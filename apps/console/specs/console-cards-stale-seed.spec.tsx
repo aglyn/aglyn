@@ -309,20 +309,61 @@ describe('LanguagesCard (AGL-1358)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save languages' }))
   }
 
-  it('REFUSES to rewrite the locale list from an unconfirmed read', async () => {
+  /**
+   * The first press is never refused for a late server (AGL-4047): Save is
+   * held while the host read is the cache's, with the reason under it, and
+   * what was typed stays.
+   */
+  it('HOLDS Save while the host read is unconfirmed, keeping what was typed', async () => {
     mockListener.fromCache = true
     render(<LanguagesCard hostId="host-1" />)
 
     editAndSave()
+    await new Promise((resolve) => setTimeout(resolve, 20))
 
-    await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
+    const save = screen.getByRole('button', {
+      name: 'Save languages',
+    }) as HTMLButtonElement
+    expect(save.disabled).toBe(true)
+    expect(screen.getByRole('status').textContent).toBe(
+      'Checking your language settings with the server…',
+    )
     expect(updateDoc).not.toHaveBeenCalled()
-    const [message] = mockEnqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('language settings'))
-    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
+    expect(mockEnqueueSnackbar).not.toHaveBeenCalled()
     expect(
       (screen.getByLabelText('Languages') as HTMLInputElement).value,
     ).toEqual('en, es, fr')
+  })
+
+  it('keeps what was typed through the server’s copy, and saves it on the first press', async () => {
+    mockListener.fromCache = true
+    const { rerender } = render(<LanguagesCard hostId="host-1" />)
+    fireEvent.change(screen.getByLabelText('Languages'), {
+      target: { value: 'en, es, fr' },
+    })
+
+    // The server answers, and its copy differs from the cache's: the
+    // default was changed elsewhere since that snapshot.
+    const before = mockHostDoc.defaultLocale
+    mockHostDoc.defaultLocale = 'es'
+    mockListener.fromCache = false
+    try {
+      rerender(<LanguagesCard hostId="host-1" />)
+      // Used to be wiped by the reset every snapshot ran.
+      expect(
+        (screen.getByLabelText('Languages') as HTMLInputElement).value,
+      ).toEqual('en, es, fr')
+      expect(screen.queryByRole('status')).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'Save languages' }))
+
+      await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
+      const [, payload] = (updateDoc as jest.Mock).mock.calls[0]
+      expect(payload.locales).toEqual(['en', 'es', 'fr'])
+      // The untouched field is saved as the server has it.
+      expect(payload.defaultLocale).toBe('es')
+    } finally {
+      mockHostDoc.defaultLocale = before
+    }
   })
 
   it('SAVES normally once the server has confirmed the seed', async () => {

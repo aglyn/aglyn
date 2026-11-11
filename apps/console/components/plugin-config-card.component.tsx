@@ -42,7 +42,7 @@ import {
   Typography,
 } from '@mui/material'
 import { deleteField, doc, setDoc } from 'firebase/firestore'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   useFirestore,
   useFirestoreDoc,
@@ -54,9 +54,20 @@ import {
   DOCS_HELP_TOPICS,
   type DocsHelpTopicKey,
 } from '../constants/docs-help.generated'
+import {
+  isSeedChecking,
+  seedCheckingText,
+  useSeedEdits,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { docsHelp } from '../constants/docs-links'
 import useOrgPermissions from '../hooks/use-org-permissions'
 import { revalidateLivePages } from '../utils/revalidate-live-pages'
+
+/**
+ * A site-scope edit that returns a key to following the workspace, rather
+ * than a value for it. Never written: a key it marks is cleared on save.
+ */
+const INHERIT: unique symbol = Symbol('inherit')
 
 /**
  * Generic per-plugin settings form (AGL-428), at either scope.
@@ -135,15 +146,6 @@ function SchemaForm({
         : null,
     [firestore, hostId, schema.pluginId],
   )
-  const [values, setValues] = useState<Record<string, unknown>>({})
-  /**
-   * The keys this SITE is answering for itself, as the form currently stands
-   * — the local counterpart of `pluginConfigOverrides` over the stored
-   * document. Empty and unused at workspace scope, where every key is an
-   * answer by definition.
-   */
-  const [overridden, setOverridden] = useState<string[]>([])
-  const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
 
   /** What the workspace answers, which is what an inherited field follows. */
@@ -160,42 +162,77 @@ function SchemaForm({
   const settled =
     orgStatus !== 'loading' && (!siteScoped || hostStatus !== 'loading')
 
-  useEffect(() => {
-    if (dirty || !settled) return
-    // Reset from the live docs until the user starts editing.
-    setValues(
-      siteScoped
-        ? resolvePluginConfig(schema, {
-            org: orgStored ?? null,
-            host: hostStored ?? null,
-          })
-        : mergePluginConfig(schema, orgStored ?? null),
+  /** What the stored documents say the form holds, once they have answered. */
+  const seed = useMemo<Record<string, unknown>>(
+    () =>
+      !settled
+        ? {}
+        : siteScoped
+          ? resolvePluginConfig(schema, {
+              org: orgStored ?? null,
+              host: hostStored ?? null,
+            })
+          : mergePluginConfig(schema, orgStored ?? null),
+    [settled, siteScoped, schema, orgStored, hostStored],
+  )
+  /**
+   * What the reader changed, kept as EDITS over the stored documents and
+   * replayed onto them on every render (AGL-4047).
+   *
+   * The form used to copy the stored values into its own state when they
+   * arrived and freeze them there at the first keystroke. A field edited
+   * while the read was still the cache's was therefore saved with the
+   * cache's copy of every OTHER field, even after the server had confirmed
+   * different ones. As edits, each field the reader did not touch follows
+   * what the server says, which is what lets Save be held until it answers.
+   *
+   * At site scope an edit is a value, which overrides the workspace, or
+   * {@link INHERIT}, which returns the key to it.
+   */
+  const form = useSeedEdits(seed)
+  const dirty = form.dirty
+  /** The form as it stands: an inherited key shows the workspace's value. */
+  const values = useMemo(() => {
+    const shown: Record<string, unknown> = { ...form.values }
+    for (const [key, edit] of Object.entries(form.edits)) {
+      if (edit === INHERIT) shown[key] = workspace[key]
+    }
+    return shown
+  }, [form.values, form.edits, workspace])
+  /**
+   * The keys this SITE is answering for itself, as the form currently stands
+   * — the local counterpart of `pluginConfigOverrides` over the stored
+   * document. Empty and unused at workspace scope, where every key is an
+   * answer by definition.
+   */
+  const overridden = useMemo(() => {
+    if (!siteScoped) return []
+    const edits = form.edits as Record<string, unknown>
+    const kept = storedOverrides.filter((key) => edits[key] !== INHERIT)
+    const added = Object.keys(edits).filter(
+      (key) => edits[key] !== INHERIT && !kept.includes(key),
     )
-    setOverridden(storedOverrides)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgStored, hostStored, settled])
+    return [...kept, ...added]
+  }, [siteScoped, storedOverrides, form.edits])
+  /**
+   * Held, not pressed, while either read is the cache's (AGL-4047): a press
+   * then waited on the server and, past the deadline, was refused. The same
+   * two signals the guard below is handed.
+   */
+  const checking = isSeedChecking({
+    fromCache: orgFromCache || (siteScoped && hostFromCache),
+    unreadable: orgStatus === 'error' || (siteScoped && hostStatus === 'error'),
+  })
 
   /**
    * Editing a field at site scope IS overriding it. A separate "override
    * this" switch would let a site hold a typed value that is not in force,
    * which is the state the whole card exists to make unambiguous.
    */
-  const setField = (key: string, value: unknown) => {
-    setDirty(true)
-    setValues((current) => ({ ...current, [key]: value }))
-    if (siteScoped) {
-      setOverridden((current) =>
-        current.includes(key) ? current : [...current, key],
-      )
-    }
-  }
+  const setField = (key: string, value: unknown) => form.edit({ [key]: value })
 
   /** The one action back to following the workspace. */
-  const inherit = (key: string) => {
-    setDirty(true)
-    setOverridden((current) => current.filter((item) => item !== key))
-    setValues((current) => ({ ...current, [key]: workspace[key] }))
-  }
+  const inherit = (key: string) => form.edit({ [key]: INHERIT })
 
   const save = async () => {
     /**
@@ -212,6 +249,7 @@ function SchemaForm({
       enqueueSnackbar(valid.error ?? 'Invalid settings', { variant: 'error' })
       return
     }
+    const written = form.edits
     setBusy(true)
     try {
       /**
@@ -322,7 +360,7 @@ function SchemaForm({
           () => undefined,
         )
       }
-      setDirty(false)
+      form.settle(written)
       enqueueSnackbar('Settings saved', { variant: 'success' })
     } catch {
       enqueueSnackbar('Save failed', { variant: 'error' })
@@ -487,7 +525,7 @@ function SchemaForm({
             {siteScoped ? provenance(field) : null}
           </Stack>
         ))}
-        <Stack direction="row">
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <BlockedControl
             blocked={permissionRefused}
             reason={permissionRefusalText('org.settings')}
@@ -495,12 +533,19 @@ function SchemaForm({
             <Button
               variant="contained"
               size="small"
-              disabled={disabled || !dirty || busy}
+              disabled={disabled || !dirty || busy || checking}
               onClick={() => void save()}
             >
               {siteScoped ? 'Save site settings' : 'Save settings'}
             </Button>
           </BlockedControl>
+          {!disabled && dirty && checking ? (
+            <Typography variant="body2" color="text.secondary" role="status">
+              {seedCheckingText(
+                siteScoped ? 'site plugin settings' : 'plugin settings',
+              )}
+            </Typography>
+          ) : null}
         </Stack>
       </Stack>
     </CardDisplay>

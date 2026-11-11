@@ -169,22 +169,66 @@ beforeAll(() => setSeedConfirmWaitMs(0))
 afterAll(() => setSeedConfirmWaitMs())
 
 describe('PluginConfigCard seed guard (AGL-1449)', () => {
-  it('REFUSES a save seeded from an unconfirmed read', async () => {
+  /**
+   * The first press is never refused for a late server (AGL-4047). Save is
+   * HELD while the read is the cache's, with the reason beside it, rather
+   * than pressed into a wait that ends refused; the guard below still wraps
+   * the write for a read that falls back to the cache after this rendered.
+   */
+  it('HOLDS Save, with the reason beside it, while the read is unconfirmed', async () => {
     mockSettingsDoc.fromCache = true
     render(<PluginConfigCards orgId="org-1" pluginId="analytics" />)
 
     editAndSave()
+    await new Promise((resolve) => setTimeout(resolve, 20))
 
-    await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
+    const save = screen.getByRole('button', {
+      name: 'Save settings',
+    }) as HTMLButtonElement
+    expect(save.disabled).toBe(true)
+    expect(screen.getByRole('status').textContent).toBe(
+      'Checking your plugin settings with the server…',
+    )
     expect(mockSetDoc).not.toHaveBeenCalled()
-    const [message] = mockEnqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('plugin settings'))
-    // The guard's words reach this call site, which they could not while the
-    // card carried its own copy.
-    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
-    // And it is the guard's words, not the card's old ones.
-    expect(message).not.toEqual(
-      expect.stringContaining('These settings have not been confirmed'),
+    // Nothing refused: the press never happened.
+    expect(mockEnqueueSnackbar).not.toHaveBeenCalled()
+    // What was typed stays.
+    expect((screen.getByLabelText('Tracking id') as HTMLInputElement).value).toBe(
+      'UA-EDITED',
+    )
+  })
+
+  /**
+   * The half that keeps the guard's protection while Save is held. The edit
+   * is replayed onto what the server confirms: a field the reader never
+   * touched is saved as the server has it, never as the cache had it.
+   */
+  it('saves the edit onto the values the server confirmed, on the first press', async () => {
+    mockSettingsDoc.fromCache = true
+    const { rerender } = render(
+      <PluginConfigCards orgId="org-1" pluginId="analytics" />,
+    )
+    editAndSave()
+
+    // Since the cached snapshot, another admin changed the sample rate.
+    mockSettingsDoc.data = { enabled: true, trackingId: 'UA-REAL', sampleRate: 75 }
+    mockSettingsDoc.fromCache = false
+    rerender(<PluginConfigCards orgId="org-1" pluginId="analytics" />)
+
+    expect(screen.queryByRole('status')).toBeNull()
+    expect((screen.getByLabelText('Tracking id') as HTMLInputElement).value).toBe(
+      'UA-EDITED',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
+
+    await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
+    const [, payload] = mockSetDoc.mock.calls[0]
+    expect(payload.trackingId).toBe('UA-EDITED')
+    expect(payload.sampleRate).toBe(75)
+    await waitFor(() =>
+      expect(mockEnqueueSnackbar).toHaveBeenCalledWith('Settings saved', {
+        variant: 'success',
+      }),
     )
   })
 

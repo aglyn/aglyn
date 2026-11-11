@@ -246,14 +246,63 @@ describe('the Business details card on Setup → Business profile (AGL-4136)', (
     expect(payload.business.socialLinks).toEqual([])
   })
 
-  it('refuses a save from a seed the server never confirmed, like every settings card', async () => {
+  /**
+   * The first press is never refused for a late server (AGL-4047). Update is
+   * HELD while the host read is the cache's, with the reason beside it,
+   * where it used to wait on the server and end refused with "We could not
+   * confirm your site settings with the server yet".
+   */
+  it('holds Update, with the reason beside it, while the host read is unconfirmed', async () => {
     mockHostDoc.fromCache = true
     await renderPage()
     type('Slogan', 'Built right')
-    fireEvent.click(screen.getByRole('button', { name: 'Update' }))
-    await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
+    const update = screen.getByRole('button', { name: 'Update' }) as HTMLButtonElement
+    expect(update.disabled).toBe(true)
+    expect(screen.getByRole('status').textContent).toBe(
+      'Checking your site settings with the server…',
+    )
+    // Enter in a field submits without the button; it is held too.
+    fireEvent.submit(input('Slogan').closest('form') as HTMLFormElement)
+    await new Promise((resolve) => setTimeout(resolve, 20))
     expect(mockSetDoc).not.toHaveBeenCalled()
-    expect(mockEnqueueSnackbar.mock.calls[0][0]).toEqual(expect.stringMatching(/nothing was saved/i))
+    expect(mockEnqueueSnackbar).not.toHaveBeenCalled()
+    expect(input('Slogan').value).toBe('Built right')
+  })
+
+  /**
+   * The half that keeps the guard's protection: the confirmed document
+   * arrives as new initial values, the typed field keeps what was typed, and
+   * every other field follows the server, so the save never writes the
+   * cache's copy of the rest.
+   */
+  it('keeps the edit through the server’s copy and saves both on the first press', async () => {
+    mockHostDoc.fromCache = true
+    const cached = mockHostDoc.data
+    try {
+      const { rerender } = render(<Page />)
+      await screen.findByLabelText('Business name', { selector: 'input' })
+      type('Slogan', 'Built right')
+
+      // Since the cached snapshot, the site's phone number was changed.
+      mockHostDoc.data = {
+        ...cached,
+        seo: { title: 'Acme Builders', entity: { telephone: '+1 512 555 0199' } },
+      }
+      mockHostDoc.fromCache = false
+      rerender(<Page />)
+
+      await waitFor(() => expect(screen.queryByRole('status')).toBeNull())
+      expect(input('Slogan').value).toBe('Built right')
+      const payload = await savedPayload()
+      expect(payload.seo.entity.slogan).toBe('Built right')
+      expect(payload.seo.entity.telephone).toBe('+1 512 555 0199')
+      expect(mockEnqueueSnackbar).not.toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm/i),
+        expect.anything(),
+      )
+    } finally {
+      mockHostDoc.data = cached
+    }
   })
 
   it('lists what pages can use, with this site’s values', async () => {
