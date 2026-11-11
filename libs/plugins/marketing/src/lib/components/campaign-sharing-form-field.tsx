@@ -38,8 +38,9 @@ export const CAMPAIGN_SHARING_FIELD = 'campaign-site-sharing'
  * the create, and again by the create itself and by the manage route.
  */
 export function CampaignSharingFormField(props: Record<string, unknown>) {
-  const { input, sites, sitesReady, label, helperText } = useFieldApi(props as never) as unknown as {
+  const { input, meta, sites, sitesReady, label, helperText } = useFieldApi(props as never) as unknown as {
     input: { value: ScopeSharingChoice | ''; onChange: (next: ScopeSharingChoice) => void }
+    meta: { submitError?: unknown; dirtySinceLastSubmit?: boolean }
     sites?: readonly SiteSharingSite[]
     sitesReady?: boolean
     label?: string
@@ -56,6 +57,14 @@ export function CampaignSharingFormField(props: Record<string, unknown>) {
       named.map((site) => site.id),
     ).problem
   }, [value, named, ready])
+  /*
+   * Why the create refused this choice, said beside it (AGL-4047): the drawer
+   * keeps the choice, and the reason goes once the choice changes. The live
+   * answer above comes first; the create's own answer covers what only it
+   * knows, such as the sites not having been read yet.
+   */
+  const refusal =
+    typeof meta?.submitError === 'string' && !meta.dirtySinceLastSubmit ? meta.submitError : null
   return (
     <FormFieldGrid>
       <SiteSharingField
@@ -64,7 +73,7 @@ export function CampaignSharingFormField(props: Record<string, unknown>) {
         onChange={input.onChange}
         sites={named}
         sitesReady={ready}
-        problem={problem}
+        problem={problem ?? refusal}
       />
       {helperText ? (
         <Typography variant="caption" color="text.secondary" component="p">
