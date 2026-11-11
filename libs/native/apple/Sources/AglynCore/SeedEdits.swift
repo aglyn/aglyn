@@ -27,3 +27,27 @@ public func rebased<V: Equatable>(_ current: [String: V], previous: [String: V],
   }
   return out
 }
+
+/// A draft laid over a stored copy that moved from `previous` to `next`, field by field: `rebased(draft, previous:, next:)
+/// { $0.field(\.name); $0.field(\.price) }`. Every field the person changed keeps its value; every other one follows `next`.
+public struct Rebaser<T> {
+  public private(set) var out: T
+  let draft: T
+  let previous: T
+
+  public init(_ draft: T, previous: T, next: T) {
+    self.draft = draft
+    self.previous = previous
+    out = next
+  }
+
+  public mutating func field<V: Equatable>(_ path: WritableKeyPath<T, V>) {
+    out[keyPath: path] = rebased(draft[keyPath: path], previous: previous[keyPath: path], next: out[keyPath: path])
+  }
+}
+
+public func rebased<T>(_ draft: T, previous: T, next: T, fields: (inout Rebaser<T>) -> Void) -> T {
+  var rebaser = Rebaser(draft, previous: previous, next: next)
+  fields(&rebaser)
+  return rebaser.out
+}

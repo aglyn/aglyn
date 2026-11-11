@@ -135,23 +135,54 @@ function editFirstRuleAndSave() {
   fireEvent.click(screen.getByRole('button', { name: 'Save redirect' }))
 }
 
+/** Long enough for a press that was going to write to have written. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 20))
+
 // This spec pins the refusal, not the wait before it (AGL-4120).
 beforeAll(() => setSeedConfirmWaitMs(0))
 afterAll(() => setSeedConfirmWaitMs())
 
 describe('RedirectsConsolePage (AGL-1358)', () => {
-  it('REFUSES to rewrite a rule seeded from an unconfirmed read', async () => {
+  /**
+   * The half that keeps the guard's protection while Save is held: the edit
+   * is replayed onto the rule the server confirms, so a rule switched off
+   * elsewhere is not switched back on (AGL-4047).
+   */
+  it('saves the edit onto the rule the server confirms, on the first press', async () => {
+    listener.fromCache = true
+    const { rerender } = renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: '/plans' } })
+
+    const stored = redirectDocs[0]
+    redirectDocs[0] = { ...stored, enabled: false }
+    listener.fromCache = false
+    try {
+      rerender(<RedirectsConsolePage hostId="host-1" entitled org={ORG} />)
+      fireEvent.click(screen.getByRole('button', { name: 'Save redirect' }))
+
+      await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
+      const [, payload] = (setDoc as jest.Mock).mock.calls[0]
+      expect(payload.destination).toBe('/plans')
+      expect(payload.enabled).toBe(false)
+    } finally {
+      redirectDocs[0] = stored
+    }
+  })
+
+  it('HOLDS Save on a rule seeded from an unconfirmed read, keeping it open', async () => {
     listener.fromCache = true
     renderPage()
 
     editFirstRuleAndSave()
-
-    // Settled, so this cannot pass merely by asserting too early.
-    await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
+    await settle()
+    // Held, not refused: nothing was pressed into the wait, and the reason
+    // sits beside the held control (AGL-4047).
+    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    expect(screen.getAllByRole('status').map((note) => note.textContent)).toContain(
+      'Checking your redirect with the server…',
+    )
     expect(setDoc).not.toHaveBeenCalled()
-    const [message] = enqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('redirect'))
-    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // …and the dialog is still open with what was being edited.
     expect((screen.getByLabelText('To') as HTMLInputElement).value).toEqual(
       '/pricing',

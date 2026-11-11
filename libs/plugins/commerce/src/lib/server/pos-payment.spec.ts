@@ -130,9 +130,11 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 
 import { posPaymentHandler } from './pos-payment'
 import {
+  capturePosOfflineCardIntent,
   handlePosStripeEvent,
   KEYED_CARD_NEEDS_AUTHENTICATION,
   POS_READER_ON_OTHER_ACCOUNT,
+  retrievePosOfflineCardIntent,
 } from './pos-terminal'
 import { onPosSaleCompleted } from './pos-sale'
 
@@ -1021,4 +1023,26 @@ describe('a store on its own Stripe account (direct charge, ToS v24 §10.2(a))',
     const create = stripeCalls.find((call) => call.path === 'payment_intents')!
     expect(Number(create.params.get('application_fee_amount') ?? 0)).toBeLessThanOrEqual(60)
   })
+})
+
+describe('an offline card read and captured at sync (AGL-4039)', () => {
+  // Stripe reads `expand[]=latest_charge`. An array under the `expand[]` key was sent as `expand[][]`, which Stripe
+  // refused ("Invalid string"), so no offline card was ever checked or captured and its sale waited forever.
+  it('asks Stripe to expand the charge once, as a plain list', async () => {
+    const { id } = await retrieveSeeded()
+    await retrievePosOfflineCardIntent(id)
+    await capturePosOfflineCardIntent(id, 0, 'offline-capture-test')
+    const calls = stripeCalls.filter((call) => call.path.startsWith(`payment_intents/${id}`))
+    expect(calls.map((call) => call.method)).toEqual(['GET', 'POST'])
+    for (const call of calls) {
+      expect(call.params.getAll('expand[]')).toEqual(['latest_charge'])
+      expect(call.params.has('expand[][]')).toBe(false)
+    }
+  })
+
+  async function retrieveSeeded() {
+    const id = `pi_test_${++intentCounter}`
+    intents.set(id, { id, object: 'payment_intent', status: 'requires_capture', amount: 500, metadata: {} })
+    return { id }
+  }
 })

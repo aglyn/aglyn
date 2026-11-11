@@ -37,7 +37,6 @@ import {
   ORG_SCOPE_TOKEN,
   planLabelGrantingFeature,
   planLegacyFolderMigration,
-  visibleToHost,
   wouldCreateCycle,
 } from '@aglyn/aglyn'
 import {
@@ -153,7 +152,8 @@ import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import useOrgHosts from '../../hooks/use-org-hosts'
 import {
   ALL_EXCEPT_MEDIA_NOTE,
-  limitAccessDescription,
+  type LimitAccessUsage,
+  limitAccessUsageOf,
   mediaSharingChoiceOf,
   mediaSharingKey,
   mediaSharingPreview,
@@ -204,6 +204,7 @@ import { useMediaQuarantine } from './use-media-quarantine'
 import { MediaAudioRightsDialog } from './media-audio-rights-dialog.component'
 import { AUDIO_RIGHTS_FIELD } from '../../utils/media-audio-rights'
 import { confirmMediaDelete } from './media-delete-confirm.component'
+import { confirmLimitAccess } from './media-limit-access-confirm.component'
 import {
   deletedMediaMessage,
   deleteFailureMessage,
@@ -262,7 +263,6 @@ import { useMediaPages } from './use-media-pages'
 import {
   coverageOf,
   type MediaScanCoverage,
-  provesUnused,
   usagePanelEmptyMessage,
 } from './media-usage-copy'
 
@@ -2182,30 +2182,22 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       // Inline rather than reusing runReferenceAudit below: that one drives
       // the drawer's "Used on" panel state, and this needs a plain answer.
       //
-      // A scan that could not cover the live corpus is folded into the same
-      // `null` a failed request produces (AGL-1413). The two are the same
-      // fact from the author's side — nobody checked — and the confirmation
-      // below already has the sentence for it.
-      const affected = await scanReferences(editor.id)
-        .then((scan) => (provesUnused(scan.coverage) ? scan.items : null))
-        .catch(() => null)
-      const losing = (affected ?? [])
-        // An org-level reference (the org's own logo) names no site, and a
-        // site scope decides nothing about it.
-        .filter((host) => host.hostId)
-        .filter((host) => !visibleToHost(nextScope, host.hostId))
-      const names = [...new Set(losing.map((host) => host.hostSubdomain))]
-      const proceed = await confirm({
+      // The dialog opens at once and says it is checking; "Limit access" is
+      // held until the scan answers (AGL-4047). A scan that read only part of
+      // the workspace (more sites than one scan reads, AGL-1413) still names
+      // what it found and says not every site was checked; only a scan that
+      // failed says usage was not checked.
+      const usage = scanReferences(editor.id).then(
+        (scan) => limitAccessUsageOf([scan], nextScope),
+        (): LimitAccessUsage => ({ state: 'failed' }),
+      )
+      const proceed = await confirmLimitAccess({
         title: 'Limit who can use this file?',
-        description: limitAccessDescription({
-          names: affected === null ? null : names.map(String),
-          count: 1,
-          allExcept: sharingWrite.mode === 'allExcept',
-        }),
-        confirmationText: 'Limit access',
+        count: 1,
+        allExcept: sharingWrite.mode === 'allExcept',
+        usage,
+        confirm,
       })
-        .then(() => true)
-        .catch(() => false)
       if (!proceed) return
     }
     let sharingRefusal: string | null = null
@@ -2972,30 +2964,19 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
    * Name the sites that lose a file before narrowing it.
    *
    * Bounded: the scan is one request per asset, so past a couple of dozen
-   * it costs more than the answer is worth and the warning goes generic.
-   * Returning `null` means "could not check", which the caller says out
-   * loud rather than presenting as "nothing breaks".
+   * it costs more than the answer is worth and the warning says it was not
+   * asked. A scan that fails leaves the others' answers standing; only when
+   * none answers is usage "not checked" (AGL-4047).
    */
   const REFERENCE_SCAN_LIMIT = 20
   const sitesLosingAccess = useCallback(
-    async (mediaIds: string[], nextScope: readonly string[]) => {
-      if (!mediaIds.length || mediaIds.length > REFERENCE_SCAN_LIMIT) return null
-      const scans = await Promise.all(mediaIds.map(scanReferences)).catch(
-        () => null,
+    async (mediaIds: string[], nextScope: readonly string[]): Promise<LimitAccessUsage> => {
+      if (!mediaIds.length) return { state: 'checked', names: [], everywhere: true }
+      if (mediaIds.length > REFERENCE_SCAN_LIMIT) return { state: 'tooMany', limit: REFERENCE_SCAN_LIMIT }
+      const scans = await Promise.all(
+        mediaIds.map((mediaId) => scanReferences(mediaId).catch(() => null)),
       )
-      if (!scans) return null
-      // ONE truncated scan makes the whole batch's answer unknowable: the
-      // site it failed to reach may be the site that loses the file.
-      if (!scans.every((scan) => provesUnused(scan.coverage))) return null
-      return [
-        ...new Set(
-          scans
-            .flatMap((scan) => scan.items)
-            .filter((ref) => ref.hostId)
-            .filter((ref) => !visibleToHost(nextScope, ref.hostId))
-            .map((ref) => ref.hostSubdomain),
-        ),
-      ]
+      return limitAccessUsageOf(scans, nextScope)
     },
     [scanReferences],
   )
@@ -3013,18 +2994,14 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         ),
       )
       if (narrowing.length && from === 0) {
-        const names = await sitesLosingAccess(narrowing, nextScope)
-        const proceed = await confirm({
+        // Opened at once, "Limit access" held until the scans answer (AGL-4047).
+        const proceed = await confirmLimitAccess({
           title: `Limit who can use ${narrowing.length} file${narrowing.length === 1 ? '' : 's'}?`,
-          description: limitAccessDescription({
-            names: names ? names.map(String) : null,
-            count: narrowing.length,
-            allExcept: choice.mode === 'allExcept',
-          }),
-          confirmationText: 'Limit access',
+          count: narrowing.length,
+          allExcept: choice.mode === 'allExcept',
+          usage: sitesLosingAccess(narrowing, nextScope),
+          confirm,
         })
-          .then(() => true)
-          .catch(() => false)
         if (!proceed) return false
       }
       let cursor = from
@@ -4385,6 +4362,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           onCreate={handleFolderCreate}
           onRename={handleFolderRename}
           onDelete={handleFolderDelete}
+          // The same dialog and the same gate as the folder card's Shared
+          // with… below, so the tree and the grid never disagree (AGL-4047).
+          onSetScope={canShareScope ? openFolderScope : undefined}
           readOnly={Boolean(onSelect)}
           writeHeld={mediaWriteHeld}
           writeRefusal={mediaWriteRefused ? mediaWriteReason : undefined}

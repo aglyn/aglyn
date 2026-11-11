@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-import { scopeSharingOf, sharingFromChoice } from '@aglyn/aglyn'
+import { scopeSharingOf, sharingFromChoice, visibleToHost } from '@aglyn/aglyn'
 import type { SiteSharingValue } from '@aglyn/shared-ui-jsx/components/site-sharing-field.component'
+import { type MediaScanCoverage, provesUnused } from './media-usage-copy'
 
 /**
  * The workspace media library's sharing, as the console edits it (AGL-4047):
@@ -61,11 +62,64 @@ export function mediaSharingPreview(
 }
 
 /**
- * The sentence a "Limit who can use…" confirmation says about the sites that
- * use the files and lose them.
+ * What the usage check behind a "Limit who can use…" confirmation has found
+ * (AGL-1045, AGL-4047).
  *
- * `names` are the sites a scan found using them that the new sharing leaves
- * out, `[]` when the scan found none, and null when nobody could check.
+ * * `checking` — the scan is still running. The confirmation opens at once
+ *   and says so, rather than nothing happening for the ten seconds a busy
+ *   scan can take.
+ * * `checked` — at least one scan answered. `names` are the sites it found
+ *   using the files that the new sharing leaves out. `everywhere` is whether
+ *   it read every site and page it could: a workspace with more sites than
+ *   one scan reads (`HOSTS_PER_SCAN`) answers with what it read, and that is
+ *   a check, not "was not checked".
+ * * `failed` — no scan answered (an error, a refused request, a dropped
+ *   connection).
+ * * `tooMany` — more files than are checked at once; nothing was asked.
+ */
+export type LimitAccessUsage =
+  | { state: 'checking' }
+  | { state: 'checked'; names: readonly string[]; everywhere: boolean }
+  | { state: 'failed' }
+  | { state: 'tooMany'; limit: number }
+
+/** One file's usage scan, as `/api/media/references` answers it. */
+export interface LimitAccessScan {
+  coverage: MediaScanCoverage
+  items: readonly { hostId?: string | null; hostSubdomain?: string | null }[]
+}
+
+/**
+ * What the scans of the files being narrowed found, `null` standing for a
+ * scan that failed. A file found on a site that keeps it is no loss, and an
+ * org-level reference (the org's own logo) names no site that a site scope
+ * decides anything about.
+ */
+export function limitAccessUsageOf(
+  scans: readonly (LimitAccessScan | null)[],
+  nextScope: readonly string[],
+): LimitAccessUsage {
+  const answered = scans.filter((scan): scan is LimitAccessScan => scan !== null)
+  if (!answered.length) return { state: 'failed' }
+  const names = new Set<string>()
+  for (const scan of answered) {
+    for (const item of scan.items) {
+      if (!item.hostId || visibleToHost(nextScope, item.hostId)) continue
+      names.add(String(item.hostSubdomain ?? item.hostId))
+    }
+  }
+  return {
+    state: 'checked',
+    names: [...names],
+    everywhere:
+      answered.length === scans.length && answered.every((scan) => provesUnused(scan.coverage)),
+  }
+}
+
+/**
+ * The sentence a "Limit who can use…" confirmation says about the sites that
+ * use the files and lose them, for each state of the check above. Only a
+ * check that did not happen says it was not checked.
  *
  * Shared with all sites except some, a page on a site left out stops showing
  * the file wherever it shows it from the library, and it is said that way: a
@@ -74,28 +128,41 @@ export function mediaSharingPreview(
  * URLs). A sentence that promised otherwise would be false.
  */
 export function limitAccessDescription(input: {
-  names: readonly string[] | null
+  usage: LimitAccessUsage
   /** One file, or several. */
   count: number
   allExcept: boolean
 }): string {
-  const { names, count, allExcept } = input
+  const { usage, count, allExcept } = input
   const one = count === 1
   const it = one ? 'it' : 'them'
-  if (names === null) {
-    return allExcept
-      ? `Current usage was not checked. Pages on a site left out stop showing ${it}, ` +
-          `except where a link to ${it} was pasted into custom HTML, which keeps loading.`
-      : `Current usage was not checked. Any site losing access will stop rendering ${it}.`
+  const files = one ? 'this file' : 'these files'
+  const whatHappens = allExcept
+    ? `Pages on a site left out stop showing ${it}, except where a link to ${it} was ` +
+      'pasted into custom HTML, which keeps loading.'
+    : `Any site losing access will stop rendering ${it}.`
+  switch (usage.state) {
+    case 'checking':
+      return `Checking which sites use ${files}… ${whatHappens}`
+    case 'failed':
+      return `Current usage was not checked. ${whatHappens}`
+    case 'tooMany':
+      return `Current usage is not checked for more than ${usage.limit} files at once. ${whatHappens}`
   }
+  const { names, everywhere } = usage
+  const notEverywhere = `Not every site could be checked, so other sites may use ${it} too.`
   if (!names.length) {
-    return `No page uses ${it} yet, so nothing breaks today.`
+    return everywhere
+      ? `No page on a site losing access uses ${it}, so nothing breaks today.`
+      : `No page checked on a site losing access uses ${it}, but not every site could be ` +
+          `checked. ${whatHappens}`
   }
-  const subject = `${names.join(', ')} ${names.length === 1 ? 'uses' : 'use'} ${one ? 'this file' : 'these files'}`
-  return allExcept
+  const subject = `${names.join(', ')} ${names.length === 1 ? 'uses' : 'use'} ${files}`
+  const found = allExcept
     ? `${subject}. Pages there stop showing ${it}, except where a link to ${it} was ` +
-        'pasted into custom HTML, which keeps loading. This does not delete anything.'
-    : `${subject} and will stop rendering ${it}. This does not delete anything.`
+      'pasted into custom HTML, which keeps loading.'
+    : `${subject} and will stop rendering ${it}.`
+  return `${found}${everywhere ? '' : ` ${notEverywhere}`} This does not delete anything.`
 }
 
 /**

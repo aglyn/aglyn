@@ -1564,7 +1564,7 @@ export async function retrievePosOfflineCardIntent(
   account: string | null = null,
 ): Promise<{ ok: true; intent: PosOfflineCardIntent } | { ok: false; error: string }> {
   const fetched = await posStripe('GET', `payment_intents/${encodeURIComponent(paymentIntentId)}`, {
-    params: { 'expand[]': ['latest_charge'] },
+    params: { expand: ['latest_charge'] },
     ...onAccount(account),
   })
   if (!fetched.ok) return { ok: false, error: posStripeErrorMessage(fetched.body, 'The card payment could not be read.') }
@@ -1583,7 +1583,7 @@ export async function capturePosOfflineCardIntent(
     ...onAccount(account),
     params: {
       ...(applicationFeeCents > 0 ? { application_fee_amount: applicationFeeCents } : {}),
-      'expand[]': ['latest_charge'],
+      expand: ['latest_charge'],
     },
   })
   // The status tells the sync whether this attempt definitely failed (AGL-4039).

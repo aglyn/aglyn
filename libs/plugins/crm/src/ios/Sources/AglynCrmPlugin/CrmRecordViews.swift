@@ -356,7 +356,7 @@ struct RecordDetail: View {
       .navigationBarTitleDisplayMode(.inline)
     #endif
     .sheet(item: Binding(get: { action.flatMap { $0.confirmsInAlert ? nil : $0 } }, set: { action = $0 })) { action in
-      sheet(action, row: row, fields: fields, values: values)
+      sheet(action, row: row, fields: fields, values: values, fromCache: document.fromCache)
     }
     .alert(
       alertTitle(row), isPresented: Binding(get: { action?.confirmsInAlert == true }, set: { if !$0 { action = nil } })
@@ -504,15 +504,16 @@ struct RecordDetail: View {
   }
 
   @ViewBuilder
-  private func sheet(_ action: RecordAction, row: CrmRow, fields: [CrmField], values: [String: String]) -> some View {
+  private func sheet(_ action: RecordAction, row: CrmRow, fields: [CrmField], values: [String: String], fromCache: Bool) -> some View {
     let done = { (message: String) in notice = message }
     switch action {
     case .edit:
       EditRecordSheet(
         title: "Edit \(kind.singular.lowercased())",
         fields: kind == .contact ? withContactEmailHelp(fields.filter { $0.editable && (movesStages || $0.spec.key != "lifecycleStage") }, hasEmail: crmHasEmail(row.data)) : fields.filter(\.editable),
-        initial: values
+        initial: values, held: fromCache, subject: kind.singular.lowercased()
       ) { edited in
+        // The sheet lays what was typed over the record as stored now, so only what the person changed differs from it.
         let changes = changedFields(fields, before: values, after: edited)
         if kind == .contact { try await api.updateContact(id, changes) } else { try await api.updateRecord(kind, id, changes) }
         done("\(kind.singular) saved.")
@@ -687,21 +688,30 @@ struct EditRecordSheet<Footer: View>: View {
   let title: String
   let fields: [CrmField]
   let initial: [String: String]
+  /// A stored record read only from the device cache: Save waits for the server's copy (AGL-4047). A new one is never held.
+  var held = false
+  /// The record's noun in the held sentence ("contact").
+  var subject = "record"
   var confirm = "Save"
   /// What the form asks below its fields that is not a field of the record (New contact's opt-in), reading and writing
   /// the same values.
   let footer: (Binding<[String: String]>) -> Footer
   let save: ([String: String]) async throws -> Void
   @State private var values: [String: String] = [:]
+  /// The stored values the typing is laid over.
+  @State private var opened: [String: String]?
   @State private var tried = false
 
   init(
-    title: String, fields: [CrmField], initial: [String: String], confirm: String = "Save",
-    @ViewBuilder footer: @escaping (Binding<[String: String]>) -> Footer, save: @escaping ([String: String]) async throws -> Void
+    title: String, fields: [CrmField], initial: [String: String], held: Bool = false, subject: String = "record",
+    confirm: String = "Save", @ViewBuilder footer: @escaping (Binding<[String: String]>) -> Footer,
+    save: @escaping ([String: String]) async throws -> Void
   ) {
     self.title = title
     self.fields = fields
     self.initial = initial
+    self.held = held
+    self.subject = subject
     self.confirm = confirm
     self.footer = footer
     self.save = save
@@ -709,24 +719,37 @@ struct EditRecordSheet<Footer: View>: View {
 
   var body: some View {
     let problems = fieldProblems(fields.map(\.spec), values)
-    AglynFormSheet(title, confirm: confirm, save: {
+    AglynFormSheet(title, confirm: confirm, canConfirm: !held, save: {
       tried = true
       guard problems.isEmpty else { throw ConsoleAPIError(status: 400, message: "Check the fields marked below.") }
       try await save(values)
     }) {
+      if held {
+        Section { Text(seedCheckingText(subject)).font(AglynFont.caption).foregroundStyle(.secondary) }
+      }
       FieldFormSection(specs: fields.map(\.spec), values: $values, errors: tried ? problems : [:])
       footer($values)
     }
-    .onAppear { if values.isEmpty { values = initial } }
+    .onAppear {
+      if values.isEmpty { values = initial }
+      if opened == nil { opened = initial }
+    }
+    // A newer copy of the record keeps what was typed and moves every other field to it (AGL-4047).
+    .onChange(of: initial) { _, next in
+      values = rebased(values, previous: opened ?? next, next: next)
+      opened = next
+    }
   }
 }
 
 extension EditRecordSheet where Footer == EmptyView {
   init(
-    title: String, fields: [CrmField], initial: [String: String], confirm: String = "Save",
-    save: @escaping ([String: String]) async throws -> Void
+    title: String, fields: [CrmField], initial: [String: String], held: Bool = false, subject: String = "record",
+    confirm: String = "Save", save: @escaping ([String: String]) async throws -> Void
   ) {
-    self.init(title: title, fields: fields, initial: initial, confirm: confirm, footer: { _ in EmptyView() }, save: save)
+    self.init(
+      title: title, fields: fields, initial: initial, held: held, subject: subject, confirm: confirm, footer: { _ in EmptyView() },
+      save: save)
   }
 }
 

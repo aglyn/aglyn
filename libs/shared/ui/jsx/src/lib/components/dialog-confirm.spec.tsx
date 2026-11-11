@@ -16,7 +16,7 @@
  */
 
 import React from 'react'
-import {render} from '@testing-library/react'
+import {act, render, waitFor} from '@testing-library/react'
 
 import DialogConfirm from './dialog-confirm'
 
@@ -25,5 +25,39 @@ describe('NavbarDrawer', () => {
   it('should render successfully', () => {
     const {baseElement} = render(<DialogConfirm open />)
     expect(baseElement).toBeTruthy()
+  })
+})
+
+describe('DialogConfirm confirmationHeldUntil (AGL-4047)', () => {
+  it('holds the confirm button, never Cancel, until the work settles', async () => {
+    let finish!: () => void
+    const work = new Promise<void>((resolve) => {
+      finish = resolve
+    })
+    const { getByRole } = render(
+      <DialogConfirm
+        open
+        options={{ confirmationText: 'Limit access', cancellationText: 'Cancel', confirmationHeldUntil: work }}
+      />,
+    )
+    const confirm = getByRole('button', { name: 'Limit access' }) as HTMLButtonElement
+    expect(confirm.disabled).toBe(true)
+    expect((getByRole('button', { name: 'Cancel' }) as HTMLButtonElement).disabled).toBe(false)
+    await act(async () => finish())
+    await waitFor(() => expect(confirm.disabled).toBe(false))
+  })
+
+  it('lets go when the work fails too', async () => {
+    const work = Promise.reject(new Error('failed'))
+    work.catch(() => undefined)
+    const { getByRole } = render(
+      <DialogConfirm open options={{ confirmationText: 'OK', confirmationHeldUntil: work }} />,
+    )
+    await waitFor(() => expect((getByRole('button', { name: 'OK' }) as HTMLButtonElement).disabled).toBe(false))
+  })
+
+  it('holds nothing without work', () => {
+    const { getByRole } = render(<DialogConfirm open options={{ confirmationText: 'OK' }} />)
+    expect((getByRole('button', { name: 'OK' }) as HTMLButtonElement).disabled).toBe(false)
   })
 })

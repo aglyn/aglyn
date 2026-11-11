@@ -143,25 +143,27 @@ function editFirstActionAndSave() {
   fireEvent.click(screen.getByRole('button', { name: 'Save action' }))
 }
 
+/** Long enough for a press that was going to write to have written. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 20))
+
 // This spec pins the refusal, not the wait before it (AGL-4120).
 beforeAll(() => setSeedConfirmWaitMs(0))
 afterAll(() => setSeedConfirmWaitMs())
 
 describe('HostActionsCard (AGL-1358)', () => {
-  it('REFUSES to rewrite an action seeded from an unconfirmed read', async () => {
+  it('HOLDS Save on an action seeded from an unconfirmed read, keeping it open', async () => {
     listener.fromCache = true
     render(<HostActionsCard hostId="host-1" org={ORG} />)
 
     editFirstActionAndSave()
-
-    // Settled, so this cannot pass merely by asserting too early.
-    await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
+    await settle()
+    // Held, not refused: nothing was pressed into the wait, and the reason
+    // sits beside the held control (AGL-4047).
+    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    expect(screen.getAllByRole('status').map((note) => note.textContent)).toContain(
+      'Checking your action with the server…',
+    )
     expect(setDoc).not.toHaveBeenCalled()
-    // The refusal explains itself and names a next step, rather than looking
-    // like a save that quietly did nothing.
-    const [message] = enqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('action'))
-    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // …and the editor is still open with the name that was there.
     expect((screen.getByLabelText('Name') as HTMLInputElement).value).toEqual(
       'Welcome banner',

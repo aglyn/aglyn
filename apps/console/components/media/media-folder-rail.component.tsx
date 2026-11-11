@@ -49,11 +49,18 @@ export interface MediaFolderRailProps {
   onCreate: (name: string, parentId: string | null) => Promise<string | null>
   onRename: (folder: MediaFolder, name: string) => Promise<void>
   onDelete: (folder: MediaFolder) => Promise<void>
+  /**
+   * Open the folder's sharing dialog, the same one its grid card's
+   * Shared with… opens (AGL-4047). Passed exactly when the card gets one, so
+   * the two menus on the same folder never disagree: omitted for a site's own
+   * library and for anyone but an org-wide member.
+   */
+  onSetScope?: (folder: MediaFolder) => void
   /** Picker mode renders without DnD hooks and without folder actions. */
   readOnly?: boolean
-  /** New folder, New subfolder, Rename, Delete and dragging stay off while permissions load. */
+  /** New folder, New subfolder, Rename, Shared with…, Delete and dragging stay off while permissions load. */
   writeHeld?: boolean
-  /** Why New folder, New subfolder, Rename, Delete and dragging are switched off for this reader. */
+  /** Why New folder, New subfolder, Rename, Shared with…, Delete and dragging are switched off for this reader. */
   writeRefusal?: string
 }
 
@@ -142,7 +149,9 @@ FolderRow.displayName = 'FolderRow'
 
 /**
  * Folder tree rail (AGL-172): root + nested folders with asset counts,
- * New/Rename/Delete actions, and dnd-kit drop targets so asset cards and
+ * New subfolder / Rename / Shared with… / Delete actions (the same entries,
+ * in the same order and under the same gate, as the folder's grid card), and
+ * dnd-kit drop targets so asset cards and
  * folders can be dragged onto rows. Every move is also possible via the
  * row menu — DnD is an enhancement, not the only path.
  */
@@ -155,6 +164,7 @@ export function MediaFolderRail(props: MediaFolderRailProps) {
     onCreate,
     onRename,
     onDelete,
+    onSetScope,
     writeHeld,
     writeRefusal,
   } = props
@@ -326,6 +336,24 @@ export function MediaFolderRail(props: MediaFolderRailProps) {
             {'Rename'}
           </MenuItem>
         </BlockedControl>
+        {onSetScope ? (
+          <BlockedControl
+            blocked={Boolean(writeRefusal)}
+            reason={writeRefusal ?? ''}
+            fullWidth
+          >
+            <MenuItem
+              disabled={writeHeld}
+              onClick={() => {
+                const folder = menu?.folder
+                setMenu(null)
+                if (folder) onSetScope(folder)
+              }}
+            >
+              {'Shared with…'}
+            </MenuItem>
+          </BlockedControl>
+        ) : null}
         <BlockedControl
           blocked={Boolean(writeRefusal)}
           reason={writeRefusal ?? ''}

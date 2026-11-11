@@ -34,7 +34,13 @@ class FormEditsTest : SpecTestBase() {
     override suspend fun getAnswer(path: String): Live.Ready<FirestoreDoc?> =
       Live.Ready(FirestoreDoc("u1", path, if (cachedFirst) cached else server ?: cached), fromCache = cachedFirst)
     override suspend fun page(query: FirestoreQuery): FirestorePage = FirestorePage(emptyList(), null)
-    override fun observe(query: FirestoreQuery): Flow<Live<List<FirestoreDoc>>> = emptyFlow()
+    // `discounts` rows: the cache's on the first read; listening has the server's behind them.
+    override suspend fun pageAnswer(query: FirestoreQuery): Live.Ready<FirestorePage> =
+      Live.Ready(FirestorePage(listOf(FirestoreDoc("d1", "hosts/h1/discounts/d1", mapOf("code" to "OLD"))), null), fromCache = cachedFirst)
+    override fun observe(query: FirestoreQuery): Flow<Live<List<FirestoreDoc>>> = flow {
+      emit(Live.Ready(listOf(FirestoreDoc("d1", "hosts/h1/discounts/d1", mapOf("code" to "OLD"))), fromCache = true))
+      emit(Live.Ready(listOf(FirestoreDoc("d1", "hosts/h1/discounts/d1", mapOf("code" to "NEW"))), fromCache = false))
+    }
     override fun observeDoc(path: String): Flow<Live<FirestoreDoc?>> = flow {
       emit(Live.Ready(FirestoreDoc("u1", path, cached), fromCache = true))
       server?.let { emit(Live.Ready(FirestoreDoc("u1", path, it), fromCache = false)) } ?: awaitCancellation()
@@ -80,6 +86,20 @@ class FormEditsTest : SpecTestBase() {
     runBlocking { model.load() }
     assertEquals(JsonObject(emptyMap()), ScreenValues.lookup("checking", model.context))
     assertEquals("Austin", city(model))
+  }
+
+  @Test
+  fun aCachedListIsHeldUntilTheServersRowsReplaceIt() {
+    val listSpec = ScreenSpec.parseFile("""{"screens":[{"id":"core.x","title":"X","load":{"discounts":{"query":{"collection":"hosts/h1/discounts"}}}}]}""").first()
+    val session = ScreenSession(orgName = "Acme", orgRole = "owner", siteName = "Shop", origin = "https://console.test", orgPermissions = OWNER, sitePermissions = OWNER)
+    val model = ScreenModel(listSpec, session.context(Site(), emptyMap()), Site().api, Reader(emptyMap(), null), null)
+    runBlocking {
+      model.load()
+      assertEquals(JsonPrimitive(true), ScreenValues.lookup("checking.discounts", model.context), "a row's prompt is held while its list is the cache's")
+      assertEquals(JsonPrimitive("OLD"), ScreenValues.lookup("data.discounts.items.0.code", model.context))
+    }
+    assertEquals(JsonObject(emptyMap()), ScreenValues.lookup("checking", model.context))
+    assertEquals(JsonPrimitive("NEW"), ScreenValues.lookup("data.discounts.items.0.code", model.context), "the server's rows replace the cache's")
   }
 
   @Test

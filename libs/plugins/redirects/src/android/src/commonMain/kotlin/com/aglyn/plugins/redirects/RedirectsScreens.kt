@@ -63,6 +63,11 @@ fun RedirectsListScreen(context: NativePluginContext) {
   val editor = remember(hostId, context.uid) {
     RedirectsEditor(ConsoleRedirectsWriteApi(context.api, context.writer, hostId), context.uid, scope)
   }
+  // A newer copy of the list reaches the open rule (AGL-4047).
+  (live as? Live.Ready)?.let { ready ->
+    editor.listFromCache = ready.fromCache
+    androidx.compose.runtime.LaunchedEffect(ready) { editor.refresh(ready.value, ready.fromCache) }
+  }
   AglynListDetail(
     detailBanner = { if (editor.draft == null && editor.deleting == null) RedirectBanners(editor) },
     list = { selected, onSelect ->
@@ -170,12 +175,15 @@ private fun RedirectDialogs(editor: RedirectsEditor) {
       title = if (draft.id == null) "Add a redirect" else "Edit redirect",
       icon = "alt_route",
       confirmLabel = "Save",
-      confirmEnabled = draft.source.isNotBlank() && draft.destination.isNotBlank(),
+      confirmEnabled = !editor.held && draft.source.isNotBlank() && draft.destination.isNotBlank(),
       busy = editor.busy,
       error = editor.error,
       onDismiss = editor::close,
       onConfirm = editor::save,
     ) {
+      if (editor.held) {
+        Text(com.aglyn.core.seedCheckingText("redirect"), Modifier.testTag("redirect-checking"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      }
       ChoiceChipRow(
         options = REDIRECT_KIND_CHOICES.map { (key, label) -> ChipOption(key, label) },
         selected = draft.kind,

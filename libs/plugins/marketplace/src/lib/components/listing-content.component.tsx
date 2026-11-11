@@ -1886,8 +1886,8 @@ export function MarketplaceListingContent({
                                 <MdiIcon
                                   path={
                                     row.tone === 'included'
-                                      ? mdiCheckCircleOutline
-                                      : mdiInformationOutline
+                                      ? mdiCheckCircleOutline.path
+                                      : mdiInformationOutline.path
                                   }
                                   size={0.8}
                                   color={

@@ -197,7 +197,11 @@ internal object FirestoreLoads {
    * `{ "$date": ISO }` for a timestamp. [limit] replaces the spec's own
    * when a list has been asked for more rows (a growing window, as the console's lists page).
    */
-  suspend fun query(reader: FirestoreReader, spec: JsonElement, context: JsonElement, limit: Int? = null): JsonElement {
+  /**
+   * An answer only the device cache gave is marked ([FROM_CACHE_KEY]), as a document load's is; [server] waits past the
+   * cache for the server's answer, up to [serverDeadlineMs] (the model's confirm pass, AGL-4047).
+   */
+  suspend fun query(reader: FirestoreReader, spec: JsonElement, context: JsonElement, limit: Int? = null, server: Boolean = false): JsonElement {
     val collection = ScreenValues.render(spec.str("collection").orEmpty(), context)
     val filters = spec.arr("where").mapNotNull { clause ->
       val parts = clause as? JsonArray ?: return@mapNotNull null
@@ -262,7 +266,33 @@ internal object FirestoreLoads {
         },
       )
     }
-    val page = reader.page(FirestoreQuery(collection, filters, order, rows))
-    return JsonObject(mapOf("items" to JsonArray(page.docs.map { json(it) })))
+    val query = FirestoreQuery(collection, filters, order, rows)
+    if (server) {
+      val confirmed = serverDocs(reader, query)
+      val answer = JsonObject(mapOf("items" to JsonArray(confirmed.first.map { json(it) })))
+      return if (confirmed.second) answer else markedFromCache(answer)
+    }
+    val page = reader.pageAnswer(query)
+    val answer = JsonObject(mapOf("items" to JsonArray(page.value.docs.map { json(it) })))
+    return if (page.fromCache) markedFromCache(answer) else answer
+  }
+
+  /** A query as the server answers it, up to [serverDeadlineMs]: its rows, and whether the server confirmed them. */
+  private suspend fun serverDocs(reader: FirestoreReader, query: FirestoreQuery): Pair<List<FirestoreDoc>, Boolean> {
+    var latest: List<FirestoreDoc>? = null
+    val confirmed = kotlinx.coroutines.withTimeoutOrNull(serverDeadlineMs) {
+      reader.observe(query.copy(includeMetadataChanges = true)).first { live ->
+        when (live) {
+          is com.aglyn.core.Live.Failed -> throw live.error
+          is com.aglyn.core.Live.Ready -> {
+            latest = live.value
+            !live.fromCache
+          }
+          com.aglyn.core.Live.Loading -> false
+        }
+      }
+    }
+    if (confirmed is com.aglyn.core.Live.Ready) return confirmed.value to true
+    return (latest ?: throw IllegalStateException("The server did not answer in time.")) to false
   }
 }

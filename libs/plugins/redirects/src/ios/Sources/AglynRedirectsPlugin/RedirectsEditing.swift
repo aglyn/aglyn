@@ -164,6 +164,10 @@ struct ConsoleRedirectsWriteAPI: RedirectsWriteAPI {
 @Observable
 final class RedirectsEditor {
   var draft: RedirectDraft?
+  /// The stored rule the open draft is laid over (AGL-4047): a newer copy keeps what was typed and moves the rest.
+  private(set) var opened: RedirectDraft?
+  /// The open rule is only the device cache's copy yet: Save waits for the server's. A new rule is never held.
+  private(set) var held = false
   var deleting: RedirectRow?
   private(set) var busy = false
   private(set) var error: String?
@@ -179,7 +183,22 @@ final class RedirectsEditor {
   }
 
   func add() { open(RedirectDraft()) }
-  func edit(_ row: RedirectRow) { open(RedirectDraft(row)) }
+  func edit(_ row: RedirectRow) {
+    open(RedirectDraft(row))
+    opened = RedirectDraft(row)
+    held = row.fromCache
+  }
+
+  /// The list moved under an open rule: lay what was typed over the rule as stored now.
+  func refresh(_ rows: [RedirectRow]) {
+    guard let id = draft?.id, let typed = draft, let previous = opened, let row = rows.first(where: { $0.id == id }) else { return }
+    let next = RedirectDraft(row)
+    draft = rebased(typed, previous: previous, next: next) {
+      $0.field(\.kind); $0.field(\.source); $0.field(\.destination); $0.field(\.statusCode); $0.field(\.priority); $0.field(\.enabled)
+    }
+    opened = next
+    held = row.fromCache
+  }
 
   func askDelete(_ row: RedirectRow) {
     error = nil
@@ -196,6 +215,8 @@ final class RedirectsEditor {
   private func open(_ next: RedirectDraft) {
     error = nil
     draft = next
+    opened = nil
+    held = false
   }
 
   func save() async {

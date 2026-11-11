@@ -151,24 +151,27 @@ function editFirstWorkflowAndSave() {
   fireEvent.click(screen.getByRole('button', { name: 'Done' }))
 }
 
+/** Long enough for a press that was going to write to have written. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 20))
+
 // This spec pins the refusal, not the wait before it (AGL-4120).
 beforeAll(() => setSeedConfirmWaitMs(0))
 afterAll(() => setSeedConfirmWaitMs())
 
 describe('HostWorkflowsCard (AGL-1358)', () => {
-  it('REFUSES to rewrite a workflow seeded from an unconfirmed read', async () => {
+  it('HOLDS Done on a workflow seeded from an unconfirmed read, keeping it open', async () => {
     listener.fromCache = true
     render(<HostWorkflowsCard hostId="host-1" org={ORG} />)
 
     editFirstWorkflowAndSave()
-
-    // Settled, so this cannot pass merely by asserting too early.
-    await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
+    await settle()
+    // Held, not refused: nothing was pressed into the wait, and the reason
+    // sits beside the held control (AGL-4047).
+    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    expect(screen.getAllByRole('status').map((note) => note.textContent)).toContain(
+      'Checking your workflow with the server…',
+    )
     expect(setDoc).not.toHaveBeenCalled()
-    // The refusal explains itself and names a next step.
-    const [message] = enqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('workflow'))
-    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
     // …and the dialog is still open with what was being edited.
     expect((screen.getByLabelText(/^Name/) as HTMLInputElement).value).toEqual(
       'Notify on signup',

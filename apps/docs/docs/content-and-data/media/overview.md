@@ -677,13 +677,18 @@ You'll find the control in three places:
 
 - on a single asset, in its details drawer;
 - on a **selection** — tick several files and use **Shared with…** in the toolbar;
-- on a **folder**, from its ⋮ menu, which offers to apply the same sharing to the files
-  inside it and its subfolders (it names the count, so you know what you're about to
-  change).
+- on a **folder**, from its ⋮ menu, either on its card in the grid or on its row in the
+  folder list beside it (both open the same dialog). It offers to apply the same sharing
+  to the files inside it and its subfolders, and names the count, so you know what you're
+  about to change.
 
 A folder applies its sharing **when you save it** — files keep their own setting
 afterwards, so moving a file into a "Client A" folder later does not re-share it. Narrowing
-a file that sites are already using names those sites first and asks you to confirm.
+a file that sites are already using names those sites first and asks you to confirm. The
+confirmation opens straight away and says it is checking which sites use the file; **Limit
+access** waits until the check answers. In a workspace with more sites than one check reads,
+it names what it found and says not every site could be checked. It says usage was not
+checked only when the check failed, or when you narrow more than 20 files at once.
 Changing sharing takes the **Edit the workspace media library** permission, which workspace
 owners, admins and editors hold by default, and access to every site in the workspace:
 someone added to particular sites can't change it.
