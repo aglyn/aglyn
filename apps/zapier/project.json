@@ -7,10 +7,24 @@
   "tags": ["scope:app", "type:app"],
   "targets": {
     "test": {
-      "executor": "@nx/jest:jest",
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^default",
+        {
+          "externalDependencies": ["jest"]
+        }
+      ],
       "outputs": ["{workspaceRoot}/coverage/apps/zapier"],
       "options": {
-        "jestConfig": "apps/zapier/jest.config.js"
+        "cwd": "{workspaceRoot}",
+        "command": "jest --config apps/zapier/jest.config.js --passWithNoTests"
+      },
+      "configurations": {
+        "ci": {
+          "args": "--ci --coverage --coverageDirectory=coverage/apps/zapier"
+        }
       }
     }
   }

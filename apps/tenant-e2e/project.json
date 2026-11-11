@@ -7,15 +7,10 @@
   "implicitDependencies": ["tenant"],
   "targets": {
     "e2e": {
-      "executor": "@nx/cypress:cypress",
+      "executor": "nx:run-commands",
       "options": {
-        "cypressConfig": "apps/tenant-e2e/cypress.json",
-        "devServerTarget": "tenant:serve"
-      },
-      "configurations": {
-        "production": {
-          "devServerTarget": "tenant:serve:production"
-        }
+        "cwd": "apps/tenant-e2e",
+        "command": "cypress run --config-file cypress.json"
       }
     }
   }
