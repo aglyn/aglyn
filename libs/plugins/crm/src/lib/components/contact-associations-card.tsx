@@ -39,6 +39,10 @@ import {
   writeGuardedBySeed,
   type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { Button, Chip, Divider, Stack, Typography } from '@mui/material'
 import { doc, getDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -175,6 +179,19 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
     [row, consentGroup],
   )
 
+  /*
+   * Save is held while the contact read is the cache's, with the reason
+   * beside it, rather than pressed into a wait that can end refused
+   * (AGL-4047). The filing follows the document until it is edited, so what
+   * is ticked meanwhile stays.
+   */
+  const checkingText = isSeedChecking({
+    fromCache: seed.fromCache,
+    unreadable: seed.status === 'error',
+  })
+    ? seedCheckingText('contact')
+    : undefined
+
   const handleSaveFiling = useCallback(async () => {
     setSaving(true)
     try {
@@ -242,7 +259,11 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
           <Button
             size="small"
             variant="outlined"
-            disabled={saving || (siteCampaigns.ready && !siteCampaigns.options.length)}
+            disabled={
+              saving ||
+              Boolean(checkingText) ||
+              (siteCampaigns.ready && !siteCampaigns.options.length)
+            }
             onClick={() => void handleSaveFiling()}
           >
             {saving ? 'Saving…' : 'Save filing'}
@@ -251,6 +272,11 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
       }}
     >
       <Stack spacing={2}>
+        {edited && checkingText ? (
+          <Typography variant="body2" color="text.secondary" role="status">
+            {checkingText}
+          </Typography>
+        ) : null}
         <Stack spacing={0.5}>
           <Typography variant="subtitle2">{'Sources'}</Typography>
           {sources.length || leadKey ? (

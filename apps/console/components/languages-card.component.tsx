@@ -22,13 +22,18 @@ import { PlanUpsellNotice } from '@aglyn/shared-ui-jsx/components/plan-upsell-no
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Button, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import { deleteField, doc } from 'firebase/firestore'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useMemo } from 'react'
 import {
   useFirestore,
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { planLockReason } from '@aglyn/tenant-feature-instance/hooks/plan-feature-lock'
+import {
+  isSeedChecking,
+  seedCheckingText,
+  useSeedEdits,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { updateHostDocument } from '../utils/host-document-writes'
 import { docsHelp } from '../constants/docs-links'
 import useCurrentOrg from '../hooks/use-current-org'
@@ -73,12 +78,30 @@ export function LanguagesCard(props: { hostId: string }) {
     [firestore, hostId],
     { idField: '$id' },
   )
-  const [locales, setLocales] = useState('')
-  const [defaultLocale, setDefaultLocale] = useState('')
-  useEffect(() => {
-    setLocales((host?.locales ?? []).join(', '))
-    setDefaultLocale(host?.defaultLocale ?? host?.locales?.[0] ?? '')
-  }, [host?.locales, host?.defaultLocale])
+  /**
+   * What was typed, kept as EDITS over the stored list (AGL-4047).
+   *
+   * The two fields used to be reset from the host doc on every snapshot, so
+   * the server's confirmation landing after a keystroke wiped what was typed.
+   * As edits, a field the reader changed keeps their value through any
+   * snapshot and the other follows the stored doc, which is what lets Save be
+   * held until the server answers without losing anything meanwhile.
+   */
+  const storedLocales: string = (host?.locales ?? []).join(', ')
+  const storedDefault: string =
+    host?.defaultLocale ?? host?.locales?.[0] ?? ''
+  const seed = useMemo(
+    () => ({ locales: storedLocales, defaultLocale: storedDefault }),
+    [storedLocales, storedDefault],
+  )
+  const form = useSeedEdits(seed)
+  const { locales, defaultLocale } = form.values
+  const setLocales = (value: string) => form.edit({ locales: value })
+  const setDefaultLocale = (value: string) => form.edit({ defaultLocale: value })
+  const checking = isSeedChecking({
+    fromCache: hostFromCache,
+    unreadable: hostStatus === 'error',
+  })
 
   const parsed = [
     ...new Set(
@@ -108,6 +131,7 @@ export function LanguagesCard(props: { hostId: string }) {
         persist: false,
       })
     }
+    const written = form.edits
     try {
       /**
        * Refuse a save whose seed the server never confirmed (AGL-1358).
@@ -150,6 +174,7 @@ export function LanguagesCard(props: { hostId: string }) {
           persist: false,
         })
       }
+      form.settle(written)
       enqueueSnackbar('Languages saved', {
         variant: 'success',
         persist: false,
@@ -174,6 +199,7 @@ export function LanguagesCard(props: { hostId: string }) {
     hostStatus,
     hostFromCache,
     hostListen,
+    form,
   ])
 
   return (
@@ -230,16 +256,27 @@ export function LanguagesCard(props: { hostId: string }) {
           blocked={multilingual.locked && parsed.length > 1}
           reason={multilingualReason}
         >
+          {/*
+            Held while the host read is the cache's (AGL-4047), with the
+            reason below it: a press then waited on the server and could end
+            refused, which is what met the first press after a page load.
+          */}
           <Button
             size="small"
             variant="contained"
             color="primary"
             sx={{ alignSelf: 'flex-start' }}
+            disabled={checking}
             onClick={handleSave}
           >
             {'Save languages'}
           </Button>
         </BlockedControl>
+        {checking ? (
+          <Typography variant="body2" color="text.secondary" role="status">
+            {seedCheckingText('language settings')}
+          </Typography>
+        ) : null}
       </Stack>
     </CardDisplay>
   )

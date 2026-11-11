@@ -732,9 +732,10 @@ another zone, so the zones you save decide what checkout can do:
   does not ship there, rather than being posted a parcel you priced nothing
   for. The **Coverage** line under Shipping settings names those countries as
   you edit, and offers to add a rest-of-world zone.
-- **Rates that differ by destination make checkout ask.** The cart and
-  product page reveal a "Ship to" selector before they can price one. A
-  single zone, or a single rest-of-world zone, asks the shopper nothing.
+- **Rates that differ by destination make checkout ask.** The cart shows a
+  "Ship to" selector with its other fields from the start, and the product
+  page reveals one before it can price a parcel. A single zone, or a single
+  rest-of-world zone, asks the shopper nothing.
 - **No rates at all is a valid setup**, not a gap: the store charges no
   shipping and refuses nobody.
 - **Payment links price a parcel too.** A draft order you invoice a customer

@@ -68,7 +68,24 @@ data class TaskDraft(
   val dealId: String? = null,
   /** A new task's site, at the workspace's level; null files it with the organization. */
   val sourceSite: String? = null,
-)
+) {
+  /**
+   * This draft over a stored task that moved from [previous] to [next] (AGL-4047): every field changed here keeps it, every
+   * other field follows [next].
+   */
+  fun rebased(previous: TaskDraft, next: TaskDraft) = next.copy(
+    title = com.aglyn.core.rebased(title, previous.title, next.title),
+    kind = com.aglyn.core.rebased(kind, previous.kind, next.kind),
+    priority = com.aglyn.core.rebased(priority, previous.priority, next.priority),
+    dueAtMs = com.aglyn.core.rebased(dueAtMs, previous.dueAtMs, next.dueAtMs),
+    assigneeUid = com.aglyn.core.rebased(assigneeUid, previous.assigneeUid, next.assigneeUid),
+    notes = com.aglyn.core.rebased(notes, previous.notes, next.notes),
+    contactId = com.aglyn.core.rebased(contactId, previous.contactId, next.contactId),
+    companyId = com.aglyn.core.rebased(companyId, previous.companyId, next.companyId),
+    dealId = com.aglyn.core.rebased(dealId, previous.dealId, next.dealId),
+    sourceSite = sourceSite,
+  )
+}
 
 data class ConvertDraft(
   val ownerUid: String?,

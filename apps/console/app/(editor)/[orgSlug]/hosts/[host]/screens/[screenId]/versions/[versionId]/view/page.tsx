@@ -132,6 +132,11 @@ import revalidateLivePages, {
 } from '../../../../../../../../../../utils/revalidate-live-pages'
 import HostDisplayNameComponent from '../../../../../../../../../../components/host-display-name.component'
 import { planLockReason } from '@aglyn/tenant-feature-instance/hooks/plan-feature-lock'
+import {
+  isSeedChecking,
+  seedCheckingText,
+  useSeedEdits,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { buildScreenSeoUpdate } from '../../../../../../../../../../constants/screen-seo'
 import { buildRoute, Route } from '../../../../../../../../../../constants/route-links'
 import { useHostId, useHostSubdomain } from '../../../../../../../../../../components/host-id-provider'
@@ -513,27 +518,41 @@ function ScreenDetails() {
 
   // --- Name & description card ---------------------------------------
   /**
-   * What the author has typed into the Name & description card, or null while
-   * it shows the stored values. Kept apart from the stored screen, so a save
-   * from another tab cannot overwrite what is being typed here.
+   * What the author has typed into the Name & description card, kept as EDITS
+   * over the stored screen (AGL-4047), so a save from another tab cannot
+   * overwrite what is being typed here, and a field left alone follows the
+   * stored value. It used to copy BOTH fields the moment one was typed, so
+   * the server's confirmation of a cache-served screen could not reach the
+   * untouched one and the save wrote the cached copy back.
+   *
+   * `detailsDraft` is the merged values while anything is typed, else null.
    */
-  const [detailsDraft, setDetailsDraft] = useState<{
-    displayName: string
-    description: string
-  } | null>(null)
-  const storedDetails = {
-    displayName: screen?.displayName ?? '',
-    description: screen?.description ?? '',
-  }
-  const detailsShown = detailsDraft ?? storedDetails
+  const storedDisplayName: string = screen?.displayName ?? ''
+  const storedDescription: string = screen?.description ?? ''
+  const storedDetails = useMemo(
+    () => ({ displayName: storedDisplayName, description: storedDescription }),
+    [storedDisplayName, storedDescription],
+  )
+  const detailsForm = useSeedEdits(storedDetails)
+  const detailsShown = detailsForm.values
+  const detailsDraft = detailsForm.dirty ? detailsForm.values : null
   const editDetails =
     (field: 'displayName' | 'description') =>
-    (event: { target: { value: string } }) => {
-      const value = event.target.value
-      setDetailsDraft((prev) => ({ ...(prev ?? storedDetails), [field]: value }))
-    }
+    (event: { target: { value: string } }) =>
+      detailsForm.edit({ [field]: event.target.value })
+  /**
+   * Both cards on this page that save the screen are HELD while its read is
+   * the cache's (AGL-4047), with the reason beside the control: a press then
+   * waited on the server's confirmation and could end refused, which is what
+   * met the first press after a page load.
+   */
+  const screenChecking = isSeedChecking({
+    fromCache: screenFromCache,
+    unreadable: status === 'error',
+  })
   const handleEditSave = useCallback(async () => {
     if (!detailsDraft?.displayName.trim()) return
+    const written = detailsForm.edits
     /**
      * Refuse a rename whose seed the server never confirmed (AGL-1358).
      *
@@ -571,7 +590,7 @@ function ScreenDetails() {
               id: screenId,
               name: detailsDraft.displayName.trim(),
             })
-            setDetailsDraft(null)
+            detailsForm.settle(written)
             // Not internal-only: the live page's `<title>` falls back to the
             // name, and its meta description to the description, whenever
             // the screen's SEO leaves them blank.
@@ -597,6 +616,7 @@ function ScreenDetails() {
     }
   }, [
     detailsDraft,
+    detailsForm,
     screenRef,
     enqueueSnackbar,
     logActivity,
@@ -1176,17 +1196,30 @@ function ScreenDetails() {
   }, [password, screenRef, enqueueSnackbar, user, hostId, screenId, publishedPath])
 
   // --- SEO (AGL-117): screen fields override host defaults on the org --
-  const [seoDraft, setSeoDraft] = useState<Record<
-    ScreenSeoCardTextField,
-    string
-  > | null>(null)
-  const seoValue: Record<ScreenSeoCardTextField, string> = {
-    title: seoDraft?.title ?? screen?.seo?.title ?? '',
-    description: seoDraft?.description ?? screen?.seo?.description ?? '',
-    breadcrumb: seoDraft?.breadcrumb ?? screen?.seo?.breadcrumb ?? '',
-  }
+  /*
+   * The typed title, description and breadcrumb, kept as EDITS over the stored
+   * `seo` map (AGL-4047). Typing one used to copy all three, so the save
+   * carried the cached copy of the two left alone. Only what was typed is
+   * staged now; the rest follows the stored screen.
+   */
+  const storedSeoTitle: string = screen?.seo?.title ?? ''
+  const storedSeoDescription: string = screen?.seo?.description ?? ''
+  const storedSeoBreadcrumb: string = screen?.seo?.breadcrumb ?? ''
+  const storedSeoText = useMemo<Record<ScreenSeoCardTextField, string>>(
+    () => ({
+      title: storedSeoTitle,
+      description: storedSeoDescription,
+      breadcrumb: storedSeoBreadcrumb,
+    }),
+    [storedSeoTitle, storedSeoDescription, storedSeoBreadcrumb],
+  )
+  const seoForm = useSeedEdits(storedSeoText)
+  /** What was typed, or null while nothing is. */
+  const seoDraft: Partial<Record<ScreenSeoCardTextField, string>> | null =
+    seoForm.dirty ? seoForm.edits : null
+  const seoValue: Record<ScreenSeoCardTextField, string> = seoForm.values
   const setSeoValue = (field: ScreenSeoCardTextField, value: string) =>
-    setSeoDraft({ ...seoValue, [field]: value })
+    seoForm.edit({ [field]: value })
   const setSeoField = (field: ScreenSeoCardTextField) =>
     (event: { target: { value: string } }) => setSeoValue(field, event.target.value)
 
@@ -1231,14 +1264,7 @@ function ScreenDetails() {
       for (const field of SCREEN_SEO_CARD_TEXT_FIELDS) {
         if (typeof values[field] === 'string') text[field] = values[field]
       }
-      if (Object.keys(text).length) {
-        setSeoDraft((prior) => ({
-          title: prior?.title ?? screen?.seo?.title ?? '',
-          description: prior?.description ?? screen?.seo?.description ?? '',
-          breadcrumb: prior?.breadcrumb ?? screen?.seo?.breadcrumb ?? '',
-          ...text,
-        }))
-      }
+      if (Object.keys(text).length) seoForm.edit(text)
       if (typeof values.imageAlt === 'string') {
         setSeoImage((prior) => {
           const image = prior != null ? prior.image : (screen?.seo?.image ?? '')
@@ -1252,7 +1278,7 @@ function ScreenDetails() {
         })
       }
     },
-    [screen],
+    [screen, seoForm],
   )
 
   /**
@@ -1266,6 +1292,7 @@ function ScreenDetails() {
   const [rawJsonOpen, setRawJsonOpen] = useState(false)
   const handleSeoSave = useCallback(async () => {
     if (!seoDraft && !seoImage) return
+    const writtenSeo = seoForm.edits
     /**
      * Carry forward everything this panel does not edit (AGL-1337), now
      * shared with the besigner's SEO panel (AGL-1437).
@@ -1323,7 +1350,7 @@ function ScreenDetails() {
               id: screenId,
               name: displayName,
             })
-            setSeoDraft(null)
+            seoForm.settle(writtenSeo)
             setSeoImage(null)
             // The live page's head is rendered from this document, and the
             // tenant caches both — so the old title and description stay in
@@ -1351,6 +1378,7 @@ function ScreenDetails() {
     }
   }, [
     seoDraft,
+    seoForm,
     seoImage,
     screen,
     screenRef,
@@ -1380,7 +1408,7 @@ function ScreenDetails() {
       size="small"
       variant="outlined"
       color="primary"
-      disabled={!seoDraft && !seoImage}
+      disabled={(!seoDraft && !seoImage) || screenChecking}
       onClick={handleSeoSave}
       sx={{ alignSelf: 'flex-start' }}
     >
@@ -1397,7 +1425,8 @@ function ScreenDetails() {
       disabled={
         !detailsDraft?.displayName.trim() ||
         (detailsDraft.displayName === storedDetails.displayName &&
-          detailsDraft.description === storedDetails.description)
+          detailsDraft.description === storedDetails.description) ||
+        screenChecking
       }
       onClick={handleEditSave}
       sx={{ alignSelf: 'flex-start' }}
@@ -1949,7 +1978,10 @@ function ScreenDetails() {
                         options={siteCampaigns.options}
                         value={storedCampaignIds}
                         onChange={(next) => void handleCampaignsChange(next)}
-                        disabled={savingCampaigns}
+                        // Each pick saves at once, so the picker itself is
+                        // what is held while the screen read is the
+                        // cache's (AGL-4047).
+                        disabled={savingCampaigns || screenChecking}
                         helperText="The campaigns this page is part of. It does not change how visits are credited."
                         empty={
                           siteCampaigns.ready && !siteCampaigns.options.length
@@ -1962,6 +1994,15 @@ function ScreenDetails() {
                         is read from the links its own emails carried, and
                         nothing on this card changes that reading.
                       */}
+                      {screenChecking ? (
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          role="status"
+                        >
+                          {seedCheckingText('campaigns')}
+                        </Typography>
+                      ) : null}
                       <Typography variant="caption" color="text.secondary">
                         {'Assignment only. A campaign’s traffic and revenue ' +
                           'are credited from the links its emails carried, ' +
@@ -2008,6 +2049,15 @@ function ScreenDetails() {
                         minRows={2}
                         fullWidth
                       />
+                      {detailsDraft && screenChecking ? (
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          role="status"
+                        >
+                          {seedCheckingText('page details')}
+                        </Typography>
+                      ) : null}
                     </Stack>
                   </CardDisplay>
                 ),
@@ -2132,6 +2182,15 @@ function ScreenDetails() {
                         proposeValues={proposeSeoValues}
                       />
                       {seoSaveButton}
+                      {(seoDraft || seoImage) && screenChecking ? (
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          role="status"
+                        >
+                          {seedCheckingText('SEO settings')}
+                        </Typography>
+                      ) : null}
                     </Stack>
                   </CardDisplay>
                 ),

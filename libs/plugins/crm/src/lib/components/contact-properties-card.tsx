@@ -43,6 +43,11 @@ import {
   type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
 import {
+  isSeedChecking,
+  seedCheckingText,
+  useSeedEdits,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
+import {
   Button,
   Checkbox,
   FormControlLabel,
@@ -276,39 +281,100 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
   const companies = useCompanyOptions({ hostId, org })
   const createCompany = useCreateCompany({ hostId, org })
 
-  const [nameOverride, setNameOverride] = useState(record.nameOverride)
-  const [salutation, setSalutation] = useState(record.salutation ?? '')
+  /*
+   * The form, kept as EDITS over the record (AGL-4047). A field nobody
+   * touched follows the record, so the server's copy arriving after a
+   * keystroke (or after a page drawn from the cache) replaces the cache's
+   * under it, and Save is held until it has (`checkingText`). A field the
+   * reader changed keeps what they typed through any number of snapshots.
+   */
+  const draftSeed = useMemo(
+    () => ({
+      nameOverride: record.nameOverride,
+      salutation: record.salutation ?? '',
+      firstName: record.firstName ?? '',
+      lastName: record.lastName ?? '',
+      phones: phoneDraftsFrom(record) as PhoneDrafts,
+      doNotCall: record.doNotCall === true,
+      email: record.email,
+      jobTitle: record.jobTitle,
+      department: record.department ?? '',
+      birthdate: record.birthdate ?? '',
+      assistantName: record.assistantName ?? '',
+      reportsTo: record.reportsToContactId ?? '',
+      // Salesforce's Lead Source (AGL-3298), carried from the lead on conversion.
+      leadSource: record.leadSource,
+      companyName: record.companyName,
+      companyId: (record.companyId || null) as string | null,
+      ownerUid: record.ownerUid,
+      lifecycleStage: record.lifecycleStage as ContactLifecycleStage | '',
+      tags: record.tags.join(', '),
+      notes: record.notes,
+      address: addressDraftFrom(record.address) as AddressDraft,
+      otherAddress: addressDraftFrom(record.otherAddress) as AddressDraft,
+    }),
+    [record],
+  )
+  type ContactDraft = typeof draftSeed
+  const draft = useSeedEdits<ContactDraft>(draftSeed)
+  const { edit: editDraft } = draft
+  const setter =
+    <K extends keyof ContactDraft>(key: K) =>
+    (value: ContactDraft[K]) =>
+      editDraft({ [key]: value } as Partial<ContactDraft>)
+  const {
+    nameOverride,
+    salutation,
+    firstName,
+    lastName,
+    phones,
+    doNotCall,
+    email,
+    jobTitle,
+    department,
+    birthdate,
+    assistantName,
+    reportsTo,
+    leadSource,
+    companyName,
+    companyId,
+    ownerUid,
+    lifecycleStage,
+    tags,
+    notes,
+    address,
+    otherAddress,
+  } = draft.values
+  const setNameOverride = setter('nameOverride')
+  const setSalutation = setter('salutation')
+  const setFirstName = setter('firstName')
+  const setLastName = setter('lastName')
+  const setPhones = setter('phones')
+  const setDoNotCall = setter('doNotCall')
+  const setEmail = setter('email')
+  const setJobTitle = setter('jobTitle')
+  const setDepartment = setter('department')
+  const setBirthdate = setter('birthdate')
+  const setAssistantName = setter('assistantName')
+  const setReportsTo = setter('reportsTo')
+  const setLeadSource = setter('leadSource')
+  const setCompanyName = setter('companyName')
+  const setCompanyId = setter('companyId')
+  const setOwnerUid = setter('ownerUid')
+  const setLifecycleStage = setter('lifecycleStage')
+  const setTags = setter('tags')
+  const setNotes = setter('notes')
+  const setAddress = setter('address')
+  const setOtherAddress = setter('otherAddress')
   const salutations = useCrmPicklist(CRM_SALUTATION_PICKLIST, orgId)
-  const [firstName, setFirstName] = useState(record.firstName ?? '')
-  const [lastName, setLastName] = useState(record.lastName ?? '')
-  const [phones, setPhones] = useState<PhoneDrafts>(() => phoneDraftsFrom(record))
-  const [doNotCall, setDoNotCall] = useState(record.doNotCall === true)
-  const [email, setEmail] = useState(record.email)
-  const [emailError, setEmailError] = useState('')
-  const [jobTitle, setJobTitle] = useState(record.jobTitle)
-  const [department, setDepartment] = useState(record.department ?? '')
-  const [birthdate, setBirthdate] = useState(record.birthdate ?? '')
-  const [assistantName, setAssistantName] = useState(record.assistantName ?? '')
-  const [reportsTo, setReportsTo] = useState(record.reportsToContactId ?? '')
-  // Salesforce's Lead Source (AGL-3298), carried from the lead on conversion.
-  const [leadSource, setLeadSource] = useState(record.leadSource)
   const leadSources = useLeadSourcePicklist(orgId)
-  const [companyName, setCompanyName] = useState(record.companyName)
-  const [companyId, setCompanyId] = useState<string | null>(
-    record.companyId || null,
-  )
-  const [ownerUid, setOwnerUid] = useState(record.ownerUid)
-  const [lifecycleStage, setLifecycleStage] = useState<ContactLifecycleStage | ''>(
-    record.lifecycleStage,
-  )
-  const [tags, setTags] = useState(record.tags.join(', '))
-  const [notes, setNotes] = useState(record.notes)
-  const [address, setAddress] = useState<AddressDraft>(
-    addressDraftFrom(record.address),
-  )
-  const [otherAddress, setOtherAddress] = useState<AddressDraft>(
-    addressDraftFrom(record.otherAddress),
-  )
+  const [emailError, setEmailError] = useState('')
+  const checkingText = isSeedChecking({
+    fromCache: seed.fromCache,
+    unreadable: seed.status === 'error',
+  })
+    ? seedCheckingText('contact')
+    : undefined
   const [phoneErrors, setPhoneErrors] = useState<Partial<PhoneDrafts>>({})
   const [birthdateError, setBirthdateError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -341,28 +407,8 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
 
   /** Every draft back to what the record holds — the seed, and Discard. */
   const reseed = () => {
-    setNameOverride(record.nameOverride)
-    setSalutation(record.salutation ?? '')
-    setFirstName(record.firstName ?? '')
-    setLastName(record.lastName ?? '')
-    setPhones(phoneDraftsFrom(record))
-    setDoNotCall(record.doNotCall === true)
-    setEmail(record.email)
+    draft.discard()
     setEmailError('')
-    setJobTitle(record.jobTitle)
-    setDepartment(record.department ?? '')
-    setBirthdate(record.birthdate ?? '')
-    setAssistantName(record.assistantName ?? '')
-    setReportsTo(record.reportsToContactId ?? '')
-    setLeadSource(record.leadSource)
-    setCompanyName(record.companyName)
-    setCompanyId(record.companyId || null)
-    setOwnerUid(record.ownerUid)
-    setLifecycleStage(record.lifecycleStage)
-    setTags(record.tags.join(', '))
-    setNotes(record.notes)
-    setAddress(addressDraftFrom(record.address))
-    setOtherAddress(addressDraftFrom(record.otherAddress))
     setPhoneErrors({})
     setBirthdateError('')
     setCustom({})
@@ -370,31 +416,22 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
   }
 
   /*
-   * Re-seeded when the RECORD changes, not when it re-renders. The listener
+   * Fresh when the RECORD changes, not when it re-renders. The listener
    * delivers a fresh row on every snapshot, including the one this card's
-   * own save produces; re-seeding on each would overwrite what somebody is
-   * in the middle of typing with what the server last confirmed.
+   * own save produces, and each moves only the fields nobody has typed in
+   * (the form is edits over the record, above). So a page drawn from the
+   * cache catches up when the server answers (AGL-4122), and what somebody
+   * is in the middle of typing is never overwritten.
    */
   const recordId = record.$id
   useEffect(() => {
     reseed()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordId])
-  /*
-   * And it follows the document until somebody edits it (AGL-4122). A page
-   * drawn from the cache seeds these drafts from the cached row, and the
-   * server's answer arrives a moment later with the newer one. Left alone, the
-   * form kept the old values on screen with the seed reading confirmed, and the
-   * next save wrote them back over the new ones without anyone having touched
-   * those fields.
-   */
-  useEffect(() => {
-    if (!edited) reseed()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [record])
 
   const handleSave = useCallback(async () => {
     if (clearingRequired) return
+    const written = draft.edits
     const readPhonesResult = readPhones(phones)
     const storedBirthdate = normalizeContactBirthdate(birthdate)
     setPhoneErrors('errors' in readPhonesResult ? readPhonesResult.errors : {})
@@ -486,6 +523,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
           )
         }
       }
+      draft.settle(written)
       setEdited(false)
       enqueueSnackbar('Contact saved', { variant: 'success', persist: false })
     } catch (error) {
@@ -511,6 +549,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     customChanges,
     department,
     doNotCall,
+    draft,
     enqueueSnackbar,
     firstName,
     siteHostId,
@@ -607,7 +646,12 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
       contentGutterY
       HeaderProps={{
         action: (
-          <Stack direction="row" spacing={1}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            {edited && checkingText ? (
+              <Typography variant="body2" color="text.secondary" role="status">
+                {checkingText}
+              </Typography>
+            ) : null}
             {edited ? (
               <Button size="small" disabled={saving} onClick={reseed}>
                 {'Discard changes'}
@@ -617,7 +661,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
               variant="contained"
               color="primary"
               size="small"
-              disabled={saving || !edited || clearingRequired}
+              disabled={saving || !edited || clearingRequired || Boolean(checkingText)}
               onClick={() => void handleSave()}
             >
               {saving ? 'Saving…' : 'Save'}

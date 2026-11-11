@@ -35,6 +35,11 @@ import {
   type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
 import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
+import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
+import {
   Alert,
   Button,
   Chip,
@@ -192,6 +197,22 @@ function toLocalInput(ms: number | null | undefined): string {
  * state to render here; the sentence a refused org reads is registered as
  * this plugin's `upgradeNotice` in `plugin.ts`.
  */
+/** A stored event as the editor holds it. */
+function eventDraftOf(event: EventRecord): EventDraft {
+  return {
+    id: event.$id,
+    title: event.title ?? '',
+    startsAt: toLocalInput(event.startsAtMs),
+    endsAt: toLocalInput(event.endsAtMs),
+    location: event.location ?? '',
+    organizer: event.organizer ?? '',
+    description: event.description ?? '',
+    coverImage: event.coverImage ?? '',
+    coverImageAlt: event.coverImageAlt ?? '',
+    status: event.status === 'published' ? 'published' : 'draft',
+  }
+}
+
 export function EventsConsolePage(props: ConsolePluginPageProps) {
   const { hostId } = props
   const firestore = useFirestore()
@@ -231,7 +252,19 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
     [events, page, pageSize],
   )
 
-  const [draft, setDraft] = useState<EventDraft | null>(null)
+  /*
+   * The editor's draft, kept as EDITS over the event as the list has it now
+   * (AGL-4047): opened from the cache's row, the server's copy replaces it
+   * under every field nobody touched (`status` among them), and Save is held
+   * until it has.
+   */
+  const [draft, setDraft] = useSeedDraft<EventDraft>((opened) => {
+    const row = opened.id ? events.find((event) => event.$id === opened.id) : undefined
+    return row ? eventDraftOf(row) : undefined
+  })
+  const draftChecking =
+    Boolean(draft?.id) &&
+    isSeedChecking({ fromCache: eventsFromCache, unreadable: eventsUnreadable })
 
   /*
    * Import and Export open the console's wizard and dialog on this site's
@@ -349,6 +382,7 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
       })
     }
   }, [
+    setDraft,
     draft,
     firestore,
     hostId,
@@ -417,20 +451,7 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
               </Stack>
               <Button
                 size="small"
-                onClick={() =>
-                  setDraft({
-                    id: event.$id,
-                    title: event.title ?? '',
-                    startsAt: toLocalInput(event.startsAtMs),
-                    endsAt: toLocalInput(event.endsAtMs),
-                    location: event.location ?? '',
-                    organizer: event.organizer ?? '',
-                    description: event.description ?? '',
-                    coverImage: event.coverImage ?? '',
-                    coverImageAlt: event.coverImageAlt ?? '',
-                    status: event.status === 'published' ? 'published' : 'draft',
-                  })
-                }
+                onClick={() => setDraft(eventDraftOf(event))}
               >
                 {'Edit'}
               </Button>
@@ -628,12 +649,17 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
           >
             {draft?.status === 'published' ? 'Set to draft' : 'Set published'}
           </Button>
-          <Stack direction="row" spacing={1}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            {draftChecking ? (
+              <Typography variant="body2" color="text.secondary" role="status">
+                {seedCheckingText('event')}
+              </Typography>
+            ) : null}
             <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
             <Button
               variant="contained"
               color="primary"
-              disabled={!draft?.title.trim()}
+              disabled={draftChecking || !draft?.title.trim()}
               onClick={handleSave}
             >
               {'Save event'}

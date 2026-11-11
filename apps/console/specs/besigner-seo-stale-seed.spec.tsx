@@ -617,23 +617,52 @@ describe('besigner SEO · the invented social-image keys (AGL-1437)', () => {
 })
 
 describe('besigner SEO · the missing seed guard (AGL-1437, AGL-1358)', () => {
-  it('REFUSES a save seeded from an unconfirmed read', async () => {
+  /**
+   * The first press is never refused for a late server (AGL-4047): Save SEO
+   * is HELD while the screen read is the cache's, with the reason under it,
+   * and the typed value stays on screen.
+   */
+  it('HOLDS Save SEO while the screen read is unconfirmed, keeping what was typed', async () => {
     mockScreenDoc.fromCache = true
     render(<ScreenBesigner />)
 
     editDescriptionAndSave()
+    await new Promise((resolve) => setTimeout(resolve, 20))
 
-    // Settled, so this cannot pass merely by asserting too early.
-    await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
+    const save = screen.getByRole('button', {
+      name: 'Save SEO',
+    }) as HTMLButtonElement
+    expect(save.disabled).toBe(true)
+    expect(
+      screen.getByText('Checking your SEO settings with the server…'),
+    ).toBeTruthy()
     expect(mockUpdateScreenDoc).not.toHaveBeenCalled()
-    const [message] = mockEnqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('SEO settings'))
-    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
-    // The typed value stays on screen. A refusal that also cleared the field
-    // would send the author back to retype a form refused just as quietly.
+    expect(mockEnqueueSnackbar).not.toHaveBeenCalled()
     expect(
       (screen.getByLabelText('Search description') as HTMLInputElement).value,
     ).toEqual('Open roles at Aglyn')
+  })
+
+  it('saves on the first press once the server answers, with the server’s title', async () => {
+    mockScreenDoc.fromCache = true
+    const { rerender } = render(<ScreenBesigner />)
+    fireEvent.change(screen.getByLabelText('Search description'), {
+      target: { value: 'Open roles at Aglyn' },
+    })
+    // The title changed elsewhere since the cached snapshot.
+    stored = { displayName: 'Careers', seo: { ...STORED_SEO, title: 'Jobs' } }
+    mockScreenDoc.data = stored
+    mockScreenDoc.fromCache = false
+    rerender(<ScreenBesigner />)
+
+    expect(screen.queryByText('Checking your SEO settings with the server…')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Save SEO' }))
+    await waitFor(() => expect(mockUpdateScreenDoc).toHaveBeenCalledTimes(1))
+    expect(stored.seo).toEqual({
+      title: 'Jobs',
+      description: 'Open roles at Aglyn',
+    })
+    expect(mockEnqueueSnackbar).toHaveBeenCalledWith('SEO saved', expect.anything())
   })
 
   it('REFUSES when the screen read failed, and says so differently', async () => {

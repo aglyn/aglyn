@@ -28,7 +28,7 @@ import {
   Typography,
 } from '@mui/material'
 import { doc } from 'firebase/firestore'
-import { useCallback, useState } from 'react'
+import { useCallback } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import {
   useFirestoreDoc,
@@ -36,6 +36,11 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
+import {
+  isSeedChecking,
+  seedCheckingText,
+  useSeedEdits,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 
 export interface StoreSettingsCardProps {
   hostId: string
@@ -85,17 +90,25 @@ export function StoreSettingsCard(props: StoreSettingsCardProps) {
     () => doc(firestore, 'hosts', hostId),
     [firestore, hostId],
   )
-  const [draft, setDraft] = useState<StoreSettings | null>(null)
-  const current: StoreSettings = draft ?? {
+  /*
+   * What was typed, kept as EDITS over the stored settings (AGL-4047), so
+   * the server's copy arriving after a keystroke replaces the cache's under
+   * every field nobody touched. Save is held until it has (`checking`).
+   */
+  const form = useSeedEdits<StoreSettings>({
     pdpScreenId: store?.pdpScreenId ?? '',
     collectionScreenId: store?.collectionScreenId ?? '',
     currency: store?.currency ?? 'USD',
     guestCheckout: store?.guestCheckout !== false,
     termsUrl: store?.termsUrl ?? '',
     receiptFooter: store?.receiptFooter ?? '',
-  }
-  const update = (patch: Partial<StoreSettings>) =>
-    setDraft({ ...current, ...patch })
+  })
+  const current = form.values
+  const update = (patch: Partial<StoreSettings>) => form.edit(patch)
+  const checking = isSeedChecking({
+    fromCache: storeFromCache,
+    unreadable: storeStatus === 'error',
+  })
 
   // Host screen directory: {screenId: path} (AGL-292 template pick).
   const screenEntries = Object.entries(
@@ -116,6 +129,7 @@ export function StoreSettingsCard(props: StoreSettingsCardProps) {
      * The guard WRAPS the write — an early return is a shape you can keep
      * while losing the protection.
      */
+    const written = form.edits
     const verdict = await writeGuardedBySeed(
       {
         subject: 'store settings',
@@ -147,7 +161,7 @@ export function StoreSettingsCard(props: StoreSettingsCardProps) {
         })
       },
     )
-    // Before `setDraft(null)`, so a refusal keeps every typed value on
+    // Before `settle`, so a refusal keeps every typed value on
     // screen. A save that silently does nothing sends the user back to
     // retype a form that will be refused again just as quietly.
     if (!verdict.ok) {
@@ -156,13 +170,14 @@ export function StoreSettingsCard(props: StoreSettingsCardProps) {
         persist: false,
       })
     }
-    setDraft(null)
+    form.settle(written)
     enqueueSnackbar('Store settings saved', {
       variant: 'success',
       persist: false,
     })
   }, [
     current,
+    form,
     firestore,
     hostId,
     user,
@@ -266,12 +281,17 @@ export function StoreSettingsCard(props: StoreSettingsCardProps) {
           variant="contained"
           color="primary"
           size="small"
-          disabled={!draft}
+          disabled={!form.dirty || checking}
           onClick={handleSave}
           sx={{ alignSelf: 'flex-start' }}
         >
           {'Save store settings'}
         </Button>
+        {form.dirty && checking ? (
+          <Typography variant="body2" color="text.secondary" role="status">
+            {seedCheckingText('store settings')}
+          </Typography>
+        ) : null}
       </Stack>
     </CardDisplay>
   )

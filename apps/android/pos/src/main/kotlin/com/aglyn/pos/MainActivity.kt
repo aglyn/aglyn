@@ -77,6 +77,8 @@ class MainActivity : ComponentActivity() {
       // The register's camera button scans with CameraX + ML Kit.
       CompositionLocalProvider(
         LocalCameraScanner provides CameraXBarcodeScanner,
+        // Day totals' Share CSV goes out through the share sheet, as the Aglyn app's exports do.
+        com.aglyn.ui.LocalFileExporter provides com.aglyn.shell.rememberAndroidFileExporter(),
         // "Continue with Google": the Credential Manager's Google ID token.
         com.aglyn.screens.LocalGoogleCredentialSource provides com.aglyn.shell.rememberAndroidGoogleCredentialSource(BuildConfig.GOOGLE_WEB_CLIENT_ID),
       ) {

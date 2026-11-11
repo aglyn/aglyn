@@ -271,27 +271,72 @@ function editFirstRowAndSave() {
   fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 }
 
+/** Long enough for a press that was going to write to have written. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 20))
+
 // This spec pins the refusal, not the wait before it (AGL-4120).
 beforeAll(() => setSeedConfirmWaitMs(0))
 afterAll(() => setSeedConfirmWaitMs())
 
 describe('SuppliersCard (AGL-1358)', () => {
-  it('REFUSES to rewrite a supplier seeded from an unconfirmed read', async () => {
+  /**
+   * The first press is never refused for a late server (AGL-4047): Save is
+   * HELD while the list is the cache's, with the reason beside it, and what
+   * was typed stays. The guard still wraps the write underneath.
+   */
+  it('HOLDS Save, with the reason beside it, while the list is unconfirmed', async () => {
     listener.fromCache = true
     render(<SuppliersCard hostId="host-1" />)
 
-    editFirstRowAndSave()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.change(screen.getByLabelText('Name'), {
+      target: { value: 'Acme Logistics' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await settle()
 
-    // Settled, so this cannot pass merely by asserting too early.
-    await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
+    expect(
+      (screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled,
+    ).toBe(true)
+    expect(screen.getByRole('status').textContent).toBe(
+      'Checking your supplier with the server…',
+    )
     expect(setDoc).not.toHaveBeenCalled()
-    // The refusal explains itself and names a next step, rather than looking
-    // like a save that quietly did nothing.
-    const [message] = enqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('supplier'))
-    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
-    // …and the dialog is still open with what was typed.
-    expect(screen.getByLabelText('Webhook secret')).toBeTruthy()
+    // Nothing refused: the press never happened.
+    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe(
+      'Acme Logistics',
+    )
+  })
+
+  /**
+   * The half that keeps the guard's protection while Save is held: the edit
+   * is replayed onto the row the server confirms, so the secret rotated
+   * since the cached snapshot is never put back.
+   */
+  it('saves the edit onto the row the server confirms, on the first press', async () => {
+    listener.fromCache = true
+    const { rerender } = render(<SuppliersCard hostId="host-1" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.change(screen.getByLabelText('Name'), {
+      target: { value: 'Acme Logistics' },
+    })
+
+    const before = supplierDocs[0].webhookSecret
+    supplierDocs[0].webhookSecret = 'secret-after-rotation'
+    listener.fromCache = false
+    try {
+      rerender(<SuppliersCard hostId="host-1" />)
+      expect(screen.queryByRole('status')).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+      await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
+      const [, payload] = (setDoc as jest.Mock).mock.calls[0]
+      expect(payload.name).toBe('Acme Logistics')
+      expect(payload.webhookSecret).toBe('secret-after-rotation')
+    } finally {
+      supplierDocs[0].webhookSecret = before
+    }
   })
 
   it('SAVES normally once the server has confirmed the seed', async () => {
@@ -325,18 +370,39 @@ describe('SuppliersCard (AGL-1358)', () => {
 })
 
 describe('DiscountsCard (AGL-1358)', () => {
-  it('REFUSES to rewrite a discount seeded from an unconfirmed read', async () => {
+  it('HOLDS Save while the list is unconfirmed, and saves onto the server’s row', async () => {
     listener.fromCache = true
-    render(<DiscountsCard hostId="host-1" />)
+    const { rerender } = render(<DiscountsCard hostId="host-1" />)
 
-    editFirstRowAndSave()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.change(screen.getByLabelText('Code (blank = automatic)'), {
+      target: { value: 'SUMMER' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await settle()
 
-    await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
-    // The redemption counter was never rolled back.
+    // Held, not refused: the redemption counter was never at risk.
     expect(setDoc).not.toHaveBeenCalled()
-    expect(enqueueSnackbar.mock.calls[0][0]).toEqual(
-      expect.stringContaining('discount'),
+    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    expect(screen.getByRole('status').textContent).toBe(
+      'Checking your discount with the server…',
     )
+
+    // Buyers redeemed it twice more since the cached snapshot.
+    discountDocs[0].redemptions = 89
+    listener.fromCache = false
+    try {
+      rerender(<DiscountsCard hostId="host-1" />)
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+      await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
+      const [, payload] = (setDoc as jest.Mock).mock.calls[0]
+      expect(payload.code).toBe('SUMMER')
+      // The live counter as the server has it, never rolled back.
+      expect(payload.redemptions).toBe(89)
+    } finally {
+      discountDocs[0].redemptions = 87
+    }
   })
 
   it('SAVES normally once the server has confirmed the seed', async () => {
@@ -424,19 +490,38 @@ describe('ProductsHubCard stock adjustment (AGL-1358)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
   }
 
-  it('REFUSES to recompute stock from an unconfirmed read', async () => {
+  it('HOLDS Apply while the products are unconfirmed, and applies to the server’s count', async () => {
     listener.fromCache = true
-    render(<ProductsHubCard hostId="host-1" />)
+    const { rerender } = render(<ProductsHubCard hostId="host-1" />)
 
     openStockDialogAndApply()
+    await settle()
 
-    await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
     expect(updateDoc).not.toHaveBeenCalled()
     // And no orphaned history entry claiming an adjustment that never landed.
     expect(addDoc).not.toHaveBeenCalled()
-    expect(enqueueSnackbar.mock.calls[0][0]).toEqual(
-      expect.stringContaining('stock'),
+    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    expect(screen.getByRole('status').textContent).toBe(
+      'Checking your stock with the server…',
     )
+
+    // Three sold since the cached snapshot: the server holds 9, not 12.
+    const stored = collections['products']
+    collections['products'] = [
+      { ...productDocs[0], variants: [{ id: 'v1', priceUsd: 40, inventory: 9 }] },
+    ]
+    listener.fromCache = false
+    try {
+      rerender(<ProductsHubCard hostId="host-1" />)
+      fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+
+      await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
+      const [, payload] = (updateDoc as jest.Mock).mock.calls[0]
+      // The typed +5 lands on the server's count.
+      expect(payload.variants[0].inventory).toBe(14)
+    } finally {
+      collections['products'] = stored
+    }
   })
 
   it('APPLIES the adjustment once the server has confirmed the seed', async () => {
@@ -470,8 +555,8 @@ describe('ProductsHubCard stock adjustment (AGL-1358)', () => {
 describe('ProductEditorDialog (AGL-1358)', () => {
   const product = productDocs[0] as never
 
-  it('REFUSES to replace a product seeded from an unconfirmed read', async () => {
-    render(
+  it('HOLDS Save while the product is unconfirmed, and saves onto the server’s copy', async () => {
+    const { rerender } = render(
       <ProductEditorDialog
         hostId="host-1"
         product={product}
@@ -481,13 +566,43 @@ describe('ProductEditorDialog (AGL-1358)', () => {
       />,
     )
 
+    fireEvent.change(screen.getByLabelText('Name'), {
+      target: { value: 'Desk lamp, brass' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save product' }))
+    await settle()
+
+    expect(setDoc).not.toHaveBeenCalled()
+    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    expect(screen.getByRole('status').textContent).toBe(
+      'Checking your product with the server…',
+    )
+
+    // The server's row: three sold since the cached snapshot.
+    rerender(
+      <ProductEditorDialog
+        hostId="host-1"
+        product={
+          {
+            ...productDocs[0],
+            variants: [{ id: 'v1', priceUsd: 40, inventory: 9 }],
+          } as never
+        }
+        seedFromCache={false}
+        open
+        onClose={jest.fn()}
+      />,
+    )
+    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe(
+      'Desk lamp, brass',
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Save product' }))
 
-    await waitFor(() => expect(enqueueSnackbar).toHaveBeenCalled())
-    expect(setDoc).not.toHaveBeenCalled()
-    const [message] = enqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('product'))
-    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
+    await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
+    const [, payload] = (setDoc as jest.Mock).mock.calls[0]
+    expect(payload.name).toBe('Desk lamp, brass')
+    // Stock as the server has it, not the cache's 12.
+    expect(payload.variants[0].inventory).toBe(9)
   })
 
   it('SAVES the product once the server has confirmed the seed', async () => {

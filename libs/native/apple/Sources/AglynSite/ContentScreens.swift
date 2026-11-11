@@ -297,7 +297,7 @@ private struct EntryEditor: View {
         AglynEmptyState("This entry is gone", systemImage: "doc.richtext")
       case .ready(let doc?):
         EntryForm(
-          env: env, collection: collection, entry: ContentEntry(doc),
+          env: env, collection: collection, entry: ContentEntry(doc), fromCache: doc.fromCache,
           authors: (authors.state.value ?? []).map(ContentAuthor.init).sorted { $0.name.lowercased() < $1.name.lowercased() },
           model: model, openURL: { openURL($0) })
       }
@@ -315,6 +315,8 @@ private struct EntryForm: View {
   let env: ContentEnv
   let collection: ContentCollection
   let entry: ContentEntry
+  /// The entry is only the device cache's copy yet: Save is held until the server's is in (AGL-4047).
+  let fromCache: Bool
   let authors: [ContentAuthor]
   let model: EntryListModel
   let openURL: (URL) -> Void
@@ -322,12 +324,13 @@ private struct EntryForm: View {
   @State private var saver = ActionRunner()
 
   init(
-    env: ContentEnv, collection: ContentCollection, entry: ContentEntry, authors: [ContentAuthor], model: EntryListModel,
-    openURL: @escaping (URL) -> Void
+    env: ContentEnv, collection: ContentCollection, entry: ContentEntry, fromCache: Bool, authors: [ContentAuthor],
+    model: EntryListModel, openURL: @escaping (URL) -> Void
   ) {
     self.env = env
     self.collection = collection
     self.entry = entry
+    self.fromCache = fromCache
     self.authors = authors
     self.model = model
     self.openURL = openURL
@@ -351,7 +354,9 @@ private struct EntryForm: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .onChange(of: stored) { _, next in draft = next }
+    .environment(\.aglynFormChecking, fromCache ? seedCheckingText("entry") : nil)
+    // A newer copy of the entry keeps what was typed and moves every other field to it (AGL-4047).
+    .onChange(of: stored) { previous, next in draft = draft.rebased(previous: previous, next: next) }
     .accessibilityIdentifier("entry-editor")
   }
 

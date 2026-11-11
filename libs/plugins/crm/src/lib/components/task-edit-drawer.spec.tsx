@@ -140,12 +140,12 @@ const task = (over: Partial<CrmTaskRow>): CrmTaskRow =>
     ...over,
   }) as CrmTaskRow
 
-function open(props: {
+function drawer(props: {
   hostId: string | null
   task?: CrmTaskRow | null
-  wrapper?: (props: { children: ReactNode }) => JSX.Element
+  fromCache?: boolean
 }) {
-  return render(
+  return (
     <TaskEditDrawer
       open
       onClose={jest.fn()}
@@ -155,9 +155,18 @@ function open(props: {
       scope={['orgs', 'org-1']}
       readTokens={props.hostId ? ['org', `host:${props.hostId}`] : null}
       task={props.task ?? null}
-    />,
-    { wrapper: props.wrapper },
+      seed={{ fromCache: props.fromCache ?? false, unreadable: false }}
+    />
   )
+}
+
+function open(props: {
+  hostId: string | null
+  task?: CrmTaskRow | null
+  fromCache?: boolean
+  wrapper?: (props: { children: ReactNode }) => JSX.Element
+}) {
+  return render(drawer(props), { wrapper: props.wrapper })
 }
 
 const sitePicker = () => screen.getByRole('combobox', { name: /^Site/ })
@@ -175,6 +184,31 @@ beforeEach(() => {
   saves = []
   picklistDocs = {}
   window.sessionStorage.clear()
+})
+
+/**
+ * The first press is never refused for a late server (AGL-4047): an edit's
+ * Save is held while the task read is the cache's, with the reason beside it,
+ * and what was typed is saved onto the task the server confirms.
+ */
+describe('an edit over an unconfirmed read', () => {
+  it('holds Save with the reason, then saves the edit onto the server’s task', async () => {
+    const cached = task({ hostId: 'host-a', visibleTo: ['host:host-a'] })
+    const view = open({ hostId: 'host-a', task: cached, fromCache: true })
+    fireEvent.change(screen.getByRole('combobox', { name: /^Subject/ }), {
+      target: { value: 'Renew the policy' },
+    })
+    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByRole('status').textContent).toBe('Checking your task with the server…')
+
+    // The priority was raised elsewhere since the cached snapshot.
+    view.rerender(drawer({ hostId: 'host-a', task: { ...cached, priority: 'high' }, fromCache: false }))
+    expect(screen.queryByRole('status')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(saves).toHaveLength(1))
+    expect(saves[0]['task']).toMatchObject({ title: 'Renew the policy', priority: 'high' })
+  })
 })
 
 describe('a new task beneath the organization hub', () => {

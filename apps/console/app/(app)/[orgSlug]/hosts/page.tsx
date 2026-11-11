@@ -63,7 +63,7 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, type Firestore } from 'firebase/firestore'
-import { Suspense, useCallback, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
@@ -71,6 +71,11 @@ import CreateHostDialog, {
   CreateSiteFromUrl,
 } from '../../../../components/create-host-dialog.component'
 import EmptyState from '../../../../components/empty-state.component'
+import {
+  markCreateOpenedWhenEmpty,
+  shouldOpenCreateWhenEmpty,
+} from '../../../../utils/open-create-when-empty'
+import { readSiteCreateRequest } from '@aglyn/aglyn/app-utils/site-create-return'
 import SiteVisitButton from '../../../../components/site-visit-button.component'
 import { isHostInPreview } from '@aglyn/aglyn/app-utils/site-preview'
 import type { SiteCreateStarterReturn } from '@aglyn/aglyn/app-utils/site-create-return'
@@ -584,6 +589,33 @@ function HostsContent() {
   // path to their first org — so the zero-state steps aside to avoid two
   // competing calls to action (AGL-234).
   const { invites } = usePendingInvites()
+  /**
+   * A workspace with no sites opens "Create site" by itself, once per
+   * session (2026-11-11): "No sites yet" and a button was where most new
+   * accounts stopped. Never over `?create=site`, which opens it on its own
+   * terms (a starter pick on the way back from paying for it).
+   */
+  const siteCount = data?.length ?? 0
+  const canCreateHosts = permissions.createHosts
+  useEffect(() => {
+    const askedByUrl =
+      typeof window !== 'undefined' &&
+      readSiteCreateRequest(new URLSearchParams(window.location.search)).asked
+    if (
+      !shouldOpenCreateWhenEmpty({
+        sitesLoaded: hostsRead === 'loaded',
+        siteCount,
+        pendingInvites: invites.length,
+        canCreate: Boolean(canCreateHosts),
+        askedByUrl,
+        orgId: currentOrg?.$id,
+      })
+    ) {
+      return
+    }
+    markCreateOpenedWhenEmpty(currentOrg?.$id as string)
+    setCreating(true)
+  }, [hostsRead, siteCount, invites.length, canCreateHosts, currentOrg?.$id])
   /**
    * The organization-level mount for the dashboard row (AGL-2636), from the
    * site list this page already holds — the same shape the org CRM hub hands

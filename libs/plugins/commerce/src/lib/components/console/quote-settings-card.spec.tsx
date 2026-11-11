@@ -26,6 +26,7 @@ import { QUOTE_DEFAULT_APPROVAL_STATEMENTS } from '../../model'
 
 const mockSetDoc = jest.fn(async (..._args: unknown[]) => undefined)
 let mockStore: any = {}
+let mockFromCache = false
 
 jest.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...segments: string[]) => segments.join('/'),
@@ -34,7 +35,7 @@ jest.mock('firebase/firestore', () => ({
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
-  useFirestoreDoc: () => ({ data: mockStore, status: 'success', fromCache: false }),
+  useFirestoreDoc: () => ({ data: mockStore, status: 'success', fromCache: mockFromCache }),
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance').writeGuardedBySeed,
 }))
 
@@ -56,6 +57,34 @@ const statementFields = () => screen.getAllByLabelText(/^Statement \d$/) as HTML
 beforeEach(() => {
   mockSetDoc.mockClear()
   mockStore = {}
+  mockFromCache = false
+})
+
+/**
+ * The first press is never refused for a late server (AGL-4047): Save is held
+ * while the settings read is the cache's, with the reason beside it, and the
+ * edit is saved onto what the server confirms.
+ */
+describe('the Quotes card while the server has not answered', () => {
+  it('holds Save with the reason, then saves the edit onto the server’s settings', async () => {
+    mockFromCache = true
+    const { rerender } = render(<QuoteSettingsCard hostId="site1" />)
+    fireEvent.click(screen.getByRole('switch', { name: 'Customers sign in to see and approve proofs' }))
+    expect(save().disabled).toBe(true)
+    expect(screen.getByRole('status').textContent).toBe('Checking your quote settings with the server…')
+
+    // Proof approval was switched on elsewhere since the cached snapshot.
+    mockStore = { quotes: { requireProofApproval: true } }
+    mockFromCache = false
+    rerender(<QuoteSettingsCard hostId="site1" />)
+    expect(screen.queryByRole('status')).toBeNull()
+    fireEvent.click(save())
+
+    await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
+    expect(mockSetDoc.mock.calls[0][1]).toMatchObject({
+      quotes: { requireProofApproval: true, requireProofSignIn: true },
+    })
+  })
 })
 
 describe('the Quotes card', () => {

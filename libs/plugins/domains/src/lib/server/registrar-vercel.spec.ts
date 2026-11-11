@@ -116,6 +116,17 @@ describe("Vercel's registrar driver (AGL-3962)", () => {
     expect(await VERCEL_REGISTRAR.info('d.com')).toEqual({ ok: 'no', code: 'forbidden', retryable: false })
   })
 
+  it('puts a name back on Vercel’s nameservers with an empty list (AGL-4040)', async () => {
+    fetchMock.mockResolvedValueOnce(respond(200, {}))
+    expect(await VERCEL_REGISTRAR.setNameservers('a.com', [])).toEqual({ ok: 'yes', value: true })
+    const [url, init] = fetchMock.mock.calls.at(-1) as [string, RequestInit]
+    expect(url).toContain('/v1/registrar/domains/a.com/nameservers')
+    expect(init.method).toBe('PATCH')
+    expect(JSON.parse(String(init.body))).toEqual({ nameservers: [] })
+    fetchMock.mockResolvedValueOnce(respond(400, { error: { code: 'invalid_nameservers' } }))
+    expect(await VERCEL_REGISTRAR.setNameservers('a.com', [])).toEqual({ ok: 'no', code: 'invalid_nameservers', retryable: false })
+  })
+
   it('treats an empty contact schema as the standard contact', async () => {
     fetchMock.mockResolvedValueOnce(respond(200, {}))
     expect(await VERCEL_REGISTRAR.standardContact('a.com')).toEqual({ ok: 'yes', value: true })

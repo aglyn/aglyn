@@ -443,24 +443,59 @@ const killTheSession = () => {
 }
 
 describe('Content entry seed guard (AGL-1449)', () => {
-  it('REFUSES an entry save seeded from an unconfirmed read', async () => {
+  /**
+   * The first press is never refused for a late server (AGL-4047): Save is
+   * HELD while the entry read is the cache's, with the reason beside it, and
+   * the editor keeps what was typed.
+   */
+  it('HOLDS Save while the entry read is unconfirmed, keeping what was typed', async () => {
     mockEntries.fromCache = true
     renderEntry('entry-1')
 
     editAndSave()
+    await new Promise((resolve) => setTimeout(resolve, 20))
 
-    await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
+    const save = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement
+    expect(save.disabled).toBe(true)
+    expect(screen.getByText('Checking your entry with the server…')).toBeTruthy()
     expect(mockSetDoc).not.toHaveBeenCalled()
-    const [message] = mockEnqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('entry'))
-    // The guard's words reach this call site, which they could not while the
-    // page carried its own copy.
-    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
-    // The editor stays open with what was typed, so the author can retry
-    // rather than discover later that nothing was stored.
+    expect(mockEnqueueSnackbar).not.toHaveBeenCalled()
     expect((screen.getByLabelText('Title') as HTMLInputElement).value).toEqual(
       'Hello world, again',
     )
+  })
+
+  it('replays the edit onto the server’s copy, and saves the confirmed fields on the first press', async () => {
+    mockEntries.fromCache = true
+    const cached = mockEntries.data
+    try {
+      const { rerender } = renderEntry('entry-1')
+      fireEvent.change(screen.getByLabelText('Title'), {
+        target: { value: 'Hello world, again' },
+      })
+      // The server answers: the SEO title was changed elsewhere since the
+      // cached snapshot.
+      mockEntries.data = [{ ...cached[0], seoTitle: 'Hello again — Acme' }]
+      mockEntries.fromCache = false
+      rerender(
+        <ContentScopeProvider>
+          <EntryDetailPage />
+        </ContentScopeProvider>,
+      )
+
+      expect((screen.getByLabelText('Title') as HTMLInputElement).value).toEqual(
+        'Hello world, again',
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+      await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
+      const [, payload] = mockSetDoc.mock.calls[0]
+      expect(payload.title).toBe('Hello world, again')
+      // Not the cache's 'Hello world — Acme'.
+      expect(payload.seoTitle).toBe('Hello again — Acme')
+      expect(payload.body).toBe('The body nobody is editing')
+    } finally {
+      mockEntries.data = cached
+    }
   })
 
   it('REFUSES when the entries read FAILED, and says so differently', async () => {

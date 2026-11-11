@@ -34,7 +34,6 @@ import {
   Typography,
 } from '@mui/material'
 import { doc } from 'firebase/firestore'
-import { useEffect, useState } from 'react'
 import {
   useFirestore,
   useFirestoreDoc,
@@ -43,6 +42,11 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
+import {
+  isSeedChecking,
+  seedCheckingText,
+  useSeedEdits,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import OverlayStatsRow from './overlay-stats-row.component'
 import {
   OVERLAY_COPY_HELPER_TEXT,
@@ -95,13 +99,20 @@ export function AnnouncementBarCard(props: AnnouncementBarCardProps) {
   const entitled = checkEntitlement(org, 'marketingOverlays')
 
   const saved = (host?.announcementBar ?? {}) as HostAnnouncementBar
-  const [draft, setDraft] = useState<HostAnnouncementBar>(saved)
-  // Re-seed the form when another session edits the host doc.
+  /*
+   * What was typed, kept as EDITS over the stored bar (AGL-4047). Another
+   * session's edit, or the server's copy arriving after a page drawn from
+   * the cache, moves every field nobody touched; it used to reset the whole
+   * form, typed fields included. Save is held until the server has answered
+   * (`checking`).
+   */
   const savedKey = JSON.stringify(saved)
-  useEffect(() => {
-    setDraft(JSON.parse(savedKey))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savedKey])
+  const form = useSeedEdits<HostAnnouncementBar>(saved)
+  const draft = form.values
+  const checking = isSeedChecking({
+    fromCache: hostFromCache,
+    unreadable: hostStatus === 'error',
+  })
 
   // `draft.text` is held in its stored form; the field shows it as typed.
   const copy = useOverlayCopyEditor({
@@ -115,11 +126,11 @@ export function AnnouncementBarCard(props: AnnouncementBarCardProps) {
   // arrived still counts as the change it becomes on save.
   const dirty =
     JSON.stringify({ ...draft, text: copy.stored(draft.text) }) !== savedKey
-  const patch = (partial: Partial<HostAnnouncementBar>) =>
-    setDraft((previous) => ({ ...previous, ...partial }))
+  const patch = (partial: Partial<HostAnnouncementBar>) => form.edit(partial)
   const textShownAsTyped = copy.shownAsTyped(draft.text)
 
   const handleSave = async () => {
+    const written = form.edits
     const dequeue = queueLoading()
     try {
       /**
@@ -174,6 +185,7 @@ export function AnnouncementBarCard(props: AnnouncementBarCardProps) {
           persist: false,
         })
       }
+      form.settle(written)
       enqueueSnackbar('Announcement bar saved', {
         variant: 'success',
         persist: false,
@@ -289,6 +301,7 @@ export function AnnouncementBarCard(props: AnnouncementBarCardProps) {
             color="primary"
             disabled={
               !dirty ||
+              checking ||
               (Boolean(draft.enabled) && !draft.text?.trim()) ||
               copy.pending(draft.text)
             }
@@ -297,6 +310,11 @@ export function AnnouncementBarCard(props: AnnouncementBarCardProps) {
           >
             {'Save'}
           </Button>
+          {dirty && checking ? (
+            <Typography variant="body2" color="text.secondary" role="status">
+              {seedCheckingText('announcement bar')}
+            </Typography>
+          ) : null}
           <OverlayStatsRow
             hostId={hostId}
             actionKey="barClick"

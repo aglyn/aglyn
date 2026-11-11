@@ -33,13 +33,18 @@ import {
   Typography,
 } from '@mui/material'
 import { doc, setDoc } from 'firebase/firestore'
-import { useCallback, useState } from 'react'
+import { useCallback } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
   useFirestoreDoc,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import {
+  isSeedChecking,
+  seedCheckingText,
+  useSeedEdits,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 
 export interface TaxSettingsCardProps {
   hostId: string
@@ -73,8 +78,11 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
     () => doc(firestore, 'hosts', hostId, 'settings', 'store'),
     [firestore, hostId],
   )
-  const [draft, setDraft] = useState<CommerceModel.TaxSettings | null>(null)
-  const current: CommerceModel.TaxSettings = draft ?? store?.tax ?? { mode: 'manual' }
+  // What was typed, kept as edits over the stored settings, and Save held
+  // until the server has confirmed them (AGL-4047).
+  const form = useSeedEdits<CommerceModel.TaxSettings>(store?.tax ?? { mode: 'manual' })
+  const current = form.values
+  const checking = isSeedChecking({ fromCache: storeFromCache, unreadable: storeStatus === 'error' })
   /**
    * Whether anyone has ever answered the tax question for this store
    * (AGL-1999). Read from the SAVED document, never from `current` — the
@@ -87,7 +95,7 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
   const decided =
     storeStatus !== 'loading' && typeof store?.tax?.mode === 'string'
   const update = (patch: Partial<CommerceModel.TaxSettings>) =>
-    setDraft({ ...current, ...patch })
+    form.edit(patch)
   const updateRate = (
     index: number,
     patch: Partial<CommerceModel.TaxRate> | null,
@@ -140,6 +148,7 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
      * The guard WRAPS the write — an early return is a shape you can keep
      * while losing the protection.
      */
+    const written = form.edits
     const verdict = await writeGuardedBySeed(
       {
         subject: 'tax settings',
@@ -155,16 +164,16 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
         )
       },
     )
-    // Before `setDraft(null)`, so a refusal keeps every typed rate on screen.
+    // Before `settle`, so a refusal keeps every typed rate on screen.
     if (!verdict.ok) {
       return void enqueueSnackbar(verdict.message, {
         variant: 'warning',
         persist: false,
       })
     }
-    setDraft(null)
+    form.settle(written)
     enqueueSnackbar('Tax settings saved', { variant: 'success', persist: false })
-  }, [current, firestore, hostId, enqueueSnackbar, storeStatus, storeFromCache, storeListen])
+  }, [current, form, firestore, hostId, enqueueSnackbar, storeStatus, storeFromCache, storeListen])
 
   return (
     <CardDisplay
@@ -486,12 +495,17 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
           // An undecided store saves the choice on screen as it stands. The
           // select fires no change for the option already shown, so waiting
           // for an edit left "Manual rates" unsaveable and checkout off.
-          disabled={storeStatus === 'loading' || (decided && !draft)}
+          disabled={storeStatus === 'loading' || (decided && !form.dirty) || checking}
           onClick={handleSave}
           sx={{ alignSelf: 'flex-start' }}
         >
           {'Save tax settings'}
         </Button>
+        {(!decided || form.dirty) && checking ? (
+          <Typography variant="body2" color="text.secondary" role="status">
+            {seedCheckingText('tax settings')}
+          </Typography>
+        ) : null}
       </Stack>
     </CardDisplay>
   )

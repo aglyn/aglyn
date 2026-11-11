@@ -12,9 +12,14 @@ import com.aglyn.core.TokenClaims
 import com.aglyn.pluginhost.NativeParams
 import com.aglyn.pluginhost.NativePluginContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -261,6 +266,8 @@ class ScreenModel(
   val shown = mutableStateMapOf<String, Set<String>>()
   /** The `{attempt}` key of each action's last request, by action, path and body: a retry reuses it. */
   private val attempts = mutableMapOf<String, String>()
+  /** Waits for the server's copy of the document loads only the device's cache answered (`checking`, AGL-4047). */
+  private var confirming: Job? = null
 
   val data: JsonElement get() = context.obj("data") ?: JsonObject(emptyMap())
 
@@ -375,6 +382,7 @@ class ScreenModel(
   }
 
   suspend fun load() {
+    confirming?.cancel()
     if ((data as? JsonObject)?.isEmpty() != false) phase = Phase.Loading
     val client = api ?: run {
       phase = Phase.Failed("Sign in to continue.")
@@ -416,7 +424,7 @@ class ScreenModel(
             async {
               val scope = ScreenContext.withItem(seen, row)
               try {
-                fetch(client, load, scope).second
+                FirestoreLoads.unmarked(fetch(client, load, scope).second)
               } catch (error: CancellationException) {
                 throw error
               } catch (_: Throwable) {
@@ -444,14 +452,81 @@ class ScreenModel(
       phase = Phase.Failed(error.message ?: "This did not load.")
       return
     }
-    val answered = results.associate { it.first to it.second }
-    val derived = wanted.filter { it.derive != null }.associate { it.key to derive(it, JsonObject(answered)) }
+    val answered = results.associate { it.first to it.second }.toMutableMap()
+    // A document only the device's cache answered seeds the screen now and holds its forms (`checking.<key>`) until the
+    // server's copy is in: a Save pressed on the cache's copy would write it back over what the server holds.
+    val seen = ScreenContext.with(context, "data", JsonObject(answered))
+    // A query load's rows the same (a row's prompt is held while its list is the cache's).
+    val cached = mutableMapOf<String, PendingConfirm>()
+    for (load in loads.filter { (it.doc != null || it.query != null) && it.each == null }) {
+      val record = answered[load.key] as? JsonObject ?: continue
+      if (record[FirestoreLoads.FROM_CACHE_KEY] != JsonPrimitive(true)) continue
+      answered[load.key] = FirestoreLoads.unmarked(record)
+      cached[load.key] = load.doc?.let { PendingConfirm.Document(ScreenValues.render(it, seen)) }
+        ?: PendingConfirm.Query(load.query!!, seen, queryLimits[load.key] ?: FirestoreLoads.queryLimit(load.query!!))
+    }
+    val deriving = wanted.filter { it.derive != null }
+    val derived = deriving.associate { it.key to derive(it, JsonObject(answered)) }
     context = ScreenContext.with(context, "data", JsonObject(answered + derived))
+    context = ScreenContext.with(context, "checking", JsonObject(cached.mapValues { JsonPrimitive(true) }))
     applyDerived()
     cursors.clear()
     for ((key, _, cursor) in results) if (!cursor.isNullOrEmpty()) cursors[key] = cursor
     phase = Phase.Ready
+    confirm(cached, deriving)
     loadPluginColumns()
+  }
+
+  /**
+   * Swaps in the server's copy of each document only the cache answered, and lifts its hold, as the console's forms
+   * re-render on the confirming snapshot. It runs beside the caller (whose screen it belongs to) for as long as the screen
+   * is open: a held Save is held, as on the web, until the server answers. A read that fails lifts the hold and leaves the
+   * save's own refusal to say why.
+   */
+  /** A load only the device cache answered, and how to read it again from the server. */
+  private sealed interface PendingConfirm {
+    data class Document(val path: String) : PendingConfirm
+    data class Query(val spec: JsonElement, val scope: JsonElement, val limit: Int) : PendingConfirm
+  }
+
+  private suspend fun confirm(paths: Map<String, PendingConfirm>, deriving: List<LoadSpec>) {
+    val reader = reader ?: return
+    if (paths.isEmpty()) return
+    confirming = CoroutineScope(currentCoroutineContext()).launch {
+      for ((key, pending) in paths) launch {
+        while (isActive) {
+          val answer: JsonElement? = try {
+            when (pending) {
+              is PendingConfirm.Document -> FirestoreLoads.serverDocument(reader, pending.path).let { read ->
+                if (read.confirmed) read.document?.let { FirestoreLoads.json(it) } ?: JsonNull else null
+              }
+              is PendingConfirm.Query -> FirestoreLoads.query(reader, pending.spec, pending.scope, pending.limit, server = true)
+                .takeIf { (it as? JsonObject)?.containsKey(FirestoreLoads.FROM_CACHE_KEY) != true }
+            }
+          } catch (error: CancellationException) {
+            throw error
+          } catch (_: Throwable) {
+            confirmed(key, null, deriving)
+            return@launch
+          }
+          if (answer == null) continue
+          confirmed(key, answer, deriving)
+          return@launch
+        }
+      }
+    }
+  }
+
+  private fun confirmed(key: String, value: JsonElement?, deriving: List<LoadSpec>) {
+    val record = (data as? JsonObject)?.toMutableMap()
+    if (value != null && record != null) {
+      record[key] = value
+      for (load in deriving) record[load.key] = derive(load, JsonObject(record))
+      context = ScreenContext.with(context, "data", JsonObject(record))
+      applyDerived()
+    }
+    val held = context.obj("checking") as? JsonObject ?: return
+    context = ScreenContext.with(context, "checking", JsonObject(held - key))
   }
 
   /** A derived load's value, from what the screen's other loads answered. */
@@ -471,7 +546,7 @@ class ScreenModel(
 
   private suspend fun fetch(client: ConsoleApiClient, load: LoadSpec, context: JsonElement = this.context): Triple<String, JsonElement, String?> {
     load.doc?.let { doc ->
-      return Triple(load.key, reader?.let { FirestoreLoads.document(it, ScreenValues.render(doc, context)) } ?: JsonNull, null)
+      return Triple(load.key, reader?.let { FirestoreLoads.documentLoad(it, ScreenValues.render(doc, context)) } ?: JsonNull, null)
     }
     load.query?.let { query ->
       val reader = reader ?: return Triple(load.key, JsonNull, null)

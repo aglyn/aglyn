@@ -42,6 +42,10 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { Alert, Typography } from '@mui/material'
 import { updateProfile } from 'firebase/auth'
 import { deleteField, doc, serverTimestamp, setDoc } from 'firebase/firestore'
@@ -269,14 +273,30 @@ export function BasicInfoCard() {
     )
   }
 
+  /*
+    The first press is never refused for a late server (AGL-4047). While the
+    profile read is still the cache's, Update is held with the reason beside
+    it instead of waiting on the confirmation and ending refused, and
+    `keepDirtyOnReinitialize` keeps every field typed meanwhile when the
+    server's copy arrives: the untouched ones follow it, so the save carries
+    the confirmed profile plus the edits.
+  */
+  const checking = isSeedChecking({
+    fromCache: profileFromCache,
+    unreadable: profileUnreadable,
+  })
   return (
     <FormRenderer
       FormTemplate={CardDisplayFormTemplate}
+      FormTemplateProps={{
+        checkingText: checking ? seedCheckingText('profile') : undefined,
+      }}
       componentMapper={simpleComponentMapper}
       onSubmit={handleBasicSave}
       schema={basicSchema}
       subscription={{ values: true }}
       initialValues={data}
+      keepDirtyOnReinitialize
     />
   )
 }

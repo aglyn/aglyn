@@ -709,7 +709,13 @@ export function TasksSection(props: ConsolePluginPageProps) {
         orgId={orgId}
         scope={scope}
         readTokens={readTokens}
-        task={drawer.task}
+        // The task as the list has it now, so the drawer saves its edits onto
+        // the server's copy once it answers (AGL-4047).
+        task={
+          drawer.task
+            ? (tasks.find((row) => row.$id === drawer.task?.$id) ?? drawer.task)
+            : null
+        }
         seed={{ fromCache, unreadable: status === 'error', listen }}
       />
     </>

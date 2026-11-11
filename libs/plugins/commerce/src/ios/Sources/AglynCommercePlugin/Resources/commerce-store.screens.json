@@ -115,8 +115,10 @@
               }
             },
             "siteWide": true,
-            "success": "Store settings saved"
-          }
+            "success": "Store settings saved",
+            "checking": "store settings"
+          },
+          "checking": "store settings"
         }
       ]
     },
@@ -332,8 +334,10 @@
               }
             },
             "siteWide": true,
-            "success": "Review settings saved"
-          }
+            "success": "Review settings saved",
+            "checking": "store settings"
+          },
+          "checking": "store settings"
         }
       ]
     },
@@ -1228,8 +1232,10 @@
                 }
               }
             },
-            "success": "Tax settings saved"
-          }
+            "success": "Tax settings saved",
+            "checking": "tax settings"
+          },
+          "checking": "tax settings"
         },
         {
           "type": "list",
@@ -1299,7 +1305,8 @@
                   }
                 }
               },
-              "success": "Rate saved"
+              "success": "Rate saved",
+              "checking": "tax settings"
             },
             {
               "id": "remove",
@@ -1319,7 +1326,8 @@
                   }
                 }
               },
-              "success": "Removed"
+              "success": "Removed",
+              "checking": "tax settings"
             }
           ]
         },
@@ -1377,7 +1385,8 @@
                   }
                 }
               },
-              "success": "Rate saved"
+              "success": "Rate saved",
+              "checking": "tax settings"
             }
           ]
         },
@@ -1422,8 +1431,10 @@
                 }
               }
             },
-            "success": "Tax settings saved"
-          }
+            "success": "Tax settings saved",
+            "checking": "tax settings"
+          },
+          "checking": "tax settings"
         },
         {
           "type": "form",
@@ -1466,8 +1477,10 @@
                 }
               }
             },
-            "success": "Tax settings saved"
-          }
+            "success": "Tax settings saved",
+            "checking": "tax settings"
+          },
+          "checking": "tax settings"
         }
       ]
     },

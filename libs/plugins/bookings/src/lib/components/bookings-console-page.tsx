@@ -79,7 +79,7 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useParams, useSearchParams } from 'next/navigation'
-import { useCallback, useState } from 'react'
+import { useCallback } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -88,6 +88,11 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
+import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
@@ -256,7 +261,24 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
     (booking: any) => booking.reminderSentAt,
   ).length
 
-  const [draft, setDraft] = useState<ServiceDraft | null>(null)
+  /*
+   * The editor's draft, kept as EDITS over the service as the list has it
+   * now (AGL-4047): opened from the cache's row, the server's copy replaces
+   * it under every field nobody touched (`windows`, `priceUsd`), and Save is
+   * held until it has.
+   */
+  const [draft, setDraft] = useSeedDraft<ServiceDraft>((opened) => {
+    const row = opened.id
+      ? services.find((service: any) => service.$id === opened.id)
+      : undefined
+    return row ? { id: row.$id, ...bookingServiceDraftFrom(row) } : undefined
+  })
+  const draftChecking =
+    Boolean(draft?.id) &&
+    isSeedChecking({
+      fromCache: servicesFromCache,
+      unreadable: servicesStatus === 'error',
+    })
 
   const handleAdd = useCallback(() => {
     if (!entitled) {
@@ -278,7 +300,7 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
         Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
       ),
     })
-  }, [entitled, org, services.length, enqueueSnackbar])
+  }, [setDraft, entitled, org, services.length, enqueueSnackbar])
 
   const handleSave = useCallback(async () => {
     if (!draft || !draft.name.trim()) return
@@ -336,6 +358,7 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
       })
     }
   }, [
+    setDraft,
     draft,
     firestore,
     hostId,
@@ -946,11 +969,16 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
           </Typography>
         </DialogContent>
         <DialogActions>
+          {draftChecking ? (
+            <Typography variant="body2" color="text.secondary" role="status" sx={{ mr: 'auto' }}>
+              {seedCheckingText('service')}
+            </Typography>
+          ) : null}
           <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
             color="primary"
-            disabled={!draft?.name.trim()}
+            disabled={draftChecking || !draft?.name.trim()}
             onClick={handleSave}
           >
             {'Save service'}

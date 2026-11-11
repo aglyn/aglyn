@@ -382,10 +382,14 @@ public struct AglynCardGrid: Layout {
     return min(maxColumns, max(1, Int((max(0, width) + spacing) / (minimum + spacing))))
   }
 
-  /// The subview indices of each row.
+  /// A card with nothing to show (an empty stack: no tasks due, no campaign yet) takes no slot, so the cards after it
+  /// close up instead of leaving a hole in the grid.
+  static func isEmpty(_ subview: LayoutSubview) -> Bool { subview.sizeThatFits(.unspecified) == .zero }
+
+  /// The subview indices of each row, without the empty ones.
   func rows(_ subviews: Subviews, columns: Int) -> [[Int]] {
     var rows: [[Int]] = []
-    for index in subviews.indices {
+    for index in subviews.indices where !Self.isEmpty(subviews[index]) {
       let full = subviews[index][AglynGridFullWidth.self]
       if full || columns == 1 || rows.isEmpty || rows[rows.count - 1].count >= columns
         || subviews[rows[rows.count - 1][0]][AglynGridFullWidth.self]
@@ -417,6 +421,9 @@ public struct AglynCardGrid: Layout {
   }
 
   public func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    for subview in subviews where Self.isEmpty(subview) {
+      subview.place(at: bounds.origin, anchor: .topLeading, proposal: .zero)
+    }
     var y = bounds.minY
     for row in measure(bounds.width, subviews) {
       var x = bounds.minX

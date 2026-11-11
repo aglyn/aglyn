@@ -144,11 +144,16 @@ fun SetupScreen(context: NativePluginContext, initialSection: String? = null) {
           is Live.Ready -> {
             val doc = live.value ?: return@AglynListDetail EmptyState("This site is gone", icon = AglynIcons.named("public"))
             val canEdit = com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.edit")
+            val section = SetupSection.of(selected)
+            // The cards seeded from the site document hold their Save while it is only the device cache's copy (AGL-4047).
+            val checking = if (live.fromCache && section.seedsFromHost) com.aglyn.core.seedCheckingText("site settings") else null
+            // Keyed by site: what was typed for one site never carries to the next.
+            androidx.compose.runtime.key(hostId) {
+            androidx.compose.runtime.CompositionLocalProvider(com.aglyn.ui.LocalFormChecking provides checking) {
             Column(
               Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("setup-detail-$selected"),
               verticalArrangement = Arrangement.spacedBy(space(2f)),
             ) {
-              val section = SetupSection.of(selected)
               Text(section.title, Modifier.semantics { heading() }, style = MaterialTheme.typography.headlineSmall)
               if (!canEdit) NoticeBanner("You can view this site's setup. Changing it needs the author, editor or admin role.", StatusTone.INFO)
               when (section) {
@@ -161,6 +166,8 @@ fun SetupScreen(context: NativePluginContext, initialSection: String? = null) {
                 SetupSection.INTEGRATIONS -> IntegrationsSection(context, integrations)
               }
             }
+            }
+            }
           }
         }
       }
@@ -168,10 +175,34 @@ fun SetupScreen(context: NativePluginContext, initialSection: String? = null) {
   )
 }
 
-/** A card's fields, as text, re-read whenever what is stored changes. */
+/**
+ * A card's fields, as text. A newer copy of what is stored keeps what was typed and moves every other field to it
+ * (AGL-4047).
+ */
 @Composable
-private fun rememberFields(stored: Map<String, String>): SnapshotStateMap<String, String> =
-  remember(stored) { mutableStateMapOf<String, String>().apply { putAll(stored) } }
+private fun rememberFields(stored: Map<String, String>): SnapshotStateMap<String, String> {
+  val fields = remember { mutableStateMapOf<String, String>().apply { putAll(stored) } }
+  val seeded = remember { mutableStateOf(stored) }
+  if (seeded.value != stored) {
+    val next = com.aglyn.core.rebased(fields.toMap(), seeded.value, stored)
+    fields.clear()
+    fields.putAll(next)
+    seeded.value = stored
+  }
+  return fields
+}
+
+/** One value a card edits, kept over a newer stored copy when the person changed it (AGL-4047). */
+@Composable
+private fun <T> rememberRebased(stored: T): androidx.compose.runtime.MutableState<T> {
+  val value = remember { mutableStateOf(stored) }
+  val seeded = remember { mutableStateOf(stored) }
+  if (seeded.value != stored) {
+    value.value = com.aglyn.core.rebased(value.value, seeded.value, stored)
+    seeded.value = stored
+  }
+  return value
+}
 
 private fun SnapshotStateMap<String, String>.dirty(stored: Map<String, String>) = stored.any { (key, value) -> this[key] != value }
 
@@ -243,7 +274,14 @@ private fun BusinessDetailsCard(host: Map<String, Any?>, api: HostSettingsApi, c
   val storedLinks = remember(host) { socialLinksOf(host) }
   val stored = remember(host) { mapOf("supportEmail" to host.text("business.supportEmail"), "address" to host.text("business.address")) }
   val fields = rememberFields(stored)
-  val links = remember(storedLinks) { mutableStateListOf<SocialLink>().apply { addAll(storedLinks) } }
+  val links = remember { mutableStateListOf<SocialLink>().apply { addAll(storedLinks) } }
+  val seededLinks = remember { mutableStateOf(storedLinks) }
+  if (seededLinks.value != storedLinks) {
+    val next = com.aglyn.core.rebased(links.toList(), seededLinks.value, storedLinks)
+    links.clear()
+    links.addAll(next)
+    seededLinks.value = storedLinks
+  }
   val runner = rememberRunner()
   FormCard(
     title = "Business details",
@@ -313,8 +351,8 @@ private fun BuiltInLayoutCard(context: NativePluginContext, hostId: String, host
 private fun LanguagesCard(host: Map<String, Any?>, api: HostSettingsApi, canEdit: Boolean) {
   val storedLocales = remember(host) { (host["locales"] as? List<*>)?.filterIsInstance<String>().orEmpty() }
   val storedDefault = host.text("defaultLocale")
-  var text by remember(storedLocales) { mutableStateOf(storedLocales.joinToString(", ")) }
-  var chosen by remember(storedDefault) { mutableStateOf(storedDefault.ifEmpty { null }) }
+  var text by rememberRebased(storedLocales.joinToString(", "))
+  var chosen by rememberRebased(storedDefault.ifEmpty { null })
   val (parsed, error) = parseLocales(text)
   val runner = rememberRunner()
   FormCard(
@@ -847,7 +885,13 @@ private fun FontPickerField(catalog: ThemeCatalog, value: String, enabled: Boole
 @Composable
 private fun ThemeEditorCard(load: Load<ThemeEditorLoad>, onRetry: () -> Unit, api: HostSettingsApi, canEdit: Boolean) {
   LoadContent(load, onRetry = onRetry, failedTitle = "Could not load the theme", modifier = Modifier.fillMaxWidth()) { (catalog, stored) ->
-    var draft by remember(stored) { mutableStateOf(stored) }
+    // The saved theme moving under the editor keeps what was changed here and moves everything else to it (AGL-4047).
+    var draft by remember { mutableStateOf(stored) }
+    var seeded by remember { mutableStateOf(stored) }
+    if (seeded != stored) {
+      draft = rebasedTheme(draft, seeded, stored)
+      seeded = stored
+    }
     var scheme by remember { mutableStateOf(catalog.schemes.firstOrNull() ?: "light") }
     val runner = rememberRunner()
     val edits = themeEdits(stored, draft)

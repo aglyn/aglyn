@@ -45,6 +45,11 @@ import {
   Typography,
 } from '@mui/material'
 import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
+import {
+  isSeedChecking,
+  seedCheckingText,
+  useSeedEdits,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useEffect, useId, useMemo, useState } from 'react'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
@@ -271,21 +276,27 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
    * company, title, the phones, website, address, tags, lead source,
    * industry, rating, size and revenue — edited in the Details card with
    * the notes and the custom fields, under one Save, the way the contact's
-   * Properties card saves. Seeded from the document and guarded on save: a
-   * draft edited over a cached read must not overwrite a newer profile
-   * with an older one.
+   * Properties card saves. Kept as EDITS over the document (AGL-4047): a
+   * field nobody touched follows the document, so the server's copy
+   * arriving after a keystroke replaces the cache's under it, and Save is
+   * held until it has (`checkingText`). A draft edited over a cached read
+   * never overwrites a newer profile with an older one.
    */
-  const [profile, setProfile] = useState<LeadProfileDraft>(() => leadProfileDraftFrom(lead))
-  const [profileDirty, setProfileDirty] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [profileErrors, setProfileErrors] = useState<Record<string, string>>({})
   // The stored profile as one value, so a change to any of its fields reseeds.
   const profileSeed = JSON.stringify(Aglyn.CRM_LEAD_PROFILE_KEYS.map((key) => lead[key] ?? null))
-  useEffect(() => {
-    if (!profileDirty) setProfile(leadProfileDraftFrom(lead))
-    // The draft follows the document until it is edited.
+  const storedProfile = useMemo(
+    () => leadProfileDraftFrom(lead),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profileDirty, profileSeed])
+    [profileSeed],
+  )
+  const profileForm = useSeedEdits<LeadProfileDraft>(storedProfile)
+  const profile = profileForm.values
+  const profileDirty = profileForm.dirty
+  const [saving, setSaving] = useState(false)
+  const [profileErrors, setProfileErrors] = useState<Record<string, string>>({})
+  const checkingText = isSeedChecking({ fromCache, unreadable: leadStatus === 'error' })
+    ? seedCheckingText('lead')
+    : undefined
   /*
    * THE ORG'S OWN LEAD FIELDS (AGL-3272), edited under the same Save as
    * the profile: one button over one card, so a person filling a lead in
@@ -311,8 +322,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
   const [custom, setCustom] = useState<CrmCustomDraft>({})
 
   const editProfile = <K extends keyof LeadProfileDraft>(key: K, value: LeadProfileDraft[K]) => {
-    setProfile((current) => ({ ...current, [key]: value }))
-    setProfileDirty(true)
+    profileForm.edit({ [key]: value } as Partial<LeadProfileDraft>)
   }
   // A newer note from the server replaces an UNEDITED draft; an edited one is
   // the reader's, and the guard on save decides whether it may land.
@@ -355,8 +365,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
 
   /** Every draft back to what the document holds. */
   const discard = () => {
-    setProfile(leadProfileDraftFrom(lead))
-    setProfileDirty(false)
+    profileForm.discard()
     setProfileErrors({})
     setCustom({})
     setNotes(String(lead.notes ?? ''))
@@ -370,6 +379,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
    */
   const saveDetails = async () => {
     const update: Record<string, unknown> = {}
+    const writtenProfile = profileForm.edits
     if (!converted && (profileDirty || customChanged)) {
       const { body, revenueError } = leadProfileDraftBody(profile)
       const { patch, errors } = Aglyn.normalizeCrmLeadProfile(body)
@@ -432,7 +442,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
       return
     }
     if (!landed) return
-    setProfileDirty(false)
+    profileForm.settle(writtenProfile)
     setNotesDirty(false)
     // The draft is spent: what it held is stored, and the controls read
     // the document again.
@@ -675,7 +685,12 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
         contentGutterY
         HeaderProps={{
           action: (
-            <Stack direction="row" spacing={1}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              {dirty && checkingText ? (
+                <Typography variant="body2" color="text.secondary" role="status">
+                  {checkingText}
+                </Typography>
+              ) : null}
               {dirty ? (
                 <Button size="small" disabled={saving} onClick={discard}>
                   {'Discard changes'}
@@ -685,7 +700,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
                 size="small"
                 variant="contained"
                 onClick={() => void saveDetails()}
-                disabled={!dirty || saving}
+                disabled={!dirty || saving || Boolean(checkingText)}
               >
                 {saving ? 'Saving…' : 'Save'}
               </Button>

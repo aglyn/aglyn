@@ -30,6 +30,10 @@ import {
   type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
 import { deleteField, doc, updateDoc } from 'firebase/firestore'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useCallback, useMemo, useState } from 'react'
 import { useCrmPicklist } from '../hooks/use-crm-picklist'
 import { useCrmRecordNames } from '../hooks/use-crm-record-names'
@@ -148,6 +152,9 @@ export function DealContactRolesCard(props: DealContactRolesCardProps) {
       help={pluginDocsHelp('deals', { anchor: '#contact-roles' })}
       emptyDescription="Name the people on the deal and the part each plays — one of them Primary."
       save={save}
+      checkingText={
+        isSeedChecking({ fromCache, unreadable }) ? seedCheckingText('deal') : undefined
+      }
     />
   )
 }

@@ -21,7 +21,15 @@ public enum AglynKeyboard: Sendable {
 /// A titled card of fields in a grouped form: a one-line description, the
 /// fields, why the last save failed or that it worked, and Discard and Save.
 /// Save and Discard stay disabled until a field differs from what is stored.
+extension EnvironmentValues {
+  /// Set while the data a form card is seeded from is only the device cache's answer (AGL-4047): the card holds its Save
+  /// and says this beside it once something is typed (`seedCheckingText`). A card that saves on each change holds its
+  /// controls the same way.
+  @Entry public var aglynFormChecking: String?
+}
+
 public struct AglynFormCard<Content: View>: View {
+  @Environment(\.aglynFormChecking) private var checking
   let title: String
   let message: String?
   let dirty: Bool
@@ -56,6 +64,10 @@ public struct AglynFormCard<Content: View>: View {
       content
       if let error { AglynNotice(error, tone: .error) }
       if let notice, !dirty, error == nil { AglynNotice(notice, tone: .success) }
+      if let checking, dirty {
+        Text(checking).font(AglynFont.caption).foregroundStyle(.secondary)
+          .accessibilityIdentifier("card-checking-\(title)")
+      }
       HStack {
         Spacer()
         Button("Discard", action: onDiscard)
@@ -65,7 +77,7 @@ public struct AglynFormCard<Content: View>: View {
           if busy { ProgressView().controlSize(.small) } else { Text("Save") }
         }
         .buttonStyle(.aglynProminent)
-        .disabled(!dirty || !canSave || busy)
+        .disabled(!dirty || !canSave || busy || checking != nil)
         .accessibilityIdentifier("card-save-\(title)")
       }
       .buttonStyle(.borderless)

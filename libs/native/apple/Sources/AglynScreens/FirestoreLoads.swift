@@ -150,6 +150,49 @@ enum FirestoreLoads {
     return doc
   }
 
+  /// The key a document load's answer carries (beside `$id`) while only the device's cache has given it (AGL-4047). The
+  /// model takes it off, holds the forms seeded from that load (`checking`) and swaps in the server's copy when it answers.
+  static let fromCacheKey = "$fromCache"
+
+  /// A document load's first answer, marked with `fromCacheKey` when only the device's cache gave it. A document the
+  /// cache reports missing is not missing yet: the server is waited for (`serverDocument`), so a form is never seeded
+  /// blank over values the server holds.
+  @MainActor
+  static func documentLoad(_ reader: FirestoreReader, _ path: String) async throws -> JSONValue {
+    let first: FirestoreAnswer<FirestoreDocument?> = try await withCheckedThrowingContinuation { continuation in
+      var listener: FirestoreListening?
+      var finished = false
+      listener = reader.listenDocumentAnswer(segments(path)) { result in
+        guard !finished else { return }
+        finished = true
+        listener?.remove()
+        continuation.resume(with: result)
+      }
+      if finished { listener?.remove() }
+    }
+    guard first.fromCache else { return first.value.map(json) ?? .null }
+    guard let doc = first.value else {
+      let server = try await serverDocument(reader, path)
+      let value = server.document.map(json) ?? .null
+      return server.confirmed ? value : markedFromCache(value)
+    }
+    return markedFromCache(json(doc))
+  }
+
+  /// `value` with `fromCacheKey` set; a document that is not there has nothing to carry it.
+  static func markedFromCache(_ value: JSONValue) -> JSONValue {
+    guard case .object(var record) = value else { return value }
+    record[fromCacheKey] = .bool(true)
+    return .object(record)
+  }
+
+  /// `value` without `fromCacheKey`: a per-row read is shown, never saved back, so it is not held.
+  static func unmarked(_ value: JSONValue) -> JSONValue {
+    guard case .object(var record) = value, record[fromCacheKey] != nil else { return value }
+    record[fromCacheKey] = nil
+    return .object(record)
+  }
+
   /// How long `serverDocument` waits for the server past the cache's answer: the console guard's 12 s (tests shorten it).
   @MainActor static var serverDeadline: Duration = .seconds(12)
 
@@ -203,7 +246,11 @@ enum FirestoreLoads {
   /// `spec` is `{ collection, where: [[field, "==", value]], orderBy: "field desc", limit }`. `limit` replaces the spec's
   /// own when a list has been asked for more rows (a growing window, as the console's lists page).
   @MainActor
-  static func query(_ reader: FirestoreReader, _ spec: JSONValue, in context: JSONValue, limit: Int? = nil) async throws -> JSONValue {
+  /// An answer only the device cache gave is marked (`fromCacheKey`), as a document load's is; `server` waits past the
+  /// cache for the server's answer, up to `serverDeadline` (the model's confirm pass, AGL-4047).
+  static func query(
+    _ reader: FirestoreReader, _ spec: JSONValue, in context: JSONValue, limit: Int? = nil, server: Bool = false
+  ) async throws -> JSONValue {
     let collection = ScreenValues.render(spec["collection"]?.stringValue ?? "", in: context)
     var equals: [(field: String, value: Any)] = []
     var filters: [ListQueryConstraint] = []
@@ -265,7 +312,33 @@ enum FirestoreLoads {
       if let field = aggregate["sum"]?.stringValue, let total = try await reader.sum(whole, field: field) { result["sum"] = .number(total) }
       return .object(result)
     }
-    return ["items": .array(try await documents(reader, query).map(json))]
+    let docs = server ? try await serverDocuments(reader, query) : try await documents(reader, query)
+    let answer: JSONValue = ["items": .array(docs.map(json))]
+    return docs.contains(where: \.fromCache) ? markedFromCache(answer) : answer
+  }
+
+  /// A query as the server answers it: the device cache's answer is waited past, up to `serverDeadline`; at the deadline
+  /// the latest answer is given as it is (its documents still say `fromCache`).
+  @MainActor
+  static func serverDocuments(_ reader: FirestoreReader, _ query: FirestoreQuery) async throws -> [FirestoreDocument] {
+    var confirming = query
+    confirming.includeMetadataChanges = true
+    let wait = QueryAnswerWait()
+    return try await withCheckedThrowingContinuation { continuation in
+      wait.continuation = continuation
+      wait.listener = reader.listen(confirming) { result in
+        switch result {
+        case .failure(let error): wait.finish(.failure(error))
+        case .success(let docs):
+          wait.latest = docs
+          if !docs.contains(where: \.fromCache) { wait.finish(.success(docs)) }
+        }
+      }
+      Task { @MainActor in
+        try? await Task.sleep(for: serverDeadline)
+        wait.finish(wait.latest.map { .success($0) } ?? .failure(URLError(.timedOut)))
+      }
+    }
   }
 
   /// A query read once.
@@ -282,6 +355,22 @@ enum FirestoreLoads {
       }
       if finished { listener?.remove() }
     }
+  }
+}
+
+/// One `serverDocuments` wait: the first of its listener's server answer, its failure or its deadline ends it.
+@MainActor
+private final class QueryAnswerWait {
+  var continuation: CheckedContinuation<[FirestoreDocument], Error>?
+  var listener: FirestoreListening?
+  var latest: [FirestoreDocument]?
+
+  func finish(_ result: Result<[FirestoreDocument], Error>) {
+    guard let continuation else { return }
+    self.continuation = nil
+    listener?.remove()
+    listener = nil
+    continuation.resume(with: result)
   }
 }
 

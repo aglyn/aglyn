@@ -56,6 +56,11 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
+import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 
 export interface ReservationsCardProps {
   hostId: string
@@ -265,9 +270,26 @@ export function ReservationsCard(props: ReservationsCardProps) {
     return map
   }, [resourceDocs])
 
-  const [resourceDraft, setResourceDraft] = useState<
-    (Partial<CommerceModel.HostResource> & { id: string | null }) | null
-  >(null)
+  /*
+   * The dialog's draft, kept as EDITS over the resource as the list has it
+   * now (AGL-4047): opened from the cache's row, the server's copy replaces
+   * it under every field nobody touched (`blocks` among them), and Save is
+   * held until it has.
+   */
+  const [resourceDraft, setResourceDraft] = useSeedDraft<
+    Partial<CommerceModel.HostResource> & { id: string | null }
+  >((opened) => {
+    const row = opened.id
+      ? resourceDocs?.find((resource: any) => resource.$id === opened.id)
+      : undefined
+    return row ? { id: row.$id, ...row } : undefined
+  })
+  const resourceChecking =
+    Boolean(resourceDraft?.id) &&
+    isSeedChecking({
+      fromCache: resourcesFromCache,
+      unreadable: resourcesStatus === 'error',
+    })
   const [walkIn, setWalkIn] = useState<{
     resourceId: string
     checkIn: string
@@ -361,6 +383,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
     setResourceDraft(null)
     enqueueSnackbar('Resource saved', { variant: 'success', persist: false })
   }, [
+    setResourceDraft,
     resourceDraft,
     firestore,
     hostId,
@@ -983,11 +1006,17 @@ export function ReservationsCard(props: ReservationsCardProps) {
           </Stack>
         </DialogContent>
         <DialogActions>
+          {resourceChecking ? (
+            <Typography variant="body2" color="text.secondary" role="status" sx={{ mr: 'auto' }}>
+              {seedCheckingText('resource')}
+            </Typography>
+          ) : null}
           <Button onClick={() => setResourceDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
             color="primary"
             disabled={
+              resourceChecking ||
               !resourceDraft?.name?.trim() ||
               !((resourceDraft?.nightlyRateUsd ?? 0) > 0) ||
               Boolean(unitsProblem(resourceDraft?.units)) ||

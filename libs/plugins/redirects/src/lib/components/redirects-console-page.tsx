@@ -63,6 +63,11 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
+import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 
 /**
  * How many redirect documents this page reads.
@@ -114,6 +119,21 @@ interface RedirectDraft {
  * the thirty analytics day-doc reads behind the hit counts, and refuses the
  * add path ahead of the server that enforces it.
  */
+/** A stored rule as the editor holds it. */
+function redirectDraftOf(redirect: any): RedirectDraft {
+  return {
+    id: redirect.$id,
+    source: redirect.source ?? '',
+    destination: redirect.destination ?? '',
+    statusCode: redirect.statusCode ?? 302,
+    kind: redirect.kind ?? 'exact',
+    priority: redirect.priority ?? REDIRECT_DEFAULT_PRIORITY,
+    // Read exactly as the switch beside it does (AGL-1372): an edit must not
+    // be a way to turn a rule back on.
+    enabled: redirect.enabled !== false,
+  }
+}
+
 export function RedirectsConsolePage(props: ConsolePluginPageProps) {
   const { hostId, entitled, org } = props
   const firestore = useFirestore()
@@ -243,7 +263,24 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
     }
   }, [countRedirects, liveRedirectDocCount])
 
-  const [draft, setDraft] = useState<RedirectDraft | null>(null)
+  /*
+   * The editor's draft, kept as EDITS over the rule as the list has it now
+   * (AGL-4047): opened from the cache's row, the server's copy replaces it
+   * under every field nobody touched (`enabled` among them), and Save is
+   * held until it has.
+   */
+  const [draft, setDraft] = useSeedDraft<RedirectDraft>((opened) => {
+    const row = opened.id
+      ? redirects.find((redirect: any) => redirect.$id === opened.id)
+      : undefined
+    return row ? redirectDraftOf(row) : undefined
+  })
+  const draftChecking =
+    Boolean(draft?.id) &&
+    isSeedChecking({
+      fromCache: redirectsFromCache,
+      unreadable: redirectsStatus === 'error',
+    })
   const [testPath, setTestPath] = useState('')
 
   // Host routing map for the screen-collision warning (AGL-156 spec).
@@ -328,7 +365,7 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
       // without the field would never resolve (AGL-1372).
       enabled: true,
     })
-  }, [entitled, org, enforcedCount, enqueueSnackbar])
+  }, [setDraft, entitled, org, enforcedCount, enqueueSnackbar])
 
   /**
    * Tell the tenant a rule changed (best effort, never awaited into the save
@@ -539,6 +576,7 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
       })
     }
   }, [
+    setDraft,
     draft,
     redirects,
     host,
@@ -738,19 +776,7 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
             </Stack>
             <Button
               size="small"
-              onClick={() =>
-                setDraft({
-                  id: redirect.$id,
-                  source: redirect.source ?? '',
-                  destination: redirect.destination ?? '',
-                  statusCode: redirect.statusCode ?? 302,
-                  kind: redirect.kind ?? 'exact',
-                  priority: redirect.priority ?? REDIRECT_DEFAULT_PRIORITY,
-                  // Read exactly as the switch beside it does (AGL-1372):
-                  // an edit must not be a way to turn a rule back on.
-                  enabled: redirect.enabled !== false,
-                })
-              }
+              onClick={() => setDraft(redirectDraftOf(redirect))}
             >
               {'Edit'}
             </Button>
@@ -923,11 +949,18 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
           />
         </DialogContent>
         <DialogActions>
+          {draftChecking ? (
+            <Typography variant="body2" color="text.secondary" role="status" sx={{ mr: 'auto' }}>
+              {seedCheckingText('redirect')}
+            </Typography>
+          ) : null}
           <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
             color="primary"
-            disabled={!draft?.source.trim() || !draft?.destination.trim()}
+            disabled={
+              draftChecking || !draft?.source.trim() || !draft?.destination.trim()
+            }
             onClick={handleSave}
           >
             {'Save redirect'}

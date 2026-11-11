@@ -213,4 +213,45 @@ final class ShellTests: XCTestCase {
     navigation.select(.analytics)
     XCTAssertFalse(navigation.canGoForward)
   }
+
+  /// Over the Besigner, Back and ⌘[ press the editor's own back control; elsewhere they walk the history (AGL-4056).
+  func testBackOverTheBesignerPressesTheEditorsOwnBack() {
+    let navigation = ShellNavigation()
+    navigation.select(.plugin("forms.forms"))
+    navigation.push(.besigner("/acme/hosts/shop/forms/f1/versions/v1/besigner"))
+    var pressed = 0
+    navigation.besignerBack = { pressed += 1 }
+    XCTAssertTrue(navigation.canGoBackOrLeave)
+    navigation.back()
+    XCTAssertEqual(pressed, 1)
+    // The window's history is untouched: a form's Besigner no longer lands on the site's Home.
+    XCTAssertEqual(navigation.section, .plugin("forms.forms"))
+    navigation.paths[navigation.section] = []
+    navigation.back()
+    XCTAssertEqual(pressed, 1)
+    XCTAssertEqual(navigation.section, .home)
+  }
+
+  /// Focus mode: the Besigner folds the rail and the sidebar, the rail toggle brings both back, and leaving restores
+  /// them as they were without remembering the fold for the next launch (AGL-4056).
+  func testTheBesignerFocusModeFoldsAndRestoresTheColumns() {
+    let key = "aglyn.shell.railHidden"
+    let stored = UserDefaults.standard.object(forKey: key)
+    defer { UserDefaults.standard.set(stored, forKey: key) }
+    UserDefaults.standard.set(false, forKey: key)
+    let navigation = ShellNavigation()
+    navigation.enterBesignerFocus()
+    XCTAssertTrue(navigation.railHidden)
+    XCTAssertTrue(navigation.sidebarHidden)
+    XCTAssertFalse(UserDefaults.standard.bool(forKey: key), "the fold is not the person's own choice")
+    navigation.railHidden = false
+    navigation.followRailInBesignerFocus()
+    XCTAssertFalse(navigation.sidebarHidden)
+    navigation.railHidden = true
+    navigation.followRailInBesignerFocus()
+    XCTAssertTrue(navigation.sidebarHidden)
+    navigation.leaveBesignerFocus()
+    XCTAssertFalse(navigation.railHidden)
+    XCTAssertFalse(navigation.sidebarHidden)
+  }
 }

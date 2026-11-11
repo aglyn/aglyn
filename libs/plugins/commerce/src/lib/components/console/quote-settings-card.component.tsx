@@ -36,6 +36,11 @@ import {
 } from '@mui/material'
 import { doc, setDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
+import {
+  isSeedChecking,
+  seedCheckingText,
+  useSeedEdits,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 
 export interface QuoteSettingsCardProps {
   hostId: string
@@ -75,11 +80,14 @@ export function QuoteSettingsCard(props: QuoteSettingsCardProps) {
     requireProofSignIn: CommerceModel.quoteRequiresProofSignInByDefault(store?.quotes),
     approvalStatements: CommerceModel.quoteApprovalStatements(store?.quotes),
   }
-  const [draft, setDraft] = useState<QuoteSettingsDraft | null>(null)
-  const form = draft ?? saved
+  // What was typed, kept as edits over the saved settings, and Save held
+  // until the server has confirmed them (AGL-4047).
+  const edits = useSeedEdits<QuoteSettingsDraft>(saved)
+  const form = edits.values
+  const checking = isSeedChecking({ fromCache, unreadable: status === 'error' })
   const [busy, setBusy] = useState(false)
   const loading = status === 'loading'
-  const edit = (patch: Partial<QuoteSettingsDraft>) => setDraft({ ...form, ...patch })
+  const edit = (patch: Partial<QuoteSettingsDraft>) => edits.edit(patch)
   const statements = form.approvalStatements
   const cleaned = CommerceModel.cleanQuoteApprovalStatements(statements)
 
@@ -89,6 +97,7 @@ export function QuoteSettingsCard(props: QuoteSettingsCardProps) {
       requireProofSignIn: form.requireProofSignIn,
       approvalStatements: CommerceModel.cleanQuoteApprovalStatements(form.approvalStatements),
     }
+    const written = edits.edits
     setBusy(true)
     try {
       const verdict = await writeGuardedBySeed(
@@ -100,12 +109,12 @@ export function QuoteSettingsCard(props: QuoteSettingsCardProps) {
       if (!verdict.ok) {
         return void enqueueSnackbar(verdict.message, { variant: 'warning', persist: false })
       }
-      setDraft(null)
+      edits.settle(written)
       enqueueSnackbar('Quote settings saved', { variant: 'success', persist: false })
     } finally {
       setBusy(false)
     }
-  }, [form, firestore, hostId, status, fromCache, listen, enqueueSnackbar])
+  }, [form, edits, firestore, hostId, status, fromCache, listen, enqueueSnackbar])
 
   return (
     <CardDisplay
@@ -120,7 +129,7 @@ export function QuoteSettingsCard(props: QuoteSettingsCardProps) {
           <Button
             size="small"
             variant="contained"
-            disabled={busy || draft === null || loading || cleaned.length === 0}
+            disabled={busy || !edits.dirty || checking || loading || cleaned.length === 0}
             onClick={() => void save()}
           >
             {'Save'}
@@ -131,6 +140,11 @@ export function QuoteSettingsCard(props: QuoteSettingsCardProps) {
       contentGutterY
     >
       <Stack spacing={2}>
+        {edits.dirty && checking ? (
+          <Typography variant="body2" color="text.secondary" role="status">
+            {seedCheckingText('quote settings')}
+          </Typography>
+        ) : null}
         <Stack spacing={0.5}>
           <FormControlLabel
             control={

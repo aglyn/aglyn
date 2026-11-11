@@ -34,9 +34,12 @@ struct EventRow: Identifiable, Equatable {
   let coverImageAlt: String
   let status: String
   let deleted: Bool
+  /// Only the device cache's copy yet: its editor holds Save until the server's is in (AGL-4047).
+  var fromCache = false
 
   init(_ doc: FirestoreDocument) {
     id = doc.id
+    fromCache = doc.fromCache
     title = doc.string("title") ?? ""
     startsAtMs = doc.int("startsAtMs") ?? 0
     endsAtMs = doc.int("endsAtMs")
@@ -132,7 +135,9 @@ final class HostEvents {
     listener?.remove()
     guard let hostID else { return }
     listener = reader.listen(
-      FirestoreQuery(eventsPath(hostID), order: [.init("startsAtMs", descending: true)], limit: eventCeiling + 1)
+      // Metadata changes too, so a row the server confirms stops reading as the cache's (AGL-4047).
+      FirestoreQuery(
+        eventsPath(hostID), order: [.init("startsAtMs", descending: true)], limit: eventCeiling + 1, includeMetadataChanges: true)
     ) { [weak self] result in
       switch result {
       case .success(let docs):
@@ -268,7 +273,10 @@ struct EventsScreen: View {
   }
 
   private func editor(for row: EventRow?) -> some View {
-    EventEditor(context: context, initial: row.map(EventDraft.init) ?? EventDraft(), onDelete: row.map { row in { deleting = row } }) { draft in
+    EventEditor(
+      context: context, initial: row.map(EventDraft.init) ?? EventDraft(), held: row?.fromCache == true,
+      onDelete: row.map { row in { deleting = row } }
+    ) { draft in
       guard let hostID = context.hostID, let merge = eventMerge(draft) else { return }
       let id = draft.id ?? newEventID()
       if draft.id == nil {
@@ -298,10 +306,18 @@ struct EventEditor: View {
   let context: NativePluginContext
   let onDelete: (() -> Void)?
   let onSave: (EventDraft) -> Void
+  /// The event as stored now; what was typed is laid over each newer copy (AGL-4047).
+  let initial: EventDraft
+  /// A stored event read only from the device cache: Save waits for the server's copy. A new one is never held.
+  let held: Bool
   @State private var draft: EventDraft
 
-  init(context: NativePluginContext, initial: EventDraft, onDelete: (() -> Void)?, onSave: @escaping (EventDraft) -> Void) {
+  init(
+    context: NativePluginContext, initial: EventDraft, held: Bool = false, onDelete: (() -> Void)?, onSave: @escaping (EventDraft) -> Void
+  ) {
     self.context = context
+    self.initial = initial
+    self.held = held
     _draft = State(initialValue: initial)
     self.onDelete = onDelete
     self.onSave = onSave
@@ -312,6 +328,9 @@ struct EventEditor: View {
   var body: some View {
     let problem = eventWriteProblem(title: draft.title, startsAtMs: draft.startsAtMs)
     Form {
+      if held {
+        Section { Text(seedCheckingText("event")).font(AglynFont.caption).foregroundStyle(.secondary) }
+      }
       Section {
         Picker("Status", selection: $draft.status) {
           Text("Draft").tag(EventStatus.draft)
@@ -369,11 +388,17 @@ struct EventEditor: View {
     .aglynScreenTitle(draft.id == nil ? "New event" : draft.title.isEmpty ? "Event" : draft.title)
     .onAppear { if draft.startsAt == nil { draft.startsAt = Self.nextHour } }
     // Beside the list on the Mac and iPad, Save sits in the head as a bordered button; the list keeps Add event.
-    .aglynEditorActions(id: "event-save", save: "Save", enabled: problem == nil, primary: false) {
+    .aglynEditorActions(id: "event-save", save: "Save", enabled: problem == nil && !held, primary: false) {
       onSave(draft)
       if draft.id == nil { dismiss() }
     }
     .accessibilityIdentifier("event-editor")
+    .onChange(of: initial) { previous, next in
+      draft = rebased(draft, previous: previous, next: next) {
+        $0.field(\.title); $0.field(\.startsAt); $0.field(\.endsAt); $0.field(\.location); $0.field(\.organizer)
+        $0.field(\.description); $0.field(\.coverImage); $0.field(\.coverImageAlt); $0.field(\.status)
+      }
+    }
   }
 
   static var nextHour: Date {

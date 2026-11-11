@@ -473,6 +473,17 @@ export const VERCEL_REGISTRAR: RegistrarDriver = {
     return { ok: 'yes', value: { ours, nameservers, intended } }
   },
 
+  async setNameservers(domain, nameservers) {
+    // An empty list is Vercel's own nameservers.
+    const answer = await call(
+      'PATCH',
+      `/v1/registrar/domains/${encodeURIComponent(domain)}/nameservers`,
+      { nameservers: [...nameservers] },
+    )
+    if (!ok(answer.status)) return refusal(answer)
+    return { ok: 'yes', value: true }
+  },
+
   async listDnsRecords(domain) {
     const records: RegistrarListedRecord[] = []
     let until: string | undefined

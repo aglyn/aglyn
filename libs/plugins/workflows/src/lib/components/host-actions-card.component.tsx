@@ -88,6 +88,11 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
+import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 import { ACTION_TEST_RUN_API_ROUTE } from '../model/action-test-run'
 import {
   AutomationStepFields,
@@ -288,7 +293,23 @@ export function HostActionsCard(props: {
   )
   const { rows: readActions, truncated: actionsTruncated } =
     ceilingedWindow<any>(actionDocs, ACTION_CEILING)
-  const [draft, setDraft] = useState<ActionDraft | null>(null)
+  /*
+   * The editor's draft, kept as EDITS over the action as the list has it now
+   * (AGL-4047): opened from the cache's row, the server's copy replaces it
+   * under every field nobody touched, and Save is held until it has.
+   */
+  const [draft, setDraft] = useSeedDraft<ActionDraft>((opened) => {
+    const row = opened.id
+      ? readActions.find((action: any) => action.$id === opened.id)
+      : undefined
+    return row ? draftFromAction(row, row.$id) : undefined
+  })
+  const draftChecking =
+    Boolean(draft?.id) &&
+    isSeedChecking({
+      fromCache: actionsFromCache,
+      unreadable: actionsStatus === 'error',
+    })
   /**
    * The editor has been opened at least once in this session.
    *
@@ -322,7 +343,7 @@ export function HostActionsCard(props: {
     if (!action) return false
     setDraft(draftFromAction(action, action.$id))
     return true
-  }, [])
+  }, [setDraft])
   /*
    * An action the address names (AGL-3603): the Workflows section drafts one
    * there and sends the reader here to open it. Opened once the list has read
@@ -376,7 +397,7 @@ export function HostActionsCard(props: {
   const patch = useCallback(
     (updater: (previous: ActionDraft) => ActionDraft) =>
       setDraft((previous) => (previous ? updater(previous) : previous)),
-    [],
+    [setDraft],
   )
 
   /** The saved action the editor has open, as the `automationEditor` zone names it. */
@@ -417,7 +438,7 @@ export function HostActionsCard(props: {
       conditionCombinator: 'and',
       recipe: null,
     })
-  }, [actionsEntitled])
+  }, [setDraft, actionsEntitled])
 
   /*
    * THE RECIPES (AGL-2626).
@@ -505,7 +526,7 @@ export function HostActionsCard(props: {
       }
       setDraft(draftFromAction(recipe.build(), null))
     },
-    [actionsEntitled],
+    [setDraft, actionsEntitled],
   )
 
   const handlePicked = useCallback(() => {
@@ -514,7 +535,7 @@ export function HostActionsCard(props: {
     if (!recipe || !picked) return
     setPickFor(null)
     setDraft(draftFromAction(recipe.build({ picked }), null))
-  }, [pickFor, pickOptions, pickedId])
+  }, [setDraft, pickFor, pickOptions, pickedId])
 
   // Run log + test runs (AGL-266).
   const [runsFor, setRunsFor] = useState<any | null>(null)
@@ -699,6 +720,7 @@ export function HostActionsCard(props: {
       })
     }
   }, [
+    setDraft,
     draft,
     firestore,
     createResource,
@@ -1227,11 +1249,16 @@ export function HostActionsCard(props: {
           </Button>
         </DialogContent>
         <DialogActions>
+          {draftChecking ? (
+            <Typography variant="body2" color="text.secondary" role="status" sx={{ mr: 'auto' }}>
+              {seedCheckingText('action')}
+            </Typography>
+          ) : null}
           <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
             color="primary"
-            disabled={!draft?.name.trim()}
+            disabled={draftChecking || !draft?.name.trim()}
             onClick={handleSave}
           >
             {'Save action'}

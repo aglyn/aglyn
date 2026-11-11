@@ -36,6 +36,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSeedEdits } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import type { ContactFieldDefinitionDoc } from '../hooks/use-contact-field-definitions'
 import { CRM_FIELD_LABEL_MAX_LENGTH, crmFieldOptions } from '../model/crm-setup-content'
 import { DEAL_CURRENCIES } from '../model/deal-board-model'
@@ -55,8 +56,18 @@ export interface ContactFieldDraft {
 export interface ContactFieldDrawerProps {
   open: boolean
   onClose: () => void
-  /** The definition being edited, or `null` to create one. */
+  /**
+   * The definition being edited, as the list has it NOW, or `null` to create
+   * one. What is typed is kept as edits over it (AGL-4047), so the server's
+   * copy arriving after the drawer opened replaces the cache's under every
+   * field nobody touched.
+   */
   definition: ContactFieldDefinitionDoc | null
+  /**
+   * The definition is not confirmed by the server yet: Save is held, with
+   * this sentence beside it, until it is (AGL-4047).
+   */
+  checkingText?: string
   /**
    * Every key the org has already used, retired ones included. A key is
    * the map key values are stored under, so a retired field's key is still
@@ -144,34 +155,46 @@ function parseOptions(text: string): string[] {
  * retire, which the section's list offers.
  */
 export function ContactFieldDrawer(props: ContactFieldDrawerProps) {
-  const { open, onClose, definition, takenKeys, onSubmit, object = 'contact' } = props
+  const { open, onClose, definition, takenKeys, onSubmit, object = 'contact', checkingText } = props
   const editing = Boolean(definition)
   const noun = OBJECT_NOUN[object]
 
-  const [label, setLabel] = useState('')
-  const [key, setKey] = useState('')
+  const seed = useMemo(
+    () => ({
+      label: definition?.label ?? '',
+      key: definition?.key ?? '',
+      type: (definition?.type ?? 'text') as ContactFieldType,
+      optionsText: (definition?.options ?? []).join('\n'),
+      currency: customFieldCurrency(definition),
+      required: definition?.required === true,
+    }),
+    [definition],
+  )
+  const form = useSeedEdits(seed)
+  const { label, key, type, optionsText, currency, required } = form.values
+  const { edit, discard } = form
+  const setLabel = (value: string) => edit({ label: value })
+  const setKey = (value: string) => edit({ key: value })
+  const setType = (value: ContactFieldType) => edit({ type: value })
+  const setOptionsText = (value: string) => edit({ optionsText: value })
+  const setCurrency = (value: string) => edit({ currency: value })
+  const setRequired = (value: boolean) => edit({ required: value })
   const [keyTouched, setKeyTouched] = useState(false)
-  const [type, setType] = useState<ContactFieldType>('text')
-  const [optionsText, setOptionsText] = useState('')
-  const [currency, setCurrency] = useState(customFieldCurrency(null))
-  const [required, setRequired] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Seeded on every open, from the definition when there is one: a drawer
-  // that kept the previous field's draft would offer it as the next one.
+  // Fresh on every open, from the definition when there is one: a drawer
+  // that kept the previous field's edits would offer them as the next one.
+  // Keyed on WHICH definition, not its copy, so the server's answer for the
+  // same field keeps what was typed (AGL-4047).
+  const definitionId = definition?.$id ?? null
   useEffect(() => {
     if (!open) return
-    setLabel(definition?.label ?? '')
-    setKey(definition?.key ?? '')
-    setKeyTouched(Boolean(definition))
-    setType(definition?.type ?? 'text')
-    setOptionsText((definition?.options ?? []).join('\n'))
-    setCurrency(customFieldCurrency(definition))
-    setRequired(definition?.required === true)
+    discard()
+    setKeyTouched(definitionId !== null)
     setBusy(false)
     setError(null)
-  }, [open, definition])
+  }, [open, definitionId, discard])
 
   const derivedKey = useMemo(
     () => (keyTouched ? normalizeContactFieldKey(key) : normalizeContactFieldKey(label)),
@@ -321,11 +344,16 @@ export function ContactFieldDrawer(props: ContactFieldDrawerProps) {
             {error}
           </Typography>
         ) : null}
+        {checkingText ? (
+          <Typography variant="body2" color="text.secondary" role="status">
+            {checkingText}
+          </Typography>
+        ) : null}
         <Stack direction="row" spacing={1}>
           <Button
             variant="contained"
             color="primary"
-            disabled={!canSubmit}
+            disabled={!canSubmit || Boolean(checkingText)}
             onClick={handleSubmit}
           >
             {editing ? 'Save' : 'Create field'}

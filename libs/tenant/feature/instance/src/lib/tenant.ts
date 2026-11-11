@@ -31,6 +31,7 @@ export * from './hooks/helpers/use-modify-doc-callback'
 export * from './hooks/helpers/besigner-nodes-converter'
 export * from './hooks/helpers/guarded-nodes-save'
 export * from './hooks/helpers/guarded-seed-write'
+export * from './hooks/use-seed-edits'
 
 export * from './hooks/firestore-denial-reporter'
 export * from './hooks/use-firestore-collection'

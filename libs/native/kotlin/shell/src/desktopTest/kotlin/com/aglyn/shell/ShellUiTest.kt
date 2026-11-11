@@ -105,6 +105,8 @@ internal fun testServices(
   liveCollections: Map<String, StateFlow<List<FirestoreDoc>>> = emptyMap(),
   /** Plugins loaded beside the platform's, for a test that needs one's contributions (the AI panel's slot). */
   plugins: List<com.aglyn.pluginhost.NativePluginManifestEntry> = emptyList(),
+  /** What a Besigner route draws, for a test of the shell around it (AGL-4056). */
+  besigner: @androidx.compose.runtime.Composable (String, () -> Unit, (String) -> Unit) -> Unit = { _, _, _ -> },
 ): ShellServices {
   val prefs = InMemoryKeyValueStore()
   val auth = authFor(prefs)
@@ -142,7 +144,7 @@ internal fun testServices(
     workspace = WorkspaceStore(CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), auth, firestore, prefs),
     prefs = prefs,
     registry = NativePluginRegistry().also { it.load(PLATFORM_ENTRIES + plugins) },
-    besigner = { _, _, _ -> },
+    besigner = besigner,
     writer = writer,
   )
 }

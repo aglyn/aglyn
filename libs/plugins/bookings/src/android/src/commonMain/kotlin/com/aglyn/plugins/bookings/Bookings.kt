@@ -144,7 +144,26 @@ fun upcomingBookingsQuery(hostId: String, fromMs: Long, limit: Int): FirestoreQu
   limit = limit + 1,
 )
 
-fun servicesQuery(hostId: String): FirestoreQuery = FirestoreQuery(servicesPath(hostId), limit = SERVICES_WINDOW)
+// Metadata changes too, so a list the server confirms stops reading as the cache's (AGL-4047).
+fun servicesQuery(hostId: String): FirestoreQuery = FirestoreQuery(servicesPath(hostId), limit = SERVICES_WINDOW, includeMetadataChanges = true)
+
+/**
+ * The service form over a stored service that moved from [previous] to [next] (AGL-4047): every field changed here keeps
+ * it, every other field follows [next].
+ */
+fun rebasedServiceDraft(form: com.aglyn.contracts.BookingServiceDraft, previous: com.aglyn.contracts.BookingServiceDraft, next: com.aglyn.contracts.BookingServiceDraft) = next.copy(
+  askAddress = com.aglyn.core.rebased(form.askAddress, previous.askAddress, next.askAddress),
+  askPhone = com.aglyn.core.rebased(form.askPhone, previous.askPhone, next.askPhone),
+  crmFollowUpTask = com.aglyn.core.rebased(form.crmFollowUpTask, previous.crmFollowUpTask, next.crmFollowUpTask),
+  crmMeetingActivity = com.aglyn.core.rebased(form.crmMeetingActivity, previous.crmMeetingActivity, next.crmMeetingActivity),
+  description = com.aglyn.core.rebased(form.description, previous.description, next.description),
+  durationMinutes = com.aglyn.core.rebased(form.durationMinutes, previous.durationMinutes, next.durationMinutes),
+  name = com.aglyn.core.rebased(form.name, previous.name, next.name),
+  priceDisplay = com.aglyn.core.rebased(form.priceDisplay, previous.priceDisplay, next.priceDisplay),
+  priceUsd = com.aglyn.core.rebased(form.priceUsd, previous.priceUsd, next.priceUsd),
+  timezone = com.aglyn.core.rebased(form.timezone, previous.timezone, next.timezone),
+  windowText = com.aglyn.core.rebased(form.windowText, previous.windowText, next.windowText),
+)
 
 /** The console's reminder line: due in the next pass, and already sent. */
 fun reminderCounts(rows: List<BookingRow>, nowMs: Long): Pair<Int, Int> =

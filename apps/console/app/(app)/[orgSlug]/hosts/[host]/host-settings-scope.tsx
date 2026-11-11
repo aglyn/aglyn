@@ -55,6 +55,10 @@ import {
 } from '@aglyn/shared-ui-jsx-forms'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser, writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useHost } from '../../../../../hooks/use-host'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { InputAdornment } from '@mui/material'
@@ -1373,6 +1377,19 @@ export interface HostSettingsScope {
   proposeFormDraft: (values: Record<string, string>) => void
   /** Moves each time a proposal lands, so the form picks its draft up again. */
   formDraftRevision: number
+  /**
+   * The host document is not confirmed by the server yet (AGL-4047): each
+   * form's Update is held with this sentence beside it, and undefined once
+   * the server has answered. See `HostSettingsForm`.
+   */
+  formsCheckingText: string | undefined
+  /**
+   * The same hold for the theme editor's Save and the "What you have changed"
+   * Resets (AGL-4047), which write `themeOverride` computed off the same host
+   * document. Undefined once the server has answered.
+   */
+  themeCheckingText: string | undefined
+  themeOverridesCheckingText: string | undefined
 }
 
 const HostSettingsScopeContext = createContext<HostSettingsScope | null>(null)
@@ -1396,7 +1413,8 @@ export function useHostSettingsScope(): HostSettingsScope {
  * places for the draft recording to be forgotten on the next one added.
  */
 export function HostSettingsForm({ schemaId }: { schemaId: string }) {
-  const { forms, draftsRef, formDraftRevision } = useHostSettingsScope()
+  const { forms, draftsRef, formDraftRevision, formsCheckingText } =
+    useHostSettingsScope()
   const form = forms.find((entry) => entry.schema.id === schemaId)
 
   /**
@@ -1445,6 +1463,24 @@ export function HostSettingsForm({ schemaId }: { schemaId: string }) {
         console does with them.
       */
       FormTemplate={CardDisplayFormTemplate}
+      /*
+        THE FIRST PRESS IS NEVER REFUSED FOR A LATE SERVER (AGL-4047).
+
+        Every form here is seeded from the host document. Pressed while that
+        read was still the cache's, Update waited on the server's
+        confirmation and, when it ran past its deadline, was refused with
+        "We could not confirm your site settings with the server yet". It is
+        held instead, with the reason beside it, and comes on the moment the
+        server answers.
+
+        `keepDirtyOnReinitialize` is the other half, and the one that keeps
+        the guard's protection. The confirmed document arrives as new
+        initial values: a field the reader changed keeps what they typed and
+        every other field follows the server, so the save carries the
+        confirmed settings plus the edits, never the cached copy of the rest.
+      */
+      FormTemplateProps={{ checkingText: formsCheckingText }}
+      keepDirtyOnReinitialize
       componentMapper={hostSettingsComponentMapper}
       onSubmit={onSubmit}
       schema={schema}
@@ -2116,6 +2152,20 @@ export function HostSettingsScopeProvider({
   ]
 
 
+  const hostChecking = isSeedChecking({
+    fromCache: hostFromCache,
+    unreadable: status === 'error',
+  })
+  const formsCheckingText = hostChecking
+    ? seedCheckingText('site settings')
+    : undefined
+  // The subjects match the guards' in `handleThemeSave` and
+  // `handleWriteOverride`, so the hold and a refusal name the same thing.
+  const themeCheckingText = hostChecking ? seedCheckingText('theme') : undefined
+  const themeOverridesCheckingText = hostChecking
+    ? seedCheckingText('theme overrides')
+    : undefined
+
   const scope = useMemo<HostSettingsScope>(
     () => ({
       hostId,
@@ -2132,6 +2182,9 @@ export function HostSettingsScopeProvider({
       draftsRef,
       proposeFormDraft,
       formDraftRevision,
+      formsCheckingText,
+      themeCheckingText,
+      themeOverridesCheckingText,
     }),
     [
       hostId,
@@ -2147,6 +2200,9 @@ export function HostSettingsScopeProvider({
       forms,
       proposeFormDraft,
       formDraftRevision,
+      formsCheckingText,
+      themeCheckingText,
+      themeOverridesCheckingText,
     ],
   )
 
