@@ -74,6 +74,11 @@ import {
   writeGuardedBySeed,
   type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
+import {
+  isSeedChecking,
+  seedCheckingText,
+  useSeedEdits,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { HelpTip } from '@aglyn/shared-ui-jsx'
 import { docsHelp } from '../constants/docs-links'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
@@ -539,36 +544,64 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
   )
 
   const selector = nodeElementSelector(state.nodeId)
-  const [name, setName] = useState<string>(
-    existing?.name ?? `When ${TRIGGER_PHRASES[state.event] ?? 'seen'} — ${state.nodeId.slice(0, 8)}`,
+  /**
+   * The form's fields as the stored action says them, and what was typed as
+   * EDITS over that (AGL-4047). They used to be copied from `existing` once,
+   * on mount, and the save writes the whole action, so a field left alone
+   * carried whatever the cache served at mount even after the server
+   * confirmed something newer. Now a field left alone follows the action as
+   * the listener holds it, a changed one keeps its value, and Save is held
+   * while that read is the cache's.
+   */
+  const seed = useMemo<{
+    name: string
+    event: string
+    frequency: string
+    cooldownMinutes: number
+    steps: StepDraft[]
+  }>(
+    () => ({
+      name:
+        existing?.name ??
+        `When ${TRIGGER_PHRASES[state.event] ?? 'seen'} — ${state.nodeId.slice(0, 8)}`,
+      event: existing?.trigger?.event ?? state.event,
+      // New interactions default to every occurrence (AGL-562): menu and
+      // drawer choreography only makes sense repeatable; existing docs keep
+      // their stored frequency.
+      frequency: existing
+        ? existing.trigger?.oncePerVisitor
+          ? 'visitor'
+          : existing.trigger?.oncePerSession
+            ? 'session'
+            : existing.trigger?.cooldownMinutes
+              ? 'cooldown'
+              : existing.trigger?.everyTime
+                ? 'every'
+                : 'always'
+        : 'every',
+      cooldownMinutes: existing?.trigger?.cooldownMinutes ?? 60,
+      steps: existing?.steps?.length
+        ? existing.steps
+        : [{ type: 'toggleClass', selector, className: '' }],
+    }),
+    [existing, state.event, state.nodeId, selector],
   )
-  const [event, setEvent] = useState<string>(
-    existing?.trigger?.event ?? state.event,
-  )
-  // New interactions default to every occurrence (AGL-562): menu and
-  // drawer choreography only makes sense repeatable; existing docs keep
-  // their stored frequency.
-  const [frequency, setFrequency] = useState<string>(
-    existing
-      ? existing.trigger?.oncePerVisitor
-        ? 'visitor'
-        : existing.trigger?.oncePerSession
-          ? 'session'
-          : existing.trigger?.cooldownMinutes
-            ? 'cooldown'
-            : existing.trigger?.everyTime
-              ? 'every'
-              : 'always'
-      : 'every',
-  )
-  const [cooldownMinutes, setCooldownMinutes] = useState<number>(
-    existing?.trigger?.cooldownMinutes ?? 60,
-  )
-  const [steps, setSteps] = useState<StepDraft[]>(
-    existing?.steps?.length
-      ? existing.steps
-      : [{ type: 'toggleClass', selector, className: '' }],
-  )
+  const form = useSeedEdits(seed)
+  const { name, event, frequency, cooldownMinutes, steps } = form.values
+  const setName = (value: string) => form.edit({ name: value })
+  const setEvent = (value: string) => form.edit({ event: value })
+  const setFrequency = (value: string) => form.edit({ frequency: value })
+  const setCooldownMinutes = (value: number) =>
+    form.edit({ cooldownMinutes: value })
+  const setSteps = (update: (prev: StepDraft[]) => StepDraft[]) =>
+    form.edit((values) => ({ steps: update(values.steps) }))
+  /**
+   * Held only where the guard below would wait: editing a stored action in
+   * the `actions` collection. A node-scoped save is seeded from the canvas
+   * and a new action from nothing, so neither has a read to wait on.
+   */
+  const checking =
+    !onSave && Boolean(existing) && isSeedChecking({ fromCache: existingFromCache })
   // Canvas element-picker (AGL-574): while picking, the dialog minimizes so
   // the canvas underneath is clickable; the draft state stays mounted and the
   // provider's PickModeBanner (driven by the shared pick store) explains how
@@ -1572,10 +1605,20 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
       <DialogActions>
         <Button onClick={handleTest}>{'Test'}</Button>
         <Button onClick={onClose}>{'Cancel'}</Button>
+        {checking ? (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            role="status"
+            sx={{ mr: 'auto', pl: 1 }}
+          >
+            {seedCheckingText('interaction')}
+          </Typography>
+        ) : null}
         <Button
           variant="contained"
           color="primary"
-          disabled={Boolean(problem) || !name.trim()}
+          disabled={Boolean(problem) || !name.trim() || checking}
           onClick={handleSave}
         >
           {state.id ? 'Save' : 'Create'}

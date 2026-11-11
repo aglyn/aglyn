@@ -86,6 +86,11 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import {
+  isSeedChecking,
+  rebaseSeedEdits,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { planLockReason } from '@aglyn/tenant-feature-instance/hooks/plan-feature-lock'
 import {
   applyCommandToSource,
@@ -455,7 +460,25 @@ export function EntryDetailPage() {
    * cannot reset the buffer under someone who is typing.
    */
   useEffect(() => {
-    if (seededForRef.current === entryId) return
+    if (seededForRef.current === entryId) {
+      /*
+        …but a NEWER snapshot of the entry is replayed under the edits
+        (AGL-4047). A field the author changed keeps their value; every other
+        field follows the stored entry. Without this the buffer kept the
+        first snapshot for every untouched field, so once the server
+        confirmed a cache-served entry with different values, Save wrote the
+        cached copy of them back over it.
+      */
+      const previous = pristineRef.current
+      if (isNewEntry || !stored || !previous) return
+      const nextSeed = editorStateForEntry(stored)
+      if (!isEditorDirty(nextSeed, previous)) return
+      pristineRef.current = nextSeed
+      setEditor((current) =>
+        current ? rebaseSeedEdits(previous, current, nextSeed) : current,
+      )
+      return
+    }
     if (isNewEntry) {
       seededForRef.current = entryId
       pristineRef.current = { ...BLANK_ENTRY_EDITOR }
@@ -491,6 +514,13 @@ export function EntryDetailPage() {
     () => isEditorDirty(editor, pristineRef.current),
     [editor],
   )
+  /** The stored entry is not confirmed by the server yet (AGL-4047). */
+  const entryChecking =
+    !isNewEntry &&
+    isSeedChecking({
+      fromCache: storedFromCache,
+      unreadable: storedStatus === 'error',
+    })
   /**
    * Read from inside listeners that must not re-subscribe on every keystroke —
    * `beforeunload` needs the CURRENT answer, not the one captured when it was
@@ -1380,12 +1410,25 @@ export function EntryDetailPage() {
               past a body that can be thousands of words long, and there is
               still exactly one control with the accessible name "Save".
             */}
+            {/*
+              Held while the entry's read is the cache's (AGL-4047), with the
+              reason beside it: a press then waited on the server and could
+              end refused, which met the first press after a page load.
+            */}
+            {editorDirty && entryChecking ? (
+              <Typography variant="body2" color="text.secondary" role="status">
+                {seedCheckingText('entry')}
+              </Typography>
+            ) : null}
             <Button
               variant="contained"
               size="small"
               color="primary"
               disabled={
-                !editor.title.trim() || !effectiveSlug || slugOwner !== null
+                !editor.title.trim() ||
+                !effectiveSlug ||
+                slugOwner !== null ||
+                entryChecking
               }
               onClick={handleSaveEntry}
             >

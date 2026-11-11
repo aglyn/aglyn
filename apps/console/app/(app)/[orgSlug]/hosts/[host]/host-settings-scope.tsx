@@ -1383,6 +1383,13 @@ export interface HostSettingsScope {
    * the server has answered. See `HostSettingsForm`.
    */
   formsCheckingText: string | undefined
+  /**
+   * The same hold for the theme editor's Save and the "What you have changed"
+   * Resets (AGL-4047), which write `themeOverride` computed off the same host
+   * document. Undefined once the server has answered.
+   */
+  themeCheckingText: string | undefined
+  themeOverridesCheckingText: string | undefined
 }
 
 const HostSettingsScopeContext = createContext<HostSettingsScope | null>(null)
@@ -2145,11 +2152,18 @@ export function HostSettingsScopeProvider({
   ]
 
 
-  const formsCheckingText = isSeedChecking({
+  const hostChecking = isSeedChecking({
     fromCache: hostFromCache,
     unreadable: status === 'error',
   })
+  const formsCheckingText = hostChecking
     ? seedCheckingText('site settings')
+    : undefined
+  // The subjects match the guards' in `handleThemeSave` and
+  // `handleWriteOverride`, so the hold and a refusal name the same thing.
+  const themeCheckingText = hostChecking ? seedCheckingText('theme') : undefined
+  const themeOverridesCheckingText = hostChecking
+    ? seedCheckingText('theme overrides')
     : undefined
 
   const scope = useMemo<HostSettingsScope>(
@@ -2169,6 +2183,8 @@ export function HostSettingsScopeProvider({
       proposeFormDraft,
       formDraftRevision,
       formsCheckingText,
+      themeCheckingText,
+      themeOverridesCheckingText,
     }),
     [
       hostId,
@@ -2185,6 +2201,8 @@ export function HostSettingsScopeProvider({
       proposeFormDraft,
       formDraftRevision,
       formsCheckingText,
+      themeCheckingText,
+      themeOverridesCheckingText,
     ],
   )
 

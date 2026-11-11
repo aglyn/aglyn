@@ -24,7 +24,7 @@
  * of a shop page nobody can dispute and everybody believes.
  */
 
-import { listingInclusions } from './marketplace'
+import { listingInclusions, type ListingInstallReach } from './marketplace'
 
 const labels = (listing: Parameters<typeof listingInclusions>[0], options = {}) =>
   listingInclusions(listing, options).map((row) => row.label)
@@ -47,9 +47,9 @@ describe('listingInclusions', () => {
     // in the picker where it is read once.
     const orgWide = listingInclusions({ artifactType: 'plugin' })
     const perSite = listingInclusions({ artifactType: 'template' })
-    expect(orgWide[1].label).toContain('org-wide')
+    expect(orgWide[1].label).toBe('Installs on every site, including sites you add later')
     expect(orgWide[1].tone).toBe('included')
-    expect(perSite[1].label).toContain('not covered automatically')
+    expect(perSite[1].label).toContain("A new site doesn't get it automatically")
     expect(perSite[1].tone).toBe('note')
   })
 
@@ -113,10 +113,48 @@ describe('listingInclusions', () => {
     ).not.toContain('Connecting')
   })
 
-  it('does not call a realm-trusted plugin sandboxed', () => {
-    expect(labels({ artifactType: 'plugin' })[0]).toContain('sandboxed')
+  it('does not call a realm-trusted plugin separate from the site', () => {
+    expect(labels({ artifactType: 'plugin' })[0]).toBe(
+      'A plugin that runs in its own secure space, separate from your site',
+    )
     const realm = labels({ artifactType: 'plugin' }, { realmTrusted: true })[0]
     expect(realm).toMatch(/^A plugin, reviewed and signed by .+ to run with your site$/)
-    expect(realm).not.toContain('sandboxed')
+    expect(realm).not.toContain('separate')
+  })
+
+  it('says the reach of the Install to choice on offer', () => {
+    const reach = (artifactType: string, installTo: ListingInstallReach) =>
+      listingInclusions({ artifactType }, { installTo })[1]
+    expect(reach('plugin', 'selected')).toEqual({
+      label: "Installs only on the sites you pick. A new site doesn't get it until you add it",
+      tone: 'note',
+    })
+    expect(reach('plugin', 'allExcept')).toEqual({
+      label: 'Installs on every site but the ones you leave out, including sites you add later',
+      tone: 'included',
+    })
+    expect(reach('plugin', 'thisSite')).toEqual({
+      label: 'Installs on this site only',
+      tone: 'note',
+    })
+    expect(reach('component', 'selected').label).toContain('only on the sites you pick')
+    expect(reach('component', 'allExcept')).toEqual({
+      label:
+        "Installs on the sites you have now, minus the ones you leave out. A new site doesn't get it automatically",
+      tone: 'note',
+    })
+    // An org-only artifact has no per-site form, so any choice reads as All sites.
+    expect(reach('datasetSchema', 'selected')).toEqual(reach('datasetSchema', 'all'))
+    expect(reach('datasetSchema', 'all').label).toContain('including sites you add later')
+  })
+
+  it('never pairs a choice that leaves sites out with sites added later', () => {
+    for (const artifactType of ['plugin', 'component', 'template']) {
+      for (const installTo of ['selected', 'thisSite'] as const) {
+        expect(
+          listingInclusions({ artifactType }, { installTo })[1].label,
+        ).not.toContain('sites you add later')
+      }
+    }
   })
 })

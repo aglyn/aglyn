@@ -68,4 +68,45 @@ class BesignerEntryTest {
     // A view that already carries it is not marked twice.
     assertEquals("$webView AglynApp/0.1.0 (android)", BesignerEntry.userAgent("$webView AglynApp/0.1.0 (android)", "0.2.0", "android"))
   }
+
+  // AGL-4056: every editor's own back control returns to the screen the Besigner was opened from.
+  @Test
+  fun eachEditorsBackControlReturnsToTheApp() {
+    val leave = BesignerEntry.Exit.Leave
+    assertEquals(leave, BesignerEntry.exit("/acme/hosts/shop/forms/f1/versions/v3/besigner", "/acme/hosts/shop/forms/f1"))
+    assertEquals(leave, BesignerEntry.exit("/acme/hosts/shop/layouts/l1/versions/v1/besigner", "/acme/hosts/shop/layouts"))
+    assertEquals(leave, BesignerEntry.exit("/acme/hosts/shop/components/c1/versions/v1/besigner", "/acme/hosts/shop/components?x=1"))
+    assertEquals(leave, BesignerEntry.exit("/acme/hosts/shop/templates/t1/besigner", "/acme/hosts/shop/templates"))
+    assertEquals(leave, BesignerEntry.exit("/admin/emails/welcome/versions/v1/besigner", "/admin/emails"))
+    // The logo's workspace and site homes are not a way back: they open the app's Home.
+    assertEquals(BesignerEntry.Exit.Open("/acme/hosts/shop"), BesignerEntry.exit(editor, "/acme/hosts/shop"))
+    assertEquals(BesignerEntry.Exit.Open("/acme"), BesignerEntry.exit(editor, "/acme"))
+    // Another document's page is not this editor's way back.
+    assertEquals(
+      BesignerEntry.Exit.Open("/acme/hosts/shop/forms/f2"),
+      BesignerEntry.exit("/acme/hosts/shop/forms/f1/versions/v3/besigner", "/acme/hosts/shop/forms/f2"),
+    )
+  }
+
+  @Test
+  fun theBackScriptPressesTheControlTheConsoleNames() {
+    assertEquals("aglyn-besigner-back", BesignerEntry.BACK_CONTROL_ID)
+    kotlin.test.assertTrue("getElementById('aglyn-besigner-back')" in BesignerEntry.BACK_SCRIPT)
+    kotlin.test.assertTrue(".click()" in BesignerEntry.BACK_SCRIPT)
+  }
+
+  @Test
+  fun backAfterASwitchReturnsToTheCurrentDocumentsPlace() {
+    val opened = "/acme/hosts/shop/screens/s1/versions/v2/besigner"
+    assertNull(BesignerEntry.returnPath(opened, opened, "/acme/hosts/shop/screens/s1/versions/v2/view"))
+    assertNull(BesignerEntry.returnPath(opened, "/acme/hosts/shop/screens/s1/versions/v3/besigner", "/acme/hosts/shop/screens/s1/versions/v3/view"))
+    assertEquals(
+      "/acme/hosts/shop/screens/s7/versions/v1/view",
+      BesignerEntry.returnPath(opened, "/acme/hosts/shop/screens/s7/versions/v1/besigner", "/acme/hosts/shop/screens/s7/versions/v1/view"),
+    )
+    assertEquals(
+      "/acme/hosts/shop/layouts",
+      BesignerEntry.returnPath(opened, "/acme/hosts/shop/layouts/l1/versions/v1/besigner?panel=layers", "/acme/hosts/shop/layouts"),
+    )
+  }
 }

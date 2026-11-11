@@ -139,6 +139,35 @@ type CartLoad = 'loading' | 'loaded' | 'failed'
 const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
 
 /**
+ * The stored cart's read: one URL for the preload hint and the fetch, so the
+ * browser hands the fetch the response it already has.
+ */
+function cartReadUrl(hostId: string): string {
+  return `/api/commerce/cart?hostId=${encodeURIComponent(hostId)}`
+}
+
+/**
+ * Starts the cart page's read while the HTML is still arriving (AGL-4047).
+ *
+ * The read is a client fetch, and a client effect runs only once the whole
+ * page has hydrated: on aglyn.com/cart that was 0.5–4.3 s after the HTML
+ * landed, and the cart's own request (0.3–0.75 s) only started then.
+ * Rendered on the server, this hint has the browser make the same request as
+ * soon as it parses the page, so when the cart mounts its fetch is answered
+ * from the response already in hand. `crossOrigin="anonymous"` is what lets a
+ * `fetch()` with its defaults (cors, same-origin cookies) match it; without it
+ * the browser would read the cart twice.
+ *
+ * The cart page only: a badge in a header is on every page of the store and
+ * has nothing on screen waiting for its count.
+ */
+function CartReadPreload({ hostId }: { hostId: string }) {
+  return (
+    <link rel="preload" as="fetch" href={cartReadUrl(hostId)} crossOrigin="anonymous" />
+  )
+}
+
+/**
  * The cart's lines as GA4 `items`.
  *
  * One mapping for every event this file sends — `view_cart` and both
@@ -816,9 +845,7 @@ const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
   const refresh = useCallback(async () => {
     if (!hostId) return
     try {
-      const response = await fetch(
-        `/api/commerce/cart?hostId=${encodeURIComponent(hostId)}`,
-      )
+      const response = await fetch(cartReadUrl(hostId))
       if (response.ok) {
         setCart(await response.json())
         setLoad('loaded')
@@ -922,6 +949,7 @@ const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
   if (variant === 'inline') {
     return (
       <Box ref={ref} {...rest}>
+        <CartReadPreload hostId={hostId} />
         <CheckoutReturnNotice hostId={hostId} siteFetch={siteFetch} />
         <CartLines
           hostId={hostId}

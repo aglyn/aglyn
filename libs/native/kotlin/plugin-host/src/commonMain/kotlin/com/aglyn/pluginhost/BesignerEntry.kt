@@ -47,12 +47,59 @@ object BesignerEntry {
     val bare = bareOf(next)
     if (bare == PATH) return Exit.Stay
     if (AUTH_WALL.any { bare == it || bare.startsWith("$it/") }) return Exit.SessionEnded
+    // Each editor's own back control (AGL-4056): a page's goes to its `/view`, a plugin document's to the document
+    // (`…/forms/f1`), a layout's, component's, template's or email's to its list. In the app every one of them is the
+    // screen the Besigner was opened from.
+    if (isBackDestination(bare, bareOf(current))) return Exit.Leave
     if (!BesignerPaths.isBesignerPath(next)) return Exit.Open(next)
-    // The editor's own back arrow goes to the page's read-only view: in the app that is the screen it came from.
-    val editor = bareOf(current)
-    if (editor.endsWith("/besigner") && bare == editor.removeSuffix("/besigner") + "/view") return Exit.Leave
     return Exit.Stay
   }
+
+  /**
+   * The DOM id of the editor's own back control (AGL-4056). In the app the editor has no native head: that control is
+   * the one way out, and Esc, Ctrl/⌘+[, the title bar's Back and the system back all press it, so whatever it does
+   * first runs for every one of them. The console's `NATIVE_BESIGNER_BACK_CONTROL_ID` is the same id.
+   */
+  const val BACK_CONTROL_ID = "aglyn-besigner-back"
+
+  /** Presses the editor's back control; the page answers whether it had one. */
+  const val BACK_SCRIPT =
+    "(function(){var b=document.getElementById('$BACK_CONTROL_ID');if(!b)return false;b.click();return true})()"
+
+  /**
+   * Where leaving the editor returns to (AGL-4056). After the document switcher moved the web view from the editor it
+   * [opened] to another document's ([current]), the place the current one's back control went ([back]), for the app to
+   * open as its own screen; null while it is still the document it opened, which returns to the screen that opened it.
+   */
+  fun returnPath(opened: String, current: String, back: String): String? {
+    val now = documentOf(current) ?: return null
+    return if (now == documentOf(opened)) null else back
+  }
+
+  /** The document an editor path edits: without its `/besigner` (and a version), or null for a path that is not one. */
+  private fun documentOf(path: String): String? {
+    val parts = segments(bareOf(path)).toMutableList()
+    if (parts.lastOrNull() != "besigner") return null
+    parts.removeAt(parts.lastIndex)
+    if (parts.size >= 2 && parts[parts.size - 2] == "versions") repeat(2) { parts.removeAt(parts.lastIndex) }
+    return "/" + parts.joinToString("/")
+  }
+
+  /**
+   * Whether [path] is where the back control of the editor at [editor] goes: the document's `/view`, or a page above the
+   * editor inside its site (or the staff console), never the workspace or site home the logo opens.
+   */
+  internal fun isBackDestination(path: String, editor: String): Boolean {
+    val mine = segments(editor)
+    if (mine.lastOrNull() != "besigner") return false
+    if (path == "/" + mine.dropLast(1).joinToString("/") + "/view") return true
+    val theirs = segments(path)
+    if (theirs.size < 2 || theirs.size >= mine.size || mine.take(theirs.size) != theirs) return false
+    // `/<org>/hosts` and `/<org>/hosts/<site>` are the site's home, never an editor's way back.
+    return !(theirs.size <= 3 && theirs[1] == "hosts")
+  }
+
+  private fun segments(path: String): List<String> = path.split('/').filter { it.isNotEmpty() }
 
   private fun bareOf(path: String): String = path.substringBefore('#').substringBefore('?')
 

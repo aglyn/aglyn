@@ -59,6 +59,7 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Typography,
 } from '@mui/material'
 import DocumentPresenceChips from './document-presence-chips.component'
 import PageHoldChips from './page-holds/page-hold-chips.component'
@@ -87,6 +88,11 @@ import {
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import {
+  isSeedChecking,
+  seedCheckingText,
+  useSeedEdits,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import ComponentIconField from './component-icon-field.component'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
@@ -332,12 +338,58 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
     })
   }, [onQuota, orgReady, componentsUsed, componentsLimit])
 
-  const [editor, setEditor] = useState<{
-    id: string
+  /**
+   * The Edit component dialog: WHICH row is open, and what was typed in it,
+   * kept as EDITS over that row as the list holds it now (AGL-4047).
+   *
+   * It used to copy the row into its own state on open, so the save carried
+   * the cached name, description and icon for every field left alone, and a
+   * server confirmation that changed them could not reach the dialog. Now a
+   * field left alone follows the row, and Save is held while the list read is
+   * the cache's, with the reason beside it.
+   */
+  const [opened, setOpened] = useState<any | null>(null)
+  const editingId: string | null = opened?.$id ?? null
+  // The row as the list holds it now; the row as it was opened when the list
+  // has paged past it, so the dialog never blanks under the person typing.
+  const editingRow = useMemo(
+    () =>
+      editingId
+        ? (components.find((definition: any) => definition.$id === editingId) ??
+          opened)
+        : undefined,
+    [components, editingId, opened],
+  )
+  const editingSeed = useMemo<{
     name: string
     description: string
     icon?: Aglyn.ReusableComponentIcon
-  } | null>(null)
+  }>(
+    () => ({
+      name: editingRow?.displayName ?? '',
+      description: editingRow?.description ?? '',
+      icon: editingRow?.icon,
+    }),
+    [editingRow],
+  )
+  const editorForm = useSeedEdits(editingSeed)
+  const editor = editingId ? { id: editingId, ...editorForm.values } : null
+  const discardEditorForm = editorForm.discard
+  const openEditor = useCallback(
+    (definition: any) => {
+      discardEditorForm()
+      setOpened(definition)
+    },
+    [discardEditorForm],
+  )
+  const closeEditor = useCallback(() => {
+    setOpened(null)
+    discardEditorForm()
+  }, [discardEditorForm])
+  const componentsChecking = isSeedChecking({
+    fromCache: componentsFromCache,
+    unreadable: componentsStatus === 'error',
+  })
 
   const { data: user } = useUser()
   const router = useRouter()
@@ -409,10 +461,11 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
         persist: false,
       })
     }
-    setEditor(null)
+    closeEditor()
     enqueueSnackbar('Component updated', { variant: 'success', persist: false })
   }, [
     editor,
+    closeEditor,
     firestore,
     hostId,
     enqueueSnackbar,
@@ -689,13 +742,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
               key: 'rename',
               label: 'Rename',
               icon: <MdiIcon path={mdiPencilOutline.path} size={0.8} />,
-              onClick: () =>
-                setEditor({
-                  id: definition.$id,
-                  name: definition.displayName ?? '',
-                  description: definition.description ?? '',
-                  icon: definition.icon,
-                }),
+              onClick: () => openEditor(definition),
             },
             {
               key: 'duplicate',
@@ -865,7 +912,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
       />
       <Dialog
         open={Boolean(editor)}
-        onClose={() => setEditor(null)}
+        onClose={closeEditor}
         maxWidth="xs"
         fullWidth
       >
@@ -876,11 +923,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
           <TextField
             label="Name"
             value={editor?.name ?? ''}
-            onChange={(event) =>
-              setEditor((prev) =>
-                prev ? { ...prev, name: event.target.value } : prev,
-              )
-            }
+            onChange={(event) => editorForm.edit({ name: event.target.value })}
             size="small"
             autoFocus
             sx={{ mt: 1 }}
@@ -889,9 +932,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
             label="Description"
             value={editor?.description ?? ''}
             onChange={(event) =>
-              setEditor((prev) =>
-                prev ? { ...prev, description: event.target.value } : prev,
-              )
+              editorForm.edit({ description: event.target.value })
             }
             size="small"
             multiline
@@ -899,18 +940,26 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
           />
           <ComponentIconField
             value={editor?.icon}
-            onChange={(icon) =>
-              setEditor((prev) => (prev ? { ...prev, icon } : prev))
-            }
+            onChange={(icon) => editorForm.edit({ icon })}
             helperText="Marks every instance of this component in the besigner"
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
+          {editorForm.dirty && componentsChecking ? (
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              role="status"
+              sx={{ mr: 'auto', pl: 1 }}
+            >
+              {seedCheckingText('component')}
+            </Typography>
+          ) : null}
+          <Button onClick={closeEditor}>{'Cancel'}</Button>
           <Button
             variant="contained"
             color="primary"
-            disabled={!editor?.name.trim()}
+            disabled={!editor?.name.trim() || componentsChecking}
             onClick={handleSave}
           >
             {'Save'}

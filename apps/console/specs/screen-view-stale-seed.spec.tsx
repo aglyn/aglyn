@@ -263,22 +263,64 @@ describe('Screen rename (AGL-1358)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save details' }))
   }
 
-  it('REFUSES a rename seeded from an unconfirmed read', async () => {
+  /**
+   * The first press is never refused for a late server (AGL-4047): Save
+   * details is HELD while the screen read is the cache's, with the reason
+   * beside it, and what was typed stays.
+   */
+  it('HOLDS Save details while the screen read is unconfirmed, keeping what was typed', async () => {
     mockScreenDoc.fromCache = true
     render(<ScreenDetails />)
 
     renameAndSave()
+    await new Promise((resolve) => setTimeout(resolve, 20))
 
-    // Settled, so this cannot pass merely by asserting too early.
-    await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
+    const save = screen.getByRole('button', {
+      name: 'Save details',
+    }) as HTMLButtonElement
+    expect(save.disabled).toBe(true)
+    expect(
+      screen.getByText('Checking your page details with the server…'),
+    ).toBeTruthy()
     expect(mockUpdateDoc).not.toHaveBeenCalled()
-    const [message] = mockEnqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('page details'))
-    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
-    // The dialog stays open with what was typed.
+    expect(mockEnqueueSnackbar).not.toHaveBeenCalled()
     expect(
       (screen.getByLabelText('Display name') as HTMLInputElement).value,
     ).toEqual('Plans')
+  })
+
+  it('keeps the rename through the server’s copy, and saves the confirmed description on the first press', async () => {
+    mockScreenDoc.fromCache = true
+    const cached = mockScreenDoc.data
+    try {
+      const { rerender } = render(<ScreenDetails />)
+      fireEvent.change(screen.getByLabelText('Display name'), {
+        target: { value: 'Plans' },
+      })
+      // The server answers: the description was changed elsewhere since the
+      // cached snapshot.
+      mockScreenDoc.data = { ...cached, description: 'Every plan we offer' }
+      mockScreenDoc.fromCache = false
+      rerender(<ScreenDetails />)
+
+      expect(
+        (screen.getByLabelText('Display name') as HTMLInputElement).value,
+      ).toEqual('Plans')
+      // The untouched field follows the server's copy (the first of two
+      // "Description" fields; the SEO card's is the other).
+      expect(
+        (screen.getAllByLabelText('Description')[0] as HTMLInputElement).value,
+      ).toEqual('Every plan we offer')
+      fireEvent.click(screen.getByRole('button', { name: 'Save details' }))
+
+      await waitFor(() => expect(mockUpdateDoc).toHaveBeenCalledTimes(1))
+      const [, payload] = mockUpdateDoc.mock.calls[0]
+      expect(payload.displayName).toBe('Plans')
+      // Not the cache's 'The plans page'.
+      expect(payload.description).toBe('Every plan we offer')
+    } finally {
+      mockScreenDoc.data = cached
+    }
   })
 
   it('SAVES normally once the server has confirmed the seed', async () => {
@@ -318,21 +360,53 @@ describe('Screen SEO (AGL-1358)', () => {
   fireEvent.click(screen.getAllByRole('button', { name: 'Save SEO' })[0])
   }
 
-  it('REFUSES an SEO save seeded from an unconfirmed read', async () => {
+  it('HOLDS Save SEO while the screen read is unconfirmed, keeping the staged title', async () => {
     mockScreenDoc.fromCache = true
     render(<ScreenDetails />)
 
     editTitleAndSave()
+    await new Promise((resolve) => setTimeout(resolve, 20))
 
-    await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
+    for (const save of screen.getAllByRole('button', { name: 'Save SEO' })) {
+      expect((save as HTMLButtonElement).disabled).toBe(true)
+    }
+    expect(
+      screen.getByText('Checking your SEO settings with the server…'),
+    ).toBeTruthy()
     expect(mockUpdateDoc).not.toHaveBeenCalled()
-    const [message] = mockEnqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('SEO settings'))
-    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
-    // The staged title is still on screen.
+    expect(mockEnqueueSnackbar).not.toHaveBeenCalled()
     expect((screen.getByLabelText('Title') as HTMLInputElement).value).toEqual(
       'Pricing and plans',
     )
+  })
+
+  it('stages only what was typed, so the server’s description is saved beside it', async () => {
+    mockScreenDoc.fromCache = true
+    const cached = mockScreenDoc.data
+    try {
+      const { rerender } = render(<ScreenDetails />)
+      fireEvent.change(screen.getByLabelText('Title'), {
+        target: { value: 'Pricing and plans' },
+      })
+      mockScreenDoc.data = {
+        ...cached,
+        seo: {
+          ...(cached.seo as Record<string, unknown>),
+          description: 'Plans from $0',
+        },
+      }
+      mockScreenDoc.fromCache = false
+      rerender(<ScreenDetails />)
+
+      fireEvent.click(screen.getAllByRole('button', { name: 'Save SEO' })[0])
+      await waitFor(() => expect(mockUpdateDoc).toHaveBeenCalledTimes(1))
+      const [, payload] = mockUpdateDoc.mock.calls[0]
+      expect(payload.seo.title).toBe('Pricing and plans')
+      // It used to copy the cache's 'What Acme costs' into the draft.
+      expect(payload.seo.description).toBe('Plans from $0')
+    } finally {
+      mockScreenDoc.data = cached
+    }
   })
 
   it('SAVES normally once the server has confirmed the seed', async () => {

@@ -206,3 +206,27 @@ export function useSeedEdits<T extends object>(seed: T): SeedEdits<T> {
 }
 
 export default useSeedEdits
+
+/**
+ * The rule {@link useSeedEdits} keeps, for a form that already holds its own
+ * buffer and seeds it once (AGL-4047).
+ *
+ * A key whose value still equals what the previous seed said is UNTOUCHED, so
+ * it follows the next seed; a key the person changed keeps their value. Hand it
+ * the seed the buffer was built from, the buffer as it stands, and the seed
+ * that just arrived, and store the result with the next seed as the new
+ * baseline. Compared by content, since a snapshot rebuilds every value.
+ */
+export function rebaseSeedEdits<T extends object>(
+  previousSeed: T,
+  current: T,
+  nextSeed: T,
+): T {
+  const next = { ...nextSeed }
+  for (const key of Object.keys(current) as (keyof T)[]) {
+    if (seedKeyOf({ v: current[key] }) !== seedKeyOf({ v: previousSeed[key] })) {
+      next[key] = current[key]
+    }
+  }
+  return next
+}

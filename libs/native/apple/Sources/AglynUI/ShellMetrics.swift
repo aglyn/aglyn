@@ -215,6 +215,9 @@ public enum AglynShellMotion {
   public static let pill = Animation.spring(duration: 0.25, bounce: 0.15)
   /// Another workspace: a short cross-fade.
   public static let crossFade = Animation.easeInOut(duration: 0.15)
+  /// The rail and the sidebar folding away or coming back (the switcher toggle, the in-app Besigner's focus mode,
+  /// AGL-4056): about 200 ms.
+  public static let columns = Animation.easeOut(duration: 0.2)
   /// A screen's content stepping in over its loading state (the in-app Besigner, AGL-4002): about 200 ms.
   public static let reveal = Animation.easeOut(duration: 0.2)
 

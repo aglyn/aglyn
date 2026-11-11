@@ -26,6 +26,12 @@ public final class ConsoleWebViewModel {
   public func goBack() { webView?.goBack() }
   public func reload() { webView?.reload() }
 
+  /// Presses the Besigner's own back control (`BesignerEntry.backScript`, AGL-4056); false when there is no page or
+  /// the page has no such control, so the caller leaves by itself.
+  public func pressBesignerBack() async -> Bool {
+    await check(BesignerEntry.backScript)
+  }
+
   /// Whether `expression` is true on the page now; false while there is no page or it throws.
   public func check(_ expression: String) async -> Bool {
     guard let webView else { return false }
@@ -63,14 +69,19 @@ public struct ConsoleWebView {
   /// console's client-side router) cannot be cancelled, so it is handed back
   /// the same way once the page has moved.
   let onRefusedPath: (@MainActor (String) -> Void)?
+  /// The back gesture, taken from the web view's own history (AGL-4056): set, the page's history swipe is off and an
+  /// edge swipe from the leading edge (iPhone and iPad) calls this instead, so the screen decides where back goes.
+  let onBackGesture: (@MainActor () -> Void)?
 
   public init(
     url: URL, trustedOrigins: [String], cookies: [HTTPCookie], model: ConsoleWebViewModel,
     bridgeName: String = "AglynApp", handlers: [String: BridgeHandler] = [:], info: [String: JSONValue] = [:],
-    allowsPath: (@MainActor (String) -> Bool)? = nil, onRefusedPath: (@MainActor (String) -> Void)? = nil
+    allowsPath: (@MainActor (String) -> Bool)? = nil, onRefusedPath: (@MainActor (String) -> Void)? = nil,
+    onBackGesture: (@MainActor () -> Void)? = nil
   ) {
     self.allowsPath = allowsPath
     self.onRefusedPath = onRefusedPath
+    self.onBackGesture = onBackGesture
     self.url = url
     self.trustedOrigins = trustedOrigins
     self.cookies = cookies
@@ -120,7 +131,16 @@ public struct ConsoleWebView {
       let webView = WKWebView(frame: .zero, configuration: configuration)
       webView.navigationDelegate = self
       webView.uiDelegate = self
-      webView.allowsBackForwardNavigationGestures = true
+      // The page's history swipe, unless the screen takes the back gesture itself: in the Besigner it walked back to
+      // the sign-in entry page or the previous document instead of leaving (AGL-4056).
+      webView.allowsBackForwardNavigationGestures = parent.onBackGesture == nil
+      #if os(iOS)
+        if parent.onBackGesture != nil {
+          let edge = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(edgeSwiped(_:)))
+          edge.edges = webView.effectiveUserInterfaceLayoutDirection == .rightToLeft ? .right : .left
+          webView.addGestureRecognizer(edge)
+        }
+      #endif
       parent.model.webView = webView
       observations = [
         webView.observe(\.title) { [weak self] view, _ in MainActor.assumeIsolated { self?.parent.model.sync(view) } },
@@ -144,6 +164,19 @@ public struct ConsoleWebView {
       }
       return webView
     }
+
+    #if os(iOS)
+      /// An edge swipe far or fast enough to mean "back" (`BackGesture.completes`) calls the screen's back.
+      @objc func edgeSwiped(_ gesture: UIScreenEdgePanGestureRecognizer) {
+        guard gesture.state == .ended, let view = gesture.view else { return }
+        let sign: CGFloat = gesture.edges == .right ? -1 : 1
+        let travel = gesture.translation(in: view).x * sign
+        let speed = gesture.velocity(in: view).x * sign
+        if BackGesture.completes(travel: Double(travel), speed: Double(speed), width: Double(view.bounds.width)) {
+          parent.onBackGesture?()
+        }
+      }
+    #endif
 
     /// The path part of a console URL, with its query.
     static func consolePath(_ url: URL) -> String { ConsoleNavigationPolicy.consolePath(url) }

@@ -243,6 +243,23 @@ describe('resolveNodesBindings', () => {
     const nodes = { a: { $id: 'a', props: { children: '{{Message}}' } } }
     expect(resolveNodesBindings(nodes as any, {})).toBe(nodes)
   })
+
+  it('renders an unknown variable token empty even when the site has no variables', () => {
+    // A site whose only variables came from a plugin connection has none
+    // once it is disconnected; the token must not reach visitors raw.
+    const nodes = {
+      a: { $id: 'a', props: { children: 'Review link: {{var:pIbeqgnNLn__google-reviewUrl}}' } },
+      b: { $id: 'b', props: { children: 'static' } },
+    }
+    const result = resolveNodesBindings(nodes as any, {})
+    expect(result['a'].props.children).toBe('Review link: ')
+    expect(result['b']).toBe(nodes.b)
+  })
+
+  it('returns the same map when every token is left as it was', () => {
+    const nodes = { a: { $id: 'a', props: { children: 'Price {{fn:unknownFn(1)}}' } } }
+    expect(resolveNodesBindings(nodes as any, variables as any)).toBe(nodes)
+  })
 })
 
 describe('site variables reach a function (AGL-3202)', () => {
