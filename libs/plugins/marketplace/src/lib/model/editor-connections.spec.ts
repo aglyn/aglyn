@@ -68,10 +68,30 @@ describe('the editor half of declared connections (AGL-4196)', () => {
       records: { Kq3: { gbp: { fields: { rating: 4.8 }, items: [], syncedAtMs: 1 } } },
     })
     expect(value.variables).toEqual([
-      { id: 'Kq3__gbp-rating', label: 'Google Business Profile: Rating', value: '4.8' },
-      { id: 'Kq3__gbp-reviewCount', label: 'Google Business Profile: Review count', value: null },
+      { id: 'Kq3__gbp-rating', label: 'Google Business Profile: Rating', value: '4.8', synced: true },
+      { id: 'Kq3__gbp-reviewCount', label: 'Google Business Profile: Review count', value: null, synced: true },
     ])
     expect(value.listingFor('acme.wall')).toBe('Kq3')
+  })
+
+  it('says whether an empty field is empty after a sync or has not synced yet', () => {
+    // A Google profile with no reviews syncs with no rating: the picker
+    // should not tell the author to wait for a sync that already ran.
+    const before = editorPluginConnections({
+      installs: [{ listingId: 'Kq3', identity: 'acme' }],
+      listings: [{ listingId: 'Kq3', connections: [CONNECTION] }],
+      records: {},
+    })
+    expect(before.variables.map((variable) => variable.synced)).toEqual([false, false])
+    const after = editorPluginConnections({
+      installs: [{ listingId: 'Kq3', identity: 'acme' }],
+      listings: [{ listingId: 'Kq3', connections: [CONNECTION] }],
+      records: { Kq3: { gbp: { fields: { rating: null }, items: [], syncedAtMs: 1 } } },
+    })
+    expect(after.variables.map((variable) => [variable.value, variable.synced])).toEqual([
+      [null, true],
+      [null, true],
+    ])
   })
 
   it('lists each syncing connection of a namespaced install as repeatable (AGL-4212)', () => {

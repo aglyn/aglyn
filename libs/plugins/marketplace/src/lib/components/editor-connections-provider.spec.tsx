@@ -119,7 +119,7 @@ describe('EditorConnectionsProvider (AGL-4196)', () => {
     expect(fetcher).toHaveBeenCalledWith('/api/orgs/realm-plugins?orgId=org-1&hostId=host-1')
     expect(fetcher).toHaveBeenCalledWith('/api/plugin-connections/record?hostId=host-1&listingId=L&connectionId=gbp')
     expect(value?.records).toEqual({ L: { gbp: { fields: { rating: 4.8 }, items: [], syncedAtMs: 5 } } })
-    expect(value?.variables).toEqual([{ id: 'L__gbp-rating', label: 'Google Business Profile: Rating', value: '4.8' }])
+    expect(value?.variables).toEqual([{ id: 'L__gbp-rating', label: 'Google Business Profile: Rating', value: '4.8', synced: true }])
     expect(value?.listingFor('acme.wall')).toBe('L')
   })
 
@@ -130,7 +130,7 @@ describe('EditorConnectionsProvider (AGL-4196)', () => {
     )
     const value = await loadEditorPluginConnections({ firestore: {} as never, fetcher }, { orgId: 'org-1', hostId: 'host-1' })
     expect(value?.records).toEqual({})
-    expect(value?.variables).toEqual([{ id: 'L__gbp-rating', label: 'Google Business Profile: Rating', value: null }])
+    expect(value?.variables).toEqual([{ id: 'L__gbp-rating', label: 'Google Business Profile: Rating', value: null, synced: false }])
   })
 
   it('a site with no plugin that declares a connection gets nothing', async () => {
