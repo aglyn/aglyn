@@ -63,6 +63,9 @@ private class FakeOfflineApi : PosOfflineApi {
   var failure: ConsoleApiError? = null
   val answers = mutableMapOf<String, PosOfflineSaleOutcome>()
 
+  /** Runs inside a sync, before it answers: a card forwarded while the sync is in flight. */
+  var midSync: (suspend () -> Unit)? = null
+
   override suspend fun kit(): PosOfflineKit {
     failure?.let { throw it }
     return kitAnswer!!
@@ -70,6 +73,10 @@ private class FakeOfflineApi : PosOfflineApi {
 
   override suspend fun sync(sales: List<com.aglyn.contracts.PosOfflineSale>): List<PosOfflineSaleOutcome> {
     batches += sales.map { it.saleKey }
+    midSync?.let {
+      midSync = null
+      it()
+    }
     failure?.let { throw it }
     return sales.map { answers[it.saleKey] ?: PosOfflineSaleOutcome(number = 7.0, orderId = it.saleKey, saleKey = it.saleKey, status = PosOfflineOutcomeStatus.RECORDED) }
   }
@@ -227,6 +234,36 @@ class PosOfflineModelTest {
     assertTrue(offline.discountOverLimit(cart(discount = 25)))
     assertNull(offline.ringCashSale(Cart.EMPTY, 5000))
     assertTrue(offline.waiting.isEmpty())
+  }
+
+  @Test
+  fun theBannerReadsTheDeviceEvenWhenAnotherRegisterAlreadySyncedItsSales() = runTest {
+    // Two registers over one device store (AGL-4219): the one on screen never keeps a "waiting to sync" the other settled.
+    val device = InMemoryKeyValueStore()
+    val api = FakeOfflineApi()
+    val onScreen = ready(api, device, this, keys = listOf("off0123456789abcdef0001"))
+    onScreen.ringCashSale(cart(), 1296)
+    model(api, device, this).sync()
+    assertEquals(1, onScreen.waiting.size, "not re-read yet")
+    onScreen.sync()
+    assertTrue(onScreen.waiting.isEmpty())
+    assertEquals(1, api.batches.size, "nothing was sent twice")
+  }
+
+  @Test
+  fun aSyncAskedForWhileOneRunsRunsOnceItEnds() = runTest {
+    val api = FakeOfflineApi()
+    val offline = ready(api, InMemoryKeyValueStore(), this, keys = listOf("off0123456789abcdef0001", "off0123456789abcdef0002"))
+    offline.ringCashSale(cart(), 1296)
+    api.midSync = {
+      // Another sale becomes ready (a card forwarded) while the first sync is in flight.
+      offline.ringCashSale(cart(), 1296)
+      offline.sync()
+    }
+    offline.sync()
+    assertEquals(listOf(listOf("off0123456789abcdef0001"), listOf("off0123456789abcdef0002")), api.batches)
+    assertTrue(offline.queue.isEmpty())
+    assertFalse(offline.syncing)
   }
 
   @Test

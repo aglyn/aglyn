@@ -44,6 +44,8 @@ private final class FakeOfflineAPI: PosOfflineAPI, @unchecked Sendable {
   var kitAnswer: PosOfflineKit? = makeKit()
   var failure: ConsoleAPIError?
   var answers: [String: PosOfflineSaleOutcome] = [:]
+  /// Runs inside a sync, before it answers: a card forwarded while the sync is in flight.
+  var midSync: (@MainActor () async -> Void)?
 
   func kit() async throws -> PosOfflineKit {
     if let failure { throw failure }
@@ -52,6 +54,10 @@ private final class FakeOfflineAPI: PosOfflineAPI, @unchecked Sendable {
 
   func sync(_ sales: [PosOfflineSale]) async throws -> [PosOfflineSaleOutcome] {
     lock.withLock { batches.append(sales.map(\.saleKey)) }
+    if let midSync {
+      self.midSync = nil
+      await midSync()
+    }
     if let failure { throw failure }
     return sales.map { answers[$0.saleKey] ?? PosOfflineSaleOutcome(number: 7, orderId: $0.saleKey, saleKey: $0.saleKey, status: .recorded) }
   }
@@ -215,6 +221,37 @@ final class PosOfflineModelTests: XCTestCase {
     XCTAssertTrue(offline.discountOverLimit(cart(discount: 25)))
     XCTAssertNil(offline.ringCashSale(cart: .empty, tenderedCents: 5000))
     XCTAssertTrue(offline.waiting.isEmpty)
+  }
+
+  func testTheBannerReadsTheDeviceEvenWhenAnotherRegisterAlreadySyncedItsSales() async {
+    // Two registers over one device store, as a rebuilt screen leaves (AGL-4219): the one on screen never keeps a
+    // "waiting to sync" the other already settled.
+    let defaults = suite()
+    let api = FakeOfflineAPI()
+    let onScreen = await ready(api, defaults: defaults, keys: ["off0123456789abcdef0001"])
+    _ = onScreen.ringCashSale(cart: cart(), tenderedCents: 1296)
+    let other = model(api, defaults: defaults)
+    await other.syncNow()
+    XCTAssertEqual(onScreen.waiting.count, 1, "not re-read yet")
+    await onScreen.syncNow()
+    XCTAssertTrue(onScreen.waiting.isEmpty)
+    XCTAssertEqual(api.batchesSent.count, 1, "nothing was sent twice")
+  }
+
+  func testASyncAskedForWhileOneRunsRunsOnceItEnds() async {
+    let defaults = suite()
+    let api = FakeOfflineAPI()
+    let offline = await ready(api, defaults: defaults, keys: ["off0123456789abcdef0001", "off0123456789abcdef0002"])
+    _ = offline.ringCashSale(cart: cart(), tenderedCents: 1296)
+    api.midSync = { [offline] in
+      // Another sale becomes ready (a card forwarded) while the first sync is in flight.
+      _ = offline.ringCashSale(cart: cart(), tenderedCents: 1296)
+      await offline.syncNow()
+    }
+    await offline.syncNow()
+    XCTAssertEqual(api.batchesSent, [["off0123456789abcdef0001"], ["off0123456789abcdef0002"]])
+    XCTAssertTrue(offline.queue.isEmpty)
+    XCTAssertFalse(offline.syncing)
   }
 
   func testASaleLeavesTheDeviceOnlyWhenTheServerHasAnsweredForIt() async {

@@ -248,6 +248,9 @@ class PosOfflineModel(
   private var kitSavedAtMs = 0L
   private var syncInFlight = false
 
+  /** A sync was asked for while one ran (a card forwarded mid-sync): it runs again once that one ends. */
+  private var syncAgain = false
+
   /** Told when a sync failed at the network (true) or the console answered it (false). */
   var networkSink: ((Boolean) -> Unit)? = null
 
@@ -470,10 +473,26 @@ class PosOfflineModel(
     launchIn.launch { sync() }
   }
 
+  /**
+   * One asked for while another runs is not dropped: it runs once that one ends, so a card forwarded mid-sync is not
+   * left waiting for the next sale (AGL-4219).
+   */
   suspend fun sync() {
-    if (syncInFlight) return
+    if (syncInFlight) {
+      syncAgain = true
+      return
+    }
+    do {
+      syncAgain = false
+      syncOnce()
+    } while (syncAgain)
+  }
+
+  private suspend fun syncOnce() {
+    // What the device holds now, even when nothing is sent: the banner never reads a queue another sync emptied.
+    queue = store.queue()
     // A card still on the device waits for its forward: the server reads Stripe, and Stripe has not got it yet.
-    val mine = store.queue().filter { it.state == PosOfflineQueued.State.QUEUED && it.sale.signedInUid == uid && !it.cardOnDevice }
+    val mine = queue.filter { it.state == PosOfflineQueued.State.QUEUED && it.sale.signedInUid == uid && !it.cardOnDevice }
     if (mine.isEmpty()) return
     syncInFlight = true
     syncing = true

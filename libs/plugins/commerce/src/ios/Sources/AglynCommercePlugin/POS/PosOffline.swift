@@ -224,6 +224,8 @@ final class PosOfflineModel {
   @ObservationIgnored private let today: () -> String
   @ObservationIgnored private var ringing = false
   @ObservationIgnored private var syncInFlight = false
+  /// A sync was asked for while one ran (a card forwarded mid-sync): it runs again once that one ends.
+  @ObservationIgnored private var syncAgain = false
   /// Told when a sync failed at the network (true) or the console answered it (false).
   @ObservationIgnored var networkSink: ((Bool) -> Void)?
 
@@ -436,11 +438,24 @@ final class PosOfflineModel {
     queue = store.queue()
   }
 
-  /// Sends everything waiting, in batches, one sync at a time.
+  /// Sends everything waiting, in batches, one sync at a time. One asked for while another runs is not dropped: it
+  /// runs once that one ends, so a card forwarded mid-sync is not left waiting for the next sale (AGL-4219).
   func syncNow() async {
-    guard !syncInFlight else { return }
+    guard !syncInFlight else {
+      syncAgain = true
+      return
+    }
+    repeat {
+      syncAgain = false
+      await syncOnce()
+    } while syncAgain
+  }
+
+  private func syncOnce() async {
+    // What the device holds now, even when nothing is sent: the banner never reads a queue another sync emptied.
+    queue = store.queue()
     // A card still on the device waits for its forward: the server reads Stripe, and Stripe has not got it yet.
-    let mine = store.queue().filter { $0.state == .queued && $0.sale.signedInUid == uid && !$0.cardOnDevice }
+    let mine = queue.filter { $0.state == .queued && $0.sale.signedInUid == uid && !$0.cardOnDevice }
     guard !mine.isEmpty else { return }
     syncInFlight = true
     syncing = true
