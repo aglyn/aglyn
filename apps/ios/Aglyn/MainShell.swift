@@ -534,6 +534,17 @@ struct ShellFrame<Content: View>: View {
         ShellScope.reveal(
           section, in: ShellScope(model: model, navigation: navigation).currentList, groups: &navigation.groups)
       }
+      // The site in this tab's scope, which each place in its history keeps, so Back and Forward return to the site a
+      // place was opened in (AGL-3996). A tab behind another leaves its own alone.
+      .onChange(of: model.workspace?.site?.id, initial: true) { _, hostID in
+        guard navigation.front else { return }
+        navigation.siteInScope = hostID
+        navigation.openSite = { [weak model] hostID in
+          guard let workspace = model?.workspace, workspace.sites.contains(where: { $0.id == hostID }) else { return false }
+          workspace.selectSite(hostID)
+          return true
+        }
+      }
       // Another account in use, or a support session: nothing open belonged to it.
       .onChange(of: model.auth?.user?.uid) {
         navigation.paths = [:]
