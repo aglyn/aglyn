@@ -58,9 +58,13 @@ import {
  *   the lease and the holder's row, read-only. When the lease is live, held
  *   by another tab, and that tab's own row says it is in the background, it
  *   posts `yield` on a `BroadcastChannel` named for this cache. It looks
- *   three times in its first 9 s, once it has been visible for
- *   {@link VISIBLE_DWELL_MS}, and
- *   every {@link RECHECK_MS} while it stays visible.
+ *   as soon as its client has started and five more times in its first 10 s
+ *   ({@link BOOT_CHECK_DELAYS_MS}), once it has been visible for
+ *   {@link VISIBLE_DWELL_MS}, and every {@link RECHECK_MS} while it stays
+ *   visible. When its own row still says hidden (the SDK writes a new tab's
+ *   first row that way), it cycles its own network first, which rewrites
+ *   the row from the visibility the SDK has read by then, instead of waiting
+ *   for the SDK's 4 s tick.
  * - **The holder** knows its own client id (the one `firestore_clients_*` key
  *   that appeared while its client started, as in AGL-3660). On a `yield`
  *   naming it, while it is hidden and online, it rereads in one transaction:
@@ -88,9 +92,12 @@ import {
  *   started together) never acts as holder. The asker's row must be younger
  *   than {@link ASKER_FRESH_MS}, or the SDK would not hand to it and the
  *   holder's cycle would only flicker its network.
- * - **Rate-limited both ways**: one ask per {@link ASK_INTERVAL_MS}, one
- *   yield per {@link YIELD_INTERVAL_MS}. Switching between two console tabs
- *   moves the role at most that often.
+ * - **Rate-limited both ways**: up to {@link ASK_BURST} asks
+ *   {@link ASK_RETRY_MS} apart (an ask a background holder never answered,
+ *   or answered while the asker's row was not yet fresh, is asked again),
+ *   then one per {@link ASK_INTERVAL_MS}; one yield per
+ *   {@link YIELD_INTERVAL_MS}. Switching between two console tabs moves the
+ *   role at most that often.
  * - **Every failure is the old behaviour.** No `BroadcastChannel`, no
  *   database, a store another tab has locked, any throw: nothing is posted
  *   or cycled, and the SDK's election runs as it always has.
@@ -103,17 +110,35 @@ export const VISIBLE_DWELL_MS = 3_000
 export const RECHECK_MS = 15_000
 
 /**
- * The looks after boot. The first comes once AGL-3660's claim has had its
- * turn. The SDK writes a new tab's first row as hidden, and corrects it at
- * its first 4 s tick (see `firestore-tab-handoff.ts`), so the first look
- * often finds this tab "not ready". The later ones land after that tick. Each
- * is a no-op once an ask has gone out (`ASK_INTERVAL_MS`) or the role has
- * moved here.
+ * The looks after this tab's client has started. The first is immediate: a
+ * background holder costs a cold load 10-16 s (measured in production on
+ * 2026-11-10), and the first looks at 2, 5 and 9 s it replaced asked only
+ * on the third. The SDK writes a new tab's first row as hidden (see
+ * `firestore-tab-handoff.ts`), so a look that finds its own row not ready
+ * rewrites it with a network cycle ({@link REFRESH_INTERVAL_MS}) and asks
+ * once the rewrite has landed: in the same look, or in the next one a
+ * second later. The later looks cover a read that found the store
+ * locked and an ask the holder did not act on. Each is a no-op once the role
+ * has moved here.
  */
-export const BOOT_CHECK_DELAYS_MS = [2_000, 5_000, 9_000] as const
+export const BOOT_CHECK_DELAYS_MS = [
+  0, 1_000, 2_500, 4_500, 7_000, 10_000,
+] as const
 
-/** At most one ask per this long from one tab. */
+/** An unanswered ask may be repeated this soon, up to {@link ASK_BURST}. */
+export const ASK_RETRY_MS = 3_000
+
+/** Asks allowed {@link ASK_RETRY_MS} apart before the long interval. */
+export const ASK_BURST = 3
+
+/** After a burst, at most one ask per this long from one tab. */
 export const ASK_INTERVAL_MS = 15_000
+
+/**
+ * At most one rewrite of this tab's own row per this long: the SDK's own
+ * renewal tick, after which it would have rewritten the row anyway.
+ */
+export const REFRESH_INTERVAL_MS = 4_000
 
 /** At most one yield per this long from one tab. */
 export const YIELD_INTERVAL_MS = 30_000
@@ -308,6 +333,7 @@ export type YieldEvent =
       reason: AskSkip | 'locked' | 'unavailable' | 'throttled'
     }
   | { side: 'asker'; result: 'took-over'; fromId: string }
+  | { side: 'asker'; result: 'refreshed' }
   | { side: 'holder'; result: 'yielded'; askerId: string }
   | {
       side: 'holder'
@@ -340,6 +366,8 @@ export interface PrimaryYieldDeps {
  */
 export function createPrimaryYield(deps: PrimaryYieldDeps) {
   let lastAskAt = Number.NEGATIVE_INFINITY
+  let asksInBurst = 0
+  let lastRefreshAt = Number.NEGATIVE_INFINITY
   let lastYieldAt = Number.NEGATIVE_INFINITY
   let busy = false
   // Looks can overlap (a boot look, the dwell look and the recheck): only
@@ -359,7 +387,7 @@ export function createPrimaryYield(deps: PrimaryYieldDeps) {
           result: 'skipped',
           reason: 'self-not-ready',
         })
-      if (looking || deps.now() - lastAskAt < ASK_INTERVAL_MS)
+      if (looking || !mayAsk())
         return emit({ side: 'asker', result: 'skipped', reason: 'throttled' })
       looking = true
       try {
@@ -372,11 +400,20 @@ export function createPrimaryYield(deps: PrimaryYieldDeps) {
     }
   }
 
-  /** One read and, when it says so, one ask. */
-  async function look(): Promise<YieldEvent> {
+  /** A short burst of asks, then the long interval. */
+  function mayAsk(): boolean {
+    const since = deps.now() - lastAskAt
+    if (since >= ASK_INTERVAL_MS) return true
+    return since >= ASK_RETRY_MS && asksInBurst < ASK_BURST
+  }
+
+  /** One read, and the decision it supports. */
+  async function decide(): Promise<
+    | { read: Extract<LeaseRead, { state: 'read' }>; decision: AskDecision }
+    | { skipped: 'locked' | 'unavailable' }
+  > {
     const read = await deps.read([deps.selfId])
-    if (read.state !== 'read')
-      return emit({ side: 'asker', result: 'skipped', reason: read.state })
+    if (read.state !== 'read') return { skipped: read.state }
     const decision = decideAsk({
       owner: read.owner,
       holder: read.owner ? read.rows[read.owner.ownerId] : undefined,
@@ -384,6 +421,39 @@ export function createPrimaryYield(deps: PrimaryYieldDeps) {
       selfId: deps.selfId,
       now: deps.now(),
     })
+    return { read, decision }
+  }
+
+  /** One read and, when it says so, one ask. */
+  async function look(): Promise<YieldEvent> {
+    let looked = await decide()
+    if ('skipped' in looked)
+      return emit({ side: 'asker', result: 'skipped', reason: looked.skipped })
+    // Visible and online, but the row the holder will read says otherwise:
+    // the SDK wrote it before it read the visibility. A network cycle runs
+    // its election, which rewrites the row; a secondary's cycle touches no
+    // stream. The SDK queues that election behind the cycle, so this second
+    // read usually sees it and sometimes does not; the next boot look, a
+    // second later, does.
+    if (
+      'reason' in looked.decision &&
+      looked.decision.reason === 'self-not-ready' &&
+      deps.isVisible() &&
+      deps.isOnline() &&
+      deps.now() - lastRefreshAt >= REFRESH_INTERVAL_MS
+    ) {
+      lastRefreshAt = deps.now()
+      await deps.cycleNetwork()
+      emit({ side: 'asker', result: 'refreshed' })
+      looked = await decide()
+      if ('skipped' in looked)
+        return emit({
+          side: 'asker',
+          result: 'skipped',
+          reason: looked.skipped,
+        })
+    }
+    const { decision } = looked
     if ('reason' in decision)
       return emit({ side: 'asker', result: 'skipped', reason: decision.reason })
     // Hidden or offline since the read: the SDK would not hand to us.
@@ -393,6 +463,8 @@ export function createPrimaryYield(deps: PrimaryYieldDeps) {
         result: 'skipped',
         reason: 'self-not-ready',
       })
+    asksInBurst =
+      deps.now() - lastAskAt >= ASK_INTERVAL_MS ? 1 : asksInBurst + 1
     lastAskAt = deps.now()
     deps.post({
       type: 'yield',
