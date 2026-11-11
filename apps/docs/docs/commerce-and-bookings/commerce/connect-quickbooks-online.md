@@ -36,6 +36,10 @@ You need:
     do not have one;
   - an **expense** account for Aglyn's fees;
   - the **bank** account your Stripe payouts land in.
+- If you charge sales tax, sales tax set up in that QuickBooks company
+  (**Taxes** in QuickBooks). Until it is, a US company's sales that carry tax
+  wait under **Needs attention**, because QuickBooks would otherwise record
+  them without their tax.
 
 ## Connect
 
