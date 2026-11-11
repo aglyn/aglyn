@@ -282,7 +282,11 @@ now:
     workflows.
   - Each row carries a console `link`. The apps open it through their
     deep-link grammar, so a record opens on its native screen and a Besigner
-    page opens in the in-app Besigner.
+    page opens in the in-app Besigner. Like every other way into a place, it
+    goes through `NavPaths` (AGL-4059), which opens the whole path to it: the
+    sidebar's mode, the area row or section, then each page on the way, so
+    the crumbs and Back walk up from it as they do from a place opened by
+    hand.
   - The screens-and-settings group (`appScreens`) is the apps' own:
     `searchNavScreens(ContractValues.nativeNavManifest, q, scope,
     enabledPluginIds, hostAdmin)` answers it with no read, and the box shows

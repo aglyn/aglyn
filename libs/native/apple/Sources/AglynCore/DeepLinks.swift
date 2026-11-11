@@ -262,6 +262,18 @@ public enum DeepLinks {
       query = [:]
     }
     let scope = splitConsoleScope(path)
+    if let (screen, params) = match(scope.rest, query: query, routes: routes) {
+      var merged = params
+      if let org = scope.orgSlug { merged["orgSlug"] = org }
+      if let host = scope.hostSlug { merged["hostSlug"] = host }
+      return .screen(screen, merged)
+    }
+    return isBesignerPath(raw) ? .besigner(raw) : .unavailable(full)
+  }
+
+  /// The registered screen a scoped console path (`/products/orders`, the part after `/{orgSlug}/hosts/{hostSlug}`) and
+  /// its query open, with the query, the query keys a pattern binds and the path's params; nil when no route answers it.
+  public static func match(_ rest: String, query: NativeParams, routes: [any DeepLinkRoute]) -> (screen: String, params: NativeParams)? {
     // Most specific pattern first: in a tie in length, the one that needs more of the query, then the one with fewer
     // segments that take any value (`/marketplace/payouts` and `:section(payouts|…)` before `:listingId`).
     let ordered = routes.enumerated().map { (offset: $0.offset, route: $0.element, pattern: RoutePattern($0.element.path)) }
@@ -272,14 +284,12 @@ public enum DeepLinks {
         return a.offset < b.offset
       }
     for (_, route, pattern) in ordered {
-      guard let params = matchPathPattern(pattern.path, scope.rest), let bound = pattern.bind(query) else { continue }
+      guard let params = matchPathPattern(pattern.path, rest), let bound = pattern.bind(query) else { continue }
       var merged = query
-      if let org = scope.orgSlug { merged["orgSlug"] = org }
-      if let host = scope.hostSlug { merged["hostSlug"] = host }
       merged.merge(bound) { _, new in new }
       merged.merge(params) { _, new in new }
-      return .screen(route.screen, merged)
+      return (route.screen, merged)
     }
-    return isBesignerPath(raw) ? .besigner(raw) : .unavailable(full)
+    return nil
   }
 }
