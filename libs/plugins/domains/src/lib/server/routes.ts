@@ -810,9 +810,43 @@ export async function dnsRoute(request: Request): Promise<Response> {
   return domainsJson({ ours: true, nameservers: nameservers.value.nameservers, siteConnected, records })
 }
 
+/**
+ * Puts a name back on the registrar's own nameservers (AGL-4040). Records
+ * kept at the provider it leaves stop applying; the owner was told so
+ * before confirming, and adds what they need again in the editor.
+ */
+async function useOurNameservers(
+  actor: DomainsActor,
+  registration: DomainRegistrationDoc,
+  alreadyOurs: boolean,
+): Promise<Response> {
+  if (alreadyOurs) {
+    return domainsError(409, `This domain already uses ${PLATFORM_BRAND_NAME}’s nameservers.`, {
+      code: 'already-ours',
+    })
+  }
+  const changed = await platformEffects().driver.setNameservers(registration.domain, [])
+  if (changed.ok === 'no') {
+    return domainsError(
+      changed.retryable ? 503 : 409,
+      changed.retryable
+        ? DNS_UNAVAILABLE
+        : 'The registrar didn’t accept the nameserver change. Nothing was changed.',
+      { code: changed.code },
+    )
+  }
+  await updateRegistration(registration.domain, {}, { event: 'nameservers-reset' })
+  await logDomainActivity(actor, registration.domain, `Moved the DNS to ${PLATFORM_BRAND_NAME}’s nameservers`, null)
+  return domainsJson({ ok: true })
+}
+
 const MANAGED_REFUSAL = `That record keeps your site reachable at this domain, with its security certificate, so ${PLATFORM_BRAND_NAME} keeps it. Disconnect the domain from its site first to change it.`
 
-/** POST: creates, changes or deletes one record. */
+/**
+ * POST: creates, changes or deletes one record, or (`use-our-nameservers`)
+ * moves a name on another provider's nameservers back onto ours, so its
+ * records are edited here from then on.
+ */
 async function dnsWriteRoute(request: Request): Promise<Response> {
   const gate = await domainsGate(request, { billing: false, scope: 'workspace', entitlement: false })
   if (gate instanceof Response) return gate
@@ -824,12 +858,13 @@ async function dnsWriteRoute(request: Request): Promise<Response> {
     })
   }
   const action = String(gate.body['action'] ?? '')
-  if (action !== 'create' && action !== 'update' && action !== 'delete') {
+  if (action !== 'create' && action !== 'update' && action !== 'delete' && action !== 'use-our-nameservers') {
     return domainsError(400, 'Unknown change.')
   }
   const driver = platformEffects().driver
   const nameservers = await driver.nameservers(registration.domain)
   if (nameservers.ok === 'no') return domainsError(503, DNS_UNAVAILABLE, { code: 'registrar-unavailable' })
+  if (action === 'use-our-nameservers') return useOurNameservers(gate.actor, registration, nameservers.value.ours)
   if (!nameservers.value.ours) {
     return domainsError(409, 'This domain uses another provider’s nameservers, so its records are edited there.', {
       code: 'not-our-nameservers',
