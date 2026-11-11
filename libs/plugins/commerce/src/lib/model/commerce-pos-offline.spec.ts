@@ -190,6 +190,26 @@ describe('a card taken offline on the app reader (AGL-4039)', () => {
     })
   })
 
+  it('says an intent made on the store’s own account is a direct sale’s (AGL-4219)', () => {
+    expect(posOfflineCardIntentMetadata({ ...SALE, direct: true })).toEqual({
+      kind: POS_OFFLINE_CARD_INTENT_KIND,
+      saleKey: SALE.saleKey,
+      hostId: 'host_1',
+      orgId: 'org_1',
+      registerId: 'reg_1',
+      chargeModel: 'direct',
+    })
+    expect(posOfflineCardIntentMetadata({ ...SALE, direct: false })).not.toHaveProperty('chargeModel')
+  })
+
+  it('keeps the account a direct card was made on, and refuses one that is not a Stripe account (AGL-4219)', () => {
+    expect(
+      sanitizePosOfflineSaleCard({ forward: 'forwarded', paymentIntentId: 'pi_3Q0abcdEFGH12345', account: 'acct_1StoreOwnAcct' }),
+    ).toEqual({ forward: 'forwarded', paymentIntentId: 'pi_3Q0abcdEFGH12345', account: 'acct_1StoreOwnAcct' })
+    expect(sanitizePosOfflineSaleCard({ forward: 'stored', account: '../accounts' })).toBeNull()
+    expect(sanitizePosOfflineSaleCard({ forward: 'stored', account: '' })).toEqual({ forward: 'stored' })
+  })
+
   it('reads the card of a queued card sale, and no cash on it', () => {
     const read = sanitizePosOfflineSale({
       ...SALE,

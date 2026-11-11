@@ -4,6 +4,8 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 private class FakeOfflinePort(
   var created: OfflineTerminalResult = OfflineTerminalResult.Ok(OfflineTerminalIntent(null, "requires_payment_method", 2479, storedOffline = false)),
@@ -46,6 +48,24 @@ class OfflineCardTest {
     assertEquals(OfflineCardOutcome.Taken(OfflineCardTaken(key, null, "visa", "4242")), collectOfflineCardPayment(port, request(), m2))
     assertEquals(listOf("create", "collect", "confirm"), port.calls)
     assertEquals("acct_merchant", port.request?.destination)
+  }
+
+  @Test
+  fun aDirectChargeIsMadeOnTheStoresOwnAccountAndTheTakenCardSaysWhich() = runTest {
+    // A store on its own Stripe account (AGL-4219): no destination, the store's account instead.
+    val direct = OfflineCardRequest(
+      key, 2479, "usd", "", mapOf("kind" to "pos-offline", "saleKey" to key, "chargeModel" to "direct"),
+      account = "acct_1StoreOwnAcct",
+    )
+    assertNull(direct.problem)
+    val port = FakeOfflinePort()
+    assertEquals(
+      OfflineCardOutcome.Taken(OfflineCardTaken(key, null, "visa", "4242", account = "acct_1StoreOwnAcct")),
+      collectOfflineCardPayment(port, direct, m2),
+    )
+    assertEquals("acct_1StoreOwnAcct", port.request?.account)
+    assertNull(request().account)
+    assertNotNull(direct.copy(account = "").problem)
   }
 
   @Test
