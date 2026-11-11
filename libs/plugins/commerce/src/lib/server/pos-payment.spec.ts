@@ -134,8 +134,10 @@ import {
   handlePosStripeEvent,
   KEYED_CARD_NEEDS_AUTHENTICATION,
   POS_READER_ON_OTHER_ACCOUNT,
+  posCaptureFeeCents,
   retrievePosOfflineCardIntent,
 } from './pos-terminal'
+import { posOfflineCardFeeCents } from './pos-stripe'
 import { onPosSaleCompleted } from './pos-sale'
 
 /*==========================================
@@ -1037,6 +1039,47 @@ describe('an offline card read and captured at sync (AGL-4039)', () => {
     for (const call of calls) {
       expect(call.params.getAll('expand[]')).toEqual(['latest_charge'])
       expect(call.params.has('expand[][]')).toBe(false)
+    }
+  })
+
+  it('reads and captures a direct-charge store’s card on its own account, with the same expand and the fee (AGL-4219)', async () => {
+    const { id } = await retrieveSeeded()
+    await retrievePosOfflineCardIntent(id, 'acct_1StoreOwnAcct')
+    await capturePosOfflineCardIntent(id, 37, 'offline-capture-direct', 'acct_1StoreOwnAcct')
+    const calls = stripeCalls.filter((call) => call.path.startsWith(`payment_intents/${id}`))
+    expect(calls.map((call) => [call.method, call.account])).toEqual([
+      ['GET', 'acct_1StoreOwnAcct'],
+      ['POST', 'acct_1StoreOwnAcct'],
+    ])
+    for (const call of calls) {
+      expect(call.params.getAll('expand[]')).toEqual(['latest_charge'])
+      expect(call.params.has('expand[][]')).toBe(false)
+    }
+    const capture = calls[1]
+    expect(capture.path).toBe(`payment_intents/${id}/capture`)
+    expect(capture.params.get('application_fee_amount')).toBe('37')
+    expect(capture.key).toBe('offline-capture-direct')
+    // Nothing on a direct capture names a transfer: the money is the store's already.
+    expect([...capture.params.keys()].some((key) => key.startsWith('transfer_data'))).toBe(false)
+  })
+
+  it('captures an offline card by the same fee rule as an online reader payment, on either account (AGL-4219)', () => {
+    for (const direct of [false, true]) {
+      for (const [takeShareCents, chargeCents] of [[0, 500], [37, 2479], [200, 10_000], [9_000, 999_999]]) {
+        const online = posCaptureFeeCents(
+          {
+            id: 'pay_1',
+            method: 'card_present',
+            amountCents: chargeCents,
+            status: 'pending',
+            atMs: 1,
+            takeFeeCents: takeShareCents,
+            ...(direct ? { chargeModel: 'direct' as const, stripeAccountId: 'acct_1StoreOwnAcct' } : {}),
+          } as any,
+          { amount: chargeCents, payment_method_types: ['card_present'] },
+        )
+        expect(posOfflineCardFeeCents({ takeShareCents, chargeCents, direct })).toBe(online)
+      }
     }
   })
 

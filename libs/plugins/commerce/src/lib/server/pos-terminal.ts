@@ -1562,16 +1562,29 @@ function offlineCardIntent(body: any): PosOfflineCardIntent {
 export async function retrievePosOfflineCardIntent(
   paymentIntentId: string,
   account: string | null = null,
-): Promise<{ ok: true; intent: PosOfflineCardIntent } | { ok: false; error: string }> {
+): Promise<{ ok: true; intent: PosOfflineCardIntent } | { ok: false; error: string; status: number }> {
   const fetched = await posStripe('GET', `payment_intents/${encodeURIComponent(paymentIntentId)}`, {
     params: { expand: ['latest_charge'] },
     ...onAccount(account),
   })
-  if (!fetched.ok) return { ok: false, error: posStripeErrorMessage(fetched.body, 'The card payment could not be read.') }
+  // The status tells the sync whether Stripe definitely has no such intent on that account (AGL-4219).
+  if (!fetched.ok) {
+    return {
+      ok: false,
+      status: fetched.status,
+      error: posStripeErrorMessage(fetched.body, 'The card payment could not be read.'),
+    }
+  }
   return { ok: true, intent: offlineCardIntent(fetched.body) }
 }
 
-/** Captures one authorized offline card with the platform's fee; a repeat finds the first capture. */
+/**
+ * Captures one authorized offline card with the platform's fee, on `account`
+ * (a direct-charge store's own, where its app's SDK made it, AGL-4219) or the
+ * platform; a repeat finds the first capture. Stripe takes the application
+ * fee at capture on a direct charge too, from the store's account to the
+ * platform, which is how an online direct reader payment is captured.
+ */
 export async function capturePosOfflineCardIntent(
   paymentIntentId: string,
   applicationFeeCents: number,

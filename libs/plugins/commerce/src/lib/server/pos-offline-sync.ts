@@ -58,7 +58,7 @@ import { posOfflineCardChargeRef, reportPosOfflineCardWrongAccount } from './pos
 import { posHardwareSaleFields } from './pos-hardware-sale-fields'
 import { posOfflineCardOrderMoney, type PosOfflineCardSettled } from './pos-offline-card-order'
 import { notifyPosSaleCompleted } from './pos-sale'
-import { POS_CURRENCY, posCardApplicationFeeCents, posTerminalAvailable } from './pos-stripe'
+import { POS_CURRENCY, posOfflineCardFeeCents, posTerminalAvailable } from './pos-stripe'
 import {
   capturePosOfflineCardIntent,
   ensurePosOfflineCardConfiguration,
@@ -75,7 +75,9 @@ import { decrementVariantStock, type StockDecrementOutcome } from './reserve-sto
  *
  *   GET   ?hostId=   the offline kit: the store's in-person tax rate, the
  *                    discount ceiling, the shift rule, the registers and their
- *                    open shifts, and the receipt's head and foot
+ *                    open shifts, and the receipt's head and foot. An app
+ *                    that can make a card's intent on a store's own Stripe
+ *                    account adds `cardChargeModels=direct` (AGL-4219)
  *   POST  {hostId, sales[]}   records each sale rung offline, once: cash,
  *                    and a card the Aglyn POS app's own reader stored and
  *                    Stripe has since been sent (AGL-4039), which this
@@ -162,17 +164,31 @@ export interface PosOfflineCardDeps {
   merchantAccount(hostId: string, org: Record<string, any> | null): Promise<PosMerchant | null>
   /** Turns Stripe's offline mode on for the site's readers; false when Stripe refused. */
   enableOffline(hostId: string): Promise<boolean>
-  retrieve(paymentIntentId: string): Promise<{ ok: true; intent: PosOfflineCardIntent } | { ok: false; error: string }>
   /**
-   * Captures with the platform fee. A failure carries Stripe's HTTP status
-   * when Stripe answered; a request that never got an answer throws.
+   * Reads an intent on `account` (a store's own Stripe account, for a direct
+   * charge, AGL-4219) or, with null, the platform. A failure carries Stripe's
+   * HTTP status when Stripe answered.
+   */
+  retrieve(
+    paymentIntentId: string,
+    account: string | null,
+  ): Promise<{ ok: true; intent: PosOfflineCardIntent } | { ok: false; error: string; status?: number }>
+  /**
+   * Captures with the platform fee, on `account` or the platform. A failure
+   * carries Stripe's HTTP status when Stripe answered; a request that never
+   * got an answer throws.
    */
   capture(
     paymentIntentId: string,
     applicationFeeCents: number,
     idempotencyKey: string,
+    account: string | null,
   ): Promise<{ ok: true; intent: PosOfflineCardIntent } | { ok: false; error: string; status?: number }>
-  /** Tells the operator a card was made out to another account. Never throws. */
+  /**
+   * Tells the operator a card was made out to another account. Never throws.
+   * `destination` is where the money went: the transfer's account for a
+   * destination charge, the account the intent was made on for a direct one.
+   */
   wrongAccount(input: {
     hostId: string
     orderId: string
@@ -314,10 +330,17 @@ async function readStoreTax(staff: PosOpsStaff): Promise<CommerceModel.TaxSettin
   return (store.get('tax') ?? undefined) as CommerceModel.TaxSettings | undefined
 }
 
+/** What the app asking for the kit can do, from the GET's query. */
+export interface PosOfflineKitClient {
+  /** The app makes a card's intent on a store's own Stripe account (AGL-4219). */
+  directCards?: boolean
+}
+
 /** The kit a register caches to sell offline. */
 export async function buildPosOfflineKit(
   deps: PosOfflineSyncDeps,
   staff: PosOpsStaff,
+  client: PosOfflineKitClient = {},
 ): Promise<PosOfflineKit> {
   const [registers, taxSettings, config, host, store] = await Promise.all([
     readRegisters(staff),
@@ -327,7 +350,7 @@ export async function buildPosOfflineKit(
     staff.hostRef.collection('settings').doc('store').get(),
   ])
   const tax = posInPersonTax(taxSettings)
-  const card = await buildPosOfflineKitCard(deps, staff, config)
+  const card = await buildPosOfflineKitCard(deps, staff, config, client)
   return {
     v: 1,
     hostId: staff.hostId,
@@ -365,6 +388,7 @@ async function buildPosOfflineKitCard(
   deps: PosOfflineSyncDeps,
   staff: PosOpsStaff,
   config: Record<string, unknown>,
+  client: PosOfflineKitClient,
 ): Promise<PosOfflineKitCard | undefined> {
   if (!deps.card) return undefined
   const settings = posOfflineCardSettings(config)
@@ -381,18 +405,25 @@ async function buildPosOfflineKitCard(
   if (!terminal.locationId) return off('Connect a card reader once while online, then cards keep working offline.')
   const merchant = await deps.card.merchantAccount(staff.hostId, staff.org)
   if (!merchant) return off('Finish connecting Stripe to take cards.')
-  // The app makes an offline card's intent itself, as a DESTINATION charge
-  // to `destination`. A store selling on its own Stripe account needs the
-  // intent made on that account with no transfer at all, which the app does
-  // not do yet: offline cards stay off there rather than fail at the counter.
-  if (merchant.chargeModel === 'direct') {
+  // The app makes an offline card's intent itself. For a store on Aglyn's
+  // account it is a DESTINATION charge to `destination`. For a store on its
+  // own Stripe account (AGL-4219) it is made ON that account, which is the
+  // one the SDK's connection token and the site's Location belong to
+  // (`createPosTerminalConnectionToken`), with no transfer at all: Stripe's
+  // Terminal-with-direct-charges guide asks a client-side intent for no
+  // Connect parameters. An app from before that cannot make one, so it is
+  // offered no kit for such a store rather than a card that fails at the
+  // counter or lands on the wrong account.
+  const direct = merchant.chargeModel === 'direct'
+  if (direct && !client.directCards) {
     return off('Card sales offline are not available for this store’s payment account yet. Take cards while online.')
   }
-  const destination = merchant.accountId
   if (!(await deps.card.enableOffline(staff.hostId))) {
     return off('Card sales offline could not be turned on for this store’s readers yet. Try again later.')
   }
-  return { ...base, destination, available: true }
+  return direct
+    ? { ...base, account: merchant.accountId, available: true }
+    : { ...base, destination: merchant.accountId, available: true }
 }
 
 /** A card made out to a Stripe account that is not the store's. */
@@ -471,8 +502,32 @@ async function settleOfflineCard(
       ...details,
     }
   }
-  const read = await deps.card.retrieve(card.paymentIntentId)
-  if ('error' in read) return wait(`The card payment could not be checked yet: ${read.error}`)
+  // WHERE THE INTENT LIVES. A direct-charge kit has the device make it on
+  // the store's own account, and the sale says which (`card.account`); every
+  // other card was made on the platform. It is read where the device made
+  // it, and judged below against where the store sells NOW.
+  const madeOn = card.account ?? null
+  const read = await deps.card.retrieve(card.paymentIntentId, madeOn)
+  if ('error' in read) {
+    // Stripe answering that the account has no such intent (or that it may
+    // not be read there) is definite. When that account is not the store's
+    // now, the card cannot be this store's money, so the sale is recorded
+    // unpaid rather than kept on the register for good.
+    if (madeOn && posOfflineCaptureRefused(read.status)) {
+      const merchant = await deps.card.merchantAccount(staff.hostId, staff.org)
+      if (merchant && !(merchant.chargeModel === 'direct' && merchant.accountId === madeOn)) {
+        return {
+          kind: 'unpaid',
+          flag: 'card-not-charged',
+          intentId: card.paymentIntentId,
+          message: 'The card was made out to a Stripe account that is not this store’s, so it was not charged here.',
+          ...details,
+          wrongAccount: { destination: madeOn, expected: merchant.accountId, status: 'unreadable', amountCents: 0 },
+        }
+      }
+    }
+    return wait(`The card payment could not be checked yet: ${read.error}`)
+  }
   let intent = read.intent
   // The amount is NOT checked here: what Stripe took is what the customer
   // paid, and a difference from the server's total is flagged on the order
@@ -486,32 +541,51 @@ async function settleOfflineCard(
     return { kind: 'wait', outcome: refused(saleKey, 'invalid', 'The card payment does not belong to this sale.', false) }
   }
   const found = { ...details, ...(intent.brand ? { brand: intent.brand } : {}), ...(intent.last4 ? { last4: intent.last4 } : {}) }
-  // THE DESTINATION. The device made this intent out to the account its
-  // offline kit named, and a kit can be stale (the store reconnected Stripe)
-  // or a register tampered with. Money that holds or has moved is only ever
-  // captured into, or recorded as paid to, the store's account as it is now.
+  // THE ACCOUNT. The device made this intent where its offline kit said:
+  // out to `destination` on the platform, or on the store's own account for
+  // a direct charge. A kit can be stale (the store reconnected Stripe, or
+  // moved to its own account) or a register tampered with. Money that holds
+  // or has moved is only ever captured into, or recorded as paid to, the
+  // store's account as it is now:
+  //  - DESTINATION store: made on the platform, transferred to its account.
+  //  - DIRECT store: made ON its current account, transferring nowhere.
+  // Anything else reads as made out elsewhere, like a kit gone stale.
   if (INTENT_HOLDS_MONEY.has(intent.status)) {
     const merchant = await deps.card.merchantAccount(staff.hostId, staff.org)
-    // A direct-charge store is offered no offline kit, so an intent the app
-    // made out to a destination is never its account's money: it reads as
-    // made out elsewhere, like a kit gone stale.
     const expected = merchant?.accountId ?? null
-    if (!expected) {
+    if (!merchant || !expected) {
       return wait('This store’s Stripe account cannot take card payments right now. The card syncs once it can.')
     }
-    if (merchant?.chargeModel === 'direct' || intent.destination !== expected) {
+    const onStoreAccount =
+      merchant.chargeModel === 'direct'
+        ? madeOn === expected && !intent.destination
+        : madeOn === null && intent.destination === expected
+    if (!onStoreAccount) {
       return {
         kind: 'unpaid',
         flag: 'card-not-charged',
         intentId: intent.id,
         message: 'The card was made out to a Stripe account that is not this store’s, so it was not charged here.',
         ...found,
-        wrongAccount: { destination: intent.destination, expected, status: intent.status, amountCents: intent.amount },
+        wrongAccount: {
+          destination: madeOn ?? intent.destination,
+          expected,
+          status: intent.status,
+          amountCents: intent.amount,
+        },
       }
     }
   }
+  // The fee, by the one tender rule, exactly as an online reader payment is
+  // captured (`posCaptureFeeCents`): the card's share of the take plus
+  // Stripe's processing on a destination charge, the take alone on the
+  // store's own account, where Stripe bills the store its card fee.
   const takeShareCents = CommerceModel.posTenderTakeCents('card_present', takeFee)
-  const expectedFeeCents = posCardApplicationFeeCents({ takeShareCents, chargeCents: intent.amount })
+  const expectedFeeCents = posOfflineCardFeeCents({
+    takeShareCents,
+    chargeCents: intent.amount,
+    ...(madeOn ? { direct: true } : {}),
+  })
   if (intent.status === 'requires_capture') {
     const chargeRef = posOfflineCardChargeRef(staff.hostRef, saleKey)
     const charge = ((await chargeRef.get()).data() ?? {}) as Record<string, unknown>
@@ -532,7 +606,12 @@ async function settleOfflineCard(
         { merge: true },
       )
     }
-    const captured = await deps.card.capture(intent.id, expectedFeeCents, posOfflineCaptureKey(staff.hostId, saleKey, attempt))
+    const captured = await deps.card.capture(
+      intent.id,
+      expectedFeeCents,
+      posOfflineCaptureKey(staff.hostId, saleKey, attempt),
+      madeOn,
+    )
     if ('error' in captured) {
       const stamp = { hostId: staff.hostId, saleKey, updatedAtMs: deps.now() }
       if (posOfflineCaptureRefused(captured.status)) {
@@ -564,6 +643,7 @@ async function settleOfflineCard(
       expectedFeeCents,
       takeShareCents,
       livemode: intent.livemode,
+      ...(madeOn ? { account: madeOn } : {}),
       ...found,
     }
   }
@@ -1087,7 +1167,11 @@ export async function handlePosOfflineSync(
   if ('error' in gate) return { status: gate.status, body: { error: gate.error } }
   const staff = gate.staff
   if (req.method === 'GET') {
-    return { status: 200, body: { kit: await buildPosOfflineKit(deps, staff) } }
+    const models = String(body['cardChargeModels'] ?? '').split(',').map((model) => model.trim())
+    return {
+      status: 200,
+      body: { kit: await buildPosOfflineKit(deps, staff, { directCards: models.includes('direct') }) },
+    }
   }
   const sales = Array.isArray(body['sales']) ? (body['sales'] as unknown[]) : null
   if (!sales) return { status: 400, body: { error: 'Missing sales' } }

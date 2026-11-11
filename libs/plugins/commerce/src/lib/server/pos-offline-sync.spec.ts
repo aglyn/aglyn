@@ -27,7 +27,7 @@ import {
   type PosOfflineSaleOutcome,
 } from '../model/commerce-pos-offline'
 import { mintPosAssertion } from './pos-ops-gate'
-import { posCardApplicationFeeCents } from './pos-stripe'
+import { posCardApplicationFeeCents, posOfflineCardFeeCents } from './pos-stripe'
 import type { PosOfflineCardIntent } from './pos-terminal'
 import {
   handlePosOfflineSync,
@@ -51,6 +51,7 @@ jest.mock('./low-stock', () => ({ alertLowStockCrossing: jest.fn() }))
 jest.mock('./reserve-stock', () => ({ decrementVariantStock: jest.fn() }))
 jest.mock('./pos-sale', () => ({ notifyPosSaleCompleted: jest.fn() }))
 jest.mock('./pos-terminal', () => ({}))
+jest.mock('@aglyn/tenant-data-admin/server/seller-payment-account', () => ({ sellerPaymentAccount: jest.fn() }))
 jest.mock('./pos-offline-card-reconcile', () => ({
   ...jest.requireActual('./pos-offline-card-reconcile'),
   reportPosOfflineCardWrongAccount: jest.fn(),
@@ -498,10 +499,14 @@ describe('a sync that dies part-way', () => {
 
 describe('a card taken offline on the app reader (AGL-4039)', () => {
   let intents: Record<string, PosOfflineCardIntent>
-  let captures: Array<{ id: string; fee: number; key: string }>
+  /** The account each intent was made on, as Stripe would answer a read with `Stripe-Account`; absent: the platform. */
+  let madeOn: Record<string, string>
+  let captures: Array<{ id: string; fee: number; key: string; account?: string | null }>
   let offlineEnabled: boolean
   /** The store's Stripe account as the server reads it at sync; null when it cannot take cards. */
   let merchant: string | null
+  /** How the store sells: through the platform, or on its own account (AGL-4219). */
+  let chargeModel: 'destination' | 'direct'
   /** What the next captures answer instead of capturing: a Stripe status, or a thrown network error. */
   let captureFailures: Array<{ status: number; error: string } | 'network'>
   let wrongAccounts: Array<Record<string, unknown>>
@@ -536,18 +541,24 @@ describe('a card taken offline on the app reader (AGL-4039)', () => {
 
   beforeEach(() => {
     intents = {}
+    madeOn = {}
     captures = []
     offlineEnabled = true
     merchant = 'acct_merchant'
+    chargeModel = 'destination'
     captureFailures = []
     wrongAccounts = []
     deps.card = {
       terminal: async () => ({ available: true, locationId: 'tml_1' }),
-      merchantAccount: async () => (merchant ? { accountId: merchant, chargeModel: 'destination' as const } : null),
+      merchantAccount: async () => (merchant ? { accountId: merchant, chargeModel } : null),
       enableOffline: async () => offlineEnabled,
-      retrieve: async (id) => (intents[id] ? { ok: true, intent: intents[id] } : { ok: false, error: 'No such payment' }),
-      capture: async (id, fee, key) => {
-        captures.push({ id, fee, key })
+      // Stripe answers a read only on the account the intent lives on.
+      retrieve: async (id, account) =>
+        intents[id] && (madeOn[id] ?? null) === account
+          ? { ok: true, intent: intents[id] }
+          : { ok: false, error: 'No such payment_intent', status: 404 },
+      capture: async (id, fee, key, account) => {
+        captures.push({ id, fee, key, ...(account ? { account } : {}) })
         const failure = captureFailures.shift()
         if (failure === 'network') throw new Error('socket hang up')
         if (failure) return { ok: false, error: failure.error, status: failure.status }
@@ -832,6 +843,170 @@ describe('a card taken offline on the app reader (AGL-4039)', () => {
         `pos-offline-capture:shop:${queued.saleKey}`,
         `pos-offline-capture:shop:${queued.saleKey}:1`,
       ])
+    })
+  })
+  describe('a store on its own Stripe account (direct charges, AGL-4219)', () => {
+    const STORE = 'acct_1StoreOwnAcct'
+    const directKit = async () =>
+      (
+        await handlePosOfflineSync(deps, {
+          ...h.request('cashier', {}),
+          method: 'GET',
+          query: { hostId: 'shop', cardChargeModels: 'direct' },
+        } as any)
+      ).body['kit'] as any
+
+    /** A card the device made on `account` (the store's, from its kit), with no transfer. */
+    const directSale = (
+      forward: 'forwarded' | 'declined' = 'forwarded',
+      intent: Partial<PosOfflineCardIntent> = {},
+      account: string = STORE,
+      saleAccount: string | undefined = account,
+    ) => {
+      const made = cardSale(forward, { destination: '', ...intent })
+      madeOn[made.intent.id] = account
+      made.intent.metadata['chargeModel'] = 'direct'
+      if (saleAccount) made.queued.card = { ...made.queued.card!, account: saleAccount }
+      return made
+    }
+
+    beforeEach(() => {
+      merchant = STORE
+      chargeModel = 'direct'
+      h.config['posOfflineCardSales'] = true
+    })
+
+    it('hands an app that can make it a kit on the store’s own account, with the same limits', async () => {
+      expect((await directKit()).card).toEqual({
+        available: true,
+        destination: '',
+        account: STORE,
+        currency: 'usd',
+        maxSaleCents: 1_000_000,
+        maxDeviceDailyCents: 0,
+      })
+      h.config['posOfflineCardMaxSale'] = 250
+      h.config['posOfflineCardDailyLimit'] = 2000
+      expect((await directKit()).card).toMatchObject({ available: true, maxSaleCents: 25_000, maxDeviceDailyCents: 200_000 })
+    })
+
+    it('still offers an app from before no card offline, rather than a card on the wrong account', async () => {
+      expect((await kit()).card).toEqual({
+        available: false,
+        unavailableReason: expect.stringMatching(/not available for this store’s payment account/),
+        destination: '',
+        currency: 'usd',
+        maxSaleCents: 1_000_000,
+        maxDeviceDailyCents: 0,
+      })
+    })
+
+    it('captures a card made on the store’s account there, with the take alone, and records a paid direct sale', async () => {
+      const { queued, intent } = directSale()
+      const [result] = await results([queued])
+      expect(result).toMatchObject({ status: 'recorded', flags: [] })
+      const fee = posOfflineCardFeeCents({ takeShareCents: take, chargeCents: intent.amount, direct: true })
+      // On its own account Stripe bills the store its card fee: the platform's is the take alone.
+      expect(fee).toBe(take)
+      expect(fee).toBeLessThan(posCardApplicationFeeCents({ takeShareCents: take, chargeCents: intent.amount }))
+      expect(captures).toEqual([
+        { id: intent.id, fee, key: `pos-offline-capture:shop:${queued.saleKey}`, account: STORE },
+      ])
+      const recorded = order(queued.saleKey)!
+      expect(recorded).toMatchObject({
+        status: 'paid',
+        chargeModel: 'direct',
+        stripeAccountId: STORE,
+        paymentIntentId: intent.id,
+        feeCollection: 'payout',
+      })
+      expect(recorded['totals'].feeCents).toBe(fee)
+      // The refund, the return and the dispute read the payment's account.
+      expect(recorded['payments'][0]).toMatchObject({
+        status: 'succeeded',
+        chargeModel: 'direct',
+        stripeAccountId: STORE,
+        feeCents: fee,
+        takeFeeCents: take,
+      })
+      expect(wrongAccounts).toHaveLength(0)
+      expect(after).toHaveLength(1)
+    })
+
+    it('never captures a card made on another account: unpaid, flagged, and the operator is told', async () => {
+      const { queued, intent } = directSale('forwarded', {}, 'acct_1SomeoneElse0')
+      const [result] = await results([queued])
+      expect(captures).toHaveLength(0)
+      expect(result).toMatchObject({ status: 'recorded', flags: ['card-not-charged'] })
+      expect(order(queued.saleKey)!['status']).toBe('pending')
+      expect(order(queued.saleKey)!['chargeModel']).toBeUndefined()
+      expect(wrongAccounts).toEqual([
+        expect.objectContaining({ paymentIntentId: intent.id, destination: 'acct_1SomeoneElse0', expected: STORE }),
+      ])
+    })
+
+    it('never captures an intent on the store’s account that transfers its money on', async () => {
+      const { queued } = directSale('forwarded', { destination: 'acct_1SomeoneElse0' })
+      expect((await results([queued]))[0]).toMatchObject({ flags: ['card-not-charged'] })
+      expect(captures).toHaveLength(0)
+    })
+
+    it('never captures a platform destination charge once the store sells on its own account', async () => {
+      // A kit from before the store moved: a destination intent on the platform.
+      const { queued } = cardSale('forwarded', { destination: STORE })
+      expect((await results([queued]))[0]).toMatchObject({ flags: ['card-not-charged'] })
+      expect(captures).toHaveLength(0)
+      expect(wrongAccounts[0]).toMatchObject({ destination: STORE, expected: STORE })
+    })
+
+    it('a kit gone stale after the store reconnected Stripe: the old account’s card is not charged here', async () => {
+      const OLD = 'acct_1OldStoreAcct'
+      const readable = directSale('forwarded', {}, OLD)
+      merchant = 'acct_1NewStoreAcct'
+      expect((await results([readable.queued]))[0]).toMatchObject({ status: 'recorded', flags: ['card-not-charged'] })
+      expect(wrongAccounts[0]).toMatchObject({ destination: OLD, expected: 'acct_1NewStoreAcct', status: 'requires_capture' })
+      // The old account no longer answers for it: definite, so recorded unpaid rather than kept on the register.
+      const gone = directSale('forwarded', {}, OLD)
+      delete madeOn[gone.intent.id]
+      delete intents[gone.intent.id]
+      expect((await results([gone.queued]))[0]).toMatchObject({ status: 'recorded', flags: ['card-not-charged'] })
+      expect(wrongAccounts[1]).toMatchObject({ destination: OLD, status: 'unreadable' })
+      expect(captures).toHaveLength(0)
+    })
+
+    it('waits when the store’s own account cannot find the intent yet, rather than recording it unpaid', async () => {
+      const { queued, intent } = directSale()
+      delete intents[intent.id]
+      expect((await results([queued]))[0]).toMatchObject({ status: 'refused', reason: 'failed', retry: true })
+      expect(order(queued.saleKey)).toBeUndefined()
+    })
+
+    it('records a declined card on the store’s account unpaid', async () => {
+      const { queued } = directSale('declined', { status: 'requires_payment_method', failureMessage: 'Declined.' })
+      expect((await results([queued]))[0]).toMatchObject({ status: 'recorded', flags: ['card-declined'] })
+      expect(captures).toHaveLength(0)
+    })
+
+    it('leaves a destination store exactly as it was, whatever the app can do', async () => {
+      merchant = 'acct_merchant'
+      chargeModel = 'destination'
+      expect((await directKit()).card).toEqual({
+        available: true,
+        destination: 'acct_merchant',
+        currency: 'usd',
+        maxSaleCents: 1_000_000,
+        maxDeviceDailyCents: 0,
+      })
+      const { queued, intent } = cardSale('forwarded')
+      await results([queued])
+      const fee = posCardApplicationFeeCents({ takeShareCents: take, chargeCents: intent.amount })
+      expect(captures).toEqual([{ id: intent.id, fee, key: `pos-offline-capture:shop:${queued.saleKey}` }])
+      expect(order(queued.saleKey)!['chargeModel']).toBeUndefined()
+      expect(order(queued.saleKey)!['payments'][0]['chargeModel']).toBeUndefined()
+      // A sale that claims a store account on a destination store is not this store's money.
+      const claimed = directSale('forwarded', { destination: '' }, 'acct_1SomeoneElse0')
+      expect((await results([claimed.queued]))[0]).toMatchObject({ flags: ['card-not-charged'] })
+      expect(captures).toHaveLength(1)
     })
   })
 })
