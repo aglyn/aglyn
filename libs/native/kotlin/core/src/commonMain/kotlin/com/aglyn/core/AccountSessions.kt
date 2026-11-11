@@ -247,6 +247,7 @@ class PickedFirestoreReader(private val pick: () -> FirestoreReader) : Firestore
   override suspend fun get(path: String): FirestoreDoc? = pick().get(path)
   override suspend fun getAnswer(path: String): Live.Ready<FirestoreDoc?> = pick().getAnswer(path)
   override suspend fun page(query: FirestoreQuery): FirestorePage = pick().page(query)
+  override suspend fun pageAnswer(query: FirestoreQuery): Live.Ready<FirestorePage> = pick().pageAnswer(query)
   override fun observeDoc(path: String) = pick().observeDoc(path)
   override fun observe(query: FirestoreQuery) = pick().observe(query)
   override suspend fun count(query: FirestoreQuery): Long? = pick().count(query)

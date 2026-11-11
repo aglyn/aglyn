@@ -44,6 +44,19 @@ data class RedirectDraft(
   val priority: String = "",
   val enabled: Boolean = true,
 ) {
+  /**
+   * This draft over a stored rule that moved from [previous] to [next] (AGL-4047): every field changed here keeps it, every
+   * other field follows [next].
+   */
+  fun rebased(previous: RedirectDraft, next: RedirectDraft) = next.copy(
+    kind = com.aglyn.core.rebased(kind, previous.kind, next.kind),
+    source = com.aglyn.core.rebased(source, previous.source, next.source),
+    destination = com.aglyn.core.rebased(destination, previous.destination, next.destination),
+    statusCode = com.aglyn.core.rebased(statusCode, previous.statusCode, next.statusCode),
+    priority = com.aglyn.core.rebased(priority, previous.priority, next.priority),
+    enabled = com.aglyn.core.rebased(enabled, previous.enabled, next.enabled),
+  )
+
   companion object {
     fun of(row: RedirectRow) = RedirectDraft(
       id = row.id,
@@ -190,9 +203,35 @@ class RedirectsEditor(private val api: RedirectsWriteApi, private val uid: Strin
   /** What just happened, or a warning that did not stop the save. */
   var notice by mutableStateOf<String?>(null)
 
+  /** The open rule is only the device cache's copy yet: Save waits for the server's (AGL-4047). A new rule is never held. */
+  var held by mutableStateOf(false)
+    private set
+
+  /** The stored rule the open draft is laid over: a newer copy keeps what was typed and moves the rest. */
+  private var opened: RedirectDraft? = null
+
   fun add() = open(RedirectDraft())
 
-  fun edit(row: RedirectRow) = open(RedirectDraft.of(row))
+  /** Whether the site's list is only the device cache's copy, which an opened rule is then held on; the screen keeps it. */
+  var listFromCache = false
+
+  fun edit(row: RedirectRow) {
+    open(RedirectDraft.of(row))
+    opened = RedirectDraft.of(row)
+    held = listFromCache
+  }
+
+  /** The list moved under an open rule: lay what was typed over the rule as stored now. */
+  fun refresh(rows: List<RedirectRow>, fromCache: Boolean) {
+    val typed = draft ?: return
+    val id = typed.id ?: return
+    val previous = opened ?: return
+    val row = rows.firstOrNull { it.id == id } ?: return
+    val next = RedirectDraft.of(row)
+    draft = typed.rebased(previous, next)
+    opened = next
+    held = fromCache
+  }
 
   fun change(next: RedirectDraft) {
     draft = next
@@ -212,6 +251,8 @@ class RedirectsEditor(private val api: RedirectsWriteApi, private val uid: Strin
   private fun open(next: RedirectDraft) {
     error = null
     draft = next
+    opened = null
+    held = false
   }
 
   fun save() {

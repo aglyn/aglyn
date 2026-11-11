@@ -111,6 +111,7 @@ class SwitchingFirestoreReader(
   override suspend fun get(path: String): FirestoreDoc? = reader.get(path)
   override suspend fun getAnswer(path: String): Live.Ready<FirestoreDoc?> = reader.getAnswer(path)
   override suspend fun page(query: FirestoreQuery): FirestorePage = reader.page(query)
+  override suspend fun pageAnswer(query: FirestoreQuery): Live.Ready<FirestorePage> = reader.pageAnswer(query)
   override fun observeDoc(path: String): Flow<Live<FirestoreDoc?>> = reader.observeDoc(path)
   override fun observe(query: FirestoreQuery): Flow<Live<List<FirestoreDoc>>> = reader.observe(query)
   override suspend fun count(query: FirestoreQuery): Long? = reader.count(query)

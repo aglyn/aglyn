@@ -22,6 +22,17 @@ final class SeedEditsTests: XCTestCase {
     XCTAssertEqual(seedCheckingText("site settings"), "Checking your site settings with the server…")
   }
 
+  func testARebaserMovesOnlyTheFieldsNobodyChanged() {
+    struct Draft: Equatable { var name: String; var price: String; var notes: String }
+    let previous = Draft(name: "Cake", price: "20", notes: "")
+    var typed = previous
+    typed.name = "Layer cake"
+    let out = rebased(typed, previous: previous, next: Draft(name: "Cake", price: "24", notes: "Order a day ahead")) {
+      $0.field(\.name); $0.field(\.price); $0.field(\.notes)
+    }
+    XCTAssertEqual(out, Draft(name: "Layer cake", price: "24", notes: "Order a day ahead"))
+  }
+
   func testTheThemeEditorKeepsItsChangesOverANewerSavedTheme() {
     let previous = ThemeValues(
       colors: ["light": ["primary": "#111111", "divider": nil]], darkScheme: "auto", fontFamily: "__system__",

@@ -87,7 +87,9 @@ const val EVENT_CEILING = 200
 
 fun eventsPath(hostId: String) = "hosts/$hostId/events"
 
-fun eventsQuery(hostId: String) = FirestoreQuery(eventsPath(hostId), orderBy = listOf(FirestoreOrder("startsAtMs", descending = true)), limit = EVENT_CEILING + 1)
+// Metadata changes too, so a list the server confirms stops reading as the cache's (AGL-4047).
+fun eventsQuery(hostId: String) =
+  FirestoreQuery(eventsPath(hostId), orderBy = listOf(FirestoreOrder("startsAtMs", descending = true)), limit = EVENT_CEILING + 1, includeMetadataChanges = true)
 
 data class EventRow(
   val id: String,
@@ -133,6 +135,22 @@ data class EventDraft(
   val coverImage: String = "",
   val coverImageAlt: String = "",
   val status: EventStatus = EventStatus.DRAFT,
+)
+
+/**
+ * The editor over a stored event that moved from [previous] to [next] (AGL-4047): every field changed here keeps it, every
+ * other field follows [next].
+ */
+fun rebasedEventDraft(draft: EventDraft, previous: EventDraft, next: EventDraft) = next.copy(
+  title = com.aglyn.core.rebased(draft.title, previous.title, next.title),
+  startsAtMs = com.aglyn.core.rebased(draft.startsAtMs, previous.startsAtMs, next.startsAtMs),
+  endsAtMs = com.aglyn.core.rebased(draft.endsAtMs, previous.endsAtMs, next.endsAtMs),
+  location = com.aglyn.core.rebased(draft.location, previous.location, next.location),
+  organizer = com.aglyn.core.rebased(draft.organizer, previous.organizer, next.organizer),
+  description = com.aglyn.core.rebased(draft.description, previous.description, next.description),
+  coverImage = com.aglyn.core.rebased(draft.coverImage, previous.coverImage, next.coverImage),
+  coverImageAlt = com.aglyn.core.rebased(draft.coverImageAlt, previous.coverImageAlt, next.coverImageAlt),
+  status = com.aglyn.core.rebased(draft.status, previous.status, next.status),
 )
 
 fun draftOf(row: EventRow) = EventDraft(
@@ -269,8 +287,11 @@ fun EventsScreen(context: NativePluginContext, startNew: Boolean = false) {
         selected == null -> SelectionPlaceholder("Pick an event to see it here", icon = AglynIcons.named("event"))
         selected == NEW -> EventEditor(context, EventDraft(null), busy) { draft -> run("Event saved.") { saveEvent(context.writer, hostId, draft) } }
         row == null -> EmptyState("This event is gone", icon = AglynIcons.named("event_busy"))
-        else -> EventEditor(context, remember(row) { draftOf(row) }, busy, onDelete = { deleting = row }) { draft ->
-          run("Event saved.") { saveEvent(context.writer, hostId, draft) }
+        // Keyed by event, so typing for one never carries to the next.
+        else -> androidx.compose.runtime.key(row.id) {
+          EventEditor(context, remember(row) { draftOf(row) }, busy, onDelete = { deleting = row }, held = (live as? Live.Ready)?.fromCache == true) { draft ->
+            run("Event saved.") { saveEvent(context.writer, hostId, draft) }
+          }
         }
       }
     },
@@ -294,8 +315,22 @@ fun EventsScreen(context: NativePluginContext, startNew: Boolean = false) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun EventEditor(context: NativePluginContext, initial: EventDraft, busy: Boolean, onDelete: (() -> Unit)? = null, onSave: (EventDraft) -> Unit) {
-  var draft by remember(initial) { mutableStateOf(initial) }
+private fun EventEditor(
+  context: NativePluginContext,
+  initial: EventDraft,
+  busy: Boolean,
+  onDelete: (() -> Unit)? = null,
+  /** A stored event read only from the device cache: Save waits for the server's copy (AGL-4047). A new one is never held. */
+  held: Boolean = false,
+  onSave: (EventDraft) -> Unit,
+) {
+  // A newer copy of the event keeps what was typed and moves every other field to it (AGL-4047).
+  var draft by remember { mutableStateOf(initial) }
+  var seeded by remember { mutableStateOf(initial) }
+  if (seeded != initial) {
+    draft = rebasedEventDraft(draft, seeded, initial)
+    seeded = initial
+  }
   val problem = eventWriteProblem(draft.title, draft.startsAtMs ?: 0)
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
@@ -346,7 +381,10 @@ private fun EventEditor(context: NativePluginContext, initial: EventDraft, busy:
         }
       }
       FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-        Button(onClick = { onSave(draft) }, enabled = problem == null && !busy, modifier = Modifier.testTag("event-save")) { Text("Save event") }
+        if (held) {
+          Text(com.aglyn.core.seedCheckingText("event"), Modifier.testTag("event-checking"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Button(onClick = { onSave(draft) }, enabled = problem == null && !busy && !held, modifier = Modifier.testTag("event-save")) { Text("Save event") }
         onDelete?.let { TextButton(onClick = it, enabled = !busy, modifier = Modifier.testTag("event-delete")) { Text("Delete", color = MaterialTheme.colorScheme.error) } }
       }
       if (problem != null && (draft.title.isNotEmpty() || draft.startsAtMs != null)) {

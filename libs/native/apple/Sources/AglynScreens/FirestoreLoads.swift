@@ -246,7 +246,11 @@ enum FirestoreLoads {
   /// `spec` is `{ collection, where: [[field, "==", value]], orderBy: "field desc", limit }`. `limit` replaces the spec's
   /// own when a list has been asked for more rows (a growing window, as the console's lists page).
   @MainActor
-  static func query(_ reader: FirestoreReader, _ spec: JSONValue, in context: JSONValue, limit: Int? = nil) async throws -> JSONValue {
+  /// An answer only the device cache gave is marked (`fromCacheKey`), as a document load's is; `server` waits past the
+  /// cache for the server's answer, up to `serverDeadline` (the model's confirm pass, AGL-4047).
+  static func query(
+    _ reader: FirestoreReader, _ spec: JSONValue, in context: JSONValue, limit: Int? = nil, server: Bool = false
+  ) async throws -> JSONValue {
     let collection = ScreenValues.render(spec["collection"]?.stringValue ?? "", in: context)
     var equals: [(field: String, value: Any)] = []
     var filters: [ListQueryConstraint] = []
@@ -308,7 +312,33 @@ enum FirestoreLoads {
       if let field = aggregate["sum"]?.stringValue, let total = try await reader.sum(whole, field: field) { result["sum"] = .number(total) }
       return .object(result)
     }
-    return ["items": .array(try await documents(reader, query).map(json))]
+    let docs = server ? try await serverDocuments(reader, query) : try await documents(reader, query)
+    let answer: JSONValue = ["items": .array(docs.map(json))]
+    return docs.contains(where: \.fromCache) ? markedFromCache(answer) : answer
+  }
+
+  /// A query as the server answers it: the device cache's answer is waited past, up to `serverDeadline`; at the deadline
+  /// the latest answer is given as it is (its documents still say `fromCache`).
+  @MainActor
+  static func serverDocuments(_ reader: FirestoreReader, _ query: FirestoreQuery) async throws -> [FirestoreDocument] {
+    var confirming = query
+    confirming.includeMetadataChanges = true
+    let wait = QueryAnswerWait()
+    return try await withCheckedThrowingContinuation { continuation in
+      wait.continuation = continuation
+      wait.listener = reader.listen(confirming) { result in
+        switch result {
+        case .failure(let error): wait.finish(.failure(error))
+        case .success(let docs):
+          wait.latest = docs
+          if !docs.contains(where: \.fromCache) { wait.finish(.success(docs)) }
+        }
+      }
+      Task { @MainActor in
+        try? await Task.sleep(for: serverDeadline)
+        wait.finish(wait.latest.map { .success($0) } ?? .failure(URLError(.timedOut)))
+      }
+    }
   }
 
   /// A query read once.
@@ -325,6 +355,22 @@ enum FirestoreLoads {
       }
       if finished { listener?.remove() }
     }
+  }
+}
+
+/// One `serverDocuments` wait: the first of its listener's server answer, its failure or its deadline ends it.
+@MainActor
+private final class QueryAnswerWait {
+  var continuation: CheckedContinuation<[FirestoreDocument], Error>?
+  var listener: FirestoreListening?
+  var latest: [FirestoreDocument]?
+
+  func finish(_ result: Result<[FirestoreDocument], Error>) {
+    guard let continuation else { return }
+    self.continuation = nil
+    listener?.remove()
+    listener = nil
+    continuation.resume(with: result)
   }
 }
 

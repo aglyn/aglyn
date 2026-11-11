@@ -207,7 +207,8 @@
                   }
                 }
               },
-              "success": "Discount saved"
+              "success": "Discount saved",
+              "checking": "discount"
             },
             {
               "id": "delete",
@@ -218,7 +219,8 @@
               "write": {
                 "delete": "hosts/{site.id}/discounts/{item.$id}"
               },
-              "success": "Deleted"
+              "success": "Deleted",
+              "checking": "discount"
             }
           ],
           "load": "discounts"
@@ -348,7 +350,8 @@
                   "redemptions": 0
                 }
               },
-              "success": "Discount saved"
+              "success": "Discount saved",
+              "checking": "discount"
             }
           ]
         }

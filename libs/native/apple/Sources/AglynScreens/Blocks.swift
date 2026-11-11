@@ -817,11 +817,36 @@ struct ActionInputSheet: View {
   /// What each `lookup` field last picked, as the person reads it.
   @State private var picked: [String: String] = [:]
 
-  private var inputs: [FieldSpec] { pending.action.inputs(in: pending.scope) }
+  private var inputs: [FieldSpec] { pending.action.inputs(in: scope) }
+
+  /// The prompt's scope over the screen as it is now (AGL-4047): the loads' newest answers, and the row it was opened on as
+  /// its list holds it now, so a field the person left alone takes a newer copy and a write built from the loads (a
+  /// replaced list of rates) builds from the server's. What was typed is kept: `values` holds only edits.
+  private var scope: JSONValue {
+    var next = pending.scope
+    if let data = context["data"] { next = ScreenContext.with(next, "data", data) }
+    if let row = liveRow { next = ScreenContext.with(next, item: row.item) }
+    return next
+  }
+
+  /// The row the prompt was opened on, found by its `$id` in a list load's items, with that load's key.
+  private var liveRow: (key: String, item: JSONValue)? {
+    guard let id = pending.scope["item"]?["$id"], case .object(let loads)? = context["data"] else { return nil }
+    for (key, load) in loads {
+      if let item = load["items"]?.arrayValue?.first(where: { $0["$id"] == id }) { return (key, item) }
+    }
+    return nil
+  }
+
+  /// A load the prompt reads or writes over, or the list its row came from, is only the device cache's answer yet.
+  private var held: Bool {
+    let checking = context["checking"]
+    if let key = liveRow?.key, checking?[key] == .bool(true) { return true }
+    return !FormEdits.heldBy(object: nil, initials: [pending.action.specText], checking: checking).isEmpty
+  }
 
   private var filled: JSONValue {
-    ScreenContext.with(
-      pending.scope, "form", .object(formObject(inputs) { values[$0.key] ?? initialValue($0, in: pending.scope) }))
+    ScreenContext.with(scope, "form", .object(formObject(inputs) { values[$0.key] ?? initialValue($0, in: scope) }))
   }
 
   /// A field the person cannot see (its `when` fails) never holds up the action.
@@ -829,7 +854,7 @@ struct ActionInputSheet: View {
     let context = filled
     return inputs.contains { field in
       ScreenValues.condition(field.when, in: context)
-        && field.unmet(fieldJSON(field, values[field.key] ?? initialValue(field, in: pending.scope)), in: pending.scope)
+        && field.unmet(fieldJSON(field, values[field.key] ?? initialValue(field, in: scope)), in: scope)
     }
   }
 
@@ -838,41 +863,47 @@ struct ActionInputSheet: View {
       Form {
         // An action with a `check` confirms over the check's answer (`preview`), which it has not got yet: its confirm is
         // asked after the inputs, never drawn here half-filled.
-        if pending.action.check == nil, let confirm = pending.action.confirmText(in: pending.scope) {
+        if pending.action.check == nil, let confirm = pending.action.confirmText(in: scope) {
           Section { Text(confirm).font(AglynFont.subheadline) }
+        }
+        if held {
+          Section {
+            Text(FormEdits.checkingText(pending.action.checkingSubject)).font(AglynFont.caption).foregroundStyle(.secondary)
+              .accessibilityIdentifier("prompt-checking")
+          }
         }
         Section {
           ForEach(inputs.filter { ScreenValues.condition($0.when, in: filled) }) { field in
             if field.kind == "lookup" {
-              LookupRow(field: field, context: pending.scope, picked: picked[field.key], search: search) { group, row in
-                picked[field.key] = group.heading(for: row, in: pending.scope)
+              LookupRow(field: field, context: scope, picked: picked[field.key], search: search) { group, row in
+                picked[field.key] = group.heading(for: row, in: scope)
                 // Only the fields this form has are filled, and what the person typed elsewhere is left alone.
-                for fill in group.fills(for: row, in: pending.scope, among: Set(inputs.map(\.key))) {
+                for fill in group.fills(for: row, in: scope, among: Set(inputs.map(\.key))) {
                   values[fill.key] = .text(fill.value)
                 }
               }
             } else {
               FieldInput(
-                field: field, context: pending.scope,
+                field: field, context: scope,
                 value: Binding(
-                  get: { values[field.key] ?? initialValue(field, in: pending.scope) }, set: { values[field.key] = $0 }))
+                  get: { values[field.key] ?? initialValue(field, in: scope) }, set: { values[field.key] = $0 }))
             }
           }
         }
       }
       .formStyle(.grouped)
-      .navigationTitle(ScreenValues.render(pending.action.promptTitle ?? pending.action.label, in: pending.scope))
-      .aglynScreenTitle(ScreenValues.render(pending.action.promptTitle ?? pending.action.label, in: pending.scope))
+      .navigationTitle(ScreenValues.render(pending.action.promptTitle ?? pending.action.label, in: scope))
+      .aglynScreenTitle(ScreenValues.render(pending.action.promptTitle ?? pending.action.label, in: scope))
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
         ToolbarItem(placement: .confirmationAction) {
-          Button(ScreenValues.render(pending.action.submitLabel ?? pending.action.label, in: pending.scope), role: pending.action.destructive ? .destructive : nil) {
+          Button(ScreenValues.render(pending.action.submitLabel ?? pending.action.label, in: scope), role: pending.action.destructive ? .destructive : nil) {
             run(visibleOnly(filled, inputs))
           }
-          .disabled(missing)
+          .disabled(missing || held)
           .accessibilityIdentifier("prompt-submit")
         }
       }

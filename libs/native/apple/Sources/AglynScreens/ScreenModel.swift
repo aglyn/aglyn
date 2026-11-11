@@ -492,12 +492,17 @@ public final class ScreenModel {
     // A document only the device's cache answered seeds the screen now and holds its forms (`checking.<key>`) until the
     // server's copy is in: a Save pressed on the cache's copy would write it back over what the server holds.
     let seen = ScreenContext.with(context, "data", .object(results))
-    var cached: [String: String] = [:]
-    for load in loads where load.doc != nil && load.each == nil {
+    // A query load's rows the same (a row's prompt is held while its list is the cache's).
+    var cached: [String: PendingConfirm] = [:]
+    for load in loads where (load.doc != nil || load.query != nil) && load.each == nil {
       guard case .object(var record)? = results[load.key], record[FirestoreLoads.fromCacheKey] == .bool(true) else { continue }
       record[FirestoreLoads.fromCacheKey] = nil
       results[load.key] = .object(record)
-      cached[load.key] = ScreenValues.render(load.doc ?? "", in: seen)
+      if let doc = load.doc {
+        cached[load.key] = .document(ScreenValues.render(doc, in: seen))
+      } else if let query = load.query {
+        cached[load.key] = .query(query, seen, queryLimits[load.key] ?? FirestoreLoads.queryLimit(query))
+      }
     }
     for load in wanted where load.derive != nil {
       results[load.key] = Self.derived(load, from: .object(results))
@@ -514,17 +519,30 @@ public final class ScreenModel {
   /// Swaps in the server's copy of each document only the cache answered, and lifts its hold, as the console's forms
   /// re-render on the confirming snapshot. It waits as long as the screen is open (a held Save is held, as on the web,
   /// until the server answers); a read that fails lifts the hold and leaves the save's own refusal to say why.
-  private func confirm(_ paths: [String: String], derive: [LoadSpec]) {
+  /// A load only the device cache answered, and how to read it again from the server.
+  enum PendingConfirm {
+    case document(String)
+    case query(JSONValue, JSONValue, Int)
+  }
+
+  private func confirm(_ paths: [String: PendingConfirm], derive: [LoadSpec]) {
     guard let reader, !paths.isEmpty else { return }
     confirming = Task { [weak self] in
       await withTaskGroup(of: Void.self) { group in
-        for (key, path) in paths {
+        for (key, pending) in paths {
           group.addTask { @MainActor [weak self] in
             while !Task.isCancelled, self != nil {
               do {
-                let answer = try await FirestoreLoads.serverDocument(reader, path)
-                guard answer.confirmed else { continue }
-                self?.confirmed(key, answer.document.map(FirestoreLoads.json) ?? .null, derive: derive)
+                switch pending {
+                case .document(let path):
+                  let answer = try await FirestoreLoads.serverDocument(reader, path)
+                  guard answer.confirmed else { continue }
+                  self?.confirmed(key, answer.document.map(FirestoreLoads.json) ?? .null, derive: derive)
+                case .query(let spec, let scope, let limit):
+                  let answer = try await FirestoreLoads.query(reader, spec, in: scope, limit: limit, server: true)
+                  guard answer[FirestoreLoads.fromCacheKey] == nil else { continue }
+                  self?.confirmed(key, answer, derive: derive)
+                }
               } catch {
                 self?.confirmed(key, nil, derive: derive)
               }

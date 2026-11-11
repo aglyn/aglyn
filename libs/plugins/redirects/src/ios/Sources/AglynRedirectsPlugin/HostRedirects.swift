@@ -13,6 +13,8 @@ public struct RedirectRow: Identifiable, Equatable, Sendable {
   public let rule: HostRedirect
   /// Soft-deleted: gone for the console and the serve path.
   public let deleted: Bool
+  /// Only the device cache's copy yet: its editor holds Save until the server's is in (AGL-4047).
+  public var fromCache = false
 
   public init(id: String, rule: HostRedirect, deleted: Bool = false) {
     self.id = id
@@ -30,6 +32,7 @@ public struct RedirectRow: Identifiable, Equatable, Sendable {
         priority: doc.double("priority"), source: doc.string("source") ?? "",
         statusCode: doc.int("statusCode") ?? 301),
       deleted: doc.data["deletedAt"] != nil && !(doc.data["deletedAt"] is NSNull))
+    fromCache = doc.fromCache
   }
 
   public var source: String { rule.source }
@@ -71,7 +74,8 @@ final class HostRedirectsModel {
     ready = false
     failed = false
     guard let hostID else { return }
-    listener = reader.listen(FirestoreQuery(["hosts", hostID, "redirects"], limit: HostRedirects.window)) {
+    // Metadata changes too, so a row the server confirms stops reading as the cache's (AGL-4047).
+    listener = reader.listen(FirestoreQuery(["hosts", hostID, "redirects"], limit: HostRedirects.window, includeMetadataChanges: true)) {
       [weak self] result in
       guard let self else { return }
       switch result {

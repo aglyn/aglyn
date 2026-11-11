@@ -228,6 +228,10 @@ class ExportRequest(
 
 class ActionSpec private constructor(json: JsonElement, val label: String) {
   val id: String = json.str("id") ?: label
+  /** The action as written, as text: which loads its prompt reads or writes over (`FormEdits.heldBy`, AGL-4047). */
+  val specText: String = json.toString()
+  /** The held prompt's subject ("discount"): "Checking your discount with the server…". */
+  val checkingSubject: String? = json.str("checking")
   val icon: String? = materialIcon(json.str("icon"))
   val method: ApiMethod = runCatching { ApiMethod.valueOf((json.str("method") ?: "POST").uppercase()) }.getOrDefault(ApiMethod.POST)
   val url: String? = json.str("url")
