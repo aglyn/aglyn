@@ -5,41 +5,9 @@
   "projectType": "application",
   "tags": ["scope:app", "scope:private", "scope:console"],
   "targets": {
-    "build": {
-      "executor": "@nx/next:build",
-      "outputs": ["{options.outputPath}"],
-      "defaultConfiguration": "production",
-      "cache": false,
-      "options": {
-        "outputPath": "dist/apps/console"
-      },
-      "configurations": {
-        "production": {
-          "webpack": false
-        },
-        "development": {
-          "outputPath": "apps/console"
-        }
-      }
-    },
     "serve": {
-      "executor": "@nx/next:server",
-      "defaultConfiguration": "development",
-      "dependsOn": ["clean-next-cache"],
       "options": {
-        "buildTarget": "console:build",
-        "dev": true,
         "port": 4200
-      },
-      "configurations": {
-        "production": {
-          "buildTarget": "console:build:production",
-          "dev": false
-        },
-        "development": {
-          "buildTarget": "console:build:development",
-          "dev": true
-        }
       }
     },
     "export": {

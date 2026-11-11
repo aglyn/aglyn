@@ -5,41 +5,9 @@
   "projectType": "application",
   "tags": ["scope:app", "scope:public", "scope:tenant"],
   "targets": {
-    "build": {
-      "executor": "@nx/next:build",
-      "outputs": ["{options.outputPath}"],
-      "defaultConfiguration": "production",
-      "cache": false,
-      "options": {
-        "outputPath": "dist/apps/tenant"
-      },
-      "configurations": {
-        "production": {
-          "webpack": false
-        },
-        "development": {
-          "outputPath": "apps/tenant"
-        }
-      }
-    },
     "serve": {
-      "executor": "@nx/next:server",
-      "defaultConfiguration": "development",
-      "dependsOn": ["clean-next-cache"],
       "options": {
-        "buildTarget": "tenant:build",
-        "dev": true,
         "port": 4500
-      },
-      "configurations": {
-        "production": {
-          "buildTarget": "tenant:build:production",
-          "dev": false
-        },
-        "development": {
-          "buildTarget": "tenant:build:development",
-          "dev": true
-        }
       }
     },
     "export": {
