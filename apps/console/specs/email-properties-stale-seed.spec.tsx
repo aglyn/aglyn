@@ -316,23 +316,53 @@ describe.each(PAGES)('%s besigner properties (AGL-1358)', (_label, Page) => {
     templateSeed.status = 'success'
   })
 
-  it('REFUSES to write a subject seeded from an unconfirmed read', async () => {
+  /**
+   * The first press is never refused for a late server (AGL-4047): Save
+   * subject is HELD while the template read is the cache's, with the reason
+   * under it, and the typed value stays on screen.
+   */
+  it('HOLDS Save subject while the template read is unconfirmed, keeping what was typed', async () => {
     templateSeed.fromCache = true
     render(<Page />)
 
     await typeSubjectAndSave()
+    await new Promise((resolve) => setTimeout(resolve, 20))
 
-    await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
+    const save = screen.getByRole('button', {
+      name: 'Save subject',
+    }) as HTMLButtonElement
+    expect(save.disabled).toBe(true)
+    expect(screen.getByText('Checking your email with the server…')).toBeTruthy()
     expect(mockSetDoc).not.toHaveBeenCalled()
-    const [message] = mockEnqueueSnackbar.mock.calls[0]
-    expect(message).toEqual(expect.stringContaining('email'))
-    expect(message).toEqual(expect.stringMatching(/nothing was saved/i))
-    // The typed value stays on screen. A refusal that also cleared the field
-    // would send the author back to retype a form that will be refused again
-    // just as quietly.
+    expect(mockEnqueueSnackbar).not.toHaveBeenCalled()
     expect(
       (screen.getByLabelText('Subject') as HTMLInputElement).value,
     ).toEqual('Edited subject')
+  })
+
+  it('saves on the first press once the server answers, with the server’s preheader', async () => {
+    templateSeed.fromCache = true
+    const cached = templateSeed.data
+    try {
+      const { rerender } = render(<Page />)
+      fireEvent.change(await screen.findByLabelText('Subject'), {
+        target: { value: 'Edited subject' },
+      })
+      templateSeed.data = {
+        subject: 'Stored subject',
+        preheader: 'Newer preheader',
+      }
+      templateSeed.fromCache = false
+      rerender(<Page />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Save subject' }))
+      await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
+      const [, payload] = mockSetDoc.mock.calls[0]
+      expect(payload.subject).toEqual('Edited subject')
+      expect(payload.preheader).toEqual('Newer preheader')
+    } finally {
+      templateSeed.data = cached
+    }
   })
 
   it('SAVES once the server has confirmed the seed', async () => {
