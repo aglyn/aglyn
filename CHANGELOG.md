@@ -16,6 +16,7 @@ content on the marketing site and is written separately.
 ### Added
 
 - **besigner:** add row and column bars, a pinned Markdown toolbar, tidier table controls ([AGL-4216](https://linear.app/aglyn/issue/AGL-4216))
+- **native:** the product editor on Apple and Android has the check-in fields ([AGL-4063](https://linear.app/aglyn/issue/AGL-4063))
 
 ### Fixed
 
