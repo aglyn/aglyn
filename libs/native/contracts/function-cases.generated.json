@@ -25171,6 +25171,171 @@
         }
       ]
     },
+    "normalizeProductCheckIn": {
+      "module": "libs/plugins/commerce/src/lib/model/commerce-check-in-product.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "enabled": true,
+              "headcount": 4
+            }
+          ],
+          "result": {
+            "enabled": true,
+            "headcount": 4
+          }
+        },
+        {
+          "args": [
+            {
+              "enabled": true,
+              "headcount": 4,
+              "askUseDate": true
+            }
+          ],
+          "result": {
+            "askUseDate": true,
+            "enabled": true,
+            "headcount": 4
+          }
+        },
+        {
+          "args": [
+            {
+              "enabled": true
+            }
+          ],
+          "result": {
+            "enabled": true,
+            "headcount": 1
+          }
+        },
+        {
+          "args": [
+            {
+              "enabled": true,
+              "headcount": 0
+            }
+          ],
+          "result": {
+            "enabled": true,
+            "headcount": 1
+          }
+        },
+        {
+          "args": [
+            {
+              "enabled": true,
+              "headcount": 2.6
+            }
+          ],
+          "result": {
+            "enabled": true,
+            "headcount": 3
+          }
+        },
+        {
+          "args": [
+            {
+              "enabled": true,
+              "headcount": 51
+            }
+          ],
+          "result": {
+            "enabled": true,
+            "headcount": 50
+          }
+        },
+        {
+          "args": [
+            {
+              "enabled": true,
+              "headcount": "3"
+            }
+          ],
+          "result": {
+            "enabled": true,
+            "headcount": 3
+          }
+        },
+        {
+          "args": [
+            {
+              "enabled": true,
+              "headcount": "abc"
+            }
+          ],
+          "result": {
+            "enabled": true,
+            "headcount": 1
+          }
+        },
+        {
+          "args": [
+            {
+              "enabled": true,
+              "headcount": -2
+            }
+          ],
+          "result": {
+            "enabled": true,
+            "headcount": 1
+          }
+        },
+        {
+          "args": [
+            {
+              "enabled": true,
+              "headcount": 4,
+              "askUseDate": "yes"
+            }
+          ],
+          "result": {
+            "enabled": true,
+            "headcount": 4
+          }
+        },
+        {
+          "args": [
+            {
+              "enabled": false,
+              "headcount": 4,
+              "askUseDate": true
+            }
+          ],
+          "result": {
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "enabled": "true"
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "on"
+          ],
+          "result": null
+        }
+      ]
+    },
     "normalizeScreenSlug": {
       "module": "libs/aglyn/src/lib/app-utils/screen-slug.ts",
       "cases": [

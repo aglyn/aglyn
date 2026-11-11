@@ -76,6 +76,40 @@ public func checkInUseDayProblem(_ value: Any?, todayKey: String) -> String? {
   return nil
 }
 
+// MARK: The product and variant setting (commerce-check-in-product.ts), for the product editor
+
+/// JavaScript's `Number(value)` for a stored or typed headcount: a number as it is, text read, a true/false or blank as
+/// 0 or 1, anything else NaN.
+private func headcountNumber(_ value: Any?) -> Double {
+  switch value {
+  case nil, is NSNull: return 0
+  case let number as NSNumber:
+    return CFGetTypeID(number) == CFBooleanGetTypeID() ? (number.boolValue ? 1 : 0) : number.doubleValue
+  case let number as Double: return number
+  case let number as Int: return Double(number)
+  case let text as String: return jsNumberFromText(text)
+  default: return .nan
+  }
+}
+
+/// A whole number of people from 1 to `CHECK_IN_MAX_HEADCOUNT`, from a stored value or what was typed; blank, zero or
+/// not a number is 1 (`headcountOf`, and the product editor's `headcountFrom`).
+public func checkInHeadcount(_ value: Any?) -> Int {
+  let rounded = (headcountNumber(value) + 0.5).rounded(.down)
+  guard rounded.isFinite, rounded >= 1 else { return 1 }
+  return Int(min(rounded, Double(ContractValues.shared.checkInMaxHeadcount)))
+}
+
+/// A stored check-in setting made safe, or nil when it says nothing (`normalizeProductCheckIn`): on carries its people
+/// per item and whether the buyer is asked which day; off carries nothing else.
+public func normalizeProductCheckIn(_ value: Any?) -> ProductCheckIn? {
+  guard let raw = value as? [String: Any], let flag = raw["enabled"] as? NSNumber, CFGetTypeID(flag) == CFBooleanGetTypeID()
+  else { return nil }
+  guard flag.boolValue else { return ProductCheckIn(enabled: false) }
+  let asks = (raw["askUseDate"] as? NSNumber).map { CFGetTypeID($0) == CFBooleanGetTypeID() && $0.boolValue } ?? false
+  return ProductCheckIn(askUseDate: asks ? true : nil, enabled: true, headcount: Double(checkInHeadcount(raw["headcount"])))
+}
+
 /// Whether a row is an open rain check still waiting to be used (`checkInRainCheckIsOpen`).
 public func checkInRainCheckIsOpen(_ row: HostCheckIn) -> Bool { row.rainCheckOpen == true && row.status == .expected }
 

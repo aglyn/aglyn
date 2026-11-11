@@ -22,6 +22,8 @@ struct ProductEditorSheet: View {
   var onSaved: (String) -> Void = { _ in }
   /// The choice whose picture is being picked from the media library.
   @State private var picturePick: AddOnPicturePick?
+  /// Whether the plan carries the point of sale, which check-in comes with; nil until the console answers.
+  @State private var posCarried: Bool?
 
   var body: some View {
     AglynFormSheet(
@@ -67,6 +69,11 @@ struct ProductEditorSheet: View {
         }
       }
       addOnsSection
+      checkInSection
+    }
+    .task(id: context.hostID) {
+      guard let hostID = context.hostID else { return }
+      posCarried = await productCheckInCarried(context.api, hostID: hostID)
     }
     .sheet(item: $picturePick) { pick in
       MediaChooserSheet(context: context, kind: "image") { chosen in
@@ -146,6 +153,109 @@ struct ProductEditorSheet: View {
         Text(problem).foregroundStyle(.orange)
       }
     }
+  }
+
+  /// Check-in at the window (AGL-4063), as the console's `ProductCheckInFields` has it behind the point of sale: whether
+  /// each one sold is somebody to check in on the day it is for, how many people one admits, whether an online buyer
+  /// picks the day, and each variant's own choice. A plan without the point of sale reads the console's upsell instead.
+  @ViewBuilder private var checkInSection: some View {
+    if posCarried == true {
+      let checkIn = model.draft.checkIn
+      let needs = productNeedsCheckIn(checkIn)
+      Section {
+        Toggle(isOn: Binding(get: { needs }, set: { model.draft.checkIn = productCheckInSwitched(model.draft.checkIn, on: $0) })) {
+          VStack(alignment: .leading, spacing: 2) {
+            Text("Needs check-in")
+            Text(productCheckInHelp).font(.caption).foregroundStyle(.secondary)
+          }
+        }
+        .accessibilityIdentifier("product-needs-check-in")
+        if needs {
+          VStack(alignment: .leading, spacing: 2) {
+            LabeledContent("People per item") {
+              headcountField(
+                Binding(
+                  get: { String(productCheckInHeadcount(model.draft.checkIn)) },
+                  set: { model.draft.checkIn = productCheckInHeadcountTyped(model.draft.checkIn, $0) })
+              )
+              .accessibilityIdentifier("product-check-in-headcount")
+            }
+            Text(productCheckInHeadcountHelp(checkIn)).font(.caption).foregroundStyle(.secondary)
+          }
+          Toggle(
+            isOn: Binding(
+              get: { checkIn?.askUseDate == true },
+              set: { model.draft.checkIn = productCheckInAskUseDateSwitched(model.draft.checkIn, on: $0) })
+          ) {
+            VStack(alignment: .leading, spacing: 2) {
+              Text("Ask the buyer which day")
+              Text(productCheckInUseDayHelp(checkIn)).font(.caption).foregroundStyle(.secondary)
+            }
+          }
+          .accessibilityIdentifier("product-check-in-ask-day")
+        }
+        if model.draft.variants.count > 1 {
+          ForEach(model.draft.variants) { variant in
+            variantCheckInRows(variant, productNeeds: needs)
+          }
+        }
+      } header: {
+        Text("Check-in")
+      }
+    } else if posCarried == false {
+      Section {
+        AglynUpgradeNotice(productCheckInUpsell(), kind: .plan) { context.navigate("core.billing.plans") }
+        .aglynFormBare()
+        .accessibilityIdentifier("product-check-in-upsell")
+      }
+    }
+  }
+
+  /// One variant's own check-in: follow the product, on, or off; and, when on, its own people per item and day question.
+  @ViewBuilder private func variantCheckInRows(_ variant: VariantDraft, productNeeds: Bool) -> some View {
+    let own = variant.checkIn
+    let choice = variantCheckInChoice(own)
+    Picker(
+      variant.label,
+      selection: Binding(
+        get: { choice },
+        set: { pick in setVariantCheckIn(variant.id, variantCheckInPicked(pick, own: own, product: model.draft.checkIn)) })
+    ) {
+      ForEach(VariantCheckInChoice.allCases, id: \.self) { option in
+        Text(variantCheckInChoiceLabel(option, productNeedsCheckIn: productNeeds)).tag(option)
+      }
+    }
+    .accessibilityIdentifier("variant-check-in-\(variant.id)")
+    if choice == .on {
+      LabeledContent("People per item") {
+        headcountField(
+          Binding(
+            get: { String(variantCheckInHeadcount(own)) },
+            set: { setVariantCheckIn(variant.id, variantCheckInHeadcountTyped(own, $0)) })
+        )
+        .accessibilityIdentifier("variant-check-in-headcount-\(variant.id)")
+      }
+      Toggle(
+        "Ask which day",
+        isOn: Binding(get: { own?.askUseDate == true }, set: { setVariantCheckIn(variant.id, variantCheckInAskUseDateSwitched(own, on: $0)) })
+      )
+      .accessibilityIdentifier("variant-check-in-ask-day-\(variant.id)")
+    }
+  }
+
+  /// Writes one variant's own check-in back to the draft by id.
+  private func setVariantCheckIn(_ id: String, _ value: ProductCheckIn?) {
+    guard let index = model.draft.variants.firstIndex(where: { $0.id == id }) else { return }
+    model.draft.variants[index].checkIn = value
+  }
+
+  private func headcountField(_ text: Binding<String>) -> some View {
+    TextField("1", text: text)
+      .multilineTextAlignment(.trailing)
+      .monospacedDigit()
+      #if os(iOS)
+        .keyboardType(.numberPad)
+      #endif
   }
 
   /// A group of the draft by id: read from the draft, and written back whole.

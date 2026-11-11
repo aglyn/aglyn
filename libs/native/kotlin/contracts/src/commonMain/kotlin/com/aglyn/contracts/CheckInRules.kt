@@ -156,6 +156,33 @@ val STAY_CHECK_IN_MODE_LABELS: List<Pair<String, String>> = listOf(
   "guest" to "One per guest",
 )
 
+/* ---- The product and variant setting (commerce-check-in-product.ts), for the product editor ---- */
+
+/**
+ * A whole number of people from 1 to `CHECK_IN_MAX_HEADCOUNT`, from a stored value or what was typed; blank, zero or
+ * not a number is 1 (`headcountOf`, and the product editor's `headcountFrom`).
+ */
+fun checkInHeadcount(value: Any?): Int {
+  val rounded = kotlin.math.floor(jsNumber(value) + 0.5)
+  if (!rounded.isFinite() || rounded < 1) return 1
+  return minOf(rounded, Contracts.checkInMaxHeadcount.toDouble()).toInt()
+}
+
+/**
+ * A stored check-in setting made safe, or null when it says nothing (`normalizeProductCheckIn`): on carries its people
+ * per item and whether the buyer is asked which day; off carries nothing else.
+ */
+fun normalizeProductCheckIn(value: Any?): ProductCheckIn? {
+  val raw = value as? Map<*, *> ?: return null
+  val enabled = raw["enabled"] as? Boolean ?: return null
+  if (!enabled) return ProductCheckIn(enabled = false)
+  return ProductCheckIn(
+    askUseDate = if (raw["askUseDate"] == true) true else null,
+    enabled = true,
+    headcount = checkInHeadcount(raw["headcount"]).toDouble(),
+  )
+}
+
 /* ---- A stay's guests (commerce-reservations.ts), for the window's Guests dialog ---- */
 
 /** The most guests a stay's resource sleeps, else the platform's ceiling (`resourceGuestCeiling`). */

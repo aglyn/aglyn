@@ -39,6 +39,35 @@ class CheckInRulesTest {
     }
   }
 
+  /** The product editor's setting (AGL-4063): what a stored `checkIn` reads as, replayed from the console's answers. */
+  @Test
+  fun productSettingAsTheConsole() {
+    cases("normalizeProductCheckIn").forEach { (args, result) ->
+      val got = normalizeProductCheckIn(plainOf(args[0]))
+      val want = plainOf(result) as? Map<*, *>
+      if (want == null) {
+        assertNull(got, args.toString())
+      } else {
+        assertEquals(want["enabled"], got?.enabled, args.toString())
+        assertEquals((want["headcount"] as? Number)?.toDouble(), got?.headcount, args.toString())
+        assertEquals(want["askUseDate"], got?.askUseDate, args.toString())
+      }
+    }
+  }
+
+  /** People per item from what was typed, as the console's field reads it: blank or not a number is 1, capped at 50. */
+  @Test
+  fun headcountFromTyping() {
+    assertEquals(4, checkInHeadcount("4"))
+    assertEquals(12, checkInHeadcount(" 12 "))
+    assertEquals(1, checkInHeadcount(""))
+    assertEquals(1, checkInHeadcount("0"))
+    assertEquals(1, checkInHeadcount("abc"))
+    assertEquals(3, checkInHeadcount("2.5"))
+    assertEquals(Contracts.checkInMaxHeadcount.toInt(), checkInHeadcount("999"))
+    assertEquals(1, checkInHeadcount(null))
+  }
+
   private fun number(value: JsonElement?): Double? = (value as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()
 
   @Test
