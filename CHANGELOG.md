@@ -33,6 +33,7 @@ content on the marketing site and is written separately.
 - **ai:** Bring my site tells logos and graphics from photos by their pixels and keeps them out of photo slots ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 - **console:** ?create=site waits for the guided start on a cold load ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 - **data:** keep an empty first or last table column through a round trip ([AGL-4216](https://linear.app/aglyn/issue/AGL-4216))
+- **sites:** a site delete survives a transient write failure
 
 ## v1.20.2 — 2026-11-11
 
