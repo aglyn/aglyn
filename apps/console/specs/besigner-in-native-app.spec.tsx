@@ -23,6 +23,7 @@
 import { PLATFORM_BRANDING_PROFILE } from '@aglyn/aglyn'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import * as shared from '@aglyn/aglyn/app-utils/native-app-web-view'
+import * as React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 /**
@@ -134,6 +135,41 @@ describe('the editor\'s back arrow', () => {
     await waitFor(() => expect(screen.getByText('back')).toBeTruthy())
     const control = document.getElementById(NATIVE_BESIGNER_BACK_CONTROL_ID)
     expect(control?.getAttribute('href')).toBe('/acme/hosts/demo/screens/s1/view')
+  })
+
+  // A routed link showed the console's loading page before the app closed the editor; a plain link's whole-page
+  // navigation is caught by the app before anything loads (AGL-4056).
+  describe('with the router link every editor passes', () => {
+    const RouterLink = React.forwardRef<HTMLAnchorElement, { href: string; children?: React.ReactNode }>(
+      function RouterLink({ href, children, ...rest }, ref) {
+        return <a ref={ref} href={href} data-router="yes" {...rest}>{children}</a>
+      },
+    )
+    const routed = () => (
+      <MainLayout
+        besigner
+        backButton={{ component: RouterLink, componentVariant: 'naked', href: '/acme/hosts/demo/forms/f1' } as any}
+      >
+        <div>canvas</div>
+      </MainLayout>
+    )
+
+    it('routes in a browser tab', () => {
+      render(routed())
+      expect(document.getElementById(NATIVE_BESIGNER_BACK_CONTROL_ID)?.getAttribute('data-router')).toBe('yes')
+    })
+
+    it('is a plain link inside the apps, to the same place', async () => {
+      setUserAgent(MAC_APP_UA)
+      render(routed())
+      await waitFor(() =>
+        expect(document.getElementById(NATIVE_BESIGNER_BACK_CONTROL_ID)?.getAttribute('data-router')).toBeNull(),
+      )
+      const control = document.getElementById(NATIVE_BESIGNER_BACK_CONTROL_ID)
+      expect(control?.tagName).toBe('A')
+      expect(control?.getAttribute('href')).toBe('/acme/hosts/demo/forms/f1')
+      expect(control?.getAttribute('componentvariant')).toBeNull()
+    })
   })
 
   it('is drawn for a build that only set the entry page\'s mark', async () => {

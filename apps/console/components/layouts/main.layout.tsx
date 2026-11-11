@@ -167,6 +167,27 @@ export interface TopAppBarProps {
   compact?: boolean
 }
 
+/**
+ * The back arrow as a plain `<a href>`: the caller's router link and its
+ * props dropped, so a click leaves the page instead of routing inside it.
+ */
+function plainBackLink(
+  backButton: Partial<ButtonProps> | undefined,
+): Partial<ButtonProps> | undefined {
+  if (!backButton) return undefined
+  const {
+    component: _router,
+    componentVariant: _variant,
+    nativeButton: _native,
+    ...plain
+  } = backButton as Partial<ButtonProps> & {
+    component?: unknown
+    componentVariant?: unknown
+    nativeButton?: unknown
+  }
+  return plain
+}
+
 const TopAppBar = (props: TopAppBarProps) => {
   const {
     appBarSuffix,
@@ -197,6 +218,11 @@ const TopAppBar = (props: TopAppBarProps) => {
   const inNativeApp = useIsNativeAppWebView()
   const showBackButton = Boolean(backButton)
   useNativeBesignerBackKeys(inNativeApp && showBackButton)
+  // In the apps the arrow is a plain link: a click is a whole-page navigation,
+  // which the app catches before anything loads and answers by closing the
+  // editor. Through the router it first showed the console's own loading page
+  // for a second or two, then the app closed it (AGL-4056).
+  const back = inNativeApp ? plainBackLink(backButton) : backButton
 
   return (
     <ScrollReaction>
@@ -235,15 +261,15 @@ const TopAppBar = (props: TopAppBarProps) => {
               <Divider orientation="vertical" variant="middle" flexItem sx={{ opacity: 0.5 }} />
             }
           >
-            {backButton && (
+            {back && (
               <Button
                 // The apps press this control by id (AGL-4056).
                 id={NATIVE_BESIGNER_BACK_CONTROL_ID}
                 // AGL-752: every caller passes `component: AppLink`, which
                 // resolves to an <a>; declare it so MUI v7's button-root check
                 // stays quiet. Overridable by the caller via the spread below.
-                {...(backButton.component ? { nativeButton: false } : {})}
-                {...backButton}
+                {...(back.component ? { nativeButton: false } : {})}
+                {...back}
                 sx={{
                   minWidth: 'unset',
                   // position: 'absolute',
