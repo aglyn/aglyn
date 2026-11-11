@@ -131,6 +131,25 @@ class DeepLinksTest {
     assertNull(DeepLinks.consolePathOf(""))
   }
 
+  /** A route may need a query key, and a param may name the values it takes or refuses (AGL-4215). */
+  @Test
+  fun aRouteNeedsItsQueryAndAParamNamesTheValuesItTakes() {
+    val routes = listOf(
+      NativeDeepLink("c", "c.orders", "/products/orders", "c.orders"),
+      NativeDeepLink("c", "c.order", "/products/orders?order=:orderId", "c.order"),
+      NativeDeepLink("m", "m.listing", "/m/:id(!upload)", "m.listing"),
+      NativeDeepLink("m", "m.sell", "/m/:section(payouts|sales)", "m.sell"),
+    )
+    val org = "orgSlug" to "acme"
+    assertEquals(NativeLinkTarget.Screen("c.order", mapOf("order" to "o1", org, "orderId" to "o1")), DeepLinks.resolve("/acme/products/orders?order=o1", routes))
+    assertEquals(NativeLinkTarget.Screen("c.orders", mapOf("order" to "", org)), DeepLinks.resolve("/acme/products/orders?order=", routes))
+    assertEquals(NativeLinkTarget.Screen("c.orders", mapOf(org)), DeepLinks.resolve("/acme/products/orders#top", routes))
+    assertEquals(NativeLinkTarget.Screen("m.sell", mapOf(org, "section" to "payouts")), DeepLinks.resolve("/acme/m/payouts", routes))
+    assertEquals(NativeLinkTarget.Screen("m.listing", mapOf(org, "id" to "l1")), DeepLinks.resolve("/acme/m/l1", routes))
+    assertEquals(NativeLinkTarget.Unmatched("/acme/m/upload"), DeepLinks.resolve("/acme/m/upload#x", routes))
+    assertNull(DeepLinks.matchPathPattern("/m/:section(payouts|sales)", "/m/other"))
+  }
+
   @Test
   fun treatsTheConsoleTopLevelSectionsAsUnscoped() {
     assertEquals(ConsoleScopeSplit(rest = "/billing/plans"), DeepLinks.splitConsoleScope("/billing/plans"))
