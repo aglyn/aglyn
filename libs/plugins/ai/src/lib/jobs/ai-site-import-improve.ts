@@ -66,7 +66,7 @@ import {
   type SiteImportFidelityTheme,
   type SiteImportPageFidelity,
 } from '../model/ai-site-import-fidelity'
-import { aiSiteImportIsBrandMark } from '../model/ai-site-import-marks'
+import { aiSiteImportImageIsMark } from '../model/ai-site-import-marks'
 import { siteImportLedger, type SiteImportLedger, type SiteImportLedgerItem, type SiteImportLedgerLine } from '../model/ai-site-import-ledger'
 import { AI_SITE_IMPORT_PAGE_CEILING_CREDITS } from '../model/ai-site-import'
 import { estimateAiBilledUsd } from '../providers/catalog'
@@ -795,7 +795,8 @@ function sectionNames(sections: readonly AiLayoutSection[], title: string): stri
 
 /**
  * The opening of a redesign without a brand's mark for its photo (AGL-4152):
- * a picture the source names a logo, a badge or an icon (`aiSiteImportIsBrandMark`)
+ * a picture the source names a logo, a badge or an icon, or whose pixels make
+ * it a graphic (`aiSiteImportIsBrandMark`),
  * that the answer keeps in its first section takes the page's widest photo no
  * section placed instead, or, where it has none, is left out, and a row it
  * leaves a column empty in is drawn as one column. A client's logo the source
@@ -813,7 +814,7 @@ export function aiSiteImportOpeningPhoto(answer: readonly AiSiteImportImprovedSe
   }
   const markAt = (ref: string) => {
     const image = imageOf(ref)
-    return !!image && aiSiteImportIsBrandMark({ url: image.url, alt: image.alt })
+    return !!image && aiSiteImportImageIsMark(image, doc.photos)
   }
   const marks = new Set(first.blocks.filter((block) => block.kind === 'keep' && markAt(block.ref)))
   if (!marks.size) return [...answer]
@@ -897,7 +898,7 @@ export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSec
     if (ownOpening.taken) return null
     const ratioOf = (line: SiteImportLineRef | undefined) => {
       const image = line === undefined || scope.used.has(line) ? undefined : doc.blocks[line]
-      if (image?.kind !== 'image' || aiSiteImportIsBrandMark({ url: image.url, alt: image.alt })) return 0
+      if (image?.kind !== 'image' || aiSiteImportImageIsMark(image, scope.photos)) return 0
       const photo = scope.photos.get(image.url)
       return photo?.width && photo.height ? photo.width / photo.height : 0
     }
@@ -1245,7 +1246,7 @@ export function aiSiteImportImprovedMisses(report: Pick<SiteImportPageFidelity, 
 
 /** A redesign's read for a page: its ledger, and everywhere a link may go. */
 export function aiSiteImportImproveLedger(doc: AiSiteImportDocument): SiteImportLedger {
-  return siteImportLedger({ layout: aiSiteImportLayoutOf(doc), blocks: doc.blocks })
+  return siteImportLedger({ layout: aiSiteImportLayoutOf(doc), blocks: doc.blocks, photos: doc.photos })
 }
 
 /**

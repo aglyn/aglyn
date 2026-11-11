@@ -450,7 +450,7 @@ export interface SiteImportFidelitySource {
   /** The page's main-region blocks, which the layout's lines are indexes of. */
   blocks: readonly SiteImportBlock[]
   /** The source's pictures as the site's library holds them (`from` → `src`, and their size); without them a picture is counted, not placed. */
-  photos?: ReadonlyArray<{ from?: string; src: string; width?: number; height?: number }>
+  photos?: ReadonlyArray<{ from?: string; src: string; width?: number; height?: number; graphic?: boolean }>
   /** What the source holds that a visitor cannot see (AGL-4152): a build that draws any of it fails `concealed`. */
   concealed?: { pictures: readonly string[]; words: readonly string[] }
 }
@@ -2321,7 +2321,7 @@ const crowdsPhone = (size: unknown) => {
 
 /** The kept ledger and the design lines of a page a generative Improve it built (AGL-4152). */
 function improvedScore(source: SiteImportFidelitySource, built: Built, look: LookOf, drawnSections: readonly string[], options: SiteImportImprovedOptions): SiteImportImprovedFidelity {
-  const ledger = siteImportLedger({ layout: source.layout, blocks: source.blocks })
+  const ledger = siteImportLedger({ layout: source.layout, blocks: source.blocks, ...(source.photos ? { photos: source.photos } : {}) })
   const pieces = built.pieces
   const sourceTexts = source.blocks.flatMap((block) => (isLine(block) && block.kind !== 'image' ? [clean(block.text)] : []))
   const anywhere = [...sourceTexts, ...(options.scope ?? [])]

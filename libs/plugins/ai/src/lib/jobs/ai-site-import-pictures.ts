@@ -104,7 +104,7 @@ export function aiSiteImportPictureSource(input: {
 }): AiLayoutPictureSource | null {
   const { next, make, tally } = input
   // A photo the library holds no size for cannot be framed, and a brand's mark is no photo (AGL-4152): a slot is a
-  // photo's place, and a client's logo filled a page's cover.
+  // photo's place, and a client's logo filled a page's cover. A mark by its name, or by its pixels (`graphic`).
   const photos = input.photos.filter((photo) => photo.width && photo.height && !aiSiteImportIsBrandMark(photo))
   if (!photos.length && !next && !make) return null
   const froms = new Map(photos.map((photo) => [photo.src, photo.from ?? '']))
