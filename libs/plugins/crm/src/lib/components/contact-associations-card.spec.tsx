@@ -182,7 +182,7 @@ describe('saving the filing', () => {
   it('holds Save over a read the server never confirmed, then files on the first press', async () => {
     const { rerender } = renderCard({ status: 'success', fromCache: true })
     fireEvent.click(screen.getByRole('button', { name: 'File under Spring push' }))
-    expect(saveFiling().disabled).toBe(true)
+    expect((saveFiling() as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByRole('status').textContent).toBe('Checking your contact with the server…')
     fireEvent.click(saveFiling())
     await new Promise((resolve) => setTimeout(resolve, 20))
