@@ -42,6 +42,10 @@ import {
 import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import dynamic from 'next/dynamic'
 import { stableStringify } from '@aglyn/aglyn/app-utils/artifact-provenance'
+import {
+  diffOverride,
+  resolveOverride,
+} from '@aglyn/aglyn/app-utils/artifact-overrides'
 import { useCallback, useMemo, useState } from 'react'
 import { docsHelp } from '../../constants/docs-links'
 import { useHostId } from '../host-id-provider'
@@ -106,6 +110,14 @@ export interface ThemeEditorProps {
   saving?: boolean
   onSave: (theme: HostTheme) => Promise<void> | void
   /**
+   * The host document `theme` came from is not confirmed by the server yet
+   * (AGL-4047): Save is held, with this sentence beside it while there is
+   * something to save. A press then would wait on the confirmation and could
+   * end refused, which met the first press after a page load. Unset, Save
+   * behaves as it always has.
+   */
+  checkingText?: string
+  /**
    * A theme to show in place of the current draft, unsaved: Save writes it
    * through `onSave` like any edit, and Discard goes back to the saved theme.
    */
@@ -142,7 +154,15 @@ function isJsonSafe(value: unknown): boolean {
  * controls or write the same one differently.
  */
 export function ThemeEditor(props: ThemeEditorProps) {
-  const { theme, saving, onSave, proposedDraft, onProposedDraftSettled } = props
+  const {
+    theme,
+    saving,
+    onSave,
+    proposedDraft,
+    onProposedDraftSettled,
+    checkingText,
+  } = props
+  const checking = Boolean(checkingText)
   const [draft, setDraft] = useState<HostTheme>(() => theme ?? {})
   const [scheme, setScheme] = useState<HostThemeScheme>('light')
   // The site being edited, from the host route this editor is mounted on.
@@ -168,14 +188,30 @@ export function ThemeEditor(props: ThemeEditorProps) {
    * different key order than the local draft — the same thing that left the
    * save buttons enabled forever in AGL-56.
    */
+  /*
+   * …and the edits are REPLAYED onto it rather than dropped (AGL-4047). What
+   * the author changed is the difference between the draft and the theme it
+   * was seeded from; that patch is put back on the new theme, so a path they
+   * changed keeps their value and every other path follows the stored theme.
+   * The server's confirmation of a cache-served theme lands this way while
+   * Save is held, and so does a Reset from the card below. With nothing
+   * changed the patch is empty and the draft is simply the new theme.
+   */
   const themeKey = useMemo(() => stableStringify(theme ?? {}), [theme])
-  const [seededKey, setSeededKey] = useState(themeKey)
-  if (seededKey !== themeKey) {
+  const [seeded, setSeeded] = useState<{ key: string; theme: HostTheme }>(
+    () => ({ key: themeKey, theme: theme ?? {} }),
+  )
+  if (seeded.key !== themeKey) {
     // Adjusting state during render — React's documented alternative to an
     // effect for "reset state when a prop changes". It re-renders immediately
     // without painting the stale draft.
-    setSeededKey(themeKey)
-    setDraft(theme ?? {})
+    const edits = diffOverride(seeded.theme, draft)
+    setSeeded({ key: themeKey, theme: theme ?? {} })
+    setDraft(
+      edits === undefined
+        ? (theme ?? {})
+        : (resolveOverride<HostTheme>(theme ?? {}, edits) ?? {}),
+    )
   }
   /**
    * A proposed draft is adopted the same way, once per key. Once it settles
@@ -326,7 +362,11 @@ export function ThemeEditor(props: ThemeEditorProps) {
 
   const handleSave = useCallback(() => {
     onProposedDraftSettled?.()
-    return onSave(sanitizeHostTheme(draft))
+    const next = sanitizeHostTheme(draft)
+    // The draft becomes what is written, so the saved theme arriving back
+    // replays an empty difference and the editor reads as saved.
+    setDraft(next)
+    return onSave(next)
   }, [draft, onSave, onProposedDraftSettled])
 
   const renderColorFields = (group: ThemeColorGroup) =>
@@ -599,7 +639,7 @@ export function ThemeEditor(props: ThemeEditorProps) {
           >
             <Button
               variant="contained"
-              disabled={!dirty || saving}
+              disabled={!dirty || saving || checking}
               onClick={handleSave}
             >
               {saving ? 'Saving…' : 'Save'}
@@ -611,6 +651,11 @@ export function ThemeEditor(props: ThemeEditorProps) {
               {'Reset to defaults'}
             </Button>
           </Stack>
+          {dirty && checking ? (
+            <Typography variant="body2" color="text.secondary" role="status">
+              {checkingText}
+            </Typography>
+          ) : null}
         </Stack>
       </Grid>
       <Grid size={{ xs: 12, md: 6 }}>

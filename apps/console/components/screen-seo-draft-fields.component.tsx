@@ -17,7 +17,7 @@
 'use client'
 
 import { SCREEN_SEO_TEXT_GUIDANCE } from '@aglyn/aglyn/app-utils/screen-seo-fields'
-import { Button, TextField } from '@mui/material'
+import { Button, TextField, Typography } from '@mui/material'
 import { memo, useSyncExternalStore } from 'react'
 import type { ScreenSeoEdits, ScreenSocialImageDraft } from '../constants/screen-seo'
 import ScreenSocialImageField from './screen-social-image-field.component'
@@ -105,6 +105,13 @@ export interface ScreenSeoDraftFieldsProps {
   } | null
   /** Writes the staged draft. Keep its identity stable across keystrokes. */
   onSave: () => void
+  /**
+   * The screen the draft was staged over is not confirmed by the server yet
+   * (AGL-4047): Save SEO is held, with this sentence below it while something
+   * is staged. The draft holds only what was typed, so nothing is lost while
+   * it waits; untouched fields follow the stored screen.
+   */
+  checkingText?: string
 }
 
 /**
@@ -117,8 +124,11 @@ export const ScreenSeoDraftFields = memo(function ScreenSeoDraftFields({
   hostId,
   saved,
   onSave,
+  checkingText,
 }: ScreenSeoDraftFieldsProps) {
   const draft = useSyncExternalStore(store.subscribe, store.get, store.get)
+  const staged =
+    draft.title != null || draft.description != null || draft.image != null
   return (
     <>
       <TextField
@@ -153,11 +163,16 @@ export const ScreenSeoDraftFields = memo(function ScreenSeoDraftFields({
         size="small"
         variant="outlined"
         onClick={onSave}
-        disabled={draft.title == null && draft.description == null && draft.image == null}
+        disabled={!staged || Boolean(checkingText)}
         sx={{ alignSelf: 'flex-start' }}
       >
         {'Save SEO'}
       </Button>
+      {staged && checkingText ? (
+        <Typography variant="body2" color="text.secondary" role="status">
+          {checkingText}
+        </Typography>
+      ) : null}
     </>
   )
 })

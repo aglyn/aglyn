@@ -48,6 +48,8 @@ export default function HostSetupThemeSection() {
     themeDraft,
     proposeThemeDraft,
     settleThemeDraft,
+    themeCheckingText,
+    themeOverridesCheckingText,
   } = useHostSettingsScope()
   const { orgId } = useCurrentOrg()
   const orgSlug = useOrgSlug()
@@ -81,6 +83,7 @@ export default function HostSetupThemeSection() {
         onSave={handleThemeSave}
         proposedDraft={themeDraft}
         onProposedDraftSettled={settleThemeDraft}
+        checkingText={themeCheckingText}
       />
       {/* "What have I changed?" is a read of the stored patch (AGL-1021), so
           it cannot disagree with what is applied — for whichever theme is
@@ -92,6 +95,7 @@ export default function HostSetupThemeSection() {
           hostId={hostId}
           host={data}
           onWriteOverride={handleWriteOverride}
+          checkingText={themeOverridesCheckingText}
         />
       </div>
     </>
