@@ -53,14 +53,57 @@ public enum BesignerEntry {
     let bare = bareOf(next)
     if bare == path { return .stay }
     if authWall.contains(where: { bare == $0 || bare.hasPrefix($0 + "/") }) { return .sessionEnded }
+    // Each editor's own back control (AGL-4056): a page's goes to its `/view`, a plugin document's to the
+    // document (`…/forms/f1`), a layout's, component's, template's or email's to its list. In the app every one of them
+    // is the screen the Besigner was opened from.
+    if isBackDestination(bare, of: bareOf(current)) { return .leave }
     guard DeepLinks.isBesignerPath(next) else { return .open(next) }
-    // The editor's own back arrow goes to the page's read-only view: in the app that is the screen it came from.
-    let editor = bareOf(current)
-    if editor.hasSuffix("/besigner") {
-      let document = String(editor.dropLast("/besigner".count))
-      if bare == document + "/view" { return .leave }
-    }
     return .stay
+  }
+
+  /// The DOM id of the editor's own back control (AGL-4056). In the app the editor has no native head and no Done: that
+  /// control is the one way out, and Esc, ⌘[, the title bar's Back and the back gesture all press it, so whatever it
+  /// does first runs for every one of them. It goes to the document's `/view`, which `exit` reads as `.leave`.
+  public static let backControlID = "aglyn-besigner-back"
+
+  /// Presses the editor's back control; the page answers whether it had one.
+  public static let backScript =
+    "(function(){var b=document.getElementById('\(backControlID)');if(!b)return false;b.click();return true})()"
+
+  /// Where leaving the editor returns to (AGL-4056). After the document switcher moved the web view from the editor it
+  /// `opened` to another document's (`current`), the place the current one's back control went (`back`), for the app
+  /// to open as its own screen; nil while it is still the document it opened, which returns to the screen that opened
+  /// it. A `back` the app has no screen for falls back to that screen too.
+  public static func returnPath(opened: String, current: String, back: String) -> String? {
+    guard let now = documentOf(current), now != documentOf(opened) else { return nil }
+    return back
+  }
+
+  /// The document an editor path edits: the path without its `/besigner` (and a version, which the switcher may move
+  /// between), or nil for a path that is not an editor.
+  private static func documentOf(_ path: String) -> String? {
+    var parts = segments(bareOf(path))
+    guard parts.last == "besigner" else { return nil }
+    parts.removeLast()
+    if parts.count >= 2, parts[parts.count - 2] == "versions" { parts.removeLast(2) }
+    return "/" + parts.joined(separator: "/")
+  }
+
+  /// Whether `path` is where the back control of the editor at `editor` goes: the document's `/view`, or a page above
+  /// the editor inside its site (or the staff console), never the workspace or site home the logo opens.
+  static func isBackDestination(_ path: String, of editor: String) -> Bool {
+    let mine = segments(editor)
+    guard mine.last == "besigner" else { return false }
+    if path == "/" + mine.dropLast().joined(separator: "/") + "/view" { return true }
+    let theirs = segments(path)
+    guard theirs.count >= 2, theirs.count < mine.count, Array(mine.prefix(theirs.count)) == theirs else { return false }
+    // `/<org>/hosts` and `/<org>/hosts/<site>` are the site's home, never an editor's way back.
+    if theirs.count <= 3, theirs[1] == "hosts" { return false }
+    return true
+  }
+
+  private static func segments(_ path: String) -> [String] {
+    path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
   }
 
   /// The product token the web view adds to its user agent (AGL-3894).

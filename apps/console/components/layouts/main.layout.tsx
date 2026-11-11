@@ -24,6 +24,10 @@ import { ScrollReaction } from '@aglyn/shared-ui-jsx/components/scroll-reaction'
 // it, so a page carries only the mark it renders.
 import { AglynConsoleLogoFull } from '@aglyn/shared-ui-jsx/const/aglyn-console-logo-full'
 import { useIsNativeAppWebView } from '@aglyn/aglyn/app-utils/native-app-web-view'
+import {
+  NATIVE_BESIGNER_BACK_CONTROL_ID,
+  useNativeBesignerBackKeys,
+} from '@aglyn/aglyn/app-utils/native-besigner-back'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { _isArrEmpty } from '@aglyn/shared-util-tools'
 import {
@@ -163,6 +167,27 @@ export interface TopAppBarProps {
   compact?: boolean
 }
 
+/**
+ * The back arrow as a plain `<a href>`: the caller's router link and its
+ * props dropped, so a click leaves the page instead of routing inside it.
+ */
+function plainBackLink(
+  backButton: Partial<ButtonProps> | undefined,
+): Partial<ButtonProps> | undefined {
+  if (!backButton) return undefined
+  const {
+    component: _router,
+    componentVariant: _variant,
+    nativeButton: _native,
+    ...plain
+  } = backButton as Partial<ButtonProps> & {
+    component?: unknown
+    componentVariant?: unknown
+    nativeButton?: unknown
+  }
+  return plain
+}
+
 const TopAppBar = (props: TopAppBarProps) => {
   const {
     appBarSuffix,
@@ -186,12 +211,18 @@ const TopAppBar = (props: TopAppBarProps) => {
   // White-label chrome (White-Label Phase 2): swap the Aglyn wordmark for the
   // current org's brand when it is white-label entitled.
   const { branding, whiteLabel } = useBranding()
-  // Inside the native apps the editor is a screen of the app, and the app's
-  // own Done button is the way out (AGL-3894). The web arrow there led to the
-  // console page the app hands straight back, a second control for the same
-  // exit.
+  // Inside the native apps the editor is a screen of the app with no native
+  // head of its own, so this arrow is the one way out there too (AGL-4056):
+  // the apps' Esc, ⌘[ and back gesture press it, and the document's `/view` it
+  // goes to is what they read as "leave the editor".
   const inNativeApp = useIsNativeAppWebView()
-  const showBackButton = Boolean(backButton) && !inNativeApp
+  const showBackButton = Boolean(backButton)
+  useNativeBesignerBackKeys(inNativeApp && showBackButton)
+  // In the apps the arrow is a plain link: a click is a whole-page navigation,
+  // which the app catches before anything loads and answers by closing the
+  // editor. Through the router it first showed the console's own loading page
+  // for a second or two, then the app closed it (AGL-4056).
+  const back = inNativeApp ? plainBackLink(backButton) : backButton
 
   return (
     <ScrollReaction>
@@ -230,13 +261,15 @@ const TopAppBar = (props: TopAppBarProps) => {
               <Divider orientation="vertical" variant="middle" flexItem sx={{ opacity: 0.5 }} />
             }
           >
-            {backButton && !inNativeApp && (
+            {back && (
               <Button
+                // The apps press this control by id (AGL-4056).
+                id={NATIVE_BESIGNER_BACK_CONTROL_ID}
                 // AGL-752: every caller passes `component: AppLink`, which
                 // resolves to an <a>; declare it so MUI v7's button-root check
                 // stays quiet. Overridable by the caller via the spread below.
-                {...(backButton.component ? { nativeButton: false } : {})}
-                {...backButton}
+                {...(back.component ? { nativeButton: false } : {})}
+                {...back}
                 sx={{
                   minWidth: 'unset',
                   // position: 'absolute',
@@ -436,7 +469,9 @@ const TopAppBar = (props: TopAppBarProps) => {
                 flexShrink: 0,
               }}
             >
-              {compact ? null : <GlobalSearchTriggerComponent />}
+              {/* Inside the apps their own search (⌘K) is the one box: this
+                  opens the same workspace palette, a second one (AGL-4056). */}
+              {compact || inNativeApp ? null : <GlobalSearchTriggerComponent />}
             </Stack>
             {actionsPrefix ? (
               <Stack
@@ -608,8 +643,12 @@ export function MainLayout(props: MainLayoutProps) {
           ...(quickActions || []),
           // The redesigned account menu (AGL-858) owns its own avatar trigger
           // + popover, and the theme control now lives inside it — so it
-          // renders as a custom node rather than an icon/menu item.
-          { render: (key: string | number) => <UserMenu key={key} /> },
+          // renders as a custom node rather than an icon/menu item. The apps
+          // keep the account, its theme and Sign out in their own chrome, so
+          // the web avatar is left out there (AGL-4056).
+          ...(inNativeApp
+            ? []
+            : [{ render: (key: string | number) => <UserMenu key={key} /> }]),
         ]}
       />
       {besigner ? (

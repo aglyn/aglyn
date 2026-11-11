@@ -1,5 +1,6 @@
 package com.aglyn.shell
 
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -791,6 +792,49 @@ class NavShellUiTest {
     onNodeWithTag("sign-out").performClick()
     waitUntil(timeoutMillis = 3_000) { accounts.active.value == "a1" }
     assertTrue(accounts.accounts.value.none { it.uid == "u1" })
+  }
+
+  /**
+   * The in-app Besigner on a wide window (AGL-4056): focus mode folds the rail and the sidebar, while the title bar and
+   * its switcher toggle stay above the editor, never under it; the toggle brings both back, the title bar's Back presses
+   * the editor's own back control, and leaving restores the columns.
+   */
+  @Test
+  fun theBesignerOpensInFocusModeUnderTheTitleBar() = runDesktopComposeUiTest(width = 1280, height = 800) {
+    val navigator = ShellNavigator()
+    var pressed = 0
+    val services = testServices(userDoc = emptyMap(), besigner = { _, onExit, _ ->
+      val back = com.aglyn.webview.LocalBesignerBack.current
+      androidx.compose.runtime.DisposableEffect(back) {
+        back?.handler = { pressed++; onExit() }
+        onDispose { back?.handler = null }
+      }
+      androidx.compose.foundation.layout.Box(
+        androidx.compose.ui.Modifier.fillMaxSize().testTag("fake-besigner"),
+      )
+    })
+    setContent { AglynShell(services, navigator) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("workspace-rail") > 0 }
+    runOnIdle { navigator.push(Route.Besigner("/acme/hosts/shop/screens/s1/versions/v1/besigner")) }
+    waitUntil(timeoutMillis = 3_000) {
+      onAllNodesWithTagCount("fake-besigner") > 0 && onAllNodesWithTagCount("workspace-rail") == 0 && onAllNodesWithTagCount("nav-sidebar") == 0
+    }
+    onNodeWithTag("title-bar").assertIsDisplayed()
+    onNodeWithTag("toggle-rail").assertIsDisplayed()
+    val bar = onNodeWithTag("title-bar").getBoundsInRoot()
+    val editor = onNodeWithTag("fake-besigner").getBoundsInRoot()
+    assertTrue(editor.top >= bar.bottom, "the editor sits under the title bar: ${editor.top} < ${bar.bottom}")
+    assertTrue(editor.bottom > editor.top, "the editor has room")
+    // The switcher toggle brings the rail and the sidebar back together.
+    onNodeWithTag("toggle-rail").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("workspace-rail") > 0 && onAllNodesWithTagCount("nav-sidebar") > 0 }
+    onNodeWithTag("toggle-rail").performClick()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("workspace-rail") == 0 && onAllNodesWithTagCount("nav-sidebar") == 0 }
+    // Back presses the editor's own control, which leaves; the columns come back as they were.
+    onNodeWithTag("title-back").performClick()
+    assertEquals(1, pressed)
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("workspace-rail") > 0 && onAllNodesWithTagCount("nav-sidebar") > 0 }
   }
 }
 

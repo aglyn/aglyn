@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,7 +58,6 @@ actual fun BesignerWebView(
   var ready by remember(path) { mutableStateOf(false) }
   var error by remember(path) { mutableStateOf<String?>(null) }
   var webView by remember { mutableStateOf<WebView?>(null) }
-  var canGoBack by remember { mutableStateOf(false) }
   // The editor the view shows, and whether it has handed the person back to the app (AGL-3850).
   val current = remember(path) { arrayOf(path) }
   val left = remember(path) { booleanArrayOf(false) }
@@ -71,7 +71,7 @@ actual fun BesignerWebView(
         if (!shown.startsWith(BesignerEntry.PATH)) current[0] = shown
         return false
       }
-      BesignerNavigation.Leave -> { left[0] = true; onExit() }
+      BesignerNavigation.Leave -> { left[0] = true; besignerLeave(path, current[0], url, onExit, onConsoleLink) }
       is BesignerNavigation.Native -> { left[0] = true; onConsoleLink(next.path) }
       BesignerNavigation.SessionEnded -> error = "Your session ended. Open the Besigner again to keep editing."
       BesignerNavigation.External -> open(android.net.Uri.parse(url))
@@ -106,7 +106,29 @@ actual fun BesignerWebView(
     http.close()
   }
 
-  BackHandler(enabled = canGoBack) { webView?.goBack() }
+  // The system back (gesture or button), the title bar's Back and Ctrl+[ press the editor's own back control, as Esc
+  // does in the page (AGL-4056). Before the editor has loaded, or on a page without that control, the screen closes.
+  fun pressBack() {
+    if (left[0]) return
+    val view = webView
+    if (view == null || !ready || error != null) {
+      left[0] = true
+      onExit()
+      return
+    }
+    view.evaluateJavascript(BesignerEntry.BACK_SCRIPT) { result ->
+      if (result != "true" && !left[0]) {
+        left[0] = true
+        onExit()
+      }
+    }
+  }
+  BackHandler(enabled = true) { pressBack() }
+  val back = LocalBesignerBack.current
+  DisposableEffect(back) {
+    back?.handler = ::pressBack
+    onDispose { back?.handler = null }
+  }
 
   when {
     error != null -> EmptyState("The Besigner did not open", body = error, icon = AglynIcons.named("error"))
@@ -194,7 +216,6 @@ actual fun BesignerWebView(
             }
 
             override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
-              canGoBack = view.canGoBack()
               // The console's client-side router never reaches shouldOverrideUrlLoading; its history entries land here.
               if (url != null && isTrustedUrl(url, listOf(origin))) handle(besignerNavigation(url, origin, current[0]), url) {}
             }

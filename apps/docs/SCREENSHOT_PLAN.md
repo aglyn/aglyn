@@ -983,10 +983,13 @@ terminal is worse than the code block it would replace.
   listing **not yet installed** (the targeting control is only rendered before an
   install — re-asking once it is settled would lie, AGL-773). Set **Install to** to
   **Selected sites** so the **Sites** checklist is open with one or two ticked.
-- **Frame:** the Install card — the **Install to** field, its helper text, the
+- **Frame:** the Install card — the **Install to** choices, their helper text, the
   checkbox list, and the **Install** button.
-- **Alt text:** The Install to dropdown set to Selected sites, with a checklist of
+- **Alt text:** The Install to choices set to Selected sites, with a checklist of
   the organization's sites and two of them ticked.
+- **Captured:** `capture-docs-screenshots.mjs` shot
+  `marketplace/install-to-selected-sites.png`, which adds two sites to the seeded
+  workspace for that shot only (`orgSites`) and removes them after it.
 - **Note:** the helper text is state-dependent and IS the content here. A one-site
   org renders no "Selected sites" option at all, so a single-site capture shows the
   wrong control.
