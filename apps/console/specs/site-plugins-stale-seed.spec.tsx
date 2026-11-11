@@ -131,8 +131,34 @@ describe('SitePluginsCard (AGL-1358)', () => {
     mockHost.status = 'success'
   })
 
-  it('REFUSES to write the deny-list from an unconfirmed seed', async () => {
+  it('HOLDS Save on an unconfirmed seed, says why, and writes nothing', async () => {
+    // A press here used to wait on the server and then refuse, so the first
+    // press after a page load failed and the second worked (AGL-4047). Save
+    // is held instead, with the reason beside it.
     mockHost.fromCache = true
+    render(<SitePluginsCard hostId="host-1" />)
+
+    toggleFirstSwitch()
+    const button = screen.getByRole('button', {
+      name: 'Save site plugins',
+    }) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    expect(screen.getByRole('status').textContent).toBe(
+      'Checking this site’s plugin list with the server…',
+    )
+    save()
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(mockSetDoc).not.toHaveBeenCalled()
+    expect(mockEnqueueSnackbar).not.toHaveBeenCalled()
+  })
+
+  it('REFUSES a read that failed with only the cache behind it: the guard still wraps the write', async () => {
+    // A failed read is not held (no wait would change it), so Save stays
+    // live and the guard is what stands in front of the write. `fromCache`
+    // outranks `unreadable` in its verdict (AGL-1066).
+    mockHost.fromCache = true
+    mockHost.status = 'error'
     render(<SitePluginsCard hostId="host-1" />)
 
     toggleFirstSwitch()

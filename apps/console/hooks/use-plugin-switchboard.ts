@@ -26,7 +26,7 @@ import {
   resolveHostEnabledPlugins,
 } from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useUser, writeGuardedBySeed } from '@aglyn/tenant-feature-instance'
 import { useHost } from './use-host'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -264,6 +264,57 @@ interface SiteState {
   optedIn: string[]
 }
 
+/**
+ * One switch move the reader made: these ids, on or off. Kept as the MOVE,
+ * not as the two lists it produced, so the move can be applied again to a
+ * list the server has since confirmed.
+ */
+interface SiteEdit {
+  ids: readonly string[]
+  on: boolean
+}
+
+/**
+ * Apply one move to a site's lists. A `defaultOffPerSite` row records CONSENT
+ * in `enabledPlugins`; every other row records refusal in `disabledPlugins`.
+ * Which list a row writes follows from the catalog, never from the row's
+ * position or label.
+ */
+function applySiteEdit(current: SiteState, edit: SiteEdit): SiteState {
+  const next: SiteState = {
+    disabled: [...current.disabled],
+    optedIn: [...current.optedIn],
+  }
+  const { on } = edit
+  for (const pluginId of edit.ids) {
+    if (isDefaultOffPerSite(pluginId)) {
+      next.optedIn = on
+        ? next.optedIn.includes(pluginId)
+          ? next.optedIn
+          : [...next.optedIn, pluginId]
+        : next.optedIn.filter((id) => id !== pluginId)
+      // An explicit deny beats an opt-in, so a site turning one ON must
+      // also stop refusing it — otherwise the resolver keeps subtracting
+      // it and the switch reads on while the plugin does not run.
+      if (on) next.disabled = next.disabled.filter((id) => id !== pluginId)
+      continue
+    }
+    next.disabled = on
+      ? next.disabled.filter((id) => id !== pluginId)
+      : next.disabled.includes(pluginId)
+        ? next.disabled
+        : [...next.disabled, pluginId]
+  }
+  return next
+}
+
+/**
+ * What a held switch or Save says while the host read waits for the server
+ * (AGL-4047), shown beside the control so a held control is never unexplained.
+ */
+export const SITE_PLUGINS_CHECKING_TEXT =
+  'Checking this site’s plugin list with the server…'
+
 export interface SiteSwitchboardOptions extends SwitchboardOptions {
   /**
    * Write as soon as a change is applied, rather than collecting edits behind
@@ -302,6 +353,14 @@ export function useSitePluginSwitchboard(
    * disagreed would be the sentence explaining the switch beside it.
    */
   siteDoc: { disabledPlugins: string[]; enabledPlugins: string[] }
+  /**
+   * The host read has not been confirmed by the server yet (AGL-4047). A save
+   * now would wait on that confirmation and could end refused, so a surface
+   * holds its write control while this is true and says why with
+   * {@link SITE_PLUGINS_CHECKING_TEXT}. Edits made meanwhile are kept, and
+   * applied to the list the server confirms.
+   */
+  checking: boolean
 } {
   const { enqueueSnackbar } = useSnackbar()
   // EXEMPT from `no-unguarded-loading-hook`: `org` reaches only
@@ -316,8 +375,29 @@ export function useSitePluginSwitchboard(
     doc: { data: host, status: hostStatus, fromCache: hostFromCache, listen: hostListen },
     setDoc,
   } = useHost({ hostId })
-  const [state, setState] = useState<SiteState>({ disabled: [], optedIn: [] })
-  const [dirty, setDirty] = useState(false)
+  /**
+   * The reader's moves since the last save, replayed onto the STORED lists
+   * on every render rather than copied from them once (AGL-4047).
+   *
+   * The lists used to be copied into local state when the doc arrived and
+   * frozen there by the first edit. A switch flipped while the read still
+   * came from the cache was therefore saved as the cached lists plus that
+   * flip, even after the server had confirmed different ones, so a plugin
+   * switched off since that snapshot was switched back on by a save that
+   * never mentioned it. Replaying the moves keeps every switch the reader did
+   * not touch on what the server says, which is what lets a surface hold Save
+   * until the server answers without the edit going stale meanwhile.
+   */
+  const [edits, setEdits] = useState<readonly SiteEdit[]>([])
+  /**
+   * The lists a save just wrote, shown until the host doc moves. The doc
+   * normally moves at once, because the local write reaches the cache before
+   * the server acknowledges it; this keeps the switches on what was saved if
+   * it has not yet.
+   */
+  const [saved, setSaved] = useState<{ key: string; lists: SiteState } | null>(
+    null,
+  )
   const [busy, setBusy] = useState(false)
   const [pending, setPending] = useState<Pending | null>(null)
   const labelFor = options.labelFor ?? catalogLabel
@@ -328,16 +408,31 @@ export function useSitePluginSwitchboard(
   const storedOptedIn = Array.isArray(host?.enabledPlugins)
     ? host.enabledPlugins.map(String).join('|')
     : ''
+  const storedKey = `${storedDisabled}#${storedOptedIn}`
+  // Dropped the moment the doc moves, so a later change back to the lists as
+  // they stood before the save is shown as it is, not hidden behind it.
+  if (saved && saved.key !== storedKey) setSaved(null)
 
-  useEffect(() => {
-    // Reset from the live doc until the user starts editing.
-    if (dirty) return
-    setState({
-      disabled: storedDisabled ? storedDisabled.split('|') : [],
-      optedIn: storedOptedIn ? storedOptedIn.split('|') : [],
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storedDisabled, storedOptedIn])
+  const stored = useMemo<SiteState>(
+    () =>
+      saved && saved.key === storedKey
+        ? saved.lists
+        : {
+            disabled: storedDisabled ? storedDisabled.split('|') : [],
+            optedIn: storedOptedIn ? storedOptedIn.split('|') : [],
+          },
+    [saved, storedKey, storedDisabled, storedOptedIn],
+  )
+  const state = useMemo(
+    () => edits.reduce(applySiteEdit, stored),
+    [edits, stored],
+  )
+  const dirty = edits.length > 0
+  /**
+   * Unconfirmed, and not failed: a failed read is left to the guard, whose
+   * refusal says the list could not be loaded, which no wait would change.
+   */
+  const checking = hostFromCache && hostStatus !== 'error'
 
   const installedKey = [...(options.installedListings ?? [])].sort().join('|')
 
@@ -361,6 +456,7 @@ export function useSitePluginSwitchboard(
   const save = useCallback(
     async (next?: SiteState) => {
       const payload = next ?? state
+      const key = storedKey
       setBusy(true)
       try {
         // The guard WRAPS the write: an early return is a shape you can keep
@@ -391,65 +487,38 @@ export function useSitePluginSwitchboard(
           },
         )
         if (!verdict.ok) {
-          // `dirty` stays true and the switches keep their positions, so the
-          // user can retry rather than discovering later that nothing saved.
+          // The moves are kept, so `dirty` stays true and the switches keep
+          // their positions: the user can retry rather than discovering later
+          // that nothing saved.
           return void enqueueSnackbar(verdict.message, { variant: 'warning' })
         }
         enqueueSnackbar('Site plugins saved', { variant: 'success' })
-        setDirty(false)
+        setSaved({ key, lists: payload })
+        setEdits([])
       } catch (error) {
         enqueueSnackbar(`Error: ${JSON.stringify(error)}`, { variant: 'error' })
       } finally {
         setBusy(false)
       }
     },
-    [enqueueSnackbar, hostFromCache, hostListen, hostStatus, setDoc, state],
-  )
-
-  /**
-   * One switch, two fields. A `defaultOffPerSite` row records CONSENT in
-   * `enabledPlugins`; every other row records refusal in `disabledPlugins`.
-   * Which list a row writes follows from the catalog, never from the row's
-   * position or label.
-   */
-  const applyIds = useCallback(
-    (current: SiteState, pluginIds: readonly string[], on: boolean): SiteState => {
-      const next: SiteState = {
-        disabled: [...current.disabled],
-        optedIn: [...current.optedIn],
-      }
-      for (const pluginId of pluginIds) {
-        if (isDefaultOffPerSite(pluginId)) {
-          next.optedIn = on
-            ? next.optedIn.includes(pluginId)
-              ? next.optedIn
-              : [...next.optedIn, pluginId]
-            : next.optedIn.filter((id) => id !== pluginId)
-          // An explicit deny beats an opt-in, so a site turning one ON must
-          // also stop refusing it — otherwise the resolver keeps subtracting
-          // it and the switch reads on while the plugin does not run.
-          if (on) next.disabled = next.disabled.filter((id) => id !== pluginId)
-          continue
-        }
-        next.disabled = on
-          ? next.disabled.filter((id) => id !== pluginId)
-          : next.disabled.includes(pluginId)
-            ? next.disabled
-            : [...next.disabled, pluginId]
-      }
-      return next
-    },
-    [],
+    [
+      enqueueSnackbar,
+      hostFromCache,
+      hostListen,
+      hostStatus,
+      setDoc,
+      state,
+      storedKey,
+    ],
   )
 
   const commit = useCallback(
     (pluginIds: readonly string[], on: boolean) => {
-      const next = applyIds(state, pluginIds, on)
-      setState(next)
-      if (options.autoSave) return void save(next)
-      setDirty(true)
+      const edit: SiteEdit = { ids: pluginIds, on }
+      setEdits((current) => [...current, edit])
+      if (options.autoSave) return void save(applySiteEdit(state, edit))
     },
-    [applyIds, options.autoSave, save, state],
+    [options.autoSave, save, state],
   )
 
   const requestToggle = useCallback(
@@ -479,6 +548,7 @@ export function useSitePluginSwitchboard(
       disabledPlugins: state.disabled,
       enabledPlugins: state.optedIn,
     },
+    checking,
     isOn: (pluginId: string) => enabledSet.has(pluginId),
     // The base library alone: every other plugin the workspace runs — AI and
     // Forms included — has a switch for one site.
