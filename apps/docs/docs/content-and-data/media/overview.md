@@ -677,9 +677,10 @@ You'll find the control in three places:
 
 - on a single asset, in its details drawer;
 - on a **selection** — tick several files and use **Shared with…** in the toolbar;
-- on a **folder**, from its ⋮ menu, which offers to apply the same sharing to the files
-  inside it and its subfolders (it names the count, so you know what you're about to
-  change).
+- on a **folder**, from its ⋮ menu, either on its card in the grid or on its row in the
+  folder list beside it (both open the same dialog). It offers to apply the same sharing
+  to the files inside it and its subfolders, and names the count, so you know what you're
+  about to change.
 
 A folder applies its sharing **when you save it** — files keep their own setting
 afterwards, so moving a file into a "Client A" folder later does not re-share it. Narrowing

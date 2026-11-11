@@ -859,3 +859,93 @@ describe('sharing a file with all sites except some', () => {
     expect(within(dialog).getByText('At least one site has to stay in.')).toBeTruthy()
   }, 240_000)
 })
+
+/**
+ * A folder's Shared with… in the folder TREE as well as on its grid card
+ * (AGL-4047). Production showed it on the card's menu only, so the same folder
+ * offered different actions in the two places. The tree now offers the same
+ * entry, opening the same dialog, under the same gate and refusal wording.
+ */
+describe('a folder’s Shared with… in the folder tree', () => {
+  /** The menu of a folder's row in the tree, opened. */
+  const treeMenu = async (folderName: string) => {
+    fireEvent.click(await screen.findByRole('button', { name: `Actions for ${folderName}` }))
+    return screen.findByRole('menu')
+  }
+  /** Each entry of the open menu with its standing, in order. */
+  const entries = (menu: HTMLElement) =>
+    within(menu)
+      .getAllByRole('menuitem')
+      .map((item) => [item.textContent, standing(item)])
+  const closeMenu = async (menu: HTMLElement) => {
+    fireEvent.keyDown(within(menu).getAllByRole('menuitem')[0], { key: 'Escape' })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
+  const posts = () =>
+    (global.fetch as jest.Mock).mock.calls
+      .filter(([input]) => String(input).includes('/api/media/folders'))
+      .map(([, init]) => JSON.parse(String((init as RequestInit).body)))
+
+  beforeEach(() => {
+    mockDb.collections.clear()
+    mockDb.docs.clear()
+    seedLibrary('orgs/org-1', true)
+    mockDb.docs.set('orgs/org-1/members/user-1', { role: 'editor', allHosts: true })
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => ({
+      ok: true,
+      status: 200,
+      json: async () =>
+        String(input).includes('/api/media/quarantine')
+          ? { quarantined: {} }
+          : { ok: true, assets: 2, total: 3, next: 3, done: true },
+    })) as unknown as typeof fetch
+  })
+
+  it.each([
+    ['a holder', HOLDER, 'on'],
+    ['a member of the whole workspace without the key', REFUSED, 'refused'],
+    ['anyone while permissions load', LOADING, 'held'],
+  ] as const)('offers it to %s exactly as the grid card does', async (_who, permissions, expected) => {
+    mockPermissions = permissions
+    await mountLibrary()
+
+    const tree = await treeMenu('Covers')
+    const fromTree = entries(tree)
+    await closeMenu(tree)
+    const card = (await folderItem('Covers')).closest('[role="menu"]') as HTMLElement
+    const fromCard = entries(card)
+
+    expect(fromTree).toContainEqual(['Shared with…', expected])
+    expect(fromTree).toEqual(fromCard)
+    if (expected !== 'refused') expect(screen.queryByLabelText(REFUSAL)).toBeNull()
+  }, 240_000)
+
+  it('opens the same dialog as the card, for the folder chosen, and counts it first', async () => {
+    mockPermissions = HOLDER
+    await mountLibrary()
+    const tree = await treeMenu('Archive')
+    fireEvent.click(within(tree).getByRole('menuitem', { name: 'Shared with…' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Shared with — "Archive"')).toBeTruthy()
+    expect(within(dialog).getByRole('radio', { name: /All sites except/ })).toBeTruthy()
+    expect(within(dialog).getByText(/Also apply/)).toBeTruthy()
+    expect(posts()).toContainEqual(
+      expect.objectContaining({ action: 'set-sharing', folderId: 'archive', preview: true }),
+    )
+  }, 240_000)
+
+  it('is not offered in a site’s own library, where the card has none either (negative control)', async () => {
+    mockPermissions = HOLDER
+    mockDb.collections.clear()
+    mockDb.docs.clear()
+    seedLibrary('hosts/host-1', false)
+    mockDb.docs.set('hosts/host-1', { memberRoles: { 'user-1': 'admin' } })
+    render(<MediaLibraryComponent hostId="host-1" />)
+    await screen.findAllByRole('button', { name: 'File actions' }, { timeout: 120_000 })
+    const tree = await treeMenu('Covers')
+    expect(within(tree).getByRole('menuitem', { name: 'Rename' })).toBeTruthy()
+    expect(within(tree).queryByRole('menuitem', { name: 'Shared with…' })).toBeNull()
+  }, 240_000)
+})
