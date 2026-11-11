@@ -26,8 +26,13 @@ import type {
 } from '@data-driven-forms/react-form-renderer/common-types'
 import type { MuiStyledOptions } from '@mui/system/createStyled'
 import type { SvgIconProps } from '@mui/material/SvgIcon'
-/** Minimal icon-props type used in component/preset schemas. Structurally compatible with @aglyn/shared-ui-jsx MdiIconProps. */
-export type MdiIconProps<D extends React.ElementType = 'svg', P = object> = SvgIconProps<D, P> & {
+/**
+ * Minimal icon-props type used in component/preset schemas. Structurally
+ * compatible with @aglyn/shared-ui-jsx MdiIconProps, which draws `path` and
+ * takes no ReactNode children (only a `(d) => …` render function), so
+ * `children` is left out here too.
+ */
+export type MdiIconProps<D extends React.ElementType = 'svg', P = object> = Omit<SvgIconProps<D, P>, 'children'> & {
   path?: string
 }
 import type {
