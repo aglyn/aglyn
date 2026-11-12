@@ -54,7 +54,7 @@
     "eventemitter2": "^6.4.9",
     "lodash-es": "^4.18.1",
     "mobx": "^7.1.6",
-    "mobx-state-tree": "^8.0.0",
+    "mobx-state-tree": "^9.0.1",
     "nanoid": "^6.0.2",
     "web-vitals": "^6.2.3"
   },

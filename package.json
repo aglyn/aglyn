@@ -416,7 +416,7 @@
     "mitt": "^3.0.1",
     "mobx": "^7.1.6",
     "mobx-react-lite": "^5.1.2",
-    "mobx-state-tree": "^8.0.0",
+    "mobx-state-tree": "^9.0.1",
     "monaco-editor": "0.57.0",
     "mout": "^1.2.4",
     "nanoid": "^6.0.2",
