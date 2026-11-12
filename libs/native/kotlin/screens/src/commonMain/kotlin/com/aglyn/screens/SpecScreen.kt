@@ -629,20 +629,27 @@ private fun PromptDialog(pending: Pending, context: JsonElement, search: suspend
   // A field the person cannot see (its `when` fails) never holds up the action.
   val visible = filled()
   val missing = inputs.any { ScreenValues.condition(it.whenCondition, visible) && it.unmet(fieldJson(it, values[it.key] ?: initialValue(it, scope)), scope) }
+  // A confirm pressed while held is kept, and runs over the prompt as it is then: the newest row and loads (AGL-4047).
+  val heldPress = com.aglyn.ui.rememberHeldPress(held, FormEdits.unconfirmedText(pending.action.checkingSubject)) {
+    if (!missing) onRun(visibleOnly(filled(), inputs))
+  }
   ActionDialog(
     title = ScreenValues.render(pending.action.promptTitle ?: pending.action.label, scope),
     // An action with a `check` confirms over the check's answer (`preview`), which it has not got yet: its confirm is asked
     // after the inputs, never drawn here half-filled.
     body = if (pending.action.check == null) pending.action.confirmText(scope) else null,
-    confirmLabel = ScreenValues.render(pending.action.submitLabel ?: pending.action.label, scope),
+    confirmLabel = if (heldPress.waiting) "Saving…" else ScreenValues.render(pending.action.submitLabel ?: pending.action.label, scope),
     destructive = pending.action.destructive,
-    confirmEnabled = !missing && !held,
+    confirmEnabled = !missing && !heldPress.waiting,
     dismissLabel = "Cancel",
-    onConfirm = { onRun(visibleOnly(filled(), inputs)) },
+    onConfirm = { if (heldPress.pressed(held)) onRun(visibleOnly(filled(), inputs)) },
     onDismiss = onDismiss,
   ) {
     Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
-      if (held) {
+      val refusal = heldPress.refusal
+      if (refusal != null) {
+        NoticeBanner(refusal, com.aglyn.ui.StatusTone.WARNING, Modifier.testTag("prompt-unconfirmed"))
+      } else if (held) {
         Text(FormEdits.checkingText(pending.action.checkingSubject), Modifier.testTag("prompt-checking"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
       val now = filled()
@@ -1358,6 +1365,15 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
   val missing = fields.any { ScreenValues.condition(it.whenCondition, filled) && it.unmet(fieldJson(it, current(it)), scope) }
   // A load this form is seeded from is only the cache's answer yet: Save is held, with the reason beside it.
   val held = FormEdits.heldBy(block.string("object"), fields.mapNotNull { it.initial }, context.obj("checking")).isNotEmpty()
+  fun save(action: ActionSpec) {
+    pressed.value = values.toMap()
+    submit(action, visibleOnly(filled, fields))
+  }
+  // A Save pressed while held is kept, and runs over the edits replayed onto the server's copy (AGL-4047).
+  val heldPress = com.aglyn.ui.rememberHeldPress(held, FormEdits.unconfirmedText(block.string("checking"))) {
+    val action = ActionSpec.parse(block["submit"]) ?: return@rememberHeldPress
+    if (!missing && action.disabledWhen?.let { ScreenValues.condition(it, scope) } != true) save(action)
+  }
   Column(Modifier.fillMaxWidth().padding(space(2f)), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
     for (field in fields.filter { ScreenValues.condition(it.whenCondition, filled) }) {
       FieldInput(field, scope, current(field)) { values[field.key] = it }
@@ -1369,7 +1385,15 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
       ?.takeIf { ScreenValues.condition(it.whenCondition, scope) }
       ?.takeIf { changed || fields.isEmpty() || !ScreenValues.render(it.label, scope).startsWith("Save") }
       ?.let { action ->
-      if (held && changed) {
+      val refusal = heldPress.refusal
+      if (refusal != null && changed) {
+        Text(
+          refusal,
+          Modifier.align(Alignment.End).testTag("unconfirmed-${block.id}"),
+          style = MaterialTheme.typography.bodySmall,
+          color = com.aglyn.ui.LocalAglynPalette.current.warning.text,
+        )
+      } else if (held && changed) {
         Text(
           FormEdits.checkingText(block.string("checking")),
           Modifier.align(Alignment.End).testTag("checking-${block.id}"),
@@ -1379,15 +1403,12 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
       }
       FilledTonalButton(
         colors = com.aglyn.ui.aglynTonalButtonColors(),
-        onClick = {
-          pressed.value = values.toMap()
-          submit(action, visibleOnly(filled, fields))
-        },
-        enabled = !busy && !held && !missing && action.disabledWhen?.let { ScreenValues.condition(it, scope) } != true,
+        onClick = { if (heldPress.pressed(held)) save(action) },
+        enabled = !busy && !heldPress.waiting && !missing && action.disabledWhen?.let { ScreenValues.condition(it, scope) } != true,
         modifier = Modifier.align(Alignment.End).testTag("submit-${block.id}"),
       ) {
-        if (busy) CircularProgressIndicator(Modifier.size(16.dp).padding(end = space(1f)), strokeWidth = 2.dp)
-        Text(ScreenValues.render(action.label, scope), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (busy || heldPress.waiting) CircularProgressIndicator(Modifier.size(16.dp).padding(end = space(1f)), strokeWidth = 2.dp)
+        Text(if (heldPress.waiting) "Saving…" else ScreenValues.render(action.label, scope), maxLines = 1, overflow = TextOverflow.Ellipsis)
       }
     }
   }

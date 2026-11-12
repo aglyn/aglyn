@@ -121,6 +121,11 @@ private fun CompactListSearch(
  * hold still and confirm shows progress; [error] says why the last try failed
  * and leaves the dialog open to try again. A [destructive] action (cancel an
  * order, refund) confirms in the error color.
+ *
+ * [hold] is set while the record the dialog edits is only the device cache's
+ * copy (AGL-4047): the dialog says so, and a confirm pressed then is kept and
+ * runs once the server's copy is in ([HeldPress]), or shows the refusal if it
+ * never comes.
  */
 @Composable
 fun ActionDialog(
@@ -136,8 +141,11 @@ fun ActionDialog(
   confirmEnabled: Boolean = true,
   destructive: Boolean = false,
   dismissLabel: String = "Cancel",
+  hold: FormHold? = null,
   content: (@Composable () -> Unit)? = null,
 ) {
+  val held = rememberHeldPress(hold != null, hold?.unconfirmed.orEmpty()) { if (confirmEnabled && !busy) onConfirm() }
+  val working = busy || held.waiting
   // A screen's error outlives its dialogs: one already showing when this dialog opened (a refused publish behind a
   // delete) is not this dialog's, so it waits for this dialog's own confirm before showing an error (AGL-3903).
   val openedWith = remember { error }
@@ -152,6 +160,12 @@ fun ActionDialog(
     text = {
       Column(verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
         if (body != null) Text(body, style = MaterialTheme.typography.bodyMedium)
+        val refusal = held.refusal
+        if (refusal != null) {
+          NoticeBanner(refusal, StatusTone.WARNING, Modifier.testTag("action-dialog-unconfirmed"))
+        } else if (hold != null) {
+          Text(hold.checking, Modifier.testTag("action-dialog-checking"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         content?.invoke()
         if (shownError != null) NoticeBanner(shownError, StatusTone.ERROR, Modifier.testTag("action-dialog-error"))
       }
@@ -162,15 +176,15 @@ fun ActionDialog(
       TextButton(
         onClick = {
           confirmed = true
-          onConfirm()
+          if (held.pressed(hold != null)) onConfirm()
         },
-        enabled = confirmEnabled && !busy,
+        enabled = confirmEnabled && !working,
         colors = ButtonDefaults.textButtonColors(contentColor = tint),
         modifier = Modifier.testTag("action-dialog-confirm"),
       ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-          if (busy) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = tint)
-          Text(confirmLabel, fontWeight = FontWeight.SemiBold)
+          if (working) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = tint)
+          Text(if (held.waiting) "Saving…" else confirmLabel, fontWeight = FontWeight.SemiBold)
         }
       }
     },

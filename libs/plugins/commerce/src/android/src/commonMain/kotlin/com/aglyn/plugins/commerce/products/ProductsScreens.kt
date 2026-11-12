@@ -549,13 +549,11 @@ private fun ProductDialogs(context: NativePluginContext, editor: ProductEditorMo
       onDismiss = editor::close,
       onConfirm = editor::save,
       confirmLabel = if (draft.create) "Add product" else "Save",
-      confirmEnabled = !editor.held && draft.name.isNotBlank(),
+      confirmEnabled = draft.name.isNotBlank(),
+      hold = if (editor.held) com.aglyn.ui.FormHold.of("product") else null,
       modifier = Modifier.testTag("product-form"),
     ) {
       Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
-        if (editor.held) {
-          Text(com.aglyn.core.seedCheckingText("product"), Modifier.testTag("product-checking"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
         OutlinedTextField(draft.name, { editor.change(draft.copy(name = it)) }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("product-name"))
         OutlinedTextField(draft.description, { editor.change(draft.copy(description = it)) }, label = { Text("Description") }, minLines = 2, modifier = Modifier.fillMaxWidth())
         ChoiceChipRow(

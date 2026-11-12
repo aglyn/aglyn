@@ -127,6 +127,10 @@ struct RedirectsListScreen: View {
 /// Adding or editing one rule: the page's fields, checked by the server on save.
 struct RedirectEditorSheet: View {
   @Bindable var editor: RedirectsEditor
+  /// Save pressed while held, kept until the server's copy is in (AGL-4047).
+  @State private var heldPress = AglynHeldPress()
+
+  private var complete: Bool { !(editor.draft?.source.isEmpty ?? true) && !(editor.draft?.destination.isEmpty ?? true) }
 
   var body: some View {
     NavigationStack {
@@ -134,7 +138,9 @@ struct RedirectEditorSheet: View {
         if let error = editor.error {
           Section { AglynNotice(error, tone: .error) }
         }
-        if editor.held {
+        if let refusal = heldPress.refusal {
+          Section { AglynNotice(refusal, tone: .warning) }
+        } else if editor.held {
           Section { Text(seedCheckingText("redirect")).font(AglynFont.caption).foregroundStyle(.secondary) }
         }
         Section {
@@ -179,13 +185,16 @@ struct RedirectEditorSheet: View {
         }
         ToolbarItem(placement: .confirmationAction) {
           Button {
-            Task { await editor.save() }
+            if heldPress.pressed(checking: editor.held) { Task { await editor.save() } }
           } label: {
-            if editor.busy { ProgressView() } else { Text("Save") }
+            if editor.busy || heldPress.waiting { ProgressView().accessibilityLabel("Saving…") } else { Text("Save") }
           }
-          .disabled(editor.busy || editor.held || (editor.draft?.source.isEmpty ?? true) || (editor.draft?.destination.isEmpty ?? true))
+          .disabled(editor.busy || heldPress.waiting || !complete)
           .accessibilityIdentifier("redirect-save")
         }
+      }
+      .aglynHeldPress($heldPress, checking: editor.held, refusal: seedUnconfirmedText("redirect")) {
+        if complete { Task { await editor.save() } }
       }
     }
     .aglynSheetMinimumSize(width: 420, height: 420)

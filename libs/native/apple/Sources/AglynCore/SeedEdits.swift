@@ -11,6 +11,13 @@ import Foundation
 /// What a held Save says beside it, for the guard's subject ("site settings", "entry").
 public func seedCheckingText(_ subject: String) -> String { "Checking your \(subject) with the server…" }
 
+/// What a Save pressed while held says when the server's copy never came within the guard's wait (AGL-4047, the console's
+/// `seedUnconfirmedText`): nothing was saved, what was typed is still there, and saving again in a moment is the remedy.
+public func seedUnconfirmedText(_ subject: String) -> String {
+  "We could not confirm your \(subject) with the server yet, so nothing was saved. What you entered is still here. "
+    + "Check your connection and save again in a moment."
+}
+
 /// One value over a seed that moved from `previous` to `next`: kept when the person changed it, else the new seed.
 public func rebased<T: Equatable>(_ current: T, previous: T?, next: T) -> T {
   guard let previous else { return next }
