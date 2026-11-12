@@ -782,6 +782,8 @@ export interface AiSiteImportImprovedPage {
   written: string[]
   added: AiSiteImportAddedSection[]
   pictures: AiSiteImportPagePictures
+  /** What code mended of the answer before it was drawn (AGL-4152): sections left a heading alone, card rows evened. For the page's log. */
+  mended: string[]
 }
 
 /** The sections' names: each heading's words, as a label, told apart. */
@@ -844,11 +846,199 @@ export function aiSiteImportOpeningPhoto(answer: readonly AiSiteImportImprovedSe
   return [opening, ...rest]
 }
 
+/** The blocks that only name a section: over nothing, they are no section. */
+const LABEL_KINDS: ReadonlySet<string> = new Set(['heading', 'eyebrow'])
+
+/** The least share of an old heading's words a new heading says for it to name that old section (AGL-4152). */
+const NAMES_SOURCE_KEPT = 0.75
+
+/** The most words an old line runs to and still reads as the heading of what follows it. */
+const HEADING_LINE_WORDS = 8
+
+/** The least share of a line's words the answer says for that line to count as said (AGL-4152). */
+const LINE_SAID_KEPT = 0.5
+
+/**
+ * A redesign's sections with none left a heading alone (AGL-4152). A section
+ * after the opening whose blocks are only a heading or an eyebrow (or a
+ * `keep` that draws nothing) is, in order:
+ *
+ * 1. refilled from the old section its heading names, where that section's
+ *    things are on the page nowhere: its group of like items kept whole, else
+ *    its lines as written, as a list. A thin page's "What we handle" over its
+ *    four kinds of work came out the heading alone, the work nowhere.
+ * 2. else handed to the next section, as its heading, where that one has none.
+ * 3. else left out.
+ *
+ * What was done to each is said in `hollow`, for the page's log.
+ */
+export function aiSiteImportFilledSections(
+  answer: readonly AiSiteImportImprovedSection[],
+  input: { doc: Pick<AiSiteImportDocument, 'blocks'>; ledger: Pick<SiteImportLedger, 'items' | 'lines'> },
+): { sections: AiSiteImportImprovedSection[]; hollow: string[]; asWritten: Set<AiSiteImportImprovedBlock> } {
+  const { doc, ledger } = input
+  const items = new Map(ledger.items.map((item) => [item.ref, item]))
+  const draws = (block: AiSiteImportImprovedBlock): boolean => {
+    if (block.kind !== 'keep') return true
+    const item = items.get(block.ref)
+    if (!item) return false
+    return item.kind === 'picture' ? doc.blocks[item.lines[0] as number]?.kind === 'image' : !!item.node
+  }
+  const hollowAt = (section: AiSiteImportImprovedSection | undefined) => !!section && section.blocks.every((block) => LABEL_KINDS.has(block.kind) || !draws(block))
+  const asWritten = new Set<AiSiteImportImprovedBlock>()
+  if (!answer.slice(1).some(hollowAt)) return { sections: [...answer], hollow: [], asWritten }
+  const placed = new Set(aiSiteImportImprovedPlaced(answer, ledger))
+  const said = answer
+    .flatMap((section) => section.blocks.flatMap((block) => (block.kind === 'keep' ? [] : [block.kind === 'image' ? '' : (block.text ?? ''), ...(block.items ?? []).flatMap((item) => [item.title, item.text])])))
+    .join(' ')
+  const unsaid = (line: SiteImportLedgerLine) => !(line.group && placed.has(line.group)) && siteImportContentKept(line.text, said) < LINE_SAID_KEPT
+  const words = (text: string) => text.match(/[\p{L}\p{N}]+/gu)?.length ?? 0
+  // The old section a heading names, and what of it the page has nowhere: its group, else its lines.
+  const refillOf = (heading: string): AiSiteImportImprovedBlock[] => {
+    const names = (line: SiteImportLedgerLine) => siteImportContentWords(line.text) > 0 && siteImportContentKept(line.text, heading) >= NAMES_SOURCE_KEPT
+    const named = ledger.lines.find((line) => line.kind === 'heading' && names(line)) ?? ledger.lines.find((line) => !line.group && words(line.text) <= HEADING_LINE_WORDS && names(line))
+    if (!named) return []
+    const rest = (section: number) => ledger.lines.filter((line) => line.section === section && line.line !== named.line && line.kind !== 'link')
+    // A heading the old page set on its own, over the next section's things, names those.
+    const at = rest(named.section).length || ledger.items.some((item) => item.section === named.section) ? named.section : named.section + 1
+    const group = ledger.items.find((item) => item.section === at && item.kind === 'group' && !placed.has(item.ref) && item.node)
+    if (group) return [{ kind: 'keep', ref: group.ref }]
+    const lines = rest(at).filter((line) => line.kind !== 'heading' && unsaid(line))
+    if (lines.length >= 2) return [{ kind: 'list', items: lines.map((line) => ({ title: line.text, text: '' })) }]
+    return lines.length === 1 ? [{ kind: 'text', text: (lines[0] as SiteImportLedgerLine).text }] : []
+  }
+  const spanning = (block: AiSiteImportImprovedBlock): AiSiteImportImprovedBlock => {
+    const { col: _col, ...rest } = block
+    return rest as AiSiteImportImprovedBlock
+  }
+  const queue = [...answer]
+  const out: AiSiteImportImprovedSection[] = []
+  const hollow: string[] = []
+  queue.forEach((section, index) => {
+    if (index === 0 || !hollowAt(section)) {
+      out.push(section)
+      return
+    }
+    const labels = section.blocks.filter((block) => LABEL_KINDS.has(block.kind)).map(spanning)
+    const heading = labels.find((block) => block.kind === 'heading')
+    const name = clean(heading && heading.kind !== 'keep' ? heading.text : labels[0] && labels[0].kind !== 'keep' ? labels[0].text : '') || `section ${index + 1}`
+    const refill = heading && heading.kind !== 'keep' ? refillOf(heading.text ?? '') : []
+    if (refill.length) {
+      for (const block of refill) {
+        if (block.kind === 'keep') placed.add(block.ref)
+        else asWritten.add(block)
+      }
+      const { cols: _cols, ...rest } = section
+      out.push({ ...rest, blocks: [...labels, ...refill] })
+      hollow.push(`"${short(name, 60)}" refilled from its old section (${refill[0]?.kind === 'keep' ? refill[0].ref : `${refill[0]?.items?.length ?? 1} lines`})`)
+      return
+    }
+    const next = queue[index + 1]
+    if (labels.length && next && !next.blocks.some((block) => block.kind === 'heading') && !hollowAt(next)) {
+      queue[index + 1] = { ...next, blocks: [...labels, ...next.blocks] }
+      hollow.push(`"${short(name, 60)}" handed to the section after it`)
+      return
+    }
+    hollow.push(`"${short(name, 60)}" left out, a heading over nothing`)
+  })
+  return { sections: out, hollow, asWritten }
+}
+
+/**
+ * How many cards of a row show a picture (AGL-4152): every card or none, as
+ * most of them do, and none on a tie. Each card's picture is its own ref, else
+ * the one `carded` gave it; a row most of whose cards show one gives the rest
+ * the page's own photos no section places first, the photos whose words they
+ * say before any other, and a slot the page step fills (its unplaced photos,
+ * then stock, then one generated only where pictures are on) for any left.
+ * Icons the same way: on every card or on none.
+ */
+export function aiSiteImportEvenCards(
+  answer: readonly AiSiteImportImprovedSection[],
+  input: { doc: Pick<AiSiteImportDocument, 'blocks' | 'photos'>; ledger: Pick<SiteImportLedger, 'items' | 'lines'>; carded: ReadonlyMap<AiSiteImportImprovedBlock, string[]> },
+): { sections: AiSiteImportImprovedSection[]; slots: Map<AiSiteImportImprovedBlock, Set<number>>; evened: string[] } {
+  const { doc, ledger, carded } = input
+  const pictures = new Map(ledger.items.filter((item) => item.kind === 'picture').map((item) => [item.ref, item]))
+  const imageOf = (ref: string | undefined) => {
+    const item = ref ? pictures.get(ref) : undefined
+    const block = item ? doc.blocks[item.lines[0] as number] : undefined
+    return block?.kind === 'image' ? block : null
+  }
+  const isPicture = (ref: string | undefined) => !!imageOf(ref)
+  const isPhoto = (ref: string | undefined) => {
+    const image = imageOf(ref)
+    return !!image && !aiSiteImportImageIsMark(image, doc.photos)
+  }
+  const placed = new Set(aiSiteImportImprovedPlaced(answer, ledger))
+  for (const refs of carded.values()) for (const ref of refs) placed.add(ref)
+  const captions = aiSiteImportPictureCaptions(ledger)
+  const slots = new Map<AiSiteImportImprovedBlock, Set<number>>()
+  const evened: string[] = []
+  const sections = answer.map((section) => ({
+    ...section,
+    blocks: section.blocks.map((block): AiSiteImportImprovedBlock => {
+      if (block.kind !== 'cards' || (block.items?.length ?? 0) < 2) return block
+      const items = block.items as AiLayoutItem[]
+      const refs = items.map((item, at) => (isPicture(item.ref) ? (item.ref as string) : (carded.get(block)?.[at] ?? null)))
+      const shown = refs.filter(Boolean).length
+      const iconed = items.filter((item) => item.icon).length
+      const icons = iconed === items.length || iconed === 0
+      if (icons && shown === 0) return block
+      if (icons && shown === items.length) return { ...block, items: items.map((item, at) => withRef(item, refs[at] ?? null)) }
+      const every = shown * 2 > items.length
+      const given = refs.slice()
+      const slotted = new Set<number>()
+      if (every && shown < items.length) {
+        const pool = [...pictures.keys()].filter((ref) => isPhoto(ref) && !placed.has(ref) && !given.includes(ref))
+        items.forEach((item, at) => {
+          if (given[at]) return
+          const words = `${item.title} ${item.text}`
+          const best = pool
+            .map((ref) => {
+              const said = (captions.get(ref) ?? []).map((line) => line.text).join(' ')
+              return { ref, kept: said ? siteImportContentKept(said, words) : 0 }
+            })
+            .sort((a, b) => b.kept - a.kept)[0]
+          if (best) {
+            given[at] = best.ref
+            pool.splice(pool.indexOf(best.ref), 1)
+            placed.add(best.ref)
+          } else slotted.add(at)
+        })
+      }
+      if (shown && !every) evened.push(`${items.length} cards drawn with no picture, ${shown} of them had one`)
+      if (every && shown < items.length) evened.push(`${items.length} cards each given a picture, ${shown} of them had one (${slotted.size} to fill)`)
+      if (!icons) evened.push(`${items.length} cards drawn with no icon, ${iconed} of them had one`)
+      const next: AiSiteImportImprovedBlock = {
+        ...block,
+        items: items.map((item, at) => {
+          const own = withRef(item, every ? (given[at] ?? null) : null)
+          if (icons) return own
+          const { icon: _icon, ...rest } = own
+          return rest
+        }),
+      }
+      if (slotted.size) slots.set(next, slotted)
+      return next
+    }),
+  }))
+  return { sections, slots, evened }
+}
+
+/** An item with this picture's ref, or with none. */
+function withRef(item: AiLayoutItem, ref: string | null): AiLayoutItem {
+  const { ref: _ref, ...rest } = item
+  return ref ? { ...rest, ref } : rest
+}
+
 /** The sections a redesign holds, in the compiler's language: every `keep` expanded to the source's own blocks, every link resolved. */
 export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSection[], input: AiSiteImportImproveCompileInput): AiSiteImportImprovedPage {
   const { doc, ledger, design, destinations } = input
-  // A brand's mark is never the opening's photo (AGL-4152).
-  const answer = aiSiteImportOpeningPhoto(given, { doc, ledger })
+  // A brand's mark is never the opening's photo (AGL-4152); no section is a heading alone; a row of cards shows a
+  // picture on every card or on none.
+  const filled = aiSiteImportFilledSections(aiSiteImportOpeningPhoto(given, { doc, ledger }), { doc, ledger })
+  const even = aiSiteImportEvenCards(filled.sections, { doc, ledger, carded: aiSiteImportCardPictures(filled.sections, ledger) })
+  const answer = even.sections
   const scope = aiSiteImportMapScope(doc, { formId: input.formId, finish: 'improve' })
   const items = new Map(ledger.items.map((item) => [item.ref, item]))
   const choices = aiLayoutDesignChoices(design)
@@ -893,10 +1083,9 @@ export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSec
     scope.groupAt = 0
     return aiSiteImportNodeBlocks(scope, [item.node], { cols: null, allowed: false }).map((block) => ({ ...block, ...placed, ...across(block, col !== undefined) }))
   }
-  // The source's pictures a written set of cards stands for, where the answer gave them none (AGL-4152).
-  const carded = aiSiteImportCardPictures(answer, ledger)
-  // The page's own photo an opening that asks for a picture takes (AGL-4152), and which of its things it was.
-  const asked = new Set([...aiSiteImportImprovedPlaced(answer, ledger), ...[...carded.values()].flat()])
+  // The page's own photo an opening that asks for a picture takes (AGL-4152), and which of its things it was. The
+  // source's pictures a written set of cards stands for are its items' refs by now (`aiSiteImportEvenCards`).
+  const asked = new Set(aiSiteImportImprovedPlaced(answer, ledger))
   const ownOpening = { ref: null as string | null, taken: false }
   const openingPicture = (): AiLayoutPicture | null => {
     if (ownOpening.taken) return null
@@ -932,7 +1121,7 @@ export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSec
         return [{ ...rest, ...(own ? { picture: own } : {}), ...placed }]
       }
       if (block.kind === 'text' || block.kind === 'lede' || block.kind === 'note') {
-        say(block.text)
+        if (!filled.asWritten.has(block)) say(block.text)
         return aiSiteImportTextParts(block.text ?? '').map((part) => ({ ...block, text: part }))
       }
       if (block.kind === 'heading' || block.kind === 'eyebrow') {
@@ -947,11 +1136,16 @@ export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSec
         const { to: _asked, ...rest } = block
         return [{ ...rest, ...(to ? { to } : {}) }]
       }
+      // A list refilled from the old page's own lines is its owner's words, not a rewrite (`aiSiteImportFilledSections`).
+      const owners = filled.asWritten.has(block)
       const groupItems = (block.items ?? []).map((item, at): AiLayoutItem => {
-        say(item.title)
-        say(item.text)
-        const given = item.ref || carded.get(block)?.[at]
-        const picture = given ? pictureOf(given, { ratio: CARD_FRAME }) : null
+        if (!owners) {
+          say(item.title)
+          say(item.text)
+        }
+        // A card left a slot so its row shows a picture on every card: the page step's pictures fill it.
+        const slot = even.slots.get(block)?.has(at) ? { src: '', alt: clean(item.title) || clean(item.text), fit: { ratio: CARD_FRAME, cropped: true as const, objectFit: 'cover' as const, rounded: true as const } } : null
+        const picture = item.ref ? pictureOf(item.ref, { ratio: CARD_FRAME }) : slot
         const to = resolve(item.to, index)
         const { ref: _ref, to: _to, ...rest } = item
         return { ...rest, ...(block.kind === 'steps' ? { figure: String(at + 1) } : {}), ...(picture ? { picture } : {}), ...(to ? { to } : {}) }
@@ -1001,9 +1195,13 @@ export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSec
       source: allPictures.length - unplaced.length + (ownOpening.taken && !ownOpening.ref ? 1 : 0),
       stock: 0,
       generated: 0,
-      slots: sections.reduce((total, section) => total + section.blocks.filter((block) => block.kind === 'image' && !block.picture).length, 0),
+      slots: sections.reduce(
+        (total, section) => total + section.blocks.filter((block) => block.kind === 'image' && !block.picture).length + section.blocks.reduce((cards, block) => cards + (block.items ?? []).filter((item) => item.picture && !item.picture.src).length, 0),
+        0,
+      ),
       unplaced,
     },
+    mended: [...filled.hollow, ...even.evened],
   }
 }
 
@@ -1301,6 +1499,8 @@ export interface AiSiteImportImproved<T> {
   page: AiSiteImportImprovedPage
   /** The design lines it was taken with still missed, by code (`AI_SITE_IMPORT_IMPROVE_SOFT_CODES`): only where no re-ask was left. */
   missed?: string[]
+  /** What reading the answer settled on its own (AGL-4152): a block left out and why, a list read from its text. */
+  read?: AiLayoutSettlement[]
 }
 
 /**
@@ -1491,7 +1691,9 @@ export function aiSiteImportImproveCheck<T>(input: {
   lenient?: boolean
 }): AiGenerationCheck<AiSiteImportImproved<T>> {
   return (answer) => {
-    const read = aiReadImprovedPage(answer)
+    // What the read settles, a block it leaves out among them, is kept for the page's log (AGL-4152).
+    const notes: AiLayoutSettlement[] = []
+    const read = aiReadImprovedPage(answer, notes)
     if (!read) return { value: null, violations: [{ rule: null, code: 'improve-unreadable', message: `The answer gave no section that can be drawn. Answer with ${AI_SITE_IMPORT_IMPROVE_TOOL.name}.` }] }
     const formAt = read.findIndex((section) => section.blocks.some((block) => block.kind === 'keep' && block.ref.startsWith('form:')))
     const destinations = aiSiteImportImproveDestinations(input.doc, input.ledger, { sections: read.length, formSection: formAt === -1 ? null : formAt })
@@ -1513,6 +1715,6 @@ export function aiSiteImportImproveCheck<T>(input: {
     const refused = input.lenient ? scored.filter((violation) => !AI_SITE_IMPORT_IMPROVE_SOFT_CODES.has(violation.code)) : scored
     if (refused.length) return { value: null, violations: refused }
     missed.push(...scored.map((violation) => violation.code))
-    return { value: { built: built.value, page, ...(missed.length ? { missed: [...new Set(missed)] } : {}) }, violations: [] }
+    return { value: { built: built.value, page, ...(missed.length ? { missed: [...new Set(missed)] } : {}), ...(notes.length ? { read: notes } : {}) }, violations: [] }
   }
 }
