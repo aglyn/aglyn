@@ -509,7 +509,7 @@
     "babel-plugin-const-enum": "^1.2.0",
     "commitizen": "^4.3.2",
     "css-loader": "^7.1.5",
-    "cypress": "15.21.1",
+    "cypress": "16.3.0",
     "cz-conventional-changelog": "^3.3.0",
     "dotenv": "18.0.10",
     "eslint": "^10.14.0",
