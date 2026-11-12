@@ -236,7 +236,19 @@ class ScreenBringMySiteTest {
     assertFalse(ScreenValues.condition(action(spec, "sendNewCode").whenCondition, proving.context))
     assertFalse(ScreenValues.condition(action(spec, "confirmCode").whenCondition, proving.context))
     val check = runner.run(action(spec, "checkDns"), proving.context)
-    assertEquals("No record yet.", (check as ActionOutcome.Done).message)
+    // "Not there yet" is information, as the console shows it: no green success, a notice under the check that was run.
+    assertEquals(null, (check as ActionOutcome.Done).message)
+    assertEquals(JsonPrimitive("No record yet."), ScreenStash.values["aiImportCheck"])
+    val checked = phase(pending)
+    assertEquals(
+      listOf(
+        "Prove it is yours",
+        "Prove the site is yours, any one way below. Nothing is read from your site until you do, so only a site you own can be brought in.",
+        "Add a DNS record", "actions", "No record yet.", "Add a tag to your home page", "actions", "Get a code by email", "actions",
+      ),
+      shown(spec, checked),
+    )
+    assertEquals("info", spec.blocks.first { it.type == "notice" && it.raw.str("text") == "{stash.aiImportCheck}" }.raw.str("tone"))
     assertEquals(json("""{"orgId":"o1","domain":"example.com","action":"check","method":"dns"}"""), body(sent, 1))
 
     // 3. Proved: what happens next, the choice (Improve it, wording on, as the console starts it), and the read.
