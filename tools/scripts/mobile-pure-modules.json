@@ -738,6 +738,10 @@
       "why": "Reached by the CRM declarations: the next-activity filter field."
     },
     {
+      "path": "libs/plugins/crm/src/lib/model/local-day-bounds.ts",
+      "why": "The local calendar day a moment falls in; no imports. Split out of the CRM reports' figures (AGL-4047), which the apps' reports replay (AGL-3669)."
+    },
+    {
       "path": "libs/plugins/crm/src/lib/model/crm-reports.ts",
       "why": "The CRM reports' figures (pipelineTotals, leadFunnel), replayed by the apps' reports (AGL-3669)."
     },
