@@ -982,9 +982,9 @@ export function aiSiteImportEvenCards(
       const refs = items.map((item, at) => (isPicture(item.ref) ? (item.ref as string) : (carded.get(block)?.[at] ?? null)))
       const shown = refs.filter(Boolean).length
       const iconed = items.filter((item) => item.icon).length
-      const icons = iconed === items.length || iconed === 0
-      if (icons && shown === 0) return block
-      if (icons && shown === items.length) return { ...block, items: items.map((item, at) => withRef(item, refs[at] ?? null)) }
+      const iconsEven = iconed === items.length || iconed === 0
+      if (iconsEven && shown === 0) return block
+      if (iconsEven && shown === items.length) return { ...block, items: items.map((item, at) => withRef(item, refs[at] ?? null)) }
       const every = shown * 2 > items.length
       const given = refs.slice()
       const slotted = new Set<number>()
@@ -1008,12 +1008,12 @@ export function aiSiteImportEvenCards(
       }
       if (shown && !every) evened.push(`${items.length} cards drawn with no picture, ${shown} of them had one`)
       if (every && shown < items.length) evened.push(`${items.length} cards each given a picture, ${shown} of them had one (${slotted.size} to fill)`)
-      if (!icons) evened.push(`${items.length} cards drawn with no icon, ${iconed} of them had one`)
+      if (!iconsEven) evened.push(`${items.length} cards drawn with no icon, ${iconed} of them had one`)
       const next: AiSiteImportImprovedBlock = {
         ...block,
         items: items.map((item, at) => {
           const own = withRef(item, every ? (given[at] ?? null) : null)
-          if (icons) return own
+          if (iconsEven) return own
           const { icon: _icon, ...rest } = own
           return rest
         }),
