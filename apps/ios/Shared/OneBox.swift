@@ -17,11 +17,12 @@ import SwiftUI
 enum OneBoxAction: Hashable {
   case workspace(String)
   case site(String)
-  case screen(String, [String: String])
+  /// A screen of the scope in use: a screens-and-settings match (with the row it was matched in), a server row's screen.
+  case screen(String, [String: String], rowID: String? = nil)
   /// A server row: its console link, through the app's deep-link resolver, in its own workspace and site.
   case link(String, orgID: String?, hostID: String?)
-  /// A recent or starred place: its workspace, site and screen.
-  case place(orgID: String, hostID: String?, screen: String, params: [String: String])
+  /// A recent or starred place: the account's item.
+  case place(AccountItemRef)
   /// The full results for what was typed, in the current tab.
   case allResults(String)
 }
@@ -127,14 +128,13 @@ struct OneBoxCatalog {
     let recents = (model.preferences?.recents ?? []).prefix(4).map { item in
       OneBoxItem(
         id: "recent:\(item.key)", label: item.label, detail: owner(orgID: item.orgId, hostID: item.hostId),
-        icon: Self.icon(forScreen: item.screen, fallback: "clock"),
-        action: .place(orgID: item.orgId, hostID: item.hostId, screen: item.screen, params: item.params ?? [:]))
+        icon: Self.icon(forScreen: item.screen, fallback: "clock"), action: .place(item.ref))
     }
     if !recents.isEmpty { out.append(OneBoxSection(id: "recent", heading: "Recent places", items: recents)) }
     let starred = (model.preferences?.starred ?? []).prefix(5).map { item in
       OneBoxItem(
         id: "starred:\(item.key)", label: item.label, detail: owner(orgID: item.orgId, hostID: item.hostId), icon: "star",
-        action: .place(orgID: item.orgId, hostID: item.hostId, screen: item.screen, params: item.params ?? [:]))
+        action: .place(item.ref))
     }
     if !starred.isEmpty { out.append(OneBoxSection(id: "starred", heading: "Starred", items: starred)) }
     return out
@@ -214,7 +214,7 @@ struct OneBoxCatalog {
             OneBoxItem(
               id: "screen:\(row.id)", label: row.label, detail: row.detail,
               icon: Self.icon(forScreen: row.screen ?? "", fallback: "gearshape"),
-              action: .screen(row.screen ?? "", row.params ?? [:]))
+              action: .screen(row.screen ?? "", row.params ?? [:], rowID: NavPaths.searchRowID(row.id)))
           }))
     }
     if seeAll {
@@ -266,7 +266,8 @@ struct OneBoxCatalog {
     }
   }
 
-  /// Opens a row where the window stands.
+  /// Opens a row where the window stands. A screen, a record and a recent or starred place each open on their whole path,
+  /// as a link to them does (AGL-4059).
   static func open(_ item: OneBoxItem, model: AppModel, navigation: ShellNavigation) {
     switch item.action {
     case .workspace(let orgID):
@@ -275,22 +276,12 @@ struct OneBoxCatalog {
     case .site(let hostID):
       model.workspace?.selectSite(hostID)
       navigation.enterSite()
-    case .screen(let screen, let params):
-      guard !screen.isEmpty else { return }
-      navigation.mode = .main
-      navigation.select(ShellSection.opening(screen, params))
+    case .screen(let screen, let params, let rowID):
+      model.open(screen: screen, params: params, rowID: rowID, in: navigation)
     case .link(let link, let orgID, let hostID):
       model.follow(link, orgID: orgID, hostID: hostID, in: navigation)
-    case .place(let orgID, let hostID, let screen, let params):
-      if orgID != model.workspace?.org?.id { model.workspace?.open(orgID: orgID, hostID: hostID) }
-      if let hostID {
-        model.workspace?.selectSite(hostID)
-        navigation.inSite = true
-      } else {
-        navigation.inSite = false
-      }
-      navigation.mode = .main
-      navigation.select(ShellSection.opening(screen, params))
+    case .place(let item):
+      model.open(item, in: navigation)
     case .allResults(let text):
       navigation.mode = .main
       navigation.push(.searchResults(text))

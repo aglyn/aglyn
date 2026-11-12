@@ -171,13 +171,8 @@ struct HomeView: View {
       .compactMap { $0 }.joined(separator: " · ")
   }
 
-  private func open(_ item: RecentItem) {
-    if let hostID = item.hostId {
-      model.workspace?.selectSite(hostID)
-      navigation.inSite = true
-    }
-    navigation.select(ShellSection.opening(item.screen, item.params))
-  }
+  /// A recent place opens on its whole path, as a link to it does (AGL-4059).
+  private func open(_ item: RecentItem) { model.open(item.ref, in: navigation) }
 
   // MARK: The AI prompt
 

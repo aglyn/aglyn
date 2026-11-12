@@ -504,6 +504,7 @@ struct ShellFrame<Content: View>: View {
       .environment(\.aglynScreenSession, model.screenSession)
       .aglynAppTheme(nonce: navigation.themeNonce)
       .onAppear {
+        tellNavigationItsShell()
         DebugLaunch.route(navigation)
         #if os(macOS)
           navigation.openTab = { [openWindow] seed in openWindow(id: "main", value: seed) }
@@ -551,6 +552,19 @@ struct ShellFrame<Content: View>: View {
         navigation.mode = .main
         navigation.section = .home
       }
+  }
+
+  /// Whether this navigation is a phone's, and its tab bar's area for a row, so a link, a starred or a recent place
+  /// opens as the shell drawing it opens an area (AGL-4059).
+  private func tellNavigationItsShell() {
+    navigation.compact = compact
+    navigation.tabSection =
+      compact
+      ? { [weak navigation, model] rowID in
+        guard let navigation else { return nil }
+        let areas = PhoneAreas(model: model, navigation: navigation)
+        return areas.row(rowID).flatMap(areas.tabSection)
+      } : nil
   }
 
   private func leaveARemovedSite() {
@@ -745,6 +759,11 @@ struct ShellStack: View {
           PushedScreen(section: section, head: !route.isBesigner) {
             if case .area(let screen, let params) = route {
               AreaView(screen: screen, params: params, pushed: true)
+                // A pushed area keeps a large title above its section chips wherever it is pushed (AGL-4059): over a
+                // tab whose own screen heads its list (Orders) it inherited that root's inline bar, so its large title
+                // was drawn over the chips with an inline one as well. On Home it inherited Home's large title. A screen
+                // that draws its own title row (Orders) keeps the inline bar it asks for.
+                .pushedAreaTitle(large: !AglynListColumnHead.screens.contains(screen))
             } else if case .modeList = route {
               // Site settings or Workspace settings from a phone Home tile (AGL-4006): the mode's grouped list.
               MenuScreen()
@@ -1199,17 +1218,8 @@ struct RecentPlacesMenu: View {
     return "\(item.label) — \(site ?? org ?? "")"
   }
 
-  private func open(_ item: RecentItem) {
-    if item.orgId != model.workspace?.org?.id { model.workspace?.open(orgID: item.orgId, hostID: item.hostId) }
-    if let hostID = item.hostId {
-      model.workspace?.selectSite(hostID)
-      navigation.inSite = true
-    } else {
-      navigation.inSite = false
-    }
-    navigation.mode = .main
-    navigation.select(ShellSection.opening(item.screen, item.params))
-  }
+  /// A recent place opens on its whole path, as a link to it does (AGL-4059).
+  private func open(_ item: RecentItem) { model.open(item.ref, in: navigation) }
 }
 
 // MARK: iPhone
@@ -1433,6 +1443,16 @@ struct PhoneTopBar: ViewModifier {
 }
 
 extension View {
+  /// A pushed area's title on a phone: large, as Home's pushes have it, whatever the screen it was pushed over sets.
+  @ViewBuilder
+  func pushedAreaTitle(large: Bool) -> some View {
+    #if os(iOS)
+      if large { navigationBarTitleDisplayMode(.large) } else { self }
+    #else
+      self
+    #endif
+  }
+
   /// The phone's top bar, on a tab's first screen.
   func phoneTopBar() -> some View { modifier(PhoneTopBar()) }
 

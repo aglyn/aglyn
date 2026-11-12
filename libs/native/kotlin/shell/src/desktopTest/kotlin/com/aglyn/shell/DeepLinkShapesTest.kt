@@ -97,6 +97,6 @@ class DeepLinkShapesTest {
     val workspace = com.aglyn.core.WorkspaceState(
       orgs = listOf(com.aglyn.core.WorkspaceOrg("org-acme", "Acme", "acme", "owner")), sites = emptyList(), ready = true,
     )
-    assertEquals(LinkScope("org-acme"), linkScopeOf("/acme#top", workspace))
+    assertEquals(LinkScope("org-acme", whole = true), linkScopeOf("/acme#top", workspace))
   }
 }

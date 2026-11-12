@@ -204,17 +204,6 @@ struct AccountSwitchItems: View {
   }
 }
 
-extension AppAppearance {
-  /// The color scheme a window takes; nil follows the system.
-  var colorScheme: ColorScheme? {
-    switch self {
-    case .light: .light
-    case .dark: .dark
-    default: nil
-    }
-  }
-}
-
 /// The account photo at the foot of the rail: opens the account menu, a popover from the photo (Figma 16:142).
 struct AccountMenuButton: View {
   @Environment(AppModel.self) private var model

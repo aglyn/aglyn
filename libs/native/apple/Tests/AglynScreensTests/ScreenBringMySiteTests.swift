@@ -235,7 +235,16 @@ final class ScreenBringMySiteTests: XCTestCase {
     XCTAssertFalse(ScreenValues.condition(try action(spec, "confirmCode").when, in: proving.context))
     let check = await runner.run(try action(spec, "checkDns"), in: proving.context)
     XCTAssertEqual(check.response?["result"]?["status"], "not-yet")
-    XCTAssertEqual(ScreenModel.message(for: try action(spec, "checkDns"), response: check.response, in: proving.context), "No record yet.")
+    // "Not there yet" is information, as the console shows it: no green success, a notice under the check that was run.
+    XCTAssertNil(ScreenModel.message(for: try action(spec, "checkDns"), response: check.response, in: proving.context))
+    XCTAssertEqual(ScreenStash.values["aiImportCheck"], "No record yet.")
+    let checked = await phase(pending)
+    XCTAssertEqual(
+      shown(spec, checked),
+      ["Prove it is yours", "Prove the site is yours, any one way below. Nothing is read from your site until you do, so only a site you own can be brought in.",
+        "Add a DNS record", "actions", "No record yet.", "Add a tag to your home page", "actions", "Get a code by email", "actions"])
+    let notice = try XCTUnwrap(spec.blocks.first { $0.type == "notice" && $0["text"]?.stringValue == "{stash.aiImportCheck}" })
+    XCTAssertEqual(notice["tone"]?.stringValue, "info")
     XCTAssertEqual(try sent(run, 1), ["orgId": "o1", "domain": "example.com", "action": "check", "method": "dns"])
 
     // 3. Proved: what happens next, the choice (Improve it, wording on, as the console starts it), and the read.

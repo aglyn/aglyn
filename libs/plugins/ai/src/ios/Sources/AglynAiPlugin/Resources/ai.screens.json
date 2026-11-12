@@ -2059,7 +2059,9 @@
             },
             "stash": {
               "aiImportSite": "{site.id}",
-              "aiImportDomain": "{response.claim.domain}"
+              "aiImportDomain": "{response.claim.domain}",
+              "aiImportCheck": null,
+              "aiImportCheckBy": null
             },
             "reload": true
           }
@@ -2154,10 +2156,19 @@
                 "action": "check",
                 "method": "dns"
               },
-              "success": "{response.result.message}",
+              "stash": {
+                "aiImportCheck": "{response.result.message}",
+                "aiImportCheckBy": "dns"
+              },
               "reload": true
             }
           ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "is.proving && stash.aiImportCheckBy == dns",
+          "text": "{stash.aiImportCheck}"
         },
         {
           "type": "fields",
@@ -2193,10 +2204,19 @@
                 "action": "check",
                 "method": "meta"
               },
-              "success": "{response.result.message}",
+              "stash": {
+                "aiImportCheck": "{response.result.message}",
+                "aiImportCheckBy": "meta"
+              },
               "reload": true
             }
           ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "is.proving && stash.aiImportCheckBy == meta",
+          "text": "{stash.aiImportCheck}"
         },
         {
           "type": "actions",
@@ -2375,7 +2395,9 @@
             },
             "stash": {
               "aiImportSite": null,
-              "aiImportDomain": null
+              "aiImportDomain": null,
+              "aiImportCheck": null,
+              "aiImportCheckBy": null
             },
             "navigate": {
               "screen": "ai.job",
@@ -2396,7 +2418,9 @@
               "icon": "arrow.uturn.backward|undo",
               "stash": {
                 "aiImportSite": null,
-                "aiImportDomain": null
+                "aiImportDomain": null,
+                "aiImportCheck": null,
+                "aiImportCheckBy": null
               },
               "reload": true
             }

@@ -23,7 +23,7 @@ class LinkScopeTest {
   fun aConsoleLinkNamesItsWorkspaceAndSite() {
     assertEquals(LinkScope("org-beta", null, "market"), linkScopeOf("/beta/hosts/market/ai-jobs/j1", onAcme()))
     assertEquals(LinkScope("org-acme", "host-cafe", "cafe"), linkScopeOf("https://app.aglyn.com/acme/hosts/cafe/ai-jobs/j1", onAcme()))
-    assertEquals(LinkScope("org-acme"), linkScopeOf("/acme/crm", onAcme()))
+    assertEquals(LinkScope("org-acme", whole = true), linkScopeOf("/acme/crm", onAcme()))
   }
 
   @Test

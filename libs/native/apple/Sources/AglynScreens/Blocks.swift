@@ -438,6 +438,10 @@ struct ListRow: View {
             if let action = next ? onAction : offAction { trigger(action, scope) }
           })
       )
+      // A plain switch: inside a grouped form the form's toggle style draws its label, which `labelsHidden` cannot hide,
+      // and the row already names what it switches (Site settings › Plugins read "› Components on this site" mid-row).
+      .toggleStyle(.switch)
+      .tint(AglynColor.primary)
       .labelsHidden()
       .disabled(disabled || (isOn ? offAction == nil : onAction == nil))
       .accessibilityLabel(label)
