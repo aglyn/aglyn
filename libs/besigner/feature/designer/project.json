@@ -3,7 +3,14 @@
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/besigner/feature/designer/src",
   "projectType": "library",
-  "tags": ["scope:lib", "scope:aglyn", "scope:feature", "aglyn:besigner", "scope:besigner-ui", "type:feature"],
+  "tags": [
+    "scope:lib",
+    "scope:aglyn",
+    "scope:feature",
+    "aglyn:besigner",
+    "scope:besigner-ui",
+    "type:feature"
+  ],
   "targets": {
     "build": {
       "executor": "@nx/js:swc",
@@ -15,16 +22,15 @@
         "assets": ["libs/besigner/feature/designer/*.md"]
       }
     },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
-    },
     "test": {
-      "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/libs/besigner/feature/designer"],
-      "options": {
-        "jestConfig": "libs/besigner/feature/designer/jest.config.ts"
-      }
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/jest.preset.js",
+        {
+          "externalDependencies": ["jest", "@nx/jest", "ts-jest", "babel-jest"]
+        }
+      ]
     }
   }
 }

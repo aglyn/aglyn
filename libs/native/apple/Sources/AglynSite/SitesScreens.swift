@@ -151,18 +151,39 @@ struct SitesScreen: View {
         }
         .refreshable { model.refresh() }
         .aglynContentList()
+        // On a phone the card sits just under the chips (Figma iPhone / Workspace / Sites 512:32000), not under the
+        // grouped list's own top gap (~35 points, which left ~44 between the chips and the card).
+        .modifier(PhoneSitesListTop(wide: wide))
         .accessibilityIdentifier("sites-list")
       }
     }
   }
 }
 
+/// A phone's sites card just under the chips; the Mac and iPad lists keep their own top.
+private struct PhoneSitesListTop: ViewModifier {
+  let wide: Bool
+
+  func body(content: Content) -> some View {
+    if wide { content } else { content.contentMargins(.top, AglynSpace.half, for: .scrollContent) }
+  }
+}
+
+/// Which of a sites row's columns show at a width. The Mac and iPad keep every column (Figma Mac Sites 13:3, iPad 13
+/// Sites 13:1880); a phone, like a narrow Mac window (Shipped / Mac / Sites · narrow window 38:530), drops "Edited" so
+/// the name, address and status keep the width (Figma iPhone / Workspace / Sites 512:32000; it clipped to "E" or "…").
+enum SiteRowColumns {
+  static func showsEdited(wideChrome: Bool) -> Bool { wideChrome }
+}
+
 /// One row of the sites list (Figma Mac Sites 13:3): the site's favicon, else its initial on its brand color; its name
-/// and address; its status; when it was last edited; a chevron. The role is the site page's, not the row's.
+/// and address; its status; when it was last edited (not on a phone); a chevron. The role is the site page's, not the
+/// row's.
 struct SiteListRow: View {
   let context: NativePluginContext
   let row: SiteRow
   @State private var host = LiveDocument()
+  @Environment(\.aglynWideChrome) private var wide
 
   var body: some View {
     let doc = host.state.value ?? nil
@@ -191,7 +212,9 @@ struct SiteListRow: View {
       Spacer(minLength: 8)
       if row.id == context.hostID { StatusChip("Current", tone: .info) }
       if let status { StatusChip(status.label, tone: hostStatusTone(status.kind)) }
-      if let edited = (doc?.data["updatedAt"] as? Date) ?? (doc?.data["createdAt"] as? Date) {
+      if SiteRowColumns.showsEdited(wideChrome: wide),
+        let edited = (doc?.data["updatedAt"] as? Date) ?? (doc?.data["createdAt"] as? Date)
+      {
         Text("Edited \(edited.formatted(.relative(presentation: .named)))")
           .font(.system(size: 12)).foregroundStyle(AglynColor.secondaryText).lineLimit(1)
           .layoutPriority(-1)

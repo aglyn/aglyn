@@ -78,6 +78,15 @@ export function setSeedConfirmWaitMs(ms: number = SEED_CONFIRM_WAIT_MS): void {
   confirmWaitMs = ms
 }
 
+/**
+ * How long a save waits, as set now: for a Save pressed while it is held
+ * (`useHeldSave`, AGL-4047), which keeps the press for exactly as long as the
+ * guard would have waited for it.
+ */
+export function seedConfirmWaitMs(): number {
+  return confirmWaitMs
+}
+
 /** The part of a document snapshot {@link sameDocument} reads. */
 interface DocumentValues {
   exists: () => boolean

@@ -48,6 +48,7 @@ extension View {
 
 private struct AglynSearchableModifier: ViewModifier {
   @Environment(\.aglynWideChrome) private var wide
+  @Environment(\.aglynPhoneAreaHead) private var phoneHead
   @Binding var text: String
   let prompt: String
   let onSubmit: (() -> Void)?
@@ -77,6 +78,18 @@ private struct AglynSearchableModifier: ViewModifier {
         .safeAreaInset(edge: .top, spacing: 0) {
           if !inColumn { bar }
         }
+    } else if let phoneHead {
+      // An area's own list on a phone, under the title row the shell draws (Figma 283:23456, 22:499): the search and
+      // the one Filter on the page, then the area's section chips.
+      content
+        .safeAreaInset(edge: .top, spacing: 0) {
+          VStack(spacing: 0) {
+            AglynListToolbar(text: $text, prompt: prompt, onSubmit: onSubmit) { filter }
+            AglynPhoneSectionChips(phoneHead)
+          }
+          .background(.bar)
+        }
+        .preference(key: AglynPhoneSearchPlacedKey.self, value: true)
     } else if alwaysShown {
       content
         #if os(iOS)
@@ -97,6 +110,37 @@ extension EnvironmentValues {
   /// A screen's list toolbar (`aglynSearchable`) waiting for its list column: `AglynListDetailColumns` draws it atop the
   /// list column on the Mac and iPad; nil elsewhere.
   @Entry public var aglynListColumnToolbar: AnyView? = nil
+}
+
+/// Set by a list's search (`aglynSearchable`) when it drew the area's section chips under it on a phone
+/// (`aglynPhoneAreaHead`), so the shell does not draw them again above the search.
+public struct AglynPhoneSearchPlacedKey: PreferenceKey {
+  public static let defaultValue = false
+  public static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
+}
+
+/// An area's sections on a phone, as one row of chips that scrolls sideways (Figma 283:23456): the selected one filled,
+/// each swapping its section in place. Nothing when the area has one section.
+public struct AglynPhoneSectionChips: View {
+  let head: AglynAreaHead
+
+  public init(_ head: AglynAreaHead) { self.head = head }
+
+  public var body: some View {
+    if !head.sections.isEmpty {
+      ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: AglynSpace.one) {
+          ForEach(head.sections) { section in
+            AglynChoiceChip(section.label, selected: section.selected) { section.open() }
+              .accessibilityIdentifier("area-section-\(section.id)")
+          }
+        }
+        .padding(.horizontal, AglynContentInsets.phone)
+        .padding(.vertical, AglynSpace.one)
+      }
+      .accessibilityIdentifier(head.id.map { "area-sections-\($0)" } ?? "area-sections")
+    }
+  }
 }
 
 /// Set by `AglynListDetailColumns` when it drew the screen's list toolbar in its list column.
@@ -231,7 +275,8 @@ public enum AglynContentInsets {
     #endif
   }
 
-  /// A phone's side margin.
+  /// A phone's side margin: its lists' rows, its screen-level rows (`aglynContentEdges`) and its grouped forms' cards
+  /// (`aglynFormBackground`, `aglynPhoneFormEdges`), where the platform's grouped form would use 20.
   public static let phone: CGFloat = 16
 
   /// What a plain `List` adds outside a row's own insets: 8 before and 9 after it on the Mac (measured by laying a
@@ -436,10 +481,12 @@ extension View {
 
 private struct AglynPrimaryActionModifier: ViewModifier {
   @Environment(\.aglynWideChrome) private var wide
+  @Environment(\.aglynPhoneAreaHead) private var phoneHead
   let action: AglynPrimaryAction
 
   func body(content: Content) -> some View {
-    if wide {
+    // A phone area's title row draws it as its filled "+" (`aglynPhoneAreaHead`, Figma 283:23456).
+    if wide || phoneHead != nil {
       content.transformPreference(AglynScreenChromeKey.self) { $0.merge(AglynScreenChrome(primary: action)) }
     } else {
       content.toolbar {
@@ -567,12 +614,15 @@ extension View {
 
 private struct AglynScreenToolbarModifier<Items: View>: ViewModifier {
   @Environment(\.aglynWideChrome) private var wide
+  @Environment(\.aglynPhoneAreaHead) private var phoneHead
   let id: String
   let phone: ToolbarItemPlacement
   let content: () -> Items
 
   func body(content view: Content) -> some View {
-    if wide {
+    // In the head on the Mac and iPad, and on a phone in the area's own title row (`aglynPhoneAreaHead`), never in a
+    // navigation bar that already holds the shell's search, bell, AI and photo.
+    if wide || phoneHead != nil {
       view.transformPreference(AglynScreenChromeKey.self) {
         $0.merge(AglynScreenChrome(entries: [AglynScreenToolbarEntry(id: id, content: AnyView(content()))]))
       }
@@ -584,14 +634,24 @@ private struct AglynScreenToolbarModifier<Items: View>: ViewModifier {
 
 /// A screen action's look in its head: a bordered 28-point button (Figma Button, Secondary, Small; Compact radius 6).
 public struct AglynHeaderButtonStyle: ButtonStyle {
-  public init() {}
+  /// Its symbol alone on a square (Figma 13:483's "⋯"), for a head with no room for the words; a label without a
+  /// symbol keeps its words.
+  let iconOnly: Bool
+
+  public init(iconOnly: Bool = false) { self.iconOnly = iconOnly }
 
   public func makeBody(configuration: Configuration) -> some View {
-    configuration.label
+    Group {
+      if iconOnly {
+        configuration.label.labelStyle(.iconOnly)
+      } else {
+        configuration.label.labelStyle(.titleAndIcon)
+      }
+    }
       .font(.system(size: AglynShellMetrics.rowText, weight: .medium))
       .foregroundStyle(AglynColor.textPrimary)
-      .labelStyle(.titleAndIcon)
-      .padding(.horizontal, 10)
+      .padding(.horizontal, iconOnly ? 0 : 10)
+      .frame(minWidth: iconOnly ? AglynShellMetrics.barButton + 4 : nil)
       .frame(height: AglynShellMetrics.barButton + 4)
       .background(
         RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous)
@@ -643,16 +703,26 @@ public struct AglynAreaHead {
   public let sections: [AglynAreaSection]
   /// On a phone, the title's ▾: every area of the scope as tiles, to switch area in place (AGL-4006); nil for none.
   public let switchArea: (@MainActor () -> Void)?
+  /// The area's id, naming its section chips for the UI tests (`area-sections-<id>`); nil when there is none.
+  public let id: String?
 
   public init(
     title: String, crumbs: AnyView, star: AnyView, sections: [AglynAreaSection],
-    switchArea: (@MainActor () -> Void)? = nil
+    switchArea: (@MainActor () -> Void)? = nil, id: String? = nil
   ) {
     self.title = title
     self.crumbs = crumbs
     self.star = star
     self.sections = sections
     self.switchArea = switchArea
+    self.id = id
+  }
+
+  /// The same head with a hub's own sections under it (`AglynSectionHub`), when the shell gave it none of its own.
+  public func withSections(_ hubSections: [AglynAreaSection]) -> AglynAreaHead {
+    guard sections.isEmpty else { return self }
+    return AglynAreaHead(
+      title: title, crumbs: crumbs, star: star, sections: hubSections, switchArea: switchArea, id: id)
   }
 }
 
@@ -663,6 +733,11 @@ extension EnvironmentValues {
   /// shows a list beside its detail takes it, leaves room for the head atop its list column and draws the area's
   /// section chips under it; the shell then draws the head in that room instead of across the content. Nil elsewhere.
   @Entry public var aglynColumnHeadOffer: AglynAreaHead? = nil
+  /// On a phone, the head of the area whose screen this is, when the shell draws its title row (Figma 283:23456: the
+  /// title with its ▾ and star, then the screen's actions and its filled "+"). The screen's primary action and other
+  /// actions go to that row (`aglynPrimaryAction`, `aglynScreenToolbar`), not to the navigation bar that holds the
+  /// shell's search, bell, AI and photo; its search (`aglynSearchable`) sits under the row with the section chips.
+  @Entry public var aglynPhoneAreaHead: AglynAreaHead? = nil
 }
 
 /// Set by `AglynListDetailColumns` when it took the area's head into its list column (`aglynColumnHeadOffer`).
@@ -671,8 +746,10 @@ public struct AglynListColumnHeadPlacedKey: PreferenceKey {
   public static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
 }
 
-/// An area's sections as chips across a column (Inbox's Submissions, Members & leads and Campaigns): the selected one
-/// filled, each opening its section.
+/// An area's sections as chips under its head in a list column (Inbox's Submissions, Members & leads and Campaigns; a
+/// hub's own sections, `AglynSectionHub`): the selected one filled, each opening its section. They are the area's way
+/// around, so none is ever cut off at the column's edge: a row when they fit the column, else they wrap onto the next
+/// line (an iPad's list column is 360 points wide), as the Kotlin twin's `SectionChips` flow. Words only, as there.
 public struct AglynAreaSectionChips: View {
   let sections: [AglynAreaSection]
   let inset: CGFloat
@@ -683,17 +760,18 @@ public struct AglynAreaSectionChips: View {
   }
 
   public var body: some View {
-    ScrollView(.horizontal, showsIndicators: false) {
-      HStack(spacing: AglynSpace.one) {
-        ForEach(sections) { section in
-          AglynChoiceChip(section.label, selected: section.selected) { section.open() }
-            .accessibilityIdentifier("area-section-\(section.id)")
-        }
+    AglynWrapRow(spacing: AglynSpace.one, lineSpacing: AglynSpace.one) {
+      ForEach(sections) { section in
+        AglynChoiceChip(section.label, selected: section.selected) { section.open() }
+          .accessibilityIdentifier("area-section-\(section.id)")
       }
-      .padding(.horizontal, inset)
-      .padding(.bottom, AglynSpace.one)
     }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.horizontal, inset)
+    .padding(.bottom, AglynSpace.one)
     .background(AglynColor.paper)
+    .accessibilityElement(children: .contain)
+    .accessibilityIdentifier("area-sections")
   }
 }
 
@@ -728,22 +806,24 @@ public struct AglynListColumnHeader<Actions: View>: View {
 
   private var column: some View {
     HStack(alignment: .center, spacing: 10) {
+      // The title and its star come first: the actions give up their words before the title gives up a letter.
       Text(head.title)
         .font(.system(size: 22, weight: .semibold))
         .foregroundStyle(AglynColor.textPrimary)
         .lineLimit(1)
         .accessibilityAddTraits(.isHeader)
-      head.star
+        .layoutPriority(2)
+      head.star.layoutPriority(2)
       Spacer(minLength: 8)
-      HStack(spacing: 8) {
-        if let primary {
-          AglynBlockableButton(primary) { Label(primary.title, systemImage: primary.systemImage).labelStyle(.titleAndIcon) }
-        }
-        actions
+      // The head stays inside its list column (an iPad's is 360 wide): the actions with their words, then the other
+      // actions as symbols (Figma 13:483's "⋯"), then the create action as its symbol too. Never past the column's edge
+      // over the detail's title.
+      ViewThatFits(in: .horizontal) {
+        columnActions(primaryWords: true, actionWords: true)
+        columnActions(primaryWords: true, actionWords: false)
+        columnActions(primaryWords: false, actionWords: false)
       }
-      .buttonStyle(AglynHeaderButtonStyle())
-      .menuStyle(.button)
-      .fixedSize()
+      .layoutPriority(1)
     }
     // Figma's title row is the height of its small buttons (28), 20 below the column's top and 12 above the search.
     .frame(height: 28)
@@ -752,6 +832,18 @@ public struct AglynListColumnHeader<Actions: View>: View {
     .padding(.bottom, 12)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(AglynColor.paper)
+  }
+
+  private func columnActions(primaryWords: Bool, actionWords: Bool) -> some View {
+    HStack(spacing: 8) {
+      if let primary {
+        AglynBlockableButton(primary) { Label(primary.title, systemImage: primary.systemImage) }
+          .buttonStyle(AglynHeaderButtonStyle(iconOnly: !primaryWords))
+      }
+      actions.buttonStyle(AglynHeaderButtonStyle(iconOnly: !actionWords))
+    }
+    .menuStyle(.button)
+    .fixedSize()
   }
 
   private var phone: some View {
@@ -774,7 +866,9 @@ public struct AglynListColumnHeader<Actions: View>: View {
       head.star
       Spacer(minLength: 8)
       HStack(spacing: 8) {
+        // Symbols alone, as Figma 22:499's 40-point squares: a word-only button (Done) keeps its word.
         actions
+          .labelStyle(.iconOnly)
           .buttonStyle(AglynTouchIconButtonStyle(filled: false))
           .menuStyle(.button)
         if let primary {
@@ -807,6 +901,9 @@ public struct AglynListColumnHeader<Actions: View>: View {
 
   /// The head's height in a list column on the Mac and iPad: 20 above the 28-point title row and 12 under it.
   public static var columnHeight: CGFloat { 20 + 28 + 12 }
+
+  /// The title row's height on a phone (Figma 22:499): 4 above and 8 below a 41-point line.
+  public static var phoneHeight: CGFloat { 4 + 41 + 8 }
 }
 
 /// A phone title row's 40-point button (Figma 22:499): the create action filled with the accent, any other action

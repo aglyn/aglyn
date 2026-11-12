@@ -16,6 +16,8 @@ public struct AglynRecordAction: Identifiable {
   public let enabled: Bool
   /// Shown while the act is under way (the filled button turns into a spinner).
   public let busy: Bool
+  /// A file the act hands to the share sheet (Share CSV): the button is the system's share link for it, not `run`.
+  public let share: URL?
   public let run: @MainActor () -> Void
 
   public init(
@@ -28,7 +30,20 @@ public struct AglynRecordAction: Identifiable {
     self.destructive = destructive
     self.enabled = enabled
     self.busy = busy
+    self.share = nil
     self.run = run
+  }
+
+  /// An act that shares `file` through the system's share sheet (a report's Share CSV).
+  public init(_ id: String, _ label: String, systemImage: String, share file: URL) {
+    self.id = id
+    self.label = label
+    self.systemImage = systemImage
+    self.destructive = false
+    self.enabled = true
+    self.busy = false
+    self.share = file
+    self.run = {}
   }
 }
 
@@ -105,7 +120,11 @@ public struct AglynRecordHeader: View {
   @ViewBuilder
   private var columnActions: some View {
     if !more.isEmpty { AglynRecordMoreMenu(more, square: true) }
-    if let primary {
+    if let primary, let file = primary.share {
+      ShareLink(item: file) { AglynPrimaryHeaderButton.face(primary.label, systemImage: primary.systemImage).fixedSize() }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(primary.id)
+    } else if let primary {
       Button(role: primary.destructive ? .destructive : nil) {
         primary.run()
       } label: {
@@ -127,7 +146,11 @@ public struct AglynRecordHeader: View {
       AglynDetailHeader(title, subtitle: subtitle, imageURL: imageURL, systemImage: systemImage, status: status)
       if primary != nil || !more.isEmpty {
         HStack(spacing: AglynSpace.one) {
-          if let primary {
+          if let primary, let file = primary.share {
+            ShareLink(item: file) { Label(primary.label, systemImage: primary.systemImage).frame(minHeight: 24) }
+              .buttonStyle(.aglynProminent)
+              .accessibilityIdentifier(primary.id)
+          } else if let primary {
             Button(role: primary.destructive ? .destructive : nil) {
               primary.run()
             } label: {
@@ -201,14 +224,20 @@ public struct AglynRecordMoreMenu: View {
     .accessibilityIdentifier("record-more")
   }
 
+  @ViewBuilder
   private func item(for action: AglynRecordAction) -> some View {
-    Button(role: action.destructive ? .destructive : nil) {
-      action.run()
-    } label: {
-      Label(action.label, systemImage: action.systemImage)
+    if let file = action.share {
+      ShareLink(item: file) { Label(action.label, systemImage: action.systemImage) }
+        .accessibilityIdentifier(action.id)
+    } else {
+      Button(role: action.destructive ? .destructive : nil) {
+        action.run()
+      } label: {
+        Label(action.label, systemImage: action.systemImage)
+      }
+      .disabled(!action.enabled || action.busy)
+      .accessibilityIdentifier(action.id)
     }
-    .disabled(!action.enabled || action.busy)
-    .accessibilityIdentifier(action.id)
   }
 }
 

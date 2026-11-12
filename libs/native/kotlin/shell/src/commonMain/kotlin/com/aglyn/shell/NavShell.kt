@@ -130,6 +130,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   LaunchedEffect(screenKey) { com.aglyn.core.Telemetry.screen(screenKey) }
   var wasSupporting by remember { mutableStateOf(supporting) }
   val chrome = remember(uid) { NavChromeState(services.prefs) }
+  // Each place in the tab's history keeps the sidebar's settings mode, so Back returns to the list it was opened in.
+  androidx.compose.runtime.SideEffect { navigator.settingsMode = chrome::settingsMode }
   LaunchedEffect(supporting) {
     if (supporting != wasSupporting) {
       wasSupporting = supporting
@@ -144,7 +146,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   val widthClass = currentWidthClass()
   val wide = widthClass != WidthClass.COMPACT
   val compactChrome = LocalUsesCompactChrome.current
-  val context = ShellPluginContext(uid, workspace, services, navigator, emptySet())
+  val context = ShellPluginContext(uid, workspace, services, navigator, emptySet(), chrome)
   // The in-app Besigner (AGL-4056): its own back control is the way out, which Back, Ctrl/⌘+[ and the menu's Back press;
   // on a wide window it opens in focus mode, the rail and the sidebar folded away until it closes.
   val besignerBack = remember { com.aglyn.webview.BesignerBack() }
@@ -170,8 +172,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     if (chrome.settingsMode == NativeNavListId.SITE_SETTINGS && workspace.site == null) chrome.settingsMode = null
   }
 
-  // A link that switched workspace or site opens once that workspace is on screen.
-  LaunchedEffect(navigator.deferredLink, workspace) { context.settleDeferredLink() }
+  // A link or a Starred or Recent item that switched workspace or site opens once that workspace is on screen.
+  LaunchedEffect(navigator.deferredLink, navigator.deferredPlace, workspace) { context.settleDeferredLink() }
   LaunchedEffect(pendingLink, workspace.ready) {
     if (pendingLink != null && workspace.ready && !AuthFlow.isAuthLink(pendingLink)) {
       // A link to a workspace another signed-in account holds opens in that account.
@@ -209,6 +211,9 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   // Each account's photo, kept on the roster so the switcher draws every account's face (AGL-4010).
   val storedPhoto = prefs.photo(user?.photoUrl)
   LaunchedEffect(storedPhoto, prefs.loaded) { if (prefs.loaded) services.accounts?.rememberPhoto(storedPhoto) }
+  // And the name the header shows, once the profile has loaded, so the switcher names each account the same way.
+  val shownName = prefs.name(user?.displayName, user?.email)
+  LaunchedEffect(shownName, prefs.loaded) { if (prefs.loaded) services.accounts?.rememberName(shownName) }
   val screenSession = rememberScreenSession(services, navigator, workspace, user, claims) { claims = it }
 
   // The scope's lists, from the manifest.
@@ -224,6 +229,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   val scopeList = if (inSite) NativeNavListId.SITE else NativeNavListId.WORKSPACE
   val scopeGroups = remember(version, enabled, hostAdmin, inSite) { navGroups(scopeList, enabled, hostAdmin, services.registry, inSite) }
   val staffGroups = remember(version, claims.isStaff) { if (claims.isStaff) staffNavGroups() else emptyList() }
+  context.staffRows = staffGroups.flatMap { it.rows }
   val settingsGroups = when (val mode = chrome.settingsMode) {
     NativeNavListId.WORKSPACE_SETTINGS -> remember(version, orgEnabled) { navGroups(mode, orgEnabled, hostAdmin, services.registry, inSite = true) }
     NativeNavListId.SITE_SETTINGS -> remember(version, enabled, hostAdmin) { navGroups(mode, enabled, hostAdmin, services.registry, inSite = true) }
@@ -440,14 +446,9 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
       kotlinx.coroutines.delay(1_500)
       services.accountPrefs.opened(item)
     }
-    // Opens a recent or starred item: its workspace and site first, then its screen.
-    val openRef: (com.aglyn.contracts.AccountItemRef) -> Unit = { item ->
-      if (item.orgId != workspace.org?.id || (item.hostId != null && item.hostId != workspace.site?.id)) {
-        services.workspace.select(item.orgId, item.hostId)
-      }
-      chrome.settingsMode = settingsModeFor(item.screen, item.params, settingsLists(enabled, orgEnabled, hostAdmin, services))
-      navigator.select(NavKeys.of(item.screen, item.params))
-    }
+    // Opens a recent or starred item: its workspace and site first, then the same path a link to it opens (AGL-4059).
+    // `openPlace` makes the switch and waits for it, as a link does.
+    val openRef: (com.aglyn.contracts.AccountItemRef) -> Unit = { item -> context.openPlace(item) }
     val banner: @Composable () -> Unit = {
       impersonation?.let { ImpersonationBanner(it, onExit = { exitScope.launch { services.auth.endImpersonation() } }) }
     }
@@ -766,17 +767,6 @@ private fun WorkspaceBrandTheme(
   if (accent == null) themed() else AccountTheme(services, dark, accent, themed)
 }
 
-/** Which settings mode a screen belongs to, so opening a setting from search or Recents shows its list. */
-private fun settingsModeFor(screen: String, params: Map<String, String>?, lists: Map<NativeNavListId, List<NavGroupItem>>): NativeNavListId? {
-  val key = NavKeys.of(screen, params)
-  return lists.entries.firstOrNull { (_, groups) -> groups.any { g -> g.rows.any { key in it.keys } } }?.key
-}
-
-private fun settingsLists(enabled: Collection<String>, orgEnabled: Collection<String>, hostAdmin: Boolean, services: ShellServices) = mapOf(
-  NativeNavListId.SITE_SETTINGS to navGroups(NativeNavListId.SITE_SETTINGS, enabled, hostAdmin, services.registry, inSite = true),
-  NativeNavListId.WORKSPACE_SETTINGS to navGroups(NativeNavListId.WORKSPACE_SETTINGS, orgEnabled, hostAdmin, services.registry, inSite = true),
-)
-
 /**
  * The place on screen as an account item: a destination (`screen`, its row's id), or a pushed record (`record`, its
  * screen and params); nothing for Home, Menu, the account's own pages and web pages.
@@ -823,9 +813,13 @@ private fun openOneBoxLine(
       services.workspace.select(row.orgId ?: workspace.org?.id ?: return, row.id)
       navigator.select(ShellNavigator.HOME)
     }
+    // A screens-and-settings match names its row (`{list}.{row}.{section}`), which the place opens under; a Recent or
+    // Starred line keeps its item's kind, and a record its group's, so a record's id is never read as a row's.
     row.screen != null -> openRef(
       com.aglyn.contracts.AccountItemRef(
-        hostId = row.hostId ?: workspace.site?.id, id = row.id, kind = "screen", label = row.label,
+        hostId = row.hostId ?: workspace.site?.id,
+        id = (if (row.group == com.aglyn.contracts.Contracts.oneBoxScreensGroup) com.aglyn.pluginhost.NavPaths.searchRowId(row.id) else null) ?: row.id,
+        kind = if (row.group == com.aglyn.contracts.Contracts.oneBoxScreensGroup) "screen" else row.group, label = row.label,
         orgId = row.orgId ?: workspace.org?.id ?: return, params = row.params, screen = row.screen!!,
       ),
     )

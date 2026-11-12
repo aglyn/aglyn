@@ -398,7 +398,8 @@ describe('the Companies section (AGL-2597)', () => {
     await act(async () => {
       fireEvent.change(field('Name'), { target: { value: 'Acme Coffee' } })
     })
-    expect((screen.getByText('Save company').closest('button') as HTMLButtonElement).disabled).toBe(true)
+    // Pressable during the hold: a press is kept, not dropped (AGL-4047).
+    expect((screen.getByText('Save company').closest('button') as HTMLButtonElement).disabled).toBe(false)
     expect(screen.getByRole('status').textContent).toBe('Checking your company with the server…')
 
     // The phone was changed elsewhere since the cached snapshot.

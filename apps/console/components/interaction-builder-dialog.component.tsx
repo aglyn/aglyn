@@ -77,6 +77,7 @@ import {
 import {
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
   useSeedEdits,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { HelpTip } from '@aglyn/shared-ui-jsx'
@@ -948,6 +949,13 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
     existingListen,
   ])
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSave, {
+    checking,
+    subject: 'interaction',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <Dialog open={!minimized} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -1618,10 +1626,10 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
         <Button
           variant="contained"
           color="primary"
-          disabled={Boolean(problem) || !name.trim() || checking}
-          onClick={handleSave}
+          disabled={Boolean(problem) || !name.trim() || held.saving}
+          onClick={held.press}
         >
-          {state.id ? 'Save' : 'Create'}
+          {held.saving ? 'Saving…' : state.id ? 'Save' : 'Create'}
         </Button>
       </DialogActions>
     </Dialog>

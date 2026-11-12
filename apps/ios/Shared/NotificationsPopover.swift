@@ -28,6 +28,8 @@ struct NotificationsPopover: View {
   @State private var unreadOnly = false
   @State private var reach: NotificationReach = .all
   @State private var marking = false
+  /// Inside the phone's Activity sheet, under Needs you: the sheet sets its own size, so the popover asks for none.
+  var inActivity = false
 
   private static let window = 30
 
@@ -117,8 +119,7 @@ struct NotificationsPopover: View {
     #if os(macOS)
       .frame(width: 380, height: 480)
     #else
-      .frame(minWidth: 320, idealWidth: 380, maxWidth: .infinity, minHeight: 360, idealHeight: 480, maxHeight: .infinity)
-      .presentationDetents([.medium, .large])
+      .modifier(PopoverSize(inActivity: inActivity))
     #endif
     .background(AglynColor.paper)
     .task(id: "\(model.auth?.user?.uid ?? ""):\(unreadOnly)") {
@@ -169,3 +170,20 @@ struct NotificationsPopover: View {
     }
   }
 }
+
+#if os(iOS)
+  /// The popover's own size and detents, unless it sits in the phone's Activity sheet, which sizes itself.
+  private struct PopoverSize: ViewModifier {
+    let inActivity: Bool
+
+    func body(content: Content) -> some View {
+      if inActivity {
+        content.frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else {
+        content
+          .frame(minWidth: 320, idealWidth: 380, maxWidth: .infinity, minHeight: 360, idealHeight: 480, maxHeight: .infinity)
+          .presentationDetents([.medium, .large])
+      }
+    }
+  }
+#endif

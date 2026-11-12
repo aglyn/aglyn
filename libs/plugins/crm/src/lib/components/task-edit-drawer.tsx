@@ -38,6 +38,7 @@ import {
 import {
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
   useSeedEdits,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { seedEditsBetween } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
@@ -400,6 +401,12 @@ function TaskForm(props: TaskEditDrawerProps) {
       setBusy(false)
     }
   }
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(save, {
+    checking: Boolean(checkingText),
+    subject: 'task',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
 
   return (
     <Stack
@@ -408,9 +415,8 @@ function TaskForm(props: TaskEditDrawerProps) {
       sx={{ width: { xs: '100vw', sm: 420 }, p: 3 }}
       onSubmit={(event: { preventDefault: () => void }) => {
         event.preventDefault()
-        // Enter submits without the button, so the hold is here as well.
-        if (checkingText) return
-        void save()
+        // Enter submits without the button, so it is kept through a hold too.
+        held.press()
       }}
     >
       <Typography variant="h6">{task ? 'Edit task' : 'New task'}</Typography>
@@ -662,8 +668,8 @@ function TaskForm(props: TaskEditDrawerProps) {
         <Button onClick={onClose} disabled={busy}>
           {'Cancel'}
         </Button>
-        <Button type="submit" variant="contained" disabled={busy || Boolean(checkingText) || !filed}>
-          {task ? 'Save' : 'Create task'}
+        <Button type="submit" variant="contained" disabled={busy || held.saving || !filed}>
+          {held.saving ? 'Saving…' : task ? 'Save' : 'Create task'}
         </Button>
       </Stack>
     </Stack>

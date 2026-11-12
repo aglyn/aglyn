@@ -260,10 +260,11 @@ const pick = async (panel: HTMLElement, label: string, option: string) => {
 /** Sets the Filters panel's one row: a column, an operator, a value. */
 const filterBy = async (column: string, operator: string | null, value: string) => {
   // The panel stays open after a value is set; clicking Filters again would close it.
-  let panel = screen.queryByRole('tooltip') as HTMLElement | null
+  // The grid draws its Filters panel as a dialog (role="tooltip" before x-data-grid 9.16).
+  let panel = screen.queryByRole('dialog') as HTMLElement | null
   if (!panel) {
     fireEvent.click(screen.getByRole('button', { name: /filters/i }))
-    panel = (await screen.findByRole('tooltip')) as HTMLElement
+    panel = (await screen.findByRole('dialog')) as HTMLElement
   }
   await pick(panel, 'Column', column)
   if (operator) await pick(panel, 'Operator', operator)
@@ -391,7 +392,7 @@ describe('what one query cannot hold is refused by name, never half-applied', ()
   it('offers no range, negation or empty check, and nothing on a timestamp', async () => {
     await mountCard()
     fireEvent.click(screen.getByRole('button', { name: /filters/i }))
-    const panel = (await screen.findByRole('tooltip')) as HTMLElement
+    const panel = (await screen.findByRole('dialog')) as HTMLElement
     await pick(panel, 'Column', 'Price')
     fireEvent.mouseDown(within(panel).getByRole('combobox', { name: 'Operator' }))
     const operators = (await screen.findAllByRole('option')).map((option) => option.textContent)

@@ -57,8 +57,10 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import {
+  heldSaveLabel,
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
   useSeedEdits,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { seedEditsBetween } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
@@ -1825,6 +1827,13 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
   ])
 
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSave, {
+    checking,
+    subject: 'product',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>{product ? 'Edit product' : 'Add product'}</DialogTitle>
@@ -2106,10 +2115,10 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
         <Button
           variant="contained"
           color="primary"
-          disabled={checking || !current.name.trim() || Boolean(error)}
-          onClick={handleSave}
+          disabled={!current.name.trim() || Boolean(error) || held.saving}
+          onClick={held.press}
         >
-          {'Save product'}
+          {heldSaveLabel(held, 'Save product')}
         </Button>
       </DialogActions>
     </Dialog>

@@ -238,6 +238,10 @@ private fun ServiceEditor(
     seeded = initial
   }
   val problem = bookingServiceDraftProblem(form.name)
+  // Save pressed while held is kept, and saves once the server's copy is in (AGL-4047).
+  val heldPress = com.aglyn.ui.rememberHeldPress(held, com.aglyn.core.seedUnconfirmedText("service")) {
+    if (bookingServiceDraftProblem(form.name) == null && !busy) onSave(form)
+  }
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
       Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = com.aglyn.ui.paneInset(), vertical = space(2f)).testTag("service-editor"),
@@ -247,7 +251,10 @@ private fun ServiceEditor(
         Text(if (isNew) "New service" else form.name.ifBlank { "Service" }, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleLarge)
         if (!isNew) StatusChip(if (draft) "Draft" else "Taking bookings", if (draft) StatusTone.WARNING else StatusTone.SUCCESS)
       }
-      if (held) {
+      val refusal = heldPress.refusal
+      if (refusal != null) {
+        NoticeBanner(refusal, StatusTone.WARNING, Modifier.testTag("service-unconfirmed"))
+      } else if (held) {
         Text(com.aglyn.core.seedCheckingText("service"), Modifier.testTag("service-checking"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
       if (draft) {
@@ -340,8 +347,8 @@ private fun ServiceEditor(
         )
       }
       FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
-        Button(onClick = { onSave(form) }, enabled = problem == null && !busy && !held, modifier = Modifier.heightIn(min = 44.dp).testTag("service-save")) {
-          Text(if (isNew) "Add service" else "Save service")
+        Button(onClick = { if (heldPress.pressed(held)) onSave(form) }, enabled = problem == null && !busy && !heldPress.waiting, modifier = Modifier.heightIn(min = 44.dp).testTag("service-save")) {
+          Text(if (heldPress.waiting) "Saving…" else if (isNew) "Add service" else "Save service")
         }
         onToggleActive?.let {
           OutlinedButton(onClick = it, enabled = !busy, modifier = Modifier.testTag("service-toggle")) { Text(if (draft) "Turn on" else "Turn off") }

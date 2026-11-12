@@ -42,9 +42,31 @@ struct AccountIdentity {
     AglynNotificationSounds.sound(for: model.preferences?.identity[AglynNotificationSounds.field])?.label
   }
 
+  /// Whether this signed-in account is the one on screen (not while support is viewing as someone else).
+  func isOnScreen(_ account: SignedInAccount) -> Bool {
+    account.slot == model.auth?.activeSlot && model.auth?.impersonation == nil
+  }
+
+  /// A signed-in account's name in the account lists: the one on screen reads the same as the header (its profile
+  /// first, `readAccountName`), the others as last shown on this device.
+  func name(of account: SignedInAccount) -> String {
+    isOnScreen(account) ? name : account.title
+  }
+
+  /// The address under a signed-in account's name, when the name is not already the address.
+  func detail(of account: SignedInAccount) -> String? {
+    guard let email = account.email, name(of: account) != email else { return nil }
+    return email
+  }
+
+  /// A signed-in account's initials, from the same name its row shows.
+  func initials(of account: SignedInAccount) -> String {
+    isOnScreen(account) ? initials : account.initials
+  }
+
   /// Another signed-in account's photo, as last shown on this device.
   func photoURL(of account: SignedInAccount) -> URL? {
-    if account.slot == model.auth?.activeSlot, model.auth?.impersonation == nil { return photoURL }
+    if isOnScreen(account) { return photoURL }
     return model.mediaURL(account.photoURL, hostID: nil, width: AccountPlaces.photoWidth)
   }
 }
@@ -117,10 +139,9 @@ struct AccountMenuContent: View {
         AglynMenuCaption("Accounts")
         ForEach(auth.accounts) { account in
           AglynMenuPersonRow(
-            name: account.displayName ?? account.email ?? "Account",
-            detail: account.displayName == nil ? nil : account.email,
-            initials: account.initials, photoURL: identity.photoURL(of: account),
-            current: account.slot == auth.activeSlot && auth.impersonation == nil
+            name: identity.name(of: account), detail: identity.detail(of: account),
+            initials: identity.initials(of: account), photoURL: identity.photoURL(of: account),
+            current: identity.isOnScreen(account)
           ) {
             done()
             Task { await auth.switchAccount(to: account.slot) }
@@ -182,15 +203,16 @@ struct AccountSwitchItems: View {
 
   var body: some View {
     if let auth = model.auth {
+      let identity = AccountIdentity(model: model)
       Section("Accounts") {
         ForEach(auth.accounts) { account in
           Button {
             Task { await auth.switchAccount(to: account.slot) }
           } label: {
-            if account.slot == auth.activeSlot && auth.impersonation == nil {
-              Label(account.displayName ?? account.email ?? "Account", systemImage: "checkmark")
+            if identity.isOnScreen(account) {
+              Label(identity.name(of: account), systemImage: "checkmark")
             } else {
-              Text(account.displayName ?? account.email ?? "Account")
+              Text(identity.name(of: account))
             }
           }
           .accessibilityIdentifier("account-\(account.email ?? account.slot)")
@@ -200,17 +222,6 @@ struct AccountSwitchItems: View {
             .accessibilityIdentifier("account-add")
         }
       }
-    }
-  }
-}
-
-extension AppAppearance {
-  /// The color scheme a window takes; nil follows the system.
-  var colorScheme: ColorScheme? {
-    switch self {
-    case .light: .light
-    case .dark: .dark
-    default: nil
     }
   }
 }

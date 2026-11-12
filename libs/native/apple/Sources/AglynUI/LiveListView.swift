@@ -65,15 +65,17 @@ public struct AglynSectionBar<Section: Hashable & Identifiable>: View {
   @Binding var selection: Section
   let label: (Section) -> String
   let systemImage: (Section) -> String
+  let identifier: String
 
   public init(
     _ sections: [Section], selection: Binding<Section>, label: @escaping (Section) -> String,
-    systemImage: @escaping (Section) -> String
+    systemImage: @escaping (Section) -> String, identifier: String = "section-bar"
   ) {
     self.sections = sections
     self._selection = selection
     self.label = label
     self.systemImage = systemImage
+    self.identifier = identifier
   }
 
   public var body: some View {
@@ -86,6 +88,52 @@ public struct AglynSectionBar<Section: Hashable & Identifiable>: View {
       .aglynContentEdges()
       .padding(.vertical, AglynSpace.one)
     }
-    .accessibilityIdentifier("section-bar")
+    .accessibilityIdentifier(identifier)
+  }
+}
+
+/// A hub with the console's sections (CRM, Emails, Marketing, Sequences): its section bar across the top, then the picked
+/// section. When the picked section is a list beside its detail that took the area's head into its list column on the
+/// Mac and iPad (`aglynColumnHeadOffer`, Figma 13:483), the sections go there too, under the area's title like every
+/// other area's (`AglynAreaSectionChips`), and the bar across the top steps aside: never chips over the title.
+public struct AglynSectionHub<Section: Hashable & Identifiable, Content: View>: View {
+  @Environment(\.aglynColumnHeadOffer) private var offer
+  /// The picked section's list column drew the head (and so these sections).
+  @State private var sectionsInColumn = false
+  let sections: [Section]
+  @Binding var selection: Section
+  let label: (Section) -> String
+  let systemImage: (Section) -> String
+  let identifier: String
+  let content: Content
+
+  public init(
+    _ sections: [Section], selection: Binding<Section>, label: @escaping (Section) -> String,
+    systemImage: @escaping (Section) -> String, identifier: String = "section-bar", @ViewBuilder content: () -> Content
+  ) {
+    self.sections = sections
+    self._selection = selection
+    self.label = label
+    self.systemImage = systemImage
+    self.identifier = identifier
+    self.content = content()
+  }
+
+  public var body: some View {
+    VStack(spacing: 0) {
+      if offer == nil || !sectionsInColumn {
+        AglynSectionBar(sections, selection: $selection, label: label, systemImage: systemImage, identifier: identifier)
+      }
+      content
+        .environment(\.aglynColumnHeadOffer, offer?.withSections(areaSections))
+        .onPreferenceChange(AglynListColumnHeadPlacedKey.self) { sectionsInColumn = $0 }
+    }
+  }
+
+  private var areaSections: [AglynAreaSection] {
+    let binding = $selection
+    return sections.map { item in
+      AglynAreaSection(id: "\(item.id)", label: label(item), selected: item == selection) { binding.wrappedValue = item }
+    }
   }
 }

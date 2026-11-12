@@ -35,8 +35,10 @@ import {
   type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
 import {
+  heldSaveLabel,
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 import {
@@ -413,6 +415,13 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
     [confirm, firestore, hostId],
   )
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSave, {
+    checking: draftChecking,
+    subject: 'event',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <CardDisplay
       header={'Events'}
@@ -659,10 +668,10 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
             <Button
               variant="contained"
               color="primary"
-              disabled={draftChecking || !draft?.title.trim()}
-              onClick={handleSave}
+              disabled={!draft?.title.trim() || held.saving}
+              onClick={held.press}
             >
-              {'Save event'}
+              {heldSaveLabel(held, 'Save event')}
             </Button>
           </Stack>
         </DialogActions>

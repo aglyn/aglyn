@@ -373,38 +373,9 @@ struct PinAreasTip: View {
   }
 }
 
-/// An area's title ▾ on a phone (AGL-4006): every area of the scope, by group, to switch in place; "All areas" opens them
-/// as tiles (Figma Area switcher).
-struct PhoneAreaTitleMenu: ViewModifier {
-  @Environment(AppModel.self) private var model
-  @Environment(ShellNavigation.self) private var navigation
-  let enabled: Bool
-
-  func body(content: Content) -> some View {
-    #if os(iOS)
-      if enabled {
-        content.toolbarTitleMenu {
-          let areas = PhoneAreas(model: model, navigation: navigation)
-          Button("All areas", systemImage: "square.grid.2x2") { navigation.showAreaSwitcher = true }
-            .accessibilityIdentifier("area-title-all")
-          ForEach(areas.groups, id: \.id) { group in
-            Section(group.label ?? "") {
-              ForEach(group.rows, id: \.id) { row in
-                Button(row.label, systemImage: row.appleIcon) { areas.open(row) }
-              }
-            }
-          }
-        }
-      } else {
-        content
-      }
-    #else
-      content
-    #endif
-  }
-}
-
-/// The bell on a phone (AGL-4006, Figma Activity): what needs you, then the notifications.
+/// The bell on a phone (AGL-4006, Figma Activity 283:25905): what needs you, then the notifications, at full height as
+/// Figma draws it. At half height the two together were taller than the sheet, which centred them and cut off the
+/// Needs you head and its first row.
 struct ActivitySheet: View {
   var body: some View {
     VStack(spacing: 0) {
@@ -412,9 +383,13 @@ struct ActivitySheet: View {
         .padding(.horizontal, 16)
         .padding(.top, 16)
         .padding(.bottom, 8)
-      NotificationsPopover()
+      NotificationsPopover(inActivity: true)
     }
+    .frame(maxHeight: .infinity, alignment: .top)
     .background(AglynColor.paper)
+    #if os(iOS)
+      .presentationDetents([.large])
+    #endif
     .accessibilityIdentifier("activity-sheet")
   }
 }

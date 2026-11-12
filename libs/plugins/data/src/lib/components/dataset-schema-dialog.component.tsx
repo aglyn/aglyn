@@ -64,6 +64,7 @@ import {
 import {
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
   useSeedEdits,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { seedEditsBetween } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
@@ -656,6 +657,13 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
         )
       : null
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSave, {
+    checking: Boolean(checkingText),
+    subject: 'collection schema',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <>
       <Dialog
@@ -863,10 +871,10 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
           <Button
             variant="contained"
             color="primary"
-            disabled={!dataScope || Boolean(checkingText)}
-            onClick={handleSave}
+            disabled={!dataScope || held.saving}
+            onClick={held.press}
           >
-            {sharingOnlyReason ? 'Save sharing' : 'Save schema'}
+            {held.saving ? 'Saving…' : sharingOnlyReason ? 'Save sharing' : 'Save schema'}
           </Button>
         </DialogActions>
       </Dialog>

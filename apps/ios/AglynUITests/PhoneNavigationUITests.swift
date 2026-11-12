@@ -24,7 +24,12 @@ final class PhoneNavigationUITests: XCTestCase {
     }
   }
 
-  private func tab(_ id: String) -> XCUIElement { any["tab-\(id)"].firstMatch }
+  /// A tab bar button. SwiftUI puts a tab's `tab-{id}` on the tab's content, not on its button (Xcode 27's iOS simulator):
+  /// the button carries the tab's title, so it is found by either, and only among the tab bar's buttons, where a query
+  /// by identifier alone found Home's content and missed every other tab.
+  private func tab(_ id: String) -> XCUIElement {
+    app.tabBars.buttons.matching(NSPredicate(format: "identifier == %@ OR label ==[c] %@", "tab-\(id)", id)).firstMatch
+  }
 
   private func tile(_ id: String) -> XCUIElement {
     let target = any["home-tile-\(id)"].firstMatch

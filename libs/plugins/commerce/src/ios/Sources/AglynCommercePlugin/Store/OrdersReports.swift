@@ -51,29 +51,36 @@ final class OrdersRegisters {
   }
 }
 
-/// One report row heading the orders list.
+/// One report row heading the orders list: the orders' own record row, its kind's icon on a tile over the title and
+/// detail, with no trailing figures (Figma List/Report row in 343:9126 and 341:13731: 68 points on a phone, 64 on the
+/// Mac and iPad). The kit's plain row was 37 points on a phone, its title touching its detail under the search.
 struct OrdersReportRow: View {
   let title: String
   let detail: String
   let systemImage: String
 
   var body: some View {
-    AglynRow(title, subtitle: detail, systemImage: systemImage)
-      .accessibilityElement(children: .combine)
+    AglynRecordRow(title, detail: detail, systemImage: systemImage) { EmptyView() }
   }
 }
 
-/// Day report: every register's day, as the register's own Day totals screen shows it.
+/// Day report: every register's day, as the register's own Day totals screen shows it, under the report's own head
+/// (Figma 341:13731 on the iPad, 343:43796 on a phone): Day report, Share CSV, and the line naming the site, every
+/// register and the days.
 struct OrdersDayReportView: View {
   @State private var model: PosDayReportModel
   let currency: String
+  let site: String
 
   init(context: NativePluginContext, currency: String) {
     _model = State(initialValue: PosDayReportModel(api: ConsolePosDayReportAPI(api: context.api, hostID: context.hostID ?? "")))
     self.currency = currency
+    site = context.siteName(context.hostID)
   }
 
-  var body: some View { PosDayTotalsView(model: model, currency: currency, notSynced: nil) }
+  var body: some View {
+    PosDayTotalsView(model: model, currency: currency, notSynced: nil, head: PosDayReportHead(title: "Day report", site: site))
+  }
 }
 
 /// The newest shifts one register reads at a time, as the console's history card pages them.

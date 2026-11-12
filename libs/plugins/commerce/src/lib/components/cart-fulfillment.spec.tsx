@@ -89,6 +89,17 @@ const PICKUP = [
 ]
 
 describe('how the buyer gets the order (AGL-3624)', () => {
+  it('asks the options once per load, and reads the cart once (AGL-4047)', async () => {
+    options = { pickup: PICKUP }
+    render(<Cart variant="inline" />)
+    await screen.findByRole('button', { name: 'Checkout' })
+    // Past the 400 ms the postal code waits for typing to stop, with nothing typed.
+    await new Promise((resolve) => setTimeout(resolve, 700))
+    expect(optionRequests).toHaveLength(1)
+    const reads = (global.fetch as jest.Mock).mock.calls.filter(([url]) => String(url).startsWith('/api/commerce/cart?'))
+    expect(reads).toHaveLength(1)
+  })
+
   it('asks nothing, and sends nothing, for a store that only ships', async () => {
     render(<Cart variant="inline" />)
     fireEvent.click(await screen.findByRole('button', { name: 'Checkout' }))

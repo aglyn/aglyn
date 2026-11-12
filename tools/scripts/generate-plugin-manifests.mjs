@@ -1315,6 +1315,33 @@ const MANIFESTS = [
  * OFF on a published site without an error anywhere (the shape of AGL-3025).
  */
 const CATALOG_FILE = 'libs/aglyn/src/lib/plugin-manager/first-party-plugins.generated.ts'
+
+/**
+ * The part of the catalog a published page runs on (AGL-4220): each row's
+ * switch fields without its console copy, the published-site impact, the
+ * edit bar's links, the analytics providers and the function bindings.
+ *
+ * A module of its own because a bundler keeps a module whole for every
+ * export ANY importer reads. `enabled-plugins.ts` and `visitor-consent.ts`
+ * run on every published page, and while they read the catalog file, every
+ * page downloaded each row's Admin › Plugins copy and every console-only
+ * declaration in it (plan figures, usage meters, notification categories,
+ * interaction steps) that some other tenant module read: about 6 KB of the
+ * every-page wire weight. `first-party-plugins.generated.ts` re-exports this
+ * file's names, so its importers are unchanged.
+ */
+const SWITCHBOARD_FILE = 'libs/aglyn/src/lib/plugin-manager/first-party-plugin-switchboard.generated.ts'
+
+/**
+ * The interaction steps and recipes plugins declare (AGL-4220), in a module of
+ * their own for the reason {@link SWITCHBOARD_FILE} is: a site's interactions
+ * runtime reads them on the published page, and reading them from the catalog
+ * file brought the whole catalog with them.
+ */
+const INTERACTIONS_FILE = 'libs/aglyn/src/lib/plugin-manager/first-party-plugin-interactions.generated.ts'
+
+/** The catalog row fields that are copy for the console, never a switch. */
+const CATALOG_COPY_FIELDS = ['description', 'siteOff']
 const SITE_IMPACTS = ['elements', 'routes', 'console-only']
 
 /**
@@ -3624,6 +3651,102 @@ function siteCspRows() {
   return rows
 }
 
+/** The catalog's every-page part (AGL-4220); see {@link SWITCHBOARD_FILE}. */
+function switchboardContent() {
+  const rows = catalogRows()
+  const indent = (json) => json.split('\n').join('\n  ')
+  const switches = rows.map((row) =>
+    Object.fromEntries(Object.entries(row.plugin).filter(([key]) => !CATALOG_COPY_FIELDS.includes(key))),
+  )
+  const editBarRows = rows
+    .filter((row) => row.editBarLink)
+    .map((row) => ({ pluginId: row.plugin.id, ...row.editBarLink }))
+    .sort((a, b) => a.order - b.order)
+  const bindings = functionBindingRows()
+  return `/**
+ * GENERATED FILE — do not edit. Regenerate with:
+ *   node tools/scripts/generate-plugin-manifests.mjs
+ *
+ * The part of the switchboard catalog (AGL-3080) a published page runs on
+ * (AGL-4220): each row's switches without its console copy, and the small
+ * declarations the published page reads. The full rows, copy included, are
+ * \`FIRST_PARTY_PLUGINS\` in first-party-plugins.generated.ts, which
+ * re-exports the rest of this file.
+ */
+
+import type { FirstPartyPluginSwitch, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'
+import type { FunctionBindings } from './plugin-contributions'
+import type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
+
+/** Every catalog row without ${CATALOG_COPY_FIELDS.map((field) => `\`${field}\``).join(' or ')}, in catalog order. */
+export const FIRST_PARTY_PLUGIN_SWITCHES: readonly FirstPartyPluginSwitch[] = [
+${switches.map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
+${rows.map((row) => `  ${JSON.stringify(row.plugin.id)}: ${JSON.stringify(row.impact)},`).join('\n')}
+}
+
+/**
+ * The admin edit bar's quick links, in the order they are drawn — each
+ * declared by the plugin whose console page it opens (AGL-3080).
+ */
+export const PLUGIN_EDIT_BAR_LINKS: readonly PluginEditBarLink[] = [
+${editBarRows.map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * The analytics settings each provider mounts a tag for, declared by the
+ * plugin that adapts the vendor (AGL-3080). Empty when none does, and then no
+ * setting configures a tag.
+ */
+export const ANALYTICS_PROVIDERS_DECLARED: readonly AnalyticsProviderDeclaration[] = [
+${analyticsProviderRows().map((row) => `  ${indent(JSON.stringify({ pluginId: row.plugin.id, settings: row.settings }, null, 2))},`).join('\n')}
+]
+
+/**
+ * Every first-party element that runs a site function, and the prop naming
+ * it, declared by that element's plugin (AGL-3393). Core names no element.
+ */
+export const FIRST_PARTY_FUNCTION_BINDINGS: FunctionBindings = {${Object.entries(bindings).map(([id, prop]) => `\n  ${JSON.stringify(id)}: ${JSON.stringify(prop)},`).join('')}${Object.keys(bindings).length ? '\n' : ''}}
+`
+}
+
+/** The interaction declarations (AGL-4220); see {@link INTERACTIONS_FILE}. */
+function interactionsContent() {
+  const indent = (json) => json.split('\n').join('\n  ')
+  return `/**
+ * GENERATED FILE — do not edit. Regenerate with:
+ *   node tools/scripts/generate-plugin-manifests.mjs
+ *
+ * The interaction steps and recipes first-party plugins declare (AGL-3080),
+ * apart from the rest of the catalog because a published page's interactions
+ * runtime reads them (AGL-4220). first-party-plugins.generated.ts re-exports
+ * both.
+ */
+
+import type { InteractionStepDeclaration } from '../app-utils/site-interactions'
+import type { InteractionRecipeDeclaration } from './interaction-recipes'
+
+/**
+ * Every interaction step a first-party plugin offers in the interaction
+ * builder, declared by that plugin (AGL-3080). Core names no plugin step.
+ */
+export const PLUGIN_INTERACTION_STEPS_DECLARED: readonly InteractionStepDeclaration[] = [
+${interactionStepRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * Every ready-to-edit interaction a first-party plugin offers, by the id a
+ * stored interaction's stamp names it with, declared by that plugin
+ * (AGL-3080). Core names no recipe.
+ */
+export const PLUGIN_INTERACTION_RECIPES_DECLARED: readonly InteractionRecipeDeclaration[] = [
+${interactionRecipeRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+`
+}
+
 function catalogContent(planEntitlements, usageAxes) {
   const rows = catalogRows()
   const indent = (json) => json.split('\n').join('\n  ')
@@ -3647,22 +3770,24 @@ function catalogContent(planEntitlements, usageAxes) {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSitemapReaderDeclaration } from './plugin-sitemap-readers'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedTransferResourceDeclaration } from './plugin-transfer-resources'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'\nimport type { ResolvedPluginRecordPage } from './plugin-record-pages'\nimport type { ResolvedVisitorDoor } from './plugin-visitor-doors'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { FunctionBindings } from './plugin-contributions'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ArtifactTypeDeclaration } from './plugin-artifact-types'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginHostKeyedCollection } from './plugin-site-resources'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { PluginSiteCspDeclaration } from './plugin-site-csp'\nimport type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'\nimport type { InteractionStepDeclaration } from '../app-utils/site-interactions'\nimport type { ServerStepDeclaration } from './plugin-server-steps'\nimport type { InteractionRecipeDeclaration } from './interaction-recipes'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
+import type { FirstPartyPlugin } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'\nimport type { ResolvedPluginSitemapReaderDeclaration } from './plugin-sitemap-readers'\nimport type { ResolvedPluginSiteBundleSectionDeclaration } from './plugin-site-bundle'\nimport type { ResolvedTransferResourceDeclaration } from './plugin-transfer-resources'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'\nimport type { ResolvedPluginEntityPicker } from './plugin-entity-pickers'\nimport type { ResolvedPluginRecordPage } from './plugin-record-pages'\nimport type { ResolvedVisitorDoor } from './plugin-visitor-doors'\nimport type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'\nimport type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'\nimport type { PluginDistribution } from './plugin-distribution'\nimport type { RepeatSourceDeclaration } from './repeat-rows'\nimport type { PluginTemplateSource } from './plugin-template-sources'\nimport type { FormRecordTargetDeclaration } from './submission-record-target'\nimport type { ArtifactTypeDeclaration } from './plugin-artifact-types'\nimport type { ResolvedBesignerDocument } from './besigner-documents'\nimport type { PluginHostKeyedCollection } from './plugin-site-resources'\nimport type { PluginOrgKeyedCollection } from './plugin-org-erasure'\nimport type { PluginSiteCspDeclaration } from './plugin-site-csp'\nimport type { ServerStepDeclaration } from './plugin-server-steps'\nimport type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
+
+// The every-page part of the catalog and the site interactions' part
+// (AGL-4220), re-exported so this file's importers are unchanged. See
+// first-party-plugin-switchboard.generated.ts.
+export {
+  ANALYTICS_PROVIDERS_DECLARED,
+  FIRST_PARTY_FUNCTION_BINDINGS,
+  PLUGIN_EDIT_BAR_LINKS,
+  PUBLISHED_SITE_IMPACT,
+} from './first-party-plugin-switchboard.generated'
+export {
+  PLUGIN_INTERACTION_RECIPES_DECLARED,
+  PLUGIN_INTERACTION_STEPS_DECLARED,
+} from './first-party-plugin-interactions.generated'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
-]
-
-export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
-${rows.map((row) => `  ${JSON.stringify(row.plugin.id)}: ${JSON.stringify(row.impact)},`).join('\n')}
-}
-
-/**
- * The admin edit bar's quick links, in the order they are drawn — each
- * declared by the plugin whose console page it opens (AGL-3080).
- */
-export const PLUGIN_EDIT_BAR_LINKS: readonly PluginEditBarLink[] = [
-${editBarRows.map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
 
 /**
@@ -3888,44 +4013,12 @@ ${templateSourceRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`
 ]
 
 /**
- * The analytics settings each provider mounts a tag for, declared by the
- * plugin that adapts the vendor (AGL-3080). Empty when none does, and then no
- * setting configures a tag.
- */
-export const ANALYTICS_PROVIDERS_DECLARED: readonly AnalyticsProviderDeclaration[] = [
-${analyticsProviderRows().map((row) => `  ${indent(JSON.stringify({ pluginId: row.plugin.id, settings: row.settings }, null, 2))},`).join('\n')}
-]
-
-/**
- * Every interaction step a first-party plugin offers in the interaction
- * builder, declared by that plugin (AGL-3080). Core names no plugin step.
- */
-export const PLUGIN_INTERACTION_STEPS_DECLARED: readonly InteractionStepDeclaration[] = [
-${interactionStepRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
-]
-
-/**
  * Every server step a first-party plugin runs for the automation engine,
  * declared by that plugin (AGL-3080). Core names no plugin step.
  */
 export const PLUGIN_SERVER_STEPS_DECLARED: readonly ServerStepDeclaration[] = [
 ${serverStepRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
-
-/**
- * Every ready-to-edit interaction a first-party plugin offers, by the id a
- * stored interaction's stamp names it with, declared by that plugin
- * (AGL-3080). Core names no recipe.
- */
-export const PLUGIN_INTERACTION_RECIPES_DECLARED: readonly InteractionRecipeDeclaration[] = [
-${interactionRecipeRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
-]
-
-/**
- * Every first-party element that runs a site function, and the prop naming
- * it, declared by that element's plugin (AGL-3393). Core names no element.
- */
-export const FIRST_PARTY_FUNCTION_BINDINGS: FunctionBindings = {${Object.entries(functionBindingRows()).map(([id, prop]) => `\n  ${JSON.stringify(id)}: ${JSON.stringify(prop)},`).join('')}${Object.keys(functionBindingRows()).length ? '\n' : ''}}
 
 /**
  * What each plugin's site feature needs the published page's policy to
@@ -4049,6 +4142,8 @@ const ALL = [
     file: CATALOG_FILE,
     content: catalogContent(await pluginPlanEntitlements(), await pluginUsageAxes()),
   },
+  { file: SWITCHBOARD_FILE, content: switchboardContent() },
+  { file: INTERACTIONS_FILE, content: interactionsContent() },
   { file: VIDEO_EMBED_PROVIDERS_FILE, content: videoEmbedProvidersContent(await pluginVideoEmbedProviders()) },
   { file: RELEASE_FLAGS_FILE, content: releaseFlagsContent(releaseFlagRows()) },
   { file: HOST_EVENTS_FILE, content: hostEventsContent(hostEventRows()) },

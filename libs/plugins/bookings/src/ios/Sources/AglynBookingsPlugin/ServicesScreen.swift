@@ -27,10 +27,11 @@ struct BookingServicesScreen: View {
   var body: some View {
     WideLayoutReader { wide in
       if wide {
-        HStack(spacing: 0) {
-          list(selectable: true).frame(minWidth: 300, idealWidth: 340, maxWidth: 400)
-          Divider()
-          detail(selection).frame(maxWidth: .infinity, maxHeight: .infinity)
+        // The shared list and detail columns: the area's head in the list column, its crumbs over the detail.
+        AglynListDetailColumns(listWidth: 340) {
+          list(selectable: true)
+        } detail: {
+          detail(selection)
         }
       } else {
         list(selectable: false)
@@ -196,10 +197,21 @@ struct ServiceEditor: View {
   private var values: ContractValues { .shared }
   /// A stored service read only from the device cache: Save waits for the server's copy. A new one is never held.
   private var held: Bool { service?.fromCache == true }
+  /// Save pressed while held, kept until the server's copy is in (AGL-4047).
+  @State private var heldPress = AglynHeldPress()
+
+  private func save() {
+    var draft = form
+    draft.windowText = hours.map { formatBookingWindows($0.map { BookingWindow(end: $0.end, start: $0.start) }) }
+    onSave(draft)
+    if service == nil { dismiss() }
+  }
 
   var body: some View {
     Form {
-      if held {
+      if let refusal = heldPress.refusal {
+        Section { AglynNotice(refusal, tone: .warning) }
+      } else if held {
         Section { Text(seedCheckingText("service")).font(AglynFont.caption).foregroundStyle(.secondary) }
       }
       if service?.draft == true {
@@ -279,13 +291,13 @@ struct ServiceEditor: View {
     .aglynScreenTitle(service == nil ? "New service" : form.name.isEmpty ? "Service" : form.name)
     // Beside the list on the Mac and iPad, Save sits in the head as a bordered button; the list keeps Add service.
     .aglynEditorActions(
-      id: "service-save", save: service == nil ? "Add" : "Save", enabled: bookingServiceDraftProblem(name: form.name) == nil && !held,
-      primary: false
+      id: "service-save", save: service == nil ? "Add" : "Save", enabled: bookingServiceDraftProblem(name: form.name) == nil,
+      busy: heldPress.waiting, primary: false
     ) {
-      var draft = form
-      draft.windowText = hours.map { formatBookingWindows($0.map { BookingWindow(end: $0.end, start: $0.start) }) }
-      onSave(draft)
-      if service == nil { dismiss() }
+      if heldPress.pressed(checking: held) { save() }
+    }
+    .aglynHeldPress($heldPress, checking: held, refusal: seedUnconfirmedText("service")) {
+      if bookingServiceDraftProblem(name: form.name) == nil { save() }
     }
     .accessibilityIdentifier("service-editor")
     .onChange(of: initial) { previous, next in

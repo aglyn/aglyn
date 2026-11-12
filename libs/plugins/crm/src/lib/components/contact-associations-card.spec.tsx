@@ -182,11 +182,15 @@ describe('saving the filing', () => {
   it('holds Save over a read the server never confirmed, then files on the first press', async () => {
     const { rerender } = renderCard({ status: 'success', fromCache: true })
     fireEvent.click(screen.getByRole('button', { name: 'File under Spring push' }))
-    expect((saveFiling() as HTMLButtonElement).disabled).toBe(true)
+    expect((saveFiling() as HTMLButtonElement).disabled).toBe(false)
     expect(screen.getByRole('status').textContent).toBe('Checking your contact with the server…')
     fireEvent.click(saveFiling())
     await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(notices).toEqual([])
+    // Kept, not dropped (AGL-4047): no confirmation came within the guard's
+    // wait (0 in this spec), so the press ends in the guard's refusal.
+    expect(notices).toEqual([
+      expect.stringMatching(/^We could not confirm your contact with the server yet, so nothing was saved/),
+    ])
     expect(posted).toEqual([])
     expect(writes).toEqual([])
 

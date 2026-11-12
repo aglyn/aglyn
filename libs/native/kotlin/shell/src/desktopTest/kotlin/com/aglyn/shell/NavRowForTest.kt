@@ -41,4 +41,18 @@ class NavRowForTest {
     assertNull(groups.rowFor(NavKeys.of("crm.contact", mapOf("id" to "c-1"))))
     assertNull(groups.rowFor("pushed:anything"))
   }
+
+  /**
+   * The phone's tab bar keeps a pinned area's tab selected while a record is pushed over it (AGL-4059): an order opened on
+   * the pinned Orders tab selects Orders, not Home. A place that is no tab's is Home's.
+   */
+  @Test
+  fun aPinnedAreasTabStaysSelectedWithARecordPushedOverIt() {
+    val tabs = sell.rows
+    // The navigator keeps the area as its destination and pushes the order over it, so `top` is the area's key either way.
+    assertEquals("orders", selectedPhoneTab(NavKeys.of("commerce.orders"), tabs))
+    assertEquals("products", selectedPhoneTab(NavKeys.of("commerce.inventory"), tabs))
+    assertNull(selectedPhoneTab(ShellNavigator.HOME, tabs))
+    assertNull(selectedPhoneTab(NavKeys.of("site.setup", mapOf("section" to "seo")), tabs))
+  }
 }

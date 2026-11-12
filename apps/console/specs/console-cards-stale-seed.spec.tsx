@@ -316,7 +316,7 @@ describe('LanguagesCard (AGL-1358)', () => {
    * held while the host read is the cache's, with the reason under it, and
    * what was typed stays.
    */
-  it('HOLDS Save while the host read is unconfirmed, keeping what was typed', async () => {
+  it('KEEPS a Save pressed while the host read is unconfirmed, keeping what was typed', async () => {
     mockListener.fromCache = true
     render(<LanguagesCard hostId="host-1" />)
 
@@ -326,12 +326,19 @@ describe('LanguagesCard (AGL-1358)', () => {
     const save = screen.getByRole('button', {
       name: 'Save languages',
     }) as HTMLButtonElement
-    expect(save.disabled).toBe(true)
+    expect(save.disabled).toBe(false)
     expect(screen.getByRole('status').textContent).toBe(
       'Checking your language settings with the server…',
     )
     expect(updateDoc).not.toHaveBeenCalled()
-    expect(mockEnqueueSnackbar).not.toHaveBeenCalled()
+    // Kept, not dropped (AGL-4047): no confirmation came within the
+    // guard's wait (0 in this spec), so the press ends in the guard's refusal.
+    await waitFor(() =>
+      expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm your .+ with the server yet, so nothing was saved/),
+        expect.anything(),
+      ),
+    )
     expect(
       (screen.getByLabelText('Languages') as HTMLInputElement).value,
     ).toEqual('en, es, fr')
@@ -459,7 +466,7 @@ describe('HostComponentsCard (AGL-1358)', () => {
    * HELD while the list read is the cache's, with the reason beside it, and
    * the dialog keeps what was typed.
    */
-  it('HOLDS Save while the list read is unconfirmed, keeping what was typed', async () => {
+  it('KEEPS a Save pressed while the list read is unconfirmed, keeping what was typed', async () => {
     mockListener.fromCache = true
     render(<HostComponentsCard hostId="host-1" />)
 
@@ -468,18 +475,31 @@ describe('HostComponentsCard (AGL-1358)', () => {
     fireEvent.change(screen.getByLabelText('Name'), {
       target: { value: 'Hero banner' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    await new Promise((resolve) => setTimeout(resolve, 20))
-
-    const save = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement
-    expect(save.disabled).toBe(true)
+    // Held, yet pressable: the reason shows and Save takes the press.
     expect(
       screen.getByText('Checking your component with the server…'),
     ).toBeTruthy()
+    const save = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement
+    expect(save.disabled).toBe(false)
+    fireEvent.click(save)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
     expect(updateDoc).not.toHaveBeenCalled()
-    expect(mockEnqueueSnackbar).not.toHaveBeenCalled()
+    // Kept, not dropped (AGL-4047): no confirmation came within the
+    // guard's wait (0 in this spec), so the press ends in the guard's refusal.
+    await waitFor(() =>
+      expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm your .+ with the server yet, so nothing was saved/),
+        expect.anything(),
+      ),
+    )
     expect((screen.getByLabelText('Name') as HTMLInputElement).value).toEqual(
       'Hero banner',
+    )
+    await waitFor(() =>
+      expect(
+        (screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled,
+      ).toBe(false),
     )
   })
 

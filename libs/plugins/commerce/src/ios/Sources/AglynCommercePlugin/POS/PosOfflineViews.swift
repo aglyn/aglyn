@@ -35,14 +35,10 @@ struct RegisterOfflineBanner: View {
             : model.offlineCardsReady
               ? "Offline. Cash and card sales keep ringing and are saved on this register until the connection returns; cards are charged then. Gift cards, store credit and room charges are off."
               : "Offline. Cash sales keep ringing and are saved on this register until the connection returns. Card readers, gift cards, store credit and room charges are off.",
-          tone: .warning
+          // Retry is the notice's own action, beside the message as Android's banner has it: laid over the notice, it
+          // covered the end of the first line once the banner moved into the narrower catalog column.
+          tone: .warning, actionTitle: "Retry", action: { model.reconnect() }
         )
-        .overlay(alignment: .trailing) {
-          Button("Retry") { model.reconnect() }
-            .buttonStyle(.aglynSecondary)
-            .padding(.trailing, AglynSpace.one)
-            .accessibilityIdentifier("register-reconnect")
-        }
         .accessibilityIdentifier("register-offline")
         if !waiting.isEmpty {
           Text(waitingSummary(model))

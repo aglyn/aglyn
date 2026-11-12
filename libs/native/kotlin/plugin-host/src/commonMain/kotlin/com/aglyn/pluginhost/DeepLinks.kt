@@ -75,7 +75,7 @@ object DeepLinks {
   }
 
   /** One `:name`, `:name(a|b)` or `:name(!a|b)` segment of a route pattern. */
-  private class PathParam(val name: String, val values: Set<String>?, val refuses: Boolean) {
+  internal class PathParam(val name: String, val values: Set<String>?, val refuses: Boolean) {
     /** Whether it takes any value but the ones it refuses (an id), rather than one of a few named pages. */
     val open get() = values == null || refuses
 
@@ -100,7 +100,7 @@ object DeepLinks {
    * `/products/orders` only when the link carries a non-empty `order`, and binds it as `orderId` (the console's own
    * order and quote addresses, AGL-4215).
    */
-  private class RoutePattern(pattern: String) {
+  internal class RoutePattern(pattern: String) {
     val path = pattern.substringBefore('?')
     val query: List<Pair<String, String>> = if ('?' !in pattern) emptyList() else pattern.substringAfter('?').split('&').mapNotNull { pair ->
       val key = pair.substringBefore('=', "")
@@ -123,7 +123,7 @@ object DeepLinks {
   /** A link without its `#fragment`, which names a spot on a page and never a page (`/admin/orgs/{id}#site-care`). */
   fun withoutFragment(link: String): String = link.substringBefore('#')
 
-  private fun parseQuery(query: String): Map<String, String> = query.split('&')
+  internal fun parseQuery(query: String): Map<String, String> = query.split('&')
     .filter { it.isNotEmpty() }
     .associate { pair ->
       val at = pair.indexOf('=')
@@ -139,6 +139,24 @@ object DeepLinks {
     val path = if (at < 0) full else full.substring(0, at)
     val query = if (at < 0) emptyMap() else parseQuery(full.substring(at + 1))
     val scope = splitConsoleScope(path)
+    match(scope.rest, query, deepLinks)?.let { (screen, params) ->
+      return NativeLinkTarget.Screen(
+        screen,
+        buildMap {
+          putAll(params)
+          scope.orgSlug?.let { put("orgSlug", it) }
+          scope.hostSlug?.let { put("hostSlug", it) }
+        },
+      )
+    }
+    return if (BesignerPaths.isBesignerPath(raw)) NativeLinkTarget.Besigner(raw) else NativeLinkTarget.Unmatched(full)
+  }
+
+  /**
+   * The registered screen a scoped console path (`/products/orders`, the part after `/{orgSlug}/hosts/{hostSlug}`) and its
+   * query open, with the query, the query keys a pattern binds and the path's params; null when no route answers it.
+   */
+  fun match(rest: String, query: Map<String, String>, deepLinks: List<NativeDeepLink>): Pair<String, NativeParams>? {
     // Most specific pattern first: in a tie in length, the one that needs more of the query, then the one with fewer
     // segments that take any value (`/marketplace/payouts` and `:section(payouts|…)` before `:listingId`).
     val ordered = deepLinks.map { it to RoutePattern(it.path) }.sortedWith(
@@ -147,20 +165,15 @@ object DeepLinks {
         .thenBy { it.second.openParams },
     )
     for ((candidate, pattern) in ordered) {
-      val params = matchPathPattern(pattern.path, scope.rest) ?: continue
+      val params = matchPathPattern(pattern.path, rest) ?: continue
       val bound = pattern.bind(query) ?: continue
-      return NativeLinkTarget.Screen(
-        candidate.screen,
-        buildMap {
-          putAll(query)
-          scope.orgSlug?.let { put("orgSlug", it) }
-          scope.hostSlug?.let { put("hostSlug", it) }
-          putAll(bound)
-          putAll(params)
-        },
-      )
+      return candidate.screen to buildMap {
+        putAll(query)
+        putAll(bound)
+        putAll(params)
+      }
     }
-    return if (BesignerPaths.isBesignerPath(raw)) NativeLinkTarget.Besigner(raw) else NativeLinkTarget.Unmatched(full)
+    return null
   }
 
   /**

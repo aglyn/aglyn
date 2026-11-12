@@ -242,4 +242,38 @@ class CommerceWalkInTest : SpecTestBase() {
     val derived = model.derive(load, kotlinx.serialization.json.JsonObject(mapOf("resources" to resources, "current" to stays))).jsonObject
     assertEquals(Stays.LOOKAHEAD_NIGHTS, (derived["rv"] as kotlinx.serialization.json.JsonArray).size)
   }
+
+  /**
+   * The stays the look-ahead reads (`current`) are a `late` load: its `when` asks whether a resource has several units, and
+   * must hold for one (a `>` inside `[?…]` was read as the condition's own comparison, so the stays were never read). When
+   * only the device's cache answered it (empty: a guess, not "none"), the server's answer must replace it as for any other
+   * read, or every night reads "12 of 12 left" while the walk-in refuses a full night.
+   */
+  @Test
+  fun theLookAheadTakesTheServersStaysWhenOnlyTheCacheAnsweredFirst() {
+    val today = Stays.localToday(ScreenValues.clock(), ScreenValues.timeZone)
+    val rv = FirestoreDoc("rv", "hosts/h1/resources/rv", mapOf("name" to "RV hookups", "units" to 12L, "nightlyRateUsd" to 60L))
+    val full = List(12) { n ->
+      FirestoreDoc("s$n", "hosts/h1/reservations/s$n", mapOf("resourceId" to "rv", "status" to "confirmed", "checkInDayMs" to today, "checkOutDayMs" to today + Stays.DAY_MS))
+    }
+    val reader = object : FirestoreReader {
+      override suspend fun get(path: String): FirestoreDoc? = null
+      override suspend fun page(query: FirestoreQuery): FirestorePage = FirestorePage(if (query.collectionPath.endsWith("/resources")) listOf(rv) else emptyList(), null)
+      override suspend fun pageAnswer(query: FirestoreQuery): Live.Ready<FirestorePage> =
+        if (query.collectionPath.endsWith("/reservations")) Live.Ready(FirestorePage(emptyList(), null), fromCache = true) else Live.Ready(page(query))
+      override fun observeDoc(path: String): Flow<Live<FirestoreDoc?>> = emptyFlow()
+      override fun observe(query: FirestoreQuery): Flow<Live<List<FirestoreDoc>>> =
+        kotlinx.coroutines.flow.flowOf(Live.Ready(if (query.filters.isNotEmpty()) full else emptyList(), fromCache = false))
+    }
+    FirestoreLoads.serverDeadlineMs = 2_000
+    try {
+      val model = ScreenModel(spec("commerce", "commerce.reservations"), Json.parseToJsonElement("""{"site":{"id":"h1"}}"""), Site().api, reader)
+      runBlocking { model.load() }
+      assertTrue(ScreenValues.condition(model.spec.loads.first { it.key == "current" }.whenCondition, model.context))
+      val tonight = ScreenValues.lookup("data.unitsAhead.rv", model.context)!!.let { it as kotlinx.serialization.json.JsonArray }.first().jsonObject
+      assertEquals("0", (tonight["unitsLeft"] as JsonPrimitive).content, "tonight's 12 stays, from the server")
+    } finally {
+      FirestoreLoads.serverDeadlineMs = 12_000
+    }
+  }
 }

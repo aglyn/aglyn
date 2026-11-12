@@ -448,15 +448,16 @@ describe('Content entry seed guard (AGL-1449)', () => {
    * HELD while the entry read is the cache's, with the reason beside it, and
    * the editor keeps what was typed.
    */
-  it('HOLDS Save while the entry read is unconfirmed, keeping what was typed', async () => {
+  it('KEEPS a Save pressed while the entry read is unconfirmed, keeping what was typed', async () => {
     mockEntries.fromCache = true
     renderEntry('entry-1')
 
     editAndSave()
     await new Promise((resolve) => setTimeout(resolve, 20))
 
-    const save = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement
-    expect(save.disabled).toBe(true)
+    // Kept, not dropped (AGL-4047): the press says Saving… while it waits for
+    // the server, and nothing is written over the cache's entry meanwhile.
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeTruthy()
     expect(screen.getByText('Checking your entry with the server…')).toBeTruthy()
     expect(mockSetDoc).not.toHaveBeenCalled()
     expect(mockEnqueueSnackbar).not.toHaveBeenCalled()

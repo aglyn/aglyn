@@ -20,6 +20,10 @@ import { mdiPostOutline } from '@aglyn/shared-data-mdi'
 import MuiStack, { type StackProps } from '@mui/material/Stack'
 import { forwardRef, use } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import {
+  ENTRIES_SEARCH_ATTRIBUTE,
+  loadCollectionSearch,
+} from './collection-search-load'
 
 // Persisted component id (AGL-551/582); the compose pipeline references it
 // through the @aglyn/aglyn constant. Never rename.
@@ -132,11 +136,9 @@ export const COLLECTION_SEARCH_MODE_OPTIONS: ReadonlyArray<{
 /** The searching variant's module (AGL-3438). */
 type EntriesSearchModule = typeof import('./collection-entries-search')
 
-/**
- * What a searching block stamps on its root. The browser looks for it before
- * the page hydrates (`prepareEntriesSearch`); nothing styles or targets it.
- */
-export const ENTRIES_SEARCH_ATTRIBUTE = 'data-aglyn-entries-search'
+// Re-exported where it always was; it lives beside the shared loader so the
+// searching variant can stamp it without importing this module (AGL-4220).
+export { ENTRIES_SEARCH_ATTRIBUTE }
 
 /**
  * React's thenable contract (`status`/`value`), stamped on the load once it
@@ -159,7 +161,11 @@ let searchLoad: StampedLoad | undefined
  */
 export const loadEntriesSearch = (): Promise<EntriesSearchModule> => {
   if (searchLoad) return searchLoad
-  const load: StampedLoad = import('./collection-entries-search')
+  // Through the loader the element tier shares, never an `import()` of its
+  // own: one written here would be a second chunk group, and the box drawn by
+  // both this variant and the Collection Search block would be downloaded
+  // once per group on a page placing both (AGL-4220).
+  const load: StampedLoad = loadCollectionSearch()
   searchLoad = load
   load.then(
     (module) => {

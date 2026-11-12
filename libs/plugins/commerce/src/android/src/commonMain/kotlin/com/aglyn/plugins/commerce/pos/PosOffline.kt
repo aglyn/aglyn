@@ -142,7 +142,12 @@ interface PosOfflineApi {
 
 class ConsolePosOfflineApi(private val api: ConsoleApiClient, private val hostId: String) : PosOfflineApi {
   override suspend fun kit(): PosOfflineKit {
-    val answer = api.request(POS_OFFLINE_SYNC_ROUTE, ApiMethod.GET, query = mapOf("hostId" to hostId)).obj()
+    // This app makes a card's intent on a store's own Stripe account too (AGL-4219), so it asks for that kit.
+    val answer = api.request(
+      POS_OFFLINE_SYNC_ROUTE,
+      ApiMethod.GET,
+      query = mapOf("hostId" to hostId, "cardChargeModels" to "direct"),
+    ).obj()
     return runCatching { ContractJsonFormat.decodeFromJsonElement(PosOfflineKit.serializer(), answer["kit"] as JsonElement) }.getOrNull()
       ?: throw ConsoleApiError("The register did not answer with its offline rules.", 502, null)
   }
@@ -243,6 +248,9 @@ class PosOfflineModel(
   private var kitSavedAtMs = 0L
   private var syncInFlight = false
 
+  /** A sync was asked for while one ran (a card forwarded mid-sync): it runs again once that one ends. */
+  private var syncAgain = false
+
   /** Told when a sync failed at the network (true) or the console answered it (false). */
   var networkSink: ((Boolean) -> Unit)? = null
 
@@ -319,11 +327,13 @@ class PosOfflineModel(
     val key = mintKey()
     return OfflineCardRequest(
       key, (totals.totalCents ?: 0.0).toLong(), card.currency, card.destination,
-      posOfflineCardIntentMetadata(key, current.hostId, current.orgId, register),
+      posOfflineCardIntentMetadata(key, current.hostId, current.orgId, register, direct = !card.account.isNullOrEmpty()),
       maxSaleCents = minOf(card.maxSaleCents.toLong(), Contracts.posOfflineCardMaxSaleCentsLimit),
       // 0 is no daily limit: the store did not set one.
       maxDeviceDailyCents = if (card.maxDeviceDailyCents > 0) card.maxDeviceDailyCents.toLong() else Long.MAX_VALUE,
       takenTodayCents = cardsTakenTodayCents,
+      // A store on its own Stripe account (AGL-4219): the intent is made there, with no transfer.
+      account = card.account?.takeIf { it.isNotEmpty() },
     )
   }
 
@@ -355,6 +365,7 @@ class PosOfflineModel(
    */
   fun ringCardSale(cart: Cart, taken: OfflineCardTaken): PosOfflineRung? {
     val card = PosOfflineSaleCard(
+      account = taken.account,
       brand = taken.brand,
       forward = if (taken.paymentIntentId == null) PosOfflineCardForward.STORED else PosOfflineCardForward.FORWARDED,
       last4 = taken.last4,
@@ -462,10 +473,26 @@ class PosOfflineModel(
     launchIn.launch { sync() }
   }
 
+  /**
+   * One asked for while another runs is not dropped: it runs once that one ends, so a card forwarded mid-sync is not
+   * left waiting for the next sale (AGL-4219).
+   */
   suspend fun sync() {
-    if (syncInFlight) return
+    if (syncInFlight) {
+      syncAgain = true
+      return
+    }
+    do {
+      syncAgain = false
+      syncOnce()
+    } while (syncAgain)
+  }
+
+  private suspend fun syncOnce() {
+    // What the device holds now, even when nothing is sent: the banner never reads a queue another sync emptied.
+    queue = store.queue()
     // A card still on the device waits for its forward: the server reads Stripe, and Stripe has not got it yet.
-    val mine = store.queue().filter { it.state == PosOfflineQueued.State.QUEUED && it.sale.signedInUid == uid && !it.cardOnDevice }
+    val mine = queue.filter { it.state == PosOfflineQueued.State.QUEUED && it.sale.signedInUid == uid && !it.cardOnDevice }
     if (mine.isEmpty()) return
     syncInFlight = true
     syncing = true

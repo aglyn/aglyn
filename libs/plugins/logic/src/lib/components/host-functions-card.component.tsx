@@ -78,8 +78,10 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import {
+  heldSaveLabel,
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
@@ -824,6 +826,13 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
     )
   }
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSave, {
+    checking: draftChecking,
+    subject: 'function',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <CardDisplay
       header={'Functions'}
@@ -1404,10 +1413,10 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
           <Button
             variant="contained"
             color="primary"
-            disabled={draftChecking || !draft?.name.trim() || nameTaken}
-            onClick={handleSave}
+            disabled={!draft?.name.trim() || nameTaken || held.saving}
+            onClick={held.press}
           >
-            {'Done'}
+            {heldSaveLabel(held, 'Done')}
           </Button>
         </DialogActions>
       </Dialog>

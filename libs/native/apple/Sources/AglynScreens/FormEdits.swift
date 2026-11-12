@@ -16,6 +16,11 @@ enum FormEdits {
     seedCheckingText(subject ?? "settings")
   }
 
+  /// What a Save pressed while held says when the server's copy never came (`seedUnconfirmedText`).
+  static func unconfirmedText(_ subject: String?) -> String {
+    seedUnconfirmedText(subject ?? "settings")
+  }
+
   /// The loads still `checking` that this form reads: its `object`, or any field's `initial`.
   static func heldBy(object: String?, initials: [String], checking: JSONValue?) -> [String] {
     guard case .object(let held)? = checking else { return [] }

@@ -207,19 +207,23 @@ internal fun AccountMenuItems(services: ShellServices, user: AuthUser?, close: (
     )
     for (account in signedIn) {
       val current = account.slot == active
+      // The account on screen reads the same as the header (its profile first, readAccountName); the others as last
+      // shown on this device.
+      val title = if (current) identity.name else account.title
       androidx.compose.material3.DropdownMenuItem(
         text = {
           Column {
-            Text(account.title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            account.email?.takeIf { account.displayName != null }?.let {
+            Text(title, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            account.email?.takeIf { it != title }?.let {
               Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
           }
         },
         leadingIcon = {
           AccountAvatar(
-            AuthUser(account.uid, account.email, account.displayName), size = if (m.compact) 24 else 28, onClick = null,
-            photoUrl = com.aglyn.core.mediaPreviewUrl(account.photoUrl, services.api.origin, null, ACCOUNT_PHOTO_WIDTH),
+            AuthUser(account.uid, account.email, title), size = if (m.compact) 24 else 28, onClick = null,
+            photoUrl = if (current) identity.photoUrl
+            else com.aglyn.core.mediaPreviewUrl(account.photoUrl, services.api.origin, null, ACCOUNT_PHOTO_WIDTH),
           )
         },
         trailingIcon = if (current) ({ Icon(AglynIcons.named("check"), contentDescription = "On screen", tint = MaterialTheme.colorScheme.primary) }) else null,

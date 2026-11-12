@@ -90,8 +90,10 @@ fun FormSheet(
   secondary: (@Composable () -> Unit)? = null,
   /** What the confirm says while it runs: "Saving…", or "Sending…" for a form that sends. */
   workingLabel: String = "Saving…",
+  /** Set while the record the form edits is only the device cache's copy: a confirm pressed then is kept (AGL-4047). */
+  hold: FormHold? = null,
   content: @Composable () -> Unit,
-) = FormSheet(title, busy.busy, busy.error, onDismiss, onConfirm, modifier, confirmLabel, confirmEnabled, destructive, secondary, workingLabel, content)
+) = FormSheet(title, busy.busy, busy.error, onDismiss, onConfirm, modifier, confirmLabel, confirmEnabled, destructive, secondary, workingLabel, hold, content)
 
 /** [FormSheet] for a model that keeps its own [busy] flag and [error] (a screen model's write). */
 @Composable
@@ -107,8 +109,12 @@ fun FormSheet(
   destructive: Boolean = false,
   secondary: (@Composable () -> Unit)? = null,
   workingLabel: String = "Saving…",
+  hold: FormHold? = null,
   content: @Composable () -> Unit,
 ) {
+  // A confirm pressed while held is kept, and runs once the server's copy is in (AGL-4047).
+  val held = rememberHeldPress(hold != null, hold?.unconfirmed.orEmpty()) { if (confirmEnabled && !busy) onConfirm() }
+  val working = busy || held.waiting
   Dialog(onDismissRequest = { if (!busy) onDismiss() }, properties = sheetDialogProperties()) {
     Surface(
       // Clear of the keyboard and the system bars: the field being typed in scrolls into the room left above the keyboard.
@@ -126,15 +132,21 @@ fun FormSheet(
           TextButton(onClick = onDismiss, enabled = !busy) { Text("Cancel") }
           secondary?.invoke()
           Button(shape = controlShape(), 
-            onClick = onConfirm,
-            enabled = confirmEnabled && !busy,
+            onClick = { if (held.pressed(hold != null)) onConfirm() },
+            enabled = confirmEnabled && !working,
             colors = if (destructive) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error) else ButtonDefaults.buttonColors(),
             modifier = Modifier.testTag("form-sheet-confirm"),
-          ) { Text(if (busy) workingLabel else confirmLabel) }
+          ) { Text(if (working) workingLabel else confirmLabel) }
         }
         HorizontalDivider()
         Column(Modifier.verticalScroll(rememberScrollState()).padding(space(2f)), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
           error?.let { NoticeBanner(it, StatusTone.ERROR) }
+          val refusal = held.refusal
+          if (refusal != null) {
+            NoticeBanner(refusal, StatusTone.WARNING, Modifier.testTag("form-sheet-unconfirmed"))
+          } else if (hold != null) {
+            Text(hold.checking, Modifier.testTag("form-sheet-checking"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          }
           content()
         }
       }

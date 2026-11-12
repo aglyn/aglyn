@@ -31,7 +31,7 @@ import {
   CRM_LEADS_RESOURCE,
   CRM_PIPELINES_RESOURCE,
   CRM_TASKS_RESOURCE,
-} from './fields'
+} from './resource-keys'
 
 /** The wizard's title for each resource. */
 export const CRM_TRANSFER_LABELS: Readonly<Record<string, string>> = {

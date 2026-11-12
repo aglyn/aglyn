@@ -45,6 +45,10 @@ import type { PosOfflineFlag } from '../model/commerce-pos-offline'
  *    tender rule's fee from the payout. The difference accrues to the org's
  *    month ledger (`orgs/{id}/offlineFees`), the same ledger a room charge's
  *    take accrues to, and the order is flagged `card-fee-short`.
+ *  - A card made on the store's OWN Stripe account (a direct charge,
+ *    AGL-4219) says so on the payment and the order (`chargeModel: direct`,
+ *    `stripeAccountId`), as an online direct sale does, so its refund, its
+ *    return at the register and its chargeback are made on that account.
  *
  * What an UNPAID card writes: `status: 'pending'` with the failed payment,
  * and the sale's plan take on `posTakeFeeCents` with the org it accrues to.
@@ -66,6 +70,8 @@ export type PosOfflineCardSettled =
       /** The card tender's share of the plan's take. */
       takeShareCents: number
       livemode: boolean
+      /** The store's own account the intent was made and captured on (a direct charge); absent for a destination one. */
+      account?: string
       brand?: string
       last4?: string
     }
@@ -147,6 +153,7 @@ export function posOfflineCardOrderMoney(input: {
   if (shortfallCents > 0) flags.push('card-fee-short')
   const invoiceCents = feeOrgId ? shortfallCents : 0
   const feeCents = nettedCents + invoiceCents
+  const direct = settled.account ? { chargeModel: 'direct' as const, stripeAccountId: settled.account } : {}
   return {
     status: 'paid',
     totals: { ...input.totals, feeCents },
@@ -161,9 +168,11 @@ export function posOfflineCardOrderMoney(input: {
       feeCents: nettedCents,
       livemode: settled.livemode,
       ...card,
+      ...direct,
       cashierId,
     },
     fields: {
+      ...direct,
       ...(feeCents > 0
         ? { feeCollection: invoiceCents > 0 ? (nettedCents > 0 ? 'split' : 'invoice') : 'payout' }
         : {}),

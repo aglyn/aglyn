@@ -19,6 +19,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import {
   feedDocId,
+  LEGACY_GOOGLE_FEED_DOC,
   SALES_CHANNELS_SETTINGS_DOC,
 } from '../constants/bundle-common'
 import { SALES_CHANNEL_IDS, type SalesChannelId } from '../model/channels'
@@ -132,6 +133,12 @@ export async function getChannelState(hostId: string): Promise<{
     if (feed && feed.channel === channel) feeds[channel] = feed
   })
   return { feeds, settings: normalizeSalesChannelSettings(settingsSnapshot.data()) }
+}
+
+/** When the pre-channels Google address was last read, or null if it never was. */
+export async function getLegacyFeedReadAtMs(hostId: string): Promise<number | null> {
+  const snapshot = await channelsCollection(hostId).doc(LEGACY_GOOGLE_FEED_DOC).get()
+  return Number(snapshot.data()?.['lastFetchAtMs']) || null
 }
 
 export async function getSettings(hostId: string): Promise<SalesChannelSettings> {
@@ -258,5 +265,28 @@ export async function stampFetch(input: {
       .update({ lastFetchAtMs: nowMs, lastFetchAgent: input.agent.slice(0, 120) })
   } catch (error) {
     console.warn('sales-channels: fetch stamp failed', error)
+  }
+}
+
+/**
+ * Notes a read of the pre-channels Google address on its own document, never
+ * on the Google feed's: the channel card's "Last read" is how a merchant sees
+ * that Merchant Center moved to the new address, so the old one must not set
+ * it. At most once per interval, like `stampFetch`.
+ */
+export async function stampLegacyFetch(input: {
+  hostId: string
+  lastFetchAtMs: number | null
+  agent: string
+  nowMs?: number
+}): Promise<void> {
+  const nowMs = input.nowMs ?? Date.now()
+  if (input.lastFetchAtMs && nowMs - input.lastFetchAtMs < FETCH_STAMP_INTERVAL_MS) return
+  try {
+    await channelsCollection(input.hostId)
+      .doc(LEGACY_GOOGLE_FEED_DOC)
+      .set({ lastFetchAtMs: nowMs, lastFetchAgent: input.agent.slice(0, 120) }, { merge: true })
+  } catch (error) {
+    console.warn('sales-channels: earlier address stamp failed', error)
   }
 }

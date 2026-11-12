@@ -290,6 +290,7 @@ export function BasicInfoCard() {
       FormTemplate={CardDisplayFormTemplate}
       FormTemplateProps={{
         checkingText: checking ? seedCheckingText('profile') : undefined,
+        checkingSubject: 'profile',
       }}
       componentMapper={simpleComponentMapper}
       onSubmit={handleBasicSave}

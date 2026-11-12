@@ -332,6 +332,9 @@ struct ListRow: View {
     let tertiary = rowLine(block["tertiary"], in: scope)
     let trailing = block["trailing"]?.stringValue.map { ScreenValues.render($0, in: scope) }
     let badges = block["badges"].array.flatMap { badge in rowBadges(badge, in: scope) }
+    // A badge with `each` is a run of chips (a resource's next fourteen nights), not a status: it wraps under the row's
+    // text on every size, where a single line of them at the trailing end ran far past the column (AGL-4045).
+    let chipRun = block["badges"].array.contains { $0["each"] != nil }
     // On the Mac and iPad a row is at most three lines (Figma List/Site row): its name, one line of detail, one line
     // of the picked columns, with its badges at the trailing end; a phone keeps the fuller stack.
     let row = HStack(alignment: .center, spacing: 12) {
@@ -359,14 +362,14 @@ struct ListRow: View {
         if let tertiary, !tertiary.isEmpty, !wide || columnsLine.isEmpty {
           Text(tertiary).font(AglynFont.caption).foregroundStyle(.tertiary).lineLimit(1)
         }
-        if !badges.isEmpty, !wide {
+        if !badges.isEmpty, !wide || chipRun {
           AglynWrapRow(spacing: AglynSpace.of(0.75), lineSpacing: AglynSpace.of(0.75)) {
             ForEach(Array(badges.enumerated()), id: \.offset) { _, badge in StatusChip(badge.0, tone: badge.1) }
           }
         }
       }
       Spacer(minLength: 8)
-      if !badges.isEmpty, wide {
+      if !badges.isEmpty, wide, !chipRun {
         HStack(spacing: 6) {
           ForEach(Array(badges.enumerated()), id: \.offset) { _, badge in StatusChip(badge.0, tone: badge.1) }
         }
@@ -435,6 +438,10 @@ struct ListRow: View {
             if let action = next ? onAction : offAction { trigger(action, scope) }
           })
       )
+      // A plain switch: inside a grouped form the form's toggle style draws its label, which `labelsHidden` cannot hide,
+      // and the row already names what it switches (Site settings › Plugins read "› Components on this site" mid-row).
+      .toggleStyle(.switch)
+      .tint(AglynColor.primary)
       .labelsHidden()
       .disabled(disabled || (isOn ? offAction == nil : onAction == nil))
       .accessibilityLabel(label)
@@ -636,11 +643,13 @@ struct FieldInput: View {
           TextField(label, text: text, prompt: field.placeholder.map { Text($0) }, axis: .vertical)
             .lineLimit(3...8)
         }
+        .aglynFieldLabel(label, value: text.wrappedValue, prompt: field.placeholder)
       case "password":
         PlainFormRow(label) {
           SecureField(label, text: text, prompt: field.placeholder.map { Text($0) })
             .textContentType(.password)
         }
+        .aglynFieldLabel(label, value: text.wrappedValue, prompt: field.placeholder)
       default:
         PlainFormRow(label) {
           TextField(label, text: text, prompt: Text(field.placeholder ?? label))
@@ -650,6 +659,7 @@ struct FieldInput: View {
             #endif
             .autocorrectionDisabled(field.kind != "text")
         }
+        .aglynFieldLabel(label, value: text.wrappedValue, prompt: field.placeholder)
       }
       if field.generate != nil {
         Button("Generate") { text.wrappedValue = field.generatedValue(in: context) ?? "" }
@@ -727,6 +737,8 @@ struct FormBlock: View {
   @State private var seededFrom: [String: FieldValue]?
   /// What the last Save wrote, settled once the data moves.
   @State private var pressed: [String: FieldValue]?
+  /// A Save pressed while the form is held, kept until the server's copy is in (AGL-4047).
+  @State private var heldPress = AglynHeldPress()
 
   private var fields: [FieldSpec] {
     FieldSpec.parseAll(block["fields"].array, in: scope)
@@ -770,26 +782,37 @@ struct FormBlock: View {
       if let action = block["submit"].flatMap(ActionSpec.init), ScreenValues.condition(action.when, in: scope) {
         // One Save per form at the standard control size, trailing (spec 8): never a full-width bar per form.
         HStack(spacing: AglynSpace.one) {
-          if held && dirty {
+          if let refusal = heldPress.refusal, dirty {
+            Text(refusal).font(AglynFont.caption).foregroundStyle(AglynColor.warning)
+              .accessibilityIdentifier("unconfirmed-\(block.id)")
+          } else if held && dirty {
             Text(FormEdits.checkingText(block["checking"]?.stringValue))
               .font(AglynFont.caption).foregroundStyle(.secondary)
               .accessibilityIdentifier("checking-\(block.id)")
           }
           Spacer(minLength: 0)
-          if busy { ProgressView().controlSize(.small) }
-          Button(ScreenValues.render(action.label, in: scope)) {
-            pressed = values
-            submit(action, visibleOnly(filled, fields))
+          if busy || heldPress.waiting { ProgressView().controlSize(.small) }
+          Button(heldPress.waiting ? "Saving…" : ScreenValues.render(action.label, in: scope)) {
+            if heldPress.pressed(checking: held) { save(action) }
           }
           .buttonStyle(.aglynProminent)
           .controlSize(.regular)
-          .disabled(busy || held || missing || action.disabledWhen.map { ScreenValues.condition($0, in: scope) } == true)
+          .disabled(busy || heldPress.waiting || missing || action.disabledWhen.map { ScreenValues.condition($0, in: scope) } == true)
           .accessibilityIdentifier("submit-\(block.id)")
+        }
+        .aglynHeldPress($heldPress, checking: held, refusal: FormEdits.unconfirmedText(block["checking"]?.stringValue)) {
+          // The save of the form as it is now: the edits replayed onto the server's copy, if they still pass.
+          if !missing, action.disabledWhen.map({ ScreenValues.condition($0, in: scope) }) != true { save(action) }
         }
       }
     }
     .onAppear(perform: seed)
     .onChange(of: context) { _, _ in seed() }
+  }
+
+  private func save(_ action: ActionSpec) {
+    pressed = values
+    submit(action, visibleOnly(filled, fields))
   }
 
   /// Settles the edits when the data under them moves (a save landed, or the server's copy replaced the cache's).
@@ -816,6 +839,8 @@ struct ActionInputSheet: View {
   @State private var values: [String: FieldValue] = [:]
   /// What each `lookup` field last picked, as the person reads it.
   @State private var picked: [String: String] = [:]
+  /// A confirm pressed while the prompt is held, kept until the server's copy is in (AGL-4047).
+  @State private var heldPress = AglynHeldPress()
 
   private var inputs: [FieldSpec] { pending.action.inputs(in: scope) }
 
@@ -866,7 +891,9 @@ struct ActionInputSheet: View {
         if pending.action.check == nil, let confirm = pending.action.confirmText(in: scope) {
           Section { Text(confirm).font(AglynFont.subheadline) }
         }
-        if held {
+        if let refusal = heldPress.refusal {
+          Section { AglynNotice(refusal, tone: .warning).accessibilityIdentifier("prompt-unconfirmed") }
+        } else if held {
           Section {
             Text(FormEdits.checkingText(pending.action.checkingSubject)).font(AglynFont.caption).foregroundStyle(.secondary)
               .accessibilityIdentifier("prompt-checking")
@@ -892,6 +919,7 @@ struct ActionInputSheet: View {
         }
       }
       .formStyle(.grouped)
+      .aglynPhoneFormEdges()
       .navigationTitle(ScreenValues.render(pending.action.promptTitle ?? pending.action.label, in: scope))
       .aglynScreenTitle(ScreenValues.render(pending.action.promptTitle ?? pending.action.label, in: scope))
       #if os(iOS)
@@ -900,12 +928,20 @@ struct ActionInputSheet: View {
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
         ToolbarItem(placement: .confirmationAction) {
-          Button(ScreenValues.render(pending.action.submitLabel ?? pending.action.label, in: scope), role: pending.action.destructive ? .destructive : nil) {
-            run(visibleOnly(filled, inputs))
+          if heldPress.waiting {
+            ProgressView().controlSize(.small).accessibilityLabel("Saving…").accessibilityIdentifier("prompt-saving")
+          } else {
+            Button(ScreenValues.render(pending.action.submitLabel ?? pending.action.label, in: scope), role: pending.action.destructive ? .destructive : nil) {
+              if heldPress.pressed(checking: held) { run(visibleOnly(filled, inputs)) }
+            }
+            .disabled(missing)
+            .accessibilityIdentifier("prompt-submit")
           }
-          .disabled(missing || held)
-          .accessibilityIdentifier("prompt-submit")
         }
+      }
+      .aglynHeldPress($heldPress, checking: held, refusal: FormEdits.unconfirmedText(pending.action.checkingSubject)) {
+        // The action over the prompt as it is now: the newest row and loads, with what was typed kept.
+        if !missing { run(visibleOnly(filled, inputs)) }
       }
     }
     .aglynSheetMinimumSize(width: 360, height: 280)
@@ -1037,6 +1073,7 @@ struct ReauthSheet: View {
         if let error { Section { AglynNotice(error, tone: .error) } }
       }
       .formStyle(.grouped)
+      .aglynPhoneFormEdges()
       .navigationTitle("Confirm it is you")
       .aglynScreenTitle("Confirm it is you")
       .toolbar {

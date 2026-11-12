@@ -346,6 +346,30 @@ final class RestFirestoreReaderTests: XCTestCase {
     XCTAssertNil((body?["structuredQuery"] as? [String: Any])?["orderBy"], "a count needs no order")
   }
 
+  /// AGL-4011: a count is of every match. A one-row query (how CRM at a glance asks) counted 1 where there were 13.
+  func testACountIgnoresTheQuerysLimit() async throws {
+    let transport = RecordingTransport([
+      (200, #"[{"result":{"aggregateFields":{"n":{"integerValue":"13"}}},"readTime":"2026-11-11T00:00:00Z"}]"#)
+    ])
+    let query = FirestoreQuery(
+      ["orgs", "o1", "contacts"],
+      filters: [ListQueryConstraint(path: "visibleTo", op: .arrayContainsAny, value: ["org", "host:h1"])], limit: 1)
+    let n = try await reader(transport).count(query)
+    XCTAssertEqual(n, 13)
+    let structured = (transport.json(0)["structuredAggregationQuery"] as? [String: Any])?["structuredQuery"] as? [String: Any]
+    XCTAssertNil(structured?["limit"], "a count reads past the query's window")
+    XCTAssertNotNil(structured?["where"], "its filters stay")
+  }
+
+  func testTheWholeMatchDropsOnlyTheWindow() {
+    let query = FirestoreQuery(["orgs", "o1", "leads"], equals: [("status", "won")], order: [.init("createdAt")], limit: 1)
+    let whole = query.wholeMatch
+    XCTAssertNil(whole.limit)
+    XCTAssertEqual(whole.collection, query.collection)
+    XCTAssertEqual(whole.allFilters.count, 1)
+    XCTAssertEqual(whole.order.map(\.field), ["createdAt"])
+  }
+
   func testQueriesTheParentWithAStructuredQuery() {
     let query = FirestoreQuery(
       ["users", "u1", "orgs"], equals: [("orgId", "o1"), ("archived", false)],

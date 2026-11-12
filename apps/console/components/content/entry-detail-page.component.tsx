@@ -90,6 +90,7 @@ import {
   isSeedChecking,
   rebaseSeedEdits,
   seedCheckingText,
+  useHeldSave,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { planLockReason } from '@aglyn/tenant-feature-instance/hooks/plan-feature-lock'
 import {
@@ -1268,6 +1269,13 @@ export function EntryDetailPage() {
     { children: headerTitle, href: entryHref(entryId) },
   ]
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const entryHeld = useHeldSave(handleSaveEntry, {
+    checking: entryChecking,
+    subject: 'entry',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning' }),
+  })
+
   /**
    * The entry has not arrived yet.
    *
@@ -1428,11 +1436,11 @@ export function EntryDetailPage() {
                 !editor.title.trim() ||
                 !effectiveSlug ||
                 slugOwner !== null ||
-                entryChecking
+                entryHeld.saving
               }
-              onClick={handleSaveEntry}
+              onClick={entryHeld.press}
             >
-              {editor.id ? 'Save' : 'Create draft'}
+              {entryHeld.saving ? 'Saving…' : editor.id ? 'Save' : 'Create draft'}
             </Button>
           </Stack>
         }

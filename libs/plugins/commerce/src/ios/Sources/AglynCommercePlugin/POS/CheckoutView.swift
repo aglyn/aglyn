@@ -80,7 +80,8 @@ struct CheckoutView: View {
     HStack {
       Text("Not approved · \(model.money(declined.amountCents))").font(AglynFont.subheadline)
       Spacer()
-      ShareLink(item: declined.receipt(store: model.storeName, money: model.money)) {
+      // Presented over the checkout sheet itself: a ShareLink here asked the register (already presenting this sheet).
+      AglynShareButton(text: declined.receipt(store: model.storeName, money: model.money)) {
         Label("Send receipt", systemImage: "square.and.arrow.up")
       }
       .accessibilityIdentifier("declined-receipt-share")

@@ -150,28 +150,17 @@ beforeEach(() => {
 afterEach(() => confirmation.close())
 
 describe('Admin › Plugins, first save after a page load (AGL-4047)', () => {
-  it('never refuses a press, and the first press after the server answers saves', async () => {
+  it('keeps a press made while the list is held, and saves it once the server answers', async () => {
     const { rerender } = render(<SitePluginsCard hostId="host-1" />)
     fireEvent.click(commerceSwitch())
 
-    // Pressed straight away, while the read is still the cache's.
+    // Pressed straight away, while the read is still the cache's: kept, not
+    // dropped (AGL-4047), and answered at once.
     pressSave()
-    // Long past the deadline the old press waited out before refusing.
-    await new Promise((resolve) => setTimeout(resolve, DEADLINE_MS * 3))
-    expect(mockEnqueueSnackbar).not.toHaveBeenCalledWith(
-      expect.stringMatching(/could not confirm/i),
-      expect.anything(),
-    )
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeTruthy()
     expect(mockSetDoc).not.toHaveBeenCalled()
-    expect(saveButton().disabled).toBe(true)
-    expect(screen.getByRole('status').textContent).toBe(
-      'Checking this site’s plugin list with the server…',
-    )
 
     serverConfirms({ $id: 'host-1', disabledPlugins: ['commerce'] }, false, rerender)
-    expect(saveButton().disabled).toBe(false)
-    expect(screen.queryByRole('status')).toBeNull()
-    pressSave()
 
     await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
     await waitFor(() =>
@@ -180,6 +169,24 @@ describe('Admin › Plugins, first save after a page load (AGL-4047)', () => {
       }),
     )
     expect(mockEnqueueSnackbar).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses a kept press in the guard’s words when no answer comes, and the next press saves', async () => {
+    const { rerender } = render(<SitePluginsCard hostId="host-1" />)
+    fireEvent.click(commerceSwitch())
+    pressSave()
+    // Past the guard's wait, with no answer: the press ends refused, here.
+    await new Promise((resolve) => setTimeout(resolve, DEADLINE_MS * 3))
+    expect(screen.getByRole('alert').textContent).toMatch(
+      /^We could not confirm your site plugin list with the server yet, so nothing was saved/,
+    )
+    expect(mockSetDoc).not.toHaveBeenCalled()
+    expect(saveButton().disabled).toBe(false)
+
+    serverConfirms({ $id: 'host-1', disabledPlugins: ['commerce'] }, false, rerender)
+    expect(screen.queryByRole('status')).toBeNull()
+    pressSave()
+    await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
   })
 
   it('applies a move made before the server answered to the list the server confirmed', async () => {

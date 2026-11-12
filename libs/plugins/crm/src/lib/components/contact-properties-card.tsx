@@ -45,6 +45,7 @@ import {
 import {
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
   useSeedEdits,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import {
@@ -638,6 +639,13 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     )
   }
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSave, {
+    checking: Boolean(checkingText),
+    subject: 'contact',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <CardDisplay
       header={'Properties'}
@@ -661,10 +669,10 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
               variant="contained"
               color="primary"
               size="small"
-              disabled={saving || !edited || clearingRequired || Boolean(checkingText)}
-              onClick={() => void handleSave()}
+              disabled={saving || !edited || clearingRequired || held.saving}
+              onClick={held.press}
             >
-              {saving ? 'Saving…' : 'Save'}
+              {held.saving ? 'Saving…' : 'Save'}
             </Button>
           </Stack>
         ),

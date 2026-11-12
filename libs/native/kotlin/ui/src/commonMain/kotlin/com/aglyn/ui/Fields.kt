@@ -339,10 +339,11 @@ fun CountedTextField(
 }
 
 /**
- * Set while the data a [FormCard] is seeded from is only the device cache's answer (AGL-4047): the card holds its Save and
- * says this beside it once something is typed (`seedCheckingText`). The Apple kit's `aglynFormChecking`.
+ * Set while the data a [FormCard] is seeded from is only the device cache's answer (AGL-4047): the card says its
+ * [FormHold.checking] beside Save once something is typed, and a Save pressed then is kept and runs once the server's copy
+ * is in ([HeldPress]), or shows [FormHold.unconfirmed] if it never comes. The Apple kit's `aglynFormChecking`.
  */
-val LocalFormChecking = androidx.compose.runtime.compositionLocalOf<String?> { null }
+val LocalFormChecking = androidx.compose.runtime.compositionLocalOf<FormHold?> { null }
 
 /**
  * A settings card that saves as one: its fields, then Save (and Discard)
@@ -370,16 +371,29 @@ fun FormCard(
     if (error != null) NoticeBanner(error, StatusTone.ERROR)
     if (notice != null && !dirty) NoticeBanner(notice, StatusTone.SUCCESS)
     val checking = LocalFormChecking.current
-    if (checking != null && dirty) {
-      Text(checking, Modifier.testTag("form-checking"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    // A Save pressed while held is kept, and runs once the server's copy is in (AGL-4047).
+    val held = rememberHeldPress(checking != null, checking?.unconfirmed.orEmpty()) { if (dirty && canSave) onSave() }
+    val saving = busy || held.waiting
+    val refusal = held.refusal
+    if (refusal != null && dirty) {
+      NoticeBanner(refusal, StatusTone.WARNING, Modifier.testTag("form-unconfirmed"))
+    } else if (checking != null && dirty) {
+      Text(checking.checking, Modifier.testTag("form-checking"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     androidx.compose.foundation.layout.Row(
       Modifier.fillMaxWidth(),
       horizontalArrangement = Arrangement.spacedBy(space(1f), androidx.compose.ui.Alignment.End),
     ) {
-      if (dirty) TextButton(onClick = onDiscard, enabled = !busy, modifier = Modifier.testTag("form-discard")) { Text("Discard") }
-      androidx.compose.material3.Button(shape = controlShape(), onClick = onSave, enabled = dirty && canSave && !busy && checking == null, modifier = Modifier.testTag("form-save")) {
-        if (busy) androidx.compose.material3.CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+      if (dirty) {
+        TextButton(onClick = { held.reset(); onDiscard() }, enabled = !saving, modifier = Modifier.testTag("form-discard")) { Text("Discard") }
+      }
+      androidx.compose.material3.Button(
+        shape = controlShape(),
+        onClick = { if (held.pressed(checking != null)) onSave() },
+        enabled = dirty && canSave && !saving,
+        modifier = Modifier.testTag("form-save"),
+      ) {
+        if (saving) androidx.compose.material3.CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
         else Text(saveLabel)
       }
     }

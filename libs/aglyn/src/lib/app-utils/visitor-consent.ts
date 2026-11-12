@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { ANALYTICS_PROVIDERS_DECLARED } from '../plugin-manager/first-party-plugins.generated'
+import { ANALYTICS_PROVIDERS_DECLARED } from '../plugin-manager/first-party-plugin-switchboard.generated'
 import {
   applyAnalyticsConsent,
   type AnalyticsProviderDeclaration,

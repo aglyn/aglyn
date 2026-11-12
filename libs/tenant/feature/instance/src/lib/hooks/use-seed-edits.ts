@@ -45,11 +45,20 @@
  * which is the same rule: a field the person changed keeps their value, every
  * other field follows the new seed.
  *
+ * A press made DURING the hold is kept, not dropped ({@link useHeldSave}): the
+ * button says "Saving…" from the press, and the save runs the moment the seed
+ * is confirmed, over the confirmed values. If no confirmation comes within the
+ * guard's own wait, the guard's refusal shows and nothing is saved. Before
+ * this, the press landed on a disabled button and did nothing, so the person
+ * took Save to be broken (the 11/11 production check).
+ *
  * First built for a site's Admin › Plugins (#2552); this is that pattern
  * lifted so every guarded form can share it.
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { checkSeedFreshness } from './helpers/guarded-seed-write'
+import { seedConfirmWaitMs } from './helpers/listen-confirmation'
 
 /**
  * Whether a save seeded from this read should be HELD rather than pressed.
@@ -72,6 +81,159 @@ export function isSeedChecking(read: {
  */
 export function seedCheckingText(subject: string): string {
   return `Checking your ${subject} with the server…`
+}
+
+/**
+ * What the guard says when a held press waited and no confirmation came: the
+ * same refusal a save that waited itself would show.
+ */
+export function seedUnconfirmedText(subject: string): string {
+  return (
+    checkSeedFreshness({ subject, fromCache: true, checkSession: false })
+      .message ?? ''
+  )
+}
+
+export interface HeldSaveOptions {
+  /** The seed is unconfirmed: {@link isSeedChecking} of the save's read. */
+  checking: boolean
+  /**
+   * What is saved, as the guard names it ("store settings"), for the
+   * refusal. A surface handed only a `checkingText` may leave it out: the
+   * refusal then names "your changes".
+   */
+  subject?: string
+  /**
+   * Show the refusal, where the surface shows a refused save's message
+   * (a snackbar, the form's error line). Called when the hold outlasts the
+   * guard's wait; nothing is saved then.
+   */
+  onRefused?: (message: string) => void
+}
+
+export interface HeldSave {
+  /**
+   * Press Save. Runs it at once when nothing is held; while the seed is held,
+   * keeps the press and runs it once the seed is confirmed. A press while one
+   * is already kept or running is the same press.
+   */
+  press: () => void
+  /**
+   * From the press until the save it starts has finished, including the
+   * time a kept press waits: what makes the button say "Saving…".
+   */
+  saving: boolean
+  /** A press is kept, waiting for the confirmation. */
+  waiting: boolean
+  /** The refusal, while the last kept press stands refused; cleared by the next press. */
+  refusal: string | null
+}
+
+/**
+ * A Save pressed while its seed is held is KEPT, not dropped (AGL-4047).
+ *
+ * The hold disables nothing any more: the button stays pressable, a press
+ * during the hold says "Saving…" at once, and the save runs when the seed is
+ * confirmed. It runs THE SAVE OF THAT RENDER, not the one pressed, so what it
+ * writes is the person's edits replayed onto the confirmed seed
+ * ({@link useSeedEdits}, or `keepDirtyOnReinitialize`), never the cached
+ * values the press was made over. That is the loss the hold exists to stop,
+ * so a kept press keeps the hold's promise.
+ *
+ * A read that fails while the press is kept ends the hold too, and the save
+ * it then runs is refused by its guard ("could not be loaded"). A
+ * confirmation that never comes ends the press after the guard's own wait
+ * ({@link seedConfirmWaitMs}), with the guard's own refusal, and nothing is
+ * saved.
+ *
+ * @param save The surface's save, as written for this render. It still goes
+ *   through `writeGuardedBySeed`, which is what refuses a seed that falls
+ *   back to the cache after the press.
+ */
+export function useHeldSave(
+  save: () => unknown,
+  options: HeldSaveOptions,
+): HeldSave {
+  const { checking } = options
+  const [waiting, setWaiting] = useState(false)
+  const [running, setRunning] = useState(false)
+  const [refusal, setRefusal] = useState<string | null>(null)
+  const latest = useRef({ save, options })
+  latest.current = { save, options }
+  const busy = useRef(false)
+  const mounted = useRef(true)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      if (timer.current) clearTimeout(timer.current)
+    }
+  }, [])
+
+  const run = useCallback(async () => {
+    busy.current = true
+    setRunning(true)
+    try {
+      await latest.current.save()
+    } finally {
+      busy.current = false
+      if (mounted.current) setRunning(false)
+    }
+  }, [])
+
+  const press = useCallback(() => {
+    if (busy.current) return
+    setRefusal(null)
+    if (!latest.current.options.checking) {
+      void run()
+      return
+    }
+    busy.current = true
+    setWaiting(true)
+    timer.current = setTimeout(() => {
+      timer.current = null
+      busy.current = false
+      if (!mounted.current) return
+      const message = seedUnconfirmedText(
+        latest.current.options.subject ?? 'changes',
+      )
+      setWaiting(false)
+      setRefusal(message)
+      latest.current.options.onRefused?.(message)
+    }, seedConfirmWaitMs())
+  }, [run])
+
+  useEffect(() => {
+    if (!waiting || checking) return
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = null
+    // One state to the next with no render between, so the label never
+    // flashes back to its own while the kept press hands over to the save.
+    setRunning(true)
+    setWaiting(false)
+    /*
+     * After this commit, not inside it: a `final-form` form re-initializes
+     * onto the new seed in its own effect, which runs after this one (a
+     * parent's effects run after its children's), and the save must read the
+     * re-initialized values.
+     */
+    setTimeout(() => {
+      if (mounted.current) void run()
+      else busy.current = false
+    }, 0)
+  }, [waiting, checking, run])
+
+  return { press, saving: waiting || running, waiting, refusal }
+}
+
+/**
+ * The label a held-press Save shows: "Saving…" from the press until the save
+ * has finished, otherwise its own.
+ */
+export function heldSaveLabel(held: Pick<HeldSave, 'saving'>, label: string): string {
+  return held.saving ? 'Saving…' : label
 }
 
 export interface SeedEdits<T extends object> {

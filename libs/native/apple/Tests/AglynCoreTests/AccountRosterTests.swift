@@ -39,6 +39,23 @@ final class AccountRosterTests: XCTestCase {
     XCTAssertNil(try JSONDecoder().decode([SignedInAccount].self, from: old).first?.photoURL)
   }
 
+  func testAnAccountIsNamedAsItsHeaderLastNamedIt() throws {
+    var shown = base
+    shown.shownName = "Ann Park"
+    var roster = AccountRosterRules.upsert(shown, into: [])
+    XCTAssertEqual(roster.first?.title, "Ann Park")
+    XCTAssertEqual(roster.first?.initials, "AP")
+    // Signing in again brings only the sign-in record's name: the one last shown stays.
+    roster = AccountRosterRules.upsert(base, into: roster)
+    XCTAssertEqual(roster.first?.title, "Ann Park")
+    // Before it has been on screen, the sign-in name, else the address.
+    XCTAssertEqual(base.title, "Ann Lee")
+    XCTAssertEqual(added.title, "b@example.test")
+    // A roster saved before shown names existed still reads.
+    let old = Data(#"[{"slot":"base","uid":"u1","email":"a@example.test","orgIDs":[]}]"#.utf8)
+    XCTAssertNil(try JSONDecoder().decode([SignedInAccount].self, from: old).first?.shownName)
+  }
+
   func testSigningOneOutKeepsTheOthers() {
     let roster = AccountRosterRules.remove(slot: "base", from: [base, added])
     XCTAssertEqual(roster.map(\.slot), ["s2"])

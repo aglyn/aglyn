@@ -16,14 +16,19 @@
  */
 
 /// <reference types="vitest" />
-import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin'
 import react from '@vitejs/plugin-react'
+import { copyFileSync } from 'fs'
 import { join } from 'path'
 import { defineConfig } from 'vite'
 import dts from 'vite-plugin-dts'
 import svgr from 'vite-plugin-svgr'
 
+const outDir = join(__dirname, '../../../../dist/libs/shared/svg-icons/svg-icons')
+
 export default defineConfig({
+  resolve: {
+    tsconfigPaths: true,
+  },
   root: __dirname,
   cacheDir: '../../../../node_modules/.vite/shared-svg-icons-svg-icons',
 
@@ -38,7 +43,17 @@ export default defineConfig({
       include: '**/*.svg',
       svgrOptions: { exportType: 'named' },
     }),
-    nxViteTsPaths(),
+    // The lib's package.json is already shaped for dist (./index.js,
+    // ./index.mjs, ./index.d.ts). The @nx/vite:build executor used to copy
+    // it in; the inferred @nx/vite/plugin target runs plain `vite build`,
+    // which does not, so the build has to (AGL-4218).
+    {
+      name: 'aglyn-copy-package-json',
+      apply: 'build',
+      writeBundle() {
+        copyFileSync(join(__dirname, 'package.json'), join(outDir, 'package.json'))
+      },
+    },
   ],
 
   // Uncomment this if you are using workers.
@@ -53,7 +68,7 @@ export default defineConfig({
   // Configuration for building your library.
   // See: https://vitejs.dev/guide/build.html#library-mode
   build: {
-    outDir: '../../../../dist/libs/shared/svg-icons/svg-icons',
+    outDir,
     // Start every build from an empty directory (AGL-3201). Vite leaves an
     // outDir outside the project root alone unless told to, and the Nx
     // executor copies the lib's package.json only when the output has none,

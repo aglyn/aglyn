@@ -412,6 +412,20 @@ test('chunkModules reads each module entry and what its factory costs', () => {
   assert.deepEqual(chunkModules('not a chunk'), [])
 })
 
+test('chunkModules reads the factories a strict-mode array nests (AGL-4220)', () => {
+  // Next 16.4.3's mixed chunk: sloppy factories flat, then the strict ones as
+  // the array a strict IIFE returns. Read flat, module 21 was invisible.
+  const nested = `(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push([null,11,e=>{${SHARED_BODY}},(()=>{"use strict";return[21,e=>{e.v(1)},22,23,e=>{e.v(2)}]})()]);`
+  assert.deepEqual(
+    chunkModules(nested).map((module) => [module.key, module.bytes]),
+    [
+      ['11', SHARED_BYTES],
+      ['21', Buffer.byteLength('e=>{e.v(1)}')],
+      ['22+23', Buffer.byteLength('e=>{e.v(2)}')],
+    ],
+  )
+})
+
 test('counts a module two sibling element imports both carry', () => {
   const copies = measureCopies(duplicationBuild()).duplication
   assert.equal(copies.followed, 2)

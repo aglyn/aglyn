@@ -146,7 +146,7 @@ fun SetupScreen(context: NativePluginContext, initialSection: String? = null) {
             val canEdit = com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.edit")
             val section = SetupSection.of(selected)
             // The cards seeded from the site document hold their Save while it is only the device cache's copy (AGL-4047).
-            val checking = if (live.fromCache && section.seedsFromHost) com.aglyn.core.seedCheckingText("site settings") else null
+            val checking = if (live.fromCache && section.seedsFromHost) com.aglyn.ui.FormHold.of("site settings") else null
             // Keyed by site: what was typed for one site never carries to the next.
             androidx.compose.runtime.key(hostId) {
             androidx.compose.runtime.CompositionLocalProvider(com.aglyn.ui.LocalFormChecking provides checking) {

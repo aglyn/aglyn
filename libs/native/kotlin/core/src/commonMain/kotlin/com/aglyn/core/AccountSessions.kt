@@ -30,9 +30,14 @@ data class SignedInAccount(
    * without reading anyone's profile; null until it has been on screen, or when it has none.
    */
   val photoUrl: String? = null,
+  /**
+   * The account's name as last shown in its own header (`readAccountName`: the profile first, AGL-4010), so the switcher
+   * names each account the way it names itself; null until it has been on screen.
+   */
+  val shownName: String? = null,
 ) {
-  /** The account's name in the account menu: its display name, else its address. */
-  val title: String get() = displayName?.takeIf { it.isNotBlank() } ?: email ?: "Account"
+  /** The account's name in the account menu: as last shown in its header, else its display name, else its address. */
+  val title: String get() = listOfNotNull(shownName, displayName).firstOrNull { it.isNotBlank() } ?: email ?: "Account"
 }
 
 /** Makes the session of one slot. Slot [AccountSessions.PRIMARY] is the build's original single session. */
@@ -133,8 +138,8 @@ class AccountSessions(
   private fun remember(slot: String, user: AuthUser) {
     val existing = stored.value.firstOrNull { it.slot == slot }
     val same = existing?.takeIf { it.uid == user.uid }
-    // The same person signing in again keeps the workspaces and photo last shown, until they are read again.
-    val next = SignedInAccount(slot, user.uid, user.email, user.displayName, same?.orgSlugs.orEmpty(), same?.photoUrl)
+    // The same person signing in again keeps the workspaces, photo and name last shown, until they are read again.
+    val next = SignedInAccount(slot, user.uid, user.email, user.displayName, same?.orgSlugs.orEmpty(), same?.photoUrl, same?.shownName)
     if (existing == next) return
     write(if (existing == null) stored.value + next else stored.value.map { if (it.slot == slot) next else it })
   }
@@ -193,6 +198,17 @@ class AccountSessions(
     val existing = stored.value.firstOrNull { it.slot == slot } ?: return
     if (impersonation.value != null || existing.photoUrl == photoUrl) return
     write(stored.value.map { if (it.slot == slot) it.copy(photoUrl = photoUrl) else it })
+  }
+
+  /**
+   * Remembers the name the account on screen shows (its profile's first, `readAccountName`), so the switcher names each
+   * account as its own header does once it has been on screen (AGL-4010).
+   */
+  fun rememberName(name: String?) {
+    val slot = activeSlot.value
+    val existing = stored.value.firstOrNull { it.slot == slot } ?: return
+    if (name.isNullOrBlank() || impersonation.value != null || existing.shownName == name || existing.email == name) return
+    write(stored.value.map { if (it.slot == slot) it.copy(shownName = name) else it })
   }
 
   /** The signed-in account, other than the one on screen, that holds the workspace a link's slug names. */

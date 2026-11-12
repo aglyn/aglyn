@@ -42,8 +42,7 @@ struct OutreachHubScreen: View {
         List { SkeletonRows(count: 6) }.aglynListBackground()
       } else if let orgID = context.orgID, gate.open(orgID: orgID) {
         let api = OutreachAPI(api: context.api, orgID: orgID)
-        VStack(spacing: 0) {
-          AglynSectionBar(OutreachSection.allCases, selection: $section, label: \.label, systemImage: \.symbol)
+        AglynSectionHub(OutreachSection.allCases, selection: $section, label: \.label, systemImage: \.symbol) {
           switch section {
           case .sequences: SequencesSection(context: context, api: api, orgID: orgID, initial: initial)
           case .mailboxes: MailboxesSection(context: context, api: api, orgID: orgID)
@@ -112,13 +111,14 @@ struct SequencesSection: View {
   var body: some View {
     WideLayoutReader { wide in
       if wide {
-        HStack(spacing: 0) {
-          pane(selectable: true).frame(minWidth: 300, idealWidth: 360, maxWidth: 420)
-          Divider()
+        // The shared list and detail columns: the area's head in the list column, its crumbs over the detail.
+        AglynListDetailColumns(listWidth: 360) {
+          pane(selectable: true)
+        } detail: {
           if let selection {
             SequenceDetail(context: context, api: api, orgID: orgID, sequenceID: selection, mailboxes: mailboxes.rows).id(selection)
           } else {
-            AglynSelectionPlaceholder("No sequence selected", systemImage: "arrow.triangle.branch").frame(maxWidth: .infinity, maxHeight: .infinity)
+            AglynSelectionPlaceholder("No sequence selected", systemImage: "arrow.triangle.branch")
           }
         }
       } else {

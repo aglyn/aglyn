@@ -72,6 +72,7 @@ import { doc, serverTimestamp, setDoc } from 'firebase/firestore'
 import {
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useCallback, useState } from 'react'
 import { useCrmPicklist } from '../hooks/use-crm-picklist'
@@ -394,6 +395,14 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
     letter.toUpperCase(),
   )
 
+  // An Add or Rename pressed while the list is held is kept, and saves once
+  // the list is confirmed, onto the confirmed values (AGL-4047).
+  const nameHeld = useHeldSave(submitName, {
+    checking: Boolean(checkingText),
+    subject: `${field} list`,
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <Stack spacing={1.5}>
       <Stack
@@ -668,10 +677,10 @@ export function PicklistValuesCard(props: PicklistValuesCardProps) {
           <Button onClick={() => setNameDialog(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
-            disabled={held || !draftName.trim()}
-            onClick={() => void submitName()}
+            disabled={busy || nameHeld.saving || !draftName.trim()}
+            onClick={nameHeld.press}
           >
-            {nameDialog?.mode === 'rename' ? 'Rename' : 'Add'}
+            {nameHeld.saving ? 'Saving…' : nameDialog?.mode === 'rename' ? 'Rename' : 'Add'}
           </Button>
         </DialogActions>
       </Dialog>

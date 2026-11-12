@@ -57,6 +57,7 @@ import {
 import {
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
   useSeedEdits,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { docsHelp } from '../constants/docs-links'
@@ -493,6 +494,13 @@ function SchemaForm({
     )
   }
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(save, {
+    checking,
+    subject: siteScoped ? 'site plugin settings' : 'plugin settings',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning' }),
+  })
+
   return (
     <CardDisplay
       header={`${label} settings`}
@@ -533,10 +541,14 @@ function SchemaForm({
             <Button
               variant="contained"
               size="small"
-              disabled={disabled || !dirty || busy || checking}
-              onClick={() => void save()}
+              disabled={disabled || !dirty || busy || held.saving}
+              onClick={held.press}
             >
-              {siteScoped ? 'Save site settings' : 'Save settings'}
+              {held.saving
+                ? 'Saving…'
+                : siteScoped
+                  ? 'Save site settings'
+                  : 'Save settings'}
             </Button>
           </BlockedControl>
           {!disabled && dirty && checking ? (

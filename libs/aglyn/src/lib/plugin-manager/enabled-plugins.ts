@@ -28,18 +28,21 @@
  * generated from; this module holds the row's shape and the resolvers.
  */
 
+// The every-page part of the catalog, not the catalog file (AGL-4220): every
+// resolver here runs on every published page, and the catalog file holds the
+// console's copy for each row and every console-only declaration beside it.
 import {
-  FIRST_PARTY_PLUGINS,
+  FIRST_PARTY_PLUGIN_SWITCHES,
   PLUGIN_EDIT_BAR_LINKS,
   PUBLISHED_SITE_IMPACT,
-} from './first-party-plugins.generated'
+} from './first-party-plugin-switchboard.generated'
 
 /**
  * The first-party elements that run a site function (AGL-3393), compiled from
  * each plugin's `contributes.site.functionBindings`. Compose merges it with the
  * installed marketplace plugins' declarations via `mergeFunctionBindings`.
  */
-export { FIRST_PARTY_FUNCTION_BINDINGS } from './first-party-plugins.generated'
+export { FIRST_PARTY_FUNCTION_BINDINGS } from './first-party-plugin-switchboard.generated'
 
 /**
  * One quick link on a live site's admin edit bar, declared by the plugin whose
@@ -181,6 +184,16 @@ export interface FirstPartyPlugin {
 }
 
 /**
+ * A catalog row's switches: everything but the console's copy for it
+ * (AGL-4220). What every resolver in this module reads, and the one shape a
+ * published page downloads; the full rows are {@link FIRST_PARTY_PLUGINS}.
+ */
+export type FirstPartyPluginSwitch = Omit<
+  FirstPartyPlugin,
+  'description' | 'siteOff'
+>
+
+/**
  * What a DISABLE does to a site that is already published (AGL-2486).
  *
  * The cascade dialog has to state a consequence, and there are two very
@@ -242,7 +255,10 @@ export const FORMS_PLUGIN_ID = 'forms'
  * is synchronous and runs in each bundle of both apps; a registry that one of
  * those bundles had not filled would read as every plugin switched OFF.
  */
-export { FIRST_PARTY_PLUGINS }
+export { FIRST_PARTY_PLUGINS } from './first-party-plugins.generated'
+
+/** The same rows without their copy, in the same order (AGL-4220). */
+export { FIRST_PARTY_PLUGIN_SWITCHES }
 
 /**
  * The admin edit bar's quick links that THIS SITE runs, in the order the bar
@@ -267,7 +283,7 @@ export function pluginEditBarLinks(
 
 /** Ids loaded for orgs that have never touched the switchboard. */
 export const DEFAULT_ENABLED_PLUGINS: readonly string[] =
-  FIRST_PARTY_PLUGINS.map((plugin) => plugin.id)
+  FIRST_PARTY_PLUGIN_SWITCHES.map((plugin) => plugin.id)
 
 /**
  * The id a stored plugin id means today — the seam a rename re-arms.
@@ -300,7 +316,7 @@ function canonicalPluginIds(pluginIds: readonly unknown[]): string[] {
 }
 
 /** On everywhere, a site's deny-list included: the base component library. */
-const ALWAYS_ON: readonly string[] = FIRST_PARTY_PLUGINS.filter(
+const ALWAYS_ON: readonly string[] = FIRST_PARTY_PLUGIN_SWITCHES.filter(
   (plugin) => plugin.alwaysOn,
 ).map((plugin) => plugin.id)
 
@@ -308,9 +324,10 @@ const ALWAYS_ON: readonly string[] = FIRST_PARTY_PLUGINS.filter(
  * Unioned into every workspace's set whatever the org stored: {@link ALWAYS_ON}
  * plus the ids that are on for every workspace and switchable per site.
  */
-const ALWAYS_ON_FOR_WORKSPACE: readonly string[] = FIRST_PARTY_PLUGINS.filter(
-  (plugin) => plugin.alwaysOn || plugin.alwaysOnForWorkspace,
-).map((plugin) => plugin.id)
+const ALWAYS_ON_FOR_WORKSPACE: readonly string[] =
+  FIRST_PARTY_PLUGIN_SWITCHES.filter(
+    (plugin) => plugin.alwaysOn || plugin.alwaysOnForWorkspace,
+  ).map((plugin) => plugin.id)
 
 /**
  * Whether the WORKSPACE switch for this plugin is locked on (AGL-3028): the
@@ -330,7 +347,7 @@ export function isLockedOnForSite(pluginId: string): boolean {
 }
 
 const FIRST_PARTY_IDS: ReadonlySet<string> = new Set(
-  FIRST_PARTY_PLUGINS.map((plugin) => plugin.id),
+  FIRST_PARTY_PLUGIN_SWITCHES.map((plugin) => plugin.id),
 )
 
 /**
@@ -338,7 +355,7 @@ const FIRST_PARTY_IDS: ReadonlySet<string> = new Set(
  * {@link FirstPartyPlugin.defaultOffPerSite} for why this inversion exists.
  */
 export const DEFAULT_OFF_PER_SITE_PLUGIN_IDS: ReadonlySet<string> = new Set(
-  FIRST_PARTY_PLUGINS.filter((plugin) => plugin.defaultOffPerSite).map(
+  FIRST_PARTY_PLUGIN_SWITCHES.filter((plugin) => plugin.defaultOffPerSite).map(
     (plugin) => plugin.id,
   ),
 )
@@ -431,7 +448,9 @@ export function resolveEnabledPlugins(
       ? Array.from(new Set([...DEFAULT_ENABLED_PLUGINS, ...listings]))
       : [...DEFAULT_ENABLED_PLUGINS]
   }
-  return Array.from(new Set([...ALWAYS_ON_FOR_WORKSPACE, ...canonicalPluginIds(configured)]))
+  return Array.from(
+    new Set([...ALWAYS_ON_FOR_WORKSPACE, ...canonicalPluginIds(configured)]),
+  )
 }
 
 /**
@@ -448,9 +467,7 @@ export function subtractDisabledPlugins(
   if (!Array.isArray(disabledPlugins) || !disabledPlugins.length)
     return [...pluginIds]
   const disabled = new Set(canonicalPluginIds(disabledPlugins))
-  return pluginIds.filter(
-    (id) => ALWAYS_ON.includes(id) || !disabled.has(id),
-  )
+  return pluginIds.filter((id) => ALWAYS_ON.includes(id) || !disabled.has(id))
 }
 
 /**
@@ -493,7 +510,10 @@ export function resolveHostEnabledPlugins(
  */
 export function isHostPluginEnabled(
   org: { enabledPlugins?: string[] } | null | undefined,
-  host: { disabledPlugins?: string[]; enabledPlugins?: string[] } | null | undefined,
+  host:
+    | { disabledPlugins?: string[]; enabledPlugins?: string[] }
+    | null
+    | undefined,
   pluginId: string,
 ): boolean {
   return resolveHostEnabledPlugins(org, host).includes(pluginId)
@@ -539,7 +559,10 @@ export type PluginSiteState =
 
 export function resolvePluginSiteState(
   org: { enabledPlugins?: string[] } | null | undefined,
-  host: { disabledPlugins?: string[]; enabledPlugins?: string[] } | null | undefined,
+  host:
+    | { disabledPlugins?: string[]; enabledPlugins?: string[] }
+    | null
+    | undefined,
   pluginId: string,
   /** The workspace's pinned marketplace listings; see {@link resolveEnabledPlugins}. */
   installedListings?: readonly string[] | null,
@@ -547,7 +570,9 @@ export function resolvePluginSiteState(
   if (ALWAYS_ON.includes(pluginId)) return 'always-on'
   if (!resolveEnabledPlugins(org, installedListings).includes(pluginId))
     return 'off-for-workspace'
-  if (resolveHostEnabledPlugins(org, host, installedListings).includes(pluginId))
+  if (
+    resolveHostEnabledPlugins(org, host, installedListings).includes(pluginId)
+  )
     return 'runs-here'
   // A default-off plugin this site has not named is off because nobody asked
   // for it; naming it in the deny-list is a decision, and an explicit deny
@@ -593,7 +618,7 @@ function dependencyEdges(
     if (forward) forward.push(required)
     else requires.set(dependent, [required])
   }
-  for (const plugin of FIRST_PARTY_PLUGINS)
+  for (const plugin of FIRST_PARTY_PLUGIN_SWITCHES)
     for (const required of plugin.requires ?? []) addEdge(plugin.id, required)
   for (const [dependent, required] of Object.entries(extraRequirements ?? {}))
     for (const one of required ?? []) addEdge(dependent, String(one))
@@ -613,7 +638,9 @@ export function pluginDependents(
   pluginId: string,
   extraRequirements?: Readonly<Record<string, readonly string[]>>,
 ): string[] {
-  return [...(dependencyEdges(extraRequirements).dependents.get(pluginId) ?? [])]
+  return [
+    ...(dependencyEdges(extraRequirements).dependents.get(pluginId) ?? []),
+  ]
 }
 
 /**
@@ -640,7 +667,7 @@ export function strandedDependents(
 ): Array<{ pluginId: string; missing: string[] }> {
   const enabled = new Set(enabledIds.map(String))
   const known = new Set<string>([
-    ...FIRST_PARTY_PLUGINS.map((plugin) => plugin.id),
+    ...FIRST_PARTY_PLUGIN_SWITCHES.map((plugin) => plugin.id),
     ...enabled,
   ])
   const { requires } = dependencyEdges(extraRequirements)
@@ -729,8 +756,10 @@ export const PLUGIN_CASCADE_IS_DECLARED_ONLY =
 /** Reverse lookup: which first-party plugin a release flag gates, if any. */
 export function pluginForReleaseFlag(
   flagKey: string,
-): FirstPartyPlugin | undefined {
-  return FIRST_PARTY_PLUGINS.find((plugin) => plugin.releaseFlag === flagKey)
+): FirstPartyPluginSwitch | undefined {
+  return FIRST_PARTY_PLUGIN_SWITCHES.find(
+    (plugin) => plugin.releaseFlag === flagKey,
+  )
 }
 
 /**
@@ -751,7 +780,7 @@ export function filterPluginsByReleaseFlags(
 ): string[] {
   if (options?.staffBypass) return [...pluginIds]
   const catalog = new Map(
-    FIRST_PARTY_PLUGINS.map((plugin) => [plugin.id, plugin]),
+    FIRST_PARTY_PLUGIN_SWITCHES.map((plugin) => [plugin.id, plugin]),
   )
   return pluginIds.filter((pluginId) => {
     const plugin = catalog.get(pluginId)

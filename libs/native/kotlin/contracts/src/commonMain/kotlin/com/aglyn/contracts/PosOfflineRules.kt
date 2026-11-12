@@ -95,11 +95,21 @@ fun posOfflineCardRefusal(card: PosOfflineKitCard?, totalCents: Double, takenTod
   return null
 }
 
-/** What the app writes on the PaymentIntent it creates for a card rung offline. */
-fun posOfflineCardIntentMetadata(saleKey: String, hostId: String, orgId: String, registerId: String): Map<String, String> = mapOf(
-  "kind" to Contracts.posOfflineCardIntentKind,
-  "saleKey" to saleKey,
-  "hostId" to hostId,
-  "orgId" to orgId,
-  "registerId" to registerId,
-)
+/**
+ * What the app writes on the PaymentIntent it creates for a card rung offline. [direct]: the intent is made on the
+ * store's own Stripe account (AGL-4219), and says so as every direct sale's objects do.
+ */
+fun posOfflineCardIntentMetadata(
+  saleKey: String,
+  hostId: String,
+  orgId: String,
+  registerId: String,
+  direct: Boolean = false,
+): Map<String, String> = buildMap {
+  put("kind", Contracts.posOfflineCardIntentKind)
+  put("saleKey", saleKey)
+  put("hostId", hostId)
+  put("orgId", orgId)
+  put("registerId", registerId)
+  if (direct) put("chargeModel", "direct")
+}

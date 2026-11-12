@@ -22,12 +22,16 @@ public struct AglynStatTile: View {
   let note: String?
   let help: String?
   let valueColor: Color?
+  let shrinks: Bool
 
   /// `value` nil draws the loading placeholder. `valueColor` tints the figure alone (an overdue count in the error color).
+  /// `shrinks`: a figure that is read whole (the device split "60% / 30% / 10%") gets smaller to fit its tile rather
+  /// than lose its middle.
   public init(
     _ value: String?, label: String, delta: String? = nil, deltaTone: AglynDeltaTone = .flat, note: String? = nil,
-    help: String? = nil, valueColor: Color? = nil
+    help: String? = nil, valueColor: Color? = nil, shrinks: Bool = false
   ) {
+    self.shrinks = shrinks
     self.valueColor = valueColor
     self.value = value
     self.label = label
@@ -48,6 +52,7 @@ public struct AglynStatTile: View {
   public var body: some View {
     VStack(alignment: .leading, spacing: AglynSpace.of(0.25)) {
       Text(value ?? "000").font(AglynFont.title2.weight(.semibold)).monospacedDigit().lineLimit(1).truncationMode(.middle)
+        .minimumScaleFactor(shrinks ? 0.6 : 1)
         .foregroundStyle(valueColor ?? AglynColor.textPrimary)
         .redacted(reason: value == nil ? .placeholder : [])
       Text(label).font(AglynFont.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -115,15 +120,22 @@ public struct AglynRangePicker: View {
   }
 }
 
-/// A stats section on a dashboard: its title, the controls on the right (a range, View details), then its card.
-public struct AglynStatsSection<Accessory: View, Content: View>: View {
+/// A stats section on a dashboard: its title, the controls on the right (a range), its link (View details), then its
+/// card. The link ends the title row; where the controls do not fit beside it they take the next line (Figma Traffic:
+/// one row on iPad 332:42419; on a phone the title and View details, then the range under them, 344:14187).
+public struct AglynStatsSection<Accessory: View, Trailing: View, Content: View>: View {
   let title: String
   let accessory: Accessory
+  let link: Trailing
   let content: Content
 
-  public init(_ title: String, @ViewBuilder accessory: () -> Accessory, @ViewBuilder content: () -> Content) {
+  public init(
+    _ title: String, @ViewBuilder accessory: () -> Accessory, @ViewBuilder link: () -> Trailing,
+    @ViewBuilder content: () -> Content
+  ) {
     self.title = title
     self.accessory = accessory()
+    self.link = link()
     self.content = content()
   }
 
@@ -134,9 +146,14 @@ public struct AglynStatsSection<Accessory: View, Content: View>: View {
           Text(title).font(AglynFont.headline).accessibilityAddTraits(.isHeader)
           Spacer(minLength: AglynSpace.one)
           accessory
+          link.fixedSize()
         }
         VStack(alignment: .leading, spacing: AglynSpace.one) {
-          Text(title).font(AglynFont.headline).accessibilityAddTraits(.isHeader)
+          HStack(alignment: .center, spacing: AglynSpace.two) {
+            Text(title).font(AglynFont.headline).accessibilityAddTraits(.isHeader)
+            Spacer(minLength: AglynSpace.one)
+            link.fixedSize()
+          }
           accessory
         }
       }
@@ -145,6 +162,12 @@ public struct AglynStatsSection<Accessory: View, Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .aglynCardSurface()
     }
+  }
+}
+
+extension AglynStatsSection where Trailing == EmptyView {
+  public init(_ title: String, @ViewBuilder accessory: () -> Accessory, @ViewBuilder content: () -> Content) {
+    self.init(title, accessory: accessory, link: { EmptyView() }, content: content)
   }
 }
 

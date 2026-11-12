@@ -243,8 +243,9 @@ describe('DatasetSchemaDialog refuses a stale seed (AGL-1358)', () => {
     // so this cannot pass merely by asserting too early.
     await waitFor(() => expect(doc).not.toHaveBeenCalled())
     expect(updateDoc).not.toHaveBeenCalled()
-    // The refusal keeps the dialog open with the edited schema on screen.
-    expect(screen.getByRole('button', { name: 'Save schema' })).toBeTruthy()
+    // The press is kept while the listener is unconfirmed (AGL-4047): it
+    // says Saving…, and the dialog stays open with the edited schema.
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeTruthy()
   })
 
   /**
@@ -253,11 +254,12 @@ describe('DatasetSchemaDialog refuses a stale seed (AGL-1358)', () => {
    * and a name typed meanwhile survives the server's copy, which used to
    * reset the whole form.
    */
-  it('HOLDS Save with the reason, and keeps a typed name through the server’s copy', async () => {
+  it('KEEPS a Save pressed with the reason, and keeps a typed name through the server’s copy', async () => {
     const view = renderDialog(dataset, true)
+    // Pressable during the hold: a press is kept, not dropped (AGL-4047).
     expect(
       (screen.getByRole('button', { name: 'Save schema' }) as HTMLButtonElement).disabled,
-    ).toBe(true)
+    ).toBe(false)
     expect(screen.getByRole('status').textContent).toBe(
       'Checking your collection schema with the server…',
     )

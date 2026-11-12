@@ -70,8 +70,10 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import {
+  heldSaveLabel,
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
@@ -522,6 +524,13 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
     return <Chip size="small" color="success" label="Live" />
   }
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSave, {
+    checking: editorChecking,
+    subject: 'overlay',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <CardDisplay
       header="Announcement bars & popups"
@@ -947,13 +956,13 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
           <Button
             variant="contained"
             color="primary"
-            onClick={handleSave}
+            onClick={held.press}
             disabled={
-              editorChecking ||
-              copy.pending(editor?.bar?.text, editor?.popup?.headline, editor?.popup?.body)
+              copy.pending(editor?.bar?.text, editor?.popup?.headline, editor?.popup?.body) ||
+              held.saving
             }
           >
-            {'Save'}
+            {heldSaveLabel(held, 'Save')}
           </Button>
         </DialogActions>
       </Dialog>

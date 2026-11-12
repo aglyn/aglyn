@@ -42,8 +42,10 @@ import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.
 import { EntitlementGatedCard } from './entitlement-gate.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import {
+  heldSaveLabel,
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 
@@ -234,6 +236,13 @@ export function SuppliersCard(props: SuppliersCardProps) {
     [confirm, firestore, hostId],
   )
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSave, {
+    checking,
+    subject: 'supplier',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <EntitlementGatedCard
       help={suppliersHelp}
@@ -374,10 +383,10 @@ export function SuppliersCard(props: SuppliersCardProps) {
           <Button
             variant="contained"
             color="primary"
-            disabled={checking || !draft?.name.trim()}
-            onClick={handleSave}
+            disabled={!draft?.name.trim() || held.saving}
+            onClick={held.press}
           >
-            {'Save'}
+            {heldSaveLabel(held, 'Save')}
           </Button>
         </DialogActions>
       </Dialog>

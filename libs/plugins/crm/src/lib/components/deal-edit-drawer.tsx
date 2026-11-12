@@ -45,6 +45,7 @@ import {
 import {
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import {
   Alert,
@@ -651,6 +652,13 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
     amountDerived,
   ])
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSave, {
+    checking: Boolean(checkingText),
+    subject: 'deal',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <NavigationDrawerComponent
       open={open}
@@ -999,17 +1007,17 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
             variant="contained"
             disabled={
               busy ||
-              Boolean(checkingText) ||
               Boolean(problem) ||
               !orgId ||
               bandFull ||
               // A new deal waits for its scope: a site, where the org keeps
               // its sites apart; nothing, where every site sees it.
-              (mode === 'create' && !createTokens.length)
+              (mode === 'create' && !createTokens.length) ||
+              held.saving
             }
-            onClick={() => void handleSave()}
+            onClick={held.press}
           >
-            {deal ? 'Save deal' : 'Create deal'}
+            {held.saving ? 'Saving…' : deal ? 'Save deal' : 'Create deal'}
           </Button>
         </Stack>
       </Container>

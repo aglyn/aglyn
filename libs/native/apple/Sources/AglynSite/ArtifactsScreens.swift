@@ -63,20 +63,18 @@ struct ArtifactsScreen: View {
         let api = ArtifactsAPI(api: context.api, writer: context.writer, hostID: hostID, kind: kind)
         WideLayoutReader { wide in
           if wide {
-            HStack(spacing: 0) {
-              list(selectable: true, hostID: hostID).frame(minWidth: 300, idealWidth: 360, maxWidth: 420)
-              Divider()
-              Group {
-                if let selection {
-                  ArtifactDetail(context: context, hostID: hostID, kind: kind, id: selection, api: api, runner: runner, canEdit: canEdit) {
-                    dialog = $0
-                  }
-                  .id(selection)
-                } else {
-                  AglynSelectionPlaceholder("No \(kind.singular) selected", systemImage: kind.systemImage)
+            // The shared list and detail columns: the area's head in the list column, its crumbs over the detail.
+            AglynListDetailColumns(listWidth: 360) {
+              list(selectable: true, hostID: hostID)
+            } detail: {
+              if let selection {
+                ArtifactDetail(context: context, hostID: hostID, kind: kind, id: selection, api: api, runner: runner, canEdit: canEdit) {
+                  dialog = $0
                 }
+                .id(selection)
+              } else {
+                AglynSelectionPlaceholder("No \(kind.singular) selected", systemImage: kind.systemImage)
               }
-              .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
           } else {
             list(selectable: false, hostID: hostID)

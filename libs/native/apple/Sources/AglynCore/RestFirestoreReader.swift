@@ -136,7 +136,7 @@ public final class RestFirestoreReader: FirestoreReader, @unchecked Sendable {
   }
 
   func countBody(_ query: FirestoreQuery) -> [String: Any] {
-    var structured = runQueryBody(query)["structuredQuery"] as? [String: Any] ?? [:]
+    var structured = runQueryBody(query.wholeMatch)["structuredQuery"] as? [String: Any] ?? [:]
     structured.removeValue(forKey: "orderBy")
     return ["structuredAggregationQuery": ["structuredQuery": structured, "aggregations": [["alias": "n", "count": [:]]]]]
   }

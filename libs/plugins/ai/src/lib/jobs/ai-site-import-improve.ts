@@ -69,7 +69,8 @@ import {
 import { aiSiteImportImageIsMark } from '../model/ai-site-import-marks'
 import { siteImportLedger, type SiteImportLedger, type SiteImportLedgerItem, type SiteImportLedgerLine } from '../model/ai-site-import-ledger'
 import { AI_SITE_IMPORT_PAGE_CEILING_CREDITS } from '../model/ai-site-import'
-import { estimateAiBilledUsd } from '../providers/catalog'
+import { aiCacheWriteHourSurchargeUsd } from '../providers/cache-write-hour'
+import { aiBilledRatesForModel, estimateAiBilledUsd } from '../providers/catalog'
 import type { AiSystemBlock, AiTool, AiUsage } from '../providers/contract'
 import { assistCreditsFromUsd } from '../usage/assist-credits'
 import type { AiGenerationCheck } from '../runtime/ai-doctrine'
@@ -412,12 +413,15 @@ export function aiSiteImportImprovePrompt(input: {
   seed: string
   /** What the page is for and what it needs (`aiSiteImportImproveRoleLines`). */
   roleLines?: readonly string[]
+  /** How much page its answer has room for, and whether it is thin (`aiSiteImportImproveSizeLines`). */
+  sizeLines?: readonly string[]
 }): string {
   return [
     `Page: "${input.screen.title}" at ${input.screen.slug}`,
     // A page the site's plan proposed: there is no old page to keep, so it is written whole from what the site says.
     ...(input.doc.proposed ? ['This page is new: the site has no such page yet. Its one line says what it tells a visitor. Write it from what the site says of itself and what this kind of business generally does, inventing no fact.'] : []),
     ...(input.roleLines ?? []),
+    ...(input.sizeLines ?? []),
     ...input.kindLines,
     "The page's ledger, what it holds and where it links:",
     fenceUntrustedText(`The owner's page ${input.doc.url}`, aiSiteImportLedgerText(input.ledger, input.doc, input.destinations), { maxChars: AI_SITE_IMPORT_LEDGER_MAX_CHARS }),
@@ -1024,8 +1028,24 @@ export const AI_SITE_IMPORT_LISTING_ROOM_CREDITS = 10
  */
 export const AI_SITE_IMPORT_IMPROVE_CEILING_CREDITS = AI_SITE_IMPORT_PAGE_CEILING_CREDITS - AI_SITE_IMPORT_LISTING_ROOM_CREDITS
 
-/** Characters a token is counted at, before a request is sent: fewer than the text runs, so a guess is never under. */
+/**
+ * Characters a token is counted at before a request is sent (AGL-4152). No
+ * truthful count exists before sending: the adapter has no count call, and
+ * nothing tells a page whether the platform's prefix is still in the cache.
+ * So the request is priced at worst from its own bytes, every byte it sends
+ * counted. Three is about what the provider counted on a real run: a
+ * contractor's home was billed about 29 credits of input where this guess,
+ * over every byte at the cache write's rate, says 29, and the same guess over
+ * the instructions alone, at the five-minute rate, had said 16.
+ */
 const CHARS_PER_TOKEN = 3
+
+/**
+ * The provider's own words that ride every request offering a tool, ahead of
+ * the tools, in the cached prefix: its published count for the tool-use
+ * prompt of recent models is under 350 tokens.
+ */
+export const AI_TOOL_USE_PROMPT_TOKENS = 350
 
 const ZERO: AiUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
 
@@ -1034,16 +1054,43 @@ const plus = (a: AiUsage, b: AiUsage): AiUsage => ({
   outputTokens: a.outputTokens + b.outputTokens,
   cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
   cacheWriteTokens: a.cacheWriteTokens + b.cacheWriteTokens,
+  ...(a.cacheWriteHourTokens !== undefined || b.cacheWriteHourTokens !== undefined ? { cacheWriteHourTokens: (a.cacheWriteHourTokens ?? 0) + (b.cacheWriteHourTokens ?? 0) } : {}),
 })
 
-/** What a request reads before it is sent, at worst: its system blocks written to the cache, its turn as input. */
-export function aiSiteImportImproveInputUsage(input: { systemChars: number; promptChars: number }): AiUsage {
-  return { ...ZERO, inputTokens: Math.ceil(input.promptChars / CHARS_PER_TOKEN), cacheWriteTokens: Math.ceil(input.systemChars / CHARS_PER_TOKEN) }
+const tokensOf = (chars: number) => Math.ceil(Math.max(0, chars) / CHARS_PER_TOKEN)
+
+/**
+ * What a request reads before it is sent, at worst (AGL-4152): every byte of
+ * it, as the provider bills it on a cold cache. The tools and the platform's
+ * blocks up to its last shared marker are written to the cache at the
+ * route's lifetime (at the hour, twice the input rate); the site's block
+ * after them at five minutes; anything after the last marker, and the turn,
+ * as input. `system` is the blocks as sent, the doctrine's own first
+ * (`aiDoctrineSystemBlocks`), and `toolChars` the tool's definition.
+ */
+export function aiSiteImportImproveInputUsage(input: { system: readonly AiSystemBlock[]; toolChars: number; promptChars: number; hour?: boolean }): AiUsage {
+  const shared = input.system.reduce((last, block, index) => (block.cacheBreakpoint && !block.site ? index : last), -1)
+  const cached = input.system.reduce((last, block, index) => (block.cacheBreakpoint ? index : last), -1)
+  let sharedChars = input.toolChars
+  let siteChars = 0
+  let uncachedChars = input.promptChars
+  input.system.forEach((block, index) => {
+    if (index <= shared) sharedChars += block.text.length
+    else if (index <= cached) siteChars += block.text.length
+    else uncachedChars += block.text.length
+  })
+  const sharedTokens = tokensOf(sharedChars) + AI_TOOL_USE_PROMPT_TOKENS
+  return {
+    ...ZERO,
+    inputTokens: tokensOf(uncachedChars),
+    cacheWriteTokens: sharedTokens + tokensOf(siteChars),
+    ...(input.hour ? { cacheWriteHourTokens: sharedTokens } : {}),
+  }
 }
 
-/** What a usage is billed in credits on a model. */
+/** What a usage is billed in credits on a model, an hour-long cache write at its own rate, as the meter bills it. */
 export function aiSiteImportImproveCredits(usage: AiUsage, model: string): number {
-  return assistCreditsFromUsd(estimateAiBilledUsd(usage, model))
+  return assistCreditsFromUsd(estimateAiBilledUsd(usage, model) + aiCacheWriteHourSurchargeUsd(usage, aiBilledRatesForModel(model)))
 }
 
 /**
@@ -1069,20 +1116,183 @@ export function aiSiteImportImproveTokensWithin(input: { model: string; spent: A
 /** The least share of the last answer's length a re-ask must have room for: less, and it would be cut off. */
 export const AI_SITE_IMPORT_REASK_ROOM = 0.9
 
+/**
+ * The least share of a cut-off answer's length its re-ask must have room for
+ * (AGL-4152): the re-ask asks for a page about half as long
+ * (`AI_SITE_IMPORT_IMPROVE_CUT_OFF_SMALLER`), so it needs room for that page,
+ * not for the one that was cut off.
+ */
+export const AI_SITE_IMPORT_CUT_OFF_REASK_ROOM = 0.6
+
+/** The least room the re-ask of a page cut off is asked in: an opening, a group and a closing, with their words. */
+export const AI_SITE_IMPORT_IMPROVE_LEAST_TOKENS = 1_200
+
+/** What the re-ask of a cut-off page is told makes it smaller (AGL-4152), in one sentence. */
+export const AI_SITE_IMPORT_IMPROVE_CUT_OFF_SMALLER = "Write a page about half as long as the one cut off: fewer sections, shorter copy, and each long group of the ledger kept whole with keep rather than written again."
+
 /** What a re-ask reads beyond its first request: the re-ask's own words naming what missed. */
 const REASK_TOKENS = 600
 
 /**
+ * What a re-ask reads (AGL-4152), from what its first request was billed:
+ * its turn again with the re-ask's words, and everything the first request
+ * read from the cache or wrote to it, now read from it. The re-ask is sent
+ * seconds after its first request, inside the five minutes the shortest
+ * entry lives, so its prefix is a read: pricing it as a second write starved
+ * the re-ask of a long home whose first request wrote the cache of about 13
+ * credits, some 900 tokens.
+ */
+export function aiSiteImportImproveReaskInput(spent: AiUsage): AiUsage {
+  return { ...ZERO, inputTokens: spent.inputTokens + REASK_TOKENS, cacheReadTokens: spent.cacheReadTokens + spent.cacheWriteTokens }
+}
+
+/**
  * Whether a redesign's re-ask fits its page's ceiling (AGL-4152): the most
  * tokens it may ask, given what the first answer spent, or 0 where the room
- * left is under what the first answer wrote, and the page falls back with
- * no re-ask rather than pass its ceiling.
+ * left is under what the re-ask must write, and the page falls back with no
+ * re-ask rather than pass its ceiling. A re-ask for a miss writes the page
+ * again, at about its first length; a re-ask for a page cut off asks for one
+ * about half as long, so it needs room for that.
  */
-export function aiSiteImportImproveReaskTokens(input: { model: string; spent: AiUsage; lastOutput: number; most: number; ceiling?: number }): number {
-  // The re-ask reads what the first request read, its system now from the cache at worst at the write's rate, and the re-ask's words.
-  const again: AiUsage = { ...ZERO, inputTokens: input.spent.inputTokens + REASK_TOKENS, cacheReadTokens: input.spent.cacheReadTokens, cacheWriteTokens: input.spent.cacheWriteTokens }
-  const room = aiSiteImportImproveTokensWithin({ model: input.model, spent: input.spent, input: again, most: input.most, ...(input.ceiling !== undefined ? { ceiling: input.ceiling } : {}) })
-  return room >= Math.ceil(input.lastOutput * AI_SITE_IMPORT_REASK_ROOM) ? room : 0
+export function aiSiteImportImproveReaskTokens(input: { model: string; spent: AiUsage; lastOutput: number; cutOff?: boolean; most: number; ceiling?: number }): number {
+  const room = aiSiteImportImproveTokensWithin({ model: input.model, spent: input.spent, input: aiSiteImportImproveReaskInput(input.spent), most: input.most, ...(input.ceiling !== undefined ? { ceiling: input.ceiling } : {}) })
+  return room >= aiSiteImportImproveReaskNeeds(input.lastOutput, input.cutOff) ? room : 0
+}
+
+/** The least room a re-ask after an answer of `lastOutput` tokens must have (AGL-4152). */
+export function aiSiteImportImproveReaskNeeds(lastOutput: number, cutOff = false): number {
+  return cutOff ? Math.max(AI_SITE_IMPORT_IMPROVE_LEAST_TOKENS, Math.ceil(lastOutput * AI_SITE_IMPORT_CUT_OFF_REASK_ROOM)) : Math.ceil(lastOutput * AI_SITE_IMPORT_REASK_ROOM)
+}
+
+/*------------------------------------------
+ * The room an answer is told it has
+ *-----------------------------------------*/
+
+/**
+ * The share of its room a page is planned to (AGL-4152): a model sizes its
+ * answer in words and sections, not in tokens, so a quarter of the room is
+ * held back for what it writes past them.
+ */
+export const AI_SITE_IMPORT_ROOM_SHARE = 0.75
+
+/** Tokens a section costs in the tool's shape before its words: its fields, three or four blocks', and a few items'. */
+export const AI_SITE_IMPORT_SECTION_TOKENS = 160
+
+/** Tokens a word of copy costs, inside the answer's strings. */
+export const AI_SITE_IMPORT_WORD_TOKENS = 1.4
+
+/** The words a section of a designed page usually says: what a section's share of a page's room is reckoned with. */
+const SECTION_WORDS = 60
+
+/** The fewest sections a page is told it has room for: an opening, what it offers, a closing. */
+export const AI_SITE_IMPORT_LEAST_SECTIONS = 3
+
+/** The least a page is planned to, where its room holds it (AGL-4152): six sections and about 450 words. */
+export const AI_SITE_IMPORT_LEAST_PAGE_TOKENS = 1_600
+
+/** A page whose old lines say fewer words than this is thin (AGL-4152): it stays short, and pads nothing. */
+export const AI_SITE_IMPORT_THIN_PAGE_WORDS = 150
+
+/** The most sections a thin page is planned to. */
+export const AI_SITE_IMPORT_THIN_MOST_SECTIONS = 6
+
+/**
+ * The share of the old page's own words, outside its groups, a page is told
+ * it has room for at the least (AGL-4152): a redesign keeps
+ * `SITE_IMPORT_IMPROVED_MEANING` of what the owner says, and a rewrite says
+ * less than all of a line it keeps. A group is kept whole by keep, its words
+ * with it, so it asks for none.
+ */
+export const AI_SITE_IMPORT_MEANING_WORDS_SHARE = 0.8
+
+/** How many words the old page says, over its lines. */
+export function aiSiteImportLedgerWords(ledger: Pick<SiteImportLedger, 'lines'>): number {
+  return ledger.lines.reduce((total, line) => total + (line.text.match(/[\p{L}\p{N}]+/gu)?.length ?? 0), 0)
+}
+
+/** What a page's first answer may write, and what it is planned to. */
+export interface AiSiteImportImproveRoom {
+  /** The most output tokens the first answer is asked at (`max_tokens`). */
+  first: number
+  /** What its input was priced at, before it is sent. */
+  estimated: AiUsage
+  /**
+   * The size the page is planned to, in tokens: where the room holds it, one
+   * whose answer and a full re-ask of it both fit the ceiling, so a miss can
+   * still be mended; never under `AI_SITE_IMPORT_LEAST_PAGE_TOKENS`, or what
+   * it must say to keep the owner's meaning, where the room holds that; and
+   * never over `AI_SITE_IMPORT_ROOM_SHARE` of the room.
+   */
+  target: number
+  /** The most sections, and about how many words, the page is told it has room for. */
+  sections: number
+  words: number
+  /** The old page's words, where it is thin. */
+  thin: number | null
+}
+
+const fifty = (value: number) => Math.max(0, Math.floor(value / 50) * 50)
+
+/**
+ * The room a page's redesign has (AGL-4152): its first answer's ceiling from
+ * what the page's credit ceiling buys after its input, and the page it is
+ * planned to inside it, in sections and words a model can plan by.
+ */
+export function aiSiteImportImproveRoom(input: {
+  model: string
+  spent: AiUsage
+  system: readonly AiSystemBlock[]
+  toolChars: number
+  promptChars: number
+  hour?: boolean
+  most: number
+  ledger: Pick<SiteImportLedger, 'lines'>
+  /** A page the site's plan proposed: it has no old lines, and is never thin. */
+  proposed?: boolean
+  ceiling?: number
+}): AiSiteImportImproveRoom {
+  const ceiling = input.ceiling ?? AI_SITE_IMPORT_IMPROVE_CEILING_CREDITS
+  const estimated = aiSiteImportImproveInputUsage({ system: input.system, toolChars: input.toolChars, promptChars: input.promptChars, ...(input.hour ? { hour: true } : {}) })
+  const first = aiSiteImportImproveTokensWithin({ model: input.model, spent: input.spent, input: estimated, most: input.most, ceiling })
+  // An answer and a re-ask of it at nine tenths of its length, both inside the ceiling.
+  const both = aiSiteImportImproveTokensWithin({ model: input.model, spent: plus(input.spent, estimated), input: aiSiteImportImproveReaskInput(estimated), most: input.most * 2, ceiling })
+  const mendable = Math.floor(both / (1 + AI_SITE_IMPORT_REASK_ROOM))
+  const words = aiSiteImportLedgerWords(input.ledger)
+  const thin = !input.proposed && words < AI_SITE_IMPORT_THIN_PAGE_WORDS ? words : null
+  // What it must say to keep the owner's meaning, which no re-ask is worth falling short of (AGL-4152).
+  const meaning = fifty(aiSiteImportLedgerWords({ lines: input.ledger.lines.filter((line) => !line.group) }) * AI_SITE_IMPORT_MEANING_WORDS_SHARE)
+  const least = Math.max(AI_SITE_IMPORT_LEAST_PAGE_TOKENS, AI_SITE_IMPORT_THIN_MOST_SECTIONS * AI_SITE_IMPORT_SECTION_TOKENS + meaning * AI_SITE_IMPORT_WORD_TOKENS)
+  const share = Math.floor(first * AI_SITE_IMPORT_ROOM_SHARE)
+  const target = Math.min(share, Math.max(mendable, least))
+  const most = thin === null ? AI_SITE_IMPORT_IMPROVE_MOST_SECTIONS : AI_SITE_IMPORT_THIN_MOST_SECTIONS
+  // As many sections as the room holds at a section's usual words, and fewer where the owner's meaning needs the words.
+  const shaped = Math.floor(target / (AI_SITE_IMPORT_SECTION_TOKENS + SECTION_WORDS * AI_SITE_IMPORT_WORD_TOKENS))
+  const meant = Math.floor((target - meaning * AI_SITE_IMPORT_WORD_TOKENS) / AI_SITE_IMPORT_SECTION_TOKENS)
+  const sections = Math.min(most, Math.max(AI_SITE_IMPORT_LEAST_SECTIONS, Math.min(shaped, meant)))
+  const room = fifty((target - sections * AI_SITE_IMPORT_SECTION_TOKENS) / AI_SITE_IMPORT_WORD_TOKENS)
+  // A thin page says about four times what its owner did, with a line of its own for each new section.
+  const said = thin === null ? room : Math.min(room, Math.max(200, fifty(thin * 4 + 150)))
+  return { first, estimated, target, sections, words: Math.max(150, said), thin }
+}
+
+/**
+ * The lines a page's request says of its size (AGL-4152), in plain words:
+ * where its room is under the most an answer may ask, the sections and words
+ * it has room for, so it plans a page that fits rather than being cut off;
+ * and on a thin page, that it stays short and says no figure the site does
+ * not. Never the platform's vocabulary: its numbers are no one's fact.
+ */
+export function aiSiteImportImproveSizeLines(room: AiSiteImportImproveRoom, input: { most: number; groups: boolean }): string[] {
+  return [
+    ...(room.first < input.most
+      ? [
+          `Length: write this page in at most ${room.sections} sections and about ${room.words} words in all, counting every heading, line, button and card; a longer answer is cut off and not used.${input.groups ? ' Keep a long group of the ledger whole with keep rather than writing its items again.' : ''}`,
+        ]
+      : []),
+    ...(room.thin !== null
+      ? ['This page says little, so it stays short: write what it says and what this kind of business generally does, and give a count, size, year or quantity only where the site states it, never one such work usually has.']
+      : []),
+  ]
 }
 
 /** What a redesign settled: the page built, what it added and what it shows. */
@@ -1219,7 +1429,7 @@ export function aiSiteImportImproveScope(doc: Pick<AiSiteImportDocument, 'blocks
 /** What each line that missed says to the one re-ask. */
 const MISS: Readonly<Record<string, string>> = {
   facts: 'The page leaves out a fact the owner gives. Say every name, number, price, date, phone and address the ledger shows.',
-  invented: 'The page says something nothing on the site supports.',
+  invented: 'The page says something nothing on the site supports. Leave it out, or say only what the site states.',
   held: 'Something the ledger marks must is not on the page. Place it with a keep block.',
   links: 'A link the ledger lists goes nowhere on the page. Link to it from a button or an item.',
   meaning: "The page has drifted from what the owner says. Keep more of the old page's substance in the new words.",
@@ -1237,10 +1447,13 @@ export function aiSiteImportImprovedMisses(report: Pick<SiteImportPageFidelity, 
   if (!improved) return []
   return improved.red.flatMap((name) => {
     if (name === 'frame') return []
-    const ledger = improved.ledger as unknown as Record<string, { missing?: string[]; found?: string[] } | undefined>
+    const ledger = improved.ledger as unknown as Record<string, { missing?: string[]; found?: string[]; at?: string[] } | undefined>
     const shown = [...(ledger[name]?.missing ?? []), ...(ledger[name]?.found ?? [])].map((token) => token.replace(/^[a-z]+:/, ''))
+    // The line each invented value sat in (AGL-4152), so the re-ask can mend that sentence and a later read can see it.
+    const at = ledger[name]?.at ?? []
     const message = MISS[name] ?? `The page falls short on ${name}.`
-    return [{ rule: null, code: `improve-${name}`, message, ...(shown.length ? { detail: `Named: ${shown.join(', ')}.` } : {}) }]
+    const detail = [...(shown.length ? [`Named: ${shown.join(', ')}.`] : []), ...(at.length ? [`In: ${at.map((line) => `"${line}"`).join('; ')}.`] : [])].join(' ')
+    return [{ rule: null, code: `improve-${name}`, message, ...(detail ? { detail } : {}) }]
   })
 }
 

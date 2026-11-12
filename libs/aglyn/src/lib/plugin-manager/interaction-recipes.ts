@@ -17,7 +17,7 @@
 
 import type { InteractionStepBase, SiteInteraction } from '../app-utils/site-interactions'
 import { getRegisteringPluginId } from '../app-utils/registering-plugin'
-import { PLUGIN_INTERACTION_RECIPES_DECLARED } from './first-party-plugins.generated'
+import { PLUGIN_INTERACTION_RECIPES_DECLARED } from './first-party-plugin-interactions.generated'
 
 /**
  * A READY-TO-EDIT INTERACTION ANOTHER PLUGIN OFFERS (AGL-3080).

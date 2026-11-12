@@ -93,8 +93,10 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import {
+  heldSaveLabel,
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
@@ -653,6 +655,13 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
     ),
   ]
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSave, {
+    checking: editorChecking,
+    subject: 'experiment',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <CardDisplay
       header="Experiments"
@@ -999,10 +1008,10 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
           <Button
             variant="contained"
             color="primary"
-            disabled={editorChecking}
-            onClick={() => void handleSave()}
+            disabled={held.saving}
+            onClick={held.press}
           >
-            {'Save'}
+            {heldSaveLabel(held, 'Save')}
           </Button>
         </DialogActions>
       </Dialog>
