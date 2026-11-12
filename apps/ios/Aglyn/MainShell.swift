@@ -1086,6 +1086,9 @@ struct AreaView: View {
             }
             .frame(width: room.width, height: room.height, alignment: .top)
             .offset(x: room.minX, y: room.minY)
+            // The screen's actions are drawn here, outside the screen: they still see the row they sit in, so a group of
+            // secondary actions folds into the row's "⋯" (`AglynSecondaryActions`).
+            .environment(\.aglynPhoneAreaHead, phoneHead)
           }
         } else if wide, !columnHead, let row {
           if headed, let offer, let slot = chrome.columnHeadSlot {
