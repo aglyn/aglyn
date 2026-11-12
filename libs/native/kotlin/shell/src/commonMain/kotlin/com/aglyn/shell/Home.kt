@@ -223,7 +223,7 @@ private fun HomeSiteLine(
 }
 
 @Composable
-private fun hostDoc(services: ShellServices, hostId: String?): Live<FirestoreDoc?> {
+internal fun hostDoc(services: ShellServices, hostId: String?): Live<FirestoreDoc?> {
   if (hostId == null) return Live.Ready(null)
   val flow = remember(hostId) { services.firestore.observeDoc("hosts/$hostId") }
   val live by flow.collectAsState(Live.Loading)

@@ -170,6 +170,20 @@ private fun ProductsList(context: NativePluginContext, model: ProductsListModel,
   }
   val hasRoom = !planReady || limit?.let { used < it } ?: true
   Column(Modifier.fillMaxSize()) {
+    // The area's head, as every list's (AGL-4012): Products with its ☆, Import and New product, then the area's section
+    // chips under it beside a detail (ListHeader).
+    com.aglyn.ui.ListHeader("Products") {
+      com.aglyn.ui.ListHeaderAction("New product", "add", editor::create, Modifier.testTag("new-product"), enabled = hasRoom)
+      if (canImportProducts(context)) {
+        // The console's Import beside Add product (the data transfer hub's import, for this site's products), in the
+        // head's ⋯ as Figma's list head keeps its other actions (13:483).
+        com.aglyn.ui.OverflowMenu(
+          listOf(com.aglyn.ui.MenuAction("import-products", "Import", "upload") { context.navigate(CORE_DATA_IMPORT_SCREEN, productsImportParams(context.hostId)) }),
+          Modifier.testTag("products-more"),
+          boxed = true,
+        )
+      }
+    }
     Column(Modifier.padding(horizontal = space(2f), vertical = space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
       Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
         SearchField(model.search, model::type, placeholder = "Search products", modifier = Modifier.weight(1f))
@@ -177,20 +191,6 @@ private fun ProductsList(context: NativePluginContext, model: ProductsListModel,
           OutlinedButton(onClick = { context.navigate(COMMERCE_SCAN_SCREEN) }, Modifier.testTag("products-scan")) {
             Icon(AglynIcons.named("qr_code_scanner"), contentDescription = "Scan a barcode")
           }
-        }
-      }
-      // The list's own actions, end-aligned, then its filter chips on a row of their own (never squeezed by a button).
-      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(space(1f), Alignment.End), verticalAlignment = Alignment.CenterVertically) {
-        if (canImportProducts(context)) {
-          // The console's Import beside Add product: the data transfer hub's import, for this site's products.
-          OutlinedButton(
-            onClick = { context.navigate(CORE_DATA_IMPORT_SCREEN, productsImportParams(context.hostId)) },
-            modifier = Modifier.testTag("import-products"),
-          ) { Text("Import") }
-        }
-        Button(onClick = editor::create, Modifier.testTag("new-product"), enabled = hasRoom) {
-          Icon(AglynIcons.named("add"), contentDescription = null)
-          Text("New product", Modifier.padding(start = space(1f)))
         }
       }
       ChoiceChipRow(

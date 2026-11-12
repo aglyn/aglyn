@@ -142,16 +142,12 @@ fun RecordsSection(
     initialSelected = picked,
     list = { selected, onSelect ->
       Column(Modifier.fillMaxSize()) {
+        // The area's head, as every list's (AGL-4012): CRM with its ☆ and New, then the sections' chips under it.
+        com.aglyn.ui.ListHeader("CRM") {
+          if (scope.canWrite) com.aglyn.ui.ListHeaderAction("New", "add", { creating = true }, Modifier.testTag("crm-new-${kind.collection}"))
+        }
         Column(Modifier.padding(horizontal = space(2f), vertical = space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
-          Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-            SearchField(search, { search = it; if (it.isBlank()) asked = "" }, placeholder = "Search ${kind.plural.lowercase()}", modifier = Modifier.weight(1f), onSearch = { asked = search })
-            if (scope.canWrite) {
-              FilledTonalButton(colors = com.aglyn.ui.aglynTonalButtonColors(), onClick = { creating = true }, modifier = Modifier.testTag("crm-new-${kind.collection}")) {
-                Icon(AglynIcons.named("add"), contentDescription = null)
-                Text("New", Modifier.padding(start = space(0.5f)))
-              }
-            }
-          }
+          SearchField(search, { search = it; if (it.isBlank()) asked = "" }, placeholder = "Search ${kind.plural.lowercase()}", onSearch = { asked = search })
           ChoiceChipRow(filters.map { ChipOption(it.key, it.label) }, filterKey, { filterKey = it })
         }
         LiveListPane(

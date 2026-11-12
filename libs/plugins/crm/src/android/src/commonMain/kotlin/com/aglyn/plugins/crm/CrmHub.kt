@@ -206,14 +206,23 @@ fun CrmGate(context: NativePluginContext, content: @Composable (CrmScope, CrmApi
 @Composable
 fun CrmHubScreen(context: NativePluginContext, initial: CrmSection, params: Map<String, String> = emptyMap()) {
   var section by rememberSaveable { mutableStateOf(initial) }
-  CrmGate(context) { scope, api, reference ->
-    Column(Modifier.fillMaxSize()) {
+  // The sections' chips: under the head of the list a section shows (Contacts, Leads, Companies: its title row, then
+  // the chips, AGL-4012), else across the top.
+  val chips = remember { com.aglyn.ui.PageSectionsSlot() }
+  androidx.compose.runtime.SideEffect {
+    chips.sections = {
       ChoiceChipRow(
         CrmSection.entries.map { ChipOption(it.key, it.label, it.icon) },
         section.key,
         { key -> section = CrmSection.entries.first { it.key == key } },
-        modifier = Modifier.padding(horizontal = space(2f), vertical = space(1f)).testTag("crm-sections"),
+        modifier = Modifier.padding(horizontal = com.aglyn.ui.LocalContentInset.current ?: space(2f), vertical = space(1f)).testTag("crm-sections"),
       )
+    }
+  }
+  CrmGate(context) { scope, api, reference ->
+    Column(Modifier.fillMaxSize()) {
+      if (!chips.claimed) chips.sections()
+      androidx.compose.runtime.CompositionLocalProvider(com.aglyn.ui.LocalAreaSections provides chips) {
       when (section) {
         CrmSection.CONTACTS -> RecordsSection(context, CrmKind.CONTACT, scope, api, reference, params[CrmKind.CONTACT.param], params[CONTACTS_LIST_EMAIL_PARAM], startNew = params["new"] == "1")
         CrmSection.LEADS -> RecordsSection(context, CrmKind.LEAD, scope, api, reference, params[CrmKind.LEAD.param])
@@ -223,6 +232,7 @@ fun CrmHubScreen(context: NativePluginContext, initial: CrmSection, params: Map<
         CrmSection.REPORTS -> ReportsSection(context, scope, reference)
         CrmSection.FIELDS -> FieldsSection(context, scope, api, reference)
         CrmSection.SETTINGS -> SettingsSection(context, scope, reference)
+      }
       }
     }
   }
