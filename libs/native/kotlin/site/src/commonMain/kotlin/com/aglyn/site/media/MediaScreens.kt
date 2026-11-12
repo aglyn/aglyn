@@ -401,9 +401,10 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
     }
   }
 
-  // A phone opens a file in the library's place; the system back returns to the grid, or up a folder.
+  // A phone opens a file in the library's place; the system back returns to the grid. On every size it then leaves
+  // selecting, or goes up a folder, before it leaves Media (a tablet's Back left a folder for Home).
   BackHandler(enabled = phone && phoneFile != null) { phoneFile = null }
-  BackHandler(enabled = phone && phoneFile == null && (selecting || currentFolderId != null)) {
+  BackHandler(enabled = !(phone && phoneFile != null) && (selecting || currentFolderId != null)) {
     if (selecting) { selecting = false; selection = emptySet() } else open(crumbs.dropLast(1).lastOrNull()?.id)
   }
 
