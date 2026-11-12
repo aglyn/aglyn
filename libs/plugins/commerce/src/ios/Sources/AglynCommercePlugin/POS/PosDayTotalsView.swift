@@ -97,7 +97,8 @@ struct PosDayTotalsView: View {
     .toolbar {
       ToolbarItem(placement: .primaryAction) {
         if let file = model.csvFile() {
-          ShareLink(item: file) { Label("Share CSV", systemImage: "square.and.arrow.up") }
+          // Over the register sheet it sits in (a ShareLink asked the register, which was already presenting it).
+          AglynShareButton(url: file) { Label("Share CSV", systemImage: "square.and.arrow.up") }
             .accessibilityIdentifier("day-totals-share")
         }
       }
