@@ -180,6 +180,11 @@ final class ShellNavigation {
   @ObservationIgnored var tabInFront: (() -> ShellNavigation?)?
   /// Where this window opens a link: the tab in front, else this navigation.
   var linkTarget: ShellNavigation { tabInFront?() ?? self }
+  /// Whether a phone's shell draws this navigation (the tab bar and Home's tiles): a place opened from a link, a starred
+  /// or a recent item then opens its area as a Home tile does (AGL-4059). Set by the shell that draws it.
+  @ObservationIgnored var compact = false
+  /// On a phone, the tab bar's section for an area row, when the tab bar holds it.
+  @ObservationIgnored var tabSection: ((String) -> ShellSection?)?
   /// Where the window has been, for Back and Forward beside the search field: each section opened, in order.
   /// Each place holds the sidebar's mode and scope too (`ShellPlace`).
   private(set) var history = NavHistory(ShellPlace(section: .home, mode: .main, inSite: true))

@@ -304,40 +304,129 @@ final class AppModel {
     return context
   }
 
-  /// Opens a console link (universal link, `aglyn://`, a notification's
-  /// link): natively when a plugin answers it, a Besigner page in the app's
-  /// web view, and otherwise a note that the app has no screen for it yet.
+  /// Opens a console link (universal link, `aglyn://`, a notification's or a push's link, a search row's): on the
+  /// workspace and site it names, then the whole path to it, as navigating there by hand builds it (AGL-4059): the
+  /// sidebar's mode, the area row, each screen on the way pushed, so the head's crumbs and Back walk up from it. A Besigner
+  /// page opens in the app's web view over the page it edits; a page the app has no screen for says so over its area.
   func open(_ link: String, in navigation: ShellNavigation) {
-    switch registry.resolve(link) {
-    case .screen(let screen, let params)?:
-      // A link that names a workspace and site by address reads them, not whichever is picked (AGL-3911).
-      if let org = params["orgSlug"] { enterScope(orgSlug: org, hostSlug: params["hostSlug"], in: navigation) }
-      navigation.push(.screen(screen, params))
-    case .besigner(let path)?: navigation.push(.besigner(path))
-    case .unavailable(let path)?:
-      // The app's own screens answer the console's own pages, and every one of them opens on the workspace and site the
-      // link names, as a plugin's screen does (AGL-4215): Analytics reads that site, and a page the app has no screen
-      // for yet says so over the right site rather than the one that happened to be open.
-      let scope = DeepLinks.splitConsoleScope(path.split(separator: "?", maxSplits: 1).first.map(String.init) ?? path)
-      if let org = scope.orgSlug { enterScope(orgSlug: org, hostSlug: scope.hostSlug, in: navigation) }
-      if let jobID = DeepLinks.rootQuery(path)?["aiJob"], !jobID.isEmpty, registry.screen("ai.job") != nil {
-        // An AI job's notice that built nothing of its own to open (`/{hostId}?aiJob=…`) opens that job (AGL-3911).
-        navigation.push(.screen("ai.job", ["jobId": jobID]))
-      } else if path.hasPrefix("/manage/notifications/settings") {
+    guard let (scope, path) = NavPaths.link(link, routes: registry.deepLinks, lists: navPathLists, inSite: navigation.inSite)
+    else { return }
+    // A link that names a workspace and site by address reads them, not whichever is picked (AGL-3911, AGL-4215).
+    if let org = scope.orgSlug { enterScope(orgSlug: org, hostSlug: scope.hostSlug, in: navigation) }
+    go(path, in: navigation)
+  }
+
+  /// Opens a Starred or Recent item (the sidebar's, Home's, the title bar's, the search's): onto its workspace and site,
+  /// then the same path a link to it opens (AGL-4059). Returns that path.
+  @discardableResult
+  func open(_ item: AccountItemRef, in navigation: ShellNavigation) -> NavPath {
+    if item.orgId != workspace?.org?.id { workspace?.open(orgID: item.orgId, hostID: item.hostId) }
+    if let hostID = item.hostId {
+      workspace?.selectSite(hostID)
+      if app == .aglyn { navigation.inSite = true }
+    } else if app == .aglyn {
+      navigation.inSite = false
+    }
+    let path = NavPaths.place(item, routes: registry.deepLinks, lists: navPathLists)
+    go(path, in: navigation)
+    return path
+  }
+
+  /// Opens a screen of the scope in use (a screens-and-settings match in the search, a record row that names a screen):
+  /// the same path a link to it opens, under the row it was matched in.
+  func open(screen: String, params: NativeParams, rowID: String?, in navigation: ShellNavigation) {
+    guard !screen.isEmpty else { return }
+    let path = NavPaths.place(
+      screen: screen, params: params, rowID: rowID, inSite: scopedSite(navigation) != nil, routes: registry.deepLinks,
+      lists: navPathLists)
+    go(path, in: navigation)
+  }
+
+  /// The lists a place is looked up in: the manifest's rows this build has a screen for (a plugin that is off still
+  /// opens its place under its own row), and the staff list for staff.
+  var navPathLists: NavPathLists {
+    let staff = claims.isStaff ? ResolvedNavList(groups: staffNavGroups, id: .unknown) : nil
+    return NavPaths.lists(staff: staff) { [registry] in registry.screen($0) != nil }
+  }
+
+  /// The staff list, as its own mode: the console's staff pages, for staff only.
+  var staffNavGroups: [NativeNavGroup] {
+    guard claims.isStaff else { return [] }
+    let rows = ScreenCatalog.shared.group("staff").map { spec in
+      NativeNavRow(
+        console: NativeNavConsoleRef(id: spec.id, surface: .nativeOnly), icon: NativeNavIcon(android: "", apple: spec.icon),
+        id: spec.id, label: spec.label, screen: spec.id)
+    }
+    return rows.isEmpty ? [] : [NativeNavGroup(foldable: false, id: "staff", rows: rows)]
+  }
+
+  /// Puts a resolved path on screen: the sidebar's mode, the area's section, and each level pushed over it. On a phone an
+  /// area opens as Home's tile does (AGL-4006): on its own tab when the tab bar holds it, else pushed on Home with its
+  /// section chips, a settings area under its mode's list. Aglyn POS has no areas: the place opens over what is on screen.
+  func go(_ path: NavPath, in navigation: ShellNavigation) {
+    let steps = path.pushed.map(Self.route)
+    if app != .aglyn {
+      switch path.area {
+      case .shell(.notifications): navigation.select(.notifications)
+      case .shell(.notificationSettings):
         navigation.select(.notifications)
         navigation.push(.notificationSettings)
-      } else if path.hasPrefix("/manage/notifications") {
-        navigation.select(.notifications)
-      } else if scope.rest.hasPrefix("/analytics") {
-        navigation.push(.analytics)
-      } else if scope.orgSlug != nil, scope.rest == "/" {
-        // A site's own dashboard (a "you have access to this site" notice) is its Home, and a workspace's own address
-        // (`/{orgSlug}`) is the workspace's Home, as on Android.
-        navigation.select(.home)
-      } else {
-        navigation.push(.unavailable(path))
+      case .shell(.home): if steps.isEmpty { navigation.select(.home) }
+      case .row(_, let screen, let params): if steps.isEmpty { navigation.push(Self.route(.screen(screen, params))) }
       }
-    case nil: break
+      if let last = steps.last { navigation.push(last) }
+      return
+    }
+    let land = { (section: ShellSection, stack: [Route]) in
+      navigation.select(section)
+      navigation.paths[section] = stack
+    }
+    switch path.area {
+    case .shell(.home):
+      navigation.mode = .main
+      land(.home, steps)
+    case .shell(.notifications):
+      navigation.mode = .main
+      land(.notifications, steps)
+    case .shell(.notificationSettings):
+      navigation.mode = .main
+      land(.notifications, [.notificationSettings] + steps)
+    case .row(let rowID, let screen, let params):
+      let section = ShellSection.opening(screen, params)
+      guard navigation.compact else {
+        navigation.mode = Self.mode(path.mode)
+        land(section, steps)
+        return
+      }
+      let settings = path.mode == .workspaceSettings || path.mode == .siteSettings
+      navigation.mode = settings ? Self.mode(path.mode) : .main
+      if !settings, let tab = navigation.tabSection?(rowID) {
+        // The tab opens on its row's own place; one of its sections (Orders' Reservations) is pushed over it, as its
+        // chip does.
+        let sectionOverTab = NavPaths.opensSection(path, lists: navPathLists) ? ShellNavigation.areaRoute(section) : nil
+        land(tab, (sectionOverTab.map { [$0] } ?? []) + steps)
+      } else {
+        let area = ShellNavigation.areaRoute(section) ?? Self.route(.screen(screen, params))
+        land(.home, (settings ? [.modeList] : []) + [area] + steps)
+      }
+    }
+  }
+
+  private static func mode(_ mode: NavPathMode) -> ShellMode {
+    switch mode {
+    case .main: .main
+    case .workspaceSettings: .workspaceSettings
+    case .siteSettings: .siteSettings
+    case .staff: .admin
+    }
+  }
+
+  private static func route(_ step: NavStep) -> Route {
+    switch step {
+    case .screen(let screen, _) where screen == NativeNav.analytics: .analytics
+    case .screen(let screen, let params): .screen(screen, params)
+    case .besigner(let path): .besigner(path)
+    case .unavailable(let path): .unavailable(path)
     }
   }
 

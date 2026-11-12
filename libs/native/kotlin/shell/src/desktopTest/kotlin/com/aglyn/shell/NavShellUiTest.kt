@@ -6,6 +6,8 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.assertTextContains
@@ -483,6 +485,27 @@ class NavShellUiTest {
       assertTrue(navigator.stack.isEmpty(), "site.$section is one tap from Pages, not pushed")
       onNodeWithTag("section-tabs").assertIsDisplayed()
     }
+  }
+
+  /**
+   * A record pushed over a pinned area keeps that area's tab selected, not Home (AGL-4059): a link or a starred page opens
+   * Pages with the page pushed, and the tab bar still says Pages.
+   */
+  @Test
+  fun aPhonesPinnedTabStaysSelectedWithARecordPushedOverIt() = runDesktopComposeUiTest(width = 400, height = 820) {
+    val navigator = ShellNavigator()
+    val userDoc = mapOf("tabBars" to listOf(mapOf("scope" to "site:h1", "areas" to listOf("pages", "media"), "chosen" to true)))
+    setContent { AglynShell(testServices(userDoc = userDoc), navigator) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-pages") > 0 }
+    onNodeWithTag("tab-home").assertIsSelected()
+    runOnIdle {
+      navigator.select(NavKeys.of("site.pages"))
+      navigator.push(Route.Screen("site.pages", mapOf("screenId" to "s1")))
+    }
+    waitForIdle()
+    onNodeWithTag("tab-pages").assertIsSelected()
+    onNodeWithTag("tab-home").assertIsNotSelected()
   }
 
   /** Before anyone pins, the first areas opened take the free spots and stay, Create in the centre between them. */

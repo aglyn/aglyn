@@ -53,3 +53,8 @@ kotlin {
     }
   }
 }
+
+// The nav path cases (AGL-4059) are replayed from libs/native/contracts, as the Apple kit replays them.
+tasks.withType<Test>().configureEach {
+  systemProperty("aglyn.contractsDir", rootProject.file("../../libs/native/contracts").absolutePath)
+}

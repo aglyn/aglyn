@@ -46,6 +46,8 @@ class NativePluginManifestTest {
     assertEquals("commerce.orders" to site, screenOf("/acme/hosts/shop/products/orders"))
     assertEquals("commerce.return" to site + mapOf("return" to "r1", "returnId" to "r1"), screenOf("/acme/hosts/shop/products/returns?return=r1"))
     assertEquals("commerce.returns" to site, screenOf("/acme/hosts/shop/products/returns"))
+    // The Products hub's Reservations section is the native Reservations screen (AGL-4059).
+    assertEquals("commerce.reservations" to site, screenOf("/acme/hosts/shop/products/reservations"))
     assertEquals("commerce.shipping" to site, screenOf("/acme/hosts/shop/products/shipping"))
     assertEquals("commerce.notifications" to site, screenOf("/acme/hosts/shop/products/notifications"))
     assertEquals(null, screenOf("/acme/hosts/shop/products/subscriptions?subscription=s1"))
