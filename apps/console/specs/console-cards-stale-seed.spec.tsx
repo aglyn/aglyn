@@ -475,14 +475,15 @@ describe('HostComponentsCard (AGL-1358)', () => {
     fireEvent.change(screen.getByLabelText('Name'), {
       target: { value: 'Hero banner' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    await new Promise((resolve) => setTimeout(resolve, 20))
-
-    const save = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement
-    expect(save.disabled).toBe(false)
+    // Held, yet pressable: the reason shows and Save takes the press.
     expect(
       screen.getByText('Checking your component with the server…'),
     ).toBeTruthy()
+    const save = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement
+    expect(save.disabled).toBe(false)
+    fireEvent.click(save)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
     expect(updateDoc).not.toHaveBeenCalled()
     // Kept, not dropped (AGL-4047): no confirmation came within the
     // guard's wait (0 in this spec), so the press ends in the guard's refusal.
@@ -494,6 +495,11 @@ describe('HostComponentsCard (AGL-1358)', () => {
     )
     expect((screen.getByLabelText('Name') as HTMLInputElement).value).toEqual(
       'Hero banner',
+    )
+    await waitFor(() =>
+      expect(
+        (screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled,
+      ).toBe(false),
     )
   })
 
