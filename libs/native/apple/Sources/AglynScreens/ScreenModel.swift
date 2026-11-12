@@ -492,9 +492,12 @@ public final class ScreenModel {
     // A document only the device's cache answered seeds the screen now and holds its forms (`checking.<key>`) until the
     // server's copy is in: a Save pressed on the cache's copy would write it back over what the server holds.
     let seen = ScreenContext.with(context, "data", .object(results))
-    // A query load's rows the same (a row's prompt is held while its list is the cache's).
+    // A query load's rows the same (a row's prompt is held while its list is the cache's). Every read that ran counts, a
+    // `late` one too: its `when` reads the other loads, so it is not among `wanted`, and a cache-only answer it gave (often
+    // empty: a guess, not "none") was never swapped for the server's (the Reservations look-ahead read no stays).
     var cached: [String: PendingConfirm] = [:]
-    for load in loads where (load.doc != nil || load.query != nil) && load.each == nil {
+    for load in spec.loads
+    where (load.doc != nil || load.query != nil) && load.each == nil && load.derive == nil && results[load.key] != nil {
       guard case .object(var record)? = results[load.key], record[FirestoreLoads.fromCacheKey] == .bool(true) else { continue }
       record[FirestoreLoads.fromCacheKey] = nil
       results[load.key] = .object(record)
