@@ -584,14 +584,24 @@ private struct AglynScreenToolbarModifier<Items: View>: ViewModifier {
 
 /// A screen action's look in its head: a bordered 28-point button (Figma Button, Secondary, Small; Compact radius 6).
 public struct AglynHeaderButtonStyle: ButtonStyle {
-  public init() {}
+  /// Its symbol alone on a square (Figma 13:483's "⋯"), for a head with no room for the words; a label without a
+  /// symbol keeps its words.
+  let iconOnly: Bool
+
+  public init(iconOnly: Bool = false) { self.iconOnly = iconOnly }
 
   public func makeBody(configuration: Configuration) -> some View {
-    configuration.label
+    Group {
+      if iconOnly {
+        configuration.label.labelStyle(.iconOnly)
+      } else {
+        configuration.label.labelStyle(.titleAndIcon)
+      }
+    }
       .font(.system(size: AglynShellMetrics.rowText, weight: .medium))
       .foregroundStyle(AglynColor.textPrimary)
-      .labelStyle(.titleAndIcon)
-      .padding(.horizontal, 10)
+      .padding(.horizontal, iconOnly ? 0 : 10)
+      .frame(minWidth: iconOnly ? AglynShellMetrics.barButton + 4 : nil)
       .frame(height: AglynShellMetrics.barButton + 4)
       .background(
         RoundedRectangle(cornerRadius: AglynShellMetrics.controlRadius, style: .continuous)
@@ -728,22 +738,24 @@ public struct AglynListColumnHeader<Actions: View>: View {
 
   private var column: some View {
     HStack(alignment: .center, spacing: 10) {
+      // The title and its star come first: the actions give up their words before the title gives up a letter.
       Text(head.title)
         .font(.system(size: 22, weight: .semibold))
         .foregroundStyle(AglynColor.textPrimary)
         .lineLimit(1)
         .accessibilityAddTraits(.isHeader)
-      head.star
+        .layoutPriority(2)
+      head.star.layoutPriority(2)
       Spacer(minLength: 8)
-      HStack(spacing: 8) {
-        if let primary {
-          AglynBlockableButton(primary) { Label(primary.title, systemImage: primary.systemImage).labelStyle(.titleAndIcon) }
-        }
-        actions
+      // The head stays inside its list column (an iPad's is 360 wide): the actions with their words, then the other
+      // actions as symbols (Figma 13:483's "⋯"), then the create action as its symbol too. Never past the column's edge
+      // over the detail's title.
+      ViewThatFits(in: .horizontal) {
+        columnActions(primaryWords: true, actionWords: true)
+        columnActions(primaryWords: true, actionWords: false)
+        columnActions(primaryWords: false, actionWords: false)
       }
-      .buttonStyle(AglynHeaderButtonStyle())
-      .menuStyle(.button)
-      .fixedSize()
+      .layoutPriority(1)
     }
     // Figma's title row is the height of its small buttons (28), 20 below the column's top and 12 above the search.
     .frame(height: 28)
@@ -752,6 +764,18 @@ public struct AglynListColumnHeader<Actions: View>: View {
     .padding(.bottom, 12)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(AglynColor.paper)
+  }
+
+  private func columnActions(primaryWords: Bool, actionWords: Bool) -> some View {
+    HStack(spacing: 8) {
+      if let primary {
+        AglynBlockableButton(primary) { Label(primary.title, systemImage: primary.systemImage) }
+          .buttonStyle(AglynHeaderButtonStyle(iconOnly: !primaryWords))
+      }
+      actions.buttonStyle(AglynHeaderButtonStyle(iconOnly: !actionWords))
+    }
+    .menuStyle(.button)
+    .fixedSize()
   }
 
   private var phone: some View {

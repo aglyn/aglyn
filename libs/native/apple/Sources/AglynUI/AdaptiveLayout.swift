@@ -115,6 +115,11 @@ public struct AglynListDetailColumns<List: View, Detail: View>: View {
         // (with every column on the same surface, the hairline is what says where one ends).
         AglynColumnHairline()
         detail
+          // The area's breadcrumbs head the detail when its head took the list column (Figma Orders 13:483); a
+          // screen that draws its own column head (Orders) draws them itself and is offered nothing.
+          .safeAreaInset(edge: .top, spacing: 0) {
+            if let headOffer { AglynDetailCrumbs(headOffer) }
+          }
           .environment(\.aglynDetailColumn, true)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
           .background(AglynColor.paper)
