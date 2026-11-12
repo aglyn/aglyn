@@ -452,6 +452,18 @@ class NavShellUiTest {
     onNodeWithTag("picker-whole-workspace").assertIsDisplayed()
   }
 
+  /** On a phone the bell is Activity (Needs you, then the notifications), never the wide shell's popover (AGL-4006). */
+  @Test
+  fun aPhonesBellOpensActivity() = runDesktopComposeUiTest(width = 400, height = 820) {
+    val navigator = ShellNavigator()
+    setContent { AglynShell(testServices(userDoc = emptyMap()), navigator) }
+    signIn()
+    waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("phone-tabs") > 0 }
+    onNodeWithTag("bell").performClick()
+    waitForIdle()
+    assertEquals(ShellNavigator.NOTIFICATIONS, navigator.top)
+  }
+
   /**
    * On a phone, Pages' tile opens it with its section tabs, and each tab swaps the area in place: Components, Layouts,
    * Templates and Content are one tap from Pages, never a screen deeper (AGL-3993).
