@@ -1978,8 +1978,15 @@
           "title": "New owner",
           "items": "data.members.members",
           "filter": "item.$id != @user.uid",
-          "primary": "{item.email|item.displayName|item.$id}",
-          "secondary": "{item.role:title}",
+          "primary": "{item.displayName|item.email|item.$id}",
+          "secondary": [
+            {
+              "text": "{item.email}",
+              "when": "item.displayName"
+            },
+            "{item.role:title}"
+          ],
+          "avatar": "{item.photoURL}",
           "icon": "person.crop.circle|account_circle",
           "actions": [
             {
@@ -1987,7 +1994,7 @@
               "label": "Transfer",
               "icon": "crown|manage_accounts",
               "destructive": true,
-              "confirm": "{item.email|item.displayName|item.$id} becomes the organization owner (billing, workspace URL, and ownership transfers). You step down to admin. This cannot be undone by you afterwards.",
+              "confirm": "{item.displayName|item.email|item.$id} becomes the organization owner (billing, workspace URL, and ownership transfers). You step down to admin. This cannot be undone by you afterwards.",
               "url": "/api/orgs/settings",
               "body": {
                 "orgId": "{org.id}",
