@@ -141,9 +141,19 @@ enum ThemeApplier {
     #endif
   }
 
-  /// The color scheme a window takes: Night is dark in both; otherwise the appearance's.
-  static func scheme(_ prefs: AppThemePrefs) -> ColorScheme? {
-    prefs.theme == .night ? .dark : prefs.appearance.colorScheme
+  /// The light or dark a window takes: Night is dark in both; otherwise the appearance's, System the device's.
+  static func appearance(_ prefs: AppThemePrefs) -> AglynAppearance {
+    AglynAppearance(appearance: prefs.appearance.rawValue, forcesDark: prefs.theme == .night)
+  }
+
+  /// Whether the shell applies the appearance: a debug Mac launch with `-AglynAppearance light|dark` pins one for
+  /// screenshots, so the account's choice leaves it alone.
+  static var appliesAppearance: Bool {
+    #if DEBUG && os(macOS)
+      !["light", "dark"].contains(UserDefaults.standard.string(forKey: "AglynAppearance")?.lowercased() ?? "")
+    #else
+      true
+    #endif
   }
 }
 
@@ -372,7 +382,8 @@ struct AppThemeModifier: ViewModifier {
       .id("\(key)|\(nonce)")
       .tint(AglynColor.tint)
       .toggleStyle(AglynToggleStyle())
-      .preferredColorScheme(ThemeApplier.scheme(prefs))
+      // Not `preferredColorScheme`: once it has set Dark, a later nil leaves the window dark (AGL-4010).
+      .aglynWindowAppearance(ThemeApplier.appearance(prefs), apply: ThemeApplier.appliesAppearance)
   }
 }
 
