@@ -1655,6 +1655,18 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     ) : null
   const railFooter = (
     <>
+      {/*
+        The Datasets card's own loading state (AGL-4047), the same rule as the
+        panel beside it: while the list has nothing to show and the server has
+        not answered, the card says it is loading instead of sitting blank.
+        Rows the cache already holds show at once, and an answer that is
+        empty, or refused, leaves the panel to say so.
+      */}
+      {!listConfirmed && !listUnreadable && datasets.length === 0 ? (
+        <Box sx={{ px: 2, py: 1 }}>
+          <CircularProgress size={24} aria-label="Loading the dataset list" />
+        </Box>
+      ) : null}
       {listConfirmed && serverNameKey && datasets.length === 0 ? (
         <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1 }}>
           {'No datasets match.'}
