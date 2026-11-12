@@ -50,7 +50,7 @@ struct AccountIdentity {
   /// A signed-in account's name in the account lists: the one on screen reads the same as the header (its profile
   /// first, `readAccountName`), the others as last shown on this device.
   func name(of account: SignedInAccount) -> String {
-    isOnScreen(account) ? name : account.displayName ?? account.email ?? "Account"
+    isOnScreen(account) ? name : account.title
   }
 
   /// The address under a signed-in account's name, when the name is not already the address.
