@@ -254,6 +254,12 @@ export interface PageScope {
   settled: AiLayoutSettlement[]
   scrollTo: Record<string, number>
   images: number
+  /**
+   * On a page brought in (AGL-4152), the pictures it asked for in words, which
+   * alone count toward `AI_LAYOUT_MAX_IMAGES`: the owner's own photos it keeps,
+   * its galleries' cells and its logos never take a slot's place.
+   */
+  asked?: number
   strong: Record<'brand' | 'dark', number>
   /** The section of this page that places the site's form, if one does. */
   formSection: number | null
@@ -1523,7 +1529,9 @@ function image(
   if (page.options.verbatim && !block.text) return null
   const alt = aiLayoutFitText(block.text, 'alt', scope.page.options.language)
   if (!alt) return null
-  if (page.images >= maxImages(page)) {
+  // A page brought in counts only the pictures it asks for in words (AGL-4152): one that keeps two grids of the
+  // owner's photos lost every picture asked for after them.
+  if ((page.options.verbatim ? (page.asked ?? 0) : page.images) >= maxImages(page)) {
     page.settled.push({
       at: scope.at,
       what: `a picture past the page's ${AI_LAYOUT_MAX_IMAGES}; left out`,
@@ -1531,6 +1539,7 @@ function image(
     return null
   }
   page.images += 1
+  if (page.options.verbatim) page.asked = (page.asked ?? 0) + 1
   const icon = aiIconOfWord(block.icon) ?? page.pageIcon
   const tree = page.tree
   const mark = tree.add(
@@ -2437,6 +2446,8 @@ function designImage(
   const { page } = scope
   if (picture.given) page.images += 1
   else page.pictures += 1
+  // A redesign's opening asking for a picture in words is one of the pictures it asks for (AGL-4152).
+  if (page.options.verbatim && picture.given && !picture.src && !picture.video) page.asked = (page.asked ?? 0) + 1
   // A page brought in places the source's own picture (AGL-4107), described as
   // the source described it, and decorative where it was not described.
   const described = picture.alt ? { alt: picture.alt } : { decorative: true }
@@ -3848,7 +3859,8 @@ function itemPicture(scope: SectionScope, picture: AiLayoutPicture): string {
   return page.tree.add(
     'image',
     {
-      src: picture.src,
+      // A card's picture left for the page step to fill has no source yet (AGL-4152): its words are what it looks for.
+      ...(picture.src ? { src: picture.src } : {}),
       ...(picture.alt ? { alt: picture.alt } : { decorative: true }),
       objectFit: fit?.objectFit ?? 'cover',
       // A height the source crops it to is the Image's own height field.

@@ -30,6 +30,22 @@ const clean = (text: unknown): string => (typeof text === 'string' ? text.replac
 /** A button's words and where it goes, as one key: two that share it are the same action. */
 const actionKey = (text: string | undefined, to: string | undefined): string => `${clean(text).toLowerCase()}\u0000${to ?? ''}`
 
+/** How strongly a button asks: filled 0, outlined 1, quiet 2. */
+const strength = (block: AiLayoutBlock): number => (filled(block) ? 0 : block.style === 'secondary' ? 1 : 2)
+
+/**
+ * Where a button goes, as two that go to one place share it (AGL-4152): a
+ * phone by its digits, an email and a web address in any case and without a
+ * trailing slash, anything else as written.
+ */
+export function aiSiteImportDestinationKey(to: string): string {
+  const value = to.trim()
+  if (/^tel:/i.test(value)) return `tel:${value.slice(4).replace(/[^\d+]/g, '')}`
+  if (/^mailto:/i.test(value)) return value.toLowerCase()
+  if (/^https?:\/\//i.test(value)) return value.toLowerCase().replace(/^http:/, 'https:').replace(/[/?#]+$/, '')
+  return value
+}
+
 /** Whether a button is drawn filled: the compiler's default, `primary` or `large`. */
 const filled = (block: AiLayoutBlock): boolean => block.kind === 'button' && (block.style === undefined || block.style === 'primary' || block.style === 'large')
 
@@ -46,9 +62,12 @@ const filled = (block: AiLayoutBlock): boolean => block.kind === 'button' && (bl
  *   group, unless the section already has that button. Where only some items
  *   carry it, each is that item's own action and stays.
  * - The same button twice in a section is shown once, the first.
- * - Two buttons side by side to the same place are one: the one with the
- *   header's words where one has them, else the first. Of buttons side by
- *   side, only the first is filled; the rest are outlined.
+ * - Buttons anywhere in a section to the same place are one: the strongest,
+ *   filled over outlined over quiet, the first of equals, with the header's
+ *   words where one of them has them. A call and a page are two places. A
+ *   closing band's "Contact us" and "Request a quote", both to the contact
+ *   page with a call between them, read as a mistake.
+ * - Of buttons side by side, only the first is filled; the rest are outlined.
  */
 export function aiSiteImportSectionActions(section: Pick<AiLayoutSection, 'cols' | 'blocks'>, cta?: string | null): Pick<AiLayoutSection, 'cols' | 'blocks'> {
   let { cols, blocks } = section
@@ -103,8 +122,26 @@ export function aiSiteImportSectionActions(section: Pick<AiLayoutSection, 'cols'
     seen.add(key)
     return true
   })
-  // Buttons side by side: one to each place, the first filled.
+  // Buttons anywhere in the section to one place: one, the strongest (filled over outlined over quiet), the first of
+  // equals, in its own place; with the header's words where one of them has them. A call and a page are two places.
   const wanted = clean(cta).toLowerCase()
+  const kept = new Map<string, AiLayoutBlock>()
+  const worded = new Map<string, AiLayoutBlock>()
+  for (const block of blocks) {
+    if (block.kind !== 'button' || !block.to) continue
+    const key = aiSiteImportDestinationKey(block.to)
+    const was = kept.get(key)
+    if (!was || strength(block) < strength(was)) kept.set(key, block)
+    if (wanted && clean(block.text).toLowerCase() === wanted && !worded.has(key)) worded.set(key, block)
+  }
+  blocks = blocks.flatMap((block) => {
+    if (block.kind !== 'button' || !block.to) return [block]
+    const key = aiSiteImportDestinationKey(block.to)
+    if (kept.get(key) !== block) return []
+    const words = worded.get(key)
+    return [words && clean(block.text).toLowerCase() !== wanted ? { ...block, text: words.text } : block]
+  })
+  // Buttons side by side, each to its own place: the first filled.
   const out: AiLayoutBlock[] = []
   for (const block of blocks) {
     const before = out[out.length - 1]
@@ -113,16 +150,6 @@ export function aiSiteImportSectionActions(section: Pick<AiLayoutSection, 'cols'
       let start = out.length - 1
       while (start > 0 && out[start - 1]?.kind === 'button' && out[start - 1]?.col === block.col) start -= 1
       const run = out.slice(start)
-      const same = block.to ? run.findIndex((entry) => entry.to === block.to) : -1
-      if (same !== -1) {
-        // The header's words win the place; the run keeps its first button's place and fill.
-        const kept = run[same] as AiLayoutBlock
-        if (wanted && clean(block.text).toLowerCase() === wanted && clean(kept.text).toLowerCase() !== wanted) {
-          const { style: _style, ...words } = block
-          out[start + same] = { ...words, ...(kept.style ? { style: kept.style } : {}) }
-        }
-        continue
-      }
       out.push(run.some(filled) && filled(block) ? { ...block, style: 'secondary' } : block)
       continue
     }

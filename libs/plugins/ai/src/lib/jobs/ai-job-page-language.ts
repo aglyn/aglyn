@@ -1452,6 +1452,26 @@ async function aiRunImportedPageWording(scope: {
   return { ...spent, status: 'ok', value: { ...built, settled: [...built.settled, ...notes], words: 'improved' } }
 }
 
+/** What a picture asked for in words past the page's cap is settled as, by the compiler (`ai-layout-compiler.ts`). */
+const PAST_THE_CAP = /^a picture past the page's \d+; left out$/
+
+/**
+ * The one line a redesign that passed logs (AGL-4152): how many sections it
+ * drew, each block its read left out and why, what code mended (a section
+ * left a heading alone, a card row evened), and how many pictures asked for
+ * in words passed the page's cap. Never a word of the page beyond a heading.
+ */
+export function aiSiteImportRedesignPassed(value: Pick<AiSiteImportImproved<Pick<AiLayoutPageBuilt, 'settled'>>, 'built' | 'page' | 'read'>, credits?: number): Record<string, unknown> {
+  const dropped = (value.read ?? []).map((note) => `${note.at}: ${note.what}`)
+  return {
+    sections: value.page.given.sections.length,
+    readDropped: dropped,
+    mended: value.page.mended,
+    pastCap: value.built.settled.filter((note) => PAST_THE_CAP.test(note.what)).length,
+    ...(credits !== undefined ? { credits } : {}),
+  }
+}
+
 /**
  * The ceiling a redesign is asked at on this model (AGL-4152): what the page
  * step's time holds of a whole page's design and words, and its one re-ask.
@@ -1604,7 +1624,7 @@ async function aiRunImprovedPage(scope: {
   const taken = answered.status === 'needs_input' && answered.answer && aiSiteImportImproveOnlySoft(answered.violations) ? checkOf(true)(answered.answer) : null
   if (taken?.value) {
     const { built, page, missed } = taken.value
-    console.info('ai imported page: its redesign taken with design lines missed', { codes: missed ?? [], ...sizes })
+    console.info('ai imported page: its redesign taken with design lines missed', { codes: missed ?? [], ...sizes, passed: aiSiteImportRedesignPassed(taken.value) })
     return {
       ...spent,
       status: 'ok',
@@ -1631,6 +1651,7 @@ async function aiRunImprovedPage(scope: {
     }
   }
   const { built, page } = answered.value
+  console.info('ai imported page: its redesign passed', aiSiteImportRedesignPassed(answered.value, sizes.credits))
   return {
     ...spent,
     status: 'ok',

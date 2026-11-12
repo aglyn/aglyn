@@ -815,8 +815,9 @@ function compileFooter(
 function sourceFooter(page: PageScope, source: AiLayoutFrameSource, plan: Pick<AiLayoutFramePlan, 'brand'>, name: string): string {
   const tree = page.tree
   const drawn = aiLayoutSourceFooter(tree, source.footer as NonNullable<AiLayoutFrameSource['footer']>, { name })
-  // It opens with the logo, where the source's does (AGL-4139).
-  const logo = footerLogoOf(tree, plan, name)
+  // It opens with the logo, where the source's does (AGL-4139); a footer a site's plan draws always opens with the
+  // brand, its logo or else its name as a wordmark (AGL-4152).
+  const logo = footerLogoOf(tree, plan, name) ?? (source.planned === true && name.trim() ? tree.add('muiTypography', { children: name.trim(), variant: 'h6', component: 'p' }, { fontWeight: 800, color: 'text.primary' }, null, 'footerWordmark') : null)
   // A planned footer with no columns to carry is one short band, never a tall one around its © line (AGL-4152).
   const compact = source.planned === true && !drawn.top
   const stack = tree.add('muiStack', { spacing: compact ? '2' : '6' }, drawn.sx, [logo, drawn.top, drawn.bottom], 'footerStack')

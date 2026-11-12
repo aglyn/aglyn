@@ -263,6 +263,92 @@ export function aiLayoutWithoutSections(
   return { nodes: nodes as unknown as NodesMap, dropped }
 }
 
+/** Elements that only hold or frame others: a section of these and headings says nothing. */
+const HOLDERS = new Set(['div', 'section', 'muiBox', 'muiStack', 'muiContainer', 'muiGrid', 'muiPaper', 'muiCard', 'muiCardContent', 'muiLinkBox', 'icon'])
+
+/** Whether a section shows nothing but its heading (AGL-4152): every element under it a holder, an icon, a heading or words-less text. */
+function hollowSection(nodes: GapNodes, id: string): boolean {
+  return subtree(nodes, id).every((each) => {
+    const node = nodes[each]
+    if (HOLDERS.has(node.componentId)) return true
+    if (node.componentId === 'muiTypography') return isHeading(node) || !wordsOf(node)
+    return false
+  })
+}
+
+/**
+ * A finished page with no section left a heading alone (AGL-4152), its first
+ * aside: each such section goes, with any link that scrolled to it
+ * (`aiLayoutWithoutSections`). The last word on a redesigned page, after its
+ * pictures are placed or dropped: a heading over a list its answer left empty,
+ * or over a band of pictures none of which could be found, says only that
+ * something is missing. Anything under it that is not a holder, an icon or a
+ * heading (a picture, a button, a form, a film, a table, a line of words)
+ * keeps the section.
+ */
+export function aiLayoutWithoutHollowSections(input: NodesMap, rootId: string): { nodes: NodesMap; dropped: string[] } {
+  const nodes = input as unknown as GapNodes
+  const [, ...rest] = nodes[rootId]?.nodes ?? []
+  const hollow = rest
+    .filter((id) => nodes[id] && hollowSection(nodes, id))
+    .map((id) => ({ id, name: String(nodes[id]?.props?.['ariaLabel'] ?? id), why: 'left with only its heading' }))
+  return aiLayoutWithoutSections(input, rootId, hollow)
+}
+
+/** Elements that wrap one item of a row without being it: a grid's cell, a link around a card. */
+const ITEM_WRAPPERS = new Set(['muiGrid', 'muiLinkBox', 'muiBox'])
+
+/** The element an item of a row is drawn as: through its cell and any link around it, to its card or its stack. */
+function itemOf(nodes: GapNodes, id: string): string {
+  let at = id
+  for (let depth = 0; depth < 4; depth += 1) {
+    const node = nodes[at]
+    const children = node?.nodes ?? []
+    if (!node || node.componentId === 'muiCard' || children.length !== 1 || !ITEM_WRAPPERS.has(node.componentId)) return at
+    at = children[0] as string
+  }
+  return at
+}
+
+/**
+ * A finished page whose rows of cards each show a picture on every card or on
+ * none (AGL-4152). A redesign gives a row most of whose cards had a picture
+ * one on each, and the page step fills the ones it asked for; a card whose
+ * picture could not be found then stood bare beside pictured ones. Each such
+ * row's pictures are taken out, so the row reads even. A row is two or more
+ * items drawn alike (the same element, its parts in the same order but for
+ * the picture); a split row of words beside a picture is no such row.
+ */
+export function aiLayoutEvenCardPictures(input: NodesMap): { nodes: NodesMap; evened: number } {
+  const source = input as unknown as GapNodes
+  const rows: string[][] = []
+  for (const node of Object.values(source)) {
+    const children = node.nodes ?? []
+    if (children.length < 2) continue
+    const items = children.map((child) => itemOf(source, child))
+    const shapes = items.map((item) => source[item])
+    const first = shapes[0]
+    if (!first || (first.componentId !== 'muiCard' && first.componentId !== 'muiStack')) continue
+    if (!shapes.every((shape) => shape && shape.componentId === first.componentId)) continue
+    const pictureOf = (item: string) => (source[item]?.nodes ?? []).filter((child) => source[child]?.componentId === 'image')
+    const pictured = items.filter((item) => pictureOf(item).length).length
+    if (!pictured || pictured === items.length) continue
+    const partsOf = (item: string) => (source[item]?.nodes ?? []).filter((child) => source[child]?.componentId !== 'image').map((child) => source[child]?.componentId).join(',')
+    const parts = partsOf(items[0] as string)
+    if (!parts || !items.every((item) => partsOf(item) === parts)) continue
+    rows.push(items.flatMap(pictureOf))
+  }
+  if (!rows.length) return { nodes: input, evened: 0 }
+  const nodes = cloneNodes(input)
+  const parents = parentsOf(nodes)
+  for (const picture of rows.flat()) {
+    const parent = parents.get(picture)
+    for (const each of subtree(nodes, picture)) delete nodes[each]
+    if (parent && nodes[parent]) nodes[parent].nodes = (nodes[parent].nodes ?? []).filter((child) => child !== picture)
+  }
+  return { nodes: nodes as unknown as NodesMap, evened: rows.length }
+}
+
 /** The page or frame with every gap taken out, and what was taken. */
 export function aiLayoutWithoutGaps(input: NodesMap, rootId: string): { nodes: NodesMap; dropped: string[] } {
   const found = gapsOf(input as unknown as GapNodes)
