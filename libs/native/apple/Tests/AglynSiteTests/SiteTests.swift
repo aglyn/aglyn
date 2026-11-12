@@ -14,6 +14,12 @@ import XCTest
 /// library queries.
 @MainActor
 final class SiteTests: XCTestCase {
+  /// A phone drops the sites row's "Edited" column, as a narrow Mac window does; the Mac and iPad keep it.
+  func testSitesRowShowsEditedOnlyInWideChrome() {
+    XCTAssertTrue(SiteRowColumns.showsEdited(wideChrome: true))
+    XCTAssertFalse(SiteRowColumns.showsEdited(wideChrome: false))
+  }
+
   private func registry() -> NativePluginRegistry {
     let registry = NativePluginRegistry()
     let result = NativePluginLoader.load(NativePlatformEntries.entries, into: registry)

@@ -42,6 +42,7 @@ public struct AglynFormSheet<Content: View>: View {
           content
         }
         .formStyle(.grouped)
+        .aglynPhoneFormEdges()
         // Why it did not save is read where it is: the form scrolls to it, rather than the new banner pushing the
         // field being typed in under the keyboard.
         .onChange(of: error) { _, error in
