@@ -179,18 +179,21 @@ describe('PluginConfigCard seed guard (AGL-1449)', () => {
     mockSettingsDoc.fromCache = true
     render(<PluginConfigCards orgId="org-1" pluginId="analytics" />)
 
-    editAndSave()
-    await new Promise((resolve) => setTimeout(resolve, 20))
-
+    fireEvent.change(screen.getByLabelText('Tracking id'), {
+      target: { value: 'UA-EDITED' },
+    })
+    // Held, yet pressable: the reason shows and Save takes the press.
+    expect(screen.getByRole('status').textContent).toBe(
+      'Checking your plugin settings with the server…',
+    )
     const save = screen.getByRole('button', {
       name: 'Save settings',
     }) as HTMLButtonElement
     expect(save.disabled).toBe(false)
-    expect(screen.getByRole('status').textContent).toBe(
-      'Checking your plugin settings with the server…',
-    )
+    fireEvent.click(save)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
     expect(mockSetDoc).not.toHaveBeenCalled()
-    // Nothing refused: the press never happened.
     // Kept, not dropped (AGL-4047): no confirmation came within the
     // guard's wait (0 in this spec), so the press ends in the guard's refusal.
     await waitFor(() =>
@@ -202,6 +205,12 @@ describe('PluginConfigCard seed guard (AGL-1449)', () => {
     // What was typed stays.
     expect((screen.getByLabelText('Tracking id') as HTMLInputElement).value).toBe(
       'UA-EDITED',
+    )
+    await waitFor(() =>
+      expect(
+        (screen.getByRole('button', { name: 'Save settings' }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
     )
   })
 

@@ -320,16 +320,20 @@ describe('LanguagesCard (AGL-1358)', () => {
     mockListener.fromCache = true
     render(<LanguagesCard hostId="host-1" />)
 
-    editAndSave()
-    await new Promise((resolve) => setTimeout(resolve, 20))
-
+    fireEvent.change(screen.getByLabelText('Languages'), {
+      target: { value: 'en, es, fr' },
+    })
+    // Held, yet pressable: the reason shows and Save takes the press.
+    expect(screen.getByRole('status').textContent).toBe(
+      'Checking your language settings with the server…',
+    )
     const save = screen.getByRole('button', {
       name: 'Save languages',
     }) as HTMLButtonElement
     expect(save.disabled).toBe(false)
-    expect(screen.getByRole('status').textContent).toBe(
-      'Checking your language settings with the server…',
-    )
+    fireEvent.click(save)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
     expect(updateDoc).not.toHaveBeenCalled()
     // Kept, not dropped (AGL-4047): no confirmation came within the
     // guard's wait (0 in this spec), so the press ends in the guard's refusal.
@@ -342,6 +346,12 @@ describe('LanguagesCard (AGL-1358)', () => {
     expect(
       (screen.getByLabelText('Languages') as HTMLInputElement).value,
     ).toEqual('en, es, fr')
+    await waitFor(() =>
+      expect(
+        (screen.getByRole('button', { name: 'Save languages' }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    )
   })
 
   it('keeps what was typed through the server’s copy, and saves it on the first press', async () => {
