@@ -63,6 +63,7 @@ import { doc, getDocs, updateDoc } from 'firebase/firestore'
 import {
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { pluginRecordListSource } from '@aglyn/aglyn/plugin-manager/plugin-record-lists'
@@ -514,7 +515,7 @@ function AddLineDialog(props: AddLineDialogProps) {
 
   const handleAdd = () => {
     if (problem || unitCents === null) return
-    void onAdd({
+    return onAdd({
       ...(door === 'catalog' && picked ? { productId: picked.productId } : {}),
       name: lineName.slice(0, DEAL_LINE_ITEM_NAME_MAX),
       quantity: quantityNumber,
@@ -522,6 +523,15 @@ function AddLineDialog(props: AddLineDialogProps) {
       currency,
     })
   }
+  /*
+   * An Add pressed while the deal is held is kept, and adds once the deal is
+   * confirmed, onto its confirmed lines (AGL-4047). If no confirmation comes,
+   * the refusal shows here and nothing is added.
+   */
+  const held = useHeldSave(handleAdd, {
+    checking: Boolean(checkingText),
+    subject: 'deal',
+  })
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="xs">
@@ -629,7 +639,11 @@ function AddLineDialog(props: AddLineDialogProps) {
         </Stack>
       </DialogContent>
       <DialogActions>
-        {checkingText ? (
+        {held.refusal ? (
+          <Typography variant="body2" color="warning.main" role="alert" sx={{ mr: 'auto' }}>
+            {held.refusal}
+          </Typography>
+        ) : checkingText ? (
           <Typography variant="body2" color="text.secondary" role="status" sx={{ mr: 'auto' }}>
             {checkingText}
           </Typography>
@@ -637,8 +651,8 @@ function AddLineDialog(props: AddLineDialogProps) {
         <Button onClick={onClose} disabled={busy}>
           {'Cancel'}
         </Button>
-        <Button variant="contained" disabled={busy || Boolean(checkingText) || Boolean(problem)} onClick={handleAdd}>
-          {'Add line'}
+        <Button variant="contained" disabled={busy || held.saving || Boolean(problem)} onClick={held.press}>
+          {held.saving ? 'Saving…' : 'Add line'}
         </Button>
       </DialogActions>
     </Dialog>

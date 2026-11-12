@@ -60,6 +60,7 @@ import { pluginDocsHelp } from '@aglyn/aglyn'
 import {
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -438,6 +439,8 @@ const CategoryDialog = memo(function CategoryDialog(props: {
   onSave(): void
   /** The row is not confirmed by the server yet: Save is held (AGL-4047). */
   checkingText?: string
+  /** A press is kept or saving (`useHeldSave`, AGL-4047): Save says "Saving…". */
+  saving?: boolean
 }) {
   const { draft, categories, setDraft, checkingText } = props
   const draftId = draft?.id
@@ -500,10 +503,10 @@ const CategoryDialog = memo(function CategoryDialog(props: {
         <Button
           variant="contained"
           color="primary"
-          disabled={Boolean(checkingText) || !draft?.name.trim()}
+          disabled={props.saving || !draft?.name.trim()}
           onClick={props.onSave}
         >
-          {'Save'}
+          {props.saving ? 'Saving…' : 'Save'}
         </Button>
       </DialogActions>
     </Dialog>
@@ -701,6 +704,8 @@ const CollectionDialog = memo(function CollectionDialog(props: {
   onSave(): void
   /** The row is not confirmed by the server yet: Save is held (AGL-4047). */
   checkingText?: string
+  /** A press is kept or saving (`useHeldSave`, AGL-4047): Save says "Saving…". */
+  saving?: boolean
 }) {
   const { draft, error, setDraft, checkingText } = props
   const close = useCallback(() => setDraft(null), [setDraft])
@@ -767,10 +772,10 @@ const CollectionDialog = memo(function CollectionDialog(props: {
         <Button
           variant="contained"
           color="primary"
-          disabled={Boolean(checkingText) || !draft?.name.trim() || Boolean(error)}
+          disabled={props.saving || !draft?.name.trim() || Boolean(error)}
           onClick={props.onSave}
         >
-          {'Save'}
+          {props.saving ? 'Saving…' : 'Save'}
         </Button>
       </DialogActions>
     </Dialog>
@@ -1480,6 +1485,18 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
     setCollectionDraft({ ...draft, rules })
   }, [])
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const categoryHeld = useHeldSave(handleCategorySave, {
+    checking: Boolean(categoryChecking),
+    subject: 'category',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+  const collectionHeld = useHeldSave(handleCollectionSave, {
+    checking: Boolean(collectionChecking),
+    subject: 'collection',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <CardDisplay
       header={'Categories & collections'}
@@ -1530,8 +1547,9 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
         draft={categoryDraft}
         categories={categories}
         setDraft={setCategoryDraft}
-        onSave={handleCategorySave}
+        onSave={categoryHeld.press}
         checkingText={categoryChecking}
+        saving={categoryHeld.saving}
       />
 
       <CollectionDialog
@@ -1547,8 +1565,9 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
         setDraft={setCollectionDraft}
         onProducts={setCollectionProducts}
         onRule={updateRule}
-        onSave={handleCollectionSave}
+        onSave={collectionHeld.press}
         checkingText={collectionChecking}
+        saving={collectionHeld.saving}
       />
     </CardDisplay>
   )

@@ -277,22 +277,33 @@ describe('StoreSettingsCard (AGL-1358)', () => {
    * HELD while the settings read is the cache's, with the reason beside it,
    * and what was typed stays.
    */
-  it('HOLDS Save, with the reason beside it, while the read is unconfirmed', async () => {
+  it('KEEPS a Save pressed, with the reason beside it, while the read is unconfirmed', async () => {
     listener.fromCache = true
     render(<StoreSettingsCard hostId="host-1" />)
 
     editAndSave()
+    // Kept, not dropped (AGL-4047): the press says Saving… at once.
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeTruthy()
     await settle()
 
-    expect(
-      (screen.getByRole('button', { name: 'Save store settings' }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true)
+    // No confirmation came within the guard's wait (0 in this spec), so the
+    // press ends in the guard's refusal, and Save can be pressed again.
+    await waitFor(() =>
+      expect(enqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm your store settings with the server yet, so nothing was saved/),
+        expect.anything(),
+      ),
+    )
+    await waitFor(() =>
+      expect(
+        (screen.getByRole('button', { name: 'Save store settings' }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    )
     expect(screen.getByRole('status').textContent).toBe(
       'Checking your store settings with the server…',
     )
     expect(setDoc).not.toHaveBeenCalled()
-    expect(enqueueSnackbar).not.toHaveBeenCalled()
     // The form keeps what was typed.
     expect(
       (screen.getByLabelText('Terms URL') as HTMLInputElement).value,
@@ -365,7 +376,7 @@ describe('ShippingSettingsCard (AGL-1358)', () => {
     )
   }
 
-  it('HOLDS Save while the read is unconfirmed, and saves onto the server’s rates', async () => {
+  it('KEEPS a Save pressed while the read is unconfirmed, and saves onto the server’s rates', async () => {
     listener.fromCache = true
     const { rerender } = render(<ShippingSettingsCard hostId="host-1" />)
 
@@ -373,7 +384,14 @@ describe('ShippingSettingsCard (AGL-1358)', () => {
     await settle()
 
     expect(setDoc).not.toHaveBeenCalled()
-    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    // Kept, not dropped (AGL-4047): no confirmation came within the
+    // guard's wait (0 in this spec), so the press ends in the guard's refusal.
+    await waitFor(() =>
+      expect(enqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm your .+ with the server yet, so nothing was saved/),
+        expect.anything(),
+      ),
+    )
     expect(screen.getByRole('status').textContent).toBe(
       'Checking your shipping settings with the server…',
     )
@@ -422,7 +440,7 @@ describe('TaxSettingsCard (AGL-1358)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save tax settings' }))
   }
 
-  it('HOLDS Save while the read is unconfirmed, and saves onto the server’s mode', async () => {
+  it('KEEPS a Save pressed while the read is unconfirmed, and saves onto the server’s mode', async () => {
     listener.fromCache = true
     const { rerender } = render(<TaxSettingsCard hostId="host-1" />)
 
@@ -430,7 +448,14 @@ describe('TaxSettingsCard (AGL-1358)', () => {
     await settle()
 
     expect(setDoc).not.toHaveBeenCalled()
-    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    // Kept, not dropped (AGL-4047): no confirmation came within the
+    // guard's wait (0 in this spec), so the press ends in the guard's refusal.
+    await waitFor(() =>
+      expect(enqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm your .+ with the server yet, so nothing was saved/),
+        expect.anything(),
+      ),
+    )
     expect(screen.getByRole('status').textContent).toBe(
       'Checking your tax settings with the server…',
     )
@@ -496,7 +521,7 @@ describe('ReservationsCard (AGL-1358)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
   }
 
-  it('HOLDS Save while the rows are unconfirmed, and saves onto the server’s row', async () => {
+  it('KEEPS a Save pressed while the rows are unconfirmed, and saves onto the server’s row', async () => {
     listener.fromCache = true
     const { rerender } = render(<ReservationsCard hostId="host-1" />)
 
@@ -508,7 +533,14 @@ describe('ReservationsCard (AGL-1358)', () => {
     await settle()
 
     expect(setDoc).not.toHaveBeenCalled()
-    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    // Kept, not dropped (AGL-4047): no confirmation came within the
+    // guard's wait (0 in this spec), so the press ends in the guard's refusal.
+    await waitFor(() =>
+      expect(enqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm your .+ with the server yet, so nothing was saved/),
+        expect.anything(),
+      ),
+    )
     expect(screen.getByRole('status').textContent).toBe(
       'Checking your resource with the server…',
     )
@@ -568,7 +600,7 @@ describe('CatalogOrganizationCard (AGL-1358)', () => {
   const clickCategoryAction = (name: 'Edit' | 'Delete') =>
     fireEvent.click(screen.getAllByRole('button', { name })[0])
 
-  it('HOLDS a category Save while the rows are unconfirmed, and saves onto the server’s row', async () => {
+  it('KEEPS a category Save pressed while the rows are unconfirmed, and saves onto the server’s row', async () => {
     listener.fromCache = true
     const { rerender } = render(<CatalogOrganizationCard hostId="host-1" />)
 
@@ -581,7 +613,14 @@ describe('CatalogOrganizationCard (AGL-1358)', () => {
     await settle()
 
     expect(setDoc).not.toHaveBeenCalled()
-    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    // Kept, not dropped (AGL-4047): no confirmation came within the
+    // guard's wait (0 in this spec), so the press ends in the guard's refusal.
+    await waitFor(() =>
+      expect(enqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm your .+ with the server yet, so nothing was saved/),
+        expect.anything(),
+      ),
+    )
     expect(
       screen
         .getAllByRole('status')
@@ -653,7 +692,7 @@ describe('CatalogOrganizationCard (AGL-1358)', () => {
     expect(payload.parentId).toBeNull()
   })
 
-  it('HOLDS a collection Save while the rows are unconfirmed, and posts onto the server’s row', async () => {
+  it('KEEPS a collection Save pressed while the rows are unconfirmed, and posts onto the server’s row', async () => {
     listener.fromCache = true
     const { rerender } = render(<CatalogOrganizationCard hostId="host-1" />)
 
@@ -664,7 +703,14 @@ describe('CatalogOrganizationCard (AGL-1358)', () => {
 
     // The request never left the browser, and nothing was refused.
     expect(fetchMock).not.toHaveBeenCalled()
-    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    // Kept, not dropped (AGL-4047): no confirmation came within the
+    // guard's wait (0 in this spec), so the press ends in the guard's refusal.
+    await waitFor(() =>
+      expect(enqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm your .+ with the server yet, so nothing was saved/),
+        expect.anything(),
+      ),
+    )
     expect(
       screen
         .getAllByRole('status')

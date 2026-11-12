@@ -622,20 +622,23 @@ describe('besigner SEO · the missing seed guard (AGL-1437, AGL-1358)', () => {
    * is HELD while the screen read is the cache's, with the reason under it,
    * and the typed value stays on screen.
    */
-  it('HOLDS Save SEO while the screen read is unconfirmed, keeping what was typed', async () => {
+  it('KEEPS a Save SEO pressed while the screen read is unconfirmed, keeping what was typed', async () => {
     mockScreenDoc.fromCache = true
     render(<ScreenBesigner />)
 
     editDescriptionAndSave()
     await new Promise((resolve) => setTimeout(resolve, 20))
 
-    const save = screen.getByRole('button', {
+    const save = (await screen.findByRole('button', {
       name: 'Save SEO',
-    }) as HTMLButtonElement
-    expect(save.disabled).toBe(true)
-    expect(
-      screen.getByText('Checking your SEO settings with the server…'),
-    ).toBeTruthy()
+    })) as HTMLButtonElement
+    expect(save.disabled).toBe(false)
+    // Kept, not dropped (AGL-4047): no confirmation came within the guard's
+    // wait (0 in this spec), so the press ends in the guard's refusal, shown
+    // where the reason for the hold was.
+    expect(screen.getByRole('alert').textContent).toMatch(
+      /^We could not confirm your SEO settings with the server yet, so nothing was saved/,
+    )
     expect(mockUpdateScreenDoc).not.toHaveBeenCalled()
     expect(mockEnqueueSnackbar).not.toHaveBeenCalled()
     expect(

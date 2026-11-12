@@ -128,16 +128,19 @@ describe('what is typed survives a snapshot', () => {
  * was typed stays through the server's answer.
  */
 describe('a save over an unconfirmed read', () => {
-  it('holds Save with the reason, then saves what was typed on the first press', async () => {
+  it('keeps a Save pressed during the hold, then saves what was typed', async () => {
     const view = render(dialogFor(PIPELINE, true, true))
     rename(0, 'First call')
     const saveButton = screen.getByRole('button', { name: 'Save stages' }) as HTMLButtonElement
-    expect(saveButton.disabled).toBe(true)
     expect(screen.getByRole('status').textContent).toBe('Checking your pipeline with the server…')
+    // Kept, not dropped (AGL-4047): pressed during the hold, it says Saving…
+    // and writes nothing until the server answers.
+    fireEvent.click(saveButton)
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeTruthy()
+    expect(updateDoc).not.toHaveBeenCalled()
 
     view.rerender(dialogFor(resnapshot(PIPELINE), true, false))
     expect(stageNames()[0]).toBe('First call')
-    fireEvent.click(screen.getByRole('button', { name: 'Save stages' }))
     await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
   })
 })

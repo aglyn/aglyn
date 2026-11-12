@@ -246,7 +246,7 @@ describe('ContactDetailPage (AGL-1358, AGL-2596)', () => {
    * HELD while the contact read is the cache's, with the reason beside it,
    * and what was typed stays.
    */
-  it('HOLDS Save, with the reason beside it, while the read is unconfirmed', async () => {
+  it('KEEPS a Save pressed, with the reason beside it, while the read is unconfirmed', async () => {
     listener.fromCache = true
     renderPage()
 
@@ -255,14 +255,21 @@ describe('ContactDetailPage (AGL-1358, AGL-2596)', () => {
 
     expect(
       (screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled,
-    ).toBe(true)
+    ).toBe(false)
     expect(screen.getAllByRole('status').map((note) => note.textContent)).toContain(
       'Checking your contact with the server…',
     )
     expect(updateDoc).not.toHaveBeenCalled()
     expect(profileSaves()).toEqual([])
     // Nothing refused: the press never happened.
-    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    // Kept, not dropped (AGL-4047): no confirmation came within the
+    // guard's wait (0 in this spec), so the press ends in the guard's refusal.
+    await waitFor(() =>
+      expect(enqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm your .+ with the server yet, so nothing was saved/),
+        expect.anything(),
+      ),
+    )
     expect((screen.getByLabelText('About') as HTMLInputElement).value).toEqual(
       'Prefers a phone call',
     )

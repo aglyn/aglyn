@@ -57,8 +57,10 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import {
+  heldSaveLabel,
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 
@@ -534,6 +536,13 @@ export function ReservationsCard(props: ReservationsCardProps) {
       persist: false,
     })
   }, [walkIn, resourceDocs, firestore, hostId, user, enqueueSnackbar])
+
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const resourceHeld = useHeldSave(handleResourceSave, {
+    checking: resourceChecking,
+    subject: 'resource',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
 
   return (
     <CardDisplay
@@ -1016,15 +1025,15 @@ export function ReservationsCard(props: ReservationsCardProps) {
             variant="contained"
             color="primary"
             disabled={
-              resourceChecking ||
               !resourceDraft?.name?.trim() ||
               !((resourceDraft?.nightlyRateUsd ?? 0) > 0) ||
               Boolean(unitsProblem(resourceDraft?.units)) ||
-              Boolean(fewLeftAtProblem(resourceDraft?.fewLeftAt))
+              Boolean(fewLeftAtProblem(resourceDraft?.fewLeftAt)) ||
+              resourceHeld.saving
             }
-            onClick={handleResourceSave}
+            onClick={resourceHeld.press}
           >
-            {'Save'}
+            {heldSaveLabel(resourceHeld, 'Save')}
           </Button>
         </DialogActions>
       </Dialog>

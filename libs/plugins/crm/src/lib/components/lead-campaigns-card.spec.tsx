@@ -152,7 +152,8 @@ describe('LeadCampaignsCard', () => {
     fireEvent.click(screen.getByRole('option', { name: 'Founder · ICP 2' }))
     fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
-    expect((saveFiling() as HTMLButtonElement).disabled).toBe(true)
+    // Pressable during the hold: a press is kept, not dropped (AGL-4047).
+    expect((saveFiling() as HTMLButtonElement).disabled).toBe(false)
     expect(screen.getByRole('status').textContent).toBe('Checking your lead with the server…')
   })
 

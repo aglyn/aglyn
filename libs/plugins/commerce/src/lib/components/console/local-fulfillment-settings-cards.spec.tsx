@@ -135,19 +135,22 @@ describe('the Local delivery card', () => {
    * held while the settings read is the cache's, with the reason beside it,
    * and the edit is saved onto what the server confirms.
    */
-  it('holds Save with the reason, then saves the edit onto the server’s settings', async () => {
+  it('keeps a Save pressed during the hold, then saves the edit onto the server’s settings', async () => {
     mockStore = { localDelivery: { enabled: true, country: 'US', zones: [], windows: '' } }
     mockStoreFromCache = true
     const { rerender } = render(<LocalDeliverySettingsCard hostId="host-1" />)
     fireEvent.click(screen.getByRole('button', { name: 'Add zone' }))
-    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByRole('status').textContent).toBe('Checking your local delivery settings with the server…')
+    // Kept, not dropped (AGL-4047): pressed during the hold, it says Saving…
+    // and writes nothing until the server answers.
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeTruthy()
+    expect(mockSetDoc).not.toHaveBeenCalled()
 
     // The delivery country was changed elsewhere since the cached snapshot.
     mockStore = { localDelivery: { enabled: true, country: 'CA', zones: [], windows: '' } }
     mockStoreFromCache = false
     rerender(<LocalDeliverySettingsCard hostId="host-1" />)
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
     const [, value] = mockSetDoc.mock.calls[0] as unknown as [string, any]

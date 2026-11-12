@@ -321,7 +321,7 @@ describe.each(PAGES)('%s besigner properties (AGL-1358)', (_label, Page) => {
    * subject is HELD while the template read is the cache's, with the reason
    * under it, and the typed value stays on screen.
    */
-  it('HOLDS Save subject while the template read is unconfirmed, keeping what was typed', async () => {
+  it('KEEPS a Save subject pressed while the template read is unconfirmed, keeping what was typed', async () => {
     templateSeed.fromCache = true
     render(<Page />)
 
@@ -331,10 +331,17 @@ describe.each(PAGES)('%s besigner properties (AGL-1358)', (_label, Page) => {
     const save = screen.getByRole('button', {
       name: 'Save subject',
     }) as HTMLButtonElement
-    expect(save.disabled).toBe(true)
+    expect(save.disabled).toBe(false)
     expect(screen.getByText('Checking your email with the server…')).toBeTruthy()
     expect(mockSetDoc).not.toHaveBeenCalled()
-    expect(mockEnqueueSnackbar).not.toHaveBeenCalled()
+    // Kept, not dropped (AGL-4047): no confirmation came within the
+    // guard's wait (0 in this spec), so the press ends in the guard's refusal.
+    await waitFor(() =>
+      expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm your .+ with the server yet, so nothing was saved/),
+        expect.anything(),
+      ),
+    )
     expect(
       (screen.getByLabelText('Subject') as HTMLInputElement).value,
     ).toEqual('Edited subject')

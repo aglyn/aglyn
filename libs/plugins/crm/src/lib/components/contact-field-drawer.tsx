@@ -36,7 +36,10 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useSeedEdits } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
+import {
+  useHeldSave,
+  useSeedEdits,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import type { ContactFieldDefinitionDoc } from '../hooks/use-contact-field-definitions'
 import { CRM_FIELD_LABEL_MAX_LENGTH, crmFieldOptions } from '../model/crm-setup-content'
 import { DEAL_CURRENCIES } from '../model/deal-board-model'
@@ -241,6 +244,13 @@ export function ContactFieldDrawer(props: ContactFieldDrawerProps) {
     }
   }, [canSubmit, derivedKey, onSubmit, label, type, options, currency, required])
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSubmit, {
+    checking: Boolean(checkingText),
+    subject: 'field',
+    onRefused: (message) => setError(message),
+  })
+
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
       <Stack spacing={2} sx={{ width: 360, maxWidth: '100vw', p: 3 }}>
@@ -353,10 +363,10 @@ export function ContactFieldDrawer(props: ContactFieldDrawerProps) {
           <Button
             variant="contained"
             color="primary"
-            disabled={!canSubmit || Boolean(checkingText)}
-            onClick={handleSubmit}
+            disabled={!canSubmit || held.saving}
+            onClick={held.press}
           >
-            {editing ? 'Save' : 'Create field'}
+            {held.saving ? 'Saving…' : editing ? 'Save' : 'Create field'}
           </Button>
           <Button onClick={onClose} disabled={busy}>
             {'Cancel'}

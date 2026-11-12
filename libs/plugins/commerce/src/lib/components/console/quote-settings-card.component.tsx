@@ -37,8 +37,10 @@ import {
 import { doc, setDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import {
+  heldSaveLabel,
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
   useSeedEdits,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 
@@ -116,6 +118,13 @@ export function QuoteSettingsCard(props: QuoteSettingsCardProps) {
     }
   }, [form, edits, firestore, hostId, status, fromCache, listen, enqueueSnackbar])
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(save, {
+    checking,
+    subject: 'quote settings',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <CardDisplay
       header={'Quotes'}
@@ -129,10 +138,10 @@ export function QuoteSettingsCard(props: QuoteSettingsCardProps) {
           <Button
             size="small"
             variant="contained"
-            disabled={busy || !edits.dirty || checking || loading || cleaned.length === 0}
-            onClick={() => void save()}
+            disabled={busy || !edits.dirty || loading || cleaned.length === 0 || held.saving}
+            onClick={held.press}
           >
-            {'Save'}
+            {heldSaveLabel(held, 'Save')}
           </Button>
         ),
       }}

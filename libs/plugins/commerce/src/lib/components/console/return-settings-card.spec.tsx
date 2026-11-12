@@ -74,20 +74,21 @@ beforeEach(() => {
  * edit is saved onto what the server confirms.
  */
 describe('return settings while the server has not answered (AGL-4047)', () => {
-  it('holds Save with the reason, then saves the edit onto the server’s policy', async () => {
+  it('keeps a Save pressed during the hold, then saves the edit onto the server’s policy', async () => {
     mockFromCache = true
     const { rerender } = render(<ReturnSettingsCard hostId="host-1" />)
     fireEvent.change(screen.getByLabelText('Return window in days'), { target: { value: '14' } })
-    expect(
-      (screen.getByRole('button', { name: 'Save return settings' }) as HTMLButtonElement).disabled,
-    ).toBe(true)
     expect(screen.getByRole('status').textContent).toBe('Checking your return settings with the server…')
+    // Kept, not dropped (AGL-4047): pressed during the hold, it says Saving…
+    // and writes nothing until the server answers.
+    save()
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeTruthy()
+    expect(batchSet).not.toHaveBeenCalled()
 
     // Digital products were made returnable elsewhere since the cached snapshot.
     mockStore = { currency: 'USD', returns: { enabled: true, windowDays: 30, eligibleTypes: ['physical', 'digital'] } }
     mockFromCache = false
     rerender(<ReturnSettingsCard hostId="host-1" />)
-    save()
 
     await waitFor(() => expect(batchSet).toHaveBeenCalledTimes(1))
     expect(batchSet.mock.calls[0][1]).toEqual({

@@ -48,6 +48,7 @@ import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore
 import {
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
   useSeedEdits,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useEffect, useId, useMemo, useState } from 'react'
@@ -459,6 +460,13 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
         ? 'Declined marketing'
         : 'No marketing consent recorded — this lead cannot be emailed marketing'
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(saveDetails, {
+    checking: Boolean(checkingText),
+    subject: 'lead',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <>
       <CrmRecordHeader
@@ -699,10 +707,10 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
               <Button
                 size="small"
                 variant="contained"
-                onClick={() => void saveDetails()}
-                disabled={!dirty || saving || Boolean(checkingText)}
+                onClick={held.press}
+                disabled={!dirty || saving || held.saving}
               >
-                {saving ? 'Saving…' : 'Save'}
+                {held.saving ? 'Saving…' : 'Save'}
               </Button>
             </Stack>
           ),

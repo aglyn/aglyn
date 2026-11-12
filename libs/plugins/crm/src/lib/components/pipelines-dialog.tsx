@@ -62,6 +62,7 @@ import {
 import {
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useCallback, useEffect, useState } from 'react'
 import {
@@ -399,7 +400,7 @@ export function PipelinesDialog(props: PipelinesDialogProps) {
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
                   event.preventDefault()
-                  void handleRename()
+                  renameHeld.press()
                 }
                 if (event.key === 'Escape') setRenaming(null)
               }}
@@ -412,10 +413,10 @@ export function PipelinesDialog(props: PipelinesDialogProps) {
             <Button
               size="small"
               variant="contained"
-              disabled={held || !renaming.name.trim()}
-              onClick={() => void handleRename()}
+              disabled={busy !== null || renameHeld.saving || !renaming.name.trim()}
+              onClick={renameHeld.press}
             >
-              {'Save'}
+              {renameHeld.saving ? 'Saving…' : 'Save'}
             </Button>
           </>
         ) : (
@@ -438,6 +439,19 @@ export function PipelinesDialog(props: PipelinesDialogProps) {
       </Stack>
     )
   }
+
+  // A Create or Save pressed while the pipelines are held is kept, and saves
+  // once they are confirmed, onto the confirmed list (AGL-4047).
+  const renameHeld = useHeldSave(handleRename, {
+    checking: Boolean(checkingText),
+    subject: 'pipeline',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+  const createHeld = useHeldSave(handleCreate, {
+    checking: Boolean(checkingText),
+    subject: 'pipeline',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
 
   return (
     <>
@@ -476,7 +490,7 @@ export function PipelinesDialog(props: PipelinesDialogProps) {
                 onKeyDown={(event) => {
                   if (event.key !== 'Enter' || !newName.trim() || newProblem) return
                   event.preventDefault()
-                  void handleCreate()
+                  createHeld.press()
                 }}
                 error={Boolean(newProblem)}
                 helperText={newProblem ?? 'Starts with the default stages, which you can then edit.'}
@@ -485,11 +499,13 @@ export function PipelinesDialog(props: PipelinesDialogProps) {
               />
               <Button
                 variant="contained"
-                disabled={held || !newName.trim() || Boolean(newProblem) || !user?.uid}
-                onClick={() => void handleCreate()}
+                disabled={
+                  busy !== null || createHeld.saving || !newName.trim() || Boolean(newProblem) || !user?.uid
+                }
+                onClick={createHeld.press}
                 sx={{ mt: 0.25 }}
               >
-                {'Create'}
+                {createHeld.saving ? 'Saving…' : 'Create'}
               </Button>
             </Stack>
           </Stack>

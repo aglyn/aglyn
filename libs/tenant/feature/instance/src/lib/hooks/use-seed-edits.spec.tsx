@@ -22,9 +22,13 @@
  */
 
 import { act, renderHook } from '@testing-library/react'
+import { setSeedConfirmWaitMs } from './helpers/listen-confirmation'
 import {
+  heldSaveLabel,
   isSeedChecking,
   seedCheckingText,
+  seedUnconfirmedText,
+  useHeldSave,
   useSeedEdits,
   rebaseSeedEdits,
 } from './use-seed-edits'
@@ -168,5 +172,131 @@ describe('rebaseSeedEdits (AGL-4047)', () => {
   it('is the new seed when nothing was changed', () => {
     const confirmed = { title: 'Bye', seoTitle: '', tags: [] as string[] }
     expect(rebaseSeedEdits(cached, { ...cached }, confirmed)).toEqual(confirmed)
+  })
+})
+
+/**
+ * A Save pressed while it is held is KEPT (AGL-4047). The 11/11 production
+ * check found the press during the 64–660 ms hold after a fresh load landed on
+ * a disabled button and did nothing, so the person took Save to be broken.
+ */
+describe('useHeldSave (AGL-4047)', () => {
+  type Props = { checking: boolean; values: Form; onRefused?: (message: string) => void }
+
+  function renderHeld(initial: Props) {
+    const saved: Form[] = []
+    let finish: (() => void) | null = null
+    const view = renderHook(
+      ({ checking, values, onRefused }: Props) =>
+        useHeldSave(
+          () => {
+            saved.push(values)
+            return new Promise<void>((resolve) => {
+              finish = resolve
+            })
+          },
+          { checking, subject: 'business profile', onRefused },
+        ),
+      { initialProps: initial },
+    )
+    return { ...view, saved, finish: () => finish?.() }
+  }
+
+  beforeEach(() => jest.useFakeTimers())
+  afterEach(() => {
+    jest.useRealTimers()
+    setSeedConfirmWaitMs()
+  })
+
+  it('saves at once when nothing is held, and says Saving… until the save ends', async () => {
+    const { result, saved, finish } = renderHeld({ checking: false, values: cached })
+    act(() => result.current.press())
+    expect(saved).toEqual([cached])
+    expect(result.current.saving).toBe(true)
+    expect(heldSaveLabel(result.current, 'Update')).toBe('Saving…')
+    await act(async () => finish())
+    expect(result.current.saving).toBe(false)
+    expect(heldSaveLabel(result.current, 'Update')).toBe('Update')
+  })
+
+  it('keeps a press made during the hold and saves the confirmed values once the hold ends', async () => {
+    const typed = { ...cached, name: 'Acme Builders' }
+    const { result, rerender, saved } = renderHeld({ checking: true, values: typed })
+
+    act(() => result.current.press())
+    // The press is answered at once, and nothing is written over the cache's seed.
+    expect(result.current.saving).toBe(true)
+    expect(result.current.waiting).toBe(true)
+    expect(heldSaveLabel(result.current, 'Update')).toBe('Saving…')
+    expect(saved).toEqual([])
+
+    // The server confirms a phone the cache did not have; the edit is replayed onto it.
+    const confirmed = { ...typed, phone: '555-0199' }
+    rerender({ checking: false, values: confirmed })
+    expect(result.current.saving).toBe(true)
+    await act(async () => {
+      jest.runOnlyPendingTimers()
+    })
+
+    // One save, of the values as they stand after the confirmation.
+    expect(saved).toEqual([confirmed])
+    expect(result.current.waiting).toBe(false)
+    expect(result.current.saving).toBe(true)
+  })
+
+  it('takes a second press while one is kept as the same press', async () => {
+    const { result, rerender, saved } = renderHeld({ checking: true, values: cached })
+    act(() => result.current.press())
+    act(() => result.current.press())
+    rerender({ checking: false, values: cached })
+    await act(async () => {
+      jest.runOnlyPendingTimers()
+    })
+    act(() => result.current.press())
+    expect(saved).toHaveLength(1)
+  })
+
+  it('refuses with the guard’s own words, and saves nothing, when no confirmation comes', async () => {
+    setSeedConfirmWaitMs(1_000)
+    const refused: string[] = []
+    const { result, rerender, saved } = renderHeld({
+      checking: true,
+      values: cached,
+      onRefused: (message) => refused.push(message),
+    })
+    act(() => result.current.press())
+    await act(async () => {
+      jest.advanceTimersByTime(1_000)
+    })
+
+    const words = seedUnconfirmedText('business profile')
+    expect(words).toMatch(/^We could not confirm your business profile with the server yet, so nothing was saved/)
+    expect(refused).toEqual([words])
+    expect(result.current.refusal).toBe(words)
+    expect(result.current.saving).toBe(false)
+    expect(heldSaveLabel(result.current, 'Update')).toBe('Update')
+
+    // A confirmation after the refusal does not resurrect the dropped press.
+    rerender({ checking: false, values: cached })
+    await act(async () => {
+      jest.runOnlyPendingTimers()
+    })
+    expect(saved).toEqual([])
+
+    // The next press clears the refusal and saves.
+    act(() => result.current.press())
+    expect(result.current.refusal).toBeNull()
+    expect(saved).toEqual([cached])
+  })
+
+  it('does not save after the surface is gone', async () => {
+    const { result, rerender, unmount, saved } = renderHeld({ checking: true, values: cached })
+    act(() => result.current.press())
+    rerender({ checking: false, values: cached })
+    unmount()
+    await act(async () => {
+      jest.runOnlyPendingTimers()
+    })
+    expect(saved).toEqual([])
   })
 })
