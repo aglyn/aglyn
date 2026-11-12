@@ -176,10 +176,11 @@ struct EventsScreen: View {
   var body: some View {
     WideLayoutReader { wide in
       if wide {
-        HStack(spacing: 0) {
-          list(selectable: true).frame(minWidth: 300, idealWidth: 360, maxWidth: 420)
-          Divider()
-          detail.frame(maxWidth: .infinity, maxHeight: .infinity)
+        // The shared list and detail columns: the area's head in the list column, its crumbs over the detail.
+        AglynListDetailColumns(listWidth: 360) {
+          list(selectable: true)
+        } detail: {
+          detail
         }
       } else {
         list(selectable: false)

@@ -64,15 +64,14 @@ struct FunnelsScreen: View {
   private var content: some View {
     WideLayoutReader { wide in
       if wide {
-        HStack(spacing: 0) {
-          list(selectable: true).frame(minWidth: 300, idealWidth: 360, maxWidth: 420)
-          Divider()
+        // The shared list and detail columns: the area's head in the list column, its crumbs over the detail.
+        AglynListDetailColumns(listWidth: 360) {
+          list(selectable: true)
+        } detail: {
           if let row = model.rows.first(where: { $0.id == selection }), let editor {
             FunnelDetail(row: row, editor: editor, canManage: access.state.canManage).id(row.id)
-              .frame(maxWidth: .infinity, maxHeight: .infinity)
           } else {
             AglynSelectionPlaceholder("No funnel selected", systemImage: FunnelsSymbols.funnel)
-              .frame(maxWidth: .infinity, maxHeight: .infinity)
           }
         }
       } else {

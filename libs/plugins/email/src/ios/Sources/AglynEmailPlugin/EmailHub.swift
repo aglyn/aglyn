@@ -245,8 +245,7 @@ struct EmailHubScreen: View {
   var startNew = false
 
   var body: some View {
-    VStack(spacing: 0) {
-      AglynSectionBar(EmailSection.allCases, selection: $section, label: \.label, systemImage: \.symbol)
+    AglynSectionHub(EmailSection.allCases, selection: $section, label: \.label, systemImage: \.symbol) {
       Group {
         if context.hostID == nil {
           // The workspace's Emails page: the same sections, read one site at a time, as the console's org page does.
@@ -430,13 +429,14 @@ struct AudiencesSection: View {
   var body: some View {
     WideLayoutReader { wide in
       if wide {
-        HStack(spacing: 0) {
-          pane(selectable: true).frame(minWidth: 300, idealWidth: 360, maxWidth: 420)
-          Divider()
+        // The shared list and detail columns: the area's head in the list column, its crumbs over the detail.
+        AglynListDetailColumns(listWidth: 360) {
+          pane(selectable: true)
+        } detail: {
           if let selection {
             ListDetail(context: context, actions: actions, listID: selection).id(selection)
           } else {
-            AglynSelectionPlaceholder("No list selected", systemImage: "person.3").frame(maxWidth: .infinity, maxHeight: .infinity)
+            AglynSelectionPlaceholder("No list selected", systemImage: "person.3")
           }
         }
       } else {

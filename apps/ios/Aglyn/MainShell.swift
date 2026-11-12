@@ -893,6 +893,7 @@ struct PushedScreen<Content: View>: View {
 
 /// A section's first screen.
 struct ShellRoot: View {
+  @Environment(\.aglynWideChrome) private var wide
   let section: ShellSection
 
   var body: some View {
@@ -901,7 +902,9 @@ struct ShellRoot: View {
     case .notifications: PushedScreen(section: .home, back: false) { NotificationsView().aglynScreenTitle("Notifications") }
     case .settings: PushedScreen(section: .home, back: false) { SettingsView().aglynScreenTitle("Settings") }
     case .more: MenuScreen()
-    case .analytics: AnalyticsView()
+    // On the Mac and iPad, Analytics wears its area's head like any area (its title and star atop its list column, its
+    // crumbs over the section beside it, Figma 324:39115); a phone's Analytics keeps its navigation bar.
+    case .analytics: if wide { AreaView(screen: NativeNav.analytics, params: [:]) } else { AnalyticsView() }
     case .plugin(let screen): AreaView(screen: screen, params: [:])
     case .place(let screen, let params): AreaView(screen: screen, params: params)
     }
@@ -943,7 +946,7 @@ struct AreaView: View {
     let offer = wide && !columnHead
       ? row.map { areaHead($0, sections: Self.selfSectioned.contains($0.id) ? [] : sections) } : nil
     let headed = columnHead || (offer != nil && headInColumn)
-    PluginScreenView(screenID: screen, params: params)
+    screenView
       .environment(\.aglynAreaHead, columnHead ? row.map { areaHead($0, sections: sections) } : nil)
       .environment(\.aglynColumnHeadOffer, offer)
       .onPreferenceChange(AglynListColumnHeadPlacedKey.self) { headInColumn = $0 }
@@ -1030,6 +1033,16 @@ struct AreaView: View {
         }
       }
       .modifier(PhoneAreaTitleMenu(enabled: !wide && !columnHead))
+  }
+
+  /// The area's screen: a plugin's, or the shell's own Analytics (`NativeNav.analytics`).
+  @ViewBuilder
+  private var screenView: some View {
+    if screen == NativeNav.analytics {
+      AnalyticsView()
+    } else {
+      PluginScreenView(screenID: screen, params: params)
+    }
   }
 
   /// The head's parts for a screen that draws them in its list column: title, breadcrumbs, star and sections.

@@ -75,8 +75,7 @@ struct MarketingHubScreen: View {
   @State private var access = MarketingAccess()
 
   var body: some View {
-    VStack(spacing: 0) {
-      AglynSectionBar(MarketingSection.allCases, selection: $section, label: \.label, systemImage: \.symbol)
+    AglynSectionHub(MarketingSection.allCases, selection: $section, label: \.label, systemImage: \.symbol) {
       Group {
         if context.hostID == nil {
           orgSections
@@ -257,13 +256,14 @@ struct CampaignsSection: View {
     let rollups = campaignRollups(sends.rows)
     WideLayoutReader { wide in
       if wide {
-        HStack(spacing: 0) {
-          pane(rollups, selectable: true).frame(minWidth: 320, idealWidth: 380, maxWidth: 440)
-          Divider()
+        // The shared list and detail columns: the area's head in the list column, its crumbs over the detail.
+        AglynListDetailColumns(listWidth: 380) {
+          pane(rollups, selectable: true)
+        } detail: {
           if let selection {
             CampaignDetail(context: context, actions: actions, access: access, campaignID: selection).id(selection)
           } else {
-            AglynSelectionPlaceholder("No campaign selected", systemImage: "megaphone").frame(maxWidth: .infinity, maxHeight: .infinity)
+            AglynSelectionPlaceholder("No campaign selected", systemImage: "megaphone")
           }
         }
       } else {

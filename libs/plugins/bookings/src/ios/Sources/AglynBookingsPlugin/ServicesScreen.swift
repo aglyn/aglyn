@@ -27,10 +27,11 @@ struct BookingServicesScreen: View {
   var body: some View {
     WideLayoutReader { wide in
       if wide {
-        HStack(spacing: 0) {
-          list(selectable: true).frame(minWidth: 300, idealWidth: 340, maxWidth: 400)
-          Divider()
-          detail(selection).frame(maxWidth: .infinity, maxHeight: .infinity)
+        // The shared list and detail columns: the area's head in the list column, its crumbs over the detail.
+        AglynListDetailColumns(listWidth: 340) {
+          list(selectable: true)
+        } detail: {
+          detail(selection)
         }
       } else {
         list(selectable: false)
