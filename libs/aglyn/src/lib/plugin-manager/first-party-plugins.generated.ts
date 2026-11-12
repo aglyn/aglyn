@@ -7,7 +7,7 @@
  * the types and the resolvers in `enabled-plugins.ts`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'
+import type { FirstPartyPlugin } from './enabled-plugins'
 import type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'
 import type { ResolvedPluginSitemapSection } from './plugin-sitemap-sections'
 import type { ResolvedPluginSitemapReaderDeclaration } from './plugin-sitemap-readers'
@@ -19,7 +19,6 @@ import type { ResolvedPluginRecordPage } from './plugin-record-pages'
 import type { ResolvedVisitorDoor } from './plugin-visitor-doors'
 import type { ResolvedPluginCostAxis, ResolvedPluginSpendLine, ResolvedPluginUsageBand, ResolvedPluginUsageMeter } from './plugin-usage-axes'
 import type { ResolvedPluginPlanFeature, ResolvedPluginPlanQuota } from './plugin-plan-entitlements'
-import type { FunctionBindings } from './plugin-contributions'
 import type { PluginDistribution } from './plugin-distribution'
 import type { RepeatSourceDeclaration } from './repeat-rows'
 import type { PluginTemplateSource } from './plugin-template-sources'
@@ -29,11 +28,22 @@ import type { ResolvedBesignerDocument } from './besigner-documents'
 import type { PluginHostKeyedCollection } from './plugin-site-resources'
 import type { PluginOrgKeyedCollection } from './plugin-org-erasure'
 import type { PluginSiteCspDeclaration } from './plugin-site-csp'
-import type { AnalyticsProviderDeclaration } from '../app-utils/analytics-provider'
-import type { InteractionStepDeclaration } from '../app-utils/site-interactions'
 import type { ServerStepDeclaration } from './plugin-server-steps'
-import type { InteractionRecipeDeclaration } from './interaction-recipes'
 import type { NotificationCategoryDeclaration, NotificationDigestDeclaration } from '../app-utils/notifications'
+
+// The every-page part of the catalog and the site interactions' part
+// (AGL-4220), re-exported so this file's importers are unchanged. See
+// first-party-plugin-switchboard.generated.ts.
+export {
+  ANALYTICS_PROVIDERS_DECLARED,
+  FIRST_PARTY_FUNCTION_BINDINGS,
+  PLUGIN_EDIT_BAR_LINKS,
+  PUBLISHED_SITE_IMPACT,
+} from './first-party-plugin-switchboard.generated'
+export {
+  PLUGIN_INTERACTION_RECIPES_DECLARED,
+  PLUGIN_INTERACTION_STEPS_DECLARED,
+} from './first-party-plugin-interactions.generated'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   {
@@ -394,70 +404,6 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
       "stops": "Switching Domains off for this site removes buying a domain and one-click DNS from its Custom Domain page. A domain you already connected keeps serving.",
       "keeps": "Domains bought for this site stay registered to you and keep renewing until you turn auto-renew off or transfer them out, and Domains keeps working on the workspace’s other sites."
     }
-  },
-]
-
-export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
-  "mui": "elements",
-  "forms": "elements",
-  "ai": "console-only",
-  "theme-presets": "console-only",
-  "funnels": "console-only",
-  "accounts": "routes",
-  "bookings": "elements",
-  "commerce": "elements",
-  "marketplace": "console-only",
-  "crm": "console-only",
-  "outreach": "console-only",
-  "data": "routes",
-  "email": "elements",
-  "events-calendar": "elements",
-  "inbox": "console-only",
-  "logic": "console-only",
-  "marketing": "elements",
-  "redirects": "routes",
-  "workflows": "routes",
-  "accounting": "console-only",
-  "shipping": "console-only",
-  "tax-engines": "console-only",
-  "sales-channels": "routes",
-  "marketing-platforms": "console-only",
-  "fonts": "console-only",
-  "post-purchase": "console-only",
-  "fulfillment-networks": "console-only",
-  "marketplaces": "console-only",
-  "print-on-demand": "console-only",
-  "inventory-sync": "console-only",
-  "delivery-apps": "console-only",
-  "loyalty": "console-only",
-  "couriers": "console-only",
-  "lightbox": "elements",
-  "live-chat": "elements",
-  "review-platforms": "console-only",
-  "weglot": "elements",
-  "music": "elements",
-  "help-desks": "console-only",
-  "waivers": "elements",
-  "ad-conversions": "console-only",
-  "domains": "console-only",
-}
-
-/**
- * The admin edit bar's quick links, in the order they are drawn — each
- * declared by the plugin whose console page it opens (AGL-3080).
- */
-export const PLUGIN_EDIT_BAR_LINKS: readonly PluginEditBarLink[] = [
-  {
-    "pluginId": "inbox",
-    "order": 20,
-    "label": "Inbox",
-    "path": "/inbox"
-  },
-  {
-    "pluginId": "commerce",
-    "order": 30,
-    "label": "Orders",
-    "path": "/products/orders"
   },
 ]
 
@@ -2766,233 +2712,6 @@ export const PLUGIN_TEMPLATE_SOURCES: readonly PluginTemplateSource[] = [
 ]
 
 /**
- * The analytics settings each provider mounts a tag for, declared by the
- * plugin that adapts the vendor (AGL-3080). Empty when none does, and then no
- * setting configures a tag.
- */
-export const ANALYTICS_PROVIDERS_DECLARED: readonly AnalyticsProviderDeclaration[] = [
-  {
-    "pluginId": "marketing",
-    "settings": [
-      "gaMeasurementId",
-      "gtmContainerId"
-    ]
-  },
-]
-
-/**
- * Every interaction step a first-party plugin offers in the interaction
- * builder, declared by that plugin (AGL-3080). Core names no plugin step.
- */
-export const PLUGIN_INTERACTION_STEPS_DECLARED: readonly InteractionStepDeclaration[] = [
-  {
-    "pluginId": "crm",
-    "type": "setContactStage",
-    "label": "Set the contact’s lifecycle stage",
-    "offered": false
-  },
-  {
-    "pluginId": "crm",
-    "type": "addContactTag",
-    "label": "Tag the contact",
-    "offered": false,
-    "typedFields": [
-      {
-        "key": "tag",
-        "names": "the tag"
-      }
-    ]
-  },
-  {
-    "pluginId": "crm",
-    "type": "assignContactOwner",
-    "label": "Assign the contact an owner",
-    "offered": false
-  },
-  {
-    "pluginId": "crm",
-    "type": "createCrmTask",
-    "label": "Create a CRM task",
-    "offered": false,
-    "typedFields": [
-      {
-        "key": "title",
-        "names": "the title"
-      }
-    ]
-  },
-  {
-    "pluginId": "crm",
-    "type": "logCrmActivity",
-    "label": "Log a CRM activity",
-    "offered": false,
-    "typedFields": [
-      {
-        "key": "body",
-        "names": "the text"
-      }
-    ]
-  },
-  {
-    "pluginId": "data",
-    "type": "datasetAppend",
-    "label": "Write to a dataset",
-    "offered": false,
-    "typedFields": [
-      {
-        "key": "datasetName",
-        "names": "the dataset"
-      }
-    ]
-  },
-  {
-    "pluginId": "data",
-    "type": "updateDataset",
-    "label": "Update a dataset record",
-    "offered": false,
-    "typedFields": [
-      {
-        "key": "datasetName",
-        "names": "the dataset"
-      }
-    ]
-  },
-  {
-    "pluginId": "marketing",
-    "type": "showOverlay",
-    "label": "Open an overlay",
-    "picks": {
-      "collection": "overlays",
-      "limit": 50,
-      "idField": "overlayId",
-      "nameField": "overlayName",
-      "label": "Overlay",
-      "missing": "pick an overlay"
-    }
-  },
-  {
-    "pluginId": "workflows",
-    "type": "runWorkflow",
-    "label": "Run a workflow",
-    "typedFields": [
-      {
-        "key": "workflowName",
-        "names": "the workflow"
-      }
-    ],
-    "picks": {
-      "collection": "workflows",
-      "limit": 100,
-      "idField": "workflowId",
-      "nameField": "workflowName",
-      "label": "Workflow",
-      "missing": "pick a workflow"
-    }
-  },
-  {
-    "pluginId": "workflows",
-    "type": "customEvent",
-    "label": "Fire a custom event",
-    "offered": false
-  },
-  {
-    "pluginId": "workflows",
-    "type": "webhookPost",
-    "label": "Send a webhook (Pro)",
-    "offered": false,
-    "typedFields": [
-      {
-        "key": "webhookName",
-        "names": "the webhook"
-      }
-    ]
-  },
-  {
-    "pluginId": "workflows",
-    "type": "sendEmail",
-    "label": "Send an email",
-    "offered": false,
-    "typedFields": [
-      {
-        "key": "subject",
-        "names": "the subject"
-      },
-      {
-        "key": "body",
-        "names": "the text"
-      }
-    ]
-  },
-  {
-    "pluginId": "workflows",
-    "type": "notifyAdmins",
-    "label": "Notify site admins",
-    "offered": false,
-    "typedFields": [
-      {
-        "key": "title",
-        "names": "the title"
-      },
-      {
-        "key": "body",
-        "names": "the text"
-      }
-    ]
-  },
-  {
-    "pluginId": "workflows",
-    "type": "enrollList",
-    "label": "Enroll in a list",
-    "offered": false,
-    "typedFields": [
-      {
-        "key": "listName",
-        "names": "the list"
-      }
-    ]
-  },
-  {
-    "pluginId": "workflows",
-    "type": "assignCampaign",
-    "label": "Assign to a campaign",
-    "offered": false,
-    "typedFields": [
-      {
-        "key": "campaignName",
-        "names": "the campaign"
-      }
-    ]
-  },
-  {
-    "pluginId": "workflows",
-    "type": "wait",
-    "label": "Wait",
-    "offered": false,
-    "holds": {
-      "minMinutes": 1,
-      "maxMinutes": 129600
-    }
-  },
-  {
-    "pluginId": "workflows",
-    "type": "waitForEvent",
-    "label": "Wait for something to happen",
-    "offered": false,
-    "holds": {
-      "minMinutes": 1,
-      "maxMinutes": 129600,
-      "timeoutField": "_waitTimedOut"
-    }
-  },
-  {
-    "pluginId": "workflows",
-    "type": "exitFlow",
-    "label": "End the flow here",
-    "offered": false
-  },
-]
-
-/**
  * Every server step a first-party plugin runs for the automation engine,
  * declared by that plugin (AGL-3080). Core names no plugin step.
  */
@@ -3026,36 +2745,6 @@ export const PLUGIN_SERVER_STEPS_DECLARED: readonly ServerStepDeclaration[] = [
     "type": "updateDataset"
   },
 ]
-
-/**
- * Every ready-to-edit interaction a first-party plugin offers, by the id a
- * stored interaction's stamp names it with, declared by that plugin
- * (AGL-3080). Core names no recipe.
- */
-export const PLUGIN_INTERACTION_RECIPES_DECLARED: readonly InteractionRecipeDeclaration[] = [
-  {
-    "pluginId": "crm",
-    "id": "welcomeNewLead"
-  },
-  {
-    "pluginId": "crm",
-    "id": "followUpWonDeal"
-  },
-  {
-    "pluginId": "crm",
-    "id": "reengageStaleLead"
-  },
-  {
-    "pluginId": "crm",
-    "id": "tagByForm"
-  },
-]
-
-/**
- * Every first-party element that runs a site function, and the prop naming
- * it, declared by that element's plugin (AGL-3393). Core names no element.
- */
-export const FIRST_PARTY_FUNCTION_BINDINGS: FunctionBindings = {}
 
 /**
  * What each plugin's site feature needs the published page's policy to

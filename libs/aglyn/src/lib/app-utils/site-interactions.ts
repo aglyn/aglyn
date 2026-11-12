@@ -18,7 +18,7 @@
 import { resolveAuthoredEventName, sanitizeEventParams } from './analytics-events'
 import { type AuthorHtmlRemoval, sanitizeAuthorHtml } from './author-html'
 import { expressionSyntaxError } from './functions'
-import { PLUGIN_INTERACTION_STEPS_DECLARED } from '../plugin-manager/first-party-plugins.generated'
+import { PLUGIN_INTERACTION_STEPS_DECLARED } from '../plugin-manager/first-party-plugin-interactions.generated'
 import { isKnownInteractionRecipe } from '../plugin-manager/interaction-recipes'
 
 /**
