@@ -350,6 +350,14 @@
       "why": "Reached by enabled-plugins: the generated first-party catalog rows; every other import is type-only (AGL-3671)."
     },
     {
+      "path": "libs/aglyn/src/lib/plugin-manager/first-party-plugin-switchboard.generated.ts",
+      "why": "Reached by enabled-plugins and the catalog: the generated catalog rows without their console copy, and the small declarations a published page reads (AGL-4220); every import is type-only."
+    },
+    {
+      "path": "libs/aglyn/src/lib/plugin-manager/first-party-plugin-interactions.generated.ts",
+      "why": "Reached by the catalog, which re-exports it: the generated interaction steps and recipes (AGL-4220); every import is type-only."
+    },
+    {
       "path": "libs/aglyn/src/lib/plugin-manager/plugin-contact-capture.ts",
       "why": "crm.ts asks it whether a saved segment's source word is known, core or a plugin's door (AGL-3680). Types and an in-process registry over plugin-services; no I/O. In a native generator no plugin has registered, so it answers for the core words alone."
     },

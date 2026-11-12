@@ -29,8 +29,8 @@
 
 let mockDeclared: unknown = undefined
 
-jest.mock('./first-party-plugins.generated', () => {
-  const actual = jest.requireActual('./first-party-plugins.generated')
+jest.mock('./first-party-plugin-interactions.generated', () => {
+  const actual = jest.requireActual('./first-party-plugin-interactions.generated')
   return {
     __esModule: true,
     ...actual,

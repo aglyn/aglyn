@@ -17,8 +17,6 @@
 
 import { _isObj, _isStrT } from '@aglyn/shared-util-tools'
 import { arraySafe } from '@aglyn/shared-util-tools'
-import cloneDeep from 'lodash-es/cloneDeep.js'
-import isEqual from 'lodash-es/isEqual.js'
 import {
   action,
   computed,
@@ -36,6 +34,7 @@ import { computedFn } from '@aglyn/shared-util-vendor/mobx-computed-fn'
 import type { Aglyn } from '../aglyn'
 import type { NodeInteraction } from '../app-utils/node-interactions'
 import { schemaAcceptsChildren } from '../app-utils/child-contract'
+import { clonePlainData, plainDataEqual } from '../app-utils/plain-data'
 import { REUSABLE_INSTANCE_COMPONENT_ID } from '../app-utils/reusable-component-keys'
 import { stripUndefinedDeep } from '../app-utils/strip-undefined'
 import { createIdUrlSafe } from '../foundation/constants/app'
@@ -467,7 +466,7 @@ export class CanvasManager {
    * both compare a baseline against this, both are read while rendering the
    * toolbar, and serializing the whole tree twice per keystroke on a
    * document that can reach a megabyte is a cost neither of them needs to
-   * pay. Read-only by contract — both hand it to `isEqual` and neither may
+   * pay. Read-only by contract — both hand it to `plainDataEqual` and neither may
    * mutate what comes back.
    */
   public get serializedNodes(): NodesMap {
@@ -476,7 +475,7 @@ export class CanvasManager {
   public get isInitialSame() {
     if (!this._initial) return true
     if (!this._initialConfirmed) return false
-    return isEqual(this._initial, this.serializedNodes)
+    return plainDataEqual(this._initial, this.serializedNodes)
   }
   /**
    * True when the canvas is exactly the tree last recorded by
@@ -491,7 +490,7 @@ export class CanvasManager {
    */
   public get isDraftedSame() {
     if (!this._drafted) return false
-    return isEqual(this._drafted, this.serializedNodes)
+    return plainDataEqual(this._drafted, this.serializedNodes)
   }
   public get didSetInitial() {
     return Boolean(this._initial)
@@ -519,7 +518,7 @@ export class CanvasManager {
   public nodesAreEqual = computedFn(
     (left: NodesMap, right?: NodesMap): boolean => {
       const _right = right ? right : this.nodes
-      return isEqual(toJS(left), toJS(_right))
+      return plainDataEqual(toJS(left), toJS(_right))
     },
   )
   public getNodeParent = computedFn(
@@ -1028,7 +1027,7 @@ export class CanvasManager {
   public confirmInitialNodes(): boolean {
     if (!this._initial) return false
     if (this._initialConfirmed) return true
-    if (!isEqual(this._initial, this.serializeNodes())) return false
+    if (!plainDataEqual(this._initial, this.serializeNodes())) return false
     this._initialConfirmed = true
     return true
   }
@@ -1528,7 +1527,7 @@ export class CanvasManager {
           : childNode
       if (!_isObj(child)) continue
 
-      const node = cloneDeep(child) as unknown as NodeSchema<any>
+      const node = clonePlainData(child) as unknown as NodeSchema<any>
 
       // TODO: Remove after migration to nodes property
       if (node['elements']) {
