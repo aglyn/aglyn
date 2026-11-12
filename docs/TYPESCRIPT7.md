@@ -22,6 +22,27 @@ side-by-side layout:
 - `require('typescript')` → **6.x JS API** — keeps typescript-eslint, ts-jest,
   `next build` type-checking, and `@nx/js` declaration emit working unchanged.
 
+## Can the bridge go yet? (re-checked 2026-11, AGL-4218)
+
+No. Both packages are on their own latest stable (`typescript@7.0.2`,
+`@typescript/typescript6@6.0.2`; 7.1 is still beta). TS 7.0's package root
+exports only `{ version, versionMajorMinor }`; its new API lives under
+`typescript/unstable/*` and has a different shape. With `typescript` pointed at
+7.0.2 (bridge moved aside), each consumer was run:
+
+| consumer | result on TS 7.0.2 |
+| -- | -- |
+| typescript-eslint 8.72 | refuses: "typescript-eslint does not support TS 7.0" (support tracked for ≥7.1, typescript-eslint#10940) |
+| ts-jest 29.4 | throws: "does not expose the JavaScript compiler API required by ts-jest" |
+| nx 24.0 | project graph fails: `nx/js/dependencies-and-lockfile` calls `tsModule.readConfigFile`; `@nx/vite`'s plugin also fails loading `vite-plugin-dts` (unplugin-dts needs the JS API) |
+| Next 16.4 | **works**: `experimental.useTypeScriptCli` defaults to `true`, so Next reads the tsconfig through the `tsc` CLI (`loadJsConfig` resolved all 164 `paths` of `apps/tenant/tsconfig.next.json`) |
+
+Re-check when TS 7.1 is stable and typescript-eslint, ts-jest, nx and
+vite-plugin-dts each declare support for it. To run the probe: move
+`node_modules/typescript` aside, copy `node_modules/@typescript/native` into its
+place, run `npx eslint <file>`, one ts-jest spec (`libs/besigner/core`), and
+`NX_DAEMON=false npx nx show projects`, then put the bridge back.
+
 ## Type-checking
 
 Builds do NOT type-check (swc/rollup strip types; jest uses babel/swc/ts-jest
@@ -98,6 +119,10 @@ AGL-460; production builds never caught this because
   (e.g. `6.0.3`) which can differ from the npm package version (`6.0.2`) —
   don't be surprised by the mismatch.
 - `apps/docs` (Docusaurus) intentionally stays on its own standalone
-  TypeScript devDependency.
+  TypeScript devDependency, held on 5.9: `@docusaurus/tsconfig` 3.10 (the
+  base it extends) sets `baseUrl`, which TS 7 removed (TS5102) and TS 6
+  rejects without `ignoreDeprecations` (TS5101), and 5.x rejects that
+  suppression value (AGL-2363). Move it when Docusaurus ships a base without
+  `baseUrl`.
 - Editor: VS Code's bundled TS 7 language service works out of the box; if
   "Use Workspace Version" is selected it picks up the 6.x bridge instead.
