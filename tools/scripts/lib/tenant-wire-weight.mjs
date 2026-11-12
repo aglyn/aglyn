@@ -280,6 +280,14 @@ export function chunkIndexer(io) {
  * costs. Read by running the chunk's single `TURBOPACK.push([...])` in an
  * empty context — the factories are collected, never called.
  *
+ * An entry list can hold a nested list of entries. Next 16.4.3's Turbopack
+ * ("Optimize strict module factory chunks", reverted in 16.4.4) wrote a
+ * chunk's strict-mode factories as an array returned by a strict IIFE after
+ * its sloppy ones, and reading only the top level skipped every module in it:
+ * on that build the duplication read 268.1 KB where the page held 290.4 KB of
+ * copies, and the jump to 293.9 KB on 16.4.6 was the gate seeing them again,
+ * not new copies (AGL-4220). Nested lists are read as entries of their own.
+ *
  * @returns {Array<{ key: string, text: string, bytes: number }>}
  */
 export function chunkModules(code) {
@@ -292,17 +300,25 @@ export function chunkModules(code) {
     return []
   }
   const modules = []
-  let ids = []
-  for (const item of Array.isArray(pushed[0]) ? pushed[0].slice(1) : []) {
-    if (typeof item === 'number' || typeof item === 'string') {
-      ids.push(item)
-      continue
+  const read = (entries) => {
+    let ids = []
+    for (const item of entries) {
+      if (typeof item === 'number' || typeof item === 'string') {
+        ids.push(item)
+        continue
+      }
+      if (Array.isArray(item)) {
+        read(item)
+        ids = []
+        continue
+      }
+      if (typeof item !== 'function') continue
+      const text = item.toString()
+      modules.push({ key: ids.join('+'), text, bytes: Buffer.byteLength(text) })
+      ids = []
     }
-    if (typeof item !== 'function') continue
-    const text = item.toString()
-    modules.push({ key: ids.join('+'), text, bytes: Buffer.byteLength(text) })
-    ids = []
   }
+  read(Array.isArray(pushed[0]) ? pushed[0].slice(1) : [])
   return modules
 }
 
