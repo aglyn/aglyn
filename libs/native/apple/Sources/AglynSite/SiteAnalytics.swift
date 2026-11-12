@@ -344,12 +344,13 @@ public struct SiteTrafficCard: View {
 
   public var body: some View {
     AglynStatsSection("Traffic") {
-      HStack(spacing: AglynSpace.two) {
-        AglynRangePicker(days: $range, choices: [7, 14, 30, 90]).accessibilityIdentifier("analytics-range")
-        if let viewDetails {
-          Button("View details", action: viewDetails).buttonStyle(.borderless).foregroundStyle(AglynColor.tint)
-            .accessibilityIdentifier("traffic-view-details")
-        }
+      AglynRangePicker(days: $range, choices: [7, 14, 30, 90]).accessibilityIdentifier("analytics-range")
+    } link: {
+      // On the head row, on one line (Figma 344:14187); the range goes under it when they do not all fit.
+      if let viewDetails {
+        Button("View details", action: viewDetails).buttonStyle(.borderless).foregroundStyle(AglynColor.tint)
+          .lineLimit(1)
+          .accessibilityIdentifier("traffic-view-details")
       }
     } content: {
       content
@@ -415,7 +416,7 @@ public struct SiteTrafficCard: View {
       }
       AglynStatTile(analyticsCount(Double(summary.avgPerDay)), label: "Avg / day")
       if !summary.devices.isEmpty {
-        AglynStatTile(deviceSplitValue(summary.devices), label: deviceSplitLabel(summary.devices))
+        AglynStatTile(deviceSplitValue(summary.devices), label: deviceSplitLabel(summary.devices), shrinks: true)
       }
       if let top = summary.topPaths.first {
         AglynStatTile(top.key, label: "Top page · \(analyticsCount(top.value)) views", help: top.key)

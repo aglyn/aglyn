@@ -225,7 +225,8 @@ struct NeedsYouSection: View {
     let paymentDue = model.workspace?.orgLogo?.paymentDue == true
     return VStack(alignment: .leading, spacing: AglynSpace.one) {
       AglynSectionHeader("Needs you")
-      VStack(spacing: 0) {
+      // Figma's lines are 4 apart (iPad 332:42419: a 61 pitch).
+      VStack(spacing: AglynSpace.half) {
         // The workspace's own plan payment, the shell's line (read from the workspace's document).
         if paymentDue {
           AglynNeedsYouLine(

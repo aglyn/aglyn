@@ -10,11 +10,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -106,41 +110,105 @@ fun TopList(title: String, rows: List<Pair<String, String>>, modifier: Modifier 
   }
 }
 
-/** The range a stats card reads, in the console's words (`7 days` … `90 days`), as one segmented control. */
+/**
+ * The range a stats card reads, in the console's words (`7 days` … `90 days`), as Figma's Segmented control
+ * (Segmented/Segment, Android 344:44710): the picked range a pill on the surface, the others its secondary text, never
+ * the platform's outlined segments with the pink container.
+ */
 @Composable
 fun RangePicker(days: Int, choices: List<Int>, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
-  SingleChoiceSegmentedButtonRow(modifier) {
-    choices.forEachIndexed { index, choice ->
-      SegmentedButton(
-        selected = choice == days,
-        onClick = { onSelect(choice) },
-        shape = SegmentedButtonDefaults.itemShape(index, choices.size),
-        icon = {},
-      ) { Text("$choice days", maxLines = 1) }
+  val shape = RoundedCornerShape(LocalShellMetrics.current.controlRadius)
+  val scheme = MaterialTheme.colorScheme
+  Row(modifier.selectableGroup(), verticalAlignment = Alignment.CenterVertically) {
+    choices.forEach { choice ->
+      val picked = choice == days
+      Text(
+        "$choice days",
+        Modifier
+          .clip(shape)
+          .background(if (picked) scheme.surface else Color.Transparent)
+          .selectable(selected = picked, role = Role.Tab, onClick = { onSelect(choice) })
+          .padding(horizontal = space(1.5f), vertical = space(0.5f))
+          .testTag("range-$choice"),
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold,
+        color = if (picked) scheme.onSurface else scheme.onSurfaceVariant,
+        maxLines = 1,
+      )
     }
   }
 }
 
-/** A stats section on a dashboard: its title and the controls on its right, then its card. */
+/**
+ * A stats section on a dashboard: its title and the controls on its right, then its card. A [link] (View details) ends
+ * the title row; where the controls do not fit beside it they take the next line (Figma Traffic: one row on a tablet,
+ * 332:42419; on a phone the title and View details, then the range under them, 344:44710).
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun StatsSection(
   title: String,
   modifier: Modifier = Modifier,
   accessory: (@Composable () -> Unit)? = null,
+  link: (@Composable () -> Unit)? = null,
   content: @Composable () -> Unit,
 ) {
   Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
-    FlowRow(
-      Modifier.fillMaxWidth(),
-      horizontalArrangement = Arrangement.SpaceBetween,
-      verticalArrangement = Arrangement.spacedBy(space(1f)),
-      itemVerticalAlignment = Alignment.CenterVertically,
-    ) {
-      Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-      accessory?.invoke()
+    if (link == null) {
+      FlowRow(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalArrangement = Arrangement.spacedBy(space(1f)),
+        itemVerticalAlignment = Alignment.CenterVertically,
+      ) {
+        Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+        accessory?.invoke()
+      }
+    } else {
+      StatsHead(
+        title = { Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() }) },
+        accessory = { accessory?.invoke() },
+        link = link,
+      )
     }
     StatsCard { content() }
+  }
+}
+
+/**
+ * The title, the controls and the link of a stats section's head: one row when all three fit (title at the start, the
+ * controls and the link at the end), else the title and the link on the first row and the controls under them.
+ */
+@Composable
+private fun StatsHead(title: @Composable () -> Unit, accessory: @Composable () -> Unit, link: @Composable () -> Unit) {
+  val gap = space(2f)
+  val rowGap = space(1f)
+  Layout(
+    contents = listOf(title, accessory, link),
+    modifier = Modifier.fillMaxWidth(),
+  ) { (titles, accessories, links), constraints ->
+    val loose = constraints.copy(minWidth = 0, minHeight = 0)
+    val linkP = links.map { it.measure(loose) }
+    val linkW = linkP.maxOfOrNull { it.width } ?: 0
+    val accP = accessories.map { it.measure(loose) }
+    val accW = accP.maxOfOrNull { it.width } ?: 0
+    val gapPx = gap.roundToPx()
+    val titleP = titles.map { it.measure(loose.copy(maxWidth = (constraints.maxWidth - linkW - gapPx).coerceAtLeast(0))) }
+    val titleW = titleP.maxOfOrNull { it.width } ?: 0
+    val oneRow = titleW + gapPx + accW + gapPx + linkW <= constraints.maxWidth
+    val width = constraints.maxWidth
+    val firstH = maxOf(titleP.maxOfOrNull { it.height } ?: 0, linkP.maxOfOrNull { it.height } ?: 0, if (oneRow) accP.maxOfOrNull { it.height } ?: 0 else 0)
+    val accH = accP.maxOfOrNull { it.height } ?: 0
+    val height = if (oneRow || accW == 0) firstH else firstH + rowGap.roundToPx() + accH
+    layout(width, height) {
+      titleP.forEach { it.placeRelative(0, (firstH - it.height) / 2) }
+      linkP.forEach { it.placeRelative(width - it.width, (firstH - it.height) / 2) }
+      if (oneRow) {
+        accP.forEach { it.placeRelative(width - linkW - gapPx - it.width, (firstH - it.height) / 2) }
+      } else {
+        accP.forEach { it.placeRelative(0, firstH + rowGap.roundToPx()) }
+      }
+    }
   }
 }
 
