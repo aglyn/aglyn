@@ -949,9 +949,10 @@ interface AiGenerationInputBase {
    * what it has spent and what its last answer wrote, the most tokens the
    * re-ask may ask, or 0 when the ceiling cannot pay for one, and the
    * generation ends on what its last answer broke. Absent, a re-ask is
-   * bounded only by the output allowance.
+   * bounded only by the output allowance. `last.cutOff` says the last answer
+   * ran past its ceiling, whose re-ask asks for a smaller one.
    */
-  reaskTokens?: (spent: AiUsage, last: { outputTokens: number }) => number
+  reaskTokens?: (spent: AiUsage, last: { outputTokens: number; cutOff: boolean }) => number
   thinking?: AiThinking
   effort?: AiEffort
   signal?: AbortSignal
@@ -1215,6 +1216,7 @@ export async function runValidatedGeneration(
   const allowance = AI_GENERATION_MAX_ATTEMPTS * maxTokens
   // What the last answer wrote, for a ceiling that asks whether a re-ask still fits (AGL-4152).
   let lastOutput = 0
+  let lastCutOff = false
   while (answers < AI_GENERATION_MAX_ATTEMPTS) {
     const spent = Number(spend.usage.outputTokens)
     const left = allowance - (Number.isFinite(spent) ? spent : 0)
@@ -1223,7 +1225,7 @@ export async function runValidatedGeneration(
       break
     }
     // A re-ask the generation's own ceiling cannot pay for is not asked: it ends on what the last answer broke.
-    const room = answers > 0 && input.reaskTokens ? input.reaskTokens(spend.usage, { outputTokens: lastOutput }) : Number.POSITIVE_INFINITY
+    const room = answers > 0 && input.reaskTokens ? input.reaskTokens(spend.usage, { outputTokens: lastOutput, cutOff: lastCutOff }) : Number.POSITIVE_INFINITY
     if (room <= 0) break
     spend.attempts += 1
     const result = await runAiRequest({
@@ -1304,6 +1306,7 @@ export async function runValidatedGeneration(
     // not particular to one kind: any door that can read a partial answer as
     // a whole one has the same hole.
     const cutOff = aiStoppedAtCeiling(result.stopReason)
+    lastCutOff = cutOff
     const checked = answer ? check(answer) : null
     if (!cutOff && checked && checked.value !== null && checked.violations.length === 0) {
       return { ...spend, status: 'ok', value: checked.value }

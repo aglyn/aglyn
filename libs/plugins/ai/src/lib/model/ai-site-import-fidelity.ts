@@ -267,8 +267,12 @@ export interface SiteImportImprovedFidelity {
   ledger: {
     /** Every fact the source says, on the page. */
     facts: SiteImportImprovedLine & { missing: string[] }
-    /** Facts and names on the page that nothing the import read says: none. */
-    invented: SiteImportImprovedLine & { found: string[] }
+    /**
+     * Facts and names on the page that nothing the import read says: none.
+     * `at` is the line each was found in, cut short around it (AGL-4152), so
+     * a re-ask and a later read of the job can tell which sentence held it.
+     */
+    invented: SiteImportImprovedLine & { found: string[]; at?: string[] }
     /** Every thing that must land, on the page. */
     held: SiteImportImprovedLine & { missing: string[] }
     /** Every link's destination, on the page. */
@@ -2319,6 +2323,23 @@ const crowdsPhone = (size: unknown) => {
   return !/\b(?:sm|md|lg):/.test(size) && size.trim() !== '' && Number(size) < 6
 }
 
+/** The most characters a line an invented fact sat in is kept at (AGL-4152). */
+export const SITE_IMPORT_INVENTED_LINE_CHARS = 120
+
+/**
+ * A line cut short around what it says (AGL-4152): whole where it is short,
+ * else the `SITE_IMPORT_INVENTED_LINE_CHARS` around the first place it says
+ * `what`, an ellipsis where it was cut.
+ */
+export function siteImportLineAround(text: string, what: string, most = SITE_IMPORT_INVENTED_LINE_CHARS): string {
+  const line = clean(text)
+  if (line.length <= most) return line
+  const found = line.toLowerCase().indexOf(what.toLowerCase())
+  const room = most - 2
+  const start = Math.max(0, Math.min(found < 0 ? 0 : found - Math.floor(room / 2), line.length - room))
+  return `${start > 0 ? '…' : ''}${line.slice(start, start + room).trim()}${start + room < line.length ? '…' : ''}`
+}
+
 /** The kept ledger and the design lines of a page a generative Improve it built (AGL-4152). */
 function improvedScore(source: SiteImportFidelitySource, built: Built, look: LookOf, drawnSections: readonly string[], options: SiteImportImprovedOptions): SiteImportImprovedFidelity {
   const ledger = siteImportLedger({ layout: source.layout, blocks: source.blocks, ...(source.photos ? { photos: source.photos } : {}) })
@@ -2342,6 +2363,15 @@ function improvedScore(source: SiteImportFidelitySource, built: Built, look: Loo
   // Invented: none that nothing the import read says.
   const allowed = new Set(anywhere.flatMap((text) => siteImportFactTokens(text, scope, false)))
   const found = [...new Set(shown.flatMap((text) => siteImportFactTokens(text, scope, true)))].filter((token) => !allowed.has(token) && token !== 'name:FAQ' && token !== 'name:FAQs')
+  // The line each was found in, cut short around it (AGL-4152): never the page whole.
+  const inventedAt = [
+    ...new Set(
+      found.slice(0, 8).flatMap((token) => {
+        const text = shown.find((entry) => siteImportFactTokens(entry, scope, true).includes(token))
+        return text ? [siteImportLineAround(text, token.slice(token.indexOf(':') + 1))] : []
+      }),
+    ),
+  ]
   // Held: every thing that must land, on the page.
   const photoOf = new Map((source.photos ?? []).flatMap((photo) => (photo.from ? [[photo.from, photo.src] as const] : [])))
   const keys = pieces.map((piece) => ` ${piece.key} `)
@@ -2382,7 +2412,7 @@ function improvedScore(source: SiteImportFidelitySource, built: Built, look: Loo
   const meaningOk = options.proposed === true || sourceWords.size === 0 || kept / sourceWords.size >= (options.meaning ?? SITE_IMPORT_IMPROVED_MEANING)
   const ledgerLines = {
     facts: { ...line(said.length - missingFacts.length, said.length), missing: missingFacts.slice(0, 8) },
-    invented: { ...line(found.length ? 0 : 1, 1), found: found.slice(0, 8) },
+    invented: { ...line(found.length ? 0 : 1, 1), found: found.slice(0, 8), ...(inventedAt.length ? { at: inventedAt } : {}) },
     held: { ...line(musts.length - missingHeld.length, musts.length), missing: missingHeld },
     links: { ...line(destinations.length - missingLinks.length, destinations.length), missing: missingLinks.slice(0, 8) },
     meaning: line(kept, sourceWords.size, meaningOk),
