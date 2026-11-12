@@ -29,7 +29,7 @@
     "@aglyn/aglyn": "1.21.0",
     "@aglyn/shared-data-mdi": "1.21.0",
     "@aglyn/shared-ui-jsx": "1.21.0",
-    "@swc/helpers": "0.5.23"
+    "@swc/helpers": "0.5.24"
   },
   "peerDependencies": {
     "@mui/material": "^9.3.1",

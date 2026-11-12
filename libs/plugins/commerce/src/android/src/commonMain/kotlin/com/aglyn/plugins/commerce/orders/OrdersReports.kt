@@ -38,6 +38,7 @@ import com.aglyn.plugins.commerce.pos.PosDayTotalsBody
 import com.aglyn.plugins.commerce.pos.PosRegister
 import com.aglyn.plugins.commerce.pos.ShiftReportView
 import com.aglyn.plugins.commerce.pos.money
+import com.aglyn.plugins.commerce.pos.posDayReportByline
 import com.aglyn.plugins.commerce.pos.posRegisterFrom
 import com.aglyn.plugins.commerce.pos.registersQuery
 import com.aglyn.plugins.commerce.pos.sortRegisters
@@ -102,12 +103,34 @@ fun rememberStoreCurrency(context: NativePluginContext): String {
   return currency
 }
 
-/** Day report: every register's day, as the register's Day totals show it. */
+/** The site's name, as its site document names it (the workspace's site list reads it the same way); null until read. */
+@Composable
+fun rememberSiteName(context: NativePluginContext): String? {
+  var name by remember(context.hostId) { mutableStateOf<String?>(null) }
+  androidx.compose.runtime.LaunchedEffect(context.hostId) {
+    val hostId = context.hostId ?: return@LaunchedEffect
+    val data = runCatching { context.firestore.get("hosts/$hostId") }.getOrNull()?.data ?: return@LaunchedEffect
+    name = listOf("displayName", "subdomain").firstNotNullOfOrNull { (data[it] as? String)?.trim()?.ifEmpty { null } }
+  }
+  return name
+}
+
+/**
+ * Day report: every register's day, as the register's Day totals show it, under the report's own head (Figma
+ * 341:13731): Day report, then the line naming the site, every register and the days.
+ */
 @Composable
 fun OrdersDayReportPane(context: NativePluginContext, currency: String) {
   val model = remember(context.hostId) { PosDayReportModel(ConsolePosDayReportApi(context.api, context.hostId ?: "")) }
+  val site = rememberSiteName(context)
   Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("orders-day-report-pane")) {
-    Text("Day report", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(bottom = space(1.5f)))
+    Text("Day report", style = MaterialTheme.typography.headlineSmall)
+    Text(
+      posDayReportByline(site, model.label),
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      modifier = Modifier.padding(top = space(0.5f), bottom = space(1.5f)).testTag("orders-day-report-byline"),
+    )
     PosDayTotalsBody(model, currency, notSynced = null)
   }
 }

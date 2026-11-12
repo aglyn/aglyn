@@ -117,6 +117,12 @@ struct PosDayNotSynced: Equatable {
   }
 }
 
+/// The line under a day report's title: whose registers, and which days (Figma 341:13731, 343:43796):
+/// "Acme Bakery · every register · Today, Oct 25, 2026"; the site is left out while it is not known.
+func posDayReportByline(site: String?, days: String?) -> String {
+  [site, "every register", days].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · ")
+}
+
 /// `yyyy-MM-dd` for a picked date, on the device's calendar (the picker's own day).
 func posDayKey(_ date: Date, calendar: Calendar = .current) -> String {
   let parts = calendar.dateComponents([.year, .month, .day], from: date)
@@ -135,11 +141,16 @@ final class PosDayReportModel {
 
   init(api: PosDayReportAPI) { self.api = api }
 
-  /// The days, as the range picker words them (the report's own once it has answered).
+  /// The store's own today, as the report answered it when asked for today (the device's clock may sit in another
+  /// time zone than the store's).
+  private(set) var todayKey: String?
+
+  /// The days, as the screen heads them (the report's own once it has answered): "Today, Oct 25, 2026". The
+  /// spreadsheet keeps the plain `yyyy-MM-dd` days.
   var label: String {
-    if let report = state.value { return posDayRangeLabel(from: report.from, to: report.to) }
+    if let report = state.value { return posDayRangeTitle(from: report.from, to: report.to, today: todayKey) }
     guard let range else { return "Today" }
-    return posDayRangeLabel(from: range.from, to: range.to)
+    return posDayRangeTitle(from: range.from, to: range.to, today: todayKey)
   }
 
   func today() async {
@@ -161,7 +172,10 @@ final class PosDayReportModel {
     state = .loading
     do {
       let report = try await api.report(from: range?.from, to: range?.to)
-      if mine == generation { state = .ready(report) }
+      if mine == generation {
+        if range == nil { todayKey = report.from }
+        state = .ready(report)
+      }
     } catch {
       if mine == generation {
         let status = (error as? ConsoleAPIError)?.status ?? 0

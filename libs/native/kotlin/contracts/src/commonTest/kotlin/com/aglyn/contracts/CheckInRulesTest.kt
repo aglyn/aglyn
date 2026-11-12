@@ -28,6 +28,18 @@ class CheckInRulesTest {
   private fun plain(value: JsonElement): Any? = if (value is JsonNull) null else (value as? JsonPrimitive)?.contentOrNull
 
   @Test
+  fun dayReportRangeReadsAsDates() {
+    assertEquals("Oct 25, 2026", dayKeyDateLabel("2026-10-25"))
+    assertEquals("", dayKeyDateLabel("2026-02-30"))
+    assertEquals("Today, Oct 25, 2026", posDayRangeTitle("2026-10-25", "2026-10-25", today = "2026-10-25"))
+    assertEquals("Oct 24, 2026", posDayRangeTitle("2026-10-24", "2026-10-24", today = "2026-10-25"))
+    assertEquals("Oct 24 – Oct 27, 2026", posDayRangeTitle("2026-10-24", "2026-10-27"))
+    assertEquals("Dec 30, 2026 – Jan 2, 2027", posDayRangeTitle("2026-12-30", "2027-01-02"))
+    assertEquals("soon", posDayRangeTitle("soon", "soon"))
+    assertEquals("2026-10-24 to 2026-10-27", posDayRangeLabel("2026-10-24", "2026-10-27"))
+  }
+
+  @Test
   fun dayHelpersAsTheConsole() {
     cases("checkInDayLabel").forEach { (args, result) -> assertEquals(result.jsonPrimitive.content, checkInDayLabel(plain(args[0]) as String?), args.toString()) }
     cases("isCheckInDayKey").forEach { (args, result) -> assertEquals(result.jsonPrimitive.boolean, isCheckInDayKey(plain(args[0])), args.toString()) }

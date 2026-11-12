@@ -23,6 +23,18 @@ public func posDayAmount(_ cents: Double?, currency: String) -> String {
 /// The range as a reader says it: `2026-10-24` or `2026-10-24 to 2026-10-26` (`posDayRangeLabel`).
 public func posDayRangeLabel(from: String, to: String) -> String { from == to ? from : "\(from) to \(to)" }
 
+/// The range as a screen heads it (the spreadsheet keeps `posDayRangeLabel`): "Today, Oct 25, 2026", "Oct 24, 2026",
+/// "Oct 24 – Oct 26, 2026" or "Dec 30, 2026 – Jan 2, 2027". `today` is the store's own today, when known.
+public func posDayRangeTitle(from: String, to: String, today: String? = nil) -> String {
+  let start = dayKeyDateLabel(from)
+  let end = dayKeyDateLabel(to)
+  guard !start.isEmpty, !end.isEmpty else { return posDayRangeLabel(from: from, to: to) }
+  if from == to { return from == today ? "Today, \(start)" : start }
+  // One year said once, at the end: "Oct 24 – Oct 26, 2026".
+  let sameYear = from.prefix(4) == to.prefix(4)
+  return "\(sameYear ? String(start.dropLast(6)) : start) – \(end)"
+}
+
 /// Whether the range had nothing to report: no sale, no return, no shift (`posDayReportIsEmpty`).
 public func posDayReportIsEmpty(_ report: PosDayReport) -> Bool {
   report.totals.orderCount == 0 && report.totals.refundCount == 0 && report.shifts.isEmpty

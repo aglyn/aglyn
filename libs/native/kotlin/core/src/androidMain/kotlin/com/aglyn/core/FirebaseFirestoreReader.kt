@@ -39,12 +39,12 @@ class FirebaseFirestoreReader(private val db: FirebaseFirestore) : FirestoreRead
   }
 
   override suspend fun count(query: FirestoreQuery): Long? = recorded("count", query.collectionPath) {
-    build(query.copy(limit = null, startAfter = null)).count().get(AggregateSource.SERVER).await().count
+    build(query.wholeMatch).count().get(AggregateSource.SERVER).await().count
   }
 
   override suspend fun sum(query: FirestoreQuery, field: String): Double? = recorded("sum", query.collectionPath) {
     val total = AggregateField.sum(field)
-    build(query.copy(limit = null, startAfter = null)).aggregate(total).get(AggregateSource.SERVER).await().getDouble(total)
+    build(query.wholeMatch).aggregate(total).get(AggregateSource.SERVER).await().getDouble(total)
   }
 
   override fun observeDoc(path: String): Flow<Live<FirestoreDoc?>> = callbackFlow {

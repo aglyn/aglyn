@@ -288,11 +288,11 @@ class CommerceServiceSpecsTest {
 
   // ---- sales channels ----------------------------------------------------------------------------------------------
 
-  private fun channelState(sells: Boolean = true, google: String = "false", extra: String = "") =
+  private fun channelState(sells: Boolean = true, google: String = "false", extra: String = "", legacyInUse: Boolean = true) =
     """{"state":{"sells":$sells,"store":{"name":"Acme","origin":"https://shop.test","currency":"usd","productPagesServed":true,"carrierPricedCountries":[]},
        "channels":[{"id":"google","enabled":$google,"url":${if (google == "true") "\"https://shop.test/feed/google/t.xml\"" else "null"},"createdAtMs":1,"rotatedAtMs":null,"lastFetchAtMs":${if (google == "true") "5" else "null"},"lastFetchAgent":null},
                    {"id":"meta","enabled":false,"url":null,"createdAtMs":null,"rotatedAtMs":null,"lastFetchAtMs":null,"lastFetchAgent":null}],
-       "legacy":{"url":"https://shop.test/api/commerce/feed","active":${google == "true"}},
+       "legacy":{"url":"https://shop.test/api/commerce/feed","active":${google == "true"},"inUse":$legacyInUse},
        "settings":{"defaultBrand":"","defaultCondition":"new","defaultGoogleCategory":""}$extra}}"""
 
   @Test
@@ -331,6 +331,8 @@ class CommerceServiceSpecsTest {
     assertEquals("https://shop.test/feed/google/t.xml", ScreenValues.render(on.action("manage", "copy").copy!!, on.context))
     assertEquals("/api/sales-channels/rotate", on.action("manage", "rotate").url)
     assertTrue("legacy" in on.shown() && "legacyOff" in on.shown(), "the earlier Merchant Center address can be turned off")
+    val neverRead = channel("google", channelState(google = "true", legacyInUse = false)).shown()
+    assertTrue("legacy" !in neverRead && "legacyOff" !in neverRead, "no earlier address to mention when Merchant Center never read it")
     assertTrue("legacy" !in channel("meta", channelState(google = "true")).shown(), "only Google had an earlier address")
     assertEquals(listOf("steps", "help"), off.shown().filter { it == "steps" || it == "help" })
     assertTrue("connection" !in on.shown() && "sync" !in on.shown(), "no connection block on a deployment without the channel API")

@@ -103,7 +103,7 @@ class RestFirestoreReader(
 
   /** One aggregation (aliased `result`) over [query] with its limit and cursor dropped; its typed value, or null. */
   private suspend fun aggregate(query: FirestoreQuery, aggregation: JsonObject): JsonObject? {
-    val bare = query.copy(limit = null, startAfter = null)
+    val bare = query.wholeMatch
     val parent = bare.collectionPath.substringBeforeLast('/', "")
     val collectionId = bare.collectionPath.substringAfterLast('/')
     val url = if (parent.isEmpty()) "$root:runAggregationQuery" else "$root/$parent:runAggregationQuery"

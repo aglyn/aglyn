@@ -64,17 +64,23 @@ struct OrdersReportRow: View {
   }
 }
 
-/// Day report: every register's day, as the register's own Day totals screen shows it.
+/// Day report: every register's day, as the register's own Day totals screen shows it, under the report's own head
+/// (Figma 341:13731 on the iPad, 343:43796 on a phone): Day report, Share CSV, and the line naming the site, every
+/// register and the days.
 struct OrdersDayReportView: View {
   @State private var model: PosDayReportModel
   let currency: String
+  let site: String
 
   init(context: NativePluginContext, currency: String) {
     _model = State(initialValue: PosDayReportModel(api: ConsolePosDayReportAPI(api: context.api, hostID: context.hostID ?? "")))
     self.currency = currency
+    site = context.siteName(context.hostID)
   }
 
-  var body: some View { PosDayTotalsView(model: model, currency: currency, notSynced: nil) }
+  var body: some View {
+    PosDayTotalsView(model: model, currency: currency, notSynced: nil, head: PosDayReportHead(title: "Day report", site: site))
+  }
 }
 
 /// The newest shifts one register reads at a time, as the console's history card pages them.
