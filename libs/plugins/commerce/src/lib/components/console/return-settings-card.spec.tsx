@@ -27,6 +27,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 let mockStore: Record<string, unknown> | undefined
+let mockFromCache = false
 const batchSet = jest.fn()
 
 jest.mock('firebase/firestore', () => ({
@@ -36,7 +37,7 @@ jest.mock('firebase/firestore', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useUser: () => ({ data: { uid: 'uid-admin' } }),
-  useFirestoreDoc: () => ({ data: mockStore, status: 'success', fromCache: false }),
+  useFirestoreDoc: () => ({ data: mockStore, status: 'success', fromCache: mockFromCache }),
   writeGuardedBySeed: async (_guard: unknown, write: () => Promise<void>) => {
     await write()
     return { ok: true }
@@ -64,6 +65,35 @@ const save = () => fireEvent.click(screen.getByRole('button', { name: 'Save retu
 beforeEach(() => {
   batchSet.mockClear()
   mockStore = { currency: 'USD', returns: { enabled: true, windowDays: 30, eligibleTypes: ['physical'] } }
+  mockFromCache = false
+})
+
+/**
+ * The first press is never refused for a late server (AGL-4047): Save is held
+ * while the settings read is the cache's, with the reason beside it, and the
+ * edit is saved onto what the server confirms.
+ */
+describe('return settings while the server has not answered (AGL-4047)', () => {
+  it('holds Save with the reason, then saves the edit onto the server’s policy', async () => {
+    mockFromCache = true
+    const { rerender } = render(<ReturnSettingsCard hostId="host-1" />)
+    fireEvent.change(screen.getByLabelText('Return window in days'), { target: { value: '14' } })
+    expect(
+      (screen.getByRole('button', { name: 'Save return settings' }) as HTMLButtonElement).disabled,
+    ).toBe(true)
+    expect(screen.getByRole('status').textContent).toBe('Checking your return settings with the server…')
+
+    // Digital products were made returnable elsewhere since the cached snapshot.
+    mockStore = { currency: 'USD', returns: { enabled: true, windowDays: 30, eligibleTypes: ['physical', 'digital'] } }
+    mockFromCache = false
+    rerender(<ReturnSettingsCard hostId="host-1" />)
+    save()
+
+    await waitFor(() => expect(batchSet).toHaveBeenCalledTimes(1))
+    expect(batchSet.mock.calls[0][1]).toEqual({
+      returns: { enabled: true, windowDays: 14, eligibleTypes: ['physical', 'digital'] },
+    })
+  })
 })
 
 describe('return settings (AGL-3611)', () => {

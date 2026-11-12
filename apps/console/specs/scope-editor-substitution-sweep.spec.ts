@@ -166,6 +166,8 @@ describe('AGL-1484 · nothing substitutes the org token for an absent scope', ()
       join(REPO_ROOT, 'apps/console/components/media/media-sharing.ts'),
       'utf8',
     )
-    expect(wrapper).not.toMatch(/visibleTo/)
+    // The stored field by name, not the shared `visibleToHost` helper the
+    // limit-access confirm uses to test a scope list against a site (#2600).
+    expect(wrapper).not.toMatch(/\bvisibleTo\b/)
   })
 })

@@ -33,8 +33,12 @@ import {
   useFirestore,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
-import { Button, Stack } from '@mui/material'
+import { Button, Stack, Typography } from '@mui/material'
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useEffect, useState } from 'react'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { crmClientListFields } from '../model/crm-list-query'
@@ -144,6 +148,13 @@ export function LeadCampaignsCard(props: LeadCampaignsCardProps) {
   }, [storedKey, dirty])
 
   const unchanged = containerMembershipUnchanged(stored, selected)
+  /*
+   * Save is held while the lead read is the cache's, with the reason beside
+   * it, rather than pressed into a wait that can end refused (AGL-4047).
+   */
+  const checkingText = isSeedChecking({ fromCache, unreadable: leadStatus === 'error' })
+    ? seedCheckingText('lead')
+    : undefined
   const empty = optionsReady && !options.length
 
   const save = async () => {
@@ -207,7 +218,7 @@ export function LeadCampaignsCard(props: LeadCampaignsCardProps) {
           <Button
             size="small"
             variant="outlined"
-            disabled={saving || unchanged}
+            disabled={saving || unchanged || Boolean(checkingText)}
             onClick={() => void save().catch((error: unknown) => {
               console.error(error)
               enqueueSnackbar(
@@ -223,6 +234,11 @@ export function LeadCampaignsCard(props: LeadCampaignsCardProps) {
       }}
     >
       <Stack spacing={2}>
+        {!unchanged && checkingText ? (
+          <Typography variant="body2" color="text.secondary" role="status">
+            {checkingText}
+          </Typography>
+        ) : null}
         <ContainerPicker
           kind="campaign"
           options={options}

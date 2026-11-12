@@ -130,10 +130,15 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 
 import { posPaymentHandler } from './pos-payment'
 import {
+  cancelPosOfflineCardIntent,
+  capturePosOfflineCardIntent,
   handlePosStripeEvent,
   KEYED_CARD_NEEDS_AUTHENTICATION,
   POS_READER_ON_OTHER_ACCOUNT,
+  posCaptureFeeCents,
+  retrievePosOfflineCardIntent,
 } from './pos-terminal'
+import { posOfflineCardFeeCents } from './pos-stripe'
 import { onPosSaleCompleted } from './pos-sale'
 
 /*==========================================
@@ -1021,4 +1026,79 @@ describe('a store on its own Stripe account (direct charge, ToS v24 §10.2(a))',
     const create = stripeCalls.find((call) => call.path === 'payment_intents')!
     expect(Number(create.params.get('application_fee_amount') ?? 0)).toBeLessThanOrEqual(60)
   })
+})
+
+describe('an offline card read and captured at sync (AGL-4039)', () => {
+  // Stripe reads `expand[]=latest_charge`. An array under the `expand[]` key was sent as `expand[][]`, which Stripe
+  // refused ("Invalid string"), so no offline card was ever checked or captured and its sale waited forever.
+  it('asks Stripe to expand the charge once, as a plain list', async () => {
+    const { id } = await retrieveSeeded()
+    await retrievePosOfflineCardIntent(id)
+    await capturePosOfflineCardIntent(id, 0, 'offline-capture-test')
+    const calls = stripeCalls.filter((call) => call.path.startsWith(`payment_intents/${id}`))
+    expect(calls.map((call) => call.method)).toEqual(['GET', 'POST'])
+    for (const call of calls) {
+      expect(call.params.getAll('expand[]')).toEqual(['latest_charge'])
+      expect(call.params.has('expand[][]')).toBe(false)
+    }
+  })
+
+  it('reads and captures a direct-charge store’s card on its own account, with the same expand and the fee (AGL-4219)', async () => {
+    const { id } = await retrieveSeeded()
+    await retrievePosOfflineCardIntent(id, 'acct_1StoreOwnAcct')
+    await capturePosOfflineCardIntent(id, 37, 'offline-capture-direct', 'acct_1StoreOwnAcct')
+    const calls = stripeCalls.filter((call) => call.path.startsWith(`payment_intents/${id}`))
+    expect(calls.map((call) => [call.method, call.account])).toEqual([
+      ['GET', 'acct_1StoreOwnAcct'],
+      ['POST', 'acct_1StoreOwnAcct'],
+    ])
+    for (const call of calls) {
+      expect(call.params.getAll('expand[]')).toEqual(['latest_charge'])
+      expect(call.params.has('expand[][]')).toBe(false)
+    }
+    const capture = calls[1]
+    expect(capture.path).toBe(`payment_intents/${id}/capture`)
+    expect(capture.params.get('application_fee_amount')).toBe('37')
+    expect(capture.key).toBe('offline-capture-direct')
+    // Nothing on a direct capture names a transfer: the money is the store's already.
+    expect([...capture.params.keys()].some((key) => key.startsWith('transfer_data'))).toBe(false)
+  })
+
+  it('cancels a refused offline card’s authorization on the account it was made on, once (AGL-4219)', async () => {
+    const { id } = await retrieveSeeded()
+    expect(await cancelPosOfflineCardIntent(id, 'acct_1OldStoreAcct', 'pos-offline-release:shop:sale1')).toEqual({ ok: true })
+    expect(await cancelPosOfflineCardIntent(id, null, 'pos-offline-release:shop:sale2')).toEqual({ ok: true })
+    const calls = stripeCalls.filter((call) => call.path === `payment_intents/${id}/cancel`)
+    expect(calls.map((call) => [call.method, call.account, call.key])).toEqual([
+      ['POST', 'acct_1OldStoreAcct', 'pos-offline-release:shop:sale1'],
+      ['POST', null, 'pos-offline-release:shop:sale2'],
+    ])
+    expect(calls[0].params.get('cancellation_reason')).toBe('abandoned')
+  })
+
+  it('captures an offline card by the same fee rule as an online reader payment, on either account (AGL-4219)', () => {
+    for (const direct of [false, true]) {
+      for (const [takeShareCents, chargeCents] of [[0, 500], [37, 2479], [200, 10_000], [9_000, 999_999]]) {
+        const online = posCaptureFeeCents(
+          {
+            id: 'pay_1',
+            method: 'card_present',
+            amountCents: chargeCents,
+            status: 'pending',
+            atMs: 1,
+            takeFeeCents: takeShareCents,
+            ...(direct ? { chargeModel: 'direct' as const, stripeAccountId: 'acct_1StoreOwnAcct' } : {}),
+          } as any,
+          { amount: chargeCents, payment_method_types: ['card_present'] },
+        )
+        expect(posOfflineCardFeeCents({ takeShareCents, chargeCents, direct })).toBe(online)
+      }
+    }
+  })
+
+  async function retrieveSeeded() {
+    const id = `pi_test_${++intentCounter}`
+    intents.set(id, { id, object: 'payment_intent', status: 'requires_capture', amount: 500, metadata: {} })
+    return { id }
+  }
 })

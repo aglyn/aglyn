@@ -671,7 +671,7 @@
         },
         "current": {
           "late": true,
-          "when": "data.resources.items[?item.units > 1].0",
+          "when": "data.resources.items.*.units > 1",
           "query": {
             "collection": "hosts/{site.id}/reservations",
             "where": [

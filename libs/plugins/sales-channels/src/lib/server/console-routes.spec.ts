@@ -213,9 +213,16 @@ describe('state', () => {
     expect(body.legacy).toEqual({
       url: `https://candles.example.com/api/commerce/feed?hostId=${HOST}`,
       active: true,
+      inUse: false,
     })
     expect(body.settings).toEqual({ defaultBrand: '', defaultCondition: 'new', defaultGoogleCategory: '' })
     expect(body.connect).toBeUndefined()
+  })
+
+  it('says the earlier address is in use only once something has read it', async () => {
+    db.docs.set(`hosts/${HOST}/salesChannels/legacy-google`, { lastFetchAtMs: 1_700_000_000_000, lastFetchAgent: 'Googlebot' })
+    const body = await (await get(stateRoute, 'tok-viewer')).json()
+    expect(body.legacy).toMatchObject({ active: true, inUse: true })
   })
 
   it('says the site does not sell when commerce is off for it', async () => {

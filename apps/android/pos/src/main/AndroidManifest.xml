@@ -49,6 +49,16 @@
     <meta-data
       android:name="com.google.firebase.messaging.default_notification_channel_id"
       android:value="aglyn" />
+    <!-- Exports shared from the register (Day totals' Share CSV) leave the app's cache through this provider. -->
+    <provider
+      android:name="androidx.core.content.FileProvider"
+      android:authorities="${applicationId}.fileprovider"
+      android:exported="false"
+      android:grantUriPermissions="true">
+      <meta-data
+        android:name="android.support.FILE_PROVIDER_PATHS"
+        android:resource="@xml/file_paths" />
+    </provider>
     <!-- Firebase starts from AndroidFirebase alone, never from resources: the build carries google_app_id for Analytics
          (which reads it from there), and Firebase's own init provider would start a half-configured app from it. -->
     <provider

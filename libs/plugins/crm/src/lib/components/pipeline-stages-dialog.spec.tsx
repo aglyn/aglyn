@@ -64,13 +64,13 @@ const resnapshot = (pipeline: PipelineDoc): PipelineDoc => ({
   stages: pipeline.stages.map((stage) => ({ ...stage })),
 })
 
-const dialogFor = (pipeline: PipelineDoc | null, open = true) => (
+const dialogFor = (pipeline: PipelineDoc | null, open = true, fromCache = false) => (
   <PipelineStagesDialog
     open={open}
     onClose={jest.fn()}
     orgId="org-1"
     pipeline={pipeline}
-    fromCache={false}
+    fromCache={fromCache}
     unreadable={false}
     visibleToTokens={null}
   />
@@ -119,6 +119,26 @@ describe('what is typed survives a snapshot', () => {
     elsewhere.stages[1].name = 'Discovery'
     view.rerender(dialogFor(elsewhere))
     expect(stageNames().slice(0, 2)).toEqual(['First call', 'Qualification'])
+  })
+})
+
+/**
+ * The first press is never refused for a late server (AGL-4047): Save is held
+ * while the pipeline read is the cache's, with the reason beside it, and what
+ * was typed stays through the server's answer.
+ */
+describe('a save over an unconfirmed read', () => {
+  it('holds Save with the reason, then saves what was typed on the first press', async () => {
+    const view = render(dialogFor(PIPELINE, true, true))
+    rename(0, 'First call')
+    const saveButton = screen.getByRole('button', { name: 'Save stages' }) as HTMLButtonElement
+    expect(saveButton.disabled).toBe(true)
+    expect(screen.getByRole('status').textContent).toBe('Checking your pipeline with the server…')
+
+    view.rerender(dialogFor(resnapshot(PIPELINE), true, false))
+    expect(stageNames()[0]).toBe('First call')
+    fireEvent.click(screen.getByRole('button', { name: 'Save stages' }))
+    await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
   })
 })
 

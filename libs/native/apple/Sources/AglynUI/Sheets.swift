@@ -69,6 +69,7 @@ public struct AglynActionSheet<Fields: View, Below: View>: View {
           below
         }
         .formStyle(.grouped)
+        .aglynPhoneFormEdges()
         .safeAreaInset(edge: .bottom, spacing: 0) { foot }
         // A long form's refusal is read where it is: the confirm stays in view however far the form has scrolled.
         .onChange(of: error) { _, error in

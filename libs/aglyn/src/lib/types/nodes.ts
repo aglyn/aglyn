@@ -26,8 +26,13 @@ import type {
 } from '@data-driven-forms/react-form-renderer/common-types'
 import type { MuiStyledOptions } from '@mui/system/createStyled'
 import type { SvgIconProps } from '@mui/material/SvgIcon'
-/** Minimal icon-props type used in component/preset schemas. Structurally compatible with @aglyn/shared-ui-jsx MdiIconProps. */
-export type MdiIconProps<D extends React.ElementType = 'svg', P = object> = SvgIconProps<D, P> & {
+/**
+ * Minimal icon-props type used in component/preset schemas. Structurally
+ * compatible with @aglyn/shared-ui-jsx MdiIconProps, which draws `path` and
+ * takes no ReactNode children (only a `(d) => …` render function), so
+ * `children` is left out here too.
+ */
+export type MdiIconProps<D extends React.ElementType = 'svg', P = object> = Omit<SvgIconProps<D, P>, 'children'> & {
   path?: string
 }
 import type {
@@ -706,6 +711,17 @@ export interface ComponentSchema<P = any> {
      * the Branch/Stem/Leaf seam swappable for everything else.
      */
     positionalChildren?: FEATURE_FLAG
+    /**
+     * Component takes its text as a plain string `children`: no child
+     * elements and no `<aglyn-text>` wrapper around it. For an element whose
+     * DOM allows text and nothing else, such as `<option>`, where React and
+     * the browser's parser both drop an element child, and with it the text.
+     *
+     * Not `selfClosing`, which means a void element (`<img>`) and strips
+     * `children` altogether: a Select Option flagged that way rendered every
+     * dropdown choice on every published site with no words.
+     */
+    plainTextChildren?: FEATURE_FLAG
     /**
      * Nothing this component renders responds to the visitor until it is
      * hydrated, beyond what its server HTML does on its own — copy, images,

@@ -15,10 +15,17 @@
  * limitations under the License.
  */
 
-import type { WithNxOptions } from '@nx/next/plugins/with-nx'
+import type { NextConfig } from 'next'
 
-export interface WithAglynOptions extends WithNxOptions {
+export interface WithAglynOptions extends NextConfig {
+  /** Stripped before Next reads the config (tools/build/next-workspace-config.js). */
+  nx?: Record<string, unknown>
   aglyn?: {
+    /**
+     * The app directory: pass the next.config's `__dirname`. A production
+     * build lands in `dist/<app dir>/.next`, as it did under `@nx/next:build`.
+     */
+    appDir?: string
     /**
      * Enable the Webpack Bundle Analyzer plugin for the webpack config. You may
      * also enable this by using an ENV variable NEXT_ANALYZE_BUNDLE="true"
@@ -41,7 +48,7 @@ export interface WithAglynOptions extends WithNxOptions {
       logLevel: 'info' | string
     }
   }
-  publicRuntimeConfig?: WithNxOptions['publicRuntimeConfig'] & {
+  publicRuntimeConfig?: Record<string, unknown> & {
     /**
      * The absolute path to the root directory of location where static files
      * within the runtime environment can be accessed

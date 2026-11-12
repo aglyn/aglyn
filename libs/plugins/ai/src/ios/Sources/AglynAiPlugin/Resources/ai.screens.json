@@ -1,5 +1,5 @@
 {
-  "$comment": "The AI plugin's native screens, kept in its Apple package (Resources, so Xcode reads it through the plugin manifest symlink) and linked from its Kotlin module (src/android/screens): AI jobs and their status, credits, the hard cap and overage cap, per-member usage, and the staff zones staffOrg and staffUser, the staff AI requests, and the AI spend column the Workspaces list draws (zone staffOrgsListColumn). Routes: /api/ai/jobs, /api/ai/jobs/{id}/cancel and /resume, /api/ai/billing/credits, /api/ai/billing/overage, /api/ai/allotments, /api/ai/usage, /api/ai/admin/org, /api/ai/admin/user (both with view=prepared), /api/ai/admin/credits, /api/ai/admin/conversations and /api/ai/admin/signals. Grammar: docs/mobile/native-architecture.md §13.",
+  "$comment": "The AI plugin's native screens, kept in its Apple package (Resources, so Xcode reads it through the plugin manifest symlink) and linked from its Kotlin module (src/android/screens): AI jobs and their status, credits, the hard cap and overage cap, per-member usage, and the staff zones staffOrg and staffUser, the staff AI requests, and the AI spend column the Workspaces list draws (zone staffOrgsListColumn). Bring my site (AGL-4152): the start on ai.import.start, an import job’s waves and its Keep my site or Improve it choice on ai.job. Routes: /api/ai/jobs, /api/ai/site-import/ownership, /api/ai/jobs/{id}/cancel and /resume, /api/ai/billing/credits, /api/ai/billing/overage, /api/ai/allotments, /api/ai/usage, /api/ai/admin/org, /api/ai/admin/user (both with view=prepared), /api/ai/admin/credits, /api/ai/admin/conversations and /api/ai/admin/signals. Grammar: docs/mobile/native-architecture.md §13.",
   "screens": [
     {
       "id": "ai.jobs",
@@ -12,7 +12,7 @@
         "/ai-jobs"
       ],
       "load": {
-        "jobs": "/api/ai/jobs?orgId={org.id}&hostId={site.id}&limit=50",
+        "jobs": "/api/ai/jobs?orgId={org.id}&hostId={site.id}&limit=50&siteImport=1",
         "credits": {
           "url": "/api/ai/billing/credits?orgId={org.id}",
           "optional": true
@@ -134,7 +134,18 @@
           "tracking": "Tracking",
           "import": "Site import"
         }
-      }
+      },
+      "actions": [
+        {
+          "id": "import",
+          "label": "Bring my site",
+          "icon": "arrow.down.doc|download",
+          "when": "data.jobs.siteImport == ready",
+          "navigate": {
+            "screen": "ai.import.start"
+          }
+        }
+      ]
     },
     {
       "id": "ai.job",
@@ -162,6 +173,12 @@
           "text": "{data.jobs.jobs[id=params.jobId].error}"
         },
         {
+          "type": "notice",
+          "tone": "info",
+          "when": "is.import && data.jobs.jobs[id=params.jobId].review.message",
+          "text": "{data.jobs.jobs[id=params.jobId].review.message}"
+        },
+        {
           "type": "fields",
           "when": "data.jobs.jobs[id=params.jobId]",
           "object": "data.jobs.jobs[id=params.jobId]",
@@ -181,6 +198,31 @@
             {
               "label": "Kind",
               "value": "{const.kindLabels[@item.kind]|'AI job'}"
+            },
+            {
+              "label": "Website address",
+              "value": "{item.siteImport.domain}",
+              "when": "item.kind == import && item.siteImport.domain"
+            },
+            {
+              "label": "{const.finish.current}",
+              "value": "{const.finish.keep.label}",
+              "when": "item.kind == import && item.siteImport && item.siteImport.finish != improve"
+            },
+            {
+              "label": "{const.finish.current}",
+              "value": "{const.finish.improve.label}",
+              "when": "item.kind == import && item.siteImport.finish == improve && item.siteImport.wording == false"
+            },
+            {
+              "label": "{const.finish.current}",
+              "value": "Improve it, with new copy",
+              "when": "item.kind == import && item.siteImport.finish == improve && item.siteImport.wording != false && item.siteImport.generative"
+            },
+            {
+              "label": "{const.finish.current}",
+              "value": "Improve it, and my wording",
+              "when": "item.kind == import && item.siteImport.finish == improve && item.siteImport.wording != false && !item.siteImport.generative"
             },
             {
               "label": "Brief",
@@ -208,6 +250,192 @@
               "value": "{item.updatedAt:datetime}"
             }
           ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "is.waveWaits",
+          "text": "Next: {data.jobs.jobs[id=params.jobId].siteImport.waves[status='waiting'].label}. A wave is paid from your AI credits. Its pages land in your site’s preview, or as drafts where the site is not in preview. You review each wave and start the next yourself."
+        },
+        {
+          "type": "actions",
+          "when": "is.waveWaits",
+          "items": [
+            {
+              "id": "startWave",
+              "label": "Start {data.jobs.jobs[id=params.jobId].siteImport.waves[status='waiting'].label}",
+              "icon": "play.circle|play_circle",
+              "prompt": [
+                {
+                  "key": "finish",
+                  "label": "{const.finish.heading}",
+                  "kind": "choice",
+                  "required": true,
+                  "initial": "{data.jobs.jobs[id=params.jobId].siteImport.finish|'keep'}",
+                  "help": "{const.finish.helper}",
+                  "options": [
+                    {
+                      "value": "keep",
+                      "label": "{const.finish.keep.label}",
+                      "detail": "{const.finish.keep.description}"
+                    },
+                    {
+                      "value": "improve",
+                      "label": "{const.finish.improve.label}",
+                      "detail": "{const.finish.improve[@is.generative]|const.finish.improve.plain}"
+                    }
+                  ]
+                },
+                {
+                  "key": "wording",
+                  "label": "{const.finish.wordingLabel[@is.generative]|const.finish.wordingLabel.plain}",
+                  "kind": "toggle",
+                  "when": "form.finish == improve",
+                  "initial": "{?data.jobs.jobs[id=params.jobId].siteImport.finish != improve || data.jobs.jobs[id=params.jobId].siteImport.wording != false}",
+                  "help": "{const.finish.wordingHelp[@is.generative]|const.finish.wordingHelp.plain}"
+                }
+              ],
+              "promptTitle": "Start {data.jobs.jobs[id=params.jobId].siteImport.waves[status='waiting'].label}",
+              "submitLabel": "Start {data.jobs.jobs[id=params.jobId].siteImport.waves[status='waiting'].label}",
+              "url": "/api/ai/jobs/{params.jobId}/resume",
+              "body": {
+                "orgId": "{org.id}",
+                "hostId": "{site.id}",
+                "finish": "{form.finish}",
+                "wording": {
+                  "$if": "form.finish == improve && form.wording",
+                  "then": true,
+                  "else": false
+                }
+              },
+              "success": "Bringing in {data.jobs.jobs[id=params.jobId].siteImport.waves[status='waiting'].label}",
+              "reload": true
+            },
+            {
+              "id": "startAll",
+              "label": "Start every remaining wave",
+              "icon": "forward.end.alt|done_all",
+              "when": "is.manyWait",
+              "prompt": [
+                {
+                  "key": "finish",
+                  "label": "{const.finish.heading}",
+                  "kind": "choice",
+                  "required": true,
+                  "initial": "{data.jobs.jobs[id=params.jobId].siteImport.finish|'keep'}",
+                  "help": "{const.finish.helper}",
+                  "options": [
+                    {
+                      "value": "keep",
+                      "label": "{const.finish.keep.label}",
+                      "detail": "{const.finish.keep.description}"
+                    },
+                    {
+                      "value": "improve",
+                      "label": "{const.finish.improve.label}",
+                      "detail": "{const.finish.improve[@is.generative]|const.finish.improve.plain}"
+                    }
+                  ]
+                },
+                {
+                  "key": "wording",
+                  "label": "{const.finish.wordingLabel[@is.generative]|const.finish.wordingLabel.plain}",
+                  "kind": "toggle",
+                  "when": "form.finish == improve",
+                  "initial": "{?data.jobs.jobs[id=params.jobId].siteImport.finish != improve || data.jobs.jobs[id=params.jobId].siteImport.wording != false}",
+                  "help": "{const.finish.wordingHelp[@is.generative]|const.finish.wordingHelp.plain}"
+                }
+              ],
+              "promptTitle": "Start every remaining wave",
+              "submitLabel": "Start every remaining wave",
+              "url": "/api/ai/jobs/{params.jobId}/resume",
+              "body": {
+                "orgId": "{org.id}",
+                "hostId": "{site.id}",
+                "finish": "{form.finish}",
+                "wording": {
+                  "$if": "form.finish == improve && form.wording",
+                  "then": true,
+                  "else": false
+                },
+                "startAll": true
+              },
+              "success": "Bringing in {data.jobs.jobs[id=params.jobId].siteImport.waves[status='waiting'].label}",
+              "reload": true
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "is.manyWait",
+          "text": "Start every remaining wave runs the {data.jobs.jobs[id=params.jobId].siteImport.waves[?item.status == waiting].*.index:count} waves left one after another, with no review between them. You review the last one."
+        },
+        {
+          "type": "list",
+          "when": "is.import && data.jobs.jobs[id=params.jobId].siteImport.waves",
+          "title": "Every wave ({data.jobs.jobs[id=params.jobId].siteImport.waves.length})",
+          "items": "data.jobs.jobs[id=params.jobId].siteImport.waves",
+          "primary": "{item.label}",
+          "secondary": [
+            {
+              "text": "1 page",
+              "when": "item.slots.length == 1"
+            },
+            {
+              "text": "{item.slots.length} pages",
+              "when": "item.slots.length != 1"
+            },
+            {
+              "text": "with your header and footer",
+              "when": "item.frame"
+            },
+            {
+              "text": "{const.finish.keep.label}",
+              "when": "item.startedAt && item.finish == keep"
+            },
+            {
+              "text": "Improved",
+              "when": "item.startedAt && item.finish == improve && item.wording == false && !item.generative"
+            },
+            {
+              "text": "Improved, wording too",
+              "when": "item.startedAt && item.finish == improve && item.wording != false && !item.generative"
+            },
+            {
+              "text": "Redesigned",
+              "when": "item.startedAt && item.finish == improve && item.wording == false && item.generative"
+            },
+            {
+              "text": "Redesigned, new copy",
+              "when": "item.startedAt && item.finish == improve && item.wording != false && item.generative"
+            }
+          ],
+          "badges": [
+            {
+              "text": "In",
+              "when": "item.status == done,review",
+              "tone": "success"
+            },
+            {
+              "text": "Running",
+              "when": "item.status == running",
+              "tone": "info"
+            },
+            {
+              "text": "Stopped",
+              "when": "item.status == stopped && item.startedAt",
+              "tone": "warning"
+            },
+            {
+              "text": "Not started",
+              "when": "item.status == stopped && !item.startedAt",
+              "tone": "neutral"
+            }
+          ],
+          "count": false,
+          "empty": "No waves yet.",
+          "page": 5
         },
         {
           "type": "list",
@@ -302,8 +530,52 @@
           "media": "Media library change",
           "tracking": "Tracking",
           "import": "Site import"
+        },
+        "finish": {
+          "heading": "How should your new site look?",
+          "keep": {
+            "label": "Keep my site",
+            "description": "Your pages stay laid out as they are, in your site’s colors, buttons and fonts. Aglyn tidies spacing, type and color so every page reads well. Every word stays as you wrote it."
+          },
+          "improve": {
+            "label": "Improve it",
+            "plain": "Aglyn AI redesigns each page with your pictures, menus and forms, in a theme built around your brand.",
+            "true": "Aglyn AI plans your menu and footer, and redesigns each page with your pictures and forms, in a theme built around your brand. It shows you the plan before anything is built."
+          },
+          "wordingLabel": {
+            "plain": "Also improve my wording",
+            "true": "Also write new copy"
+          },
+          "wordingHelp": {
+            "plain": "Aglyn AI rewrites the headings, paragraphs and buttons of your main pages so they read better. Every name, price, number, date, address, phone number and email stays exactly as you wrote it. Quotes, policies, tables and forms keep every word. About 25 more AI credits for each main page.",
+            "true": "Aglyn AI writes new headings, paragraphs and sections for your main pages from what your site says. It never makes up a name, number, price, date, testimonial, client, award, credential, address or guarantee. Off, every word stays as you wrote it, and your layout and menu are still redesigned. About 32 more AI credits for each main page."
+          },
+          "helper": "You can change this before each wave.",
+          "current": "How your new site looks"
         }
-      }
+      },
+      "derive": [
+        {
+          "name": "import",
+          "when": "data.jobs.jobs[id=params.jobId].kind == import"
+        },
+        {
+          "name": "generative",
+          "when": "is.import && data.jobs.jobs[id=params.jobId].siteImport.generative"
+        },
+        {
+          "name": "planWaits",
+          "when": "is.import && data.jobs.jobs[id=params.jobId].siteImport.plan && !data.jobs.jobs[id=params.jobId].siteImport.planAccepted"
+        },
+        {
+          "name": "waveWaits",
+          "when": "is.import && data.jobs.jobs[id=params.jobId].status == needs_review && data.jobs.jobs[id=params.jobId].review.reason == wave && data.jobs.jobs[id=params.jobId].siteImport.waves.-1.status == waiting && !data.jobs.jobs[id=params.jobId].siteImport.waves[status='running'] && data.jobs.jobs[id=params.jobId].siteImport.verdict.kind != home-blocked,home-unreadable && !is.planWaits"
+        },
+        {
+          "name": "manyWait",
+          "when": "is.waveWaits && data.jobs.jobs[id=params.jobId].siteImport.waves.-2.status == waiting"
+        }
+      ]
     },
     {
       "id": "ai.credits",
@@ -1702,6 +1974,464 @@
           ]
         }
       ]
+    },
+    {
+      "id": "ai.import.start",
+      "title": "Bring my site",
+      "subtitle": "Bring the website you have now in: its pages, words and photos. First, prove it is yours.",
+      "icon": "arrow.down.doc|download",
+      "scope": "site",
+      "requires": "org.can[ai.import]",
+      "load": {
+        "offer": "/api/ai/jobs?orgId={org.id}&hostId={site.id}&limit=1&siteImport=1",
+        "claims": {
+          "url": "/api/ai/site-import/ownership?orgId={org.id}",
+          "optional": true
+        }
+      },
+      "derive": [
+        {
+          "name": "ready",
+          "when": "data.offer.siteImport == ready"
+        },
+        {
+          "name": "generative",
+          "when": "is.ready && data.offer.siteImportGenerative"
+        },
+        {
+          "name": "claimed",
+          "when": "is.ready && stash.aiImportSite == @site.id && data.claims.claims[domain=stash.aiImportDomain]"
+        },
+        {
+          "name": "proving",
+          "when": "is.claimed && !data.claims.claims[domain=stash.aiImportDomain].current"
+        },
+        {
+          "name": "proved",
+          "when": "is.claimed && data.claims.claims[domain=stash.aiImportDomain].current"
+        },
+        {
+          "name": "lapsed",
+          "when": "is.proving && data.claims.claims[domain=stash.aiImportDomain].status == proven"
+        }
+      ],
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.offer.siteImport == role",
+          "text": "Only the workspace owner or an admin can bring a site in."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.offer.siteImport == plan",
+          "text": "Bring your current website in, every page and photo, on any paid plan. Upgrade to bring yours in."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.offer && !data.offer.siteImport",
+          "text": "Bring my site is not offered on this workspace."
+        },
+        {
+          "type": "form",
+          "id": "address",
+          "title": "Your current website",
+          "when": "is.ready && !is.claimed",
+          "fields": [
+            {
+              "key": "address",
+              "label": "Website address",
+              "kind": "url",
+              "placeholder": "example.com",
+              "required": true,
+              "help": "The address people type to reach your site today. You prove it is yours next."
+            }
+          ],
+          "submit": {
+            "label": "Next",
+            "url": "/api/ai/site-import/ownership",
+            "body": {
+              "orgId": "{org.id}",
+              "action": "claim",
+              "domain": "{form.address}"
+            },
+            "stash": {
+              "aiImportSite": "{site.id}",
+              "aiImportDomain": "{response.claim.domain}"
+            },
+            "reload": true
+          }
+        },
+        {
+          "type": "fields",
+          "title": "Prove it is yours",
+          "when": "is.proving",
+          "object": "data.claims.claims[domain=stash.aiImportDomain]",
+          "rows": [
+            {
+              "label": "Website",
+              "value": "{item.domain}"
+            },
+            {
+              "label": "Status",
+              "value": "Not verified yet",
+              "chip": true,
+              "tone": "neutral",
+              "when": "item.status != proven"
+            },
+            {
+              "label": "Status",
+              "value": "Verify again",
+              "chip": true,
+              "tone": "warning",
+              "when": "item.status == proven"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "is.proving && !is.lapsed",
+          "text": "Prove the site is yours, any one way below. Nothing is read from your site until you do, so only a site you own can be brought in."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "is.lapsed",
+          "text": "Your last proof is more than 30 days old. Prove the site is yours again, any one way below."
+        },
+        {
+          "type": "fields",
+          "title": "Add a DNS record",
+          "when": "is.proving",
+          "object": "data.claims.claims[domain=stash.aiImportDomain]",
+          "footer": "Where your domain is registered or its DNS is managed, add a TXT record with this name and value. Some providers want the full name. It can take a few minutes to an hour to appear.",
+          "rows": [
+            {
+              "label": "Name",
+              "value": "{item.dns.host:before/.}"
+            },
+            {
+              "label": "Full name",
+              "value": "{item.dns.host}"
+            },
+            {
+              "label": "Value",
+              "value": "{item.dns.value}"
+            },
+            {
+              "label": "Record type",
+              "value": "TXT"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "when": "is.proving",
+          "items": [
+            {
+              "id": "copyName",
+              "label": "Copy the name",
+              "icon": "doc.on.doc|content_copy",
+              "copy": "{data.claims.claims[domain=stash.aiImportDomain].dns.host:before/.}"
+            },
+            {
+              "id": "copyValue",
+              "label": "Copy the value",
+              "icon": "doc.on.doc|content_copy",
+              "copy": "{data.claims.claims[domain=stash.aiImportDomain].dns.value}"
+            },
+            {
+              "id": "checkDns",
+              "label": "Check the DNS record",
+              "icon": "checkmark.seal|verified",
+              "url": "/api/ai/site-import/ownership",
+              "body": {
+                "orgId": "{org.id}",
+                "domain": "{data.claims.claims[domain=stash.aiImportDomain].domain}",
+                "action": "check",
+                "method": "dns"
+              },
+              "success": "{response.result.message}",
+              "reload": true
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Add a tag to your home page",
+          "when": "is.proving",
+          "object": "data.claims.claims[domain=stash.aiImportDomain]",
+          "footer": "In the builder your site is made with now, open the setting for code in your home page’s header (often called Custom code or Header code), paste this tag there, and publish the site.",
+          "rows": [
+            {
+              "label": "Tag",
+              "value": "{item.meta.tag}"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "when": "is.proving",
+          "items": [
+            {
+              "id": "copyTag",
+              "label": "Copy the tag",
+              "icon": "doc.on.doc|content_copy",
+              "copy": "{data.claims.claims[domain=stash.aiImportDomain].meta.tag}"
+            },
+            {
+              "id": "checkMeta",
+              "label": "Check my home page",
+              "icon": "checkmark.seal|verified",
+              "url": "/api/ai/site-import/ownership",
+              "body": {
+                "orgId": "{org.id}",
+                "domain": "{data.claims.claims[domain=stash.aiImportDomain].domain}",
+                "action": "check",
+                "method": "meta"
+              },
+              "success": "{response.result.message}",
+              "reload": true
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "title": "Get a code by email",
+          "when": "is.proving",
+          "footer": "We email a six-digit code to an address at {data.claims.claims[domain=stash.aiImportDomain].domain}. It is good for 15 minutes.",
+          "items": [
+            {
+              "id": "sendCode",
+              "label": "Send a code",
+              "icon": "envelope|mail",
+              "when": "!data.claims.claims[domain=stash.aiImportDomain].email.pendingAddress",
+              "prompt": [
+                {
+                  "key": "mailbox",
+                  "label": "Email address",
+                  "kind": "text",
+                  "placeholder": "you",
+                  "required": true,
+                  "help": "The part before @{data.claims.claims[domain=stash.aiImportDomain].domain}."
+                }
+              ],
+              "promptTitle": "Get a code by email",
+              "submitLabel": "Send a code",
+              "url": "/api/ai/site-import/ownership",
+              "body": {
+                "orgId": "{org.id}",
+                "domain": "{data.claims.claims[domain=stash.aiImportDomain].domain}",
+                "action": "send-code",
+                "email": "{form.mailbox:before/@}@{data.claims.claims[domain=stash.aiImportDomain].domain}"
+              },
+              "success": "Code sent to {response.claim.email.pendingAddress}",
+              "reload": true
+            },
+            {
+              "id": "sendNewCode",
+              "label": "Send a new code",
+              "icon": "envelope|mail",
+              "when": "data.claims.claims[domain=stash.aiImportDomain].email.pendingAddress",
+              "prompt": [
+                {
+                  "key": "mailbox",
+                  "label": "Email address",
+                  "kind": "text",
+                  "placeholder": "you",
+                  "required": true,
+                  "help": "The part before @{data.claims.claims[domain=stash.aiImportDomain].domain}."
+                }
+              ],
+              "promptTitle": "Get a code by email",
+              "submitLabel": "Send a new code",
+              "url": "/api/ai/site-import/ownership",
+              "body": {
+                "orgId": "{org.id}",
+                "domain": "{data.claims.claims[domain=stash.aiImportDomain].domain}",
+                "action": "send-code",
+                "email": "{form.mailbox:before/@}@{data.claims.claims[domain=stash.aiImportDomain].domain}"
+              },
+              "success": "Code sent to {response.claim.email.pendingAddress}",
+              "reload": true
+            },
+            {
+              "id": "confirmCode",
+              "label": "Confirm the code",
+              "icon": "number|password",
+              "when": "data.claims.claims[domain=stash.aiImportDomain].email.pendingAddress",
+              "prompt": [
+                {
+                  "key": "code",
+                  "label": "Code sent to {data.claims.claims[domain=stash.aiImportDomain].email.pendingAddress}",
+                  "kind": "text",
+                  "required": true,
+                  "pattern": "^[0-9]{6}$",
+                  "mismatch": "The six-digit code from the email"
+                }
+              ],
+              "promptTitle": "Confirm the code",
+              "submitLabel": "Confirm the code",
+              "url": "/api/ai/site-import/ownership",
+              "body": {
+                "orgId": "{org.id}",
+                "domain": "{data.claims.claims[domain=stash.aiImportDomain].domain}",
+                "action": "confirm-code",
+                "code": "{form.code}"
+              },
+              "success": "{response.result.message}",
+              "reload": true
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Bring in {data.claims.claims[domain=stash.aiImportDomain].domain}",
+          "when": "is.proved",
+          "object": "data.claims.claims[domain=stash.aiImportDomain]",
+          "rows": [
+            {
+              "label": "Website",
+              "value": "{item.domain}"
+            },
+            {
+              "label": "Status",
+              "value": "Verified",
+              "chip": true,
+              "tone": "success"
+            },
+            {
+              "label": "Verified by",
+              "value": "{const.proven[@item.provenMethod]}",
+              "when": "item.provenMethod"
+            },
+            {
+              "label": "Verified on",
+              "value": "{item.provenAt:date}",
+              "when": "item.provenAt"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "is.proved",
+          "text": "AglynBot reads your whole site, home page first, as many pages as your plan includes: your main pages first, then collections such as blog posts.\nYou see what was found, what could not be read and why, and what each wave of up to 10 pages costs before anything is built. Reading your site uses no AI credits.\nIf your home page cannot be read, nothing is planned and no AI credits are used. You are told why, and you check again once it can be.\nEvery page comes across with its sections, columns, cards, icons, pictures, tables, tabs and forms, finished the way you choose below. You review each wave and start the next yourself.\nEach wave lands in your new site’s preview, where only you and your team can see it, until you make the site public. A site not in preview keeps its pages as drafts. Your current site is not changed."
+        },
+        {
+          "type": "form",
+          "id": "read",
+          "when": "is.proved",
+          "fields": [
+            {
+              "key": "finish",
+              "label": "{const.finish.heading}",
+              "kind": "choice",
+              "required": true,
+              "initial": "improve",
+              "help": "{const.finish.helper}",
+              "options": [
+                {
+                  "value": "keep",
+                  "label": "{const.finish.keep.label}",
+                  "detail": "{const.finish.keep.description}"
+                },
+                {
+                  "value": "improve",
+                  "label": "{const.finish.improve.label}",
+                  "detail": "{const.finish.improve[@is.generative]|const.finish.improve.plain}"
+                }
+              ]
+            },
+            {
+              "key": "wording",
+              "label": "{const.finish.wordingLabel[@is.generative]|const.finish.wordingLabel.plain}",
+              "kind": "toggle",
+              "when": "form.finish == improve",
+              "initial": "true",
+              "help": "{const.finish.wordingHelp[@is.generative]|const.finish.wordingHelp.plain}"
+            }
+          ],
+          "submit": {
+            "label": "Read my site",
+            "url": "/api/ai/jobs",
+            "body": {
+              "orgId": "{org.id}",
+              "hostId": "{site.id}",
+              "kind": "import",
+              "brief": "Bring in {data.claims.claims[domain=stash.aiImportDomain].domain}",
+              "inputs": {
+                "domain": "{data.claims.claims[domain=stash.aiImportDomain].domain}",
+                "finish": "{form.finish}",
+                "wording": {
+                  "$if": "form.finish == improve && form.wording",
+                  "then": true,
+                  "else": false
+                }
+              }
+            },
+            "stash": {
+              "aiImportSite": null,
+              "aiImportDomain": null
+            },
+            "navigate": {
+              "screen": "ai.job",
+              "params": {
+                "jobId": "{response.job.id}"
+              }
+            },
+            "reload": false
+          }
+        },
+        {
+          "type": "actions",
+          "when": "is.claimed",
+          "items": [
+            {
+              "id": "otherAddress",
+              "label": "Use a different address",
+              "icon": "arrow.uturn.backward|undo",
+              "stash": {
+                "aiImportSite": null,
+                "aiImportDomain": null
+              },
+              "reload": true
+            }
+          ]
+        }
+      ],
+      "constants": {
+        "finish": {
+          "heading": "How should your new site look?",
+          "keep": {
+            "label": "Keep my site",
+            "description": "Your pages stay laid out as they are, in your site’s colors, buttons and fonts. Aglyn tidies spacing, type and color so every page reads well. Every word stays as you wrote it."
+          },
+          "improve": {
+            "label": "Improve it",
+            "plain": "Aglyn AI redesigns each page with your pictures, menus and forms, in a theme built around your brand.",
+            "true": "Aglyn AI plans your menu and footer, and redesigns each page with your pictures and forms, in a theme built around your brand. It shows you the plan before anything is built."
+          },
+          "wordingLabel": {
+            "plain": "Also improve my wording",
+            "true": "Also write new copy"
+          },
+          "wordingHelp": {
+            "plain": "Aglyn AI rewrites the headings, paragraphs and buttons of your main pages so they read better. Every name, price, number, date, address, phone number and email stays exactly as you wrote it. Quotes, policies, tables and forms keep every word. About 25 more AI credits for each main page.",
+            "true": "Aglyn AI writes new headings, paragraphs and sections for your main pages from what your site says. It never makes up a name, number, price, date, testimonial, client, award, credential, address or guarantee. Off, every word stays as you wrote it, and your layout and menu are still redesigned. About 32 more AI credits for each main page."
+          },
+          "helper": "You can change this before each wave.",
+          "current": "How your new site looks"
+        },
+        "proven": {
+          "dns": "A DNS record",
+          "meta": "A tag on your home page",
+          "email": "A code sent to an address at your domain"
+        }
+      }
     },
     {
       "id": "ai.import.productCopy",

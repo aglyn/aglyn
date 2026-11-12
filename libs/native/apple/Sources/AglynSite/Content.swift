@@ -271,6 +271,27 @@ public struct EntryDraft: Equatable, Sendable {
     seoDescription = entry.seoDescription
   }
 
+  /// This draft over a stored entry that moved from `previous` to `next` (the console's `rebaseSeedEdits`, AGL-4047): every
+  /// field changed here keeps it, every other field follows `next`.
+  public func rebased(previous: EntryDraft, next: EntryDraft) -> EntryDraft {
+    var out = next
+    out.title = AglynCore.rebased(title, previous: previous.title, next: next.title)
+    out.slug = AglynCore.rebased(slug, previous: previous.slug, next: next.slug)
+    out.excerpt = AglynCore.rebased(excerpt, previous: previous.excerpt, next: next.excerpt)
+    out.body = AglynCore.rebased(body, previous: previous.body, next: next.body)
+    out.categoryID = AglynCore.rebased(categoryID, previous: previous.categoryID, next: next.categoryID)
+    out.tags = AglynCore.rebased(tags, previous: previous.tags, next: next.tags)
+    out.authorID = AglynCore.rebased(authorID, previous: previous.authorID, next: next.authorID)
+    out.authorName = AglynCore.rebased(authorName, previous: previous.authorName, next: next.authorName)
+    out.coverImage = AglynCore.rebased(coverImage, previous: previous.coverImage, next: next.coverImage)
+    out.coverImageAlt = AglynCore.rebased(coverImageAlt, previous: previous.coverImageAlt, next: next.coverImageAlt)
+    out.coverVideo = AglynCore.rebased(coverVideo, previous: previous.coverVideo, next: next.coverVideo)
+    out.coverVideoDuration = AglynCore.rebased(coverVideoDuration, previous: previous.coverVideoDuration, next: next.coverVideoDuration)
+    out.seoTitle = AglynCore.rebased(seoTitle, previous: previous.seoTitle, next: next.seoTitle)
+    out.seoDescription = AglynCore.rebased(seoDescription, previous: previous.seoDescription, next: next.seoDescription)
+    return out
+  }
+
   /// The slug a save stores: the typed one as a slug, else the title's.
   public var effectiveSlug: String {
     let typed = contentSlug(slug)

@@ -247,6 +247,36 @@ describe('DatasetSchemaDialog refuses a stale seed (AGL-1358)', () => {
     expect(screen.getByRole('button', { name: 'Save schema' })).toBeTruthy()
   })
 
+  /**
+   * The first press is never refused for a late server (AGL-4047): Save is
+   * held while the dataset read is the cache's, with the reason beside it,
+   * and a name typed meanwhile survives the server's copy, which used to
+   * reset the whole form.
+   */
+  it('HOLDS Save with the reason, and keeps a typed name through the server’s copy', async () => {
+    const view = renderDialog(dataset, true)
+    expect(
+      (screen.getByRole('button', { name: 'Save schema' }) as HTMLButtonElement).disabled,
+    ).toBe(true)
+    expect(screen.getByRole('status').textContent).toBe(
+      'Checking your collection schema with the server…',
+    )
+    fireEvent.change(screen.getByLabelText('Plural name'), { target: { value: 'Catalog items' } })
+
+    view.rerender(
+      <DatasetSchemaDialog
+        orgId="org-1"
+        dataset={{ ...dataset, model: { ...dataset.model } }}
+        datasets={[]}
+        recordCount={0}
+        seedFromCache={false}
+        onClose={jest.fn()}
+      />,
+    )
+    expect((screen.getByLabelText('Plural name') as HTMLInputElement).value).toBe('Catalog items')
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
   it('DOES write the same schema once the server has confirmed it', async () => {
     renderDialog(dataset, false)
 

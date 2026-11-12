@@ -7,20 +7,9 @@
   "implicitDependencies": ["console"],
   "targets": {
     "e2e": {
-      "executor": "@nx/cypress:cypress",
       "options": {
-        "cypressConfig": "apps/console-e2e/cypress.config.ts",
-        "devServerTarget": "console:serve"
-      },
-      "configurations": {
-        "production": {
-          "devServerTarget": "console:serve:production"
-        }
+        "config-file": "./cypress.config.ts"
       }
-    },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
     }
   }
 }

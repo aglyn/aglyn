@@ -368,6 +368,46 @@ describe('the Companies section (AGL-2597)', () => {
     expect(written[0].data).toMatchObject({ visibleTo: ['org'], hostId: null })
   })
 
+  /**
+   * The first press is never refused for a late server (AGL-4047): an edit's
+   * Save is held while the company read is the cache's, with the reason
+   * beside it, and what was typed is saved onto the company the server
+   * confirms.
+   */
+  it('holds an edit’s Save over an unconfirmed read, then saves onto the server’s company', async () => {
+    const members = {
+      options: [],
+      ready: true,
+      memberName: (uid: string) => uid,
+      memberEmail: (uid: string) => uid,
+      labelFor: () => '',
+    } as any
+    const drawer = (company: Record<string, unknown>, fromCache: boolean) => (
+      <CompanyEditDrawer
+        open
+        onClose={() => undefined}
+        onSaved={() => undefined}
+        hostId="host-1"
+        org={{ $id: 'org-1' } as any}
+        company={{ $id: 'co-1', visibleTo: ['org'], ...company } as any}
+        seed={{ fromCache, unreadable: false }}
+        members={members}
+      />
+    )
+    const view = render(drawer({ name: 'Acme', phone: '+15125550100' }, true))
+    await act(async () => {
+      fireEvent.change(field('Name'), { target: { value: 'Acme Coffee' } })
+    })
+    expect((screen.getByText('Save company').closest('button') as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByRole('status').textContent).toBe('Checking your company with the server…')
+
+    // The phone was changed elsewhere since the cached snapshot.
+    view.rerender(drawer({ name: 'Acme', phone: '+15125550199' }, false))
+    expect(field('Name').value).toBe('Acme Coffee')
+    expect(field('Phone').value).toBe('+15125550199')
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
   it('refuses a domain that is not one, and writes nothing', async () => {
     mount()
 

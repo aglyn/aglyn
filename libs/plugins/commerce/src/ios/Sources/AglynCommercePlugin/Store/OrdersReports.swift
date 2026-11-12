@@ -51,15 +51,16 @@ final class OrdersRegisters {
   }
 }
 
-/// One report row heading the orders list.
+/// One report row heading the orders list: the orders' own record row, its kind's icon on a tile over the title and
+/// detail, with no trailing figures (Figma List/Report row in 343:9126 and 341:13731: 68 points on a phone, 64 on the
+/// Mac and iPad). The kit's plain row was 37 points on a phone, its title touching its detail under the search.
 struct OrdersReportRow: View {
   let title: String
   let detail: String
   let systemImage: String
 
   var body: some View {
-    AglynRow(title, subtitle: detail, systemImage: systemImage)
-      .accessibilityElement(children: .combine)
+    AglynRecordRow(title, detail: detail, systemImage: systemImage) { EmptyView() }
   }
 }
 

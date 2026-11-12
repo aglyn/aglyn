@@ -41,6 +41,11 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import {
+  isSeedChecking,
+  seedCheckingText,
+  useSeedEdits,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 
 export interface ShippingSettingsCardProps {
   hostId: string
@@ -99,8 +104,11 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
     () => doc(firestore, 'hosts', hostId, 'settings', 'store'),
     [firestore, hostId],
   )
-  const [draft, setDraft] = useState<CommerceModel.ShippingSettings | null>(null)
-  const current: CommerceModel.ShippingSettings = draft ?? store?.shipping ?? {}
+  // What was typed, kept as edits over the stored settings, and Save held
+  // until the server has confirmed them (AGL-4047).
+  const form = useSeedEdits<CommerceModel.ShippingSettings>(store?.shipping ?? {})
+  const current = form.values
+  const checking = isSeedChecking({ fromCache: storeFromCache, unreadable: storeStatus === 'error' })
   /*
    * Live carrier rates (AGL-3612) are offered only where a plugin quotes
    * carriers for this site — the server asks core's quoter seam. A rate
@@ -125,7 +133,7 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
     }
   }, [hostId, user])
   const update = (patch: Partial<CommerceModel.ShippingSettings>) =>
-    setDraft({ ...current, ...patch })
+    form.edit(patch)
 
   const updateZone = (
     index: number,
@@ -182,6 +190,7 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
      * The guard WRAPS the write — an early return is a shape you can keep
      * while losing the protection.
      */
+    const written = form.edits
     const verdict = await writeGuardedBySeed(
       {
         subject: 'shipping settings',
@@ -197,7 +206,7 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
         )
       },
     )
-    // Before `setDraft(null)`, so a refusal keeps every zone and rate that
+    // Before `settle`, so a refusal keeps every zone and rate that
     // was typed on screen.
     if (!verdict.ok) {
       return void enqueueSnackbar(verdict.message, {
@@ -205,12 +214,12 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
         persist: false,
       })
     }
-    setDraft(null)
+    form.settle(written)
     enqueueSnackbar('Shipping settings saved', {
       variant: 'success',
       persist: false,
     })
-  }, [current, firestore, hostId, enqueueSnackbar, storeStatus, storeFromCache, storeListen])
+  }, [current, form, firestore, hostId, enqueueSnackbar, storeStatus, storeFromCache, storeListen])
 
   /**
    * Recomputed from `current` on every render, so the block answers for what
@@ -560,12 +569,17 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
           variant="contained"
           color="primary"
           size="small"
-          disabled={!draft}
+          disabled={!form.dirty || checking}
           onClick={handleSave}
           sx={{ alignSelf: 'flex-start' }}
         >
           {'Save shipping settings'}
         </Button>
+        {form.dirty && checking ? (
+          <Typography variant="body2" color="text.secondary" role="status">
+            {seedCheckingText('shipping settings')}
+          </Typography>
+        ) : null}
       </Stack>
     </CardDisplay>
   )

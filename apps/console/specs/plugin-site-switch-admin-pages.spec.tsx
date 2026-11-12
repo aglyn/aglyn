@@ -60,6 +60,8 @@ jest.mock('firebase/firestore', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useFirestoreDoc: () => ({ data: null, status: 'success', fromCache: false }),
+  firestoreDocPhase: jest.requireActual('@aglyn/tenant-feature-instance')
+    .firestoreDocPhase,
   useFirestoreCollection: () => ({ data: [] }),
   useUser: () => ({ data: { getIdToken: async () => 'token' } }),
   useHost: () => ({

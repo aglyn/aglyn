@@ -57,6 +57,11 @@ import {
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
+import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import TransferHeaderActions from '../../transfer/transfer-header-actions.component'
 import { COMMERCE_CATEGORIES_TRANSFER } from '../../transfer/transfer-keys'
@@ -146,6 +151,37 @@ type CollectionDraft = CommerceModel.HostCollection & { id: string | null }
 type WalkedCategory = CategoryRow & { depth: number }
 type DraftSetter<T> = Dispatch<SetStateAction<T | null>>
 
+/** A stored category as its editor holds it. */
+function categoryDraftOf(category: any): CategoryDraft {
+  return {
+    id: category.$id,
+    name: category.name,
+    parentId: category.parentId ?? '',
+  }
+}
+
+/** A stored catalog collection as its editor holds it. */
+function collectionDraftOf(row: any): CollectionDraft {
+  return {
+    id: row.$id,
+    name: row.name,
+    slug: row.slug ?? '',
+    mode: row.mode ?? 'manual',
+    productIds: row.productIds ?? [],
+    rules: row.rules ?? [],
+    matchAll: row.matchAll !== false,
+  }
+}
+
+/** Says why a held control is off, while the server has not answered. */
+function CheckingNote(props: { text?: string; sx?: object }) {
+  return props.text ? (
+    <Typography variant="body2" color="text.secondary" role="status" sx={props.sx}>
+      {props.text}
+    </Typography>
+  ) : null
+}
+
 /** A change to one rule, or `null` to remove it. */
 type RuleChange = (
   index: number,
@@ -170,6 +206,7 @@ type FieldChange = { target: { value: string } }
 const MemoTextField = memo(TextField) as typeof TextField
 
 const FIRST_FIELD = { mt: 1 } as const
+const HELD_NOTE = { mr: 'auto' } as const
 const RULE_FIELD = { width: 130 } as const
 const RULE_OP = { width: 110 } as const
 const RULE_VALUE = { flex: 1 } as const
@@ -205,11 +242,20 @@ const CategoriesSection = memo(function CategoriesSection(props: {
   onPageSizeChange(pageSize: number): void
   onEdit: DraftSetter<CategoryDraft>
   onDelete(category: CategoryRow): () => Promise<void>
+  /**
+   * The rows a delete reparents from are not confirmed by the server yet
+   * (AGL-4047): Delete is held, with this sentence, rather than pressed into
+   * a wait that can end refused.
+   */
+  deleteCheckingText?: string
 }) {
-  const { categories, visible, onEdit, onDelete } = props
+  const { categories, visible, onEdit, onDelete, deleteCheckingText } = props
   return (
     <>
       <Typography variant="subtitle2">{'Categories'}</Typography>
+      {categories.length === 0 ? null : (
+        <CheckingNote text={deleteCheckingText} />
+      )}
       {categories.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
           {'Group products into a browsable tree (e.g. Brakes → Pads).'}
@@ -234,19 +280,14 @@ const CategoriesSection = memo(function CategoriesSection(props: {
             </Typography>
             <Button
               size="small"
-              onClick={() =>
-                onEdit({
-                  id: category.$id,
-                  name: category.name,
-                  parentId: category.parentId ?? '',
-                })
-              }
+              onClick={() => onEdit(categoryDraftOf(category))}
             >
               {'Edit'}
             </Button>
             <Button
               size="small"
               color="error"
+              disabled={Boolean(deleteCheckingText)}
               onClick={onDelete(category)}
             >
               {'Delete'}
@@ -337,17 +378,7 @@ const CollectionsSection = memo(function CollectionsSection(props: {
           </Typography>
           <Button
             size="small"
-            onClick={() =>
-              onEdit({
-                id: row.$id,
-                name: row.name,
-                slug: row.slug ?? '',
-                mode: row.mode ?? 'manual',
-                productIds: row.productIds ?? [],
-                rules: row.rules ?? [],
-                matchAll: row.matchAll !== false,
-              })
-            }
+            onClick={() => onEdit(collectionDraftOf(row))}
           >
             {'Edit'}
           </Button>
@@ -405,8 +436,10 @@ const CategoryDialog = memo(function CategoryDialog(props: {
   categories: readonly WalkedCategory[]
   setDraft: DraftSetter<CategoryDraft>
   onSave(): void
+  /** The row is not confirmed by the server yet: Save is held (AGL-4047). */
+  checkingText?: string
 }) {
-  const { draft, categories, setDraft } = props
+  const { draft, categories, setDraft, checkingText } = props
   const draftId = draft?.id
   const close = useCallback(() => setDraft(null), [setDraft])
   const setName = useCallback(
@@ -462,11 +495,12 @@ const CategoryDialog = memo(function CategoryDialog(props: {
         </MemoTextField>
       </DialogContent>
       <DialogActions>
+        <CheckingNote text={checkingText} sx={HELD_NOTE} />
         <Button onClick={close}>{'Cancel'}</Button>
         <Button
           variant="contained"
           color="primary"
-          disabled={!draft?.name.trim()}
+          disabled={Boolean(checkingText) || !draft?.name.trim()}
           onClick={props.onSave}
         >
           {'Save'}
@@ -665,8 +699,10 @@ const CollectionDialog = memo(function CollectionDialog(props: {
   onProducts(picked: ProductRow[]): void
   onRule: RuleChange
   onSave(): void
+  /** The row is not confirmed by the server yet: Save is held (AGL-4047). */
+  checkingText?: string
 }) {
-  const { draft, error, setDraft } = props
+  const { draft, error, setDraft, checkingText } = props
   const close = useCallback(() => setDraft(null), [setDraft])
   const setName = useCallback(
     (event: FieldChange) =>
@@ -726,11 +762,12 @@ const CollectionDialog = memo(function CollectionDialog(props: {
         ) : null}
       </DialogContent>
       <DialogActions>
+        <CheckingNote text={checkingText} sx={HELD_NOTE} />
         <Button onClick={close}>{'Cancel'}</Button>
         <Button
           variant="contained"
           color="primary"
-          disabled={!draft?.name.trim() || Boolean(error)}
+          disabled={Boolean(checkingText) || !draft?.name.trim() || Boolean(error)}
           onClick={props.onSave}
         >
           {'Save'}
@@ -943,10 +980,45 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
     [commerceCollections, collectionPage, collectionPageSize],
   )
 
-  const [categoryDraft, setCategoryDraft] = useState<CategoryDraft | null>(null)
-  const [collectionDraft, setCollectionDraft] = useState<CollectionDraft | null>(
-    null,
+  /*
+   * Each editor's draft, kept as EDITS over the row as the list has it now
+   * (AGL-4047): opened from the cache's row, the server's copy replaces it
+   * under every field nobody touched (a category's parent, a collection's
+   * membership), and Save is held until it has.
+   */
+  const [categoryDraft, setCategoryDraft] = useSeedDraft<CategoryDraft>(
+    (opened) => {
+      const row = opened.id
+        ? categoryDocs?.find((category: any) => category.$id === opened.id)
+        : undefined
+      return row ? categoryDraftOf(row) : undefined
+    },
   )
+  const [collectionDraft, setCollectionDraft] = useSeedDraft<CollectionDraft>(
+    (opened) => {
+      const row = opened.id
+        ? collectionDocs?.find((collection: any) => collection.$id === opened.id)
+        : undefined
+      return row ? collectionDraftOf(row) : undefined
+    },
+  )
+  const categoriesChecking = isSeedChecking({
+    fromCache: categoriesFromCache,
+    unreadable: categoriesStatus === 'error',
+  })
+    ? seedCheckingText('categories')
+    : undefined
+  const categoryChecking = categoryDraft?.id
+    ? categoriesChecking && seedCheckingText('category')
+    : undefined
+  const collectionChecking =
+    collectionDraft?.id &&
+    isSeedChecking({
+      fromCache: collectionsFromCache,
+      unreadable: collectionsStatus === 'error',
+    })
+      ? seedCheckingText('collection')
+      : undefined
 
   const handleCategorySave = useCallback(async () => {
     if (!categoryDraft?.name.trim()) return
@@ -1435,6 +1507,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
           onPageSizeChange={setCategoryPageSize}
           onEdit={setCategoryDraft}
           onDelete={handleCategoryDelete}
+          deleteCheckingText={categoriesChecking}
         />
 
         <Divider sx={{ my: 1 }} />
@@ -1458,6 +1531,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
         categories={categories}
         setDraft={setCategoryDraft}
         onSave={handleCategorySave}
+        checkingText={categoryChecking}
       />
 
       <CollectionDialog
@@ -1474,6 +1548,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
         onProducts={setCollectionProducts}
         onRule={updateRule}
         onSave={handleCollectionSave}
+        checkingText={collectionChecking}
       />
     </CardDisplay>
   )

@@ -2865,6 +2865,7 @@ data class PosOfflineKit(
 
 @Serializable
 data class PosOfflineKitCard(
+    val account: String? = null,
     val available: Boolean,
     val currency: String,
     val destination: String,
@@ -2965,6 +2966,7 @@ data class PosOfflineSale(
 
 @Serializable
 data class PosOfflineSaleCard(
+    val account: String? = null,
     val brand: String? = null,
     val declineMessage: String? = null,
     val forward: PosOfflineCardForward,

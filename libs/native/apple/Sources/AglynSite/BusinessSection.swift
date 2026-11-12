@@ -124,6 +124,8 @@ struct BusinessSection: View {
         "Year founded", text: binding("founded"), error: foundedError, supporting: line("founded", "Four digits, such as 2015"),
         placeholder: "2015", keyboard: .number, enabled: canEdit)
     }
+    // Its own document, so its own hold: Save waits while the profile is only the device cache's copy (AGL-4047).
+    .environment(\.aglynFormChecking, profile.ready && profile.fromCache ? seedCheckingText("business profile") : nil)
     facts
       .task(id: hostID) {
         profile.start(context.firestore, path)
@@ -132,8 +134,8 @@ struct BusinessSection: View {
         }
       }
       .onChange(of: businessProfileForm(stored), initial: true) { _, next in
-        // Re-read whenever what is stored changes, but never over edits in progress.
-        if fields == seeded || fields.isEmpty { fields = next }
+        // A newer copy keeps what was typed and moves every other field to it (AGL-4047).
+        fields = fields.isEmpty ? next : rebased(fields, previous: seeded, next: next)
         seeded = next
       }
       .onDisappear {

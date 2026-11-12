@@ -35,6 +35,13 @@ export const SALES_CHANNELS_COLLECTION = 'salesChannels'
 /** The site's defaults for what a product leaves blank. */
 export const SALES_CHANNELS_SETTINGS_DOC = 'settings'
 
+/**
+ * When the pre-channels Google address (`/api/commerce/feed?hostId=`) was
+ * last read. The only evidence that a site's Merchant Center holds that
+ * address: a site that never had it has no such document.
+ */
+export const LEGACY_GOOGLE_FEED_DOC = 'legacy-google'
+
 /** A channel's feed document id. */
 export const feedDocId = (channel: string): string => `feed-${channel}`
 

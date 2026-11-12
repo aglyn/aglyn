@@ -74,6 +74,11 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
+import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
+import {
   AutomationStepFields,
   type AutomationStepKind,
   defaultStep,
@@ -167,6 +172,17 @@ interface WorkflowDraft extends AutomationWorkflow {
  * evaluator; test-run panel included. Plan-gated (`workflows` flag +
  * `workflowsPerHost` cap, AGL-99); site-event triggers are v2.
  */
+/** A stored workflow as the editor holds it. */
+function workflowDraftOf(workflow: any): WorkflowDraft {
+  return {
+    id: workflow.$id,
+    name: workflow.name ?? '',
+    steps: workflow.steps ?? [],
+    returnValue: workflow.returnValue ?? '',
+    trigger: workflow.trigger ?? null,
+  }
+}
+
 export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
@@ -261,7 +277,23 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
   )
   const { rows: readWorkflows, truncated: workflowsTruncated } =
     ceilingedWindow<any>(workflowDocs, WORKFLOW_CEILING)
-  const [draft, setDraft] = useState<WorkflowDraft | null>(null)
+  /*
+   * The editor's draft, kept as EDITS over the workflow as the list has it
+   * now (AGL-4047): opened from the cache's row, the server's copy replaces
+   * it under every field nobody touched, and Done is held until it has.
+   */
+  const [draft, setDraft] = useSeedDraft<WorkflowDraft>((opened) => {
+    const row = opened.id
+      ? readWorkflows.find((workflow: any) => workflow.$id === opened.id)
+      : undefined
+    return row ? workflowDraftOf(row) : undefined
+  })
+  const draftChecking =
+    Boolean(draft?.id) &&
+    isSeedChecking({
+      fromCache: workflowsFromCache,
+      unreadable: workflowsStatus === 'error',
+    })
   /**
    * The editor has been opened at least once in this session.
    *
@@ -441,7 +473,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
   const patch = useCallback(
     (updater: (previous: WorkflowDraft) => WorkflowDraft) =>
       setDraft((previous) => (previous ? updater(previous) : previous)),
-    [],
+    [setDraft],
   )
 
   /** The saved workflow the editor has open, as the `automationEditor` zone names it. */
@@ -479,7 +511,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
       returnValue: '',
       trigger: null,
     })
-  }, [org, workflowCount, enqueueSnackbar])
+  }, [setDraft, org, workflowCount, enqueueSnackbar])
 
   /**
    * Every list the ceiling cut, named — the editor's two and the step
@@ -601,6 +633,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
       })
     }
   }, [
+    setDraft,
     draft,
     nameTaken,
     stepProblem,
@@ -744,13 +777,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
                 size="small"
                 onClick={() => {
                   setTestResult(null)
-                  setDraft({
-                    id: workflow.$id,
-                    name: workflow.name ?? '',
-                    steps: workflow.steps ?? [],
-                    returnValue: workflow.returnValue ?? '',
-                    trigger: workflow.trigger ?? null,
-                  })
+                  setDraft(workflowDraftOf(workflow))
                 }}
               >
                 {'Edit'}
@@ -1121,11 +1148,16 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
           ) : null}
         </DialogContent>
         <DialogActions>
+          {draftChecking ? (
+            <Typography variant="body2" color="text.secondary" role="status" sx={{ mr: 'auto' }}>
+              {seedCheckingText('workflow')}
+            </Typography>
+          ) : null}
           <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"
             color="primary"
-            disabled={!draft?.name.trim() || nameTaken}
+            disabled={draftChecking || !draft?.name.trim() || nameTaken}
             onClick={handleSave}
           >
             {'Done'}

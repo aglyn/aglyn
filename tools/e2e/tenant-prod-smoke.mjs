@@ -364,7 +364,7 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const startServer = (extraEnv) => {
   const child = spawn(
     'npx',
-    ['next', 'start', 'dist/apps/tenant', '-p', '4500'],
+    ['next', 'start', 'apps/tenant', '-p', '4500'],
     {
       cwd: repoRoot,
       detached: true,

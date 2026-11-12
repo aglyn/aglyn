@@ -45,6 +45,7 @@
       "blocks": [
         {
           "type": "form",
+          "checking": "plugin settings",
           "id": "settings",
           "object": "data.settings",
           "footer": "A site can override these on its own plugin page.",
@@ -1195,6 +1196,7 @@
       "blocks": [
         {
           "type": "form",
+          "checking": "site plugin settings",
           "id": "settings",
           "footer": "A field you do not override follows the workspace value.",
           "fields": [
@@ -2639,6 +2641,7 @@
       "blocks": [
         {
           "type": "form",
+          "checking": "plugin settings",
           "id": "settings",
           "object": "data.settings",
           "footer": "A site can override these on its own plugin page.",
@@ -2850,6 +2853,7 @@
       "blocks": [
         {
           "type": "form",
+          "checking": "site plugin settings",
           "id": "settings",
           "footer": "A field you do not override follows the workspace value.",
           "fields": [
@@ -3260,6 +3264,7 @@
       "blocks": [
         {
           "type": "form",
+          "checking": "plugin settings",
           "id": "settings",
           "object": "data.settings",
           "footer": "A site can override these on its own plugin page.",
@@ -3324,6 +3329,7 @@
       "blocks": [
         {
           "type": "form",
+          "checking": "site plugin settings",
           "id": "settings",
           "footer": "A field you do not override follows the workspace value.",
           "fields": [

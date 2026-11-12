@@ -99,6 +99,10 @@ import {
   updateDoc,
   writeBatch,
 } from 'firebase/firestore'
+import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useCallback, useMemo, useState } from 'react'
 import {
   type ContactFieldDefinitionDoc,
@@ -195,6 +199,8 @@ interface FieldsTableProps {
   definitions: readonly ContactFieldDefinitionDoc[]
   /** A field being written; every arrow waits for it. */
   busyId: string
+  /** The order is not confirmed by the server yet: the arrows wait (AGL-4047). */
+  orderChecking?: boolean
   onMove: (definition: ContactFieldDefinitionDoc, direction: -1 | 1) => void
   rowActions: (definition: ContactFieldDefinitionDoc) => RowActionsMenuItem[]
 }
@@ -220,7 +226,7 @@ interface FieldsTableProps {
  * grid sorts and pages it whole; a read that reaches the ceiling says so.
  */
 function FieldsTable(props: FieldsTableProps) {
-  const { orgId, object, definitions, busyId, onMove, rowActions } = props
+  const { orgId, object, definitions, busyId, orderChecking, onMove, rowActions } = props
   const firestore = useFirestore()
   const gridFilter = useListGridFilter({ selectFields: ['type', 'required'] })
   const [sortModel, setSortModel] = useState<GridSortModel>([])
@@ -322,7 +328,9 @@ function FieldsTable(props: FieldsTableProps) {
                   </Typography>
                   <IconButton
                     size="small"
-                    disabled={reorderLocked || row.position === 0 || Boolean(busyId)}
+                    disabled={
+                      reorderLocked || row.position === 0 || Boolean(busyId) || Boolean(orderChecking)
+                    }
                     onClick={() => onMove(row.definition, -1)}
                   >
                     <MdiIcon path={mdiArrowUp.path} size={0.7} />
@@ -331,7 +339,10 @@ function FieldsTable(props: FieldsTableProps) {
                   <IconButton
                     size="small"
                     disabled={
-                      reorderLocked || row.position === definitions.length - 1 || Boolean(busyId)
+                      reorderLocked ||
+                      row.position === definitions.length - 1 ||
+                      Boolean(busyId) ||
+                      Boolean(orderChecking)
                     }
                     onClick={() => onMove(row.definition, 1)}
                   >
@@ -424,7 +435,7 @@ function FieldsTable(props: FieldsTableProps) {
         FIELD_FILTER_OPTIONS,
         FIELD_FILTER_HEADERS,
       ),
-    [reorderLocked, busyId, onMove, rowActions, definitions.length],
+    [reorderLocked, busyId, orderChecking, onMove, rowActions, definitions.length],
   )
 
   return (
@@ -526,6 +537,12 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
     object,
   )
   const noun = OBJECT_NOUN[object]
+  /*
+   * A field's Save and the order arrows are held while the definitions read
+   * is the cache's, with the reason beside them, rather than pressed into a
+   * wait that can end refused (AGL-4047).
+   */
+  const checkingText = isSeedChecking({ fromCache }) ? seedCheckingText('field order') : undefined
 
   /*
    * MAINTENANCE: recompute every record's next activity (AGL-2661). The
@@ -891,6 +908,11 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
           {`${tasksTab ? TASKS_INTRO : OBJECT_INTRO[object]} Fields are shared across every site in this ` +
             'organization, like the records themselves.'}
         </Typography>
+        {!tasksTab && definitions.length > 0 && checkingText ? (
+          <Typography variant="body2" color="text.secondary" role="status">
+            {checkingText}
+          </Typography>
+        ) : null}
         {tasksTab ? null : scopeReady && !scope ? (
           <Typography variant="body2" color="text.secondary">
             {`This site has no organization, so it has no ${noun} fields.`}
@@ -918,6 +940,7 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
             object={object}
             definitions={definitions}
             busyId={busyId}
+            orderChecking={Boolean(checkingText)}
             onMove={onMove}
             rowActions={rowActions}
           />
@@ -949,7 +972,14 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
       <ContactFieldDrawer
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        definition={editing}
+        // The definition as the list has it now, so the drawer saves its
+        // edits onto the server's copy once it answers (AGL-4047).
+        definition={
+          editing
+            ? (definitions.find((definition) => definition.$id === editing.$id) ?? editing)
+            : null
+        }
+        checkingText={editing && checkingText ? seedCheckingText('field') : undefined}
         object={object}
         takenKeys={definitions.map((definition) => definition.key)}
         onSubmit={handleSubmit}

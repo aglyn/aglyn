@@ -14,10 +14,6 @@
         "tsConfig": "libs/shared/data/enums/tsconfig.lib.json",
         "assets": ["libs/shared/data/enums/*.md"]
       }
-    },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
     }
   }
 }

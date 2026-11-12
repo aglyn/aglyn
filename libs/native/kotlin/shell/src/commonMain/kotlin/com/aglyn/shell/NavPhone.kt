@@ -168,8 +168,11 @@ internal fun PhoneShell(
           },
           actions = {
             TitleBarButton("Search or jump to", "search", "phone-search") { chrome.oneBox = true }
-            // The bell is Activity on a phone: what needs you, then the notifications.
-            BellButton(services, uid) { chrome.settingsMode = null; navigator.select(ShellNavigator.NOTIFICATIONS) }
+            // The bell is Activity on a phone: what needs you, then the notifications. The wide shell's bell popover is
+            // provided above every shell, so a phone takes it out here, or the bell opened the popover and never Activity.
+            androidx.compose.runtime.CompositionLocalProvider(LocalBellPopover provides null) {
+              BellButton(services, uid) { chrome.settingsMode = null; navigator.select(ShellNavigator.NOTIFICATIONS) }
+            }
             // Four pinned areas fill the tab bar, so Create new comes up here, beside your AI (Figma Home · 4 pinned).
             if (tabs.createInTopBar) TitleBarButton("Create new", "add", "phone-create") { chrome.createMenu = true }
             // Your AI, one tap away on every screen as the tablet's and the desktop's title bar has it (Figma Phone/Top

@@ -73,44 +73,105 @@
   },
   "targetDefaults": {
     "e2e": {
-      "inputs": ["default", "^default"],
-      "cache": true
-    },
-    "build": {
-      "dependsOn": ["^build"],
-      "inputs": ["production", "^production"],
-      "cache": true
-    },
-    "@nx/jest:jest": {
-      "inputs": ["default", "^default", "{workspaceRoot}/jest.preset.js"],
-      "cache": true,
-      "options": {
-        "passWithNoTests": true
-      },
-      "configurations": {
-        "ci": {
-          "ci": true,
-          "codeCoverage": true
-        }
-      }
-    },
-    "@nx/eslint:lint": {
       "inputs": [
         "default",
-        "^default",
-        "{workspaceRoot}/tools/lint-rules/**/*",
-        "{workspaceRoot}/eslint.config.mjs"
+        "^default"
       ],
       "cache": true
     },
-    "@nx/next:build": {
-      "cache": true,
-      "dependsOn": [],
-      "inputs": ["production", "^production"]
-    }
+    "build": [
+      {
+        "dependsOn": [
+          "^build"
+        ],
+        "inputs": [
+          "production",
+          "^production"
+        ],
+        "cache": true
+      },
+      {
+        "filter": {
+          "plugin": "@nx/next/plugin"
+        },
+        "cache": false,
+        "defaultConfiguration": "production",
+        "configurations": {
+          "production": {},
+          "development": {}
+        },
+        "dependsOn": [],
+        "inputs": [
+          "production",
+          "^production"
+        ],
+        "outputs": [
+          "{workspaceRoot}/dist/{projectRoot}/.next/!(cache)/**/*",
+          "{workspaceRoot}/dist/{projectRoot}/.next/!(cache)"
+        ]
+      }
+    ],
+    "test": [
+      {
+        "filter": {
+          "plugin": "@nx/jest/plugin"
+        },
+        "configurations": {
+          "ci": {
+            "ci": true,
+            "coverage": true
+          }
+        },
+        "options": {
+          "passWithNoTests": true,
+          "cwd": "{workspaceRoot}",
+          "command": "jest --config {projectRoot}/jest.config.ts"
+        }
+      }
+    ],
+    "lint": [
+      {
+        "filter": {
+          "plugin": "@nx/eslint/plugin"
+        },
+        "inputs": [
+          "default",
+          "^default",
+          "{workspaceRoot}/tools/lint-rules/**/*",
+          "{workspaceRoot}/eslint.config.mjs",
+          {
+            "externalDependencies": [
+              "eslint"
+            ]
+          }
+        ],
+        "options": {
+          "cwd": "{workspaceRoot}",
+          "command": "eslint {projectRoot}"
+        }
+      }
+    ],
+    "serve": [
+      {
+        "filter": {
+          "plugin": "@nx/next/plugin"
+        },
+        "defaultConfiguration": "development",
+        "dependsOn": [
+          "clean-next-cache"
+        ],
+        "configurations": {
+          "production": {},
+          "development": {}
+        }
+      }
+    ]
   },
   "namedInputs": {
-    "default": ["{projectRoot}/**/*", "sharedGlobals"],
+    "default": [
+      "{projectRoot}/**/*",
+      "sharedGlobals"
+    ],
     "sharedGlobals": [
       "{workspaceRoot}/workspace.json",
       "{workspaceRoot}/tsconfig.base.json",
@@ -133,5 +194,133 @@
   "parallel": 3,
   "defaultBase": "main",
   "analytics": true,
-  "pluginsConfig": {}
+  "pluginsConfig": {},
+  "affected": {
+    "legacy": true
+  },
+  "plugins": [
+    {
+      "plugin": "@nx/jest/plugin",
+      "options": {
+        "targetName": "test"
+      },
+      "include": [
+        "apps/console/**/*",
+        "apps/docs/**/*",
+        "apps/tenant/**/*",
+        "apps/zapier/**/*",
+        "libs/aglyn/**/*",
+        "libs/aglyn-markdown-editor/**/*",
+        "libs/aglyn-node-renderer/**/*",
+        "libs/aglyn-transfer-ui/**/*",
+        "libs/besigner/core/**/*",
+        "libs/besigner/feature/designer/**/*",
+        "libs/cli/**/*",
+        "libs/plugins/**/*",
+        "libs/shared/data/mdi/**/*",
+        "libs/shared/ui/color-picker/**/*",
+        "libs/shared/ui/email-campaigns/**/*",
+        "libs/shared/ui/json-editor/**/*",
+        "libs/shared/ui/jsx/**/*",
+        "libs/shared/ui/jsx-forms/**/*",
+        "libs/shared/ui/next/**/*",
+        "libs/shared/ui/theme/**/*",
+        "libs/shared/util/dom/**/*",
+        "libs/shared/util/email/**/*",
+        "libs/shared/util/errors/**/*",
+        "libs/shared/util/first-touch/**/*",
+        "libs/shared/util/http/**/*",
+        "libs/shared/util/logger/**/*",
+        "libs/shared/util/timestamp/**/*",
+        "libs/shared/util/tools/**/*",
+        "libs/shared/util/vendor/**/*",
+        "libs/tenant/data/admin/**/*",
+        "libs/tenant/feature/instance/**/*",
+        "libs/tenant/runtime/**/*"
+      ]
+    },
+    {
+      "plugin": "@nx/eslint/plugin",
+      "options": {
+        "targetName": "lint"
+      },
+      "include": [
+        "apps/console/**/*",
+        "apps/console-e2e/**/*",
+        "apps/docs/**/*",
+        "apps/tenant/**/*",
+        "apps/tenant-e2e/**/*",
+        "apps/zapier/**/*",
+        "libs/aglyn/**/*",
+        "libs/aglyn-markdown-editor/**/*",
+        "libs/aglyn-node-renderer/**/*",
+        "libs/aglyn-transfer-ui/**/*",
+        "libs/besigner/core/**/*",
+        "libs/besigner/feature/designer/**/*",
+        "libs/cli/**/*",
+        "libs/plugins/**/*",
+        "libs/shared/data/enums/**/*",
+        "libs/shared/data/forms/**/*",
+        "libs/shared/data/mdi/**/*",
+        "libs/shared/data/regex/**/*",
+        "libs/shared/data/types/**/*",
+        "libs/shared/svg-icons/svg-icons/**/*",
+        "libs/shared/ui/color-picker/**/*",
+        "libs/shared/ui/email-campaigns/**/*",
+        "libs/shared/ui/json-editor/**/*",
+        "libs/shared/ui/jsx/**/*",
+        "libs/shared/ui/jsx-forms/**/*",
+        "libs/shared/ui/next/**/*",
+        "libs/shared/ui/snackstack/**/*",
+        "libs/shared/ui/theme/**/*",
+        "libs/shared/util/dom/**/*",
+        "libs/shared/util/email/**/*",
+        "libs/shared/util/errors/**/*",
+        "libs/shared/util/fbserver/**/*",
+        "libs/shared/util/first-touch/**/*",
+        "libs/shared/util/http/**/*",
+        "libs/shared/util/logger/**/*",
+        "libs/shared/util/next/**/*",
+        "libs/shared/util/rest-api/**/*",
+        "libs/shared/util/timestamp/**/*",
+        "libs/shared/util/tools/**/*",
+        "libs/shared/util/vendor/**/*",
+        "libs/tenant/data/admin/**/*",
+        "libs/tenant/feature/instance/**/*",
+        "libs/tenant/runtime/**/*"
+      ]
+    },
+    {
+      "plugin": "@nx/cypress/plugin",
+      "options": {
+        "targetName": "e2e",
+        "ciTargetName": "e2e-ci",
+        "componentTestingTargetName": "component-test",
+        "openTargetName": "open-cypress"
+      }
+    },
+    {
+      "plugin": "@nx/vite/plugin",
+      "options": {
+        "devTargetName": "dev",
+        "typecheckTargetName": "typecheck",
+        "buildTargetName": "build",
+        "serveTargetName": "serve",
+        "previewTargetName": "preview",
+        "serveStaticTargetName": "serve-static"
+      },
+      "include": [
+        "libs/shared/svg-icons/svg-icons/**/*"
+      ]
+    },
+    {
+      "plugin": "@nx/next/plugin",
+      "options": {
+        "buildTargetName": "build",
+        "devTargetName": "serve",
+        "startTargetName": "start",
+        "serveStaticTargetName": "serve-static"
+      }
+    }
+  ]
 }

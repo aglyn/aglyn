@@ -206,35 +206,42 @@ class ShellNavigator(initialTop: String = HOME) {
   /** The saved-state key of what is showing. */
   val currentKey: String get() = keys.last()
 
-  /** The destinations visited, for the title bar's back and forward (Mac, iPad, tablets and desktop). */
-  private val history = mutableStateListOf(initialTop)
-  private var historyAt by mutableStateOf(0)
-  val canGoBackInHistory: Boolean get() = historyAt > 0
-  val canGoForwardInHistory: Boolean get() = historyAt < history.lastIndex
+  /** One place in the history: a destination, with the sidebar's settings mode it was opened in (null: the everyday list). */
+  data class HistoryPlace(val key: String, val mode: com.aglyn.contracts.NativeNavListId? = null)
+
+  /**
+   * The sidebar's settings mode, which each place in the history keeps and Back and Forward set again (AGL-3996): the
+   * shell hands in its chrome's. Without it a place keeps its destination only.
+   */
+  var settingsMode: kotlin.reflect.KMutableProperty0<com.aglyn.contracts.NativeNavListId?>? = null
+
+  /** The places visited, for the title bar's back and forward (Mac, iPad, tablets and desktop). */
+  private var history by mutableStateOf(com.aglyn.pluginhost.NavHistory.of(HistoryPlace(initialTop)))
+  val canGoBackInHistory: Boolean get() = history.canGoBack
+  val canGoForwardInHistory: Boolean get() = history.canGoForward
 
   fun select(key: String) {
     top = key
     stack.clear()
-    if (history.getOrNull(historyAt) != key) {
-      while (history.lastIndex > historyAt) history.removeAt(history.lastIndex)
-      history.add(key)
-      if (history.size > 50) history.removeAt(0)
-      historyAt = history.lastIndex
-    }
+    history = history.record(HistoryPlace(key, settingsMode?.get()))
   }
 
-  /** The destination before this one in the history, as the title bar's back arrow goes. */
+  /** The place before this one in the history, as the title bar's back arrow goes: its destination and its mode. */
   fun historyBack() {
     if (!canGoBackInHistory) return
-    historyAt -= 1
-    top = history[historyAt]
-    stack.clear()
+    history = history.back()
+    go(history.current)
   }
 
   fun historyForward() {
     if (!canGoForwardInHistory) return
-    historyAt += 1
-    top = history[historyAt]
+    history = history.forward()
+    go(history.current)
+  }
+
+  private fun go(place: HistoryPlace) {
+    settingsMode?.set(place.mode)
+    top = place.key
     stack.clear()
   }
 

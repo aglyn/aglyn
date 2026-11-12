@@ -43,6 +43,10 @@ import {
   type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
 import {
+  isSeedChecking,
+  seedCheckingText,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
+import {
   Alert,
   Autocomplete,
   Button,
@@ -464,6 +468,25 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
     dealFormProblem(values, mode) ??
     (customMissing.length ? `${customMissing.join(', ')} is required.` : null)
   const amountDerived = Boolean(deal && dealHasLineItems(deal))
+  /*
+   * Save is held, with the reason beside it, while the deal read is the
+   * cache's and the edit typed so far is one worked out from it (AGL-4047):
+   * pressed then, it waited on the server and could end refused. Every other
+   * edit saves at once, as before, and the form already follows the stored
+   * deal in the fields nobody touched.
+   */
+  const checkingText =
+    deal &&
+    isSeedChecking({ fromCache, unreadable }) &&
+    dealEditNeedsConfirmedRead(
+      dealEditFromForm(values, seed.current?.values ?? dealFormFromDoc(deal), Date.now(), {
+        amountDerived,
+        stage: currentStage,
+        current: deal,
+      }),
+    )
+      ? seedCheckingText('deal')
+      : undefined
 
   /*
    * THE RECORDS BAND (AGL-2611), read only while a CREATE is open: a deal
@@ -967,10 +990,16 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
             <Alert severity="warning">{CRM_RECORDS_BAND_FULL_MESSAGE}</Alert>
           ) : null}
           {problem && values.title ? <Alert severity="warning">{problem}</Alert> : null}
+          {checkingText ? (
+            <Typography variant="body2" color="text.secondary" role="status">
+              {checkingText}
+            </Typography>
+          ) : null}
           <Button
             variant="contained"
             disabled={
               busy ||
+              Boolean(checkingText) ||
               Boolean(problem) ||
               !orgId ||
               bandFull ||

@@ -132,6 +132,7 @@ const PRODUCTION_BUILD_EXPERIMENTAL =
  * @type {import('/tools/nextjs-base.config').WithAglynOptions}
  **/
 module.exports = withAglyn({
+  aglyn: { appDir: __dirname },
   serverExternalPackages: FONT_INSTALLER_PACKAGES,
   experimental: PRODUCTION_BUILD_EXPERIMENTAL,
   env: {

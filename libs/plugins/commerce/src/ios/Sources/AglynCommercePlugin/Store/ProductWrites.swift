@@ -299,12 +299,31 @@ final class WriteAttempt {
 @Observable
 final class ProductEditorModel: Identifiable {
   var draft: ProductDraft
-  @ObservationIgnored private let stored: [String: Any]?
+  /// The stored product is only the device cache's copy yet: Save waits for the server's (AGL-4047). A new one is never held.
+  private(set) var held = false
+  @ObservationIgnored private var stored: [String: Any]?
+  /// The stored product as a draft, which the typing is laid over.
+  @ObservationIgnored private var opened: ProductDraft?
   @ObservationIgnored private let attempt = WriteAttempt()
 
-  init(draft: ProductDraft, stored: [String: Any]?) {
+  init(draft: ProductDraft, stored: [String: Any]?, held: Bool = false) {
     self.draft = draft
     self.stored = stored
+    self.held = held
+    opened = stored == nil ? nil : draft
+  }
+
+  /// A newer copy of the product arrived: what was typed stays, every other field moves to it, and Save sends it whole.
+  func refresh(_ doc: FirestoreDocument) {
+    guard !draft.create, doc.id == draft.productID, let previous = opened else { return }
+    let next = productDraft(doc)
+    draft = rebased(draft, previous: previous, next: next) {
+      $0.field(\.name); $0.field(\.description); $0.field(\.status); $0.field(\.type); $0.field(\.options)
+      $0.field(\.variants); $0.field(\.addOns); $0.field(\.checkIn)
+    }
+    opened = next
+    stored = doc.data
+    held = doc.fromCache
   }
 
   static func creating() -> ProductEditorModel {
@@ -312,7 +331,7 @@ final class ProductEditorModel: Identifiable {
   }
 
   static func editing(_ doc: FirestoreDocument) -> ProductEditorModel {
-    ProductEditorModel(draft: productDraft(doc), stored: doc.data)
+    ProductEditorModel(draft: productDraft(doc), stored: doc.data, held: doc.fromCache)
   }
 
   /// Saves the draft; throws what the sheet shows.

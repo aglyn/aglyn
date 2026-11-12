@@ -22,6 +22,7 @@ import {
   installsUnreviewedFallback,
   listingArtifactLabel,
   listingInclusions,
+  type ListingInstallReach,
   hasLivePurchaseOf,
   hasOrgLicenceOf,
   licensedOrgIdsFor,
@@ -1359,6 +1360,20 @@ export function MarketplaceListingContent({
             ? 'loading'
             : 'answered',
       })
+  /**
+   * The Install to choice the card offers right now, which the `What's
+   * included` reach row describes so the two never disagree. With no picker
+   * on screen (installed, or nothing to choose), the row keeps the artifact's
+   * All sites reach.
+   */
+  const includedReach: ListingInstallReach =
+    pinsPhase !== 'ready' || installed
+      ? 'all'
+      : orgTargeting && !(orgPluginScope && orgInstall.installedAnywhere)
+        ? installChoice.mode
+        : installTargets.length > 1 && installScope === 'host'
+          ? 'thisSite'
+          : 'all'
   /** Run a pin write, then re-read every site's pin. */
   const runSiteEdit = async (work: () => Promise<unknown>) => {
     try {
@@ -1860,6 +1875,7 @@ export function MarketplaceListingContent({
                                 'approved',
                               realmTrusted: latestEntry?.trust === 'realm',
                               connections: latestEntry?.connections ?? [],
+                              installTo: includedReach,
                             }).map((row) => (
                               <Stack
                                 key={row.label}
@@ -1870,8 +1886,8 @@ export function MarketplaceListingContent({
                                 <MdiIcon
                                   path={
                                     row.tone === 'included'
-                                      ? mdiCheckCircleOutline
-                                      : mdiInformationOutline
+                                      ? mdiCheckCircleOutline.path
+                                      : mdiInformationOutline.path
                                   }
                                   size={0.8}
                                   color={

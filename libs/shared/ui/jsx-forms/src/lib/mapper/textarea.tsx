@@ -26,6 +26,7 @@ import {
 } from '@mui/material'
 
 import { useFieldApi } from '../vendor/data-driven-forms'
+import { emptyValuesEqual } from '../utils/empty-values-equal'
 import FormFieldGrid, { type FormFieldGridProps } from './form-field-grid'
 import type { BaseFieldProps } from './types'
 import { type ExtendedFieldMeta, validationError } from './validation-error'
@@ -58,7 +59,11 @@ export const Textarea = (props: TextareaProps) => {
     inputProps = {},
     TextFieldProps = {},
     ...rest
-  } = useFieldApi(props)
+  } = useFieldApi({
+    ...props,
+    // A cleared box equals the `''` its stored copy reseeds (AGL-4047).
+    FieldProps: { isEqual: emptyValuesEqual, ...props.FieldProps },
+  })
 
   const invalid = validationError(meta as ExtendedFieldMeta, validateOnMount)
 

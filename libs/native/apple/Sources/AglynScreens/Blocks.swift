@@ -332,6 +332,9 @@ struct ListRow: View {
     let tertiary = rowLine(block["tertiary"], in: scope)
     let trailing = block["trailing"]?.stringValue.map { ScreenValues.render($0, in: scope) }
     let badges = block["badges"].array.flatMap { badge in rowBadges(badge, in: scope) }
+    // A badge with `each` is a run of chips (a resource's next fourteen nights), not a status: it wraps under the row's
+    // text on every size, where a single line of them at the trailing end ran far past the column (AGL-4045).
+    let chipRun = block["badges"].array.contains { $0["each"] != nil }
     // On the Mac and iPad a row is at most three lines (Figma List/Site row): its name, one line of detail, one line
     // of the picked columns, with its badges at the trailing end; a phone keeps the fuller stack.
     let row = HStack(alignment: .center, spacing: 12) {
@@ -359,14 +362,14 @@ struct ListRow: View {
         if let tertiary, !tertiary.isEmpty, !wide || columnsLine.isEmpty {
           Text(tertiary).font(AglynFont.caption).foregroundStyle(.tertiary).lineLimit(1)
         }
-        if !badges.isEmpty, !wide {
+        if !badges.isEmpty, !wide || chipRun {
           AglynWrapRow(spacing: AglynSpace.of(0.75), lineSpacing: AglynSpace.of(0.75)) {
             ForEach(Array(badges.enumerated()), id: \.offset) { _, badge in StatusChip(badge.0, tone: badge.1) }
           }
         }
       }
       Spacer(minLength: 8)
-      if !badges.isEmpty, wide {
+      if !badges.isEmpty, wide, !chipRun {
         HStack(spacing: 6) {
           ForEach(Array(badges.enumerated()), id: \.offset) { _, badge in StatusChip(badge.0, tone: badge.1) }
         }
@@ -713,15 +716,20 @@ struct StepperInput: View {
   }
 }
 
-/// A form on the screen: its inputs, filled from the loaded data, and the
-/// action that saves them.
+/// A form on the screen: its inputs, filled from the loaded data, and the action that saves them. What the person
+/// changed is kept as edits over the data as it is now (`FormEdits`), and Save is held while that data is only the
+/// device cache's answer.
 struct FormBlock: View {
   let block: BlockSpec
   let context: JSONValue
   let busy: Bool
   let submit: (ActionSpec, JSONValue) -> Void
+  /// The fields the person changed; every other field shows what the data says now.
   @State private var values: [String: FieldValue] = [:]
-  @State private var seededFrom: JSONValue?
+  /// The seed the edits were last settled against.
+  @State private var seededFrom: [String: FieldValue]?
+  /// What the last Save wrote, settled once the data moves.
+  @State private var pressed: [String: FieldValue]?
 
   private var fields: [FieldSpec] {
     FieldSpec.parseAll(block["fields"].array, in: scope)
@@ -732,14 +740,27 @@ struct FormBlock: View {
     return base.map { ScreenContext.with(context, item: $0) } ?? context
   }
 
+  private func current(_ field: FieldSpec) -> FieldValue {
+    values[field.key] ?? initialValue(field, in: scope)
+  }
+
   private var filled: JSONValue {
-    ScreenContext.with(scope, "form", .object(formObject(fields) { values[$0.key] }))
+    ScreenContext.with(scope, "form", .object(formObject(fields) { current($0) }))
   }
 
   private var missing: Bool {
     fields.contains { field in
-      ScreenValues.condition(field.when, in: filled) && field.unmet(fieldJSON(field, values[field.key] ?? initialValue(field, in: scope)), in: scope)
+      ScreenValues.condition(field.when, in: filled) && field.unmet(fieldJSON(field, current(field)), in: scope)
     }
+  }
+
+  /// A load this form is seeded from is only the cache's answer yet.
+  private var held: Bool {
+    !FormEdits.heldBy(object: block["object"]?.stringValue, initials: fields.compactMap(\.initial), checking: context["checking"]).isEmpty
+  }
+
+  private var dirty: Bool {
+    fields.contains { field in values[field.key].map { $0 != initialValue(field, in: scope) } ?? false }
   }
 
   var body: some View {
@@ -747,19 +768,25 @@ struct FormBlock: View {
       ForEach(fields.filter { ScreenValues.condition($0.when, in: filled) }) { field in
         FieldInput(
           field: field, context: scope,
-          value: Binding(get: { values[field.key] ?? initialValue(field, in: scope) }, set: { values[field.key] = $0 }))
+          value: Binding(get: { current(field) }, set: { values[field.key] = $0 }))
       }
       if let action = block["submit"].flatMap(ActionSpec.init), ScreenValues.condition(action.when, in: scope) {
         // One Save per form at the standard control size, trailing (spec 8): never a full-width bar per form.
         HStack(spacing: AglynSpace.one) {
+          if held && dirty {
+            Text(FormEdits.checkingText(block["checking"]?.stringValue))
+              .font(AglynFont.caption).foregroundStyle(.secondary)
+              .accessibilityIdentifier("checking-\(block.id)")
+          }
           Spacer(minLength: 0)
           if busy { ProgressView().controlSize(.small) }
           Button(ScreenValues.render(action.label, in: scope)) {
+            pressed = values
             submit(action, visibleOnly(filled, fields))
           }
           .buttonStyle(.aglynProminent)
           .controlSize(.regular)
-          .disabled(busy || missing || action.disabledWhen.map { ScreenValues.condition($0, in: scope) } == true)
+          .disabled(busy || held || missing || action.disabledWhen.map { ScreenValues.condition($0, in: scope) } == true)
           .accessibilityIdentifier("submit-\(block.id)")
         }
       }
@@ -768,14 +795,16 @@ struct FormBlock: View {
     .onChange(of: context) { _, _ in seed() }
   }
 
-  /// Fills the inputs from the data once per load, keeping what was typed
-  /// when the data did not change.
+  /// Settles the edits when the data under them moves (a save landed, or the server's copy replaced the cache's).
   private func seed() {
-    guard seededFrom != scope else { return }
-    seededFrom = scope
-    var next: [String: FieldValue] = [:]
-    for field in fields { next[field.key] = initialValue(field, in: scope) }
-    values = next
+    var now: [String: FieldValue] = [:]
+    for field in fields { now[field.key] = initialValue(field, in: scope) }
+    guard seededFrom != now else { return }
+    if seededFrom != nil {
+      values = FormEdits.settled(values, pressed: pressed, seed: now)
+      pressed = nil
+    }
+    seededFrom = now
   }
 }
 
@@ -791,11 +820,36 @@ struct ActionInputSheet: View {
   /// What each `lookup` field last picked, as the person reads it.
   @State private var picked: [String: String] = [:]
 
-  private var inputs: [FieldSpec] { pending.action.inputs(in: pending.scope) }
+  private var inputs: [FieldSpec] { pending.action.inputs(in: scope) }
+
+  /// The prompt's scope over the screen as it is now (AGL-4047): the loads' newest answers, and the row it was opened on as
+  /// its list holds it now, so a field the person left alone takes a newer copy and a write built from the loads (a
+  /// replaced list of rates) builds from the server's. What was typed is kept: `values` holds only edits.
+  private var scope: JSONValue {
+    var next = pending.scope
+    if let data = context["data"] { next = ScreenContext.with(next, "data", data) }
+    if let row = liveRow { next = ScreenContext.with(next, item: row.item) }
+    return next
+  }
+
+  /// The row the prompt was opened on, found by its `$id` in a list load's items, with that load's key.
+  private var liveRow: (key: String, item: JSONValue)? {
+    guard let id = pending.scope["item"]?["$id"], case .object(let loads)? = context["data"] else { return nil }
+    for (key, load) in loads {
+      if let item = load["items"]?.arrayValue?.first(where: { $0["$id"] == id }) { return (key, item) }
+    }
+    return nil
+  }
+
+  /// A load the prompt reads or writes over, or the list its row came from, is only the device cache's answer yet.
+  private var held: Bool {
+    let checking = context["checking"]
+    if let key = liveRow?.key, checking?[key] == .bool(true) { return true }
+    return !FormEdits.heldBy(object: nil, initials: [pending.action.specText], checking: checking).isEmpty
+  }
 
   private var filled: JSONValue {
-    ScreenContext.with(
-      pending.scope, "form", .object(formObject(inputs) { values[$0.key] ?? initialValue($0, in: pending.scope) }))
+    ScreenContext.with(scope, "form", .object(formObject(inputs) { values[$0.key] ?? initialValue($0, in: scope) }))
   }
 
   /// A field the person cannot see (its `when` fails) never holds up the action.
@@ -803,7 +857,7 @@ struct ActionInputSheet: View {
     let context = filled
     return inputs.contains { field in
       ScreenValues.condition(field.when, in: context)
-        && field.unmet(fieldJSON(field, values[field.key] ?? initialValue(field, in: pending.scope)), in: pending.scope)
+        && field.unmet(fieldJSON(field, values[field.key] ?? initialValue(field, in: scope)), in: scope)
     }
   }
 
@@ -812,41 +866,48 @@ struct ActionInputSheet: View {
       Form {
         // An action with a `check` confirms over the check's answer (`preview`), which it has not got yet: its confirm is
         // asked after the inputs, never drawn here half-filled.
-        if pending.action.check == nil, let confirm = pending.action.confirmText(in: pending.scope) {
+        if pending.action.check == nil, let confirm = pending.action.confirmText(in: scope) {
           Section { Text(confirm).font(AglynFont.subheadline) }
+        }
+        if held {
+          Section {
+            Text(FormEdits.checkingText(pending.action.checkingSubject)).font(AglynFont.caption).foregroundStyle(.secondary)
+              .accessibilityIdentifier("prompt-checking")
+          }
         }
         Section {
           ForEach(inputs.filter { ScreenValues.condition($0.when, in: filled) }) { field in
             if field.kind == "lookup" {
-              LookupRow(field: field, context: pending.scope, picked: picked[field.key], search: search) { group, row in
-                picked[field.key] = group.heading(for: row, in: pending.scope)
+              LookupRow(field: field, context: scope, picked: picked[field.key], search: search) { group, row in
+                picked[field.key] = group.heading(for: row, in: scope)
                 // Only the fields this form has are filled, and what the person typed elsewhere is left alone.
-                for fill in group.fills(for: row, in: pending.scope, among: Set(inputs.map(\.key))) {
+                for fill in group.fills(for: row, in: scope, among: Set(inputs.map(\.key))) {
                   values[fill.key] = .text(fill.value)
                 }
               }
             } else {
               FieldInput(
-                field: field, context: pending.scope,
+                field: field, context: scope,
                 value: Binding(
-                  get: { values[field.key] ?? initialValue(field, in: pending.scope) }, set: { values[field.key] = $0 }))
+                  get: { values[field.key] ?? initialValue(field, in: scope) }, set: { values[field.key] = $0 }))
             }
           }
         }
       }
       .formStyle(.grouped)
-      .navigationTitle(ScreenValues.render(pending.action.promptTitle ?? pending.action.label, in: pending.scope))
-      .aglynScreenTitle(ScreenValues.render(pending.action.promptTitle ?? pending.action.label, in: pending.scope))
+      .aglynPhoneFormEdges()
+      .navigationTitle(ScreenValues.render(pending.action.promptTitle ?? pending.action.label, in: scope))
+      .aglynScreenTitle(ScreenValues.render(pending.action.promptTitle ?? pending.action.label, in: scope))
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
       #endif
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
         ToolbarItem(placement: .confirmationAction) {
-          Button(ScreenValues.render(pending.action.submitLabel ?? pending.action.label, in: pending.scope), role: pending.action.destructive ? .destructive : nil) {
+          Button(ScreenValues.render(pending.action.submitLabel ?? pending.action.label, in: scope), role: pending.action.destructive ? .destructive : nil) {
             run(visibleOnly(filled, inputs))
           }
-          .disabled(missing)
+          .disabled(missing || held)
           .accessibilityIdentifier("prompt-submit")
         }
       }
@@ -980,6 +1041,7 @@ struct ReauthSheet: View {
         if let error { Section { AglynNotice(error, tone: .error) } }
       }
       .formStyle(.grouped)
+      .aglynPhoneFormEdges()
       .navigationTitle("Confirm it is you")
       .aglynScreenTitle("Confirm it is you")
       .toolbar {

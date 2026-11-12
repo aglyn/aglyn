@@ -278,6 +278,27 @@ data class EntryDraft(
   val seoTitle: String,
   val seoDescription: String,
 ) {
+  /**
+   * This draft over a stored entry that moved from [previous] to [next] (the console's `rebaseSeedEdits`, AGL-4047): every
+   * field changed here keeps it, every other field follows [next].
+   */
+  fun rebased(previous: EntryDraft, next: EntryDraft): EntryDraft = EntryDraft(
+    title = com.aglyn.core.rebased(title, previous.title, next.title),
+    slug = com.aglyn.core.rebased(slug, previous.slug, next.slug),
+    excerpt = com.aglyn.core.rebased(excerpt, previous.excerpt, next.excerpt),
+    body = com.aglyn.core.rebased(body, previous.body, next.body),
+    categoryId = com.aglyn.core.rebased(categoryId, previous.categoryId, next.categoryId),
+    tags = com.aglyn.core.rebased(tags, previous.tags, next.tags),
+    authorId = com.aglyn.core.rebased(authorId, previous.authorId, next.authorId),
+    authorName = com.aglyn.core.rebased(authorName, previous.authorName, next.authorName),
+    coverImage = com.aglyn.core.rebased(coverImage, previous.coverImage, next.coverImage),
+    coverImageAlt = com.aglyn.core.rebased(coverImageAlt, previous.coverImageAlt, next.coverImageAlt),
+    coverVideo = com.aglyn.core.rebased(coverVideo, previous.coverVideo, next.coverVideo),
+    coverVideoDuration = com.aglyn.core.rebased(coverVideoDuration, previous.coverVideoDuration, next.coverVideoDuration),
+    seoTitle = com.aglyn.core.rebased(seoTitle, previous.seoTitle, next.seoTitle),
+    seoDescription = com.aglyn.core.rebased(seoDescription, previous.seoDescription, next.seoDescription),
+  )
+
   /** The slug a save stores: the typed one as a slug, else the title's. */
   val effectiveSlug: String get() = contentSlug(slug).ifEmpty { contentSlug(title) }
 

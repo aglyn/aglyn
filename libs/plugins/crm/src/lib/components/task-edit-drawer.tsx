@@ -36,6 +36,12 @@ import {
   type ListenHandle,
 } from '@aglyn/tenant-feature-instance'
 import {
+  isSeedChecking,
+  seedCheckingText,
+  useSeedEdits,
+} from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
+import { seedEditsBetween } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
+import {
   Autocomplete,
   Button,
   Drawer,
@@ -45,7 +51,7 @@ import {
   Typography,
 } from '@mui/material'
 import { deleteDoc, doc } from 'firebase/firestore'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { CrmTaskRow } from '../hooks/use-crm-tasks'
 import { useOrgMemberDirectory } from '../hooks/use-org-member-directory'
 import { refreshCrmNextActivity } from '../model/next-activity-api'
@@ -212,7 +218,13 @@ function TaskForm(props: TaskEditDrawerProps) {
       ? { orgId, ...(task || !filedFrom ? {} : { hostId: filedFrom }) }
       : null
 
-  const [fields, setFields] = useState<CrmTaskFields>(() => {
+  /*
+   * What was typed, kept as EDITS over the task (AGL-4047). The caller hands
+   * the row as its list has it now, so the server's copy arriving after the
+   * drawer opened on the cache's replaces it under every field nobody
+   * touched, and Save is held until it has (`checkingText`).
+   */
+  const fieldsSeed = useMemo<CrmTaskFields>(() => {
     const base = crmTaskFieldsOf(task ?? {})
     if (task) return base
     // A new task is the creator's own unless a button said otherwise: it
@@ -221,7 +233,19 @@ function TaskForm(props: TaskEditDrawerProps) {
     // Its reminder is left UNSAID (AGL-2659) — the field shows the due time
     // and the route decides — until the person touches it.
     return { ...base, remindAtMs: undefined, assigneeUid: user?.uid ?? null, ...prefill }
-  })
+  }, [task, user?.uid, prefill])
+  const fieldsForm = useSeedEdits<CrmTaskFields>(fieldsSeed)
+  const fields = fieldsForm.values
+  const { edit: editFields } = fieldsForm
+  const setFields = useCallback(
+    (build: (prev: CrmTaskFields) => CrmTaskFields) =>
+      editFields((values) => seedEditsBetween(values, build(values))),
+    [editFields],
+  )
+  const checkingText =
+    task && isSeedChecking({ fromCache: seed?.fromCache, unreadable: seed?.unreadable })
+      ? seedCheckingText('task')
+      : undefined
   const assignee = findOrgMember(directory.members, fields.assigneeUid)
   const [busy, setBusy] = useState(false)
   /*
@@ -384,6 +408,8 @@ function TaskForm(props: TaskEditDrawerProps) {
       sx={{ width: { xs: '100vw', sm: 420 }, p: 3 }}
       onSubmit={(event: { preventDefault: () => void }) => {
         event.preventDefault()
+        // Enter submits without the button, so the hold is here as well.
+        if (checkingText) return
         void save()
       }}
     >
@@ -617,6 +643,11 @@ function TaskForm(props: TaskEditDrawerProps) {
           {error}
         </Typography>
       ) : null}
+      {checkingText ? (
+        <Typography variant="body2" color="text.secondary" role="status">
+          {checkingText}
+        </Typography>
+      ) : null}
       <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
         {task ? (
           <Button
@@ -631,7 +662,7 @@ function TaskForm(props: TaskEditDrawerProps) {
         <Button onClick={onClose} disabled={busy}>
           {'Cancel'}
         </Button>
-        <Button type="submit" variant="contained" disabled={busy || !filed}>
+        <Button type="submit" variant="contained" disabled={busy || Boolean(checkingText) || !filed}>
           {task ? 'Save' : 'Create task'}
         </Button>
       </Stack>

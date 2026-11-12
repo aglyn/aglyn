@@ -129,6 +129,11 @@ struct SetupDetail: View {
       }
     }
     .formStyle(.aglynGrouped)
+    // The cards seeded from the site document hold their Save while it is only the device cache's copy (AGL-4047); the
+    // theme editor and the emails read through their routes, which answer from the server.
+    .environment(\.aglynFormChecking, doc.fromCache && section.seedsFromHost ? seedCheckingText("site settings") : nil)
+    // What was typed for one site never carries to the next.
+    .id(hostID)
     .navigationTitle(section.title)
     .aglynScreenTitle(section.title)
     .accessibilityIdentifier("setup-detail-\(section.id)")
@@ -154,6 +159,8 @@ private struct HostTextCard<Content: View>: View {
   var draft: FormDraft?
   @ViewBuilder let content: (_ field: @escaping (String) -> Binding<String>) -> Content
   @State private var fields: [String: String] = [:]
+  /// The stored values the fields were last laid over.
+  @State private var seeded: [String: String]?
   @State private var runner = newRunner()
 
   private var stored: [String: String] { Dictionary(uniqueKeysWithValues: paths.map { ($0, textAt(host, $0)) }) }
@@ -170,7 +177,11 @@ private struct HostTextCard<Content: View>: View {
     ) {
       content { path in Binding(get: { fields[path] ?? "" }, set: { fields[path] = $0 }) }
     }
-    .onChange(of: stored, initial: true) { _, next in fields = next }
+    // A newer copy of the site keeps what was typed and moves every other field to it (AGL-4047).
+    .onChange(of: stored, initial: true) { _, next in
+      fields = seeded.map { rebased(fields, previous: $0, next: next) } ?? next
+      seeded = next
+    }
     .onChange(of: draft?.version) { _, _ in
       guard let draft else { return }
       for path in paths { if let value = draft.values[path] { fields[path] = value } }
@@ -183,10 +194,12 @@ private struct ImmediateCard<Content: View>: View {
   let title: String
   @ViewBuilder let content: (ActionRunner) -> Content
   @State private var runner = newRunner()
+  @Environment(\.aglynFormChecking) private var checking
 
   var body: some View {
     Section(title) {
-      content(runner)
+      content(runner).disabled(checking != nil)
+      if let checking { Text(checking).font(AglynFont.caption).foregroundStyle(.secondary) }
       if let error = runner.error { AglynNotice(error, tone: .error) }
     }
   }
@@ -224,6 +237,7 @@ private struct BusinessDetailsCard: View {
   @State private var email = ""
   @State private var address = ""
   @State private var links: [SocialLink] = []
+  @State private var seeded: (email: String, address: String, links: [SocialLink])?
   @State private var runner = newRunner()
 
   private var storedEmail: String { textAt(host, "business.supportEmail") }
@@ -265,7 +279,12 @@ private struct BusinessDetailsCard: View {
       .accessibilityIdentifier("add-social-link")
     }
     .onChange(of: storedEmail + "\n" + storedAddress + "\n" + storedLinks.map { $0.label + "\t" + $0.url }.joined(separator: "\n"), initial: true) { _, _ in
-      reset()
+      // A newer copy of the site keeps what was typed and moves every other field to it (AGL-4047).
+      guard let seeded else { return reset() }
+      email = rebased(email, previous: seeded.email, next: storedEmail)
+      address = rebased(address, previous: seeded.address, next: storedAddress)
+      links = rebased(links, previous: seeded.links, next: storedLinks)
+      self.seeded = (storedEmail, storedAddress, storedLinks)
     }
   }
 
@@ -273,6 +292,7 @@ private struct BusinessDetailsCard: View {
     email = storedEmail
     address = storedAddress
     links = storedLinks
+    seeded = (storedEmail, storedAddress, storedLinks)
     runner.clear()
   }
 }
@@ -345,6 +365,7 @@ private struct LanguagesCard: View {
   let canEdit: Bool
   @State private var text = ""
   @State private var chosen = ""
+  @State private var seeded: (text: String, chosen: String)?
   @State private var runner = newRunner()
 
   private var storedLocales: [String] { (host["locales"] as? [Any])?.compactMap { $0 as? String } ?? [] }
@@ -376,12 +397,20 @@ private struct LanguagesCard: View {
       }
       .disabled(!canEdit || parsed.isEmpty)
     }
-    .onChange(of: storedLocales.joined(separator: ",") + "|" + storedDefault, initial: true) { _, _ in reset() }
+    .onChange(of: storedLocales.joined(separator: ",") + "|" + storedDefault, initial: true) { _, _ in
+      // A newer copy of the site keeps what was typed and moves every other field to it (AGL-4047).
+      guard let seeded else { return reset() }
+      let next = storedLocales.joined(separator: ", ")
+      text = rebased(text, previous: seeded.text, next: next)
+      chosen = rebased(chosen, previous: seeded.chosen, next: storedDefault)
+      self.seeded = (next, storedDefault)
+    }
   }
 
   private func reset() {
     text = storedLocales.joined(separator: ", ")
     chosen = storedDefault
+    seeded = (text, chosen)
     runner.clear()
   }
 }
@@ -490,6 +519,7 @@ private struct LocalBusinessCard: View {
   let api: HostSettingsAPI
   let canEdit: Bool
   @State private var fields: [String: String] = [:]
+  @State private var seeded: [String: String]?
   @State private var runner = newRunner()
   private let contracts = ContractValues.shared
 
@@ -540,7 +570,10 @@ private struct LocalBusinessCard: View {
           placeholder: "Cash, Credit Card", enabled: canEdit)
       }
     }
-    .onChange(of: stored, initial: true) { _, next in fields = next }
+    .onChange(of: stored, initial: true) { _, next in
+      fields = seeded.map { rebased(fields, previous: $0, next: next) } ?? next
+      seeded = next
+    }
   }
 }
 
@@ -1067,7 +1100,8 @@ private struct ThemeEditorForm: View {
         }
       }
     }
-    .onChange(of: stored) { _, next in draft = next }
+    // The saved theme moving under the editor keeps what was changed here and moves everything else to it (AGL-4047).
+    .onChange(of: stored) { previous, next in draft = rebasedTheme(draft, previous: previous, next: next) }
   }
 }
 
