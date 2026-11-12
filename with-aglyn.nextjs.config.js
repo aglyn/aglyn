@@ -692,7 +692,6 @@ function withAglyn(nextConfig = {}) {
   // The app's own directory (its next.config's `__dirname`), which places a
   // production build under dist/ (tools/build/next-workspace-config.js).
   const appDir = nextConfig?.aglyn?.appDir ?? process.cwd()
-  console.log('process.env.NODE_ENV', NODE_ENV)
 
   /**
    * Base configuration for NextJS Apps next.config.js
