@@ -111,7 +111,14 @@ import {
   versionForTag,
 } from './lib/release-version.mjs'
 
-const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim()
+// CHANGELOG.md passed 1 MiB at v1.22.0, and execFileSync's default maxBuffer
+// is exactly 1 MiB: `git show <ref>:CHANGELOG.md` then threw, gitQuiet turned
+// that into null, and the tag was refused as "no `## v1.22.0` section" while
+// the section was there. release-changelog-entry.mjs already reads with 64 MiB.
+const GIT_MAX_BUFFER = 64 * 1024 * 1024
+
+const git = (...args) =>
+  execFileSync('git', args, { encoding: 'utf8', maxBuffer: GIT_MAX_BUFFER }).trim()
 
 // `null` on failure, and genuinely quiet: git writes "fatal: path ... does not
 // exist" to stderr, which would otherwise print above this script's own, much
@@ -121,6 +128,7 @@ const gitQuiet = (...args) => {
     return execFileSync('git', args, {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
+      maxBuffer: GIT_MAX_BUFFER,
     }).trim()
   } catch {
     return null
