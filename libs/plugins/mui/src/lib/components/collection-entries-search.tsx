@@ -23,16 +23,28 @@ import { Children, forwardRef, useContext, useState } from 'react'
 // One coercion for every authored count in this bundle (AGL-1457) — number
 // fields round-trip as strings, and a second parser here would drift.
 import { toCount } from '../utils/to-count'
-import {
-  ENTRIES_SEARCH_ATTRIBUTE,
-  type CollectionEntriesProps,
-  type CollectionSearchMode,
+// Types only: a value import of the plain block would copy it, and its
+// presets, into this chunk, whose parent is the element tier (AGL-4220).
+import type {
+  CollectionEntriesProps,
+  CollectionSearchMode,
 } from './collection-entries'
 import {
   SearchField,
   SuggestSearchBox,
   useEntryFuse,
 } from './collection-search-box'
+import { ENTRIES_SEARCH_ATTRIBUTE } from './collection-search-load'
+
+// The standalone Collection Search block rides in this module too, so the two
+// elements that draw the search box share one chunk group and download it once
+// (AGL-4220): `collection-search-load.ts` says why.
+export {
+  CollectionSearch,
+  collectionSearchSchema,
+  SEARCH_ID,
+  type CollectionSearchProps,
+} from './collection-search'
 
 /**
  * The Collection Entries block with its search box on (AGL-1516, AGL-1525).
@@ -42,6 +54,10 @@ import {
  * entries block otherwise has no use for, and most blocks — aglyn.com/press's
  * among them — never turn search on. `collection-entries.tsx` renders the
  * plain block itself and reaches for this one through `loadEntriesSearch`.
+ *
+ * The standalone Collection Search block is re-exported here, and the element
+ * tier loads it from this module: both draw the same box, and one module is
+ * what keeps a page placing both from downloading it twice (AGL-4220).
  */
 
 /**
