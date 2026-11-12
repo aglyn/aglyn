@@ -643,11 +643,13 @@ struct FieldInput: View {
           TextField(label, text: text, prompt: field.placeholder.map { Text($0) }, axis: .vertical)
             .lineLimit(3...8)
         }
+        .aglynFieldLabel(label, value: text.wrappedValue, prompt: field.placeholder)
       case "password":
         PlainFormRow(label) {
           SecureField(label, text: text, prompt: field.placeholder.map { Text($0) })
             .textContentType(.password)
         }
+        .aglynFieldLabel(label, value: text.wrappedValue, prompt: field.placeholder)
       default:
         PlainFormRow(label) {
           TextField(label, text: text, prompt: Text(field.placeholder ?? label))
@@ -657,6 +659,7 @@ struct FieldInput: View {
             #endif
             .autocorrectionDisabled(field.kind != "text")
         }
+        .aglynFieldLabel(label, value: text.wrappedValue, prompt: field.placeholder)
       }
       if field.generate != nil {
         Button("Generate") { text.wrappedValue = field.generatedValue(in: context) ?? "" }
