@@ -518,7 +518,7 @@
     "eslint-plugin-cypress": "7.0.4",
     "eslint-plugin-import": "2.32.0",
     "eslint-plugin-jsx-a11y": "6.10.2",
-    "eslint-plugin-mobx": "^0.1.1",
+    "eslint-plugin-mobx": "^0.2.1",
     "eslint-plugin-react": "7.37.5",
     "eslint-plugin-react-hooks": "7.1.1",
     "eslint-plugin-storybook": "^10.6.7",
