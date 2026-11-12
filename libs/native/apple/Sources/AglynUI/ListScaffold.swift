@@ -866,7 +866,9 @@ public struct AglynListColumnHeader<Actions: View>: View {
       head.star
       Spacer(minLength: 8)
       HStack(spacing: 8) {
+        // Symbols alone, as Figma 22:499's 40-point squares: a word-only button (Done) keeps its word.
         actions
+          .labelStyle(.iconOnly)
           .buttonStyle(AglynTouchIconButtonStyle(filled: false))
           .menuStyle(.button)
         if let primary {
