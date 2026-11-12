@@ -64,6 +64,13 @@
       XCTAssertFalse(placed(hub.environment(\.aglynColumnHeadOffer, head())))
     }
 
+    func testAnEmptyListWithItsDetailFoldedLeavesTheHeadAndItsCrumbsToTheShell() {
+      let folded = AglynListDetailColumns(showsDetail: false) { Text("No custom roles yet") } detail: { Text("Detail") }
+      XCTAssertFalse(placed(folded.environment(\.aglynColumnHeadOffer, head())))
+      let open = AglynListDetailColumns(showsDetail: true) { Text("List") } detail: { Text("Detail") }
+      XCTAssertTrue(placed(open.environment(\.aglynColumnHeadOffer, head())))
+    }
+
     private func height(_ sections: [AglynAreaSection], width: CGFloat) -> CGFloat {
       let host = NSHostingController(rootView: AglynAreaSectionChips(sections, inset: 24).environment(\.aglynWideChrome, true))
       return host.sizeThatFits(in: CGSize(width: width, height: 1000)).height
