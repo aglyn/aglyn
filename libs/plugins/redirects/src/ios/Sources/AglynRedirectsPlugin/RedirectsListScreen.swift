@@ -19,11 +19,11 @@ struct RedirectsListScreen: View {
   var body: some View {
     WideLayoutReader { wide in
       if wide {
-        HStack(spacing: 0) {
-          list(selectable: true).frame(minWidth: 300, idealWidth: 360, maxWidth: 420)
-          Divider()
+        // The shared list and detail columns: the area's head in the list column, its crumbs over the detail.
+        AglynListDetailColumns(listWidth: 360) {
+          list(selectable: true)
+        } detail: {
           RedirectDetail(row: model.rows.first { $0.id == selection }, titled: false, editor: editor)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
       } else {
         list(selectable: false)

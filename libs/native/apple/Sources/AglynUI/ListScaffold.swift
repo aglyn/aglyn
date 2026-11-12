@@ -665,6 +665,12 @@ public struct AglynAreaHead {
     self.sections = sections
     self.switchArea = switchArea
   }
+
+  /// The same head with a hub's own sections under it (`AglynSectionHub`), when the shell gave it none of its own.
+  public func withSections(_ hubSections: [AglynAreaSection]) -> AglynAreaHead {
+    guard sections.isEmpty else { return self }
+    return AglynAreaHead(title: title, crumbs: crumbs, star: star, sections: hubSections, switchArea: switchArea)
+  }
 }
 
 extension EnvironmentValues {
@@ -682,8 +688,10 @@ public struct AglynListColumnHeadPlacedKey: PreferenceKey {
   public static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
 }
 
-/// An area's sections as chips across a column (Inbox's Submissions, Members & leads and Campaigns): the selected one
-/// filled, each opening its section.
+/// An area's sections as chips under its head in a list column (Inbox's Submissions, Members & leads and Campaigns; a
+/// hub's own sections, `AglynSectionHub`): the selected one filled, each opening its section. They are the area's way
+/// around, so none is ever cut off at the column's edge: a row when they fit the column, else they wrap onto the next
+/// line (an iPad's list column is 360 points wide), as the Kotlin twin's `SectionChips` flow. Words only, as there.
 public struct AglynAreaSectionChips: View {
   let sections: [AglynAreaSection]
   let inset: CGFloat
@@ -694,17 +702,18 @@ public struct AglynAreaSectionChips: View {
   }
 
   public var body: some View {
-    ScrollView(.horizontal, showsIndicators: false) {
-      HStack(spacing: AglynSpace.one) {
-        ForEach(sections) { section in
-          AglynChoiceChip(section.label, selected: section.selected) { section.open() }
-            .accessibilityIdentifier("area-section-\(section.id)")
-        }
+    AglynWrapRow(spacing: AglynSpace.one, lineSpacing: AglynSpace.one) {
+      ForEach(sections) { section in
+        AglynChoiceChip(section.label, selected: section.selected) { section.open() }
+          .accessibilityIdentifier("area-section-\(section.id)")
       }
-      .padding(.horizontal, inset)
-      .padding(.bottom, AglynSpace.one)
     }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.horizontal, inset)
+    .padding(.bottom, AglynSpace.one)
     .background(AglynColor.paper)
+    .accessibilityElement(children: .contain)
+    .accessibilityIdentifier("area-sections")
   }
 }
 

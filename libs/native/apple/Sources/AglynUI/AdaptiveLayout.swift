@@ -106,7 +106,7 @@ public struct AglynListDetailColumns<List: View, Detail: View>: View {
       // Both columns stand on the content surface (never a grey ground): the list's rows on E, and the
       // detail's forms plain (`AglynGroupedForm`), its sections on the surface with no cards.
       if showsDetail {
-        listColumn
+        listColumn(takesHead: true)
           .frame(
             minWidth: max(320, listWidth - 40), idealWidth: listWidth, maxWidth: max(440, listWidth), maxHeight: .infinity,
             alignment: .top)
@@ -124,11 +124,13 @@ public struct AglynListDetailColumns<List: View, Detail: View>: View {
           .frame(maxWidth: .infinity, maxHeight: .infinity)
           .background(AglynColor.paper)
       } else {
-        listColumn.aglynListColumn()
+        // The detail folded away (an empty list): one column, so the area's head goes back across the content with its
+        // breadcrumbs (the shell's), rather than a column head whose crumbs had nowhere to go.
+        listColumn(takesHead: false).aglynListColumn()
       }
     }
     .preference(key: AglynListToolbarPlacedKey.self, value: toolbar != nil)
-    .preference(key: AglynListColumnHeadPlacedKey.self, value: headOffer != nil)
+    .preference(key: AglynListColumnHeadPlacedKey.self, value: headOffer != nil && showsDetail)
     .animation(.snappy(duration: 0.2), value: showsDetail)
     #if os(iOS)
       // Two scroll views side by side leave the bar no single one to collapse a large title into, so the title
@@ -142,12 +144,12 @@ public struct AglynListDetailColumns<List: View, Detail: View>: View {
   /// The list, its toolbar atop it; the toolbar is not handed further down. With the area's head offered (Figma
   /// 13:483), the list column holds the head's room (the shell draws the head in it, with the screen's actions), then
   /// the area's section chips, then the toolbar, and the hairline beside it runs from the top of the column.
-  private var listColumn: some View {
+  private func listColumn(takesHead: Bool) -> some View {
     list
       .environment(\.aglynListColumn, true)
       .safeAreaInset(edge: .top, spacing: 0) {
         VStack(spacing: 0) {
-          if let headOffer {
+          if takesHead, let headOffer {
             Color.clear
               .frame(maxWidth: .infinity)
               .frame(height: AglynListColumnHeader<EmptyView>.columnHeight)
