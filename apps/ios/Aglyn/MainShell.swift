@@ -759,6 +759,11 @@ struct ShellStack: View {
           PushedScreen(section: section, head: !route.isBesigner) {
             if case .area(let screen, let params) = route {
               AreaView(screen: screen, params: params, pushed: true)
+                // A pushed area keeps a large title above its section chips wherever it is pushed (AGL-4059): over a
+                // tab whose own screen heads its list (Orders) it inherited that root's inline bar, so its large title
+                // was drawn over the chips with an inline one as well. On Home it inherited Home's large title. A screen
+                // that draws its own title row (Orders) keeps the inline bar it asks for.
+                .pushedAreaTitle(large: !AglynListColumnHead.screens.contains(screen))
             } else if case .modeList = route {
               // Site settings or Workspace settings from a phone Home tile (AGL-4006): the mode's grouped list.
               MenuScreen()
@@ -1438,6 +1443,16 @@ struct PhoneTopBar: ViewModifier {
 }
 
 extension View {
+  /// A pushed area's title on a phone: large, as Home's pushes have it, whatever the screen it was pushed over sets.
+  @ViewBuilder
+  func pushedAreaTitle(large: Bool) -> some View {
+    #if os(iOS)
+      if large { navigationBarTitleDisplayMode(.large) } else { self }
+    #else
+      self
+    #endif
+  }
+
   /// The phone's top bar, on a tab's first screen.
   func phoneTopBar() -> some View { modifier(PhoneTopBar()) }
 
