@@ -275,10 +275,10 @@ struct SpecScreenBody: View {
         else { return }
         trigger(action, scope: context)
       }
-      .confirmationDialog(
+      .actionConfirmation(
         confirming.map { $0.action.confirmText(in: $0.scope) ?? ScreenValues.render($0.action.label, in: $0.scope) } ?? "",
         isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),
-        titleVisibility: .visible
+        centered: wide
       ) {
         if let pending = confirming {
           Button(ScreenValues.render(pending.action.label, in: pending.scope), role: pending.action.destructive ? .destructive : nil) {
