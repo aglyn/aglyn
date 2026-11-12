@@ -332,6 +332,9 @@ struct ListRow: View {
     let tertiary = rowLine(block["tertiary"], in: scope)
     let trailing = block["trailing"]?.stringValue.map { ScreenValues.render($0, in: scope) }
     let badges = block["badges"].array.flatMap { badge in rowBadges(badge, in: scope) }
+    // A badge with `each` is a run of chips (a resource's next fourteen nights), not a status: it wraps under the row's
+    // text on every size, where a single line of them at the trailing end ran far past the column (AGL-4045).
+    let chipRun = block["badges"].array.contains { $0["each"] != nil }
     // On the Mac and iPad a row is at most three lines (Figma List/Site row): its name, one line of detail, one line
     // of the picked columns, with its badges at the trailing end; a phone keeps the fuller stack.
     let row = HStack(alignment: .center, spacing: 12) {
@@ -359,14 +362,14 @@ struct ListRow: View {
         if let tertiary, !tertiary.isEmpty, !wide || columnsLine.isEmpty {
           Text(tertiary).font(AglynFont.caption).foregroundStyle(.tertiary).lineLimit(1)
         }
-        if !badges.isEmpty, !wide {
+        if !badges.isEmpty, !wide || chipRun {
           AglynWrapRow(spacing: AglynSpace.of(0.75), lineSpacing: AglynSpace.of(0.75)) {
             ForEach(Array(badges.enumerated()), id: \.offset) { _, badge in StatusChip(badge.0, tone: badge.1) }
           }
         }
       }
       Spacer(minLength: 8)
-      if !badges.isEmpty, wide {
+      if !badges.isEmpty, wide, !chipRun {
         HStack(spacing: 6) {
           ForEach(Array(badges.enumerated()), id: \.offset) { _, badge in StatusChip(badge.0, tone: badge.1) }
         }
