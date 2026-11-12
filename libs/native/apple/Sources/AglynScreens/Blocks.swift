@@ -895,6 +895,7 @@ struct ActionInputSheet: View {
         }
       }
       .formStyle(.grouped)
+      .aglynPhoneFormEdges()
       .navigationTitle(ScreenValues.render(pending.action.promptTitle ?? pending.action.label, in: scope))
       .aglynScreenTitle(ScreenValues.render(pending.action.promptTitle ?? pending.action.label, in: scope))
       #if os(iOS)
@@ -1040,6 +1041,7 @@ struct ReauthSheet: View {
         if let error { Section { AglynNotice(error, tone: .error) } }
       }
       .formStyle(.grouped)
+      .aglynPhoneFormEdges()
       .navigationTitle("Confirm it is you")
       .aglynScreenTitle("Confirm it is you")
       .toolbar {

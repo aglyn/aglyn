@@ -534,7 +534,9 @@ private struct AglynFormBackgroundModifier: ViewModifier {
     #if os(macOS)
       base.safeAreaPadding(.horizontal, wide ? AglynContentInsets.horizontal - 16 : 0)
     #else
-      base.contentMargins(.horizontal, wide ? AglynContentInsets.horizontal : nil, for: .scrollContent)
+      // iPad: the cards on E. A phone: on its 16-point edges (Figma Phone 2:7), not the grouped form's own 20-point
+      // margins.
+      base.contentMargins(.horizontal, wide ? AglynContentInsets.horizontal : AglynContentInsets.phone, for: .scrollContent)
     #endif
   }
 }
