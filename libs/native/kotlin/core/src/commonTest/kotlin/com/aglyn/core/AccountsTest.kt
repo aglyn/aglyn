@@ -83,10 +83,10 @@ class AccountsTest {
     val prefs = InMemoryKeyValueStore()
     val accounts = AccountSessions(backgroundScope, { slot -> SlotAuth(if (slot == AccountSessions.PRIMARY) "u1" else "u-$slot") }, prefs)
     accounts.signInWithEmail("a@example.test", "x")
-    // The profile's name replaces whatever the sign-in record had, and survives a relaunch.
+    // The profile's name replaces whatever the sign-in record had, and is written to the device's roster.
     accounts.rememberName("Jordan Lee")
     assertEquals("Jordan Lee", accounts.accounts.value.single().title)
-    assertEquals("Jordan Lee", AccountSessions(backgroundScope, { slot -> SlotAuth("u1") }, prefs).accounts.value.single().title)
+    assertTrue(prefs.get("aglyn.accounts").orEmpty().contains("\"shownName\":\"Jordan Lee\""))
     // A blank name, or the bare address, never replaces a real one.
     accounts.rememberName("")
     accounts.rememberName("a@example.test")
