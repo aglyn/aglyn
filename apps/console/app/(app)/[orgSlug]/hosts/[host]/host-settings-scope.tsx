@@ -1479,7 +1479,10 @@ export function HostSettingsForm({ schemaId }: { schemaId: string }) {
         every other field follows the server, so the save carries the
         confirmed settings plus the edits, never the cached copy of the rest.
       */
-      FormTemplateProps={{ checkingText: formsCheckingText }}
+      FormTemplateProps={{
+        checkingText: formsCheckingText,
+        checkingSubject: 'site settings',
+      }}
       keepDirtyOnReinitialize
       componentMapper={hostSettingsComponentMapper}
       onSubmit={onSubmit}

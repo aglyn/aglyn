@@ -46,6 +46,7 @@ import {
 import {
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
   useSeedEdits,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { seedEditsBetween } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
@@ -479,6 +480,13 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
     readParent,
   ])
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSave, {
+    checking: Boolean(checkingText),
+    subject: 'company',
+    onRefused: (message) => setError(message),
+  })
+
   return (
     <NavigationDrawerComponent
       open={open}
@@ -781,14 +789,14 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
               // A new company waits for its capturing site.
               disabled={
                 busy ||
-                Boolean(checkingText) ||
                 !scope ||
                 !draft.name.trim() ||
-                (!company && !createTokens.length)
+                (!company && !createTokens.length) ||
+                held.saving
               }
-              onClick={() => void handleSave()}
+              onClick={held.press}
             >
-              {busy
+              {busy || held.saving
                 ? 'Saving…'
                 : company
                   ? 'Save company'

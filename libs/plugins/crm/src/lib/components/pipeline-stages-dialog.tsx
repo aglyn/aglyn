@@ -58,8 +58,10 @@ import {
   where,
 } from 'firebase/firestore'
 import {
+  heldSaveLabel,
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useCallback, useEffect, useState } from 'react'
 import { crmVisibleToClause } from '../hooks/use-crm-scope'
@@ -241,6 +243,13 @@ export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
     ? seedCheckingText('pipeline')
     : undefined
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSave, {
+    checking: Boolean(checkingText),
+    subject: 'pipeline',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm">
       <DialogTitle>{pipeline ? `${pipeline.name} stages` : 'Stages'}</DialogTitle>
@@ -409,10 +418,10 @@ export function PipelineStagesDialog(props: PipelineStagesDialogProps) {
         </Button>
         <Button
           variant="contained"
-          disabled={busy || Boolean(checkingText) || !pipeline || Boolean(problem)}
-          onClick={() => void handleSave()}
+          disabled={busy || !pipeline || Boolean(problem) || held.saving}
+          onClick={held.press}
         >
-          {'Save stages'}
+          {heldSaveLabel(held, 'Save stages')}
         </Button>
       </DialogActions>
     </Dialog>

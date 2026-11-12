@@ -64,8 +64,10 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import {
+  heldSaveLabel,
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 
@@ -689,6 +691,13 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
       </Stack>
     ) : null
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSave, {
+    checking: draftChecking,
+    subject: 'redirect',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <CardDisplay
       header={'URL redirects'}
@@ -959,11 +968,12 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
             variant="contained"
             color="primary"
             disabled={
-              draftChecking || !draft?.source.trim() || !draft?.destination.trim()
+              !draft?.source.trim() || !draft?.destination.trim() ||
+              held.saving
             }
-            onClick={handleSave}
+            onClick={held.press}
           >
-            {'Save redirect'}
+            {heldSaveLabel(held, 'Save redirect')}
           </Button>
         </DialogActions>
       </Dialog>

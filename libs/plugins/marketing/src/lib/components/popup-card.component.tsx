@@ -46,8 +46,10 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import {
+  heldSaveLabel,
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
   useSeedEdits,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import OverlayStatsRow from './overlay-stats-row.component'
@@ -234,6 +236,13 @@ export function PopupCard(props: PopupCardProps) {
       dequeue()
     }
   }
+
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSave, {
+    checking,
+    subject: 'popup',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
 
   return (
     <CardDisplay
@@ -434,14 +443,14 @@ export function PopupCard(props: PopupCardProps) {
             color="primary"
             disabled={
               !dirty ||
-              checking ||
               (Boolean(draft.enabled) && !draft.body?.trim()) ||
-              copy.pending(draft.headline, draft.body)
+              copy.pending(draft.headline, draft.body) ||
+              held.saving
             }
-            onClick={handleSave}
+            onClick={held.press}
             sx={{ alignSelf: 'flex-start' }}
           >
-            {'Save'}
+            {heldSaveLabel(held, 'Save')}
           </Button>
           {dirty && checking ? (
             <Typography variant="body2" color="text.secondary" role="status">

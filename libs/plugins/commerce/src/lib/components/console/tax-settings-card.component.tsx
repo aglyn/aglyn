@@ -41,8 +41,10 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import {
+  heldSaveLabel,
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
   useSeedEdits,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 
@@ -174,6 +176,13 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
     form.settle(written)
     enqueueSnackbar('Tax settings saved', { variant: 'success', persist: false })
   }, [current, form, firestore, hostId, enqueueSnackbar, storeStatus, storeFromCache, storeListen])
+
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSave, {
+    checking,
+    subject: 'tax settings',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
 
   return (
     <CardDisplay
@@ -495,11 +504,11 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
           // An undecided store saves the choice on screen as it stands. The
           // select fires no change for the option already shown, so waiting
           // for an edit left "Manual rates" unsaveable and checkout off.
-          disabled={storeStatus === 'loading' || (decided && !form.dirty) || checking}
-          onClick={handleSave}
+          disabled={storeStatus === 'loading' || (decided && !form.dirty) || held.saving}
+          onClick={held.press}
           sx={{ alignSelf: 'flex-start' }}
         >
-          {'Save tax settings'}
+          {heldSaveLabel(held, 'Save tax settings')}
         </Button>
         {(!decided || form.dirty) && checking ? (
           <Typography variant="body2" color="text.secondary" role="status">

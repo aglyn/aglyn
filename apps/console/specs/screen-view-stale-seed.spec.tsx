@@ -268,7 +268,7 @@ describe('Screen rename (AGL-1358)', () => {
    * details is HELD while the screen read is the cache's, with the reason
    * beside it, and what was typed stays.
    */
-  it('HOLDS Save details while the screen read is unconfirmed, keeping what was typed', async () => {
+  it('KEEPS a Save details pressed while the screen read is unconfirmed, keeping what was typed', async () => {
     mockScreenDoc.fromCache = true
     render(<ScreenDetails />)
 
@@ -278,12 +278,19 @@ describe('Screen rename (AGL-1358)', () => {
     const save = screen.getByRole('button', {
       name: 'Save details',
     }) as HTMLButtonElement
-    expect(save.disabled).toBe(true)
+    expect(save.disabled).toBe(false)
     expect(
       screen.getByText('Checking your page details with the server…'),
     ).toBeTruthy()
     expect(mockUpdateDoc).not.toHaveBeenCalled()
-    expect(mockEnqueueSnackbar).not.toHaveBeenCalled()
+    // Kept, not dropped (AGL-4047): no confirmation came within the
+    // guard's wait (0 in this spec), so the press ends in the guard's refusal.
+    await waitFor(() =>
+      expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm your .+ with the server yet, so nothing was saved/),
+        expect.anything(),
+      ),
+    )
     expect(
       (screen.getByLabelText('Display name') as HTMLInputElement).value,
     ).toEqual('Plans')
@@ -360,7 +367,7 @@ describe('Screen SEO (AGL-1358)', () => {
   fireEvent.click(screen.getAllByRole('button', { name: 'Save SEO' })[0])
   }
 
-  it('HOLDS Save SEO while the screen read is unconfirmed, keeping the staged title', async () => {
+  it('KEEPS a Save SEO pressed while the screen read is unconfirmed, keeping the staged title', async () => {
     mockScreenDoc.fromCache = true
     render(<ScreenDetails />)
 
@@ -368,13 +375,20 @@ describe('Screen SEO (AGL-1358)', () => {
     await new Promise((resolve) => setTimeout(resolve, 20))
 
     for (const save of screen.getAllByRole('button', { name: 'Save SEO' })) {
-      expect((save as HTMLButtonElement).disabled).toBe(true)
+      expect((save as HTMLButtonElement).disabled).toBe(false)
     }
     expect(
       screen.getByText('Checking your SEO settings with the server…'),
     ).toBeTruthy()
     expect(mockUpdateDoc).not.toHaveBeenCalled()
-    expect(mockEnqueueSnackbar).not.toHaveBeenCalled()
+    // Kept, not dropped (AGL-4047): no confirmation came within the
+    // guard's wait (0 in this spec), so the press ends in the guard's refusal.
+    await waitFor(() =>
+      expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm your .+ with the server yet, so nothing was saved/),
+        expect.anything(),
+      ),
+    )
     expect((screen.getByLabelText('Title') as HTMLInputElement).value).toEqual(
       'Pricing and plans',
     )

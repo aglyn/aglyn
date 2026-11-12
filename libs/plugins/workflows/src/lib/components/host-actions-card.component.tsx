@@ -89,8 +89,10 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import {
+  heldSaveLabel,
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 import { ACTION_TEST_RUN_API_ROUTE } from '../model/action-test-run'
@@ -780,6 +782,13 @@ export function HostActionsCard(props: {
     [confirm, firestore, hostId],
   )
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSave, {
+    checking: draftChecking,
+    subject: 'action',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <CardDisplay
       header={'Actions'}
@@ -1258,10 +1267,10 @@ export function HostActionsCard(props: {
           <Button
             variant="contained"
             color="primary"
-            disabled={draftChecking || !draft?.name.trim()}
-            onClick={handleSave}
+            disabled={!draft?.name.trim() || held.saving}
+            onClick={held.press}
           >
-            {'Save action'}
+            {heldSaveLabel(held, 'Save action')}
           </Button>
         </DialogActions>
       </Dialog>

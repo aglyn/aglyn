@@ -208,16 +208,19 @@ describe('the profile on the lead page', () => {
    * held while the lead read is the cache's, with the reason beside it, and
    * the edit is saved onto the lead the server confirms.
    */
-  it('holds Save over an unconfirmed read, then saves the edit onto the server’s lead', async () => {
+  it('keeps a Save pressed over an unconfirmed read, then saves the edit onto the server’s lead', async () => {
     const { rerender } = renderCard({ lead: { ...lead, jobTitle: 'CMO' }, fromCache: true })
     fireEvent.change(screen.getByLabelText('Company'), { target: { value: 'Acme Brands' } })
-    expect(saveButton().disabled).toBe(true)
     expect(screen.getByRole('status').textContent).toBe('Checking your lead with the server…')
+    // Kept, not dropped (AGL-4047): pressed during the hold, it says Saving…
+    // and writes nothing until the server answers.
+    fireEvent.click(saveButton())
+    expect(detailsHeader().getByRole('button', { name: 'Saving…' })).toBeTruthy()
+    expect(updateDoc).not.toHaveBeenCalled()
 
     // The title was changed elsewhere since the cached snapshot.
     rerender({ lead: { ...lead, jobTitle: 'CFO' }, fromCache: false })
     expect((screen.getByLabelText('Company') as HTMLInputElement).value).toBe('Acme Brands')
-    fireEvent.click(saveButton())
     await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
     expect(updateDoc.mock.calls[0]?.[1]).toMatchObject({ company: 'Acme Brands', jobTitle: 'CFO' })
   })

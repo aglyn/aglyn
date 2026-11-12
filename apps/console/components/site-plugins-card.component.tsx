@@ -34,6 +34,7 @@ import {
   Switch,
   Typography,
 } from '@mui/material'
+import { useHeldSave } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useMemo } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import { buildRoute, Route } from '../constants/route-links'
@@ -211,6 +212,16 @@ export default function SitePluginsCard(props: { hostId: string }) {
     )
   }
 
+  /*
+   * Save pressed while the site's plugin list is held is kept, and saves once
+   * the list is confirmed, with the flips replayed onto it (AGL-4047). If no
+   * confirmation comes, the refusal shows beside the button.
+   */
+  const held = useHeldSave(save, {
+    checking,
+    subject: 'site plugin list',
+  })
+
   return (
     <CardDisplay
       header="Site plugins"
@@ -283,12 +294,16 @@ export default function SitePluginsCard(props: { hostId: string }) {
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Button
             variant="contained"
-            disabled={!dirty || busy || checking}
-            onClick={() => void save()}
+            disabled={!dirty || busy || held.saving}
+            onClick={held.press}
           >
-            {'Save site plugins'}
+            {held.saving ? 'Saving…' : 'Save site plugins'}
           </Button>
-          {dirty && checking ? (
+          {dirty && held.refusal ? (
+            <Typography variant="body2" color="warning.main" role="alert">
+              {held.refusal}
+            </Typography>
+          ) : dirty && checking ? (
             <Typography variant="body2" color="text.secondary" role="status">
               {SITE_PLUGINS_CHECKING_TEXT}
             </Typography>

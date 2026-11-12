@@ -30,7 +30,7 @@
  * and adoptable again once it has settled.
  */
 
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
@@ -266,9 +266,9 @@ describe('Save while the stored theme is unconfirmed (AGL-4047)', () => {
       target: { value: '60' },
     })
 
-  it('holds Save, with the reason beside it, and keeps the edit', () => {
+  it('keeps a Save pressed during the hold, says Saving…, and saves once the theme is confirmed', async () => {
     const onSave = jest.fn()
-    render(
+    const { rerender } = render(
       <ThemeEditor
         theme={{}}
         onSave={onSave}
@@ -280,12 +280,18 @@ describe('Save while the stored theme is unconfirmed (AGL-4047)', () => {
     editNavHeight()
 
     const save = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement
-    expect(save.disabled).toBe(true)
+    expect(save.disabled).toBe(false)
     expect(screen.getByRole('status').textContent).toBe(
       'Checking your theme with the server…',
     )
+    // Kept, not dropped (AGL-4047): Saving… at once, and nothing saved yet.
     fireEvent.click(save)
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeTruthy()
     expect(onSave).not.toHaveBeenCalled()
+
+    // The server answers: the kept press saves, once, with the edit.
+    rerender(<ThemeEditor theme={{}} onSave={onSave} />)
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
   })
 
   it('replays the edit onto the server’s theme, and saves both on the first press', () => {

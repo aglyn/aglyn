@@ -47,6 +47,7 @@ import {
   resolveOverride,
 } from '@aglyn/aglyn/app-utils/artifact-overrides'
 import { useCallback, useMemo, useState } from 'react'
+import { useHeldSave } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { docsHelp } from '../../constants/docs-links'
 import { useHostId } from '../host-id-provider'
 import PluginWidgetSlot from '../plugin-widget-slot.component'
@@ -385,6 +386,12 @@ export function ThemeEditor(props: ThemeEditorProps) {
       ),
     )
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSave, {
+    checking,
+    subject: 'theme',
+  })
+
   return (
     <Grid container spacing={3}>
       {/* The draft's fonts, for the preview. A stylesheet `<link>` with a
@@ -639,10 +646,10 @@ export function ThemeEditor(props: ThemeEditorProps) {
           >
             <Button
               variant="contained"
-              disabled={!dirty || saving || checking}
-              onClick={handleSave}
+              disabled={!dirty || saving || held.saving}
+              onClick={held.press}
             >
-              {saving ? 'Saving…' : 'Save'}
+              {held.saving ? 'Saving…' : 'Save'}
             </Button>
             <Button disabled={!dirty || saving} onClick={handleDiscard}>
               {'Discard changes'}
@@ -651,7 +658,11 @@ export function ThemeEditor(props: ThemeEditorProps) {
               {'Reset to defaults'}
             </Button>
           </Stack>
-          {dirty && checking ? (
+          {dirty && held.refusal ? (
+            <Typography variant="body2" color="warning.main" role="alert">
+              {held.refusal}
+            </Typography>
+          ) : dirty && checking ? (
             <Typography variant="body2" color="text.secondary" role="status">
               {checkingText}
             </Typography>

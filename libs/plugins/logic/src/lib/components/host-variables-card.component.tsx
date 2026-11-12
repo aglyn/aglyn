@@ -70,8 +70,10 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import {
+  heldSaveLabel,
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
@@ -590,6 +592,13 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
     [user, confirm, firestore, hostId, enqueueSnackbar],
   )
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSave, {
+    checking: draftChecking,
+    subject: 'variable',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <CardDisplay
       header={'Variables'}
@@ -828,10 +837,10 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
           <Button
             variant="contained"
             color="primary"
-            disabled={draftChecking || !validName || nameTaken}
-            onClick={handleSave}
+            disabled={!validName || nameTaken || held.saving}
+            onClick={held.press}
           >
-            {'Save variable'}
+            {heldSaveLabel(held, 'Save variable')}
           </Button>
         </DialogActions>
       </Dialog>

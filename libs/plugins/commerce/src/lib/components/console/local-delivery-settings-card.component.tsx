@@ -46,8 +46,10 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import {
+  heldSaveLabel,
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
   useSeedEdits,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 
@@ -180,6 +182,13 @@ export function LocalDeliverySettingsCard(props: LocalDeliverySettingsCardProps)
     String(a.name ?? '').localeCompare(String(b.name ?? '')),
   )
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSave, {
+    checking,
+    subject: 'local delivery settings',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <CardDisplay
       header={'Local delivery'}
@@ -188,8 +197,8 @@ export function LocalDeliverySettingsCard(props: LocalDeliverySettingsCardProps)
       })}
       HeaderProps={{
         action: (
-          <Button variant="contained" size="small" disabled={!form.dirty || checking || badWindowLines.length > 0} onClick={handleSave}>
-            {'Save'}
+          <Button variant="contained" size="small" disabled={!form.dirty || badWindowLines.length > 0 || held.saving} onClick={held.press}>
+            {heldSaveLabel(held, 'Save')}
           </Button>
         ),
       }}

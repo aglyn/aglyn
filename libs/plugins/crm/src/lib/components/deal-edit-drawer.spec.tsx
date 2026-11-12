@@ -401,7 +401,7 @@ describe('what still waits for a confirmed read', () => {
     fireEvent.click(screen.getByRole('option', { name: /Grace Hopper/ }))
     expect(
       (screen.getByRole('button', { name: 'Save deal' }) as HTMLButtonElement).disabled,
-    ).toBe(true)
+    ).toBe(false)
     expect(screen.getByRole('status').textContent).toBe('Checking your deal with the server…')
     save()
     await new Promise((resolve) => setTimeout(resolve, 20))
@@ -410,9 +410,10 @@ describe('what still waits for a confirmed read', () => {
     expect(onClose).not.toHaveBeenCalled()
     expect(field('Contact').value).toBe('Grace Hopper')
 
-    // The server answers; the first press saves.
+    // Kept, not dropped (AGL-4047): the server answers, and the press made
+    // during the hold saves on its own.
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeTruthy()
     snapshot({ fromCache: false })
-    save()
     await waitFor(() => expect(onClose).toHaveBeenCalled())
     expect(written()).toMatchObject({ contactId: 'c2' })
   })
@@ -422,7 +423,7 @@ describe('what still waits for a confirmed read', () => {
     type('Amount', '75.00')
     expect(
       (screen.getByRole('button', { name: 'Save deal' }) as HTMLButtonElement).disabled,
-    ).toBe(true)
+    ).toBe(false)
     save()
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(mockNotices).toEqual([])

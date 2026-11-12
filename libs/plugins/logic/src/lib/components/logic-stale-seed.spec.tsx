@@ -184,7 +184,7 @@ describe('HostVariablesCard (AGL-1358)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save variable' }))
   }
 
-  it('HOLDS Save on a variable seeded from an unconfirmed read, keeping it open', async () => {
+  it('KEEPS a Save pressed on a variable seeded from an unconfirmed read, keeping it open', async () => {
     listener.fromCache = true
     render(<HostVariablesCard hostId="host-1" org={ORG} />)
 
@@ -192,7 +192,14 @@ describe('HostVariablesCard (AGL-1358)', () => {
     await settle()
     // Held, not refused: nothing was pressed into the wait, and the reason
     // sits beside the held control (AGL-4047).
-    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    // Kept, not dropped (AGL-4047): no confirmation came within the
+    // guard's wait (0 in this spec), so the press ends in the guard's refusal.
+    await waitFor(() =>
+      expect(enqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm your .+ with the server yet, so nothing was saved/),
+        expect.anything(),
+      ),
+    )
     expect(screen.getAllByRole('status').map((note) => note.textContent)).toContain(
       'Checking your variable with the server…',
     )
@@ -253,7 +260,7 @@ describe('HostFunctionsCard (AGL-1358)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Done' }))
   }
 
-  it('HOLDS Done on a function seeded from an unconfirmed read, keeping it open', async () => {
+  it('KEEPS a Done pressed on a function seeded from an unconfirmed read, keeping it open', async () => {
     listener.fromCache = true
     render(<HostFunctionsCard hostId="host-1" org={ORG} />)
 
@@ -262,7 +269,14 @@ describe('HostFunctionsCard (AGL-1358)', () => {
     await settle()
     // Held, not refused: nothing was pressed into the wait, and the reason
     // sits beside the held control (AGL-4047).
-    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    // Kept, not dropped (AGL-4047): no confirmation came within the
+    // guard's wait (0 in this spec), so the press ends in the guard's refusal.
+    await waitFor(() =>
+      expect(enqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm your .+ with the server yet, so nothing was saved/),
+        expect.anything(),
+      ),
+    )
     expect(screen.getAllByRole('status').map((note) => note.textContent)).toContain(
       'Checking your function with the server…',
     )

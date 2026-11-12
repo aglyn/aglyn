@@ -140,7 +140,7 @@ beforeAll(() => setSeedConfirmWaitMs(0))
 afterAll(() => setSeedConfirmWaitMs())
 
 describe('BookingsConsolePage (AGL-1358)', () => {
-  it('HOLDS Save on a service seeded from an unconfirmed read, keeping it open', async () => {
+  it('KEEPS a Save pressed on a service seeded from an unconfirmed read, keeping it open', async () => {
     listener.fromCache = true
     renderPage()
 
@@ -148,7 +148,14 @@ describe('BookingsConsolePage (AGL-1358)', () => {
     await settle()
     // Held, not refused: nothing was pressed into the wait, and the reason
     // sits beside the held control (AGL-4047).
-    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    // Kept, not dropped (AGL-4047): no confirmation came within the
+    // guard's wait (0 in this spec), so the press ends in the guard's refusal.
+    await waitFor(() =>
+      expect(enqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm your .+ with the server yet, so nothing was saved/),
+        expect.anything(),
+      ),
+    )
     expect(screen.getAllByRole('status').map((note) => note.textContent)).toContain(
       'Checking your service with the server…',
     )

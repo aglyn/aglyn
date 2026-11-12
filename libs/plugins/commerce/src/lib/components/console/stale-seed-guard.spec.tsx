@@ -284,7 +284,7 @@ describe('SuppliersCard (AGL-1358)', () => {
    * HELD while the list is the cache's, with the reason beside it, and what
    * was typed stays. The guard still wraps the write underneath.
    */
-  it('HOLDS Save, with the reason beside it, while the list is unconfirmed', async () => {
+  it('KEEPS a Save pressed, with the reason beside it, while the list is unconfirmed', async () => {
     listener.fromCache = true
     render(<SuppliersCard hostId="host-1" />)
 
@@ -293,17 +293,27 @@ describe('SuppliersCard (AGL-1358)', () => {
       target: { value: 'Acme Logistics' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    // Kept, not dropped (AGL-4047): the press says Saving… at once.
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeTruthy()
     await settle()
 
-    expect(
-      (screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled,
-    ).toBe(true)
+    // No confirmation came within the guard's wait (0 in this spec), so the
+    // press ends in the guard's refusal, and Save can be pressed again.
+    await waitFor(() =>
+      expect(enqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm your supplier with the server yet, so nothing was saved/),
+        expect.anything(),
+      ),
+    )
+    await waitFor(() =>
+      expect(
+        (screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled,
+      ).toBe(false),
+    )
     expect(screen.getByRole('status').textContent).toBe(
       'Checking your supplier with the server…',
     )
     expect(setDoc).not.toHaveBeenCalled()
-    // Nothing refused: the press never happened.
-    expect(enqueueSnackbar).not.toHaveBeenCalled()
     expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe(
       'Acme Logistics',
     )
@@ -370,7 +380,7 @@ describe('SuppliersCard (AGL-1358)', () => {
 })
 
 describe('DiscountsCard (AGL-1358)', () => {
-  it('HOLDS Save while the list is unconfirmed, and saves onto the server’s row', async () => {
+  it('KEEPS a Save pressed while the list is unconfirmed, and saves onto the server’s row', async () => {
     listener.fromCache = true
     const { rerender } = render(<DiscountsCard hostId="host-1" />)
 
@@ -383,7 +393,14 @@ describe('DiscountsCard (AGL-1358)', () => {
 
     // Held, not refused: the redemption counter was never at risk.
     expect(setDoc).not.toHaveBeenCalled()
-    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    // Kept, not dropped (AGL-4047): no confirmation came within the
+    // guard's wait (0 in this spec), so the press ends in the guard's refusal.
+    await waitFor(() =>
+      expect(enqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm your .+ with the server yet, so nothing was saved/),
+        expect.anything(),
+      ),
+    )
     expect(screen.getByRole('status').textContent).toBe(
       'Checking your discount with the server…',
     )
@@ -490,7 +507,7 @@ describe('ProductsHubCard stock adjustment (AGL-1358)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
   }
 
-  it('HOLDS Apply while the products are unconfirmed, and applies to the server’s count', async () => {
+  it('KEEPS an Apply pressed while the products are unconfirmed, and applies to the server’s count', async () => {
     listener.fromCache = true
     const { rerender } = render(<ProductsHubCard hostId="host-1" />)
 
@@ -500,7 +517,14 @@ describe('ProductsHubCard stock adjustment (AGL-1358)', () => {
     expect(updateDoc).not.toHaveBeenCalled()
     // And no orphaned history entry claiming an adjustment that never landed.
     expect(addDoc).not.toHaveBeenCalled()
-    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    // Kept, not dropped (AGL-4047): no confirmation came within the
+    // guard's wait (0 in this spec), so the press ends in the guard's refusal.
+    await waitFor(() =>
+      expect(enqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm your .+ with the server yet, so nothing was saved/),
+        expect.anything(),
+      ),
+    )
     expect(screen.getByRole('status').textContent).toBe(
       'Checking your stock with the server…',
     )
@@ -555,7 +579,7 @@ describe('ProductsHubCard stock adjustment (AGL-1358)', () => {
 describe('ProductEditorDialog (AGL-1358)', () => {
   const product = productDocs[0] as never
 
-  it('HOLDS Save while the product is unconfirmed, and saves onto the server’s copy', async () => {
+  it('KEEPS a Save pressed while the product is unconfirmed, and saves onto the server’s copy', async () => {
     const { rerender } = render(
       <ProductEditorDialog
         hostId="host-1"
@@ -573,7 +597,14 @@ describe('ProductEditorDialog (AGL-1358)', () => {
     await settle()
 
     expect(setDoc).not.toHaveBeenCalled()
-    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    // Kept, not dropped (AGL-4047): no confirmation came within the
+    // guard's wait (0 in this spec), so the press ends in the guard's refusal.
+    await waitFor(() =>
+      expect(enqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm your .+ with the server yet, so nothing was saved/),
+        expect.anything(),
+      ),
+    )
     expect(screen.getByRole('status').textContent).toBe(
       'Checking your product with the server…',
     )

@@ -66,19 +66,22 @@ beforeEach(() => {
  * edit is saved onto what the server confirms.
  */
 describe('the Quotes card while the server has not answered', () => {
-  it('holds Save with the reason, then saves the edit onto the server’s settings', async () => {
+  it('keeps a Save pressed during the hold, then saves the edit onto the server’s settings', async () => {
     mockFromCache = true
     const { rerender } = render(<QuoteSettingsCard hostId="site1" />)
     fireEvent.click(screen.getByRole('switch', { name: 'Customers sign in to see and approve proofs' }))
-    expect(save().disabled).toBe(true)
     expect(screen.getByRole('status').textContent).toBe('Checking your quote settings with the server…')
+    // Kept, not dropped (AGL-4047): pressed during the hold, it says Saving…
+    // and writes nothing until the server answers.
+    fireEvent.click(save())
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeTruthy()
+    expect(mockSetDoc).not.toHaveBeenCalled()
 
     // Proof approval was switched on elsewhere since the cached snapshot.
     mockStore = { quotes: { requireProofApproval: true } }
     mockFromCache = false
     rerender(<QuoteSettingsCard hostId="site1" />)
     expect(screen.queryByRole('status')).toBeNull()
-    fireEvent.click(save())
 
     await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
     expect(mockSetDoc.mock.calls[0][1]).toMatchObject({

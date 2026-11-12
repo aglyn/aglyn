@@ -131,7 +131,7 @@ describe('SitePluginsCard (AGL-1358)', () => {
     mockHost.status = 'success'
   })
 
-  it('HOLDS Save on an unconfirmed seed, says why, and writes nothing', async () => {
+  it('KEEPS a Save pressed on an unconfirmed seed, says why, and writes nothing', async () => {
     // A press here used to wait on the server and then refuse, so the first
     // press after a page load failed and the second worked (AGL-4047). Save
     // is held instead, with the reason beside it.
@@ -142,7 +142,7 @@ describe('SitePluginsCard (AGL-1358)', () => {
     const button = screen.getByRole('button', {
       name: 'Save site plugins',
     }) as HTMLButtonElement
-    expect(button.disabled).toBe(true)
+    expect(button.disabled).toBe(false)
     expect(screen.getByRole('status').textContent).toBe(
       'Checking this site’s plugin list with the server…',
     )

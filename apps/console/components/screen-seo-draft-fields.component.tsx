@@ -19,6 +19,7 @@
 import { SCREEN_SEO_TEXT_GUIDANCE } from '@aglyn/aglyn/app-utils/screen-seo-fields'
 import { Button, TextField, Typography } from '@mui/material'
 import { memo, useSyncExternalStore } from 'react'
+import { useHeldSave } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import type { ScreenSeoEdits, ScreenSocialImageDraft } from '../constants/screen-seo'
 import ScreenSocialImageField from './screen-social-image-field.component'
 
@@ -129,6 +130,15 @@ export const ScreenSeoDraftFields = memo(function ScreenSeoDraftFields({
   const draft = useSyncExternalStore(store.subscribe, store.get, store.get)
   const staged =
     draft.title != null || draft.description != null || draft.image != null
+  /*
+   * Save SEO pressed while the screen is held is kept, and saves the staged
+   * draft once the screen is confirmed (AGL-4047). If no confirmation comes,
+   * the refusal shows below the button and nothing is saved.
+   */
+  const held = useHeldSave(onSave, {
+    checking: Boolean(checkingText),
+    subject: 'SEO settings',
+  })
   return (
     <>
       <TextField
@@ -162,13 +172,17 @@ export const ScreenSeoDraftFields = memo(function ScreenSeoDraftFields({
       <Button
         size="small"
         variant="outlined"
-        onClick={onSave}
-        disabled={!staged || Boolean(checkingText)}
+        onClick={held.press}
+        disabled={!staged || held.saving}
         sx={{ alignSelf: 'flex-start' }}
       >
-        {'Save SEO'}
+        {held.saving ? 'Saving…' : 'Save SEO'}
       </Button>
-      {staged && checkingText ? (
+      {staged && held.refusal ? (
+        <Typography variant="body2" color="warning.main" role="alert">
+          {held.refusal}
+        </Typography>
+      ) : staged && checkingText ? (
         <Typography variant="body2" color="text.secondary" role="status">
           {checkingText}
         </Typography>
