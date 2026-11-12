@@ -135,39 +135,43 @@ private fun AreaTiles(
   onEditTabBar: () -> Unit,
 ) {
   var fullFor by remember { mutableStateOf<NavItem?>(null) }
-  for (group in groups) {
-    group.label?.let { AreaGroupHeader(it, Modifier.testTag("home-group-${group.id}")) }
-    group.rows.chunked(4).forEach { row ->
-      Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        for (item in row) {
-          var menu by remember(item.rowId) { mutableStateOf(false) }
-          Box(Modifier.weight(1f)) {
-            AreaTile(
-              item.label, item.icon, onClick = { onOpen(item) },
-              modifier = Modifier.fillMaxWidth().testTag("home-tile-${item.rowId}"),
-              current = current != null && current in item.keys,
-              onLongPress = { menu = true },
-              badgeSlot = context?.let { ctx -> ctx.slotWidgets("sidebarCount.${item.rowId}").takeIf { it.isNotEmpty() }?.let { widgets -> { for (w in widgets) w.content(ctx) } } },
-            )
-            DropdownMenu(menu, onDismissRequest = { menu = false }, modifier = Modifier.testTag("tile-menu-${item.rowId}")) {
-              if (com.aglyn.contracts.isTabPinnable(item.screen) && tabScope != null) {
-                if (item.rowId in pinned) {
-                  MenuRow("Remove from tab bar", "keep_off", tag = "tile-unpin-${item.rowId}") {
-                    menu = false
-                    services.accountPrefs.unpinTab(item.rowId, tabScope)
-                  }
-                } else {
-                  MenuRow("Add to tab bar", "keep", tag = "tile-pin-${item.rowId}") {
-                    menu = false
-                    if (services.accountPrefs.pinTab(item.rowId, tabScope) == PinAnswer.FULL) fullFor = item
+  // One column of their own: a phone Home's column spaces its blocks apart, and that gap went between every heading and
+  // row too (Figma Android Home 22:775: a group every 120, its tiles 19 under the heading).
+  Column(Modifier.fillMaxWidth()) {
+    for (group in groups) {
+      group.label?.let { AreaGroupHeader(it, Modifier.testTag("home-group-${group.id}")) }
+      group.rows.chunked(4).forEach { row ->
+        Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          for (item in row) {
+            var menu by remember(item.rowId) { mutableStateOf(false) }
+            Box(Modifier.weight(1f)) {
+              AreaTile(
+                item.label, item.icon, onClick = { onOpen(item) },
+                modifier = Modifier.fillMaxWidth().testTag("home-tile-${item.rowId}"),
+                current = current != null && current in item.keys,
+                onLongPress = { menu = true },
+                badgeSlot = context?.let { ctx -> ctx.slotWidgets("sidebarCount.${item.rowId}").takeIf { it.isNotEmpty() }?.let { widgets -> { for (w in widgets) w.content(ctx) } } },
+              )
+              DropdownMenu(menu, onDismissRequest = { menu = false }, modifier = Modifier.testTag("tile-menu-${item.rowId}")) {
+                if (com.aglyn.contracts.isTabPinnable(item.screen) && tabScope != null) {
+                  if (item.rowId in pinned) {
+                    MenuRow("Remove from tab bar", "keep_off", tag = "tile-unpin-${item.rowId}") {
+                      menu = false
+                      services.accountPrefs.unpinTab(item.rowId, tabScope)
+                    }
+                  } else {
+                    MenuRow("Add to tab bar", "keep", tag = "tile-pin-${item.rowId}") {
+                      menu = false
+                      if (services.accountPrefs.pinTab(item.rowId, tabScope) == PinAnswer.FULL) fullFor = item
+                    }
                   }
                 }
+                MenuRow("Edit tab bar…", "tab", tag = "tile-edit-tab-bar") { menu = false; onEditTabBar() }
               }
-              MenuRow("Edit tab bar…", "tab", tag = "tile-edit-tab-bar") { menu = false; onEditTabBar() }
             }
           }
+          repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
         }
-        repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
       }
     }
   }
