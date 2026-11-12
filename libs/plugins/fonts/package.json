@@ -36,7 +36,7 @@
     "@aglyn/tenant-feature-instance": "1.21.0",
     "@aglyn/tenant-runtime": "1.21.0",
     "@mdi/js": "^7.4.47",
-    "@swc/helpers": "0.5.23",
+    "@swc/helpers": "0.5.24",
     "fontverter": "^2.0.0",
     "subset-font": "^2.9.0"
   },

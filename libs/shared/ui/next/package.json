@@ -30,7 +30,7 @@
     "@aglyn/shared-ui-theme": "1.21.0",
     "@aglyn/shared-util-dom": "1.21.0",
     "@aglyn/shared-util-tools": "1.21.0",
-    "@swc/helpers": "0.5.23"
+    "@swc/helpers": "0.5.24"
   },
   "peerDependencies": {
     "@mui/lab": "^9.0.0-beta.8",

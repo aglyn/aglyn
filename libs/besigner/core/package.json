@@ -30,9 +30,9 @@
     "@aglyn/shared-util-logger": "1.21.0",
     "@aglyn/shared-util-tools": "1.21.0",
     "@aglyn/shared-util-vendor": "1.21.0",
-    "@swc/helpers": "0.5.23",
+    "@swc/helpers": "0.5.24",
     "lodash-es": "^4.18.1",
-    "mobx": "^7.0.5",
+    "mobx": "^7.1.6",
     "rxjs": "^7.8.2"
   },
   "peerDependencies": {

@@ -34,7 +34,7 @@
     "@aglyn/tenant-data-admin": "1.21.0",
     "@aglyn/tenant-feature-instance": "1.21.0",
     "@aglyn/tenant-runtime": "1.21.0",
-    "@swc/helpers": "0.5.23"
+    "@swc/helpers": "0.5.24"
   },
   "peerDependencies": {
     "@aglyn/plugins-commerce": "1.21.0",

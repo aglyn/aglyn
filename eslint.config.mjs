@@ -249,7 +249,6 @@ export default [
       'aglyn/no-raw-mui-table': 'error',
       'mobx/exhaustive-make-observable': 'off',
       'mobx/unconditional-make-observable': 'off',
-      'mobx/missing-make-observable': 'off',
       'mobx/missing-observer': 'off',
       'node/no-extraneous-import': 'off',
       '@nx/enforce-module-boundaries': ['error', moduleBoundaryOptions],

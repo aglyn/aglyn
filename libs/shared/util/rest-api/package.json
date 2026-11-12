@@ -28,8 +28,8 @@
     "@aglyn/shared-data-enums": "1.21.0",
     "@aglyn/shared-util-errors": "1.21.0",
     "@aglyn/shared-util-http": "1.21.0",
-    "@swc/helpers": "0.5.23",
-    "cookie": "^2.0.1",
+    "@swc/helpers": "0.5.24",
+    "cookie": "^2.0.2",
     "js-cookie": "^3.0.8",
     "next-api-middleware": "^3.0.0"
   },
