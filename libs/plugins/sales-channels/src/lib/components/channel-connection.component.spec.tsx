@@ -69,7 +69,7 @@ function cardState(overrides: Partial<SalesChannelsState> = {}): SalesChannelsSt
       lastFetchAtMs: null,
       lastFetchAgent: null,
     })),
-    legacy: { url: null, active: false },
+    legacy: { url: null, active: false, inUse: false },
     settings: { defaultBrand: '', defaultCondition: 'new', defaultGoogleCategory: '' },
     ...overrides,
   }

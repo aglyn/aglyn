@@ -289,6 +289,25 @@ describe('legacyGoogleFeedRoute', () => {
     expect((await legacy()).status).toBe(200)
   })
 
+  it('notes its reads on its own document, never as the Google channel reading its address', async () => {
+    seedFeed('google', { enabled: true })
+    const agent = { headers: { 'user-agent': 'Googlebot-Merchant' } }
+    await (await legacy(agent)).text()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(db.docs.get(`hosts/${HOST}/salesChannels/feed-google`)!['lastFetchAtMs']).toBeUndefined()
+    const stamp = db.docs.get(`hosts/${HOST}/salesChannels/legacy-google`)!
+    expect(stamp['lastFetchAgent']).toBe('Googlebot-Merchant')
+    expect(stamp['lastFetchAtMs']).toBeGreaterThan(0)
+  })
+
+  it('notes a read before the Google channel is set up, without setting it up', async () => {
+    await (await legacy()).text()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(db.docs.get(`hosts/${HOST}/salesChannels/legacy-google`)!['lastFetchAtMs']).toBeGreaterThan(0)
+    expect(db.docs.has(`hosts/${HOST}/salesChannels/feed-google`)).toBe(false)
+    expect((await legacy()).status).toBe(200)
+  })
+
   it('stops for good once retired', async () => {
     seedFeed('google', { legacyRetired: true })
     expect((await legacy()).status).toBe(404)
