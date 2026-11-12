@@ -9,6 +9,24 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.22.1 — 2026-11-12
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.22.0...v1.22.1)
+
+### Fixed
+
+- **ai:** no hollow sections, even card rows and an honest picture cap on redesigns ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** one button per destination in a redesigned section ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** a redesigned footer opens with the brand and says how to reach the site ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **tools:** release:tag reads a CHANGELOG.md over 1 MiB ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+
+<details>
+<summary>Also in this release: 1 test</summary>
+
+- **console:** the other kept-press specs press Save once they have seen it is pressable ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+
+</details>
+
 ## v1.22.0 — 2026-11-12
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.21.0...v1.22.0)
