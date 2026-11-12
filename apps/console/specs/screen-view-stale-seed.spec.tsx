@@ -272,16 +272,20 @@ describe('Screen rename (AGL-1358)', () => {
     mockScreenDoc.fromCache = true
     render(<ScreenDetails />)
 
-    renameAndSave()
-    await new Promise((resolve) => setTimeout(resolve, 20))
-
+    fireEvent.change(screen.getByLabelText('Display name'), {
+      target: { value: 'Plans' },
+    })
+    // Held, yet pressable: the reason shows and Save details takes the press.
+    expect(
+      screen.getByText('Checking your page details with the server…'),
+    ).toBeTruthy()
     const save = screen.getByRole('button', {
       name: 'Save details',
     }) as HTMLButtonElement
     expect(save.disabled).toBe(false)
-    expect(
-      screen.getByText('Checking your page details with the server…'),
-    ).toBeTruthy()
+    fireEvent.click(save)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
     expect(mockUpdateDoc).not.toHaveBeenCalled()
     // Kept, not dropped (AGL-4047): no confirmation came within the
     // guard's wait (0 in this spec), so the press ends in the guard's refusal.
@@ -294,6 +298,12 @@ describe('Screen rename (AGL-1358)', () => {
     expect(
       (screen.getByLabelText('Display name') as HTMLInputElement).value,
     ).toEqual('Plans')
+    await waitFor(() =>
+      expect(
+        (screen.getByRole('button', { name: 'Save details' }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    )
   })
 
   it('keeps the rename through the server’s copy, and saves the confirmed description on the first press', async () => {
@@ -371,15 +381,20 @@ describe('Screen SEO (AGL-1358)', () => {
     mockScreenDoc.fromCache = true
     render(<ScreenDetails />)
 
-    editTitleAndSave()
-    await new Promise((resolve) => setTimeout(resolve, 20))
-
-    for (const save of screen.getAllByRole('button', { name: 'Save SEO' })) {
-      expect((save as HTMLButtonElement).disabled).toBe(false)
-    }
+    fireEvent.change(screen.getByLabelText('Title'), {
+      target: { value: 'Pricing and plans' },
+    })
+    // Held, yet pressable: the reason shows and both Save SEO buttons take the press.
     expect(
       screen.getByText('Checking your SEO settings with the server…'),
     ).toBeTruthy()
+    const saves = screen.getAllByRole('button', { name: 'Save SEO' })
+    for (const save of saves) {
+      expect((save as HTMLButtonElement).disabled).toBe(false)
+    }
+    fireEvent.click(saves[0])
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
     expect(mockUpdateDoc).not.toHaveBeenCalled()
     // Kept, not dropped (AGL-4047): no confirmation came within the
     // guard's wait (0 in this spec), so the press ends in the guard's refusal.
@@ -392,6 +407,11 @@ describe('Screen SEO (AGL-1358)', () => {
     expect((screen.getByLabelText('Title') as HTMLInputElement).value).toEqual(
       'Pricing and plans',
     )
+    await waitFor(() => {
+      for (const save of screen.getAllByRole('button', { name: 'Save SEO' })) {
+        expect((save as HTMLButtonElement).disabled).toBe(false)
+      }
+    })
   })
 
   it('stages only what was typed, so the server’s description is saved beside it', async () => {

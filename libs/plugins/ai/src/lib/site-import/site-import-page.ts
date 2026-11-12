@@ -255,9 +255,9 @@ export interface SiteImportSiteFacts {
   header: SiteImportBlock[]
   footer: SiteImportBlock[]
   organization: SiteImportOrganization | null
-  /** Email addresses, from its structured data and its `mailto:` links. */
+  /** Email addresses, from its structured data and its `mailto:` links: its header's and footer's first, then the rest of the page's. */
   emails: string[]
-  /** Phone numbers as written, from its structured data and its `tel:` links. */
+  /** Phone numbers as written, from its structured data and its `tel:` links, in the same order. */
   phones: string[]
   /** Its profiles on other sites: its structured data's `sameAs` and its links to them. */
   social: string[]
@@ -286,10 +286,16 @@ export function siteImportSiteFacts(home: Pick<SiteImportPage, 'blocks' | 'organ
   if (organization?.email) add(emails, organization.email.toLowerCase())
   if (organization?.telephone) add(phones, organization.telephone)
   for (const url of organization?.sameAs ?? []) add(social, url)
+  // A call link says its number in its words, or only "Call now" (AGL-4152): then the number it calls is the one written.
+  const phoneOf = (block: Extract<SiteImportBlock, { kind: 'link' }>) => {
+    if (block.text.replace(/\D/g, '').length >= 7) return block.text
+    const called = safeDecode(block.href.slice('tel:'.length)).trim()
+    return called.replace(/\D/g, '').length >= 7 ? called : ''
+  }
   for (const block of [...header, ...footer]) {
     if (block.kind !== 'link') continue
-    if (block.href.startsWith('mailto:')) add(emails, block.href.slice('mailto:'.length))
-    else if (block.href.startsWith('tel:')) add(phones, block.text)
+    if (block.href.startsWith('mailto:')) add(emails, mailOf(block.href))
+    else if (block.href.startsWith('tel:')) add(phones, phoneOf(block))
     else {
       try {
         if (SOCIAL_HOSTS.test(new URL(block.href).hostname)) add(social, block.href)
@@ -298,7 +304,45 @@ export function siteImportSiteFacts(home: Pick<SiteImportPage, 'blocks' | 'organ
       }
     }
   }
+  // How to reach it from the rest of the home page too (AGL-4152): a contractor's number is often only its opening's
+  // "Call now", or a line of its reviews. A link that calls or writes is the site's own word on where it is reached,
+  // and so is an email address or a phone number written out in full; a run of digits that only might be one is not.
+  for (const block of home.blocks) {
+    if (block.kind === 'image') continue
+    if (block.kind === 'link') {
+      if (block.region === 'header' || block.region === 'footer') continue
+      if (block.href.startsWith('mailto:')) add(emails, mailOf(block.href))
+      else if (block.href.startsWith('tel:')) add(phones, phoneOf(block))
+      continue
+    }
+    for (const found of block.text.match(WRITTEN_EMAIL) ?? []) add(emails, found)
+    for (const found of block.text.match(WRITTEN_PHONE) ?? []) add(phones, found.trim())
+  }
   return { header, footer, organization, emails, phones, social }
+}
+
+/** An email address written out. */
+const WRITTEN_EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}/gu
+
+/**
+ * A phone number written out in full (AGL-4152): three digits, three and four,
+ * with a country code or the area code in brackets where it has them. Never a
+ * span of years ("1998-2024") or a license number.
+ */
+const WRITTEN_PHONE = /(?<![\d-])(?:\+\d{1,3}[\s.-]?)?(?:\(\d{3}\)\s?|\d{3}[\s.-])\d{3}[\s.-]\d{4}(?![\d-])/g
+
+/** A `mailto:` link's address alone, without its subject or its other recipients. */
+function mailOf(href: string): string {
+  const address = safeDecode(href.slice('mailto:'.length)).split(/[?,;]/)[0]?.trim() ?? ''
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address) ? address : ''
+}
+
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
 }
 
 /** Why the crawler could not read a page, as an import leaves it out; `status` is the answer an `http-error` got. */

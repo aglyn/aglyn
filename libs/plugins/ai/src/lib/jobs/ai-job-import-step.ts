@@ -733,6 +733,18 @@ export function aiSiteImportFrameColorRole(hex: string | null, kind: 'fill' | 'i
   return !brand || hueApart(own.h, brand.h) <= 40 ? 'primary.main' : 'secondary.main'
 }
 
+/**
+ * The lines a frame's contact details are held to (AGL-4152): the source's
+ * header and footer words, and where a site's plan draws its footer, the
+ * address, phone and email it shows, each one the site states
+ * (`aiSiteImportPlannedFrame`), so a number only the home page's "Call now"
+ * gives is not refused as invented.
+ */
+export function aiSiteImportFrameFactLines(lines: readonly string[], source: AiLayoutFrameSource | null): string[] {
+  const reach = source?.planned && source.footer ? [source.footer.address, source.footer.phone, source.footer.email] : []
+  return [...lines, ...reach.filter((line): line is string => !!line?.trim() && !lines.some((entry) => entry.includes(line)))]
+}
+
 /** The header and footer's job: a layout of the site's brand, linking the wave's pages, in the layout language. */
 export function aiSiteImportFrameJob(job: AiJob, state: AiSiteImportState, wave: AiSiteImportWave, items: readonly AiJobItemLedger[]): AiJob {
   const draftId = state.frame?.draftId ?? `${job.$id}-${AI_SITE_IMPORT_FRAME_SLOT}`
@@ -757,8 +769,8 @@ export function aiSiteImportFrameJob(job: AiJob, state: AiSiteImportState, wave:
   const brand = home
     ? {
         ...(withLogo ? { logo: { src: (logo as NonNullable<typeof logo>).src }, ...(alt ? { alt } : {}), ...(aspect ? { aspect } : {}) } : {}),
-        // The footer opens with the logo too, where the source's does (AGL-4139).
-        ...(withLogo && home.footer?.logo === true ? { footer: true } : {}),
+        // The footer opens with the logo too, where the source's does (AGL-4139), and always under Improve it (AGL-4152).
+        ...(withLogo && (home.footer?.logo === true || redrawn) ? { footer: true } : {}),
         ...(redrawn ? { height: aiSiteImportLogoHeight(aspect) } : {}),
         name: (!logo || home.brand.kind !== 'logo-only') && !holdsName,
       }
@@ -782,8 +794,9 @@ export function aiSiteImportFrameJob(job: AiJob, state: AiSiteImportState, wave:
       ...aiSiteImportDesignInputs(state, wave),
       ...(brand ? { [AI_LAYOUT_SITE_BRAND_INPUT]: brand } : {}),
       ...(source ? { [AI_LAYOUT_SITE_FRAME_INPUT]: source } : {}),
-      // The source's own header and footer words, fenced where the prompt shows them (AGL-4084).
-      ...(home ? { [AI_LAYOUT_SITE_FACTS_INPUT]: { url: home.url, description: home.description, lines: home.facts.lines } } : {}),
+      // The source's own header and footer words, fenced where the prompt shows them (AGL-4084), and how a planned
+      // footer says the site is reached, which its frame's check holds its contact details to (AGL-4152).
+      ...(home ? { [AI_LAYOUT_SITE_FACTS_INPUT]: { url: home.url, description: home.description, lines: aiSiteImportFrameFactLines(home.facts.lines, source) } } : {}),
     },
     // Never words a footer could print as the site's own (AGL-4084): the prompt shows the source's.
     brief: `The header and footer of the site “${state.siteName}”.`.slice(0, AI_JOB_BRIEF_MAX_CHARS),

@@ -325,14 +325,18 @@ describe.each(PAGES)('%s besigner properties (AGL-1358)', (_label, Page) => {
     templateSeed.fromCache = true
     render(<Page />)
 
-    await typeSubjectAndSave()
-    await new Promise((resolve) => setTimeout(resolve, 20))
-
+    fireEvent.change(await screen.findByLabelText('Subject'), {
+      target: { value: 'Edited subject' },
+    })
+    // Held, yet pressable: the reason shows and Save subject takes the press.
+    expect(screen.getByText('Checking your email with the server…')).toBeTruthy()
     const save = screen.getByRole('button', {
       name: 'Save subject',
     }) as HTMLButtonElement
     expect(save.disabled).toBe(false)
-    expect(screen.getByText('Checking your email with the server…')).toBeTruthy()
+    fireEvent.click(save)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
     expect(mockSetDoc).not.toHaveBeenCalled()
     // Kept, not dropped (AGL-4047): no confirmation came within the
     // guard's wait (0 in this spec), so the press ends in the guard's refusal.
@@ -345,6 +349,12 @@ describe.each(PAGES)('%s besigner properties (AGL-1358)', (_label, Page) => {
     expect(
       (screen.getByLabelText('Subject') as HTMLInputElement).value,
     ).toEqual('Edited subject')
+    await waitFor(() =>
+      expect(
+        (screen.getByRole('button', { name: 'Save subject' }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    )
   })
 
   it('saves on the first press once the server answers, with the server’s preheader', async () => {

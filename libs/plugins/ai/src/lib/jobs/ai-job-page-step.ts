@@ -20,6 +20,7 @@ import { buildPageMarkdown } from '@aglyn/aglyn/app-utils/page-markdown'
 import { SCREEN_SEO_TEXT_GUIDANCE } from '@aglyn/aglyn/app-utils/screen-seo-fields'
 import { SCREEN_ROOT_PATH, screenRoutePathToUrl } from '@aglyn/aglyn/app-utils/screen-route'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
+import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
 import { AI_BUILD_PLAN_LIMITS, aiPlanEmbedsFor, type AiBuildPlanScreen } from '../model/ai-build-plan'
@@ -98,6 +99,7 @@ import {
 } from './ai-job-page-sections'
 import { aiLayoutSitePages } from './ai-job-layout-site-pages'
 import { aiResolveLayoutPictures, type AiLayoutPicturePhoto, type AiLayoutPictureSource } from '../layout-language/ai-layout-pictures'
+import { aiLayoutEvenCardPictures, aiLayoutWithoutHollowSections } from '../layout-language/ai-layout-gaps'
 import { pluginMediaIngest } from '@aglyn/aglyn/plugin-manager/plugin-media-ingest'
 import type { AiImageProvider } from '../providers/image-contract'
 import { vertexImageProvider } from '../providers/vertex-image'
@@ -972,7 +974,7 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
           tally: pictureTally,
         })
       }
-      const pictured = await aiResolveLayoutPictures(result.value.nodes, {
+      const placed = await aiResolveLayoutPictures(result.value.nodes, {
         rootId: CANVAS_ROOT_ELEMENT_ID,
         // A redesign's sections are its own, past its source's count (AGL-4152).
         sectionIds: redesigned?.names ? redesigned.names.map((_, at) => sectionIds[at] ?? aiPageSectionNodeId(job.$id, at)) : sectionIds,
@@ -1006,6 +1008,9 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
           }),
         ),
       })
+      // A redesign's last word, once its pictures are placed or dropped (AGL-4152): a row of cards one of whose
+      // pictures could not be found shows none, and a section left with only its heading goes.
+      const pictured = redesigned ? aiSiteImportFinishedPage(placed, { jobId: job.$id, slug }) : placed
       if (!written) {
         // Never written once the job is canceled (AGL-3616).
         throwIfAiJobCanceled(signal)
@@ -1150,4 +1155,16 @@ export function registerAiPageJob(): void {
   })
   registerAiJobStepPasses('page', AI_JOB_PAGE_MAX_PASSES)
   registerAiJobAdmission('page', aiPageJobAdmission)
+}
+
+/**
+ * A redesigned page as it is written (AGL-4152), after its pictures: each row
+ * of cards with a picture on every card or on none, and no section after the
+ * first left with only its heading, each one taken out named in the log.
+ */
+export function aiSiteImportFinishedPage(nodes: NodesMap, at: { jobId: string; slug: string }): NodesMap {
+  const even = aiLayoutEvenCardPictures(nodes)
+  const { nodes: filled, dropped } = aiLayoutWithoutHollowSections(even.nodes, CANVAS_ROOT_ELEMENT_ID)
+  if (even.evened || dropped.length) console.info('ai imported page: its finished page mended', { jobId: at.jobId, slug: at.slug, rowsEvened: even.evened, dropped })
+  return filled
 }
