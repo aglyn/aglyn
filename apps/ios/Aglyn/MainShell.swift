@@ -1702,15 +1702,16 @@ struct AccountSheet: View {
                 dismiss()
               } label: {
                 HStack(spacing: 10) {
-                  AglynAccountAvatar(initials: account.initials, photoURL: identity.photoURL(of: account), size: 28)
+                  AglynAccountAvatar(
+                    initials: identity.initials(of: account), photoURL: identity.photoURL(of: account), size: 28)
                   VStack(alignment: .leading, spacing: 1) {
-                    Text(account.displayName ?? account.email ?? "Account").font(AglynFont.body)
-                    if let email = account.email, account.displayName != nil {
+                    Text(identity.name(of: account)).font(AglynFont.body)
+                    if let email = identity.detail(of: account) {
                       Text(email).font(AglynFont.caption).foregroundStyle(.secondary)
                     }
                   }
                   Spacer()
-                  if account.slot == auth.activeSlot && auth.impersonation == nil {
+                  if identity.isOnScreen(account) {
                     Image(systemName: "checkmark").foregroundStyle(AglynColor.tint)
                   }
                 }
