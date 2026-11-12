@@ -148,7 +148,7 @@ public final class FirebaseFirestoreReader: FirestoreReader, @unchecked Sendable
 
   public func count(_ query: FirestoreQuery) async throws -> Int? {
     do {
-      let snapshot = try await built(query).count.getAggregation(source: .server)
+      let snapshot = try await built(query.wholeMatch).count.getAggregation(source: .server)
       return snapshot.count.intValue
     } catch {
       Telemetry.record(error, Telemetry.firestoreContext("count", query.collection))
@@ -158,10 +158,8 @@ public final class FirebaseFirestoreReader: FirestoreReader, @unchecked Sendable
 
   public func sum(_ query: FirestoreQuery, field: String) async throws -> Double? {
     let total = AggregateField.sum(field)
-    var whole = query
-    whole.limit = nil
     do {
-      let snapshot = try await built(whole).aggregate([total]).getAggregation(source: .server)
+      let snapshot = try await built(query.wholeMatch).aggregate([total]).getAggregation(source: .server)
       return (snapshot.get(total) as? NSNumber)?.doubleValue
     } catch {
       Telemetry.record(error, Telemetry.firestoreContext("sum", query.collection))

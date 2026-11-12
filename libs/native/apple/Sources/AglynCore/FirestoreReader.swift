@@ -70,6 +70,16 @@ public struct FirestoreQuery: @unchecked Sendable {
   }
 
   public var path: String { collection.joined(separator: "/") }
+
+  /// The query a server count or sum runs: every document it matches, its window dropped. The web SDK's
+  /// `getCountFromServer` honors a `limit`, so a count over a one-row query answers at most 1 (AGL-4011: the iPhone's
+  /// CRM at a glance read 1 contact where the console and Android read 13); every count and sum here asks for the
+  /// whole match, as the Kotlin readers do.
+  public var wholeMatch: FirestoreQuery {
+    var whole = self
+    whole.limit = nil
+    return whole
+  }
 }
 
 /// A value the server fills in on write.
@@ -179,9 +189,10 @@ public protocol FirestoreReader: AnyObject, Sendable {
   /// The web SDK's `updateDoc`: replaces each top-level field whole, on a document that exists.
   func updateDocument(_ path: [String], _ fields: [String: Any]) async throws
 
-  /// The server's count of a query's documents (the web SDK's
-  /// `getCountFromServer`), or nil where the reader cannot ask for one; a
-  /// caller then falls back to the rows it holds.
+  /// The server's count of every document a query matches (the web SDK's
+  /// `getCountFromServer`; the query's `limit` is ignored, see `wholeMatch`), or
+  /// nil where the reader cannot ask for one; a caller then falls back to the
+  /// rows it holds.
   func count(_ query: FirestoreQuery) async throws -> Int?
 
   /// The server's total of a numeric field over every document a query
