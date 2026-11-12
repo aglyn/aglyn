@@ -16,6 +16,7 @@ import SwiftUI
 struct SetupScreen: View {
   let context: NativePluginContext
   var initialSection: String?
+  @Environment(\.aglynWideChrome) private var wideChrome
   @State private var selection: SetupSection?
   @State private var pushed: SetupSection?
   @State private var opened = false
@@ -36,6 +37,11 @@ struct SetupScreen: View {
     WideLayoutReader { wide in
       if context.hostID == nil {
         AglynEmptyState("Pick a site first", systemImage: SiteSymbols.site)
+      } else if wideChrome, let section = initialSection.map({ SetupSection.of($0) }) {
+        // On the Mac and iPad the Site settings sidebar is the list of sections (and a link lands on its row, AGL-4059's
+        // `NavPaths`), so a section opens as the area itself: no list beside it and nothing pushed, and the shell draws
+        // its head with the crumbs (AGL-4058). A phone keeps the list and pushes the section.
+        SetupDetail(context: context, section: section, integrations: integrations).id(section)
       } else if wide {
         AglynListDetailColumns(listWidth: 320) {
           List {
