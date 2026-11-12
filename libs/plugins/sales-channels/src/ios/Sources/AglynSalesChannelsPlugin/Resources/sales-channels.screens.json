@@ -499,13 +499,13 @@
           "type": "notice",
           "id": "legacy",
           "tone": "info",
-          "when": "params.channel == google && data.state.legacy.active",
+          "when": "params.channel == google && data.state.legacy.active && data.state.legacy.inUse",
           "text": "Your earlier Merchant Center address still works: {data.state.legacy.url}. Turn it off once Merchant Center reads the new address."
         },
         {
           "type": "actions",
           "id": "legacyOff",
-          "when": "params.channel == google && data.state.legacy.active",
+          "when": "params.channel == google && data.state.legacy.active && data.state.legacy.inUse",
           "items": [
             {
               "id": "retire",
