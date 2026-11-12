@@ -70,7 +70,7 @@ function state(overrides: Partial<SalesChannelsState> = {}): SalesChannelsState 
       lastFetchAtMs: null,
       lastFetchAgent: null,
     })),
-    legacy: { url: 'https://candles.example.com/api/commerce/feed?hostId=host-1', active: true },
+    legacy: { url: 'https://candles.example.com/api/commerce/feed?hostId=host-1', active: true, inUse: true },
     settings: { defaultBrand: '', defaultCondition: 'new', defaultGoogleCategory: '' },
     ...overrides,
   }
@@ -98,6 +98,18 @@ describe('SalesChannelsCard', () => {
     expect(google.getByText('On')).toBeTruthy()
     expect(google.getByText('Not read yet')).toBeTruthy()
     expect(within(screen.getByTestId('sales-channel-tiktok')).getByText('CSV feed')).toBeTruthy()
+  })
+
+  it('says nothing of an earlier address on a site whose Merchant Center never read one', async () => {
+    const fresh = state()
+    request.mockResolvedValueOnce({ ...fresh, legacy: { ...fresh.legacy, inUse: false } })
+    render(<SalesChannelsCard hostId="host-1" />)
+    await screen.findByTestId('sales-channels-card')
+    expect(screen.queryByText(/earlier Merchant Center address/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Turn off' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Replace address' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).queryByText(/earlier Merchant Center address/)).toBeNull()
   })
 
   it('copies a feed address from its field', async () => {

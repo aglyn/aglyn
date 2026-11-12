@@ -130,6 +130,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   LaunchedEffect(screenKey) { com.aglyn.core.Telemetry.screen(screenKey) }
   var wasSupporting by remember { mutableStateOf(supporting) }
   val chrome = remember(uid) { NavChromeState(services.prefs) }
+  // Each place in the tab's history keeps the sidebar's settings mode, so Back returns to the list it was opened in.
+  androidx.compose.runtime.SideEffect { navigator.settingsMode = chrome::settingsMode }
   LaunchedEffect(supporting) {
     if (supporting != wasSupporting) {
       wasSupporting = supporting

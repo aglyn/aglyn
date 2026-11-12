@@ -40,6 +40,7 @@ import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
 import DDFSelectImport, { parseInternalValue } from '@data-driven-forms/common/select'
 
 import { useFieldApi } from '../vendor/data-driven-forms'
+import { emptyValuesEqual } from '../utils/empty-values-equal'
 import FormFieldGrid, {
   buildFieldClear,
   type FormFieldGridProps,
@@ -406,7 +407,11 @@ export function Select<T = OptionValue>(props: SelectProps<T>) {
     noOptionsText,
     closeMenuOnSelect,
     ...rest
-  } = useFieldApi(props)
+  } = useFieldApi({
+    ...props,
+    // A cleared box equals the `''` its stored copy reseeds (AGL-4047).
+    FieldProps: { isEqual: emptyValuesEqual, ...props.FieldProps },
+  })
 
   return (
     <DDFSelect

@@ -214,6 +214,47 @@ final class ShellTests: XCTestCase {
     XCTAssertFalse(navigation.canGoForward)
   }
 
+  /// Back out of Workspace settings, or out of the whole workspace, returns to the sidebar's mode and scope the place
+  /// was opened in, not the screen alone over the list in use now (AGL-3996).
+  func testHistoryPutsBackTheSidebarsModeAndScope() {
+    let navigation = ShellNavigation()
+    var picked: [String] = []
+    navigation.openSite = { hostID in
+      picked.append(hostID)
+      return true
+    }
+    navigation.inSite = true
+    navigation.siteInScope = "s1"
+    navigation.select(.plugin("commerce.orders"))
+    navigation.enterWorkspace()
+    navigation.enter(.workspaceSettings, first: .plugin("core.team"))
+
+    navigation.goBack()
+    XCTAssertEqual(navigation.section, .home)
+    XCTAssertEqual(navigation.mode, .main)
+    XCTAssertFalse(navigation.inSite)
+    navigation.goBack()
+    XCTAssertEqual(navigation.section, .plugin("commerce.orders"))
+    XCTAssertTrue(navigation.inSite)
+    XCTAssertEqual(picked, [], "the site in scope is the place's own")
+    navigation.goForward()
+    navigation.goForward()
+    XCTAssertEqual(navigation.section, .plugin("core.team"))
+    XCTAssertEqual(navigation.mode, .workspaceSettings)
+
+    // Another site, then Back to the place in the first one: that site is picked again.
+    navigation.leaveMode()
+    navigation.siteInScope = "s2"
+    navigation.enterSite()
+    navigation.goBack()
+    navigation.goBack()
+    navigation.goBack()
+    navigation.goBack()
+    XCTAssertEqual(navigation.section, .plugin("commerce.orders"))
+    XCTAssertEqual(picked, ["s1"])
+    XCTAssertEqual(navigation.siteInScope, "s1")
+  }
+
   /// Over the Besigner, Back and ⌘[ press the editor's own back control; elsewhere they walk the history (AGL-4056).
   func testBackOverTheBesignerPressesTheEditorsOwnBack() {
     let navigation = ShellNavigation()

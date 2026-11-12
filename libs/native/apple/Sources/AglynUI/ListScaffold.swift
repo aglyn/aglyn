@@ -231,7 +231,8 @@ public enum AglynContentInsets {
     #endif
   }
 
-  /// A phone's side margin.
+  /// A phone's side margin: its lists' rows, its screen-level rows (`aglynContentEdges`) and its grouped forms' cards
+  /// (`aglynFormBackground`, `aglynPhoneFormEdges`), where the platform's grouped form would use 20.
   public static let phone: CGFloat = 16
 
   /// What a plain `List` adds outside a row's own insets: 8 before and 9 after it on the Mac (measured by laying a
