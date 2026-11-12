@@ -113,7 +113,9 @@ fun RegisterOpsDialog(model: RegisterModel, onDismiss: () -> Unit) {
   if (printersOpen) ReceiptPrintersDialog(model.printers, model.register?.name) { printersOpen = false }
   if (dayTotalsOpen) {
     val dayReport = remember { PosDayReportModel(model.dayReportApi) }
-    PosDayTotalsPanel(dayReport, model.currency, PosDayNotSynced.of(model.offline.queue)) { dayTotalsOpen = false }
+    PosDayTotalsPanel(dayReport, model.currency, PosDayNotSynced.of(model.offline.queue), storeName = model.storeName) {
+      dayTotalsOpen = false
+    }
   }
   ShiftDialogs(model)
 }

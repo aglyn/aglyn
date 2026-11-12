@@ -6,7 +6,7 @@ import androidx.compose.runtime.setValue
 import com.aglyn.contracts.ContractJsonFormat
 import com.aglyn.contracts.Contracts
 import com.aglyn.contracts.PosDayReport
-import com.aglyn.contracts.posDayRangeLabel
+import com.aglyn.contracts.posDayRangeTitle
 import com.aglyn.contracts.posDayReportCsv
 import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
@@ -103,6 +103,13 @@ data class PosDayNotSynced(val cashCount: Int, val cashCents: Long, val cardCoun
   }
 }
 
+/**
+ * The line under a day report's title: whose registers, and which days (Figma 341:13731, 180:26616):
+ * "Acme Bakery · every register · Today, Oct 25, 2026"; the site is left out while it is not known.
+ */
+fun posDayReportByline(site: String?, days: String?): String =
+  listOf(site, "every register", days).filter { !it.isNullOrEmpty() }.joinToString(" · ")
+
 /** The day totals screen's state: the days asked for, the report, and the report as a spreadsheet. */
 class PosDayReportModel(private val api: PosDayReportApi) {
   /** The days asked for (`yyyy-MM-dd`); null is today in the store's own time zone. */
@@ -112,11 +119,21 @@ class PosDayReportModel(private val api: PosDayReportApi) {
     private set
   private var generation = 0
 
-  /** The days, as the range picker words them (the report's own once it has answered). */
+  /**
+   * The store's own today, as the report answered it when asked for today (the device's clock may sit in another time
+   * zone than the store's).
+   */
+  var todayKey by mutableStateOf<String?>(null)
+    private set
+
+  /**
+   * The days, as the screen heads them (the report's own once it has answered): "Today, Oct 25, 2026". The
+   * spreadsheet keeps the plain `yyyy-MM-dd` days.
+   */
   val label: String
     get() {
-      (state as? Load.Ready)?.value?.let { return posDayRangeLabel(it.from, it.to) }
-      return range?.let { posDayRangeLabel(it.first, it.second) } ?: "Today"
+      (state as? Load.Ready)?.value?.let { return posDayRangeTitle(it.from, it.to, todayKey) }
+      return range?.let { posDayRangeTitle(it.first, it.second, todayKey) } ?: "Today"
     }
 
   suspend fun today() {
@@ -135,7 +152,10 @@ class PosDayReportModel(private val api: PosDayReportApi) {
     state = Load.Loading
     try {
       val report = api.report(range?.first, range?.second)
-      if (mine == generation) state = Load.Ready(report)
+      if (mine == generation) {
+        if (range == null) todayKey = report.from
+        state = Load.Ready(report)
+      }
     } catch (cancel: CancellationException) {
       throw cancel
     } catch (error: Throwable) {

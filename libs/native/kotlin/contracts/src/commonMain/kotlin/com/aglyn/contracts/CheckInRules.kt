@@ -73,6 +73,15 @@ fun checkInDayLabel(dayKey: String?): String {
   return "$weekday, $month ${dayKey.substring(8, 10).toInt()}"
 }
 
+/**
+ * A day key as a date a reader says: "Oct 25, 2026"; "" for a value that is not a day key. The day helpers' month
+ * names, so a day reads the same wherever a screen shows one.
+ */
+fun dayKeyDateLabel(dayKey: String?): String {
+  dayKeyMs(dayKey) ?: return ""
+  return "${MONTHS[dayKey!!.substring(5, 7).toInt() - 1]} ${dayKey.substring(8, 10).toInt()}, ${dayKey.substring(0, 4).toInt()}"
+}
+
 /** Why a chosen use day can't be had, or null (`checkInUseDayProblem`). */
 fun checkInUseDayProblem(value: Any?, todayKey: String): String? {
   if (!isCheckInDayKey(value)) return "Choose the day as a date."

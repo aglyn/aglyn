@@ -35,6 +35,18 @@ final class CheckInRulesTests: XCTestCase {
     }
   }
 
+  /// A day report's days as a screen heads them; the spreadsheet keeps `posDayRangeLabel`'s plain days.
+  func testDayReportRangeReadsAsDates() {
+    XCTAssertEqual(dayKeyDateLabel("2026-10-25"), "Oct 25, 2026")
+    XCTAssertEqual(dayKeyDateLabel("2026-02-30"), "")
+    XCTAssertEqual(posDayRangeTitle(from: "2026-10-25", to: "2026-10-25", today: "2026-10-25"), "Today, Oct 25, 2026")
+    XCTAssertEqual(posDayRangeTitle(from: "2026-10-24", to: "2026-10-24", today: "2026-10-25"), "Oct 24, 2026")
+    XCTAssertEqual(posDayRangeTitle(from: "2026-10-24", to: "2026-10-27"), "Oct 24 – Oct 27, 2026")
+    XCTAssertEqual(posDayRangeTitle(from: "2026-12-30", to: "2027-01-02"), "Dec 30, 2026 – Jan 2, 2027")
+    XCTAssertEqual(posDayRangeTitle(from: "soon", to: "soon"), "soon")
+    XCTAssertEqual(posDayRangeLabel(from: "2026-10-24", to: "2026-10-27"), "2026-10-24 to 2026-10-27")
+  }
+
   /// The product editor's setting (AGL-4063): what a stored `checkIn` reads as, replayed from the console's answers.
   func testProductSettingAsTheConsole() {
     for item in cases("normalizeProductCheckIn") {
