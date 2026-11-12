@@ -15,16 +15,15 @@
         "assets": ["libs/plugins/video-delivery/*.md"]
       }
     },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
-    },
     "test": {
-      "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/libs/plugins/video-delivery"],
-      "options": {
-        "jestConfig": "libs/plugins/video-delivery/jest.config.ts"
-      }
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/jest.preset.js",
+        {
+          "externalDependencies": ["jest", "@nx/jest", "ts-jest", "@swc/jest"]
+        }
+      ]
     }
   }
 }

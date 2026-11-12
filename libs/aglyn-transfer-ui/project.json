@@ -15,16 +15,15 @@
         "assets": ["libs/aglyn-transfer-ui/*.md"]
       }
     },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
-    },
     "test": {
-      "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/libs/aglyn-transfer-ui"],
-      "options": {
-        "jestConfig": "libs/aglyn-transfer-ui/jest.config.ts"
-      }
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/jest.preset.js",
+        {
+          "externalDependencies": ["jest", "@nx/jest", "ts-jest", "babel-jest"]
+        }
+      ]
     }
   }
 }

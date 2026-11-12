@@ -818,11 +818,13 @@
       let params: PaymentIntentParameters
       let config: CreateConfiguration
       do {
-        params = try PaymentIntentParametersBuilder(amount: UInt(request.amountCents), currency: request.currency)
+        let builder = PaymentIntentParametersBuilder(amount: UInt(request.amountCents), currency: request.currency)
           .setCaptureMethod(.manual)
-          .setTransferDataDestination(request.destination)
           .setMetadata(request.metadata)
-          .build()
+        // A store on its own Stripe account (AGL-4219): no Connect parameters at all. The SDK makes the intent on the
+        // account its connection token was minted on, which is the store's (Stripe's Terminal direct-charges guide).
+        if request.account == nil { builder.setTransferDataDestination(request.destination) }
+        params = try builder.build()
         // The store's limits once more at the SDK: above them the card must be taken online.
         let held = Terminal.shared.offlineStatus.sdk.paymentAmountsByCurrency[request.currency]?.intValue ?? 0
         let behavior: OfflineBehavior = offlineCardRequiresOnline(request, sdkStoredCents: held) ? .requireOnline : .preferOnline

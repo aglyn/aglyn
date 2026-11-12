@@ -22,6 +22,7 @@ import { COMMERCE_OPERATOR_ALERTS } from '../constants/operator-alerts'
 import type { PosOfflineCardIntent } from './pos-terminal'
 import { handlePosOfflineSync, type PosOfflineSyncDeps } from './pos-offline-sync'
 import {
+  createPosOfflineCardBillingWebhookHandler,
   POS_OFFLINE_CARD_UNSYNCED_ALERT_MS,
   posOfflineCardBillingWebhookHandler,
   reconcilePosOfflineCardEvent,
@@ -55,6 +56,7 @@ jest.mock('./low-stock', () => ({ alertLowStockCrossing: jest.fn() }))
 jest.mock('./reserve-stock', () => ({ decrementVariantStock: jest.fn() }))
 jest.mock('./pos-sale', () => ({ notifyPosSaleCompleted: jest.fn() }))
 jest.mock('./pos-terminal', () => ({}))
+jest.mock('@aglyn/tenant-data-admin/server/seller-payment-account', () => ({ sellerPaymentAccount: jest.fn() }))
 
 void memoryFirestoreModule
 
@@ -160,6 +162,38 @@ describe('posOfflineCardBillingWebhookHandler', () => {
       await posOfflineCardBillingWebhookHandler(event('payment_intent.amount_capturable_updated') as any),
     ).toEqual({ claimed: true, hostId: 'shop' })
     expect(mockStore.read(RECORD)).toMatchObject({ synced: false })
+  })
+})
+
+describe('a card made on a store’s own Stripe account (direct charges, AGL-4219)', () => {
+  const STORE = 'acct_1StoreOwnAcct'
+  const handler = createPosOfflineCardBillingWebhookHandler(async (hostId) => (hostId === 'shop' ? STORE : null))
+  const connect = (account: string, metadata: Record<string, string> = {}) => {
+    const base = event('payment_intent.amount_capturable_updated')
+    return {
+      ...base,
+      object: { ...base.object, metadata: { ...base.object.metadata, chargeModel: 'direct', ...metadata } },
+      event: { account },
+    }
+  }
+
+  it('keeps a Connect-delivered event from the site’s own account', async () => {
+    mockStore = memoryFirestore()
+    expect(await handler(connect(STORE) as any)).toEqual({ claimed: true, hostId: 'shop' })
+    expect(mockStore.read(RECORD)).toMatchObject({ synced: false, status: 'requires_capture' })
+  })
+
+  it('ignores one from another account, or one that does not say it is a direct sale’s', async () => {
+    mockStore = memoryFirestore()
+    expect(await handler(connect('acct_1SomeoneElse0') as any)).toBeUndefined()
+    expect(await handler(connect(STORE, { chargeModel: '' }) as any)).toBeUndefined()
+    expect(await handler(connect(STORE, { hostId: 'other-shop' }) as any)).toBeUndefined()
+    expect(mockStore.docs.size).toBe(0)
+  })
+
+  it('keeps reading the platform’s own events as before', async () => {
+    mockStore = memoryFirestore()
+    expect(await handler(event('payment_intent.amount_capturable_updated') as any)).toEqual({ claimed: true, hostId: 'shop' })
   })
 })
 
@@ -296,6 +330,7 @@ describe('end to end: the webhook, the device’s sync and the sweep (Stripe moc
           intent = { ...intent, status: 'succeeded', applicationFeeCents: fee }
           return { ok: true, intent }
         },
+        cancel: async () => ({ ok: true }),
         wrongAccount: async () => undefined,
       },
     }

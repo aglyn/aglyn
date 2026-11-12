@@ -127,7 +127,8 @@ class FunctionCasesTest {
     cases("posOfflineCardIntentMetadata").forEach { (args, result) ->
       val input = args[0].jsonObject
       val expected = result.jsonObject.mapValues { it.value.jsonPrimitive.content }
-      assertEquals(expected, posOfflineCardIntentMetadata(str(input["saleKey"]) ?: "", str(input["hostId"]) ?: "", str(input["orgId"]) ?: "", str(input["registerId"]) ?: ""), args.toString())
+      val direct = input["direct"]?.jsonPrimitive?.booleanOrNull ?: false
+      assertEquals(expected, posOfflineCardIntentMetadata(str(input["saleKey"]) ?: "", str(input["hostId"]) ?: "", str(input["orgId"]) ?: "", str(input["registerId"]) ?: "", direct), args.toString())
     }
   }
 

@@ -23,9 +23,12 @@ import kotlin.coroutines.resume
 
 /**
  * The offline card sequence's three calls on the Stripe Terminal SDK
- * (AGL-4039). The app creates the intent itself: a destination charge with
- * manual capture and no application fee, named by the sale's key in its
- * metadata. Offline, the SDK stores it on the device and forwards it later.
+ * (AGL-4039). The app creates the intent itself, with manual capture and no
+ * application fee, named by the sale's key in its metadata: a destination
+ * charge, or for a store on its own Stripe account (AGL-4219) no Connect
+ * parameters at all, so the SDK makes it on the account its connection token
+ * was minted on, the store's (Stripe's Terminal direct-charges guide).
+ * Offline, the SDK stores it on the device and forwards it later.
  */
 internal class SdkOfflinePort(
   private val terminal: Terminal,
@@ -35,13 +38,13 @@ internal class SdkOfflinePort(
   private var intent: PaymentIntent? = null
 
   override suspend fun create(request: OfflineCardRequest): OfflineTerminalResult {
-    val params = PaymentIntentParameters.Builder()
+    val builder = PaymentIntentParameters.Builder()
       .setAmount(request.amountCents)
       .setCurrency(request.currency)
       .setCaptureMethod(CaptureMethod.Manual)
-      .setTransferDataDestination(request.destination)
       .setMetadata(request.metadata)
-      .build()
+    if (request.account.isNullOrEmpty()) builder.setTransferDataDestination(request.destination)
+    val params = builder.build()
     // The store's limits once more at the SDK: above them the card must be taken online.
     val held = terminal.offlineStatus.sdk.offlinePaymentAmountsByCurrency[request.currency] ?: 0L
     val behavior = if (offlineCardRequiresOnline(request, held)) OfflineBehavior.REQUIRE_ONLINE else OfflineBehavior.PREFER_ONLINE

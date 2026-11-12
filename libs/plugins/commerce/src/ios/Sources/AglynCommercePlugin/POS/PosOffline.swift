@@ -102,7 +102,8 @@ struct ConsolePosOfflineAPI: PosOfflineAPI {
   let hostID: String
 
   func kit() async throws -> PosOfflineKit {
-    let answer = try await api.request(posOfflineSyncRoute, query: [("hostId", hostID)])
+    // This app makes a card's intent on a store's own Stripe account too (AGL-4219), so it asks for that kit.
+    let answer = try await api.request(posOfflineSyncRoute, query: [("hostId", hostID), ("cardChargeModels", "direct")])
     guard let data = try answer?["kit"]?.encoded(), let kit = try? JSONDecoder().decode(PosOfflineKit.self, from: data) else {
       throw ConsoleAPIError(status: 502, message: "The register did not answer with its offline rules.")
     }
@@ -223,6 +224,8 @@ final class PosOfflineModel {
   @ObservationIgnored private let today: () -> String
   @ObservationIgnored private var ringing = false
   @ObservationIgnored private var syncInFlight = false
+  /// A sync was asked for while one ran (a card forwarded mid-sync): it runs again once that one ends.
+  @ObservationIgnored private var syncAgain = false
   /// Told when a sync failed at the network (true) or the console answered it (false).
   @ObservationIgnored var networkSink: ((Bool) -> Void)?
 
@@ -318,7 +321,9 @@ final class PosOfflineModel {
     let key = mintKey()
     return OfflineCardRequest(
       saleKey: key, amountCents: Int(totals.totalCents ?? 0), currency: card.currency, destination: card.destination,
-      metadata: posOfflineCardIntentMetadata(saleKey: key, hostID: kit.hostId, orgID: kit.orgId, registerID: register),
+      account: card.account,
+      metadata: posOfflineCardIntentMetadata(
+        saleKey: key, hostID: kit.hostId, orgID: kit.orgId, registerID: register, direct: card.account != nil),
       maxSaleCents: min(Int(card.maxSaleCents), ContractValues.shared.posOfflineCardMaxSaleCentsLimit),
       // 0 is no daily limit: the store did not set one.
       maxDeviceDailyCents: card.maxDeviceDailyCents > 0 ? Int(card.maxDeviceDailyCents) : .max,
@@ -352,8 +357,8 @@ final class PosOfflineModel {
   /// even past the ceilings: the money was taken.
   func ringCardSale(cart: Cart, taken: OfflineCardTaken) -> PosOfflineRung? {
     let card = PosOfflineSaleCard(
-      brand: taken.brand, forward: taken.paymentIntentID == nil ? .stored : .forwarded, last4: taken.last4,
-      paymentIntentId: taken.paymentIntentID)
+      account: taken.account, brand: taken.brand, forward: taken.paymentIntentID == nil ? .stored : .forwarded,
+      last4: taken.last4, paymentIntentId: taken.paymentIntentID)
     let rung = ring(cart: cart, saleKey: taken.saleKey, cashTenderedCents: 0, changeCents: 0, card: card)
     if let rung { store.addCardTaken(rung.totalCents, on: today()) }
     return rung
@@ -433,11 +438,24 @@ final class PosOfflineModel {
     queue = store.queue()
   }
 
-  /// Sends everything waiting, in batches, one sync at a time.
+  /// Sends everything waiting, in batches, one sync at a time. One asked for while another runs is not dropped: it
+  /// runs once that one ends, so a card forwarded mid-sync is not left waiting for the next sale (AGL-4219).
   func syncNow() async {
-    guard !syncInFlight else { return }
+    guard !syncInFlight else {
+      syncAgain = true
+      return
+    }
+    repeat {
+      syncAgain = false
+      await syncOnce()
+    } while syncAgain
+  }
+
+  private func syncOnce() async {
+    // What the device holds now, even when nothing is sent: the banner never reads a queue another sync emptied.
+    queue = store.queue()
     // A card still on the device waits for its forward: the server reads Stripe, and Stripe has not got it yet.
-    let mine = store.queue().filter { $0.state == .queued && $0.sale.signedInUid == uid && !$0.cardOnDevice }
+    let mine = queue.filter { $0.state == .queued && $0.sale.signedInUid == uid && !$0.cardOnDevice }
     guard !mine.isEmpty else { return }
     syncInFlight = true
     syncing = true

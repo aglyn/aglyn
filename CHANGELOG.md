@@ -33,7 +33,6 @@ content on the marketing site and is written separately.
 - **native:** an iPad window keeps its place across the app switcher ([AGL-4006](https://linear.app/aglyn/issue/AGL-4006))
 - **native:** Android POS Day totals can share its CSV ([AGL-4062](https://linear.app/aglyn/issue/AGL-4062))
 - **media:** folder tree offers Shared with… like the folder card ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
-- **deps:** upgrade Next.js to 16.4.6 for seven moderate advisories ([AGL-4091](https://linear.app/aglyn/issue/AGL-4091))
 - **shared-ui:** MdiIcon draws a generated icon object, and its path prop is typechecked ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
 - **domains:** connect automatically hears an approval after five minutes ([AGL-3963](https://linear.app/aglyn/issue/AGL-3963))
 - **plugins:** hold first-press saves on an unconfirmed seed in the other plugins ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))

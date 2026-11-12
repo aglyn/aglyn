@@ -182,7 +182,13 @@ function nextApps() {
     try {
       const project = JSON.parse(readFileSync(projectFile, 'utf8'))
       const serve = project?.targets?.serve
-      if (!String(serve?.executor ?? '').includes('next')) continue
+      // A Next app: a `serve` target beside a next.config. Nx 24 infers the
+      // target from @nx/next/plugin, so project.json no longer names an
+      // executor for it.
+      const isNext = ['js', 'cjs', 'mjs', 'ts'].some((ext) =>
+        existsSync(join(appsDir, name, `next.config.${ext}`)),
+      )
+      if (!serve || !isNext) continue
       found.push({
         name,
         dir: join(appsDir, name),

@@ -12,7 +12,8 @@ on the Hobby builder Vercel reports as **2 cores, 8 GB**:
 
 ## Next app builds must not depend on `^build` (AGL-738)
 
-`nx.json` sets `dependsOn: []` on the `@nx/next:build` target default. **This is deliberate.**
+`nx.json` sets `dependsOn: []` on the Next build target default (the `build` entry filtered
+to `@nx/next/plugin`; before Nx 24 it was the `@nx/next:build` default). **This is deliberate.**
 Restoring `["^build"]` re-adds roughly four fifths of the build.
 
 Every `@aglyn/*` alias in `tsconfig.base.json` — and in the generated per-app

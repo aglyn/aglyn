@@ -3,27 +3,17 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/cli/src",
   "projectType": "library",
-  "tags": [
-    "scope:lib",
-    "scope:cli",
-    "type:util"
-  ],
+  "tags": ["scope:lib", "scope:cli", "type:util"],
   "targets": {
     "build": {
       "executor": "@nx/js:swc",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/libs/cli",
         "main": "libs/cli/src/index.ts",
-        "additionalEntryPoints": [
-          "libs/cli/src/bin.ts"
-        ],
+        "additionalEntryPoints": ["libs/cli/src/bin.ts"],
         "tsConfig": "libs/cli/tsconfig.lib.json",
-        "assets": [
-          "libs/cli/*.md"
-        ]
+        "assets": ["libs/cli/*.md"]
       }
     },
     "publish": {
@@ -37,20 +27,15 @@
         "command": "node tools/scripts/publish.mjs cli {args.ver} {args.tag}"
       }
     },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": [
-        "{options.outputFile}"
-      ]
-    },
     "test": {
-      "executor": "@nx/jest:jest",
-      "outputs": [
-        "{workspaceRoot}/coverage/{projectRoot}"
-      ],
-      "options": {
-        "jestConfig": "libs/cli/jest.config.ts"
-      }
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/jest.preset.js",
+        {
+          "externalDependencies": ["jest", "@nx/jest", "ts-jest", "babel-jest"]
+        }
+      ]
     }
   }
 }
