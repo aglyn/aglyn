@@ -63,6 +63,9 @@ class NavPathCasesTest {
       val expected = path(case.getValue("expect").jsonObject)
       val stays = case.getValue("expect").jsonObject["starredRowStays"]?.jsonPrimitive?.booleanOrNull
       assertEquals(stays, expected.keepsStarredRow, "$name: the starred row stays selected")
+      // A section of a row (Orders' Reservations) is pushed over a pinned phone tab's own place (AGL-4059 iPhone drive).
+      val section = case.getValue("expect").jsonObject["opensSection"]?.jsonPrimitive?.booleanOrNull
+      assertEquals(section, NavPaths.opensSection(expected, lists), "$name: opens a section")
       for (entry in case.getValue("entries").jsonArray.map { it.jsonObject }) {
         val via = entry.text("via")
         assertEquals(expected, open(entry)?.unscoped, "$name, via $via")

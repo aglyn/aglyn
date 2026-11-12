@@ -222,6 +222,16 @@ public enum NavPaths {
       inSite: item.hostId != nil, routes: routes, lists: lists)
   }
 
+  /// Whether the path's area is one of its row's sections rather than the row's own place (Orders' Reservations,
+  /// Marketing's Campaigns). On a phone whose tab bar holds the row, the tab opens on the row's own place, so a section
+  /// is pushed over it, as its chip does (AGL-4059: a Reservations search row opened Orders' list).
+  public static func opensSection(_ path: NavPath, lists: NavPathLists) -> Bool {
+    guard case .row(let id, let screen, let params) = path.area else { return false }
+    let all = [lists.site, lists.workspace, lists.siteSettings, lists.workspaceSettings] + (lists.staff.map { [$0] } ?? [])
+    guard let row = all.flatMap(\.groups).flatMap(\.rows).first(where: { $0.id == id }) else { return false }
+    return !(row.screen == screen && (row.params ?? [:]) == params)
+  }
+
   /// The row a one-box screens-and-settings match names: its id is `{list}.{row}` or `{list}.{row}.{section}`.
   public static func searchRowID(_ id: String) -> String? {
     let parts = id.split(separator: ".", omittingEmptySubsequences: false)

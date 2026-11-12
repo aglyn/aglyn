@@ -51,6 +51,10 @@ final class NavPathTests: XCTestCase {
       // A starred setting selects its own row in its mode, not the starred row (AGL-4059 iPad drive).
       XCTAssertEqual(
         expected.keepsStarredRow, (item["expect"] as? [String: Any])?["starredRowStays"] as? Bool, "\(name): the starred row stays")
+      // A section of a row (Orders' Reservations) is pushed over a pinned phone tab's own place (AGL-4059 iPhone drive).
+      XCTAssertEqual(
+        NavPaths.opensSection(expected, lists: lists), (item["expect"] as? [String: Any])?["opensSection"] as? Bool,
+        "\(name): opens a section")
       for entry in item["entries"] as? [[String: Any]] ?? [] {
         let via = entry["via"] as? String ?? "?"
         XCTAssertEqual(open(entry)?.unscoped, expected, "\(name), via \(via)")

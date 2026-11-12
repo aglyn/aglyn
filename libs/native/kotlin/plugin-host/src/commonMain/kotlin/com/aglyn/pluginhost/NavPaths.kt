@@ -190,6 +190,18 @@ object NavPaths {
   fun place(item: com.aglyn.contracts.AccountItemRef, routes: List<NativeDeepLink>, lists: NavPathLists): NavPath =
     place(item.screen, item.params.orEmpty(), item.id.takeIf { item.kind == "screen" }, item.hostId != null, routes, lists)
 
+  /**
+   * Whether the path's area is one of its row's sections rather than the row's own place (Orders' Reservations,
+   * Marketing's Campaigns). On a phone whose tab bar holds the row, the tab opens on the row's own place, so a section is
+   * pushed over it, as its chip does (AGL-4059: a Reservations search row opened Orders' list).
+   */
+  fun opensSection(path: NavPath, lists: NavPathLists): Boolean {
+    val area = path.area as? NavArea.Row ?: return false
+    val all = listOfNotNull(lists.site, lists.workspace, lists.siteSettings, lists.workspaceSettings, lists.staff)
+    val row = all.flatMap { it.groups }.flatMap { it.rows }.firstOrNull { it.id == area.id } ?: return false
+    return !(row.screen == area.screen && row.params.orEmpty() == area.params)
+  }
+
   /** The row a one-box screens-and-settings match names: its id is `{list}.{row}` or `{list}.{row}.{section}`. */
   fun searchRowId(id: String): String? = id.split('.').getOrNull(1)
 

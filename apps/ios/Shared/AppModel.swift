@@ -401,7 +401,10 @@ final class AppModel {
       let settings = path.mode == .workspaceSettings || path.mode == .siteSettings
       navigation.mode = settings ? Self.mode(path.mode) : .main
       if !settings, let tab = navigation.tabSection?(rowID) {
-        land(tab, steps)
+        // The tab opens on its row's own place; one of its sections (Orders' Reservations) is pushed over it, as its
+        // chip does.
+        let sectionOverTab = NavPaths.opensSection(path, lists: navPathLists) ? ShellNavigation.areaRoute(section) : nil
+        land(tab, (sectionOverTab.map { [$0] } ?? []) + steps)
       } else {
         let area = ShellNavigation.areaRoute(section) ?? Self.route(.screen(screen, params))
         land(.home, (settings ? [.modeList] : []) + [area] + steps)
