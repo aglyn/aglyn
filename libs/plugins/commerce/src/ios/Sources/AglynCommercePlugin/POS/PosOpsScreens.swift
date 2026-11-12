@@ -49,9 +49,7 @@ struct RegisterOpsSheet: View {
           ShiftControls(model: model)
           // Every register, shift and cashier for the day or the event (AGL-4037), and this device's unsynced sales.
           NavigationLink {
-            PosDayTotalsView(
-              model: PosDayReportModel(api: model.dayReportAPI), currency: model.currency,
-              notSynced: PosDayNotSynced(model.offline.queue))
+            PosRegisterDayTotals(model: model)
           } label: {
             Text("Day totals")
           }
@@ -618,5 +616,22 @@ private struct PairingCodeSheet: View {
       }
     }
     .aglynSheetMinimumSize(width: 420, height: 440)
+  }
+}
+
+/// The register's Day totals, holding its report model for as long as the screen is open: built inline in the link,
+/// every redraw of the register sheet (a Share CSV tap is one) made a new model that never loaded, and the screen sat
+/// on "Adding up every register…".
+private struct PosRegisterDayTotals: View {
+  let model: RegisterModel
+  @State private var report: PosDayReportModel
+
+  init(model: RegisterModel) {
+    self.model = model
+    _report = State(initialValue: PosDayReportModel(api: model.dayReportAPI))
+  }
+
+  var body: some View {
+    PosDayTotalsView(model: report, currency: model.currency, notSynced: PosDayNotSynced(model.offline.queue))
   }
 }

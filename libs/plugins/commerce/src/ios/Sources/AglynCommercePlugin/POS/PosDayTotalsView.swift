@@ -24,6 +24,9 @@ struct PosDayTotalsView: View {
   @Environment(\.aglynWideChrome) private var wide
   @State private var from = Date()
   @State private var to = Date()
+  /// Today resets the pickers to the device's date; that is not a pick, or it would replace the store's own today
+  /// (and its "Today, …" heading) with a plain range.
+  @State private var resettingToToday = false
 
   private func money(_ cents: Int) -> String { posMoney(cents, currency: model.state.value?.currency ?? currency) }
 
@@ -79,9 +82,13 @@ struct PosDayTotalsView: View {
       DatePicker("To", selection: $to, in: from..., displayedComponents: .date)
         .accessibilityIdentifier("day-totals-to")
       Button("Today") {
+        resettingToToday = true
         from = Date()
         to = Date()
-        Task { await model.today() }
+        Task {
+          await model.today()
+          resettingToToday = false
+        }
       }
       .accessibilityIdentifier("day-totals-today")
     } header: {
@@ -91,8 +98,8 @@ struct PosDayTotalsView: View {
         Text(head == nil ? model.label : byline).textCase(nil).accessibilityIdentifier("day-totals-days")
       }
     }
-    .onChange(of: from) { _, _ in Task { await model.pick(from: from, to: to) } }
-    .onChange(of: to) { _, _ in Task { await model.pick(from: from, to: to) } }
+    .onChange(of: from) { _, _ in if !resettingToToday { Task { await model.pick(from: from, to: to) } } }
+    .onChange(of: to) { _, _ in if !resettingToToday { Task { await model.pick(from: from, to: to) } } }
 
     if let notSynced, !notSynced.isEmpty {
       Section {
