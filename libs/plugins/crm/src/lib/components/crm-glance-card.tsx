@@ -41,7 +41,7 @@ import { openLeadsForScope } from './reports/lead-counts'
 import { scopedCollection, visibleToClause } from './reports/report-scope'
 import { ReportStatTile } from './reports/report-stat-tile'
 import { useAggregateRead } from './reports/use-aggregate-read'
-import { localDayBounds } from '../model/crm-reports'
+import { localDayBounds } from '../model/local-day-bounds'
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 

@@ -640,18 +640,8 @@ export function currencyOfDeals(
   return { currency: ranked[0]?.key ?? 'usd', mixed: ranked.length > 1 }
 }
 
-/**
- * The local calendar day a moment falls in, `[start, end)`.
- *
- * The same day `taskDueState` decides "today" on, so a count of tasks due
- * today and the list's "today" chip agree about the same task at 11 p.m.
- */
-export function localDayBounds(nowMs: number): { start: number; end: number } {
-  const now = new Date(nowMs)
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
-  return { start: start.getTime(), end: end.getTime() }
-}
+/** The local calendar day a moment falls in; see `local-day-bounds.ts`. */
+export { localDayBounds } from './local-day-bounds'
 
 /*==========================================
  * ACTIVITY BY TEAMMATE (AGL-2624)
