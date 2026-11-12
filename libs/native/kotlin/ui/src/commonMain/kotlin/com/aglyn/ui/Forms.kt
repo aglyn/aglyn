@@ -13,7 +13,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -49,26 +48,9 @@ fun SearchField(
 ) {
   val metrics = LocalShellMetrics.current
   // The desktop and the tablet draw Figma's 28 list search (Mac 13:483, iPad 13:2167); phones keep the touch field.
-  if (metrics.compact || currentWidthClass() != WidthClass.COMPACT) {
-    CompactListSearch(query, onQuery, placeholder, modifier, onSearch, metrics)
-    return
-  }
-  OutlinedTextField(
-    value = query,
-    onValueChange = onQuery,
-    modifier = modifier.fillMaxWidth().testTag("search-field"),
-    placeholder = { Text(placeholder, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-    leadingIcon = { Icon(AglynIcons.named("search"), contentDescription = null) },
-    trailingIcon = {
-      if (query.isNotEmpty()) {
-        WithTooltip("Clear search") { IconButton(onClick = { onQuery("") }) { Icon(AglynIcons.named("close"), contentDescription = "Clear search") } }
-      }
-    },
-    singleLine = true,
-    shape = MaterialTheme.shapes.extraLarge,
-    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-    keyboardActions = KeyboardActions(onSearch = { onSearch?.invoke() }),
-  )
+  // A phone's list search is Figma's 40 touch field on the sunken fill (Pages 285:6443, Media 285:31459), not the
+  // platform's 56 outlined field.
+  CompactListSearch(query, onQuery, placeholder, modifier, onSearch, metrics, touch = !(metrics.compact || currentWidthClass() != WidthClass.COMPACT))
 }
 
 @Composable
@@ -79,34 +61,39 @@ private fun CompactListSearch(
   modifier: Modifier,
   onSearch: (() -> Unit)?,
   metrics: ShellMetrics,
+  /** A phone's touch field: 40 tall, the body type, no outline. */
+  touch: Boolean = false,
 ) {
-  val shape = androidx.compose.foundation.shape.RoundedCornerShape(metrics.controlRadius)
+  // Figma's Phone/Search field rounds by 12 (the medium step); a list toolbar's by the control radius.
+  val shape = if (touch) MaterialTheme.shapes.medium else androidx.compose.foundation.shape.RoundedCornerShape(metrics.controlRadius)
   val muted = MaterialTheme.colorScheme.onSurfaceVariant
+  val type = if (touch) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, lineHeight = 18.sp)
   androidx.compose.foundation.text.BasicTextField(
     value = query,
     onValueChange = onQuery,
     singleLine = true,
-    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, lineHeight = 18.sp, color = MaterialTheme.colorScheme.onSurface),
+    textStyle = type.copy(color = MaterialTheme.colorScheme.onSurface),
     cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
     keyboardActions = KeyboardActions(onSearch = { onSearch?.invoke() }),
     modifier = modifier.fillMaxWidth().testTag("search-field"),
     decorationBox = { field ->
       Row(
-        Modifier.fillMaxWidth().heightIn(min = 28.dp).clip(shape).background(MaterialTheme.colorScheme.surfaceVariant)
-          .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape).padding(start = 10.dp, end = if (query.isEmpty()) 10.dp else 2.dp),
+        Modifier.fillMaxWidth().heightIn(min = if (touch) 40.dp else 28.dp).clip(shape).background(MaterialTheme.colorScheme.surfaceVariant)
+          .then(if (touch) Modifier else Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape))
+          .padding(start = if (touch) 12.dp else 10.dp, end = if (query.isEmpty()) (if (touch) 12.dp else 10.dp) else 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
       ) {
-        Icon(AglynIcons.named("search"), contentDescription = null, modifier = Modifier.size(14.dp), tint = muted)
+        Icon(AglynIcons.named("search"), contentDescription = null, modifier = Modifier.size(if (touch) 20.dp else 14.dp), tint = muted)
         Box(Modifier.weight(1f)) {
-          if (query.isEmpty()) Text(placeholder, fontSize = 13.sp, lineHeight = 18.sp, color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          if (query.isEmpty()) Text(placeholder, style = type, color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
           field()
         }
         if (query.isNotEmpty()) {
           WithTooltip("Clear search") {
-            IconButton(onClick = { onQuery("") }, modifier = Modifier.size(24.dp)) {
-              Icon(AglynIcons.named("close"), contentDescription = "Clear search", modifier = Modifier.size(14.dp), tint = muted)
+            IconButton(onClick = { onQuery("") }, modifier = Modifier.size(if (touch) 36.dp else 24.dp)) {
+              Icon(AglynIcons.named("close"), contentDescription = "Clear search", modifier = Modifier.size(if (touch) 18.dp else 14.dp), tint = muted)
             }
           }
         }

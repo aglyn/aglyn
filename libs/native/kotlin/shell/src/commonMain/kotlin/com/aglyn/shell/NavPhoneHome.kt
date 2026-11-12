@@ -105,10 +105,55 @@ internal fun PhoneHome(
 
 /** The workspace's proposed plan, above a workspace Home's tiles (AGL-4011). */
 @Composable
-internal fun PhoneHomeHeader(services: ShellServices, context: ShellPluginContext, workspace: WorkspaceState) {
-  if (workspace.site != null) return
+internal fun PhoneHomeHeader(services: ShellServices, context: ShellPluginContext, workspace: WorkspaceState, onVisit: (String) -> Unit) {
+  workspace.site?.let { site ->
+    PhoneSiteLine(services, site, onVisit)
+    return
+  }
   val org = (orgDocLive(services, workspace.org?.id) as? Live.Ready)?.value?.data
   HomeUpgradeProposal(services, context, org, workspace.org?.name, workspace.org?.slug, Contracts.platformBrandName)
+}
+
+/**
+ * A site Home's line under the scope chip (Figma Android Home 22:775, iPhone 22:176; the console's Visit site): the
+ * site's status, its address and Visit site, which opens the site in the in-app browser.
+ */
+@Composable
+private fun PhoneSiteLine(services: ShellServices, site: com.aglyn.core.WorkspaceSite, onVisit: (String) -> Unit) {
+  val host = hostDoc(services, site.id)
+  val data = (host as? Live.Ready)?.value?.data
+  val status = data?.let { com.aglyn.core.HostStatus.describe(it, com.aglyn.core.nowMillis()) }
+  val address = site.addressWith(data?.get("cname") as? String)
+  Row(
+    Modifier.fillMaxWidth().testTag("home-site-line"),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(space(1f)),
+  ) {
+    status?.let {
+      com.aglyn.ui.StatusChip(
+        it.label,
+        when (it.kind) {
+          com.aglyn.core.HostStatusKind.LIVE -> com.aglyn.ui.StatusTone.SUCCESS
+          com.aglyn.core.HostStatusKind.MAINTENANCE -> com.aglyn.ui.StatusTone.WARNING
+          com.aglyn.core.HostStatusKind.SUSPENDED -> com.aglyn.ui.StatusTone.ERROR
+          else -> com.aglyn.ui.StatusTone.NEUTRAL
+        },
+      )
+    }
+    Text(
+      address.orEmpty(),
+      Modifier.weight(1f),
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+    )
+    if (address != null) {
+      TextButton(onClick = { onVisit("https://$address/") }, modifier = Modifier.testTag("home-visit-site")) {
+        Text("Visit site", fontWeight = FontWeight.SemiBold)
+      }
+    }
+  }
 }
 
 /** The numbers under a phone Home's tiles (AGL-4011): a site's Traffic, its cards and its activity; the workspace's cards. */

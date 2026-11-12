@@ -112,18 +112,22 @@ fun OverflowMenu(
 ) {
   if (actions.isEmpty()) return
   var open by remember { mutableStateOf(false) }
+  // In a phone area's title row, Figma's bordered 40 "⋯" square (285:6443).
+  val phoneHead = LocalPhoneListHead.current
+  val square = boxed || phoneHead
+  val side = if (phoneHead) PhoneHeadMetrics.button else boxSize
   Box(modifier) {
     WithTooltip(contentDescription) {
-      if (boxed) {
+      if (square) {
         val shape = androidx.compose.foundation.shape.RoundedCornerShape(LocalShellMetrics.current.controlRadius)
         Box(
-          Modifier.size(boxSize).clip(shape).background(MaterialTheme.colorScheme.surface)
+          Modifier.size(side).clip(shape).background(MaterialTheme.colorScheme.surface)
             .border(1.dp, MaterialTheme.colorScheme.outline, shape)
             .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = { open = true })
             .testTag("overflow-menu").semantics { this.contentDescription = contentDescription },
           contentAlignment = Alignment.Center,
         ) {
-          Icon(AglynIcons.named("more_horiz"), contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurface)
+          Icon(AglynIcons.named("more_horiz"), contentDescription = null, modifier = Modifier.size(if (phoneHead) PhoneHeadMetrics.icon else 16.dp), tint = MaterialTheme.colorScheme.onSurface)
         }
       } else {
         IconButton(onClick = { open = true }, Modifier.testTag("overflow-menu")) {
@@ -171,6 +175,12 @@ fun ListHeader(title: String, modifier: Modifier = Modifier, actions: @Composabl
   // 20 above a 28 title row in the list title's type, its ☆ and actions, 12 below, then the area's section chips.
   if (LocalListColumn.current != null) {
     ListColumnHead(title, modifier, actions)
+    return
+  }
+  // An area's own list on a phone (Pages, Content, Analytics) is headed as Orders is (Figma 285:6443): the title with its ▾
+  // and ☆, then the actions, at the head's measures.
+  if (LocalAreaSwitcher.current != null && !LocalShellMetrics.current.compact && currentWidthClass() == WidthClass.COMPACT) {
+    PhoneListHead(title, modifier, actions)
     return
   }
   FlowRow(
@@ -250,6 +260,59 @@ fun StatTile(label: String, value: String, modifier: Modifier = Modifier, captio
   }
 }
 
+/** Inside a phone area's title row ([ListHeader]): its actions draw as Figma's 40 squares (285:6443). */
+val LocalPhoneListHead = androidx.compose.runtime.staticCompositionLocalOf { false }
+
+/** A phone title row's square buttons (Figma 22:499 / 285:6443): 40 square, a 20 symbol. */
+object PhoneHeadMetrics {
+  val button = 40.dp
+  val icon = 20.dp
+}
+
+/** [ListHeader] for an area's own list on a phone: the area's title row, as [ListScreenScaffold] draws Orders'. */
+@Composable
+private fun PhoneListHead(title: String, modifier: Modifier, actions: @Composable () -> Unit) {
+  val star = LocalPageStar.current
+  if (star != null) {
+    androidx.compose.runtime.DisposableEffect(star) {
+      star.claim()
+      onDispose { star.release() }
+    }
+  }
+  val edge = LocalContentInset.current ?: contentInset()
+  Row(
+    modifier.fillMaxWidth().padding(start = edge, end = edge, top = HeadMetrics.gap, bottom = HeadMetrics.gap)
+      .heightIn(min = HeadMetrics.titleRow).testTag("list-title-row"),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(space(1f)),
+  ) {
+    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+      Box(Modifier.weight(1f, fill = false)) { AreaTitle(title, compactHead = false) }
+      star?.star?.invoke()
+    }
+    androidx.compose.runtime.CompositionLocalProvider(LocalPhoneListHead provides true) { actions() }
+  }
+  // A hub's own sections (CRM's Contacts, Leads…) under the title, as a list column has them ([AreaSectionsSlot]).
+  AreaSections()
+}
+
+/**
+ * A screen that keeps its own sections (a hub: CRM's Contacts, Leads…) offers its chips here, so the list it shows can
+ * draw them under its head ([ListHeader]) rather than above it. Unclaimed, the hub draws them itself.
+ */
+val LocalAreaSections = androidx.compose.runtime.staticCompositionLocalOf<PageSectionsSlot?> { null }
+
+/** The hub's section chips under a list's head, claimed from [LocalAreaSections]; nothing without them. */
+@Composable
+private fun AreaSections() {
+  val slot = LocalAreaSections.current ?: return
+  androidx.compose.runtime.DisposableEffect(slot) {
+    slot.claim()
+    onDispose { slot.release() }
+  }
+  slot.sections()
+}
+
 /** [ListHeader] atop a list column beside its detail: the area's head, then its section chips. */
 @Composable
 private fun ListColumnHead(title: String, modifier: Modifier, actions: @Composable () -> Unit) {
@@ -288,6 +351,7 @@ private fun ListColumnHead(title: String, modifier: Modifier, actions: @Composab
       actions()
     }
     ListColumnSections()
+    AreaSections()
   }
 }
 
