@@ -766,16 +766,13 @@ internal fun EditSheet(
     busy = busy,
     onDismiss = onDismiss,
     confirmLabel = confirmLabel,
-    confirmEnabled = !held,
+    hold = if (held) com.aglyn.ui.FormHold.of(subject) else null,
     modifier = Modifier.testTag("crm-edit-sheet"),
     onConfirm = {
       tried = true
       if (problems.isEmpty()) onSave(values)
     },
   ) {
-    if (held) {
-      Text(com.aglyn.core.seedCheckingText(subject), Modifier.testTag("crm-checking"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
     header?.invoke()
     FieldForm(fields.map { it.spec }, values, { key, value -> values = values + (key to value) }, errors = if (tried) problems else emptyMap(), enabled = !busy.busy)
     footer?.invoke(values) { key, value -> values = values + (key to value) }

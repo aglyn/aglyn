@@ -137,7 +137,7 @@ struct SetupDetail: View {
     .formStyle(.aglynGrouped)
     // The cards seeded from the site document hold their Save while it is only the device cache's copy (AGL-4047); the
     // theme editor and the emails read through their routes, which answer from the server.
-    .environment(\.aglynFormChecking, doc.fromCache && section.seedsFromHost ? seedCheckingText("site settings") : nil)
+    .environment(\.aglynFormChecking, doc.fromCache && section.seedsFromHost ? formHold("site settings") : nil)
     // What was typed for one site never carries to the next.
     .id(hostID)
     .navigationTitle(section.title)
@@ -195,6 +195,12 @@ private struct HostTextCard<Content: View>: View {
   }
 }
 
+/// What a form card seeded from the cache's copy of `subject` is held on (AGL-4047): the sentence beside Save, and the
+/// refusal a kept press shows if the server's copy never comes.
+func formHold(_ subject: String) -> AglynFormHold {
+  AglynFormHold(checking: seedCheckingText(subject), unconfirmed: seedUnconfirmedText(subject))
+}
+
 /// A card of one switch or choice that saves the moment it changes.
 private struct ImmediateCard<Content: View>: View {
   let title: String
@@ -205,7 +211,7 @@ private struct ImmediateCard<Content: View>: View {
   var body: some View {
     Section(title) {
       content(runner).disabled(checking != nil)
-      if let checking { Text(checking).font(AglynFont.caption).foregroundStyle(.secondary) }
+      if let checking { Text(checking.checking).font(AglynFont.caption).foregroundStyle(.secondary) }
       if let error = runner.error { AglynNotice(error, tone: .error) }
     }
   }

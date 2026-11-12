@@ -22,14 +22,17 @@ public enum AglynKeyboard: Sendable {
 /// fields, why the last save failed or that it worked, and Discard and Save.
 /// Save and Discard stay disabled until a field differs from what is stored.
 extension EnvironmentValues {
-  /// Set while the data a form card is seeded from is only the device cache's answer (AGL-4047): the card holds its Save
-  /// and says this beside it once something is typed (`seedCheckingText`). A card that saves on each change holds its
-  /// controls the same way.
-  @Entry public var aglynFormChecking: String?
+  /// Set while the data a form card is seeded from is only the device cache's answer (AGL-4047): the card says its
+  /// `checking` sentence beside Save once something is typed, and a Save pressed then is kept and runs once the server's
+  /// copy is in (`AglynHeldPress`), or shows `unconfirmed` if it never comes. A card that saves on each change holds its
+  /// controls instead.
+  @Entry public var aglynFormChecking: AglynFormHold?
 }
 
 public struct AglynFormCard<Content: View>: View {
   @Environment(\.aglynFormChecking) private var checking
+  /// A Save pressed while the card is held, kept until the server's copy is in (AGL-4047).
+  @State private var held = AglynHeldPress()
   let title: String
   let message: String?
   let dirty: Bool
@@ -64,27 +67,41 @@ public struct AglynFormCard<Content: View>: View {
       content
       if let error { AglynNotice(error, tone: .error) }
       if let notice, !dirty, error == nil { AglynNotice(notice, tone: .success) }
-      if let checking, dirty {
-        Text(checking).font(AglynFont.caption).foregroundStyle(.secondary)
+      if let refusal = held.refusal, dirty {
+        AglynNotice(refusal, tone: .warning)
+          .accessibilityIdentifier("card-unconfirmed-\(title)")
+      } else if let checking, dirty {
+        Text(checking.checking).font(AglynFont.caption).foregroundStyle(.secondary)
           .accessibilityIdentifier("card-checking-\(title)")
       }
       HStack {
         Spacer()
-        Button("Discard", action: onDiscard)
-          .disabled(!dirty || busy)
-          .accessibilityIdentifier("card-discard-\(title)")
-        Button(action: onSave) {
-          if busy { ProgressView().controlSize(.small) } else { Text("Save") }
+        Button("Discard") {
+          held.reset()
+          onDiscard()
+        }
+        .disabled(!dirty || saving)
+        .accessibilityIdentifier("card-discard-\(title)")
+        Button {
+          if held.pressed(checking: checking != nil) { onSave() }
+        } label: {
+          if saving { ProgressView().controlSize(.small) } else { Text("Save") }
         }
         .buttonStyle(.aglynProminent)
-        .disabled(!dirty || !canSave || busy || checking != nil)
+        .disabled(!dirty || !canSave || saving)
         .accessibilityIdentifier("card-save-\(title)")
       }
       .buttonStyle(.borderless)
     } header: {
       Text(title).accessibilityAddTraits(.isHeader)
     }
+    .aglynHeldPress($held, checking: checking != nil, refusal: checking?.unconfirmed ?? "") {
+      if dirty && canSave { onSave() }
+    }
   }
+
+  /// From the press until the save finishes, a kept press's wait included.
+  private var saving: Bool { busy || held.waiting }
 }
 
 /// A labeled text field with a character count and a helper or error line.

@@ -123,7 +123,7 @@ internal fun BusinessSection(context: NativePluginContext, hostId: String, host:
   val foundedError = businessFoundedError(form)
 
   // Its own document, so its own hold: Save waits while the profile is only the device cache's copy (AGL-4047).
-  val profileChecking = if ((live as? Live.Ready)?.fromCache == true) com.aglyn.core.seedCheckingText("business profile") else null
+  val profileChecking = if ((live as? Live.Ready)?.fromCache == true) com.aglyn.ui.FormHold.of("business profile") else null
   androidx.compose.runtime.CompositionLocalProvider(com.aglyn.ui.LocalFormChecking provides profileChecking) {
   FormCard(
     title = "Business profile",

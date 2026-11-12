@@ -18,6 +18,9 @@ internal object FormEdits {
   /** What a held Save says beside it (`seedCheckingText`), for the form's `checking` subject ("profile"). */
   fun checkingText(subject: String?): String = "Checking your ${subject ?: "settings"} with the server…"
 
+  /** What a Save pressed while held says when the server's copy never came (`seedUnconfirmedText`). */
+  fun unconfirmedText(subject: String?): String = com.aglyn.core.seedUnconfirmedText(subject ?: "settings")
+
   /** The loads still `checking` that this form reads: its `object`, or any field's `initial`. */
   fun heldBy(objectPath: String?, initials: List<String>, checking: JsonElement?): List<String> {
     val held = checking as? JsonObject ?: return emptyList()
