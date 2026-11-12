@@ -229,6 +229,8 @@ final class CommerceRegistrationTests: XCTestCase {
       ("/acme/hosts/shop/products/orders?quote=q1", .screen("commerce.quote", with(["quote": "q1"])), #line),
       ("/acme/hosts/shop/products/returns?return=r1", .screen("commerce.return", with(["return": "r1", "returnId": "r1"])), #line),
       ("/acme/hosts/shop/products/returns", .screen("commerce.returns", site), #line),
+      // The Products hub's Reservations section is the native Reservations screen (AGL-4059).
+      ("/acme/hosts/shop/products/reservations", .screen("commerce.reservations", site), #line),
       ("/acme/hosts/shop/products/shipping", .screen("commerce.shipping", site), #line),
       ("/acme/hosts/shop/products/notifications", .screen("commerce.notifications", site), #line),
       ("/acme/hosts/shop/products/subscriptions?subscription=s1", .unavailable("/acme/hosts/shop/products/subscriptions?subscription=s1"), #line),
