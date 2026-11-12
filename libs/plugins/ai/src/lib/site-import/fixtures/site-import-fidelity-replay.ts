@@ -30,7 +30,7 @@ import { DEFAULT_SITE_THEME } from '@aglyn/aglyn/app-utils/default-site'
 import { aiImportedPageCheck } from '../../jobs/ai-job-page-language'
 import { aiReadImprovedPage, aiSiteImportImproveDestinations, aiSiteImportImproveLedger, aiSiteImportImproveScope, aiSiteImportImprovedPage, type AiSiteImportImprovedPage } from '../../jobs/ai-site-import-improve'
 import { aiSiteImportFrameJob, aiSiteImportHomeOf } from '../../jobs/ai-job-import-step'
-import { aiLayoutSiteBrandOf, aiLayoutSiteFrameOf, aiLayoutSourceFrameBuild } from '../../jobs/ai-job-layout-language'
+import { aiLayoutSiteBrandOf, aiLayoutSiteFactsText, aiLayoutSiteFrameOf, aiLayoutSourceFrameBuild } from '../../jobs/ai-job-layout-language'
 import { aiLayoutChecks } from '../../jobs/ai-job-layout-step'
 import { aiSiteImportSectionNames } from '../../jobs/ai-site-import-compile'
 import { AI_LAYOUT_IMPORTED_SECTIONS_INPUT, aiSiteImportDocumentOf, type AiSiteImportDocument } from '../../jobs/ai-site-import-document'
@@ -436,7 +436,8 @@ export function siteImportReplayFrame(name: SiteImportReplayHome, options: { gen
     homeId: home.draftId,
     pages: [{ id: home.draftId, label: 'Home', slug: '/' }],
     targets: { pageId: null, pages: [], homeIds: [home.draftId], forms: [], formPageId: null, components: [], facts: '' } as never,
-    extend: aiLayoutChecks(emptyAiSiteInventory('host-replay'), frameJob.plan ?? null, [frameJob.brief, ...(state.home?.facts.lines ?? [])].join('\n')),
+    // Held to the frame job's own facts, as the layout step holds it (AGL-4152).
+    extend: aiLayoutChecks(emptyAiSiteInventory('host-replay'), frameJob.plan ?? null, [frameJob.brief, aiLayoutSiteFactsText(frameJob.inputs)].filter(Boolean).join('\n')),
     brand: aiLayoutSiteBrandOf(frameJob.inputs),
     source: aiLayoutSiteFrameOf(frameJob.inputs) as AiLayoutFrameSource,
   })
