@@ -15,23 +15,14 @@ struct AddAccountView: View {
 
   var body: some View {
     NavigationStack {
-      ScrollView {
-        VStack(alignment: .leading, spacing: AglynSpace.two) {
-          VStack(alignment: .leading, spacing: AglynSpace.one) {
-            Text("Add an account").font(AglynFont.title).accessibilityAddTraits(.isHeader)
-            Text(
-              "Sign in to another \(model.brandName) account. You stay signed in to \(model.auth?.user?.email ?? "this account"), and can switch from your photo at any time."
-            )
-            .font(AglynFont.subheadline)
-            .foregroundStyle(.secondary)
-          }
-          .padding(.horizontal, AglynSpace.two)
-          .padding(.top, AglynSpace.two)
-          SignedOutView()
-        }
-        .frame(maxWidth: 520)
-        .frame(maxWidth: .infinity)
-      }
+      // The sign-in screens draw their own card, heading and scrolling (AuthCard measures the space it is given, so it
+      // must not sit inside another ScrollView, where it is offered no height and draws nothing). The add-account words
+      // replace the sign-in heading and line.
+      SignedOutView(
+        signInTitle: "Add an account",
+        signInSubtitle:
+          "Sign in to another \(model.brandName) account. You stay signed in to \(model.auth?.user?.email ?? "this account"), and can switch from your photo at any time."
+      )
       .background(AglynColor.page)
       #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)

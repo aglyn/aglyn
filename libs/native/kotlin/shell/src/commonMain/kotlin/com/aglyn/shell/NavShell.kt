@@ -211,6 +211,9 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
   // Each account's photo, kept on the roster so the switcher draws every account's face (AGL-4010).
   val storedPhoto = prefs.photo(user?.photoUrl)
   LaunchedEffect(storedPhoto, prefs.loaded) { if (prefs.loaded) services.accounts?.rememberPhoto(storedPhoto) }
+  // And the name the header shows, once the profile has loaded, so the switcher names each account the same way.
+  val shownName = prefs.name(user?.displayName, user?.email)
+  LaunchedEffect(shownName, prefs.loaded) { if (prefs.loaded) services.accounts?.rememberName(shownName) }
   val screenSession = rememberScreenSession(services, navigator, workspace, user, claims) { claims = it }
 
   // The scope's lists, from the manifest.

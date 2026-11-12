@@ -528,6 +528,12 @@ struct ShellFrame<Content: View>: View {
       .onChange(of: model.workspace?.effective, initial: true) { leaveARemovedSite() }
       // Each account's photo, kept on the roster so the switcher draws every account's face (AGL-4010).
       .onChange(of: AccountIdentity(model: model).photoValue, initial: true) { _, photo in model.auth?.recordPhoto(photo) }
+      // The name the header shows, kept on the roster so the switcher names each account the same way (AGL-4010). Only
+      // once the profile has loaded, so the sign-in record's name never overwrites it.
+      .onChange(
+        of: model.preferences?.name(authDisplayName: model.auth?.user?.displayName, email: model.auth?.user?.email),
+        initial: true
+      ) { _, name in model.auth?.recordName(name) }
       .onChange(of: navigation.section) { _, section in
         navigation.record(section)
         recordRecent(section)
@@ -1702,15 +1708,16 @@ struct AccountSheet: View {
                 dismiss()
               } label: {
                 HStack(spacing: 10) {
-                  AglynAccountAvatar(initials: account.initials, photoURL: identity.photoURL(of: account), size: 28)
+                  AglynAccountAvatar(
+                    initials: identity.initials(of: account), photoURL: identity.photoURL(of: account), size: 28)
                   VStack(alignment: .leading, spacing: 1) {
-                    Text(account.displayName ?? account.email ?? "Account").font(AglynFont.body)
-                    if let email = account.email, account.displayName != nil {
+                    Text(identity.name(of: account)).font(AglynFont.body)
+                    if let email = identity.detail(of: account) {
                       Text(email).font(AglynFont.caption).foregroundStyle(.secondary)
                     }
                   }
                   Spacer()
-                  if account.slot == auth.activeSlot && auth.impersonation == nil {
+                  if identity.isOnScreen(account) {
                     Image(systemName: "checkmark").foregroundStyle(AglynColor.tint)
                   }
                 }
