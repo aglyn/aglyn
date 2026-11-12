@@ -2964,6 +2964,7 @@
             "ai.hostMember",
             "ai.allotment",
             "ai.import.productCopy",
+            "ai.import.start",
             "ai.create"
           ],
           "widgets": [
