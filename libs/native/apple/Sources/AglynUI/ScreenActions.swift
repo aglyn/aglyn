@@ -123,10 +123,12 @@ extension View {
 
 private struct AglynOptionalPrimaryActionModifier: ViewModifier {
   @Environment(\.aglynWideChrome) private var wide
+  @Environment(\.aglynPhoneAreaHead) private var phoneHead
   let action: AglynPrimaryAction?
 
   func body(content: Content) -> some View {
-    if wide {
+    // A phone area's title row draws it too (`aglynPhoneAreaHead`), as the head does on the Mac and iPad.
+    if wide || phoneHead != nil {
       content.transformPreference(AglynScreenChromeKey.self) { $0.merge(AglynScreenChrome(primary: action)) }
     } else {
       content.toolbar {
