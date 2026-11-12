@@ -52,6 +52,14 @@ data class FirestoreQuery(
   val includeMetadataChanges: Boolean = false,
 )
 
+/**
+ * The query a server count or sum runs: every document [this] matches, its window ([FirestoreQuery.limit],
+ * [FirestoreQuery.startAfter]) dropped. The SDKs' server count honors a limit, so a one-row query would count at most 1
+ * (AGL-4011: the Apple kit's CRM at a glance read 1 contact where the console and Android read 13). The Apple twin is
+ * `FirestoreQuery.wholeMatch`.
+ */
+val FirestoreQuery.wholeMatch: FirestoreQuery get() = copy(limit = null, startAfter = null)
+
 data class FirestorePage(
   val docs: List<FirestoreDoc>,
   /** Pass as [FirestoreQuery.startAfter] for the next page; null on the last page. */
