@@ -294,81 +294,125 @@ struct MediaPathRow: View {
   }
 
   var body: some View {
-    HStack(spacing: AglynSpace.one) {
-      if let library {
-        Menu {
-          Picker("Library", selection: library) {
-            Text("This site").tag(0)
-            Text("Workspace").tag(1)
-          }
-          .pickerStyle(.inline)
-        } label: {
-          HStack(spacing: AglynSpace.half) {
-            Text(library.wrappedValue == 0 ? "This site" : "Workspace")
-              .font(.system(size: AglynMediaMetrics.control, weight: .medium))
-            Image(systemName: "chevron.down").font(.system(size: AglynMediaMetrics.chevron, weight: .semibold))
-              .foregroundStyle(AglynColor.secondaryText)
-          }
-          .foregroundStyle(AglynColor.textPrimary)
-          .padding(.leading, AglynSpace.of(1.25)).padding(.trailing, AglynSpace.one)
-          .frame(height: AglynMediaMetrics.button)
-          .background(RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous).fill(AglynColor.paper))
-          .overlay(RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous).strokeBorder(AglynColor.divider))
-          .contentShape(Rectangle())
-        }
-        .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
-        .accessibilityLabel("Library")
-        .accessibilityIdentifier("media-library")
+    // One row when it all fits. In a narrow list column (an iPad's beside its detail) a folder's crumbs would be cut to
+    // "All files › Stor": Include subfolders and the view then take a second row, so the crumbs keep their names.
+    ViewThatFits(in: .horizontal) {
+      HStack(spacing: AglynSpace.one) {
+        leading
+        crumbsRow.fixedSize()
+        Spacer(minLength: AglynSpace.one)
+        subfolders
+        select
+        viewToggle
       }
-      if !crumbs.isEmpty {
-        Button {
-          open(crumbs.count > 1 ? crumbs[crumbs.count - 2].id : nil)
-        } label: {
-          Image(systemName: "chevron.left").font(.system(size: AglynMediaMetrics.symbol, weight: .semibold))
-            .frame(width: AglynMediaMetrics.button, height: AglynMediaMetrics.button)
+      VStack(alignment: .leading, spacing: AglynSpace.one) {
+        HStack(spacing: AglynSpace.one) {
+          leading
+          ScrollView(.horizontal, showsIndicators: false) { crumbsRow }
+            .scrollBounceBehavior(.basedOnSize)
+          Spacer(minLength: AglynSpace.one)
+          select
         }
-        .buttonStyle(AglynHeaderButtonStyle())
-        .keyboardShortcut(.upArrow, modifiers: .command)
-        .help("Back")
-        .accessibilityLabel("Back")
-        .accessibilityIdentifier("media-back")
-      }
-      ScrollView(.horizontal, showsIndicators: false) {
-        HStack(spacing: AglynSpace.of(0.75)) {
-          crumb("All files", id: nil, last: crumbs.isEmpty)
-          ForEach(Array(crumbs.enumerated()), id: \.element.id) { index, folder in
-            Image(systemName: "chevron.right").font(.system(size: AglynMediaMetrics.crumbChevron, weight: .semibold))
-              .foregroundStyle(AglynColor.textTertiary).accessibilityHidden(true)
-            crumb(folder.name, id: folder.id, last: index == crumbs.count - 1)
+        if !crumbs.isEmpty && wide {
+          HStack(spacing: AglynSpace.one) {
+            subfolders
+            Spacer(minLength: AglynSpace.one)
+            viewToggle
           }
         }
-      }
-      .scrollBounceBehavior(.basedOnSize)
-      Spacer(minLength: AglynSpace.one)
-      if !crumbs.isEmpty && wide {
-        Toggle("Include subfolders", isOn: $includeSubfolders)
-          .toggleStyle(.aglynCheckbox)
-          .font(.system(size: AglynMediaMetrics.control))
-          .fixedSize()
-          .accessibilityIdentifier("media-subfolders")
-      }
-      if let selecting, touch {
-        Button(selecting.wrappedValue ? "Done" : "Select") { selecting.wrappedValue.toggle() }
-          .buttonStyle(AglynHeaderButtonStyle())
-          .accessibilityIdentifier("media-select")
-      }
-      if wide {
-        HStack(spacing: AglynMediaMetrics.ring) {
-          viewButton(.grid, systemImage: "square.grid.2x2", label: "Grid")
-          viewButton(.list, systemImage: "list.bullet", label: "List")
-        }
-        .padding(AglynMediaMetrics.ring)
-        .background(RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous).fill(AglynColor.sunken))
-        .overlay(RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous).strokeBorder(AglynColor.divider))
-        .accessibilityIdentifier("media-view")
       }
     }
     .frame(minHeight: AglynMediaMetrics.button)
+  }
+
+  /// The library menu and, inside a folder, Back.
+  @ViewBuilder
+  private var leading: some View {
+    if let library {
+      Menu {
+        Picker("Library", selection: library) {
+          Text("This site").tag(0)
+          Text("Workspace").tag(1)
+        }
+        .pickerStyle(.inline)
+      } label: {
+        HStack(spacing: AglynSpace.half) {
+          Text(library.wrappedValue == 0 ? "This site" : "Workspace")
+            .font(.system(size: AglynMediaMetrics.control, weight: .medium))
+          Image(systemName: "chevron.down").font(.system(size: AglynMediaMetrics.chevron, weight: .semibold))
+            .foregroundStyle(AglynColor.secondaryText)
+        }
+        .foregroundStyle(AglynColor.textPrimary)
+        .padding(.leading, AglynSpace.of(1.25)).padding(.trailing, AglynSpace.one)
+        .frame(height: AglynMediaMetrics.button)
+        .background(RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous).fill(AglynColor.paper))
+        .overlay(RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous).strokeBorder(AglynColor.divider))
+        .contentShape(Rectangle())
+      }
+      .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
+      .accessibilityLabel("Library")
+      .accessibilityIdentifier("media-library")
+  }
+  if !crumbs.isEmpty {
+    Button {
+      open(crumbs.count > 1 ? crumbs[crumbs.count - 2].id : nil)
+    } label: {
+      Image(systemName: "chevron.left").font(.system(size: AglynMediaMetrics.symbol, weight: .semibold))
+        .frame(width: AglynMediaMetrics.button, height: AglynMediaMetrics.button)
+    }
+    .buttonStyle(AglynHeaderButtonStyle())
+    .keyboardShortcut(.upArrow, modifiers: .command)
+    .help("Back")
+    .accessibilityLabel("Back")
+    .accessibilityIdentifier("media-back")
+  }
+  }
+
+  /// "All files › Catering".
+  private var crumbsRow: some View {
+    HStack(spacing: AglynSpace.of(0.75)) {
+      crumb("All files", id: nil, last: crumbs.isEmpty)
+      ForEach(Array(crumbs.enumerated()), id: \.element.id) { index, folder in
+        Image(systemName: "chevron.right").font(.system(size: AglynMediaMetrics.crumbChevron, weight: .semibold))
+          .foregroundStyle(AglynColor.textTertiary).accessibilityHidden(true)
+        crumb(folder.name, id: folder.id, last: index == crumbs.count - 1)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var subfolders: some View {
+    if !crumbs.isEmpty && wide {
+      Toggle("Include subfolders", isOn: $includeSubfolders)
+        .toggleStyle(.aglynCheckbox)
+        .font(.system(size: AglynMediaMetrics.control))
+        .fixedSize()
+        .accessibilityIdentifier("media-subfolders")
+  }
+  }
+
+  /// Select on a touch screen (the console's selection: move, share, delete several at once).
+  @ViewBuilder
+  private var select: some View {
+    if let selecting, touch {
+      Button(selecting.wrappedValue ? "Done" : "Select") { selecting.wrappedValue.toggle() }
+        .buttonStyle(AglynHeaderButtonStyle())
+        .accessibilityIdentifier("media-select")
+  }
+  }
+
+  @ViewBuilder
+  private var viewToggle: some View {
+    if wide {
+      HStack(spacing: AglynMediaMetrics.ring) {
+        viewButton(.grid, systemImage: "square.grid.2x2", label: "Grid")
+        viewButton(.list, systemImage: "list.bullet", label: "List")
+      }
+      .padding(AglynMediaMetrics.ring)
+      .background(RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous).fill(AglynColor.sunken))
+      .overlay(RoundedRectangle(cornerRadius: AglynRadius.control, style: .continuous).strokeBorder(AglynColor.divider))
+      .accessibilityIdentifier("media-view")
+  }
   }
 
   private func crumb(_ title: String, id: String?, last: Bool) -> some View {

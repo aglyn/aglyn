@@ -332,6 +332,10 @@ private fun EventEditor(
     seeded = initial
   }
   val problem = eventWriteProblem(draft.title, draft.startsAtMs ?: 0)
+  // Save pressed while held is kept, and saves once the server's copy is in (AGL-4047).
+  val heldPress = com.aglyn.ui.rememberHeldPress(held, com.aglyn.core.seedUnconfirmedText("event")) {
+    if (eventWriteProblem(draft.title, draft.startsAtMs ?: 0) == null && !busy) onSave(draft)
+  }
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
       Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("event-editor"),
@@ -381,10 +385,15 @@ private fun EventEditor(
         }
       }
       FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-        if (held) {
+        val refusal = heldPress.refusal
+        if (refusal != null) {
+          NoticeBanner(refusal, StatusTone.WARNING, Modifier.testTag("event-unconfirmed"))
+        } else if (held) {
           Text(com.aglyn.core.seedCheckingText("event"), Modifier.testTag("event-checking"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Button(onClick = { onSave(draft) }, enabled = problem == null && !busy && !held, modifier = Modifier.testTag("event-save")) { Text("Save event") }
+        Button(onClick = { if (heldPress.pressed(held)) onSave(draft) }, enabled = problem == null && !busy && !heldPress.waiting, modifier = Modifier.testTag("event-save")) {
+          Text(if (heldPress.waiting) "Saving…" else "Save event")
+        }
         onDelete?.let { TextButton(onClick = it, enabled = !busy, modifier = Modifier.testTag("event-delete")) { Text("Delete", color = MaterialTheme.colorScheme.error) } }
       }
       if (problem != null && (draft.title.isNotEmpty() || draft.startsAtMs != null)) {

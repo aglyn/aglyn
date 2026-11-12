@@ -7,6 +7,7 @@ import SwiftUI
 /// the screen's head on the Mac and iPad, their own navigation-bar buttons on a phone, as they always were there.
 public struct AglynSecondaryActions<Content: View>: View {
   @Environment(\.aglynWideChrome) private var wide
+  @Environment(\.aglynPhoneAreaHead) private var phoneHead
   let content: Content
 
   public init(@ViewBuilder content: () -> Content) {
@@ -14,7 +15,8 @@ public struct AglynSecondaryActions<Content: View>: View {
   }
 
   public var body: some View {
-    if wide {
+    // A phone area's title row folds them into its "⋯" too (Figma 283:23456), beside the filled "+".
+    if wide || phoneHead != nil {
       AglynMoreMenu { content }
     } else {
       content
@@ -123,10 +125,12 @@ extension View {
 
 private struct AglynOptionalPrimaryActionModifier: ViewModifier {
   @Environment(\.aglynWideChrome) private var wide
+  @Environment(\.aglynPhoneAreaHead) private var phoneHead
   let action: AglynPrimaryAction?
 
   func body(content: Content) -> some View {
-    if wide {
+    // A phone area's title row draws it too (`aglynPhoneAreaHead`), as the head does on the Mac and iPad.
+    if wide || phoneHead != nil {
       content.transformPreference(AglynScreenChromeKey.self) { $0.merge(AglynScreenChrome(primary: action)) }
     } else {
       content.toolbar {

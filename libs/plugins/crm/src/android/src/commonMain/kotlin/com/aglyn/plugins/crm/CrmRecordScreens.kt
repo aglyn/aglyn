@@ -142,16 +142,12 @@ fun RecordsSection(
     initialSelected = picked,
     list = { selected, onSelect ->
       Column(Modifier.fillMaxSize()) {
+        // The area's head, as every list's (AGL-4012): CRM with its ☆ and New, then the sections' chips under it.
+        com.aglyn.ui.ListHeader("CRM") {
+          if (scope.canWrite) com.aglyn.ui.ListHeaderAction("New", "add", { creating = true }, Modifier.testTag("crm-new-${kind.collection}"))
+        }
         Column(Modifier.padding(horizontal = space(2f), vertical = space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
-          Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-            SearchField(search, { search = it; if (it.isBlank()) asked = "" }, placeholder = "Search ${kind.plural.lowercase()}", modifier = Modifier.weight(1f), onSearch = { asked = search })
-            if (scope.canWrite) {
-              FilledTonalButton(colors = com.aglyn.ui.aglynTonalButtonColors(), onClick = { creating = true }, modifier = Modifier.testTag("crm-new-${kind.collection}")) {
-                Icon(AglynIcons.named("add"), contentDescription = null)
-                Text("New", Modifier.padding(start = space(0.5f)))
-              }
-            }
-          }
+          SearchField(search, { search = it; if (it.isBlank()) asked = "" }, placeholder = "Search ${kind.plural.lowercase()}", onSearch = { asked = search })
           ChoiceChipRow(filters.map { ChipOption(it.key, it.label) }, filterKey, { filterKey = it })
         }
         LiveListPane(
@@ -766,16 +762,13 @@ internal fun EditSheet(
     busy = busy,
     onDismiss = onDismiss,
     confirmLabel = confirmLabel,
-    confirmEnabled = !held,
+    hold = if (held) com.aglyn.ui.FormHold.of(subject) else null,
     modifier = Modifier.testTag("crm-edit-sheet"),
     onConfirm = {
       tried = true
       if (problems.isEmpty()) onSave(values)
     },
   ) {
-    if (held) {
-      Text(com.aglyn.core.seedCheckingText(subject), Modifier.testTag("crm-checking"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
     header?.invoke()
     FieldForm(fields.map { it.spec }, values, { key, value -> values = values + (key to value) }, errors = if (tried) problems else emptyMap(), enabled = !busy.busy)
     footer?.invoke(values) { key, value -> values = values + (key to value) }

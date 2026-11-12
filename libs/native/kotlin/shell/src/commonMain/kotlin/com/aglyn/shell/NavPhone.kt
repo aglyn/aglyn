@@ -217,7 +217,7 @@ internal fun PhoneShell(
             PhoneHome(
               services, context, homeGroups, tabScope, pinned, prefs.loaded, onOpen = ::openTile,
               onEditTabBar = { chrome.tabBarSheet = true },
-              header = { context?.let { PhoneHomeHeader(services, it, workspace) } },
+              header = { context?.let { PhoneHomeHeader(services, it, workspace, onVisit = navigator::openWeb) } },
               stats = { context?.let { PhoneHomeStats(services, it, workspace) { navigator.select(NavKeys.of(NavKeys.ANALYTICS_SCREEN)) } } },
             )
           top == ShellNavigator.NOTIFICATIONS && route == null && context != null -> Column(Modifier.fillMaxSize()) {

@@ -217,16 +217,14 @@ fun TaskDialog(
     title = title,
     icon = "task",
     confirmLabel = "Save",
-    confirmEnabled = !held && draft.title.isNotBlank() && (sites == null || site.isNotEmpty()),
+    confirmEnabled = draft.title.isNotBlank() && (sites == null || site.isNotEmpty()),
+    hold = if (held) com.aglyn.ui.FormHold.of("task") else null,
     busy = busy.busy,
     error = busy.error,
     onDismiss = onDismiss,
     dismissLabel = "Cancel",
     onConfirm = { onSave(draft.copy(sourceSite = site.takeIf { sites != null && it.isNotEmpty() && it != CRM_ORGANIZATION_CHOICE })) },
   ) {
-    if (held) {
-      Text(com.aglyn.core.seedCheckingText("task"), Modifier.testTag("task-checking"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
     if (sites != null) {
       FieldEditor(
         FieldSpec(

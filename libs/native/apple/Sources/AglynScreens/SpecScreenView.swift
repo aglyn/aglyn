@@ -173,6 +173,8 @@ struct SpecScreenBody: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.aglynGateResolve) private var gateResolve
   @Environment(\.aglynWideChrome) private var wide
+  /// A phone area's title row, drawn by the shell: the screen's actions go there, as in a wide head.
+  @Environment(\.aglynPhoneAreaHead) private var phoneHead
   @State private var confirming: PendingAction?
   @State private var prompting: PendingAction?
   @State private var reauthing: PendingAction?
@@ -255,11 +257,11 @@ struct SpecScreenBody: View {
         }
       }
       .animation(.default, value: notice?.text)
-      // On the Mac and iPad the screen's first action is its head's one primary button and the rest are in More; a
-      // phone keeps them in its navigation bar.
-      .toolbar { if !wide { toolbar } }
-      .aglynPrimaryAction(wide && !embedded ? headPrimary : nil)
-      .aglynScreenToolbar(id: "spec-\(model.spec.id)") { if wide && !embedded { headMore } }
+      // On the Mac and iPad, and in a phone area's title row, the screen's first action is its head's one primary
+      // button and the rest are in More; any other phone screen keeps them in its navigation bar.
+      .toolbar { if !wide && (phoneHead == nil || embedded) { toolbar } }
+      .aglynPrimaryAction((wide || phoneHead != nil) && !embedded ? headPrimary : nil)
+      .aglynScreenToolbar(id: "spec-\(model.spec.id)") { if (wide || phoneHead != nil) && !embedded { headMore } }
       // A detail column's own head only when it has actions: Refresh alone is the screen head's More already, and a
       // row holding only a More leaves a strip above the detail.
       .safeAreaInset(edge: .top, spacing: 0) { if wide && embedded && hasOwnActions { embeddedHead } }
@@ -275,10 +277,10 @@ struct SpecScreenBody: View {
         else { return }
         trigger(action, scope: context)
       }
-      .confirmationDialog(
+      .actionConfirmation(
         confirming.map { $0.action.confirmText(in: $0.scope) ?? ScreenValues.render($0.action.label, in: $0.scope) } ?? "",
         isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),
-        titleVisibility: .visible
+        centered: wide
       ) {
         if let pending = confirming {
           Button(ScreenValues.render(pending.action.label, in: pending.scope), role: pending.action.destructive ? .destructive : nil) {

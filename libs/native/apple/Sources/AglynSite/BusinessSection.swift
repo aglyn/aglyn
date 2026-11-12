@@ -125,7 +125,7 @@ struct BusinessSection: View {
         placeholder: "2015", keyboard: .number, enabled: canEdit)
     }
     // Its own document, so its own hold: Save waits while the profile is only the device cache's copy (AGL-4047).
-    .environment(\.aglynFormChecking, profile.ready && profile.fromCache ? seedCheckingText("business profile") : nil)
+    .environment(\.aglynFormChecking, profile.ready && profile.fromCache ? formHold("business profile") : nil)
     facts
       .task(id: hostID) {
         profile.start(context.firestore, path)

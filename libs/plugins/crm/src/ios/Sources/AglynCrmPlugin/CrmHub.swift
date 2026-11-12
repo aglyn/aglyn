@@ -180,17 +180,10 @@ struct CrmHubScreen: View {
 
   private func hub(_ context: NativePluginContext) -> some View {
     CrmGate(context: context) { scope, api, reference in
-      VStack(spacing: 0) {
-        ScrollView(.horizontal, showsIndicators: false) {
-          HStack(spacing: AglynSpace.one) {
-            ForEach(CrmSection.allCases) { item in
-              AglynChoiceChip(item.label, systemImage: item.symbol, selected: section == item) { section = item }
-            }
-          }
-          .aglynContentEdges()
-          .padding(.vertical, AglynSpace.one)
-        }
-        .accessibilityIdentifier("crm-sections")
+      // The sections across the top, or under the CRM's title in the list column beside a record (Figma 13:483).
+      AglynSectionHub(
+        CrmSection.allCases, selection: $section, label: \.label, systemImage: \.symbol, identifier: "crm-sections"
+      ) {
         sectionView(context, scope, api, reference).frame(maxWidth: .infinity, maxHeight: .infinity)
       }
       .background(AglynGround())

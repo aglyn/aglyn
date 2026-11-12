@@ -212,6 +212,7 @@ public struct FieldEditor: View {
       DateFieldRow(spec: spec, label: label, value: $value)
     case .multiline:
       TextField(label, text: $value, axis: .vertical).lineLimit(3...10)
+        .aglynFieldLabel(label, value: value)
     case .money where spec.currency != nil:
       // Typed in major units with the code beside it, as the console's currency box.
       HStack(spacing: 6) {
@@ -222,6 +223,7 @@ public struct FieldEditor: View {
           .autocorrectionDisabled()
         Text(spec.currency?.code ?? "").foregroundStyle(.secondary).accessibilityHidden(true)
       }
+      .aglynFieldLabel(label, value: value)
     default:
       TextField(label, text: $value)
         .textContentType(contentType)
@@ -230,6 +232,7 @@ public struct FieldEditor: View {
           .textInputAutocapitalization(capitalization)
         #endif
         .autocorrectionDisabled(spec.kind != .text)
+        .aglynFieldLabel(label, value: value)
     }
   }
 

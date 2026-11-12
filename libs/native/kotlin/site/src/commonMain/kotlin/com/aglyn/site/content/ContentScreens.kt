@@ -296,7 +296,7 @@ private fun EntryEditor(
       val titleError = if (draft.title.isBlank()) "Required" else null
       val slugError = if (draft.effectiveSlug.isEmpty()) "Add a title or an address" else null
       // The entry is only the device cache's copy yet: Save is held until the server's is in (AGL-4047).
-      val checking = if (doc.fromCache) com.aglyn.core.seedCheckingText("entry") else null
+      val checking = if (doc.fromCache) com.aglyn.ui.FormHold.of("entry") else null
       androidx.compose.runtime.CompositionLocalProvider(com.aglyn.ui.LocalFormChecking provides checking) {
       Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("entry-editor"),

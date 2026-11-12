@@ -256,4 +256,16 @@ class ScreenWorkspaceSettingsTest {
     assertEquals(listOf("viewListing"), page.actions.map { it.id })
     assertEquals("/{org.slug}/marketplace", spec("core.plugins").actions.first().route)
   }
+  @Test
+  fun anOwnershipCandidateIsNamedWithTheirEmailUnderneathAndTheirPhoto() {
+    val list = spec("core.settings.ownership").blocks.first { it.type == "list" }
+    val named = json("""{"item":{"${'$'}id":"u2","displayName":"Jordan Lee","email":"jordan@example.com","role":"editor","photoURL":"https://example.com/j.png"}}""")
+    val unnamed = json("""{"item":{"${'$'}id":"u3","email":"pat@example.com","role":"viewer"}}""")
+    // The console's member row: the name, then the email; a member with no name is their email, said once.
+    assertEquals("Jordan Lee", ScreenValues.render(list.string("primary")!!, named))
+    assertEquals("jordan@example.com \u00b7 Editor", rowLine(list["secondary"], named))
+    assertEquals("pat@example.com", ScreenValues.render(list.string("primary")!!, unnamed))
+    assertEquals("Viewer", rowLine(list["secondary"], unnamed))
+    assertEquals("https://example.com/j.png", ScreenValues.render(list.string("avatar")!!, named))
+  }
 }
