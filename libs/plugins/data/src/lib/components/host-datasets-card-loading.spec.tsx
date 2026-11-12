@@ -213,3 +213,43 @@ describe('a site’s Data page while its list loads', () => {
     expect(screen.getByText('We couldn’t load your datasets. This does not mean there are none.')).toBeTruthy()
   })
 })
+
+/**
+ * The Datasets card, the rail beside the panel, has a loading state of its own
+ * (AGL-4047). The 11/10 re-check found it blank, with no spinner, until its
+ * rows arrived, while the panel beside it already said loading.
+ */
+describe('the Datasets card while its list loads', () => {
+  const RAIL_LOADING = 'Loading the dataset list'
+
+  it('shows its own loading before any snapshot', async () => {
+    await mount()
+    expect(screen.getByRole('progressbar', { name: RAIL_LOADING })).toBeTruthy()
+  })
+
+  it('shows its own loading while an empty answer from the cache is unconfirmed', async () => {
+    listAnswer = CACHED_EMPTY
+    await mount()
+    expect(screen.getByRole('progressbar', { name: RAIL_LOADING })).toBeTruthy()
+  })
+
+  it('stops loading once the server has answered empty, and the empty state is the panel’s', async () => {
+    listAnswer = SERVER_EMPTY
+    await mount()
+    expect(screen.queryByRole('progressbar', { name: RAIL_LOADING })).toBeNull()
+    expect(screen.getByText(EMPTY_STATE)).toBeTruthy()
+  })
+
+  it('shows rows the cache already holds instead of loading', async () => {
+    listAnswer = { data: [PRODUCTS], status: 'success', fromCache: true }
+    await mount()
+    expect(screen.getByRole('tab', { name: /Products/ })).toBeTruthy()
+    expect(screen.queryByRole('progressbar', { name: RAIL_LOADING })).toBeNull()
+  })
+
+  it('does not say loading when the list is refused', async () => {
+    listAnswer = REFUSED
+    await mount()
+    expect(screen.queryByRole('progressbar', { name: RAIL_LOADING })).toBeNull()
+  })
+})
