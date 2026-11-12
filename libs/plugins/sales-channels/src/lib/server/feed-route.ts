@@ -21,7 +21,16 @@ import { resolveOffer } from '../model/feed-columns'
 import { feedHead, feedRow, feedTail } from '../model/feed-writer'
 import type { SalesChannelSettings } from '../model/settings'
 import { CatalogUnavailableError, cachedPage, cachedStore, FEED_MAX_PAGES } from './catalog-source'
-import { getFeed, getSettings, isDocumentId, stampFetch, tokenMatches, type FeedDocument } from './feed-store'
+import {
+  getFeed,
+  getLegacyFeedReadAtMs,
+  getSettings,
+  isDocumentId,
+  stampFetch,
+  stampLegacyFetch,
+  tokenMatches,
+  type FeedDocument,
+} from './feed-store'
 import { siteSells } from './site-gate'
 
 /**
@@ -130,7 +139,7 @@ async function serveFeed(
   request: Request,
   hostId: string,
   channel: SalesChannelDefinition,
-  feed: FeedDocument | null,
+  stamp: (agent: string) => Promise<void>,
 ): Promise<Response> {
   const sells = await siteSells(hostId)
   if ('response' in sells) return sells.response
@@ -138,12 +147,7 @@ async function serveFeed(
     const [store, settings] = await Promise.all([cachedStore(hostId), getSettings(hostId)])
     if (!store) return notFound()
     const first = await cachedPage(hostId, null)
-    void stampFetch({
-      hostId,
-      channel: channel.id,
-      feed,
-      agent: request.headers.get('user-agent') ?? '',
-    })
+    void stamp(request.headers.get('user-agent') ?? '')
     return feedResponse({
       hostId,
       channel,
@@ -180,7 +184,7 @@ export async function feedRoute(
     return textResponse(503, 'Feed temporarily unavailable', { 'Retry-After': '300' })
   }
   if (!feed?.enabled || !tokenMatches(file.token, feed.token)) return notFound()
-  return serveFeed(request, hostId, channel, feed)
+  return serveFeed(request, hostId, channel, (agent) => stampFetch({ hostId, channel: channel.id, feed, agent }))
 }
 
 /**
@@ -198,13 +202,16 @@ export async function legacyGoogleFeedRoute(request: Request, hostId: string): P
     return textResponse(405, 'Method not allowed', { Allow: 'GET, HEAD' })
   }
   if (!isDocumentId(hostId)) return textResponse(400, 'Missing hostId')
-  let feed: FeedDocument | null
+  let read: [FeedDocument | null, number | null]
   try {
-    feed = await getFeed(hostId, 'google')
+    read = await Promise.all([getFeed(hostId, 'google'), getLegacyFeedReadAtMs(hostId)])
   } catch (error) {
     console.error('sales-channels: feed state unreadable', error)
     return textResponse(503, 'Feed temporarily unavailable', { 'Retry-After': '300' })
   }
+  const [feed, lastFetchAtMs] = read
   if (feed && (feed.legacyRetired || !feed.enabled)) return notFound()
-  return serveFeed(request, hostId, salesChannel('google')!, feed)
+  return serveFeed(request, hostId, salesChannel('google')!, (agent) =>
+    stampLegacyFetch({ hostId, lastFetchAtMs, agent }),
+  )
 }

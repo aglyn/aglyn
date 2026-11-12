@@ -87,7 +87,11 @@ export interface SalesChannelsState {
     carrierPricedCountries: string[]
   } | null
   channels: ChannelState[]
-  legacy: { url: string | null; active: boolean }
+  /**
+   * The pre-channels Google address: whether it still answers, and whether
+   * anything ever read it. Only a site whose Merchant Center holds it is told.
+   */
+  legacy: { url: string | null; active: boolean; inUse: boolean }
   settings: SalesChannelSettings
   /** Present only on a deployment that configured a channel API (phase 2). */
   connect?: {

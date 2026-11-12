@@ -171,7 +171,9 @@ Stores that set up Merchant Center before sales channels existed used an
 address ending in `/api/commerce/feed?hostId=…`. It keeps working, now with
 everything above, until you retire it: once Merchant Center reads the Google
 card's address, select **Turn off** beside the earlier address on the Google
-card. Replacing the Google address turns it off too.
+card. Replacing the Google address turns it off too. The Google card names the
+earlier address only once something has read it, so a store that never used
+it sees nothing about it.
 
 ## Turn sales channels off for a site {#turn-off}
 

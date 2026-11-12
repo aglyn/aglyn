@@ -26,6 +26,7 @@ import { CatalogUnavailableError, readOffers, readStore } from './catalog-source
 import {
   getChannelState,
   getFeed,
+  getLegacyFeedReadAtMs,
   retireLegacyGoogleFeed,
   rotateFeedToken,
   saveSettings,
@@ -146,10 +147,11 @@ export async function stateRoute(request: Request): Promise<Response> {
   const actor = await channelsGate(request, { permission: null })
   if (actor instanceof Response) return actor
   try {
-    const [sells, store, state] = await Promise.all([
+    const [sells, store, state, legacyReadAtMs] = await Promise.all([
       sellsOnSite(actor),
       storeOrNull(actor.hostId),
       getChannelState(actor.hostId),
+      getLegacyFeedReadAtMs(actor.hostId),
     ])
     // The API connections (phase 2): nothing unless the deployment is set up.
     const extras = await (await import('./connect/connect-state')).connectState(actor)
@@ -168,6 +170,9 @@ export async function stateRoute(request: Request): Promise<Response> {
       legacy: {
         url: legacyFeedUrl(store, actor.hostId),
         active: legacyFeedActive(state.feeds.google),
+        // Whether anything ever read it: a site made after the channels
+        // shipped never had the address, so there is nothing to tell it.
+        inUse: legacyReadAtMs !== null,
       },
       settings: state.settings,
       ...extras,
