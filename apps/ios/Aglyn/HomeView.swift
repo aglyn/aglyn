@@ -61,6 +61,9 @@ struct HomeView: View {
       }
     }
     .navigationTitle("Home")
+    // A phone's Home has no title of its own (Figma 22:176): the site line sits under the scope chip. "Home" stays the
+    // way back from a pushed area, and the top bar keeps no inline title (`PhoneTopBar`).
+    .modifier(PhoneHomeInlineTitle(wide: wide))
     .onAppear {
       // Back on Home from a settings list (Site settings, Workspace settings): the everyday list again.
       if !wide, navigation.mode != .main, navigation.paths[.home]?.isEmpty ?? true { navigation.mode = .main }
@@ -247,5 +250,18 @@ struct NeedsYouSection: View {
           .accessibilityIdentifier("home-nothing-waiting")
       }
     }
+  }
+}
+
+/// A phone's Home draws no large title (Figma 22:176), so the site line starts under the top bar.
+private struct PhoneHomeInlineTitle: ViewModifier {
+  let wide: Bool
+
+  func body(content: Content) -> some View {
+    #if os(iOS)
+      if wide { content } else { content.navigationBarTitleDisplayMode(.inline) }
+    #else
+      content
+    #endif
   }
 }

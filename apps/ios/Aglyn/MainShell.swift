@@ -764,12 +764,9 @@ struct ShellStack: View {
         .navigationDestination(for: Route.self) { route in
           PushedScreen(section: section, head: !route.isBesigner) {
             if case .area(let screen, let params) = route {
+              // A pushed area draws its own title row on a phone, as a pinned one does (Figma 283:23456), and keeps the
+              // inline bar it asks for (`aglynListColumnHead`).
               AreaView(screen: screen, params: params, pushed: true)
-                // A pushed area keeps a large title above its section chips wherever it is pushed (AGL-4059): over a
-                // tab whose own screen heads its list (Orders) it inherited that root's inline bar, so its large title
-                // was drawn over the chips with an inline one as well. On Home it inherited Home's large title. A screen
-                // that draws its own title row (Orders) keeps the inline bar it asks for.
-                .pushedAreaTitle(large: !AglynListColumnHead.screens.contains(screen))
             } else if case .modeList = route {
               // Site settings or Workspace settings from a phone Home tile (AGL-4006): the mode's grouped list.
               MenuScreen()
@@ -968,6 +965,8 @@ struct AreaView: View {
   var pushed = false
   /// The screen took the area's head into its list column (`aglynColumnHeadOffer`, Figma 13:483).
   @State private var headInColumn = false
+  /// On a phone, the screen's search drew the section chips under it (`aglynPhoneAreaHead`).
+  @State private var searchInHead = false
 
   /// The areas whose screens draw their own section chips.
   private static let selfSectioned: Set<String> = ["crm", "emails", "marketing", "marketplace"]
@@ -990,12 +989,31 @@ struct AreaView: View {
     let offer = wide && !columnHead
       ? row.map { areaHead($0, sections: Self.selfSectioned.contains($0.id) ? [] : sections) } : nil
     let headed = columnHead || (offer != nil && headInColumn)
+    // On a phone every other area gets the same title row as Orders and Media (Figma 283:23456, 22:499): the title with
+    // its ▾ and star, the screen's actions and its filled "+", under the shell's top bar, which keeps its search, bell,
+    // AI and photo. The screen's search and the section chips follow under the row.
+    let phoneHead = !wide && !columnHead
+      ? row.map { areaHead($0, sections: Self.selfSectioned.contains($0.id) ? [] : sections) } : nil
     screenView
       .environment(\.aglynAreaHead, columnHead ? row.map { areaHead($0, sections: sections) } : nil)
       .environment(\.aglynColumnHeadOffer, offer)
+      .environment(\.aglynPhoneAreaHead, phoneHead)
       .onPreferenceChange(AglynListColumnHeadPlacedKey.self) { headInColumn = $0 }
+      .onPreferenceChange(AglynPhoneSearchPlacedKey.self) { searchInHead = $0 }
       .safeAreaInset(edge: .top, spacing: 0) {
-        if !headed {
+        if let phoneHead {
+          VStack(spacing: 0) {
+            // The title row's room: the row itself is drawn over it with the screen's own actions (below).
+            Color.clear
+              .frame(height: AglynListColumnHeader<EmptyView>.phoneHeight)
+              .frame(maxWidth: .infinity)
+              .transformAnchorPreference(key: AglynScreenChromeKey.self, value: .bounds) { chrome, slot in
+                chrome.columnHeadSlot = slot
+              }
+            if !searchInHead { AglynPhoneSectionChips(phoneHead) }
+          }
+          .background(.bar)
+        } else if !headed {
           VStack(alignment: .leading, spacing: 0) {
             if wide, let row {
               // The area's head in its content (Figma Mac Sites 13:3): breadcrumbs, the title with its star, and the
@@ -1029,13 +1047,50 @@ struct AreaView: View {
         }
       }
       .overlayPreferenceValue(AglynScreenChromeKey.self, alignment: .top) { chrome in
-        if wide, !columnHead, let row {
-          // The area's own create action stands in when the screen names no primary action of its own.
-          let fallback = (actions.first(where: { $0.params?["new"] == "1" }) ?? actions.first).map { first in
-            AglynPrimaryAction(id: "area-action-\(first.id)", title: first.label, systemImage: first.icon.apple, enabled: true) {
-              navigation.push(.screen(first.screen, first.params ?? [:]))
-            }
+        // The area's own create action stands in when the screen names no primary action of its own.
+        let fallbackRow = actions.first(where: { $0.params?["new"] == "1" }) ?? actions.first
+        let fallback = fallbackRow.map { first in
+          AglynPrimaryAction(id: "area-action-\(first.id)", title: first.label, systemImage: first.icon.apple, enabled: true) {
+            navigation.push(.screen(first.screen, first.params ?? [:]))
           }
+        }
+        if let phoneHead, let slot = chrome.columnHeadSlot {
+          // A phone's title row, in the room the inset left for it: the screen's actions, then the area's other
+          // actions (one as its symbol, more in a "⋯" menu), then the filled "+".
+          let primary = chrome.primary ?? fallback
+          let others = actions.filter { primary?.id != "area-action-\($0.id)" }
+          GeometryReader { proxy in
+            let room = proxy[slot]
+            AglynListColumnHeader(phoneHead, primary: primary) {
+              ForEach(chrome.entries) { $0.content }
+              if others.count == 1, let only = others.first {
+                Button(only.label, systemImage: only.icon.apple) {
+                  navigation.push(.screen(only.screen, only.params ?? [:]))
+                }
+                .labelStyle(.iconOnly)
+                .accessibilityIdentifier("area-action-\(only.id)")
+              } else if others.count > 1 {
+                Menu {
+                  ForEach(others, id: \.id) { action in
+                    Button(action.label, systemImage: action.icon.apple) {
+                      navigation.push(.screen(action.screen, action.params ?? [:]))
+                    }
+                    .accessibilityIdentifier("area-action-\(action.id)")
+                  }
+                } label: {
+                  Label("More", systemImage: "ellipsis")
+                }
+                .labelStyle(.iconOnly)
+                .accessibilityIdentifier("area-actions-more")
+              }
+            }
+            .frame(width: room.width, height: room.height, alignment: .top)
+            .offset(x: room.minX, y: room.minY)
+            // The screen's actions are drawn here, outside the screen: they still see the row they sit in, so a group of
+            // secondary actions folds into the row's "⋯" (`AglynSecondaryActions`).
+            .environment(\.aglynPhoneAreaHead, phoneHead)
+          }
+        } else if wide, !columnHead, let row {
           if headed, let offer, let slot = chrome.columnHeadSlot {
             // The head in the room its list column left for it, with the screen's own actions.
             GeometryReader { proxy in
@@ -1051,32 +1106,8 @@ struct AreaView: View {
           }
         }
       }
-      .toolbar {
-        // On a phone the star and the area's actions stay in the navigation bar.
-        if !wide, !columnHead, let row, let item = model.itemRef(for: row, navigation: navigation) {
-          ToolbarItem(placement: .primaryAction) {
-            let starred = model.preferences?.isStarred(item) == true
-            Button {
-              model.preferences?.toggleStar(item)
-            } label: {
-              Label(starred ? "Unstar \(row.label)" : "Star \(row.label)", systemImage: starred ? "star.fill" : "star")
-            }
-            .help(starred ? "Unstar" : "Star")
-            .accessibilityIdentifier("titlebar-star")
-          }
-        }
-        if !wide, !columnHead, !actions.isEmpty {
-          ToolbarItemGroup(placement: .primaryAction) {
-            ForEach(actions, id: \.id) { action in
-              Button(action.label, systemImage: action.icon.apple) {
-                navigation.push(.screen(action.screen, action.params ?? [:]))
-              }
-              .accessibilityIdentifier("area-action-\(action.id)")
-            }
-          }
-        }
-      }
-      .modifier(PhoneAreaTitleMenu(enabled: !wide && !columnHead))
+      // The navigation bar keeps the scope chip and the shell's buttons, with no second title.
+      .aglynListColumnHead(phoneHead)
   }
 
   /// The area's screen: a plugin's, or the shell's own Analytics (`NativeNav.analytics`).
@@ -1096,7 +1127,7 @@ struct AreaView: View {
     if !wide { switchArea = { shell.showAreaSwitcher = true } }
     return AglynAreaHead(
       title: row.label, crumbs: AnyView(Breadcrumbs(row: row)), star: AnyView(starButton(row)),
-      sections: phoneSections(sections), switchArea: switchArea)
+      sections: phoneSections(sections), switchArea: switchArea, id: row.id)
   }
 
   private func phoneSections(_ sections: [NativeNavSection]) -> [AglynAreaSection] {
@@ -1512,16 +1543,6 @@ struct PhoneTopBar: ViewModifier {
 }
 
 extension View {
-  /// A pushed area's title on a phone: large, as Home's pushes have it, whatever the screen it was pushed over sets.
-  @ViewBuilder
-  func pushedAreaTitle(large: Bool) -> some View {
-    #if os(iOS)
-      if large { navigationBarTitleDisplayMode(.large) } else { self }
-    #else
-      self
-    #endif
-  }
-
   /// The phone's top bar, on a tab's first screen.
   func phoneTopBar() -> some View { modifier(PhoneTopBar()) }
 
