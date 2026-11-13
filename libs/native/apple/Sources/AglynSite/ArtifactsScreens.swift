@@ -54,6 +54,8 @@ struct ArtifactsScreen: View {
   @State private var selection: String?
   @State private var searchText = ""
   @State private var seeded = false
+  @Environment(\.aglynPhoneAreaHead) private var phoneHead
+  @Environment(\.aglynWideChrome) private var wide
 
   private var canEdit: Bool { context.can("site.edit") }
 
@@ -114,20 +116,25 @@ struct ArtifactsScreen: View {
       dialog = .create
     }
     .aglynScreenToolbar(id: "artifacts-\(kind.singular)") {
-      if kind != .template {
+      let folded = phoneTitleRow(head: phoneHead, wide: wide)
+      if kind != .template || folded {
         AglynSecondaryActions {
-          Button {
-            runner.clear()
-            dialog = .gallery
-          } label: {
-            Label("From a template", systemImage: "square.grid.2x2")
+          if kind != .template {
+            Button {
+              runner.clear()
+              dialog = .gallery
+            } label: {
+              Label("From a template", systemImage: "square.grid.2x2")
+            }
+            .disabled(!canEdit)
+            .accessibilityIdentifier("from-template-\(kind.singular)")
           }
-          .disabled(!canEdit)
-          .accessibilityIdentifier("from-template-\(kind.singular)")
+          if folded { SlotWidgets(context: context, slot: kind.createZone, placement: .header) }
         }
       }
-      // Create with AI and anything else a plugin puts beside New (the console's zone for this list).
-      SlotWidgets(context: context, slot: kind.createZone, placement: .header)
+      // Create with AI and anything else a plugin puts beside New (the console's zone for this list). On a phone's title
+      // row it is in the ⋯ above instead (`phoneTitleRow`).
+      if !folded { SlotWidgets(context: context, slot: kind.createZone, placement: .header) }
     }
     .onAppear {
       if !seeded {
