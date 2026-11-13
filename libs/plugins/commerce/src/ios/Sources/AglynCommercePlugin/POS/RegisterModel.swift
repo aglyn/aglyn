@@ -646,7 +646,8 @@ final class RegisterModel {
     }
   }
 
-  private func stopWatchingReceipt() {
+  /// Stops reading the sale's receipt: the sale is done, or a declined card's receipt is put away.
+  func stopWatchingReceipt() {
     listeners["receipt"]?.remove()
     listeners["receipt"] = nil
     receipt = nil

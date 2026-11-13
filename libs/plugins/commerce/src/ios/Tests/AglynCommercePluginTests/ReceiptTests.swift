@@ -60,6 +60,19 @@ final class ReceiptTests: XCTestCase {
     XCTAssertTrue(text.split(separator: "\n", omittingEmptySubsequences: false).allSatisfy { $0.count <= 48 })
   }
 
+  func testADeclinedCardsReceiptHasNothingPaidAndSaysDeclinedUnderTheTotal() {
+    let text = renderText(layoutDeclinedReceipt(fixture(), cardLabel: "Visa •••• 4242", ReceiptLayoutOptions(columns: 48)))
+    let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+    let total = try? XCTUnwrap(lines.firstIndex(of: "TOTAL             $16.51"))
+    XCTAssertEqual(
+      Array(lines[(total ?? 0) + 1...(total ?? 0) + 5]),
+      ["", "Visa **** 4242                          DECLINED", "Nothing was charged.", "", "                     [1042]"])
+    XCTAssertFalse(text.contains("Cash"), "a declined sale's receipt shows nothing paid")
+    XCTAssertFalse(text.contains("Change"))
+    XCTAssertTrue(
+      renderText(layoutDeclinedReceipt(fixture(), cardLabel: nil, ReceiptLayoutOptions(columns: 32))).contains("Card"))
+  }
+
   func testFits58mmPaperToo() {
     let text = renderText(layoutReceipt(fixture(), ReceiptLayoutOptions(columns: 32)))
     XCTAssertTrue(text.split(separator: "\n", omittingEmptySubsequences: false).allSatisfy { $0.count <= 32 })

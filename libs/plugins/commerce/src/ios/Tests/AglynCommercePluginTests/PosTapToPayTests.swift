@@ -170,6 +170,35 @@ final class PosTapToPayTests: XCTestCase {
     XCTAssertTrue(receipt.contains("Amount: $10.80"))
     XCTAssertTrue(receipt.hasSuffix("Nothing was charged."))
   }
+
+  func testADeclinedCardShowsAsNotPaidUntilTheCashierTakesThePaymentAnotherWay() async {
+    let api = ScriptedSaleAPI()
+    let opened = PosOpenedSale(
+      orderID: "o1", subtotalCents: 1000, discountCents: 0, taxCents: 80, totalCents: 1080, dueCents: 1080, stockWarnings: [])
+    let checkout = Checkout(api: api, opened: opened, settings: PosRegisterSettings(), sleep: { _ in })
+    await checkout.payCard(DecliningReader())
+    XCTAssertTrue(checkout.showsDeclined)
+    XCTAssertNil(checkout.notice, "the declined card's own notice replaces the processor's words")
+    XCTAssertEqual(
+      checkout.declined?.notice,
+      "Card declined. Nothing was charged. Send the customer a receipt, or take the payment another way.")
+    checkout.takePaymentAnotherWay()
+    XCTAssertFalse(checkout.showsDeclined)
+    XCTAssertNil(checkout.declined)
+  }
+
+  func testADeclinedCardIsNamedByItsBrandAndLastFour() {
+    let payment = PosSalePayment(
+      id: "p1", method: "card_present", amountCents: 2479, tipCents: 0, status: "failed", cardBrand: "visa", last4: "4242",
+      changeCents: 0, readerID: nil, failureMessage: "Your card was declined.")
+    XCTAssertEqual(declinedCardLabel(payment), "Visa •••• 4242")
+    let card = DeclinedCard(amountCents: 2479, readerLabel: "Tap to Pay on iPhone", message: "x", at: Date(), cardLabel: "Visa •••• 4242")
+    XCTAssertEqual(
+      card.notice,
+      "Card declined: Visa •••• 4242. Nothing was charged. Send the customer a receipt, or take the payment another way.")
+    XCTAssertTrue(card.receipt(store: "S", money: { posMoney($0, currency: "usd") }).contains("Card: Visa •••• 4242"))
+    XCTAssertNil(declinedCardLabel(nil))
+  }
 }
 
 /// Answers every request with one status and body, and keeps what was sent.

@@ -56,22 +56,42 @@ class DeviceReaderTest {
   }
 
   @Test
-  fun releasesTheIntentWhenTheCustomerCancelsOrTheCardIsDeclined() = runTest {
-    for (answer in listOf<CardCollectOutcome>(CardCollectOutcome.Canceled(INTENT), CardCollectOutcome.Failed(INTENT, "Declined: insufficient funds."))) {
-      val api = ScriptedSaleApi(
-        mapOf(
-          "card-present-sdk" to listOf(sale(listOf(pending), clientSecret = SECRET, paymentIntentId = INTENT)),
-          "cancel" to listOf(sale(listOf(pending.copy(status = "canceled")))),
-        ),
-      )
-      val outcome = DeviceReaderService(FakeCollector { answer }).charge(TenderDeps(api, "o1", noSleep), 1000, 150, "k")
-      if (answer is CardCollectOutcome.Failed) {
-        assertEquals("Declined: insufficient funds.", assertIs<TenderOutcome.Failed>(outcome).message)
-      } else {
-        assertIs<TenderOutcome.Canceled>(outcome)
-      }
-      assertEquals(listOf("card-present-sdk", "cancel"), api.actions)
-    }
+  fun releasesTheIntentWhenTheCustomerCancels() = runTest {
+    val api = ScriptedSaleApi(
+      mapOf(
+        "card-present-sdk" to listOf(sale(listOf(pending), clientSecret = SECRET, paymentIntentId = INTENT)),
+        "cancel" to listOf(sale(listOf(pending.copy(status = "canceled")))),
+      ),
+    )
+    val outcome = DeviceReaderService(FakeCollector { CardCollectOutcome.Canceled(INTENT) }).charge(TenderDeps(api, "o1", noSleep), 1000, 150, "k")
+    assertIs<TenderOutcome.Canceled>(outcome)
+    assertEquals(listOf("card-present-sdk", "cancel"), api.actions)
+  }
+
+  @Test
+  fun recordsADeclinedCardAsDeclinedAsTheConsoleDoesAndReleasesOneStripeStillHolds() = runTest {
+    // Stripe has the decline: the server's read records it (Declined, with the card), and nothing is canceled.
+    val declined = ScriptedSaleApi(
+      mapOf(
+        "card-present-sdk" to listOf(sale(listOf(pending), clientSecret = SECRET, paymentIntentId = INTENT)),
+        "status" to listOf(sale(listOf(pending.copy(status = "failed")))),
+      ),
+    )
+    val outcome = DeviceReaderService(FakeCollector { CardCollectOutcome.Failed(INTENT, "Declined: insufficient funds.") })
+      .charge(TenderDeps(declined, "o1", noSleep), 1000, 150, "k")
+    assertEquals("Declined: insufficient funds.", assertIs<TenderOutcome.Failed>(outcome).message)
+    assertEquals(listOf("card-present-sdk", "status"), declined.actions)
+    // The card never reached Stripe: the payment is still waiting there, so it is released.
+    val held = ScriptedSaleApi(
+      mapOf(
+        "card-present-sdk" to listOf(sale(listOf(pending), clientSecret = SECRET, paymentIntentId = INTENT)),
+        "status" to listOf(sale(listOf(pending))),
+        "cancel" to listOf(sale(listOf(pending.copy(status = "canceled")))),
+      ),
+    )
+    DeviceReaderService(FakeCollector { CardCollectOutcome.Failed(INTENT, "The card was removed too soon.") })
+      .charge(TenderDeps(held, "o1", noSleep), 1000, 150, "k")
+    assertEquals(listOf("card-present-sdk", "status", "cancel"), held.actions)
   }
 
   @Test
