@@ -72,6 +72,33 @@ describe('withExportTempCleanup', () => {
     assert.equal(existsSync(made), false)
     assert.ok(existsSync(older))
   })
+
+  it('waits for an export that returns a promise before cleaning up', async () => {
+    const { root, older } = tempRoot()
+    const made = join(root, 'XcodeDistPipeline.~~~async1')
+    const pending = withExportTempCleanup(async () => {
+      mkdirSync(made)
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      assert.ok(existsSync(made), 'not removed while the export runs')
+      return 'exported'
+    }, [root])
+    assert.equal(await pending, 'exported')
+    assert.equal(existsSync(made), false)
+    assert.ok(existsSync(older))
+  })
+
+  it('cleans up after a rejected export, and still rejects', async () => {
+    const { root } = tempRoot()
+    const made = join(root, 'XcodeDistPipeline.~~~async2')
+    await assert.rejects(
+      withExportTempCleanup(async () => {
+        mkdirSync(made)
+        throw new Error('xcodebuild exited with SIGTERM')
+      }, [root]),
+      /SIGTERM/,
+    )
+    assert.equal(existsSync(made), false)
+  })
 })
 
 describe('exportStagingFolders', () => {
