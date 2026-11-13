@@ -58,6 +58,36 @@
  * so writing it now would overwrite the new ones: the exact loss the guard
  * exists to stop. That settles as `refreshed` and the save is refused for one
  * click, so they see the new values first.
+ *
+ * ## A confirmation is kept through a short fall back to the cache (AGL-4047)
+ *
+ * A listener the server has confirmed reads `fromCache` again whenever the
+ * client's online state goes `Offline`, which the SDK applies to every view at
+ * once (`syncEngineApplyOnlineStateChange`). In the console that is routine,
+ * and has nothing to do with the values: a background tab handing the shared
+ * cache to the visible one cycles its network (`firestore-primary-yield.ts`),
+ * as does a stall recovery in either tab, and every secondary tab takes the
+ * holder's `Offline` from the shared client state. The view comes back only
+ * when the server marks its target current again, which behind a starved lease
+ * holder took longer than the guard's wait. So a card confirmed minutes
+ * earlier, whose stored copy never changed, held its next Save for 12 s and
+ * then refused it (production, v1.22.2: 2 of 4 presses on Business profile,
+ * 30–60 s after an earlier save, with a second console tab open).
+ *
+ * Such a fall is not the danger the guard exists for. The guard stops a form
+ * seeded from a copy the server never vouched for, which can be any age. A
+ * cached snapshot that FOLLOWS a confirmation on the same listener can hold
+ * nothing older than that confirmation, because the cache only ever moves
+ * forward (server values, or writes made on this device); and up to the fall
+ * the listener was hearing every change as it happened. So a confirmed
+ * listener stays confirmed for {@link SEED_CONFIRMATION_KEPT_MS} after it
+ * falls back: the hook keeps reporting `fromCache: false`, and a save writes
+ * at once. If the server has not confirmed it again by then, the confirmation
+ * LAPSES and the listener is unconfirmed like any other: the hook reports
+ * `fromCache: true`, a save waits for the server, and it is refused only if
+ * nothing comes within the guard's own wait. The deadline is read from the
+ * wall clock as well as a timer, so a device that slept through it never
+ * saves over a copy it has not heard about since.
  */
 
 /**
@@ -85,6 +115,29 @@ export function setSeedConfirmWaitMs(ms: number = SEED_CONFIRM_WAIT_MS): void {
  */
 export function seedConfirmWaitMs(): number {
   return confirmWaitMs
+}
+
+/**
+ * How long a listener the server confirmed stays confirmed after it falls back
+ * to the cache (AGL-4047). Longer than a handoff of the shared cache between
+ * two tabs takes to re-confirm (reads waited up to 18.9 s behind a background
+ * holder, and a lease went 23.7 s stale, measured in production in AGL-4204),
+ * and short enough that a client the server has really stopped answering is
+ * soon treated as one.
+ */
+export const SEED_CONFIRMATION_KEPT_MS = 60_000
+
+let confirmationKeptMs = SEED_CONFIRMATION_KEPT_MS
+
+/**
+ * How long a confirmation is kept. For a spec that pins what happens once it
+ * lapses: pass `0` to lapse at the fall, and restore the default (no argument)
+ * when done.
+ */
+export function setSeedConfirmationKeptMs(
+  ms: number = SEED_CONFIRMATION_KEPT_MS,
+): void {
+  confirmationKeptMs = ms
 }
 
 /** The part of a document snapshot {@link sameDocument} reads. */
@@ -119,10 +172,21 @@ export type ListenSettlement =
 
 /** One listener's line in the record. */
 interface Token {
-  /** Where its last word left it. A refusal or a teardown is never `confirmed`. */
+  /**
+   * Where its last word left it. A refusal or a teardown is never `confirmed`.
+   * A confirmed listener that fell back to the cache stays `confirmed` until
+   * its confirmation lapses (`keptUntil`).
+   */
   state: 'unconfirmed' | 'confirmed' | 'released'
   /** Its latest confirmation brought values that differ from the ones it showed. */
   changed: boolean
+  /**
+   * Epoch ms at which a confirmation kept through a fall back to the cache
+   * lapses; null while the listener is not on a kept confirmation.
+   */
+  keptUntil: number | null
+  /** End a kept confirmation now: the listener is unconfirmed from here. */
+  lapse: () => void
 }
 
 interface Waiter {
@@ -187,8 +251,12 @@ export interface ListenConfirmation {
    * A snapshot arrived. `changed` says a confirmation brought different values
    * from the ones this listener had shown; a first answer showed nothing, so
    * it cannot have changed anything.
+   *
+   * Returns the `fromCache` the hook reports: the snapshot's own, except that
+   * a cached snapshot following a confirmation reads `false` while the
+   * confirmation is kept (AGL-4047).
    */
-  report: (fromCache: boolean, changed?: boolean) => void
+  report: (fromCache: boolean, changed?: boolean) => boolean
   /**
    * The listener was refused. A wait on every listener ends unconfirmed; a wait
    * on this one goes on, for the retry.
@@ -201,6 +269,14 @@ export interface ListenConfirmation {
   close: () => void
 }
 
+export interface TrackListenOptions {
+  /**
+   * A confirmation kept through a fall back to the cache has lapsed: the hook
+   * reports `fromCache: true` from now on, until the server answers.
+   */
+  onLapse?: () => void
+}
+
 /**
  * One listener's line in the record. Unconfirmed from the start, for the same
  * reason every hook's `fromCache` state starts true. With `handle`, the handle
@@ -208,12 +284,36 @@ export interface ListenConfirmation {
  */
 export function trackListenConfirmation(
   handle?: ListenHandle,
+  options: TrackListenOptions = {},
 ): ListenConfirmation {
-  const token: Token = { state: 'unconfirmed', changed: false }
+  let keepTimer: ReturnType<typeof setTimeout> | null = null
+  const endKeep = () => {
+    if (keepTimer) clearTimeout(keepTimer)
+    keepTimer = null
+    token.keptUntil = null
+  }
+  const unconfirm = () => {
+    token.state = 'unconfirmed'
+    token.changed = false
+    unconfirmed.add(token)
+  }
+  const token: Token = {
+    state: 'unconfirmed',
+    changed: false,
+    keptUntil: null,
+    lapse: () => {
+      if (token.keptUntil === null) return
+      endKeep()
+      if (token.state !== 'confirmed') return
+      unconfirm()
+      options.onLapse?.()
+    },
+  }
   unconfirmed.add(token)
   const bound = handle as unknown as HandleState | undefined
   if (bound) bound.token = token
   const release = () => {
+    endKeep()
     token.state = 'released'
     token.changed = false
     unconfirmed.delete(token)
@@ -222,16 +322,28 @@ export function trackListenConfirmation(
   return {
     report: (fromCache, changed = false) => {
       if (fromCache) {
-        token.state = 'unconfirmed'
-        token.changed = false
-        unconfirmed.add(token)
-        return
+        // Confirmed, and now the cache's: the client's online state moved,
+        // not the values. Kept, from the first such snapshot (AGL-4047).
+        if (token.state === 'confirmed' && confirmationKeptMs > 0) {
+          if (token.keptUntil === null) {
+            token.keptUntil = Date.now() + confirmationKeptMs
+            keepTimer = setTimeout(token.lapse, confirmationKeptMs)
+          }
+          if (Date.now() < token.keptUntil) return false
+          token.lapse()
+          return true
+        }
+        endKeep()
+        unconfirm()
+        return true
       }
+      endKeep()
       token.state = 'confirmed'
       token.changed = changed
       unconfirmed.delete(token)
       settleWaiters(token, { changed })
       settleSeedWaiters(token)
+      return false
     },
     release,
     close: () => {
@@ -239,6 +351,21 @@ export function trackListenConfirmation(
       if (bound?.token === token) bound.token = null
     },
   }
+}
+
+/**
+ * Whether the listener `handle` points at is on a kept confirmation whose
+ * deadline the wall clock has passed (AGL-4047): a device that slept, or a tab
+ * whose timers were held back, has not run the lapse yet. It lapses now, so
+ * the caller treats the seed as unconfirmed and waits for the server.
+ */
+export function lapseOverdueConfirmation(handle: ListenHandle): boolean {
+  const token = (handle as unknown as HandleState).token
+  if (!token || token.keptUntil === null || Date.now() < token.keptUntil) {
+    return false
+  }
+  token.lapse()
+  return token.state === 'unconfirmed'
 }
 
 /**
@@ -270,7 +397,9 @@ export function whenListensConfirmed(
  * `timeoutMs` (AGL-4135). Never rejects.
  *
  * - **Already confirmed**: at once, `refreshed` if that confirmation changed
- *   the values on screen. The caller read `fromCache` before it landed.
+ *   the values on screen. The caller read `fromCache` before it landed. A
+ *   confirmation kept through a fall back to the cache counts, until its
+ *   deadline (AGL-4047); past it, the listener is unconfirmed and waited on.
  * - **Unconfirmed, refused or torn down**: waits. A refused listener retries
  *   and reports again; a torn-down one is replaced, and the handle points at
  *   the replacement. Neither is ever taken for a confirmation.
@@ -284,6 +413,7 @@ export function whenListenConfirmed(
   const state = handle as unknown as HandleState
   const token = state.token
   if (!token) return Promise.resolve('untracked')
+  lapseOverdueConfirmation(handle)
   if (token.state === 'confirmed') {
     return Promise.resolve(token.changed ? 'refreshed' : 'confirmed')
   }

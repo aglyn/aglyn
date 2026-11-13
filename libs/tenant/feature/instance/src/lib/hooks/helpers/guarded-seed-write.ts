@@ -76,6 +76,7 @@
  */
 
 import {
+  lapseOverdueConfirmation,
   whenListenConfirmed,
   whenListensConfirmed,
   type ListenHandle,
@@ -253,12 +254,25 @@ export function checkSeedFreshness(
  * is normally a moment. The other reasons are facts about the read or the
  * session that waiting does not change, and they refuse at once. A save that
  * names its seed's listener (`listen`) waits on that read alone (AGL-4135).
+ *
+ * A listener the server confirmed keeps that confirmation for a while after
+ * it falls back to the cache, so its hook reports `fromCache: false` and the
+ * save writes at once (AGL-4047, see `listen-confirmation.ts`). A save that
+ * names the listener also checks the keep's deadline by the wall clock, so a
+ * device that slept past it waits for the server like any unconfirmed seed.
  */
 export async function writeGuardedBySeed(
   options: GuardedSeedWriteOptions,
   write: () => Promise<void>,
 ): Promise<GuardedSeedWriteResult> {
-  const verdict = checkSeedFreshness(options)
+  const lapsed =
+    !options.fromCache &&
+    !options.unreadable &&
+    options.listen != null &&
+    lapseOverdueConfirmation(options.listen)
+  const verdict = checkSeedFreshness(
+    lapsed ? { ...options, fromCache: true } : options,
+  )
   if (verdict.ok) {
     await write()
     return verdict
