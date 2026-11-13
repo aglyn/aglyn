@@ -9,6 +9,31 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.22.3 — 2026-11-13
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.22.2...v1.22.3)
+
+### Fixed
+
+- **native:** a confirmed seed stays confirmed through a short fall to the cache ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **console:** a confirmed seed stays confirmed through a short fall to cache ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **changelog:** a release entry's headline is never an internal subject ([AGL-3211](https://linear.app/aglyn/issue/AGL-3211))
+- **apple:** iPhone Pages shows one ✦: Create with AI joins the title row's ⋯ ([AGL-4006](https://linear.app/aglyn/issue/AGL-4006))
+- **apple:** Analytics › Funnels heads its own section with New funnel and Create with AI ([AGL-4058](https://linear.app/aglyn/issue/AGL-4058))
+- **native:** a site plugin switched off asks the console's question, naming what goes with it ([AGL-4221](https://linear.app/aglyn/issue/AGL-4221))
+- **ai:** a call button's label loses a stray mark after the verb ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** a row's icons on every card or on none ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **native-release:** wait in the build lock's FIFO queue and release it on every exit ([AGL-3800](https://linear.app/aglyn/issue/AGL-3800))
+
+<details>
+<summary>Also in this release: 1 test</summary>
+
+- **ios:** the phone pin/reorder test scrolls Home both ways and finds Media's drag handle in its row; Tab bar sheet rows read their area's name ([AGL-4006](https://linear.app/aglyn/issue/AGL-4006))
+
+</details>
+
+4 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.22.2 — 2026-11-13
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.22.1...v1.22.2)

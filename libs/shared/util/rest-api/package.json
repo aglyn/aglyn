@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/shared-util-rest-api",
-  "version": "1.22.2",
+  "version": "1.22.3",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": {
@@ -25,9 +25,9 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/shared-data-enums": "1.22.2",
-    "@aglyn/shared-util-errors": "1.22.2",
-    "@aglyn/shared-util-http": "1.22.2",
+    "@aglyn/shared-data-enums": "1.22.3",
+    "@aglyn/shared-util-errors": "1.22.3",
+    "@aglyn/shared-util-http": "1.22.3",
     "@swc/helpers": "0.5.24",
     "cookie": "^2.0.2",
     "js-cookie": "^3.0.8",
