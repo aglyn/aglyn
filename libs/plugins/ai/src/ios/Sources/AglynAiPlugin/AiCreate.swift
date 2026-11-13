@@ -216,6 +216,14 @@ final class AiCreateDoors {
     answers[key] = (Date(), door)
     return door
   }
+
+  /// The answer already kept for this list, while it is fresh: a menu's item draws from it at once.
+  func kept(_ context: NativePluginContext, kind: AiCreateKind) -> AiCreateDoor? {
+    guard let orgID = context.orgID, let hostID = context.hostID,
+      let kept = answers["\(orgID)/\(hostID)/\(kind.rawValue)"], Date().timeIntervalSince(kept.at) < aiCreateDoorSeconds
+    else { return nil }
+    return kept.door
+  }
 }
 
 // MARK: - The entry beside a list's create action
@@ -232,15 +240,20 @@ struct AiCreateButton: View {
 
   var body: some View {
     entry
+      // A phone's "⋯" beside New shows only once there is an entry to put in it (`AglynBesideCreate`).
+      .aglynDrawsBesideCreate(shown?.drawn == true)
       .task(id: key) {
         door = nil
         door = try? await AiCreateDoors.shared.door(context, kind: kind)
       }
   }
 
+  /// The door as last read, or as already kept: a menu builds this view afresh each time it opens.
+  private var shown: AiCreateDoor? { door ?? AiCreateDoors.shared.kept(context, kind: kind) }
+
   @ViewBuilder
   private var entry: some View {
-    if let door, door.drawn {
+    if let door = shown, door.drawn {
       let button = Button {
         context.navigate(aiCreateScreen, ["kind": kind.rawValue])
       } label: {

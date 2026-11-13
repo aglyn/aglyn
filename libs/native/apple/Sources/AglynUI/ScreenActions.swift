@@ -3,6 +3,58 @@
 
 import SwiftUI
 
+/// What sits beside a list's create action (its create zone: Create with AI). Beside New in the head on the Mac and iPad.
+/// On a phone it goes in a "⋯": the phone's top bar, and a pushed screen's navigation bar, already hold the AI panel's ✦,
+/// so a list's own Create with AI never draws a second ✦ beside it (one ✦ per phone screen; Figma iPhone / Site / Pages
+/// 283:23456). A list that already folds actions into its title row's "⋯" puts it there instead (`phoneTitleRow`).
+///
+/// `reportsDrawn`: the content is other plugins' widgets, which may draw nothing (Create with AI where the plan has no
+/// AI). A menu's items are only built when it opens, so a copy of the content is kept out of sight to load them, and the
+/// "⋯" shows once one says it draws something (`aglynDrawsBesideCreate`), never as an empty menu.
+public struct AglynBesideCreate<Content: View>: View {
+  @Environment(\.aglynWideChrome) private var wide
+  @State private var drawn = false
+  let reportsDrawn: Bool
+  let content: Content
+
+  public init(reportsDrawn: Bool = false, @ViewBuilder content: () -> Content) {
+    self.reportsDrawn = reportsDrawn
+    self.content = content()
+  }
+
+  public var body: some View {
+    if wide {
+      content
+    } else if reportsDrawn {
+      ZStack {
+        content.hidden().frame(width: 0, height: 0).clipped().allowsHitTesting(false).accessibilityHidden(true)
+        if drawn { AglynMoreMenu { content } }
+      }
+      .onPreferenceChange(AglynDrawsBesideCreateKey.self) { drawn = $0 }
+    } else {
+      AglynMoreMenu { content }
+    }
+  }
+}
+
+/// Whether a widget beside a list's create action draws something (`AglynBesideCreate(reportsDrawn:)`).
+public struct AglynDrawsBesideCreateKey: PreferenceKey {
+  public static let defaultValue = false
+  public static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
+}
+
+extension View {
+  /// Says this widget draws something beside a list's create action, so a phone's "⋯" for it shows.
+  public func aglynDrawsBesideCreate(_ drawn: Bool) -> some View {
+    preference(key: AglynDrawsBesideCreateKey.self, value: drawn)
+  }
+}
+
+/// Whether a list draws in a phone's title row (Figma iPhone / Site / Pages 283:23456): the row holds the ⋯ and the
+/// filled "+", and the top bar above it already holds the AI panel's ✦, so a list's Create with AI goes in that ⋯ rather
+/// than drawing a second ✦ beside it. The Mac and iPad keep it beside New in the head.
+public func phoneTitleRow(head: AglynAreaHead?, wide: Bool) -> Bool { head != nil && !wide }
+
 /// A screen's actions besides its one primary action (Calm rule 1), for its `aglynScreenToolbar`: one "More" menu in
 /// the screen's head on the Mac and iPad, their own navigation-bar buttons on a phone, as they always were there.
 public struct AglynSecondaryActions<Content: View>: View {
