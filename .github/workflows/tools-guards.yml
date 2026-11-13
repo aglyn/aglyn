@@ -540,6 +540,13 @@ jobs:
       # node.
       - run: npm run test:xcode-export-temp
 
+      # test:build-lock  The shared build lock's FIFO protocol, which
+      # native-release.mjs and the session build scripts follow: only the
+      # queue's head takes the lock, the holder writes lock/owner, and every
+      # exit (Ctrl-C and kill included) releases the lock and the queue line.
+      # Pure node.
+      - run: npm run test:build-lock
+
       - run: npm run test:standalone-installs
 
       - run: npm run check:standalone-installs

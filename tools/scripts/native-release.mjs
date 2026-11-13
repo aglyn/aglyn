@@ -63,17 +63,19 @@
  *
  * The Xcode and Gradle builds take the shared build locks
  * (/private/tmp/aglyn-xcodebuild.lock, /private/tmp/aglyn-gradle.lock), so
- * two sessions on this Mac never build at once.
+ * two sessions on this Mac never build at once. They wait their turn in the
+ * lock's FIFO queue (aglyn-xcodebuild.queue) when there is one, write the
+ * lock's owner file, and release both on every exit, Ctrl-C and kill
+ * included (lib/build-lock.mjs).
  */
 
-import { execFileSync, spawnSync } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import {
   copyFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
   readFileSync,
-  rmdirSync,
   statSync,
   writeFileSync,
 } from 'node:fs'
@@ -81,6 +83,7 @@ import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { RELEASE_SIGNALS, withBuildLock } from './lib/build-lock.mjs'
 import { withExportTempCleanup } from './lib/xcode-export-temp.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -119,29 +122,15 @@ function fail(message) {
   throw new ReleaseError(message)
 }
 
-function sleep(ms) {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
-}
-
-/** Runs `work` holding the named build lock, a directory other sessions also take. */
+/**
+ * Runs `work` holding the named build lock, a directory other sessions also
+ * take, after its turn in the lock's queue (lib/build-lock.mjs). The owner
+ * file names the command and this process.
+ */
 function withLock(path, work) {
-  let announced = false
-  for (;;) {
-    try {
-      mkdirSync(path)
-      break
-    } catch (error) {
-      if (error.code !== 'EEXIST') throw error
-      if (!announced) console.log(`Waiting for ${path} …`)
-      announced = true
-      sleep(20_000)
-    }
-  }
-  try {
-    return work()
-  } finally {
-    rmdirSync(path)
-  }
+  return withBuildLock(path, work, {
+    name: `native-release-${process.argv[2]}-${process.pid}`,
+  })
 }
 
 function run(command, args, options = {}) {
@@ -149,6 +138,35 @@ function run(command, args, options = {}) {
   const result = spawnSync(command, args, { stdio: 'inherit', ...options })
   if (result.status !== 0)
     fail(`${command} exited with ${result.status ?? result.signal}`)
+}
+
+/**
+ * `run` for the builds that hold a lock: the child runs while the event loop
+ * stays free, so a SIGINT, SIGTERM or SIGHUP reaches this process, is passed on
+ * to the build, and the lock is released once the build has stopped.
+ */
+function runHolding(command, args, options = {}) {
+  console.log(`$ ${command} ${args.join(' ')}`)
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: 'inherit', ...options })
+    const forward = (signal) => child.kill(signal)
+    for (const signal of RELEASE_SIGNALS) process.on(signal, forward)
+    const settle = (error) => {
+      for (const signal of RELEASE_SIGNALS) process.off(signal, forward)
+      if (error) reject(error)
+      else resolve()
+    }
+    child.on('error', (error) =>
+      settle(new ReleaseError(`${command}: ${error.message}`)),
+    )
+    child.on('close', (code, signal) =>
+      settle(
+        code === 0
+          ? undefined
+          : new ReleaseError(`${command} exited with ${code ?? signal}`),
+      ),
+    )
+  })
 }
 
 function utcStamp(date = new Date()) {
@@ -168,7 +186,7 @@ function sizeOf(path) {
   return out.trim().split(/\s+/)[0]
 }
 
-function iosArchive(scheme, platform) {
+async function iosArchive(scheme, platform) {
   if (!SCHEMES.has(scheme))
     fail(`scheme must be one of ${[...SCHEMES].join(', ')}`)
   const destination = PLATFORMS[platform]
@@ -178,8 +196,8 @@ function iosArchive(scheme, platform) {
   const { version, core } = releaseVersion()
   mkdirSync(OUT, { recursive: true })
   const archive = join(OUT, `${scheme}-${platform}-${build}.xcarchive`)
-  withLock('/private/tmp/aglyn-xcodebuild.lock', () =>
-    run(
+  await withLock('/private/tmp/aglyn-xcodebuild.lock', () =>
+    runHolding(
       'xcodebuild',
       [
         'archive',
@@ -283,7 +301,7 @@ function iosSymbols(archive) {
   console.log(`dSYMs from ${basename(archive)} uploaded to Crashlytics.`)
 }
 
-function iosUpload(archive) {
+async function iosUpload(archive) {
   if (!archive || !existsSync(archive) || !statSync(archive).isDirectory())
     fail('name an .xcarchive to upload')
   const exportPath = join(OUT, `${basename(archive, '.xcarchive')}-export`)
@@ -307,9 +325,9 @@ function iosUpload(archive) {
   )
   // The export leaves a ~300 MB XcodeDistPipeline.~~~* staging folder in the
   // temp folder; the cleanup removes the one this export made.
-  withLock('/private/tmp/aglyn-xcodebuild.lock', () =>
+  await withLock('/private/tmp/aglyn-xcodebuild.lock', () =>
     withExportTempCleanup(() =>
-      run('xcodebuild', [
+      runHolding('xcodebuild', [
         '-exportArchive',
         '-archivePath',
         archive,
@@ -346,7 +364,7 @@ function keychainPassword() {
   return result.stdout.trim()
 }
 
-function androidBundle(module) {
+async function androidBundle(module) {
   const name = ANDROID_APPS[module]
   if (!name) fail(`app must be one of ${Object.keys(ANDROID_APPS).join(', ')}`)
   const keystore =
@@ -367,8 +385,8 @@ function androidBundle(module) {
       process.env.AGLYN_UPLOAD_KEY_PASSWORD || password,
   }
   // No configuration cache: it would keep the environment, the passwords with it, on disk.
-  withLock('/private/tmp/aglyn-gradle.lock', () =>
-    run(
+  await withLock('/private/tmp/aglyn-gradle.lock', () =>
+    runHolding(
       './gradlew',
       [
         '--no-daemon',
@@ -510,16 +528,16 @@ const [command, ...args] = process.argv.slice(2)
 try {
   switch (command) {
     case 'ios-archive':
-      iosArchive(args[0], args[1])
+      await iosArchive(args[0], args[1])
       break
     case 'ios-upload':
-      iosUpload(args[0])
+      await iosUpload(args[0])
       break
     case 'ios-symbols':
       iosSymbols(args[0])
       break
     case 'android-bundle':
-      androidBundle(args[0])
+      await androidBundle(args[0])
       break
     case 'android-upload':
       await androidUpload(args[0], args[1])
@@ -532,5 +550,6 @@ try {
 } catch (error) {
   if (!(error instanceof ReleaseError)) throw error
   console.error(`native-release: ${error.message}`)
-  process.exitCode = 1
+  // A signal during a held build has already set 128 + its number.
+  process.exitCode ||= 1
 }

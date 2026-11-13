@@ -167,7 +167,8 @@ it as `production`. Card readers (Stripe Terminal) and the barcode camera are
 iOS only, so the Mac apps ask for neither Bluetooth nor the camera.
 
 `tools/scripts/native-release.mjs` archives and uploads, under the shared
-xcodebuild lock, to `/private/tmp/aglyn-release/`:
+xcodebuild lock (it waits its turn in the lock's FIFO queue and releases both
+on any exit, `tools/scripts/lib/build-lock.mjs`), to `/private/tmp/aglyn-release/`:
 
 ```bash
 node tools/scripts/native-release.mjs ios-archive Aglyn ios       # or AglynPOS, and macos
