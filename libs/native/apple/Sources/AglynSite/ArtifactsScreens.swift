@@ -133,8 +133,8 @@ struct ArtifactsScreen: View {
         }
       }
       // Create with AI and anything else a plugin puts beside New (the console's zone for this list). On a phone's title
-      // row it is in the ⋯ above instead (`phoneTitleRow`).
-      if !folded { SlotWidgets(context: context, slot: kind.createZone, placement: .header) }
+      // row it is in the ⋯ above instead (`phoneTitleRow`); pushed on a phone, in a ⋯ of its own.
+      if !folded { AglynBesideCreate(reportsDrawn: true) { SlotWidgets(context: context, slot: kind.createZone, placement: .header) } }
     }
     .onAppear {
       if !seeded {

@@ -86,9 +86,12 @@ struct FormsScreen: View {
       runner.clear()
       sheet = .create
     }
-    // Create with AI and anything else a plugin puts beside New form (the console's `hostForms` zone).
+    // Create with AI and anything else a plugin puts beside New form (the console's `hostForms` zone); in a ⋯ on a phone,
+    // whose top bar already holds the AI panel's ✦ (`AglynBesideCreate`).
     .aglynScreenToolbar(id: "forms-create") {
-      SlotWidgets(context: context, slot: ListCreateZone.forms, placement: .header)
+      if !context.slotWidgets(ListCreateZone.forms).isEmpty {
+        AglynBesideCreate(reportsDrawn: true) { SlotWidgets(context: context, slot: ListCreateZone.forms, placement: .header) }
+      }
     }
     .aglynPushDestination(item: $pushed) { id in detail(id, titled: true) }
     .safeAreaInset(edge: .bottom) {

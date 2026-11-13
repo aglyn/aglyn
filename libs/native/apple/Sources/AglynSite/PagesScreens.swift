@@ -203,9 +203,9 @@ struct PagesScreen: View {
         if phoneTitleRow(head: phoneHead, wide: wide) { SlotWidgets(context: context, slot: ListCreateZone.pages, placement: .header) }
       }
       // Create with AI and anything else a plugin puts beside New page (the console's `hostScreens` zone). On a phone's
-      // title row it is in the ⋯ above instead (`phoneTitleRow`).
+      // title row it is in the ⋯ above instead (`phoneTitleRow`); pushed on a phone, in a ⋯ of its own.
       if !phoneTitleRow(head: phoneHead, wide: wide) {
-        SlotWidgets(context: context, slot: ListCreateZone.pages, placement: .header)
+        AglynBesideCreate(reportsDrawn: true) { SlotWidgets(context: context, slot: ListCreateZone.pages, placement: .header) }
       }
     }
     .safeAreaInset(edge: .bottom) { banner }
@@ -851,8 +851,3 @@ struct PageSheetView: View {
     .accessibilityAddTraits(parent == id ? .isSelected : [])
   }
 }
-
-/// Whether a Pages hub list draws in a phone's title row (Figma iPhone / Site / Pages 283:23456): the row holds the ⋯ and
-/// the filled "+", and the top bar above it already holds the AI panel's ✦, so a list's Create with AI goes in the ⋯
-/// rather than drawing a second ✦ beside it. The Mac and iPad keep it beside New in the head.
-func phoneTitleRow(head: AglynAreaHead?, wide: Bool) -> Bool { head != nil && !wide }
