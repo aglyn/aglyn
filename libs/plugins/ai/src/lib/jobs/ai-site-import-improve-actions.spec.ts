@@ -29,7 +29,7 @@ import type { AiLayoutPictureSlot } from '../layout-language/ai-layout-pictures'
 import { aiSiteImportIsBrandMark } from '../model/ai-site-import-marks'
 import { siteImportReplayDocumentOf } from '../site-import/fixtures/site-import-fidelity-replay'
 import type { AiSiteImportDocument } from './ai-site-import-document'
-import { aiSiteImportSectionActions } from './ai-site-import-actions'
+import { aiSiteImportCallLabel, aiSiteImportSectionActions } from './ai-site-import-actions'
 import { aiReadImprovedPage, aiSiteImportImproveDestinations, aiSiteImportImprovedPage, aiSiteImportImproveLedger } from './ai-site-import-improve'
 import { aiSiteImportPictureSource, aiSiteImportPictureTally } from './ai-site-import-pictures'
 
@@ -176,5 +176,19 @@ describe('a brand’s mark', () => {
     })
     const found = await source?.([slot('hero', 'hero'), slot('band', 'gallery')])
     expect(found?.map((photo) => photo?.src ?? null)).toEqual(['media:h/m-drive', null])
+  })
+})
+
+describe('a call button’s words (AGL-4152)', () => {
+  it('lose a stray mark the source left after the verb, and keep every word', () => {
+    expect(aiSiteImportCallLabel('Call- 555-010-0142')).toBe('Call 555-010-0142')
+    expect(aiSiteImportCallLabel('Text: (555) 010-0200')).toBe('Text (555) 010-0200')
+    expect(aiSiteImportCallLabel('Call us')).toBe('Call us')
+    expect(aiSiteImportCallLabel('Call-backs welcome')).toBe('Call-backs welcome')
+  })
+
+  it('are tidied on a call button in a section, and only there', () => {
+    const { blocks } = aiSiteImportSectionActions({ blocks: [button('Request a quote', 'page:p-contact'), button('Call- 555-010-0142', 'tel:5550100142'), button('Step- 1', 'page:p-steps')] })
+    expect(blocks.map((block) => block.text)).toEqual(['Request a quote', 'Call 555-010-0142', 'Step- 1'])
   })
 })
