@@ -81,11 +81,51 @@ enum SwitchboardRows {
       row["workspaceOn"] = .bool(workspace.contains(plugin.id))
       row["cascade"] = cascade.isEmpty ? .null : labels(cascade)
       row["confirmOff"] = .bool(!cascade.isEmpty || plugin.siteOff?.confirm == true)
+      let question = offQuestion(plugin, cascade: cascade)
+      row["offTitle"] = .string(question.title)
+      row["offMessage"] = .string(question.message)
+      row["offLabel"] = .string(question.label)
       row["turnOn"] = ["disabledPlugins": strings(turnOn.disabled), "enabledPlugins": strings(turnOn.optedIn)]
       row["turnOff"] = ["disabledPlugins": strings(turnOff.disabled), "enabledPlugins": strings(turnOff.optedIn)]
       return .object(row)
     }
     return ["rows": .array(rows)]
+  }
+
+  /// What one published site loses when a plugin goes off, by the plugin's `PUBLISHED_SITE_IMPACT`
+  /// (the console's `consequenceOf`).
+  static func consequence(_ pluginID: String) -> String {
+    switch ContractValues.shared.publishedSiteImpact[pluginID] {
+    case .elements?: "Elements already placed on published pages stop rendering."
+    case .routes?: "Pages it serves stop being served on published sites."
+    default: "Leaves navigation and the editor. Published pages are unaffected."
+    }
+  }
+
+  /// The question switching a plugin off for one site asks, worded as the console's
+  /// `PluginDisableCascadeDialog` at site scope: with dependents, the title counts them and the body lists the plugin
+  /// and each dependent with what it does to the published site; with none (a `siteOff.confirm` plugin, Forms), it
+  /// says what stops and what keeps running. The console also counts placed elements and names the published pages
+  /// when its scan answers; without that answer it says these same sentences.
+  static func offQuestion(_ plugin: FirstPartyPlugin, cascade: [String]) -> (title: String, message: String, label: String) {
+    let name = plugin.label
+    if cascade.isEmpty {
+      let body = [plugin.siteOff?.stops, plugin.siteOff?.keeps].compactMap { $0 }.filter { !$0.isEmpty }
+      return ("Switch \(name) off for this site?", body.joined(separator: "\n\n"), "Switch \(name) off")
+    }
+    let others = "\(cascade.count) other plugin\(cascade.count == 1 ? "" : "s")"
+    let entries =
+      ["\(name) (the one you switched off)\n\(consequence(plugin.id))"]
+      + cascade.map { "\(PluginCatalog.label($0)) — depends on \(name)\n\(consequence($0))" }
+    let message = (
+      ["These plugins depend on \(name) and cannot run without it. Continuing switches them off for this site."]
+        + entries
+        + [
+          "Turning \(name) back on later does NOT switch these back on — you will need to re-enable each one yourself.",
+          ContractValues.shared.pluginCascadeIsDeclaredOnly,
+        ]
+    ).joined(separator: "\n\n")
+    return ("Disabling \(name) also disables \(others)", message, "Continue and disable those too")
   }
 
   /// The site's two lists after switching `pluginID` on or off over `orgs/{org}` and `hosts/{site}` as stored now,

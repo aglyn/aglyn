@@ -250,6 +250,10 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
   val confirmParts: List<JsonElement> = (json.obj("confirm") as? JsonArray).orEmpty()
   /** When set, the confirmation is asked only while this condition holds. */
   val confirmWhen: String? = json.str("confirmWhen")
+  /** What the confirmation says under its question, a template: the console's dialog body (what else goes off with a plugin, and what that does to the published site). */
+  val confirmMessage: String? = json.str("confirmMessage")
+  /** The confirming button's label, a template, where the action's own label would not say what it does (the console's "Continue and disable those too"). */
+  val confirmLabel: String? = json.str("confirmLabel")
   val destructive: Boolean = json.isTrue("destructive")
   val reason: Boolean = json.isTrue("reason")
   val prompt: List<FieldSpec> = json.arr("prompt").mapNotNull { FieldSpec.parse(it) }
@@ -345,6 +349,12 @@ class ActionSpec private constructor(json: JsonElement, val label: String) {
     } else {
       confirm?.let { ScreenValues.render(it, scope) }
     }
+
+  /** The confirmation's body over [scope], null when it has none. */
+  fun confirmMessageText(scope: JsonElement): String? = confirmMessage?.let { ScreenValues.render(it, scope) }?.takeIf { it.isNotEmpty() }
+
+  /** The confirming button's label over [scope]: `confirmLabel`, else the action's own label. */
+  fun confirmButtonLabel(scope: JsonElement): String = ScreenValues.render(confirmLabel ?: label, scope)
 
   /** The `instead` entry the route's answer meets, if any. */
   fun insteadEntry(scope: JsonElement): JsonElement? =

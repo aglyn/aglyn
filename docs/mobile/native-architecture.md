@@ -1250,7 +1250,7 @@ A file is `{ "screens": [ … ] }`. A screen:
 | `blocks` | `fields`, `meters`, `list`, `form`, `actions`, `links`, `notice`, `zone`, `image`, `html`; a `list` row may carry a `toggle: { value, disabled, label, on, off }` whose flip runs the `on` or `off` action, and an `avatar` template (a person's picture, `{item.photoURL}`) that draws the row as that person, their photo or else the initials of its `primary`, in the shared avatar (AGL-4010) |
 | `constants` | fixed rows, read as `const` |
 
-An action is `{ label, icon, method, url, body, headers, confirm, confirmWhen, destructive, prompt,
+An action is `{ label, icon, method, url, body, headers, confirm, confirmWhen, confirmMessage, confirmLabel, destructive, prompt,
 promptTitle, submitLabel, reason, success, instead, check, open, navigate, back, reload, when, disabledWhen, link, copy,
 export, overlay, reveal, else, then, write, route }`: `disabledWhen` on a form's submit keeps the button on screen and off
 while it holds, for a setup step the screen says above it (a `when` would hide it); `prompt` asks for inputs first (`form.*`), in a dialog titled
@@ -1266,7 +1266,10 @@ page, else a note that the page does not open in the app; `else` runs on a 404 (
 follows a success; `write` merges a document the person writes directly, as
 the console does (their own profile, the site document), under the rules.
 `confirm` is a template, or a list of `{ when, text }` segments joined in order
-so one sentence can follow the route's answer; `check` is a route call made
+so one sentence can follow the route's answer; `confirmMessage` is the body under
+that question and `confirmLabel` its confirming button where the action's label
+would not say what it does (a site plugin switched off names what goes with it,
+as the console's cascade dialog does); `check` is a route call made
 first (the add-on price preview), whose answer is `preview` in the
 confirmation; `instead` is `{ when, title, text, open }` (or a list, the first
 that matches wins) shown in place of `success` when the route's answer meets

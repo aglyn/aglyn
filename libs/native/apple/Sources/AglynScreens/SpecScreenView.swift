@@ -279,11 +279,12 @@ struct SpecScreenBody: View {
       }
       .actionConfirmation(
         confirming.map { $0.action.confirmText(in: $0.scope) ?? ScreenValues.render($0.action.label, in: $0.scope) } ?? "",
+        message: confirming.flatMap { $0.action.confirmMessageText(in: $0.scope) },
         isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),
         centered: wide
       ) {
         if let pending = confirming {
-          Button(ScreenValues.render(pending.action.label, in: pending.scope), role: pending.action.destructive ? .destructive : nil) {
+          Button(pending.action.confirmButtonLabel(in: pending.scope), role: pending.action.destructive ? .destructive : nil) {
             confirming = nil
             Task { await execute(pending.action, scope: pending.scope) }
           }
