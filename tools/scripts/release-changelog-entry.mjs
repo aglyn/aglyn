@@ -54,7 +54,11 @@ import { execFileSync } from 'node:child_process'
 import { cert, applicationDefault, getApps, initializeApp } from 'firebase-admin/app'
 import { FieldValue, Timestamp, getFirestore } from 'firebase-admin/firestore'
 
-import { changelogEntryId, renderReleaseEntry } from './lib/changelog-entry.mjs'
+import {
+  changelogEntryId,
+  pullRequestFromMerge,
+  renderReleaseEntry,
+} from './lib/changelog-entry.mjs'
 import { nameSearchTokens } from './lib/name-search-tokens.mjs'
 import {
   compareVersions,
@@ -212,7 +216,23 @@ function recentMerges(ref, count) {
         const [commitSha, subject, body = ''] = chunk.split(separator)
         return { sha: commitSha, subject, body }
       })
-    merges.push({ sha, date, version, tags, commits })
+    // The PRs this merge brought in, read from their merge commits, so the
+    // excerpt can lead with a PR's title rather than one commit's subject.
+    const pullRequests = git(
+      'log',
+      '--merges',
+      `${sha}^1..${sha}`,
+      `--format=%s${separator}%b${record}`,
+    )
+      .split(record)
+      .map((chunk) => chunk.trim())
+      .filter(Boolean)
+      .map((chunk) => {
+        const [subject, body = ''] = chunk.split(separator)
+        return pullRequestFromMerge({ subject, body })
+      })
+      .filter(Boolean)
+    merges.push({ sha, date, version, tags, commits, pullRequests })
   }
   // Oldest first: a release is built by walking forward from the previous one.
   return merges.reverse()
@@ -417,12 +437,16 @@ async function main() {
   // A release the window shows as never served is not a release; its changes
   // belong to whoever carried them out, which is this one.
   const carried = []
+  const carriedPullRequests = []
   const carriedVersions = []
   for (let back = index - 1; back > 0; back -= 1) {
     const candidate = releases[back]
     const servedAt = servedAtFrom(await servedTimes(candidate.merges[0].sha))
     if (servedAt) break
     carried.unshift(...candidate.merges.flatMap((merge) => merge.commits))
+    carriedPullRequests.unshift(
+      ...candidate.merges.flatMap((merge) => merge.pullRequests),
+    )
     carriedVersions.unshift(candidate.version)
   }
 
@@ -443,6 +467,10 @@ async function main() {
       ...carried,
       ...release.merges.flatMap((merge) => merge.commits),
     ].map((commit) => parseCommit(commit)),
+    pullRequests: [
+      ...carriedPullRequests,
+      ...release.merges.flatMap((merge) => merge.pullRequests),
+    ],
     servedAt: deployedAt[0],
     deployedAt,
     ref: refFor(release),
