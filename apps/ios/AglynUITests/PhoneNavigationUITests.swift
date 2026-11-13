@@ -31,8 +31,16 @@ final class PhoneNavigationUITests: XCTestCase {
     app.tabBars.buttons.matching(NSPredicate(format: "identifier == %@ OR label ==[c] %@", "tab-\(id)", id)).firstMatch
   }
 
+  /// A Home tile, scrolled into view. Home keeps its scroll position between visits (a tile lower down leaves it
+  /// scrolled), so a tile can be above the screen as well as below it, and a tile far off screen is not built yet:
+  /// back to the top first when it is not there, then down once if it is still out of reach. Few queries on purpose:
+  /// a loop of hittability checks trips the simulator's log quarantine and crashes the app under test.
   private func tile(_ id: String) -> XCUIElement {
     let target = any["home-tile-\(id)"].firstMatch
+    if !target.exists {
+      app.swipeDown()
+      app.swipeDown()
+    }
     if !target.isHittable { app.swipeUp() }
     return target
   }
@@ -95,7 +103,9 @@ final class PhoneNavigationUITests: XCTestCase {
     XCTAssertTrue(row.waitForExistence(timeout: 10), "The account sheet has no Tab bar row")
     row.tap()
     XCTAssertTrue(any["tab-bar-sheet"].firstMatch.waitForExistence(timeout: 10))
-    let grab = app.buttons["Reorder Media"].firstMatch
+    // The list's drag handle is labelled "Reorder" on every row (iOS 18), so it is found inside Media's row.
+    let grab = app.cells.containing(NSPredicate(format: "identifier == %@", "tab-bar-pinned-media")).buttons["Reorder"]
+      .firstMatch
     let above = any["tab-bar-pinned-pages"].firstMatch
     XCTAssertTrue(grab.waitForExistence(timeout: 5), "The Tab bar sheet has no reorder control")
     grab.press(forDuration: 0.8, thenDragTo: above)
