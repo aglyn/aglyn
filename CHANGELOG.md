@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.22.2 — 2026-11-13
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.22.1...v1.22.2)
+
+### Fixed
+
+- **ai:** send the plan's switches to the resume door ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+
 ## v1.22.1 — 2026-11-12
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.22.0...v1.22.1)
