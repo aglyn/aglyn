@@ -112,8 +112,16 @@ public final class FirebaseFirestoreReader: FirestoreReader, @unchecked Sendable
 
   private final class Registration: FirestoreListening {
     let handle: ListenerRegistration
-    init(_ handle: ListenerRegistration) { self.handle = handle }
-    func remove() { handle.remove() }
+    let keeper: SeedConfirmationKeeper?
+    init(_ handle: ListenerRegistration, keeper: SeedConfirmationKeeper? = nil) {
+      self.handle = handle
+      self.keeper = keeper
+    }
+    func remove() {
+      handle.remove()
+      guard let keeper else { return }
+      Task { @MainActor in keeper.reset() }
+    }
   }
 
   private func collection(_ path: [String]) -> CollectionReference {
@@ -130,11 +138,16 @@ public final class FirebaseFirestoreReader: FirestoreReader, @unchecked Sendable
     }
   }
 
-  private static func document(_ snapshot: DocumentSnapshot) -> FirestoreDocument {
+  /// A document as its listener reports it: `fromCache` is the keep's, not the snapshot's (AGL-4047).
+  private static func document(_ snapshot: DocumentSnapshot, fromCache: Bool) -> FirestoreDocument {
     FirestoreDocument(
       id: snapshot.documentID,
       data: (snapshot.data(with: .estimate) ?? [:]).mapValues(plain),
-      fromCache: snapshot.metadata.isFromCache)
+      fromCache: fromCache)
+  }
+
+  private static func cached(_ document: FirestoreDocument) -> FirestoreDocument {
+    FirestoreDocument(id: document.id, data: document.data, fromCache: true)
   }
 
   private func built(_ query: FirestoreQuery) -> Query {
@@ -172,14 +185,26 @@ public final class FirebaseFirestoreReader: FirestoreReader, @unchecked Sendable
     _ query: FirestoreQuery,
     _ onChange: @escaping @MainActor (Result<[FirestoreDocument], Error>) -> Void
   ) -> FirestoreListening {
+    // A confirmation is kept through a short fall back to the cache (AGL-4047); on its lapse the last rows are
+    // delivered again as the cache's.
+    let keeper = SeedConfirmationKeeper()
+    var last: [FirestoreDocument] = []
+    keeper.onLapse = { onChange(.success(last.map(Self.cached))) }
     let handle = built(query).addSnapshotListener(includeMetadataChanges: query.includeMetadataChanges) { snapshot, error in
-      let result: Result<[FirestoreDocument], Error> =
-        if let snapshot { .success(snapshot.documents.map(Self.document)) }
-        else { .failure(error ?? URLError(.unknown)) }
-      if case .failure(let error) = result { Telemetry.record(error, Telemetry.firestoreContext("listen", query.collection)) }
-      MainActor.assumeIsolated { onChange(result) }
+      MainActor.assumeIsolated {
+        guard let snapshot else {
+          let error = error ?? URLError(.unknown)
+          Telemetry.record(error, Telemetry.firestoreContext("listen", query.collection))
+          keeper.reset()
+          onChange(.failure(error))
+          return
+        }
+        let fromCache = keeper.report(fromCache: snapshot.metadata.isFromCache)
+        last = snapshot.documents.map { Self.document($0, fromCache: fromCache) }
+        onChange(.success(last))
+      }
     }
-    return Registration(handle)
+    return Registration(handle, keeper: keeper)
   }
 
   @MainActor
@@ -187,14 +212,25 @@ public final class FirebaseFirestoreReader: FirestoreReader, @unchecked Sendable
     _ query: FirestoreQuery,
     _ onChange: @escaping @MainActor (Result<FirestoreAnswer<[FirestoreDocument]>, Error>) -> Void
   ) -> FirestoreListening {
+    let keeper = SeedConfirmationKeeper()
+    var last: [FirestoreDocument] = []
+    keeper.onLapse = { onChange(.success(FirestoreAnswer(last.map(Self.cached), fromCache: true))) }
     let handle = built(query).addSnapshotListener(includeMetadataChanges: query.includeMetadataChanges) { snapshot, error in
-      let result: Result<FirestoreAnswer<[FirestoreDocument]>, Error> =
-        if let snapshot { .success(FirestoreAnswer(snapshot.documents.map(Self.document), fromCache: snapshot.metadata.isFromCache)) }
-        else { .failure(error ?? URLError(.unknown)) }
-      if case .failure(let error) = result { Telemetry.record(error, Telemetry.firestoreContext("listen", query.collection)) }
-      MainActor.assumeIsolated { onChange(result) }
+      MainActor.assumeIsolated {
+        guard let snapshot else {
+          let error = error ?? URLError(.unknown)
+          Telemetry.record(error, Telemetry.firestoreContext("listen", query.collection))
+          keeper.reset()
+          onChange(.failure(error))
+          return
+        }
+        // Kept through a short fall back to the cache (AGL-4047).
+        let fromCache = keeper.report(fromCache: snapshot.metadata.isFromCache)
+        last = snapshot.documents.map { Self.document($0, fromCache: fromCache) }
+        onChange(.success(FirestoreAnswer(last, fromCache: fromCache)))
+      }
     }
-    return Registration(handle)
+    return Registration(handle, keeper: keeper)
   }
 
   @MainActor
@@ -202,16 +238,26 @@ public final class FirebaseFirestoreReader: FirestoreReader, @unchecked Sendable
     _ path: [String],
     _ onChange: @escaping @MainActor (Result<FirestoreAnswer<FirestoreDocument?>, Error>) -> Void
   ) -> FirestoreListening {
+    let keeper = SeedConfirmationKeeper()
+    var last: FirestoreDocument?
+    keeper.onLapse = { onChange(.success(FirestoreAnswer(last.map(Self.cached), fromCache: true))) }
     let handle = db.document(path.joined(separator: "/")).addSnapshotListener(includeMetadataChanges: true) {
       snapshot, error in
-      let result: Result<FirestoreAnswer<FirestoreDocument?>, Error> =
-        if let snapshot {
-          .success(FirestoreAnswer(snapshot.exists ? Self.document(snapshot) : nil, fromCache: snapshot.metadata.isFromCache))
-        } else { .failure(error ?? URLError(.unknown)) }
-      if case .failure(let error) = result { Telemetry.record(error, Telemetry.firestoreContext("listen_document", path)) }
-      MainActor.assumeIsolated { onChange(result) }
+      MainActor.assumeIsolated {
+        guard let snapshot else {
+          let error = error ?? URLError(.unknown)
+          Telemetry.record(error, Telemetry.firestoreContext("listen_document", path))
+          keeper.reset()
+          onChange(.failure(error))
+          return
+        }
+        // Kept through a short fall back to the cache (AGL-4047).
+        let fromCache = keeper.report(fromCache: snapshot.metadata.isFromCache)
+        last = snapshot.exists ? Self.document(snapshot, fromCache: fromCache) : nil
+        onChange(.success(FirestoreAnswer(last, fromCache: fromCache)))
+      }
     }
-    return Registration(handle)
+    return Registration(handle, keeper: keeper)
   }
 
   @MainActor
@@ -221,15 +267,26 @@ public final class FirebaseFirestoreReader: FirestoreReader, @unchecked Sendable
   ) -> FirestoreListening {
     // Metadata changes too, so a cached answer the server then confirms reaches
     // the screen with `fromCache` false (an editor's stale-seed guard reads it).
+    // A confirmation is kept through a short fall back to the cache (AGL-4047).
+    let keeper = SeedConfirmationKeeper()
+    var last: FirestoreDocument?
+    keeper.onLapse = { onChange(.success(last.map(Self.cached))) }
     let handle = db.document(path.joined(separator: "/")).addSnapshotListener(includeMetadataChanges: true) {
       snapshot, error in
-      let result: Result<FirestoreDocument?, Error> =
-        if let snapshot { .success(snapshot.exists ? Self.document(snapshot) : nil) }
-        else { .failure(error ?? URLError(.unknown)) }
-      if case .failure(let error) = result { Telemetry.record(error, Telemetry.firestoreContext("listen_document", path)) }
-      MainActor.assumeIsolated { onChange(result) }
+      MainActor.assumeIsolated {
+        guard let snapshot else {
+          let error = error ?? URLError(.unknown)
+          Telemetry.record(error, Telemetry.firestoreContext("listen_document", path))
+          keeper.reset()
+          onChange(.failure(error))
+          return
+        }
+        let fromCache = keeper.report(fromCache: snapshot.metadata.isFromCache)
+        last = snapshot.exists ? Self.document(snapshot, fromCache: fromCache) : nil
+        onChange(.success(last))
+      }
     }
-    return Registration(handle)
+    return Registration(handle, keeper: keeper)
   }
 
   private static func writable(_ value: Any) -> Any {
