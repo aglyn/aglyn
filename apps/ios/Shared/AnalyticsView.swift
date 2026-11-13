@@ -166,7 +166,8 @@ struct AnalyticsView: View {
           if !widgets.isEmpty {
             scroll { ForEach(widgets) { $0.make(context).accessibilityIdentifier("widget-\($0.id)") } }
           } else if let screen = model.registry.screen(funnelsScreen) {
-            screen.make(context, [:])
+            // Its New funnel and Create with AI head this section, not the Analytics head over the sections.
+            screen.make(context, [:]).aglynSectionHead(AnalyticsSection.funnels.title)
           }
         }
       case .glance:
