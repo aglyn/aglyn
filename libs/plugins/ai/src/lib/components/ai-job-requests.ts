@@ -19,7 +19,7 @@
 import { authorizedFetch, type MaybeTokenSource } from '@aglyn/shared-util-http/authorized-token'
 import { AI_CREDITS_CONFIRM_CODE, type AiCreditsPrompt } from '../model/ai-credit-estimate'
 import type { AiJobSummary } from '../model/ai-jobs.types'
-import type { AiSiteImportFinish } from '../model/ai-site-import'
+import type { AiSiteImportFinish, AiSiteImportPlanChoice } from '../model/ai-site-import'
 import { assistBuildJobRequest, type AssistBuildProposal } from '../model/assist-build'
 import { assistPageChangeJobRequest, type AssistPageChangeProposal } from '../model/assist-page-change'
 import { publishAiJob } from './ai-jobs-store'
@@ -72,6 +72,16 @@ export interface AiJobResumeOptions {
   finish?: AiSiteImportFinish
   /** Under Improve it, whether its main pages' wording is improved too (AGL-4152). */
   wording?: boolean
+  /** The owner's answer to a generative plan (AGL-4152): whether its proposed page and generated pictures are in. */
+  plan?: AiSiteImportPlanChoice
+}
+
+/** The plan answer the resume door reads (AGL-4152): only the switches the owner set. */
+export function aiJobResumePlan(plan: AiSiteImportPlanChoice): AiSiteImportPlanChoice {
+  return {
+    ...(typeof plan.addPage === 'boolean' ? { addPage: plan.addPage } : {}),
+    ...(typeof plan.pictures === 'boolean' ? { pictures: plan.pictures } : {}),
+  }
 }
 
 /**
@@ -102,6 +112,8 @@ export async function resumeAiJobRequest(
           ...(options.startAll ? { startAll: true } : {}),
           ...(options.finish ? { finish: options.finish } : {}),
           ...(typeof options.wording === 'boolean' ? { wording: options.wording } : {}),
+          // The plan's two switches: left out, the door keeps the proposed page and generated pictures on.
+          ...(options.plan ? { plan: aiJobResumePlan(options.plan) } : {}),
         }),
       },
     )
