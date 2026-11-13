@@ -77,7 +77,8 @@ private final class DecliningReader: CardReaderService {
     _ deps: TenderDeps, amountCents: Int, tipCents: Int, attemptKey: String,
     onWaiting: @escaping @MainActor (String?) -> Void
   ) async -> TenderOutcome {
-    .failed("The card was declined.", nil)
+    onWaiting("pay1")
+    return .failed("The card was declined.", nil)
   }
   func cancel(_ deps: TenderDeps, paymentID: String?) async {}
 }

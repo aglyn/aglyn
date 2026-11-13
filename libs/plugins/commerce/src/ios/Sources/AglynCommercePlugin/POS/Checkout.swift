@@ -151,7 +151,9 @@ final class Checkout {
     let outcome = await reader.charge(deps, amountCents: amount, tipCents: tip, attemptKey: key) { [weak self] id in
       self?.step = .card(readerLabel: reader.label, paymentID: id)
     }
-    if case .failed(let message, let answer) = outcome {
+    // Only a card the reader was waiting for can be declined. A refusal before that (no card entry key, an amount that
+    // does not match the register) is not a declined card: it keeps its own notice.
+    if case .failed(let message, let answer) = outcome, case .card(_, .some) = step {
       declined = DeclinedCard(
         amountCents: amount + tip, readerLabel: reader.label, message: message, at: Date(),
         cardLabel: declinedCardLabel(answer?.payment))
