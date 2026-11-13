@@ -3249,6 +3249,18 @@ data class ProductVariant(
     val weightGrams: Double? = null,
 )
 
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = PublishedSiteImpactSerializer::class)
+enum class PublishedSiteImpact(val raw: String) {
+    CONSOLE_ONLY("console-only"),
+    ELEMENTS("elements"),
+    ROUTES("routes"),
+    UNKNOWN(""),
+}
+
+internal object PublishedSiteImpactSerializer :
+    RawEnumSerializer<PublishedSiteImpact>("com.aglyn.contracts.PublishedSiteImpact", PublishedSiteImpact.entries, PublishedSiteImpact.UNKNOWN, { it.raw })
+
 @Serializable
 data class QuoteApproval(
     val atMs: Double,
@@ -4257,6 +4269,7 @@ internal data class ContractValuesPart6(
     @SerialName("PLAN_CARD_SCREEN_CONTEXTS") val planCardScreenContexts: Map<String, String>,
     @SerialName("PLAN_CARD_WARNING_SHARE") val planCardWarningShare: Double,
     @SerialName("PLATFORM_BRAND_NAME") val platformBrandName: String,
+    @SerialName("PLUGIN_CASCADE_IS_DECLARED_ONLY") val pluginCascadeIsDeclaredOnly: String,
     @SerialName("POS_CASH_EVENT_LABELS") val posCashEventLabels: Map<String, String>,
     @SerialName("POS_CHECK_IN_ROUTE") val posCheckInRoute: String,
     @SerialName("POS_DAY_REPORT_MAX_DAYS") val posDayReportMaxDays: Long,
@@ -4298,13 +4311,14 @@ internal data class ContractValuesPart6(
     @SerialName("PRODUCT_LIST_OPTIONS") val productListOptions: Map<String, List<ListFilterOption>>,
     @SerialName("PRODUCT_LIST_QUERY") val productListQuery: ListQueryDeclaration,
     @SerialName("PRODUCT_LIST_SELECT_FIELDS") val productListSelectFields: List<String>,
+    @SerialName("PUBLISHED_SITE_IMPACT") val publishedSiteImpact: Map<String, PublishedSiteImpact>,
     @SerialName("PUBLISHER_AGREEMENT_CONSENT_LABEL") val publisherAgreementConsentLabel: String,
-    @SerialName("PUBLISHER_AGREEMENT_TITLE") val publisherAgreementTitle: String,
-    @SerialName("PUBLISHER_AGREEMENT_URL") val publisherAgreementUrl: String,
 )
 
 @Serializable
 internal data class ContractValuesPart7(
+    @SerialName("PUBLISHER_AGREEMENT_TITLE") val publisherAgreementTitle: String,
+    @SerialName("PUBLISHER_AGREEMENT_URL") val publisherAgreementUrl: String,
     @SerialName("PUBLISHER_AGREEMENT_VERSION") val publisherAgreementVersion: String,
     @SerialName("RAIL_RECENT_ORGS") val railRecentOrgs: Long,
     @SerialName("RECENT_ORGS_FIELD") val recentOrgsField: String,
@@ -4351,12 +4365,12 @@ internal data class ContractValuesPart7(
     @SerialName("TASK_LIST_DECLARATION") val taskListDeclaration: ListQueryDeclaration,
     @SerialName("TEMPLATE_KIND_OPTIONS") val templateKindOptions: List<ListFilterOption>,
     @SerialName("TEMPLATE_LIST_BASE") val templateListBase: List<ListQueryFilter>,
-    @SerialName("TEMPLATE_LIST_QUERY") val templateListQuery: ListQueryDeclaration,
-    @SerialName("TENANT_EMAIL_COLLECTION") val tenantEmailCollection: String,
 )
 
 @Serializable
 internal data class ContractValuesPart8(
+    @SerialName("TEMPLATE_LIST_QUERY") val templateListQuery: ListQueryDeclaration,
+    @SerialName("TENANT_EMAIL_COLLECTION") val tenantEmailCollection: String,
     @SerialName("TENANT_EMAILS") val tenantEmails: List<TenantEmailEntry>,
     @SerialName("THEME_ACCENT_SWATCHES") val themeAccentSwatches: List<ThemeAccentSwatch>,
     @SerialName("THEME_ACCENTS") val themeAccents: List<ThemeNamedAccent>,
@@ -4639,6 +4653,7 @@ class ContractValues internal constructor(
     val planCardScreenContexts: Map<String, String> get() = part6.planCardScreenContexts
     val planCardWarningShare: Double get() = part6.planCardWarningShare
     val platformBrandName: String get() = part6.platformBrandName
+    val pluginCascadeIsDeclaredOnly: String get() = part6.pluginCascadeIsDeclaredOnly
     val posCashEventLabels: Map<String, String> get() = part6.posCashEventLabels
     val posCheckInRoute: String get() = part6.posCheckInRoute
     val posDayReportMaxDays: Long get() = part6.posDayReportMaxDays
@@ -4680,9 +4695,10 @@ class ContractValues internal constructor(
     val productListOptions: Map<String, List<ListFilterOption>> get() = part6.productListOptions
     val productListQuery: ListQueryDeclaration get() = part6.productListQuery
     val productListSelectFields: List<String> get() = part6.productListSelectFields
+    val publishedSiteImpact: Map<String, PublishedSiteImpact> get() = part6.publishedSiteImpact
     val publisherAgreementConsentLabel: String get() = part6.publisherAgreementConsentLabel
-    val publisherAgreementTitle: String get() = part6.publisherAgreementTitle
-    val publisherAgreementUrl: String get() = part6.publisherAgreementUrl
+    val publisherAgreementTitle: String get() = part7.publisherAgreementTitle
+    val publisherAgreementUrl: String get() = part7.publisherAgreementUrl
     val publisherAgreementVersion: String get() = part7.publisherAgreementVersion
     val railRecentOrgs: Long get() = part7.railRecentOrgs
     val recentOrgsField: String get() = part7.recentOrgsField
@@ -4729,8 +4745,8 @@ class ContractValues internal constructor(
     val taskListDeclaration: ListQueryDeclaration get() = part7.taskListDeclaration
     val templateKindOptions: List<ListFilterOption> get() = part7.templateKindOptions
     val templateListBase: List<ListQueryFilter> get() = part7.templateListBase
-    val templateListQuery: ListQueryDeclaration get() = part7.templateListQuery
-    val tenantEmailCollection: String get() = part7.tenantEmailCollection
+    val templateListQuery: ListQueryDeclaration get() = part8.templateListQuery
+    val tenantEmailCollection: String get() = part8.tenantEmailCollection
     val tenantEmails: List<TenantEmailEntry> get() = part8.tenantEmails
     val themeAccentSwatches: List<ThemeAccentSwatch> get() = part8.themeAccentSwatches
     val themeAccents: List<ThemeNamedAccent> get() = part8.themeAccents

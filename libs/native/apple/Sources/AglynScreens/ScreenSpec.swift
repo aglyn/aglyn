@@ -251,6 +251,12 @@ public struct ActionSpec: Sendable, Identifiable {
   public let confirmParts: [JSONValue]
   /// When set, the confirmation is asked only while this condition holds.
   public let confirmWhen: String?
+  /// What the confirmation says under its question, a template: the console's dialog body (what else goes off with a
+  /// plugin, and what that does to the published site).
+  public let confirmMessage: String?
+  /// The confirming button's label, a template, where the action's own label would not say what it does (the
+  /// console's "Continue and disable those too").
+  public let confirmLabel: String?
   public let destructive: Bool
   public let reason: Bool
   public let prompt: [FieldSpec]
@@ -396,6 +402,8 @@ public struct ActionSpec: Sendable, Identifiable {
     self.confirm = json["confirm"]?.stringValue
     self.confirmParts = json["confirm"].array
     self.confirmWhen = json["confirmWhen"]?.stringValue
+    self.confirmMessage = json["confirmMessage"]?.stringValue
+    self.confirmLabel = json["confirmLabel"]?.stringValue
     self.destructive = json["destructive"] == .bool(true)
     self.reason = json["reason"] == .bool(true)
     self.prompt = json["prompt"].array.compactMap(FieldSpec.init)
@@ -462,6 +470,16 @@ public struct ActionSpec: Sendable, Identifiable {
         .map { ScreenValues.render($0["text"]?.stringValue ?? "", in: scope) }.joined()
     }
     return confirm.map { ScreenValues.render($0, in: scope) }
+  }
+
+  /// The confirmation's body over `scope`, nil when it has none.
+  public func confirmMessageText(in scope: JSONValue) -> String? {
+    confirmMessage.map { ScreenValues.render($0, in: scope) }.flatMap { $0.isEmpty ? nil : $0 }
+  }
+
+  /// The confirming button's label over `scope`: `confirmLabel`, else the action's own label.
+  public func confirmButtonLabel(in scope: JSONValue) -> String {
+    ScreenValues.render(confirmLabel ?? label, in: scope)
   }
 
   /// The `instead` entry the route's answer meets, if any.

@@ -1,8 +1,10 @@
 package com.aglyn.screens
 
+import com.aglyn.contracts.Contracts
 import com.aglyn.contracts.FirstPartyPlugin
 import com.aglyn.contracts.PluginCatalog
 import com.aglyn.contracts.PluginSiteState
+import com.aglyn.contracts.PublishedSiteImpact
 import com.aglyn.contracts.SitePluginLists
 import com.aglyn.contracts.applySitePluginSwitch
 import com.aglyn.contracts.isDefaultOffPerSite
@@ -68,6 +70,46 @@ internal object SwitchboardRows {
     return JsonObject(mapOf("rows" to JsonArray(rows), "stored" to JsonPrimitive(stored != null)))
   }
 
+  /** The question switching a plugin off for one site asks: its title, body and confirming button. */
+  data class OffQuestion(val title: String, val message: String, val label: String)
+
+  /**
+   * What one published site loses when a plugin goes off, by the plugin's `PUBLISHED_SITE_IMPACT` (the console's
+   * `consequenceOf`).
+   */
+  fun consequence(pluginId: String): String = when (Contracts.publishedSiteImpact[pluginId]) {
+    PublishedSiteImpact.ELEMENTS -> "Elements already placed on published pages stop rendering."
+    PublishedSiteImpact.ROUTES -> "Pages it serves stop being served on published sites."
+    else -> "Leaves navigation and the editor. Published pages are unaffected."
+  }
+
+  /**
+   * The question switching a plugin off for one site asks, worded as the console's `PluginDisableCascadeDialog` at
+   * site scope: with dependents, the title counts them and the body lists the plugin and each dependent with what it
+   * does to the published site; with none (a `siteOff.confirm` plugin, Forms), it says what stops and what keeps
+   * running. The console also counts placed elements and names the published pages when its scan answers; without
+   * that answer it says these same sentences.
+   */
+  fun offQuestion(plugin: FirstPartyPlugin, cascade: List<String>): OffQuestion {
+    val name = plugin.label
+    if (cascade.isEmpty()) {
+      val body = listOfNotNull(plugin.siteOff?.stops, plugin.siteOff?.keeps).filter { it.isNotEmpty() }
+      return OffQuestion("Switch $name off for this site?", body.joinToString("\n\n"), "Switch $name off")
+    }
+    val others = "${cascade.size} other plugin${if (cascade.size == 1) "" else "s"}"
+    val entries = listOf("$name (the one you switched off)\n${consequence(plugin.id)}") +
+      cascade.map { "${PluginCatalog.label(it)} — depends on $name\n${consequence(it)}" }
+    val message = (
+      listOf("These plugins depend on $name and cannot run without it. Continuing switches them off for this site.") +
+        entries +
+        listOf(
+          "Turning $name back on later does NOT switch these back on — you will need to re-enable each one yourself.",
+          Contracts.pluginCascadeIsDeclaredOnly,
+        )
+      ).joinToString("\n\n")
+    return OffQuestion("Disabling $name also disables $others", message, "Continue and disable those too")
+  }
+
   /** One site's switchboard over `orgs/{org}` and `hosts/{site}`. */
   fun site(orgDoc: JsonElement, hostDoc: JsonElement): JsonElement {
     val orgEnabled = stringList((orgDoc as? JsonObject)?.get("enabledPlugins"))
@@ -87,6 +129,10 @@ internal object SwitchboardRows {
       row["workspaceOn"] = JsonPrimitive(plugin.id in workspace)
       row["cascade"] = labels(cascade)
       row["confirmOff"] = JsonPrimitive(cascade.isNotEmpty() || plugin.siteOff?.confirm == true)
+      val question = offQuestion(plugin, cascade)
+      row["offTitle"] = JsonPrimitive(question.title)
+      row["offMessage"] = JsonPrimitive(question.message)
+      row["offLabel"] = JsonPrimitive(question.label)
       row["turnOn"] = JsonObject(mapOf("disabledPlugins" to strings(turnOn.disabled), "enabledPlugins" to strings(turnOn.optedIn)))
       row["turnOff"] = JsonObject(mapOf("disabledPlugins" to strings(turnOff.disabled), "enabledPlugins" to strings(turnOff.optedIn)))
       JsonObject(row)

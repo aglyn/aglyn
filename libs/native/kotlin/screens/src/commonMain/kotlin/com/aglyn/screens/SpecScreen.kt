@@ -516,7 +516,8 @@ private fun SpecBodyContent(
   confirming?.let { pending ->
     ActionDialog(
       title = pending.action.confirmText(pending.scope) ?: ScreenValues.render(pending.action.label, pending.scope),
-      confirmLabel = ScreenValues.render(pending.action.label, pending.scope),
+      body = pending.action.confirmMessageText(pending.scope),
+      confirmLabel = pending.action.confirmButtonLabel(pending.scope),
       destructive = pending.action.destructive,
       dismissLabel = "Cancel",
       onConfirm = { confirming = null; scope.launch { execute(pending.action, pending.scope) } },
