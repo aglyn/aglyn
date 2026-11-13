@@ -105,7 +105,12 @@ enum ShellPicker: String, Identifiable, Hashable {
 @Observable
 final class ShellNavigation {
   var section: ShellSection = .home { didSet { reportScreen() } }
-  var paths: [ShellSection: [Route]] = [:] { didSet { reportScreen() } }
+  var paths: [ShellSection: [Route]] = [:] {
+    didSet {
+      reportScreen()
+      leaveTheStarredPlace()
+    }
+  }
   /// Asks for the site picker (the older single switcher's name, kept for every screen that offers "Choose a site").
   var showSwitcher = false
   /// The picker open in this window, nil for none.
@@ -125,8 +130,11 @@ final class ShellNavigation {
   /// What the search holds in this tab.
   let search = OneBoxModel()
   /// The starred shortcut the section was opened through, so the selection shows on that row rather than on its
-  /// group's row too (one selection in the sidebar).
-  var starKey: String?
+  /// group's row too (one selection in the sidebar). It holds while the place is on screen: going back over it (Back to
+  /// Orders from a starred order) selects the area's own row again, as the console's sidebar does.
+  var starKey: String? { didSet { starPath = starKey == nil ? nil : paths[section] ?? [] } }
+  /// The section's path when the starred place was opened, to tell when it is left.
+  @ObservationIgnored private var starPath: [Route]?
   /// Whether this tab is the one in front of its window (always, where the shell has no tabs).
   var front = true { didSet { reportScreen() } }
   /// The workspace and site this tab's screens read while another tab is in front, and until its own are back on its
@@ -286,6 +294,14 @@ final class ShellNavigation {
         push(.web(page))
       }
     }
+  }
+
+  /// Drops the starred row's selection once the section's path no longer reaches the starred place (Back over it); a
+  /// screen pushed on top of it keeps it.
+  private func leaveTheStarredPlace() {
+    guard starKey != nil, let starPath else { return }
+    let now = paths[section] ?? []
+    if now.count < starPath.count || Array(now.prefix(starPath.count)) != starPath { starKey = nil }
   }
 
   func select(_ next: ShellSection) {

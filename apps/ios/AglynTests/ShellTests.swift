@@ -61,6 +61,23 @@ final class ShellTests: XCTestCase {
     XCTAssertEqual(navigation.paths[.notifications], [])
   }
 
+  /// A starred order keeps its Starred row selected while it is open, and screens pushed on it keep it; Back to Orders
+  /// gives the selection back to the Orders row (the Mac sidebar kept the starred order highlighted).
+  func testBackOverAStarredPlaceSelectsTheAreasRowAgain() {
+    let navigation = ShellNavigation()
+    let orders = ShellSection.plugin("commerce.orders")
+    let order = Route.screen("commerce.order", ["orderId": "1041"])
+    navigation.section = orders
+    navigation.paths[orders] = [order]
+    navigation.starKey = "order-1041"
+    navigation.push(.screen("commerce.refund", ["orderId": "1041"]))
+    XCTAssertEqual(navigation.starKey, "order-1041", "a screen over the starred order keeps it selected")
+    navigation.paths[orders] = [order]
+    XCTAssertEqual(navigation.starKey, "order-1041")
+    navigation.paths[orders] = []
+    XCTAssertNil(navigation.starKey, "Back to Orders selects the Orders row")
+  }
+
   /// Opening a site, or going back to the whole workspace, starts every screen at its root: the workspace's search
   /// results pushed on its Home never show under the site's Home (P4).
   func testOpeningAScopeStartsItsScreensAtTheirRoots() {
