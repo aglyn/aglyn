@@ -265,7 +265,9 @@ struct CheckoutView: View {
         }
         .disabled(checkout.busy)
       }
-      if payment.status == "failed", payment.method == "card_present" {
+      // A smart reader's declined card can be asked for again on that reader; a card this device read cannot (the
+      // route retries on the payment's reader), so its row offers another tender instead, as in the console.
+      if payment.status == "failed", payment.method == "card_present", payment.readerID != nil {
         Button("Retry") { Task { await checkout.retryReaderPayment(payment.id) } }.buttonStyle(.borderless).disabled(!checkout.canTender)
       }
     }

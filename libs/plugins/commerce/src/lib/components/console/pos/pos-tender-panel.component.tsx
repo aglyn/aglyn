@@ -334,7 +334,8 @@ export function PosTenderPanel(props: PosTenderPanelProps) {
                   </Button>
                 </>
               ) : null}
-              {payment.status === 'failed' && payment.method === 'card_present' && !paid ? (
+              {/* Retry asks the payment's own smart reader again; a card a native app's reader took has none. */}
+              {payment.status === 'failed' && payment.method === 'card_present' && payment.readerId && !paid ? (
                 <Button size="small" onClick={() => void run('retry', { paymentId: payment.id })}>
                   {'Retry'}
                 </Button>

@@ -102,3 +102,14 @@ it('leaves every tender on while online', () => {
   }
   expect(screen.queryByText(/are off/)).toBeNull()
 })
+
+it('offers Retry on a declined card only when a smart reader took it', () => {
+  const declined = { method: 'card_present', status: 'failed', amountCents: 105, tipCents: 0, failureMessage: 'Your card was declined.' }
+  const view = panel({ offline: false, payments: [{ ...declined, id: 'p1', readerId: 'tmr_1' }] })
+  expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
+  view.unmount()
+  // A card a native app's own reader (Tap to Pay) declined has no reader to ask again.
+  panel({ offline: false, payments: [{ ...declined, id: 'p2' }] })
+  expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
+  expect(screen.getByText('Your card was declined.')).toBeTruthy()
+})

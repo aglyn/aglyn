@@ -1316,8 +1316,11 @@ export async function refreshPosCardPayment(input: {
   }
   if (intent.status === 'requires_payment_method' && intent.last_payment_error) {
     const message = String(intent.last_payment_error?.message ?? 'The card was declined.')
+    // The declined charge names the card, so the sale and the declined card's receipt can say which card it was.
     return await patchCardPayment(input.hostId, input.orderId, payment.id, (current) =>
-      current.status === 'pending' ? { ...current, status: 'failed', failureMessage: message } : null,
+      current.status === 'pending'
+        ? { ...current, status: 'failed', failureMessage: message, ...cardDetailsOf(intent) }
+        : null,
     )
   }
   // Still waiting on the customer. A reader action that already failed (a

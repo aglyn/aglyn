@@ -89,6 +89,23 @@ suspend fun settleCardPayment(deps: TenderDeps, paymentId: String, attempts: Int
   return TenderOutcome.Unknown("The card was read, but the payment is not confirmed yet. Check the sale in a moment.")
 }
 
+/**
+ * A card this device's reader could not take. The server reads Stripe and records the payment as declined, with the
+ * card (`status`), as the console does after a native reader's answer; the declined payment holds no amount. One still
+ * waiting there (the card never reached Stripe) is released instead, so the amount can be tendered again.
+ */
+suspend fun recordDeclinedCardPayment(deps: TenderDeps, paymentId: String): PosPaymentAnswer? {
+  val answer = try {
+    deps.api.payment(deps.orderId, SaleStep.Status(paymentId))
+  } catch (error: Throwable) {
+    if (error is CancellationException) throw error
+    null
+  }
+  val status = answer?.payment?.status
+  if (status != null && status != "pending") return answer
+  return cancelCardPayment(deps, paymentId)
+}
+
 /** Stops a card payment nobody was charged for, so the balance is open again. */
 suspend fun cancelCardPayment(deps: TenderDeps, paymentId: String): PosPaymentAnswer? = try {
   deps.api.payment(deps.orderId, SaleStep.Cancel(paymentId))
@@ -238,9 +255,8 @@ class DeviceReaderService(private val collector: CardCollector) : CardReaderServ
     }
     return when (collected) {
       is CardCollectOutcome.Canceled -> TenderOutcome.Canceled(cancelCardPayment(deps, payment.id) ?: started)
-      // The intent stays open on the server; releasing it lets the cashier
-      // try another card or another tender.
-      is CardCollectOutcome.Failed -> TenderOutcome.Failed(collected.message, cancelCardPayment(deps, payment.id) ?: started)
+      // Recorded as declined, with its card, as the console records a native reader's decline.
+      is CardCollectOutcome.Failed -> TenderOutcome.Failed(collected.message, recordDeclinedCardPayment(deps, payment.id) ?: started)
       is CardCollectOutcome.Collected, null -> settleCardPayment(deps, payment.id)
     }
   }

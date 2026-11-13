@@ -272,6 +272,54 @@ final class CheckoutTests: XCTestCase {
     XCTAssertEqual(api.steps.map { $0.0.action }, ["card-present-sdk", "status"])
   }
 
+  func testADeviceReadersDeclineIsRecordedAsDeclinedWithItsCardAndNotCanceled() async {
+    let api = ScriptedSaleAPI()
+    let card = PosSalePayment(
+      id: "pay1", method: "card_present", amountCents: 1080, tipCents: 0, status: "pending", cardBrand: nil,
+      last4: nil, changeCents: 0, readerID: nil, failureMessage: nil)
+    let declined = PosSalePayment(
+      id: "pay1", method: "card_present", amountCents: 1080, tipCents: 0, status: "failed", cardBrand: "visa",
+      last4: "4242", changeCents: 0, readerID: nil, failureMessage: "Your card was declined.")
+    api.answers = [
+      .success(answer(due: 1080, payment: card, secret: "pi_12345678abc_secret_abcdefgh", intent: "pi_12345678abc")),
+      .success(answer(due: 1080, payment: declined)),
+    ]
+    let collector = SimulatedCardCollector(delay: .zero) {
+      .failed(paymentIntentID: $0.paymentIntentID, message: "Your card was declined.", code: "card_declined")
+    }
+    _ = await collector.connect(hostID: "h1", kind: .simulated, sessions: NoSessions())
+    let checkout = Checkout(api: api, opened: opened, settings: PosRegisterSettings(), sleep: { _ in })
+    await checkout.payCard(DeviceReaderService(collector))
+    XCTAssertEqual(api.steps.map { $0.0.action }, ["card-present-sdk", "status"], "read, as the console does; never canceled")
+    XCTAssertEqual(checkout.sale.payments.first?.status, "failed")
+    XCTAssertEqual(paymentStatusLabel(checkout.sale.payments.first?.status ?? ""), "Declined")
+    XCTAssertEqual(checkout.declined?.cardLabel, "Visa •••• 4242")
+    XCTAssertEqual(checkout.dueCents, 1080)
+  }
+
+  func testADeclineStripeStillHoldsOpenIsReleased() async {
+    let api = ScriptedSaleAPI()
+    let card = PosSalePayment(
+      id: "pay1", method: "card_present", amountCents: 1080, tipCents: 0, status: "pending", cardBrand: nil,
+      last4: nil, changeCents: 0, readerID: nil, failureMessage: nil)
+    let canceled = PosSalePayment(
+      id: "pay1", method: "card_present", amountCents: 1080, tipCents: 0, status: "canceled", cardBrand: nil,
+      last4: nil, changeCents: 0, readerID: nil, failureMessage: nil)
+    api.answers = [
+      .success(answer(due: 1080, payment: card, secret: "pi_12345678abc_secret_abcdefgh", intent: "pi_12345678abc")),
+      .success(answer(due: 1080, payment: card)),
+      .success(answer(due: 1080, payment: canceled)),
+    ]
+    let collector = SimulatedCardCollector(delay: .zero) {
+      .failed(paymentIntentID: $0.paymentIntentID, message: "The card was removed too soon.", code: nil)
+    }
+    _ = await collector.connect(hostID: "h1", kind: .simulated, sessions: NoSessions())
+    let checkout = Checkout(api: api, opened: opened, settings: PosRegisterSettings(), sleep: { _ in })
+    await checkout.payCard(DeviceReaderService(collector))
+    XCTAssertEqual(api.steps.map { $0.0.action }, ["card-present-sdk", "status", "cancel"])
+    XCTAssertEqual(checkout.dueCents, 1080)
+  }
+
   func testAnIntentForAnotherAmountIsNeverCollected() async {
     let api = ScriptedSaleAPI()
     let card = PosSalePayment(
