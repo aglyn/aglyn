@@ -1802,13 +1802,38 @@ function takeItemsInPlace<T>(scope: SectionScope, items: T[]): void {
   items.length = kept.length
 }
 
+/**
+ * A row's icons, every item or none (AGL-4152). A row the design gave icons
+ * drew a card with none where its word was one the library does not have: a
+ * contractor's redesigned services row showed icons on two cards of three.
+ * An item whose word names nothing takes one its own words suggest, else the
+ * row's neutral icon; a row where fewer than half the items name an icon
+ * draws none. A row with the source's own drawings stays as it is.
+ */
+function evenItemIcons(scope: SectionScope, block: AiLayoutBlock, items: readonly AiLayoutItem[]): AiLayoutItem[] {
+  if (items.length < 2 || items.some((item) => item.iconPath) || aiIconOfWord(block.icon)) return items.slice()
+  const named = items.filter((item) => item.icon?.trim()).length
+  const drawn = items.filter((item) => aiIconOfWord(item.icon)).length
+  if (drawn === 0 || drawn === items.length) return items.slice()
+  if (named * 2 <= items.length) {
+    scope.page.settled.push({ at: scope.at, what: `${items.length} items drawn with no icon, ${drawn} of them named one` })
+    return items.map(({ icon: _icon, ...item }) => item)
+  }
+  const words = aiStorefrontItemIcons(items, (word) => !!aiIconOfWord(word), {
+    section: scope.words ?? '',
+    ...(scope.page.design ? { kind: scope.page.design.input.kind } : {}),
+  })
+  scope.page.settled.push({ at: scope.at, what: `${items.length - drawn} of ${items.length} items given an icon their words suggest` })
+  return items.map((item, at) => (aiIconOfWord(item.icon) ? item : { ...item, icon: words[at] }))
+}
+
 function group(
   scope: SectionScope,
   block: AiLayoutBlock,
   room: Room,
 ): string | null {
-  if (scope.page.options.verbatim) return importedGroup(scope, block, room)
-  const items = takeItems(scope, cleanItems(scope, block.items ?? []))
+  if (scope.page.options.verbatim) return importedGroup(scope, { ...block, items: evenItemIcons(scope, block, block.items ?? []) }, room)
+  const items = takeItems(scope, evenItemIcons(scope, block, cleanItems(scope, block.items ?? [])))
   if (!items.length) return null
   const perRow = across(items.length, room, block.kind)
   const placed = componentOf(scope.page.targets, block.to)

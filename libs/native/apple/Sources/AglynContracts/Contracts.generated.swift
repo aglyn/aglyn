@@ -4999,6 +4999,19 @@ public struct ProductVariant: Codable, Hashable, Sendable {
   }
 }
 
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum PublishedSiteImpact: String, Codable, CaseIterable, Hashable, Sendable {
+  case consoleOnly = "console-only"
+  case elements = "elements"
+  case routes = "routes"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct QuoteApproval: Codable, Hashable, Sendable {
   public var atMs: Double
   public var confirmed: [String]?
@@ -6386,6 +6399,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let planCardScreenContexts: [String: String]
   public let planCardWarningShare: Double
   public let platformBrandName: String
+  public let pluginCascadeIsDeclaredOnly: String
   public let posCashEventLabels: [String: String]
   public let posCheckInRoute: String
   public let posDayReportMaxDays: Int
@@ -6427,6 +6441,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let productListOptions: [String: [ListFilterOption]]
   public let productListQuery: ListQueryDeclaration
   public let productListSelectFields: [String]
+  public let publishedSiteImpact: [String: PublishedSiteImpact]
   public let publisherAgreementConsentLabel: String
   public let publisherAgreementTitle: String
   public let publisherAgreementUrl: String
@@ -6745,6 +6760,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case planCardScreenContexts = "PLAN_CARD_SCREEN_CONTEXTS"
     case planCardWarningShare = "PLAN_CARD_WARNING_SHARE"
     case platformBrandName = "PLATFORM_BRAND_NAME"
+    case pluginCascadeIsDeclaredOnly = "PLUGIN_CASCADE_IS_DECLARED_ONLY"
     case posCashEventLabels = "POS_CASH_EVENT_LABELS"
     case posCheckInRoute = "POS_CHECK_IN_ROUTE"
     case posDayReportMaxDays = "POS_DAY_REPORT_MAX_DAYS"
@@ -6786,6 +6802,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case productListOptions = "PRODUCT_LIST_OPTIONS"
     case productListQuery = "PRODUCT_LIST_QUERY"
     case productListSelectFields = "PRODUCT_LIST_SELECT_FIELDS"
+    case publishedSiteImpact = "PUBLISHED_SITE_IMPACT"
     case publisherAgreementConsentLabel = "PUBLISHER_AGREEMENT_CONSENT_LABEL"
     case publisherAgreementTitle = "PUBLISHER_AGREEMENT_TITLE"
     case publisherAgreementUrl = "PUBLISHER_AGREEMENT_URL"

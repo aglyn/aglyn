@@ -131,6 +131,8 @@ struct PagesScreen: View {
   @State private var linkedPage: String?
   @State private var linkSeeded = false
   @State private var sheet: PageSheet?
+  @Environment(\.aglynPhoneAreaHead) private var phoneHead
+  @Environment(\.aglynWideChrome) private var wide
 
   private var canEdit: Bool { context.can("site.edit") }
   private var canPublish: Bool { context.can("site.publish") }
@@ -198,9 +200,13 @@ struct PagesScreen: View {
         .disabled(!canEdit)
         .keyboardShortcut("n", modifiers: [.command, .shift])
         .accessibilityIdentifier("add-group")
+        if phoneTitleRow(head: phoneHead, wide: wide) { SlotWidgets(context: context, slot: ListCreateZone.pages, placement: .header) }
       }
-      // Create with AI and anything else a plugin puts beside New page (the console's `hostScreens` zone).
-      SlotWidgets(context: context, slot: ListCreateZone.pages, placement: .header)
+      // Create with AI and anything else a plugin puts beside New page (the console's `hostScreens` zone). On a phone's
+      // title row it is in the ⋯ above instead (`phoneTitleRow`); pushed on a phone, in a ⋯ of its own.
+      if !phoneTitleRow(head: phoneHead, wide: wide) {
+        AglynBesideCreate(reportsDrawn: true) { SlotWidgets(context: context, slot: ListCreateZone.pages, placement: .header) }
+      }
     }
     .safeAreaInset(edge: .bottom) { banner }
   }

@@ -701,6 +701,21 @@ describe('card readers', () => {
     expect(stripeCalls.filter((call) => call.path === 'payment_intents')).toHaveLength(1)
     expect(stripeCalls.filter((call) => call.path.endsWith('/process_payment_intent'))).toHaveLength(2)
   })
+
+  it('records the declined card a native reader read, from its failed charge', async () => {
+    const started = await act({ action: 'card-present-sdk', amountCents: 105 }, 'r5')
+    const intent = [...intents.values()][0]
+    intent.last_payment_error = { message: 'Your card was declined.', code: 'card_declined' }
+    intent.latest_charge = { status: 'failed', payment_method_details: { card_present: { brand: 'visa', last4: '4242' } } }
+    await act({ action: 'status', paymentId: started.body.paymentId })
+    expect(sale().payments[0]).toMatchObject({
+      status: 'failed',
+      failureMessage: 'Your card was declined.',
+      cardBrand: 'visa',
+      last4: '4242',
+    })
+    expect(stripeCalls.some((call) => call.path.endsWith('/cancel'))).toBe(false)
+  })
 })
 
 describe('typed card and the QR link', () => {

@@ -45,11 +45,29 @@ final class SitePluginSwitchUITests: XCTestCase {
     XCTAssertTrue(forms.waitForExistence(timeout: 20), "Forms' switch is listed")
     XCTAssertTrue(isOn(forms), "Forms runs on the seeded site")
     forms.tap()
-    let turnOff = app.buttons["Turn off for this site"].firstMatch
+    let turnOff = app.buttons["Switch Forms off"].firstMatch
     XCTAssertTrue(turnOff.waitForExistence(timeout: 5), "Turning Forms off asks first, as the console does")
     app.buttons["Cancel"].firstMatch.tap()
     XCTAssertFalse(turnOff.waitForExistence(timeout: 2), "Cancel closes the question")
     XCTAssertTrue(isOn(pluginSwitch("Forms")), "Cancel saved nothing")
+  }
+
+  /// Commerce takes User Accounts with it on the seeded site (it opted in), so the question names it with the
+  /// console's words, and Cancel saves nothing.
+  func testTurningCommerceOffNamesWhatGoesWithIt() {
+    let commerce = pluginSwitch("Commerce")
+    XCTAssertTrue(commerce.waitForExistence(timeout: 20), "Commerce's switch is listed")
+    XCTAssertTrue(isOn(commerce), "Commerce runs on the seeded site")
+    commerce.tap()
+    let title = any.matching(NSPredicate(format: "label BEGINSWITH 'Disabling Commerce also disables'")).firstMatch
+    XCTAssertTrue(title.waitForExistence(timeout: 5), "The question counts what goes off with Commerce")
+    XCTAssertTrue(
+      any.matching(NSPredicate(format: "label CONTAINS 'User Accounts — depends on Commerce'")).firstMatch.exists,
+      "The question names User Accounts")
+    XCTAssertTrue(app.buttons["Continue and disable those too"].firstMatch.exists, "The console's confirming button")
+    app.buttons["Cancel"].firstMatch.tap()
+    XCTAssertFalse(title.waitForExistence(timeout: 2), "Cancel closes the question")
+    XCTAssertTrue(isOn(pluginSwitch("Commerce")), "Cancel saved nothing")
   }
 
   func testTurningFunnelsOffAndOnSavesAtOnce() {

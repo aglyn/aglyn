@@ -9,9 +9,11 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.Query
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.plus
 import kotlinx.coroutines.tasks.await
 
 /** [FirestoreReader] on the Firebase Android SDK: realtime snapshot listeners. */
@@ -51,11 +53,26 @@ class FirebaseFirestoreReader(private val db: FirebaseFirestore) : FirestoreRead
     trySend(Live.Loading)
     // Metadata changes too, so a cached answer the server then confirms reaches the screen with `fromCache` false: a
     // missing document the cache reports first is not missing yet (AGL-4047), as the Apple kit's listenDocument does.
-    val registration = db.document(path).addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
-      if (error != null) Telemetry.record(error, Telemetry.firestoreContext("listen_document", path))
-      if (error != null) trySend(Live.Failed(error)) else trySend(Live.Ready(snapshot?.toDoc(), snapshot?.metadata?.isFromCache == true))
+    // A confirmation is kept through a short fall back to the cache (AGL-4047); on its lapse the last document is
+    // delivered again as the cache's. The SDK calls back on the main thread, where the keep's watch runs too.
+    var last: FirestoreDoc? = null
+    val keeper = SeedConfirmationKeeper(this + Dispatchers.Main, System::currentTimeMillis) {
+      trySend(Live.Ready(last, fromCache = true))
     }
-    awaitClose { registration.remove() }
+    val registration = db.document(path).addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
+      if (error != null) {
+        Telemetry.record(error, Telemetry.firestoreContext("listen_document", path))
+        keeper.reset()
+        trySend(Live.Failed(error))
+      } else {
+        last = snapshot?.toDoc()
+        trySend(Live.Ready(last, keeper.report(snapshot?.metadata?.isFromCache == true)))
+      }
+    }
+    awaitClose {
+      registration.remove()
+      keeper.reset()
+    }
   }
 
   override fun observe(query: FirestoreQuery): Flow<Live<List<FirestoreDoc>>> = callbackFlow {
@@ -68,15 +85,25 @@ class FirebaseFirestoreReader(private val db: FirebaseFirestore) : FirestoreRead
       throw error
     }
     val metadata = if (query.includeMetadataChanges) MetadataChanges.INCLUDE else MetadataChanges.EXCLUDE
+    // A confirmation is kept through a short fall back to the cache (AGL-4047), as observeDoc does.
+    var last: List<FirestoreDoc> = emptyList()
+    val keeper = SeedConfirmationKeeper(this + Dispatchers.Main, System::currentTimeMillis) {
+      trySend(Live.Ready(last, fromCache = true))
+    }
     val registration = built.addSnapshotListener(metadata) { snapshot, error ->
       if (error != null) {
         Telemetry.record(error, Telemetry.firestoreContext("listen", query.collectionPath))
+        keeper.reset()
         trySend(Live.Failed(error))
       } else {
-        trySend(Live.Ready(snapshot?.documents?.mapNotNull { it.toDoc() } ?: emptyList(), snapshot?.metadata?.isFromCache == true))
+        last = snapshot?.documents?.mapNotNull { it.toDoc() } ?: emptyList()
+        trySend(Live.Ready(last, keeper.report(snapshot?.metadata?.isFromCache == true)))
       }
     }
-    awaitClose { registration.remove() }
+    awaitClose {
+      registration.remove()
+      keeper.reset()
+    }
   }
 
   private fun documentIds(value: Any?): Any? = when (value) {

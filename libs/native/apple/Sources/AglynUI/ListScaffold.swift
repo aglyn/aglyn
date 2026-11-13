@@ -670,6 +670,64 @@ extension View {
   }
 }
 
+extension View {
+  /// A screen drawn as one section of another screen's detail column (Analytics › Funnels): on the Mac and iPad its
+  /// primary action and other actions head that section beside its title, as the section's card does in the console
+  /// (Funnels' header holds Create with AI and New funnel), instead of travelling up to the area's head over the list
+  /// of sections (AGL-4058). The title row is the one Analytics' other sections draw (Traffic, Pages: Figma
+  /// 324:39115). A phone pushes the section with its own navigation bar, so nothing changes there.
+  public func aglynSectionHead(_ title: String) -> some View {
+    modifier(AglynSectionHeadModifier(title: title))
+  }
+}
+
+private struct AglynSectionHeadModifier: ViewModifier {
+  @Environment(\.aglynWideChrome) private var wide
+  let title: String
+
+  /// 24 above the 28-point row (the sections' scroll padding) and 12 under it.
+  private static let height: CGFloat = AglynSpace.three + 28 + AglynSpace.oneAndHalf
+
+  func body(content: Content) -> some View {
+    if wide {
+      content
+        .safeAreaInset(edge: .top, spacing: 0) {
+          Color.clear.frame(maxWidth: .infinity).frame(height: Self.height)
+        }
+        // The section's own chrome, read here and kept here: its head draws it, and the area's head never sees it.
+        .overlayPreferenceValue(AglynScreenChromeKey.self, alignment: .top) { chrome in row(chrome) }
+        .transformPreference(AglynScreenChromeKey.self) { $0 = AglynScreenChrome() }
+    } else {
+      content
+    }
+  }
+
+  private func row(_ chrome: AglynScreenChrome) -> some View {
+    HStack(alignment: .center, spacing: AglynSpace.two) {
+      Text(title).font(AglynFont.headline).foregroundStyle(AglynColor.textPrimary).lineLimit(1)
+        .accessibilityAddTraits(.isHeader)
+      Spacer(minLength: AglynSpace.one)
+      HStack(spacing: 8) {
+        if let primary = chrome.primary {
+          AglynBlockableButton(primary) { Label(primary.title, systemImage: primary.systemImage) }
+            .buttonStyle(AglynHeaderButtonStyle())
+        }
+        ForEach(chrome.entries) { $0.content }.buttonStyle(AglynHeaderButtonStyle(iconOnly: true))
+      }
+      .menuStyle(.button)
+      .fixedSize()
+    }
+    .frame(height: 28)
+    .padding(.horizontal, AglynContentInsets.horizontal)
+    .padding(.top, AglynSpace.three)
+    .padding(.bottom, AglynSpace.oneAndHalf)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(AglynColor.paper)
+    .accessibilityElement(children: .contain)
+    .accessibilityIdentifier("section-head")
+  }
+}
+
 // How a screen puts its own chrome in its content on the Mac and iPad (the window has no toolbar there):
 // - `aglynSearchable(text:prompt:onSubmit:filter:)`: the list's search and its one Filter, in the list's toolbar.
 // - `aglynPrimaryAction(id:_:systemImage:enabled:action:)`: the one filled button at the right of the screen's head.

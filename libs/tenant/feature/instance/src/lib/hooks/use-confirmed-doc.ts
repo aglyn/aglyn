@@ -187,7 +187,16 @@ export function useConfirmedDoc<T extends Record<string, unknown>>(
     let confirmRequested = false
     const ref = doc(firestore, pathKey)
     /** What a save waits on while this read is unconfirmed (AGL-4120). */
-    const confirmation = trackListenConfirmation()
+    const confirmation = trackListenConfirmation(undefined, {
+      // A confirmation kept through a fall back to the cache ran out
+      // before the server answered again (AGL-4047).
+      onLapse: () => {
+        if (cancelled) return
+        setState((current) =>
+          current.fromCache ? current : { ...current, fromCache: true },
+        )
+      },
+    })
     /** The cached values on screen, while they are (AGL-4120). */
     let shownFromCache: string | undefined
 
@@ -198,7 +207,9 @@ export function useConfirmedDoc<T extends Record<string, unknown>>(
       fromCache: boolean,
     ) => {
       const values = JSON.stringify(exists ? (payload ?? null) : undefined)
-      confirmation.report(
+      // The snapshot's own, unless it is a short fall back to the cache
+      // after a confirmation, which keeps it (AGL-4047).
+      const shown = confirmation.report(
         fromCache,
         !fromCache && shownFromCache !== undefined && shownFromCache !== values,
       )
@@ -207,7 +218,7 @@ export function useConfirmedDoc<T extends Record<string, unknown>>(
         data: exists ? ({ $id: id, ...payload } as unknown as T) : undefined,
         ready: true,
         error: false,
-        fromCache,
+        fromCache: shown,
       })
     }
 

@@ -605,7 +605,13 @@
         "FirstPartyPlugin"
       ],
       "values": [
-        "FIRST_PARTY_PLUGINS"
+        "FIRST_PARTY_PLUGINS",
+        "PLUGIN_CASCADE_IS_DECLARED_ONLY"
+      ]
+    },
+    "libs/aglyn/src/lib/plugin-manager/first-party-plugin-switchboard.generated.ts": {
+      "values": [
+        "PUBLISHED_SITE_IMPACT"
       ]
     },
     "libs/plugins/commerce/src/lib/model/commerce-pos-ops.ts": {

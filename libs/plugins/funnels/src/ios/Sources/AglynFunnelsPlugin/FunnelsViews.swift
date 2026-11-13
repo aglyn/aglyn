@@ -86,10 +86,13 @@ struct FunnelsScreen: View {
       Task { await editor?.add() }
     }
     .aglynScreenToolbar(id: "funnels") {
+      // In a ⋯ on a phone, whose top bar already holds the AI panel's ✦ (`AglynBesideCreate`).
       if access.state.canManage, let editor {
-        Button { editor.askPropose() } label: { Label("Create with AI", systemImage: FunnelsSymbols.ai) }
-          .disabled(model.rows.count >= ContractValues.shared.funnelsMaxPerSite)
-          .accessibilityIdentifier("funnels-propose")
+        AglynBesideCreate {
+          Button { editor.askPropose() } label: { Label("Create with AI", systemImage: FunnelsSymbols.ai) }
+            .disabled(model.rows.count >= ContractValues.shared.funnelsMaxPerSite)
+            .accessibilityIdentifier("funnels-propose")
+        }
       }
     }
     .safeAreaInset(edge: .bottom) {

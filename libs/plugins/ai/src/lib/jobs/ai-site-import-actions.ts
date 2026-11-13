@@ -46,6 +46,15 @@ export function aiSiteImportDestinationKey(to: string): string {
   return value
 }
 
+/**
+ * A call button's words without the stray mark its source left after the
+ * verb (AGL-4152): a contractor's "Call- 555-010-0142" reads "Call
+ * 555-010-0142". Only the mark goes; every word stays as written.
+ */
+export function aiSiteImportCallLabel(text: string): string {
+  return text.replace(/^(\s*(?:call|text|phone|tel)\b)\s*[-\u2013\u2014:|]+\s*(?=[+(\d])/i, '$1 ')
+}
+
 /** Whether a button is drawn filled: the compiler's default, `primary` or `large`. */
 const filled = (block: AiLayoutBlock): boolean => block.kind === 'button' && (block.style === undefined || block.style === 'primary' || block.style === 'large')
 
@@ -67,6 +76,7 @@ const filled = (block: AiLayoutBlock): boolean => block.kind === 'button' && (bl
  *   words where one of them has them. A call and a page are two places. A
  *   closing band's "Contact us" and "Request a quote", both to the contact
  *   page with a call between them, read as a mistake.
+ * - A call button's words lose a stray mark after the verb ("Call- 555…").
  * - Of buttons side by side, only the first is filled; the rest are outlined.
  */
 export function aiSiteImportSectionActions(section: Pick<AiLayoutSection, 'cols' | 'blocks'>, cta?: string | null): Pick<AiLayoutSection, 'cols' | 'blocks'> {
@@ -141,6 +151,8 @@ export function aiSiteImportSectionActions(section: Pick<AiLayoutSection, 'cols'
     const words = worded.get(key)
     return [words && clean(block.text).toLowerCase() !== wanted ? { ...block, text: words.text } : block]
   })
+  // A call button's words without a stray mark after the verb.
+  blocks = blocks.map((block) => (block.kind === 'button' && /^tel:/i.test(block.to ?? '') && block.text ? { ...block, text: aiSiteImportCallLabel(block.text) } : block))
   // Buttons side by side, each to its own place: the first filled.
   const out: AiLayoutBlock[] = []
   for (const block of blocks) {

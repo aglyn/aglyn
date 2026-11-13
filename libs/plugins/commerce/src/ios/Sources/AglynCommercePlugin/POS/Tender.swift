@@ -83,6 +83,18 @@ func settleCardPayment(_ deps: TenderDeps, _ paymentID: String, attempts: Int = 
   return .unknown("The card was read, but the payment is not confirmed yet. Check the sale in a moment.")
 }
 
+/// A card this device's reader could not take. The server reads Stripe and records the payment as declined, with the
+/// card (`status`), as the console does after a native reader's answer; the declined payment holds no amount. One
+/// still waiting there (the card never reached Stripe) is released instead, so the amount can be tendered again.
+func recordDeclinedCardPayment(_ deps: TenderDeps, _ paymentID: String) async -> PosPaymentAnswer? {
+  if let answer = try? await deps.api.payment(orderID: deps.orderID, step: .status(paymentID: paymentID)),
+    let status = answer.payment?.status, status != "pending"
+  {
+    return answer
+  }
+  return await cancelCardPayment(deps, paymentID)
+}
+
 /// Stops a card payment nobody was charged for, so the balance is open again.
 func cancelCardPayment(_ deps: TenderDeps, _ paymentID: String) async -> PosPaymentAnswer? {
   try? await deps.api.payment(orderID: deps.orderID, step: .cancel(paymentID: paymentID))
@@ -227,9 +239,8 @@ final class DeviceReaderService: CardReaderService {
     case .canceled:
       return .canceled(await cancelCardPayment(deps, payment.id) ?? started)
     case .failed(_, let message, _):
-      // The intent stays open on the server; releasing it lets the cashier
-      // try another card or another tender.
-      return .failed(message, await cancelCardPayment(deps, payment.id) ?? started)
+      // Recorded as declined, with its card, as the console records a native reader's decline.
+      return .failed(message, await recordDeclinedCardPayment(deps, payment.id) ?? started)
     case .collected:
       return await settleCardPayment(deps, payment.id)
     }

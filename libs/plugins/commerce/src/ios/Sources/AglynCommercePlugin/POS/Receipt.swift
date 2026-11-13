@@ -176,3 +176,26 @@ func layoutReceipt(_ receipt: ReceiptData, _ options: ReceiptLayoutOptions) -> P
   ops.append(.cut)
   return PrintDocument(columns: columns, ops: ops)
 }
+
+/// A declined card's receipt (Apple 5.10: a receipt whether approved or declined): the sale's own receipt with nothing
+/// paid on it, and under its total the card, DECLINED, and that nothing was charged (Figma iPhone POS 177:5163).
+func layoutDeclinedReceipt(_ receipt: ReceiptData, cardLabel: String?, _ options: ReceiptLayoutOptions) -> PrintDocument {
+  var unpaid = receipt
+  unpaid.tenders = nil
+  unpaid.changeCents = nil
+  let document = layoutReceipt(unpaid, options)
+  var ops = document.ops
+  var declined: [PrintOp] = [.feed(1)]
+  for text in twoColumnLines(declinedReceiptCard(cardLabel), "DECLINED", width: options.columns) { declined.append(.text(text)) }
+  declined.append(.text("Nothing was charged.", bold: true))
+  // Under the TOTAL, the last double-size line, where a paid card's tender line would be.
+  let total = ops.lastIndex { if case .text(_, align: _, bold: _, size: 2) = $0 { return true } else { return false } }
+  ops.insert(contentsOf: declined, at: total.map { $0 + 1 } ?? ops.count)
+  return PrintDocument(columns: document.columns, ops: ops)
+}
+
+/// The card as the paper names it: the brand and `**** 4242`, as a paid card's tender line reads.
+private func declinedReceiptCard(_ cardLabel: String?) -> String {
+  guard let cardLabel, !cardLabel.isEmpty else { return "Card" }
+  return cardLabel.replacingOccurrences(of: "••••", with: "****")
+}

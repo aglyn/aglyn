@@ -180,7 +180,13 @@ export function useFirestoreDoc<T = DocumentData>(
      */
     const disarmStall = armFirestoreStallWatch(ref.firestore)
     /** What a save waits on while this listener is unconfirmed (AGL-4120). */
-    const confirmation = trackListenConfirmation(listen)
+    const confirmation = trackListenConfirmation(listen, {
+      // A confirmation kept through a fall back to the cache ran out
+      // before the server answered again (AGL-4047).
+      onLapse: () => {
+        if (!cancelled) setFromCache(true)
+      },
+    })
     /** The cached snapshot on screen, while one is (AGL-4120). */
     let shownFromCache: DocumentSnapshot<DocumentData> | null = null
 
@@ -198,12 +204,15 @@ export function useFirestoreDoc<T = DocumentData>(
             setError(undefined)
           }
           setHasPendingWrites(snapshot.metadata.hasPendingWrites)
-          setFromCache(snapshot.metadata.fromCache)
-          confirmation.report(
-            snapshot.metadata.fromCache,
-            !snapshot.metadata.fromCache &&
-              shownFromCache !== null &&
-              !sameDocument(shownFromCache, snapshot),
+          // The snapshot's own, unless it is a short fall back to the cache
+          // after a confirmation, which keeps it (AGL-4047).
+          setFromCache(
+            confirmation.report(
+              snapshot.metadata.fromCache,
+              !snapshot.metadata.fromCache &&
+                shownFromCache !== null &&
+                !sameDocument(shownFromCache, snapshot),
+            ),
           )
           shownFromCache = snapshot.metadata.fromCache ? snapshot : null
           // Only the SERVER answering is evidence the session can read — and

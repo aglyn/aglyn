@@ -18,8 +18,11 @@
 import { writeGuardedBySeed } from './guarded-seed-write'
 import {
   createListenHandle,
+  lapseOverdueConfirmation,
   sameDocument,
   SEED_CONFIRM_WAIT_MS,
+  SEED_CONFIRMATION_KEPT_MS,
+  setSeedConfirmationKeptMs,
   trackListenConfirmation,
   whenListenConfirmed,
   whenListensConfirmed,
@@ -35,8 +38,8 @@ import {
  */
 describe('a save that waits for the server (AGL-4120)', () => {
   const open: ListenConfirmation[] = []
-  const listen = (handle?: ListenHandle) => {
-    const confirmation = trackListenConfirmation(handle)
+  const listen = (handle?: ListenHandle, onLapse?: () => void) => {
+    const confirmation = trackListenConfirmation(handle, { onLapse })
     open.push(confirmation)
     return confirmation
   }
@@ -91,11 +94,13 @@ describe('a save that waits for the server (AGL-4120)', () => {
       await expect(settled).resolves.toBe('unconfirmed')
     })
 
-    it('counts a listener that is knocked back to the cache again', async () => {
+    it('counts a listener knocked back to the cache once its kept confirmation lapses', async () => {
       const listener = listen()
       listener.report(false)
       await expect(whenListensConfirmed()).resolves.toBe('untracked')
       listener.report(true)
+      await expect(whenListensConfirmed()).resolves.toBe('untracked')
+      jest.advanceTimersByTime(SEED_CONFIRMATION_KEPT_MS)
       const settled = whenListensConfirmed()
       listener.report(false)
       await expect(settled).resolves.toBe('confirmed')
@@ -185,11 +190,13 @@ describe('a save that waits for the server (AGL-4120)', () => {
       await expect(whenListenConfirmed(changed)).resolves.toBe('refreshed')
     })
 
-    it('waits again for a listener knocked back to the cache', async () => {
+    it('waits again for a listener knocked back to the cache, once its kept confirmation lapses', async () => {
       const seed = createListenHandle()
       const own = listen(seed)
       own.report(false)
       own.report(true)
+      await expect(whenListenConfirmed(seed)).resolves.toBe('confirmed')
+      jest.advanceTimersByTime(SEED_CONFIRMATION_KEPT_MS)
       const settled = jest.fn()
       void whenListenConfirmed(seed).then(settled)
       await whenListensConfirmedResult(settled)
@@ -314,6 +321,131 @@ describe('a save that waits for the server (AGL-4120)', () => {
           write,
         ),
       ).resolves.toEqual({ ok: true })
+      expect(write).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  /**
+   * A confirmed listener falls back to the cache whenever the client's online
+   * state goes Offline for a moment, which a second console tab handing over
+   * the shared cache does routinely. Its values did not move, so neither does
+   * its confirmation, for a while (AGL-4047).
+   */
+  describe('a confirmation kept through a fall back to the cache (AGL-4047)', () => {
+    afterEach(() => setSeedConfirmationKeptMs())
+
+    it('reports the snapshot as confirmed while it is kept, and unconfirmed before any confirmation', () => {
+      const listener = listen()
+      expect(listener.report(true)).toBe(true)
+      expect(listener.report(false)).toBe(false)
+      expect(listener.report(true)).toBe(false)
+      expect(listener.report(true)).toBe(false)
+    })
+
+    it('lapses after the keep, from the first fall, and says so', () => {
+      const onLapse = jest.fn()
+      const listener = listen(undefined, onLapse)
+      listener.report(false)
+      listener.report(true)
+      jest.advanceTimersByTime(SEED_CONFIRMATION_KEPT_MS / 2)
+      // A second cached snapshot does not extend the keep.
+      expect(listener.report(true)).toBe(false)
+      jest.advanceTimersByTime(SEED_CONFIRMATION_KEPT_MS / 2 - 1)
+      expect(onLapse).not.toHaveBeenCalled()
+      jest.advanceTimersByTime(1)
+      expect(onLapse).toHaveBeenCalledTimes(1)
+      expect(listener.report(true)).toBe(true)
+    })
+
+    it('starts a fresh keep after the server confirms again', () => {
+      const onLapse = jest.fn()
+      const listener = listen(undefined, onLapse)
+      listener.report(false)
+      listener.report(true)
+      jest.advanceTimersByTime(SEED_CONFIRMATION_KEPT_MS - 1)
+      listener.report(false)
+      jest.advanceTimersByTime(SEED_CONFIRMATION_KEPT_MS)
+      expect(onLapse).not.toHaveBeenCalled()
+      expect(listener.report(true)).toBe(false)
+    })
+
+    it('never keeps a listener that was refused or torn down', () => {
+      const onLapse = jest.fn()
+      const listener = listen(undefined, onLapse)
+      listener.report(false)
+      listener.report(true)
+      listener.release()
+      jest.advanceTimersByTime(SEED_CONFIRMATION_KEPT_MS)
+      expect(onLapse).not.toHaveBeenCalled()
+      // The retry's cached snapshot is the cache's alone.
+      expect(listener.report(true)).toBe(true)
+    })
+
+    it('lapses at the fall when the keep is off', () => {
+      setSeedConfirmationKeptMs(0)
+      const listener = listen()
+      listener.report(false)
+      expect(listener.report(true)).toBe(true)
+    })
+
+    it('lapses by the wall clock when the timer was held back, as on a device that slept', () => {
+      const seed = createListenHandle()
+      const onLapse = jest.fn()
+      const own = listen(seed, onLapse)
+      own.report(false)
+      own.report(true)
+      expect(lapseOverdueConfirmation(seed)).toBe(false)
+      jest.setSystemTime(Date.now() + SEED_CONFIRMATION_KEPT_MS)
+      expect(lapseOverdueConfirmation(seed)).toBe(true)
+      expect(onLapse).toHaveBeenCalledTimes(1)
+    })
+
+    it('lets a save on a kept seed write at once', async () => {
+      const seed = createListenHandle()
+      const own = listen(seed)
+      own.report(false)
+      const write = jest.fn(async () => undefined)
+      const fromCache = own.report(true)
+      await expect(
+        writeGuardedBySeed(
+          { subject: 'business profile', fromCache, checkSession: false, listen: seed },
+          write,
+        ),
+      ).resolves.toEqual({ ok: true })
+      expect(write).toHaveBeenCalledTimes(1)
+    })
+
+    it('makes a save past the keep wait for the server, and refuses when it never answers', async () => {
+      const seed = createListenHandle()
+      const own = listen(seed)
+      own.report(false)
+      const fromCache = own.report(true)
+      jest.setSystemTime(Date.now() + SEED_CONFIRMATION_KEPT_MS)
+      const write = jest.fn(async () => undefined)
+      const saved = writeGuardedBySeed(
+        { subject: 'business profile', fromCache, checkSession: false, listen: seed },
+        write,
+      )
+      await Promise.resolve()
+      expect(write).not.toHaveBeenCalled()
+      jest.advanceTimersByTime(SEED_CONFIRM_WAIT_MS)
+      await expect(saved).resolves.toMatchObject({ ok: false, reason: 'unconfirmed' })
+      expect(write).not.toHaveBeenCalled()
+    })
+
+    it('makes a save past the keep write once the server answers again', async () => {
+      const seed = createListenHandle()
+      const own = listen(seed)
+      own.report(false)
+      const fromCache = own.report(true)
+      jest.setSystemTime(Date.now() + SEED_CONFIRMATION_KEPT_MS)
+      const write = jest.fn(async () => undefined)
+      const saved = writeGuardedBySeed(
+        { subject: 'business profile', fromCache, checkSession: false, listen: seed },
+        write,
+      )
+      own.report(false)
+      await expect(saved).resolves.toEqual({ ok: true })
       expect(write).toHaveBeenCalledTimes(1)
     })
   })

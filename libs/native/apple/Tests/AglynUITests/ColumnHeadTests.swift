@@ -85,5 +85,43 @@
       // A narrow list column cannot hold all three on one row; a wide one can.
       XCTAssertGreaterThan(height(inbox, width: 300), height(inbox, width: 900) * 1.5)
     }
+
+    private final class Chrome {
+      var primary: String?
+      var entries: [String] = []
+    }
+
+    /// The chrome that reaches the shell from `view`, on the Mac and iPad.
+    private func chrome<V: View>(_ view: V) -> Chrome {
+      let seen = Chrome()
+      let host = NSHostingView(
+        rootView: view
+          .environment(\.aglynWideChrome, true)
+          .backgroundPreferenceValue(AglynScreenChromeKey.self) { chrome in
+            let _ = { seen.primary = chrome.primary?.id; seen.entries = chrome.entries.map(\.id) }()
+            Color.clear
+          })
+      host.frame = NSRect(x: 0, y: 0, width: 900, height: 600)
+      host.layoutSubtreeIfNeeded()
+      RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+      return seen
+    }
+
+    private func funnels() -> some View {
+      Text("Funnels list")
+        .aglynPrimaryAction(id: "funnels-add", "New funnel", systemImage: "plus") {}
+        .aglynScreenToolbar(id: "funnels") { Button("Create with AI") {} }
+    }
+
+    /// A screen shown as a section of Analytics' detail keeps New funnel and Create with AI in its own head; on its
+    /// own, they go to the area's head as before (AGL-4058).
+    func testASectionKeepsItsActionsOutOfTheAreasHead() {
+      let alone = chrome(funnels())
+      XCTAssertEqual(alone.primary, "funnels-add")
+      XCTAssertEqual(alone.entries, ["funnels"])
+      let section = chrome(funnels().aglynSectionHead("Funnels"))
+      XCTAssertNil(section.primary)
+      XCTAssertEqual(section.entries, [])
+    }
   }
 #endif

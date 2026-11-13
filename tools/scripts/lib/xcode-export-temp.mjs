@@ -80,7 +80,9 @@ export function exportStagingFolders(roots) {
 
 /**
  * Runs `work` (an `xcodebuild -exportArchive`), then removes the staging
- * folders that appeared while it ran, whether it succeeded or threw.
+ * folders that appeared while it ran, whether it succeeded or threw. When
+ * `work` returns a promise (native-release runs the export as a child it can
+ * pass a signal to), the folders are removed once it settles.
  *
  * @template T
  * @param {() => T} work
@@ -89,11 +91,19 @@ export function exportStagingFolders(roots) {
  */
 export function withExportTempCleanup(work, roots = exportTempRoots()) {
   const before = exportStagingFolders(roots)
-  try {
-    return work()
-  } finally {
+  const sweep = () => {
     for (const path of exportStagingFolders(roots)) {
       if (!before.has(path)) rmSync(path, { recursive: true, force: true })
     }
   }
+  let result
+  try {
+    result = work()
+  } catch (error) {
+    sweep()
+    throw error
+  }
+  if (typeof result?.then === 'function') return result.finally(sweep)
+  sweep()
+  return result
 }

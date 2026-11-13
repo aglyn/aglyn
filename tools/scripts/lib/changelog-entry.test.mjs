@@ -39,6 +39,9 @@ import {
   bulletFor,
   cleanSummary,
   isVersionBump,
+  leadFor,
+  pullRequestFromMerge,
+  readsInternal,
   renderExcerpt,
   renderReleaseEntry,
   sectionsFor,
@@ -252,11 +255,192 @@ describe('the excerpt', () => {
     assert.match(excerpt, /^Serve a video’s poster and renditions, and keep the edge verdict\./)
   })
 
-  it('falls back to the internal change when that is all there was', () => {
+  it('counts the release when that is all there was, rather than quote it', () => {
+    // It used to fall back to the internal subject itself, which is how a
+    // CI commit's sentence would have become a headline on aglyn.com.
     const excerpt = renderExcerpt([
       commit('f1', 'ci(main): stop tuning the cron — editing it is what starves it'),
     ])
-    assert.equal(excerpt, 'Stop tuning the cron — editing it is what starves it.')
+    assert.equal(excerpt, '1 change: 1 behind the scenes.')
+  })
+
+  it('never leads with a chore or a test, even in a customer area', () => {
+    const excerpt = renderExcerpt([
+      commit('f2', 'test(console): the kept-press specs press Save once it is pressable'),
+      commit('f3', 'chore(console): tidy the header'),
+    ])
+    assert.equal(excerpt, '2 changes: 2 behind the scenes.')
+  })
+})
+
+/**
+ * v1.22.1 and v1.22.2 as released: the commits `release-changelog-entry.mjs`
+ * reads for each (`git log --no-merges <merge>^1..<merge>`, newest first) and
+ * the merge commits it reads the PR titles from. Both entries went live with
+ * an internal headline and were rewritten by hand.
+ */
+const V1_22_1 = [
+  commit('5717755494', 'fix(ai): name the even-cards icon flag so the image-sink inventory does not read it as a manifest (AGL-4152)'),
+  commit('a574b257c2', 'chore(release): v1.22.1 (AGL-2089)'),
+  commit('befcde8a47', 'fix(ai): no hollow sections, even card rows and an honest picture cap on redesigns (AGL-4152)'),
+  commit('2cdf077a4b', 'fix(ai): one button per destination in a redesigned section (AGL-4152)'),
+  commit('1010266c19', 'fix(ai): a redesigned footer opens with the brand and says how to reach the site (AGL-4152)'),
+  commit('a81ff0ad84', 'fix(tools): release:tag reads a CHANGELOG.md over 1 MiB (AGL-2089)'),
+  commit('f516b9dced', 'test(console): the other kept-press specs press Save once they have seen it is pressable (AGL-4047)'),
+]
+const V1_22_1_MERGES = [
+  { subject: 'Merge pull request #2659 from aglyn/release/v1.22.1', body: 'Release v1.22.1' },
+  {
+    subject: 'Merge pull request #2658 from aglyn/agl-4152-improve-polish [skip ci]',
+    body: 'fix(ai): Improve it polish: no hollow sections, even cards, fuller footer, one button per destination, honest picture cap (AGL-4152)',
+  },
+  {
+    subject: 'Merge pull request #2657 from aglyn/fix-release-tag-big-changelog [skip ci]',
+    body: 'fix(tools): release:tag reads a CHANGELOG.md over 1 MiB (AGL-2089) [skip ci]',
+  },
+  { subject: "Merge branch 'production' into main after Release v1.22.0 [skip ci]", body: '' },
+  {
+    subject: 'Merge pull request #2656 from aglyn/fix-kept-press-spec-races [skip ci]',
+    body: 'test(console): the other kept-press specs press Save once they have seen it is pressable',
+  },
+]
+const V1_22_2 = [
+  commit('386c3832ae', 'chore(release): v1.22.2 (AGL-2089)'),
+  commit('85f0578899', "fix(ai): send the plan's switches to the resume door (AGL-4152)"),
+]
+const V1_22_2_MERGES = [
+  { subject: 'Merge pull request #2661 from aglyn/release/v1.22.2', body: 'Release v1.22.2' },
+  {
+    subject: 'Merge pull request #2660 from aglyn/agl-4152-plan-switches [skip ci]',
+    body: "fix(ai): send the plan's switches to the resume door (AGL-4152)",
+  },
+  { subject: "Merge branch 'production' into main after Release v1.22.1 [skip ci]", body: '' },
+]
+const prsOf = (merges) => merges.map(pullRequestFromMerge).filter(Boolean)
+const entryFor = (version, commits, pullRequests) =>
+  renderReleaseEntry({
+    version,
+    commits,
+    pullRequests,
+    servedAt: '2026-11-12T15:00:00Z',
+    ref: `v${version}`,
+    previousRef: 'v1.22.0',
+  })
+
+describe('the headline never publishes internal wording', () => {
+  it('leads v1.22.1 with the PR title, not the icon-flag commit', () => {
+    const entry = entryFor('1.22.1', V1_22_1, prsOf(V1_22_1_MERGES))
+    assert.equal(
+      entry.excerpt,
+      'Improve it polish: no hollow sections, even cards, fuller footer, one ' +
+        'button per destination, honest picture cap. 6 changes in all: 5 fixes ' +
+        'and 1 behind the scenes.',
+    )
+  })
+
+  it('leads v1.22.1 with a customer-facing commit when no PR is known', () => {
+    const entry = entryFor('1.22.1', V1_22_1, [])
+    assert.equal(
+      entry.excerpt,
+      'No hollow sections, even card rows and an honest picture cap on ' +
+        'redesigns. 6 changes in all: 5 fixes and 1 behind the scenes.',
+    )
+  })
+
+  it('counts v1.22.2 rather than publish the resume door', () => {
+    const entry = entryFor('1.22.2', V1_22_2, prsOf(V1_22_2_MERGES))
+    assert.equal(entry.excerpt, '1 change: 1 fix.')
+  })
+
+  it('still lists every change in the body, internal wording included', () => {
+    const entry = entryFor('1.22.1', V1_22_1, prsOf(V1_22_1_MERGES))
+    assert.match(entry.body, /name the even-cards icon flag so the image-sink inventory/)
+    assert.match(entry.body, /release:tag reads a CHANGELOG\.md over 1 MiB/)
+    assert.equal(entry.changes, 6)
+  })
+
+  it('prefers a feat to a fix, and a PR title to a commit within a tier', () => {
+    const commits = [
+      commit('h1', 'fix(console): the save button stays put on a narrow screen'),
+      commit('h2', 'feat(forms): a form can ask for a date range'),
+    ]
+    assert.equal(leadFor(commits).summary, 'a form can ask for a date range')
+    assert.equal(
+      leadFor(commits, [{ number: 1, title: 'feat(forms): date ranges, and a calendar to pick them' }]).summary,
+      'date ranges, and a calendar to pick them',
+    )
+    // A fix PR does not outrank a feat commit: the tier comes first.
+    assert.equal(
+      leadFor(commits, [{ number: 2, title: 'fix(console): narrow screens keep the save button' }]).summary,
+      'a form can ask for a date range',
+    )
+  })
+})
+
+describe('what reads as internal', () => {
+  it('flags the engineers\' vocabulary', () => {
+    for (const summary of [
+      'name the even-cards icon flag so the image-sink inventory does not read it as a manifest',
+      "send the plan's switches to the resume door",
+      'the kept-press specs press Save',
+      'raise the lint ceiling by one',
+      'a new guard for the barrel exports',
+    ]) {
+      assert.equal(readsInternal(summary), true, summary)
+    }
+  })
+
+  it('flags identifiers, files, scripts, paths and ids', () => {
+    for (const summary of [
+      'getHost caches the verdict for a day',
+      'plan_rates follows the price change',
+      'release:tag reads a large changelog',
+      'read CHANGELOG.md in full',
+      'paginate /api/screen on cursor',
+      'move libs/shared/ui into its own package',
+      'accept --hotfix on a capped day',
+      'raise the ceiling to AGL-2718, read from the list',
+      'carry #2288 into the release',
+      'rename `siteId` to the host',
+    ]) {
+      assert.equal(readsInternal(summary), true, summary)
+    }
+  })
+
+  it('lets a customer sentence through, product names and all', () => {
+    for (const summary of [
+      'publish a VideoObject for the films a page actually ships',
+      'the app opens on iPhone and macOS without a blank screen',
+      'Improve it polish: no hollow sections, even cards, fuller footer',
+      'a one-click checkout for returning buyers (AGL-4152)',
+      'a redesigned footer opens with the brand and says how to reach the site',
+    ]) {
+      assert.equal(readsInternal(summary), false, summary)
+    }
+  })
+})
+
+describe('a merged pull request, read from its merge commit', () => {
+  it('reads the title from the body of a plain merge', () => {
+    assert.deepEqual(pullRequestFromMerge(V1_22_1_MERGES[1]), {
+      number: 2658,
+      title: 'fix(ai): Improve it polish: no hollow sections, even cards, fuller footer, one button per destination, honest picture cap (AGL-4152)',
+    })
+  })
+
+  it('reads the title from the subject when GitHub put it there', () => {
+    assert.deepEqual(
+      pullRequestFromMerge({
+        subject: 'Merge pull request #2663: even row icons and tidy call-button labels on Improve [skip ci]',
+        body: '',
+      }),
+      { number: 2663, title: 'even row icons and tidy call-button labels on Improve' },
+    )
+  })
+
+  it('skips the promotion itself and a back-merge of production', () => {
+    assert.equal(pullRequestFromMerge(V1_22_1_MERGES[0]), null)
+    assert.equal(pullRequestFromMerge(V1_22_1_MERGES[3]), null)
   })
 })
 

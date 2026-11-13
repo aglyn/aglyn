@@ -348,7 +348,9 @@ private fun PaymentRow(model: RegisterModel, checkout: Checkout, state: Checkout
         TextButton(onClick = { model.act { checkout.cancelPending(payment.id) } }, enabled = !state.busy, modifier = Modifier.testTag("pos-in-flight")) { Text("Stop it") }
       }
     }
-    if (payment.status == "failed" && payment.method == "card_present") {
+    // A smart reader's declined card can be asked for again on that reader; a card this device read cannot (the route
+    // retries on the payment's reader), as in the console.
+    if (payment.status == "failed" && payment.method == "card_present" && payment.readerId != null) {
       TextButton(onClick = { model.act { checkout.retryReaderPayment(payment.id) } }, enabled = state.canTender) { Text("Retry") }
     }
   }

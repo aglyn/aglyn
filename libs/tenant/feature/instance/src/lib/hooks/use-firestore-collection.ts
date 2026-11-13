@@ -205,7 +205,13 @@ export function useFirestoreCollection<T = DocumentData>(
      */
     const disarmStall = armFirestoreStallWatch(q.firestore)
     /** What a save waits on while this listener is unconfirmed (AGL-4120). */
-    const confirmation = trackListenConfirmation(listen)
+    const confirmation = trackListenConfirmation(listen, {
+      // A confirmation kept through a fall back to the cache ran out
+      // before the server answered again (AGL-4047).
+      onLapse: () => {
+        if (!cancelled) setFromCache(true)
+      },
+    })
     /** Whether the rows on screen came from the cache (AGL-4120). */
     let shownFromCache = false
     // Disappearance tracking (AGL-1196); inert unless opted in.
@@ -224,8 +230,11 @@ export function useFirestoreCollection<T = DocumentData>(
         setStatus('success')
         setError(undefined)
       }
-      setFromCache(cached)
-      confirmation.report(cached, !cached && shownFromCache && changed)
+      // The snapshot's own, unless it is a short fall back to the cache
+      // after a confirmation, which keeps it (AGL-4047).
+      setFromCache(
+        confirmation.report(cached, !cached && shownFromCache && changed),
+      )
       shownFromCache = cached
       setData(
         docs.map((docSnap) => {

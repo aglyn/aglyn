@@ -249,7 +249,11 @@ struct TabBarSheet: View {
         Section("In your tab bar · \(draft.count) of \(max)") {
           ForEach(draft, id: \.self) { id in
             if let row = areas.row(id) {
+              // One element named by the area, so VoiceOver reads "Pages", and the row's drag handle "Reorder Pages"
+              // rather than "Reorder" on every row (the icon is decoration).
               Label { Text(row.label) } icon: { AglynPhoneRowIcon(systemName: row.appleIcon) }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(row.label)
                 .accessibilityIdentifier("tab-bar-pinned-\(id)")
             }
           }

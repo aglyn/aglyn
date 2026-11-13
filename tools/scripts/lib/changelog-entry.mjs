@@ -48,6 +48,7 @@
  */
 
 import { BRITISH_SPELLINGS } from './british-spellings.mjs'
+import { parseCommit } from './release-version.mjs'
 
 /**
  * What each commit scope is CALLED on the site.
@@ -408,33 +409,197 @@ export function bulletFor(commit) {
 }
 
 /**
+ * Words that are the engineers' own vocabulary, not a subscriber's.
+ *
+ * Each one put a headline on aglyn.com that had to be rewritten by hand:
+ * v1.22.1 led with "Name the even-cards icon flag so the image-sink inventory
+ * does not read it as a manifest", v1.22.2 with "Send the plan's switches to
+ * the resume door". A `door` here is an HTTP route, a `flag` a field in a
+ * payload, an `inventory` a build guard's list — words a reader can parse and
+ * cannot understand. Matched as whole words, singular or plural.
+ *
+ * Only the LEAD is chosen against this list. The bullets keep every subject as
+ * written, because the entry lists everything a release carried.
+ */
+export const INTERNAL_WORDS = [
+  'allowlist',
+  'barrel',
+  'callable',
+  'canary',
+  'ceiling',
+  'ci',
+  'codegen',
+  'cron',
+  'denylist',
+  'door',
+  'e2e',
+  'emulator',
+  'eslint',
+  'eval',
+  'firestore',
+  'fixture',
+  'flag',
+  'guard',
+  'harness',
+  'helper',
+  'husky',
+  'inventory',
+  'lint',
+  'linter',
+  'manifest',
+  'mock',
+  'monorepo',
+  'nx',
+  'ratchet',
+  'refactor',
+  'regex',
+  'repo',
+  'sampler',
+  'sink',
+  'spec',
+  'stub',
+  'tsconfig',
+  'typecheck',
+]
+
+const INTERNAL_WORD_RE = new RegExp(
+  `\\b(?:${INTERNAL_WORDS.join('|')})s?\\b`,
+  'i',
+)
+
+/**
+ * Shapes that only an identifier has. A sentence that carries one is talking
+ * about the code, whatever the words around it say.
+ */
+const IDENTIFIER_RES = [
+  // getHost, readSiteTimeZone — but not macOS or iPhone, which a reader knows.
+  /\b[a-z]{2,}[A-Z][a-z]/,
+  // plan_rates, sync_state
+  /\b[A-Za-z0-9]+_[A-Za-z0-9_]+\b/,
+  // release:tag, check:lib-boundaries — an npm script, never "polish: no".
+  /\b[a-z]+:[a-z][\w-]*/,
+  // CHANGELOG.md, prepush.mjs
+  /\b[\w-]+\.(?:c?m?[jt]sx?|json|ya?ml|md|swift|kts?|css|html|sh|py|rules)\b/i,
+  // /api/screen, libs/shared/ui
+  /(?:^|[\s(])\/[A-Za-z]/,
+  /\b[\w.-]+\/[\w.-]+\/[\w.-]/,
+  // --write, --hotfix
+  /(?:^|\s)--[a-z]/,
+  // an issue id or PR number INSIDE the sentence (a trailing one is stripped)
+  /\bAGL-\d+/,
+  /#\d+/,
+]
+
+/**
+ * True when a subject reads as internal: an identifier, a file or guard name,
+ * or one of the {@link INTERNAL_WORDS}. Such a subject still gets its bullet;
+ * it just never becomes the sentence an entry leads with.
+ */
+export function readsInternal(summary) {
+  const raw = summary ?? ''
+  // A backtick is a code span by definition. Checked on the raw subject,
+  // because cleanSummary strips it.
+  if (raw.includes('`')) return true
+  const text = cleanSummary(raw)
+  if (INTERNAL_WORD_RE.test(text)) return true
+  return IDENTIFIER_RES.some((re) => re.test(text))
+}
+
+/**
+ * A merged pull request, read from its merge commit.
+ *
+ * GitHub writes a merge commit two ways and both occur on `main`:
+ * `Merge pull request #2658 from aglyn/<branch>` with the PR's title as the
+ * first line of the body, and `Merge pull request #2663: <title>` with it in
+ * the subject. A promotion's own PR (`Release v1.22.1`) and a back-merge of
+ * production are not changes and return null.
+ */
+export function pullRequestFromMerge({ subject = '', body = '' } = {}) {
+  const ciDirective = /\s*\[(?:skip ci|ci skip|no ci|skip actions|actions skip)\]/gi
+  const head = subject.replace(ciDirective, '').trim()
+  const inline = /^Merge pull request #(\d+):\s*(.+)$/.exec(head)
+  const plain = /^Merge pull request #(\d+) from \S+$/.exec(head)
+  let number
+  let title
+  if (inline) {
+    number = Number(inline[1])
+    title = inline[2]
+  } else if (plain) {
+    number = Number(plain[1])
+    title = (body ?? '').split('\n').find((line) => line.trim()) ?? ''
+  } else {
+    return null
+  }
+  title = title.replace(ciDirective, '').trim()
+  if (!title || /^Release v\d/.test(title)) return null
+  return { number, title }
+}
+
+/**
+ * The tiers a lead may come from, best first. Nothing outside them leads:
+ * a release that is all chores and tests says so in a count line rather than
+ * quoting one of them as if it were news.
+ */
+const LEAD_TYPES = ['feat', 'fix', 'perf']
+
+/**
+ * The change an entry leads with, or null when no change reads as one a
+ * subscriber got.
+ *
+ * Deterministic, in this order: a `feat` before a `fix` before a `perf`; within
+ * a tier, a merged pull request's title before a single commit's subject,
+ * because a PR title is written to describe the whole change while a commit
+ * names one step of it (v1.22.1's PR said "even cards, fuller footer, one
+ * button per destination"; the commit that sorted first named an icon flag).
+ * A candidate is skipped when its area is in {@link INTERNAL_AREAS} or its
+ * subject {@link readsInternal}.
+ *
+ * `pullRequests` are `{ title }` objects; each title is parsed as a
+ * conventional subject, and one that is not conventional is never a lead.
+ */
+export function leadFor(commits, pullRequests = []) {
+  const titles = pullRequests
+    .map((pr) => parseCommit({ subject: pr.title ?? '' }))
+    .filter((one) => one.conventional)
+  const customerFacing = (candidate) =>
+    !INTERNAL_AREAS.has(areaFor(candidate)) && !readsInternal(candidate.summary)
+  for (const type of LEAD_TYPES) {
+    const found =
+      titles.find((one) => one.type === type && customerFacing(one)) ??
+      commits.find((one) => one.type === type && customerFacing(one))
+    if (found) return found
+  }
+  return null
+}
+
+/**
  * The excerpt: what changed, then how much.
  *
- * The lead is the first change a reader would care about, which is why the
- * internal areas are skipped — the published beta.116 entry leads with the
- * media CDN and not with the ffmpeg tooling commit above it. A release of one
- * change states it and stops; a tally of "1 changes in all" is a robot
- * talking.
+ * The lead is the first change a reader would care about ({@link leadFor}) —
+ * the published beta.116 entry leads with the media CDN and not with the
+ * ffmpeg tooling commit above it. A release of one change states it and stops;
+ * a tally of "1 changes in all" is a robot talking.
+ *
+ * When nothing qualifies, the excerpt is the count alone — "6 changes: 5 fixes
+ * and 1 behind the scenes." — which is plain and true, where quoting the
+ * nearest internal subject published v1.22.2's "resume door".
  */
-export function renderExcerpt(commits) {
+export function renderExcerpt(commits, pullRequests = []) {
+  if (!commits.length) return ''
   const sections = sectionsFor(commits)
-  const lead =
-    commits.find(
-      (commit) => commit.type === 'feat' && !INTERNAL_AREAS.has(areaFor(commit)),
-    ) ??
-    commits.find(
-      (commit) => commit.type === 'fix' && !INTERNAL_AREAS.has(areaFor(commit)),
-    ) ??
-    commits.find((commit) => !INTERNAL_AREAS.has(areaFor(commit))) ??
-    commits[0]
-  if (!lead) return ''
+  const tally = joinList(
+    sections.map((section) => section.tally(section.commits.length)),
+  )
+  const lead = leadFor(commits, pullRequests)
+  if (!lead) {
+    return `${commits.length} ${commits.length === 1 ? 'change' : 'changes'}: ${tally}.`
+  }
   const sentence = cleanSummary(lead.summary)
   const opener = /[.!?]$/.test(sentence)
     ? sentence.charAt(0).toUpperCase() + sentence.slice(1)
     : `${sentence.charAt(0).toUpperCase() + sentence.slice(1)}.`
   if (commits.length < 2) return opener
-  const tally = sections.map((section) => section.tally(section.commits.length))
-  return `${opener} ${commits.length} changes in all: ${joinList(tally)}.`
+  return `${opener} ${commits.length} changes in all: ${tally}.`
 }
 
 /** The entry body: what this was, anything unusual about it, then everything. */
@@ -543,6 +708,12 @@ export function changelogEntryId(slug) {
 export function renderReleaseEntry({
   version,
   commits,
+  /**
+   * The pull requests merged into this release, as `{ number, title }` —
+   * read from the merge commits by {@link pullRequestFromMerge}. Only the
+   * excerpt's lead uses them; the body lists commits.
+   */
+  pullRequests = [],
   servedAt,
   ref,
   previousRef,
@@ -592,7 +763,7 @@ export function renderReleaseEntry({
     // To the minute: the seconds of a deployment status are noise, and the
     // console's own publish-date dialog cannot express them either.
     publishedAt: `${servedAt.slice(0, 17)}00Z`,
-    excerpt: renderExcerpt(listed),
+    excerpt: renderExcerpt(listed, pullRequests),
     body: renderBody({ intro, notes, commits: listed }),
     changes: listed.length,
   }
