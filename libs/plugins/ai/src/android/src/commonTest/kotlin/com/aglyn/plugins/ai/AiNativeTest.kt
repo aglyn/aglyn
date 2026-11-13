@@ -10,7 +10,7 @@ import kotlin.test.assertIs
 
 class AiNativeTest {
   private val declared = mapOf(
-    "screens" to listOf("ai.jobs", "ai.job", "ai.credits", "ai.member", "ai.staffOrg", "ai.staffUser", "ai.signals", "ai.staffRequests", "ai.requests", "ai.request", "ai.orgsSpendColumn", "ai.hostMember", "ai.allotment", "ai.import.productCopy", "ai.create"),
+    "screens" to listOf("ai.jobs", "ai.job", "ai.credits", "ai.member", "ai.staffOrg", "ai.staffUser", "ai.signals", "ai.staffRequests", "ai.requests", "ai.request", "ai.orgsSpendColumn", "ai.hostMember", "ai.allotment", "ai.import.productCopy", "ai.import.start", "ai.create"),
     "widgets" to listOf(
       "ai.seo-audit", "ai.seo-start", "ai.site-memory",
       "ai.create-page", "ai.create-template", "ai.create-layout", "ai.create-form", "ai.create-component",

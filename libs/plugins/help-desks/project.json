@@ -15,16 +15,15 @@
         "assets": ["libs/plugins/help-desks/*.md"]
       }
     },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
-    },
     "test": {
-      "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/libs/plugins/help-desks"],
-      "options": {
-        "jestConfig": "libs/plugins/help-desks/jest.config.ts"
-      }
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/jest.preset.js",
+        {
+          "externalDependencies": ["jest", "@nx/jest", "ts-jest", "@swc/jest"]
+        }
+      ]
     }
   }
 }

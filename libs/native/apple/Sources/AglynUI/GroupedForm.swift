@@ -118,6 +118,25 @@ extension View {
   }
 }
 
+extension View {
+  /// A sheet's grouped form on a phone's 16-point edges (`AglynContentInsets.phone`, Figma Phone 2:7), where the
+  /// platform's grouped form would put its cards on its own 20-point margins. On the Mac and iPad the sheet keeps the
+  /// platform's margins. A content screen's form takes its edges from `aglynFormBackground` instead.
+  public func aglynPhoneFormEdges() -> some View { modifier(AglynPhoneFormEdges()) }
+}
+
+private struct AglynPhoneFormEdges: ViewModifier {
+  @Environment(\.aglynWideChrome) private var wide
+
+  func body(content: Content) -> some View {
+    #if os(iOS)
+      content.contentMargins(.horizontal, wide ? nil : AglynContentInsets.phone, for: .scrollContent)
+    #else
+      content
+    #endif
+  }
+}
+
 /// What a legacy, always-visible scroll bar takes from a scroll view's width on the Mac (System Settings › Appearance ›
 /// Show scroll bars › Always, or a mouse): the content keeps E on both sides of the COLUMN, so its trailing inset is E
 /// less the bar, and the bar sits against the column's far edge, outside the content. Overlay scroll

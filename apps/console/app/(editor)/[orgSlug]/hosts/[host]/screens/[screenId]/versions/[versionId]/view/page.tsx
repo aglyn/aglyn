@@ -133,8 +133,10 @@ import revalidateLivePages, {
 import HostDisplayNameComponent from '../../../../../../../../../../components/host-display-name.component'
 import { planLockReason } from '@aglyn/tenant-feature-instance/hooks/plan-feature-lock'
 import {
+  heldSaveLabel,
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
   useSeedEdits,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { buildScreenSeoUpdate } from '../../../../../../../../../../constants/screen-seo'
@@ -1394,6 +1396,21 @@ function ScreenDetails() {
     publishedPath,
   ])
 
+  // A Save SEO or Save details pressed while the screen is held is kept, and
+  // saves once the screen is confirmed (AGL-4047).
+  const seoHeld = useHeldSave(handleSeoSave, {
+    checking: screenChecking,
+    subject: 'SEO settings',
+    onRefused: (message) =>
+      enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+  const detailsHeld = useHeldSave(handleEditSave, {
+    checking: screenChecking,
+    subject: 'page details',
+    onRefused: (message) =>
+      enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   /**
    * ONE Save SEO control, rendered in two places on its card — the header's
    * action slot and the foot of the content.
@@ -1408,11 +1425,11 @@ function ScreenDetails() {
       size="small"
       variant="outlined"
       color="primary"
-      disabled={(!seoDraft && !seoImage) || screenChecking}
-      onClick={handleSeoSave}
+      disabled={(!seoDraft && !seoImage) || seoHeld.saving}
+      onClick={seoHeld.press}
       sx={{ alignSelf: 'flex-start' }}
     >
-      {'Save SEO'}
+      {heldSaveLabel(seoHeld, 'Save SEO')}
     </Button>
   )
 
@@ -1426,12 +1443,12 @@ function ScreenDetails() {
         !detailsDraft?.displayName.trim() ||
         (detailsDraft.displayName === storedDetails.displayName &&
           detailsDraft.description === storedDetails.description) ||
-        screenChecking
+        detailsHeld.saving
       }
-      onClick={handleEditSave}
+      onClick={detailsHeld.press}
       sx={{ alignSelf: 'flex-start' }}
     >
-      {'Save details'}
+      {heldSaveLabel(detailsHeld, 'Save details')}
     </Button>
   )
 

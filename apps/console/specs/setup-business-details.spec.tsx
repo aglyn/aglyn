@@ -247,25 +247,73 @@ describe('the Business details card on Setup → Business profile (AGL-4136)', (
   })
 
   /**
-   * The first press is never refused for a late server (AGL-4047). Update is
-   * HELD while the host read is the cache's, with the reason beside it,
-   * where it used to wait on the server and end refused with "We could not
-   * confirm your site settings with the server yet".
+   * The first press is never refused for a late server, and never lost
+   * (AGL-4047). While the host read is the cache's, the reason sits beside
+   * Update; a press then is KEPT: Update says "Saving…" at once, nothing is
+   * written over the cache's copy, and the save runs when the server answers.
+   * Before, the press landed on a disabled button and did nothing.
    */
-  it('holds Update, with the reason beside it, while the host read is unconfirmed', async () => {
+  it('keeps an Update pressed while the host read is unconfirmed, and says Saving…', async () => {
+    // A wait the press can sit in (the rest of this file waits 0).
+    setSeedConfirmWaitMs(10_000)
     mockHostDoc.fromCache = true
     await renderPage()
     type('Slogan', 'Built right')
-    const update = screen.getByRole('button', { name: 'Update' }) as HTMLButtonElement
-    expect(update.disabled).toBe(true)
     expect(screen.getByRole('status').textContent).toBe(
       'Checking your site settings with the server…',
     )
-    // Enter in a field submits without the button; it is held too.
+    const update = screen.getByRole('button', { name: 'Update' }) as HTMLButtonElement
+    expect(update.disabled).toBe(false)
+    fireEvent.click(update)
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeTruthy()
+    // Enter in a field is the same press, not a second one.
     fireEvent.submit(input('Slogan').closest('form') as HTMLFormElement)
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(mockSetDoc).not.toHaveBeenCalled()
     expect(mockEnqueueSnackbar).not.toHaveBeenCalled()
+    expect(input('Slogan').value).toBe('Built right')
+    setSeedConfirmWaitMs(0)
+  })
+
+  it('saves the kept press once the server answers, with the confirmed values', async () => {
+    setSeedConfirmWaitMs(10_000)
+    mockHostDoc.fromCache = true
+    const cached = mockHostDoc.data
+    try {
+      const { rerender } = render(<Page />)
+      await screen.findByLabelText('Business name', { selector: 'input' })
+      type('Slogan', 'Built right')
+      fireEvent.click(screen.getByRole('button', { name: 'Update' }))
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(mockSetDoc).not.toHaveBeenCalled()
+
+      mockHostDoc.data = {
+        ...cached,
+        seo: { title: 'Acme Builders', entity: { telephone: '+1 512 555 0199' } },
+      }
+      mockHostDoc.fromCache = false
+      rerender(<Page />)
+
+      await waitFor(() => expect(mockSetDoc).toHaveBeenCalledTimes(1))
+      const [payload] = withoutSiteWideEntry(mockSetDoc.mock.calls[0]) as any[]
+      expect(payload.seo.entity.slogan).toBe('Built right')
+      expect(payload.seo.entity.telephone).toBe('+1 512 555 0199')
+    } finally {
+      mockHostDoc.data = cached
+      setSeedConfirmWaitMs(0)
+    }
+  })
+
+  it('refuses a kept press in the guard’s words when no confirmation comes, and writes nothing', async () => {
+    mockHostDoc.fromCache = true
+    await renderPage()
+    type('Slogan', 'Built right')
+    fireEvent.click(screen.getByRole('button', { name: 'Update' }))
+    expect(
+      (await screen.findByRole('alert')).textContent,
+    ).toMatch(/^We could not confirm your site settings with the server yet, so nothing was saved/)
+    expect(mockSetDoc).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Update' })).toBeTruthy()
     expect(input('Slogan').value).toBe('Built right')
   })
 

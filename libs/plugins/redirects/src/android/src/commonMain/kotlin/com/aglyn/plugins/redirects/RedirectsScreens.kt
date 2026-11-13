@@ -175,15 +175,13 @@ private fun RedirectDialogs(editor: RedirectsEditor) {
       title = if (draft.id == null) "Add a redirect" else "Edit redirect",
       icon = "alt_route",
       confirmLabel = "Save",
-      confirmEnabled = !editor.held && draft.source.isNotBlank() && draft.destination.isNotBlank(),
+      confirmEnabled = draft.source.isNotBlank() && draft.destination.isNotBlank(),
+      hold = if (editor.held) com.aglyn.ui.FormHold.of("redirect") else null,
       busy = editor.busy,
       error = editor.error,
       onDismiss = editor::close,
       onConfirm = editor::save,
     ) {
-      if (editor.held) {
-        Text(com.aglyn.core.seedCheckingText("redirect"), Modifier.testTag("redirect-checking"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-      }
       ChoiceChipRow(
         options = REDIRECT_KIND_CHOICES.map { (key, label) -> ChipOption(key, label) },
         selected = draft.kind,

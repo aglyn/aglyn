@@ -31,8 +31,11 @@ import { POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT } from './pos-offline-card-limits
  *  - A card, only on the native Aglyn POS app's own Stripe Terminal reader
  *    (AGL-4039): Stripe's SDK stores the card on the device ("store and
  *    forward") and forwards it once a connection returns. The app creates
- *    the PaymentIntent itself, a destination charge with MANUAL capture and
- *    NO application fee; the server captures it when the sale syncs and
+ *    the PaymentIntent itself with MANUAL capture and NO application fee:
+ *    a destination charge for a store on Aglyn's account, or, for a store on
+ *    its own Stripe account (direct charges), an intent made ON that account
+ *    (the connection token's) with no transfer at all (AGL-4219). The
+ *    server captures it when the sale syncs and
  *    sizes the platform fee then, exactly as for an online card sale. A bank
  *    can still decline it at that point, after the customer left: the order
  *    is then recorded unpaid and flagged, and the register says so.
@@ -115,6 +118,13 @@ export interface PosOfflineSaleCard {
   last4?: string
   /** The bank's or Stripe's words for a decline or failure. */
   declineMessage?: string
+  /**
+   * The store's own Stripe account the device made the intent on, from the
+   * kit it sold with (a direct charge, AGL-4219). Absent: a destination
+   * charge made on the platform. The server reads the intent there, and
+   * captures it only when it is still the store's account.
+   */
+  account?: string
 }
 
 /** Every tender the register turns off while offline, and why, in its words. */
@@ -310,8 +320,15 @@ export interface PosOfflineKitCard {
   available: boolean
   /** Why not, in the cashier's words, when it is not. */
   unavailableReason?: string
-  /** The connected account the charge transfers to (a destination charge, as online). */
+  /** The connected account the charge transfers to (a destination charge, as online); '' for a direct charge. */
   destination: string
+  /**
+   * Set for a store on its own Stripe account (direct charges, AGL-4219):
+   * the device makes the intent with no transfer and no destination, on the
+   * account its connection token belongs to, which is this one. Offered only
+   * to an app that says it can (`cardChargeModels=direct` on the kit's GET).
+   */
+  account?: string
   currency: string
   /** The limit of one card sale rung offline, in cents: the store's, or Stripe's own ceiling when it set none. */
   maxSaleCents: number
@@ -553,6 +570,9 @@ export function posOfflineFlagLabels(flags: readonly PosOfflineFlag[]): string[]
   return flags.map((flag) => POS_OFFLINE_FLAG_LABELS[flag] ?? flag)
 }
 
+/** A Stripe account id as Stripe mints them. */
+const POS_OFFLINE_CARD_ACCOUNT = /^acct_[A-Za-z0-9]{8,64}$/
+
 const CARD_FORWARDS: readonly PosOfflineCardForward[] = ['stored', 'forwarded', 'declined', 'failed']
 
 /** The card side of a queued sale, typed and bounded, or `null` when it cannot be read. */
@@ -567,12 +587,15 @@ export function sanitizePosOfflineSaleCard(raw: unknown): PosOfflineSaleCard | n
   const brand = bounded(input['brand'], 24)
   const last4 = typeof input['last4'] === 'string' && /^\d{4}$/.test(input['last4']) ? input['last4'] : ''
   const declineMessage = bounded(input['declineMessage'], 300)
+  const account = typeof input['account'] === 'string' ? input['account'].trim() : ''
+  if (account && !POS_OFFLINE_CARD_ACCOUNT.test(account)) return null
   return {
     forward,
     ...(intent ? { paymentIntentId: intent } : {}),
     ...(brand ? { brand } : {}),
     ...(last4 ? { last4 } : {}),
     ...(declineMessage ? { declineMessage } : {}),
+    ...(account ? { account } : {}),
   }
 }
 
@@ -608,10 +631,12 @@ export function posOfflineCardRefusal(input: {
  * What the app writes on the PaymentIntent it creates for a card rung
  * offline: the sale key (the order's id once it syncs) and where it was rung,
  * so the server can match the charge to the sale even if the sale's own sync
- * never arrives.
+ * never arrives. An intent made on the store's own account (`direct`,
+ * AGL-4219) also says `chargeModel: direct`, as every direct sale's objects
+ * do, so its Connect-delivered events are read as the store's own.
  */
 export function posOfflineCardIntentMetadata(
-  sale: Pick<PosOfflineSale, 'saleKey' | 'hostId' | 'orgId' | 'registerId'>,
+  sale: Pick<PosOfflineSale, 'saleKey' | 'hostId' | 'orgId' | 'registerId'> & { direct?: boolean },
 ): Record<string, string> {
   return {
     kind: POS_OFFLINE_CARD_INTENT_KIND,
@@ -619,6 +644,7 @@ export function posOfflineCardIntentMetadata(
     hostId: sale.hostId,
     orgId: sale.orgId,
     registerId: sale.registerId,
+    ...(sale.direct ? { chargeModel: 'direct' } : {}),
   }
 }
 

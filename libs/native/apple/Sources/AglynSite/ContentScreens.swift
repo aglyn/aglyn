@@ -354,7 +354,7 @@ private struct EntryForm: View {
       }
     }
     .formStyle(.aglynGrouped)
-    .environment(\.aglynFormChecking, fromCache ? seedCheckingText("entry") : nil)
+    .environment(\.aglynFormChecking, fromCache ? formHold("entry") : nil)
     // A newer copy of the entry keeps what was typed and moves every other field to it (AGL-4047).
     .onChange(of: stored) { previous, next in draft = draft.rebased(previous: previous, next: next) }
     .accessibilityIdentifier("entry-editor")

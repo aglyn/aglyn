@@ -42,8 +42,10 @@ import {
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import {
+  heldSaveLabel,
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
   useSeedEdits,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import type { ProductType } from '../../model/commerce'
@@ -150,6 +152,13 @@ export function ReturnSettingsCard(props: ReturnSettingsCardProps) {
     enqueueSnackbar('Return settings saved', { variant: 'success', persist: false })
   }, [form, daysValid, storeStatus, storeFromCache, storeListen, firestore, user, hostId, current, days, enqueueSnackbar])
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSave, {
+    checking,
+    subject: 'return settings',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <CardDisplay
       header={'Returns'}
@@ -199,11 +208,11 @@ export function ReturnSettingsCard(props: ReturnSettingsCardProps) {
           variant="contained"
           color="primary"
           size="small"
-          disabled={!form.dirty || checking || !daysValid}
-          onClick={handleSave}
+          disabled={!form.dirty || !daysValid || held.saving}
+          onClick={held.press}
           sx={{ alignSelf: 'flex-start' }}
         >
-          {'Save return settings'}
+          {heldSaveLabel(held, 'Save return settings')}
         </Button>
         {form.dirty && checking ? (
           <Typography variant="body2" color="text.secondary" role="status">

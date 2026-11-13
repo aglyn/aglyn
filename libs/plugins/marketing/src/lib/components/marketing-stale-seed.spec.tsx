@@ -211,7 +211,7 @@ describe('PopupCard (AGL-1358)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
   }
 
-  it('HOLDS Save on the popup over an unconfirmed read, keeping what was typed', async () => {
+  it('KEEPS a Save pressed on the popup over an unconfirmed read, keeping what was typed', async () => {
     listener.fromCache = true
     render(<PopupCard hostId="host-1" org={ORG} />)
 
@@ -219,7 +219,14 @@ describe('PopupCard (AGL-1358)', () => {
     await settle()
     // Held, not refused: nothing was pressed into the wait, and the reason
     // sits beside the held control (AGL-4047).
-    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    // Kept, not dropped (AGL-4047): no confirmation came within the
+    // guard's wait (0 in this spec), so the press ends in the guard's refusal.
+    await waitFor(() =>
+      expect(enqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm your .+ with the server yet, so nothing was saved/),
+        expect.anything(),
+      ),
+    )
     expect(screen.getAllByRole('status').map((note) => note.textContent)).toContain(
       'Checking your popup with the server…',
     )
@@ -298,7 +305,7 @@ describe('AnnouncementBarCard (AGL-1358)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
   }
 
-  it('HOLDS Save on the bar over an unconfirmed read, keeping what was typed', async () => {
+  it('KEEPS a Save pressed on the bar over an unconfirmed read, keeping what was typed', async () => {
     listener.fromCache = true
     render(<AnnouncementBarCard hostId="host-1" org={ORG} />)
 
@@ -307,7 +314,14 @@ describe('AnnouncementBarCard (AGL-1358)', () => {
     await settle()
     // Held, not refused: nothing was pressed into the wait, and the reason
     // sits beside the held control (AGL-4047).
-    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    // Kept, not dropped (AGL-4047): no confirmation came within the
+    // guard's wait (0 in this spec), so the press ends in the guard's refusal.
+    await waitFor(() =>
+      expect(enqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm your .+ with the server yet, so nothing was saved/),
+        expect.anything(),
+      ),
+    )
     expect(screen.getAllByRole('status').map((note) => note.textContent)).toContain(
       'Checking your announcement bar with the server…',
     )
@@ -361,7 +375,7 @@ describe('HostExperimentsCard (AGL-1358)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
   }
 
-  it('HOLDS Save on an experiment seeded from an unconfirmed read, keeping it open', async () => {
+  it('KEEPS a Save pressed on an experiment seeded from an unconfirmed read, keeping it open', async () => {
     listener.fromCache = true
     render(<HostExperimentsCard hostId="host-1" org={ORG} />)
 
@@ -370,7 +384,14 @@ describe('HostExperimentsCard (AGL-1358)', () => {
     await settle()
     // Held, not refused: nothing was pressed into the wait, and the reason
     // sits beside the held control (AGL-4047).
-    expect(enqueueSnackbar).not.toHaveBeenCalled()
+    // Kept, not dropped (AGL-4047): no confirmation came within the
+    // guard's wait (0 in this spec), so the press ends in the guard's refusal.
+    await waitFor(() =>
+      expect(enqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm your .+ with the server yet, so nothing was saved/),
+        expect.anything(),
+      ),
+    )
     expect(screen.getAllByRole('status').map((note) => note.textContent)).toContain(
       'Checking your experiment with the server…',
     )

@@ -347,6 +347,7 @@ export function BusinessProfileCard(props: BusinessProfileCardProps) {
       FormTemplate={CardDisplayFormTemplate}
       FormTemplateProps={{
         checkingText: checking ? seedCheckingText('business profile') : undefined,
+        checkingSubject: 'business profile',
       }}
       componentMapper={simpleComponentMapper}
       onSubmit={handleSave}

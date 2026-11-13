@@ -275,11 +275,10 @@ fun SiteTrafficCard(
   StatsSection(
     "Traffic",
     modifier.testTag("analytics-traffic"),
-    accessory = {
-      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-        RangePicker(range, TRAFFIC_RANGES, { range = it }, Modifier.testTag("analytics-range"))
-        if (viewDetails != null) TextButton(onClick = viewDetails, modifier = Modifier.testTag("traffic-view-details")) { Text("View details") }
-      }
+    accessory = { RangePicker(range, TRAFFIC_RANGES, { range = it }, Modifier.testTag("analytics-range")) },
+    // View details ends the title row, on one line (Figma 344:44710); the range goes under it when they do not all fit.
+    link = viewDetails?.let { open ->
+      { TextButton(onClick = open, modifier = Modifier.testTag("traffic-view-details")) { Text("View details", maxLines = 1, softWrap = false) } }
     },
   ) {
     when (val live = traffic) {

@@ -21,12 +21,16 @@ public struct SignedInAccount: Codable, Equatable, Hashable, Identifiable, Senda
   /// The account's own picture as it was last shown (`readAccountPhoto`, AGL-4010), so the switcher draws each account's
   /// face without reading anyone's profile; nil until it has been on screen, or when it has none.
   public var photoURL: String?
+  /// The account's name as it was last shown in its own header (`readAccountName`: the profile first, AGL-4010), so the
+  /// switcher names each account the way it names itself; nil until it has been on screen.
+  public var shownName: String?
 
   public var id: String { slot }
   public var isBase: Bool { slot == Self.baseSlot }
 
   public init(
-    slot: String, uid: String, email: String?, displayName: String?, orgIDs: [String] = [], photoURL: String? = nil
+    slot: String, uid: String, email: String?, displayName: String?, orgIDs: [String] = [], photoURL: String? = nil,
+    shownName: String? = nil
   ) {
     self.slot = slot
     self.uid = uid
@@ -34,10 +38,16 @@ public struct SignedInAccount: Codable, Equatable, Hashable, Identifiable, Senda
     self.displayName = displayName
     self.orgIDs = orgIDs
     self.photoURL = photoURL
+    self.shownName = shownName
+  }
+
+  /// The account's name in the account lists: as last shown in its header, else its sign-in name, else its address.
+  public var title: String {
+    [shownName, displayName].compactMap { $0 }.first { !$0.isEmpty } ?? email ?? "Account"
   }
 
   /// The initials the account's photo shows when it has none ("ZG"), from the name, else the address.
-  public var initials: String { accountInitials(name: displayName, email: email) }
+  public var initials: String { accountInitials(name: shownName ?? displayName, email: email) }
 }
 
 /// "ZG" for Zach Gover, "Z" for zach@…, "?" for nobody.
@@ -96,6 +106,7 @@ public enum AccountRosterRules {
       if kept.orgIDs.isEmpty { kept.orgIDs = next[index].orgIDs }
       // The same person signing in again keeps the photo last shown, until their profile is read again.
       if kept.photoURL == nil, kept.uid == next[index].uid { kept.photoURL = next[index].photoURL }
+      if kept.shownName == nil, kept.uid == next[index].uid { kept.shownName = next[index].shownName }
       next[index] = kept
     } else {
       next.append(account)

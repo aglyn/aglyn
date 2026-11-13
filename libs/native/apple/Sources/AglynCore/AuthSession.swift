@@ -401,6 +401,18 @@ public final class AuthSession {
     roster?.save(next)
   }
 
+  /// Remembers the name the account in use shows (its profile's first, `readAccountName`), so the account switcher
+  /// names each account as its own header does once it has been on screen (AGL-4010).
+  public func recordName(_ name: String?) {
+    guard let name, !name.isEmpty, impersonation == nil,
+      var account = accounts.first(where: { $0.slot == activeSlot }), account.shownName != name, account.email != name
+    else { return }
+    account.shownName = name
+    let next = accounts.map { $0.slot == account.slot ? account : $0 }
+    accounts = next
+    roster?.save(next)
+  }
+
   /// Uses another signed-in account. Its session is read back from its Keychain slot when it was not used this launch;
   /// one the server no longer accepts is dropped. A support session is ended first.
   public func switchAccount(to slot: String) async {

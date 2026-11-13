@@ -192,19 +192,22 @@ beforeEach(() => {
  * and what was typed is saved onto the task the server confirms.
  */
 describe('an edit over an unconfirmed read', () => {
-  it('holds Save with the reason, then saves the edit onto the server’s task', async () => {
+  it('keeps a Save pressed during the hold, then saves the edit onto the server’s task', async () => {
     const cached = task({ hostId: 'host-a', visibleTo: ['host:host-a'] })
     const view = open({ hostId: 'host-a', task: cached, fromCache: true })
     fireEvent.change(screen.getByRole('combobox', { name: /^Subject/ }), {
       target: { value: 'Renew the policy' },
     })
-    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByRole('status').textContent).toBe('Checking your task with the server…')
+    // Kept, not dropped (AGL-4047): pressed during the hold, it says Saving…
+    // and writes nothing until the server answers.
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeTruthy()
+    expect(saves).toHaveLength(0)
 
     // The priority was raised elsewhere since the cached snapshot.
     view.rerender(drawer({ hostId: 'host-a', task: { ...cached, priority: 'high' }, fromCache: false }))
     expect(screen.queryByRole('status')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(saves).toHaveLength(1))
     expect(saves[0]['task']).toMatchObject({ title: 'Renew the policy', priority: 'high' })

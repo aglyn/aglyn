@@ -89,8 +89,10 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import {
+  heldSaveLabel,
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
   useSeedEdits,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import ComponentIconField from './component-icon-field.component'
@@ -821,6 +823,13 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
 
   // No card header: the page header already says "Reusable Components",
   // and screens/layouts do not repeat it either (AGL-693).
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const componentHeld = useHeldSave(handleSave, {
+    checking: componentsChecking,
+    subject: 'component',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <CardDisplay>
       {duplicate.dialog}
@@ -959,10 +968,10 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
           <Button
             variant="contained"
             color="primary"
-            disabled={!editor?.name.trim() || componentsChecking}
-            onClick={handleSave}
+            disabled={!editor?.name.trim() || componentHeld.saving}
+            onClick={componentHeld.press}
           >
-            {'Save'}
+            {heldSaveLabel(componentHeld, 'Save')}
           </Button>
         </DialogActions>
       </Dialog>

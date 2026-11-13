@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/shared-data-forms",
-  "version": "1.21.0",
+  "version": "1.22.2",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": {
@@ -25,9 +25,9 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/shared-data-regex": "1.21.0",
-    "@data-driven-forms/react-form-renderer": "^4.2.0",
-    "@swc/helpers": "0.5.23"
+    "@aglyn/shared-data-regex": "1.22.2",
+    "@data-driven-forms/react-form-renderer": "^4.2.3",
+    "@swc/helpers": "0.5.24"
   },
   "sideEffects": false
 }

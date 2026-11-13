@@ -42,6 +42,7 @@ import {
 import {
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { Button, Chip, Divider, Stack, Typography } from '@mui/material'
 import { doc, getDoc } from 'firebase/firestore'
@@ -248,6 +249,13 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
       : null,
   ].filter(Boolean)
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSaveFiling, {
+    checking: Boolean(checkingText),
+    subject: 'contact',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <CardDisplay
       header={'Relationship'}
@@ -261,12 +269,12 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
             variant="outlined"
             disabled={
               saving ||
-              Boolean(checkingText) ||
-              (siteCampaigns.ready && !siteCampaigns.options.length)
+              (siteCampaigns.ready && !siteCampaigns.options.length) ||
+              held.saving
             }
-            onClick={() => void handleSaveFiling()}
+            onClick={held.press}
           >
-            {saving ? 'Saving…' : 'Save filing'}
+            {held.saving ? 'Saving…' : 'Save filing'}
           </Button>
         ),
       }}

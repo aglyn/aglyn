@@ -164,15 +164,13 @@ struct TaskSheet: View {
 
   var body: some View {
     AglynFormSheet(
-      title, canConfirm: !held && !draft.title.trimmingCharacters(in: .whitespaces).isEmpty && (siteChoice == nil || !site.isEmpty), save: {
+      title, canConfirm: !draft.title.trimmingCharacters(in: .whitespaces).isEmpty && (siteChoice == nil || !site.isEmpty),
+      hold: held ? AglynFormHold(checking: seedCheckingText("task"), unconfirmed: seedUnconfirmedText("task")) : nil, save: {
       var final = draft
       final.dueAtMs = hasDue ? Int64(due.timeIntervalSince1970 * 1000) : nil
       final.sourceSite = site.isEmpty || site == crmOrganizationChoice ? nil : site
       try await save(final)
     }) {
-      if held {
-        Section { Text(seedCheckingText("task")).font(AglynFont.caption).foregroundStyle(.secondary) }
-      }
       if let siteChoice {
         Section {
           Picker("Site", selection: $site) {

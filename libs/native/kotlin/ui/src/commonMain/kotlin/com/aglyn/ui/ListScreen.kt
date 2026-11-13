@@ -160,6 +160,21 @@ fun CompactButton(
  */
 @Composable
 fun ListHeaderAction(label: String, icon: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+  if (LocalPhoneListHead.current) {
+    // A phone area's title row: the filled 40 square with its symbol (Figma 285:6443's "+"), the label spoken.
+    val shape = RoundedCornerShape(LocalShellMetrics.current.controlRadius)
+    WithTooltip(label) {
+      Box(
+        modifier.size(PhoneHeadMetrics.button).alpha(if (enabled) 1f else 0.38f).clip(shape).background(MaterialTheme.colorScheme.primary)
+          .clickable(enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
+          .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+      ) {
+        Icon(AglynIcons.named(icon), contentDescription = null, Modifier.size(PhoneHeadMetrics.icon), tint = MaterialTheme.colorScheme.onPrimary)
+      }
+    }
+    return
+  }
   if (LocalShellMetrics.current.compact || currentWidthClass() != WidthClass.COMPACT) {
     CompactButton(label, icon, onClick, modifier, enabled = enabled)
   } else {
@@ -184,6 +199,30 @@ object HeadMetrics {
   val listColumnTop = 20.dp
   val listColumnTitleRow = 28.dp
   val listColumnGap = 12.dp
+}
+
+/**
+ * A list's title in its head. On a phone the area's title carries ▾: every area of the scope as tiles, to switch in
+ * place (AGL-4006, Figma 285:6443). [compactHead] is the desktop's and tablet's 22/28 list title, with no ▾.
+ */
+@Composable
+fun AreaTitle(title: String, compactHead: Boolean) {
+  val switchArea = LocalAreaSwitcher.current.takeIf { !compactHead }
+  Row(
+    if (switchArea != null) Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClickLabel = "Show every area", onClick = switchArea).testTag("area-title-switcher") else Modifier,
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Text(
+      title,
+      // Figma's list title: 22/28 bold on the desktop; on a phone the area's large title (Android Pages 285:6443, 28).
+      style = if (compactHead) MaterialTheme.typography.headlineSmall.copy(fontSize = ListColumnTitle.size, lineHeight = ListColumnTitle.line) else MaterialTheme.typography.displaySmall,
+      fontWeight = FontWeight.Bold,
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+      modifier = Modifier.semantics { heading() },
+    )
+    if (switchArea != null) Icon(AglynIcons.named("expand_more"), contentDescription = null, Modifier.padding(start = 2.dp).size(22.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+  }
 }
 
 /** The primary action of a list screen: its one filled button. */
@@ -240,23 +279,7 @@ fun ListScreenScaffold(
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(space(1f)),
     ) {
-      // On a phone the area's title carries ▾: every area of the scope as tiles, to switch in place (AGL-4006).
-      val switchArea = LocalAreaSwitcher.current.takeIf { !compactHead }
-      Row(
-        if (switchArea != null) Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClickLabel = "Show every area", onClick = switchArea).testTag("area-title-switcher") else Modifier,
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        Text(
-          title,
-          // Figma's list title: 22/28 bold on the desktop.
-          style = if (compactHead) MaterialTheme.typography.headlineSmall.copy(fontSize = ListColumnTitle.size, lineHeight = ListColumnTitle.line) else MaterialTheme.typography.headlineSmall,
-          fontWeight = FontWeight.Bold,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-          modifier = Modifier.semantics { heading() },
-        )
-        if (switchArea != null) Icon(AglynIcons.named("expand_more"), contentDescription = null, Modifier.padding(start = 2.dp).size(22.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-      }
+      AreaTitle(title, compactHead)
       star?.star?.invoke()
       Box(Modifier.weight(1f))
       if (more.isNotEmpty() && !compactHead) OverflowMenu(more, contentDescription = "More actions")

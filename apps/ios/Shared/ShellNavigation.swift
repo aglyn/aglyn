@@ -83,6 +83,16 @@ enum ShellMode: String, Hashable {
   case admin
 }
 
+/// One place in a window's history (AGL-3996): the section, with the sidebar's mode and scope it was opened in, so Back
+/// and Forward put back the list and the scope as well as the screen.
+struct ShellPlace: Equatable {
+  var section: ShellSection
+  var mode: ShellMode
+  var inSite: Bool
+  /// The site the place was opened in; nil for the whole workspace, or while the site is not known yet.
+  var hostID: String?
+}
+
 /// The two pickers: workspace, then site.
 enum ShellPicker: String, Identifiable, Hashable {
   case workspace
@@ -170,10 +180,27 @@ final class ShellNavigation {
   @ObservationIgnored var tabInFront: (() -> ShellNavigation?)?
   /// Where this window opens a link: the tab in front, else this navigation.
   var linkTarget: ShellNavigation { tabInFront?() ?? self }
+  /// Whether a phone's shell draws this navigation (the tab bar and Home's tiles): a place opened from a link, a starred
+  /// or a recent item then opens its area as a Home tile does (AGL-4059). Set by the shell that draws it.
+  @ObservationIgnored var compact = false
+  /// On a phone, the tab bar's section for an area row, when the tab bar holds it.
+  @ObservationIgnored var tabSection: ((String) -> ShellSection?)?
   /// Where the window has been, for Back and Forward beside the search field: each section opened, in order.
-  private(set) var history: [ShellSection] = [.home]
-  private(set) var historyIndex = 0
+  /// Each place holds the sidebar's mode and scope too (`ShellPlace`).
+  private(set) var history = NavHistory(ShellPlace(section: .home, mode: .main, inSite: true))
   @ObservationIgnored private var travelling = false
+  /// The site in this window's scope, as the shell in front reads it from the workspace store: a scope switch picks it
+  /// just after the place it opens is recorded, so the place on screen takes it.
+  @ObservationIgnored var siteInScope: String? {
+    didSet {
+      guard siteInScope != oldValue, inSite else { return }
+      var place = history.current
+      place.hostID = siteInScope
+      history.replaceCurrent(place)
+    }
+  }
+  /// Picks a site again for Back or Forward; false when the workspace no longer has it.
+  @ObservationIgnored var openSite: ((String) -> Bool)?
   /// A workspace waiting to be pinned while the five pins are full ("Pinned is full. Replace one?").
   var pinFull: PendingPin?
   /// The workspace whose color is being picked.
@@ -190,6 +217,7 @@ final class ShellNavigation {
   init() {
     inSite = UserDefaults.standard.object(forKey: Self.inSiteKey) as? Bool ?? true
     groups = AglynSidebarGroups(stored: UserDefaults.standard.stringArray(forKey: Self.openGroupsKey) ?? [])
+    history = NavHistory(ShellPlace(section: .home, mode: .main, inSite: inSite))
   }
   /// An invitation a notification opened, waiting for its accept or decline.
   var pendingInvite: FeedNotification?
@@ -267,26 +295,40 @@ final class ShellNavigation {
     record(next)
   }
 
-  /// Notes a section opened, for Back and Forward: going somewhere new drops what was ahead.
+  /// Notes a section opened, for Back and Forward, in the mode and scope the window is in: going somewhere new drops
+  /// what was ahead.
   func record(_ next: ShellSection) {
-    guard !travelling, history.indices.contains(historyIndex), history[historyIndex] != next else { return }
-    history = Array(history.prefix(historyIndex + 1)) + [next]
-    if history.count > 50 { history.removeFirst(history.count - 50) }
-    historyIndex = history.count - 1
+    guard !travelling else { return }
+    history.record(place(next))
   }
 
-  var canGoBack: Bool { historyIndex > 0 }
-  var canGoForward: Bool { historyIndex < history.count - 1 }
+  /// A section as a place in the mode and scope the window is in now.
+  private func place(_ section: ShellSection) -> ShellPlace {
+    ShellPlace(section: section, mode: mode, inSite: inSite, hostID: inSite ? siteInScope : nil)
+  }
 
-  func goBack() { travel(to: historyIndex - 1) }
-  func goForward() { travel(to: historyIndex + 1) }
+  var canGoBack: Bool { history.canGoBack }
+  var canGoForward: Bool { history.canGoForward }
 
-  private func travel(to index: Int) {
-    guard history.indices.contains(index) else { return }
+  func goBack() { travel(history.back()) }
+  func goForward() { travel(history.forward()) }
+
+  /// Puts a place back whole: its scope (the whole workspace, or its site), the sidebar's mode, then its section.
+  private func travel(_ place: ShellPlace?) {
+    guard let place else { return }
     travelling = true
-    historyIndex = index
-    section = history[index]
-    travelling = false
+    defer { travelling = false }
+    var site = siteInScope
+    if let hostID = place.hostID, hostID != site, openSite?(hostID) == true { site = hostID }
+    // A stack pushed in the other scope is not this one's, as entering a scope starts every screen at its root.
+    if place.inSite != inSite || site != siteInScope { paths = [:] }
+    inSite = place.inSite
+    siteInScope = site
+    mode = place.mode
+    section = place.section
+    // The place as it stands now (a site it was opened in before the site was known), so the section's own record of
+    // it is not a new place that drops what is ahead.
+    history.replaceCurrent(self.place(place.section))
   }
 }
 

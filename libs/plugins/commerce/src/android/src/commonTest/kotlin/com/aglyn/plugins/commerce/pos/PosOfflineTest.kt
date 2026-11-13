@@ -63,6 +63,9 @@ private class FakeOfflineApi : PosOfflineApi {
   var failure: ConsoleApiError? = null
   val answers = mutableMapOf<String, PosOfflineSaleOutcome>()
 
+  /** Runs inside a sync, before it answers: a card forwarded while the sync is in flight. */
+  var midSync: (suspend () -> Unit)? = null
+
   override suspend fun kit(): PosOfflineKit {
     failure?.let { throw it }
     return kitAnswer!!
@@ -70,6 +73,10 @@ private class FakeOfflineApi : PosOfflineApi {
 
   override suspend fun sync(sales: List<com.aglyn.contracts.PosOfflineSale>): List<PosOfflineSaleOutcome> {
     batches += sales.map { it.saleKey }
+    midSync?.let {
+      midSync = null
+      it()
+    }
     failure?.let { throw it }
     return sales.map { answers[it.saleKey] ?: PosOfflineSaleOutcome(number = 7.0, orderId = it.saleKey, saleKey = it.saleKey, status = PosOfflineOutcomeStatus.RECORDED) }
   }
@@ -230,6 +237,36 @@ class PosOfflineModelTest {
   }
 
   @Test
+  fun theBannerReadsTheDeviceEvenWhenAnotherRegisterAlreadySyncedItsSales() = runTest {
+    // Two registers over one device store (AGL-4219): the one on screen never keeps a "waiting to sync" the other settled.
+    val device = InMemoryKeyValueStore()
+    val api = FakeOfflineApi()
+    val onScreen = ready(api, device, this, keys = listOf("off0123456789abcdef0001"))
+    onScreen.ringCashSale(cart(), 1296)
+    model(api, device, this).sync()
+    assertEquals(1, onScreen.waiting.size, "not re-read yet")
+    onScreen.sync()
+    assertTrue(onScreen.waiting.isEmpty())
+    assertEquals(1, api.batches.size, "nothing was sent twice")
+  }
+
+  @Test
+  fun aSyncAskedForWhileOneRunsRunsOnceItEnds() = runTest {
+    val api = FakeOfflineApi()
+    val offline = ready(api, InMemoryKeyValueStore(), this, keys = listOf("off0123456789abcdef0001", "off0123456789abcdef0002"))
+    offline.ringCashSale(cart(), 1296)
+    api.midSync = {
+      // Another sale becomes ready (a card forwarded) while the first sync is in flight.
+      offline.ringCashSale(cart(), 1296)
+      offline.sync()
+    }
+    offline.sync()
+    assertEquals(listOf(listOf("off0123456789abcdef0001"), listOf("off0123456789abcdef0002")), api.batches)
+    assertTrue(offline.queue.isEmpty())
+    assertFalse(offline.syncing)
+  }
+
+  @Test
   fun aSaleLeavesTheDeviceOnlyWhenTheServerHasAnsweredForIt() = runTest {
     val api = FakeOfflineApi()
     val offline = ready(api, InMemoryKeyValueStore(), this, keys = listOf("off0123456789abcdef0001", "off0123456789abcdef0002"))
@@ -361,7 +398,8 @@ class ConsolePosOfflineApiTest {
     val seen = mutableListOf<Seen>()
     val read = api(seen, """{"kit":$KIT_JSON}""").kit()
     assertEquals("/api/commerce/pos-offline-sync", seen.single().path)
-    assertEquals("hostId=h1", seen.single().query)
+    // The app can make a card's intent on a store's own Stripe account, and says so (AGL-4219).
+    assertEquals("hostId=h1&cardChargeModels=direct", seen.single().query)
     assertEquals(HttpMethod.Get, seen.single().method)
     assertEquals(8.0, read.tax.pct)
     assertEquals(20.0, read.maxDiscountPct)
@@ -403,10 +441,17 @@ class ConsolePosOfflineApiTest {
 class PosOfflineCardTest {
   private val key = "offcard0000000000000000001"
 
-  private fun cardKit(available: Boolean = true, maxSale: Double = 10_000.0, maxDaily: Double = 500_000.0) = makeKit {
+  private fun cardKit(
+    available: Boolean = true,
+    maxSale: Double = 10_000.0,
+    maxDaily: Double = 500_000.0,
+    account: String? = null,
+  ) = makeKit {
     it.copy(
       card = com.aglyn.contracts.PosOfflineKitCard(
-        available = available, currency = "usd", destination = "acct_merchant", maxSaleCents = maxSale, maxDeviceDailyCents = maxDaily,
+        account = account,
+        available = available, currency = "usd", destination = if (account == null) "acct_merchant" else "",
+        maxSaleCents = maxSale, maxDeviceDailyCents = maxDaily,
         unavailableReason = if (available) null else "Card sales offline are not turned on.",
       ),
     )
@@ -480,6 +525,30 @@ class PosOfflineCardTest {
     assertEquals(1296L, request.amountCents)
     assertEquals("pos-offline", request.metadata["kind"])
     assertNull(request.problem)
+  }
+
+  @Test
+  fun aDirectChargeStoresKitMakesTheIntentOnItsOwnAccountAndTheSaleSaysWhich() = runTest {
+    // A store on its own Stripe account (AGL-4219).
+    val api = FakeOfflineApi().apply { kitAnswer = cardKit(account = "acct_1StoreOwnAcct") }
+    val offline = model(api, InMemoryKeyValueStore(), this, keys = listOf(key))
+    offline.refreshKit()
+    val request = assertNotNull(offline.cardRequest(cart()))
+    assertEquals("acct_1StoreOwnAcct", request.account)
+    assertEquals("direct", request.metadata["chargeModel"])
+    assertNull(request.problem)
+    val rung = assertNotNull(
+      offline.ringCardSale(
+        cart(),
+        com.aglyn.hardware.OfflineCardTaken(key, "pi_3Q0abcdEFGH12345", "visa", "4242", account = request.account),
+      ),
+    )
+    assertEquals("acct_1StoreOwnAcct", rung.sale.card?.account)
+    // A destination store's sale names no account, and its intent no charge model.
+    api.kitAnswer = cardKit()
+    offline.refreshKit()
+    assertNull(offline.cardRequest(cart())?.account)
+    assertNull(offline.cardRequest(cart())?.metadata?.get("chargeModel"))
   }
 
   @Test

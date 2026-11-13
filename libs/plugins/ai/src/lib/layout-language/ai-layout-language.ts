@@ -496,6 +496,31 @@ function readItem(raw: unknown): AiLayoutItem | null {
   return { ...item, ...(to ? { to } : {}), ...(icon ? { icon } : {}), ...(ref ? { ref: ref.trim() } : {}) }
 }
 
+/** The groups whose items may arrive as lines of their text: each line names one thing. */
+const LINED_GROUPS: ReadonlySet<string> = new Set(['list', 'cards', 'steps'])
+
+/** A line's own mark as a list writes it: a bullet, a dash, a number. */
+const LINE_MARK = /^\s*(?:[-*•·▪◦]|\d{1,2}[.)])\s+/
+
+/**
+ * The lines a block's text holds as a list (AGL-4152): one a line, or between
+ * bullets or semicolons, each without its mark. One line is no list.
+ */
+export function aiLayoutTextLines(value: string | undefined): string[] {
+  if (!value?.trim()) return []
+  const lines = value
+    .split(/\r?\n|\s[•·▪◦]\s|;\s+/)
+    .map((line) => line.replace(LINE_MARK, '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+  return lines.length >= 2 ? lines : []
+}
+
+/** A line of a card as its title and its words, where it writes them "Title: words" or "Title — words". */
+function titledLine(line: string): AiLayoutItem {
+  const split = /^(.{2,60}?)\s*(?::|\s[—–-])\s+(.+)$/.exec(line)
+  return split ? { title: (split[1] as string).trim(), text: (split[2] as string).trim() } : { title: line, text: '' }
+}
+
 /** One block of an answer read, or `null` with why it could not be. */
 export function aiReadLayoutBlock(
   raw: unknown,
@@ -547,10 +572,22 @@ export function aiReadLayoutBlock(
         what: `${items.length} items; the first ${most} kept`,
       })
     if (items.length) block.items = items.slice(0, most)
+    // A list, cards or steps written as lines of its text and no items (AGL-4152): each line an item, so what it
+    // names is drawn rather than the block left out and its section left a heading alone.
+    const lines = !items.length && LINED_GROUPS.has(kind) ? aiLayoutTextLines(block.text) : []
+    if (lines.length >= 2) {
+      block.items = lines.slice(0, most).map((line) => (kind === 'list' ? { title: line, text: '' } : titledLine(line)))
+      delete block.text
+      settled.push({ at, what: `an empty ${kind}; its ${lines.length} lines of text read as its items` })
+    } else if (!items.length && LINED_GROUPS.has(kind) && block.text) {
+      // One line is a paragraph: its words are kept all the same.
+      block.kind = 'text'
+      settled.push({ at, what: `an empty ${kind}; its one line of text read as a paragraph` })
+    }
   }
   // A block with nothing to show is no block: a group with no items, words
   // with no words. A form or a component may name its record alone.
-  const empty = AI_LAYOUT_GROUP_KINDS.has(kind)
+  const empty = AI_LAYOUT_GROUP_KINDS.has(block.kind)
     ? !block.items?.length
     : kind === 'form' || kind === 'component'
       ? false

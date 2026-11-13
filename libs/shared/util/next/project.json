@@ -14,10 +14,6 @@
         "tsConfig": "libs/shared/util/next/tsconfig.lib.json",
         "assets": ["libs/shared/util/next/*.md"]
       }
-    },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
     }
   }
 }

@@ -40,6 +40,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
+import { useHeldSave } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { type ComponentProps, useState } from 'react'
 import type { useCrmPicklist } from '../hooks/use-crm-picklist'
 import { type CrmOrgDoc, useCrmScope } from '../hooks/use-crm-scope'
@@ -260,6 +261,24 @@ function AddContactRoleDialog(props: AddContactRoleDialogProps) {
     reset()
     onClose()
   }
+  const add = async () => {
+    if (!contactId) return
+    const added = await onAdd({
+      contactId,
+      role: role || undefined,
+      primary: primary || roles.length === 0,
+    })
+    if (added) reset()
+  }
+  /*
+   * An Add pressed while the record is held is kept, and adds once the record
+   * is confirmed, onto the confirmed roles (AGL-4047). If no confirmation
+   * comes, the refusal shows here and nothing is added.
+   */
+  const held = useHeldSave(add, {
+    checking: Boolean(checkingText),
+    subject: noun,
+  })
 
   return (
     <Dialog open={open} onClose={busy ? undefined : close} fullWidth maxWidth="xs">
@@ -298,7 +317,11 @@ function AddContactRoleDialog(props: AddContactRoleDialogProps) {
         </Stack>
       </DialogContent>
       <DialogActions>
-        {checkingText ? (
+        {held.refusal ? (
+          <Typography variant="body2" color="warning.main" role="alert" sx={{ mr: 'auto' }}>
+            {held.refusal}
+          </Typography>
+        ) : checkingText ? (
           <Typography variant="body2" color="text.secondary" role="status" sx={{ mr: 'auto' }}>
             {checkingText}
           </Typography>
@@ -308,18 +331,10 @@ function AddContactRoleDialog(props: AddContactRoleDialogProps) {
         </Button>
         <Button
           variant="contained"
-          disabled={busy || Boolean(checkingText) || !contactId || Boolean(problem)}
-          onClick={async () => {
-            if (!contactId) return
-            const added = await onAdd({
-              contactId,
-              role: role || undefined,
-              primary: primary || roles.length === 0,
-            })
-            if (added) reset()
-          }}
+          disabled={busy || held.saving || !contactId || Boolean(problem)}
+          onClick={held.press}
         >
-          {'Add'}
+          {held.saving ? 'Saving…' : 'Add'}
         </Button>
       </DialogActions>
     </Dialog>

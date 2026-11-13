@@ -304,6 +304,8 @@ function ChannelCard(props: {
   onLegacyRetired: () => void
 }) {
   const { hostId, channel, state, canEnable, diagnostics, legacy, connect, onChange, onLegacyRetired } = props
+  // The earlier address is news only to a site whose Merchant Center read it.
+  const legacyInUse = Boolean(legacy?.active && legacy.inUse && legacy.url)
   const { blocked } = useSiteKeys(hostId)
   const feedsRefused = blocked('salesChannels.feeds', SALES_CHANNELS_SITE_PRESETS['salesChannels.feeds'])
   const replaceRefused = blocked('salesChannels.replaceAddress', SALES_CHANNELS_SITE_PRESETS['salesChannels.replaceAddress'])
@@ -341,7 +343,7 @@ function ChannelCard(props: {
     const ok = await confirmed({
       title: 'Replace the feed address?',
       description: `The current address stops working at once, and ${channel.label} stops receiving updates until you paste the new one.${
-        channel.id === 'google' ? ' The earlier Merchant Center address stops too.' : ''
+        legacyInUse ? ' The earlier Merchant Center address stops too.' : ''
       }`,
       confirmationText: 'Replace',
       confirmationButtonProps: { color: 'warning', variant: 'contained' },
@@ -432,7 +434,7 @@ function ChannelCard(props: {
               : `Turn the feed on to get the address ${channel.label} reads.`}
           </Typography>
         )}
-        {legacy?.active && legacy.url ? (
+        {legacy && legacyInUse ? (
           <Alert
             severity="info"
             action={

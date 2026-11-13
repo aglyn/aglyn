@@ -117,7 +117,8 @@ struct CheckoutView: View {
           .accessibilityIdentifier("declined-receipt-print")
         }
         Spacer()
-        ShareLink(item: declined.receipt(store: model.storeName, money: model.money)) { Text("Send receipt") }
+        // Presented over the checkout sheet itself: a ShareLink here asked the register (already presenting this sheet).
+        AglynShareButton(text: declined.receipt(store: model.storeName, money: model.money)) { Text("Send receipt") }
           .buttonStyle(.aglynProminent)
           .accessibilityIdentifier("declined-receipt-share")
       }

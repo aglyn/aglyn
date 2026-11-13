@@ -30,8 +30,10 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { planLockReason } from '@aglyn/tenant-feature-instance/hooks/plan-feature-lock'
 import {
+  heldSaveLabel,
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
   useSeedEdits,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { updateHostDocument } from '../utils/host-document-writes'
@@ -202,6 +204,13 @@ export function LanguagesCard(props: { hostId: string }) {
     form,
   ])
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSave, {
+    checking,
+    subject: 'language settings',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <CardDisplay
       header={'Languages'}
@@ -266,10 +275,10 @@ export function LanguagesCard(props: { hostId: string }) {
             variant="contained"
             color="primary"
             sx={{ alignSelf: 'flex-start' }}
-            disabled={checking}
-            onClick={handleSave}
+            disabled={held.saving}
+            onClick={held.press}
           >
-            {'Save languages'}
+            {heldSaveLabel(held, 'Save languages')}
           </Button>
         </BlockedControl>
         {checking ? (

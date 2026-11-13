@@ -23,6 +23,7 @@ import {
   notifyHostManagers,
   raiseOperatorAlert,
 } from '@aglyn/tenant-data-admin'
+import { sellerPaymentAccount } from '@aglyn/tenant-data-admin/server/seller-payment-account'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   COMMERCE_POS_OFFLINE_CARD_UNSYNCED,
@@ -65,6 +66,14 @@ import {
  * commerce handlers, rather than as a branch of the storefront sections. The
  * four `payment_intent.*` events it reads are in the platform destination's
  * `WEBHOOK_EVENTS` (`tools/scripts/lib/stripe-webhook-health.mjs`).
+ *
+ * A STORE ON ITS OWN STRIPE ACCOUNT (AGL-4219). Its app makes the intent on
+ * that account, so the events come through the Connect destination, naming
+ * the account. Metadata is only a claim, and the account's owner can write
+ * any: a Connect-delivered event is kept only when it says it is a direct
+ * sale's and the account is the one the site sells on now. Those four events
+ * reach the Connect destination only once it subscribes to them; the sync
+ * never depends on this record, because it reads Stripe.
  *=========================================*/
 
 /** The subcollection, under `hosts/{hostId}/terminal/config`, and its collection-group name. */
@@ -169,12 +178,40 @@ export async function reconcilePosOfflineCardEvent(
   return { hostId }
 }
 
-/** The platform webhook's handler for offline card intents: claims only its own. */
-export const posOfflineCardBillingWebhookHandler: BillingWebhookHandler =
-  async ({ type, object }) => {
+/** The connected account a Connect-delivered event names; null for the platform's own. */
+function eventAccount(event: unknown): string | null {
+  const account = (event as { account?: unknown } | null)?.account
+  return typeof account === 'string' && account ? account : null
+}
+
+/** The account a site's direct sales are made on now; null for a store selling through the platform. */
+async function directAccountOf(hostId: string): Promise<string | null> {
+  const seller = await sellerPaymentAccount(hostId)
+  return seller?.chargeModel === 'direct' ? seller.accountId : null
+}
+
+/**
+ * The platform webhook's handler for offline card intents: claims only its
+ * own. A Connect-delivered event counts only for the site's own account.
+ */
+export function createPosOfflineCardBillingWebhookHandler(
+  directAccount: (hostId: string) => Promise<string | null> = directAccountOf,
+): BillingWebhookHandler {
+  return async ({ type, object, event }) => {
+    const account = eventAccount(event)
+    if (account) {
+      if (!type.startsWith('payment_intent.')) return undefined
+      const metadata = (object?.metadata ?? {}) as Record<string, string>
+      if (metadata['kind'] !== POS_OFFLINE_CARD_INTENT_KIND || metadata['chargeModel'] !== 'direct') return undefined
+      const hostId = String(metadata['hostId'] ?? '')
+      if (!validHostId(hostId) || (await directAccount(hostId)) !== account) return undefined
+    }
     const reconciled = await reconcilePosOfflineCardEvent({ type, object })
     return reconciled ? { claimed: true, hostId: reconciled.hostId } : undefined
   }
+}
+
+export const posOfflineCardBillingWebhookHandler: BillingWebhookHandler = createPosOfflineCardBillingWebhookHandler()
 
 /*==========================================
  * THE SWEEP: AN OFFLINE CARD WHOSE SALE NEVER SYNCED.

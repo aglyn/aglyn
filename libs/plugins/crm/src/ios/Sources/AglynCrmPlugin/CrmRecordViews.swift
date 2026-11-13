@@ -719,14 +719,11 @@ struct EditRecordSheet<Footer: View>: View {
 
   var body: some View {
     let problems = fieldProblems(fields.map(\.spec), values)
-    AglynFormSheet(title, confirm: confirm, canConfirm: !held, save: {
+    AglynFormSheet(title, confirm: confirm, hold: held ? AglynFormHold(checking: seedCheckingText(subject), unconfirmed: seedUnconfirmedText(subject)) : nil, save: {
       tried = true
       guard problems.isEmpty else { throw ConsoleAPIError(status: 400, message: "Check the fields marked below.") }
       try await save(values)
     }) {
-      if held {
-        Section { Text(seedCheckingText(subject)).font(AglynFont.caption).foregroundStyle(.secondary) }
-      }
       FieldFormSection(specs: fields.map(\.spec), values: $values, errors: tried ? problems : [:])
       footer($values)
     }

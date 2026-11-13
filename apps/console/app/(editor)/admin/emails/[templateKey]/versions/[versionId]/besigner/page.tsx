@@ -53,8 +53,10 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import {
+  heldSaveLabel,
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { Alert, Button, Stack, TextField, Typography } from '@mui/material'
 import { doc, setDoc, Timestamp } from 'firebase/firestore'
@@ -455,6 +457,13 @@ function SystemEmailBesignerPage() {
       </Alert>
     ) : null
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const subjectHeld = useHeldSave(handlePropertiesSave, {
+    checking: templateChecking,
+    subject: 'email',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   const editor = (
     <>
       <MainLayout
@@ -623,14 +632,14 @@ function SystemEmailBesignerPage() {
           <Button
             size="small"
             variant="outlined"
-            onClick={() => void handlePropertiesSave()}
+            onClick={subjectHeld.press}
             disabled={
               (subjectInput == null && preheaderInput == null) ||
-              templateChecking
+              subjectHeld.saving
             }
             sx={{ alignSelf: 'flex-start' }}
           >
-            {'Save subject'}
+            {heldSaveLabel(subjectHeld, 'Save subject')}
           </Button>
           {(subjectInput != null || preheaderInput != null) &&
           templateChecking ? (

@@ -57,9 +57,28 @@ import type {
   TransferFieldType,
 } from '@aglyn/aglyn/data-transfer'
 
+import {
+  CRM_ACTIVITIES_RESOURCE,
+  CRM_COMPANIES_RESOURCE,
+  CRM_CONTACTS_RESOURCE,
+  CRM_DEALS_RESOURCE,
+  CRM_FIELDS_RESOURCE,
+  CRM_LEADS_RESOURCE,
+  CRM_PIPELINES_RESOURCE,
+  CRM_TASKS_RESOURCE,
+} from './resource-keys'
+
 /** The CRM's resource keys, as `plugins.config.json` declares them. */
-export const CRM_CONTACTS_RESOURCE = 'crm.contacts'
-export const CRM_COMPANIES_RESOURCE = 'crm.companies'
+export {
+  CRM_ACTIVITIES_RESOURCE,
+  CRM_COMPANIES_RESOURCE,
+  CRM_CONTACTS_RESOURCE,
+  CRM_DEALS_RESOURCE,
+  CRM_FIELDS_RESOURCE,
+  CRM_LEADS_RESOURCE,
+  CRM_PIPELINES_RESOURCE,
+  CRM_TASKS_RESOURCE,
+}
 
 /**
  * The workspace's members, as an owner column names them: a lookup target
@@ -405,13 +424,6 @@ export function crmCustomTransferFields(
 /*==========================================
  * LEADS (AGL-3528)
  *=========================================*/
-
-export const CRM_LEADS_RESOURCE = 'crm.leads'
-export const CRM_DEALS_RESOURCE = 'crm.deals'
-export const CRM_TASKS_RESOURCE = 'crm.tasks'
-export const CRM_ACTIVITIES_RESOURCE = 'crm.activities'
-export const CRM_PIPELINES_RESOURCE = 'crm.pipelines'
-export const CRM_FIELDS_RESOURCE = 'crm.fields'
 
 /** The organization's live campaigns as a list a lead's campaign names are matched onto. */
 export const CRM_CAMPAIGNS_PICKLIST = 'crm.campaigns'

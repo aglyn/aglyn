@@ -3,7 +3,14 @@
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/tenant/data/admin/src",
   "projectType": "library",
-  "tags": ["scope:lib", "scope:aglyn", "scope:data", "aglyn:tenancy", "scope:tenant", "type:data"],
+  "tags": [
+    "scope:lib",
+    "scope:aglyn",
+    "scope:data",
+    "aglyn:tenancy",
+    "scope:tenant",
+    "type:data"
+  ],
   "targets": {
     "build": {
       "executor": "@nx/js:swc",
@@ -15,16 +22,15 @@
         "assets": ["libs/tenant/data/admin/*.md"]
       }
     },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
-    },
     "test": {
-      "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/libs/tenant/data/admin"],
-      "options": {
-        "jestConfig": "libs/tenant/data/admin/jest.config.ts"
-      }
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/jest.preset.js",
+        {
+          "externalDependencies": ["jest", "@nx/jest", "ts-jest"]
+        }
+      ]
     }
   }
 }

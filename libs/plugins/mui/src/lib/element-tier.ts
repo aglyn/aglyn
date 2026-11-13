@@ -31,6 +31,7 @@ import * as screenLink from './components/screen-link'
 import * as linkBox from './components/link-box'
 import * as image from './components/image'
 import * as icon from './components/icon'
+import { loadCollectionSearch } from './components/collection-search-load'
 
 /**
  * The element tier: how a page's mui elements reach it (AGL-3401).
@@ -134,7 +135,12 @@ export const collectionAuthorProfile = () =>
   import('./components/collection-author-profile')
 export const collectionCategories = () =>
   import('./components/collection-categories')
-export const collectionSearch = () => import('./components/collection-search')
+// The Collection Search block arrives in the Entries block's searching
+// variant's module, through the one loader both share: each `import()` of the
+// box of its own was a chunk group of its own, and a page placing both
+// downloaded the box twice (AGL-4220). `collection-search-load.ts` is imported
+// statically above so that its `import()` is this tier's child.
+export const collectionSearch = loadCollectionSearch
 export const video = () => import('./components/video')
 export const languageSwitcher = () => import('./components/language-switcher')
 export const reusableInstance = () => import('./components/reusable-instance')

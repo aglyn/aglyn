@@ -120,6 +120,8 @@ internal fun PhoneShell(
   // The settings list a Site settings or Workspace settings tile opened (the navigator's Menu key, never a tab of its own).
   val settingsList = top == ShellNavigator.MENU && route == null && settingsGroups != null
   val onTab = route == null && tabItems.any { top in it.keys }
+  // The tab the place belongs to stays selected while a record is pushed over it (AGL-4059).
+  val selectedTab = selectedPhoneTab(top, tabItems)
   val atHome = route == null && top == ShellNavigator.HOME && settingsGroups == null
   // Anything else is pushed on the Home tab, with the way back.
   val pushed = route != null || (!atHome && !onTab)
@@ -166,8 +168,11 @@ internal fun PhoneShell(
           },
           actions = {
             TitleBarButton("Search or jump to", "search", "phone-search") { chrome.oneBox = true }
-            // The bell is Activity on a phone: what needs you, then the notifications.
-            BellButton(services, uid) { chrome.settingsMode = null; navigator.select(ShellNavigator.NOTIFICATIONS) }
+            // The bell is Activity on a phone: what needs you, then the notifications. The wide shell's bell popover is
+            // provided above every shell, so a phone takes it out here, or the bell opened the popover and never Activity.
+            androidx.compose.runtime.CompositionLocalProvider(LocalBellPopover provides null) {
+              BellButton(services, uid) { chrome.settingsMode = null; navigator.select(ShellNavigator.NOTIFICATIONS) }
+            }
             // Four pinned areas fill the tab bar, so Create new comes up here, beside your AI (Figma Home · 4 pinned).
             if (tabs.createInTopBar) TitleBarButton("Create new", "add", "phone-create") { chrome.createMenu = true }
             // Your AI, one tap away on every screen as the tablet's and the desktop's title bar has it (Figma Phone/Top
@@ -186,7 +191,7 @@ internal fun PhoneShell(
         for (slot in tabs.slots) {
           when (slot) {
             com.aglyn.contracts.Contracts.tabBarHome ->
-              PhoneTab("Home", "home", !onTab, "tab-home", colors) { chrome.settingsMode = null; navigator.select(ShellNavigator.HOME) }
+              PhoneTab("Home", "home", selectedTab == null, "tab-home", colors) { chrome.settingsMode = null; navigator.select(ShellNavigator.HOME) }
             com.aglyn.contracts.Contracts.tabBarCreate -> NavigationBarItem(
               selected = false,
               onClick = { chrome.createMenu = true },
@@ -194,7 +199,7 @@ internal fun PhoneShell(
               modifier = Modifier.testTag("tab-create"),
             )
             else -> items[slot]?.let { item ->
-              PhoneTab(item.label, item.icon, onTab && top in item.keys, "tab-${item.rowId}", colors, count = context?.let { ctx -> { AreaCount(ctx, item.rowId) } }) {
+              PhoneTab(item.label, item.icon, selectedTab == item.rowId, "tab-${item.rowId}", colors, count = context?.let { ctx -> { AreaCount(ctx, item.rowId) } }) {
                 chrome.settingsMode = null
                 navigator.select(item.key)
               }
@@ -212,7 +217,7 @@ internal fun PhoneShell(
             PhoneHome(
               services, context, homeGroups, tabScope, pinned, prefs.loaded, onOpen = ::openTile,
               onEditTabBar = { chrome.tabBarSheet = true },
-              header = { context?.let { PhoneHomeHeader(services, it, workspace) } },
+              header = { context?.let { PhoneHomeHeader(services, it, workspace, onVisit = navigator::openWeb) } },
               stats = { context?.let { PhoneHomeStats(services, it, workspace) { navigator.select(NavKeys.of(NavKeys.ANALYTICS_SCREEN)) } } },
             )
           top == ShellNavigator.NOTIFICATIONS && route == null && context != null -> Column(Modifier.fillMaxSize()) {

@@ -69,7 +69,8 @@ import {
 import { aiSiteImportImageIsMark } from '../model/ai-site-import-marks'
 import { siteImportLedger, type SiteImportLedger, type SiteImportLedgerItem, type SiteImportLedgerLine } from '../model/ai-site-import-ledger'
 import { AI_SITE_IMPORT_PAGE_CEILING_CREDITS } from '../model/ai-site-import'
-import { estimateAiBilledUsd } from '../providers/catalog'
+import { aiCacheWriteHourSurchargeUsd } from '../providers/cache-write-hour'
+import { aiBilledRatesForModel, estimateAiBilledUsd } from '../providers/catalog'
 import type { AiSystemBlock, AiTool, AiUsage } from '../providers/contract'
 import { assistCreditsFromUsd } from '../usage/assist-credits'
 import type { AiGenerationCheck } from '../runtime/ai-doctrine'
@@ -412,12 +413,15 @@ export function aiSiteImportImprovePrompt(input: {
   seed: string
   /** What the page is for and what it needs (`aiSiteImportImproveRoleLines`). */
   roleLines?: readonly string[]
+  /** How much page its answer has room for, and whether it is thin (`aiSiteImportImproveSizeLines`). */
+  sizeLines?: readonly string[]
 }): string {
   return [
     `Page: "${input.screen.title}" at ${input.screen.slug}`,
     // A page the site's plan proposed: there is no old page to keep, so it is written whole from what the site says.
     ...(input.doc.proposed ? ['This page is new: the site has no such page yet. Its one line says what it tells a visitor. Write it from what the site says of itself and what this kind of business generally does, inventing no fact.'] : []),
     ...(input.roleLines ?? []),
+    ...(input.sizeLines ?? []),
     ...input.kindLines,
     "The page's ledger, what it holds and where it links:",
     fenceUntrustedText(`The owner's page ${input.doc.url}`, aiSiteImportLedgerText(input.ledger, input.doc, input.destinations), { maxChars: AI_SITE_IMPORT_LEDGER_MAX_CHARS }),
@@ -778,6 +782,8 @@ export interface AiSiteImportImprovedPage {
   written: string[]
   added: AiSiteImportAddedSection[]
   pictures: AiSiteImportPagePictures
+  /** What code mended of the answer before it was drawn (AGL-4152): sections left a heading alone, card rows evened. For the page's log. */
+  mended: string[]
 }
 
 /** The sections' names: each heading's words, as a label, told apart. */
@@ -840,11 +846,199 @@ export function aiSiteImportOpeningPhoto(answer: readonly AiSiteImportImprovedSe
   return [opening, ...rest]
 }
 
+/** The blocks that only name a section: over nothing, they are no section. */
+const LABEL_KINDS: ReadonlySet<string> = new Set(['heading', 'eyebrow'])
+
+/** The least share of an old heading's words a new heading says for it to name that old section (AGL-4152). */
+const NAMES_SOURCE_KEPT = 0.75
+
+/** The most words an old line runs to and still reads as the heading of what follows it. */
+const HEADING_LINE_WORDS = 8
+
+/** The least share of a line's words the answer says for that line to count as said (AGL-4152). */
+const LINE_SAID_KEPT = 0.5
+
+/**
+ * A redesign's sections with none left a heading alone (AGL-4152). A section
+ * after the opening whose blocks are only a heading or an eyebrow (or a
+ * `keep` that draws nothing) is, in order:
+ *
+ * 1. refilled from the old section its heading names, where that section's
+ *    things are on the page nowhere: its group of like items kept whole, else
+ *    its lines as written, as a list. A thin page's "What we handle" over its
+ *    four kinds of work came out the heading alone, the work nowhere.
+ * 2. else handed to the next section, as its heading, where that one has none.
+ * 3. else left out.
+ *
+ * What was done to each is said in `hollow`, for the page's log.
+ */
+export function aiSiteImportFilledSections(
+  answer: readonly AiSiteImportImprovedSection[],
+  input: { doc: Pick<AiSiteImportDocument, 'blocks'>; ledger: Pick<SiteImportLedger, 'items' | 'lines'> },
+): { sections: AiSiteImportImprovedSection[]; hollow: string[]; asWritten: Set<AiSiteImportImprovedBlock> } {
+  const { doc, ledger } = input
+  const items = new Map(ledger.items.map((item) => [item.ref, item]))
+  const draws = (block: AiSiteImportImprovedBlock): boolean => {
+    if (block.kind !== 'keep') return true
+    const item = items.get(block.ref)
+    if (!item) return false
+    return item.kind === 'picture' ? doc.blocks[item.lines[0] as number]?.kind === 'image' : !!item.node
+  }
+  const hollowAt = (section: AiSiteImportImprovedSection | undefined) => !!section && section.blocks.every((block) => LABEL_KINDS.has(block.kind) || !draws(block))
+  const asWritten = new Set<AiSiteImportImprovedBlock>()
+  if (!answer.slice(1).some(hollowAt)) return { sections: [...answer], hollow: [], asWritten }
+  const placed = new Set(aiSiteImportImprovedPlaced(answer, ledger))
+  const said = answer
+    .flatMap((section) => section.blocks.flatMap((block) => (block.kind === 'keep' ? [] : [block.kind === 'image' ? '' : (block.text ?? ''), ...(block.items ?? []).flatMap((item) => [item.title, item.text])])))
+    .join(' ')
+  const unsaid = (line: SiteImportLedgerLine) => !(line.group && placed.has(line.group)) && siteImportContentKept(line.text, said) < LINE_SAID_KEPT
+  const words = (text: string) => text.match(/[\p{L}\p{N}]+/gu)?.length ?? 0
+  // The old section a heading names, and what of it the page has nowhere: its group, else its lines.
+  const refillOf = (heading: string): AiSiteImportImprovedBlock[] => {
+    const names = (line: SiteImportLedgerLine) => siteImportContentWords(line.text) > 0 && siteImportContentKept(line.text, heading) >= NAMES_SOURCE_KEPT
+    const named = ledger.lines.find((line) => line.kind === 'heading' && names(line)) ?? ledger.lines.find((line) => !line.group && words(line.text) <= HEADING_LINE_WORDS && names(line))
+    if (!named) return []
+    const rest = (section: number) => ledger.lines.filter((line) => line.section === section && line.line !== named.line && line.kind !== 'link')
+    // A heading the old page set on its own, over the next section's things, names those.
+    const at = rest(named.section).length || ledger.items.some((item) => item.section === named.section) ? named.section : named.section + 1
+    const group = ledger.items.find((item) => item.section === at && item.kind === 'group' && !placed.has(item.ref) && item.node)
+    if (group) return [{ kind: 'keep', ref: group.ref }]
+    const lines = rest(at).filter((line) => line.kind !== 'heading' && unsaid(line))
+    if (lines.length >= 2) return [{ kind: 'list', items: lines.map((line) => ({ title: line.text, text: '' })) }]
+    return lines.length === 1 ? [{ kind: 'text', text: (lines[0] as SiteImportLedgerLine).text }] : []
+  }
+  const spanning = (block: AiSiteImportImprovedBlock): AiSiteImportImprovedBlock => {
+    const { col: _col, ...rest } = block
+    return rest as AiSiteImportImprovedBlock
+  }
+  const queue = [...answer]
+  const out: AiSiteImportImprovedSection[] = []
+  const hollow: string[] = []
+  queue.forEach((section, index) => {
+    if (index === 0 || !hollowAt(section)) {
+      out.push(section)
+      return
+    }
+    const labels = section.blocks.filter((block) => LABEL_KINDS.has(block.kind)).map(spanning)
+    const heading = labels.find((block) => block.kind === 'heading')
+    const name = clean(heading && heading.kind !== 'keep' ? heading.text : labels[0] && labels[0].kind !== 'keep' ? labels[0].text : '') || `section ${index + 1}`
+    const refill = heading && heading.kind !== 'keep' ? refillOf(heading.text ?? '') : []
+    if (refill.length) {
+      for (const block of refill) {
+        if (block.kind === 'keep') placed.add(block.ref)
+        else asWritten.add(block)
+      }
+      const { cols: _cols, ...rest } = section
+      out.push({ ...rest, blocks: [...labels, ...refill] })
+      hollow.push(`"${short(name, 60)}" refilled from its old section (${refill[0]?.kind === 'keep' ? refill[0].ref : `${refill[0]?.items?.length ?? 1} lines`})`)
+      return
+    }
+    const next = queue[index + 1]
+    if (labels.length && next && !next.blocks.some((block) => block.kind === 'heading') && !hollowAt(next)) {
+      queue[index + 1] = { ...next, blocks: [...labels, ...next.blocks] }
+      hollow.push(`"${short(name, 60)}" handed to the section after it`)
+      return
+    }
+    hollow.push(`"${short(name, 60)}" left out, a heading over nothing`)
+  })
+  return { sections: out, hollow, asWritten }
+}
+
+/**
+ * How many cards of a row show a picture (AGL-4152): every card or none, as
+ * most of them do, and none on a tie. Each card's picture is its own ref, else
+ * the one `carded` gave it; a row most of whose cards show one gives the rest
+ * the page's own photos no section places first, the photos whose words they
+ * say before any other, and a slot the page step fills (its unplaced photos,
+ * then stock, then one generated only where pictures are on) for any left.
+ * Icons the same way: on every card or on none.
+ */
+export function aiSiteImportEvenCards(
+  answer: readonly AiSiteImportImprovedSection[],
+  input: { doc: Pick<AiSiteImportDocument, 'blocks' | 'photos'>; ledger: Pick<SiteImportLedger, 'items' | 'lines'>; carded: ReadonlyMap<AiSiteImportImprovedBlock, string[]> },
+): { sections: AiSiteImportImprovedSection[]; slots: Map<AiSiteImportImprovedBlock, Set<number>>; evened: string[] } {
+  const { doc, ledger, carded } = input
+  const pictures = new Map(ledger.items.filter((item) => item.kind === 'picture').map((item) => [item.ref, item]))
+  const imageOf = (ref: string | undefined) => {
+    const item = ref ? pictures.get(ref) : undefined
+    const block = item ? doc.blocks[item.lines[0] as number] : undefined
+    return block?.kind === 'image' ? block : null
+  }
+  const isPicture = (ref: string | undefined) => !!imageOf(ref)
+  const isPhoto = (ref: string | undefined) => {
+    const image = imageOf(ref)
+    return !!image && !aiSiteImportImageIsMark(image, doc.photos)
+  }
+  const placed = new Set(aiSiteImportImprovedPlaced(answer, ledger))
+  for (const refs of carded.values()) for (const ref of refs) placed.add(ref)
+  const captions = aiSiteImportPictureCaptions(ledger)
+  const slots = new Map<AiSiteImportImprovedBlock, Set<number>>()
+  const evened: string[] = []
+  const sections = answer.map((section) => ({
+    ...section,
+    blocks: section.blocks.map((block): AiSiteImportImprovedBlock => {
+      if (block.kind !== 'cards' || (block.items?.length ?? 0) < 2) return block
+      const items = block.items as AiLayoutItem[]
+      const refs = items.map((item, at) => (isPicture(item.ref) ? (item.ref as string) : (carded.get(block)?.[at] ?? null)))
+      const shown = refs.filter(Boolean).length
+      const iconed = items.filter((item) => item.icon).length
+      const iconsEven = iconed === items.length || iconed === 0
+      if (iconsEven && shown === 0) return block
+      if (iconsEven && shown === items.length) return { ...block, items: items.map((item, at) => withRef(item, refs[at] ?? null)) }
+      const every = shown * 2 > items.length
+      const given = refs.slice()
+      const slotted = new Set<number>()
+      if (every && shown < items.length) {
+        const pool = [...pictures.keys()].filter((ref) => isPhoto(ref) && !placed.has(ref) && !given.includes(ref))
+        items.forEach((item, at) => {
+          if (given[at]) return
+          const words = `${item.title} ${item.text}`
+          const best = pool
+            .map((ref) => {
+              const said = (captions.get(ref) ?? []).map((line) => line.text).join(' ')
+              return { ref, kept: said ? siteImportContentKept(said, words) : 0 }
+            })
+            .sort((a, b) => b.kept - a.kept)[0]
+          if (best) {
+            given[at] = best.ref
+            pool.splice(pool.indexOf(best.ref), 1)
+            placed.add(best.ref)
+          } else slotted.add(at)
+        })
+      }
+      if (shown && !every) evened.push(`${items.length} cards drawn with no picture, ${shown} of them had one`)
+      if (every && shown < items.length) evened.push(`${items.length} cards each given a picture, ${shown} of them had one (${slotted.size} to fill)`)
+      if (!iconsEven) evened.push(`${items.length} cards drawn with no icon, ${iconed} of them had one`)
+      const next: AiSiteImportImprovedBlock = {
+        ...block,
+        items: items.map((item, at) => {
+          const own = withRef(item, every ? (given[at] ?? null) : null)
+          if (iconsEven) return own
+          const { icon: _icon, ...rest } = own
+          return rest
+        }),
+      }
+      if (slotted.size) slots.set(next, slotted)
+      return next
+    }),
+  }))
+  return { sections, slots, evened }
+}
+
+/** An item with this picture's ref, or with none. */
+function withRef(item: AiLayoutItem, ref: string | null): AiLayoutItem {
+  const { ref: _ref, ...rest } = item
+  return ref ? { ...rest, ref } : rest
+}
+
 /** The sections a redesign holds, in the compiler's language: every `keep` expanded to the source's own blocks, every link resolved. */
 export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSection[], input: AiSiteImportImproveCompileInput): AiSiteImportImprovedPage {
   const { doc, ledger, design, destinations } = input
-  // A brand's mark is never the opening's photo (AGL-4152).
-  const answer = aiSiteImportOpeningPhoto(given, { doc, ledger })
+  // A brand's mark is never the opening's photo (AGL-4152); no section is a heading alone; a row of cards shows a
+  // picture on every card or on none.
+  const filled = aiSiteImportFilledSections(aiSiteImportOpeningPhoto(given, { doc, ledger }), { doc, ledger })
+  const even = aiSiteImportEvenCards(filled.sections, { doc, ledger, carded: aiSiteImportCardPictures(filled.sections, ledger) })
+  const answer = even.sections
   const scope = aiSiteImportMapScope(doc, { formId: input.formId, finish: 'improve' })
   const items = new Map(ledger.items.map((item) => [item.ref, item]))
   const choices = aiLayoutDesignChoices(design)
@@ -889,10 +1083,9 @@ export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSec
     scope.groupAt = 0
     return aiSiteImportNodeBlocks(scope, [item.node], { cols: null, allowed: false }).map((block) => ({ ...block, ...placed, ...across(block, col !== undefined) }))
   }
-  // The source's pictures a written set of cards stands for, where the answer gave them none (AGL-4152).
-  const carded = aiSiteImportCardPictures(answer, ledger)
-  // The page's own photo an opening that asks for a picture takes (AGL-4152), and which of its things it was.
-  const asked = new Set([...aiSiteImportImprovedPlaced(answer, ledger), ...[...carded.values()].flat()])
+  // The page's own photo an opening that asks for a picture takes (AGL-4152), and which of its things it was. The
+  // source's pictures a written set of cards stands for are its items' refs by now (`aiSiteImportEvenCards`).
+  const asked = new Set(aiSiteImportImprovedPlaced(answer, ledger))
   const ownOpening = { ref: null as string | null, taken: false }
   const openingPicture = (): AiLayoutPicture | null => {
     if (ownOpening.taken) return null
@@ -928,7 +1121,7 @@ export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSec
         return [{ ...rest, ...(own ? { picture: own } : {}), ...placed }]
       }
       if (block.kind === 'text' || block.kind === 'lede' || block.kind === 'note') {
-        say(block.text)
+        if (!filled.asWritten.has(block)) say(block.text)
         return aiSiteImportTextParts(block.text ?? '').map((part) => ({ ...block, text: part }))
       }
       if (block.kind === 'heading' || block.kind === 'eyebrow') {
@@ -943,11 +1136,16 @@ export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSec
         const { to: _asked, ...rest } = block
         return [{ ...rest, ...(to ? { to } : {}) }]
       }
+      // A list refilled from the old page's own lines is its owner's words, not a rewrite (`aiSiteImportFilledSections`).
+      const owners = filled.asWritten.has(block)
       const groupItems = (block.items ?? []).map((item, at): AiLayoutItem => {
-        say(item.title)
-        say(item.text)
-        const given = item.ref || carded.get(block)?.[at]
-        const picture = given ? pictureOf(given, { ratio: CARD_FRAME }) : null
+        if (!owners) {
+          say(item.title)
+          say(item.text)
+        }
+        // A card left a slot so its row shows a picture on every card: the page step's pictures fill it.
+        const slot = even.slots.get(block)?.has(at) ? { src: '', alt: clean(item.title) || clean(item.text), fit: { ratio: CARD_FRAME, cropped: true as const, objectFit: 'cover' as const, rounded: true as const } } : null
+        const picture = item.ref ? pictureOf(item.ref, { ratio: CARD_FRAME }) : slot
         const to = resolve(item.to, index)
         const { ref: _ref, to: _to, ...rest } = item
         return { ...rest, ...(block.kind === 'steps' ? { figure: String(at + 1) } : {}), ...(picture ? { picture } : {}), ...(to ? { to } : {}) }
@@ -997,9 +1195,13 @@ export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSec
       source: allPictures.length - unplaced.length + (ownOpening.taken && !ownOpening.ref ? 1 : 0),
       stock: 0,
       generated: 0,
-      slots: sections.reduce((total, section) => total + section.blocks.filter((block) => block.kind === 'image' && !block.picture).length, 0),
+      slots: sections.reduce(
+        (total, section) => total + section.blocks.filter((block) => block.kind === 'image' && !block.picture).length + section.blocks.reduce((cards, block) => cards + (block.items ?? []).filter((item) => item.picture && !item.picture.src).length, 0),
+        0,
+      ),
       unplaced,
     },
+    mended: [...filled.hollow, ...even.evened],
   }
 }
 
@@ -1024,8 +1226,24 @@ export const AI_SITE_IMPORT_LISTING_ROOM_CREDITS = 10
  */
 export const AI_SITE_IMPORT_IMPROVE_CEILING_CREDITS = AI_SITE_IMPORT_PAGE_CEILING_CREDITS - AI_SITE_IMPORT_LISTING_ROOM_CREDITS
 
-/** Characters a token is counted at, before a request is sent: fewer than the text runs, so a guess is never under. */
+/**
+ * Characters a token is counted at before a request is sent (AGL-4152). No
+ * truthful count exists before sending: the adapter has no count call, and
+ * nothing tells a page whether the platform's prefix is still in the cache.
+ * So the request is priced at worst from its own bytes, every byte it sends
+ * counted. Three is about what the provider counted on a real run: a
+ * contractor's home was billed about 29 credits of input where this guess,
+ * over every byte at the cache write's rate, says 29, and the same guess over
+ * the instructions alone, at the five-minute rate, had said 16.
+ */
 const CHARS_PER_TOKEN = 3
+
+/**
+ * The provider's own words that ride every request offering a tool, ahead of
+ * the tools, in the cached prefix: its published count for the tool-use
+ * prompt of recent models is under 350 tokens.
+ */
+export const AI_TOOL_USE_PROMPT_TOKENS = 350
 
 const ZERO: AiUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
 
@@ -1034,16 +1252,43 @@ const plus = (a: AiUsage, b: AiUsage): AiUsage => ({
   outputTokens: a.outputTokens + b.outputTokens,
   cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
   cacheWriteTokens: a.cacheWriteTokens + b.cacheWriteTokens,
+  ...(a.cacheWriteHourTokens !== undefined || b.cacheWriteHourTokens !== undefined ? { cacheWriteHourTokens: (a.cacheWriteHourTokens ?? 0) + (b.cacheWriteHourTokens ?? 0) } : {}),
 })
 
-/** What a request reads before it is sent, at worst: its system blocks written to the cache, its turn as input. */
-export function aiSiteImportImproveInputUsage(input: { systemChars: number; promptChars: number }): AiUsage {
-  return { ...ZERO, inputTokens: Math.ceil(input.promptChars / CHARS_PER_TOKEN), cacheWriteTokens: Math.ceil(input.systemChars / CHARS_PER_TOKEN) }
+const tokensOf = (chars: number) => Math.ceil(Math.max(0, chars) / CHARS_PER_TOKEN)
+
+/**
+ * What a request reads before it is sent, at worst (AGL-4152): every byte of
+ * it, as the provider bills it on a cold cache. The tools and the platform's
+ * blocks up to its last shared marker are written to the cache at the
+ * route's lifetime (at the hour, twice the input rate); the site's block
+ * after them at five minutes; anything after the last marker, and the turn,
+ * as input. `system` is the blocks as sent, the doctrine's own first
+ * (`aiDoctrineSystemBlocks`), and `toolChars` the tool's definition.
+ */
+export function aiSiteImportImproveInputUsage(input: { system: readonly AiSystemBlock[]; toolChars: number; promptChars: number; hour?: boolean }): AiUsage {
+  const shared = input.system.reduce((last, block, index) => (block.cacheBreakpoint && !block.site ? index : last), -1)
+  const cached = input.system.reduce((last, block, index) => (block.cacheBreakpoint ? index : last), -1)
+  let sharedChars = input.toolChars
+  let siteChars = 0
+  let uncachedChars = input.promptChars
+  input.system.forEach((block, index) => {
+    if (index <= shared) sharedChars += block.text.length
+    else if (index <= cached) siteChars += block.text.length
+    else uncachedChars += block.text.length
+  })
+  const sharedTokens = tokensOf(sharedChars) + AI_TOOL_USE_PROMPT_TOKENS
+  return {
+    ...ZERO,
+    inputTokens: tokensOf(uncachedChars),
+    cacheWriteTokens: sharedTokens + tokensOf(siteChars),
+    ...(input.hour ? { cacheWriteHourTokens: sharedTokens } : {}),
+  }
 }
 
-/** What a usage is billed in credits on a model. */
+/** What a usage is billed in credits on a model, an hour-long cache write at its own rate, as the meter bills it. */
 export function aiSiteImportImproveCredits(usage: AiUsage, model: string): number {
-  return assistCreditsFromUsd(estimateAiBilledUsd(usage, model))
+  return assistCreditsFromUsd(estimateAiBilledUsd(usage, model) + aiCacheWriteHourSurchargeUsd(usage, aiBilledRatesForModel(model)))
 }
 
 /**
@@ -1069,20 +1314,183 @@ export function aiSiteImportImproveTokensWithin(input: { model: string; spent: A
 /** The least share of the last answer's length a re-ask must have room for: less, and it would be cut off. */
 export const AI_SITE_IMPORT_REASK_ROOM = 0.9
 
+/**
+ * The least share of a cut-off answer's length its re-ask must have room for
+ * (AGL-4152): the re-ask asks for a page about half as long
+ * (`AI_SITE_IMPORT_IMPROVE_CUT_OFF_SMALLER`), so it needs room for that page,
+ * not for the one that was cut off.
+ */
+export const AI_SITE_IMPORT_CUT_OFF_REASK_ROOM = 0.6
+
+/** The least room the re-ask of a page cut off is asked in: an opening, a group and a closing, with their words. */
+export const AI_SITE_IMPORT_IMPROVE_LEAST_TOKENS = 1_200
+
+/** What the re-ask of a cut-off page is told makes it smaller (AGL-4152), in one sentence. */
+export const AI_SITE_IMPORT_IMPROVE_CUT_OFF_SMALLER = "Write a page about half as long as the one cut off: fewer sections, shorter copy, and each long group of the ledger kept whole with keep rather than written again."
+
 /** What a re-ask reads beyond its first request: the re-ask's own words naming what missed. */
 const REASK_TOKENS = 600
 
 /**
+ * What a re-ask reads (AGL-4152), from what its first request was billed:
+ * its turn again with the re-ask's words, and everything the first request
+ * read from the cache or wrote to it, now read from it. The re-ask is sent
+ * seconds after its first request, inside the five minutes the shortest
+ * entry lives, so its prefix is a read: pricing it as a second write starved
+ * the re-ask of a long home whose first request wrote the cache of about 13
+ * credits, some 900 tokens.
+ */
+export function aiSiteImportImproveReaskInput(spent: AiUsage): AiUsage {
+  return { ...ZERO, inputTokens: spent.inputTokens + REASK_TOKENS, cacheReadTokens: spent.cacheReadTokens + spent.cacheWriteTokens }
+}
+
+/**
  * Whether a redesign's re-ask fits its page's ceiling (AGL-4152): the most
  * tokens it may ask, given what the first answer spent, or 0 where the room
- * left is under what the first answer wrote, and the page falls back with
- * no re-ask rather than pass its ceiling.
+ * left is under what the re-ask must write, and the page falls back with no
+ * re-ask rather than pass its ceiling. A re-ask for a miss writes the page
+ * again, at about its first length; a re-ask for a page cut off asks for one
+ * about half as long, so it needs room for that.
  */
-export function aiSiteImportImproveReaskTokens(input: { model: string; spent: AiUsage; lastOutput: number; most: number; ceiling?: number }): number {
-  // The re-ask reads what the first request read, its system now from the cache at worst at the write's rate, and the re-ask's words.
-  const again: AiUsage = { ...ZERO, inputTokens: input.spent.inputTokens + REASK_TOKENS, cacheReadTokens: input.spent.cacheReadTokens, cacheWriteTokens: input.spent.cacheWriteTokens }
-  const room = aiSiteImportImproveTokensWithin({ model: input.model, spent: input.spent, input: again, most: input.most, ...(input.ceiling !== undefined ? { ceiling: input.ceiling } : {}) })
-  return room >= Math.ceil(input.lastOutput * AI_SITE_IMPORT_REASK_ROOM) ? room : 0
+export function aiSiteImportImproveReaskTokens(input: { model: string; spent: AiUsage; lastOutput: number; cutOff?: boolean; most: number; ceiling?: number }): number {
+  const room = aiSiteImportImproveTokensWithin({ model: input.model, spent: input.spent, input: aiSiteImportImproveReaskInput(input.spent), most: input.most, ...(input.ceiling !== undefined ? { ceiling: input.ceiling } : {}) })
+  return room >= aiSiteImportImproveReaskNeeds(input.lastOutput, input.cutOff) ? room : 0
+}
+
+/** The least room a re-ask after an answer of `lastOutput` tokens must have (AGL-4152). */
+export function aiSiteImportImproveReaskNeeds(lastOutput: number, cutOff = false): number {
+  return cutOff ? Math.max(AI_SITE_IMPORT_IMPROVE_LEAST_TOKENS, Math.ceil(lastOutput * AI_SITE_IMPORT_CUT_OFF_REASK_ROOM)) : Math.ceil(lastOutput * AI_SITE_IMPORT_REASK_ROOM)
+}
+
+/*------------------------------------------
+ * The room an answer is told it has
+ *-----------------------------------------*/
+
+/**
+ * The share of its room a page is planned to (AGL-4152): a model sizes its
+ * answer in words and sections, not in tokens, so a quarter of the room is
+ * held back for what it writes past them.
+ */
+export const AI_SITE_IMPORT_ROOM_SHARE = 0.75
+
+/** Tokens a section costs in the tool's shape before its words: its fields, three or four blocks', and a few items'. */
+export const AI_SITE_IMPORT_SECTION_TOKENS = 160
+
+/** Tokens a word of copy costs, inside the answer's strings. */
+export const AI_SITE_IMPORT_WORD_TOKENS = 1.4
+
+/** The words a section of a designed page usually says: what a section's share of a page's room is reckoned with. */
+const SECTION_WORDS = 60
+
+/** The fewest sections a page is told it has room for: an opening, what it offers, a closing. */
+export const AI_SITE_IMPORT_LEAST_SECTIONS = 3
+
+/** The least a page is planned to, where its room holds it (AGL-4152): six sections and about 450 words. */
+export const AI_SITE_IMPORT_LEAST_PAGE_TOKENS = 1_600
+
+/** A page whose old lines say fewer words than this is thin (AGL-4152): it stays short, and pads nothing. */
+export const AI_SITE_IMPORT_THIN_PAGE_WORDS = 150
+
+/** The most sections a thin page is planned to. */
+export const AI_SITE_IMPORT_THIN_MOST_SECTIONS = 6
+
+/**
+ * The share of the old page's own words, outside its groups, a page is told
+ * it has room for at the least (AGL-4152): a redesign keeps
+ * `SITE_IMPORT_IMPROVED_MEANING` of what the owner says, and a rewrite says
+ * less than all of a line it keeps. A group is kept whole by keep, its words
+ * with it, so it asks for none.
+ */
+export const AI_SITE_IMPORT_MEANING_WORDS_SHARE = 0.8
+
+/** How many words the old page says, over its lines. */
+export function aiSiteImportLedgerWords(ledger: Pick<SiteImportLedger, 'lines'>): number {
+  return ledger.lines.reduce((total, line) => total + (line.text.match(/[\p{L}\p{N}]+/gu)?.length ?? 0), 0)
+}
+
+/** What a page's first answer may write, and what it is planned to. */
+export interface AiSiteImportImproveRoom {
+  /** The most output tokens the first answer is asked at (`max_tokens`). */
+  first: number
+  /** What its input was priced at, before it is sent. */
+  estimated: AiUsage
+  /**
+   * The size the page is planned to, in tokens: where the room holds it, one
+   * whose answer and a full re-ask of it both fit the ceiling, so a miss can
+   * still be mended; never under `AI_SITE_IMPORT_LEAST_PAGE_TOKENS`, or what
+   * it must say to keep the owner's meaning, where the room holds that; and
+   * never over `AI_SITE_IMPORT_ROOM_SHARE` of the room.
+   */
+  target: number
+  /** The most sections, and about how many words, the page is told it has room for. */
+  sections: number
+  words: number
+  /** The old page's words, where it is thin. */
+  thin: number | null
+}
+
+const fifty = (value: number) => Math.max(0, Math.floor(value / 50) * 50)
+
+/**
+ * The room a page's redesign has (AGL-4152): its first answer's ceiling from
+ * what the page's credit ceiling buys after its input, and the page it is
+ * planned to inside it, in sections and words a model can plan by.
+ */
+export function aiSiteImportImproveRoom(input: {
+  model: string
+  spent: AiUsage
+  system: readonly AiSystemBlock[]
+  toolChars: number
+  promptChars: number
+  hour?: boolean
+  most: number
+  ledger: Pick<SiteImportLedger, 'lines'>
+  /** A page the site's plan proposed: it has no old lines, and is never thin. */
+  proposed?: boolean
+  ceiling?: number
+}): AiSiteImportImproveRoom {
+  const ceiling = input.ceiling ?? AI_SITE_IMPORT_IMPROVE_CEILING_CREDITS
+  const estimated = aiSiteImportImproveInputUsage({ system: input.system, toolChars: input.toolChars, promptChars: input.promptChars, ...(input.hour ? { hour: true } : {}) })
+  const first = aiSiteImportImproveTokensWithin({ model: input.model, spent: input.spent, input: estimated, most: input.most, ceiling })
+  // An answer and a re-ask of it at nine tenths of its length, both inside the ceiling.
+  const both = aiSiteImportImproveTokensWithin({ model: input.model, spent: plus(input.spent, estimated), input: aiSiteImportImproveReaskInput(estimated), most: input.most * 2, ceiling })
+  const mendable = Math.floor(both / (1 + AI_SITE_IMPORT_REASK_ROOM))
+  const words = aiSiteImportLedgerWords(input.ledger)
+  const thin = !input.proposed && words < AI_SITE_IMPORT_THIN_PAGE_WORDS ? words : null
+  // What it must say to keep the owner's meaning, which no re-ask is worth falling short of (AGL-4152).
+  const meaning = fifty(aiSiteImportLedgerWords({ lines: input.ledger.lines.filter((line) => !line.group) }) * AI_SITE_IMPORT_MEANING_WORDS_SHARE)
+  const least = Math.max(AI_SITE_IMPORT_LEAST_PAGE_TOKENS, AI_SITE_IMPORT_THIN_MOST_SECTIONS * AI_SITE_IMPORT_SECTION_TOKENS + meaning * AI_SITE_IMPORT_WORD_TOKENS)
+  const share = Math.floor(first * AI_SITE_IMPORT_ROOM_SHARE)
+  const target = Math.min(share, Math.max(mendable, least))
+  const most = thin === null ? AI_SITE_IMPORT_IMPROVE_MOST_SECTIONS : AI_SITE_IMPORT_THIN_MOST_SECTIONS
+  // As many sections as the room holds at a section's usual words, and fewer where the owner's meaning needs the words.
+  const shaped = Math.floor(target / (AI_SITE_IMPORT_SECTION_TOKENS + SECTION_WORDS * AI_SITE_IMPORT_WORD_TOKENS))
+  const meant = Math.floor((target - meaning * AI_SITE_IMPORT_WORD_TOKENS) / AI_SITE_IMPORT_SECTION_TOKENS)
+  const sections = Math.min(most, Math.max(AI_SITE_IMPORT_LEAST_SECTIONS, Math.min(shaped, meant)))
+  const room = fifty((target - sections * AI_SITE_IMPORT_SECTION_TOKENS) / AI_SITE_IMPORT_WORD_TOKENS)
+  // A thin page says about four times what its owner did, with a line of its own for each new section.
+  const said = thin === null ? room : Math.min(room, Math.max(200, fifty(thin * 4 + 150)))
+  return { first, estimated, target, sections, words: Math.max(150, said), thin }
+}
+
+/**
+ * The lines a page's request says of its size (AGL-4152), in plain words:
+ * where its room is under the most an answer may ask, the sections and words
+ * it has room for, so it plans a page that fits rather than being cut off;
+ * and on a thin page, that it stays short and says no figure the site does
+ * not. Never the platform's vocabulary: its numbers are no one's fact.
+ */
+export function aiSiteImportImproveSizeLines(room: AiSiteImportImproveRoom, input: { most: number; groups: boolean }): string[] {
+  return [
+    ...(room.first < input.most
+      ? [
+          `Length: write this page in at most ${room.sections} sections and about ${room.words} words in all, counting every heading, line, button and card; a longer answer is cut off and not used.${input.groups ? ' Keep a long group of the ledger whole with keep rather than writing its items again.' : ''}`,
+        ]
+      : []),
+    ...(room.thin !== null
+      ? ['This page says little, so it stays short: write what it says and what this kind of business generally does, and give a count, size, year or quantity only where the site states it, never one such work usually has.']
+      : []),
+  ]
 }
 
 /** What a redesign settled: the page built, what it added and what it shows. */
@@ -1091,6 +1499,8 @@ export interface AiSiteImportImproved<T> {
   page: AiSiteImportImprovedPage
   /** The design lines it was taken with still missed, by code (`AI_SITE_IMPORT_IMPROVE_SOFT_CODES`): only where no re-ask was left. */
   missed?: string[]
+  /** What reading the answer settled on its own (AGL-4152): a block left out and why, a list read from its text. */
+  read?: AiLayoutSettlement[]
 }
 
 /**
@@ -1219,7 +1629,7 @@ export function aiSiteImportImproveScope(doc: Pick<AiSiteImportDocument, 'blocks
 /** What each line that missed says to the one re-ask. */
 const MISS: Readonly<Record<string, string>> = {
   facts: 'The page leaves out a fact the owner gives. Say every name, number, price, date, phone and address the ledger shows.',
-  invented: 'The page says something nothing on the site supports.',
+  invented: 'The page says something nothing on the site supports. Leave it out, or say only what the site states.',
   held: 'Something the ledger marks must is not on the page. Place it with a keep block.',
   links: 'A link the ledger lists goes nowhere on the page. Link to it from a button or an item.',
   meaning: "The page has drifted from what the owner says. Keep more of the old page's substance in the new words.",
@@ -1237,10 +1647,13 @@ export function aiSiteImportImprovedMisses(report: Pick<SiteImportPageFidelity, 
   if (!improved) return []
   return improved.red.flatMap((name) => {
     if (name === 'frame') return []
-    const ledger = improved.ledger as unknown as Record<string, { missing?: string[]; found?: string[] } | undefined>
+    const ledger = improved.ledger as unknown as Record<string, { missing?: string[]; found?: string[]; at?: string[] } | undefined>
     const shown = [...(ledger[name]?.missing ?? []), ...(ledger[name]?.found ?? [])].map((token) => token.replace(/^[a-z]+:/, ''))
+    // The line each invented value sat in (AGL-4152), so the re-ask can mend that sentence and a later read can see it.
+    const at = ledger[name]?.at ?? []
     const message = MISS[name] ?? `The page falls short on ${name}.`
-    return [{ rule: null, code: `improve-${name}`, message, ...(shown.length ? { detail: `Named: ${shown.join(', ')}.` } : {}) }]
+    const detail = [...(shown.length ? [`Named: ${shown.join(', ')}.`] : []), ...(at.length ? [`In: ${at.map((line) => `"${line}"`).join('; ')}.`] : [])].join(' ')
+    return [{ rule: null, code: `improve-${name}`, message, ...(detail ? { detail } : {}) }]
   })
 }
 
@@ -1278,7 +1691,9 @@ export function aiSiteImportImproveCheck<T>(input: {
   lenient?: boolean
 }): AiGenerationCheck<AiSiteImportImproved<T>> {
   return (answer) => {
-    const read = aiReadImprovedPage(answer)
+    // What the read settles, a block it leaves out among them, is kept for the page's log (AGL-4152).
+    const notes: AiLayoutSettlement[] = []
+    const read = aiReadImprovedPage(answer, notes)
     if (!read) return { value: null, violations: [{ rule: null, code: 'improve-unreadable', message: `The answer gave no section that can be drawn. Answer with ${AI_SITE_IMPORT_IMPROVE_TOOL.name}.` }] }
     const formAt = read.findIndex((section) => section.blocks.some((block) => block.kind === 'keep' && block.ref.startsWith('form:')))
     const destinations = aiSiteImportImproveDestinations(input.doc, input.ledger, { sections: read.length, formSection: formAt === -1 ? null : formAt })
@@ -1300,6 +1715,6 @@ export function aiSiteImportImproveCheck<T>(input: {
     const refused = input.lenient ? scored.filter((violation) => !AI_SITE_IMPORT_IMPROVE_SOFT_CODES.has(violation.code)) : scored
     if (refused.length) return { value: null, violations: refused }
     missed.push(...scored.map((violation) => violation.code))
-    return { value: { built: built.value, page, ...(missed.length ? { missed: [...new Set(missed)] } : {}) }, violations: [] }
+    return { value: { built: built.value, page, ...(missed.length ? { missed: [...new Set(missed)] } : {}), ...(notes.length ? { read: notes } : {}) }, violations: [] }
   }
 }

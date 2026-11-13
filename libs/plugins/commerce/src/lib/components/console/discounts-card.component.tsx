@@ -49,8 +49,10 @@ import {
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import {
+  heldSaveLabel,
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 import TransferHeaderActions from '../../transfer/transfer-header-actions.component'
@@ -274,6 +276,13 @@ export function DiscountsCard(props: DiscountsCardProps) {
       .join(' · ')
     return `${value}${extras ? ` · ${extras}` : ''}`
   }
+
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(handleSave, {
+    checking,
+    subject: 'discount',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
 
   return (
     <CardDisplay
@@ -563,13 +572,13 @@ export function DiscountsCard(props: DiscountsCardProps) {
             variant="contained"
             color="primary"
             disabled={
-              checking ||
               (draft?.kind === 'percent' && !((draft?.valuePct ?? 0) > 0)) ||
-              (draft?.kind === 'fixed' && !((draft?.valueCents ?? 0) > 0))
+              (draft?.kind === 'fixed' && !((draft?.valueCents ?? 0) > 0)) ||
+              held.saving
             }
-            onClick={handleSave}
+            onClick={held.press}
           >
-            {'Save'}
+            {heldSaveLabel(held, 'Save')}
           </Button>
         </DialogActions>
       </Dialog>

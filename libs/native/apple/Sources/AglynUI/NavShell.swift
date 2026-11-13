@@ -430,15 +430,16 @@ public struct AglynNeedsYouLine: View {
 
   public var body: some View {
     Button(action: action) {
+      // Figma Home/Needs you line 11:390: a 32-point tile, 12 above and below, 57 tall.
       HStack(spacing: 12) {
-        IconBadge(systemImage, tone: tone == .neutral ? .info : tone, size: 28)
+        IconBadge(systemImage, tone: tone == .neutral ? .info : tone, size: 32)
         Text(text).font(AglynFont.body).foregroundStyle(.primary).multilineTextAlignment(.leading)
         Spacer(minLength: 8)
         Text(place).font(AglynFont.caption).foregroundStyle(.secondary)
         Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
       }
       .padding(.horizontal, 12)
-      .padding(.vertical, 10)
+      .padding(.vertical, 12)
       .contentShape(Rectangle())
     }
     .buttonStyle(.aglynRow)

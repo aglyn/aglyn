@@ -9,6 +9,143 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.22.2 — 2026-11-13
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.22.1...v1.22.2)
+
+### Fixed
+
+- **ai:** send the plan's switches to the resume door ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+
+## v1.22.1 — 2026-11-12
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.22.0...v1.22.1)
+
+### Fixed
+
+- **ai:** no hollow sections, even card rows and an honest picture cap on redesigns ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** one button per destination in a redesigned section ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** a redesigned footer opens with the brand and says how to reach the site ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **tools:** release:tag reads a CHANGELOG.md over 1 MiB ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+
+<details>
+<summary>Also in this release: 1 test</summary>
+
+- **console:** the other kept-press specs press Save once they have seen it is pressable ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+
+</details>
+
+## v1.22.0 — 2026-11-12
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.21.0...v1.22.0)
+
+### Added
+
+- **ai:** native import job offers the next wave above its wave list, five waves at a time ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **native:** Bring my site start screen in the apps ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ai:** native import job page offers the next wave with Keep my site or Improve it ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **pos:** take cards offline on a store's own Stripe account, Apple and Android ([AGL-4219](https://linear.app/aglyn/issue/AGL-4219))
+- **pos:** offline card sales for stores on their own Stripe account, server and contracts ([AGL-4219](https://linear.app/aglyn/issue/AGL-4219))
+- **native:** the Kotlin port of the one path resolver ([AGL-4059](https://linear.app/aglyn/issue/AGL-4059))
+- **native:** one path resolver for every way into a place ([AGL-4059](https://linear.app/aglyn/issue/AGL-4059))
+
+### Fixed
+
+- **data:** the Datasets card says it is loading until the server answers ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **console:** a Save pressed during the seed hold is kept and saves once confirmed ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** local-day-bounds joins the proven-pure modules ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** the switcher names each account as its header last did ([AGL-4010](https://linear.app/aglyn/issue/AGL-4010))
+- **native:** the account lists name the account on screen as the header does ([AGL-4010](https://linear.app/aglyn/issue/AGL-4010))
+- **apple:** Add account shows its sign-in form again ([AGL-3945](https://linear.app/aglyn/issue/AGL-3945))
+- **native:** a DNS or tag check that is not there yet shows as information ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **native:** a list row's switch draws no label of its own inside a grouped form ([AGL-4007](https://linear.app/aglyn/issue/AGL-4007))
+- **native:** a Setup row on the iPad and Mac opens as its area, under the crumbs ([AGL-4058](https://linear.app/aglyn/issue/AGL-4058))
+- **ai:** size an Improve redesign inside its page ceiling and tell it its room ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ios:** the offline banner's Retry sits beside its message ([AGL-4039](https://linear.app/aglyn/issue/AGL-4039))
+- **native:** name the earlier Google address only to a site that used it ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **ios:** a share button inside a POS sheet opens the share sheet ([AGL-4062](https://linear.app/aglyn/issue/AGL-4062))
+- **ios:** a section pushed over a pinned tab draws its title like any pushed area ([AGL-4059](https://linear.app/aglyn/issue/AGL-4059))
+- **ios:** the register's Day totals keeps its report, and Today stays today ([AGL-4062](https://linear.app/aglyn/issue/AGL-4062))
+- **tools:** the duplication measure reads factories nested in a strict-mode array ([AGL-4220](https://linear.app/aglyn/issue/AGL-4220))
+- **apple:** System appearance clears every window override, so Dark never sticks ([AGL-4010](https://linear.app/aglyn/issue/AGL-4010))
+- **commerce:** the cart asks its pickup and delivery options once per load ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **forms:** a field cleared and saved reads Up to date again ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **native:** an iPad list column's head fits it, and its crumbs head the detail ([AGL-4058](https://linear.app/aglyn/issue/AGL-4058), [AGL-4007](https://linear.app/aglyn/issue/AGL-4007))
+- **android:** an answer's documentation link opens in the in-app browser ([AGL-4064](https://linear.app/aglyn/issue/AGL-4064))
+- **sales-channels:** name the earlier Google address only to a site that used it ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **android:** Back on a tablet goes up a media folder before it leaves Media ([AGL-4004](https://linear.app/aglyn/issue/AGL-4004))
+- **native:** the Reservations look-ahead reads the stays, and its chips wrap ([AGL-4045](https://linear.app/aglyn/issue/AGL-4045))
+- **native:** the /products/reservations link opens the native Reservations screen ([AGL-4059](https://linear.app/aglyn/issue/AGL-4059))
+- **ios:** a section opened on a pinned phone tab is pushed over it ([AGL-4059](https://linear.app/aglyn/issue/AGL-4059))
+- **android:** the phone's bell opens Activity, not the wide shell's popover ([AGL-4006](https://linear.app/aglyn/issue/AGL-4006))
+- **android:** a workspace's place leaves the site, and a pinned tab stays selected ([AGL-4059](https://linear.app/aglyn/issue/AGL-4059))
+- **ios:** a starred setting selects its own row in its mode ([AGL-4059](https://linear.app/aglyn/issue/AGL-4059))
+- **tools:** scaffold the .swcrc the plugin build reads ([AGL-4218](https://linear.app/aglyn/issue/AGL-4218))
+- **android:** a Starred or Recent place in another workspace waits for it ([AGL-4059](https://linear.app/aglyn/issue/AGL-4059))
+- **native:** Android AI sheet answers render their links and inline markdown ([AGL-4064](https://linear.app/aglyn/issue/AGL-4064))
+- **pos:** the register's offline banner and card notices follow every sync, Apple and Android ([AGL-4219](https://linear.app/aglyn/issue/AGL-4219))
+- **pos:** release the customer's hold on an offline card refused as another account's ([AGL-4219](https://linear.app/aglyn/issue/AGL-4219))
+- **tools:** keep a test target in the plugin scaffold ([AGL-4218](https://linear.app/aglyn/issue/AGL-4218))
+- **nx:** run inferred lint and jest from the workspace root, as the executors did ([AGL-4218](https://linear.app/aglyn/issue/AGL-4218))
+- **tools:** read Next apps and scaffold plugins without removed executors ([AGL-4218](https://linear.app/aglyn/issue/AGL-4218))
+- **next:** keep production builds in dist/apps/<app>/.next without withNx ([AGL-4218](https://linear.app/aglyn/issue/AGL-4218))
+- **nx:** finish the nx 24 target conversions the migrations left ([AGL-4218](https://linear.app/aglyn/issue/AGL-4218))
+- **android:** open the whole path from Starred, Recent, search, notices, pushes and links ([AGL-4059](https://linear.app/aglyn/issue/AGL-4059))
+- **ios:** open the whole path from Starred, Recent, search, notices, pushes and links ([AGL-4059](https://linear.app/aglyn/issue/AGL-4059))
+
+### Performance
+
+- **crm:** the plugin's load reads small modules, not the field and report tables ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **tenant:** every published page stops loading the plugin catalog copy and lodash ([AGL-4220](https://linear.app/aglyn/issue/AGL-4220))
+- **mui:** both collection search elements load the search box through one import ([AGL-4220](https://linear.app/aglyn/issue/AGL-4220))
+
+### Documentation
+
+- **typescript:** record why the TS 6 bridge stays on TS 7.0.2 ([AGL-4218](https://linear.app/aglyn/issue/AGL-4218))
+
+<details>
+<summary>Also in this release: 4 test, 31 chore</summary>
+
+- **data:** the Datasets card loading state is ready to merge ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **console:** kept seed-hold presses ready to merge ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **kotlin:** the roster name check reads the stored roster ([AGL-4010](https://linear.app/aglyn/issue/AGL-4010))
+- **crm:** plugin budget headroom ready to merge ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **tenant:** every-page headroom ready to merge ([AGL-4220](https://linear.app/aglyn/issue/AGL-4220))
+- **ios:** the phone navigation test finds a tab by its tab bar button ([AGL-4006](https://linear.app/aglyn/issue/AGL-4006))
+- the next 16.4.6 reland is checked on merged main, ready to merge ([AGL-4220](https://linear.app/aglyn/issue/AGL-4220))
+- dependency sweep ready to merge ([AGL-4218](https://linear.app/aglyn/issue/AGL-4218))
+- **ai:** re-record the device audit on axe-core 4.14.0 ([AGL-4218](https://linear.app/aglyn/issue/AGL-4218))
+- **deps:** upgrade Next.js to 16.4.6 again for seven moderate advisories ([AGL-4091](https://linear.app/aglyn/issue/AGL-4091), [AGL-4220](https://linear.app/aglyn/issue/AGL-4220))
+- **tools:** raise the Linear issue ceiling to AGL-4220 ([AGL-4220](https://linear.app/aglyn/issue/AGL-4220), [AGL-4219](https://linear.app/aglyn/issue/AGL-4219), [AGL-4218](https://linear.app/aglyn/issue/AGL-4218))
+- **data:** find the grid's Filters panel by its dialog role ([AGL-4218](https://linear.app/aglyn/issue/AGL-4218))
+- cart options asked once, ready to merge ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- cleared field reads Up to date, ready to merge ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- earlier Google address notice ready to merge ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **deps:** adopt firebase-admin 14 in cloud/functions ([AGL-4218](https://linear.app/aglyn/issue/AGL-4218))
+- **deps:** adopt jsdom 31 ([AGL-4218](https://linear.app/aglyn/issue/AGL-4218))
+- **deps:** adopt cypress 16 ([AGL-4218](https://linear.app/aglyn/issue/AGL-4218))
+- **deps:** adopt vitest 5 and @vitest/ui 5 ([AGL-4218](https://linear.app/aglyn/issue/AGL-4218))
+- **deps:** adopt framer-motion 14 ([AGL-4218](https://linear.app/aglyn/issue/AGL-4218))
+- **deps:** adopt eslint-plugin-mobx 0.2 ([AGL-4218](https://linear.app/aglyn/issue/AGL-4218))
+- **deps:** adopt mobx-state-tree 9 ([AGL-4218](https://linear.app/aglyn/issue/AGL-4218))
+- **deps:** adopt @stripe/stripe-js 10 and @stripe/react-stripe-js 7 ([AGL-4218](https://linear.app/aglyn/issue/AGL-4218))
+- **deps:** take every patch and minor in root, cloud/functions and apps/docs ([AGL-4218](https://linear.app/aglyn/issue/AGL-4218))
+- **nx-migrate:** convert console and tenant to @nx/next/plugin
+- **nx-migrate:** register @nx/js/typescript for typecheck inference
+- **nx-migrate:** replace nxViteTsPaths with resolve.tsconfigPaths
+- **nx-migrate:** convert shared-svg-icons build to @nx/vite/plugin
+- **nx-migrate:** convert console-e2e to @nx/cypress/plugin
+- **nx-migrate:** convert @nx/eslint:lint targets to @nx/eslint/plugin
+- **nx-migrate:** convert @nx/jest:jest targets to @nx/jest/plugin
+- **nx-migrate:** keep project-level nx affected (affected.legacy)
+- **nx-migrate:** add the nx 24 AI migration prompts written by nx migrate
+- **pos:** the offline kit request asks for the direct-charge kit on both apps ([AGL-4219](https://linear.app/aglyn/issue/AGL-4219))
+- **deps:** nx 23.3.0 -> 24.0.6 via nx migrate latest ([AGL-4218](https://linear.app/aglyn/issue/AGL-4218))
+
+</details>
+
+10 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.21.0 — 2026-11-11
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.20.3...v1.21.0)
@@ -33,7 +170,6 @@ content on the marketing site and is written separately.
 - **native:** an iPad window keeps its place across the app switcher ([AGL-4006](https://linear.app/aglyn/issue/AGL-4006))
 - **native:** Android POS Day totals can share its CSV ([AGL-4062](https://linear.app/aglyn/issue/AGL-4062))
 - **media:** folder tree offers Shared with… like the folder card ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
-- **deps:** upgrade Next.js to 16.4.6 for seven moderate advisories ([AGL-4091](https://linear.app/aglyn/issue/AGL-4091))
 - **shared-ui:** MdiIcon draws a generated icon object, and its path prop is typechecked ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
 - **domains:** connect automatically hears an approval after five minutes ([AGL-3963](https://linear.app/aglyn/issue/AGL-3963))
 - **plugins:** hold first-press saves on an unconfirmed seed in the other plugins ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))

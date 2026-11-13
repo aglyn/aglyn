@@ -1,8 +1,8 @@
 {
   "team": "AGL",
-  "highest": 4216,
-  "verifiedAt": "2026-11-11",
-  "verifiedBy": "Read from the workspace 2026-11-11 18:3xZ (newest first, archived included): AGL-4216 (Besigner: add row/column bars on canvas tables, sticky Markdown toolbar, polished Markdown table controls) exists, created 2026-11-11T17:52Z, newest in the team.",
+  "highest": 4222,
+  "verifiedAt": "2026-11-12",
+  "verifiedBy": "Read from the workspace 2026-11-12 (list_issues team AGL orderBy createdAt, archived included): AGL-4222 (Native: ownership candidates show name, email and photo; filled iOS form fields keep their label) exists, created 2026-11-12T05:23Z, and is the newest issue. AGL-4221 (Native iPad: Site settings › Plugins switches ask nothing and save nothing) exists, created 2026-11-12T04:34Z.",
   "note": "The highest issue identifier that EXISTS, and a FLOOR rather than the answer. Any citation above it was never assigned, because Linear numbers issues sequentially per team. check-linear-ids.mjs asks Linear for the real highest on every run and can only ever RAISE this number with the answer, so with LINEAR_API_KEY set there is nothing to maintain here; this value is what the check falls back to when the query cannot be made. Raise it only after reading the workspace — never to whatever number a failing check just reported. See tools/scripts/lib/linear-ids.mjs.",
   "historicalCitations": {
     "note": "Commits already on `main` whose messages cite a fabricated id. History is NOT rewritten (see docs/DECISION_LOG.md, 2026-08-28), so the commit sweep would otherwise be permanently red and the guard would never be wirable into CI. Listed by sha rather than exempted by date: a FIFTEENTH such commit still fails. This list may shrink and must never grow.",

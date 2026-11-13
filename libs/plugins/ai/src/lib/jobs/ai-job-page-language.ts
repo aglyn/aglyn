@@ -46,9 +46,12 @@ import { aiLayoutPromisedCopyViolations, aiLayoutPromisedSections } from '../lay
 import { aiLayoutStoredTree } from '../layout-language/ai-layout-store'
 import { AI_GENERATION_MAX_ATTEMPTS } from '../runtime/ai-generation-bounds'
 import { AI_STEP_TIERS } from '../providers/catalog'
+import { AI_ROUTING_TABLE } from '../providers/routing'
 import { aiCacheWriteHourSum } from '../providers/cache-write-hour'
 import {
   aiDoctrineNeedsInputMessage,
+  aiDoctrineScopeFor,
+  aiDoctrineSystemBlocks,
   runValidatedGeneration,
   type AiGenerationCheck,
   type AiGenerationSpend,
@@ -100,11 +103,14 @@ import {
   aiSiteImportImprovePrompt,
   aiSiteImportImproveScope,
   aiSiteImportImprovedMisses,
-  aiSiteImportImproveInputUsage,
+  aiSiteImportImproveCredits,
+  aiSiteImportImproveReaskNeeds,
   aiSiteImportImproveReaskTokens,
   aiSiteImportImproveRoleLines,
-  aiSiteImportImproveTokensWithin,
+  aiSiteImportImproveRoom,
+  aiSiteImportImproveSizeLines,
   aiSiteImportImproveOnlySoft,
+  AI_SITE_IMPORT_IMPROVE_CUT_OFF_SMALLER,
   aiSiteImportNewSectionsWanted,
   aiSiteImportPageRoleOf,
   aiSiteImportMeaningShare,
@@ -1446,6 +1452,26 @@ async function aiRunImportedPageWording(scope: {
   return { ...spent, status: 'ok', value: { ...built, settled: [...built.settled, ...notes], words: 'improved' } }
 }
 
+/** What a picture asked for in words past the page's cap is settled as, by the compiler (`ai-layout-compiler.ts`). */
+const PAST_THE_CAP = /^a picture past the page's \d+; left out$/
+
+/**
+ * The one line a redesign that passed logs (AGL-4152): how many sections it
+ * drew, each block its read left out and why, what code mended (a section
+ * left a heading alone, a card row evened), and how many pictures asked for
+ * in words passed the page's cap. Never a word of the page beyond a heading.
+ */
+export function aiSiteImportRedesignPassed(value: Pick<AiSiteImportImproved<Pick<AiLayoutPageBuilt, 'settled'>>, 'built' | 'page' | 'read'>, credits?: number): Record<string, unknown> {
+  const dropped = (value.read ?? []).map((note) => `${note.at}: ${note.what}`)
+  return {
+    sections: value.page.given.sections.length,
+    readDropped: dropped,
+    mended: value.page.mended,
+    pastCap: value.built.settled.filter((note) => PAST_THE_CAP.test(note.what)).length,
+    ...(credits !== undefined ? { credits } : {}),
+  }
+}
+
 /**
  * The ceiling a redesign is asked at on this model (AGL-4152): what the page
  * step's time holds of a whole page's design and words, and its one re-ask.
@@ -1484,23 +1510,49 @@ async function aiRunImprovedPage(scope: {
   const needs = { role, wanted: aiSiteImportNewSectionsWanted(role, ledger, !!doc.proposed) }
   const instructions = aiSiteImportImproveInstructions(aiSiteImportImproveDigest({ siteName, scope: doc.siteLines ?? [], plan: doc.plan ?? null }))
   const roleLines = aiSiteImportImproveRoleLines({ ...needs, folded: ledger.folded, kind: doc.plan?.site.kind ?? null, seed: aiSiteSeed(input.job.$id) })
-  const prompt = aiSiteImportImprovePrompt({
-    screen: input.screen,
-    doc,
-    ledger,
-    destinations: aiSiteImportImproveDestinations(doc, ledger),
-    kindLines: aiSiteKindDesignLines(input.job.inputs),
-    seed: input.job.$id.slice(-6),
-    roleLines,
-  })
+  const promptOf = (sizeLines: readonly string[]) =>
+    aiSiteImportImprovePrompt({
+      screen: input.screen,
+      doc,
+      ledger,
+      destinations: aiSiteImportImproveDestinations(doc, ledger),
+      kindLines: aiSiteKindDesignLines(input.job.inputs),
+      seed: input.job.$id.slice(-6),
+      roleLines,
+      sizeLines,
+    })
   // The page's ceiling holds in code: the answer asks no more than it buys, and a re-ask it cannot pay for is not asked.
+  // Its input is priced from every byte the request sends, as the doctrine's loop sends it (AGL-4152).
   const most = aiSiteImportImproveMaxTokens(input.model)
-  const first = aiSiteImportImproveTokensWithin({
-    model: input.model,
-    spent: spend.usage,
-    input: aiSiteImportImproveInputUsage({ systemChars: instructions.reduce((sum, block) => sum + block.text.length, 0), promptChars: prompt.length }),
-    most,
-  })
+  const system = aiDoctrineSystemBlocks(undefined, { instructions, scope: aiDoctrineScopeFor(AI_SITE_IMPORT_IMPROVE_KIND) })
+  const roomOf = (prompt: string) =>
+    aiSiteImportImproveRoom({
+      model: input.model,
+      spent: spend.usage,
+      system,
+      toolChars: JSON.stringify(AI_SITE_IMPORT_IMPROVE_TOOL).length,
+      promptChars: prompt.length,
+      hour: AI_ROUTING_TABLE['job.page'].cacheTtl === '1h',
+      most,
+      ledger,
+      proposed: !!doc.proposed,
+    })
+  // The answer is told its room in sections and words, so it plans a page that fits rather than being cut off. The
+  // lines are part of the request they size, so they are priced over it until they say what its room is.
+  const groups = ledger.items.some((item) => item.kind === 'group')
+  let sizeLines: string[] = []
+  let prompt = promptOf(sizeLines)
+  let room = roomOf(prompt)
+  for (let pass = 0; pass < 3; pass += 1) {
+    const lines = aiSiteImportImproveSizeLines(room, { most, groups })
+    if (lines.join('\n') === sizeLines.join('\n')) break
+    sizeLines = lines
+    prompt = promptOf(sizeLines)
+    room = roomOf(prompt)
+  }
+  const first = room.first
+  // What each answer had and wrote, for the log a fallback leaves (AGL-4152).
+  const track: { reask: { room: number; needs: number; cutOff: boolean; firstOutput: number } | null } = { reask: null }
   const checkOf = (lenient: boolean) =>
     aiSiteImportImproveCheck<AiLayoutPageBuilt>({
       doc,
@@ -1543,18 +1595,36 @@ async function aiRunImprovedPage(scope: {
     tool: AI_SITE_IMPORT_IMPROVE_TOOL,
     maxTokens: Math.max(1, first),
     // Nothing is spent before it: a page brought in is compiled with no model first.
-    reaskTokens: (spent, last) => aiSiteImportImproveReaskTokens({ model: input.model, spent, lastOutput: last.outputTokens, most }),
-    cutOff: { noun: 'page', smaller: 'Write shorter copy, and fewer sections.' },
+    reaskTokens: (spent, last) => {
+      const tokens = aiSiteImportImproveReaskTokens({ model: input.model, spent, lastOutput: last.outputTokens, cutOff: last.cutOff, most })
+      track.reask = { room: tokens, needs: aiSiteImportImproveReaskNeeds(last.outputTokens, last.cutOff), cutOff: last.cutOff, firstOutput: last.outputTokens }
+      return tokens
+    },
+    cutOff: { noun: 'page', smaller: AI_SITE_IMPORT_IMPROVE_CUT_OFF_SMALLER },
     ...AI_LAYOUT_LANGUAGE_THINKING,
     check: observe(checkOf(false)),
     ...(input.signal ? { signal: input.signal } : {}),
   })
   const spent = spentTogether(spend, answered)
+  // Each answer's room and what it wrote, whether a re-ask ran, and its input priced before and as billed (AGL-4152):
+  // what a later read of a fallback needs to tell a page cut off from one starved, never a word of the page.
+  const asked = track.reask
+  const firstOutput = asked ? asked.firstOutput : answered.usage.outputTokens
+  const sizes = {
+    answers: [
+      { room: first, outputTokens: firstOutput },
+      ...(answered.attempts > 1 && asked ? [{ room: Math.min(first, asked.room), outputTokens: answered.usage.outputTokens - firstOutput }] : []),
+    ],
+    reask: asked ? { ran: answered.attempts > 1, room: asked.room, needs: asked.needs, cutOff: asked.cutOff } : { ran: false },
+    planned: { sections: room.sections, words: room.words, target: room.target, ...(room.thin !== null ? { thinWords: room.thin } : {}) },
+    inputCredits: { estimated: aiSiteImportImproveCredits(room.estimated, input.model), billed: aiSiteImportImproveCredits({ ...answered.usage, outputTokens: 0 }, input.model) },
+    credits: aiSiteImportImproveCredits(answered.usage, input.model),
+  }
   // Its last answer, where no re-ask was left and it missed only how it is planned or drawn: taken, its misses on its row (AGL-4152).
   const taken = answered.status === 'needs_input' && answered.answer && aiSiteImportImproveOnlySoft(answered.violations) ? checkOf(true)(answered.answer) : null
   if (taken?.value) {
     const { built, page, missed } = taken.value
-    console.info('ai imported page: its redesign taken with design lines missed', { codes: missed ?? [] })
+    console.info('ai imported page: its redesign taken with design lines missed', { codes: missed ?? [], ...sizes, passed: aiSiteImportRedesignPassed(taken.value) })
     return {
       ...spent,
       status: 'ok',
@@ -1565,7 +1635,7 @@ async function aiRunImprovedPage(scope: {
     const codes = answered.status === 'needs_input' ? [...new Set(answered.violations.map((violation) => violation.code))] : [answered.status]
     // Logged with each miss's line, cut short (AGL-4152): the answer is not kept, so this is all a later read of the job has to go on.
     const why = answered.status === 'needs_input' ? aiSiteImportRedesignWhy(answered.violations) : []
-    console.info('ai imported page: its redesign did not pass, its layout kept', { status: answered.status, codes, why })
+    console.info('ai imported page: its redesign did not pass, its layout kept', { status: answered.status, codes, why, ...sizes })
     // A new page has no words of its own to fall back on: it is left out, and its row says why.
     if (doc.proposed) return { ...spent, status: 'needs_input', violations: answered.status === 'needs_input' ? answered.violations : [], message: AI_SITE_IMPORT_PROPOSED_NOT_WRITTEN, answer: null }
     return {
@@ -1581,6 +1651,7 @@ async function aiRunImprovedPage(scope: {
     }
   }
   const { built, page } = answered.value
+  console.info('ai imported page: its redesign passed', aiSiteImportRedesignPassed(answered.value, sizes.credits))
   return {
     ...spent,
     status: 'ok',

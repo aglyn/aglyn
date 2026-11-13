@@ -38,6 +38,7 @@ import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import {
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useEffect, useState } from 'react'
 import { useCrmScope } from '../hooks/use-crm-scope'
@@ -157,6 +158,24 @@ export function LeadCampaignsCard(props: LeadCampaignsCardProps) {
     : undefined
   const empty = optionsReady && !options.length
 
+  // `save` is read when the press runs, after it is defined below.
+  const saveFiling = () =>
+    save().catch((error: unknown) => {
+      console.error(error)
+      enqueueSnackbar(
+        error instanceof Error && error.message ? error.message : 'An error has occurred',
+        { variant: 'error', allowDuplicate: true },
+      )
+      setSaving(false)
+    })
+
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const held = useHeldSave(saveFiling, {
+    checking: Boolean(checkingText),
+    subject: 'lead',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning' }),
+  })
+
   const save = async () => {
     if (unchanged) return
     if (!orgId) {
@@ -218,17 +237,10 @@ export function LeadCampaignsCard(props: LeadCampaignsCardProps) {
           <Button
             size="small"
             variant="outlined"
-            disabled={saving || unchanged || Boolean(checkingText)}
-            onClick={() => void save().catch((error: unknown) => {
-              console.error(error)
-              enqueueSnackbar(
-                error instanceof Error && error.message ? error.message : 'An error has occurred',
-                { variant: 'error', allowDuplicate: true },
-              )
-              setSaving(false)
-            })}
+            disabled={saving || unchanged || held.saving}
+            onClick={held.press}
           >
-            {saving ? 'Saving…' : 'Save filing'}
+            {held.saving ? 'Saving…' : 'Save filing'}
           </Button>
         ),
       }}

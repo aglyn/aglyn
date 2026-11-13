@@ -14,10 +14,6 @@
         "tsConfig": "libs/shared/util/rest-api/tsconfig.lib.json",
         "assets": ["libs/shared/util/rest-api/*.md"]
       }
-    },
-    "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
     }
   }
 }

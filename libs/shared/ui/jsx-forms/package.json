@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/shared-ui-jsx-forms",
-  "version": "1.21.0",
+  "version": "1.22.2",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": {
@@ -25,16 +25,16 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/shared-data-enums": "1.21.0",
-    "@aglyn/shared-data-mdi": "1.21.0",
-    "@aglyn/shared-ui-color-picker": "1.21.0",
-    "@aglyn/shared-ui-jsx": "1.21.0",
-    "@aglyn/shared-ui-theme": "1.21.0",
-    "@aglyn/shared-util-tools": "1.21.0",
-    "@aglyn/shared-util-vendor": "1.21.0",
-    "@data-driven-forms/common": "^4.2.0",
-    "@data-driven-forms/react-form-renderer": "^4.2.0",
-    "@swc/helpers": "0.5.23",
+    "@aglyn/shared-data-enums": "1.22.2",
+    "@aglyn/shared-data-mdi": "1.22.2",
+    "@aglyn/shared-ui-color-picker": "1.22.2",
+    "@aglyn/shared-ui-jsx": "1.22.2",
+    "@aglyn/shared-ui-theme": "1.22.2",
+    "@aglyn/shared-util-tools": "1.22.2",
+    "@aglyn/shared-util-vendor": "1.22.2",
+    "@data-driven-forms/common": "^4.2.3",
+    "@data-driven-forms/react-form-renderer": "^4.2.3",
+    "@swc/helpers": "0.5.24",
     "clsx": "^2.1.1",
     "lodash-es": "^4.18.1"
   },

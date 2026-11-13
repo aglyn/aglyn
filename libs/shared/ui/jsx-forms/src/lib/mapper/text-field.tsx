@@ -23,6 +23,7 @@
 import { TextField as MuiTextField } from '@mui/material'
 
 import { useFieldApi } from '../vendor/data-driven-forms'
+import { emptyValuesEqual } from '../utils/empty-values-equal'
 import FormFieldGrid, {
   buildFieldClear,
   type FormFieldGridProps,
@@ -65,7 +66,11 @@ export const TextField = (props: TextFieldProps) => {
     FormFieldGridProps = {},
     type,
     ...rest
-  } = useFieldApi(props)
+  } = useFieldApi({
+    ...props,
+    // A cleared box equals the `''` its stored copy reseeds (AGL-4047).
+    FieldProps: { isEqual: emptyValuesEqual, ...props.FieldProps },
+  })
   const invalid = validationError(meta as ExtendedFieldMeta, validateOnMount)
   // A date, time or color input paints its own placeholder whether or not it
   // holds a value, so a floating label would sit on top of `mm/dd/yyyy` — the

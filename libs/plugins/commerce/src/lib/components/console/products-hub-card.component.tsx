@@ -94,8 +94,10 @@ import { productCollectionFields } from './smart-collections'
 import ProductsHubZone from './products-hub-zone.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import {
+  heldSaveLabel,
   isSeedChecking,
   seedCheckingText,
+  useHeldSave,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { useSeedDraft } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 import { PRODUCTS_CREATE_ZONE, type ConsoleProductsHubZoneProps } from './product-zones'
@@ -881,6 +883,13 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     <CreateZone slot={PRODUCTS_CREATE_ZONE.id} hostId={hostId} orgId={undefined} />
   ) : null
 
+  // A press while Save is held is kept, and saves once confirmed (AGL-4047).
+  const adjustHeld = useHeldSave(handleAdjustSave, {
+    checking: adjustChecking,
+    subject: 'stock',
+    onRefused: (message) => enqueueSnackbar(message, { variant: 'warning', persist: false }),
+  })
+
   return (
     <CardDisplay
       /*
@@ -1252,10 +1261,10 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           <Button
             variant="contained"
             color="primary"
-            disabled={adjustChecking || !Math.round(Number(adjusting?.delta))}
-            onClick={handleAdjustSave}
+            disabled={!Math.round(Number(adjusting?.delta)) || adjustHeld.saving}
+            onClick={adjustHeld.press}
           >
-            {'Apply'}
+            {heldSaveLabel(adjustHeld, 'Apply')}
           </Button>
         </DialogActions>
       </Dialog>

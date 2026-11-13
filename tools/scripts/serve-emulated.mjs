@@ -100,7 +100,12 @@ const projectFile = join(repoRoot, 'apps', app, 'project.json')
 const targets = existsSync(projectFile)
   ? (JSON.parse(readFileSync(projectFile, 'utf8')).targets ?? {})
   : {}
-if (!String(targets.serve?.executor ?? '').includes('next')) {
+// Nx 24 infers a Next app's `serve` from @nx/next/plugin, so project.json
+// keeps the target (and its port) but no longer names an executor for it.
+const isNextApp = ['js', 'cjs', 'mjs', 'ts'].some((ext) =>
+  existsSync(join(repoRoot, 'apps', app, `next.config.${ext}`)),
+)
+if (!targets.serve || !isNextApp) {
   fail(`apps/${app} has no Next serve target.`)
 }
 const port = Number(portArg ?? targets.serve.options?.port)
@@ -163,7 +168,7 @@ if (liveAi && passedThrough.length === 0) {
       "in the shell or the env files; put it in the repo's .env.",
   )
 }
-// `@nx/next:server` exports the port it serves on over any PORT an env file holds.
+// `nx serve` passes the port it serves on over any PORT an env file holds.
 env.PORT = String(port)
 
 const pruned = spawnSync(prune, { cwd: repoRoot, env, shell: true, stdio: 'inherit' })

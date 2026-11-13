@@ -484,7 +484,7 @@
           "tabs": ["commerce.orders-tab", "commerce.products-tab"],
           "widgets": ["commerce.today", "commerce.sales-trend", "commerce.to-ship", "commerce.glance", "commerce.needs-you", "commerce.newest-site-users", "commerce.quote-from-request", "commerce.quote-from-contact"],
           "quickActions": ["commerce.orders-to-ship", "commerce.new-product", "commerce.scan"],
-          "deepLinks": ["commerce.orders-page", "commerce.products-page", "commerce.order-link", "commerce.quote-link", "commerce.returns-page", "commerce.return-link", "commerce.shipping-page", "commerce.notifications-page"]
+          "deepLinks": ["commerce.orders-page", "commerce.products-page", "commerce.order-link", "commerce.quote-link", "commerce.returns-page", "commerce.return-link", "commerce.shipping-page", "commerce.notifications-page", "commerce.reservations.link"]
         }
       },
       "requiredPersonEraser": true,
@@ -2964,6 +2964,7 @@
             "ai.hostMember",
             "ai.allotment",
             "ai.import.productCopy",
+            "ai.import.start",
             "ai.create"
           ],
           "widgets": [

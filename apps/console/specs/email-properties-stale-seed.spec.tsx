@@ -321,23 +321,40 @@ describe.each(PAGES)('%s besigner properties (AGL-1358)', (_label, Page) => {
    * subject is HELD while the template read is the cache's, with the reason
    * under it, and the typed value stays on screen.
    */
-  it('HOLDS Save subject while the template read is unconfirmed, keeping what was typed', async () => {
+  it('KEEPS a Save subject pressed while the template read is unconfirmed, keeping what was typed', async () => {
     templateSeed.fromCache = true
     render(<Page />)
 
-    await typeSubjectAndSave()
-    await new Promise((resolve) => setTimeout(resolve, 20))
-
+    fireEvent.change(await screen.findByLabelText('Subject'), {
+      target: { value: 'Edited subject' },
+    })
+    // Held, yet pressable: the reason shows and Save subject takes the press.
+    expect(screen.getByText('Checking your email with the server…')).toBeTruthy()
     const save = screen.getByRole('button', {
       name: 'Save subject',
     }) as HTMLButtonElement
-    expect(save.disabled).toBe(true)
-    expect(screen.getByText('Checking your email with the server…')).toBeTruthy()
+    expect(save.disabled).toBe(false)
+    fireEvent.click(save)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
     expect(mockSetDoc).not.toHaveBeenCalled()
-    expect(mockEnqueueSnackbar).not.toHaveBeenCalled()
+    // Kept, not dropped (AGL-4047): no confirmation came within the
+    // guard's wait (0 in this spec), so the press ends in the guard's refusal.
+    await waitFor(() =>
+      expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringMatching(/could not confirm your .+ with the server yet, so nothing was saved/),
+        expect.anything(),
+      ),
+    )
     expect(
       (screen.getByLabelText('Subject') as HTMLInputElement).value,
     ).toEqual('Edited subject')
+    await waitFor(() =>
+      expect(
+        (screen.getByRole('button', { name: 'Save subject' }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    )
   })
 
   it('saves on the first press once the server answers, with the server’s preheader', async () => {

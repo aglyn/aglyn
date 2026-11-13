@@ -255,4 +255,19 @@ final class ScreenWorkspaceSettingsTests: XCTestCase {
     XCTAssertEqual(page.raw["actions"].array.compactMap(ActionSpec.init).map(\.id), ["viewListing"])
     XCTAssertEqual(try spec("core.plugins").raw["actions"].array.compactMap(ActionSpec.init).first?.route, "/{org.slug}/marketplace")
   }
+  @MainActor
+  func testAnOwnershipCandidateIsNamedWithTheirEmailUnderneathAndTheirPhoto() throws {
+    let page = try spec("core.settings.ownership")
+    let list = try XCTUnwrap(page.blocks.first { $0.type == "list" })
+    let named: JSONValue = [
+      "item": ["$id": "u2", "displayName": "Jordan Lee", "email": "jordan@example.com", "role": "editor", "photoURL": "https://example.com/j.png"],
+    ]
+    let unnamed: JSONValue = ["item": ["$id": "u3", "email": "pat@example.com", "role": "viewer"]]
+    // The console's member row: the name, then the email; a member with no name is their email, said once.
+    XCTAssertEqual(ScreenValues.render(try XCTUnwrap(list["primary"]?.stringValue), in: named), "Jordan Lee")
+    XCTAssertEqual(rowLine(list["secondary"], in: named), "jordan@example.com · Editor")
+    XCTAssertEqual(ScreenValues.render(try XCTUnwrap(list["primary"]?.stringValue), in: unnamed), "pat@example.com")
+    XCTAssertEqual(rowLine(list["secondary"], in: unnamed), "Viewer")
+    XCTAssertEqual(ScreenValues.render(try XCTUnwrap(list["avatar"]?.stringValue), in: named), "https://example.com/j.png")
+  }
 }

@@ -10,9 +10,12 @@ import Foundation
  * collects it (`collectCardPayment`). Offline there is no server to ask, so
  * the app makes the intent itself through the Stripe Terminal SDK, which
  * stores the card on the device ("store and forward") and sends it to Stripe
- * once a connection returns. The intent is a destination charge with MANUAL
- * capture and no application fee: the server captures it when the sale
- * syncs, and sizes the platform fee then.
+ * once a connection returns. The intent has MANUAL capture and no
+ * application fee: a destination charge for a store on Aglyn's account, or,
+ * for a store on its own Stripe account (AGL-4219), an intent with no
+ * transfer at all, which the SDK makes on the account its connection token
+ * belongs to (the store's). The server captures it when the sale syncs, and
+ * sizes the platform fee then.
  *
  * Every rule that does not need the SDK lives here and is tested with a fake
  * port: the request's checks, the create → collect → confirm sequence, and
@@ -31,8 +34,10 @@ public struct OfflineCardRequest: Equatable, Sendable {
   public let saleKey: String
   public let amountCents: Int
   public let currency: String
-  /// The connected account the charge transfers to.
+  /// The connected account the charge transfers to; ignored for a direct charge.
   public let destination: String
+  /// The store's own Stripe account, for a direct charge (AGL-4219): no transfer is set, and the sale records it.
+  public let account: String?
   public let metadata: [String: String]
   /// The store's limit per sale offline, in cents: above it the SDK is told to require a connection.
   public let maxSaleCents: Int
@@ -41,13 +46,15 @@ public struct OfflineCardRequest: Equatable, Sendable {
   public let takenTodayCents: Int
 
   public init(
-    saleKey: String, amountCents: Int, currency: String, destination: String, metadata: [String: String],
-    maxSaleCents: Int = Int.max, maxDeviceDailyCents: Int = Int.max, takenTodayCents: Int = 0
+    saleKey: String, amountCents: Int, currency: String, destination: String, account: String? = nil,
+    metadata: [String: String], maxSaleCents: Int = Int.max, maxDeviceDailyCents: Int = Int.max,
+    takenTodayCents: Int = 0
   ) {
     self.saleKey = saleKey
     self.amountCents = amountCents
     self.currency = currency
     self.destination = destination
+    self.account = account.flatMap { $0.isEmpty ? nil : $0 }
     self.metadata = metadata
     self.maxSaleCents = maxSaleCents
     self.maxDeviceDailyCents = maxDeviceDailyCents
@@ -60,7 +67,7 @@ public struct OfflineCardRequest: Equatable, Sendable {
       return "The sale has no key to charge the card against."
     }
     guard amountCents > 0 else { return "There is nothing to charge." }
-    guard destination.hasPrefix("acct_") else { return "Card payments are not set up for this store." }
+    guard (account ?? destination).hasPrefix("acct_") else { return "Card payments are not set up for this store." }
     guard currency.range(of: "^[a-z]{3}$", options: .regularExpression) != nil else {
       return "The store's currency is missing."
     }
@@ -76,12 +83,17 @@ public struct OfflineCardTaken: Equatable, Sendable {
   public let paymentIntentID: String?
   public let brand: String?
   public let last4: String?
+  /// The store's own account the intent was made on (a direct charge, AGL-4219); nil for a destination charge.
+  public let account: String?
 
-  public init(saleKey: String, paymentIntentID: String?, brand: String? = nil, last4: String? = nil) {
+  public init(
+    saleKey: String, paymentIntentID: String?, brand: String? = nil, last4: String? = nil, account: String? = nil
+  ) {
     self.saleKey = saleKey
     self.paymentIntentID = paymentIntentID
     self.brand = brand
     self.last4 = last4
+    self.account = account
   }
 
   /// Visa •••• 4242, or "Card".
@@ -194,7 +206,7 @@ public func collectOfflineCardPayment(
     return .taken(
       OfflineCardTaken(
         saleKey: request.saleKey, paymentIntentID: intent.storedOffline ? nil : intent.id, brand: intent.brand,
-        last4: intent.last4))
+        last4: intent.last4, account: request.account))
   }
 }
 

@@ -27,7 +27,8 @@ final class TabsUITests: XCTestCase {
     let sites = any["sidebar-sites"]
     XCTAssertTrue(sites.waitForExistence(timeout: 10), "No Sites row in the workspace's sidebar")
     sites.tap()
-    let site = any["site-mobile-demo-site"]
+    // The row's button and the row around it share the identifier on an iPad, so a plain lookup finds two.
+    let site = any["site-mobile-demo-site"].firstMatch
     XCTAssertTrue(site.waitForExistence(timeout: 20), "The seeded site is not in Sites")
     site.tap()
     let orders = any["sidebar-orders"]

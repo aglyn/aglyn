@@ -102,13 +102,14 @@ const saveButton = () => screen.getByRole('button', { name: 'Save' }) as HTMLBut
 beforeEach(() => jest.clearAllMocks())
 
 describe('a stored interaction while its read is unconfirmed (AGL-4047)', () => {
-  it('holds Save, with the reason beside it, and keeps the typed name', async () => {
+  it('keeps a Save pressed during the hold, with the reason beside it, and the typed name', async () => {
     render(dialog(stored, true))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Open the drawer' } })
     fireEvent.click(saveButton())
     await new Promise((resolve) => setTimeout(resolve, 20))
 
-    expect(saveButton().disabled).toBe(true)
+    // Kept, not dropped (AGL-4047): the press says Saving… while it waits.
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeTruthy()
     expect(screen.getByText('Checking your interaction with the server…')).toBeTruthy()
     expect(mockSetDoc).not.toHaveBeenCalled()
     expect(mockEnqueueSnackbar).not.toHaveBeenCalled()

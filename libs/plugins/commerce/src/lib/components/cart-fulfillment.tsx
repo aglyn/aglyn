@@ -109,21 +109,28 @@ export function useCartFulfillment(
     return () => clearTimeout(timer)
   }, [postalCode, line1])
 
+  // What the request asks beyond the basket: a delivery quote, only for a
+  // postal code long enough to place. Keyed by its content, so the settle
+  // above handing back an equal object, or a switch between shipping and
+  // pickup, is not another request (AGL-4047: every cart load asked twice).
+  const wantsQuote = method === 'local_delivery' && asked.postalCode.length >= 3
+  const quoteFor = wantsQuote ? JSON.stringify([asked.postalCode, asked.line1]) : ''
+
   useEffect(() => {
     if (!hostId || cartSignature === '[]' || buyNow === null) {
       setOptions(EMPTY)
       return
     }
     let live = true
-    const wantsQuote = method === 'local_delivery' && asked.postalCode.length >= 3
+    const [quotePostal, quoteLine1] = quoteFor ? (JSON.parse(quoteFor) as [string, string]) : ['', '']
     fetch('/api/commerce/local-fulfillment-options', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         hostId,
         ...(buyNow ? buyNow : {}),
-        ...(wantsQuote ? { postalCode: asked.postalCode } : {}),
-        ...(wantsQuote && asked.line1 ? { address: { line1: asked.line1, postalCode: asked.postalCode } } : {}),
+        ...(quoteFor ? { postalCode: quotePostal } : {}),
+        ...(quoteFor && quoteLine1 ? { address: { line1: quoteLine1, postalCode: quotePostal } } : {}),
       }),
     })
       .then((response) => (response.ok ? response.json() : EMPTY))
@@ -154,7 +161,7 @@ export function useCartFulfillment(
     }
     // `buyNow` is read through its key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hostId, cartSignature, round, method, asked, buyNowKey])
+  }, [hostId, cartSignature, round, quoteFor, buyNowKey])
 
   const offered = options.pickup.length > 0 || Boolean(options.delivery)
   const quote = options.delivery?.quote

@@ -63,6 +63,27 @@ final class OfflineCardTests: XCTestCase {
     XCTAssertEqual(port.request?.destination, "acct_merchant")
   }
 
+  func testADirectChargeIsMadeOnTheStoresOwnAccountAndTheTakenCardSaysWhich() async {
+    // A store on its own Stripe account (AGL-4219): no destination, the store's account instead.
+    let direct = OfflineCardRequest(
+      saleKey: key, amountCents: 2479, currency: "usd", destination: "", account: "acct_1StoreOwnAcct",
+      metadata: ["kind": "pos-offline", "saleKey": key, "chargeModel": "direct"])
+    XCTAssertNil(direct.problem)
+    let port = FakeOfflinePort()
+    let outcome = await collectOfflineCardPayment(port, direct, readerDeviceType: "STRIPE_M2")
+    XCTAssertEqual(
+      outcome,
+      .taken(
+        OfflineCardTaken(saleKey: key, paymentIntentID: nil, brand: "visa", last4: "4242", account: "acct_1StoreOwnAcct")))
+    XCTAssertEqual(port.request?.account, "acct_1StoreOwnAcct")
+    // A destination charge names no account, and an empty one reads as none.
+    XCTAssertNil(request().account)
+    let empty = OfflineCardRequest(
+      saleKey: key, amountCents: 2479, currency: "usd", destination: "", account: "",
+      metadata: ["kind": "pos-offline", "saleKey": key])
+    XCTAssertNotNil(empty.problem)
+  }
+
   func testACardStripeAuthorizedAfterAllKeepsItsID() async {
     let port = FakeOfflinePort(
       confirmed: .success(

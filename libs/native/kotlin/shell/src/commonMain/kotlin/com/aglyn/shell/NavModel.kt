@@ -195,6 +195,12 @@ fun phoneHomeItems(scopeGroups: List<NavGroupItem>, inSite: Boolean, team: NavIt
   }
 }
 
+/**
+ * The tab bar's area tab (its row id) that holds the destination [top], with or without a record pushed over it: an order
+ * opened on the pinned Orders tab keeps Orders selected, not Home (AGL-4059). Null when the place is Home's (pushed there).
+ */
+internal fun selectedPhoneTab(top: String, tabItems: List<NavItem>): String? = tabItems.firstOrNull { top in it.keys }?.rowId
+
 /** What a phone's tab bar shows for a scope: its slots (Home, the pinned areas, Create) and whether Create is in the top bar. */
 data class PhoneTabs(val slots: List<String>, val createInTopBar: Boolean, val pinnable: List<String>)
 

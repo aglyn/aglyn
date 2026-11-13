@@ -176,10 +176,11 @@ struct EventsScreen: View {
   var body: some View {
     WideLayoutReader { wide in
       if wide {
-        HStack(spacing: 0) {
-          list(selectable: true).frame(minWidth: 300, idealWidth: 360, maxWidth: 420)
-          Divider()
-          detail.frame(maxWidth: .infinity, maxHeight: .infinity)
+        // The shared list and detail columns: the area's head in the list column, its crumbs over the detail.
+        AglynListDetailColumns(listWidth: 360) {
+          list(selectable: true)
+        } detail: {
+          detail
         }
       } else {
         list(selectable: false)
@@ -311,6 +312,8 @@ struct EventEditor: View {
   /// A stored event read only from the device cache: Save waits for the server's copy. A new one is never held.
   let held: Bool
   @State private var draft: EventDraft
+  /// Save pressed while held, kept until the server's copy is in (AGL-4047).
+  @State private var heldPress = AglynHeldPress()
 
   init(
     context: NativePluginContext, initial: EventDraft, held: Bool = false, onDelete: (() -> Void)?, onSave: @escaping (EventDraft) -> Void
@@ -325,10 +328,17 @@ struct EventEditor: View {
 
   private var values: ContractValues { .shared }
 
+  private func save() {
+    onSave(draft)
+    if draft.id == nil { dismiss() }
+  }
+
   var body: some View {
     let problem = eventWriteProblem(title: draft.title, startsAtMs: draft.startsAtMs)
     Form {
-      if held {
+      if let refusal = heldPress.refusal {
+        Section { AglynNotice(refusal, tone: .warning) }
+      } else if held {
         Section { Text(seedCheckingText("event")).font(AglynFont.caption).foregroundStyle(.secondary) }
       }
       Section {
@@ -388,9 +398,11 @@ struct EventEditor: View {
     .aglynScreenTitle(draft.id == nil ? "New event" : draft.title.isEmpty ? "Event" : draft.title)
     .onAppear { if draft.startsAt == nil { draft.startsAt = Self.nextHour } }
     // Beside the list on the Mac and iPad, Save sits in the head as a bordered button; the list keeps Add event.
-    .aglynEditorActions(id: "event-save", save: "Save", enabled: problem == nil && !held, primary: false) {
-      onSave(draft)
-      if draft.id == nil { dismiss() }
+    .aglynEditorActions(id: "event-save", save: "Save", enabled: problem == nil, busy: heldPress.waiting, primary: false) {
+      if heldPress.pressed(checking: held) { save() }
+    }
+    .aglynHeldPress($heldPress, checking: held, refusal: seedUnconfirmedText("event")) {
+      if eventWriteProblem(title: draft.title, startsAtMs: draft.startsAtMs) == nil { save() }
     }
     .accessibilityIdentifier("event-editor")
     .onChange(of: initial) { previous, next in
