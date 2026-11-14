@@ -23,6 +23,13 @@ public enum AglynNotificationSounds {
     return all.first { $0.id == id } ?? all.first { $0.id == defaultID } ?? all.first
   }
 
+  /// The sound a push names: its `aps.sound`, the file the server put in the payload. Nil for the system's own sound or
+  /// a file that is not one of the list.
+  public static func sound(inPayload userInfo: [AnyHashable: Any]) -> NotificationSound? {
+    guard let aps = userInfo["aps"] as? [String: Any], let file = aps["sound"] as? String else { return nil }
+    return all.first { $0.apple == file }
+  }
+
   /// The bundled file a sound plays from.
   public static func url(_ sound: NotificationSound, in bundle: Bundle = .main) -> URL? {
     let name = (sound.apple as NSString).deletingPathExtension

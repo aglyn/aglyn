@@ -21,4 +21,11 @@ final class NotificationSoundsTests: XCTestCase {
     XCTAssertEqual(AglynNotificationSounds.sound(for: "kazoo")?.id, "xylophone")
     XCTAssertEqual(AglynNotificationSounds.sound(for: 3)?.id, "xylophone")
   }
+
+  func testAPushPayloadNamesItsSoundByFile() {
+    XCTAssertEqual(AglynNotificationSounds.sound(inPayload: ["aps": ["sound": "aglyn-cowbell.caf"]])?.id, "cowbell")
+    XCTAssertNil(AglynNotificationSounds.sound(inPayload: ["aps": ["sound": "default"]]))
+    XCTAssertNil(AglynNotificationSounds.sound(inPayload: ["aps": ["alert": "Hi"]]))
+    XCTAssertNil(AglynNotificationSounds.sound(inPayload: [:]))
+  }
 }
