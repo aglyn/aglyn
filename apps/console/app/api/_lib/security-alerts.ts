@@ -72,7 +72,7 @@ async function meterSent(
 }
 
 /** Long-lived HttpOnly device-identity cookie, minted by the session route. */
-export const DEVICE_COOKIE = 'aglyn_device'
+export { DEVICE_COOKIE } from './device-registry'
 
 /** A year. Re-set on every mint, so an active device never lapses. */
 export const DEVICE_COOKIE_MAX_AGE_S = 365 * 24 * 60 * 60

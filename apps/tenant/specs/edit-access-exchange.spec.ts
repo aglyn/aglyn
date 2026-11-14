@@ -40,6 +40,8 @@ let mockMembers: Record<string, Record<string, unknown>>
 let mockUsers: Record<string, { disabled?: boolean; email?: string }>
 let mockFlagOn: boolean
 let mockLockdownResponse: Response | null
+/** `users/{uid}/editHintEnds/{did}` → endedAt, keyed `${uid}/${did}`. */
+let mockHintEnds: Record<string, number>
 
 const snapshotOf = (data: Record<string, unknown> | null) => ({
   exists: data !== null,
@@ -54,9 +56,17 @@ function mockFirestore() {
         get: async () =>
           snapshotOf(name === 'hosts' ? mockHostData : null),
         collection: (sub: string) => ({
-          doc: (uid: string) => ({
-            get: async () =>
-              snapshotOf(sub === 'members' ? (mockMembers[uid] ?? null) : null),
+          doc: (key: string) => ({
+            get: async () => {
+              if (sub === 'members') {
+                return snapshotOf(mockMembers[key] ?? null)
+              }
+              if (name === 'users' && sub === 'editHintEnds') {
+                const endedAt = mockHintEnds[`${id}/${key}`]
+                return snapshotOf(endedAt ? { endedAt } : null)
+              }
+              return snapshotOf(null)
+            },
           }),
         }),
       }),
@@ -103,6 +113,9 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   const access = jest.requireActual(
     '../../../libs/tenant/data/admin/src/lib/server/edit-access-token',
   )
+  const ends = jest.requireActual(
+    '../../../libs/tenant/data/admin/src/lib/server/edit-hint-end',
+  )
   const authz = jest.requireActual(
     '../../../libs/tenant/data/admin/src/lib/server/edit-access-authz',
   )
@@ -110,6 +123,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     __esModule: true,
     ...hint,
     ...access,
+    ...ends,
     editAccessMintRefusal: authz.editAccessMintRefusal,
     // AGL-2005 moved this route off a project-level `getUser` and onto the
     // cross-pool resolver, because an SSO user's uid lives in their org's GCIP
@@ -159,8 +173,31 @@ function exchangeRequest(options?: {
   })
 }
 
-function hintCookie(uid = UID): string {
-  return `aglyn_edit_hint=${mintEditHintToken('cookie', uid).token}`
+/** The console browser the hint was planted from (`aglyn_device`). */
+const BROWSER_A = 'device-browser-a-0001'
+const BROWSER_B = 'device-browser-b-0002'
+
+/**
+ * A hint as the sign-in bounce plants it: bound to the browser it came from
+ * and dated when that console session was proven live.
+ */
+function hintCookie(
+  uid = UID,
+  binding: { did: string; iat: number } = {
+    did: BROWSER_A,
+    iat: Date.now() - 60_000,
+  },
+): string {
+  return `aglyn_edit_hint=${mintEditHintToken('cookie', uid, Date.now(), binding).token}`
+}
+
+/** What the response did to the two hint cookies, by name. */
+function clearedCookies(response: Response): string[] {
+  return response.headers
+    .getSetCookie()
+    .filter((cookie) => /Max-Age=0/.test(cookie))
+    .map((cookie) => cookie.split('=')[0])
+    .sort()
 }
 
 describe('/api/edit-access/exchange (AGL-1842)', () => {
@@ -175,6 +212,7 @@ describe('/api/edit-access/exchange (AGL-1842)', () => {
     mockUsers = { [UID]: { disabled: false, email: 'editor@aglyn.com' } }
     mockFlagOn = true
     mockLockdownResponse = null
+    mockHintEnds = {}
   })
 
   it('trades a valid hint for a REAL edit-access token, host-scoped to this site', async () => {
@@ -266,5 +304,83 @@ describe('/api/edit-access/exchange (AGL-1842)', () => {
     mockLockdownResponse = Response.json({ error: 'locked' }, { status: 423 })
     const response = await POST(exchangeRequest({ cookie: hintCookie() }))
     expect(response.status).toBe(423)
+  })
+
+  /*
+   * Signing out of the console ends the bar in THAT browser (AGL-1842
+   * follow-on). The sign-out writes `users/{uid}/editHintEnds/{did}`; the
+   * cookie it cannot reach is refused here instead, and cleared on the way
+   * out. Each case below flips ONE fact against the passing fixture above.
+   */
+  describe('console sign-out ends the hint in that browser', () => {
+    it('refuses a hint this browser signed out after, and clears both cookies', async () => {
+      mockHintEnds = { [`${UID}/${BROWSER_A}`]: Date.now() - 1_000 }
+      const response = await POST(exchangeRequest({ cookie: hintCookie() }))
+      expect(response.status).toBe(401)
+      expect(await response.json()).toMatchObject({ ended: true })
+      expect(clearedCookies(response)).toEqual(['aglyn_edit_hint', 'aglyn_editor'])
+      for (const cookie of response.headers.getSetCookie()) {
+        expect(cookie).toContain('Domain=.aglyn.app')
+      }
+    })
+
+    it('still exchanges ANOTHER browser’s hint for the same person', async () => {
+      mockHintEnds = { [`${UID}/${BROWSER_A}`]: Date.now() - 1_000 }
+      const response = await POST(
+        exchangeRequest({
+          cookie: hintCookie(UID, { did: BROWSER_B, iat: Date.now() - 60_000 }),
+        }),
+      )
+      expect(response.status).toBe(200)
+      expect(response.headers.getSetCookie()).toHaveLength(0)
+    })
+
+    it('exchanges again once this browser signs back in (a newer hint)', async () => {
+      mockHintEnds = { [`${UID}/${BROWSER_A}`]: Date.now() - 60_000 }
+      const response = await POST(
+        exchangeRequest({
+          cookie: hintCookie(UID, { did: BROWSER_A, iat: Date.now() - 1_000 }),
+        }),
+      )
+      expect(response.status).toBe(200)
+    })
+
+    it('refuses a bounce that landed AFTER the sign-out but was minted before it', async () => {
+      // `iat` is the bounce's mint time, carried through `set` unchanged, so
+      // a blob fetched before signing out and planted after is still dated
+      // before the sign-out.
+      const signedOutAt = Date.now() - 5_000
+      mockHintEnds = { [`${UID}/${BROWSER_A}`]: signedOutAt }
+      const response = await POST(
+        exchangeRequest({
+          cookie: hintCookie(UID, { did: BROWSER_A, iat: signedOutAt - 1 }),
+        }),
+      )
+      expect(response.status).toBe(401)
+    })
+
+    it('refuses a hint that names no browser (planted before sign-out could end one)', async () => {
+      const unbound = `aglyn_edit_hint=${mintEditHintToken('cookie', UID).token}`
+      const response = await POST(exchangeRequest({ cookie: unbound }))
+      expect(response.status).toBe(401)
+      expect(await response.json()).toMatchObject({ ended: true })
+      expect(clearedCookies(response)).toEqual(['aglyn_edit_hint', 'aglyn_editor'])
+    })
+
+    it('names the browser in the minted token, dated by the hint, not by now', async () => {
+      const iat = Date.now() - 120_000
+      const response = await POST(
+        exchangeRequest({ cookie: hintCookie(UID, { did: BROWSER_A, iat }) }),
+      )
+      const claims = verifyEditAccessToken((await response.json()).token)
+      expect(claims).toMatchObject({ did: BROWSER_A, since: iat })
+    })
+
+    it('leaves the lockdown verdict where it was: an un-ended hint still meets it', async () => {
+      mockHintEnds = { [`${UID}/${BROWSER_B}`]: Date.now() }
+      mockLockdownResponse = Response.json({ error: 'locked' }, { status: 423 })
+      const response = await POST(exchangeRequest({ cookie: hintCookie() }))
+      expect(response.status).toBe(423)
+    })
   })
 })

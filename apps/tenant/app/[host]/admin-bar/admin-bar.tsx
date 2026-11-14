@@ -475,7 +475,12 @@ export default function AdminBar({
           // than showing a bar that lies.
           clearStoredEditToken(hostId)
           tokenRef.current = null
-          setPhase(restingPhase)
+          // Signed out of the console in this browser: nothing to offer, not
+          // even the connect pill, whichever way the bar was armed.
+          const refusal = (await response.json().catch(() => null)) as {
+            ended?: boolean
+          } | null
+          setPhase(refusal?.ended ? 'silent' : restingPhase)
           return
         }
         if (!response.ok) {
@@ -542,12 +547,24 @@ export default function AdminBar({
               expiresAtMs: Number(payload.expiresAtMs) || Date.now(),
               siteName: payload.siteName,
               userEmail: payload.userEmail,
+              // Lives only as long as the hint that bought it.
+              viaHint: true,
             }
             writeStoredEditToken(hostId, stored)
             void resolveContext(stored)
             return
           }
           fallBack(response.status)
+          return
+        }
+        // Signed out of the console in this browser: a definitive no, so no
+        // probe and no pill.
+        const refusal = (await response.json().catch(() => null)) as {
+          ended?: boolean
+        } | null
+        if (cancelled) return
+        if (refusal?.ended) {
+          setPhase('silent')
           return
         }
         fallBack(response.status)

@@ -375,16 +375,16 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'Reader of NEXT_PUBLIC_CONSOLE_URL; the literal is its default.',
   },
   {
-    file: 'apps/tenant/app/api/edit-hint/set/route.ts',
-    count: 2,
-    reason:
-      'consoleReturnAllowlist prefers NEXT_PUBLIC_CONSOLE_URL and falls back to our two console origins ONLY when nothing is configured (AGL-2016).',
-  },
-  {
     file: 'apps/tenant/middleware.ts',
     count: 10,
     reason:
       'Vercel-only host routing gated on IS_VERCEL, plus the NEXT_PUBLIC_CONSOLE_URL default. The edge bundle cannot import TENANT_APEX; a self-host serves its apex through the AGLYN_TENANT_HOST_CNAME branch above it. Widening that to a wildcard is AGL-2202.',
+  },
+  {
+    file: 'apps/tenant/utils/edit-hint-cookies.ts',
+    count: 2,
+    reason:
+      'consoleReturnAllowlist (shared by the edit-hint set and clear bounces) prefers NEXT_PUBLIC_CONSOLE_URL and falls back to our two console origins ONLY when nothing is configured (AGL-2016).',
   },
   {
     file: 'libs/aglyn/src/lib/app-utils/docs-help.ts',

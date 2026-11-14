@@ -37,13 +37,16 @@ import {
 } from '@aglyn/aglyn/server'
 import type * as Aglyn from '@aglyn/aglyn/server'
 import {
+  editHintEndRefuses,
   filterEnabledPluginsByReleaseFlags,
   firebaseAdmin,
   hostConverter,
   isServerReleaseFlagOnForOrg,
+  readEditHintEndedAt,
   screenConverter,
   verifyEditAccessToken,
 } from '@aglyn/tenant-data-admin'
+import { clearEditHintCookies } from '../../../utils/edit-hint-cookies'
 
 export const dynamic = 'force-dynamic'
 
@@ -83,6 +86,27 @@ export async function POST(request: Request): Promise<Response> {
 
   try {
     const firestore = firebaseAdmin.app().firestore()
+    // A token that names the console browser it came from stops working the
+    // moment that browser signs out of the console (AGL-1842 follow-on), on
+    // the next page view at the latest, not when its 30 minutes run out. One
+    // read, editors only. A token naming no browser (minted before this, or
+    // for a session with no device id) keeps its short life.
+    if (
+      claims.did &&
+      editHintEndRefuses(
+        await readEditHintEndedAt(firestore, claims.uid, claims.did),
+        claims.since,
+      )
+    ) {
+      const headers = new Headers({ 'Cache-Control': 'no-store' })
+      // The hint that minted it is just as dead; take it with the token so
+      // the next page view has nothing to arm on.
+      clearEditHintCookies(headers, request)
+      return Response.json(
+        { error: 'Signed out of the console', ended: true },
+        { status: 401, headers },
+      )
+    }
     const hostSnapshot = await firestore
       .collection('hosts')
       .withConverter(hostConverter)

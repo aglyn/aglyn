@@ -278,6 +278,8 @@ const TENANT_EXEMPT_AUDIT: Record<string, string> = {
     'pure request-header echo; reads no document and writes none',
   'apps/tenant/app/api/edit-hint/set/route.ts':
     'plants two signed browser cookies and redirects; the hint is redeemed at edit-access/exchange, which runs the verdict',
+  'apps/tenant/app/api/edit-hint/clear/route.ts':
+    'expires the two hint cookies at console sign-out and redirects; it can only take edit access away, never grant it',
   'apps/tenant/app/api/edit-context/route.ts':
     'read-only projection for the admin bar; the capability it describes is gated at the mint (editAccessMintRefusal)',
   'apps/tenant/app/api/revalidate/route.ts':

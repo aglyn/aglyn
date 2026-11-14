@@ -45,6 +45,15 @@ import { tokenSigningSecret } from './media-signing'
  * prefix domain-separates both from the `edit-bar:`/`media:`/commerce
  * signatures sharing `TOKEN_SIGNING_SECRET`.
  *
+ * Each hint also names the BROWSER it was planted in and when the console
+ * proved the session (AGL-1842 follow-on, sign-out ends the bar): `did` is
+ * the console's own `aglyn_device` id for that browser, and `iat` is when the
+ * bounce was minted from a live console session. Console sign-out records
+ * `users/{uid}/editHintEnds/{did}` (see `edit-hint-end.ts`), and the exchange
+ * refuses any hint for that browser minted before it — so a sign-out ends the
+ * bar in that browser alone, even when the tab closed before any cookie could
+ * be cleared, while the same person's other browsers keep theirs.
+ *
  * A hint is NOT edit access: it names a uid and nothing else. Everything
  * real happens server-side at the tenant's `/api/edit-access/exchange`,
  * which re-authorizes that uid against the specific host being viewed with
@@ -75,6 +84,33 @@ export interface EditHintClaims {
   uid: string
   /** Expiry, epoch ms. */
   exp: number
+  /**
+   * The console browser the hint was planted from — its `aglyn_device` id.
+   * Absent only on hints minted before sign-out could end them, which the
+   * exchange refuses.
+   */
+  did?: string
+  /**
+   * When the console last proved this session live, epoch ms: the BOUNCE
+   * mint, carried unchanged into the cookie so a bounce that lands after a
+   * sign-out is still dated before it.
+   */
+  iat?: number
+}
+
+/** What a mint may bind the hint to; see {@link EditHintClaims}. */
+export interface EditHintBinding {
+  did: string
+  iat: number
+}
+
+/**
+ * The shape a `did` must have to be used as a Firestore document id: the
+ * console mints `aglyn_device` as a UUID, and anything else is refused rather
+ * than written into a path.
+ */
+export function isEditHintDeviceId(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(value)
 }
 
 function signPayload(kind: EditHintKind, payloadB64: string): string {
@@ -97,12 +133,15 @@ export function mintEditHintToken(
   kind: EditHintKind,
   uid: string,
   nowMs: number = Date.now(),
+  binding?: EditHintBinding,
 ): MintedEditHintToken {
   if (!uid) throw new Error('uid is required')
   const exp =
     nowMs +
     (kind === 'bounce' ? EDIT_HINT_BOUNCE_TTL_MS : EDIT_HINT_COOKIE_TTL_MS)
-  const claims: EditHintClaims = { uid, exp }
+  const claims: EditHintClaims = binding
+    ? { uid, exp, did: binding.did, iat: binding.iat }
+    : { uid, exp }
   const payload = Buffer.from(JSON.stringify(claims), 'utf8').toString(
     'base64url',
   )
@@ -156,5 +195,9 @@ export function verifyEditHintToken(
   const exp = Number(claims?.exp)
   if (!Number.isFinite(exp) || exp <= nowMs) return null
   if (typeof claims.uid !== 'string' || !claims.uid) return null
+  const iat = Number(claims.iat)
+  if (isEditHintDeviceId(claims.did) && Number.isFinite(iat) && iat > 0) {
+    return { uid: claims.uid, exp, did: claims.did, iat }
+  }
   return { uid: claims.uid, exp }
 }
