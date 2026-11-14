@@ -24,6 +24,7 @@ import {
   mintEditAccessToken,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { editHintDeviceId } from '../../_lib/edit-hint-end'
 
 /**
  * Mint an edit-access token for the tenant admin bar (admin edit bar,
@@ -92,7 +93,17 @@ async function handler(request: Request): Promise<Response> {
     })
     if (refusal) return refusal
 
-    const { token, expiresAtMs } = mintEditAccessToken(hostId, decoded.uid)
+    // Named to this browser when it has a device id, so a console sign-out
+    // here also ends the token on the site (a custom domain included, where
+    // no hint ever reaches) at its next page view rather than in 30 minutes.
+    const now = Date.now()
+    const did = editHintDeviceId(request)
+    const { token, expiresAtMs } = mintEditAccessToken(
+      hostId,
+      decoded.uid,
+      now,
+      did ? { did, since: now } : undefined,
+    )
 
     // Where the popup may deliver the token: the host's own public names,
     // nothing else. Off-production, the local tenant dev server and its

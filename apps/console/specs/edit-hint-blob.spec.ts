@@ -76,10 +76,20 @@ import { POST } from '../app/api/edit-hint/blob/route'
 const authError = (code: string, message: string) =>
   Object.assign(new Error(message), { code })
 
-function blobRequest(authorization?: string, method = 'POST'): Request {
+/** The console's own device id for this browser (`aglyn_device`). */
+const DEVICE_ID = 'f2a1c3d4-5b6e-4f70-8a91-b2c3d4e5f607'
+
+function blobRequest(
+  authorization?: string,
+  method = 'POST',
+  deviceId: string | null = DEVICE_ID,
+): Request {
+  const headers: Record<string, string> = {}
+  if (authorization) headers['authorization'] = authorization
+  if (deviceId) headers['cookie'] = `aglyn_device=${deviceId}`
   return new Request('https://app.aglyn.com/api/edit-hint/blob', {
     method,
-    headers: authorization ? { authorization } : {},
+    headers,
   })
 }
 
@@ -121,6 +131,26 @@ describe('/api/edit-hint/blob (AGL-1842)', () => {
     mockDecoded = { uid: 'uid-editor', email_verified: false }
     const response = await POST(blobRequest('Bearer good-id-token'))
     expect(response.status).toBe(403)
+  })
+
+  /*
+   * The blob names the BROWSER (AGL-1842 follow-on): its device id, and the
+   * moment this live session was proven. That is what lets a console
+   * sign-out in this browser end the hint here and nowhere else.
+   */
+  it('binds the blob to this browser and dates it now', async () => {
+    const before = Date.now()
+    const response = await POST(blobRequest('Bearer good-id-token'))
+    const claims = verifyEditHintToken('bounce', (await response.json()).blob)
+    expect(claims?.did).toBe(DEVICE_ID)
+    expect(claims?.iat).toBeGreaterThanOrEqual(before)
+    expect(claims?.iat).toBeLessThanOrEqual(Date.now())
+  })
+
+  it('mints nothing for a browser with no device id, since nothing could end it', async () => {
+    const response = await POST(blobRequest('Bearer good-id-token', 'POST', null))
+    expect(response.status).toBe(409)
+    expect((await response.json()).blob).toBeUndefined()
   })
 })
 

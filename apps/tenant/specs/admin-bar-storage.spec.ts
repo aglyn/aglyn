@@ -126,4 +126,34 @@ describe('admin-bar token storage (AGL-1829)', () => {
     clearEditOptOut(HOST)
     expect(isEditOptedOut(HOST)).toBe(false)
   })
+
+  /*
+   * Console sign-out ends the bar (AGL-1842 follow-on). The sign-out bounce
+   * clears the `.aglyn.app` hint, and a token the EXCHANGE bought with that
+   * hint must go with it on the next read, not live out its 30 minutes.
+   * A token the console popup delivered is not tied to the hint (a custom
+   * domain never has one), so the hint's absence says nothing about it.
+   */
+  it('drops a hint-bought token once the hint is gone', () => {
+    document.cookie = 'aglyn_editor=1; Path=/'
+    writeStoredEditToken(HOST, {
+      token: 't-hint',
+      expiresAtMs: Date.now() + 60_000,
+      viaHint: true,
+    })
+    expect(readStoredEditToken(HOST)?.token).toBe('t-hint')
+    document.cookie = 'aglyn_editor=; Max-Age=0; Path=/'
+    expect(readStoredEditToken(HOST)).toBeNull()
+    expect(window.localStorage.getItem(editTokenStorageKey(HOST))).toBeNull()
+  })
+
+  it('keeps a popup-delivered token with no hint at all (custom domains)', () => {
+    writeStoredEditToken(HOST, {
+      token: 't-popup',
+      expiresAtMs: Date.now() + 60_000,
+    })
+    expect(hasEditorHint()).toBe(false)
+    expect(readStoredEditToken(HOST)?.token).toBe('t-popup')
+  })
 })
+

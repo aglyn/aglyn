@@ -317,8 +317,8 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
       },
     ],
   },
-  'apps/tenant/app/api/edit-hint/set/route.ts': {
-    note: `The ${TENANT_DOMAIN} twin of the console editor hint, plus its signed credential.`,
+  'apps/tenant/utils/edit-hint-cookies.ts': {
+    note: `The ${TENANT_DOMAIN} twin of the console editor hint, plus its signed credential. Planted by the sign-in bounce (/api/edit-hint/set) and expired by the sign-out bounce (/api/edit-hint/clear) and by any refusal after a sign-out.`,
     cookies: [
       {
         name: 'aglyn_edit_hint',
@@ -326,7 +326,7 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
         surface: `*.${TENANT_DOMAIN}`,
         purpose:
           `Signed proof that an ${PLATFORM_BRAND_NAME} editor is signed in, exchanged for edit access on a site you administer`,
-        duration: '7 days',
+        duration: '7 days, cleared on sign-out',
         httpOnly: true,
       },
       {
@@ -334,7 +334,7 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
         token: 'aglyn_editor=1',
         surface: `*.${TENANT_DOMAIN}`,
         purpose: `The JS-visible half of the same hint, on the ${TENANT_DOMAIN} domain`,
-        duration: '7 days',
+        duration: '7 days, cleared on sign-out',
         httpOnly: false,
       },
     ],

@@ -73,10 +73,12 @@ import {
  *   mint applies — see the note at that guard for why it precedes the stamp.
  *
  * Sign-out clears the stamp so the next sign-in re-plants promptly. It
- * cannot clear the `.aglyn.app` cookies from here — that boundary again —
- * so a signed-out editor's hint dies by expiry, and sooner than that by the
- * exchange failing closed server-side (removed membership, disabled
- * account). A stale hint costs one refused, invisible POST.
+ * cannot clear the `.aglyn.app` cookies from here — that boundary again — so
+ * sign-out ends the hint twice over (AGL-1842 follow-on): the session route's
+ * DELETE records the ending for this browser server-side, and the exchange
+ * refuses every hint from this browser dated before it; and the `/signout`
+ * page sends the browser once through the tenant's `/api/edit-hint/clear`
+ * ({@link editHintClearUrl}) to expire the cookies themselves.
  */
 
 /** The reserved tenant-app host the bounce lands on. `console` is in
@@ -92,7 +94,11 @@ import {
  * work, and it leaves. */
 export const EDIT_HINT_BOUNCE_ORIGIN = `https://console.${TENANT_APEX}`
 
-export const EDIT_HINT_BOUNCE_STAMP_KEY = 'aglyn-edit-hint-bounce-at'
+/** `-v2` since hints name the browser they were planted from (AGL-1842
+ * follow-on). The exchange refuses the older, unbound hints, so a new key
+ * makes every signed-in console browser re-plant a bound one on its next
+ * visit instead of waiting out a stamp written for the old kind. */
+export const EDIT_HINT_BOUNCE_STAMP_KEY = 'aglyn-edit-hint-bounce-at-v2'
 
 /** The pages that create the session and still have work to do once it
  * exists. Leaving one mid-flight loses that work. */
@@ -104,6 +110,36 @@ export const EDIT_HINT_BOUNCE_SKIPPED_PATHS: ReadonlySet<string> = new Set([
 /** Once a day per browser; the planted cookie lives 7, so a weekly console
  * visit keeps the hint alive continuously. */
 export const EDIT_HINT_BOUNCE_INTERVAL_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Where the `/signout` page sends the browser after the session has ended:
+ * once through the tenant's `/api/edit-hint/clear`, which expires the
+ * `.aglyn.app` hint cookies and comes straight back to `returnUrl`. Null when
+ * there is nothing to clear here, so the page signs out exactly as before:
+ *
+ * - no hint was planted from this browser (no bounce stamp; read it BEFORE
+ *   signing out, because the signed-out branch below removes it);
+ * - not a top-level window, or inside the native apps' web view, which keeps
+ *   no cookies for sites anyway;
+ * - not a first-party console host: a white-label console never bounced.
+ *
+ * The cookies are the tidy half. The server already refuses what this
+ * sign-out ended, so a trip that never happens leaves nothing usable behind.
+ */
+export function editHintClearUrl(returnUrl: string): string | null {
+  if (window.top !== window) return null
+  if (isNativeAppWebView()) return null
+  if (!editorHintCookieDomain(window.location.hostname)) return null
+  try {
+    if (!window.localStorage.getItem(EDIT_HINT_BOUNCE_STAMP_KEY)) return null
+  } catch {
+    return null
+  }
+  return (
+    `${EDIT_HINT_BOUNCE_ORIGIN}/api/edit-hint/clear` +
+    `?return=${encodeURIComponent(returnUrl)}`
+  )
+}
 
 export interface EditHintBounceProps {
   /** Test seam: performs the top-level navigation. */
