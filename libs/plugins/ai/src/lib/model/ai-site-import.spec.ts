@@ -44,6 +44,7 @@ import {
   aiSiteImportWaveCreditRange,
   aiSiteImportWaveMessage,
   aiSiteImportWaveStarted,
+  aiSiteImportCanceled,
   aiSiteImportWire,
   AI_SITE_IMPORT_PROSE_WORDS,
   aiSiteImportPageBuild,
@@ -292,6 +293,13 @@ describe('what runs next, and the review between waves', () => {
     state = aiSiteImportWaveClosed(state, 0, 'b')
     expect(state.waves[0].status).toBe('done')
     expect(aiSiteImportNextWork(state, ledgerOf([['frame', 'succeeded'], ['p0', 'succeeded'], ['p1', 'succeeded']]))).toEqual({ kind: 'done' })
+  })
+
+  it('reads a state its site was never read into as none, and stops it without a wave', () => {
+    // What production held: a switch written onto a queued job, and nothing else.
+    const partial = { generatedPictures: false } as unknown as AiSiteImportState
+    expect(aiSiteImportWire(partial)).toBeNull()
+    expect(aiSiteImportCanceled(partial, 'a')).toEqual({ generatedPictures: false, autoContinue: false })
   })
 
   it('never sends a wave’s page text to the console', () => {

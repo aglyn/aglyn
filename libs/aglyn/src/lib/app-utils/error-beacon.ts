@@ -399,9 +399,13 @@ export function isRecaptchaTimeout(error: unknown): boolean {
 export const FIRESTORE_QUEUE_KIND = 'firestore-queue'
 
 const FIRESTORE_QUEUE_MESSAGE =
-  /INTERNAL ASSERTION FAILED: Unexpected state \(ID: b815\)|Attempt to get a record from database without an in-progress transaction/
+  /INTERNAL ASSERTION FAILED: Unexpected state \(ID: b815\)|Attempt to (?:get a record from|open a cursor in) database without an in-progress transaction|IndexedDB transaction '[^']*' failed: AbortError/
 
-/** The assertion, or the IndexedDB rejection that arrives beside it. */
+/**
+ * The assertion, or the IndexedDB rejection that arrives beside it: the
+ * browser ended the transaction under the SDK, whichever call it was in (a
+ * record read, a cursor, or opening the database in a webview).
+ */
 export function isFirestoreQueueFailureReport(error: unknown): boolean {
   const message = (error as { message?: unknown } | null)?.message
   return typeof message === 'string' && FIRESTORE_QUEUE_MESSAGE.test(message)
