@@ -79,6 +79,8 @@ internal class ShellActions(
   val editProfile: () -> Unit = {},
   /** The person's notification settings and sound. */
   val notificationSettings: () -> Unit = {},
+  /** The staff list (the console's "Staff console"), for staff only; null hides the row. */
+  val staffConsole: (() -> Unit)? = null,
 )
 
 /** The workspace menu (its name ▾): who it is, then Invite people, Workspace settings, Billing and usage, Workspace color. */
@@ -154,8 +156,8 @@ internal fun accountIdentity(user: AuthUser?, prefs: com.aglyn.core.AccountPrefe
 
 /**
  * The account menu (your photo; Figma Mac / Popover / Account 16:142, dark 311:2829): your photo, name and address with
- * Edit profile; Appearance inline, Theme settings…, Notifications and sound, Settings; Marketplace, Documentation, Report
- * an issue; the accounts signed in on this device with their photos and Add account; Sign out (of the account on screen
+ * Edit profile; Appearance inline, Theme settings…, Notifications and sound, Settings; Marketplace, Staff console (staff
+ * only), Documentation, Report an issue; the accounts signed in on this device with their photos and Add account; Sign out (of the account on screen
  * only). Only what the console offers the signed-in person.
  */
 @Composable
@@ -197,6 +199,7 @@ internal fun AccountMenuItems(services: ShellServices, user: AuthUser?, close: (
   MenuRow("Settings", "settings", tag = "account-menu-settings") { close(); actions.accountSettings() }
   HorizontalDivider()
   MenuRow("Marketplace", "storefront", tag = "account-menu-marketplace") { close(); actions.openScreen("marketplace.sell", emptyMap()) }
+  actions.staffConsole?.let { open -> MenuRow(STAFF_CONSOLE_TITLE, "shield", tag = "account-menu-staff-console") { close(); open() } }
   MenuRow("Documentation", "article", tag = "account-menu-docs") { close(); actions.openWeb(helpLinks(services.config).first { it.id == "docs" }.url) }
   MenuRow("Report an issue", "bug_report", tag = "account-menu-report") { close(); actions.openScreen("core.support", emptyMap()) }
   if (accounts != null) {

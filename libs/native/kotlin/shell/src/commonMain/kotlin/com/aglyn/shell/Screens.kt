@@ -244,11 +244,12 @@ internal fun SettingsScreen(
       icon = AglynIcons.named("account_circle"),
     )
     // Your account's own screens (profile, email addresses, security, support). The workspace's and the site's settings
-    // are settings modes of the sidebar now; staff reach the staff list from the rail's Admin button, or here on a phone.
+    // are settings modes of the sidebar now; staff reach the staff list from the account menu's Staff console and the rail's
+    // shield, or here on a phone.
     if (context != null) {
       val groups = buildList {
         add("account" to "Your account")
-        if (staff && com.aglyn.ui.currentWidthClass() == com.aglyn.ui.WidthClass.COMPACT) add("staff" to "Admin")
+        if (staff && com.aglyn.ui.currentWidthClass() == com.aglyn.ui.WidthClass.COMPACT) add("staff" to STAFF_CONSOLE_TITLE)
       }
       for ((group, heading) in groups) {
         val screens = com.aglyn.screens.ScreenCatalog.group(group)

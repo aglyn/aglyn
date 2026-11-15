@@ -87,9 +87,38 @@ enum AccountPlaces {
   }
 }
 
+/// The staff console (AGL-3667): the console's account menu offers staff a "Staff console" row, just above
+/// Documentation, and its switcher names the place "Staff Console". Here it is the sidebar's staff list (`ShellMode.admin`),
+/// reached from that row in the account menu and the phone's account sheet, and from the rail's shield on iPad and the Mac.
+@MainActor
+enum StaffConsole {
+  static let title = "Staff console"
+  /// The rail's shield (Figma Icon/admin 3:142), on the menu row too: one mark for one place.
+  static let systemImage = "shield"
+
+  /// Only a token with the staff claim is offered it; every staff route checks the claim again on the server.
+  static func offered(_ claims: TokenClaims) -> Bool { claims.isStaff }
+
+  /// Opens the staff list: on iPad and the Mac as the sidebar's mode, on its first row; on a phone as its list pushed on
+  /// Home, the way a settings tile opens its mode. Its header leads back to the everyday list.
+  static func open(_ navigation: ShellNavigation, first: ShellSection?) {
+    if navigation.compact {
+      navigation.mode = .admin
+      navigation.land(.home, stack: [.modeList])
+    } else {
+      navigation.enter(.admin, first: first)
+    }
+  }
+
+  static func open(model: AppModel, navigation: ShellNavigation) {
+    open(navigation, first: ShellScope(model: model, navigation: navigation).firstSection(of: .admin))
+  }
+}
+
 /// The account menu (Figma Mac / Popover / Account 16:142, dark 311:2829), drawn as a popover's content so it can hold
 /// the person's photo and the inline appearance picker: the profile header with Edit profile; Appearance, Theme
-/// settings…, Notifications and sound, Settings; Marketplace, Documentation, Report an issue; the accounts signed in on
+/// settings…, Notifications and sound, Settings; Marketplace, Staff console (staff only), Documentation, Report an issue;
+/// the accounts signed in on
 /// this device with their photos and Add account; Sign out. Only what the console offers the signed-in person.
 struct AccountMenuContent: View {
   @Environment(AppModel.self) private var model
@@ -123,6 +152,12 @@ struct AccountMenuContent: View {
           go { navigation.push(.screen(AccountPlaces.marketplaceScreen, [:])) }
         })
         .accessibilityIdentifier("account-marketplace")
+      }
+      if StaffConsole.offered(model.claims) {
+        AglynMenuRow(StaffConsole.title, systemImage: StaffConsole.systemImage, action: {
+          go { StaffConsole.open(model: model, navigation: navigation) }
+        })
+        .accessibilityIdentifier("account-staff-console")
       }
       if let docs = AccountPlaces.documentation(model) {
         AglynMenuRow("Documentation", systemImage: "book", action: { go { navigation.openWeb(docs) } })

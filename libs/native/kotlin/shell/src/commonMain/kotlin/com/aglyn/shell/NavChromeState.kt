@@ -21,8 +21,28 @@ import com.aglyn.ui.colorOfHex
 import com.aglyn.ui.rememberLogoColor
 import com.aglyn.ui.toHex
 
-/** The settings-mode value that stands for the staff list (the rail's Admin button), which the manifest does not hold. */
+/** The settings-mode value that stands for the staff list (the staff console), which the manifest does not hold. */
 internal val STAFF_MODE = NativeNavListId.UNKNOWN
+
+/**
+ * The staff console (AGL-3667): the console's account menu offers staff a "Staff console" row, just above Documentation,
+ * and its switcher names the place "Staff Console". Here it is the staff list as a settings mode, reached from that row in
+ * the account menu (and the phone's account sheet) and from the rail's shield.
+ */
+internal const val STAFF_CONSOLE_TITLE = "Staff console"
+
+/** The account menu's Staff console action: offered to a staff token only (every staff route checks the claim again). */
+internal fun staffConsoleAction(isStaff: Boolean, open: () -> Unit): (() -> Unit)? = if (isStaff) open else null
+
+/**
+ * Opens the staff list: on a wide window as the sidebar's mode, on its first row; on a phone as its list, the way a
+ * Site settings or Workspace settings tile opens its mode. The list's header leads back to the everyday list.
+ */
+internal fun openStaffConsole(chrome: NavChromeState, navigator: ShellNavigator, wide: Boolean, firstKey: String?) {
+  chrome.closeMenus()
+  chrome.settingsMode = STAFF_MODE
+  if (wide) firstKey?.let { navigator.select(it) } else navigator.select(ShellNavigator.MENU)
+}
 
 /** The two steps of the scope picker: a workspace, then one of its sites (or the whole workspace). */
 enum class PickerStep { WORKSPACE, SITE }
