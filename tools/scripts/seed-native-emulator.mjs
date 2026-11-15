@@ -148,6 +148,28 @@ async function put(path, data, { merge = false, fields = null } = {}) {
   })
 }
 
+/** Firestore REST value decoding, the inverse of `encode` for the shapes the seed reads back. */
+function decode(value) {
+  if ('stringValue' in value) return value.stringValue
+  if ('booleanValue' in value) return value.booleanValue
+  if ('integerValue' in value) return Number(value.integerValue)
+  if ('doubleValue' in value) return value.doubleValue
+  if ('timestampValue' in value) return new Date(value.timestampValue)
+  if ('arrayValue' in value) return (value.arrayValue.values ?? []).map(decode)
+  if ('mapValue' in value) return Object.fromEntries(Object.entries(value.mapValue.fields ?? {}).map(([k, v]) => [k, decode(v)]))
+  return null
+}
+
+/** The document at `path` as plain values, or `null` when there is none. */
+async function get(path) {
+  const url = `http://${FIRESTORE}/v1/projects/${PROJECT}/databases/(default)/documents/${path}`
+  const response = await fetch(url, { headers: { authorization: 'Bearer owner' } })
+  if (response.status === 404) return null
+  const body = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(`GET ${url}: ${response.status} ${JSON.stringify(body)}`)
+  return decode({ mapValue: { fields: body.fields ?? {} } })
+}
+
 async function member() {
   const base = `http://${AUTH}/identitytoolkit.googleapis.com/v1`
   const body = JSON.stringify({ email: EMAIL, password: PASSWORD, returnSecureToken: true })
@@ -225,6 +247,7 @@ for (const [file, name] of areas) {
   const area = await import(`./seed-native/${file}.mjs`)
   const seeded = await area[name]({
     put,
+    get,
     uid,
     orgId,
     hostId,
