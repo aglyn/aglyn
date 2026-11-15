@@ -121,6 +121,8 @@ public struct AglynListDetailColumns<List: View, Detail: View>: View {
             if let headOffer { AglynDetailCrumbs(headOffer) }
           }
           .environment(\.aglynDetailColumn, true)
+          // The offer is taken: a screen drawn inside the detail never draws the area's crumbs a second time.
+          .environment(\.aglynColumnHeadOffer, nil)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
           .background(AglynColor.paper)
       } else {

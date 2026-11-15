@@ -10,6 +10,17 @@ import Observation
 /// The ranges the card offers, in days.
 let funnelRanges = [7, 14, 30, 90]
 
+/// A range as the card's Range select names it.
+func funnelRangeLabel(_ days: Int) -> String { "Last \(days) days" }
+
+/// A funnel as the card's Funnel select names it: a draft says so.
+func funnelChoiceLabel(_ row: FunnelRow) -> String { row.draft ? "\(row.name) (draft)" : row.name }
+
+/// The funnel the card shows: the one picked, or the first when none is (or the picked one is gone).
+func funnelShown(_ rows: [FunnelRow], picked: FunnelRow.ID?) -> FunnelRow? {
+  rows.first { $0.id == picked } ?? rows.first
+}
+
 private let dayMs = 86_400_000
 
 /// The last `days` UTC days, ending today, as the results door reads a range.
