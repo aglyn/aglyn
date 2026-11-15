@@ -93,6 +93,26 @@ const SALES_TAX_SEEN_MS = 10 * 60 * 1000
 /** The service items a sale's lines name, made once per company. */
 export const QUICKBOOKS_SALE_ITEM_NAME = `${PLATFORM_BRAND_NAME} sales`
 export const QUICKBOOKS_SHIPPING_ITEM_NAME = `${PLATFORM_BRAND_NAME} shipping`
+export const QUICKBOOKS_TIPS_ITEM_NAME = `${PLATFORM_BRAND_NAME} tips`
+export const QUICKBOOKS_GIFT_CARD_ITEM_NAME = `${PLATFORM_BRAND_NAME} gift cards`
+
+/**
+ * The item a line posts through: a QuickBooks sales line names an item, and
+ * the item names the account. A tip with no tips account of its own is sales.
+ */
+function itemIdFor(line: AccountingDocLine, extras: AccountingProviderExtras): string | undefined {
+  switch (line.kind) {
+    case 'shipping':
+      return extras['shippingItemId']
+    case 'tip':
+      return extras['tipsItemId'] ?? extras['saleItemId']
+    case 'giftCard':
+    case 'giftCardSpent':
+      return extras['giftCardItemId']
+    default:
+      return extras['saleItemId']
+  }
+}
 
 export type QuickBooksEnvironment = 'sandbox' | 'production'
 
@@ -227,7 +247,7 @@ export function createQuickBooksProvider(
         DiscountLineDetail: { PercentBased: false },
       }
     }
-    const itemId = line.kind === 'shipping' ? extras['shippingItemId'] : extras['saleItemId']
+    const itemId = itemIdFor(line, extras)
     if (!itemId) {
       throw new AccountingProviderError('validation', 'Save the Accounting settings again to set up the QuickBooks items.')
     }
@@ -437,9 +457,20 @@ export function createQuickBooksProvider(
       const shipping = accounts.shippingIncome ?? income
       const saleItemId = await ensureItem(session, QUICKBOOKS_SALE_ITEM_NAME, income)
       const shippingItemId = await ensureItem(session, QUICKBOOKS_SHIPPING_ITEM_NAME, shipping)
+      // Tips and gift cards get items of their own only once their accounts are chosen.
+      const tipsItemId = accounts.tips ? await ensureItem(session, QUICKBOOKS_TIPS_ITEM_NAME, accounts.tips) : null
+      const giftCardItemId = accounts.giftCards
+        ? await ensureItem(session, QUICKBOOKS_GIFT_CARD_ITEM_NAME, accounts.giftCards)
+        : null
       const info = await get<{ CompanyInfo?: QboRecord }>(session, `companyinfo/${encodeURIComponent(session.tenantId)}`)
       const companyCountry = String(info?.CompanyInfo?.['Country'] ?? '').trim().toUpperCase()
-      return { saleItemId, shippingItemId, ...(companyCountry ? { companyCountry } : {}) }
+      return {
+        saleItemId,
+        shippingItemId,
+        ...(tipsItemId ? { tipsItemId } : {}),
+        ...(giftCardItemId ? { giftCardItemId } : {}),
+        ...(companyCountry ? { companyCountry } : {}),
+      }
     },
 
     async upsertCustomer(session, customer: AccountingCustomerRef) {
@@ -555,6 +586,7 @@ export function createQuickBooksProvider(
         // and the sync log are their locks.
         'fee-refund': null,
         payout: null,
+        settlement: null,
       }
       const name = entity[kind]
       if (!name) return null

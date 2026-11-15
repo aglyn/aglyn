@@ -3793,6 +3793,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               ...(modifiers.length ? { modifiers } : {}),
               ...(variant?.sku ? { sku: variant.sku } : {}),
               productType: product.type,
+              // A gift card is value the store still owes (AGL-3614).
+              ...(product.giftCard ? { giftCard: true } : {}),
               ...(product.supplierId
                 ? { supplierId: product.supplierId }
                 : {}),
@@ -3920,6 +3922,12 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             totals,
             ...(cartExtras.length ? { extras: cartExtras } : {}),
             ...(creditSold ? { credits: [creditSold] } : {}),
+            // How much of the discount was a gift card spent (AGL-3614): the
+            // card was paid for when it was sold, so a ledger takes this out
+            // of what the store owes on gift cards rather than off revenue.
+            ...(object?.metadata?.giftCardCode && Number(object?.metadata?.giftCardCents) > 0
+              ? { giftCardRedeemedCents: Math.round(Number(object.metadata.giftCardCents)) }
+              : {}),
             // WHICH TAX THIS SALE CARRIED (AGL-2451). `totals.taxCents` above
             // says how much; this says who computed it, which is the fact that
             // decides whose registration the money is held under. The same
