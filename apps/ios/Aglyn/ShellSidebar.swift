@@ -137,8 +137,9 @@ struct ScopeHeader: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .help("Back to \(title)")
-    .accessibilityLabel("Back to \(title)")
+    // A way back with no place to name (the staff console of an account with no workspace) says only "Back".
+    .help(title == "Back" ? title : "Back to \(title)")
+    .accessibilityLabel(title == "Back" ? title : "Back to \(title)")
     .accessibilityIdentifier(identifier)
   }
 }
