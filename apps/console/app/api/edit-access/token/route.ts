@@ -96,13 +96,18 @@ async function handler(request: Request): Promise<Response> {
     // Named to this browser when it has a device id, so a console sign-out
     // here also ends the token on the site (a custom domain included, where
     // no hint ever reaches) at its next page view rather than in 30 minutes.
+    // The pool rides along so the site can also ask the right pool whether
+    // the account signed out everywhere since (AGL-2005): '' is the project
+    // pool.
     const now = Date.now()
     const did = editHintDeviceId(request)
     const { token, expiresAtMs } = mintEditAccessToken(
       hostId,
       decoded.uid,
       now,
-      did ? { did, since: now } : undefined,
+      did
+        ? { did, since: now, pool: decoded.firebase?.tenant ?? '' }
+        : undefined,
     )
 
     // Where the popup may deliver the token: the host's own public names,

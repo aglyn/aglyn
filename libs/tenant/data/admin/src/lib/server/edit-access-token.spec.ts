@@ -46,6 +46,21 @@ describe('edit-access tokens (admin edit bar, AGL-1302 follow-on)', () => {
     })
   })
 
+  it('carries the account pool beside the browser binding (AGL-1842)', () => {
+    const binding = { did: 'device-a-0001', since: NOW - 1_000 }
+    const sso = mintEditAccessToken(HOST, UID, NOW, { ...binding, pool: 'tenant-acme' })
+    expect(verifyEditAccessToken(sso.token, NOW)).toMatchObject({
+      ...binding,
+      pool: 'tenant-acme',
+    })
+    // '' is the project pool, and is kept: it is not the same as "unknown".
+    const project = mintEditAccessToken(HOST, UID, NOW, { ...binding, pool: '' })
+    expect(verifyEditAccessToken(project.token, NOW)).toMatchObject({ pool: '' })
+    // A token minted without one names no pool, so the site skips that check.
+    const bare = mintEditAccessToken(HOST, UID, NOW, binding)
+    expect(verifyEditAccessToken(bare.token, NOW)).not.toHaveProperty('pool')
+  })
+
   it('expires — the TTL plus the flag are the only revocation', () => {
     const { token } = mintEditAccessToken(HOST, UID, NOW)
     expect(

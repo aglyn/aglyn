@@ -37,11 +37,16 @@ process.env['TOKEN_SIGNING_SECRET'] = 'exchange-spec-secret'
 
 let mockHostData: Record<string, unknown> | null
 let mockMembers: Record<string, Record<string, unknown>>
-let mockUsers: Record<string, { disabled?: boolean; email?: string }>
+let mockUsers: Record<
+  string,
+  { disabled?: boolean; email?: string; tokensValidAfterTime?: string }
+>
 let mockFlagOn: boolean
 let mockLockdownResponse: Response | null
 /** `users/{uid}/editHintEnds/{did}` → endedAt, keyed `${uid}/${did}`. */
 let mockHintEnds: Record<string, number>
+/** `users/{uid}/devices/{did}` → revokedAt, keyed `${uid}/${did}`. */
+let mockDeviceRevokes: Record<string, number>
 
 const snapshotOf = (data: Record<string, unknown> | null) => ({
   exists: data !== null,
@@ -64,6 +69,11 @@ function mockFirestore() {
               if (name === 'users' && sub === 'editHintEnds') {
                 const endedAt = mockHintEnds[`${id}/${key}`]
                 return snapshotOf(endedAt ? { endedAt } : null)
+              }
+              if (name === 'users' && sub === 'devices') {
+                const revokedAt = mockDeviceRevokes[`${id}/${key}`]
+                // A live device row has no `revokedAt` at all.
+                return snapshotOf({ lastSeenAt: 1, ...(revokedAt ? { revokedAt } : {}) })
               }
               return snapshotOf(null)
             },
@@ -213,6 +223,7 @@ describe('/api/edit-access/exchange (AGL-1842)', () => {
     mockFlagOn = true
     mockLockdownResponse = null
     mockHintEnds = {}
+    mockDeviceRevokes = {}
   })
 
   it('trades a valid hint for a REAL edit-access token, host-scoped to this site', async () => {
@@ -381,6 +392,80 @@ describe('/api/edit-access/exchange (AGL-1842)', () => {
       mockLockdownResponse = Response.json({ error: 'locked' }, { status: 423 })
       const response = await POST(exchangeRequest({ cookie: hintCookie() }))
       expect(response.status).toBe(423)
+    })
+  })
+
+  /*
+   * "Sign out everywhere" and removing a device end the bar too (AGL-1842,
+   * follow-on to the per-browser sign-out above). Neither writes anything
+   * new: signing out everywhere moves the account's `tokensValidAfterTime`,
+   * and removing a device stamps that device row's `revokedAt`. Each case
+   * flips ONE of those facts against the passing fixture.
+   */
+  describe('signing out everywhere, or removing a device, ends the hint', () => {
+    /** `tokensValidAfterTime` as the Admin SDK reports it. */
+    const validAfter = (ms: number) => new Date(ms).toUTCString()
+
+    it('sign-out-everywhere refuses BOTH browsers, and clears the cookies', async () => {
+      mockUsers[UID].tokensValidAfterTime = validAfter(Date.now() - 5_000)
+      for (const did of [BROWSER_A, BROWSER_B]) {
+        const response = await POST(
+          exchangeRequest({
+            cookie: hintCookie(UID, { did, iat: Date.now() - 60_000 }),
+          }),
+        )
+        expect(response.status).toBe(401)
+        expect(await response.json()).toMatchObject({ ended: true })
+        expect(clearedCookies(response)).toEqual(['aglyn_edit_hint', 'aglyn_editor'])
+      }
+    })
+
+    it('exchanges again after a fresh sign-in (a hint minted after the epoch)', async () => {
+      mockUsers[UID].tokensValidAfterTime = validAfter(Date.now() - 60_000)
+      const response = await POST(
+        exchangeRequest({
+          cookie: hintCookie(UID, { did: BROWSER_A, iat: Date.now() - 1_000 }),
+        }),
+      )
+      expect(response.status).toBe(200)
+    })
+
+    it('an epoch older than the hint ends nothing (the account was revoked long ago)', async () => {
+      mockUsers[UID].tokensValidAfterTime = validAfter(Date.now() - 86_400_000)
+      const response = await POST(exchangeRequest({ cookie: hintCookie() }))
+      expect(response.status).toBe(200)
+    })
+
+    it('a device revoke refuses ONLY that device', async () => {
+      mockDeviceRevokes = { [`${UID}/${BROWSER_A}`]: Date.now() - 5_000 }
+      const revoked = await POST(exchangeRequest({ cookie: hintCookie() }))
+      expect(revoked.status).toBe(401)
+      expect(await revoked.json()).toMatchObject({ ended: true })
+      expect(clearedCookies(revoked)).toEqual(['aglyn_edit_hint', 'aglyn_editor'])
+
+      const other = await POST(
+        exchangeRequest({
+          cookie: hintCookie(UID, { did: BROWSER_B, iat: Date.now() - 60_000 }),
+        }),
+      )
+      expect(other.status).toBe(200)
+      expect(other.headers.getSetCookie()).toHaveLength(0)
+    })
+
+    it('exchanges again once the revoked device signs back in', async () => {
+      mockDeviceRevokes = { [`${UID}/${BROWSER_A}`]: Date.now() - 60_000 }
+      const response = await POST(
+        exchangeRequest({
+          cookie: hintCookie(UID, { did: BROWSER_A, iat: Date.now() - 1_000 }),
+        }),
+      )
+      expect(response.status).toBe(200)
+    })
+
+    it('names the account pool in the minted token, so edit-context asks the right one', async () => {
+      const response = await POST(exchangeRequest({ cookie: hintCookie() }))
+      const claims = verifyEditAccessToken((await response.json()).token)
+      expect(claims).toMatchObject({ did: BROWSER_A, pool: '' })
     })
   })
 })
