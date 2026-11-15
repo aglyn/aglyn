@@ -38,6 +38,8 @@ import {
   areaFor,
   bulletFor,
   cleanSummary,
+  excerptFieldsFor,
+  GENERATED_EXCERPT_FIELD,
   isVersionBump,
   leadFor,
   pullRequestFromMerge,
@@ -538,5 +540,56 @@ describe('the notes a release carries', () => {
       entry.body,
       /compare\/0049273ece55\.\.\.v1\.0\.0-beta\.109\)/,
     )
+  })
+})
+
+describe('a re-run keeps a headline a person rewrote', () => {
+  const rendered = '1 change: 1 fix.'
+  const generated = (excerpt) => ({ excerpt, [GENERATED_EXCERPT_FIELD]: excerpt })
+
+  it('writes and records the excerpt on a new entry', () => {
+    assert.deepEqual(excerptFieldsFor(null, rendered), {
+      fields: generated(rendered),
+      kept: false,
+    })
+  })
+
+  it('updates an excerpt nobody has touched since it was generated', () => {
+    // A follow-up deploy under the same number changes the count.
+    const existing = generated('Something new. 2 changes in all: 1 new and 1 fix.')
+    assert.deepEqual(excerptFieldsFor(existing, rendered), {
+      fields: generated(rendered),
+      kept: false,
+    })
+  })
+
+  it('keeps an excerpt rewritten in the console', () => {
+    const existing = {
+      excerpt: 'Plans you switch on now carry through when an import resumes.',
+      [GENERATED_EXCERPT_FIELD]: "Send the plan's switches to the resume door.",
+    }
+    assert.deepEqual(excerptFieldsFor(existing, rendered), { fields: {}, kept: true })
+  })
+
+  it('keeps the excerpt of an entry written before the record existed', () => {
+    // v1.10.0, v1.22.1 and v1.22.2 were rewritten by hand with no record of
+    // what was generated, so nothing can say they are safe to replace.
+    const existing = { excerpt: 'Plans you switch on now carry through when an import resumes.' }
+    assert.deepEqual(excerptFieldsFor(existing, rendered), { fields: {}, kept: true })
+  })
+
+  it('fills an existing entry whose excerpt is empty', () => {
+    assert.deepEqual(excerptFieldsFor({ excerpt: '' }, rendered), {
+      fields: generated(rendered),
+      kept: false,
+    })
+  })
+
+  it('replaces a hand-written excerpt only when told to', () => {
+    const existing = { excerpt: 'Hand-written.' }
+    assert.deepEqual(excerptFieldsFor(existing, rendered, { replace: true }), {
+      fields: generated(rendered),
+      kept: false,
+    })
   })
 })
