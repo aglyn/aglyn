@@ -769,6 +769,47 @@ export function renderReleaseEntry({
   }
 }
 
+/**
+ * The field an entry records the excerpt this script last wrote in.
+ *
+ * It is what tells a re-run whether a person has rewritten the headline since:
+ * the console's entry editor saves with `merge: true` and never touches it, so
+ * an `excerpt` that no longer equals it was changed by hand.
+ */
+export const GENERATED_EXCERPT_FIELD = 'generatedExcerpt'
+
+/**
+ * The excerpt fields a write sends, given the entry already there (or null).
+ *
+ * A re-run of the publisher — after a failed write, or for a follow-up deploy
+ * under the same number — used to overwrite `excerpt` unconditionally, which
+ * would undo a headline the owner had approved and had rewritten by hand
+ * (v1.10.0, v1.22.1 and v1.22.2 were). Now:
+ *
+ *  - a new entry gets the rendered excerpt, recorded as generated;
+ *  - an existing one whose excerpt still equals what was last generated gets
+ *    the new render, because nobody has touched it;
+ *  - any other existing one keeps its excerpt — including every entry written
+ *    before the record existed, since nothing says which of those a person
+ *    edited, and keeping a stale count is cheaper than losing approved copy;
+ *  - `replace` (the `--replace-excerpt` flag) overrides that, for when the
+ *    owner has said the hand-written headline should go.
+ *
+ * Returns the fields to merge and whether a hand-written excerpt was kept.
+ */
+export function excerptFieldsFor(existing, rendered, { replace = false } = {}) {
+  const generated = { excerpt: rendered, [GENERATED_EXCERPT_FIELD]: rendered }
+  if (!existing || replace) return { fields: generated, kept: false }
+  const current = existing.excerpt ?? ''
+  const recorded = existing[GENERATED_EXCERPT_FIELD]
+  if (current === rendered) return { fields: generated, kept: false }
+  if (typeof recorded === 'string' && current === recorded) {
+    return { fields: generated, kept: false }
+  }
+  if (!current.trim()) return { fields: generated, kept: false }
+  return { fields: {}, kept: true }
+}
+
 /** `a, b and c` — the site writes lists out rather than printing commas. */
 export function joinList(items) {
   if (items.length < 2) return items[0] ?? ''
