@@ -54,6 +54,10 @@ import {
   orderLabel,
   payoutExternalId,
   refundExternalId,
+  refundSettlementExternalId,
+  refundSettlementOf,
+  settlementExternalId,
+  settlementOf,
 } from '../model/accounting-transforms'
 import {
   ACCOUNTING_SYNC_ITEMS_COLLECTION,
@@ -126,6 +130,10 @@ export const refundItemId = (refund: AccountingRefundSnapshot) =>
 export const feeRefundItemId = (refund: AccountingRefundSnapshot) =>
   syncItemId('fee-refund', refund.order.hostId, refund.refundId)
 export const payoutItemId = (payout: Pick<AccountingPayoutSnapshot, 'payoutId'>) => syncItemId('payout', payout.payoutId)
+export const settlementItemId = (order: Pick<AccountingOrderSnapshot, 'hostId' | 'orderId'>) =>
+  syncItemId('settlement', order.hostId, order.orderId)
+export const refundSettlementItemId = (refund: AccountingRefundSnapshot) =>
+  syncItemId('settlement', refund.order.hostId, `refund-${refund.refundId}`)
 
 /** A row as the console page reads it. */
 export function toSyncItemView(record: AccountingSyncItemRecord): AccountingSyncItemView {
@@ -231,8 +239,9 @@ export function itemsForPaidOrder(
     order,
   }
   const items = [sale]
+  const settlement = settlementOf(order)
   // In a summary the fee is one of the sale's postings, not its own document.
-  if (mode === 'per-order' && toCents(order.totals.feeCents) > 0) {
+  if (mode === 'per-order' && settlement.stripeFeeCents > 0) {
     items.push({
       ...baseItem({
         id: feeItemId(order),
@@ -242,11 +251,33 @@ export function itemsForPaidOrder(
         sourceId: order.orderId,
         externalId: feeExternalId(order),
         label: `${PLATFORM_BRAND_NAME} fee on ${orderLabel(order).toLowerCase()}`,
-        amountCents: toCents(order.totals.feeCents),
+        amountCents: settlement.stripeFeeCents,
         currency: order.currency,
         occurredAtMs: order.paidAtMs,
         summaryDate: null,
         dependsOn: null,
+        nowMs,
+      }),
+      order,
+    })
+  }
+  // The share paid outside Stripe moves on from clearing by its own transfer,
+  // in either mode, once the sale it came in with has posted.
+  if (settlement.otherCents > 0) {
+    items.push({
+      ...baseItem({
+        id: settlementItemId(order),
+        orgId: order.orgId,
+        kind: 'settlement',
+        mode: 'per-order',
+        sourceId: order.orderId,
+        externalId: settlementExternalId(order),
+        label: `${orderLabel(order)} paid outside Stripe`,
+        amountCents: settlement.otherCents,
+        currency: order.currency,
+        occurredAtMs: order.paidAtMs,
+        summaryDate: null,
+        dependsOn: saleItemId(order),
         nowMs,
       }),
       order,
@@ -298,6 +329,27 @@ export function itemsForRefund(
         occurredAtMs: refund.refundedAtMs,
         summaryDate: null,
         dependsOn: saleItemId(order),
+        nowMs,
+      }),
+      refund,
+    })
+  }
+  const outside = refundSettlementOf(refund).otherCents
+  if (outside > 0) {
+    items.push({
+      ...baseItem({
+        id: refundSettlementItemId(refund),
+        orgId: order.orgId,
+        kind: 'settlement',
+        mode: 'per-order',
+        sourceId: refund.refundId,
+        externalId: refundSettlementExternalId(refund),
+        label: `Refund on ${orderLabel(order).toLowerCase()} handed back outside Stripe`,
+        amountCents: outside,
+        currency: order.currency,
+        occurredAtMs: refund.refundedAtMs,
+        summaryDate: null,
+        dependsOn: refundItemId(refund),
         nowMs,
       }),
       refund,

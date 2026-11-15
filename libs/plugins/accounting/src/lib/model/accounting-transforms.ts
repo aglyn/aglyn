@@ -73,7 +73,11 @@ export class AccountingTransformError extends Error {
 export type AccountingTaxTreatment = 'exclusive' | 'inclusive' | 'none'
 
 export interface AccountingDocLine {
-  kind: 'item' | 'shipping' | 'discount' | 'adjustment' | 'refund'
+  /**
+   * `giftCard` sells a gift card and `giftCardSpent` takes one in payment, both
+   * against the gift card liability; `tip` is a register tip.
+   */
+  kind: 'item' | 'shipping' | 'discount' | 'adjustment' | 'refund' | 'giftCard' | 'giftCardSpent' | 'tip'
   description: string
   quantity: number
   /** Per unit, in the document's tax treatment (gross when tax-inclusive). */
@@ -134,9 +138,13 @@ export interface AccountingExpenseDoc {
   payeeName: string
 }
 
-/** Money moved from clearing to the bank. */
+/**
+ * Money moved between two bank-type accounts: a payout from clearing to the
+ * bank, or (`settlement`) the share of a sale paid outside Stripe moved from
+ * clearing to the account that money really sits in, and back for a refund.
+ */
 export interface AccountingTransferDoc {
-  kind: 'payout'
+  kind: 'payout' | 'settlement'
   externalId: string
   date: string
   currency: string
@@ -218,6 +226,11 @@ export const feeExternalId = (order: AccountingOrderSnapshot) => `${orderExterna
 export const feeRefundExternalId = (refund: AccountingRefundSnapshot) =>
   `${orderExternalId(refund.order)}-FR${shortCode(refund.refundId).slice(-3)}`
 
+export const settlementExternalId = (order: AccountingOrderSnapshot) => `${orderExternalId(order)}-S`
+
+export const refundSettlementExternalId = (refund: AccountingRefundSnapshot) =>
+  `${orderExternalId(refund.order)}-RS${shortCode(refund.refundId).slice(-3)}`
+
 export const payoutExternalId = (payout: Pick<AccountingPayoutSnapshot, 'payoutId'>) =>
   `PO-${String(payout.payoutId).replace(/^po_/, '').slice(-12)}`
 
@@ -231,9 +244,10 @@ export function orderLabel(order: Pick<AccountingOrderSnapshot, 'number' | 'orde
     : `Order ${String(order.orderId).slice(0, 8)}`
 }
 
-/** The account a role posts to; `shippingIncome` falls back to `income`. */
+/** The account a role posts to; `shippingIncome` and `tips` fall back to `income`. */
 export function accountFor(mapping: AccountingMapping, role: AccountingAccountRole): string {
-  const id = mapping.accounts[role] ?? (role === 'shippingIncome' ? mapping.accounts.income : undefined)
+  const id =
+    mapping.accounts[role] ?? (role === 'shippingIncome' || role === 'tips' ? mapping.accounts.income : undefined)
   if (!id) {
     throw new AccountingTransformError('unmapped', `Choose the ${ROLE_WORDS[role]} in Accounting settings.`)
   }
@@ -247,6 +261,9 @@ const ROLE_WORDS: Readonly<Record<AccountingAccountRole, string>> = {
   feeExpense: 'fee expense account',
   payoutBank: 'payout bank account',
   taxLiability: 'sales tax liability account',
+  tips: 'tips account',
+  otherPayments: 'account for cash and other payments',
+  giftCards: 'gift card liability account',
 }
 
 /** The tax code a sale or refund posts under: the order's own key, then the base key. */
@@ -272,6 +289,125 @@ function customerOf(order: AccountingOrderSnapshot): AccountingCustomerRef {
   return { name, email }
 }
 
+// ── How a sale was paid ───────────────────────────────────────────────────
+
+/** The register tenders that go through Stripe. */
+const CARD_TENDERS: ReadonlySet<string> = new Set(['card_present', 'card_keyed', 'card_link'])
+
+/** What each tender of a sale amounts to, tips included. */
+export interface AccountingSettlement {
+  /** Paid by card through Stripe: lands in clearing. */
+  stripeCents: number
+  /** Cash, a room charge, a marketplace's sale: money that never passed through Stripe. */
+  otherCents: number
+  /** Paid with a gift card the store sold earlier: comes off the gift card liability. */
+  giftCardCents: number
+  /** Paid with store credit (rewards, referrals): value given away, so a discount. */
+  creditCents: number
+  /** Register tips, across every tender. */
+  tipCents: number
+  /** The application fee Stripe took, which comes out of clearing. */
+  stripeFeeCents: number
+}
+
+/**
+ * How a sale was paid. A register sale names its tenders; a marketplace's
+ * sale was paid to the marketplace; every other sale went through Stripe.
+ * The tenders cover the total and the tips; a difference between them (a
+ * sale recorded before its tenders were) stays with the card share, or the
+ * outside share when there is no card.
+ */
+export function settlementOf(order: AccountingOrderSnapshot): AccountingSettlement {
+  const total = toCents(order.totals.totalCents)
+  const payments = Array.isArray(order.payments) ? order.payments : []
+  if (payments.length) {
+    const out: AccountingSettlement = {
+      stripeCents: 0,
+      otherCents: 0,
+      giftCardCents: 0,
+      creditCents: 0,
+      tipCents: 0,
+      stripeFeeCents: 0,
+    }
+    let toward = 0
+    for (const payment of payments) {
+      const amount = toCents(payment.amountCents)
+      const tip = toCents(payment.tipCents)
+      toward += amount
+      out.tipCents += tip
+      if (CARD_TENDERS.has(payment.method)) {
+        out.stripeCents += amount + tip
+        out.stripeFeeCents += toCents(payment.feeCents)
+      } else if (payment.method === 'gift_card') out.giftCardCents += amount + tip
+      else if (payment.method === 'credit') out.creditCents += amount + tip
+      else out.otherCents += amount + tip
+    }
+    const short = total - toward
+    if (short !== 0) {
+      if (out.stripeCents > 0 || out.otherCents <= 0) out.stripeCents += short
+      else out.otherCents += short
+    }
+    return out
+  }
+  const tip = toCents(order.totals.tipCents)
+  if (order.settledOutsideStripe) {
+    return { stripeCents: 0, otherCents: total + tip, giftCardCents: 0, creditCents: 0, tipCents: tip, stripeFeeCents: 0 }
+  }
+  return {
+    stripeCents: total + tip,
+    otherCents: 0,
+    giftCardCents: 0,
+    creditCents: 0,
+    tipCents: tip,
+    stripeFeeCents: toCents(order.totals.feeCents),
+  }
+}
+
+/** The gift cards a sale sold, at their price. */
+function giftCardsSoldCents(order: AccountingOrderSnapshot): number {
+  return (order.lines ?? []).reduce(
+    (sum, line) =>
+      line?.giftCard ? sum + Math.max(0, Math.round(Number(line.quantity ?? 0))) * toCents(line.unitAmountCents) : sum,
+    0,
+  )
+}
+
+/** The part of the discount a gift card paid online, never more than the discount. */
+function giftCardDiscountCents(order: AccountingOrderSnapshot): number {
+  return Math.min(toCents(order.giftCardRedeemedCents), toCents(order.totals.discountCents))
+}
+
+/** A refund's share of each tender, in proportion to how the sale was paid. */
+export function refundSettlementOf(refund: AccountingRefundSnapshot): {
+  giftCardCents: number
+  creditCents: number
+  otherCents: number
+} {
+  const order = refund.order
+  const settlement = settlementOf(order)
+  const paid = toCents(order.totals.totalCents) + settlement.tipCents
+  const amount = toCents(refund.amountCents)
+  if (paid <= 0 || amount <= 0) return { giftCardCents: 0, creditCents: 0, otherCents: 0 }
+  const [, giftCardCents, creditCents, otherCents] = allocateCents(amount, [
+    settlement.stripeCents,
+    settlement.giftCardCents,
+    settlement.creditCents,
+    settlement.otherCents,
+  ])
+  return { giftCardCents, creditCents, otherCents }
+}
+
+/** Why a share of the sale never went through Stripe, in a few words. */
+function outsideStripeWords(order: AccountingOrderSnapshot): string {
+  if (order.settledOutsideStripe) return 'paid through a marketplace'
+  const methods = new Set((order.payments ?? []).filter((payment) => !CARD_TENDERS.has(payment.method)).map((p) => p.method))
+  const words: string[] = []
+  if (methods.has('cash')) words.push('cash')
+  if (methods.has('folio')) words.push('room charge')
+  for (const method of methods) if (method !== 'cash' && method !== 'folio' && method !== 'gift_card' && method !== 'credit') words.push(method)
+  return words.length ? `paid by ${words.join(' and ')}` : 'paid outside Stripe'
+}
+
 /** The most a total may differ from its lines and still be rounding. */
 function roundingTolerance(lineCount: number): number {
   return Math.max(2, lineCount)
@@ -286,7 +422,15 @@ function assertSnapshot(order: AccountingOrderSnapshot): void {
   }
 }
 
-/** One order → one sales document, paid in full into clearing. */
+/**
+ * One order → one sales document, paid into clearing.
+ *
+ * Every sale is paid into clearing, whatever paid it, so the lines and the
+ * daily summary read the same; the share paid outside Stripe then moves on
+ * by its own transfer ({@link buildSettlementDoc}). What was not money is
+ * not paid in: a gift card spent comes off the gift card liability, store
+ * credit comes off the sale as a discount. A register tip is its own line.
+ */
 export function buildSaleDoc(
   order: AccountingOrderSnapshot,
   mapping: AccountingMapping,
@@ -297,55 +441,59 @@ export function buildSaleDoc(
   const clearing = accountFor(mapping, 'clearing')
   const treatment = taxTreatmentOf(order)
   const taxCodeId = taxCodeFor(mapping, order)
+  const untaxedCodeId = mapping.taxCodes['untaxed'] ?? null
   const totals = order.totals
   const taxCents = treatment === 'none' ? 0 : toCents(totals.taxCents)
   const totalCents = toCents(totals.totalCents)
+  const settlement = settlementOf(order)
 
   const lines: AccountingDocLine[] = []
+  const plain = (
+    kind: AccountingDocLine['kind'],
+    description: string,
+    amountCents: number,
+    accountId: string,
+    lineTaxCodeId: string | null,
+  ): AccountingDocLine => ({
+    kind,
+    description,
+    quantity: 1,
+    unitAmountCents: amountCents,
+    amountCents,
+    accountId,
+    taxCodeId: lineTaxCodeId,
+    taxCents: 0,
+    sku: null,
+  })
   for (const line of order.lines ?? []) {
     const quantity = Math.max(0, Math.round(Number(line?.quantity ?? 0)))
     if (!quantity) continue
     const unit = toCents(line?.unitAmountCents)
     const description = [line?.name, line?.variantLabel].filter((part) => part && String(part).trim()).join(' — ')
+    const giftCard = line?.giftCard === true
     lines.push({
-      kind: 'item',
-      description: (description || 'Item').slice(0, 4000),
+      kind: giftCard ? 'giftCard' : 'item',
+      description: (description || (giftCard ? 'Gift card' : 'Item')).slice(0, 4000),
       quantity,
       unitAmountCents: unit,
       amountCents: quantity * unit,
-      accountId: income,
-      taxCodeId,
+      accountId: giftCard ? accountFor(mapping, 'giftCards') : income,
+      taxCodeId: giftCard ? untaxedCodeId : taxCodeId,
       taxCents: 0,
       sku: line?.sku ? String(line.sku) : null,
     })
   }
-  const shipping = toCents(totals.shippingCents)
-  if (shipping > 0) {
-    lines.push({
-      kind: 'shipping',
-      description: 'Shipping',
-      quantity: 1,
-      unitAmountCents: shipping,
-      amountCents: shipping,
-      accountId: shippingIncome,
-      taxCodeId,
-      taxCents: 0,
-      sku: null,
-    })
+  for (const extra of order.extras ?? []) {
+    const amount = toCents(extra?.amountCents)
+    if (amount > 0) lines.push(plain('item', String(extra.label || 'Extra').slice(0, 4000), amount, income, taxCodeId))
   }
-  const discount = toCents(totals.discountCents)
-  if (discount > 0) {
-    lines.push({
-      kind: 'discount',
-      description: 'Discount',
-      quantity: 1,
-      unitAmountCents: -discount,
-      amountCents: -discount,
-      accountId: income,
-      taxCodeId,
-      taxCents: 0,
-      sku: null,
-    })
+  const shipping = toCents(totals.shippingCents)
+  if (shipping > 0) lines.push(plain('shipping', 'Shipping', shipping, shippingIncome, taxCodeId))
+  const giftCardDiscount = giftCardDiscountCents(order)
+  const discount = toCents(totals.discountCents) - giftCardDiscount
+  if (discount > 0) lines.push(plain('discount', 'Discount', -discount, income, taxCodeId))
+  if (giftCardDiscount > 0) {
+    lines.push(plain('giftCardSpent', 'Gift card', -giftCardDiscount, accountFor(mapping, 'giftCards'), untaxedCodeId))
   }
 
   const linesSum = lines.reduce((sum, line) => sum + line.amountCents, 0)
@@ -359,17 +507,7 @@ export function buildSaleDoc(
           `but it was paid ${formatMoney(totalCents, order.currency)}.`,
       )
     }
-    lines.push({
-      kind: 'adjustment',
-      description: 'Rounding',
-      quantity: 1,
-      unitAmountCents: difference,
-      amountCents: difference,
-      accountId: income,
-      taxCodeId,
-      taxCents: 0,
-      sku: null,
-    })
+    lines.push(plain('adjustment', 'Rounding', difference, income, taxCodeId))
   }
   if (!lines.length) {
     throw new AccountingTransformError('invalid', `${orderLabel(order)} has no lines to post.`)
@@ -386,19 +524,70 @@ export function buildSaleDoc(
     })
   }
 
+  // How it was paid, after the order's own figures are proven.
+  if (settlement.giftCardCents > 0) {
+    lines.push(plain('giftCardSpent', 'Paid by gift card', -settlement.giftCardCents, accountFor(mapping, 'giftCards'), untaxedCodeId))
+  }
+  if (settlement.creditCents > 0) {
+    lines.push(plain('discount', 'Paid with store credit', -settlement.creditCents, income, taxCodeId))
+  }
+  if (settlement.tipCents > 0) {
+    lines.push(plain('tip', 'Tip', settlement.tipCents, accountFor(mapping, 'tips'), untaxedCodeId))
+  }
+
   return {
     kind: 'sale',
     externalId: orderExternalId(order),
     date: dateInZone(order.paidAtMs, mapping.timeZone),
     currency: normalizeCurrency(order.currency),
-    memo: `${orderLabel(order)} — ${PLATFORM_BRAND_NAME} ${order.channel === 'pos' ? 'point of sale' : 'store'}`,
+    memo: `${orderLabel(order)} — ${PLATFORM_BRAND_NAME} ${order.channel === 'pos' ? 'point of sale' : order.settledOutsideStripe ? 'marketplace' : 'store'}`,
     customer: customerOf(order),
     taxTreatment: treatment,
     taxCodeId,
     lines,
     taxCents,
-    totalCents,
+    totalCents: totalCents + settlement.tipCents - settlement.giftCardCents - settlement.creditCents,
     depositAccountId: clearing,
+  }
+}
+
+/**
+ * The share of a sale paid outside Stripe, moved from clearing to the account
+ * that money sits in; `null` when Stripe took all of it.
+ */
+export function buildSettlementDoc(order: AccountingOrderSnapshot, mapping: AccountingMapping): AccountingTransferDoc | null {
+  assertSnapshot(order)
+  const amount = settlementOf(order).otherCents
+  if (amount <= 0) return null
+  return {
+    kind: 'settlement',
+    externalId: settlementExternalId(order),
+    date: dateInZone(order.paidAtMs, mapping.timeZone),
+    currency: normalizeCurrency(order.currency),
+    memo: `${orderLabel(order)}, ${outsideStripeWords(order)}`,
+    amountCents: amount,
+    fromAccountId: accountFor(mapping, 'clearing'),
+    toAccountId: accountFor(mapping, 'otherPayments'),
+  }
+}
+
+/** A refund's share handed back outside Stripe, moved back into clearing; `null` when none was. */
+export function buildRefundSettlementDoc(
+  refund: AccountingRefundSnapshot,
+  mapping: AccountingMapping,
+): AccountingTransferDoc | null {
+  assertSnapshot(refund?.order)
+  const amount = refundSettlementOf(refund).otherCents
+  if (amount <= 0) return null
+  return {
+    kind: 'settlement',
+    externalId: refundSettlementExternalId(refund),
+    date: dateInZone(refund.refundedAtMs, mapping.timeZone),
+    currency: normalizeCurrency(refund.order.currency),
+    memo: `Refund on ${orderLabel(refund.order).toLowerCase()}, ${outsideStripeWords(refund.order).replace(/^paid/, 'handed back')}`,
+    amountCents: amount,
+    fromAccountId: accountFor(mapping, 'otherPayments'),
+    toAccountId: accountFor(mapping, 'clearing'),
   }
 }
 
@@ -414,7 +603,11 @@ export function refundTaxCents(order: AccountingOrderSnapshot, amountCents: numb
  * A refund → one refund receipt (QuickBooks) or credit note (Xero), paid out
  * of clearing. One line for the amount, because a refund names an amount and
  * not always the lines it is for; the tax it gives back is the order's tax in
- * the same proportion.
+ * the same proportion. A register tip handed back too is its own line. The
+ * refund comes back the way the sale was paid, in proportion: a gift card's
+ * share goes back onto the gift card liability and store credit's comes off
+ * as a discount, so neither leaves clearing; an outside share leaves clearing
+ * and is made good by its own transfer ({@link buildRefundSettlementDoc}).
  */
 export function buildRefundDoc(
   refund: AccountingRefundSnapshot,
@@ -424,46 +617,65 @@ export function buildRefundDoc(
   assertSnapshot(order)
   const amount = toCents(refund.amountCents)
   if (amount <= 0) throw new AccountingTransformError('invalid', 'The refund amount is not positive.')
-  if (amount > toCents(order.totals.totalCents)) {
+  const settlement = settlementOf(order)
+  const total = toCents(order.totals.totalCents)
+  if (amount > total + settlement.tipCents) {
     throw new AccountingTransformError('invalid', `The refund is more than ${orderLabel(order)} was paid.`)
   }
   const treatment = taxTreatmentOf(order)
   const taxCodeId = taxCodeFor(mapping, order)
-  const tax = refundTaxCents(order, amount)
-  const lineAmount = treatment === 'exclusive' ? amount - tax : amount
+  const untaxedCodeId = mapping.taxCodes['untaxed'] ?? null
+  const sale = Math.min(amount, total)
+  const tax = refundTaxCents(order, sale)
+  const lineAmount = treatment === 'exclusive' ? sale - tax : sale
+  const label = `Refund on ${orderLabel(order).toLowerCase()}`
+  const plain = (
+    kind: AccountingDocLine['kind'],
+    description: string,
+    cents: number,
+    accountId: string,
+    lineTaxCodeId: string | null,
+  ): AccountingDocLine => ({
+    kind,
+    description,
+    quantity: 1,
+    unitAmountCents: cents,
+    amountCents: cents,
+    accountId,
+    taxCodeId: lineTaxCodeId,
+    taxCents: 0,
+    sku: null,
+  })
+  const lines: AccountingDocLine[] = [{ ...plain('refund', label, lineAmount, accountFor(mapping, 'income'), taxCodeId), taxCents: tax }]
+  if (amount > sale) lines.push(plain('tip', 'Tip handed back', amount - sale, accountFor(mapping, 'tips'), untaxedCodeId))
+  const shares = refundSettlementOf(refund)
+  if (shares.giftCardCents > 0) {
+    lines.push(plain('giftCardSpent', 'Back onto the gift card', -shares.giftCardCents, accountFor(mapping, 'giftCards'), untaxedCodeId))
+  }
+  if (shares.creditCents > 0) {
+    lines.push(plain('discount', 'Back as store credit', -shares.creditCents, accountFor(mapping, 'income'), taxCodeId))
+  }
   return {
     kind: 'refund',
     externalId: refundExternalId(refund),
     saleExternalId: orderExternalId(order),
     date: dateInZone(refund.refundedAtMs, mapping.timeZone),
     currency: normalizeCurrency(order.currency),
-    memo: `Refund on ${orderLabel(order).toLowerCase()}`,
+    memo: label,
     customer: customerOf(order),
     taxTreatment: treatment,
     taxCodeId,
-    lines: [
-      {
-        kind: 'refund',
-        description: `Refund on ${orderLabel(order).toLowerCase()}`,
-        quantity: 1,
-        unitAmountCents: lineAmount,
-        amountCents: lineAmount,
-        accountId: accountFor(mapping, 'income'),
-        taxCodeId,
-        taxCents: tax,
-        sku: null,
-      },
-    ],
+    lines,
     taxCents: tax,
-    totalCents: amount,
+    totalCents: amount - shares.giftCardCents - shares.creditCents,
     depositAccountId: accountFor(mapping, 'clearing'),
   }
 }
 
-/** The platform fee on a sale, paid out of clearing; `null` when there was none. */
+/** The platform fee on a sale that Stripe took, paid out of clearing; `null` when there was none. */
 export function buildFeeDoc(order: AccountingOrderSnapshot, mapping: AccountingMapping): AccountingExpenseDoc | null {
   assertSnapshot(order)
-  const fee = toCents(order.totals.feeCents)
+  const fee = settlementOf(order).stripeFeeCents
   if (fee <= 0) return null
   return {
     kind: 'fee',
@@ -526,13 +738,16 @@ export interface AccountingPosting {
   cents: number
 }
 
-/** A sale's postings, for the daily summary. They sum to zero. */
+/** A sale's postings, for the daily summary: the same figures as its document. They sum to zero. */
 export function salePostings(order: AccountingOrderSnapshot): AccountingPosting[] {
   assertSnapshot(order)
   const treatment = taxTreatmentOf(order)
   const total = toCents(order.totals.totalCents)
   const tax = treatment === 'none' ? 0 : toCents(order.totals.taxCents)
   const shipping = Math.max(0, toCents(order.totals.shippingCents))
+  const settlement = settlementOf(order)
+  const giftCardsSold = giftCardsSoldCents(order)
+  const giftCardDiscount = giftCardDiscountCents(order)
   const revenue = total - tax
   let shippingCredit = shipping
   if (treatment === 'inclusive' && shipping > 0) {
@@ -541,26 +756,33 @@ export function salePostings(order: AccountingOrderSnapshot): AccountingPosting[
   }
   shippingCredit = Math.max(0, Math.min(shippingCredit, revenue))
   const postings: AccountingPosting[] = [
-    { role: 'clearing', cents: total },
-    { role: 'income', cents: -(revenue - shippingCredit) },
+    { role: 'clearing', cents: total + settlement.tipCents - settlement.giftCardCents - settlement.creditCents },
+    { role: 'income', cents: -(revenue - shippingCredit - giftCardsSold + giftCardDiscount - settlement.creditCents) },
   ]
   if (shippingCredit) postings.push({ role: 'shippingIncome', cents: -shippingCredit })
+  const giftCards = giftCardsSold - giftCardDiscount - settlement.giftCardCents
+  if (giftCards) postings.push({ role: 'giftCards', cents: -giftCards })
+  if (settlement.tipCents) postings.push({ role: 'tips', cents: -settlement.tipCents })
   if (tax) postings.push({ role: 'taxLiability', cents: -tax })
-  const fee = toCents(order.totals.feeCents)
+  const fee = settlement.stripeFeeCents
   if (fee > 0) postings.push({ role: 'feeExpense', cents: fee }, { role: 'clearing', cents: -fee })
   return postings
 }
 
-/** A refund's postings, for the daily summary. They sum to zero. */
+/** A refund's postings, for the daily summary: the same figures as its document. They sum to zero. */
 export function refundPostings(refund: AccountingRefundSnapshot): AccountingPosting[] {
   const order = refund.order
   assertSnapshot(order)
   const amount = toCents(refund.amountCents)
-  const tax = refundTaxCents(order, amount)
+  const sale = Math.min(amount, toCents(order.totals.totalCents))
+  const tax = refundTaxCents(order, sale)
+  const shares = refundSettlementOf(refund)
   const postings: AccountingPosting[] = [
-    { role: 'clearing', cents: -amount },
-    { role: 'income', cents: amount - tax },
+    { role: 'clearing', cents: -(amount - shares.giftCardCents - shares.creditCents) },
+    { role: 'income', cents: sale - tax - shares.creditCents },
   ]
+  if (amount > sale) postings.push({ role: 'tips', cents: amount - sale })
+  if (shares.giftCardCents) postings.push({ role: 'giftCards', cents: -shares.giftCardCents })
   if (tax) postings.push({ role: 'taxLiability', cents: tax })
   const fee = toCents(refund.feeRefundedCents)
   if (fee > 0) postings.push({ role: 'clearing', cents: fee }, { role: 'feeExpense', cents: -fee })
@@ -621,6 +843,7 @@ export function docAmountCents(doc: AccountingDoc): number {
     case 'fee':
     case 'fee-refund':
     case 'payout':
+    case 'settlement':
       return doc.amountCents
     case 'summary':
       return doc.lines.reduce((sum, line) => sum + line.debitCents, 0)

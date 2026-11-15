@@ -59,6 +59,16 @@ bank account**, and the Xero **tax rate** for orders with sales tax and for
 orders without. Then choose how sales are posted, set a **Start date**, and
 select **Save**. Nothing is posted until the accounts are chosen.
 
+Three more are asked for only when your sales need them:
+
+- **Tips**: where tips taken at the register are recorded. Left empty, sales
+  income; tips your staff are owed belong in a liability account.
+- **Cash and other payments**: a bank account for money that does not go
+  through Stripe — cash at the register, room charges, and sales on a
+  marketplace.
+- **Gift card liability**: where gift cards you sell are owed until they are
+  spent.
+
 ## What is posted
 
 | In Aglyn | In Xero |
@@ -67,11 +77,32 @@ select **Save**. Nothing is posted until the accounts are chosen.
 | A refund | An approved **credit note**, refunded out of the Stripe clearing account, with the tax given back in proportion. |
 | The Aglyn fee on a sale | A **spend money** transaction from the Stripe clearing account to the fee expense account, paid to a contact named **Aglyn**. |
 | A Stripe payout | A **bank transfer** from the Stripe clearing account to the payout bank account. |
+| A sale paid in cash, by room charge or on a marketplace | Its invoice and payment, then a **bank transfer** of that share from the Stripe clearing account to the cash and other payments account. |
 
 Each invoice's number is the order's number with a short code for the site in
 front of it, so two sites' order #1042 are two invoices. A customer with an
 email address is filed under their own Xero contact, found by that address or
 added; a sale with no name or address is filed under **Online customer**.
+
+### How each payment is posted
+
+Every sale is paid into the Stripe clearing account, so invoices read the same
+whatever paid them. What did not come through Stripe then moves on:
+
+- **Card**, online or at the register: stays in clearing until Stripe pays it
+  out. Only the Aglyn fee Stripe took is posted.
+- **Cash** and **room charges** at the register, and a **marketplace's** sale:
+  a bank transfer moves that share to the cash and other payments account. A
+  marketplace collects and remits its own sales tax, so its sales post without
+  tax.
+- **A gift card spent**, at the register or online: a line takes it off the
+  gift card liability, since the card was paid for when it was sold. **A gift
+  card sold** is a line on that liability too, untaxed, not a sale.
+- **Store credit** (rewards or referral credit): a discount on the sale.
+- **A tip**: its own untaxed line, to the tips account.
+
+A refund comes back the same way, in proportion to how the sale was paid. A
+sale made with Stripe in **test mode** is never posted.
 
 ### Sales tax collected by Aglyn
 
