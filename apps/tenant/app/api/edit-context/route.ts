@@ -37,11 +37,14 @@ import {
 } from '@aglyn/aglyn/server'
 import type * as Aglyn from '@aglyn/aglyn/server'
 import {
+  accountEndRefuses,
+  authForPool,
   editHintEndRefuses,
   filterEnabledPluginsByReleaseFlags,
   firebaseAdmin,
   hostConverter,
   isServerReleaseFlagOnForOrg,
+  readAccountRevocationState,
   readEditHintEndedAt,
   screenConverter,
   verifyEditAccessToken,
@@ -88,16 +91,13 @@ export async function POST(request: Request): Promise<Response> {
     const firestore = firebaseAdmin.app().firestore()
     // A token that names the console browser it came from stops working the
     // moment that browser signs out of the console (AGL-1842 follow-on), on
-    // the next page view at the latest, not when its 30 minutes run out. One
-    // read, editors only. A token naming no browser (minted before this, or
-    // for a session with no device id) keeps its short life.
-    if (
-      claims.did &&
-      editHintEndRefuses(
-        await readEditHintEndedAt(firestore, claims.uid, claims.did),
-        claims.since,
-      )
-    ) {
+    // the next page view at the latest, not when its 30 minutes run out: its
+    // own sign-out, that device signed out from the device list, or the
+    // account signed out everywhere. Two document reads side by side plus one
+    // cached account lookup, editors only. A token naming no browser (minted
+    // before this, or for a session with no device id) keeps its short life,
+    // and one naming no pool skips the account half the same way.
+    if (claims.did && (await editTokenEnded(firestore, claims))) {
       const headers = new Headers({ 'Cache-Control': 'no-store' })
       // The hint that minted it is just as dead; take it with the token so
       // the next page view has nothing to arm on.
@@ -496,4 +496,34 @@ export async function POST(request: Request): Promise<Response> {
       { status: 500 },
     )
   }
+}
+
+/**
+ * Has the console browser behind this token been signed out since the token's
+ * session was proven live? Per browser (its console sign-out, or that one
+ * device signed out from the device list) and per account (signed out
+ * everywhere). The account half asks the pool the token names, through the
+ * 15-second revocation cache every console door shares, and fails open when
+ * the service cannot be reached, the same direction that cache takes: an
+ * outage is not a sign-out.
+ */
+async function editTokenEnded(
+  firestore: Parameters<typeof readEditHintEndedAt>[0],
+  claims: { uid: string; did?: string; since?: number; pool?: string },
+): Promise<boolean> {
+  const tenantId =
+    typeof claims.pool === 'string' ? claims.pool || null : undefined
+  const [endedAt, account] = await Promise.all([
+    readEditHintEndedAt(firestore, claims.uid, claims.did ?? ''),
+    tenantId === undefined
+      ? Promise.resolve(null)
+      : readAccountRevocationState(authForPool(tenantId), claims.uid, tenantId),
+  ])
+  if (editHintEndRefuses(endedAt, claims.since)) return true
+  if (!account) return false
+  return (
+    account.missing ||
+    account.disabled ||
+    accountEndRefuses(account.validAfterMs, claims.since)
+  )
 }

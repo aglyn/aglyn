@@ -118,7 +118,7 @@ export class UserDisabledError extends Error {
 }
 
 /** What the check needs off the account record, and nothing else. */
-interface AccountState {
+export interface AccountRevocationState {
   /** `true` when the record could not be found at all. */
   missing: boolean
   disabled: boolean
@@ -126,8 +126,8 @@ interface AccountState {
   validAfterMs: number | null
 }
 
-const cache = new Map<string, { at: number; state: AccountState }>()
-const pending = new Map<string, Promise<AccountState | null>>()
+const cache = new Map<string, { at: number; state: AccountRevocationState }>()
+const pending = new Map<string, Promise<AccountRevocationState | null>>()
 
 /**
  * A uid is only unique WITHIN a pool (AGL-2005), so the pool is part of the
@@ -206,7 +206,7 @@ async function readAccountState(
   pool: Pick<BaseAuth, 'getUser'>,
   uid: string,
   key: string,
-): Promise<AccountState | null> {
+): Promise<AccountRevocationState | null> {
   const cached = cache.get(key)
   if (cached && Date.now() - cached.at < TOKEN_REVOCATION_TTL_MS) {
     // Re-insert to refresh recency: eviction is least-recently-used, and an
@@ -220,7 +220,7 @@ async function readAccountState(
     inFlight = (async () => {
       // No initializer: every path below either assigns `state` or returns,
       // so seeding it with `null` would be a value nothing ever reads.
-      let state: AccountState
+      let state: AccountRevocationState
       try {
         const record = await pool.getUser(uid)
         const validAfterRaw = record?.tokensValidAfterTime
@@ -254,6 +254,24 @@ async function readAccountState(
     pending.set(key, inFlight)
   }
   return inFlight
+}
+
+/**
+ * The cached account state behind a uid, for a credential that is not an ID
+ * token: the site edit bar's own token (AGL-1842), which names the uid and
+ * the pool it was minted for but carries no `auth_time`. Same cache, same
+ * 15-second bound and same pool rule as {@link assertIdTokenNotRevoked}.
+ * `null` means the service could not be asked; the caller fails open.
+ *
+ * @param pool - the auth handle of the pool the uid lives in (AGL-2005)
+ */
+export async function readAccountRevocationState(
+  pool: Pick<BaseAuth, 'getUser'>,
+  uid: string,
+  tenantId: string | null,
+): Promise<Readonly<AccountRevocationState> | null> {
+  if (!uid) return null
+  return readAccountState(pool, uid, cacheKey(uid, tenantId))
 }
 
 /**
