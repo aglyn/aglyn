@@ -19,10 +19,13 @@ private func grouped(_ value: Int) -> String { value.formatted(.number.grouping(
 
 /// The site's funnels (the console's Funnels card on the Analytics page): each
 /// funnel's steps, the visits that reached them over a range, and where they
-/// dropped off. In a wide window the list sits beside the selected funnel.
-/// New and edit with the card's own checks, Create with AI, Activate for a
+/// dropped off. In a wide window the list sits beside the selected funnel; as
+/// a section of Analytics' detail it is one column, the funnel picked in its
+/// head as the card's Funnel select picks it (`aglynSection`). New and edit with the card's own checks, Create with AI, Activate for a
 /// draft, delete, and "Act on this drop-off", all through `/api/funnels/...`.
 struct FunnelsScreen: View {
+  /// Drawn as a section of Analytics' detail on the Mac and iPad, beside the list of sections (`aglynSectionHead`).
+  @Environment(\.aglynSection) private var section
   let context: NativePluginContext
   @State private var model = HostFunnelsModel()
   @State private var access = FunnelsAccess()
@@ -62,20 +65,26 @@ struct FunnelsScreen: View {
 
   @ViewBuilder
   private var content: some View {
-    WideLayoutReader { wide in
-      if wide {
-        // The shared list and detail columns: the area's head in the list column, its crumbs over the detail.
-        AglynListDetailColumns(listWidth: 360) {
-          list(selectable: true)
-        } detail: {
-          if let row = model.rows.first(where: { $0.id == selection }), let editor {
-            FunnelDetail(row: row, editor: editor, canManage: access.state.canManage).id(row.id)
+    Group {
+      if section {
+        sectionColumn
+      } else {
+        WideLayoutReader { wide in
+          if wide {
+            // The shared list and detail columns: the area's head in the list column, its crumbs over the detail.
+            AglynListDetailColumns(listWidth: 360) {
+              list(selectable: true)
+            } detail: {
+              if let row = model.rows.first(where: { $0.id == selection }), let editor {
+                FunnelDetail(row: row, editor: editor, canManage: access.state.canManage).id(row.id)
+              } else {
+                AglynSelectionPlaceholder("No funnel selected", systemImage: FunnelsSymbols.funnel)
+              }
+            }
           } else {
-            AglynSelectionPlaceholder("No funnel selected", systemImage: FunnelsSymbols.funnel)
+            list(selectable: false)
           }
         }
-      } else {
-        list(selectable: false)
       }
     }
     .aglynPrimaryAction(
@@ -123,6 +132,19 @@ struct FunnelsScreen: View {
       }
     } message: {
       Text("\(editor?.deleting?.name ?? "This funnel") and its results are removed. Recorded visits are kept until they expire.")
+    }
+  }
+
+  /// One column in Analytics' detail, as the console's Funnels card: the funnel picked in the head beside its range,
+  /// its results below. A list and detail of its own here would be a third and fourth column (AGL-4058).
+  @ViewBuilder
+  private var sectionColumn: some View {
+    if model.ready, !model.failed, let row = funnelShown(model.rows, picked: selection), let editor {
+      FunnelDetail(
+        row: row, editor: editor, canManage: access.state.canManage, choices: model.rows, pick: { selection = $0 })
+    } else {
+      // Loading, a failure or no funnels yet: the same states the list shows.
+      list(selectable: false)
     }
   }
 
@@ -189,6 +211,9 @@ struct FunnelDetail: View {
   let row: FunnelRow
   let editor: FunnelsEditor
   let canManage: Bool
+  /// The site's funnels, when this detail picks its own (a section of Analytics' detail, as the card's Funnel select).
+  var choices: [FunnelRow] = []
+  var pick: ((FunnelRow.ID) -> Void)?
   @State private var days = 30
   @State private var state: ResultState = .loading
 
@@ -225,7 +250,15 @@ struct FunnelDetail: View {
   private var header: some View {
     VStack(alignment: .leading, spacing: AglynSpace.one) {
       HStack {
-        Text(row.name).font(AglynFont.title).accessibilityAddTraits(.isHeader)
+        if let pick {
+          Picker("Funnel", selection: Binding(get: { row.id }, set: pick)) {
+            ForEach(choices) { Text(funnelChoiceLabel($0)).tag($0.id) }
+          }
+          .pickerStyle(.menu)
+          .accessibilityIdentifier("funnel-pick")
+        } else {
+          Text(row.name).font(AglynFont.title).accessibilityAddTraits(.isHeader)
+        }
         if row.draft { StatusChip("Draft", tone: .info) }
         Spacer()
         if !row.draft {
@@ -233,13 +266,7 @@ struct FunnelDetail: View {
             .labelStyle(.iconOnly).accessibilityIdentifier("funnel-refresh")
         }
       }
-      if !row.draft {
-        Picker("Range", selection: $days) {
-          ForEach(funnelRanges, id: \.self) { Text("\($0) days").tag($0) }
-        }
-        .pickerStyle(.segmented)
-        .accessibilityIdentifier("funnel-range")
-      }
+      if !row.draft { range }
       if canManage {
         HStack {
           Button { Task { await editor.edit(row) } } label: { Label("Edit", systemImage: "pencil") }
@@ -248,6 +275,28 @@ struct FunnelDetail: View {
             .buttonStyle(.aglynSecondary).accessibilityIdentifier("funnel-delete")
         }
       }
+    }
+  }
+
+  /// The four ranges in one segmented row where they fit beside their label; a narrower column gets the card's own
+  /// Range select. The label never breaks (squeezed, it broke a letter a line beside the chips).
+  private var range: some View {
+    ViewThatFits(in: .horizontal) {
+      Picker(selection: $days) {
+        ForEach(funnelRanges, id: \.self) { Text("\($0) days").tag($0) }
+      } label: {
+        Text("Range").fixedSize()
+      }
+      .pickerStyle(.segmented)
+      .accessibilityIdentifier("funnel-range")
+      Picker(selection: $days) {
+        ForEach(funnelRanges, id: \.self) { Text(funnelRangeLabel($0)).tag($0) }
+      } label: {
+        Text("Range").fixedSize()
+      }
+      .pickerStyle(.menu)
+      .fixedSize()
+      .accessibilityIdentifier("funnel-range")
     }
   }
 
