@@ -212,6 +212,59 @@ describe('QuickBooks Online adapter', () => {
     expect(posts[1]).toMatchObject({ Name: 'Aglyn shipping', Type: 'Service', IncomeAccountRef: { value: '79' } })
   })
 
+  it('makes tips and gift card items only for the accounts chosen for them', async () => {
+    const { adapter, calls } = provider([
+      { match: /query.*Aglyn(%20|\+)sales/, body: { QueryResponse: { Item: [{ Id: '20', SyncToken: '3', IncomeAccountRef: { value: '79' } }] } } },
+      { match: /query.*Aglyn(%20|\+)shipping/, body: { QueryResponse: { Item: [{ Id: '21', SyncToken: '1', IncomeAccountRef: { value: '79' } }] } } },
+      { match: /query.*Aglyn(%20|\+)tips/, body: { QueryResponse: {} } },
+      { match: /query.*Aglyn(%20|\+)gift(%20|\+)cards/, body: { QueryResponse: {} } },
+      { method: 'POST', match: '/item', body: { Item: { Id: '22' } } },
+      { match: '/companyinfo/', body: { CompanyInfo: { Country: 'US' } } },
+    ])
+    await expect(adapter.prepare(session, { income: '79', giftCards: '88' }, {})).resolves.toEqual({
+      saleItemId: '20',
+      shippingItemId: '21',
+      giftCardItemId: '22',
+      companyCountry: 'US',
+    })
+    const posts = calls.filter((call) => call.method === 'POST').map((call) => JSON.parse(call.body ?? '{}'))
+    expect(posts).toEqual([{ Name: 'Aglyn gift cards', Type: 'Service', IncomeAccountRef: { value: '88' } }])
+  })
+
+  it('posts a gift card spent and a tip through their own items, untaxed', async () => {
+    const { adapter, calls } = provider([
+      { match: /query.*TaxCode/, body: { QueryResponse: { TaxCode: [{ Id: '2' }] } } },
+      { method: 'POST', match: '/salesreceipt', body: { SalesReceipt: { Id: '146' } } },
+    ])
+    const register = {
+      ...order,
+      channel: 'pos',
+      payments: [
+        { method: 'gift_card', amountCents: 1000, tipCents: 0, feeCents: 0 },
+        { method: 'card_present', amountCents: 1160, tipCents: 300, feeCents: 60 },
+      ],
+    }
+    const doc = buildSaleDoc(register, {
+      ...mapping,
+      accounts: { ...mapping.accounts, giftCards: '88' },
+      taxCodes: { ...mapping.taxCodes, taxed: '2' },
+    })
+    await adapter.createSalesReceipt(session, doc, {
+      idempotencyKey: 'k',
+      customerId: null,
+      extras: { saleItemId: '20', shippingItemId: '21', giftCardItemId: '22', companyCountry: 'US' },
+      homeCurrency: 'USD',
+    })
+    const body = JSON.parse(calls.find((call) => call.method === 'POST')?.body ?? '{}')
+    expect(body.Line.map((line: any) => [line.Amount, line.SalesItemLineDetail.ItemRef.value, line.SalesItemLineDetail.TaxCodeRef.value])).toEqual([
+      [20, '20', 'TAX'],
+      [-10, '22', 'NON'],
+      // No tips account chosen: the tip is sales, untaxed.
+      [3, '20', 'NON'],
+    ])
+    expect(body.TxnTaxDetail.TotalTax).toBe(1.6)
+  })
+
   it('marks a US company lines TAX or NON and puts the tax code on the transaction', async () => {
     const { adapter, calls } = provider([
       { match: /query.*TaxCode/, body: { QueryResponse: { TaxCode: [{ Id: '2' }] } } },

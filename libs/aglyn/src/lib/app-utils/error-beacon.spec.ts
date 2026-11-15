@@ -452,6 +452,15 @@ describe('recoveredErrorKind (AGL-3423)', () => {
           'Attempt to get a record from database without an in-progress transaction',
       }),
     ).toBe(FIRESTORE_QUEUE_KIND)
+    // The same ended transaction, met in a cursor (Safari) and in opening the database (a webview).
+    expect(
+      recoveredErrorKind({ message: 'Attempt to open a cursor in database without an in-progress transaction' }),
+    ).toBe(FIRESTORE_QUEUE_KIND)
+    expect(
+      recoveredErrorKind({
+        message: "IndexedDB transaction 'createOrUpgrade' failed: AbortError: The operation was aborted.",
+      }),
+    ).toBe(FIRESTORE_QUEUE_KIND)
     // Another assertion id is not this recovery, and still pages as itself.
     expect(
       recoveredErrorKind(

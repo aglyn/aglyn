@@ -38,6 +38,27 @@ export interface AccountingOrderLine {
   sku?: string | null
   quantity: number
   unitAmountCents: number
+  /** A gift card sold: value the store owes, booked as a liability. */
+  giftCard?: boolean
+}
+
+/**
+ * How a register sale was paid: one entry per tender that succeeded. Only the
+ * card tenders went through Stripe.
+ */
+export interface AccountingOrderPayment {
+  method: string
+  /** Toward the sale; never the tip. */
+  amountCents: number
+  tipCents: number
+  /** The application fee Stripe took from this payment. */
+  feeCents: number
+}
+
+/** A line the buyer added at checkout, inside the total and outside the items. */
+export interface AccountingOrderExtra {
+  label: string
+  amountCents: number
 }
 
 /** The figures an order settled at. */
@@ -50,6 +71,8 @@ export interface AccountingOrderTotals {
   totalCents: number
   /** Aglyn's platform fee on the sale: the Connect application fee. */
   feeCents: number
+  /** A register tip, on top of `totalCents`. */
+  tipCents?: number
 }
 
 /** A paid order, as the sync posts it. */
@@ -83,6 +106,17 @@ export interface AccountingOrderSnapshot {
    * how much, for the memo and for scaling a refund to the merchant's share.
    */
   marketplaceTaxCents?: number
+  /** The lines the buyer added at checkout. Absent on a snapshot from before they were read. */
+  extras?: AccountingOrderExtra[]
+  /** A register sale's tenders. Absent or empty: the whole sale went through Stripe. */
+  payments?: AccountingOrderPayment[]
+  /** The part of `totals.discountCents` a gift card paid. */
+  giftCardRedeemedCents?: number
+  /**
+   * The sale was paid somewhere other than Stripe — a marketplace — and the
+   * money reaches the merchant from there.
+   */
+  settledOutsideStripe?: boolean
 }
 
 /** A refund against a paid order. */

@@ -274,13 +274,32 @@ export function parseArgs(argv) {
 const execFileAsync = promisify(execFile)
 const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-/** The version npm answers for `name@version`, or `null` when it has none. */
-async function npmViewVersion(name, version) {
+/**
+ * The version npm answers for `name@version` once its tarball can be fetched,
+ * or `null` until then.
+ *
+ * The packument and the tarball are served separately, and the tarball trails:
+ * five releases in a row answered `npm view` and then 404'd `npm install` on
+ * one tarball minutes after the publish. Only a tarball that answers is "on
+ * the registry" for an install.
+ */
+export async function npmViewVersion(name, version, { exec = execFileAsync, head = tarballAnswers } = {}) {
   try {
-    const { stdout } = await execFileAsync('npm', ['view', `${name}@${version}`, 'version'], { encoding: 'utf8' })
-    return stdout.trim() || null
+    const { stdout } = await exec('npm', ['view', `${name}@${version}`, 'version', 'dist.tarball', '--json'], { encoding: 'utf8' })
+    // npm answers one object, or a list of one, depending on its version.
+    const answer = [JSON.parse(stdout || 'null')].flat()[0]
+    if (!answer?.version || !answer['dist.tarball']) return null
+    return (await head(answer['dist.tarball'])) ? answer.version : null
   } catch {
     return null
+  }
+}
+
+async function tarballAnswers(url) {
+  try {
+    return (await fetch(url, { method: 'HEAD' })).ok
+  } catch {
+    return false
   }
 }
 

@@ -9,6 +9,20 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.23.0 — 2026-11-15
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.22.4...v1.23.0)
+
+### Added
+
+- **accounting:** post each sale where its money really is ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
+
+### Fixed
+
+- **ops:** one half-written import no longer 500s the AI jobs list, and three checks stop reading red falsely
+- **apple:** title-bar Back returns to Orders from a starred order opened over it ([AGL-4059](https://linear.app/aglyn/issue/AGL-4059))
+- **apple:** Back over a starred place gives the selection back to its area's row ([AGL-4059](https://linear.app/aglyn/issue/AGL-4059))
+
 ## v1.22.4 — 2026-11-15
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.22.3...v1.22.4)

@@ -90,7 +90,7 @@ export interface AccountingDocRef {
 }
 
 /** The kinds `findByExternalId` is asked about. */
-export type AccountingDocKind = 'sale' | 'refund' | 'fee' | 'fee-refund' | 'payout' | 'summary'
+export type AccountingDocKind = 'sale' | 'refund' | 'fee' | 'fee-refund' | 'payout' | 'summary' | 'settlement'
 
 /** Settings an adapter needs beyond the mapping: QuickBooks' sales items. */
 export type AccountingProviderExtras = Readonly<Record<string, string>>
