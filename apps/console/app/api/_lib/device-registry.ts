@@ -68,6 +68,14 @@ import { authForPool, invalidateTokenRevocationCache } from '@aglyn/tenant-data-
 export const DEVICES_COLLECTION = 'devices'
 
 /**
+ * Long-lived HttpOnly device-identity cookie, minted by the session route.
+ * Declared here for the same reason as the collection above, and re-exported
+ * by `security-alerts.ts`: the edit-hint routes read it to name the browser a
+ * site edit bar belongs to, and must not load the mail stack to do so.
+ */
+export const DEVICE_COOKIE = 'aglyn_device'
+
+/**
  * Enough history to recognise a stranger, bounded so one account cannot make
  * this an expensive read. Unchanged from AGL-2318's `DEVICE_LIMIT`.
  */

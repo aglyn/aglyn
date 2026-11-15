@@ -49,6 +49,7 @@ import { act, render, waitFor } from '@testing-library/react'
 import EditHintBounce, {
   EDIT_HINT_BOUNCE_ORIGIN,
   EDIT_HINT_BOUNCE_STAMP_KEY,
+  editHintClearUrl,
 } from '../components/edit-hint-bounce.component'
 import {
   holdSignUpLanding,
@@ -305,4 +306,37 @@ describe('EditHintBounce (AGL-1842)', () => {
     expect(window.localStorage.getItem(EDIT_HINT_BOUNCE_STAMP_KEY)).toBe('123')
     expect(global.fetch).not.toHaveBeenCalled()
   })
+
+  it('re-plants hints planted before they named the browser', () => {
+    // The exchange refuses those, so a stamp written for them must not hold
+    // a browser off the new kind for a day.
+    expect(EDIT_HINT_BOUNCE_STAMP_KEY).not.toBe('aglyn-edit-hint-bounce-at')
+  })
 })
+
+/*
+ * The sign-out half (AGL-1842 follow-on): `/signout` sends the browser once
+ * through the tenant's clear route, which expires the `.aglyn.app` hint
+ * cookies and comes back. Only where a hint was planted from, and only from
+ * a top-level first-party console page.
+ */
+describe('editHintClearUrl (sign-out ends the site edit bar)', () => {
+  beforeEach(() => window.localStorage.clear())
+
+  it('routes through the tenant clear route and back to the return URL', () => {
+    window.localStorage.setItem(EDIT_HINT_BOUNCE_STAMP_KEY, String(Date.now()))
+    const target = editHintClearUrl('https://app.aglyn.com/signin?continue=%2Facme')
+    expect(target).not.toBeNull()
+    const url = new URL(target as string)
+    expect(url.origin).toBe(EDIT_HINT_BOUNCE_ORIGIN)
+    expect(url.pathname).toBe('/api/edit-hint/clear')
+    expect(url.searchParams.get('return')).toBe(
+      'https://app.aglyn.com/signin?continue=%2Facme',
+    )
+  })
+
+  it('stays put when no hint was planted from this browser', () => {
+    expect(editHintClearUrl('https://app.aglyn.com/signin')).toBeNull()
+  })
+})
+

@@ -146,6 +146,27 @@ describe('the platform brand, Aglyn-operated', () => {
     expect(text).toContain(`© 2031 Aglyn LLC · ${AGLYN_ADDRESS}`)
   })
 
+  it('draws the confirmation mail’s logo with no link, so the button is the only way on (AGL-4224)', () => {
+    const { chrome } = loadWith({})
+    const definition = getSystemEmailTemplate('email-verification')!
+    const merged = {
+      ...chrome.PLATFORM_BRAND_MERGE_TOKENS,
+      verifyUrl: 'https://app.aglyn.com/verify-email?oobCode=abc',
+    }
+    const built = chrome.buildSystemEmailChrome({
+      definition,
+      merged,
+      now: IN_2031,
+    })
+
+    expect(built.header).toEqual({ logoUrl: AGLYN_WORDMARK, logoAlt: 'Aglyn' })
+
+    const { html } = renderDefault('email-verification', merged, built)
+    expect(html).toContain(`src="${AGLYN_WORDMARK}" alt="Aglyn"`)
+    expect(html).not.toContain('href="https://aglyn.com"')
+    expect(html).toContain('href="https://app.aglyn.com/verify-email?oobCode=abc"')
+  })
+
   it('shows a mailto support URL as the mailbox', () => {
     const { chrome } = loadWith({
       NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL: 'help@example.test',

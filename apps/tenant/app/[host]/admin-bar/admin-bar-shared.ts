@@ -46,8 +46,9 @@ export const EDIT_RESULT_MESSAGE_TYPE = 'aglyn-edit-access-result'
  * The editor-presence hint cookie (AGL-1829): set by the console on the
  * REGISTRABLE domain (`.aglyn.com`/`.aglyn.io`) while a console session
  * exists, cleared on sign-out — and planted on `.aglyn.app` too, beside its
- * HttpOnly signed sibling, by the login-time bounce (AGL-1842), where it
- * lapses rather than clears because sign-out cannot reach that domain. A
+ * HttpOnly signed sibling, by the login-time bounce (AGL-1842), and cleared
+ * there by the sign-out bounce through `/api/edit-hint/clear` or by the first
+ * exchange refused because that browser signed out. A
  * customer's custom domain is cross-site with both, so the browser
  * (correctly) never shows it there; that host keeps the chord/param/
  * stored-token paths. Never a credential: the exchange and the silent probe
@@ -75,17 +76,26 @@ export interface StoredEditToken {
   siteName?: string
   /** Display hint only — who connected; carried from the console payload. */
   userEmail?: string
+  /**
+   * Minted by the hint exchange. Such a token lives only as long as the hint
+   * that bought it: once console sign-out has cleared the hint, it is
+   * dropped on read instead of keeping the bar for the rest of its 30
+   * minutes.
+   */
+  viaHint?: boolean
 }
 
 function parseStoredToken(raw: string | null): StoredEditToken | null {
   if (!raw) return null
   const parsed = JSON.parse(raw) as StoredEditToken
   if (!parsed?.token || Number(parsed.expiresAtMs) <= Date.now()) return null
+  if (parsed.viaHint && !hasEditorHint()) return null
   return parsed
 }
 
 /**
- * Reads (and prunes) the stored token; null when absent or expired. Reads
+ * Reads (and prunes) the stored token; null when absent, expired, or bought
+ * with a hint that is no longer here (signed out of the console). Reads
  * localStorage first, then the legacy sessionStorage slot (pre-AGL-1829
  * connects), migrating a still-valid legacy token forward so those editors
  * keep their bar across the storage move.

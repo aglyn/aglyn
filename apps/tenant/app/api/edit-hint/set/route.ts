@@ -21,13 +21,14 @@
 // own — it names a uid and nothing more — and is redeemed at
 // `/api/edit-access/exchange`, which is where the lockdown verdict runs.
 
-import { TENANT_APEX } from '@aglyn/aglyn/server'
 import {
-  EDIT_HINT_COOKIE,
-  EDIT_HINT_COOKIE_TTL_MS,
   mintEditHintToken,
   verifyEditHintToken,
 } from '@aglyn/tenant-data-admin'
+import {
+  consoleReturnTarget,
+  plantEditHintCookies,
+} from '../../../../utils/edit-hint-cookies'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,104 +68,15 @@ export const dynamic = 'force-dynamic'
  * custom domain must plant nothing there.
  */
 
-/**
- * Where the bounce may send the browser back to: console origins, exactly.
- *
- * Aglyn's two origins are seeded ONLY when this deployment has not named its
- * own (AGL-2176). They used to be unconditional, with the configured origin
- * merely added — so a self-hoster could not remove them, and their tenant
- * runtime kept an open redirect target at a console they do not run. The
- * comment above is explicit that a bounce landing anywhere else "must plant
- * nothing there"; an allowlist an operator cannot narrow is the same idea
- * left half-applied.
- */
-function consoleReturnAllowlist(): Set<string> {
-  const origins = new Set<string>()
-  const configured = process.env.NEXT_PUBLIC_CONSOLE_URL
-  if (configured) {
-    try {
-      origins.add(new URL(configured).origin)
-    } catch {
-      // A malformed env var must not widen or break the list.
-    }
-  }
-  // Nothing configured: fall back to Aglyn's own console origins, so our
-  // deployment is unchanged by this. A deployment that HAS named its console
-  // gets exactly that one and nothing else.
-  if (!origins.size) {
-    origins.add('https://app.aglyn.com')
-    origins.add('https://app.aglyn.io')
-  }
-  if (process.env.NODE_ENV !== 'production') {
-    origins.add('http://localhost:4200')
-  }
-  return origins
-}
-
-/**
- * Is this a console origin, INCLUDING a workspace subdomain?
- *
- * The set above holds the console's canonical origins, and for a long time
- * that was the whole story. It stopped being true with AGL-627: a workspace
- * is reachable at its own subdomain of the console apex — `acme.aglyn.com`,
- * which serves the console with the org already named, so the path does not
- * repeat it.
- *
- * A person working on `acme.aglyn.com` therefore had their once-a-day bounce
- * refused and landed on a bare `Invalid return target`, because the only
- * origins on the list began with `app.`. The bounce is a background
- * convenience nobody asked for; being ejected onto an error page by it is the
- * worst possible outcome of a feature whose entire cost was meant to be one
- * redirect flash.
- *
- * ⚠️ This must stay a SUBDOMAIN test against a known console apex, never a
- * suffix test. `endsWith('aglyn.com')` also matches `evil-aglyn.com`, and the
- * thing being guarded is an open redirect on an `aglyn.app` URL — a phishing
- * primitive, per this module's own note. Same scheme, same port, one extra
- * label: that is the whole widening.
- *
- * A console on a CUSTOM domain is deliberately still refused. Proving one
- * would mean asking the console's `console-domain-verdict` endpoint on every
- * bounce, and an allowlist that makes a network call is one that fails open
- * the day that call times out.
- */
-function isConsoleReturnOrigin(destination: URL): boolean {
-  const allowed = consoleReturnAllowlist()
-  if (allowed.has(destination.origin)) return true
-  return [...allowed].some((entry) => {
-    let apex: URL
-    try {
-      apex = new URL(entry)
-    } catch {
-      return false
-    }
-    if (apex.protocol !== destination.protocol) return false
-    if (apex.port !== destination.port) return false
-    // `app.aglyn.com` → `aglyn.com`; a workspace subdomain is one label on
-    // the front of that, and nothing deeper.
-    const parts = apex.hostname.split('.')
-    if (parts.length < 3) return false
-    const base = parts.slice(1).join('.')
-    const host = destination.hostname
-    if (!host.endsWith(`.${base}`)) return false
-    return host.slice(0, -(base.length + 1)).split('.').length === 1
-  })
-}
-
 export async function GET(request: Request): Promise<Response> {
-  const url = new URL(request.url)
-  const sig = url.searchParams.get('sig')
-  const returnUrl = url.searchParams.get('return')
+  const sig = new URL(request.url).searchParams.get('sig')
 
   // The redirect target is validated BEFORE anything else: refusing to
-  // forward is the one behaviour that must survive every other branch.
-  let destination: URL | null
-  try {
-    destination = returnUrl ? new URL(returnUrl) : null
-  } catch {
-    destination = null
-  }
-  if (!destination || !isConsoleReturnOrigin(destination)) {
+  // forward is the one behaviour that must survive every other branch. The
+  // allowlist, and why it is a subdomain test and never a suffix test, lives
+  // with `consoleReturnTarget`.
+  const destination = consoleReturnTarget(request)
+  if (!destination) {
     return new Response('Invalid return target', {
       status: 400,
       headers: { 'Cache-Control': 'no-store' },
@@ -176,40 +88,23 @@ export async function GET(request: Request): Promise<Response> {
     'Cache-Control': 'no-store',
   })
 
-  // Cookie writes only on our own apex: a bounce that somehow arrives on a
-  // customer's custom domain (or anywhere else) forwards and plants nothing.
-  const hostname = (request.headers.get('host') ?? '')
-    .split(':')[0]
-    .toLowerCase()
-  // AGL-2121: the configured apex. Pinned to ours, a self-host install both
-  // failed this test AND planted `Domain=.aglyn.app` — a domain the operator's
-  // browser would reject anyway.
-  const onTenantApex =
-    hostname === TENANT_APEX || hostname.endsWith(`.${TENANT_APEX}`)
-  const onDevHost =
-    process.env.NODE_ENV !== 'production' &&
-    (hostname === 'localhost' || hostname.endsWith('.localhost'))
-
   const claims = verifyEditHintToken('bounce', sig)
-  if (claims && (onTenantApex || onDevHost)) {
-    // Re-mint as the long-lived COOKIE kind — the bounce blob itself must
-    // never live past this redirect (kind separation is the replay wall).
-    const { token } = mintEditHintToken('cookie', claims.uid)
-    const maxAge = Math.floor(EDIT_HINT_COOKIE_TTL_MS / 1000)
-    // Dev localhost gets host-only cookies (browsers refuse Domain=localhost);
-    // production pins the registrable domain so every tenant subdomain sees
-    // the hint.
-    const attributes = onTenantApex
-      ? `Domain=.${TENANT_APEX}; Path=/; Secure; SameSite=Lax; Max-Age=${maxAge}`
-      : `Path=/; SameSite=Lax; Max-Age=${maxAge}`
-    headers.append(
-      'Set-Cookie',
-      `${EDIT_HINT_COOKIE}=${token}; ${attributes}; HttpOnly`,
+  if (claims) {
+    // Re-mint as the long-lived COOKIE kind (the bounce blob itself must
+    // never live past this redirect; kind separation is the replay wall),
+    // carrying the browser binding UNCHANGED. `iat` stays the bounce's own
+    // mint time, so a bounce that lands after this browser signed out of the
+    // console is still dated before the sign-out and the exchange refuses it.
+    const { token } = mintEditHintToken(
+      'cookie',
+      claims.uid,
+      Date.now(),
+      claims.did && claims.iat ? { did: claims.did, iat: claims.iat } : undefined,
     )
-    // The stub's arming marker — the same name and value the console sets on
-    // `.aglyn.com`/`.aglyn.io` (editor-hint-cookie.component.tsx). NOT
-    // HttpOnly: `document.cookie` is its whole consumer surface.
-    headers.append('Set-Cookie', `aglyn_editor=1; ${attributes}`)
+    // Cookie writes only on our own apex (or a dev host): a bounce that
+    // somehow arrives on a customer's custom domain forwards and plants
+    // nothing there.
+    plantEditHintCookies(headers, request, token)
   }
 
   return new Response(null, { status: 302, headers })

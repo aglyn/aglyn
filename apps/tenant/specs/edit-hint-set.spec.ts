@@ -230,4 +230,27 @@ describe('/api/edit-hint/set (AGL-1842)', () => {
     )
     expect(response.status).toBe(400)
   })
+
+  it('carries the browser binding into the cookie UNCHANGED, dated by the bounce', async () => {
+    // The sign-out ending (AGL-1842 follow-on) compares against when the
+    // console proved the session, so `iat` must be the bounce's own mint
+    // time: a blob fetched before signing out and planted after it is still
+    // dated before the sign-out.
+    const iat = Date.now() - 30_000
+    const sig = mintEditHintToken('bounce', 'uid-editor', Date.now(), {
+      did: 'device-browser-a-0001',
+      iat,
+    }).token
+    const response = await GET(bounceRequest({ sig, returnUrl: RETURN_URL }))
+    const hint = response.headers
+      .getSetCookie()
+      .find((cookie) => cookie.startsWith(`${EDIT_HINT_COOKIE}=`))
+    const value = (hint ?? '').split(';')[0].slice(EDIT_HINT_COOKIE.length + 1)
+    expect(verifyEditHintToken('cookie', value)).toMatchObject({
+      uid: 'uid-editor',
+      did: 'device-browser-a-0001',
+      iat,
+    })
+  })
 })
+

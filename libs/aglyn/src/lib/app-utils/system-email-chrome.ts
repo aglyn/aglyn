@@ -142,8 +142,13 @@ export function isPlatformBrandedSend(
 }
 
 export interface SystemEmailChromeInput extends SystemEmailBrandOptions {
-  /** The email being sent; its `footerReason` is the footer's first line. */
-  definition: Pick<SystemEmailTemplateDefinition, 'footerReason'>
+  /**
+   * The email being sent; its `footerReason` is the footer's first line, and
+   * its `key` decides whether the header logo is a link
+   * ({@link HEADER_LOGO_UNLINKED}).
+   */
+  definition: Pick<SystemEmailTemplateDefinition, 'footerReason'> &
+    Partial<Pick<SystemEmailTemplateDefinition, 'key'>>
   /**
    * The send's merge map, platform brand tokens under the caller's — the map
    * the body renders with, which is what makes the reason's tokens resolve to
@@ -153,6 +158,19 @@ export interface SystemEmailChromeInput extends SystemEmailBrandOptions {
   /** The clock the copyright year is read from. */
   now?: () => Date
 }
+
+/**
+ * Emails whose header logo is drawn with no link (AGL-4224).
+ *
+ * The logo is the first thing in the mail a finger can land on, and it led to
+ * the marketing home page. New sign-ups pressed it in the confirmation mail,
+ * some of them five times across a resend, never pressed the button under
+ * it, and stayed unverified with no workspace. A mail that exists for one
+ * button offers no other way out above that button.
+ */
+const HEADER_LOGO_UNLINKED: ReadonlySet<string> = new Set([
+  'email-verification',
+])
 
 /** A non-empty trimmed string, else undefined. */
 const clean = (value: string | null | undefined): string | undefined => {
@@ -197,6 +215,7 @@ export function buildSystemEmailChrome(
   const now = input.now ?? (() => new Date())
   const reason = clean(definition.footerReason)
   const support = supportLink(merged['brand.supportUrl'])
+  const linkLogo = !HEADER_LOGO_UNLINKED.has(definition.key ?? '')
   const footer: EmailChromeFooter = {
     ...(reason ? { reason } : {}),
     ...(support ? { support } : {}),
@@ -210,7 +229,7 @@ export function buildSystemEmailChrome(
       header: {
         ...(PLATFORM_EMAIL_LOGO_URL ? { logoUrl: PLATFORM_EMAIL_LOGO_URL } : {}),
         logoAlt: PLATFORM_BRAND_NAME,
-        ...(PLATFORM_HOME_URL ? { href: PLATFORM_HOME_URL } : {}),
+        ...(linkLogo && PLATFORM_HOME_URL ? { href: PLATFORM_HOME_URL } : {}),
       },
       footer: { ...footer, legal },
     }
@@ -222,7 +241,7 @@ export function buildSystemEmailChrome(
     header: {
       ...(logoUrl ? { logoUrl } : {}),
       logoAlt: merged['brand.productName'] ?? '',
-      ...(home && /^https?:\/\//i.test(home) ? { href: home } : {}),
+      ...(linkLogo && home && /^https?:\/\//i.test(home) ? { href: home } : {}),
     },
     footer,
   }

@@ -21,6 +21,7 @@ import {
   mintEditHintToken,
   verifyEditHintToken,
 } from './edit-hint-token'
+import { editHintEndRefuses } from './edit-hint-end'
 
 const UID = 'uid-northwind-editor'
 const NOW = 1_800_000_000_000
@@ -97,4 +98,41 @@ describe('edit-hint tokens (AGL-1842 cross-site auto-arm)', () => {
     delete process.env['TOKEN_SIGNING_SECRET']
     expect(verifyEditHintToken('cookie', minted.token, NOW)).toBeNull()
   })
+
+  it('round-trips the browser binding, signed with the rest', () => {
+    const binding = { did: 'device-browser-a-0001', iat: NOW - 5_000 }
+    const minted = mintEditHintToken('cookie', UID, NOW, binding)
+    expect(verifyEditHintToken('cookie', minted.token, NOW)).toEqual({
+      uid: UID,
+      exp: minted.expiresAtMs,
+      ...binding,
+    })
+  })
+
+  it('drops a binding whose device id could not be a document id', () => {
+    const minted = mintEditHintToken('cookie', UID, NOW, {
+      did: 'a/b',
+      iat: NOW,
+    })
+    const claims = verifyEditHintToken('cookie', minted.token, NOW)
+    expect(claims).toEqual({ uid: UID, exp: minted.expiresAtMs })
+  })
 })
+
+describe('editHintEndRefuses (console sign-out ends the bar)', () => {
+  it('refuses what was proven at or before the sign-out, admits what came after', () => {
+    expect(editHintEndRefuses(NOW, NOW - 1)).toBe(true)
+    expect(editHintEndRefuses(NOW, NOW)).toBe(true)
+    expect(editHintEndRefuses(NOW, NOW + 1)).toBe(false)
+  })
+
+  it('admits anything when this browser never signed out', () => {
+    expect(editHintEndRefuses(0, NOW)).toBe(false)
+  })
+
+  it('refuses an undateable credential once a sign-out exists', () => {
+    expect(editHintEndRefuses(NOW, undefined)).toBe(true)
+    expect(editHintEndRefuses(NOW, 0)).toBe(true)
+  })
+})
+

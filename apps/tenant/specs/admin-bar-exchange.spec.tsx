@@ -278,4 +278,87 @@ describe('AdminBar manual arm tries the exchange first (AGL-3047)', () => {
     expect(pill()).not.toBeNull()
     expect(fetchMock).not.toHaveBeenCalled()
   })
+
 })
+
+/*
+ * Console sign-out ends the bar in this browser (AGL-1842 follow-on). The
+ * server says so with `ended` on its 401, and that is a definitive no: no
+ * probe, and no connect pill, however the bar was armed. The hint cookie is
+ * present throughout, as it is in the tab-closed-mid-sign-out case these
+ * refusals exist for.
+ */
+describe('AdminBar after a console sign-out in this browser', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+    window.sessionStorage.clear()
+    document.cookie = 'aglyn_editor=1; Path=/'
+  })
+
+  afterEach(() => {
+    document.cookie = 'aglyn_editor=; Max-Age=0; Path=/'
+    jest.restoreAllMocks()
+  })
+
+  it('goes silent with no probe when the exchange says this browser signed out', async () => {
+    const fetchMock = mockFetch((url) =>
+      url.includes('/api/edit-access/exchange')
+        ? {
+            ok: false,
+            status: 401,
+            json: async () => ({ error: 'Signed out of the console', ended: true }),
+          }
+        : { ok: true, status: 200, json: async () => CONTEXT_RESPONSE },
+    )
+    const { container } = renderBar()
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    await waitFor(() => expect(container.innerHTML).toBe(''))
+    expect(container.querySelector('iframe')).toBeNull()
+  })
+
+  it('stores an exchanged token as hint-bought, so it dies with the hint', async () => {
+    mockFetch((url) =>
+      url.includes('/api/edit-access/exchange')
+        ? { ok: true, status: 200, json: async () => EXCHANGE_RESPONSE }
+        : { ok: true, status: 200, json: async () => CONTEXT_RESPONSE },
+    )
+    renderBar()
+    await waitFor(() =>
+      expect(
+        screen.getByRole('region', { name: 'Aglyn admin bar' }),
+      ).toBeTruthy(),
+    )
+    const stored = JSON.parse(
+      window.localStorage.getItem(editTokenStorageKey(HOST)) ?? 'null',
+    )
+    expect(stored?.viaHint).toBe(true)
+  })
+
+  it('drops a stored token the sign-out ended and shows NOTHING, not the pill, on a manual arm', async () => {
+    window.localStorage.setItem(
+      editTokenStorageKey(HOST),
+      JSON.stringify({
+        token: 'aglyn-edit-bar-v1.p.s',
+        expiresAtMs: Date.now() + 60_000,
+        viaHint: true,
+      }),
+    )
+    const fetchMock = mockFetch(() => ({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: 'Signed out of the console', ended: true }),
+    }))
+    const { container } = render(
+      <AdminBar hostId={HOST} consoleOrigin={CONSOLE_ORIGIN} />,
+    )
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith('/api/edit-context', expect.anything()),
+    )
+    await waitFor(() =>
+      expect(window.localStorage.getItem(editTokenStorageKey(HOST))).toBeNull(),
+    )
+    await waitFor(() => expect(container.innerHTML).toBe(''))
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+})
+

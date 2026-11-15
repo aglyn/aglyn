@@ -62,6 +62,32 @@ export interface EditAccessClaims {
   uid: string
   /** Expiry, epoch ms. */
   exp: number
+  /**
+   * The console browser behind this token (its `aglyn_device` id) and when
+   * that browser's console session was last proven live, epoch ms. Set when
+   * the minter knows them; the tenant's `/api/edit-context` then refuses the
+   * token once that browser has signed out of the console since `since`
+   * (`edit-hint-end.ts`), instead of honouring it for the rest of its 30
+   * minutes.
+   */
+  did?: string
+  since?: number
+  /**
+   * The auth pool the uid lives in: a GCIP tenant id, or `''` for the
+   * project pool (AGL-2005). Lets `/api/edit-context` ask the RIGHT pool
+   * whether the account signed out everywhere since `since`, without a
+   * cross-pool search on every page view. Only ever present beside `did` and
+   * `since`; a token without it skips that check and keeps its short life.
+   */
+  pool?: string
+}
+
+/** The browser binding a mint may carry; see {@link EditAccessClaims}. */
+export interface EditAccessBinding {
+  did: string
+  since: number
+  /** See {@link EditAccessClaims.pool}. */
+  pool?: string
 }
 
 function signPayload(payloadB64: string): string {
@@ -87,10 +113,20 @@ export function mintEditAccessToken(
   hostId: string,
   uid: string,
   nowMs: number = Date.now(),
+  binding?: EditAccessBinding,
 ): MintedEditAccessToken {
   if (!hostId || !uid) throw new Error('hostId and uid are required')
   const exp = nowMs + EDIT_ACCESS_TOKEN_TTL_MS
-  const claims: EditAccessClaims = { hostId, uid, exp }
+  const claims: EditAccessClaims = binding
+    ? {
+        hostId,
+        uid,
+        exp,
+        did: binding.did,
+        since: binding.since,
+        ...(typeof binding.pool === 'string' ? { pool: binding.pool } : {}),
+      }
+    : { hostId, uid, exp }
   const payload = Buffer.from(JSON.stringify(claims), 'utf8').toString(
     'base64url',
   )
@@ -139,5 +175,23 @@ export function verifyEditAccessToken(
   if (!Number.isFinite(exp) || exp <= nowMs) return null
   if (typeof claims.hostId !== 'string' || !claims.hostId) return null
   if (typeof claims.uid !== 'string' || !claims.uid) return null
+  const since = Number(claims.since)
+  if (
+    typeof claims.did === 'string' &&
+    claims.did &&
+    Number.isFinite(since) &&
+    since > 0
+  ) {
+    return {
+      hostId: claims.hostId,
+      uid: claims.uid,
+      exp,
+      did: claims.did,
+      since,
+      ...(typeof claims.pool === 'string' && claims.pool.length <= 128
+        ? { pool: claims.pool }
+        : {}),
+    }
+  }
   return { hostId: claims.hostId, uid: claims.uid, exp }
 }

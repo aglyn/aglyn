@@ -73,6 +73,7 @@ import {
 import { enforceSanctionsGeo } from '../../../../constants/sanctions-geo'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { announceNewAccount } from '../../_lib/growth-announcements'
+import { endEditHintForBrowser } from '../../_lib/edit-hint-end'
 
 export const dynamic = 'force-dynamic'
 
@@ -973,6 +974,14 @@ async function handler(request: Request): Promise<Response> {
     }
 
     if (request.method === 'DELETE') {
+      // Ends the site edit bar in THIS browser (AGL-1842 follow-on) while the
+      // cookie still names whose session it was. Server-side because the
+      // `.aglyn.app` hint cookies are out of this domain's reach, and a tab
+      // closed mid-sign-out never runs the clear bounce. Never throws.
+      await endEditHintForBrowser(request, {
+        cookie: readCookie(request, SESSION_COOKIE),
+        tenantId: readCookie(request, SESSION_TENANT_COOKIE) || undefined,
+      })
       // Timestamped tombstone, not deletion (AGL-463/AGL-624): other
       // subdomains read this as "signed out elsewhere" — but only if the
       // sign-out is newer than their last sign-in — while a truly absent

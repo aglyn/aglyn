@@ -23,6 +23,7 @@ import {
   mintEditHintToken,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { editHintDeviceId } from '../../_lib/edit-hint-end'
 
 /**
  * Mints the BOUNCE half of the `*.aglyn.app` editor-presence hint
@@ -41,6 +42,12 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  * per-host at the tenant's `/api/edit-access/exchange`, with the same
  * membership gate `/api/edit-access/token` applies — one authorization
  * path, evaluated where the answer is needed.
+ *
+ * The blob DOES name the browser: its `aglyn_device` id and the moment this
+ * live session was proven, so that signing out of the console in this
+ * browser can end the hint here and nowhere else (`_lib/edit-hint-end.ts`).
+ * A browser with no device id gets no blob, because nothing could end a hint
+ * planted from it.
  */
 async function handler(request: Request): Promise<Response> {
   const { method, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -64,7 +71,18 @@ async function handler(request: Request): Promise<Response> {
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
       return emailUnverifiedResponse()
     }
-    const { token, expiresAtMs } = mintEditHintToken('bounce', decoded.uid)
+    const did = editHintDeviceId(request)
+    if (!did) {
+      return Response.json(
+        { error: 'No device id for this browser' },
+        { status: 409, headers: { 'Cache-Control': 'no-store' } },
+      )
+    }
+    const now = Date.now()
+    const { token, expiresAtMs } = mintEditHintToken('bounce', decoded.uid, now, {
+      did,
+      iat: now,
+    })
     return Response.json(
       { blob: token, expiresAtMs },
       { status: 200, headers: { 'Cache-Control': 'no-store' } },

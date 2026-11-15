@@ -21,13 +21,17 @@
 
 import { TENANT_APEX } from '@aglyn/aglyn/server'
 import {
+  accountEndRefuses,
   EDIT_HINT_COOKIE,
   editAccessMintRefusal,
+  editHintEndRefuses,
   findUserByUidAcrossPools,
   firebaseAdmin,
   mintEditAccessToken,
+  readEditHintEndedAt,
   verifyEditHintToken,
 } from '@aglyn/tenant-data-admin'
+import { clearEditHintCookies } from '../../../../utils/edit-hint-cookies'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,10 +55,23 @@ export const dynamic = 'force-dynamic'
  * re-proves two things the console route gets from a live ID token for
  * free:
  *
+ * - the BROWSER has not signed out of the console since the hint was
+ *   minted. Console sign-out cannot reach `.aglyn.app` cookies, so it records
+ *   the ending server-side instead (`users/{uid}/editHintEnds/{did}`, where
+ *   `did` is the console's device id for the browser the hint names), and a
+ *   hint dated before that record is refused here, with the hint cookies
+ *   cleared on the way out. Per browser: the same person signed in on
+ *   another browser keeps their bar. Signing that one device out from the
+ *   device list ends it the same way, through the device row's own
+ *   `revokedAt` (read beside the sign-out record). A hint that names no
+ *   browser predates this check and is refused the same way;
+ * - the account has not signed out EVERYWHERE since the hint was minted:
+ *   "Sign out everywhere", a password reset, a lock or a demotion move the
+ *   account's `tokensValidAfterTime`, and a hint dated before it is refused
+ *   on every browser, read off the account record this route fetches anyway;
  * - the ACCOUNT is still real — `getUser(uid)` must resolve and not be
- *   disabled. Console sign-out cannot reach `.aglyn.app` cookies, so this
- *   is the fail-closed half of the sign-out story: disable the account or
- *   remove the membership and the hint dies here, days before its expiry;
+ *   disabled. Disable the account or remove the membership and the hint dies
+ *   here, days before its expiry;
  * - the HOST answers to the domain the request arrived on — the same
  *   cname/subdomain check `/api/edit-context` applies, so a page cannot
  *   exchange under someone else's hostId.
@@ -91,11 +108,29 @@ export async function POST(request: Request): Promise<Response> {
   if (!claims) {
     return Response.json({ error: 'No edit hint' }, { status: 401 })
   }
+  // A hint that names no browser was planted before sign-out could end one,
+  // so nothing can show it is still live: refuse it like an ended one. The
+  // console re-plants a bound hint on its next visit.
+  const { did, iat } = claims
+  if (!did || !iat) return signedOutResponse(request)
 
   try {
+    // This browser signed out of the console after the hint was minted: the
+    // bar ends here, however long the cookie had left.
+    const firestore = firebaseAdmin.app().firestore()
+    if (
+      editHintEndRefuses(
+        await readEditHintEndedAt(firestore, claims.uid, did),
+        iat,
+      )
+    ) {
+      return signedOutResponse(request)
+    }
+
     // The account behind the hint must still exist and be enabled — the
     // checkable thing a week-long cookie is bound to.
     let userEmail: string | undefined
+    let pool = ''
     try {
       // Across pools (AGL-2005). A project-level `getUser` THROWS for anyone
       // who signs in through SSO — their uid lives in their org's GCIP tenant
@@ -113,11 +148,16 @@ export async function POST(request: Request): Promise<Response> {
         return Response.json({ error: 'No edit access' }, { status: 403 })
       }
       userEmail = found.record.email ?? undefined
+      // Signed out everywhere since this hint was minted: every browser's
+      // bar ends, this one included. Same record, no extra read.
+      if (accountEndRefuses(found.record.tokensValidAfterTime, iat)) {
+        return signedOutResponse(request)
+      }
+      pool = found.tenantId ?? ''
     } catch {
       return Response.json({ error: 'No edit access' }, { status: 403 })
     }
 
-    const firestore = firebaseAdmin.app().firestore()
     const host = await firestore.collection('hosts').doc(hostId).get()
     if (!host.exists) {
       return Response.json({ error: 'Unknown site' }, { status: 404 })
@@ -159,7 +199,15 @@ export async function POST(request: Request): Promise<Response> {
     })
     if (refusal) return refusal
 
-    const { token, expiresAtMs } = mintEditAccessToken(hostId, claims.uid)
+    // The token carries the hint's browser and date, so `/api/edit-context`
+    // can refuse it too once this browser signs out, instead of honouring it
+    // for the rest of its 30 minutes.
+    const { token, expiresAtMs } = mintEditAccessToken(
+      hostId,
+      claims.uid,
+      Date.now(),
+      { did, since: iat, pool },
+    )
     return Response.json(
       {
         token,
@@ -175,4 +223,19 @@ export async function POST(request: Request): Promise<Response> {
     console.error(error)
     return Response.json({ error: 'Could not exchange edit hint' }, { status: 500 })
   }
+}
+
+/**
+ * The answer to a hint this browser's console sign-out ended: a 401 the bar
+ * reads as "signed out" (`ended`, so it goes quiet rather than offering the
+ * connect pill), carrying the expiry of both hint cookies so the next page
+ * view has no hint to arm on.
+ */
+function signedOutResponse(request: Request): Response {
+  const headers = new Headers({ 'Cache-Control': 'no-store' })
+  clearEditHintCookies(headers, request)
+  return Response.json(
+    { error: 'Signed out of the console', ended: true },
+    { status: 401, headers },
+  )
 }
