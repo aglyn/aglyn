@@ -10,7 +10,7 @@ import UniformTypeIdentifiers
 /// The workspace rail on the Mac and iPad (AGL-3945, Figma Rail 12:338 "Many workspaces"): up to five pinned workspaces
 /// in the order the person drags them, a divider, up to three recent under "Recent", a divider, then "All workspaces"
 /// with the total, which opens the picker where pins are edited. Every account gets this rail, however few workspaces it
-/// has (AGL-3996). At the foot: Admin for staff, Create new, and the person's photo.
+/// has (AGL-3996). At the foot: the staff console for staff, Create new, and the person's photo.
 struct WorkspaceRail: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
@@ -54,15 +54,15 @@ struct WorkspaceRail: View {
         .frame(maxWidth: .infinity)
       }
       VStack(spacing: AglynShellMetrics.railGap) {
-        if model.claims.isStaff {
+        if StaffConsole.offered(model.claims) {
           Button {
-            navigation.enter(.admin, first: ShellScope(model: model, navigation: navigation).firstSection(of: .admin))
+            StaffConsole.open(model: model, navigation: navigation)
           } label: {
-            AglynRailButton(systemImage: "shield", size: AglynShellMetrics.utility)
+            AglynRailButton(systemImage: StaffConsole.systemImage, size: AglynShellMetrics.utility)
           }
           .buttonStyle(.plain)
-          .aglynRailTooltip("Admin", id: "rail-admin", state: tooltip)
-          .accessibilityLabel("Admin")
+          .aglynRailTooltip(StaffConsole.title, id: "rail-admin", state: tooltip)
+          .accessibilityLabel(StaffConsole.title)
           .accessibilityIdentifier("rail-admin")
         }
         CreateNewButton()

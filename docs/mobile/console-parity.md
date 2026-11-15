@@ -169,8 +169,11 @@ Unticked rows and platforms, and what each needs:
 - Fonts, theme presets, logic (Apple, Kotlin): logic was driven on all five; no
   drive record names the Fonts or Theme presets screens.
 - Sequences (Apple, Kotlin): no drive record names the Sequences screens.
-- Staff (Apple): the staff section was not driven on iPhone, iPad or Mac. It
-  was driven on the Android phone and tablet.
+- Staff (Apple): the way in (the account menu's Staff console row, the
+  iPhone account sheet and the rail's shield) and Overview, Workspaces, a
+  workspace, People, a person and Support tickets were driven on iPhone, iPad
+  and Mac on 2026-11-15; the other staff pages were not. The whole section was
+  driven on the Android phone and tablet.
 - Sign-up link with a plan and campaign (Apple, Kotlin): not driven.
 - Signups-paused notice (Apple, Kotlin): not driven; it needs the signups
   lockdown turned on in the local stack.

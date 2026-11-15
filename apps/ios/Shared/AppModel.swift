@@ -350,7 +350,10 @@ final class AppModel {
   }
 
   /// The staff list, as its own mode: the console's staff pages, for staff only.
-  var staffNavGroups: [NativeNavGroup] {
+  var staffNavGroups: [NativeNavGroup] { Self.staffNavGroups(for: claims) }
+
+  /// The staff list a token's claims open: every screen of the catalog's staff group, for staff only.
+  static func staffNavGroups(for claims: TokenClaims) -> [NativeNavGroup] {
     guard claims.isStaff else { return [] }
     let rows = ScreenCatalog.shared.group("staff").map { spec in
       NativeNavRow(

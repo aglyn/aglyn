@@ -88,7 +88,7 @@ struct ShellScope {
     case .main: nil
     case .workspaceSettings: "\(org?.name ?? "Workspace") settings"
     case .siteSettings: "\(site?.name ?? "Site") settings"
-    case .admin: "Admin"
+    case .admin: StaffConsole.title
     }
   }
 
