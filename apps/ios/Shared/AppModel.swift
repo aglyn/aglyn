@@ -377,10 +377,9 @@ final class AppModel {
       if let last = steps.last { navigation.push(last) }
       return
     }
-    let land = { (section: ShellSection, stack: [Route]) in
-      navigation.select(section)
-      navigation.paths[section] = stack
-    }
+    // The section and its whole path are one new place in the window's history, so Back returns to the place before it
+    // (an order opened from Starred over Orders goes Back to Orders).
+    let land = { (section: ShellSection, stack: [Route]) in navigation.land(section, stack: stack) }
     switch path.area {
     case .shell(.home):
       navigation.mode = .main

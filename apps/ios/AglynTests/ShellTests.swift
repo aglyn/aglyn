@@ -214,6 +214,59 @@ final class ShellTests: XCTestCase {
     XCTAssertFalse(navigation.canGoForward)
   }
 
+  /// Sell › Orders, then Starred › Order 1041 (the order opened over Orders, the section on screen): Back returns to
+  /// Orders, not to the place before Orders, and Forward reopens the order (the Mac drive of 2026-11-14).
+  func testBackFromAStarredOrderOpenedOverOrdersReturnsToOrders() {
+    let navigation = ShellNavigation()
+    let orders = ShellSection.plugin("commerce.orders")
+    let order = Route.screen("commerce.order", ["orderId": "o-1041"])
+    navigation.select(.plugin("site.pages"))
+    navigation.select(orders)
+    navigation.land(orders, stack: [order])
+    XCTAssertEqual(navigation.paths[orders], [order])
+
+    navigation.goBack()
+    XCTAssertEqual(navigation.section, orders)
+    XCTAssertEqual(navigation.paths[orders], [], "Back shows the Orders list")
+    navigation.goBack()
+    XCTAssertEqual(navigation.section, .plugin("site.pages"))
+    navigation.goForward()
+    navigation.goForward()
+    XCTAssertEqual(navigation.section, orders)
+    XCTAssertEqual(navigation.paths[orders], [order], "Forward reopens the order")
+
+    // The same place opened again is not a new one.
+    navigation.land(orders, stack: [order])
+    XCTAssertFalse(navigation.canGoForward)
+    navigation.goBack()
+    XCTAssertEqual(navigation.paths[orders], [])
+  }
+
+  /// An order opened from its row is a place over Orders too: Back returns to the list, and the head's crumb back to
+  /// Orders is Back to it, so Forward reopens the order.
+  func testBackFromAPushedScreenReturnsToTheListUnderIt() {
+    let navigation = ShellNavigation()
+    let orders = ShellSection.plugin("commerce.orders")
+    let order = Route.screen("commerce.order", ["orderId": "o-1041"])
+    navigation.select(orders)
+    navigation.push(order)
+    navigation.goBack()
+    XCTAssertEqual(navigation.section, orders)
+    XCTAssertEqual(navigation.paths[orders], [])
+    navigation.goForward()
+    XCTAssertEqual(navigation.paths[orders], [order])
+    navigation.paths[orders] = []
+    XCTAssertTrue(navigation.canGoForward, "the crumb back to Orders is Back")
+    navigation.goBack()
+    XCTAssertEqual(navigation.section, .home)
+    // Another section and back again keeps the screen open over it.
+    navigation.goForward()
+    navigation.goForward()
+    navigation.select(.analytics)
+    navigation.goBack()
+    XCTAssertEqual(navigation.paths[orders], [order])
+  }
+
   /// Back out of Workspace settings, or out of the whole workspace, returns to the sidebar's mode and scope the place
   /// was opened in, not the screen alone over the list in use now (AGL-3996).
   func testHistoryPutsBackTheSidebarsModeAndScope() {
