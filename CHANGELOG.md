@@ -9,6 +9,28 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.22.4 — 2026-11-15
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.22.3...v1.22.4)
+
+### Fixed
+
+- **ai:** footer phone link drops the stray mark after Call ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **tenant:** sign out everywhere and device revoke end the site edit bar ([AGL-1842](https://linear.app/aglyn/issue/AGL-1842))
+- **changelog:** a re-run keeps a hand-rewritten headline and the console's SEO fields ([AGL-3211](https://linear.app/aglyn/issue/AGL-3211))
+- **email:** the confirmation mail's logo no longer links away from the confirm button ([AGL-4224](https://linear.app/aglyn/issue/AGL-4224))
+- **edit-bar:** console sign-out ends the site edit bar in that browser ([AGL-1842](https://linear.app/aglyn/issue/AGL-1842))
+
+<details>
+<summary>Also in this release: 3 chore, 1 build</summary>
+
+- close edit-bar-ends-everywhere ([AGL-1842](https://linear.app/aglyn/issue/AGL-1842))
+- **deps-dev:** bump @types/flat from 5.0.5 to 6.0.1 in the types group
+- merge edit-bar-ends-at-sign-out ([AGL-1842](https://linear.app/aglyn/issue/AGL-1842))
+- **deps:** toml 5.0.1 and cloud/functions minimatch 11.0.8 for Dependabot alerts
+
+</details>
+
 ## v1.22.3 — 2026-11-13
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.22.2...v1.22.3)
