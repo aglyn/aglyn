@@ -481,6 +481,18 @@ true, and that is exactly what an entry claims. Two consequences worth knowing:
 * A failure there never fails the tag. The tag is already pushed and correct;
   the script prints the one command that finishes the job, and it is idempotent
   by slug, so re-running converges instead of publishing a second entry.
+* A re-run never undoes a hand edit. It keeps an excerpt someone rewrote in
+  the console (and every entry from before 2026-11-14, which has no record of
+  what was generated), and it leaves the SEO, cover and tag fields alone.
+  `--replace-excerpt` overwrites the headline, and is only for when the owner
+  has said so.
+
+The headline (the excerpt's lead sentence) is chosen by a fixed rule: a `feat`
+before a `fix` before a `perf`, a merged PR's title before a single commit's
+subject, and never a change in an internal area or one whose subject reads as
+internal (code names, file or script names, and words such as *spec*,
+*guard*, *flag* or *door*). When nothing qualifies, the excerpt is the count
+alone: "6 changes: 5 fixes and 1 behind the scenes."
 
 The entry needs Firestore credentials (the `FIREBASE_*` service-account triple,
 or ADC) and picks up `REVALIDATE_SECRET` when it is set to drop the live

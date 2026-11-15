@@ -72,12 +72,22 @@ export interface EditAccessClaims {
    */
   did?: string
   since?: number
+  /**
+   * The auth pool the uid lives in: a GCIP tenant id, or `''` for the
+   * project pool (AGL-2005). Lets `/api/edit-context` ask the RIGHT pool
+   * whether the account signed out everywhere since `since`, without a
+   * cross-pool search on every page view. Only ever present beside `did` and
+   * `since`; a token without it skips that check and keeps its short life.
+   */
+  pool?: string
 }
 
 /** The browser binding a mint may carry; see {@link EditAccessClaims}. */
 export interface EditAccessBinding {
   did: string
   since: number
+  /** See {@link EditAccessClaims.pool}. */
+  pool?: string
 }
 
 function signPayload(payloadB64: string): string {
@@ -108,7 +118,14 @@ export function mintEditAccessToken(
   if (!hostId || !uid) throw new Error('hostId and uid are required')
   const exp = nowMs + EDIT_ACCESS_TOKEN_TTL_MS
   const claims: EditAccessClaims = binding
-    ? { hostId, uid, exp, did: binding.did, since: binding.since }
+    ? {
+        hostId,
+        uid,
+        exp,
+        did: binding.did,
+        since: binding.since,
+        ...(typeof binding.pool === 'string' ? { pool: binding.pool } : {}),
+      }
     : { hostId, uid, exp }
   const payload = Buffer.from(JSON.stringify(claims), 'utf8').toString(
     'base64url',
@@ -165,7 +182,16 @@ export function verifyEditAccessToken(
     Number.isFinite(since) &&
     since > 0
   ) {
-    return { hostId: claims.hostId, uid: claims.uid, exp, did: claims.did, since }
+    return {
+      hostId: claims.hostId,
+      uid: claims.uid,
+      exp,
+      did: claims.did,
+      since,
+      ...(typeof claims.pool === 'string' && claims.pool.length <= 128
+        ? { pool: claims.pool }
+        : {}),
+    }
   }
   return { hostId: claims.hostId, uid: claims.uid, exp }
 }

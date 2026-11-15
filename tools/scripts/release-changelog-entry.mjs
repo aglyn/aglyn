@@ -21,6 +21,12 @@
 //   npm run release:changelog                    # report only — writes nothing
 //   npm run release:changelog -- --write
 //   npm run release:changelog -- --version 1.0.0-beta.144 --write
+//   npm run release:changelog -- --version 1.22.1 --write --replace-excerpt
+//
+// A re-run updates the entry already there but KEEPS an excerpt a person has
+// rewritten in the console, and the SEO, cover and tag fields they set
+// (`excerptFieldsFor` in lib/changelog-entry.mjs). `--replace-excerpt` is for
+// when the owner has said the hand-written headline should go.
 //
 // `release-tag.mjs --write --push` calls this for you, because the tag is the
 // moment the claim "this tree was built AND served" becomes true, and that is
@@ -56,6 +62,7 @@ import { FieldValue, Timestamp, getFirestore } from 'firebase-admin/firestore'
 
 import {
   changelogEntryId,
+  excerptFieldsFor,
   pullRequestFromMerge,
   renderReleaseEntry,
 } from './lib/changelog-entry.mjs'
@@ -139,10 +146,12 @@ function parseArgs(argv) {
     collection: DEFAULT_COLLECTION,
     window: 40,
     write: false,
+    replaceExcerpt: false,
   }
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--write') options.write = true
+    else if (arg === '--replace-excerpt') options.replaceExcerpt = true
     else if (arg === '--version') options.version = argv[++index]
     else if (arg.startsWith('--version=')) options.version = arg.slice(10)
     else if (arg === '--ref') options.ref = argv[++index]
@@ -515,13 +524,18 @@ async function main() {
     ? entriesRef.doc(changelogEntryId(entry.slug))
     : existing.docs[0].ref
   const publishedAt = Timestamp.fromDate(new Date(entry.publishedAt))
+  const excerpt = excerptFieldsFor(
+    existing.empty ? null : existing.docs[0].data(),
+    entry.excerpt,
+    { replace: options.replaceExcerpt },
+  )
   await target.set(
     {
       title: entry.title,
       // The words the console's entries table searches by (AGL-3321).
       titleTokens: nameSearchTokens(entry.title),
       slug: entry.slug,
-      excerpt: entry.excerpt,
+      ...excerpt.fields,
       body: entry.body,
       status: 'published',
       publishedAt,
@@ -530,16 +544,28 @@ async function main() {
       // the console's table.
       publishSortAt: publishedAt,
       ...AUTHOR,
-      seoTitle: '',
-      seoDescription: '',
-      coverImage: '',
-      tags: [],
-      ...(existing.empty ? { createdAt: publishedAt } : {}),
+      // Blank only on CREATE. On a re-run these are whatever a person set in
+      // the console, and writing '' over them is how a re-run would quietly
+      // undo an approved SEO title or cover.
+      ...(existing.empty
+        ? {
+            seoTitle: '',
+            seoDescription: '',
+            coverImage: '',
+            tags: [],
+            createdAt: publishedAt,
+          }
+        : {}),
       updatedAt: FieldValue.serverTimestamp(),
     },
     { merge: true },
   )
   out.push(`  ${existing.empty ? 'PUBLISHED' : 'UPDATED'}  ${target.id}`)
+  if (excerpt.kept) {
+    out.push(
+      '  excerpt         KEPT — rewritten by hand; --replace-excerpt overwrites it',
+    )
+  }
   out.push(
     `  cache           ${await revalidate(
       options.host,

@@ -21,6 +21,7 @@
 
 import { TENANT_APEX } from '@aglyn/aglyn/server'
 import {
+  accountEndRefuses,
   EDIT_HINT_COOKIE,
   editAccessMintRefusal,
   editHintEndRefuses,
@@ -60,8 +61,14 @@ export const dynamic = 'force-dynamic'
  *   `did` is the console's device id for the browser the hint names), and a
  *   hint dated before that record is refused here, with the hint cookies
  *   cleared on the way out. Per browser: the same person signed in on
- *   another browser keeps their bar. A hint that names no browser predates
- *   this check and is refused the same way;
+ *   another browser keeps their bar. Signing that one device out from the
+ *   device list ends it the same way, through the device row's own
+ *   `revokedAt` (read beside the sign-out record). A hint that names no
+ *   browser predates this check and is refused the same way;
+ * - the account has not signed out EVERYWHERE since the hint was minted:
+ *   "Sign out everywhere", a password reset, a lock or a demotion move the
+ *   account's `tokensValidAfterTime`, and a hint dated before it is refused
+ *   on every browser, read off the account record this route fetches anyway;
  * - the ACCOUNT is still real — `getUser(uid)` must resolve and not be
  *   disabled. Disable the account or remove the membership and the hint dies
  *   here, days before its expiry;
@@ -123,6 +130,7 @@ export async function POST(request: Request): Promise<Response> {
     // The account behind the hint must still exist and be enabled — the
     // checkable thing a week-long cookie is bound to.
     let userEmail: string | undefined
+    let pool = ''
     try {
       // Across pools (AGL-2005). A project-level `getUser` THROWS for anyone
       // who signs in through SSO — their uid lives in their org's GCIP tenant
@@ -140,6 +148,12 @@ export async function POST(request: Request): Promise<Response> {
         return Response.json({ error: 'No edit access' }, { status: 403 })
       }
       userEmail = found.record.email ?? undefined
+      // Signed out everywhere since this hint was minted: every browser's
+      // bar ends, this one included. Same record, no extra read.
+      if (accountEndRefuses(found.record.tokensValidAfterTime, iat)) {
+        return signedOutResponse(request)
+      }
+      pool = found.tenantId ?? ''
     } catch {
       return Response.json({ error: 'No edit access' }, { status: 403 })
     }
@@ -192,7 +206,7 @@ export async function POST(request: Request): Promise<Response> {
       hostId,
       claims.uid,
       Date.now(),
-      { did, since: iat },
+      { did, since: iat, pool },
     )
     return Response.json(
       {
