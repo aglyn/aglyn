@@ -91,6 +91,9 @@ struct ShellPlace: Equatable {
   var inSite: Bool
   /// The site the place was opened in; nil for the whole workspace, or while the site is not known yet.
   var hostID: String?
+  /// The screens pushed over the section (an order over Orders): each level is a place of its own, so Back from a
+  /// starred order opened over Orders returns to Orders, not to the place before it.
+  var stack: [Route] = []
 }
 
 /// The two pickers: workspace, then site.
@@ -108,6 +111,7 @@ final class ShellNavigation {
   var paths: [ShellSection: [Route]] = [:] {
     didSet {
       reportScreen()
+      noteStack()
       leaveTheStarredPlace()
     }
   }
@@ -197,6 +201,8 @@ final class ShellNavigation {
   /// Each place holds the sidebar's mode and scope too (`ShellPlace`).
   private(set) var history = NavHistory(ShellPlace(section: .home, mode: .main, inSite: true))
   @ObservationIgnored private var travelling = false
+  /// A place being put on screen in more than one step (a section and its whole path), recorded once when it is done.
+  @ObservationIgnored private var placing = false
   /// The site in this window's scope, as the shell in front reads it from the workspace store: a scope switch picks it
   /// just after the place it opens is recorded, so the place on screen takes it.
   @ObservationIgnored var siteInScope: String? {
@@ -305,10 +311,40 @@ final class ShellNavigation {
   }
 
   func select(_ next: ShellSection) {
-    if section == next { paths[next] = [] }
-    starKey = nil
-    section = next
+    inOneStep {
+      if section == next { paths[next] = [] }
+      starKey = nil
+      section = next
+    }
     record(next)
+  }
+
+  /// Puts a section on screen with the whole path pushed over it (a link, a Starred or Recent place, AGL-4059), as one
+  /// new place: an order opened over Orders, the section on screen, is a place after Orders, so Back returns to Orders.
+  func land(_ next: ShellSection, stack: [Route]) {
+    inOneStep {
+      starKey = nil
+      section = next
+      paths[next] = stack
+    }
+    record(next)
+  }
+
+  /// Changes the place on screen in several steps without noting the steps between as places.
+  private func inOneStep(_ change: () -> Void) {
+    let was = placing
+    placing = true
+    defer { placing = was }
+    change()
+  }
+
+  /// A screen pushed over the section on screen, or closed (its row, the head's crumbs, the Besigner's own back): the
+  /// place it leaves on screen, in the mode and scope the window is in. Closing back to the place before is Back to it.
+  private func noteStack() {
+    guard !placing, !travelling else { return }
+    let now = history.current
+    guard now.section == section, now.mode == mode, now.inSite == inSite else { return }
+    history.show(place(section))
   }
 
   /// Notes a section opened, for Back and Forward, in the mode and scope the window is in: going somewhere new drops
@@ -320,7 +356,8 @@ final class ShellNavigation {
 
   /// A section as a place in the mode and scope the window is in now.
   private func place(_ section: ShellSection) -> ShellPlace {
-    ShellPlace(section: section, mode: mode, inSite: inSite, hostID: inSite ? siteInScope : nil)
+    ShellPlace(
+      section: section, mode: mode, inSite: inSite, hostID: inSite ? siteInScope : nil, stack: paths[section] ?? [])
   }
 
   var canGoBack: Bool { history.canGoBack }
@@ -342,6 +379,7 @@ final class ShellNavigation {
     siteInScope = site
     mode = place.mode
     section = place.section
+    paths[place.section] = place.stack
     // The place as it stands now (a site it was opened in before the site was known), so the section's own record of
     // it is not a new place that drops what is ahead.
     history.replaceCurrent(self.place(place.section))
@@ -365,19 +403,23 @@ struct ColorPickTarget: Identifiable, Equatable {
 extension ShellNavigation {
   /// Opens the whole workspace: its own list, from its Home.
   func enterWorkspace() {
-    inSite = false
-    mode = .main
-    // Every screen starts at its root in the scope just opened: a stack pushed in the other one (the workspace's search
-    // results under the site's Home) is not this scope's.
-    paths = [:]
+    inOneStep {
+      inSite = false
+      mode = .main
+      // Every screen starts at its root in the scope just opened: a stack pushed in the other one (the workspace's
+      // search results under the site's Home) is not this scope's.
+      paths = [:]
+    }
     select(.home)
   }
 
   /// Opens the picked site: its own list, from its Home.
   func enterSite() {
-    inSite = true
-    mode = .main
-    paths = [:]
+    inOneStep {
+      inSite = true
+      mode = .main
+      paths = [:]
+    }
     select(.home)
   }
 
