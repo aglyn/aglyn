@@ -23,6 +23,7 @@
  * action once, where it belongs. No model is asked; nothing is reworded.
  *=========================================*/
 
+import { aiLayoutCallLabel } from '../layout-language/ai-layout-frame-source'
 import type { AiLayoutBlock, AiLayoutItem, AiLayoutSection } from '../layout-language/ai-layout-language'
 
 const clean = (text: unknown): string => (typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '')
@@ -52,7 +53,7 @@ export function aiSiteImportDestinationKey(to: string): string {
  * 555-010-0142". Only the mark goes; every word stays as written.
  */
 export function aiSiteImportCallLabel(text: string): string {
-  return text.replace(/^(\s*(?:call|text|phone|tel)\b)\s*[-\u2013\u2014:|]+\s*(?=[+(\d])/i, '$1 ')
+  return aiLayoutCallLabel(text)
 }
 
 /** Whether a button is drawn filled: the compiler's default, `primary` or `large`. */

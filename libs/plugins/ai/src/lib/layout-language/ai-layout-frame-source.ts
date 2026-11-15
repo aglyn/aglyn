@@ -923,6 +923,16 @@ export function aiLayoutTelHref(phone: string): string | null {
   return isContactHref(href) ? href : null
 }
 
+/**
+ * A phone line's words without the stray mark its source left after the verb
+ * (AGL-4152): a contractor's "Call- 555-010-0142" reads "Call 555-010-0142".
+ * Only the mark goes; every word stays as written. A page's call button and
+ * the footer's phone link both say it this way.
+ */
+export function aiLayoutCallLabel(text: string): string {
+  return text.replace(/^(\s*(?:call|text|phone|tel)\b)\s*[-\u2013\u2014:|]+\s*(?=[+(\d])/i, '$1 ')
+}
+
 /** The source's footer drawn (AGL-4108): its words and profiles beside its columns, its © line and other links under a rule. */
 export function aiLayoutSourceFooter(
   tree: AiLayoutTreeBuilder,
@@ -959,7 +969,7 @@ export function aiLayoutSourceFooter(
   const mail = footer.email ? `mailto:${footer.email}` : null
   const reach = [
     footer.address ? tree.add('muiTypography', { children: footer.address, variant: 'body2', component: 'p' }, null, null, 'address') : null,
-    footer.phone && tel ? footerLink({ label: footer.phone, to: tel }, 'phone') : null,
+    footer.phone && tel ? footerLink({ label: aiLayoutCallLabel(footer.phone), to: tel }, 'phone') : null,
     footer.email && mail && isContactHref(mail) ? footerLink({ label: footer.email, to: mail }, 'email') : null,
   ].filter((id): id is string => !!id)
   // Its filled boxes, under its words as the source sets them (AGL-4139): a heading with its icon, its words, its links.
