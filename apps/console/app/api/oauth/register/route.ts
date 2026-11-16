@@ -49,6 +49,19 @@ const REGISTRATIONS_PER_WINDOW = 300
 const REGISTRATIONS = connectorBudget('oauth-register', REGISTRATIONS_PER_WINDOW, 10 * 60_000)
 
 /**
+ * NEW clients one address may create per window. Registration is open to any
+ * client and distinct registrations are unbounded in variety, so this — not
+ * the request limit — is what bounds storage: at most 60 per 10 minutes is
+ * 8,640 a day per address, each at most about 3 KB (a 60-character name and
+ * five 512-character addresses), and a client nobody approves lives one day
+ * (`CONNECTOR_CLIENT_UNUSED_TTL_MS`). So one address can hold at most about
+ * 26 MB of unapproved registrations at any time. A repeat of an existing
+ * registration is never refused by it.
+ */
+const NEW_CLIENTS_PER_WINDOW = 60
+const NEW_CLIENTS = connectorBudget('oauth-register-new', NEW_CLIENTS_PER_WINDOW, 10 * 60_000)
+
+/**
  * Dynamic client registration (RFC 7591), public clients only (AGL-4225).
  *
  * Idempotent: the client id is derived from the name and the redirect
@@ -58,10 +71,12 @@ const REGISTRATIONS = connectorBudget('oauth-register', REGISTRATIONS_PER_WINDOW
  * `client_id_issued_at` keeps the first registration's time, which is the
  * honest answer to "when was this client issued".
  *
- * What is kept is a name and the redirect addresses, and every address must
- * be on `CONNECTOR_REDIRECT_ALLOWLIST` — so registering is open, but a client
- * registered by anyone can only ever have a code delivered to Claude or to
- * the person's own machine. Everything else a client asks for is replaced
+ * Open to any MCP client. What is kept is a name and the redirect addresses,
+ * each held to `CONNECTOR_REDIRECT_POLICY` — https on a real domain, http
+ * only on loopback, or a private-use app scheme — so every address is
+ * unambiguous. Who may receive a code is not decided here: PKCE binds the
+ * code to the sign-in that asked for it, and the consent screen shows the
+ * person where it is going. Everything else a client asks for is replaced
  * with what this server does, and the response says what that is.
  */
 export async function POST(request: Request): Promise<Response> {
@@ -88,10 +103,19 @@ export async function POST(request: Request): Promise<Response> {
   if (!validated.ok) return oauthErrorResponse(400, validated.error, validated.description)
 
   try {
-    const client = await registerConnectorClient({
-      clientName: validated.clientName,
-      redirectUris: validated.redirectUris,
-    })
+    const mayCreate = NEW_CLIENTS.refusal(request) === null
+    const client = await registerConnectorClient(
+      { clientName: validated.clientName, redirectUris: validated.redirectUris },
+      Date.now(),
+      { mayCreate },
+    )
+    if (!client) {
+      return (
+        NEW_CLIENTS.refusal(request) ??
+        oauthErrorResponse(429, 'invalid_request', 'Too many new registrations', { 'Retry-After': '60' })
+      )
+    }
+    if (client.created) NEW_CLIENTS.charge(request)
     return Response.json(
       {
         client_id: client.clientId,

@@ -41,7 +41,7 @@ const assign = jest.fn()
 const answer = (status: number, body: unknown) => ({ ok: status < 400, status, json: async () => body })
 
 const DESCRIPTION = {
-  app: { name: 'Claude', returnsTo: 'claude.ai', local: false },
+  app: { name: 'Claude', returnsTo: 'claude.ai', kind: 'web' },
   workspaces: [
     { orgId: 'org-1', name: 'Acme', slug: 'acme', entitled: true },
     { orgId: 'org-2', name: 'Side Project', slug: 'side', entitled: false },
@@ -64,8 +64,8 @@ describe('the consent screen (AGL-4225)', () => {
   it('names the app and where it goes back to, and offers both levels in plain words', async () => {
     mockFetch.mockResolvedValueOnce(answer(200, DESCRIPTION))
     render(<ConnectAppConsent navigate={assign} />)
-    expect(await screen.findByText('Connect Claude')).toBeTruthy()
-    expect(screen.getByText(/go back to claude\.ai/)).toBeTruthy()
+    expect(await screen.findByText('Connect an app')).toBeTruthy()
+    expect(screen.getByTestId('connect-destination').textContent).toContain('claude.ai')
     expect(screen.getByLabelText('View only')).toBeTruthy()
     expect(screen.getByLabelText('View and make changes')).toBeTruthy()
     expect(screen.getByText('See your contacts')).toBeTruthy()
@@ -82,7 +82,23 @@ describe('the consent screen (AGL-4225)', () => {
     render(<ConnectAppConsent navigate={assign} />)
     expect(await screen.findByText('owner@example.com')).toBeTruthy()
     expect(screen.getByText(/Signed in as/)).toBeTruthy()
-    expect(screen.getByText(/Only continue if you started connecting Claude yourself/)).toBeTruthy()
+    expect(screen.getByText(/Only continue if you started connecting this app yourself/)).toBeTruthy()
+  })
+
+  it.each([
+    [{ name: 'Cursor', returnsTo: 'cursor://', kind: 'app' }, 'cursor://', /opens cursor:\/\/ links/],
+    [{ name: 'Inspector', returnsTo: 'this computer', kind: 'loopback' }, 'An app on this computer', /running on this computer/],
+    [{ name: 'claude.ai', returnsTo: 'evil.example', kind: 'web' }, 'evil.example', /website at this address/],
+  ])('leads with where the connection goes, not what the app calls itself (%#)', async (app, destination, explanation) => {
+    mockFetch.mockResolvedValueOnce(answer(200, { ...DESCRIPTION, app }))
+    render(<ConnectAppConsent navigate={assign} />)
+    const box = await screen.findByTestId('connect-destination')
+    expect(box.textContent).toContain(destination)
+    expect(box.textContent).toMatch(explanation)
+    // The self-asserted name is labeled as such, in quotes.
+    expect(box.textContent).toContain(`The app calls itself “${app.name}”`)
+    // Nothing on the screen names Claude unless the app does.
+    if (!app.name.includes('Claude')) expect(document.body.textContent).not.toMatch(/Claude/)
   })
 
   it('shows a workspace without the plan, but it cannot be chosen', async () => {

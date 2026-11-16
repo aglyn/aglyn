@@ -112,9 +112,34 @@ function withSignInChallenge(response: Response, origin: string): Response {
   })
 }
 
+/**
+ * CORS for a browser-based MCP client — an inspector, a web IDE. Any origin,
+ * because the endpoint is authenticated by a bearer credential in a header
+ * and by nothing a browser attaches on its own: no cookie is read here, and
+ * credentialed requests are never allowed. The 401's `WWW-Authenticate` and
+ * the negotiated `MCP-Protocol-Version` are exposed so such a client can
+ * read them; the rate-limit headers so it can pace itself.
+ */
+const MCP_CORS_HEADERS: Record<string, string> = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type, MCP-Protocol-Version, Mcp-Session-Id',
+  'Access-Control-Expose-Headers':
+    'WWW-Authenticate, MCP-Protocol-Version, Mcp-Session-Id, Retry-After, RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset',
+  'Access-Control-Max-Age': '600',
+}
+
+export function OPTIONS(request: Request): Response {
+  return refuseOnAuthOrigin(request) ?? new Response(null, { status: 204, headers: MCP_CORS_HEADERS })
+}
+
 export async function POST(request: Request): Promise<Response> {
   const elsewhere = refuseOnAuthOrigin(request)
   if (elsewhere) return elsewhere
+  return withResponseHeaders(await answer(request), MCP_CORS_HEADERS)
+}
+
+async function answer(request: Request): Promise<Response> {
   const { origin } = connectorOrigin(request)
   const authenticated = await authenticateApiV1(request)
   if (authenticated instanceof Response) return withSignInChallenge(authenticated, origin)
@@ -207,5 +232,8 @@ function answeredVersion(messages: readonly JsonRpcMessage[], request: Request):
  * which is a clearer answer to a client than an SSE stream that never emits.
  */
 export function GET(request: Request): Response {
-  return refuseOnAuthOrigin(request) ?? ApiErrors.methodNotAllowed({ headers: { Allow: 'POST' } })
+  return (
+    refuseOnAuthOrigin(request) ??
+    ApiErrors.methodNotAllowed({ headers: { Allow: 'POST', ...MCP_CORS_HEADERS } })
+  )
 }

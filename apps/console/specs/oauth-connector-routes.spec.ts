@@ -211,7 +211,7 @@ describe('POST /api/oauth/register', () => {
   })
 
   it('refuses an address off the allowlist, and stores nothing', async () => {
-    const response = await call({ redirect_uris: ['https://evil.example/callback'] })
+    const response = await call({ redirect_uris: ['javascript:alert(1)'] })
     expect(response.status).toBe(400)
     expect(await response.json()).toMatchObject({ error: 'invalid_redirect_uri' })
     expect(mockStore.registerConnectorClient).not.toHaveBeenCalled()
@@ -228,6 +228,34 @@ describe('POST /api/oauth/register', () => {
     const response = await call({ client_name: 'Claude', redirect_uris: [CLAUDE] })
     expect(response.status).toBe(201)
     expect(await response.json()).toMatchObject({ client_id: CLIENT_ID, client_id_issued_at: 1_700_000_000 })
+  })
+
+  it('registers any MCP client whose addresses pass the policy, web or app or loopback', async () => {
+    mockStore.registerConnectorClient.mockImplementation(async (input: { clientName: string; redirectUris: string[] }) => ({
+      clientId: CLIENT_ID,
+      ...input,
+      issuedAtMs: 0,
+      created: true,
+    }))
+    const response = await call({
+      client_name: 'Cursor',
+      redirect_uris: ['cursor://anysphere.cursor-retrieval/oauth/callback', 'http://[::1]:6274/cb', 'https://chatgpt.com/cb'],
+    })
+    expect(response.status).toBe(201)
+    expect((await response.json()).client_name).toBe('Cursor')
+  })
+
+  it('bounds NEW clients per address, and never refuses a repeat of an existing one', async () => {
+    mockStore.registerConnectorClient.mockImplementation(
+      async (_input: unknown, _now: number, options: { mayCreate?: boolean }) =>
+        options?.mayCreate === false ? null : { ...CLIENT, issuedAtMs: 0, created: true },
+    )
+    for (let i = 0; i < 60; i += 1) expect((await call({ redirect_uris: [CLAUDE] })).status).toBe(201)
+    const refused = await call({ redirect_uris: [CLAUDE] })
+    expect(refused.status).toBe(429)
+    expect(mockStore.registerConnectorClient).toHaveBeenLastCalledWith(expect.anything(), expect.any(Number), { mayCreate: false })
+    mockStore.registerConnectorClient.mockResolvedValue({ ...CLIENT, issuedAtMs: 0, created: false })
+    expect((await call({ redirect_uris: [CLAUDE] })).status).toBe(201)
   })
 
   it('limits registrations per address only at a rate no burst of real connects reaches', async () => {
@@ -387,7 +415,7 @@ describe('POST /api/oauth/consent', () => {
     mockStore.listConnectableWorkspaces.mockResolvedValue([{ orgId: 'org-1', name: 'Acme', slug: 'acme', entitled: true }])
     const response = await consentCall({ action: 'describe', query: authorizeQuery() })
     const body = await response.json()
-    expect(body.app).toEqual({ name: 'Claude', returnsTo: 'claude.ai', local: false })
+    expect(body.app).toEqual({ name: 'Claude', returnsTo: 'claude.ai', kind: 'web' })
     expect(body.workspaces).toHaveLength(1)
     expect(body.access.map((choice: { level: string }) => choice.level)).toEqual(['view', 'change'])
     expect(JSON.stringify(body)).not.toMatch(/oauth|scope|token|grant/i)

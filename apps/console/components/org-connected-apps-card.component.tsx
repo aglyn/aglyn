@@ -47,7 +47,8 @@ const formatDate = (iso: string | null): string => (iso ? new Date(iso).toLocale
 
 /**
  * Connected apps (AGL-4225): the apps people connected to this workspace by
- * signing in — Claude, chiefly — with who connected each, when, when it was
+ * signing in — any MCP client, named as it names itself — with who
+ * connected each, when, when it was
  * last used and what it may do, and a Disconnect that ends it at once.
  *
  * Beside the API keys card and behind the same permission, "Manage API
@@ -143,8 +144,8 @@ export function OrgConnectedAppsCard() {
     >
       <Stack spacing={2}>
         <Typography variant="body2" color="text.secondary">
-          {'Apps that people connected to this workspace by signing in, such as Claude. ' +
-            'Each one acts with the access chosen when it was connected.'}
+          {'Apps that people connected to this workspace by signing in instead of with an API key. ' +
+            'Each one acts with the access chosen when it was connected, and is listed under the name it gave itself.'}
         </Typography>
         {listState === 'error' ? (
           <Alert

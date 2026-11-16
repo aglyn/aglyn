@@ -70,7 +70,13 @@ interface AccessChoice {
 }
 
 interface Description {
-  app: { name: string; returnsTo: string; local: boolean }
+  /**
+   * `name` is what the app CALLS ITSELF — anyone can register any name.
+   * `returnsTo` is derived from the address the code is sent to, which is
+   * the part a person can check: a website's host, an app link's scheme, or
+   * "this computer".
+   */
+  app: { name: string; returnsTo: string; kind: 'web' | 'app' | 'loopback' }
   workspaces: Workspace[]
   access: AccessChoice[]
 }
@@ -235,6 +241,21 @@ export function ConnectAppConsent({ navigate = assignLocation }: ConnectAppConse
 }
 ConnectAppConsent.displayName = 'ConnectAppConsent'
 
+/** Where the code goes, in the words the destination box leads with. */
+function destinationLabel(app: Description['app']): string {
+  if (app.kind === 'loopback') return 'An app on this computer'
+  return app.returnsTo
+}
+
+/** What that destination is, in a sentence. */
+function destinationExplanation(app: Description['app']): string {
+  if (app.kind === 'loopback') {
+    return 'A program running on this computer receives the connection — such as a code editor or a command-line tool.'
+  }
+  if (app.kind === 'app') return `The app on this device that opens ${app.returnsTo} links receives the connection.`
+  return 'The website at this address receives the connection.'
+}
+
 interface ConsentCardProps {
   /** The signed-in address doing the approving, so a wrong account is seen. */
   account: string | null
@@ -258,16 +279,31 @@ function ConsentCard(props: ConsentCardProps) {
 
   return (
     <CardDisplay
-      header={`Connect ${app.name}`}
-      subheader={
-        app.local
-          ? `${app.name}, an app on this computer, wants to use one of your ${PLATFORM_BRAND_NAME} workspaces.`
-          : `${app.name} wants to use one of your ${PLATFORM_BRAND_NAME} workspaces. When you’re done you’ll go back to ${app.returnsTo}.`
-      }
+      header={'Connect an app'}
+      subheader={`An app wants to use one of your ${PLATFORM_BRAND_NAME} workspaces.`}
       contentGutterX
       contentGutterY
     >
       <Stack spacing={3}>
+        <Box
+          sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 2 }}
+          data-testid="connect-destination"
+        >
+          <Typography variant="overline" color="text.secondary" component="p">
+            {'If you allow it, you’ll be sent to'}
+          </Typography>
+          <Typography variant="h6" component="p" sx={{ wordBreak: 'break-all' }}>
+            {destinationLabel(app)}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {destinationExplanation(app)}
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 1.5, wordBreak: 'break-word' }}>
+            {'The app calls itself '}
+            <Box component="span" sx={{ fontWeight: 'fontWeightMedium' }}>{`“${app.name}”`}</Box>
+            {'. Anyone can give an app any name, so check the address above.'}
+          </Typography>
+        </Box>
         <Stack spacing={1}>
           {account ? (
             <Typography variant="body2">
@@ -276,7 +312,7 @@ function ConsentCard(props: ConsentCardProps) {
             </Typography>
           ) : null}
           <Alert severity="warning">
-            {`Only continue if you started connecting ${app.name} yourself, just now. If you didn’t, choose Cancel.`}
+            {'Only continue if you started connecting this app yourself, just now. If you didn’t, choose Cancel.'}
           </Alert>
         </Stack>
         {workspaces.length === 0 ? (
@@ -318,7 +354,7 @@ function ConsentCard(props: ConsentCardProps) {
 
         {access.length > 1 ? (
           <FormControl>
-            <FormLabel id="connect-access">{`What ${app.name} can do`}</FormLabel>
+            <FormLabel id="connect-access">{'What the app can do'}</FormLabel>
             <RadioGroup
               aria-labelledby="connect-access"
               value={level}
@@ -335,7 +371,7 @@ function ConsentCard(props: ConsentCardProps) {
             </RadioGroup>
           </FormControl>
         ) : chosen ? (
-          <Typography variant="subtitle2">{`${app.name} will get: ${ACCESS_LABELS[chosen.level]}`}</Typography>
+          <Typography variant="subtitle2">{`The app will get: ${ACCESS_LABELS[chosen.level]}`}</Typography>
         ) : null}
 
         {chosen ? (

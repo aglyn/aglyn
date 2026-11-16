@@ -154,7 +154,7 @@ export async function POST(request: Request): Promise<Response> {
       const target = describeRedirectTarget(authorize.redirectUri)
       return Response.json(
         {
-          app: { name: authorize.clientName, returnsTo: target.host, local: target.local },
+          app: { name: authorize.clientName, returnsTo: target.label, kind: target.kind },
           workspaces: await listConnectableWorkspaces(decoded.uid),
           access: options.map((level) => ({
             level,

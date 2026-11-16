@@ -34,7 +34,7 @@ jest.mock('../utils/api-v1-resources', () => ({
 }))
 
 import { ApiErrors } from '@aglyn/tenant-data-admin'
-import { GET, POST } from '../app/api/mcp/route'
+import { GET, OPTIONS, POST } from '../app/api/mcp/route'
 
 const call = (origin = 'https://app.aglyn.com') =>
   POST(
@@ -129,6 +129,27 @@ describe('the MCP endpoint’s own limits and answers (AGL-4225)', () => {
     expect(later.headers.get('mcp-protocol-version')).toBe('2025-03-26')
     const unknown = await send(JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'ping' }), { 'mcp-protocol-version': '1999-01-01' })
     expect(unknown.headers.get('mcp-protocol-version')).toBe('2025-06-18')
+  })
+})
+
+describe('a browser-based MCP client can use the endpoint (AGL-4225)', () => {
+  it('answers a preflight for the headers an MCP client sends, without credentials', () => {
+    const preflight = OPTIONS(new Request('https://app.aglyn.com/api/mcp', { method: 'OPTIONS' }))
+    expect(preflight.status).toBe(204)
+    expect(preflight.headers.get('access-control-allow-origin')).toBe('*')
+    expect(preflight.headers.get('access-control-allow-credentials')).toBeNull()
+    for (const header of ['Authorization', 'Content-Type', 'MCP-Protocol-Version', 'Mcp-Session-Id']) {
+      expect(preflight.headers.get('access-control-allow-headers')).toContain(header)
+    }
+  })
+
+  it('lets the browser read the 401 challenge and the negotiated revision', async () => {
+    mockAuthenticate.mockResolvedValue(ApiErrors.unauthorized())
+    const challenged = await call()
+    expect(challenged.headers.get('access-control-allow-origin')).toBe('*')
+    expect(challenged.headers.get('access-control-expose-headers')).toContain('WWW-Authenticate')
+    expect(challenged.headers.get('access-control-expose-headers')).toContain('MCP-Protocol-Version')
+    expect(challenged.headers.get('www-authenticate')).toContain('resource_metadata=')
   })
 })
 

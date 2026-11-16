@@ -17,8 +17,8 @@
 
 /**
  * Connected apps (AGL-4225): the session-authenticated plane for listing and
- * disconnecting the apps connected to a workspace through sign-in — Claude,
- * and anything else on the redirect allowlist. The twin of the API keys
+ * disconnecting the apps connected to a workspace through sign-in — any MCP
+ * client. The twin of the API keys
  * route, held to the SAME permission: "Manage API keys" (`org.apiKeys`) over
  * the whole workspace, because a connection is a key a person approved
  * instead of copied.

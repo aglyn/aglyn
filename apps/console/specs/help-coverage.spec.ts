@@ -85,7 +85,7 @@ const CARD_EXCEPTIONS: Record<string, string> = {
     'The workspace picker on the org-agnostic billing entry point (AGL-2430) — the same navigational card the org jump page renders, and exempt for the same reason: it names one of the reader\'s own workspaces and claims nothing about billing. The surface itself carries help="billing" on its DashboardLayout, which is where the explanation belongs.',
   'apps/console/app/(app)/support/page.tsx#{org.orgName ?? org.slug ?? org.$id}':
     'The workspace picker on the org-agnostic support entry point (AGL-3265) — the third rendering of the same navigational card, exempt for the reason the other two are: it names one of the reader\'s own workspaces and claims nothing about support. The surface carries the support docs topic as `help` on its DashboardLayout, which is where the explanation belongs.',
-  'apps/console/components/connect-app-consent.component.tsx#{`Connect ${app.name}`}':
+  "apps/console/components/connect-app-consent.component.tsx#{'Connect an app'}":
     'The connector consent screen (AGL-4225) is a decision the person must make on this page, about an app that sent them here. Its card names the app, where it returns to and what it may do; a help link would invite them away mid-decision, and the page sends no referrer for the same reason.',
   'apps/console/components/connect-app-consent.component.tsx#{phase.title}':
     'The consent screen\'s refusal card (AGL-4225): the app\'s request could not be used, and the only next step is to start again from the app. Nothing here a docs page could add to.',
