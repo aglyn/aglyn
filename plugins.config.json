@@ -3529,7 +3529,8 @@
         },
         "contributes": {
           "screens": [
-            "tax-engines.service"
+            "tax-engines.service",
+            "tax-engines.order"
           ]
         }
       },

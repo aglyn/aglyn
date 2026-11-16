@@ -199,7 +199,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "tax-engines",
-      contributes: ["screens": ["tax-engines.service"]],
+      contributes: ["screens": ["tax-engines.order", "tax-engines.service"]],
       register: AglynTaxEnginesPlugin.registerTaxEnginesNative
     ),
     NativePluginManifestEntry(

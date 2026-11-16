@@ -201,7 +201,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "tax-engines",
-            contributes = mapOf("screens" to listOf("tax-engines.service")),
+            contributes = mapOf("screens" to listOf("tax-engines.order", "tax-engines.service")),
             register = ::registerTaxEnginesNative,
         ),
         NativePluginManifestEntry(
