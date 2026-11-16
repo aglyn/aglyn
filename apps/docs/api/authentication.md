@@ -7,7 +7,8 @@ description: Authenticate REST API requests with an organization API key, scoped
 # Authentication
 
 Every request authenticates with an **API key** — a secret that identifies your
-organization. Keys look like `aglyn_sk_…`.
+organization. Keys look like `aglyn_sk_…`. An app that acts for a person, such as
+Claude, can [sign in](#apps-that-sign-in) instead.
 
 A key carries the organization's access, not a person's: it keeps working after the
 teammate who created it leaves, and it isn't limited by their role.
@@ -124,6 +125,39 @@ Scopes are independent — there's no hierarchy. `datasets:write` does **not** i
 
 Two endpoints need no scope at all: [`GET /v1`](overview.md#get-v1) and
 [`GET /v1/me`](overview.md#get-v1me). Any valid key can call them.
+
+## Apps that sign in
+
+An app that acts for a person — [Claude](/marketing-and-automation/workflows-and-actions/claude)
+or another Model Context Protocol client — doesn't need a key. Point it at
+`https://app.aglyn.com/api/mcp` and it asks the person to sign in, pick a
+workspace and choose **View only** or **View and make changes**. Nothing is
+copied anywhere.
+
+What the app receives instead of a key:
+
+- An **access token** (`aglyn_at_…`) that lasts one hour, sent as
+  `Authorization: Bearer aglyn_at_…` exactly as a key is. It works on `/api/v1`
+  and `/api/mcp`, with the same rate limit, plan check and usage meter, and the
+  scopes the person's choice grants: every `:read` scope for View only, every
+  scope for View and make changes.
+- A **refresh token** (`aglyn_rt_…`) that the app trades for a new pair. Each one
+  works once; a refresh token used a second time ends the connection.
+
+A connection is a person's, unlike a key. Connecting takes the **Manage API keys**
+permission in the workspace, and the connection stops working the moment that
+person leaves the workspace or loses the permission, or someone disconnects it
+under **Settings → API keys → Connected apps**.
+
+For client developers, it is OAuth 2.1 with PKCE, public clients only:
+
+| | |
+| --- | --- |
+| Discovery | A `401` from `/api/mcp` carries `WWW-Authenticate: Bearer resource_metadata="https://app.aglyn.com/.well-known/oauth-protected-resource/api/mcp"`. The authorization server is described at `/.well-known/oauth-authorization-server` (RFC 8414). |
+| Registration | Dynamic (RFC 7591) at `/api/oauth/register`. Codes are delivered only to Claude's callback addresses and to loopback addresses (`http://localhost` or `http://127.0.0.1`, any port), so a `redirect_uri` anywhere else is refused. No client secret is issued. |
+| Authorization | `/oauth/authorize` with `response_type=code`, `code_challenge_method=S256` and a `state`. The answer carries `iss`. |
+| Token | `/api/oauth/token`, form-encoded, `authorization_code` or `refresh_token`. Codes last five minutes and work once. |
+| Revocation | `/api/oauth/revoke` (RFC 7009). Revoking a refresh token ends the connection. |
 
 ## Keep keys safe
 

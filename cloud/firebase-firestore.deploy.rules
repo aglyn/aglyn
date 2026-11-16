@@ -2749,6 +2749,28 @@ allow read, write: if false;
 
 
 
+match /oauthClients/{clientId} {
+allow read, write: if false;
+}
+match /oauthCodes/{codeHash} {
+allow read, write: if false;
+}
+match /oauthGrants/{grantId} {
+allow read, write: if false;
+}
+match /oauthAccessTokens/{tokenHash} {
+allow read, write: if false;
+}
+match /oauthRefreshTokens/{tokenHash} {
+allow read, write: if false;
+}
+
+
+
+
+
+
+
 
 
 
