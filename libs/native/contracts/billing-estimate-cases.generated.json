@@ -2432,6 +2432,7 @@
       },
       "apiRequests": 0,
       "emails": 0,
+      "emailBand": 0,
       "expect": {
         "recordsOverage": 0,
         "recordsRate": null,
@@ -2497,6 +2498,7 @@
       },
       "apiRequests": 1,
       "emails": 1,
+      "emailBand": 0,
       "expect": {
         "recordsOverage": 1,
         "recordsRate": null,
@@ -2562,6 +2564,7 @@
       },
       "apiRequests": 1234,
       "emails": 1234,
+      "emailBand": 0,
       "expect": {
         "recordsOverage": 1234,
         "recordsRate": null,
@@ -2627,6 +2630,7 @@
       },
       "apiRequests": 56789,
       "emails": 56789,
+      "emailBand": 0,
       "expect": {
         "recordsOverage": 56789,
         "recordsRate": null,
@@ -2691,13 +2695,14 @@
         }
       },
       "apiRequests": 500,
-      "emails": 0,
+      "emails": 1000,
+      "emailBand": 1000,
       "expect": {
         "recordsOverage": 0,
         "recordsRate": 1,
         "recordsUsd": 0,
         "apiOverage": 0,
-        "apiRate": null,
+        "apiRate": 3,
         "apiUsd": 0,
         "emailOverage": 0,
         "emailRate": 2.5,
@@ -2756,15 +2761,16 @@
         }
       },
       "apiRequests": 501,
-      "emails": 1,
+      "emails": 1001,
+      "emailBand": 1000,
       "expect": {
         "recordsOverage": 1,
         "recordsRate": 1,
         "recordsUsd": 0,
         "apiOverage": 1,
-        "apiRate": null,
+        "apiRate": 3,
         "apiUsd": 0,
-        "emailOverage": 0,
+        "emailOverage": 1,
         "emailRate": 2.5,
         "emailUsd": 0
       }
@@ -2821,17 +2827,18 @@
         }
       },
       "apiRequests": 1734,
-      "emails": 1234,
+      "emails": 2234,
+      "emailBand": 1000,
       "expect": {
         "recordsOverage": 1234,
         "recordsRate": 1,
         "recordsUsd": 1.23,
         "apiOverage": 1234,
-        "apiRate": null,
-        "apiUsd": 0,
-        "emailOverage": 0,
+        "apiRate": 3,
+        "apiUsd": 3.7,
+        "emailOverage": 1234,
         "emailRate": 2.5,
-        "emailUsd": 0
+        "emailUsd": 3.09
       }
     },
     {
@@ -2886,17 +2893,18 @@
         }
       },
       "apiRequests": 57289,
-      "emails": 56789,
+      "emails": 57789,
+      "emailBand": 1000,
       "expect": {
         "recordsOverage": 56789,
         "recordsRate": 1,
         "recordsUsd": 56.79,
         "apiOverage": 56789,
-        "apiRate": null,
-        "apiUsd": 0,
-        "emailOverage": 0,
+        "apiRate": 3,
+        "apiUsd": 170.37,
+        "emailOverage": 56789,
         "emailRate": 2.5,
-        "emailUsd": 0
+        "emailUsd": 141.97
       }
     },
     {
@@ -2952,12 +2960,13 @@
       },
       "apiRequests": 1500,
       "emails": 2500,
+      "emailBand": 2500,
       "expect": {
         "recordsOverage": 0,
         "recordsRate": 0.75,
         "recordsUsd": 0,
         "apiOverage": 0,
-        "apiRate": null,
+        "apiRate": 0.5,
         "apiUsd": 0,
         "emailOverage": 0,
         "emailRate": 2.25,
@@ -3017,12 +3026,13 @@
       },
       "apiRequests": 1501,
       "emails": 2501,
+      "emailBand": 2500,
       "expect": {
         "recordsOverage": 1,
         "recordsRate": 0.75,
         "recordsUsd": 0,
         "apiOverage": 1,
-        "apiRate": null,
+        "apiRate": 0.5,
         "apiUsd": 0,
         "emailOverage": 1,
         "emailRate": 2.25,
@@ -3082,13 +3092,14 @@
       },
       "apiRequests": 2734,
       "emails": 3734,
+      "emailBand": 2500,
       "expect": {
         "recordsOverage": 1234,
         "recordsRate": 0.75,
         "recordsUsd": 0.93,
         "apiOverage": 1234,
-        "apiRate": null,
-        "apiUsd": 0,
+        "apiRate": 0.5,
+        "apiUsd": 0.62,
         "emailOverage": 1234,
         "emailRate": 2.25,
         "emailUsd": 2.78
@@ -3147,13 +3158,14 @@
       },
       "apiRequests": 58289,
       "emails": 59289,
+      "emailBand": 2500,
       "expect": {
         "recordsOverage": 56789,
         "recordsRate": 0.75,
         "recordsUsd": 42.59,
         "apiOverage": 56789,
-        "apiRate": null,
-        "apiUsd": 0,
+        "apiRate": 0.5,
+        "apiUsd": 28.39,
         "emailOverage": 56789,
         "emailRate": 2.25,
         "emailUsd": 127.78
@@ -3212,12 +3224,13 @@
       },
       "apiRequests": 1500,
       "emails": 15000,
+      "emailBand": 15000,
       "expect": {
         "recordsOverage": 0,
         "recordsRate": 0.5,
         "recordsUsd": 0,
         "apiOverage": 0,
-        "apiRate": null,
+        "apiRate": 0.5,
         "apiUsd": 0,
         "emailOverage": 0,
         "emailRate": 2,
@@ -3277,12 +3290,13 @@
       },
       "apiRequests": 1501,
       "emails": 15001,
+      "emailBand": 15000,
       "expect": {
         "recordsOverage": 1,
         "recordsRate": 0.5,
         "recordsUsd": 0,
         "apiOverage": 1,
-        "apiRate": null,
+        "apiRate": 0.5,
         "apiUsd": 0,
         "emailOverage": 1,
         "emailRate": 2,
@@ -3342,13 +3356,14 @@
       },
       "apiRequests": 2734,
       "emails": 16234,
+      "emailBand": 15000,
       "expect": {
         "recordsOverage": 1234,
         "recordsRate": 0.5,
         "recordsUsd": 0.62,
         "apiOverage": 1234,
-        "apiRate": null,
-        "apiUsd": 0,
+        "apiRate": 0.5,
+        "apiUsd": 0.62,
         "emailOverage": 1234,
         "emailRate": 2,
         "emailUsd": 2.47
@@ -3407,13 +3422,14 @@
       },
       "apiRequests": 58289,
       "emails": 71789,
+      "emailBand": 15000,
       "expect": {
         "recordsOverage": 56789,
         "recordsRate": 0.5,
         "recordsUsd": 28.39,
         "apiOverage": 56789,
-        "apiRate": null,
-        "apiUsd": 0,
+        "apiRate": 0.5,
+        "apiUsd": 28.39,
         "emailOverage": 56789,
         "emailRate": 2,
         "emailUsd": 113.58
@@ -3472,12 +3488,13 @@
       },
       "apiRequests": 17000,
       "emails": 65000,
+      "emailBand": 65000,
       "expect": {
         "recordsOverage": 0,
         "recordsRate": 0.4,
         "recordsUsd": 0,
         "apiOverage": 0,
-        "apiRate": null,
+        "apiRate": 0.5,
         "apiUsd": 0,
         "emailOverage": 0,
         "emailRate": 1.85,
@@ -3537,12 +3554,13 @@
       },
       "apiRequests": 17001,
       "emails": 65001,
+      "emailBand": 65000,
       "expect": {
         "recordsOverage": 1,
         "recordsRate": 0.4,
         "recordsUsd": 0,
         "apiOverage": 1,
-        "apiRate": null,
+        "apiRate": 0.5,
         "apiUsd": 0,
         "emailOverage": 1,
         "emailRate": 1.85,
@@ -3602,13 +3620,14 @@
       },
       "apiRequests": 18234,
       "emails": 66234,
+      "emailBand": 65000,
       "expect": {
         "recordsOverage": 1234,
         "recordsRate": 0.4,
         "recordsUsd": 0.49,
         "apiOverage": 1234,
-        "apiRate": null,
-        "apiUsd": 0,
+        "apiRate": 0.5,
+        "apiUsd": 0.62,
         "emailOverage": 1234,
         "emailRate": 1.85,
         "emailUsd": 2.28
@@ -3667,13 +3686,14 @@
       },
       "apiRequests": 73789,
       "emails": 121789,
+      "emailBand": 65000,
       "expect": {
         "recordsOverage": 56789,
         "recordsRate": 0.4,
         "recordsUsd": 22.72,
         "apiOverage": 56789,
-        "apiRate": null,
-        "apiUsd": 0,
+        "apiRate": 0.5,
+        "apiUsd": 28.39,
         "emailOverage": 56789,
         "emailRate": 1.85,
         "emailUsd": 105.06
@@ -3732,6 +3752,7 @@
       },
       "apiRequests": 170000,
       "emails": 260000,
+      "emailBand": 260000,
       "expect": {
         "recordsOverage": 0,
         "recordsRate": null,
@@ -3797,6 +3818,7 @@
       },
       "apiRequests": 170001,
       "emails": 260001,
+      "emailBand": 260000,
       "expect": {
         "recordsOverage": 1,
         "recordsRate": null,
@@ -3862,6 +3884,7 @@
       },
       "apiRequests": 171234,
       "emails": 261234,
+      "emailBand": 260000,
       "expect": {
         "recordsOverage": 1234,
         "recordsRate": null,
@@ -3927,6 +3950,7 @@
       },
       "apiRequests": 226789,
       "emails": 316789,
+      "emailBand": 260000,
       "expect": {
         "recordsOverage": 56789,
         "recordsRate": null,
