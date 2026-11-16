@@ -17,10 +17,11 @@
 
 /**
  * Auth + gating for the customer REST API (`/api/v1`, AGL-617). Resolves a
- * Bearer API key to its org, enforces the `apiAccess` entitlement and a
- * per-key rate limit, and hands resource handlers a ready `ApiV1Context`.
- * This path is deliberately separate from the console session chokepoint
- * (verifyConsoleIdToken / email-verify) — API keys, not Firebase sessions.
+ * Bearer API key — or a connector's access token (AGL-4225) — to its org,
+ * enforces the `apiAccess` entitlement and a per-credential rate limit, and
+ * hands resource handlers a ready `ApiV1Context`. This path is deliberately
+ * separate from the console session chokepoint (verifyConsoleIdToken /
+ * email-verify) — API credentials, not Firebase sessions.
  */
 import type { AglynOrganization } from '@aglyn/aglyn'
 import type { ApiV1Context } from '@aglyn/tenant-data-admin/server/api-v1-kit'
@@ -56,6 +57,19 @@ import {
   NO_CLIENT_ADDRESS_BUCKET,
   readClientIp,
 } from '@aglyn/aglyn/app-utils/request-ip'
+// By module path rather than the barrel: the connector door is resolved
+// beside the key door here, and the specs that stand the barrel in for
+// `/api/v1` name only the key half.
+import {
+  CONNECTOR_ACCESS_TOKEN_PREFIX,
+  isConnectorAccessTokenFormat,
+} from '@aglyn/tenant-data-admin/server/connector-oauth'
+import {
+  CONNECTOR_TOKEN_UNAVAILABLE,
+  verifyConnectorAccessToken,
+} from '@aglyn/tenant-data-admin/server/connector-oauth-store'
+import { isValidApiKeyFormat as isApiKeyShaped } from '@aglyn/tenant-data-admin/server/api-keys'
+import { createHash } from 'node:crypto'
 
 /**
  * What the pipeline resolved for one request, and the scope check every
@@ -63,6 +77,102 @@ import {
  * resource reaches them too.
  */
 export { type ApiV1Context, requireScope } from '@aglyn/tenant-data-admin/server/api-v1-kit'
+
+/** What either credential resolves to before the shared gates run. */
+interface VerifiedCredential {
+  orgId: string
+  keyId: string
+  scopes: ApiScope[]
+  name: string
+  /**
+   * The person a connector acts for (AGL-4225), so the user-scope lockdown
+   * applies to their calls. Absent for an API key, which is an organization
+   * credential with no person behind it.
+   */
+  uid?: string
+}
+
+/**
+ * Resolve a bearer credential: an API key (`aglyn_sk_…`) or a connector's
+ * hourly access token (`aglyn_at_…`, AGL-4225).
+ *
+ * The ONLY place the two differ. Everything after this — the pre-auth budget
+ * charge, the per-credential rate limit, the lockdown verdict, the plan, the
+ * monthly quota and the usage meter — runs once, below, for whichever one
+ * arrived. `lookedUp()` says whether a Firestore read was spent, which is
+ * what the pre-auth budget charges for; a malformed token of either kind is
+ * free. Asked only on a refusal, as the format check always was.
+ */
+async function verifyCredential(token: string): Promise<{
+  verified: VerifiedCredential | null
+  lookedUp: () => boolean
+  /** A read failed: nothing is known about the credential either way. */
+  unavailable?: boolean
+}> {
+  if (token.startsWith(CONNECTOR_ACCESS_TOKEN_PREFIX)) {
+    const answer = await verifyConnectorAccessToken(token)
+    if (answer === CONNECTOR_TOKEN_UNAVAILABLE) {
+      return { verified: null, lookedUp: () => false, unavailable: true }
+    }
+    return { verified: answer, lookedUp: () => isConnectorAccessTokenFormat(token) }
+  }
+  return { verified: await verifyApiKey(token), lookedUp: () => isValidApiKeyFormat(token) }
+}
+
+/**
+ * What this instance has already learned about credentials, by hash
+ * (AGL-4225). Memory only, bounded, and short-lived.
+ *
+ * The pre-auth budget is per client ADDRESS, and an app such as Claude calls
+ * from a provider's shared egress addresses — so without these, one tenant's
+ * integration retrying a dead token could spend the budget every other
+ * tenant behind the same address needs. They change who PAYS, never what is
+ * read:
+ *
+ *  - A credential that resolved to nothing is refused again for free — no
+ *    read, no charge — so a client hammering one dead token cannot drain the
+ *    shared budget. Dead stays dead: a revoked, expired or ended credential
+ *    never comes back, and a token cannot be minted to a chosen hash.
+ *  - A credential that resolved on this instance is not refused by an
+ *    exhausted budget; it is still looked up and checked on every call, and
+ *    the first time it fails it moves to the dead set. That lookup is
+ *    bounded by credentials that were once valid, so it is no amplifier.
+ *
+ * A read that FAILED teaches nothing and lands in neither set.
+ */
+const CREDENTIAL_MEMORY_LIMIT = 5_000
+const CREDENTIAL_MEMORY_TTL_MS = 10 * 60_000
+const knownGoodCredentials = new Map<string, number>()
+const knownDeadCredentials = new Map<string, number>()
+
+function remember(memory: Map<string, number>, hash: string, now = Date.now()): void {
+  memory.delete(hash)
+  memory.set(hash, now + CREDENTIAL_MEMORY_TTL_MS)
+  while (memory.size > CREDENTIAL_MEMORY_LIMIT) {
+    const oldest = memory.keys().next().value
+    if (oldest === undefined) break
+    memory.delete(oldest)
+  }
+}
+
+function recalls(memory: Map<string, number>, hash: string | null, now = Date.now()): boolean {
+  if (!hash) return false
+  const until = memory.get(hash)
+  if (until === undefined) return false
+  if (until <= now) {
+    memory.delete(hash)
+    return false
+  }
+  return true
+}
+
+/** The memory key for a credential; `null` for one no lookup would be spent on. */
+function credentialHash(token: string): string | null {
+  const lookable = token.startsWith(CONNECTOR_ACCESS_TOKEN_PREFIX)
+    ? isConnectorAccessTokenFormat(token)
+    : isApiKeyShaped(token)
+  return lookable ? createHash('sha256').update(token).digest('hex') : null
+}
 
 /** `Authorization: Bearer <key>` (preferred) or `X-Api-Key: <key>`. */
 function extractToken(request: Request): string {
@@ -137,6 +247,8 @@ const preAuthLookups = new Map<string, RateLimitState>()
 /** Test seam: forget this instance's pre-auth budget. */
 export function resetPreAuthLookupBudgetForTests(): void {
   preAuthLookups.clear()
+  knownGoodCredentials.clear()
+  knownDeadCredentials.clear()
 }
 
 /**
@@ -318,6 +430,46 @@ async function consumeWorkspaceRateLimit(
 }
 
 /**
+ * Charge one MORE request to an already-authenticated credential (AGL-4225).
+ *
+ * `authenticateApiV1` charges a request once: one rate-limit unit, one usage
+ * count. An MCP batch is one HTTP request that can carry many `tools/call`
+ * messages, each a full `/v1` dispatch, so every call after the first is
+ * charged here as its own request — the same per-credential limit, the same
+ * monthly quota, the same meter — and refused, as itself, when the budget is
+ * spent. Answers the refusal to report for that one call, or `null`, and the
+ * rate-limit headers as they stand after this charge.
+ */
+export async function chargeApiV1Call(
+  context: ApiV1Context,
+): Promise<{ refusal: Response | null; headers: Record<string, string> }> {
+  const rate = await consumeRateLimit(`apiv1:${context.keyId}`)
+  // The same two per-minute limits and the same scoped headers and codes as
+  // `authenticateApiV1` (AGL-4226): the key's, then the WORKSPACE's, so a
+  // batch of tool calls cannot go round the workspace ceiling.
+  let headers: Record<string, string> = {
+    ...rateLimitHeaders(rate),
+    [RATE_LIMIT_SCOPE_HEADER]: 'key',
+  }
+  if (!rate.allowed) {
+    return {
+      refusal: ApiErrors.rateLimited(Math.ceil((rate.resetMs - Date.now()) / 1000), headers, {
+        code: 'key_rate_limit',
+        message: `This API key has made ${rate.limit} requests in the last minute.`,
+      }),
+      headers,
+    }
+  }
+  const workspace = await consumeWorkspaceRateLimit(context.orgId, context.org, headers)
+  if (workspace.refusal) return { refusal: workspace.refusal, headers }
+  headers = { ...headers, ...workspace.headers }
+  const quotaRefusal = await refuseIfApiQuotaExhausted(context.firestore, context.orgId, context.org, headers)
+  if (quotaRefusal) return { refusal: quotaRefusal, headers }
+  recordApiRequest(context.firestore, context.orgId)
+  return { refusal: null, headers }
+}
+
+/**
  * Authenticate a v1 request. Returns an `ApiV1Context` on success, or an
  * error `Response` (401 unknown key, 403 plan required, 429 rate limited)
  * to return as-is.
@@ -337,7 +489,12 @@ export async function authenticateApiV1(
     store: preAuthLookups,
   }
   const budget = peekRateLimit(budgetKey, budgetOptions)
-  if (!budget.allowed) {
+  // See `knownGoodCredentials` for why recalling a credential is safe.
+  const hash = token ? credentialHash(token) : null
+  if (recalls(knownDeadCredentials, hash)) {
+    return ApiErrors.unauthorized({ headers: rateLimitHeaders(budget) })
+  }
+  if (!budget.allowed && !recalls(knownGoodCredentials, hash)) {
     /*
       The headers describe THIS budget — the per-IP lookup budget — and not the
       120/min of a key we declined to identify (AGL-2727).
@@ -366,14 +523,24 @@ export async function authenticateApiV1(
     return ApiErrors.unauthorized({ headers: rateLimitHeaders(budget) })
   }
 
-  const verified = await verifyApiKey(token)
+  const { verified, lookedUp, unavailable } = await verifyCredential(token)
+  if (unavailable) {
+    // A read failed while resolving the credential (AGL-4225). Not a 401 —
+    // nothing says the credential is bad, and a 401 would send the client
+    // off to sign in again — and not charged to the address either.
+    return ApiErrors.unavailable(5, rateLimitHeaders(budget))
+  }
   if (!verified) {
-    // `isValidApiKeyFormat` is the same predicate `verifyApiKey` short-circuits
+    if (hash) {
+      knownGoodCredentials.delete(hash)
+      remember(knownDeadCredentials, hash)
+    }
+    // `lookedUp` is the same format predicate the verifier short-circuits
     // on, so this charges the budget when — and only when — a Firestore read
     // was actually spent. A malformed token cost nothing and is charged
     // nothing; making it free is what keeps this budget a truthful count of
     // reads rather than a second, undocumented request cap.
-    if (isValidApiKeyFormat(token)) checkRateLimit(budgetKey, budgetOptions)
+    if (lookedUp()) checkRateLimit(budgetKey, budgetOptions)
     /*
       Peeked AFTER the charge above, so `remaining` is what the caller has
       left rather than what it had on arrival — a budget read that ignores the
@@ -384,6 +551,8 @@ export async function authenticateApiV1(
       headers: rateLimitHeaders(peekRateLimit(budgetKey, budgetOptions)),
     })
   }
+
+  if (hash) remember(knownGoodCredentials, hash)
 
   // From here the key is known, so the rate-limit budget is knowable — and a
   // client that reads it off every response shouldn't lose it on exactly the
@@ -450,7 +619,15 @@ export async function authenticateApiV1(
   // signal — a customer's GET keeps working while their POST/PATCH/DELETE
   // gets the 423 with a `Retry-After`, which is the contract an integration
   // can actually back off on. A full lock still refuses both.
-  const locked = await lockdownRefusal({ request, org })
+  //
+  // A connector DOES act for a person (AGL-4225), so its uid rides along and
+  // a lock on that person refuses their app exactly as it refuses their
+  // console. Still no staff bypass: a connection is never a staff session.
+  const locked = await lockdownRefusal({
+    request,
+    org,
+    ...(verified.uid ? { uid: verified.uid } : {}),
+  })
   if (locked) return withResponseHeaders(locked, headers)
   if (!checkEntitlement(org, 'apiAccess')) {
     return ApiErrors.planRequired({ headers })
@@ -500,6 +677,8 @@ export async function authenticateApiV1(
       orgId: verified.orgId,
       keyId: verified.keyId,
       keyName: verified.name || null,
+      // Only a connection carries a person (AGL-4225).
+      credential: verified.uid ? 'connected_app' : 'api_key',
       scopes: verified.scopes,
       org,
       firestore,

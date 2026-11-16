@@ -49,6 +49,7 @@ export function memoryZapierHookStore(seed: ZapierHook[] = []) {
           events: record.events,
           keyId: record.keyId,
           keyName: record.keyName,
+          keyLabel: record.keyLabel ?? null,
           updatedAtMs: record.updatedAtMs,
         })
         return { hook: { ...same }, created: false }

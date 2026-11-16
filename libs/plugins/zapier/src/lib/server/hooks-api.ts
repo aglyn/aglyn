@@ -18,7 +18,7 @@
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { ApiErrors, apiJson, listResponse } from '@aglyn/tenant-data-admin/server/api-http'
 import { configuredUrlRefusal, describeConfiguredUrlRefusal } from '@aglyn/tenant-data-admin/server/configured-url-fetch'
-import type { ApiV1Context } from '@aglyn/tenant-data-admin/server/api-v1-kit'
+import { apiActorLabel, type ApiV1Context } from '@aglyn/tenant-data-admin/server/api-v1-kit'
 import { ZAPIER_HOOK_HOSTS, ZAPIER_MAX_HOOKS_PER_SITE } from '../constants'
 import { readZapierHookEvents, zapierHookEventSpec, type ZapierHookEvent } from '../model/hook-events'
 import { type ZapierHook, type ZapierHookStore, zapierHookView } from './store'
@@ -162,6 +162,8 @@ export function createZapierHooksHandler(deps: ZapierHooksApiDeps) {
           targetUrl: String(body['targetUrl']).trim(),
           keyId: ctx.keyId,
           keyName: ctx.keyName,
+          // "API key Zapier" or "Connected app Cursor" (AGL-4225).
+          keyLabel: apiActorLabel(ctx),
           createdAtMs: now,
           updatedAtMs: now,
           consecutiveFailures: 0,

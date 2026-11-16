@@ -184,7 +184,14 @@ async function serve(
     return apiJson(
       // `name` (AGL-3643) is how an integration that holds several keys —
       // Zapier's connection label — tells them apart without the secret.
-      { object: 'api_key', org: context.orgId, name: context.keyName, scopes: context.scopes },
+      // A connection answers as what it is (AGL-4225), with the same fields:
+      // `name` is then the name the app registered under.
+      {
+        object: context.credential === 'connected_app' ? 'connected_app' : 'api_key',
+        org: context.orgId,
+        name: context.keyName,
+        scopes: context.scopes,
+      },
       { headers },
     )
   }

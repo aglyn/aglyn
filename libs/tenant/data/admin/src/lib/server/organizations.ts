@@ -67,7 +67,7 @@ import {
   ACCOUNT_ACQUISITION_FIELD,
   organizationAcquisition,
 } from '@aglyn/aglyn/app-utils/account-acquisition'
-import type { HostActivityActor } from '@aglyn/aglyn/app-utils/activity-presenter'
+import { connectedAppActorLabel, type HostActivityActor } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
 import {
   nameSearchKey,
@@ -1550,6 +1550,15 @@ export async function logHostActivity(
       // A key's entry names the key (AGL-2632); a person's carries no such
       // field, so the two are told apart by its presence.
       ...(actor.apiKeyName ? { apiKeyName: actor.apiKeyName } : {}),
+      // A connected app's entry names the app instead (AGL-4225).
+      ...(actor.connectedAppName
+        ? {
+            connectedAppName: actor.connectedAppName,
+            // The label as the native activity lists print it, which read a
+            // stored field rather than build one (AGL-4225).
+            connectedAppLabel: connectedAppActorLabel(actor.connectedAppName),
+          }
+        : {}),
       action,
       target: {
         type: target.type,
@@ -1562,6 +1571,7 @@ export async function logHostActivity(
       searchTokens: activitySearchTokens({
         actorEmail: actor.email,
         apiKeyName: actor.apiKeyName,
+        connectedAppName: actor.connectedAppName,
         target,
       }),
       createdAt: FieldValue.serverTimestamp(),

@@ -7,7 +7,8 @@ description: Authenticate REST API requests with an organization API key, scoped
 # Authentication
 
 Every request authenticates with an **API key** — a secret that identifies your
-organization. Keys look like `aglyn_sk_…`.
+organization. Keys look like `aglyn_sk_…`. An app that acts for a person — an AI
+assistant or a code editor that speaks MCP — can [sign in](#apps-that-sign-in) instead.
 
 A key carries the organization's access, not a person's: it keeps working after the
 teammate who created it leaves, and it isn't limited by their role.
@@ -124,6 +125,51 @@ Scopes are independent — there's no hierarchy. `datasets:write` does **not** i
 
 Two endpoints need no scope at all: [`GET /v1`](overview.md#get-v1) and
 [`GET /v1/me`](overview.md#get-v1me). Any valid key can call them.
+
+## Apps that sign in
+
+An app that acts for a person — any Model Context Protocol client, such as an AI
+assistant, a code editor or an MCP inspector — doesn't need a key. Point it at
+`https://app.aglyn.com/api/mcp` and it asks the person to sign in, pick a
+workspace and choose **View only** or **View and make changes**. Nothing is
+copied anywhere. The consent screen names the app as it names itself and shows,
+above everything else, the address the app will receive the connection at.
+
+What the app receives instead of a key:
+
+- An **access token** (`aglyn_at_…`) that lasts one hour, sent as
+  `Authorization: Bearer aglyn_at_…` exactly as a key is. It works on `/api/v1`
+  and `/api/mcp`, with the same rate limit, plan check and usage meter, and the
+  scopes the person's choice grants: every `:read` scope for View only, every
+  scope for View and make changes.
+- A **refresh token** (`aglyn_rt_…`) that the app trades for a new pair. Each one
+  works once. A retry within 30 seconds of the trade is refused and changes
+  nothing, so an app that lost the answer is not disconnected; used again any
+  later, it ends the connection.
+
+A connection's writes appear in activity as *Connected app* followed by its name, and
+[`GET /v1/me`](overview.md#get-v1me) answers `"object": "connected_app"` for it. A lock on
+the workspace refuses a connection for as long as it lasts without ending it, as it
+does an API key.
+
+A connection is a person's, unlike a key. Connecting takes the **Manage API keys**
+permission in the workspace, and the connection stops working the moment that
+person leaves the workspace or loses the permission, or someone disconnects it
+under **Settings → API keys → Connected apps**.
+
+For client developers, it is OAuth 2.1 with PKCE, public clients only:
+
+| | |
+| --- | --- |
+| Discovery | A `401` from `/api/mcp` carries `WWW-Authenticate: Bearer resource_metadata="https://app.aglyn.com/.well-known/oauth-protected-resource/api/mcp"`. The authorization server is described at `/.well-known/oauth-authorization-server` (RFC 8414). |
+| Registration | Dynamic (RFC 7591) at `/api/oauth/register`, open to any client. Send `client_name` and up to five `redirect_uris`. The name is normalized (NFKC), quotation marks and control, invisible and blank characters are removed, and it is capped at 60 characters; a name with no letter or digit becomes *Unnamed app*, and a name that is or contains the platform's own name is refused. No client secret is issued, and an identical registration returns the same `client_id` with `201`. A registration nobody approves expires after 7 days. |
+| Redirect addresses | Each must be exactly as a URL parser prints it, with no user info and no fragment, and one of: `https://` on a domain name (not an IP address, and not one of this platform's own domains or a site published on it), any path; or `http://` on `localhost`, `127.0.0.1` or `[::1]` only, any port. **Native and desktop clients use a loopback address.** Custom app-link schemes are not accepted, because the scheme decides which program is launched; an app-link callback can be added for a client on request, as one exact address. Addresses outside these rules are dropped from a registration, which fails only if none is left. At sign-in the `redirect_uri` must match a registered one exactly, except that a loopback port may differ. |
+| Consent | The person sees the address the app will receive the connection at — the full host and path, or *an app on this computer* — above the name the app gave itself, and chooses a workspace and **View only** (always offered, and the default) or **View and make changes**. Nothing navigates away from the page until they press a button; a request that is wrong is shown on the page, and Cancel returns the error to the app. |
+| Browser clients | `/api/mcp` answers CORS from any origin without credentials, and exposes `WWW-Authenticate` and `MCP-Protocol-Version`. |
+| Authorization | `/oauth/authorize` with `response_type=code`, `code_challenge_method=S256` and a `state`. The answer carries `iss`. |
+| Token | `/api/oauth/token`, form-encoded, `authorization_code` or `refresh_token`. Codes last five minutes and work once. |
+| Revocation | `/api/oauth/revoke` (RFC 7009). Revoking a refresh token ends the connection. |
+| Limits | A code or refresh token that resolves is never refused by a failure limit. Guesses — well-formed secrets that resolve to nothing — are counted per address, and past 30 a minute a further guess is answered `429` with `error: "invalid_request"` and `Retry-After`; lookups of any kind are capped at 600 a minute per address. While the workspace is locked, a refresh is answered `503` with `error: "temporarily_unavailable"` and `Retry-After`: keep the refresh token and retry. Each account may approve 30 times per 10 minutes and bring at most 20 new apps into use a day. Registration allows 300 requests and 20 new clients per address per 10 minutes. In an MCP batch, every `tools/call` is charged as its own request; one the budget no longer covers returns the `429` body as that call's result. |
 
 ## Keep keys safe
 

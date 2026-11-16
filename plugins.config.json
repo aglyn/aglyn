@@ -4621,7 +4621,8 @@
           ],
           "slots": [
             "hostDomain",
-            "hostDomainConnect"
+            "hostDomainConnect",
+            "hostVerification"
           ]
         }
       }

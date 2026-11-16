@@ -56,5 +56,6 @@ export function runTriggeredByFields(): {
   if (actor.uid) triggeredBy['uid'] = actor.uid
   if (actor.email) triggeredBy['email'] = actor.email
   if (actor.apiKeyName) triggeredBy['apiKeyName'] = actor.apiKeyName
+  if (actor.connectedAppName) triggeredBy['connectedAppName'] = actor.connectedAppName
   return { triggeredBy }
 }

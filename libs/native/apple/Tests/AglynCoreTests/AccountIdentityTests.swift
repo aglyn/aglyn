@@ -36,4 +36,19 @@ final class AccountIdentityTests: XCTestCase {
     let kept = user.fromToken(TokenClaims(idToken: nil))
     XCTAssertEqual(kept.photoURL, "https://a.example.com/p.jpg", "a token without a picture keeps the one known")
   }
+
+  /// A sign-in answer without the account's name (the Auth emulator's `signInWithPassword` sends none) still names the
+  /// person from the token, as the console's SDK names them from the account; a name already known is kept.
+  func testTheTokenNamesThePersonWhenTheSignInAnswerDidNot() {
+    func token(_ claims: String) -> TokenClaims {
+      TokenClaims(idToken: "h.\(Data(claims.utf8).base64EncodedString().replacingOccurrences(of: "=", with: "")).s")
+    }
+    let named = AglynUser(uid: "u1", email: "a@example.com", displayName: nil).fromToken(token(#"{"name":"Riley Staff"}"#))
+    XCTAssertEqual(named.displayName, "Riley Staff")
+    let kept = AglynUser(uid: "u1", email: "a@example.com", displayName: "Riley S.").fromToken(token(#"{"name":"Riley Staff"}"#))
+    XCTAssertEqual(kept.displayName, "Riley S.", "a name the answer gave is kept")
+    let blank = AglynUser(uid: "u1", email: "a@example.com", displayName: nil).fromToken(token(#"{"name":""}"#))
+    XCTAssertNil(blank.displayName, "a blank claim is no name")
+    XCTAssertNil(AglynUser(uid: "u1", email: "a@example.com", displayName: nil).fromToken(TokenClaims(idToken: nil)).displayName)
+  }
 }

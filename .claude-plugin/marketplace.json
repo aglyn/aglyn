@@ -1,0 +1,14 @@
+{
+  "name": "aglyn",
+  "owner": { "name": "Aglyn" },
+  "metadata": {
+    "description": "Work in your Aglyn workspace from Claude: sites, content, contacts, orders and more."
+  },
+  "plugins": [
+    {
+      "name": "aglyn",
+      "source": "./integrations/claude",
+      "description": "Connects Claude to your Aglyn workspace and teaches it how to work there: through Aglyn's tools, in the console, and from the command line."
+    }
+  ]
+}

@@ -66,8 +66,10 @@ export function nativeAppAssociationRoute(pathname: string): string | null {
  * auth session opens them for the app, and a universal link there would loop
  * back into the app), the native hand-off and other `/auth` pages, the
  * sign-out page, the site admin bar's connect page, a plugin's public
- * device pages and a site's photo link (`/p/<linkId>`, opened on a phone
- * by someone with no account). The sections the apps finish natively are
+ * device pages, a site's photo link (`/p/<linkId>`, opened on a phone
+ * by someone with no account) and the connector consent page
+ * (`/oauth/authorize`, AGL-4225), which an app such as Claude opens in the
+ * browser and expects to finish there. The sections the apps finish natively are
  * {@link NATIVE_AUTH_LINK_SEGMENTS}.
  *
  * The rest of the console's top-level sections (`admin`, `billing`,
@@ -81,6 +83,7 @@ export const NATIVE_WEB_ONLY_TOP_LEVEL_SEGMENTS: readonly string[] = [
   'auth',
   'edit-access',
   'kiosk',
+  'oauth',
   'p',
   'signin',
   'signout',

@@ -59,6 +59,7 @@ export const ACTIVITY_SEARCH_TOKENS_PATH = 'searchTokens'
 export interface ActivitySearchSource {
   actorEmail?: unknown
   apiKeyName?: unknown
+  connectedAppName?: unknown
   /** The entry's target as stored — only its `name` is read. */
   target?: { name?: unknown } | null
 }
@@ -89,6 +90,7 @@ export function activitySearchTokens(entry: ActivitySearchSource): string[] {
   const words = [
     ...addressSearchWords(entry.actorEmail),
     text(entry.apiKeyName),
+    text(entry.connectedAppName),
     text(entry.target?.name),
   ].filter(Boolean)
   return nameSearchTokens(words.join(' '))

@@ -623,6 +623,15 @@ organization**, and the plans differ in how much they allow:
 - Only requests that pass authentication and the rate limits are counted — rejected calls
   (bad key, wrong plan, rate-limited, past the ceiling) are never billed.
 
+### Connected apps {#connected-apps}
+
+**Connected apps** lists every app that was connected to the workspace by signing in
+instead of with an API key, such as an AI assistant. To connect one, add Aglyn in the app,
+sign in when it asks, pick the workspace and choose **View only** or **View and make
+changes**. Each row shows who connected it, when it was last used and its access, and
+**Disconnect** ends its access at once. A connected app's requests count toward the same
+API requests meter as your keys.
+
 ## Payments
 
 Billing runs through **Stripe**. Paid features (commerce, bookings, campaigns) share the

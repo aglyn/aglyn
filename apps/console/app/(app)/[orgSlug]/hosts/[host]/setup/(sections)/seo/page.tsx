@@ -125,6 +125,17 @@ export default function HostSetupSeoSection() {
           does with the site, and a reader verifying in Search Console is the
           one most likely to need to know the switch is off (AGL-3399). */}
       <HostSettingsForm schemaId="hostSeoVerification" />
+      {/* Proof of the site's DOMAIN to another service, which a plugin
+          writes into DNS: beside the tags that prove the site to a search
+          engine, because an owner looks for both in one place. */}
+      <PluginWidgetSlot
+        slot="hostVerification"
+        hostId={hostId}
+        orgId={orgId}
+        orgSlug={orgSlug}
+        host={host ?? null}
+        connectedDomain={typeof data?.cname === 'string' && data.cname ? data.cname : null}
+      />
       <SearchIndexingCard hostId={hostId} />
     </Stack>
   )

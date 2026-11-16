@@ -160,6 +160,8 @@ export interface LeadConvertActor {
    * conversion to, since a key has no address to be named by.
    */
   apiKeyName?: string | null
+  /** For an `api` actor that is a connected app: the app's own name (AGL-4225). */
+  connectedAppName?: string | null
 }
 
 /** What a conversion is asked to do. Validated by the door before it gets here. */
@@ -469,7 +471,11 @@ export async function convertHostLead(
     actor:
       actor.kind === 'member'
         ? { kind: 'member', uid: actor.uid, email: actor.email ?? null }
-        : { kind: 'apiKey', apiKeyName: actor.apiKeyName ?? null },
+        : {
+            kind: 'apiKey',
+            apiKeyName: actor.apiKeyName ?? null,
+            ...(actor.connectedAppName ? { connectedAppName: actor.connectedAppName } : {}),
+          },
     ...(leadConsent.basis === 'granted' ? { marketingConsent: true } : {}),
     ...(leadConsent.basis === 'granted' && leadDisclosure
       ? { disclosedConsentGroup: leadDisclosure }
@@ -833,6 +839,7 @@ export async function convertHostLead(
       uid: actor.uid,
       email: actor.email ?? null,
       ...(actor.apiKeyName ? { apiKeyName: actor.apiKeyName } : {}),
+      ...(actor.connectedAppName ? { connectedAppName: actor.connectedAppName } : {}),
     },
     'Converted lead',
     { type: 'lead', id: leadId, name: String(lead['name'] ?? '') || email },

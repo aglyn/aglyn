@@ -7,10 +7,22 @@
 /**
  * The demo site's connected services, each in test mode where the service
  * has one, so the commerce settings screen's Connected services cards
- * (`commerceSettings` zone) show a connection rather than only the connect
- * buttons. Each document is the one the plugin's connect route writes, at its
- * own path and in its own shape:
+ * (`commerceSettings` zone), the store's own ShipStation and ShippingEasy
+ * cards (Shipping & delivery) and the site setup's Email platforms card show a
+ * connection rather than only the connect buttons. Each document is the one
+ * the connect route writes, at its own path and in its own shape:
  *
+ * - Payments (Stripe Connect) is NOT written. Every money route, the
+ *   register's card readers and Tap to Pay among them, charges the account on
+ *   the owner's `profiles/{uid}`, and the console's Set up payments retrieves
+ *   it before anything else, so a made-up account id would turn "set up
+ *   payments, then drive a reader" into a refusal at both steps. The account
+ *   comes from Set up payments on a console holding the Stripe TEST key (a
+ *   real test account); the seed only reports what the profile names.
+ * - ShipStation: `commerceShipStationConnections/{hostId}`, a Custom Store login.
+ * - ShippingEasy: `commerceShippingEasyConnections/{hostId}`, placeholder keys.
+ * - Email platforms: `marketingPlatformConnections/{hostId}_mailchimp`, an API-key
+ *   connection with its audience picked (Mailchimp has no test mode).
  * - Couriers: `courierConnections/{hostId}_doordash`, a TEST key only, last test passed.
  * - Delivery apps: `deliveryAppStores/doordash_{digest}`, one store (the Sandbox badge is the deployment's).
  * - Fulfillment networks: `fulfillmentNetworkConnections/{hostId}_shipmonk`, `sandbox: true`.
@@ -33,14 +45,15 @@
  * holds a `seed-test-sealed-…` placeholder, non-empty because the readers
  * drop a connection whose sealed field is empty. The routes the cards load
  * never open one or call the service, and an action that would (Test keys, a
- * sync) fails to open the placeholder and says so, so nothing reaches a
- * vendor. Every due time is a year out, so no scheduled sync picks a
- * connection up.
+ * sync, ShipStation's Show password) fails to open the placeholder and says
+ * so, so nothing reaches a vendor. Every due time is a year out, so no
+ * scheduled sync picks a connection up.
  *
  * The cards draw on a console served by `serve-emulated`, which gives each
- * plugin its published local key and says the deployment offers DoorDash,
- * ShipMonk, eBay, AfterShip, Route, Narvar and Easyship
- * (`LOCAL_COMMERCE_SERVICE_SETTINGS`), all with placeholder or sandbox values.
+ * plugin its published local key (the Email platforms card's among them) and
+ * says the deployment offers DoorDash, ShipMonk, eBay, AfterShip, Route,
+ * Narvar and Easyship (`LOCAL_COMMERCE_SERVICE_SETTINGS`), all with
+ * placeholder or sandbox values.
  *
  * Idempotent: every document has a fixed id and is written whole.
  */
@@ -60,7 +73,7 @@ const sha256 = (value) => createHash('sha256').update(value).digest('hex')
 const sealed = (label) => `seed-test-sealed-${label}`
 const KEY_ID = 'seed-test'
 
-export async function seedIntegrations({ put, uid, orgId, hostId, now: date, root }) {
+export async function seedIntegrations({ put, get, uid, orgId, hostId, now: date, root }) {
   const now = date.getTime()
   const connectedAtMs = now - 6 * DAY
   const far = now + YEAR
@@ -376,5 +389,73 @@ export async function seedIntegrations({ put, uid, orgId, hostId, now: date, roo
     updatedAtMs: now - HOUR,
   })
 
-  return '11 services connected (test mode where offered)'
+  // Payments (Stripe Connect): read, never written (see the header). Said in
+  // the summary so the drive knows whether Set up payments is still owed.
+  const profile = (await get?.(`profiles/${uid}`)) ?? null
+  const payments = profile?.stripeAccountId
+    ? `Payments on the owner's ${{ false: 'TEST', true: 'LIVE' }[profile.stripeAccountLivemode] ?? 'unrecorded-mode'} account ${profile.stripeAccountId}, charges ${profile.stripeChargesEnabled ? 'on' : 'off'}`
+    : 'Payments not set up (Set up payments on a console with the Stripe test key)'
+
+  // ShipStation (Custom Store): the login ShipStation calls the order feed
+  // with; the password is a placeholder nobody can sign in with.
+  await put(`commerceShipStationConnections/${hostId}`, {
+    hostId,
+    username: 'aglyn-5eed7e570001',
+    sealedPassword: sealed('shipstation-password'),
+    passwordKeyId: KEY_ID,
+    createdAtMs: connectedAtMs,
+    createdBy: uid,
+    lastExportAtMs: now - 2 * HOUR,
+  })
+
+  // ShippingEasy: the account's API key and store key (shown by their last
+  // four), the API secret sealed as a placeholder ShippingEasy refuses.
+  await put(`commerceShippingEasyConnections/${hostId}`, {
+    hostId,
+    apiKey: 'seedtestshippingeasyapikey0001',
+    sealedApiSecret: sealed('shippingeasy-api-secret'),
+    secretKeyId: KEY_ID,
+    storeApiKey: 'seedtestshippingeasystore0001',
+    createdAtMs: connectedAtMs,
+    createdBy: uid,
+    lastError: null,
+  })
+
+  // Email platforms (Mailchimp, by API key): the audience picked, contacts
+  // syncing, the next run a year out so the engine never opens the placeholder.
+  const mailchimpId = `${hostId}_mailchimp`
+  await put(`marketingPlatformConnections/${mailchimpId}`, {
+    orgId,
+    hostId,
+    provider: 'mailchimp',
+    status: 'active',
+    authKind: 'api-key',
+    accountName: 'Juniper Street (seed test account)',
+    listId: 'seedtestaudience01',
+    lists: [{ id: 'seedtestaudience01', name: 'Juniper Street newsletter' }],
+    tag: 'Aglyn',
+    syncContacts: true,
+    syncEvents: true,
+    sealedToken: sealed('mailchimp-api-key'),
+    sealedRefreshToken: null,
+    tokenExpiresAtMs: null,
+    tokenKeyId: KEY_ID,
+    apiBase: null,
+    cursors: { contacts: null, suppressions: null, provider: null },
+    backfillDone: false,
+    nextRunAtMs: far,
+    leaseUntilMs: 0,
+    consecutiveFailures: 0,
+    lastRunAtMs: null,
+    lastSuccessAtMs: null,
+    lastError: null,
+    totals: { contactsPushed: 0, consentPulled: 0, eventsSent: 0 },
+    connectedAtMs,
+    connectedByUid: uid,
+    pendingOAuth: null,
+    updatedAtMs: connectedAtMs,
+  })
+
+  console.log(`seed-native-emulator: ${payments}`)
+  return `14 services connected (test mode where offered); ${payments}`
 }

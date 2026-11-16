@@ -1128,6 +1128,16 @@ export const CONSOLE_WIDGET_SLOTS = {
    */
   hostSeo: 'hostSeo',
   /**
+   * The host setup SEO section, under the Search engine verification card:
+   * where a plugin proves the site's DOMAIN to another service, beside the
+   * tags that prove the site to search engines. Props:
+   * {@link ConsoleHostVerificationZoneProps}.
+   *
+   * A widget here draws its own card. The section's own verification card
+   * works with nothing here, so a zone with no widget is the page as it was.
+   */
+  hostVerification: 'hostVerification',
+  /**
    * The host setup Business profile section, under the site's profile and
    * the facts read from its settings (AGL-3661). Props:
    * {@link ConsoleHostBusinessProfileZoneProps}. What a plugin keeps ABOUT the
@@ -1404,6 +1414,19 @@ export interface ConsoleHostDomainZoneProps {
   /** The site's org document; `undefined` while it resolves. */
   org: Record<string, unknown> | undefined
   /** The domain the site holds now, or null. */
+  connectedDomain: string | null
+}
+
+/** What the `hostVerification` zone hands each widget. */
+export interface ConsoleHostVerificationZoneProps {
+  hostId: string
+  /** The org the page names; `undefined` while it resolves. */
+  orgId: string | undefined
+  /** Path slug for building `/[orgSlug]/…` links. */
+  orgSlug: string
+  /** The site's subdomain, which is what a console URL names a site by. */
+  host: string | null
+  /** The domain the site holds now, or null for a site on its free address. */
   connectedDomain: string | null
 }
 

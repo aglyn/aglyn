@@ -161,7 +161,7 @@ export function ZapierCard(props: ZapierCardProps) {
                         ) : null}
                       </Stack>
                     }
-                    secondary={`${hook.keyName ? `API key “${hook.keyName}” · ` : ''}Last sent: ${formatTime(hook.lastDeliveryAt)}`}
+                    secondary={`${hook.keyLabel ? `${hook.keyLabel} · ` : hook.keyName ? `API key “${hook.keyName}” · ` : ''}Last sent: ${formatTime(hook.lastDeliveryAt)}`}
                   />
                 </ListItem>
               ))}

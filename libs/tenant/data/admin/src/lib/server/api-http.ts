@@ -137,6 +137,15 @@ export const ApiErrors = {
     }),
   internal: (init?: ApiResponseInit) =>
     errorResponse(500, 'internal_error', 'Something went wrong', init),
+  /**
+   * 503: the request could not be judged because a dependency failed, so
+   * nothing about the credential or the request is wrong (AGL-4225). Carries
+   * `Retry-After`; a client should simply try again.
+   */
+  unavailable: (retryAfterSec: number, headers?: Record<string, string>) =>
+    errorResponse(503, 'service_unavailable', 'Temporarily unavailable — try again shortly', {
+      headers: { 'Retry-After': String(Math.max(1, retryAfterSec)), ...headers },
+    }),
 }
 
 /**

@@ -117,6 +117,7 @@ import { readCrmPicklist } from '../read-picklist'
 import { judgeLeadPicklistPatch, namesLeadPicklist, readLeadPicklists } from '../lead-picklists'
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import {
+  apiActorFields,
   type ApiV1Context,
   claimWrite,
   orgOwnsHost,
@@ -893,7 +894,7 @@ async function convertLead(
       // A key has no uid; `'api'` is the attribution every REST create
       // stamps, and a key owns nothing — see the runtime's header. Its name
       // is what the site's activity feed shows for the conversion.
-      actor: { uid: 'api', email: null, kind: 'api', apiKeyName: ctx.keyName },
+      actor: { uid: 'api', email: null, kind: 'api', ...apiActorFields(ctx) },
       ...(ownerUid ? { ownerUid } : {}),
       ...parsed.plan,
     })
