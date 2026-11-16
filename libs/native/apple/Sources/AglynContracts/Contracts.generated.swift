@@ -2477,12 +2477,14 @@ public struct NativeNavRow: Codable, Hashable, Sendable {
   public var label: String
   public var order: Double?
   public var params: [String: String]?
+  public var permissions: [String]?
   public var pluginId: String?
+  public var requiresFeature: String?
   public var requiresHostAdmin: Bool?
   public var screen: String
   public var sections: [NativeNavSection]?
 
-  public init(actions: [NativeNavAction]? = nil, console: NativeNavConsoleRef, consoleLabel: String? = nil, description: String? = nil, docs: String? = nil, icon: NativeNavIcon, id: String, keywords: [String]? = nil, label: String, order: Double? = nil, params: [String: String]? = nil, pluginId: String? = nil, requiresHostAdmin: Bool? = nil, screen: String, sections: [NativeNavSection]? = nil) {
+  public init(actions: [NativeNavAction]? = nil, console: NativeNavConsoleRef, consoleLabel: String? = nil, description: String? = nil, docs: String? = nil, icon: NativeNavIcon, id: String, keywords: [String]? = nil, label: String, order: Double? = nil, params: [String: String]? = nil, permissions: [String]? = nil, pluginId: String? = nil, requiresFeature: String? = nil, requiresHostAdmin: Bool? = nil, screen: String, sections: [NativeNavSection]? = nil) {
     self.actions = actions
     self.console = console
     self.consoleLabel = consoleLabel
@@ -2494,7 +2496,9 @@ public struct NativeNavRow: Codable, Hashable, Sendable {
     self.label = label
     self.order = order
     self.params = params
+    self.permissions = permissions
     self.pluginId = pluginId
+    self.requiresFeature = requiresFeature
     self.requiresHostAdmin = requiresHostAdmin
     self.screen = screen
     self.sections = sections

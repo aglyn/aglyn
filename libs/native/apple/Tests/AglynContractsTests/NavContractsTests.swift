@@ -225,10 +225,35 @@ final class NavContractsTests: XCTestCase {
   func testTheManifestResolvesPerScope() throws {
     for item in cases("resolveNavList") {
       let listID = NativeNavListId(rawValue: item.args[0] as? String ?? "") ?? .unknown
+      // A fourth argument is the reader's answers, which hold back a row the console's org tab strip drops.
+      let answers = item.args.count > 3 ? item.args[3] as? [String: Any] : nil
+      let access = answers.map {
+        NativeNavAccess(
+          permissions: $0["permissions"] as? [String: Bool] ?? [:], features: $0["features"] as? [String: Bool] ?? [:])
+      }
       XCTAssertEqual(
-        resolveNavList(listID, enabledPluginIds: strings(item.args[1]), hostAdmin: item.args[2] as? Bool ?? false),
-        try decode(ResolvedNavList.self, item.result), "resolveNavList \(item.args[0]) \(item.args[1])")
+        resolveNavList(
+          listID, enabledPluginIds: strings(item.args[1]), hostAdmin: item.args[2] as? Bool ?? false, access: access),
+        try decode(ResolvedNavList.self, item.result), "resolveNavList \(item.args[0]) \(item.args[1]) \(access as Any)")
     }
+  }
+
+  func testSequencesWaitsForItsPermissionAndItsGrant() {
+    let keys = navRowGateKeys()
+    XCTAssertTrue(keys.permissions.contains("outreach.use") && keys.features.contains("outreach"))
+    func shown(use: Bool, granted: Bool) -> Bool {
+      resolveNavList(
+        .workspace, enabledPluginIds: ["outreach"], hostAdmin: false,
+        access: NativeNavAccess(permissions: ["outreach.use": use], features: ["outreach": granted])
+      ).groups.flatMap(\.rows).contains { $0.id == "sequences" }
+    }
+    XCTAssertTrue(shown(use: true, granted: true))
+    XCTAssertFalse(shown(use: false, granted: true))
+    XCTAssertFalse(shown(use: true, granted: false))
+    // No answers: a deep link's path is never held back.
+    XCTAssertTrue(
+      resolveNavList(.workspace, enabledPluginIds: ["outreach"], hostAdmin: false).groups.flatMap(\.rows)
+        .contains { $0.id == "sequences" })
   }
 
   func testTheCreateMenuResolvesPerScope() throws {

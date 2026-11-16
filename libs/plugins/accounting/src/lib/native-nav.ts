@@ -40,6 +40,9 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
       icon: nativeNavIcon('banknote', 'account_balance'),
       screen: 'accounting.books',
       pluginId: 'accounting',
+      // The org tab strip's permission (plugin.ts); a plan sells
+      // `features.commerce`, so the entitlement never hides the tab.
+      permissions: ['accounting.manage'],
       order: 70,
       console: nativeNavRef('orgPluginTab', '/accounting'),
     },

@@ -4965,6 +4965,9 @@
                 ],
                 "label": "CRM",
                 "order": 20,
+                "permissions": [
+                  "data.manage"
+                ],
                 "pluginId": "crm",
                 "screen": "crm.contacts",
                 "sections": [
@@ -5112,6 +5115,9 @@
                 "id": "emails",
                 "label": "Emails",
                 "order": 40,
+                "permissions": [
+                  "data.manage"
+                ],
                 "pluginId": "email",
                 "screen": "email.messages",
                 "sections": [
@@ -5276,6 +5282,9 @@
                 "id": "accounting",
                 "label": "Accounting",
                 "order": 70,
+                "permissions": [
+                  "accounting.manage"
+                ],
                 "pluginId": "accounting",
                 "screen": "accounting.books"
               },
@@ -5292,7 +5301,11 @@
                 "id": "sequences",
                 "label": "Sequences",
                 "order": 80,
+                "permissions": [
+                  "outreach.use"
+                ],
                 "pluginId": "outreach",
+                "requiresFeature": "outreach",
                 "screen": "outreach.sequences"
               },
               {

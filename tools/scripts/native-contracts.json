@@ -31978,6 +31978,78 @@
           "workspace",
           [],
           false
+        ],
+        [
+          "workspace",
+          [
+            "crm",
+            "inbox",
+            "email",
+            "outreach",
+            "accounting",
+            "marketplace",
+            "workflows",
+            "marketing"
+          ],
+          false,
+          {
+            "permissions": {
+              "data.manage": true,
+              "outreach.use": false,
+              "accounting.manage": true
+            },
+            "features": {
+              "outreach": true
+            }
+          }
+        ],
+        [
+          "workspace",
+          [
+            "crm",
+            "inbox",
+            "email",
+            "outreach",
+            "accounting",
+            "marketplace",
+            "workflows",
+            "marketing"
+          ],
+          false,
+          {
+            "permissions": {
+              "data.manage": false,
+              "outreach.use": true,
+              "accounting.manage": false
+            },
+            "features": {
+              "outreach": false
+            }
+          }
+        ],
+        [
+          "workspace",
+          [
+            "crm",
+            "inbox",
+            "email",
+            "outreach",
+            "accounting",
+            "marketplace",
+            "workflows",
+            "marketing"
+          ],
+          false,
+          {
+            "permissions": {
+              "data.manage": true,
+              "outreach.use": true,
+              "accounting.manage": true
+            },
+            "features": {
+              "outreach": true
+            }
+          }
         ]
       ]
     },
