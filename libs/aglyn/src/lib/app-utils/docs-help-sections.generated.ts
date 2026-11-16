@@ -184,6 +184,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#billing-link': 'A billing link in an email from Aglyn — a failed-payment notice, say — opens the Billing page of your workspace, asking you to sign in first if you need to.',
     '#billing-page': 'Organization → Billing is where your workspace\'s plan, usage, invoices and billing details live, in four tabs: Plan, Usage, Invoices and Settings.',
     '#campaign-sending-pace': 'Campaign emails (this hour, organization) shows how many campaign emails your workspace has sent this hour against the most it may send in an hour, so a very large send is spread out rather than refused.',
+    '#connected-apps': 'Connected apps lists every app that was connected to the workspace by signing in instead of with an API key, such as an AI assistant.',
     '#crm-records': 'Your CRM — the contacts captured from forms, member sign-ups, buyers and bookings, and the companies and deals your team files beside them — is priced as one CRM records band, not a hard cap.',
     '#current-plan': 'The Current plan card at the top of the Plan tab names your plan, the state of its subscription and its price, with the plan\'s headline limits — sites, team seats and campaign emails a month — beside it.',
     '#if-you-would-rather-uploads-stopped': 'Set a monthly storage cap on the Storage cap card under Billing → Usage when you would rather new uploads stopped than pay for extra storage past a figure you choose.',
