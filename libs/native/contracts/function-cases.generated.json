@@ -61761,6 +61761,22 @@
                   },
                   {
                     "console": {
+                      "id": "/domains",
+                      "surface": "orgPluginTab"
+                    },
+                    "docs": "/building-sites/custom-domains/manage-domains",
+                    "icon": {
+                      "android": "dns",
+                      "apple": "network"
+                    },
+                    "id": "domains",
+                    "label": "Domains",
+                    "order": 75,
+                    "pluginId": "domains",
+                    "screen": "domains.list"
+                  },
+                  {
+                    "console": {
                       "id": "/outreach",
                       "surface": "orgPluginTab"
                     },

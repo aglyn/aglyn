@@ -15,6 +15,7 @@ import com.aglyn.plugins.couriers.registerCouriersNative
 import com.aglyn.plugins.crm.registerCrmNative
 import com.aglyn.plugins.data.registerDataNative
 import com.aglyn.plugins.deliveryapps.registerDeliveryAppsNative
+import com.aglyn.plugins.domains.registerDomainsNative
 import com.aglyn.plugins.email.registerEmailNative
 import com.aglyn.plugins.eventscalendar.registerEventsCalendarNative
 import com.aglyn.plugins.forms.registerFormsNative
@@ -88,6 +89,11 @@ object NativePluginManifest {
             id = "delivery-apps",
             contributes = mapOf("screens" to listOf("delivery-apps.match", "delivery-apps.service", "delivery-apps.store"), "widgets" to listOf("delivery-apps.pos-orders")),
             register = ::registerDeliveryAppsNative,
+        ),
+        NativePluginManifestEntry(
+            id = "domains",
+            contributes = mapOf("screens" to listOf("domains.domain", "domains.list")),
+            register = ::registerDomainsNative,
         ),
         NativePluginManifestEntry(
             id = "email",
