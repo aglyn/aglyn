@@ -99,6 +99,7 @@ import {
   type EmailStreamRejoinOutcome,
   rejoinEmailStream,
 } from '@aglyn/aglyn/plugin-manager/plugin-email-streams'
+import { isSignupCanaryEmail } from '@aglyn/aglyn/app-utils/health-report'
 import { recordCapturedContact } from '@aglyn/aglyn/plugin-manager/record-captured-contact'
 import { attributableAccountForAddress } from './account-addresses'
 import { findPluginPerson } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
@@ -145,6 +146,11 @@ export type PlatformMarketingContactOutcome =
   | { status: 'no-email' }
   /** The capture door refused the row — its band, an erasure, or an error. */
   | { status: 'refused'; reason: string }
+  /**
+   * The sign-up canary's own throwaway account (AGL-4230): deleted seconds
+   * after it is made, so it is nobody's contact and nobody's to follow up.
+   */
+  | { status: 'test-account' }
 
 export interface RecordPlatformMarketingConsentInput {
   uid: string
@@ -378,6 +384,10 @@ export async function recordPlatformAccountContact(
   if (!hostId) return { status: 'unconfigured' }
   const email = String(input.email ?? '').trim()
   if (!email) return { status: 'no-email' }
+  // The canary walks sign-up every few hours and deletes the account after.
+  // As a contact it is residue in the operator's CRM, and with an owner it
+  // would hand that member a "Contact assigned to you" on every walk.
+  if (isSignupCanaryEmail(email)) return { status: 'test-account' }
 
   const snapshot = await (input.firestore ?? firestore())
     .collection('users')

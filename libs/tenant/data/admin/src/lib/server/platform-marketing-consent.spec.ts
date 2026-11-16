@@ -343,6 +343,26 @@ describe('recordPlatformAccountContact', () => {
     expect(upsertCalls).toHaveLength(0)
   })
 
+  it('leaves the sign-up canary’s throwaway account out of the CRM', async () => {
+    const captured: unknown[] = []
+    const result = await recordPlatformAccountContact({
+      uid: UID,
+      email: 'ops+signup-canary-abc123@example.com',
+      createdAtMs: CREATED,
+      firestore: fakeFirestore(),
+      hostId: HOST,
+      upsert,
+      orgIdForHost: async () => 'org-operator',
+      capture: (async (request: unknown) => {
+        captured.push(request)
+        return null
+      }) as never,
+    })
+    expect(result).toEqual({ status: 'test-account' })
+    expect(captured).toEqual([])
+    expect(upsertCalls).toHaveLength(0)
+  })
+
   it('returns a refused row instead of throwing', async () => {
     const result = await recordPlatformAccountContact({
       uid: UID,
