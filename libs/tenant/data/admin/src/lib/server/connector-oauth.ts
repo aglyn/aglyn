@@ -122,8 +122,22 @@ export const generateConnectorAccessToken = () => generateSecret(CONNECTOR_ACCES
 export const generateConnectorRefreshToken = () => generateSecret(CONNECTOR_REFRESH_TOKEN_PREFIX)
 export const generateConnectorCode = () => generateSecret(CONNECTOR_CODE_PREFIX)
 
-export function generateConnectorClientId(): string {
-  return `${CONNECTOR_CLIENT_ID_PREFIX}${randomBytes(16).toString('base64url')}`
+/**
+ * The client id for a registration, DERIVED from what it registers: the
+ * display name and the redirect addresses, sorted. An identical registration
+ * therefore gets the same id and the same document, so a client that
+ * registers on every connect — Claude, from shared addresses — cannot grow
+ * the store or spend a budget meant for strangers.
+ *
+ * Safe because a public client's id is not a secret and was never a proof of
+ * who registered: every code and token is bound to PKCE and to its own
+ * single-use secret, not to the id. It also means an id's name cannot be
+ * changed after the fact: a different name is a different id. 132 bits of
+ * SHA-256, in the same 22-character shape random ids had.
+ */
+export function deriveConnectorClientId(clientName: string, redirectUris: readonly string[]): string {
+  const normalized = JSON.stringify(['v1', clientName, [...new Set(redirectUris)].sort()])
+  return `${CONNECTOR_CLIENT_ID_PREFIX}${createHash('sha256').update(normalized, 'utf8').digest('base64url').slice(0, 22)}`
 }
 
 export function generateConnectorGrantId(): string {

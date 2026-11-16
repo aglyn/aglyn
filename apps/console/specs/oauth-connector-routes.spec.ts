@@ -223,9 +223,16 @@ describe('POST /api/oauth/register', () => {
     expect((await call({ redirect_uris: [CLAUDE], client_name: 'x'.repeat(9000) })).status).toBe(413)
   })
 
-  it('limits registrations per address', async () => {
+  it('answers a repeat registration 201 with the same client and its first issue time', async () => {
+    mockStore.registerConnectorClient.mockResolvedValue({ ...CLIENT, issuedAtMs: 1_700_000_000_000, created: false })
+    const response = await call({ client_name: 'Claude', redirect_uris: [CLAUDE] })
+    expect(response.status).toBe(201)
+    expect(await response.json()).toMatchObject({ client_id: CLIENT_ID, client_id_issued_at: 1_700_000_000 })
+  })
+
+  it('limits registrations per address only at a rate no burst of real connects reaches', async () => {
     mockStore.registerConnectorClient.mockResolvedValue({ ...CLIENT, issuedAtMs: 0 })
-    for (let i = 0; i < 20; i += 1) expect((await call({ redirect_uris: [CLAUDE] })).status).toBe(201)
+    for (let i = 0; i < 300; i += 1) expect((await call({ redirect_uris: [CLAUDE] })).status).toBe(201)
     const refused = await call({ redirect_uris: [CLAUDE] })
     expect(refused.status).toBe(429)
     expect(Number(refused.headers.get('retry-after'))).toBeGreaterThan(0)

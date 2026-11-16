@@ -66,7 +66,7 @@ import {
   type ConnectorAccessLevel,
   describeRedirectTarget,
   generateConnectorAccessToken,
-  generateConnectorClientId,
+  deriveConnectorClientId,
   generateConnectorCode,
   generateConnectorGrantId,
   generateConnectorRefreshToken,
@@ -152,19 +152,45 @@ export interface ConnectorClientRegistration {
   clientId: string
   clientName: string
   redirectUris: string[]
+  /** When the client was first registered — a repeat keeps the original. */
   issuedAtMs: number
+  /** False when an identical registration already existed and was reused. */
+  created: boolean
 }
 
-/** Store a validated registration. The caller has run `validateClientRegistration`. */
+/**
+ * Store a validated registration, IDEMPOTENTLY. The caller has run
+ * `validateClientRegistration`.
+ *
+ * The id is derived from the registration (`deriveConnectorClientId`), so an
+ * identical one finds its own document: it is returned as it stands and at
+ * most its idle clock is pushed on, at most once a day — never a second
+ * document. A lapsed one (past `expiresAt`, not yet swept) is registered
+ * afresh in place. One transaction, so two identical registrations at once
+ * cannot both create.
+ */
 export async function registerConnectorClient(
   input: { clientName: string; redirectUris: string[] },
   now = Date.now(),
 ): Promise<ConnectorClientRegistration> {
-  const clientId = generateConnectorClientId()
-  await db()
-    .collection(CONNECTOR_CLIENTS_COLLECTION)
-    .doc(clientId)
-    .create({
+  const clientId = deriveConnectorClientId(input.clientName, input.redirectUris)
+  const ref = db().collection(CONNECTOR_CLIENTS_COLLECTION).doc(clientId)
+  return db().runTransaction(async (tx): Promise<ConnectorClientRegistration> => {
+    const snap = await tx.get(ref)
+    const existing = snap.exists ? (snap.data() ?? {}) : null
+    if (existing && msOf(existing.expiresAt) > now) {
+      if (now - msOf(existing.lastUsedAt) >= CLIENT_TOUCH_INTERVAL_MS) {
+        tx.update(ref, { lastUsedAt: at(now), expiresAt: at(now + CONNECTOR_CLIENT_IDLE_TTL_MS) })
+      }
+      return {
+        clientId,
+        clientName: String(existing.clientName ?? input.clientName),
+        redirectUris: Array.isArray(existing.redirectUris) ? existing.redirectUris.map(String) : input.redirectUris,
+        issuedAtMs: msOf(existing.createdAt) || now,
+        created: false,
+      }
+    }
+    tx.set(ref, {
       clientId,
       clientName: input.clientName,
       redirectUris: input.redirectUris,
@@ -172,7 +198,8 @@ export async function registerConnectorClient(
       lastUsedAt: at(now),
       expiresAt: at(now + CONNECTOR_CLIENT_IDLE_TTL_MS),
     })
-  return { clientId, clientName: input.clientName, redirectUris: input.redirectUris, issuedAtMs: now }
+    return { clientId, clientName: input.clientName, redirectUris: input.redirectUris, issuedAtMs: now, created: true }
+  })
 }
 
 /** A live registration, or `null` when it is unknown or has lapsed. */

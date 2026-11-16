@@ -171,6 +171,42 @@ beforeEach(() => {
 })
 
 describe('registration', () => {
+  const clientDocs = () => [...mockDocs.keys()].filter((key) => key.startsWith('oauthClients/'))
+
+  it('is idempotent: the same registration is the same client and one document, touched at most daily', async () => {
+    const first = await registerConnectorClient({ clientName: 'Claude', redirectUris: [CLAUDE] }, NOW)
+    expect(first.created).toBe(true)
+    const stored = mockDocs.get(`oauthClients/${first.clientId}`)
+    const again = await registerConnectorClient({ clientName: 'Claude', redirectUris: [CLAUDE] }, NOW + 60_000)
+    expect(again).toEqual({ ...first, created: false })
+    expect(clientDocs()).toHaveLength(1)
+    // Within the day: nothing written at all.
+    expect(mockDocs.get(`oauthClients/${first.clientId}`)).toEqual(stored)
+    // A day on: the idle clock moves, and only that.
+    const DAY = 24 * 60 * 60 * 1000
+    await registerConnectorClient({ clientName: 'Claude', redirectUris: [CLAUDE] }, NOW + DAY)
+    const touched = mockDocs.get(`oauthClients/${first.clientId}`) as Record<string, { toMillis: () => number }>
+    expect(touched.expiresAt.toMillis()).toBe(NOW + DAY + CONNECTOR_CLIENT_IDLE_TTL_MS)
+    expect(touched.createdAt.toMillis()).toBe(NOW)
+    expect(clientDocs()).toHaveLength(1)
+  })
+
+  it('gives a different name or different addresses a different client', async () => {
+    const a = await registerConnectorClient({ clientName: 'Claude', redirectUris: [CLAUDE] }, NOW)
+    const b = await registerConnectorClient({ clientName: 'Claude Code', redirectUris: [CLAUDE] }, NOW)
+    const c = await registerConnectorClient({ clientName: 'Claude', redirectUris: ['http://localhost:9/cb'] }, NOW)
+    expect(new Set([a.clientId, b.clientId, c.clientId]).size).toBe(3)
+    expect(clientDocs()).toHaveLength(3)
+  })
+
+  it('registers a lapsed client afresh, in place', async () => {
+    const first = await registerConnectorClient({ clientName: 'Claude', redirectUris: [CLAUDE] }, NOW)
+    const later = NOW + CONNECTOR_CLIENT_IDLE_TTL_MS + 1
+    const again = await registerConnectorClient({ clientName: 'Claude', redirectUris: [CLAUDE] }, later)
+    expect(again).toMatchObject({ clientId: first.clientId, created: true, issuedAtMs: later })
+    expect(await readConnectorClient(first.clientId, later)).not.toBeNull()
+  })
+
   it('reads back a live client and forgets a lapsed one', async () => {
     const client = await registerConnectorClient({ clientName: 'Claude', redirectUris: [CLAUDE] }, NOW)
     expect(await readConnectorClient(client.clientId, NOW)).toEqual({

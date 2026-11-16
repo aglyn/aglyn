@@ -37,15 +37,26 @@ import {
 export const dynamic = 'force-dynamic'
 
 /**
- * Registrations one address may make per window. Every registration is a
- * stored document written for an unauthenticated caller, so every request is
- * counted, not only failures. A client registers once per connection, so a
- * person connecting a handful of apps never comes near it.
+ * Registration requests one address may make per window — every request
+ * counted. Only abuse should ever meet it: registration is idempotent (an
+ * identical one returns the same client and writes nothing new), and Claude
+ * registers from a provider's shared addresses on behalf of every customer at
+ * once, so the number has to be one no burst of real connects reaches.
+ * DISTINCT registrations are bounded elsewhere — every address on the
+ * redirect allowlist, the size caps, and each unused client's expiry.
  */
-const REGISTRATIONS = connectorBudget('oauth-register', 20, 10 * 60_000)
+const REGISTRATIONS_PER_WINDOW = 300
+const REGISTRATIONS = connectorBudget('oauth-register', REGISTRATIONS_PER_WINDOW, 10 * 60_000)
 
 /**
  * Dynamic client registration (RFC 7591), public clients only (AGL-4225).
+ *
+ * Idempotent: the client id is derived from the name and the redirect
+ * addresses, so the same registration answers with the same client. A repeat
+ * still answers 201 with the full registration — RFC 7591 §3.2.1 defines
+ * exactly one success status, and a client library may hold the server to it;
+ * `client_id_issued_at` keeps the first registration's time, which is the
+ * honest answer to "when was this client issued".
  *
  * What is kept is a name and the redirect addresses, and every address must
  * be on `CONNECTOR_REDIRECT_ALLOWLIST` — so registering is open, but a client

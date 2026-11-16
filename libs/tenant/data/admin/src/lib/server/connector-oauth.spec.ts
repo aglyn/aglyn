@@ -39,7 +39,7 @@ import {
   describeConnectorAccess,
   describeRedirectTarget,
   generateConnectorAccessToken,
-  generateConnectorClientId,
+  deriveConnectorClientId,
   generateConnectorCode,
   generateConnectorGrantId,
   generateConnectorRefreshToken,
@@ -90,9 +90,19 @@ describe('credentials', () => {
   })
 
   it('mints client and connection ids in their own shapes', () => {
-    expect(isConnectorClientIdFormat(generateConnectorClientId())).toBe(true)
+    expect(isConnectorClientIdFormat(deriveConnectorClientId('Claude', [CLAUDE]))).toBe(true)
     expect(isConnectorGrantIdFormat(generateConnectorGrantId())).toBe(true)
     expect(isConnectorGrantIdFormat('key_abcdefghijkl')).toBe(false)
+  })
+
+  it('derives a client id from the registration: same input, same id; anything different, a different one', () => {
+    const local = 'http://localhost:33418/callback'
+    const id = deriveConnectorClientId('Claude', [CLAUDE, local])
+    expect(deriveConnectorClientId('Claude', [local, CLAUDE])).toBe(id)
+    expect(deriveConnectorClientId('Claude', [CLAUDE, local, CLAUDE])).toBe(id)
+    expect(deriveConnectorClientId('Claude Code', [CLAUDE, local])).not.toBe(id)
+    expect(deriveConnectorClientId('Claude', [CLAUDE])).not.toBe(id)
+    expect(deriveConnectorClientId('Claude', [CLAUDE, 'http://localhost:33419/callback'])).not.toBe(id)
   })
 
   it('compares in constant time without throwing on unequal lengths', () => {
@@ -265,7 +275,7 @@ describe('access', () => {
 })
 
 describe('the authorization request', () => {
-  const client = { clientId: generateConnectorClientId(), clientName: 'Claude', redirectUris: [CLAUDE] }
+  const client = { clientId: deriveConnectorClientId('Claude', [CLAUDE]), clientName: 'Claude', redirectUris: [CLAUDE] }
   const good = {
     client_id: client.clientId,
     redirect_uri: CLAUDE,
