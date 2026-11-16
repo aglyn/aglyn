@@ -1,23 +1,35 @@
 ---
 sidebar_position: 3
 title: Rate limits & usage
-description: The per-key request limit, the RateLimit and X-RateLimit headers, and how the monthly quota bills.
+description: The per-key and per-workspace request limits, the RateLimit and X-RateLimit headers, and how the monthly quota bills.
 ---
 
 # Rate limits & usage
 
 Two separate things share this page, and they behave very differently:
 
-- The **rate limit** is a short-term burst cap. Exceed it and the request is refused.
+- The **rate limits** are short-term burst caps, one per key and one for the whole
+  workspace. Exceed either and the request is refused.
 - The **monthly quota** is a billing meter. Exceed it and the request still succeeds —
-  the overage lands on your invoice.
+  the overage lands on your invoice — up to your plan's monthly ceiling, if it has one.
 
-## Rate limit
+## Rate limits
 
-**120 requests per minute, per API key**, in a fixed one-minute window.
+Two per-minute limits apply to every request, in fixed one-minute windows:
 
-The limit is per key, so splitting an integration across two keys gives it two
-budgets — and one runaway script can't starve your others.
+| Limit | Starter | Pro | Custom |
+| --- | --- | --- | --- |
+| Per API key | 120 | 120 | 120 |
+| Per workspace, all keys and connections together | 120 | 600 | Set by your agreement; none by default |
+
+**The workspace limit is the ceiling.** Splitting an integration across several keys
+gives each key its own 120, so one runaway script can't starve the others — but
+together they never go past the workspace's limit. On Starter one key can use the
+whole workspace budget; on Pro five busy keys can.
+
+Everything that authenticates with a key counts towards the workspace limit: REST
+calls, and an AI agent calling through the
+[MCP server](/guides/your-first-api-call#mcp) with one of your keys.
 
 :::note Counted globally, not per server
 The counter is shared across every server that answers your requests, so 120/min is
@@ -33,7 +45,8 @@ Every response carries the current budget:
 
 | Header | Meaning |
 | --- | --- |
-| `RateLimit-Limit` | Requests allowed per window (`120`). |
+| `X-RateLimit-Scope` | Which budget the six headers below describe: `key`, or `workspace` on a refusal by the workspace limit. |
+| `RateLimit-Limit` | Requests allowed per window (`120` for a key). |
 | `RateLimit-Remaining` | Requests left in the current window. |
 | `RateLimit-Reset` | **Seconds until** the window resets. |
 | `X-RateLimit-Limit` | Same number as `RateLimit-Limit`. |
@@ -47,6 +60,18 @@ writing a general HTTP client, and note that its `Reset` is a **duration** while
 
 `X-RateLimit-*` is the older set this API has always sent. It is not deprecated and
 has no removal date; if you are already reading it, keep reading it.
+
+The workspace's own budget comes on every authenticated response too, wherever the
+plan sets one:
+
+| Header | Meaning |
+| --- | --- |
+| `X-Workspace-RateLimit-Limit` | Requests the whole workspace may make per minute. |
+| `X-Workspace-RateLimit-Remaining` | Requests the workspace has left in the current window. |
+| `X-Workspace-RateLimit-Reset` | When the workspace window resets, as a Unix timestamp in **seconds**. |
+
+Pace a single integration against the key headers; pace several against the
+workspace ones.
 
 [rfc9331]: https://www.rfc-editor.org/rfc/rfc9331
 
@@ -74,16 +99,24 @@ a *valid* key sent from the same address is refused too, because identifying it 
 work we're declining to do.
 :::
 
-When you exceed the limit, the request returns `429` with a `Retry-After` header
-(seconds to wait):
+When you exceed a limit, the request returns `429` with a `Retry-After` header
+(seconds to wait), and `error.code` says which limit it was:
 
 ```json
-{ "error": { "type": "rate_limited", "message": "Too many requests" } }
+{ "error": { "type": "rate_limited", "code": "workspace_rate_limit", "message": "This workspace has made 120 API requests in the last minute across all of its keys, the most its plan allows." } }
 ```
+
+| `code` | Limit | `Retry-After` |
+| --- | --- | --- |
+| `key_rate_limit` | The key's 120 a minute | Seconds to the next minute |
+| `workspace_rate_limit` | The workspace's per-minute limit | Seconds to the next minute |
+| `monthly_request_ceiling` | The plan's monthly ceiling (Starter) — see [below](#monthly-quota--overage) | Seconds to the next month, UTC |
+| `monthly_request_quota` | The included requests, on a plan that bills nothing past them | Seconds to the next month, UTC |
 
 ### Staying under the limit
 
 - Read `RateLimit-Remaining` (or `X-RateLimit-Remaining`) and slow down as it approaches zero.
+  If you run several keys, watch `X-Workspace-RateLimit-Remaining` as well.
 - On a `429`, wait `Retry-After` seconds. Requests made while limited still count, so
   hammering the endpoint keeps the window pinned — back off rather than retrying
   immediately.
@@ -129,18 +162,32 @@ Two practical consequences:
 
 ## Monthly quota & overage
 
-Separate from the rate limit, each **organization** has a monthly request quota tied
+Separate from the rate limits, each **organization** has a monthly request quota tied
 to its plan:
 
-| Plan | Included requests / month | Overage |
-| --- | --- | --- |
-| Pro | 1,500 | Metered per additional 1,000, at the rate on [aglyn.com/pricing](https://aglyn.com/pricing) |
-| Custom | Set by your agreement | — |
+| Plan | Included requests / month | Overage | Monthly ceiling |
+| --- | --- | --- | --- |
+| Starter | 500 | Metered per additional 1,000, at the rate on [aglyn.com/pricing](https://aglyn.com/pricing) | 50,000 requests, then refused until the month turns |
+| Pro | 1,500 | Metered per additional 1,000, at the rate on [aglyn.com/pricing](https://aglyn.com/pricing) | None |
+| Custom | Set by your agreement | — | Set by your agreement |
 
 Requests beyond the included quota **keep working** and bill as metered overage on the
-monthly invoice — the quota is a meter, not a wall, so it can never break a live
-integration mid-run. Read where you stand from the API itself with
-[`GET /v1/usage`](usage.md), or on the **Billing** page's API-requests meter. See
+monthly invoice, so a bulk import doesn't stop when the included requests run out.
+
+**Starter has a monthly ceiling; Pro has none.** On Starter, once the workspace has
+made 50,000 requests in a calendar month (UTC) — the included 500 and the overage
+together — every further request is refused with `429` and code
+`monthly_request_ceiling` until the month turns, with `Retry-After` counting down to
+it. Move to Pro for an integration that needs more: its overage keeps billing with no
+ceiling. `GET /v1/usage` reports the ceiling as `apiRequests.ceiling` (`null` where
+there is none).
+
+A workspace that can't be billed for overage — one with no active subscription, or
+whose whole bill is covered by a 100% discount — stops at its included requests
+instead, with code `monthly_request_quota`.
+
+Read where you stand from the API itself with [`GET /v1/usage`](usage.md), or on the
+**Billing** page's API-requests meter. See
 [Billing & Plans → API access](/workspace-and-billing/billing-and-plans/overview#api-access).
 
 The month is calendar-based in **UTC**, which may not match your billing timezone at
@@ -154,7 +201,8 @@ Metering happens once a request is authenticated and past the rate limit, so:
 then fail: `404` not-found, `405` wrong-method, `400` validation errors, and `403
 insufficient_scope` (the scope is checked after metering).
 
-**Not billed** — `401 unauthorized`, `403 plan_required`, and `429 rate_limited`.
+**Not billed** — `401 unauthorized`, `403 plan_required`, and every `429 rate_limited`,
+whichever limit refused it.
 
 In practice: a buggy client looping on a 404 costs you quota, but an unauthenticated
 or rate-limited one doesn't.

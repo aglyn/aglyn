@@ -504,6 +504,37 @@ the Terms point at it rather than restate it.
 
 Revert: point `v0clP6xQl-`'s `versionId` back at `d4QVrkm2vn` and revalidate.
 
+### 2026-11-16 — the API on Starter: code first, the page after billing (AGL-4226)
+
+Starter gains the API (500 requests a month, $0.50 per 1,000 past them, a
+50,000 monthly ceiling) and every plan a per-workspace rate limit. A band going
+UP publishes after billing is live, so this change is code-only and the page
+follows the release:
+
+- `tables.json` is regenerated and now carries the Starter cells and two new
+  compare rows, **API monthly ceiling** and **API requests per minute, whole
+  workspace**. `build-pricing-tables.mts` declares the two Starter cells
+  (`FRAME_STALE_CELLS['API access · Starter']`,
+  `USAGE_STALE['API requests, per 1,000 over limit · Starter']`) and the two
+  new rows (`EXPECTED_MISSING`) ahead of the frame. Each declaration fails the
+  reconciler the day the frame catches up, and is deleted then.
+- `/pricing`, the calculator variables, the comparison pages and the Figma
+  frames change by hand after the release, from before→after rows the owner
+  approves.
+- **Two numbers may move after a pricing audit**: Starter's overage rate and
+  its ceiling. Each is written once —
+  `PLAN_PRICING.starter.extraApiRequestsUsdPer1k` and
+  `PLAN_ENTITLEMENTS.starter.maxApiRequestsPerMonth` — and the specs, the
+  refusal message, the console captions and `tables.json` read them. What
+  still states them as literals, and moves by hand with either: the docs
+  (`apps/docs/api/{overview,rate-limits,usage}.md`,
+  `apps/docs/docs/workspace-and-billing/billing-and-plans/overview.md`), the
+  native overage screen's `const.pricing.starter`
+  (`libs/native/screens/billing-overage.screens.json`, held to the code by
+  `native-billing-overage-matches-the-console.spec.ts`), the `$24.75` and
+  `975` guards in `api-request-guards.spec.ts` and `report-usage/route.spec.ts`
+  (each conditional on today's figures), the decision-log entry, and the page.
+
 ## Enterprise has no price here, but it has bands
 
 `PLAN_ENTITLEMENTS.enterprise` is a row of **finite fallbacks** — twice

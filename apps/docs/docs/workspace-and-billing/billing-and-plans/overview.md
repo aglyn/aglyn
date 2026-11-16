@@ -89,7 +89,7 @@ copy that goes stale.
 | Plan | What it is for |
 |---|---|
 | Free | One site to build and publish — no selling, no custom domain |
-| Starter | One site with your own domain, a store, bookings and the CRM, with the highest transaction fee |
+| Starter | One site with your own domain, a store, bookings, the CRM and the API, with the highest transaction fee |
 | Pro | The full platform: unlimited pages, products, forms, workflows and dataset records, POS, video, recurring billing, members-only content, gift cards, A/B testing, multilingual sites, scheduled publishing, the API and webhooks |
 | Custom | Everything in Pro, plus white-label, single sign-on, a dedicated support commitment, no transaction fee, and limits set by agreement |
 
@@ -592,21 +592,30 @@ message. On plans that have the cap, the billing page shows
 
 ## API access
 
-The **customer REST API** is included on **Pro and Custom** — mint scoped API keys
-and call the versioned `/v1` endpoints from anywhere. Requests are **metered per
-organization**:
+The **customer REST API** is included on **Starter, Pro and Custom** — mint scoped API
+keys and call the versioned `/v1` endpoints from anywhere. Requests are **metered per
+organization**, and the plans differ in how much they allow:
 
-| Plan | Included requests / month | Overage |
-|---|---|---|
-| Pro | 1,500 | Metered per additional 1,000 |
-| Custom | Set by your agreement | — |
+| | Starter | Pro | Custom |
+|---|---|---|---|
+| Included requests / month | 500 | 1,500 | Set by your agreement |
+| Past the included requests | Metered per additional 1,000 | Metered per additional 1,000 | — |
+| Monthly ceiling | 50,000 requests, then refused until the month turns | None | Set by your agreement |
+| Requests per minute, whole workspace | 120 | 600 | Set by your agreement |
+| Requests per minute, per key | 120 | 120 | 120 |
+| Webhooks and Zapier hooks | Not included | Included | Included |
 
 - Requests past the included quota **keep working** and bill as metered overage on your
-  monthly invoice — never a hard wall mid-integration.
+  monthly invoice. On Starter they stop at the monthly ceiling: the API answers `429`
+  until the next calendar month (UTC). Pro has no ceiling.
+- The workspace limit counts every key together, so adding keys doesn't add capacity
+  past it. See [Rate limits & usage](/api/rate-limits).
+- On Starter, a workspace that can't be billed for overage — no active subscription,
+  or a 100% discount on the whole bill — stops at its 500 included requests.
 - The billing page shows an **API requests** meter, and the usage-cap banner warns at 80%
   and 100% of the included quota.
-- Only requests that pass authentication and the rate limit are counted — rejected calls
-  (bad key, wrong plan, rate-limited) are never billed.
+- Only requests that pass authentication and the rate limits are counted — rejected calls
+  (bad key, wrong plan, rate-limited, past the ceiling) are never billed.
 
 ## Payments
 

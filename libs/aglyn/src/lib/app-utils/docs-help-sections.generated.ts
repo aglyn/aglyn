@@ -176,7 +176,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#where-the-money-goes': 'Costs on this board are our estimated provider cost at the serving model\'s list rates.',
   },
   billing: {
-    '#api-access': 'The customer REST API is included on Pro and Custom — mint scoped API keys and call the versioned /v1 endpoints from anywhere.',
+    '#api-access': 'The customer REST API is included on Starter, Pro and Custom — mint scoped API keys and call the versioned /v1 endpoints from anywhere.',
     '#billing-address': 'The address Aglyn issues your invoices to, and the address sales tax on your Aglyn subscription is calculated from.',
     '#billing-address-on-profile': 'Settings → Profile shows your billing address read-only, beside the workspace\'s other details; change it on Billing → Settings.',
     '#billing-email': 'Invoices are sent to the billing email, along with receipts and — the one that matters most — the notices we send when a card fails and a subscription is about to lapse.',
