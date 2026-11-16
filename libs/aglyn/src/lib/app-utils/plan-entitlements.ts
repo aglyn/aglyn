@@ -5646,6 +5646,50 @@ export const INCLUDED_EMAIL_SENDS_BY_PLAN: Readonly<Partial<Record<OrgPlan, numb
 }
 
 /**
+ * A HARD monthly cap on a plan's email (AGL-4227), across everything on the
+ * cost meter but account and security mail: past it, the next email is not
+ * sent until the month turns (UTC). For the plan that cannot be billed for
+ * usage — Free — so its mail has a bound that is not an invoice.
+ *
+ * 300 on Free. What a Free workspace legitimately sends is small: 20 form
+ * submissions a month (a notice and a confirmation each, at most 40), no
+ * store, no bookings, no campaigns, no one-to-one CRM mail and no workflows;
+ * invitations, sign-in links and password resets are exempt and never
+ * counted. 300 is several times that, and costs at most $0.27 a month at
+ * `perEmailSend`. Counted on its own field from the month it ships, so it
+ * never refuses mail because of what was sent before it existed.
+ *
+ * A plan absent here has no monthly cap (its daily abuse ceiling still
+ * applies). An org can be given its own figure on
+ * `entitlements.emailSendsMonthlyCap`.
+ */
+export const EMAIL_SENDS_MONTHLY_CAP_BY_PLAN: Readonly<Partial<Record<OrgPlan, number>>> = {
+  free: 300,
+}
+
+/** The per-org override key for the monthly email cap. */
+export const EMAIL_SENDS_MONTHLY_CAP_KEY = 'emailSendsMonthlyCap'
+
+/**
+ * The org's hard monthly email cap (AGL-4227): its own figure when staff
+ * wrote one, else its plan's, else `UNLIMITED`. The ONE reader the send seam,
+ * the usage page and the usage alerts ask. Read off the plan the org RESOLVES
+ * as, so a lapsed paid plan reads as Free.
+ */
+export function resolveMonthlyEmailCap(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): number {
+  const override = (org?.entitlements as Record<string, unknown> | undefined)?.[
+    EMAIL_SENDS_MONTHLY_CAP_KEY
+  ]
+  if (typeof override === 'number' && Number.isFinite(override) && override >= 0) {
+    return Math.floor(override)
+  }
+  const cap = EMAIL_SENDS_MONTHLY_CAP_BY_PLAN[resolveEffectivePlan(org)]
+  return typeof cap === 'number' ? cap : UNLIMITED
+}
+
+/**
  * The band an org's month of email is billed against (AGL-4227):
  * `INCLUDED_EMAIL_SENDS_BY_PLAN` for its plan where one is set, else its
  * resolved `emailSendsPerMonth`. The ONE reader the rollup and the billing
