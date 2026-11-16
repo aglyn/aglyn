@@ -9,6 +9,94 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.24.0 — 2026-11-16
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.23.1...v1.24.0)
+
+### Added
+
+- **data:** an Icon field for datasets, bound by an Icon element in a repeat ([AGL-4190](https://linear.app/aglyn/issue/AGL-4190))
+- **accounting:** release_accounting on by default for every workspace ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
+- **api:** an MCP Registry server.json for the remote MCP server, not published ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **api:** the API catalog, the customer OpenAPI and the REST root name the MCP server and how to sign in ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **api:** MCP server card, documentation members in both sign-in documents, and a scope challenge on 403 ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **api:** a connection's writes read Connected app <name>; /v1/me answers connected_app; staff mail never links a chosen name ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **console:** consent leads with where the connection goes and names the app as it names itself; MCP answers browser clients; new-client budget per address ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **api:** connector sign-in is open to any MCP client: one redirect policy (https domains, loopback, private-use schemes), hardened app names, unused registrations kept a day ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **api:** connector collections deny-all with TTLs, erased with the org and the person, hooks follow the connection, documented ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **api:** MCP 401 names sign-in; tools carry title, hints and self-contained schemas; OpenAPI publishes the connector scheme ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **console:** connector sign-in routes, consent page and Connected apps ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **api:** /api/v1 resolves a connector access token through the same pipeline as a key ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **api:** connector sign-in core: PKCE, redirect allowlist, codes, rotating refresh, connections ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **claude:** a Claude plugin with skills for the tools, the console and reading a site, and a Claude guide ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+
+### Fixed
+
+- **staff:** new-account notice waits for the sign-up's acquisition record before saying there is none ([AGL-4229](https://linear.app/aglyn/issue/AGL-4229))
+- **console:** a signed-out tab parks its refused listens until somebody signs in ([AGL-2945](https://linear.app/aglyn/issue/AGL-2945))
+- **console:** an invitee who signs up lands in the invited workspace ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **api:** declare the MCP schema host as never requested, and drop a dead assignment lint refuses ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **forms:** a lone yes-box shows its field's question, not just "Yes"
+- **console:** Connected apps opens a docs section of its own, apart from API keys ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **api:** invisible characters in the app-name patterns are written as escapes, so lint reads them ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **console:** native activity, native run history and Zapier hooks name a connected app as one ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **api:** a batch reports the budget after its last charge; only an app's chosen name is unlinked in staff mail; stale wording fixed ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **console:** self-host without a console URL fails closed; previews issue no credentials; per-account approval and promotion limits ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **api:** a resolving refresh is never refused by a failure limit; only guesses are counted; a lock answers 503 and ends nothing ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **api:** app names refuse the brand by what they read as; codes never go to the platform's own hosts ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **apple:** staff claims are read only for the person in use ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667))
+- **api:** every tool call in an MCP batch is charged and metered as its own request ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **console:** nothing leaves the consent page without a click; destination shown in full; no preselected workspace; token budgets per client; reserved new-client budget; canonical issuer in production ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **api:** app-link callbacks only by exact allowlist; View only always offered; hardened app names; locks never end a connection; unapproved clients live a week ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **console:** native apps reserve the oauth slug; connector TTLs declared and documented; Connected apps carries help ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **api:** client registration is idempotent — the id derives from name and redirects — and its per-address limit only stops abuse ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **console:** consent names the approving account and asks for a deliberate start; words spec over the API; refresh retry documented ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **api:** MCP caps body and batch, names the revision it answered in, marks updates destructive ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **api:** /api/v1 answers a failed credential read with 503, and a shared address is not drained by one dead token ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **console:** one connector origin, refused on the auth origin; logging after the outcome cannot fail it; token failures budgeted per client ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **api:** a spent code revokes only with its bindings; 30 s refresh retry grace; clients outlive their tokens; a failed read is unavailable, not unknown; consent words cover every write ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+
+### Documentation
+
+- **mobile:** add the console features the apps still lack to the parity checklist
+- **api:** an MCP server section in the API overview, and the card and scope challenge in sign-in ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **api:** guesses, lock retries and approval limits for connector sign-in ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **api:** loopback for native clients, exact app callbacks on request, consent, limits and connected_app ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **api:** sign-in for any MCP client — the redirect policy, registration and browser access ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **claude:** the guide and plugin readme cover any assistant that supports MCP sign-in, not only Claude ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+
+<details>
+<summary>Also in this release: 2 test, 3 chore</summary>
+
+- **firewall:** declare the MCP + connector sign-in bypass now live on the console; nothing is owed a bypass ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **selfhost:** the API catalog reads its console origin from the shared helper, one hard-coded host fewer ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **console:** invitee landing ready to merge ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **guards:** check:agent-readiness covers the MCP server, and runs in CI ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **console:** connector walk end to end on the emulators, the sign-in round trip, and the consent screen ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+
+</details>
+
+## v1.23.1 — 2026-11-16
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.23.0...v1.23.1)
+
+### Added
+
+- **domains:** verify a site's domain with ChatGPT from its SEO setup, beside its other search engine verifications
+
+### Fixed
+
+- **ai:** Improve it lets a redesigned page's call and email buttons use the site's own phone and email ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **seed:** leave the store's Stripe account to Set up payments
+- **apple:** a REST sign-in names the person from the token when the answer does not ([AGL-4010](https://linear.app/aglyn/issue/AGL-4010))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **seed:** connect Payments, ShipStation, ShippingEasy and Email platforms in test mode
+
+</details>
+
 ## v1.23.0 — 2026-11-16
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.22.4...v1.23.0)

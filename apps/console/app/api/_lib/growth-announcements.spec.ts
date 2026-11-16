@@ -25,9 +25,29 @@
 
 const mockNotifyStaff = jest.fn()
 
+/** `users/{uid}` as successive reads find it; past the list, the last one. */
+let mockUserReads: Array<Record<string, unknown> | null> = []
+let mockUserReadCount = 0
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
-  firebaseAdmin: {},
+  firebaseAdmin: {
+    app: () => ({
+      firestore: () => ({
+        collection: (collection: string) => ({
+          doc: () => ({
+            get: async () => {
+              if (collection !== 'users') return { exists: false, data: () => undefined }
+              const data =
+                mockUserReads[Math.min(mockUserReadCount, mockUserReads.length - 1)] ?? null
+              mockUserReadCount += 1
+              return { exists: data != null, data: () => data ?? undefined }
+            },
+          }),
+        }),
+      }),
+    }),
+  },
   meterOrgEmail: async () => undefined,
   notifyStaff: (...args: unknown[]) => mockNotifyStaff(...args),
 }))
@@ -44,7 +64,12 @@ jest.mock('./render-system-email', () => ({
 }))
 
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
-import { announceNewSite, announceNewWorkspace } from './growth-announcements'
+import {
+  ACQUISITION_WAIT_MS,
+  announceNewAccount,
+  announceNewSite,
+  announceNewWorkspace,
+} from './growth-announcements'
 import {
   registerPluginEventHandler,
   resetPluginEventHandlersForTests,
@@ -61,6 +86,8 @@ const SITE = {
 beforeEach(() => {
   jest.clearAllMocks()
   mockNotifyStaff.mockResolvedValue(undefined)
+  mockUserReads = []
+  mockUserReadCount = 0
 })
 
 describe('AGL-3491 · announceNewSite', () => {
@@ -174,5 +201,74 @@ describe('AGL-4038 · org.created', () => {
   it('never throws into the route when a plugin fails', async () => {
     registerPluginEventHandler('org.created', () => Promise.reject(new Error('boom')), { pluginId: 'test' })
     await expect(announceNewWorkspace(WORKSPACE)).resolves.toBeUndefined()
+  })
+})
+
+describe('announceNewAccount waits for the sign-up acquisition write', () => {
+  const ACCOUNT = {
+    uid: 'u-1',
+    email: 'owner@example.com',
+    displayName: null,
+    provider: 'google.com',
+    emailVerified: true,
+  }
+  // The shape `recordSignUpAcquisition` writes (a direct visit to the home page).
+  const RECORD = {
+    v: 1,
+    channel: 'direct',
+    source: '(direct)',
+    medium: '(none)',
+    campaign: null,
+    landing: { host: 'aglyn.com', path: '/' },
+    referrerHost: null,
+    viaHost: null,
+    utm: null,
+    clickIds: [],
+    adCampaignId: null,
+    door: 'signup-google',
+    provider: 'google.com',
+    invitedToOrgId: null,
+    capturedAt: 1,
+    accountCreatedAt: 2,
+    recordedAt: 3,
+    recordedBy: 'signup',
+  }
+  const slept: number[] = []
+  const sleep = async (ms: number) => {
+    slept.push(ms)
+  }
+  beforeEach(() => {
+    slept.length = 0
+  })
+  const foundUs = () =>
+    (mockNotifyStaff.mock.calls[0][1].emailDetails as Array<{ label: string; value: string }>).find(
+      (row) => row.label === 'How they found us',
+    )?.value
+
+  it('reads once when the record is already there', async () => {
+    mockUserReads = [{ displayName: 'Ada', acquisition: RECORD }]
+    await announceNewAccount(ACCOUNT, { sleep })
+    expect(mockUserReadCount).toBe(1)
+    expect(slept).toEqual([])
+    expect(foundUs()).not.toBe('No acquisition record')
+  })
+
+  it('re-reads until the record lands, then tells staff how they found us', async () => {
+    // The race this exists for: the user doc is there, its record a moment later.
+    mockUserReads = [{ displayName: 'Ada' }, { displayName: 'Ada' }, { displayName: 'Ada', acquisition: RECORD }]
+    await announceNewAccount(ACCOUNT, { sleep })
+    expect(mockUserReadCount).toBe(3)
+    expect(slept).toEqual([250, 500])
+    expect(foundUs()).not.toBe('No acquisition record')
+    expect(mockNotifyStaff.mock.calls[0][0].body).not.toContain('No acquisition record')
+  })
+
+  it('gives up after the bound and says there is none, still sending the notice', async () => {
+    mockUserReads = [{ displayName: 'Ada' }]
+    await announceNewAccount(ACCOUNT, { sleep })
+    expect(slept.reduce((sum, ms) => sum + ms, 0)).toBe(ACQUISITION_WAIT_MS)
+    expect(Math.max(...slept)).toBeLessThanOrEqual(1_000)
+    expect(foundUs()).toBe('No acquisition record')
+    expect(mockNotifyStaff).toHaveBeenCalledTimes(1)
   })
 })
