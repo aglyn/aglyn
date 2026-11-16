@@ -17,10 +17,11 @@
 
 /**
  * Auth + gating for the customer REST API (`/api/v1`, AGL-617). Resolves a
- * Bearer API key to its org, enforces the `apiAccess` entitlement and a
- * per-key rate limit, and hands resource handlers a ready `ApiV1Context`.
- * This path is deliberately separate from the console session chokepoint
- * (verifyConsoleIdToken / email-verify) — API keys, not Firebase sessions.
+ * Bearer API key — or a connector's access token (AGL-4225) — to its org,
+ * enforces the `apiAccess` entitlement and a per-credential rate limit, and
+ * hands resource handlers a ready `ApiV1Context`. This path is deliberately
+ * separate from the console session chokepoint (verifyConsoleIdToken /
+ * email-verify) — API credentials, not Firebase sessions.
  */
 import type { AglynOrganization } from '@aglyn/aglyn'
 import type { ApiV1Context } from '@aglyn/tenant-data-admin/server/api-v1-kit'
@@ -48,6 +49,14 @@ import {
   NO_CLIENT_ADDRESS_BUCKET,
   readClientIp,
 } from '@aglyn/aglyn/app-utils/request-ip'
+// By module path rather than the barrel: the connector door is resolved
+// beside the key door here, and the specs that stand the barrel in for
+// `/api/v1` name only the key half.
+import {
+  CONNECTOR_ACCESS_TOKEN_PREFIX,
+  isConnectorAccessTokenFormat,
+} from '@aglyn/tenant-data-admin/server/connector-oauth'
+import { verifyConnectorAccessToken } from '@aglyn/tenant-data-admin/server/connector-oauth-store'
 
 /**
  * What the pipeline resolved for one request, and the scope check every
@@ -55,6 +64,43 @@ import {
  * resource reaches them too.
  */
 export { type ApiV1Context, requireScope } from '@aglyn/tenant-data-admin/server/api-v1-kit'
+
+/** What either credential resolves to before the shared gates run. */
+interface VerifiedCredential {
+  orgId: string
+  keyId: string
+  scopes: ApiScope[]
+  name: string
+  /**
+   * The person a connector acts for (AGL-4225), so the user-scope lockdown
+   * applies to their calls. Absent for an API key, which is an organization
+   * credential with no person behind it.
+   */
+  uid?: string
+}
+
+/**
+ * Resolve a bearer credential: an API key (`aglyn_sk_…`) or a connector's
+ * hourly access token (`aglyn_at_…`, AGL-4225).
+ *
+ * The ONLY place the two differ. Everything after this — the pre-auth budget
+ * charge, the per-credential rate limit, the lockdown verdict, the plan, the
+ * monthly quota and the usage meter — runs once, below, for whichever one
+ * arrived. `lookedUp()` says whether a Firestore read was spent, which is
+ * what the pre-auth budget charges for; a malformed token of either kind is
+ * free. Asked only on a refusal, as the format check always was.
+ */
+async function verifyCredential(
+  token: string,
+): Promise<{ verified: VerifiedCredential | null; lookedUp: () => boolean }> {
+  if (token.startsWith(CONNECTOR_ACCESS_TOKEN_PREFIX)) {
+    return {
+      verified: await verifyConnectorAccessToken(token),
+      lookedUp: () => isConnectorAccessTokenFormat(token),
+    }
+  }
+  return { verified: await verifyApiKey(token), lookedUp: () => isValidApiKeyFormat(token) }
+}
 
 /** `Authorization: Bearer <key>` (preferred) or `X-Api-Key: <key>`. */
 function extractToken(request: Request): string {
@@ -282,14 +328,14 @@ export async function authenticateApiV1(
     return ApiErrors.unauthorized({ headers: rateLimitHeaders(budget) })
   }
 
-  const verified = await verifyApiKey(token)
+  const { verified, lookedUp } = await verifyCredential(token)
   if (!verified) {
-    // `isValidApiKeyFormat` is the same predicate `verifyApiKey` short-circuits
+    // `lookedUp` is the same format predicate the verifier short-circuits
     // on, so this charges the budget when — and only when — a Firestore read
     // was actually spent. A malformed token cost nothing and is charged
     // nothing; making it free is what keeps this budget a truthful count of
     // reads rather than a second, undocumented request cap.
-    if (isValidApiKeyFormat(token)) checkRateLimit(budgetKey, budgetOptions)
+    if (lookedUp()) checkRateLimit(budgetKey, budgetOptions)
     /*
       Peeked AFTER the charge above, so `remaining` is what the caller has
       left rather than what it had on arrival — a budget read that ignores the
@@ -360,7 +406,15 @@ export async function authenticateApiV1(
   // signal — a customer's GET keeps working while their POST/PATCH/DELETE
   // gets the 423 with a `Retry-After`, which is the contract an integration
   // can actually back off on. A full lock still refuses both.
-  const locked = await lockdownRefusal({ request, org })
+  //
+  // A connector DOES act for a person (AGL-4225), so its uid rides along and
+  // a lock on that person refuses their app exactly as it refuses their
+  // console. Still no staff bypass: a connection is never a staff session.
+  const locked = await lockdownRefusal({
+    request,
+    org,
+    ...(verified.uid ? { uid: verified.uid } : {}),
+  })
   if (locked) return withResponseHeaders(locked, headers)
   if (!checkEntitlement(org, 'apiAccess')) {
     return ApiErrors.planRequired({ headers })
