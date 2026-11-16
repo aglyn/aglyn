@@ -248,11 +248,24 @@ Enforcement is switched on by us, at your request.
   paused when bandwidth is.
 - The monthly email allowance caps **campaign sends**. Transactional mail — password
   resets, invites, order confirmations, booking reminders and workflow notifications — is
-  counted toward your usage but is never blocked by the cap, at any plan. Going over shows
+  counted toward your usage but is never blocked by the cap on a paid plan. Going over shows
   up as an overage on the usage rollup rather than as mail your customers never receive.
   Starter sends no campaigns, and instead includes **1,000 emails a month of everything it
-  sends** — receipts, notices, workflow mail and one-to-one CRM email together; past
-  that, each 1,000 is billed at the rate on [aglyn.com/pricing](https://aglyn.com/pricing).
+  sends** — receipts, notices, workflow mail and one-to-one CRM email together; from
+  **December 2026**, each 1,000 past that is billed at the rate on
+  [aglyn.com/pricing](https://aglyn.com/pricing). Earlier months are counted and shown,
+  never charged.
+- Free sends up to **300 emails a month** — form confirmations, notices and everything
+  else your sites send. Sign-in links, email verification, invitations, password resets
+  and security notices are never counted and always go out. Past 300, your sites' emails
+  are not sent for the rest of the month and are not sent later; sending starts again on
+  the 1st (UTC). **Billing → Usage** shows the count against the 300 and how many emails
+  were not sent, and the owner is told as the month nears the limit and when it reaches
+  it. Upgrading lifts the limit at once.
+- Every plan also has a daily limit on the emails its sites send, as a guard against
+  abuse (Free 200 a day, Starter 1,000). An email refused by it is not sent, the order,
+  booking or form it belonged to never shows it as sent, and **Billing → Usage** counts
+  it.
 - On Starter, CRM records past the included amount are billed up to Pro's included
   amount; past that, new contacts, companies and deals are refused with a prompt to move
   to Pro, and every record you already have is kept. Pro has no such ceiling.
