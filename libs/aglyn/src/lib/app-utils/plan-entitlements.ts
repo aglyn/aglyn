@@ -320,6 +320,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     emailSendsPerMonth: 0,
     actionRunsPerMonth: 0,
     apiRequestsPerMonth: 0,
+    apiRequestsPerMinutePerOrg: 120,
+    maxApiRequestsPerMonth: 0,
     datasetsPerOrg: 0,
     maxDatasetsPerOrg: 0,
     recordsPerDataset: 0,
@@ -455,7 +457,21 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // to it, and the CRM is what a Starter site builds before it upgrades.
     emailSendsPerMonth: 0,
     actionRunsPerMonth: 0,
-    apiRequestsPerMonth: 0,
+    // API access from Starter, billed by use (2026-11-16, AGL-4226). 500
+    // requests cost $0.06 at `perApiRequest` against a $16 annual price; past
+    // them each 1,000 bills at `PLAN_PRICING.starter.extraApiRequestsUsdPer1k`
+    // up to the monthly ceiling below. A third of Pro's band, which is one of
+    // the three API reasons to move up; the ceiling and the workspace rate
+    // limit are the other two.
+    apiRequestsPerMonth: 500,
+    // The whole workspace, every key and connection together, per minute
+    // (AGL-4226): the per-key 120 alone let a workspace multiply its budget
+    // by minting keys. Starter's is one key's worth.
+    apiRequestsPerMinutePerOrg: 120,
+    // A HARD monthly stop (AGL-4226): $24.75 of overage at most, so the
+    // cheapest paid door cannot accrue more than that between invoices.
+    // Pro and above have none (`UNLIMITED`).
+    maxApiRequestsPerMonth: 50_000,
     datasetsPerOrg: 2,
     maxDatasetsPerOrg: 10,
     recordsPerDataset: 1000,
@@ -505,7 +521,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       interactions: true,
       actions: false,
       webhooks: false,
-      apiAccess: false,
+      // From Starter since AGL-4226: 500 requests, metered past them up to a
+      // 50,000 ceiling, at 120 a minute for the workspace. Webhooks stay off,
+      // and so do the Zapier hooks that are outbound events by another name.
+      apiAccess: true,
       siteExport: false,
       multilingual: false,
       eventCalendar: false,
@@ -579,6 +598,10 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // API access moved in from Business with Business's band (v4), and the
     // excess meters at Business's rate rather than refusing mid-integration.
     apiRequestsPerMonth: 1_500,
+    // Five keys' worth for the whole workspace (AGL-4226), and no monthly
+    // ceiling: the two API limits Starter has and Pro lifts.
+    apiRequestsPerMinutePerOrg: 600,
+    maxApiRequestsPerMonth: UNLIMITED,
     datasetsPerOrg: 5,
     maxDatasetsPerOrg: UNLIMITED,
     recordsPerDataset: UNLIMITED,
@@ -684,6 +707,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     emailSendsPerMonth: 15000,
     actionRunsPerMonth: 50000,
     apiRequestsPerMonth: 1_500,
+    apiRequestsPerMinutePerOrg: 600,
+    maxApiRequestsPerMonth: UNLIMITED,
     datasetsPerOrg: 10,
     maxDatasetsPerOrg: 250,
     recordsPerDataset: 100000,
@@ -758,6 +783,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     emailSendsPerMonth: 25000,
     actionRunsPerMonth: 100000,
     apiRequestsPerMonth: 5_000,
+    apiRequestsPerMinutePerOrg: 1_200,
+    maxApiRequestsPerMonth: UNLIMITED,
     datasetsPerOrg: 15,
     maxDatasetsPerOrg: 500,
     recordsPerDataset: 500000,
@@ -829,6 +856,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     emailSendsPerMonth: 65000,
     actionRunsPerMonth: 250000,
     apiRequestsPerMonth: 17_000,
+    apiRequestsPerMinutePerOrg: 2_400,
+    maxApiRequestsPerMonth: UNLIMITED,
     datasetsPerOrg: 25,
     maxDatasetsPerOrg: 1000,
     recordsPerDataset: 1000000,
@@ -904,6 +933,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     emailSendsPerMonth: 130000,
     actionRunsPerMonth: 1000000,
     apiRequestsPerMonth: 85_000,
+    apiRequestsPerMinutePerOrg: 6_000,
+    maxApiRequestsPerMonth: UNLIMITED,
     datasetsPerOrg: 50,
     maxDatasetsPerOrg: 5000,
     recordsPerDataset: UNLIMITED,
@@ -1015,6 +1046,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     emailSendsPerMonth: ENTERPRISE_EMAIL_SENDS_PER_MONTH,
     actionRunsPerMonth: 2_000_000,
     apiRequestsPerMonth: 170_000,
+    apiRequestsPerMinutePerOrg: UNLIMITED,
+    maxApiRequestsPerMonth: UNLIMITED,
     datasetsPerOrg: 100,
     maxDatasetsPerOrg: 10_000,
     recordsPerDataset: UNLIMITED,
@@ -1402,9 +1435,10 @@ export interface PlanPricing {
   extraDataGbMonthlyUsd: number | null
   /**
    * Metered overage per 1,000 customer REST API requests beyond
-   * `apiRequestsPerMonth` (AGL-634). API access starts at Pro since pricing
-   * v4 (Business before it) and every tier above it carries it, so Free and
-   * Starter are null (no API to meter).
+   * `apiRequestsPerMonth` (AGL-634). API access starts at Starter since
+   * AGL-4226 (Pro from pricing v4, Business before it) and every tier above it
+   * carries it, so Free alone is null (no API to meter) beside Custom's
+   * contractual null. Starter's overage stops at `maxApiRequestsPerMonth`.
    */
   extraApiRequestsUsdPer1k: number | null
   /**
@@ -1603,7 +1637,13 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraCollaboratorMonthlyUsd: 3,
     extraDatasetMonthlyUsd: 2,
     extraDataGbMonthlyUsd: 0.36,
-    extraApiRequestsUsdPer1k: null,
+    // API overage, per 1,000 past the 500 included (AGL-4226). THE one place
+    // the Starter rate is written: specs, the refusal message, the console and
+    // the generated tables read it from here. Pro's rate, for now — the most a
+    // Starter workspace can be billed for API overage in a month is this times
+    // 49.5 (its 50,000 ceiling less the 500 band), $24.75 at $0.50. Withheld
+    // where it could never be collected (`apiOverageRateUsd`).
+    extraApiRequestsUsdPer1k: 0.5,
     // The top of the retail ladder, which Starter JOINS rather than steps
     // above (AGL-3203): the ladder descends with the tier, and Starter is the
     // rung below Pro, not a new one over it. Moves in lockstep with the 750
@@ -2815,18 +2855,24 @@ export const ORG_COGS_UNIT_RATES_USD = {
    */
   dataStoragePerGbMonth: 0.18,
   /**
-   * One `/v1` request — $117 per million (AGL-3444).
+   * One `/v1` request — $120 per million (AGL-3444, re-derived for AGL-4226).
    *
    * Every request is a function invocation behind a CDN request, and it reads
    * before it answers (`apps/console/utils/api-v1.ts`). The ledger for a
    * default list page — 25 records, read as 26 — at Vercel's dearest region
-   * and nam5's list prices:
+   * and nam5's list prices, as the pipeline stands after AGL-4226:
    *
-   *   - reads: the key, the rate-limit window, the org, the month's quota
-   *     counter, the site the resource sits under, and the page — 31, at
-   *     $0.06 per 100,000 = $0.0000186
-   *   - writes: the rate-limit window and the usage counter — 2, at $0.18 per
-   *     100,000 = $0.0000036
+   *   - reads: the key, the key's rate-limit window, the org, the WORKSPACE's
+   *     rate-limit window (AGL-4226), the site the resource sits under, and
+   *     the page — 31, at $0.06 per 100,000 = $0.0000186. A plan whose month
+   *     is MEASURED (Starter, for its ceiling; a comp; Custom's fallback
+   *     band) reads the month's counter as well, 32 in all ($0.0000192). Before the
+   *     workspace limit it was 30 on a plan that never measured, and the
+   *     comment said 31 — the counter read is paid only where a month can
+   *     refuse.
+   *   - writes: the two rate-limit windows and the usage counter — 3, at
+   *     $0.18 per 100,000 = $0.0000054 (the key's last-used stamp is written
+   *     at most once a minute, and is left out)
    *   - the function, 0.4 s billed as active CPU at $0.221/hr, 2 GB at
    *     $0.0183/GB-hr, $0.60 per million invocations = $0.0000292
    *   - the CDN request: $3.20 per million = $0.0000032
@@ -2836,11 +2882,24 @@ export const ORG_COGS_UNIT_RATES_USD = {
    *     of request and envelope, through Fast Data Transfer ($0.35 a GB) and
    *     Fast Origin Transfer ($0.43 a GB), decimal GB = $0.0000615
    *
-   * $0.0001161, carried up to $0.000117. A page of 100 — the most a client
-   * may ask for — costs about three times that, so the figure is the default
-   * request rather than the ceiling; see the 2026-10-01 decision entry.
+   * $0.0001179, or $0.0001185 where the month is measured, carried up to
+   * $0.00012. It was $0.000117 before the workspace window's read and write.
+   *
+   * The figure is the DEFAULT request, not the ceiling:
+   *
+   *   - a page of 100 — the most a client may ask for — is $0.000343: about
+   *     three times, and $0.34 per 1,000 against a $0.50 rate;
+   *   - a request or response at Vercel's 4.5 MB function body limit (a
+   *     base64 image upload, or a page of large dataset records) is about
+   *     $0.0035 in transfer alone, roughly 7× the $0.0005 a billed request
+   *     brings in at $0.50 per 1,000;
+   *   - break-even: at $0.50 per 1,000, after Stripe's 2.9%, a request pays
+   *     for itself up to about 550 KB (decimal) on the wire; past it, every
+   *     request loses money on any plan.
+   *
+   * See the 2026-10-01 and 2026-11-16 decision entries.
    */
-  perApiRequest: 0.000117,
+  perApiRequest: 0.00012,
   /**
    * One CRM record held for a month. An operator-tuned estimate (AGL-1134),
    * not built from a per-operation price: at `nam5`'s $0.06 per 100,000 it
@@ -5173,30 +5232,95 @@ export interface ApiRequestQuotaResult {
   overageMonthlyUsd: number
   /** Per-1,000 overage rate; null when the plan has no API. */
   overageRateUsd: number | null
+  /**
+   * The most requests the month allows, overage included (AGL-4226):
+   * `maxApiRequestsPerMonth`, never below `included`. `UNLIMITED` from Pro up.
+   */
+  ceiling: number
+  /**
+   * Which limit refused, when `allowed` is false (AGL-4226): `'ceiling'` — a
+   * metered plan at its monthly ceiling; `'band'` — a plan with no rate (or
+   * whose overage cannot be collected) at its included band.
+   */
+  refusedBy: 'ceiling' | 'band' | null
+}
+
+/**
+ * Whether a whole-bill discount takes the ENTIRE invoice, usage included
+ * (AGL-4226): a 100% coupon that is not limited to the base price. Usage
+ * past a band under it is measured, reported and invoiced at $0.
+ */
+function wholeBillFullyDiscounted(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): boolean {
+  const discount = (org as { discount?: Partial<OrgDiscount> } | null | undefined)
+    ?.discount
+  if (!discount || discount.basePriceOnly === true) return false
+  return typeof discount.percentOff === 'number' && discount.percentOff >= 100
+}
+
+/**
+ * The per-1,000 rate API requests past the band are SOLD at for this org, or
+ * `null` when nothing past the band is sold (AGL-4226).
+ *
+ * The plan's rate (`resolvePlanPricing`, so a comp sells nothing), withheld
+ * on STARTER when the overage could never be collected: no live billing
+ * subscription (`isBillingSubscription` — a paid plan stored without one), or
+ * a 100% whole-bill discount. A withheld rate turns the band into the wall
+ * `checkApiRequestQuota` already enforces for a plan with no rate, so those
+ * workspaces stop at the 500 they were given rather than metering onto an
+ * invoice nobody pays.
+ *
+ * STARTER ONLY, deliberately. Pro and above in the same two states run
+ * unbounded today and have not been counted; extending this to them is a
+ * separate change (see the AGL-4226 hand-off), so it does not cut off a
+ * workspace nobody has looked at. An explicit uncapped staff comp is
+ * untouched: its band is `UNLIMITED`, so a null rate refuses nothing.
+ */
+export function apiOverageRateUsd(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): number | null {
+  const rate = resolvePlanPricing(org).extraApiRequestsUsdPer1k
+  if (rate === null) return null
+  if (
+    resolveEffectivePlan(org) === 'starter' &&
+    (!isBillingSubscription(org) || wholeBillFullyDiscounted(org))
+  ) {
+    return null
+  }
+  return rate
 }
 
 /**
  * Customer REST API request meter (AGL-634): the monthly request count for an
- * org. Pro (since pricing v4) and every tier above it carry `apiAccess` and an
- * `extraApiRequestsUsdPer1k` rate, so requests past the included quota meter
- * onto the monthly invoice
- * (cost-plus, like storage overage — never a hard wall mid-integration); plans
- * without API access have `included: 0` and always block.
+ * org. Every plan with `apiAccess` but Custom carries an
+ * `extraApiRequestsUsdPer1k` rate (Starter since AGL-4226, Pro since pricing
+ * v4), so requests past the included band meter onto the monthly invoice up
+ * to the plan's monthly CEILING (`maxApiRequestsPerMonth`: 50,000 on
+ * Starter, none from Pro up). Plans without a rate — Free, a comp, Custom
+ * on its fallback band, or a Starter workspace whose overage cannot be
+ * collected (`apiOverageRateUsd`) — stop at the band.
  */
 export function checkApiRequestQuota(
   org: Partial<AglynOrgBilling> | null | undefined,
   usedRequests: number,
 ): ApiRequestQuotaResult {
   const entitlements = resolveOrgEntitlements(org)
-  const pricing = resolvePlanPricing(org)
   const included = entitlements.apiRequestsPerMonth
-  const overageRateUsd = pricing.extraApiRequestsUsdPer1k
+  const overageRateUsd = apiOverageRateUsd(org)
+  const ceiling = Math.max(
+    included,
+    Number(entitlements.maxApiRequestsPerMonth ?? UNLIMITED),
+  )
   const used = Math.max(0, usedRequests)
   const overageRequests = Math.max(0, used - included)
+  const allowed = overageRateUsd !== null ? used < ceiling : used < included
   return {
-    allowed: overageRateUsd !== null ? true : used < included,
+    allowed,
     included,
     used,
+    ceiling,
+    refusedBy: allowed ? null : overageRateUsd !== null ? 'ceiling' : 'band',
     remaining: Math.max(0, included - used),
     overageRequests,
     overageMonthlyUsd:
@@ -6180,5 +6304,67 @@ export function apiRequestEnforcementShape(
   return enforcementShape(
     checkApiRequestQuota(org, 0).allowed,
     checkApiRequestQuota(org, Number.MAX_SAFE_INTEGER).allowed,
+  )
+}
+
+/**
+ * Requests per minute the WHOLE workspace may make on the customer API, every
+ * key and connection together (AGL-4226): the resolved
+ * `apiRequestsPerMinutePerOrg`, or `UNLIMITED` when the plan sets none
+ * (Custom without an agreed figure, an uncapped comp). Sits beside the
+ * per-key 120 a minute, never instead of it.
+ *
+ * The ladder: Starter 120 (one key's worth), Pro 600, and each retired tier
+ * above it at least Pro's — Business 600, Scale 1,200, Advanced 2,400,
+ * Agency 6,000 — with Custom unlimited unless its agreement sets a number.
+ */
+export function apiWorkspaceRateLimitPerMinute(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): number {
+  const value = Number(resolveOrgEntitlements(org).apiRequestsPerMinutePerOrg)
+  if (!Number.isFinite(value)) return UNLIMITED
+  return Math.max(0, Math.floor(value))
+}
+
+/**
+ * The cheapest self-serve plan with no monthly API ceiling, by price — the
+ * plan a refusal at the ceiling names as the way past it (AGL-4226). `null`
+ * when every self-serve plan has one.
+ */
+export function cheapestPlanWithoutApiCeiling(): OrgPlan | null {
+  const uncapped = SELF_SERVE_PLANS.filter(
+    (plan) =>
+      PLAN_ENTITLEMENTS[plan].features.apiAccess &&
+      !Number.isFinite(PLAN_ENTITLEMENTS[plan].maxApiRequestsPerMonth ?? UNLIMITED),
+  )
+  uncapped.sort(
+    (a, b) => PLAN_PRICING[a].basePriceMonthlyUsd - PLAN_PRICING[b].basePriceMonthlyUsd,
+  )
+  return uncapped[0] ?? null
+}
+
+/**
+ * What a monthly refusal says (AGL-4226), naming the limit that refused: the
+ * plan's ceiling and the plan without one, or the band a plan that sells no
+ * overage stopped at.
+ */
+export function apiMonthlyRefusalMessage(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  quota: Pick<ApiRequestQuotaResult, 'ceiling' | 'included' | 'refusedBy'>,
+): string {
+  const plan = resolveEffectivePlan(org)
+  const label = PLAN_LABELS[plan]
+  const next = cheapestPlanWithoutApiCeiling()
+  const upgrade =
+    next && next !== plan ? ` ${PLAN_LABELS[next]} has no monthly ceiling.` : ''
+  if (quota.refusedBy === 'ceiling') {
+    return (
+      `This workspace has made ${quota.ceiling.toLocaleString('en-US')} API requests this month, ` +
+      `the most the ${label} plan allows. Requests resume when the month turns (UTC).${upgrade}`
+    )
+  }
+  return (
+    `This workspace has used the ${quota.included.toLocaleString('en-US')} API requests ` +
+    `included this month, and no overage can be billed to it. Requests resume when the month turns (UTC).`
   )
 }

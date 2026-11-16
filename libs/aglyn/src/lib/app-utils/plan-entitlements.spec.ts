@@ -320,7 +320,7 @@ describe('plan entitlements', () => {
         extraCollaboratorMonthlyUsd: 3,
         extraDatasetMonthlyUsd: 2,
         extraDataGbMonthlyUsd: 0.36,
-        extraApiRequestsUsdPer1k: null,
+        extraApiRequestsUsdPer1k: 0.5,
         extraAssistCreditsUsdPer1k: 3,
         extraContactsUsdPer1k: 1,
         extraEmailSendsUsdPer1k: null,
@@ -485,6 +485,13 @@ describe('plan entitlements', () => {
       // `FORMS_PER_HOST_CEILING` from Scale up, this plan included (AGL-3597).
       // A deal that needs a larger catalog takes a per-org override.
       if (key === 'formsPerHost') continue
+      // Nor is the workspace's API rate limit (AGL-4226): Custom is unlimited
+      // there unless an agreement sets a figure, since the per-key 120/min
+      // still bounds every key.
+      if (key === 'apiRequestsPerMinutePerOrg') {
+        expect(value).toBe(UNLIMITED)
+        continue
+      }
       if (agency[key] === UNLIMITED) {
         expect([key, value]).toEqual([key, UNLIMITED])
         continue
@@ -1008,11 +1015,22 @@ describe('plan entitlements', () => {
     expect(pro.included).toBe(1_500)
     expect(pro.overageMonthlyUsd).toBeCloseTo(25)
     expect(pro.overageRateUsd).toBe(0.5)
-    // Plans without API access have zero included and always block.
-    const starter = checkApiRequestQuota({ plan: 'starter' } as any, 1)
-    expect(starter.allowed).toBe(false)
-    expect(starter.included).toBe(0)
-    expect(starter.overageRateUsd).toBeNull()
+    // Starter carries the API since AGL-4226: 500 included, Pro's rate past
+    // them, up to a 50,000 ceiling. 10,500 → 10k over at $0.50/1k = $5.
+    const starter = checkApiRequestQuota(
+      { plan: 'starter', billingStatus: 'active' } as any,
+      10_500,
+    )
+    expect(starter.allowed).toBe(true)
+    expect(starter.included).toBe(500)
+    expect(starter.ceiling).toBe(50_000)
+    expect(starter.overageMonthlyUsd).toBeCloseTo(5)
+    expect(starter.overageRateUsd).toBe(PLAN_PRICING.starter.extraApiRequestsUsdPer1k)
+    // Free has no API: zero included, and it always blocks.
+    const free = checkApiRequestQuota({ plan: 'free' } as any, 1)
+    expect(free.allowed).toBe(false)
+    expect(free.included).toBe(0)
+    expect(free.overageRateUsd).toBeNull()
   })
 
   it('checkCrmRecordsQuota meters the records band on paid plans, hard-bands free (AGL-890/2611)', () => {
