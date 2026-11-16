@@ -23,7 +23,8 @@ import {
   connectorOrigin,
   connectorPreflight,
   discoveryCacheControl,
-  refuseOnAuthOrigin,
+  refuseWhereSignInIsNotServed,
+  unconfiguredOriginResponse,
 } from '../../../_lib/connector-oauth-http'
 
 // lockdown-423: exempt — a public discovery document (RFC 9728) fetched with
@@ -40,9 +41,10 @@ export const dynamic = 'force-dynamic'
  * say the same thing.
  */
 export function GET(request: Request): Response {
-  const refused = refuseOnAuthOrigin(request)
+  const refused = refuseWhereSignInIsNotServed(request)
   if (refused) return refused
   const origin = connectorOrigin(request)
+  if (!origin) return unconfiguredOriginResponse()
   return Response.json(buildProtectedResourceMetadata(origin.origin), {
     headers: { ...CONNECTOR_CORS_HEADERS, 'Cache-Control': discoveryCacheControl(origin) },
   })

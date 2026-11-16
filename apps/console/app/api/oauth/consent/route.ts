@@ -20,6 +20,7 @@ import {
   AUTHORIZE_PARAM_NAMES,
   type AuthorizeParams,
   buildAuthorizeRedirect,
+  checkRateLimit,
   connectorAccessOptions,
   type ConnectorAccessLevel,
   describeConnectorAccess,
@@ -31,13 +32,19 @@ import {
   lockdownRefusal,
   memberHasOrgPermission,
   mintConnectorCode,
+  type RateLimitState,
   readCappedBody,
   readConnectorClient,
+  reserveClientPromotion,
   resolveOrgMembership,
   scopesForAccess,
   validateAuthorizeRequest,
 } from '@aglyn/tenant-data-admin'
-import { connectorOrigin, refuseOnAuthOrigin } from '../../_lib/connector-oauth-http'
+import {
+  connectorOrigin,
+  refuseWhereSignInIsNotServed,
+  unconfiguredOriginResponse,
+} from '../../_lib/connector-oauth-http'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
@@ -67,6 +74,15 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * Approvals one account may make per window, per instance. A person
+ * connecting apps by hand makes a handful; this stops a script holding one
+ * session from minting codes in a loop.
+ */
+const ALLOWS_PER_WINDOW = 30
+const ALLOWS_WINDOW_MS = 10 * 60_000
+const allowsByAccount = new Map<string, RateLimitState>()
+
 /** Largest body read: the forwarded query plus a choice. */
 const MAX_CONSENT_BYTES = 16 * 1024
 
@@ -88,7 +104,7 @@ const refuse = (status: number, error: string, extra: Record<string, unknown> = 
   Response.json({ error, ...extra }, { status, headers: { 'Cache-Control': 'no-store' } })
 
 export async function POST(request: Request): Promise<Response> {
-  const elsewhere = refuseOnAuthOrigin(request)
+  const elsewhere = refuseWhereSignInIsNotServed(request)
   if (elsewhere) return elsewhere
   const authorization = request.headers.get('authorization') ?? ''
   const idToken = authorization.startsWith('Bearer ') ? authorization.slice(7) : ''
@@ -114,7 +130,9 @@ export async function POST(request: Request): Promise<Response> {
     }
     if (!decoded.email_verified) return emailUnverifiedResponse()
 
-    const { origin } = connectorOrigin(request)
+    const resolved = connectorOrigin(request)
+    if (!resolved) return unconfiguredOriginResponse()
+    const origin = resolved.origin
     const { params, duplicated } = parseQuery(body.query)
     const client = await readConnectorClient(params.client_id)
     const validation = validateAuthorizeRequest(params, { origin, client, duplicated })
@@ -205,6 +223,22 @@ export async function POST(request: Request): Promise<Response> {
       return refuse(403, 'Your role does not include "Manage API keys" — ask a workspace admin', {
         reason: 'permission',
         permission: 'org.apiKeys',
+      })
+    }
+
+    // Per ACCOUNT, whatever address it calls from: how often it may approve,
+    // and how many never-approved clients it may bring to life a day.
+    const allowance = checkRateLimit(`consent-allow:${decoded.uid}`, {
+      limit: ALLOWS_PER_WINDOW,
+      windowMs: ALLOWS_WINDOW_MS,
+      store: allowsByAccount,
+    })
+    if (!allowance.allowed) {
+      return refuse(429, 'Too many approvals — wait a few minutes and try again', { reason: 'rate_limited' })
+    }
+    if (!(await reserveClientPromotion(decoded.uid, authorize.clientId))) {
+      return refuse(429, 'You have connected as many new apps as you can today — try again tomorrow', {
+        reason: 'promotion_limit',
       })
     }
 

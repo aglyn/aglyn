@@ -96,24 +96,44 @@ export interface ConnectorOrigin {
  *
  * In order:
  *  1. the configured console URL (`NEXT_PUBLIC_CONSOLE_URL`);
- *  2. on a production build, the canonical console origin
- *     (`platformConsoleOrigin`, which is `https://app.aglyn.com` when nothing
- *     is configured) — never a request header;
- *  3. only in local development, tests and a Vercel preview, the host the
+ *  2. on a SELF-HOSTED production build (`AGLYN_STANDALONE=1`) without one:
+ *     nothing — `null`, which every caller answers with
+ *     {@link unconfiguredOriginResponse}. Falling back would make this
+ *     install's sign-in name another operator's console as its issuer;
+ *  3. on the platform's own production build, the canonical console origin
+ *     (`platformConsoleOrigin`, `https://app.aglyn.com` when nothing is
+ *     configured) — never a request header;
+ *  4. only in local development, tests and a Vercel preview, the host the
  *     request was addressed to, by the trusted-proxy rule above, with the
  *     protocol the proxy reports.
  */
 export function connectorOrigin(
   request: Request,
   env: NodeJS.ProcessEnv = process.env,
-): ConnectorOrigin {
+): ConnectorOrigin | null {
   const configured = configuredConsoleOrigin()
   if (configured) return { origin: configured, configured: true }
-  if (!mayDeriveOriginFromRequest(env)) return { origin: platformConsoleOrigin(), configured: true }
+  if (!mayDeriveOriginFromRequest(env)) {
+    if (env.AGLYN_STANDALONE === '1' && !env.VERCEL) return null
+    return { origin: platformConsoleOrigin(), configured: true }
+  }
   const url = new URL(request.url)
   const proto = (request.headers.get('x-forwarded-proto') ?? '').split(',')[0]?.trim().toLowerCase()
   const protocol = proto === 'https' || proto === 'http' ? `${proto}:` : url.protocol
   return { origin: `${protocol}//${addressedHost(request)}`, configured: false }
+}
+
+/**
+ * The answer when {@link connectorOrigin} has none to give: a self-hosted
+ * install that has not set `NEXT_PUBLIC_CONSOLE_URL`. A clear configuration
+ * error, never a guess at whose console this is.
+ */
+export function unconfiguredOriginResponse(): Response {
+  return oauthErrorResponse(
+    503,
+    'temporarily_unavailable',
+    'Sign-in is not configured on this server: set NEXT_PUBLIC_CONSOLE_URL to this console’s address',
+  )
 }
 
 /** Cache header for a discovery document: cacheable only when the origin cannot vary. */
@@ -132,6 +152,29 @@ export function discoveryCacheControl(origin: ConnectorOrigin): string {
  */
 export function refuseOnAuthOrigin(request: Request): Response | null {
   return hostnameOf(addressedHost(request)) === `auth.${WORKSPACE_DOMAIN}` ? ApiErrors.notFound() : null
+}
+
+/**
+ * 404 where new connector credentials must not be ISSUED: the auth origin
+ * (above), and a Vercel preview deployment.
+ *
+ * A preview reads and writes the production database — owner decision
+ * 2026-10-13, recorded in `tools/deploy/verify-env-isolation.mjs` — and a
+ * credential is not bound to the origin that issued it. So a token minted by
+ * a preview, from a branch nobody reviewed, would be accepted by production.
+ * Discovery, registration, consent and the token endpoint are therefore
+ * closed on every preview; `CONNECTOR_SIGN_IN_ON_PREVIEW=1` opens them for a
+ * preview that has been given a database of its own. Revocation and the MCP
+ * endpoint stay open: they cannot create access.
+ */
+export function refuseWhereSignInIsNotServed(
+  request: Request,
+  env: NodeJS.ProcessEnv = process.env,
+): Response | null {
+  const onAuth = refuseOnAuthOrigin(request)
+  if (onAuth) return onAuth
+  if (env.VERCEL_ENV === 'preview' && env.CONNECTOR_SIGN_IN_ON_PREVIEW !== '1') return ApiErrors.notFound()
+  return null
 }
 
 /**

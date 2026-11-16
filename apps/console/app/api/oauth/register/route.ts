@@ -27,7 +27,7 @@ import {
 import {
   connectorBudget,
   connectorPreflight,
-  refuseOnAuthOrigin,
+  refuseWhereSignInIsNotServed,
 } from '../../_lib/connector-oauth-http'
 
 // lockdown-423: exempt — registering a client names no workspace and grants
@@ -88,7 +88,7 @@ const NEW_CLIENTS = connectorBudget('oauth-register-new', NEW_CLIENTS_PER_WINDOW
  * with what this server does, and the response says what that is.
  */
 export async function POST(request: Request): Promise<Response> {
-  const elsewhere = refuseOnAuthOrigin(request)
+  const elsewhere = refuseWhereSignInIsNotServed(request)
   if (elsewhere) return elsewhere
   const refused = REGISTRATIONS.refusal(request)
   if (refused) return refused

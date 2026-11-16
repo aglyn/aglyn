@@ -39,6 +39,7 @@ const mockStore = {
   listConnectableWorkspaces: jest.fn(),
   listConnectorGrants: jest.fn(),
   disconnectConnectorGrant: jest.fn(),
+  reserveClientPromotion: jest.fn(),
 }
 const mockVerifyIdToken = jest.fn()
 const mockResolveOrgMembership = jest.fn()
@@ -65,6 +66,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
         'listConnectableWorkspaces',
         'listConnectorGrants',
         'disconnectConnectorGrant',
+        'reserveClientPromotion',
       ].map((name) => [
         name,
         (...args: unknown[]) => (mockStore as Record<string, jest.Mock>)[name](...args),
@@ -106,13 +108,18 @@ import { POST as token } from '../app/api/oauth/token/route'
 import { POST as revoke } from '../app/api/oauth/revoke/route'
 import { POST as consent } from '../app/api/oauth/consent/route'
 import { GET as listApps, POST as appsAction } from '../app/api/orgs/connected-apps/route'
-import { connectorOrigin } from '../app/api/_lib/connector-oauth-http'
+import { connectorOrigin, unconfiguredOriginResponse } from '../app/api/_lib/connector-oauth-http'
 
 const ORIGIN = 'https://app.aglyn.com'
 const CLAUDE = 'https://claude.ai/api/mcp/auth_callback'
 const CLIENT_ID = `aglyn_client_${'A'.repeat(22)}`
 const CHALLENGE = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM'
 const CLIENT = { clientId: CLIENT_ID, clientName: 'Claude', redirectUris: [CLAUDE] }
+/** Well-formed secrets: a malformed one is refused before any read. */
+const RT = `aglyn_rt_${'r'.repeat(43)}`
+const AC = `aglyn_ac_${'c'.repeat(43)}`
+const AC2 = `aglyn_ac_${'d'.repeat(43)}`
+const UNKNOWN_CLIENT = `aglyn_client_${'N'.repeat(22)}`
 
 let ipSeed = 0
 /** A fresh address per test, so the per-address budgets never leak between them. */
@@ -159,6 +166,7 @@ beforeEach(() => {
   mockResolveOrgMembership.mockResolvedValue({ orgId: 'org-1', member: { role: 'admin' } })
   mockMemberHasOrgPermission.mockResolvedValue(true)
   mockLockdownRefusal.mockResolvedValue(null)
+  mockStore.reserveClientPromotion.mockResolvedValue(true)
 })
 
 describe('discovery documents', () => {
@@ -300,7 +308,7 @@ describe('POST /api/oauth/token', () => {
       connected: { grantId: 'grant_x', orgId: 'org-1', uid: 'user-1', email: 'owner@example.com', clientName: 'Claude' },
     })
     const response = await token(
-      form({ grant_type: 'authorization_code', client_id: CLIENT_ID, code: 'aglyn_ac_x', redirect_uri: CLAUDE, code_verifier: 'v'.repeat(43), resource: `${ORIGIN}/api/mcp` }),
+      form({ grant_type: 'authorization_code', client_id: CLIENT_ID, code: AC, redirect_uri: CLAUDE, code_verifier: 'v'.repeat(43), resource: `${ORIGIN}/api/mcp` }),
     )
     expect(response.status).toBe(200)
     expect(response.headers.get('cache-control')).toBe('no-store')
@@ -327,9 +335,9 @@ describe('POST /api/oauth/token', () => {
 
   it.each([
     ['a JSON body', () => token(new Request(`${ORIGIN}/api/oauth/token`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })), 400, 'invalid_request'],
-    ['no client_id', () => token(form({ grant_type: 'refresh_token', refresh_token: 'x' })), 400, 'invalid_request'],
+    ['no client_id', () => token(form({ grant_type: 'refresh_token', refresh_token: RT })), 400, 'invalid_request'],
     ['a parameter twice', () => token(new Request(`${ORIGIN}/api/oauth/token`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: `client_id=${CLIENT_ID}&code=a&code=b` })), 400, 'invalid_request'],
-    ['another resource', () => token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: 'x', resource: 'https://evil.example/api/mcp' })), 400, 'invalid_target'],
+    ['another resource', () => token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: RT, resource: 'https://evil.example/api/mcp' })), 400, 'invalid_target'],
     ['an unknown grant type', () => token(form({ grant_type: 'client_credentials', client_id: CLIENT_ID })), 400, 'unsupported_grant_type'],
     ['a code exchange missing the verifier', () => token(form({ grant_type: 'authorization_code', client_id: CLIENT_ID, code: 'c', redirect_uri: CLAUDE })), 400, 'invalid_request'],
   ])('refuses %s', async (_label, send, status, error) => {
@@ -341,7 +349,7 @@ describe('POST /api/oauth/token', () => {
 
   it('answers an unknown client with invalid_client', async () => {
     mockStore.readConnectorClient.mockResolvedValue(null)
-    const response = await token(form({ grant_type: 'refresh_token', client_id: 'aglyn_client_nope', refresh_token: 'x' }))
+    const response = await token(form({ grant_type: 'refresh_token', client_id: UNKNOWN_CLIENT, refresh_token: RT }))
     expect(response.status).toBe(401)
     expect(await response.json()).toMatchObject({ error: 'invalid_client' })
   })
@@ -357,17 +365,6 @@ describe('POST /api/oauth/token', () => {
     expect(text).not.toContain(verifier)
   })
 
-  it('stops an address that keeps failing, and never one that keeps succeeding', async () => {
-    mockStore.refreshConnectorTokens.mockResolvedValue({ ok: true, tokens })
-    for (let i = 0; i < 40; i += 1) {
-      expect((await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: 'x' }))).status).toBe(200)
-    }
-    mockStore.refreshConnectorTokens.mockResolvedValue({ ok: false, error: 'invalid_grant', description: 'no' })
-    for (let i = 0; i < 30; i += 1) {
-      expect((await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: 'x' }))).status).toBe(400)
-    }
-    expect((await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: 'x' }))).status).toBe(429)
-  })
 })
 
 describe('POST /api/oauth/revoke', () => {
@@ -573,13 +570,13 @@ describe('fixes from review (AGL-4225)', () => {
       throw new Error('firestore down')
     })
     const response = await token(
-      form({ grant_type: 'authorization_code', client_id: CLIENT_ID, code: 'aglyn_ac_x', redirect_uri: CLAUDE, code_verifier: 'v'.repeat(43) }),
+      form({ grant_type: 'authorization_code', client_id: CLIENT_ID, code: AC, redirect_uri: CLAUDE, code_verifier: 'v'.repeat(43) }),
     )
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual(tokens)
 
     mockLogOrgActivity.mockRejectedValueOnce(new Error('firestore down'))
-    expect((await token(form({ grant_type: 'authorization_code', client_id: CLIENT_ID, code: 'aglyn_ac_y', redirect_uri: CLAUDE, code_verifier: 'v'.repeat(43) }))).status).toBe(200)
+    expect((await token(form({ grant_type: 'authorization_code', client_id: CLIENT_ID, code: AC2, redirect_uri: CLAUDE, code_verifier: 'v'.repeat(43) }))).status).toBe(200)
   })
 
   it('1 · a failing activity log after a Disconnect still reports the disconnect', async () => {
@@ -647,7 +644,7 @@ describe('fixes from review (AGL-4225)', () => {
       process.env.NEXT_PUBLIC_CONSOLE_URL = 'https://app.aglyn.com'
       mockStore.refreshConnectorTokens.mockResolvedValue({ ok: true, tokens })
       const asked = (resource: string) =>
-        token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: 'x', resource }))
+        token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: RT, resource }))
       expect((await asked('https://app.aglyn.com/api/mcp')).status).toBe(200)
       expect((await asked(`${ORIGIN.replace('app.aglyn.com', 'evil.example')}/api/mcp`)).status).toBe(400)
     })
@@ -662,25 +659,13 @@ describe('fixes from review (AGL-4225)', () => {
 
   it('10 · a refused token request is a 429 with invalid_request and Retry-After', async () => {
     mockStore.readConnectorClient.mockResolvedValue(null)
-    for (let i = 0; i < 30; i += 1) await token(form({ grant_type: 'refresh_token', client_id: 'aglyn_client_nope', refresh_token: 'x' }))
-    const refused = await token(form({ grant_type: 'refresh_token', client_id: 'aglyn_client_nope', refresh_token: 'x' }))
+    for (let i = 0; i < 30; i += 1) await token(form({ grant_type: 'refresh_token', client_id: UNKNOWN_CLIENT, refresh_token: RT }))
+    const refused = await token(form({ grant_type: 'refresh_token', client_id: UNKNOWN_CLIENT, refresh_token: RT }))
     expect(refused.status).toBe(429)
     expect(await refused.json()).toMatchObject({ error: 'invalid_request' })
     expect(Number(refused.headers.get('retry-after'))).toBeGreaterThan(0)
   })
 
-  it('12 · one client failing at a shared address does not refuse another client there', async () => {
-    const OTHER = `aglyn_client_${'B'.repeat(22)}`
-    mockStore.readConnectorClient.mockImplementation(async (id: string) => ({ ...CLIENT, clientId: id }))
-    mockStore.refreshConnectorTokens.mockImplementation(async ({ clientId }: { clientId: string }) =>
-      clientId === CLIENT_ID ? { ok: false, error: 'invalid_grant', description: 'no' } : { ok: true, tokens },
-    )
-    for (let i = 0; i < 30; i += 1) {
-      expect((await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: 'x' }))).status).toBe(400)
-    }
-    expect((await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: 'x' }))).status).toBe(429)
-    expect((await token(form({ grant_type: 'refresh_token', client_id: OTHER, refresh_token: 'x' }))).status).toBe(200)
-  })
 })
 
 describe('second review (AGL-4225)', () => {
@@ -691,43 +676,6 @@ describe('second review (AGL-4225)', () => {
     refresh_token: `aglyn_rt_${'r'.repeat(43)}`,
     scope: 'contacts:read',
   }
-
-  it('5 · resolves the client before the resource check, and charges a bad resource to that client', async () => {
-    mockStore.readConnectorClient.mockResolvedValue(CLIENT)
-    const OTHER = `aglyn_client_${'C'.repeat(22)}`
-    for (let i = 0; i < 30; i += 1) {
-      const response = await token(
-        form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: 'x', resource: 'https://evil.com/api/mcp' }),
-      )
-      expect(response.status).toBe(400)
-    }
-    expect(mockStore.readConnectorClient).toHaveBeenCalled()
-    expect((await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: 'x' }))).status).toBe(429)
-    // Another registered client at the same address is untouched.
-    mockStore.readConnectorClient.mockImplementation(async (id: string) => ({ ...CLIENT, clientId: id }))
-    mockStore.refreshConnectorTokens.mockResolvedValue({ ok: true, tokens })
-    expect((await token(form({ grant_type: 'refresh_token', client_id: OTHER, refresh_token: 'x' }))).status).toBe(200)
-  })
-
-  it('5 · malformed bodies and duplicated parameters cannot lock out a registered client', async () => {
-    mockStore.readConnectorClient.mockResolvedValue(CLIENT)
-    mockStore.refreshConnectorTokens.mockResolvedValue({ ok: true, tokens })
-    // Prime this instance's memory of the client, as a working connection does.
-    expect((await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: 'x' }))).status).toBe(200)
-    for (let i = 0; i < 40; i += 1) {
-      await token(new Request(`${ORIGIN}/api/oauth/token`, { method: 'POST', headers: { 'content-type': 'text/plain', 'x-forwarded-for': ip }, body: 'junk' }))
-      await token(new Request(`${ORIGIN}/api/oauth/token`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-forwarded-for': ip },
-        body: 'client_id=aglyn_client_nope&client_id=x&code=a&code=b',
-      }))
-    }
-    // The address bucket is spent for anonymous traffic…
-    const anonymous = await token(new Request(`${ORIGIN}/api/oauth/token`, { method: 'POST', headers: { 'content-type': 'text/plain', 'x-forwarded-for': ip }, body: 'junk' }))
-    expect(anonymous.status).toBe(429)
-    // …and the registered client is still served.
-    expect((await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: 'x' }))).status).toBe(200)
-  })
 
   describe('11 · one origin, by deployment', () => {
     const saved = { ...process.env }
@@ -769,6 +717,134 @@ describe('second review (AGL-4225)', () => {
         connectorOrigin(spoofed(), { NODE_ENV: 'production', VERCEL_ENV: 'preview' } as NodeJS.ProcessEnv).configured,
       ).toBe(false)
     })
+  })
+})
+
+describe('third review (AGL-4225)', () => {
+  const tokens = {
+    access_token: `aglyn_at_${'a'.repeat(43)}`,
+    token_type: 'Bearer',
+    expires_in: 3600,
+    refresh_token: `aglyn_rt_${'n'.repeat(43)}`,
+    scope: 'contacts:read',
+  }
+  const VICTIM_RT = `aglyn_rt_${'v'.repeat(43)}`
+  const junk = (i: number) => `aglyn_rt_${String(i).padStart(43, 'j')}`
+
+  afterEach(() => jest.restoreAllMocks())
+
+  it('N2 · the victim’s refresh succeeds after 30 junk posts naming its client id, and 11 minutes later', async () => {
+    mockStore.readConnectorClient.mockResolvedValue(CLIENT)
+    mockStore.refreshConnectorTokens.mockImplementation(async ({ refreshToken }: { refreshToken: string }) =>
+      refreshToken === VICTIM_RT
+        ? { ok: true, tokens }
+        : { ok: false, error: 'invalid_grant', description: 'The refresh token is not valid', unknown: true },
+    )
+    // A hostile page posts from the victim's own address, naming its public client id.
+    for (let i = 0; i < 30; i += 1) {
+      expect((await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: junk(i) }))).status).toBe(400)
+    }
+    expect((await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: junk(99) }))).status).toBe(429)
+    // The real client's refresh resolves, so no failure budget refuses it.
+    expect((await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: VICTIM_RT }))).status).toBe(200)
+    // Eleven minutes after its last call — longer than any instance memory —
+    // with the junk still being posted.
+    const later = Date.now() + 11 * 60_000
+    jest.spyOn(Date, 'now').mockReturnValue(later)
+    for (let i = 0; i < 31; i += 1) await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: junk(i) }))
+    expect((await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: VICTIM_RT }))).status).toBe(200)
+  })
+
+  it('N2 · a malformed secret is refused without a read; a well-formed one is looked up under a generous ceiling', async () => {
+    mockStore.readConnectorClient.mockResolvedValue(CLIENT)
+    const before = mockStore.readConnectorClient.mock.calls.length
+    expect((await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: 'x' }))).status).toBe(400)
+    expect(mockStore.readConnectorClient.mock.calls.length).toBe(before)
+    expect(mockStore.refreshConnectorTokens).not.toHaveBeenCalled()
+    // 600 reads a minute: 300 requests of two reads each, then refused.
+    mockStore.refreshConnectorTokens.mockResolvedValue({ ok: true, tokens })
+    for (let i = 0; i < 300; i += 1) {
+      expect((await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: RT }))).status).toBe(200)
+    }
+    expect((await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: RT }))).status).toBe(429)
+  })
+
+  it('N2 · a refusal for any reason but an unknown secret is never counted', async () => {
+    mockStore.readConnectorClient.mockResolvedValue(CLIENT)
+    mockStore.refreshConnectorTokens.mockResolvedValue({ ok: false, error: 'invalid_grant', description: 'already used' })
+    for (let i = 0; i < 40; i += 1) {
+      expect((await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: RT }))).status).toBe(400)
+    }
+  })
+
+  it('N3 · a lock answers 503 temporarily_unavailable with Retry-After, and is never counted', async () => {
+    mockStore.readConnectorClient.mockResolvedValue(CLIENT)
+    mockStore.refreshConnectorTokens.mockResolvedValue({
+      ok: false,
+      error: 'temporarily_unavailable',
+      description: 'The workspace is locked; try again later',
+      retryAfterSec: 300,
+    })
+    for (let i = 0; i < 35; i += 1) {
+      const response = await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: RT }))
+      expect(response.status).toBe(503)
+      expect(response.headers.get('retry-after')).toBe('300')
+      expect(await response.json()).toEqual({
+        error: 'temporarily_unavailable',
+        error_description: 'The workspace is locked; try again later',
+      })
+    }
+  })
+
+  it('N6d · a self-hosted build without a console URL fails closed, naming no one else’s console', () => {
+    delete process.env.NEXT_PUBLIC_CONSOLE_URL
+    const request = new Request('https://console.example.com/x')
+    expect(connectorOrigin(request, { NODE_ENV: 'production', AGLYN_STANDALONE: '1' } as NodeJS.ProcessEnv)).toBeNull()
+    const answer = unconfiguredOriginResponse()
+    expect(answer.status).toBe(503)
+  })
+
+  it('N6f · a preview deployment issues nothing: discovery, register, consent and token answer 404', async () => {
+    const saved = process.env.VERCEL_ENV
+    process.env.VERCEL_ENV = 'preview'
+    try {
+      const statuses = [
+        protectedResource(new Request(`${ORIGIN}/x`)).status,
+        authorizationServer(new Request(`${ORIGIN}/x`)).status,
+        (await register(new Request(`${ORIGIN}/api/oauth/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }))).status,
+        (await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: RT }))).status,
+        (await consentCall({ action: 'describe', query: authorizeQuery() })).status,
+      ]
+      expect(statuses).toEqual([404, 404, 404, 404, 404])
+      expect(mockStore.readConnectorClient).not.toHaveBeenCalled()
+      process.env.CONNECTOR_SIGN_IN_ON_PREVIEW = '1'
+      expect(protectedResource(new Request(`${ORIGIN}/x`)).status).toBe(200)
+    } finally {
+      if (saved === undefined) delete process.env.VERCEL_ENV
+      else process.env.VERCEL_ENV = saved
+      delete process.env.CONNECTOR_SIGN_IN_ON_PREVIEW
+    }
+  })
+
+  it('N6e · an account may approve 30 times per window, and may not bring more new clients to life than allowed', async () => {
+    // An account no earlier test has approved with: the allowance is per account.
+    mockVerifyIdToken.mockResolvedValue({ uid: 'user-busy', email: 'busy@example.com', email_verified: true })
+    mockStore.mintConnectorCode.mockResolvedValue('aglyn_ac_minted')
+    mockStore.reserveClientPromotion.mockResolvedValue(true)
+    for (let i = 0; i < 30; i += 1) {
+      expect((await consentCall({ action: 'allow', query: authorizeQuery(), orgId: 'org-1', access: 'view' })).status).toBe(200)
+    }
+    const throttled = await consentCall({ action: 'allow', query: authorizeQuery(), orgId: 'org-1', access: 'view' })
+    expect(throttled.status).toBe(429)
+  })
+
+  it('N6e · refuses an approval that would promote one client too many today', async () => {
+    mockVerifyIdToken.mockResolvedValue({ uid: 'user-promoter', email: 'p@example.com', email_verified: true })
+    mockStore.reserveClientPromotion.mockResolvedValue(false)
+    const refused = await consentCall({ action: 'allow', query: authorizeQuery(), orgId: 'org-1', access: 'view' })
+    expect(refused.status).toBe(429)
+    expect(await refused.json()).toMatchObject({ reason: 'promotion_limit' })
+    expect(mockStore.mintConnectorCode).not.toHaveBeenCalled()
   })
 })
 
