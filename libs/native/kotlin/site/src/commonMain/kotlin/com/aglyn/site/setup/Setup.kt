@@ -369,6 +369,7 @@ fun rebasedTheme(draft: ThemeValues, previous: ThemeValues, next: ThemeValues): 
     colors = colors,
     darkScheme = com.aglyn.core.rebased(draft.darkScheme, previous.darkScheme, next.darkScheme),
     fontFamily = com.aglyn.core.rebased(draft.fontFamily, previous.fontFamily, next.fontFamily),
+    fonts = com.aglyn.core.rebased(draft.fonts, previous.fonts, next.fonts),
     borderRadius = com.aglyn.core.rebased(draft.borderRadius, previous.borderRadius, next.borderRadius),
     spacing = com.aglyn.core.rebased(draft.spacing, previous.spacing, next.spacing),
     navHeightXs = com.aglyn.core.rebased(draft.navHeightXs, previous.navHeightXs, next.navHeightXs),
@@ -387,6 +388,8 @@ data class ThemeValues(
   val navHeightSm: Double?,
   /** Each Style components field's choice: [THEME_LOOK_DEFAULT] for the theme's own, [THEME_LOOK_CUSTOM] for a value no choice names. */
   val componentLooks: Map<String, String> = emptyMap(),
+  /** The fonts plugin's body and heading fonts (`readThemeFonts`). */
+  val fonts: ThemeFontSelection = ThemeFontSelection(),
 )
 
 internal fun JsonElement?.obj(key: String): JsonObject? = (this as? JsonObject)?.get(key) as? JsonObject
@@ -425,6 +428,7 @@ fun themeValuesOf(json: JsonElement?): ThemeValues = ThemeValues(
   navHeightXs = json.obj("navHeight").num("xs"),
   navHeightSm = json.obj("navHeight").num("sm"),
   componentLooks = (json.obj("componentLooks") ?: JsonObject(emptyMap())).mapValues { (_, v) -> (v as? JsonPrimitive)?.contentOrNull.orEmpty() },
+  fonts = ThemeFontSelection.of(json.obj("fonts")),
 )
 
 /** One edit of the theme editor, as the route reads it (`ThemeEditorEdit`). */
@@ -452,6 +456,10 @@ sealed interface ThemeEdit {
   data class ComponentLook(val field: String, val value: String) : ThemeEdit {
     override fun body() = mapOf("control" to "componentLook", "field" to field, "value" to value)
   }
+  /** The fonts plugin's picker: the body and heading fonts together. */
+  data class Fonts(val selection: ThemeFontSelection) : ThemeEdit {
+    override fun body() = mapOf("control" to "fonts", "value" to selection.value())
+  }
 }
 
 /** The edits that turn [before] into [after]: only the controls that changed. */
@@ -461,6 +469,7 @@ fun themeEdits(before: ThemeValues, after: ThemeValues): List<ThemeEdit> = build
   }
   if (before.darkScheme != after.darkScheme) add(ThemeEdit.DarkScheme(after.darkScheme))
   if (before.fontFamily != after.fontFamily) add(ThemeEdit.FontFamily(after.fontFamily))
+  if (before.fonts != after.fonts) add(ThemeEdit.Fonts(after.fonts))
   if (before.borderRadius != after.borderRadius) add(ThemeEdit.BorderRadius(after.borderRadius))
   if (before.spacing != after.spacing) add(ThemeEdit.Spacing(after.spacing))
   if (before.navHeightXs != after.navHeightXs) add(ThemeEdit.NavHeight("xs", after.navHeightXs))
