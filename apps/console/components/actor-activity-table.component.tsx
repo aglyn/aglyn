@@ -62,6 +62,7 @@ export interface ActorActivityEntry {
   /** The address `actorId` holds now, for a row that recorded none (AGL-3369). */
   actorEmailNow?: string | null
   apiKeyName?: string
+  connectedAppName?: string
   createdAt?: { seconds: number } | null
   /** The site's or organization's name, where the route resolved it (AGL-3660). */
   scopeName?: string | null

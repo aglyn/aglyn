@@ -18,10 +18,17 @@
 'use client'
 
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
+import { Stack } from '@mui/material'
 import OrgApiKeysCard from '../../../../../../components/org-api-keys-card.component'
+import OrgConnectedAppsCard from '../../../../../../components/org-connected-apps-card.component'
 
-/** Org API keys and their scopes. */
-const SettingsApiKeys: NextPageWithLayout<Record<string, never>> = () => <OrgApiKeysCard />
+/** Org API keys and their scopes, and the apps connected by signing in (AGL-4225). */
+const SettingsApiKeys: NextPageWithLayout<Record<string, never>> = () => (
+  <Stack spacing={3}>
+    <OrgApiKeysCard />
+    <OrgConnectedAppsCard />
+  </Stack>
+)
 SettingsApiKeys.displayName = 'Page:SettingsApiKeys'
 
 export default SettingsApiKeys

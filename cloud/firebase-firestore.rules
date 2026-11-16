@@ -2743,6 +2743,28 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Connector sign-in (AGL-4225): app registrations, one-time codes, the
+    // connections a person approved, and the refresh and access tokens they
+    // issue. Codes and tokens are stored only as their SHA-256 (doc id =
+    // hash); a connection names the workspace and the person. Deny ALL client
+    // access — registration, consent, exchange, verification and Disconnect
+    // all go through the Admin SDK, and no client ever reads these.
+    match /oauthClients/{clientId} {
+      allow read, write: if false;
+    }
+    match /oauthCodes/{codeHash} {
+      allow read, write: if false;
+    }
+    match /oauthGrants/{grantId} {
+      allow read, write: if false;
+    }
+    match /oauthAccessTokens/{tokenHash} {
+      allow read, write: if false;
+    }
+    match /oauthRefreshTokens/{tokenHash} {
+      allow read, write: if false;
+    }
+
     // Outreach mailbox credentials (AGL-2974): the OAuth grant behind a rep's
     // connected mailbox, one document per mailbox. The document id is the
     // mailbox id and `orgId` and `mailboxId` ride as fields — none of that is

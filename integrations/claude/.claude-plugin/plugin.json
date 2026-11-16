@@ -1,0 +1,10 @@
+{
+  "name": "aglyn",
+  "version": "0.1.0",
+  "description": "Connects Claude to your Aglyn workspace and teaches it how to work there: through Aglyn's tools, in the console, and from the command line.",
+  "author": { "name": "Aglyn", "url": "https://aglyn.com" },
+  "homepage": "https://docs.aglyn.com/marketing-and-automation/workflows-and-actions/claude",
+  "repository": "https://github.com/aglyn/aglyn",
+  "license": "Apache-2.0",
+  "keywords": ["aglyn", "website", "crm", "commerce", "mcp"]
+}

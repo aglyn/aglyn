@@ -96,6 +96,23 @@ describe('POST /v1/sites/{siteId}/hooks (AGL-3643)', () => {
     expect(stored).toMatchObject({ orgId: 'org1', hostId: 'h1', keyId: 'key_zap', targetUrl: TARGET })
   })
 
+  it('says who subscribed a hook: an API key by its name, a connected app as one (AGL-4225)', async () => {
+    const { call } = setup()
+    const byKey = await (await call('POST', '/v1/sites/h1/hooks', { targetUrl: TARGET, events: ['order.paid'] })).json()
+    expect(byKey.keyLabel).toBe('API key Zapier')
+    const { call: callAsApp } = setup()
+    const byApp = await (
+      await callAsApp(
+        'POST',
+        '/v1/sites/h1/hooks',
+        { targetUrl: TARGET, events: ['order.paid'] },
+        ctx({ keyName: 'Cursor', credential: 'connected_app' }),
+      )
+    ).json()
+    expect(byApp.keyLabel).toBe('Connected app Cursor')
+    expect(byApp.keyLabel).not.toMatch(/API key/)
+  })
+
   it('takes one `event` as well as `events`', async () => {
     const { call } = setup()
     const response = await call('POST', '/v1/sites/h1/hooks', { targetUrl: TARGET, event: 'form.submitted' })
