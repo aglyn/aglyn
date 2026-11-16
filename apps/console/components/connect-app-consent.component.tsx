@@ -27,6 +27,7 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   CircularProgress,
   FormControl,
   FormControlLabel,
@@ -36,7 +37,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { buildRoute, Route } from '../constants/route-links'
 
 /**
@@ -69,6 +70,16 @@ interface AccessChoice {
   areas: Array<{ area: string; abilities: string[] }>
 }
 
+/** Where the code goes, as the server derived it from the address alone. */
+interface Destination {
+  /** The host (and port) for a website, the whole address for an app link, `this computer` for loopback. */
+  returnsTo: string
+  kind: 'web' | 'app' | 'loopback'
+  host?: string
+  port?: string
+  path?: string
+}
+
 interface Description {
   /**
    * `name` is what the app CALLS ITSELF — anyone can register any name.
@@ -76,7 +87,7 @@ interface Description {
    * the part a person can check: a website's host, an app link's scheme, or
    * "this computer".
    */
-  app: { name: string; returnsTo: string; kind: 'web' | 'app' | 'loopback' }
+  app: Destination & { name: string }
   workspaces: Workspace[]
   access: AccessChoice[]
 }
@@ -85,6 +96,8 @@ type Phase =
   | { kind: 'loading' }
   | { kind: 'ready'; description: Description }
   | { kind: 'refused'; title: string; body: string }
+  /** The request is wrong before consent: shown, and sent back only on Cancel. */
+  | { kind: 'request_error'; description: string; returnsTo: Destination | null }
   | { kind: 'leaving' }
 
 const ACCESS_LABELS: Record<AccessLevel, string> = {
@@ -156,18 +169,29 @@ export function ConnectAppConsent({ navigate = assignLocation }: ConnectAppConse
     navigate(redirectTo)
   }
 
+  // Opening the page NEVER navigates — not on an error, not after sign-in.
+  // Every way out is a button the person presses (`decide`).
   useEffect(() => {
     if (!user || started.current) return
     started.current = true
     void (async () => {
       try {
         const { response, payload } = await send({ action: 'describe' })
-        if (response.ok && typeof payload.redirectTo === 'string') return leave(payload.redirectTo)
-        if (!response.ok) return setPhase(refusalFor(response.status, payload))
+        if (payload?.reason === 'request_error') {
+          return setPhase({
+            kind: 'request_error',
+            description: String(payload.description ?? ''),
+            returnsTo: payload.returnsTo?.kind ? (payload.returnsTo as Destination) : null,
+          })
+        }
+        if (!response.ok || !payload?.app) return setPhase(refusalFor(response.status, payload))
         const description = payload as Description
-        const first = description.workspaces.find((workspace) => workspace.entitled)
-        setOrgId(first?.orgId ?? '')
-        setLevel(description.access[0]?.level ?? 'view')
+        // Preselected only when there is exactly one workspace to choose;
+        // with several, Allow waits until the person picks one.
+        const eligible = description.workspaces.filter((workspace) => workspace.entitled)
+        setOrgId(eligible.length === 1 ? eligible[0].orgId : '')
+        // "View only" is always offered and always the starting choice.
+        setLevel('view')
         setPhase({ kind: 'ready', description })
       } catch {
         setPhase(refusalFor(0, {}))
@@ -215,6 +239,31 @@ export function ConnectAppConsent({ navigate = assignLocation }: ConnectAppConse
               {phase.kind === 'leaving' ? 'Taking you back…' : 'Getting things ready…'}
             </Typography>
           </Stack>
+        ) : phase.kind === 'request_error' ? (
+          <CardDisplay header={'This request can’t be used'} contentGutterX contentGutterY>
+            <Stack spacing={2}>
+              <Typography variant="body2" color="text.secondary">
+                {'The app that sent you here asked for something this sign-in doesn’t support, so nothing has been connected.'}
+              </Typography>
+              {phase.description ? (
+                <Typography variant="body2" color="text.secondary">{phase.description}</Typography>
+              ) : null}
+              {phase.returnsTo ? (
+                <Box>
+                  <Typography variant="caption" color="text.secondary" component="p">
+                    {'Cancel tells the app, at'}
+                  </Typography>
+                  <DestinationText destination={phase.returnsTo} />
+                </Box>
+              ) : null}
+              {problem ? <Alert severity="error">{problem}</Alert> : null}
+              <Stack direction="row" sx={{ justifyContent: 'flex-end' }}>
+                <Button color="inherit" disabled={busy} onClick={() => void decide('deny')}>
+                  {'Cancel'}
+                </Button>
+              </Stack>
+            </Stack>
+          </CardDisplay>
         ) : phase.kind === 'refused' ? (
           <CardDisplay header={phase.title} contentGutterX contentGutterY>
             <Typography variant="body2" color="text.secondary">
@@ -241,19 +290,67 @@ export function ConnectAppConsent({ navigate = assignLocation }: ConnectAppConse
 }
 ConnectAppConsent.displayName = 'ConnectAppConsent'
 
-/** Where the code goes, in the words the destination box leads with. */
-function destinationLabel(app: Description['app']): string {
-  if (app.kind === 'loopback') return 'An app on this computer'
-  return app.returnsTo
+/**
+ * A host as it is read: in full, never truncated, and allowed to wrap only
+ * between labels (after each dot) so no line break can split a label and
+ * make `bank.example.evil.com` read as `bank.example`.
+ */
+function HostText({ host }: { host: string }) {
+  const labels = host.split('.')
+  return (
+    <>
+      {labels.map((label, index) => (
+        <Fragment key={`${index}-${label}`}>
+          <Box component="span" sx={{ whiteSpace: 'nowrap' }}>
+            {index < labels.length - 1 ? `${label}.` : label}
+          </Box>
+          {index < labels.length - 1 ? <wbr /> : null}
+        </Fragment>
+      ))}
+    </>
+  )
 }
 
-/** What that destination is, in a sentence. */
-function destinationExplanation(app: Description['app']): string {
-  if (app.kind === 'loopback') {
-    return 'A program running on this computer receives the connection — such as a code editor or a command-line tool.'
+/** Where the connection goes, primary line first, then what that means. */
+function DestinationText({ destination }: { destination: Destination }) {
+  if (destination.kind === 'loopback') {
+    return (
+      <>
+        <Typography variant="h6" component="p">{'An app on this computer'}</Typography>
+        <Typography variant="body2" color="text.secondary">
+          {'A program running on this computer receives the connection — such as a code editor or a command-line tool.'}
+        </Typography>
+      </>
+    )
   }
-  if (app.kind === 'app') return `The app on this device that opens ${app.returnsTo} links receives the connection.`
-  return 'The website at this address receives the connection.'
+  if (destination.kind === 'app') {
+    return (
+      <>
+        <Typography variant="h6" component="p" sx={{ wordBreak: 'break-all' }}>
+          {destination.returnsTo}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {'The app on this device that opens this address receives the connection.'}
+        </Typography>
+      </>
+    )
+  }
+  return (
+    <>
+      <Typography variant="h6" component="p" data-testid="connect-destination-host">
+        <HostText host={destination.host ?? destination.returnsTo} />
+        {destination.port ? `:${destination.port}` : ''}
+      </Typography>
+      {destination.path ? (
+        <Typography variant="body2" color="text.secondary" sx={{ wordBreak: 'break-all' }}>
+          {destination.path}
+        </Typography>
+      ) : null}
+      <Typography variant="body2" color="text.secondary">
+        {'The website at this address receives the connection.'}
+      </Typography>
+    </>
+  )
 }
 
 interface ConsentCardProps {
@@ -292,16 +389,15 @@ function ConsentCard(props: ConsentCardProps) {
           <Typography variant="overline" color="text.secondary" component="p">
             {'If you allow it, you’ll be sent to'}
           </Typography>
-          <Typography variant="h6" component="p" sx={{ wordBreak: 'break-all' }}>
-            {destinationLabel(app)}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {destinationExplanation(app)}
-          </Typography>
-          <Typography variant="body2" sx={{ mt: 1.5, wordBreak: 'break-word' }}>
-            {'The app calls itself '}
-            <Box component="span" sx={{ fontWeight: 'fontWeightMedium' }}>{`“${app.name}”`}</Box>
-            {'. Anyone can give an app any name, so check the address above.'}
+          <DestinationText destination={app} />
+          <Stack direction="row" spacing={1} sx={{ mt: 1.5, alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}>
+            <Typography variant="body2" color="text.secondary">
+              {'The name the app gave itself:'}
+            </Typography>
+            <Chip label={app.name} size="small" variant="outlined" data-testid="connect-app-name" sx={{ maxWidth: 1 }} />
+          </Stack>
+          <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 0.5 }}>
+            {'Anyone can give an app any name, so check the address above.'}
           </Typography>
         </Box>
         <Stack spacing={1}>

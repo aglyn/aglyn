@@ -250,12 +250,29 @@ describe('POST /api/oauth/register', () => {
       async (_input: unknown, _now: number, options: { mayCreate?: boolean }) =>
         options?.mayCreate === false ? null : { ...CLIENT, issuedAtMs: 0, created: true },
     )
-    for (let i = 0; i < 60; i += 1) expect((await call({ redirect_uris: [CLAUDE] })).status).toBe(201)
+    for (let i = 0; i < 20; i += 1) expect((await call({ redirect_uris: [CLAUDE] })).status).toBe(201)
     const refused = await call({ redirect_uris: [CLAUDE] })
     expect(refused.status).toBe(429)
     expect(mockStore.registerConnectorClient).toHaveBeenLastCalledWith(expect.anything(), expect.any(Number), { mayCreate: false })
     mockStore.registerConnectorClient.mockResolvedValue({ ...CLIENT, issuedAtMs: 0, created: false })
     expect((await call({ redirect_uris: [CLAUDE] })).status).toBe(201)
+  })
+
+  it('reserves a new-client unit before the transaction and refunds it when the client existed', async () => {
+    // Twenty concurrent NEW registrations, then twenty concurrent repeats:
+    // the repeats refund, so they never eat into the budget for new ones.
+    mockStore.registerConnectorClient.mockResolvedValue({ ...CLIENT, issuedAtMs: 0, created: false })
+    const repeats = await Promise.all(Array.from({ length: 40 }, () => call({ redirect_uris: [CLAUDE] })))
+    expect(repeats.every((response) => response.status === 201)).toBe(true)
+    let created = 0
+    mockStore.registerConnectorClient.mockImplementation(async (_input: unknown, _now: number, options: { mayCreate?: boolean }) => {
+      if (options?.mayCreate === false) return null
+      created += 1
+      return { ...CLIENT, issuedAtMs: 0, created: true }
+    })
+    const news = await Promise.all(Array.from({ length: 30 }, () => call({ redirect_uris: [CLAUDE] })))
+    expect(created).toBe(20)
+    expect(news.filter((response) => response.status === 429)).toHaveLength(10)
   })
 
   it('limits registrations per address only at a rate no burst of real connects reaches', async () => {
@@ -401,8 +418,28 @@ describe('POST /api/oauth/consent', () => {
     expect(body).not.toHaveProperty('redirectTo')
   })
 
-  it('sends any other problem back to the app with the state untouched', async () => {
-    const response = await consentCall({ action: 'describe', query: authorizeQuery({ code_challenge_method: 'plain' }) })
+  it.each([
+    // The second review's zero-click redirector: a registered phishing page,
+    // reached by a request that is wrong before consent.
+    ['response_type=token', { response_type: 'token' }],
+    ['plain PKCE', { code_challenge_method: 'plain' }],
+    ['an unknown scope', { scope: 'openid' }],
+    ['another resource', { resource: 'https://evil.com/api/mcp' }],
+  ])('shows a pre-consent error (%s) and NEVER answers with an address to follow', async (_label, change) => {
+    mockStore.readConnectorClient.mockResolvedValue({ ...CLIENT, redirectUris: ['https://evil.com/phish?step=2'] })
+    const query = authorizeQuery({ redirect_uri: 'https://evil.com/phish?step=2', ...change })
+    for (const action of ['describe', 'allow']) {
+      const response = await consentCall({ action, query, orgId: 'org-1', access: 'view' })
+      const body = await response.json()
+      expect(response.status).toBe(400)
+      expect(body).not.toHaveProperty('redirectTo')
+      expect(body).toMatchObject({ reason: 'request_error', returnsTo: { kind: 'web', host: 'evil.com' } })
+    }
+    expect(mockStore.mintConnectorCode).not.toHaveBeenCalled()
+  })
+
+  it('sends a pre-consent error back to the app only on Cancel, with the state untouched', async () => {
+    const response = await consentCall({ action: 'deny', query: authorizeQuery({ code_challenge_method: 'plain' }) })
     const { redirectTo } = await response.json()
     const url = new URL(redirectTo)
     expect(`${url.origin}${url.pathname}`).toBe(CLAUDE)
@@ -415,7 +452,13 @@ describe('POST /api/oauth/consent', () => {
     mockStore.listConnectableWorkspaces.mockResolvedValue([{ orgId: 'org-1', name: 'Acme', slug: 'acme', entitled: true }])
     const response = await consentCall({ action: 'describe', query: authorizeQuery() })
     const body = await response.json()
-    expect(body.app).toEqual({ name: 'Claude', returnsTo: 'claude.ai', kind: 'web' })
+    expect(body.app).toEqual({
+      name: 'Claude',
+      returnsTo: 'claude.ai',
+      kind: 'web',
+      host: 'claude.ai',
+      path: '/api/mcp/auth_callback',
+    })
     expect(body.workspaces).toHaveLength(1)
     expect(body.access.map((choice: { level: string }) => choice.level)).toEqual(['view', 'change'])
     expect(JSON.stringify(body)).not.toMatch(/oauth|scope|token|grant/i)
@@ -637,6 +680,95 @@ describe('fixes from review (AGL-4225)', () => {
     }
     expect((await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: 'x' }))).status).toBe(429)
     expect((await token(form({ grant_type: 'refresh_token', client_id: OTHER, refresh_token: 'x' }))).status).toBe(200)
+  })
+})
+
+describe('second review (AGL-4225)', () => {
+  const tokens = {
+    access_token: `aglyn_at_${'a'.repeat(43)}`,
+    token_type: 'Bearer',
+    expires_in: 3600,
+    refresh_token: `aglyn_rt_${'r'.repeat(43)}`,
+    scope: 'contacts:read',
+  }
+
+  it('5 · resolves the client before the resource check, and charges a bad resource to that client', async () => {
+    mockStore.readConnectorClient.mockResolvedValue(CLIENT)
+    const OTHER = `aglyn_client_${'C'.repeat(22)}`
+    for (let i = 0; i < 30; i += 1) {
+      const response = await token(
+        form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: 'x', resource: 'https://evil.com/api/mcp' }),
+      )
+      expect(response.status).toBe(400)
+    }
+    expect(mockStore.readConnectorClient).toHaveBeenCalled()
+    expect((await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: 'x' }))).status).toBe(429)
+    // Another registered client at the same address is untouched.
+    mockStore.readConnectorClient.mockImplementation(async (id: string) => ({ ...CLIENT, clientId: id }))
+    mockStore.refreshConnectorTokens.mockResolvedValue({ ok: true, tokens })
+    expect((await token(form({ grant_type: 'refresh_token', client_id: OTHER, refresh_token: 'x' }))).status).toBe(200)
+  })
+
+  it('5 · malformed bodies and duplicated parameters cannot lock out a registered client', async () => {
+    mockStore.readConnectorClient.mockResolvedValue(CLIENT)
+    mockStore.refreshConnectorTokens.mockResolvedValue({ ok: true, tokens })
+    // Prime this instance's memory of the client, as a working connection does.
+    expect((await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: 'x' }))).status).toBe(200)
+    for (let i = 0; i < 40; i += 1) {
+      await token(new Request(`${ORIGIN}/api/oauth/token`, { method: 'POST', headers: { 'content-type': 'text/plain', 'x-forwarded-for': ip }, body: 'junk' }))
+      await token(new Request(`${ORIGIN}/api/oauth/token`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-forwarded-for': ip },
+        body: 'client_id=aglyn_client_nope&client_id=x&code=a&code=b',
+      }))
+    }
+    // The address bucket is spent for anonymous traffic…
+    const anonymous = await token(new Request(`${ORIGIN}/api/oauth/token`, { method: 'POST', headers: { 'content-type': 'text/plain', 'x-forwarded-for': ip }, body: 'junk' }))
+    expect(anonymous.status).toBe(429)
+    // …and the registered client is still served.
+    expect((await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: 'x' }))).status).toBe(200)
+  })
+
+  describe('11 · one origin, by deployment', () => {
+    const saved = { ...process.env }
+    afterEach(() => {
+      for (const key of ['NEXT_PUBLIC_CONSOLE_URL', 'VERCEL_ENV']) {
+        if (saved[key] === undefined) delete process.env[key]
+        else process.env[key] = saved[key]
+      }
+    })
+    const spoofed = () =>
+      new Request('https://acme.aglyn.com/api/oauth/metadata/authorization-server', {
+        headers: { 'x-forwarded-host': 'acme.aglyn.com' },
+      })
+
+    it('a production build without a console URL uses the canonical console origin, never the host', () => {
+      delete process.env.NEXT_PUBLIC_CONSOLE_URL
+      expect(connectorOrigin(spoofed(), { NODE_ENV: 'production' } as NodeJS.ProcessEnv)).toEqual({
+        origin: 'https://app.aglyn.com',
+        configured: true,
+      })
+      expect(connectorOrigin(spoofed(), { NODE_ENV: 'production', VERCEL_ENV: 'production' } as NodeJS.ProcessEnv).origin).toBe(
+        'https://app.aglyn.com',
+      )
+    })
+
+    it('a configured console URL wins everywhere', () => {
+      process.env.NEXT_PUBLIC_CONSOLE_URL = 'https://console.example.com'
+      expect(connectorOrigin(spoofed(), { NODE_ENV: 'production' } as NodeJS.ProcessEnv).origin).toBe('https://console.example.com')
+      expect(connectorOrigin(spoofed(), { NODE_ENV: 'development' } as NodeJS.ProcessEnv).origin).toBe('https://console.example.com')
+    })
+
+    it('local development and a Vercel preview read the host the request was addressed to', () => {
+      delete process.env.NEXT_PUBLIC_CONSOLE_URL
+      expect(connectorOrigin(spoofed(), { NODE_ENV: 'development' } as NodeJS.ProcessEnv)).toEqual({
+        origin: 'https://acme.aglyn.com',
+        configured: false,
+      })
+      expect(
+        connectorOrigin(spoofed(), { NODE_ENV: 'production', VERCEL_ENV: 'preview' } as NodeJS.ProcessEnv).configured,
+      ).toBe(false)
+    })
   })
 })
 

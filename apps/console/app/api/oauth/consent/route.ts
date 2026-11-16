@@ -121,6 +121,18 @@ export async function POST(request: Request): Promise<Response> {
 
     if (validation.kind === 'fatal') return refuse(400, validation.reason, { reason: validation.reason })
     if (validation.kind === 'redirect') {
+      // NOTHING leaves this page unless a person presses a button. A request
+      // that is wrong before consent is SHOWN, with the address it would go
+      // back to, and only Cancel — a deliberate click, `deny` — sends the
+      // error to the client. An automatic redirect here would make our origin
+      // a zero-click open redirector for anyone who registers a client.
+      if (action !== 'deny') {
+        return refuse(400, validation.error, {
+          reason: 'request_error',
+          description: validation.description,
+          returnsTo: describeRedirectTarget(validation.redirectUri),
+        })
+      }
       return Response.json(
         {
           redirectTo: buildAuthorizeRedirect(validation.redirectUri, {
@@ -154,7 +166,14 @@ export async function POST(request: Request): Promise<Response> {
       const target = describeRedirectTarget(authorize.redirectUri)
       return Response.json(
         {
-          app: { name: authorize.clientName, returnsTo: target.label, kind: target.kind },
+          app: {
+            name: authorize.clientName,
+            returnsTo: target.label,
+            kind: target.kind,
+            ...(target.host ? { host: target.host } : {}),
+            ...(target.port ? { port: target.port } : {}),
+            ...(target.path ? { path: target.path } : {}),
+          },
           workspaces: await listConnectableWorkspaces(decoded.uid),
           access: options.map((level) => ({
             level,

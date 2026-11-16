@@ -49,16 +49,23 @@ const REGISTRATIONS_PER_WINDOW = 300
 const REGISTRATIONS = connectorBudget('oauth-register', REGISTRATIONS_PER_WINDOW, 10 * 60_000)
 
 /**
- * NEW clients one address may create per window. Registration is open to any
- * client and distinct registrations are unbounded in variety, so this — not
- * the request limit — is what bounds storage: at most 60 per 10 minutes is
- * 8,640 a day per address, each at most about 3 KB (a 60-character name and
- * five 512-character addresses), and a client nobody approves lives one day
- * (`CONNECTOR_CLIENT_UNUSED_TTL_MS`). So one address can hold at most about
- * 26 MB of unapproved registrations at any time. A repeat of an existing
- * registration is never refused by it.
+ * NEW clients one address may create per window, PER SERVER INSTANCE (the
+ * budgets here are in memory, so N instances admit N times this).
+ *
+ * Registration is open to any client and distinct registrations are
+ * unbounded in variety, so this — not the request limit — bounds storage.
+ * What the code guarantees, per address per instance: at most 20 new clients
+ * per 10 minutes, 2,880 a day; a client nobody approves lives 7 days
+ * (`CONNECTOR_CLIENT_UNUSED_TTL_MS`) and no repeat registration extends it; a
+ * client document is at most about 3 KB (a 60-character name and five
+ * 512-character addresses). So one address holds at most about 20,160
+ * unapproved clients, roughly 60 MB, through one instance at any time.
+ *
+ * The unit is RESERVED before the transaction and refunded when the client
+ * already existed, so concurrent registrations cannot overrun it. A repeat
+ * of an existing registration is never refused by it.
  */
-const NEW_CLIENTS_PER_WINDOW = 60
+const NEW_CLIENTS_PER_WINDOW = 20
 const NEW_CLIENTS = connectorBudget('oauth-register-new', NEW_CLIENTS_PER_WINDOW, 10 * 60_000)
 
 /**
@@ -73,8 +80,9 @@ const NEW_CLIENTS = connectorBudget('oauth-register-new', NEW_CLIENTS_PER_WINDOW
  *
  * Open to any MCP client. What is kept is a name and the redirect addresses,
  * each held to `CONNECTOR_REDIRECT_POLICY` — https on a real domain, http
- * only on loopback, or a private-use app scheme — so every address is
- * unambiguous. Who may receive a code is not decided here: PKCE binds the
+ * only on loopback, or an exact app-link callback on the allowlist — so every
+ * address is unambiguous; addresses outside it are dropped from the
+ * registration, which fails only when none is left. Who may receive a code is not decided here: PKCE binds the
  * code to the sign-in that asked for it, and the consent screen shows the
  * person where it is going. Everything else a client asks for is replaced
  * with what this server does, and the response says what that is.
@@ -103,19 +111,25 @@ export async function POST(request: Request): Promise<Response> {
   if (!validated.ok) return oauthErrorResponse(400, validated.error, validated.description)
 
   try {
-    const mayCreate = NEW_CLIENTS.refusal(request) === null
-    const client = await registerConnectorClient(
-      { clientName: validated.clientName, redirectUris: validated.redirectUris },
-      Date.now(),
-      { mayCreate },
-    )
+    const reserved = NEW_CLIENTS.reserve(request)
+    let client: Awaited<ReturnType<typeof registerConnectorClient>>
+    try {
+      client = await registerConnectorClient(
+        { clientName: validated.clientName, redirectUris: validated.redirectUris },
+        Date.now(),
+        { mayCreate: reserved },
+      )
+    } catch (error) {
+      if (reserved) NEW_CLIENTS.refund(request)
+      throw error
+    }
     if (!client) {
       return (
         NEW_CLIENTS.refusal(request) ??
         oauthErrorResponse(429, 'invalid_request', 'Too many new registrations', { 'Retry-After': '60' })
       )
     }
-    if (client.created) NEW_CLIENTS.charge(request)
+    if (reserved && !client.created) NEW_CLIENTS.refund(request)
     return Response.json(
       {
         client_id: client.clientId,

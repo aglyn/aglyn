@@ -56,10 +56,10 @@ const MAX_TOKEN_REQUEST_BYTES = 4 * 1024
  * misbehaving connection refuse every other tenant's refresh. A failure made
  * with a REGISTERED client id is charged to that client's own bucket at the
  * address; one with no client, an unknown client or a malformed request is
- * charged to the address. A request is refused when either bucket it would
- * draw on is spent. Nothing here reads anything before the refusal: the
- * client id is taken from the form, and an invented one is charged to the
- * address once its lookup finds nothing, so inventing ids buys nothing.
+ * charged to the address. A request naming a REGISTERED client draws only
+ * on that client's bucket; the address bucket refuses only requests that
+ * carry no registered client id. An invented id is charged to the address
+ * once its lookup finds nothing, so inventing ids buys nothing.
  */
 const FAILURES = connectorBudget('oauth-token-failures', 30, 60_000)
 
@@ -71,12 +71,45 @@ const FAILURES = connectorBudget('oauth-token-failures', 30, 60_000)
  * Every answer is `Cache-Control: no-store`, and no error carries the code,
  * the token or the verifier it was given — each description is a constant.
  */
+/**
+ * Client ids this instance has seen resolve to a registration, briefly. A
+ * request naming one is judged by its OWN (address, client) bucket without
+ * first asking the address bucket, which a stranger's failures at the same
+ * shared address may have spent. Memory only and bounded; a client not seen
+ * here yet is looked up once the address bucket allows it.
+ */
+const REGISTERED_MEMORY_LIMIT = 5_000
+const REGISTERED_MEMORY_TTL_MS = 10 * 60_000
+const recentlyRegistered = new Map<string, number>()
+
+function rememberRegistered(clientId: string, now = Date.now()): void {
+  recentlyRegistered.delete(clientId)
+  recentlyRegistered.set(clientId, now + REGISTERED_MEMORY_TTL_MS)
+  while (recentlyRegistered.size > REGISTERED_MEMORY_LIMIT) {
+    const oldest = recentlyRegistered.keys().next().value
+    if (oldest === undefined) break
+    recentlyRegistered.delete(oldest)
+  }
+}
+
+function recallsRegistered(clientId: string, now = Date.now()): boolean {
+  const until = recentlyRegistered.get(clientId)
+  if (until === undefined) return false
+  if (until > now) return true
+  recentlyRegistered.delete(clientId)
+  return false
+}
+
 export async function POST(request: Request): Promise<Response> {
   const elsewhere = refuseOnAuthOrigin(request)
   if (elsewhere) return elsewhere
-  const addressRefused = FAILURES.refusal(request)
-  if (addressRefused) return addressRefused
-  /** Which bucket a failure is charged to; the client's once it is known to exist. */
+  /**
+   * Which bucket a failure is charged to: the (address, client) bucket once
+   * the client is known to be registered, the address bucket until then. So
+   * a malformed body, a duplicated parameter or an unknown client spends
+   * only the address bucket — which refuses only requests that carry no
+   * registered client id — and can never lock out another client.
+   */
   let chargeTo: string | undefined
   const fail = (status: number, error: string, description?: string) => {
     FAILURES.charge(request, chargeTo)
@@ -85,26 +118,42 @@ export async function POST(request: Request): Promise<Response> {
 
   const form = await readConnectorForm(request, MAX_TOKEN_REQUEST_BYTES)
   if (!form.ok) {
+    const refused = FAILURES.refusal(request)
+    if (refused) return refused
     FAILURES.charge(request)
     return form.response
   }
   const { params, duplicated } = form
-  if (duplicated.length) return fail(400, 'invalid_request', 'A parameter was sent more than once')
-  if (isConnectorClientIdFormat(params.client_id)) {
-    const clientRefused = FAILURES.refusal(request, params.client_id)
-    if (clientRefused) return clientRefused
-  }
+  const named = isConnectorClientIdFormat(params.client_id) ? params.client_id : null
 
-  const { origin } = connectorOrigin(request)
-  if (params.resource && params.resource !== connectorResourceFor(origin)) {
-    return fail(400, 'invalid_target', 'resource must be this server’s MCP endpoint')
+  // Before any read: a client this instance knows is judged by its own
+  // bucket alone; anything else by the address bucket, so an unknown id
+  // cannot buy a lookup once the address has spent its failures.
+  if (named && recallsRegistered(named)) {
+    const refused = FAILURES.refusal(request, named)
+    if (refused) return refused
+  } else {
+    const refused = FAILURES.refusal(request)
+    if (refused) return refused
   }
-  if (!params.client_id) return fail(400, 'invalid_request', 'client_id is required')
 
   try {
-    const client = await readConnectorClient(params.client_id)
+    // The client is resolved FIRST, so every later failure is charged to it.
+    const client = named ? await readConnectorClient(named) : null
+    if (client) {
+      rememberRegistered(client.clientId)
+      chargeTo = client.clientId
+      const refused = FAILURES.refusal(request, client.clientId)
+      if (refused) return refused
+    }
+    if (duplicated.length) return fail(400, 'invalid_request', 'A parameter was sent more than once')
+    if (!params.client_id) return fail(400, 'invalid_request', 'client_id is required')
     if (!client) return fail(401, 'invalid_client', 'The client is not registered')
-    chargeTo = client.clientId
+
+    const { origin } = connectorOrigin(request)
+    if (params.resource && params.resource !== connectorResourceFor(origin)) {
+      return fail(400, 'invalid_target', 'resource must be this server’s MCP endpoint')
+    }
 
     if (params.grant_type === 'authorization_code') {
       if (!params.code || !params.redirect_uri || !params.code_verifier) {

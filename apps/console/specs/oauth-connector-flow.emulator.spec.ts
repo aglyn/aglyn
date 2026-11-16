@@ -151,7 +151,7 @@ describeEmulated('connecting an app, end to end (emulators)', () => {
         }),
       )
     const described = await (await ask({ action: 'describe' })).json()
-    expect(described.app).toEqual({ name: 'Claude', returnsTo: 'claude.ai', kind: 'web' })
+    expect(described.app).toEqual({ name: 'Claude', returnsTo: 'claude.ai', kind: 'web', host: 'claude.ai', path: '/api/mcp/auth_callback' })
     expect(described.workspaces).toEqual([
       expect.objectContaining({ orgId: ORG, name: 'Flow Co', entitled: true }),
     ])

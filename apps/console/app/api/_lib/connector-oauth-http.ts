@@ -38,6 +38,7 @@ import {
   type RateLimitState,
   readCappedBody,
 } from '@aglyn/tenant-data-admin'
+import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 import { hostnameOf, WORKSPACE_DOMAIN } from '../../../constants/workspace-domain'
 
 /**
@@ -62,13 +63,28 @@ function configuredConsoleOrigin(): string | null {
   }
 }
 
+/**
+ * May the origin be read off the request when no console URL is configured?
+ * Only where every request is ours to trust: local development and tests,
+ * and a Vercel PREVIEW deployment, whose address is a generated host nobody
+ * else attaches. A production build never does — any domain attached to the
+ * console project (a workspace subdomain, a custom console domain, a link
+ * domain) would otherwise become an issuer — and takes the canonical origin
+ * every other "where is the console" answer in the product uses.
+ */
+function mayDeriveOriginFromRequest(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.VERCEL_ENV === 'preview') return true
+  return env.NODE_ENV !== 'production'
+}
+
 /** The origin connector sign-in speaks for, and whether it is fixed by configuration. */
 export interface ConnectorOrigin {
   /** Issuer, resource base, `iss`, and the base every endpoint URL is built on. */
   origin: string
   /**
-   * True when the origin comes from configuration and so is the same for
-   * every request — the only case a discovery document may be cached.
+   * True when the origin is fixed for the deployment — configured, or the
+   * canonical console origin — and so is the same for every request: the
+   * only case a discovery document may be cached.
    */
   configured: boolean
 }
@@ -78,16 +94,22 @@ export interface ConnectorOrigin {
  * `iss`, the token endpoint's `resource` check and the MCP challenge, so they
  * can never name two different servers.
  *
- * The configured console URL when there is one: then no request header can
- * move it. Without one (local development, a preview, an install that has
- * not set it) it is the host the request was addressed to, read by the
- * trusted-proxy rule above, and the protocol the proxy reports — so an
- * install that leaves `NEXT_PUBLIC_CONSOLE_URL` unset trusts its proxy's
- * `Host`, which is why every production deployment should set it.
+ * In order:
+ *  1. the configured console URL (`NEXT_PUBLIC_CONSOLE_URL`);
+ *  2. on a production build, the canonical console origin
+ *     (`platformConsoleOrigin`, which is `https://app.aglyn.com` when nothing
+ *     is configured) — never a request header;
+ *  3. only in local development, tests and a Vercel preview, the host the
+ *     request was addressed to, by the trusted-proxy rule above, with the
+ *     protocol the proxy reports.
  */
-export function connectorOrigin(request: Request): ConnectorOrigin {
+export function connectorOrigin(
+  request: Request,
+  env: NodeJS.ProcessEnv = process.env,
+): ConnectorOrigin {
   const configured = configuredConsoleOrigin()
   if (configured) return { origin: configured, configured: true }
+  if (!mayDeriveOriginFromRequest(env)) return { origin: platformConsoleOrigin(), configured: true }
   const url = new URL(request.url)
   const proto = (request.headers.get('x-forwarded-proto') ?? '').split(',')[0]?.trim().toLowerCase()
   const protocol = proto === 'https' || proto === 'http' ? `${proto}:` : url.protocol
@@ -135,6 +157,14 @@ export interface ConnectorBudget {
   refusal(request: Request, within?: string): Response | null
   /** Count one request (or one failure) against the caller's address. */
   charge(request: Request, within?: string): void
+  /**
+   * Take one unit NOW, before the work it pays for, so concurrent requests
+   * cannot all pass a check that each would pass alone. `false`, with the
+   * unit given back, when the budget was already spent.
+   */
+  reserve(request: Request, within?: string): boolean
+  /** Give back a unit {@link reserve} took, when the work turned out not to need it. */
+  refund(request: Request, within?: string): void
 }
 
 /**
@@ -161,6 +191,16 @@ export function connectorBudget(name: string, limit: number, windowMs: number): 
     },
     charge(request, within) {
       checkRateLimit(keyFor(request, within), { limit, windowMs, store })
+    },
+    reserve(request, within) {
+      const result = checkRateLimit(keyFor(request, within), { limit, windowMs, store })
+      if (result.allowed) return true
+      this.refund(request, within)
+      return false
+    },
+    refund(request, within) {
+      const state = store.get(keyFor(request, within))
+      if (state && state.count > 0) state.count -= 1
     },
   }
 }
