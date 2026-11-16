@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import com.aglyn.contracts.Contracts
 import com.aglyn.contracts.InstallTarget
 import com.aglyn.core.FirestoreOrder
@@ -298,6 +299,37 @@ private fun ListingBody(
   val handle = (publisher as? Live.Ready)?.value?.let { it.string("handle") ?: it.string("displayName") }
   val now = remember(listing.id) { nowMillis() }
   val held = rememberMemberPermissions(context)
+  // Buying (AGL-4049): the person's own live purchases, every workspace, decide Buy (AGL-2331); their OWN member document
+  // in the publishing workspace, which the rules let anyone read of themselves, switches it off for a publisher's member
+  // (AGL-3365).
+  val asksToBuy = listing.paid && !mine && context.uid.isNotEmpty()
+  val purchases by remember(asksToBuy, context.uid, context.firestore) {
+    if (asksToBuy) context.firestore.observe(listingPurchasesQuery(context.uid)) else kotlinx.coroutines.flow.flowOf(Live.Ready(emptyList()))
+  }.collectAsState(Live.Loading)
+  val ownMembership by remember(asksToBuy, listing.profileId, context.uid, context.firestore) {
+    val publisherOrg = listing.profileId
+    if (asksToBuy && publisherOrg != null) context.firestore.observeDoc("orgs/$publisherOrg/members/${context.uid}") else kotlinx.coroutines.flow.flowOf(Live.Ready(null))
+  }.collectAsState(Live.Loading)
+  val purchaseRows = (purchases as? Live.Ready)?.value.orEmpty().map(LicenceRow::from)
+  val purchased = hasOrgLicence(purchaseRows, listing.id, context.orgId, context.uid)
+  val heldElsewhere = licensedElsewhere(purchaseRows, listing.id, context.orgId, context.uid)
+  val buying = purchases is Live.Ready && mustBuy(listing.priceUsd, purchased, mine, state.installedVersion != null)
+  val buyBlocked = (ownMembership as? Live.Ready)?.value != null && !mine
+  val buyKey = buyPermissionKey(listing.artifactType)
+  val canBuy = context.orgId != null && held.can(buyKey)
+  var payNotice by remember(listing.id) { mutableStateOf<Pair<String, PayNoticeTone>?>(null) }
+  val payScope = rememberCoroutineScope()
+  val uri = androidx.compose.ui.platform.LocalUriHandler.current
+  val pay = remember(listing.id, context.orgId, context.hostId, context.api) {
+    context.orgId?.let { orgId ->
+      MarketplacePay(
+        MarketplacePayApi(context.api, orgId, context.hostId),
+        // Stripe's pages go to the secure browser tab (the in-app browser's own routing).
+        openPage = { uri.openUri(it) },
+        onFinish = { outcome -> payNotice = payOutcomeNotice(outcome, listing.name) },
+      )
+    }
+  }
   val installable = canInstall(held) && context.hostId != null
   val targets = installTargets(listing.artifactType)
   val offered = listing.offeredVersion
@@ -307,6 +339,19 @@ private fun ListingBody(
   ) {
     if (runner.error != null) NoticeBanner(runner.error!!, StatusTone.ERROR)
     runner.notice?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = runner::clear) { Text("Dismiss") } }) }
+    payNotice?.let { (text, tone) ->
+      NoticeBanner(
+        text,
+        when (tone) {
+          PayNoticeTone.SUCCESS -> StatusTone.SUCCESS
+          PayNoticeTone.INFO -> StatusTone.INFO
+          PayNoticeTone.WARNING -> StatusTone.WARNING
+          PayNoticeTone.ERROR -> StatusTone.ERROR
+        },
+        Modifier.testTag("marketplace-pay-outcome"),
+        action = { TextButton(onClick = { payNotice = null }) { Text("Dismiss") } },
+      )
+    }
     SectionCard(null) {
       Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1.5f))) {
         MediaThumb(mediaPreviewUrl(listing.imageUrl, context.api.origin, null, 160), contentDescription = null, icon = if (plugin) "extension" else "widgets", modifier = Modifier.size(64.dp))
@@ -338,8 +383,16 @@ private fun ListingBody(
           if (state.shadowed) StatusChip("Org-wide (shadowed)", StatusTone.WARNING)
         }
       }
-      if (!mine && listing.paid && state.installedVersion == null) {
-        NoticeBanner("A paid listing is bought once for the workspace; buying is not in the app yet.", StatusTone.INFO)
+      // You own one, just not here (AGL-2331): said before the money moves, so a second charge never reads as a double one.
+      if (buying && heldElsewhere) {
+        NoticeBanner("You already own this in another workspace. A license covers one organization, so this one needs its own.", StatusTone.INFO)
+      }
+      // The lookup ran short: "not purchased" is an absence from a window, so a window that stopped early says so.
+      if (buying && purchaseRows.size >= PURCHASE_LOOKUP_CEILING) {
+        NoticeBanner(
+          "Checked against the first $PURCHASE_LOOKUP_CEILING of your purchases, ordered by id; you have more. If you already own or installed this, it may not be reflected here — check your receipts before buying again.",
+          StatusTone.WARNING,
+        )
       }
       if (pinsPhase == "loading") {
         Row(
@@ -364,6 +417,19 @@ private fun ListingBody(
               Text(if (state.scope == InstallTarget.ORG) "Remove from the workspace" else "Remove from this site")
             }
           }
+          buying -> {
+            Button(
+              onClick = {
+                payNotice = null
+                pay?.let { model -> payScope.launch { model.buy(listing.id, listing.name) } }
+              },
+              enabled = canBuy && !buyBlocked && !runner.busy && pay?.open != true && pay?.busy != true,
+              modifier = Modifier.testTag("listing-buy"),
+            ) {
+              Icon(AglynIcons.named("shopping_bag"), contentDescription = null)
+              Text(buyLabel(listing.priceUsd, heldElsewhere), Modifier.padding(start = space(1f)))
+            }
+          }
           else -> {
             Button(
               onClick = { open(ListingDialog.Install(if (InstallTarget.HOST in targets) InstallTarget.HOST else targets.firstOrNull())) },
@@ -380,6 +446,13 @@ private fun ListingBody(
             }
           }
         }
+      }
+      if (pinsPhase == "ready" && buying) {
+        when {
+          buyBlocked -> NoticeBanner(publisherMemberBuyReason((publisher as? Live.Ready)?.value?.string("displayName") ?: handle), StatusTone.NEUTRAL)
+          !canBuy -> NoticeBanner(if (context.orgId == null) "Open one of your workspaces to buy this." else permissionRefusalText(buyKey), StatusTone.NEUTRAL)
+        }
+        pay?.let { MarketplacePayPanel(context, it) }
       }
       if (plugin && offered == null) NoticeBanner("No reviewed version yet: it can be installed once one passes review.", StatusTone.WARNING)
       if (!installable) NoticeBanner(
