@@ -37084,6 +37084,115 @@
           null
         ]
       ]
+    },
+    "computeLifetimePurchaseCents": {
+      "module": "libs/plugins/commerce/src/lib/model/site-member-purchases.ts",
+      "args": [
+        [
+          []
+        ],
+        [
+          [
+            {
+              "status": "paid",
+              "totals": {
+                "totalCents": 2500
+              }
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "status": "paid",
+              "totals": {
+                "totalCents": 2500
+              },
+              "refundedCents": 500
+            },
+            {
+              "status": "fulfilled",
+              "amountCents": 1200
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "status": "pending",
+              "totals": {
+                "totalCents": 9900
+              }
+            },
+            {
+              "status": "cancelled",
+              "totals": {
+                "totalCents": 4000
+              }
+            },
+            {
+              "status": "refunded",
+              "totals": {
+                "totalCents": 3000
+              },
+              "refundedCents": 3000
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "status": "paid",
+              "totals": {
+                "totalCents": 1000
+              },
+              "refundedCents": 1500
+            },
+            {
+              "totals": {
+                "totalCents": null
+              },
+              "amountCents": "750"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "status": "delivered",
+              "totals": {},
+              "amountCents": 400,
+              "refundedCents": -50
+            },
+            {
+              "status": "partially_fulfilled",
+              "totals": {
+                "totalCents": "abc"
+              }
+            },
+            {
+              "status": null,
+              "totals": {
+                "totalCents": 1250.5
+              }
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "status": "paid",
+              "totals": {
+                "totalCents": 2000
+              },
+              "refundedCents": null,
+              "dispute": {
+                "reversedCents": 2000
+              }
+            }
+          ]
+        ]
+      ]
     }
   }
 }

@@ -1104,6 +1104,10 @@
     {
       "path": "libs/shared/util/tools/src/lib/list-query/list-query-refusals.ts",
       "why": "Reached by the CRM list declarations: the planner's refusal wording."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/site-member-purchases.ts",
+      "why": "A site account's lifetime purchase total (computeLifetimePurchaseCents), the console drawer's Purchases figure: the native account screen's compute load replays it."
     }
   ]
 }

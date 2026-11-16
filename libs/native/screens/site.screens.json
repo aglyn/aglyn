@@ -336,6 +336,22 @@
       "links": [
         "/users"
       ],
+      "constants": {
+        "statuses": [
+          {
+            "id": "all",
+            "label": "All"
+          },
+          {
+            "id": "active",
+            "label": "Active"
+          },
+          {
+            "id": "suspended",
+            "label": "Suspended"
+          }
+        ]
+      },
       "load": {
         "members": {
           "query": {
@@ -347,7 +363,7 @@
           "query": {
             "collection": "hosts/{site.id}/siteMembers",
             "orderBy": "createdAt desc",
-            "limit": 100
+            "limit": 50
           },
           "optional": true
         }
@@ -483,10 +499,71 @@
           "empty": "Only the workspace team."
         },
         {
+          "type": "actions",
+          "id": "accountsFilter",
+          "items": [
+            {
+              "id": "search",
+              "label": "{params.q|'Search site users'}",
+              "icon": "magnifyingglass|search",
+              "prompt": [
+                {
+                  "key": "q",
+                  "label": "Search by name or email",
+                  "kind": "text",
+                  "initial": "{params.q}"
+                }
+              ],
+              "navigate": {
+                "screen": "core.site.accounts",
+                "params": {
+                  "q": "{form.q}",
+                  "status": ""
+                }
+              }
+            },
+            {
+              "id": "status",
+              "label": "Status: {const.statuses[id=params.status].label|'All'}",
+              "icon": "line.3.horizontal.decrease|filter_list",
+              "prompt": [
+                {
+                  "key": "status",
+                  "label": "Status",
+                  "kind": "select",
+                  "initial": "{params.status|'all'}",
+                  "options": [
+                    {
+                      "value": "all",
+                      "label": "All"
+                    },
+                    {
+                      "value": "active",
+                      "label": "Active"
+                    },
+                    {
+                      "value": "suspended",
+                      "label": "Suspended"
+                    }
+                  ]
+                }
+              ],
+              "navigate": {
+                "screen": "core.site.accounts",
+                "params": {
+                  "q": "",
+                  "status": "{form.status}"
+                }
+              }
+            }
+          ]
+        },
+        {
           "type": "list",
+          "id": "accounts",
           "title": "Site accounts",
-          "footer": "People who signed up on the published site.",
           "items": "data.accounts.items",
+          "load": "accounts",
           "primary": "{item.displayName|item.name|item.email|item.$id}",
           "secondary": "{item.email}",
           "tertiary": "Joined {item.createdAt:date}",
@@ -498,9 +575,348 @@
               "tone": "error"
             }
           ],
-          "empty": "No one has signed up on the site yet."
+          "empty": "No one has signed up on the site yet.",
+          "open": {
+            "screen": "core.site.account",
+            "params": {
+              "memberId": "{item.$id}"
+            }
+          },
+          "footer": "People who signed up on the published site."
         },
         { "type": "zone", "name": "hostMembers", "title": "More", "params": { "who": "This site", "subject": "host:{site.id}", "hostId": "{site.id}" } }
+      ]
+    },
+    {
+      "id": "core.site.accounts",
+      "title": "Site users",
+      "label": "Site users",
+      "icon": "person.2|group",
+      "scope": "site",
+      "constants": {
+        "statuses": [
+          {
+            "id": "all",
+            "label": "All"
+          },
+          {
+            "id": "active",
+            "label": "Active"
+          },
+          {
+            "id": "suspended",
+            "label": "Suspended"
+          }
+        ]
+      },
+      "load": {
+        "accounts": {
+          "query": {
+            "collection": "hosts/{site.id}/siteMembers",
+            "orderBy": "createdAt desc",
+            "limit": 50,
+            "where": [
+              [
+                "searchTokens",
+                "array-contains",
+                "{params.q:token}",
+                "params.q"
+              ],
+              [
+                "suspended",
+                "==",
+                true,
+                "params.status == suspended"
+              ],
+              [
+                "suspended",
+                "==",
+                false,
+                "params.status == active"
+              ]
+            ]
+          },
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "actions",
+          "id": "accountsFilter",
+          "items": [
+            {
+              "id": "search",
+              "label": "{params.q|'Search site users'}",
+              "icon": "magnifyingglass|search",
+              "prompt": [
+                {
+                  "key": "q",
+                  "label": "Search by name or email",
+                  "kind": "text",
+                  "initial": "{params.q}"
+                }
+              ],
+              "navigate": {
+                "screen": "core.site.accounts",
+                "params": {
+                  "q": "{form.q}",
+                  "status": "{params.status}"
+                }
+              }
+            },
+            {
+              "id": "status",
+              "label": "Status: {const.statuses[id=params.status].label|'All'}",
+              "icon": "line.3.horizontal.decrease|filter_list",
+              "prompt": [
+                {
+                  "key": "status",
+                  "label": "Status",
+                  "kind": "select",
+                  "initial": "{params.status|'all'}",
+                  "options": [
+                    {
+                      "value": "all",
+                      "label": "All"
+                    },
+                    {
+                      "value": "active",
+                      "label": "Active"
+                    },
+                    {
+                      "value": "suspended",
+                      "label": "Suspended"
+                    }
+                  ]
+                }
+              ],
+              "navigate": {
+                "screen": "core.site.accounts",
+                "params": {
+                  "q": "{params.q}",
+                  "status": "{form.status}"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "unreadable",
+          "tone": "info",
+          "when": "!data.accounts",
+          "text": "Site accounts could not be read with your role on this site."
+        },
+        {
+          "type": "list",
+          "id": "accounts",
+          "title": "{const.statuses[id=params.status].label|'All'} site users",
+          "items": "data.accounts.items",
+          "load": "accounts",
+          "primary": "{item.displayName|item.name|item.email|item.$id}",
+          "secondary": "{item.email}",
+          "tertiary": "Joined {item.createdAt:date}",
+          "icon": "person|person",
+          "badges": [
+            {
+              "text": "Suspended",
+              "when": "item.suspended",
+              "tone": "error"
+            }
+          ],
+          "empty": "No site users match these filters",
+          "open": {
+            "screen": "core.site.account",
+            "params": {
+              "memberId": "{item.$id}"
+            }
+          },
+          "when": "data.accounts"
+        }
+      ]
+    },
+    {
+      "id": "core.site.account",
+      "title": "{data.member.displayName|data.member.name|data.member.email|params.memberId}",
+      "label": "Site user",
+      "icon": "person.crop.circle|account_circle",
+      "scope": "site",
+      "constants": {
+        "password": {
+          "minLength": 12,
+          "alphabet": "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789",
+          "length": 20
+        }
+      },
+      "load": {
+        "member": {
+          "doc": "hosts/{site.id}/siteMembers/{params.memberId}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "id": "account",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "Suspended",
+              "chip": true,
+              "tones": {
+                "*": "error"
+              },
+              "when": "data.member.suspended"
+            },
+            {
+              "label": "Email",
+              "value": "{data.member.email}"
+            },
+            {
+              "label": "Joined",
+              "value": "{data.member.createdAt:date}",
+              "when": "data.member.createdAt"
+            },
+            {
+              "label": "Joined",
+              "value": "Join date unknown",
+              "when": "!data.member.createdAt"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "access",
+          "items": [
+            {
+              "id": "suspend",
+              "label": "Suspend member",
+              "icon": "person.crop.circle.badge.xmark|person_off",
+              "destructive": true,
+              "when": "data.member.suspended != true",
+              "confirm": "Suspend this member?",
+              "confirmMessage": "\"{data.member.email}\" can no longer sign in on the published site; their account page signs out on next load. Orders and history are kept.",
+              "confirmLabel": "Suspend",
+              "write": {
+                "doc": "hosts/{site.id}/siteMembers/{params.memberId}",
+                "fields": {
+                  "suspended": true
+                }
+              },
+              "success": "Member suspended",
+              "failure": [
+                "Could not update the member — check your role"
+              ]
+            },
+            {
+              "id": "reactivate",
+              "label": "Reactivate member",
+              "icon": "person.crop.circle.badge.checkmark|person_check",
+              "when": "data.member.suspended",
+              "confirm": "Reactivate this member?",
+              "confirmMessage": "\"{data.member.email}\" can sign in again with their existing password.",
+              "confirmLabel": "Reactivate",
+              "write": {
+                "doc": "hosts/{site.id}/siteMembers/{params.memberId}",
+                "fields": {
+                  "suspended": false
+                }
+              },
+              "success": "Member reactivated",
+              "failure": [
+                "Could not update the member — check your role"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "noEmail",
+          "tone": "info",
+          "title": "Password",
+          "when": "!data.member.email",
+          "text": "This account has no email address, so password help is not available for it."
+        },
+        {
+          "type": "actions",
+          "id": "password",
+          "title": "Password",
+          "when": "data.member.email && (site.can[site.manage] || org.can[members.manage])",
+          "footer": "For a member locked out of their account on this site. This is their site sign-in only — it has nothing to do with any Aglyn console account they may also have.",
+          "items": [
+            {
+              "id": "sendReset",
+              "label": "Send password reset email",
+              "icon": "envelope|mail",
+              "confirm": "Send a password reset email?",
+              "confirmMessage": "{data.member.email} gets a link to choose a new password. Their current password keeps working until they use it.",
+              "confirmLabel": "Send email",
+              "url": "/api/membership/admin-password",
+              "body": {
+                "hostId": "{site.id}",
+                "memberId": "{params.memberId}",
+                "action": "sendPasswordReset"
+              },
+              "success": "Reset email sent to {data.member.email}"
+            },
+            {
+              "id": "setPassword",
+              "label": "Set a password directly",
+              "icon": "key|password",
+              "destructive": true,
+              "prompt": [
+                {
+                  "key": "password",
+                  "label": "New password",
+                  "kind": "text",
+                  "required": true,
+                  "generate": {
+                    "length": "{const.password.length}",
+                    "alphabet": "{const.password.alphabet}"
+                  },
+                  "help": "At least {const.password.minLength} characters. Shown in the clear so you can pass it on accurately."
+                }
+              ],
+              "confirm": "Set this password?",
+              "confirmMessage": "{data.member.email} is signed out everywhere and can only sign back in with the password you set here. They are emailed to say an admin changed it. Make sure you can pass the new password to them over a channel you trust.",
+              "confirmLabel": "Set password",
+              "url": "/api/membership/admin-password",
+              "body": {
+                "hostId": "{site.id}",
+                "memberId": "{params.memberId}",
+                "action": "setPassword",
+                "password": "{form.password}"
+              },
+              "success": "Password set — the account holder was emailed"
+            }
+          ]
+        },
+        {
+          "type": "zone",
+          "name": "siteMember",
+          "title": "More",
+          "params": {
+            "hostId": "{site.id}",
+            "memberId": "{params.memberId}",
+            "email": "{data.member.email}"
+          }
+        },
+        {
+          "type": "list",
+          "id": "addresses",
+          "title": "Addresses",
+          "when": "data.member.addresses.0",
+          "items": "data.member.addresses",
+          "icon": "mappin.and.ellipse|location_on",
+          "wrap": true,
+          "count": false,
+          "primary": [
+            "{item.name}",
+            "{item.line1}",
+            "{item.line2}",
+            "{item.city} {item.state} {item.postalCode}",
+            "{item.country}"
+          ]
+        }
       ]
     },
     {
