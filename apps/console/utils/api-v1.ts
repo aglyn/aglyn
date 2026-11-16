@@ -56,7 +56,12 @@ import {
   CONNECTOR_ACCESS_TOKEN_PREFIX,
   isConnectorAccessTokenFormat,
 } from '@aglyn/tenant-data-admin/server/connector-oauth'
-import { verifyConnectorAccessToken } from '@aglyn/tenant-data-admin/server/connector-oauth-store'
+import {
+  CONNECTOR_TOKEN_UNAVAILABLE,
+  verifyConnectorAccessToken,
+} from '@aglyn/tenant-data-admin/server/connector-oauth-store'
+import { isValidApiKeyFormat as isApiKeyShaped } from '@aglyn/tenant-data-admin/server/api-keys'
+import { createHash } from 'node:crypto'
 
 /**
  * What the pipeline resolved for one request, and the scope check every
@@ -90,16 +95,75 @@ interface VerifiedCredential {
  * what the pre-auth budget charges for; a malformed token of either kind is
  * free. Asked only on a refusal, as the format check always was.
  */
-async function verifyCredential(
-  token: string,
-): Promise<{ verified: VerifiedCredential | null; lookedUp: () => boolean }> {
+async function verifyCredential(token: string): Promise<{
+  verified: VerifiedCredential | null
+  lookedUp: () => boolean
+  /** A read failed: nothing is known about the credential either way. */
+  unavailable?: boolean
+}> {
   if (token.startsWith(CONNECTOR_ACCESS_TOKEN_PREFIX)) {
-    return {
-      verified: await verifyConnectorAccessToken(token),
-      lookedUp: () => isConnectorAccessTokenFormat(token),
+    const answer = await verifyConnectorAccessToken(token)
+    if (answer === CONNECTOR_TOKEN_UNAVAILABLE) {
+      return { verified: null, lookedUp: () => false, unavailable: true }
     }
+    return { verified: answer, lookedUp: () => isConnectorAccessTokenFormat(token) }
   }
   return { verified: await verifyApiKey(token), lookedUp: () => isValidApiKeyFormat(token) }
+}
+
+/**
+ * What this instance has already learned about credentials, by hash
+ * (AGL-4225). Memory only, bounded, and short-lived.
+ *
+ * The pre-auth budget is per client ADDRESS, and an app such as Claude calls
+ * from a provider's shared egress addresses — so without these, one tenant's
+ * integration retrying a dead token could spend the budget every other
+ * tenant behind the same address needs. They change who PAYS, never what is
+ * read:
+ *
+ *  - A credential that resolved to nothing is refused again for free — no
+ *    read, no charge — so a client hammering one dead token cannot drain the
+ *    shared budget. Dead stays dead: a revoked, expired or ended credential
+ *    never comes back, and a token cannot be minted to a chosen hash.
+ *  - A credential that resolved on this instance is not refused by an
+ *    exhausted budget; it is still looked up and checked on every call, and
+ *    the first time it fails it moves to the dead set. That lookup is
+ *    bounded by credentials that were once valid, so it is no amplifier.
+ *
+ * A read that FAILED teaches nothing and lands in neither set.
+ */
+const CREDENTIAL_MEMORY_LIMIT = 5_000
+const CREDENTIAL_MEMORY_TTL_MS = 10 * 60_000
+const knownGoodCredentials = new Map<string, number>()
+const knownDeadCredentials = new Map<string, number>()
+
+function remember(memory: Map<string, number>, hash: string, now = Date.now()): void {
+  memory.delete(hash)
+  memory.set(hash, now + CREDENTIAL_MEMORY_TTL_MS)
+  while (memory.size > CREDENTIAL_MEMORY_LIMIT) {
+    const oldest = memory.keys().next().value
+    if (oldest === undefined) break
+    memory.delete(oldest)
+  }
+}
+
+function recalls(memory: Map<string, number>, hash: string | null, now = Date.now()): boolean {
+  if (!hash) return false
+  const until = memory.get(hash)
+  if (until === undefined) return false
+  if (until <= now) {
+    memory.delete(hash)
+    return false
+  }
+  return true
+}
+
+/** The memory key for a credential; `null` for one no lookup would be spent on. */
+function credentialHash(token: string): string | null {
+  const lookable = token.startsWith(CONNECTOR_ACCESS_TOKEN_PREFIX)
+    ? isConnectorAccessTokenFormat(token)
+    : isApiKeyShaped(token)
+  return lookable ? createHash('sha256').update(token).digest('hex') : null
 }
 
 /** `Authorization: Bearer <key>` (preferred) or `X-Api-Key: <key>`. */
@@ -175,6 +239,8 @@ const preAuthLookups = new Map<string, RateLimitState>()
 /** Test seam: forget this instance's pre-auth budget. */
 export function resetPreAuthLookupBudgetForTests(): void {
   preAuthLookups.clear()
+  knownGoodCredentials.clear()
+  knownDeadCredentials.clear()
 }
 
 /**
@@ -299,7 +365,12 @@ export async function authenticateApiV1(
     store: preAuthLookups,
   }
   const budget = peekRateLimit(budgetKey, budgetOptions)
-  if (!budget.allowed) {
+  // See `knownGoodCredentials` for why recalling a credential is safe.
+  const hash = token ? credentialHash(token) : null
+  if (recalls(knownDeadCredentials, hash)) {
+    return ApiErrors.unauthorized({ headers: rateLimitHeaders(budget) })
+  }
+  if (!budget.allowed && !recalls(knownGoodCredentials, hash)) {
     /*
       The headers describe THIS budget — the per-IP lookup budget — and not the
       120/min of a key we declined to identify (AGL-2727).
@@ -328,8 +399,18 @@ export async function authenticateApiV1(
     return ApiErrors.unauthorized({ headers: rateLimitHeaders(budget) })
   }
 
-  const { verified, lookedUp } = await verifyCredential(token)
+  const { verified, lookedUp, unavailable } = await verifyCredential(token)
+  if (unavailable) {
+    // A read failed while resolving the credential (AGL-4225). Not a 401 —
+    // nothing says the credential is bad, and a 401 would send the client
+    // off to sign in again — and not charged to the address either.
+    return ApiErrors.unavailable(5, rateLimitHeaders(budget))
+  }
   if (!verified) {
+    if (hash) {
+      knownGoodCredentials.delete(hash)
+      remember(knownDeadCredentials, hash)
+    }
     // `lookedUp` is the same format predicate the verifier short-circuits
     // on, so this charges the budget when — and only when — a Firestore read
     // was actually spent. A malformed token cost nothing and is charged
@@ -346,6 +427,8 @@ export async function authenticateApiV1(
       headers: rateLimitHeaders(peekRateLimit(budgetKey, budgetOptions)),
     })
   }
+
+  if (hash) remember(knownGoodCredentials, hash)
 
   // From here the key is known, so the rate-limit budget is knowable — and a
   // client that reads it off every response shouldn't lose it on exactly the

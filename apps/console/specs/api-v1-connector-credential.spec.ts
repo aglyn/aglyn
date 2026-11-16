@@ -33,6 +33,7 @@
 import { createHash } from 'node:crypto'
 
 let mockReads = 0
+let mockReadFails = false
 const mockStore = new Map<string, Record<string, unknown>>()
 const mockUsageWrites: string[] = []
 
@@ -43,6 +44,7 @@ jest.mock('../../../libs/tenant/data/admin/src/lib/server/firebase-admin', () =>
         path: `${name}/${id}`,
         get: async () => {
           mockReads += 1
+          if (mockReadFails) throw new Error('UNAVAILABLE: firestore')
           const data = mockStore.get(`${name}/${id}`)
           return { exists: data !== undefined, data: () => data }
         },
@@ -145,6 +147,7 @@ const call = (credential: string, path: string[] = ['me'], ip = '203.0.113.9') =
 beforeEach(() => {
   jest.clearAllMocks()
   mockReads = 0
+  mockReadFails = false
   mockStore.clear()
   mockUsageWrites.length = 0
   resetPreAuthLookupBudgetForTests()
@@ -225,5 +228,42 @@ describe('a connector token through the /api/v1 door (AGL-4225)', () => {
       expect((await call('aglyn_at_short')).status).toBe(401)
     }
     expect(mockReads).toBe(0)
+  })
+
+  it('answers a failed read with 503 and Retry-After — not a 401, not charged, nothing revoked', async () => {
+    const credential = token('blip')
+    storeConnection(credential)
+    mockReadFails = true
+    for (let i = 0; i < PREAUTH_LOOKUP_LIMIT + 5; i += 1) {
+      const response = await call(credential)
+      expect(response.status).toBe(503)
+      expect(Number(response.headers.get('retry-after'))).toBeGreaterThan(0)
+      expect(await response.json()).toMatchObject({ error: { type: 'service_unavailable' } })
+    }
+    // Not charged: once reads work again the address is still served.
+    mockReadFails = false
+    expect((await call(credential)).status).toBe(200)
+    expect(mockStore.get(`oauthGrants/${GRANT}`)?.revokedAt).toBeNull()
+  })
+
+  it('refuses a dead token again for free, so one client retrying it cannot drain a shared address', async () => {
+    const dead = token('dead')
+    expect((await call(dead)).status).toBe(401)
+    const readsAfterFirst = mockReads
+    for (let i = 0; i < PREAUTH_LOOKUP_LIMIT * 2; i += 1) expect((await call(dead)).status).toBe(401)
+    expect(mockReads).toBe(readsAfterFirst)
+    // The address's budget is untouched by the retries: a live token is served.
+    const live = token('alive')
+    storeConnection(live)
+    expect((await call(live)).status).toBe(200)
+  })
+
+  it('never refuses a credential that already resolved here, however the address’s budget stands', async () => {
+    const live = token('known-good')
+    storeConnection(live)
+    expect((await call(live)).status).toBe(200)
+    for (let i = 0; i < PREAUTH_LOOKUP_LIMIT; i += 1) await call(token(`junk${i}`))
+    expect((await call(token('one-more-junk'))).status).toBe(429)
+    expect((await call(live)).status).toBe(200)
   })
 })
