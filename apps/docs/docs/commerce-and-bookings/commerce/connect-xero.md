@@ -1,17 +1,10 @@
 ---
 sidebar_position: 21
 title: Connect Xero
-description: Post every sale, refund, Aglyn fee and Stripe payout from your store to Xero, mapped to the accounts you choose. Rolling out.
-unlisted: true
+description: Post every sale, refund, Aglyn fee and Stripe payout from your store to Xero, mapped to the accounts you choose.
 ---
 
 # Connect Xero
-
-:::caution Rolling out
-Accounting is a **release-flagged feature** that is **not yet available** on
-aglyn.com-hosted workspaces. Until it is switched on for your workspace, the
-**Accounting** tab does not appear in your organization.
-:::
 
 Connect your Xero organization and Aglyn posts your store's money to it as it
 happens: each paid order, each refund, the Aglyn fee on each sale, and each
