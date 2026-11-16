@@ -61749,6 +61749,7 @@
                       "id": "/accounting",
                       "surface": "orgPluginTab"
                     },
+                    "docs": "/commerce-and-bookings/commerce/connect-quickbooks-online",
                     "icon": {
                       "android": "account_balance",
                       "apple": "banknote"
