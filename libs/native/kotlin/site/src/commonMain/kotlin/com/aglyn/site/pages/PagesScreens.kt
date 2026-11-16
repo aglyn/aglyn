@@ -362,6 +362,8 @@ private fun PageDetail(
         DetailRow("Updated", page.updatedAt?.let { relativeTime(it.epochMillis, now) })
       }
       PageVersions(context, hostId, page, api, runner, canPublish, loader)
+      // What breaks if this page goes (AGL-703), on demand: the scan reads every page, layout and component.
+      PageUsedBySection(context, hostId, page.id)
       // What the page is doing, then who touched it (the console's page view, AGL-4011): its traffic above its activity.
       com.aglyn.site.analytics.PageTrafficCard(context.firestore, context.api, hostId, page.id, upgrade = { context.navigate("core.billing.plans") })
       com.aglyn.site.analytics.SiteActivityCard(context.firestore, context.api, hostId, targetId = page.id, title = "Page Activity")

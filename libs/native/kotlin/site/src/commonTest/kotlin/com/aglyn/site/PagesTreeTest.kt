@@ -125,3 +125,13 @@ class PagesTreeTest {
     assertTrue(first.hasMore)
   }
 }
+
+class PageUsedByTest {
+  @kotlin.test.Test
+  fun namesHowEachDependentPointsAtThePage() {
+    kotlin.test.assertEquals("links here", com.aglyn.site.pages.pageRelationLabel("link"))
+    kotlin.test.assertEquals("nested under", com.aglyn.site.pages.pageRelationLabel("child"))
+    kotlin.test.assertEquals("renders through", com.aglyn.site.pages.pageRelationLabel("template"))
+    kotlin.test.assertEquals(null, com.aglyn.site.pages.pageRelationLabel(null))
+  }
+}

@@ -552,6 +552,8 @@ struct PageDetail: View {
         }
         PageVersionsSection(
           context: context, hostID: hostID, page: page, model: model, api: api, runner: runner, canPublish: canPublish)
+        // What breaks if this page goes (AGL-703), on demand: the scan reads every page, layout and component.
+        PageUsedBySection(context: context, hostID: hostID, pageID: page.id)
         // What the page is doing, then who touched it (the console's page view, AGL-4011): its traffic above its activity.
         Section {
           PageTrafficCard(reader: context.firestore, api: context.api, hostID: hostID, screenID: page.id) {
