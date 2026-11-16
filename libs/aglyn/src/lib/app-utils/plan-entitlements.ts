@@ -224,7 +224,8 @@ export const ENTERPRISE_EMAIL_SENDS_PER_MONTH = 260_000
  * (AGL-67, 2026-07-07): storage-per-host is media storage; the published
  * total-site-size cap it used to exceed by design was retired in AGL-2133.
  * Metered costs are passed through
- * from Firebase/Vercel at cost × 1.30 separately (AGL-41).
+ * from Firebase/Vercel separately (AGL-41), priced at cost ×
+ * `METERED_PRICE_MULTIPLE` (1.3388) so cost + 30% is kept after Stripe.
  */
 /** Legacy host-keyed dataset overrides resolved into org keys (AGL-240). */
 type LegacyEntitlementKeys = 'datasetsPerHost' | 'maxDatasetsPerHost'
@@ -281,6 +282,13 @@ export type ResolvedOrgEntitlements = Required<
     features: Required<CoreOrgFeatureFlags> & PluginOrgFeatures
   }
 
+/**
+ * Pro's included CRM records, and therefore Starter's CRM-record ceiling
+ * (AGL-4227): one constant, read by both rows, so the ceiling is always
+ * exactly what upgrading includes.
+ */
+const PRO_INCLUDED_CRM_RECORDS = 10_000
+
 export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
   free: {
     hostLimit: 1,
@@ -317,6 +325,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: 0,
     redirectsPerHost: 0,
     contactsPerHost: 100,
+    maxCrmRecords: 0,
     emailSendsPerMonth: 0,
     actionRunsPerMonth: 0,
     apiRequestsPerMonth: 0,
@@ -436,6 +445,11 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: 1,
     redirectsPerHost: 25,
     contactsPerHost: 1000,
+    // Starter sells CRM records past its 1,000 only up to Pro's included
+    // 10,000 (AGL-4227): past that a new record is refused with an upgrade
+    // message, and every record already held stays. Read off Pro's row so
+    // the two cannot drift; Pro and up have no ceiling.
+    maxCrmRecords: PRO_INCLUDED_CRM_RECORDS,
     // Campaign email starts at Pro. A site that may send campaigns needs its
     // own verified provider sending domain, and provisioning one is a real
     // per-site operational cost that a campaign allowance commits the platform
@@ -468,10 +482,13 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     // (AGL-4226): the per-key 120 alone let a workspace multiply its budget
     // by minting keys. Starter's is one key's worth.
     apiRequestsPerMinutePerOrg: 120,
-    // A HARD monthly stop (AGL-4226): $24.75 of overage at most, so the
-    // cheapest paid door cannot accrue more than that between invoices.
-    // Pro and above have none (`UNLIMITED`).
-    maxApiRequestsPerMonth: 50_000,
+    // A HARD monthly stop (AGL-4226): 19,500 requests of overage at most,
+    // $58.50 at Starter's rate, so the cheapest paid door cannot accrue more
+    // than that between invoices. THE one place the ceiling is written. Set
+    // with the rate so Pro is the cheaper plan before it is reached: about
+    // 17,900 requests on monthly prices, 13,500 on annual. Pro and above
+    // have none (`UNLIMITED`).
+    maxApiRequestsPerMonth: 20_000,
     datasetsPerOrg: 2,
     maxDatasetsPerOrg: 10,
     recordsPerDataset: 1000,
@@ -522,7 +539,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       actions: false,
       webhooks: false,
       // From Starter since AGL-4226: 500 requests, metered past them up to a
-      // 50,000 ceiling, at 120 a minute for the workspace. Webhooks stay off,
+      // 20,000 ceiling, at 120 a minute for the workspace. Webhooks stay off,
       // and so do the Zapier hooks that are outbound events by another name.
       apiAccess: true,
       siteExport: false,
@@ -592,7 +609,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     workflowsPerHost: UNLIMITED,
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
-    contactsPerHost: 10000,
+    contactsPerHost: PRO_INCLUDED_CRM_RECORDS,
+    maxCrmRecords: UNLIMITED,
     emailSendsPerMonth: 2500,
     actionRunsPerMonth: 5000,
     // API access moved in from Business with Business's band (v4), and the
@@ -704,6 +722,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: 30000,
+    maxCrmRecords: UNLIMITED,
     emailSendsPerMonth: 15000,
     actionRunsPerMonth: 50000,
     apiRequestsPerMonth: 1_500,
@@ -780,6 +799,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: 100000,
+    maxCrmRecords: UNLIMITED,
     emailSendsPerMonth: 25000,
     actionRunsPerMonth: 100000,
     apiRequestsPerMonth: 5_000,
@@ -853,6 +873,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: 150000,
+    maxCrmRecords: UNLIMITED,
     emailSendsPerMonth: 65000,
     actionRunsPerMonth: 250000,
     apiRequestsPerMonth: 17_000,
@@ -930,6 +951,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: 500000,
+    maxCrmRecords: UNLIMITED,
     emailSendsPerMonth: 130000,
     actionRunsPerMonth: 1000000,
     apiRequestsPerMonth: 85_000,
@@ -1043,6 +1065,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     servicesPerHost: UNLIMITED,
     redirectsPerHost: UNLIMITED,
     contactsPerHost: 1_000_000,
+    maxCrmRecords: UNLIMITED,
     emailSendsPerMonth: ENTERPRISE_EMAIL_SENDS_PER_MONTH,
     actionRunsPerMonth: 2_000_000,
     apiRequestsPerMonth: 170_000,
@@ -1391,9 +1414,13 @@ export interface PlanPricing {
    * $16 per included host on annual prices and $12 to $22 on monthly: ten
    * Business sites plus fifteen extras came to $219 against Advanced's $299,
    * and plus ninety extras to $819 against Agency's $1,049, so on host count
-   * alone no plan was ever worth upgrading to. $20 clears the steepest step on
-   * both intervals: extra hosts are how a plan takes a few more sites, and
-   * the next plan is how it takes many more (2026-09-20).
+   * alone no plan was ever worth upgrading to. $20 cleared the steepest step
+   * on both intervals when it was set (2026-09-20); pricing v4's $69 Pro made
+   * the Starter → Pro step $22 a site on monthly prices, so three Starter
+   * sites came to $65 against Pro's $69. Starter's is $25 since AGL-4227
+   * (three sites $75 monthly, $66 annual); every other plan stays at $20.
+   * Extra hosts are how a plan takes a few more sites, and the next plan is
+   * how it takes many more.
    */
   extraHostMonthlyUsd: number | null
   /**
@@ -1538,20 +1565,23 @@ export interface PlanPricing {
    *
    * Null wherever the plan has no email band to be over, and null on
    * enterprise, where every rate is the "not for sale" sentinel and the terms
-   * are contractual. Free and Starter are the two banded at 0: campaign email
-   * begins at Pro, and `emailSendsOverage` yields 0 against a non-positive
-   * band, so a rate on either would advertise a fee that can never be
-   * computed — the same defect as a rate beside an UNLIMITED band.
+   * are contractual. Free is banded at 0 and has no subscription to bill:
+   * `emailSendsOverage` yields 0 against a non-positive band, so a rate there
+   * would advertise a fee that can never be computed — the same defect as a
+   * rate beside an UNLIMITED band. (Starter's campaign band is 0 too, but it
+   * is billed against its own band — below.)
    *
    * Every tier whose band is POSITIVE carries one, Pro upward. A finite band
    * with no rate is silently free past the band, and since transactional mail
    * cannot be refused at any tier that would be unbounded absorbed spend
    * rather than "no overage".
    *
-   * The Starter null therefore leaves that tier's transactional mail — the
-   * only mail it can send — unbilled at any volume. Bounded in practice by
-   * `hostLimit: 1` and a 1,000-contact CRM, and the alternative prices a
-   * password reset, but it is the one place this axis absorbs cost by design.
+   * Starter is the exception since AGL-4227: its campaign band is 0, so its
+   * rate is measured against `INCLUDED_EMAIL_SENDS_BY_PLAN` — 1,000 emails a
+   * month of everything it sends — and bills past it. (This comment used to
+   * call Starter's unbilled mail "bounded in practice by `hostLimit: 1` and a
+   * 1,000-contact CRM"; neither bounded it — Starter buys extra sites and
+   * meters CRM records — and the real bound was the daily abuse ceiling.)
    */
   extraEmailSendsUsdPer1k: number | null
   /**
@@ -1632,18 +1662,25 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
   starter: {
     basePriceMonthlyUsd: 25,
     basePriceAnnualMonthlyUsd: 16,
-    extraHostMonthlyUsd: 20,
+    // $25 since AGL-4227 (from $20): three Starter sites now cost more than
+    // Pro on both intervals ($75 vs $69 monthly, $66 vs $49 annual). Charged
+    // at $20 until `STRIPE_PRICE_STARTER_EXTRA_HOST_V2[_YEARLY]` names the
+    // $25 price — see `REPRICED_ADDONS` in `billing-addons.ts`.
+    extraHostMonthlyUsd: 25,
     extraSeatMonthlyUsd: 5,
     extraCollaboratorMonthlyUsd: 3,
     extraDatasetMonthlyUsd: 2,
     extraDataGbMonthlyUsd: 0.36,
     // API overage, per 1,000 past the 500 included (AGL-4226). THE one place
     // the Starter rate is written: specs, the refusal message, the console and
-    // the generated tables read it from here. Pro's rate, for now — the most a
-    // Starter workspace can be billed for API overage in a month is this times
-    // 49.5 (its 50,000 ceiling less the 500 band), $24.75 at $0.50. Withheld
-    // where it could never be collected (`apiOverageRateUsd`).
-    extraApiRequestsUsdPer1k: 0.5,
+    // the generated tables read it from here. Six times Pro's $0.50 on
+    // purpose, so upgrading is the cheaper path for a real integration (the
+    // overage audit of 2026-11-16, option C), and the $3 per 1,000 Starter
+    // already pays for AI credits. The most a Starter workspace can be billed
+    // for API overage in a month is this times 19.5 (its 20,000 ceiling less
+    // the 500 band), $58.50. Withheld where it could never be collected
+    // (`apiOverageRateUsd`).
+    extraApiRequestsUsdPer1k: 3,
     // The top of the retail ladder, which Starter JOINS rather than steps
     // above (AGL-3203): the ladder descends with the tier, and Starter is the
     // rung below Pro, not a new one over it. Moves in lockstep with the 750
@@ -1652,11 +1689,14 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     // advertised on a quantity the plan never sold.
     extraAssistCreditsUsdPer1k: 3,
     extraContactsUsdPer1k: 1,
-    // No email band to be "over" — see `emailSendsPerMonth` on the Starter
-    // entitlements. `emailSendsOverage` returns 0 for any non-positive band,
-    // so a rate here would price volume that can never be computed, which is
-    // the same defect as a rate beside an UNLIMITED band.
-    extraEmailSendsUsdPer1k: null,
+    // EVERY email Starter sends past 1,000 a month bills here (AGL-4227):
+    // receipts, booking and form mail, workflow notices and one-to-one CRM
+    // mail together, measured against `INCLUDED_EMAIL_SENDS_BY_PLAN.starter`
+    // rather than the campaign band (still 0: campaigns start at Pro). Above
+    // Pro's $2.25 so the ladder points up, and $2.50 keeps 2.70× of the $0.90
+    // a thousand cost. Until this the mail was neither billed nor refused below
+    // a 1,000-a-day abuse ceiling — $27 a month of provider cost at worst.
+    extraEmailSendsUsdPer1k: 2.5,
     // Starter keeps every wall (v4): its run bands stop rather than bill.
     extraRunsUsdPer1k: null,
     meteredInfraPassThrough: true,
@@ -1706,7 +1746,9 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraCollaboratorMonthlyUsd: 1,
     extraDatasetMonthlyUsd: 1,
     extraDataGbMonthlyUsd: 0.36,
-    extraApiRequestsUsdPer1k: 0.35,
+    // Pro's $0.50 (AGL-4227): a page of 100 records costs $0.34 per 1,000,
+    // and $0.35 kept nothing on it. Retired; no workspace can subscribe.
+    extraApiRequestsUsdPer1k: 0.5,
     extraAssistCreditsUsdPer1k: 2.5,
     extraContactsUsdPer1k: 0.4,
     extraEmailSendsUsdPer1k: 1.9,
@@ -1721,10 +1763,10 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraCollaboratorMonthlyUsd: 1,
     extraDatasetMonthlyUsd: 1,
     extraDataGbMonthlyUsd: 0.36,
-    // FLOORED at the 50% retail margin, with Agency's: a `/v1` request costs
-    // $0.117 per 1,000 at the dearest region, so $0.25 is the round figure at
-    // or above $0.234 (AGL-3444).
-    extraApiRequestsUsdPer1k: 0.25,
+    // Pro's $0.50 (AGL-4227). It was $0.25, floored at the 50% retail margin
+    // on a default request (AGL-3444), which lost money on a page of 100
+    // records ($0.34 per 1,000). Retired; no workspace can subscribe.
+    extraApiRequestsUsdPer1k: 0.5,
     extraAssistCreditsUsdPer1k: 2.25,
     // FLOORED at the 50% retail margin, not stepped down again. The ladder
     // above it descends $1.00 → $0.75 → $0.50 → $0.40, and one more step
@@ -1757,8 +1799,8 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraCollaboratorMonthlyUsd: 1,
     extraDatasetMonthlyUsd: 1,
     extraDataGbMonthlyUsd: 0.36,
-    // FLOORED at the 50% retail margin — see Advanced's.
-    extraApiRequestsUsdPer1k: 0.25,
+    // Pro's $0.50 (AGL-4227) — see Advanced's.
+    extraApiRequestsUsdPer1k: 0.5,
     extraAssistCreditsUsdPer1k: 2,
     // $0.40, because the band it meters is now FINITE.
     //
@@ -2696,7 +2738,8 @@ export function publishedMeteredPrice(costPerQuotedUnitUsd: number, decimals: nu
  * and functions bill, in USD per view (AGL-1879, AGL-3444): the CDN requests
  * a cold load makes, and the one of them that reaches a function — the
  * analytics beacon. A page view billed past a plan's band is priced at
- * `(perPageView + this) × METERED_MARKUP` — $0.80 per 1,000 — and every
+ * `(perPageView + this) × METERED_PRICE_MULTIPLE`, rounded up — $0.83 per
+ * 1,000 since AGL-3476 (this said $0.80 at × 1.3 until AGL-4227) — and every
  * `bandwidthGb` band is sized with it counted.
  *
  * ## Why a page view needs a second cost term
@@ -2768,8 +2811,9 @@ export const PAGE_VIEW_CDN_REQUEST_COST_USD = 0.00021635711
 /**
  * Monthly unit costs for the meters the rollup already records (AGL-1134).
  *
- * These are OUR costs, not prices — the org is billed at cost × 1.30
- * (`METERED_MARKUP`, AGL-41). Storage/page-view/form rates match
+ * These are OUR costs, not prices — the org is billed at cost ×
+ * `METERED_PRICE_MULTIPLE` (1.3388, AGL-3476), which keeps cost + 30%
+ * (`METERED_MARKUP`, AGL-41) after Stripe's 2.9%. Storage/page-view/form rates match
  * `METERED_UNIT_RATES_USD` in the metering module on purpose: two files
  * disagreeing about what a page view costs is exactly the drift this function
  * exists to remove.
@@ -2885,17 +2929,25 @@ export const ORG_COGS_UNIT_RATES_USD = {
    * $0.0001179, or $0.0001185 where the month is measured, carried up to
    * $0.00012. It was $0.000117 before the workspace window's read and write.
    *
-   * The figure is the DEFAULT request, not the ceiling:
+   * The figure is the DEFAULT request, not the ceiling — which is why a
+   * request has been BILLED by size since AGL-4227: one unit per started
+   * 256 KB of the larger of its request and response
+   * (`API_BILLING_UNIT_BYTES`). At Pro's $0.50 per 1,000, $0.0005 a unit and
+   * 97.1% of it kept after Stripe:
    *
-   *   - a page of 100 — the most a client may ask for — is $0.000343: about
-   *     three times, and $0.34 per 1,000 against a $0.50 rate;
-   *   - a request or response at Vercel's 4.5 MB function body limit (a
-   *     base64 image upload, or a page of large dataset records) is about
-   *     $0.0035 in transfer alone, roughly 7× the $0.0005 a billed request
-   *     brings in at $0.50 per 1,000;
-   *   - break-even: at $0.50 per 1,000, after Stripe's 2.9%, a request pays
-   *     for itself up to about 550 KB (decimal) on the wire; past it, every
-   *     request loses money on any plan.
+   *   - a full 256 KiB unit costs about $0.000262 (the $0.000057 fixed part
+   *     above plus 262,144 bytes at $0.78 a decimal GB): kept 1.86×, the
+   *     thinnest case, still above cost + 30%;
+   *   - a page of 100 — the most a client may ask for — is $0.000343 and
+   *     about 302 KiB, so 2 units ($0.001): kept 2.83×;
+   *   - a 1 MB body is 4 units ($0.002) against about $0.000837: kept 2.32×;
+   *   - a body at Vercel's 4.5 MB function limit (a base64 image upload, or a
+   *     page of large dataset records) is 18 units ($0.009) against about
+   *     $0.00357: kept 2.45×. Billed as one unit it lost about 7×.
+   *
+   * Before the unit, a request paid for itself only up to about 550 KB on the
+   * wire; with it, every size clears cost + 30% at $0.50, and by more at
+   * Starter's $3.00.
    *
    * See the 2026-10-01 and 2026-11-16 decision entries.
    */
@@ -2951,8 +3003,10 @@ export const ORG_COGS_UNIT_RATES_USD = {
    * document returned — and a step that writes a dataset record or calls a
    * webhook adds to it, so this is the typical figure, not the ceiling.
    *
-   * It is a COST, not a price: no plan bills runs, and none refuses past the
-   * band on a metered plan. It exists so a tier's run bands reach
+   * It is a COST, not a price. Since pricing v4 Pro bills runs past its bands
+   * at `RUN_OVERAGE_USD_PER_1K` ($0.02, cost × the pass-through multiple) and
+   * Starter refuses at its band (comment corrected in AGL-4227). It exists so
+   * a tier's run bands reach
    * `orgMonthlyCogsUsd` and `tier-margin-floor.spec.ts` — Agency's 3,000,000
    * runs are $36 a month that read as nothing while this was absent.
    */
@@ -5264,30 +5318,27 @@ function wholeBillFullyDiscounted(
  * `null` when nothing past the band is sold (AGL-4226).
  *
  * The plan's rate (`resolvePlanPricing`, so a comp sells nothing), withheld
- * on STARTER when the overage could never be collected: no live billing
+ * on EVERY plan when the overage could never be collected: no live billing
  * subscription (`isBillingSubscription` — a paid plan stored without one), or
  * a 100% whole-bill discount. A withheld rate turns the band into the wall
  * `checkApiRequestQuota` already enforces for a plan with no rate, so those
- * workspaces stop at the 500 they were given rather than metering onto an
- * invoice nobody pays.
+ * workspaces stop at the requests they were given rather than metering onto
+ * an invoice nobody pays.
  *
- * STARTER ONLY, deliberately. Pro and above in the same two states run
- * unbounded today and have not been counted; extending this to them is a
- * separate change (see the AGL-4226 hand-off), so it does not cut off a
- * workspace nobody has looked at. An explicit uncapped staff comp is
- * untouched: its band is `UNLIMITED`, so a null rate refuses nothing.
+ * Starter-only when it was written (AGL-4226); every plan since a read-only
+ * production count on 2026-11-16 found no workspace it would cut off (none
+ * of 275 on a paid plan without a live subscription, none on a 100%
+ * whole-bill coupon; the only unbilled ones are staff comps, none of them
+ * calling the API). An explicit uncapped staff comp is untouched: its band is
+ * `UNLIMITED`, so a null rate refuses nothing. Custom carries no rate, so its
+ * contracted band was already the wall.
  */
 export function apiOverageRateUsd(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): number | null {
   const rate = resolvePlanPricing(org).extraApiRequestsUsdPer1k
   if (rate === null) return null
-  if (
-    resolveEffectivePlan(org) === 'starter' &&
-    (!isBillingSubscription(org) || wholeBillFullyDiscounted(org))
-  ) {
-    return null
-  }
+  if (!isBillingSubscription(org) || wholeBillFullyDiscounted(org)) return null
   return rate
 }
 
@@ -5296,7 +5347,7 @@ export function apiOverageRateUsd(
  * org. Every plan with `apiAccess` but Custom carries an
  * `extraApiRequestsUsdPer1k` rate (Starter since AGL-4226, Pro since pricing
  * v4), so requests past the included band meter onto the monthly invoice up
- * to the plan's monthly CEILING (`maxApiRequestsPerMonth`: 50,000 on
+ * to the plan's monthly CEILING (`maxApiRequestsPerMonth`: 20,000 on
  * Starter, none from Pro up). Plans without a rate — Free, a comp, Custom
  * on its fallback band, or a Starter workspace whose overage cannot be
  * collected (`apiOverageRateUsd`) — stop at the band.
@@ -5411,6 +5462,19 @@ export interface CrmRecordsQuotaResult {
   overageMonthlyUsd: number
   /** Per-1,000 overage rate; null when the plan hard-bands (free). */
   overageRateUsd: number | null
+  /**
+   * The most records the plan allows, overage included (AGL-4227):
+   * `maxCrmRecords`, never below `included`. Starter's is Pro's included
+   * amount; `UNLIMITED` from Pro up.
+   */
+  ceiling: number
+  /**
+   * Which limit refused, when `allowed` is false (AGL-4227): `'ceiling'` — a
+   * metered plan at its records ceiling (Starter at Pro's band, where the
+   * upgrade is the way on); `'band'` — a plan that sells nothing past its
+   * included records (Free, a comp).
+   */
+  refusedBy: 'ceiling' | 'band' | null
 }
 
 /**
@@ -5422,7 +5486,9 @@ export type ContactQuotaResult = CrmRecordsQuotaResult
 /**
  * CRM records band meter (AGL-890, widened in AGL-2611): contacts, companies
  * and deals, counted together across the org and measured against the ONE
- * band `contactsPerHost` names. Paid plans carry an `extraContactsUsdPer1k`
+ * band `contactsPerHost` names, up to `maxCrmRecords` (AGL-4227: Starter
+ * stops adding at Pro's included amount; records it already holds stay and
+ * bill). Paid plans carry an `extraContactsUsdPer1k`
  * rate, so records past the included band meter onto the monthly invoice
  * (cost-plus, like storage and API overage — a growing audience is never
  * dropped); free has no rate and hard-bands at the included count, refusing
@@ -5450,12 +5516,18 @@ export function checkCrmRecordsQuota(
   const pricing = resolvePlanPricing(org)
   const included = entitlements.contactsPerHost
   const overageRateUsd = pricing.extraContactsUsdPer1k
+  const ceiling = Math.max(included, Number(entitlements.maxCrmRecords ?? UNLIMITED))
   const used = Math.max(0, usedRecords)
+  // Every record HELD past the band bills, the ceiling included: the ceiling
+  // refuses new records, it never stops billing the ones a workspace keeps.
   const overageRecords = Math.max(0, used - included)
+  const allowed = overageRateUsd !== null ? used < ceiling : used < included
   return {
-    allowed: overageRateUsd !== null ? true : used < included,
+    allowed,
     included,
     used,
+    ceiling,
+    refusedBy: allowed ? null : overageRateUsd !== null ? 'ceiling' : 'band',
     remaining: Math.max(0, included - used),
     overageRecords,
     overageMonthlyUsd:
@@ -5555,6 +5627,37 @@ export function checkCrmEmailQuota(
     remaining: Math.max(0, included - used),
     resetsAt,
   }
+}
+
+/**
+ * The EMAIL BILLING band where it is not the campaign band (AGL-4227): the
+ * emails a month a plan includes across ALL mail on the cost meter — receipts,
+ * notices, workflow and one-to-one CRM mail as well as campaigns — before
+ * `extraEmailSendsUsdPer1k` bills.
+ *
+ * Starter's campaign band is 0 (campaigns start at Pro), so measuring its
+ * overage against that band priced nothing at any volume. It now includes
+ * 1,000 emails a month of everything, one-to-one CRM mail inside the same
+ * 1,000, and bills past it. Every other plan bills against its campaign band
+ * as before; a plan absent here has no separate billing band.
+ */
+export const INCLUDED_EMAIL_SENDS_BY_PLAN: Readonly<Partial<Record<OrgPlan, number>>> = {
+  starter: 1_000,
+}
+
+/**
+ * The band an org's month of email is billed against (AGL-4227):
+ * `INCLUDED_EMAIL_SENDS_BY_PLAN` for its plan where one is set, else its
+ * resolved `emailSendsPerMonth`. The ONE reader the rollup and the billing
+ * page ask, so the invoice and the readout cannot measure different bands.
+ * A comp prices nothing past any band (`compPricing`), so the band it reads
+ * here never bills.
+ */
+export function emailSendsBillingBand(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): number {
+  const band = INCLUDED_EMAIL_SENDS_BY_PLAN[resolveEffectivePlan(org)]
+  return typeof band === 'number' ? band : resolveOrgEntitlements(org).emailSendsPerMonth
 }
 
 /**
@@ -6367,4 +6470,62 @@ export function apiMonthlyRefusalMessage(
     `This workspace has used the ${quota.included.toLocaleString('en-US')} API requests ` +
     `included this month, and no overage can be billed to it. Requests resume when the month turns (UTC).`
   )
+}
+
+/**
+ * What a refused CRM record says (AGL-4227): at Starter's ceiling, the
+ * ceiling and the plan that includes it; at a band a plan sells nothing past,
+ * the band. Records already held are never touched, and the message says so.
+ */
+export function crmRecordsRefusalMessage(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  quota: Pick<CrmRecordsQuotaResult, 'ceiling' | 'included' | 'refusedBy'>,
+): string {
+  if (quota.refusedBy === 'ceiling') {
+    const plan = resolveEffectivePlan(org)
+    const next = SELF_SERVE_PLANS.find(
+      (candidate) =>
+        candidate !== plan &&
+        PLAN_PRICING[candidate].basePriceMonthlyUsd > PLAN_PRICING[plan].basePriceMonthlyUsd &&
+        !Number.isFinite(PLAN_ENTITLEMENTS[candidate].maxCrmRecords ?? UNLIMITED),
+    )
+    return (
+      `CRM records limit reached: the ${PLAN_LABELS[plan]} plan holds up to ` +
+      `${quota.ceiling.toLocaleString('en-US')} records across contacts, companies and deals, ` +
+      'and every record you have is kept.' +
+      (next ? ` Upgrade to ${PLAN_LABELS[next]} to add more.` : '')
+    )
+  }
+  return (
+    `CRM records limit reached (${quota.included.toLocaleString('en-US')} records across ` +
+    'contacts, companies and deals). Upgrade the plan to add more.'
+  )
+}
+
+/**
+ * The size of ONE billed API unit (AGL-4227): a request is billed one unit
+ * per started 256 KB of the larger of its request and response body.
+ *
+ * Every request was one unit at any size, and a request costs its bytes: a
+ * default page is about 77 KB on the wire, a page of 100 records about
+ * 302 KB, and a body at Vercel's 4.5 MB function limit about $0.0035 in
+ * transfer alone — roughly 7× what one unit brings in at $0.50 per 1,000. A
+ * 256 KB unit costs at most about $0.00026 (transfer at $0.78 per decimal GB
+ * plus the request's fixed cost), which $0.50 per 1,000 covers 1.9 times
+ * after Stripe's fee. The unit counts on the monthly counter, so it reaches
+ * the invoice, the ceiling and the usage meter alike; the per-minute limits
+ * keep counting CALLS.
+ */
+export const API_BILLING_UNIT_BYTES = 256 * 1024
+
+/**
+ * How many billed units a request is (AGL-4227): one per started
+ * `API_BILLING_UNIT_BYTES` of the larger of its request and response body,
+ * and never fewer than one. A size that is not a finite, non-negative number
+ * reads as 0, so it can only ever charge the one unit every call is.
+ */
+export function apiRequestBillingUnits(requestBytes: number, responseBytes: number): number {
+  const size = (value: number) => (Number.isFinite(value) && value > 0 ? value : 0)
+  const larger = Math.max(size(requestBytes), size(responseBytes))
+  return Math.max(1, Math.ceil(larger / API_BILLING_UNIT_BYTES))
 }

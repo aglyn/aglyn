@@ -32,6 +32,8 @@
  */
 
 import {
+  API_BILLING_UNIT_BYTES,
+  apiRequestBillingUnits,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
   UNLIMITED,
@@ -93,7 +95,7 @@ describe('1 · the workspace rate limit is an entitlement, tiered by plan', () =
 
 describe('2 · Starter has a hard monthly ceiling; Pro and up have none', () => {
   it('is written once, on the Starter row, and Pro and above are uncapped', () => {
-    expect(STARTER_CEILING).toBe(50_000)
+    expect(STARTER_CEILING).toBe(20_000)
     for (const plan of ['pro', 'business', 'scale', 'advanced', 'agency', 'enterprise'] as OrgPlan[]) {
       expect(`${plan}: ${PLAN_ENTITLEMENTS[plan].maxApiRequestsPerMonth}`).toBe(`${plan}: ${UNLIMITED}`)
     }
@@ -110,11 +112,11 @@ describe('2 · Starter has a hard monthly ceiling; Pro and up have none', () => 
     expect(at.ceiling).toBe(STARTER_CEILING)
   })
 
-  it('bounds Starter API overage at $24.75 a month at $0.50 — derived, not copied', () => {
+  it('bounds Starter API overage at $58.50 a month at $3.00 — derived, not copied', () => {
     const most = checkApiRequestQuota(paying(), STARTER_CEILING)
     expect(most.overageMonthlyUsd).toBeCloseTo(((STARTER_CEILING - STARTER_BAND) / 1000) * STARTER_RATE, 2)
     // The figure the owner set, while the rate and ceiling are what they are.
-    if (STARTER_RATE === 0.5 && STARTER_CEILING === 50_000) expect(most.overageMonthlyUsd).toBe(24.75)
+    if (STARTER_RATE === 3 && STARTER_CEILING === 20_000) expect(most.overageMonthlyUsd).toBe(58.5)
   })
 
   it('makes Starter MEASURED and leaves Pro never-blocks (no extra read on Pro)', () => {
@@ -138,7 +140,7 @@ describe('2 · Starter has a hard monthly ceiling; Pro and up have none', () => 
   })
 })
 
-describe('3 · a Starter workspace whose overage cannot be collected stops at its band', () => {
+describe('3 · a workspace whose overage cannot be collected stops at its band (Starter first, every plan since)', () => {
   it('a paying Starter workspace is sold overage', () => {
     expect(apiOverageRateUsd(paying())).toBe(STARTER_RATE)
     expect(apiOverageRateUsd(paying({ billingStatus: 'past_due' }))).toBe(STARTER_RATE)
@@ -181,14 +183,51 @@ describe('3 · a Starter workspace whose overage cannot be collected stops at it
     expect(apiRequestEnforcementShape(comp(true))).toBe('never-blocks')
   })
 
-  it('does NOT change Pro in the same states — that is a separate, counted change', () => {
-    expect(apiOverageRateUsd({ plan: 'pro' } as never)).toBe(PLAN_PRICING.pro.extraApiRequestsUsdPer1k)
+  it('applies to Pro the same way: no live subscription, or a 100% whole-bill coupon, stops at the band', () => {
+    const PRO_BAND = PLAN_ENTITLEMENTS.pro.apiRequestsPerMonth as number
+    const stored = { plan: 'pro' } as never
+    expect(apiOverageRateUsd(stored)).toBeNull()
+    expect(checkApiRequestQuota(stored, PRO_BAND).refusedBy).toBe('band')
+    const free100 = { plan: 'pro', billingStatus: 'active', discount: { couponId: 'c', percentOff: 100 } } as never
+    expect(apiOverageRateUsd(free100)).toBeNull()
+    expect(checkApiRequestQuota(free100, PRO_BAND).allowed).toBe(false)
+    // A paying Pro workspace, and a base-price-only partner coupon, still meter with no ceiling.
+    expect(checkApiRequestQuota({ plan: 'pro', billingStatus: 'active' } as never, 10_000_000).allowed).toBe(true)
     expect(
       apiOverageRateUsd({
         plan: 'pro',
         billingStatus: 'active',
-        discount: { couponId: 'c', percentOff: 100 },
+        discount: { couponId: 'c', percentOff: 100, basePriceOnly: true },
       } as never),
     ).toBe(PLAN_PRICING.pro.extraApiRequestsUsdPer1k)
+  })
+
+  it('Custom stops at its contracted band, and an uncapped comp of it keeps working', () => {
+    const custom = { plan: 'enterprise', billingStatus: 'active' } as never
+    expect(apiOverageRateUsd(custom)).toBeNull()
+    const band = PLAN_ENTITLEMENTS.enterprise.apiRequestsPerMonth as number
+    expect(checkApiRequestQuota(custom, band).allowed).toBe(false)
+    const uncapped = { plan: 'free', entitlements: { planComp: { plan: 'enterprise', uncapped: true } } } as never
+    expect(apiRequestEnforcementShape(uncapped)).toBe('never-blocks')
+    const uncappedPro = { plan: 'free', entitlements: { planComp: { plan: 'pro', uncapped: true } } } as never
+    expect(checkApiRequestQuota(uncappedPro, 50_000_000).allowed).toBe(true)
+  })
+})
+
+describe('AGL-4227 · one billed unit per started 256 KB', () => {
+  it('is 256 KiB, and a call is never less than one unit', () => {
+    expect(API_BILLING_UNIT_BYTES).toBe(262_144)
+    expect(apiRequestBillingUnits(0, 0)).toBe(1)
+    expect(apiRequestBillingUnits(Number.NaN, -5)).toBe(1)
+  })
+
+  it('weighs the LARGER of request and response, per started unit', () => {
+    // A default page (~77 KB) and a page of 100 records (~302 KB).
+    expect(apiRequestBillingUnits(2_048, 77 * 1024)).toBe(1)
+    expect(apiRequestBillingUnits(2_048, 302 * 1024)).toBe(2)
+    expect(apiRequestBillingUnits(API_BILLING_UNIT_BYTES, 0)).toBe(1)
+    expect(apiRequestBillingUnits(API_BILLING_UNIT_BYTES + 1, 0)).toBe(2)
+    // A body at Vercel's 4.5 MB limit: 18 units.
+    expect(apiRequestBillingUnits(4_500_000, 1_000)).toBe(18)
   })
 })

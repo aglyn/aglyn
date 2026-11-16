@@ -22,6 +22,7 @@ import {
   restoreQuotaLimit,
   brandMergeTokens,
   checkApiRequestQuota,
+  INCLUDED_EMAIL_SENDS_BY_PLAN,
   checkContactQuota,
   checkCrmEmailQuota,
   checkCrmRecordsQuota,
@@ -315,15 +316,15 @@ describe('plan entitlements', () => {
       starter: {
         basePriceMonthlyUsd: 25,
         basePriceAnnualMonthlyUsd: 16,
-        extraHostMonthlyUsd: 20,
+        extraHostMonthlyUsd: 25,
         extraSeatMonthlyUsd: 5,
         extraCollaboratorMonthlyUsd: 3,
         extraDatasetMonthlyUsd: 2,
         extraDataGbMonthlyUsd: 0.36,
-        extraApiRequestsUsdPer1k: 0.5,
+        extraApiRequestsUsdPer1k: 3,
         extraAssistCreditsUsdPer1k: 3,
         extraContactsUsdPer1k: 1,
-        extraEmailSendsUsdPer1k: null,
+        extraEmailSendsUsdPer1k: 2.5,
         // Starter keeps every wall (pricing v4): no runs are sold past its bands.
         extraRunsUsdPer1k: null,
         meteredInfraPassThrough: true,
@@ -368,7 +369,7 @@ describe('plan entitlements', () => {
         extraCollaboratorMonthlyUsd: 1,
         extraDatasetMonthlyUsd: 1,
         extraDataGbMonthlyUsd: 0.36,
-        extraApiRequestsUsdPer1k: 0.35,
+        extraApiRequestsUsdPer1k: 0.5,
         extraAssistCreditsUsdPer1k: 2.5,
         extraContactsUsdPer1k: 0.4,
         extraEmailSendsUsdPer1k: 1.9,
@@ -383,7 +384,7 @@ describe('plan entitlements', () => {
         extraCollaboratorMonthlyUsd: 1,
         extraDatasetMonthlyUsd: 1,
         extraDataGbMonthlyUsd: 0.36,
-        extraApiRequestsUsdPer1k: 0.25,
+        extraApiRequestsUsdPer1k: 0.5,
         extraAssistCreditsUsdPer1k: 2.25,
         extraContactsUsdPer1k: 0.4,
         extraEmailSendsUsdPer1k: 1.85,
@@ -398,7 +399,7 @@ describe('plan entitlements', () => {
         extraCollaboratorMonthlyUsd: 1,
         extraDatasetMonthlyUsd: 1,
         extraDataGbMonthlyUsd: 0.36,
-        extraApiRequestsUsdPer1k: 0.25,
+        extraApiRequestsUsdPer1k: 0.5,
         extraAssistCreditsUsdPer1k: 2,
         extraContactsUsdPer1k: 0.4,
         extraEmailSendsUsdPer1k: 1.8,
@@ -992,39 +993,40 @@ describe('plan entitlements', () => {
   })
 
   it('checkApiRequestQuota meters overage on Pro/Business/Advanced, blocks below (AGL-634)', () => {
-    // Business includes 1,500 requests; 51,500 used → 50k over at $0.50/1k = $25.
-    const business = checkApiRequestQuota({ plan: 'business' } as any, 51_500)
+    // Paying workspaces (a live subscription — since AGL-4227 a plan with
+    // none sells nothing past its band). Business includes 1,500 requests; 51,500 used → 50k over at $0.50/1k = $25.
+    const business = checkApiRequestQuota({ plan: 'business', billingStatus: 'active' } as any, 51_500)
     expect(business.allowed).toBe(true)
     expect(business.included).toBe(1_500)
     expect(business.overageRequests).toBe(50_000)
     expect(business.overageMonthlyUsd).toBeCloseTo(25)
     expect(business.overageRateUsd).toBe(0.5)
-    // Advanced: 17,000 included, cheaper overage ($0.25/1k). 117,000 → 100k
-    // over = $25.
-    const advanced = checkApiRequestQuota({ plan: 'advanced' } as any, 117_000)
+    // Advanced: 17,000 included at Pro's $0.50/1k since AGL-4227 (was $0.25,
+    // which lost money on a page of 100). 117,000 → 100k over = $50.
+    const advanced = checkApiRequestQuota({ plan: 'advanced', billingStatus: 'active' } as any, 117_000)
     expect(advanced.included).toBe(17_000)
-    expect(advanced.overageMonthlyUsd).toBeCloseTo(25)
+    expect(advanced.overageMonthlyUsd).toBeCloseTo(50)
     // Within the included quota there is no overage; remaining is tracked.
-    const within = checkApiRequestQuota({ plan: 'business' } as any, 400)
+    const within = checkApiRequestQuota({ plan: 'business', billingStatus: 'active' } as any, 400)
     expect(within.overageRequests).toBe(0)
     expect(within.remaining).toBe(1_100)
     // Pro carries Business's band and rate since pricing v4 (AGL-4126):
     // 1,500 included, 51,500 used → 50k over at $0.50/1k = $25.
-    const pro = checkApiRequestQuota({ plan: 'pro' } as any, 51_500)
+    const pro = checkApiRequestQuota({ plan: 'pro', billingStatus: 'active' } as any, 51_500)
     expect(pro.allowed).toBe(true)
     expect(pro.included).toBe(1_500)
     expect(pro.overageMonthlyUsd).toBeCloseTo(25)
     expect(pro.overageRateUsd).toBe(0.5)
-    // Starter carries the API since AGL-4226: 500 included, Pro's rate past
-    // them, up to a 50,000 ceiling. 10,500 → 10k over at $0.50/1k = $5.
+    // Starter carries the API since AGL-4226: 500 included, $3.00 per 1,000
+    // past them, up to a 20,000 ceiling. 10,500 → 10k over at $3/1k = $30.
     const starter = checkApiRequestQuota(
       { plan: 'starter', billingStatus: 'active' } as any,
       10_500,
     )
     expect(starter.allowed).toBe(true)
     expect(starter.included).toBe(500)
-    expect(starter.ceiling).toBe(50_000)
-    expect(starter.overageMonthlyUsd).toBeCloseTo(5)
+    expect(starter.ceiling).toBe(20_000)
+    expect(starter.overageMonthlyUsd).toBeCloseTo(30)
     expect(starter.overageRateUsd).toBe(PLAN_PRICING.starter.extraApiRequestsUsdPer1k)
     // Free has no API: zero included, and it always blocks.
     const free = checkApiRequestQuota({ plan: 'free' } as any, 1)
@@ -2637,7 +2639,12 @@ describe('an uncapped band never carries an overage rate (AGL-2482)', () => {
       const sold: string[] = []
       const unsold: string[] = []
       for (const plan of Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]) {
-        const limit = PLAN_ENTITLEMENTS[plan][band]
+        // Email is billed against its BILLING band where a plan sets one
+        // (AGL-4227: Starter's 1,000 of everything, its campaign band 0).
+        const limit =
+          band === 'emailSendsPerMonth'
+            ? (INCLUDED_EMAIL_SENDS_BY_PLAN[plan] ?? PLAN_ENTITLEMENTS[plan][band])
+            : PLAN_ENTITLEMENTS[plan][band]
         const price = PLAN_PRICING[plan][rate]
         if (isCustomPricedPlan(plan)) {
           expect(`${plan}: ${price}`).toBe(`${plan}: null`)

@@ -565,6 +565,14 @@ export interface CoreOrgEntitlements {
    */
   contactsPerHost?: number
   /**
+   * The most CRM records (contacts + companies + deals) a workspace may hold,
+   * overage included (AGL-4227): Starter stops at Pro's included 10,000 and
+   * refuses the next NEW record with an upgrade message; records already
+   * held are never touched. `UNLIMITED` from Pro up. Never read below
+   * `contactsPerHost`.
+   */
+  maxCrmRecords?: number
+  /**
    * CAMPAIGN emails sendable per calendar month (AGL-161), and campaign
    * emails only (AGL-1438).
    *
