@@ -27,6 +27,7 @@ import {
   assignmentRuleMatches,
   campaignEmailSummary,
   companyDomainForEmail,
+  companyDomainMintable,
   isPublicMailboxDomain,
   PUBLIC_MAILBOX_DOMAINS,
   CRM_ASSIGNMENT_RULES_MAX,
@@ -835,6 +836,15 @@ describe('companyDomainForEmail', () => {
     expect(companyDomainForEmail('jo@comcast.net')).toBeNull()
   })
 
+  it('answers null for a free mailbox abroad and a disposable inbox (AGL-4230)', () => {
+    expect(companyDomainForEmail('jo@mail.ru')).toBeNull()
+    expect(companyDomainForEmail('jo@wp.pl')).toBeNull()
+    expect(companyDomainForEmail('jo@uol.com.br')).toBeNull()
+    // An inbox that expires names nobody.
+    expect(companyDomainForEmail('jo@sharklasers.com')).toBeNull()
+    expect(companyDomainForEmail('jo@Mailinator.com')).toBeNull()
+  })
+
   it('answers null for anything that is not an address', () => {
     expect(companyDomainForEmail('')).toBeNull()
     expect(companyDomainForEmail('acme.com')).toBeNull()
@@ -842,6 +852,41 @@ describe('companyDomainForEmail', () => {
     expect(companyDomainForEmail('jo@')).toBeNull()
     expect(companyDomainForEmail('jo smith@acme.com')).toBeNull()
     expect(companyDomainForEmail('jo@acme')).toBeNull()
+  })
+})
+
+describe('companyDomainMintable (AGL-4230)', () => {
+  it('lets a business domain be created as a company', () => {
+    expect(companyDomainMintable('acme.com')).toBe(true)
+    expect(companyDomainMintable('sales.acme.co.uk')).toBe(true)
+    expect(companyDomainMintable('Acme-Dental.example')).toBe(true)
+  })
+
+  it('never mints a school, a university or a student mailbox', () => {
+    expect(companyDomainMintable('k12.ipsd.org')).toBe(false)
+    expect(companyDomainMintable('lakewoodlocal.k12.oh.us')).toBe(false)
+    expect(companyDomainMintable('state.edu')).toBe(false)
+    expect(companyDomainMintable('usp.edu.br')).toBe(false)
+    expect(companyDomainMintable('ox.ac.uk')).toBe(false)
+    expect(companyDomainMintable('aluno.educa.go.gov.br')).toBe(false)
+    expect(companyDomainMintable('mypolkschools.net')).toBe(false)
+    expect(companyDomainMintable('tuckahoeschools.org')).toBe(false)
+  })
+
+  it('never mints a public or disposable mailbox, or something that is not a domain', () => {
+    expect(companyDomainMintable('gmail.com')).toBe(false)
+    expect(companyDomainMintable('mail.ru')).toBe(false)
+    expect(companyDomainMintable('sharklasers.com')).toBe(false)
+    expect(companyDomainMintable('')).toBe(false)
+    expect(companyDomainMintable(null)).toBe(false)
+  })
+
+  it('reads labels, not substrings of a business name', () => {
+    // "academy", "education" and "edutech" are words in a business's name,
+    // not the academic `ac` or `edu` label.
+    expect(companyDomainMintable('academy.com')).toBe(true)
+    expect(companyDomainMintable('edutech.io')).toBe(true)
+    expect(companyDomainMintable('acme.co')).toBe(true)
   })
 })
 
