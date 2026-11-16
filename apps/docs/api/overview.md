@@ -173,6 +173,11 @@ when it was created, or `null` for a key from before names were required.
 }
 ```
 
+Called by an app that [signed in](authentication.md#apps-that-sign-in) instead of using a
+key, `object` is `"connected_app"` and `name` is the name the app registered under; the
+other fields are the same. Its writes appear in activity as *Connected app* followed by
+that name, where a key's appear as *API key* and the key's name.
+
 ### `GET /v1/usage`
 
 Where you stand against every plan band this month — requests, contacts, datasets and

@@ -147,6 +147,11 @@ What the app receives instead of a key:
   nothing, so an app that lost the answer is not disconnected; used again any
   later, it ends the connection.
 
+A connection's writes appear in activity as *Connected app* followed by its name, and
+[`GET /v1/me`](overview.md#get-v1me) answers `"object": "connected_app"` for it. A lock on
+the workspace refuses a connection for as long as it lasts without ending it, as it
+does an API key.
+
 A connection is a person's, unlike a key. Connecting takes the **Manage API keys**
 permission in the workspace, and the connection stops working the moment that
 person leaves the workspace or loses the permission, or someone disconnects it
@@ -157,13 +162,14 @@ For client developers, it is OAuth 2.1 with PKCE, public clients only:
 | | |
 | --- | --- |
 | Discovery | A `401` from `/api/mcp` carries `WWW-Authenticate: Bearer resource_metadata="https://app.aglyn.com/.well-known/oauth-protected-resource/api/mcp"`. The authorization server is described at `/.well-known/oauth-authorization-server` (RFC 8414). |
-| Registration | Dynamic (RFC 7591) at `/api/oauth/register`, open to any client. Send `client_name` (up to 60 characters; control and invisible characters are removed) and up to five `redirect_uris`. No client secret is issued, and an identical registration returns the same `client_id`. Unused registrations expire after a day. |
-| Redirect addresses | Each must be exactly as a URL parser prints it, with no user info and no fragment, and one of: `https://` on a domain name (not an IP address); `http://` on `localhost`, `127.0.0.1` or `[::1]` only, any port; or a private-use app scheme such as `cursor://…` or `com.example.app:/callback` (RFC 8252). Web-handled and dangerous schemes (`javascript`, `data`, `file`, `blob`, `about`, `ws`, `wss`, `ftp`, `mailto`, …) are refused. At sign-in the `redirect_uri` must match a registered one exactly, except that a loopback port may differ. |
+| Registration | Dynamic (RFC 7591) at `/api/oauth/register`, open to any client. Send `client_name` and up to five `redirect_uris`. The name is normalized (NFKC), quotation marks and control, invisible and blank characters are removed, and it is capped at 60 characters; a name with no letter or digit becomes *Unnamed app*, and a name that is or contains the platform's own name is refused. No client secret is issued, and an identical registration returns the same `client_id` with `201`. A registration nobody approves expires after 7 days. |
+| Redirect addresses | Each must be exactly as a URL parser prints it, with no user info and no fragment, and one of: `https://` on a domain name (not an IP address), any path; or `http://` on `localhost`, `127.0.0.1` or `[::1]` only, any port. **Native and desktop clients use a loopback address.** Custom app-link schemes are not accepted, because the scheme decides which program is launched; an app-link callback can be added for a client on request, as one exact address. Addresses outside these rules are dropped from a registration, which fails only if none is left. At sign-in the `redirect_uri` must match a registered one exactly, except that a loopback port may differ. |
+| Consent | The person sees the address the app will receive the connection at — the full host and path, or *an app on this computer* — above the name the app gave itself, and chooses a workspace and **View only** (always offered, and the default) or **View and make changes**. Nothing navigates away from the page until they press a button; a request that is wrong is shown on the page, and Cancel returns the error to the app. |
 | Browser clients | `/api/mcp` answers CORS from any origin without credentials, and exposes `WWW-Authenticate` and `MCP-Protocol-Version`. |
 | Authorization | `/oauth/authorize` with `response_type=code`, `code_challenge_method=S256` and a `state`. The answer carries `iss`. |
 | Token | `/api/oauth/token`, form-encoded, `authorization_code` or `refresh_token`. Codes last five minutes and work once. |
 | Revocation | `/api/oauth/revoke` (RFC 7009). Revoking a refresh token ends the connection. |
-| Limits | A failed token request counts against the calling address and client; past 30 a minute the endpoint answers `429` with `error: "invalid_request"` and `Retry-After`. Registration allows 300 requests and 60 new clients per address per 10 minutes. |
+| Limits | A failed token request counts against the calling address and client; past 30 a minute the endpoint answers `429` with `error: "invalid_request"` and `Retry-After`. Registration allows 300 requests and 20 new clients per address per 10 minutes. In an MCP batch, every `tools/call` is charged as its own request; one the budget no longer covers returns the `429` body as that call's result. |
 
 ## Keep keys safe
 
