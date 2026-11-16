@@ -30,6 +30,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **console:** a signed-out tab parks its refused listens until somebody signs in ([AGL-2945](https://linear.app/aglyn/issue/AGL-2945))
 - **console:** an invitee who signs up lands in the invited workspace ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
 - **api:** declare the MCP schema host as never requested, and drop a dead assignment lint refuses ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
 - **forms:** a lone yes-box shows its field's question, not just "Yes"
