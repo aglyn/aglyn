@@ -561,11 +561,11 @@ describe('Starter bills every email past 1,000 a month (AGL-4227)', () => {
   })
 
   it('a Starter month BEFORE its start prices $0, however late it is swept', async () => {
-    // July swept with the start set to December: the rollup of a month that
+    // July swept with the start set to November: the rollup of a month that
     // predates the start never becomes a charge.
     seedOrg('starter')
     mockEmailSends = STARTER_BAND + 4_000
-    await runRollup(loadRoute('2026-01', '2026-12'))
+    await runRollup(loadRoute('2026-01', '2026-11'))
     const rollup = mockDocs.get(`orgs/org-1/usage/${MONTH}`)!
     expect(rollup['emailSendsOverageBilled']).toBe(false)
     expect(rollup['billedCents']).toBe(0)
@@ -575,7 +575,7 @@ describe('Starter bills every email past 1,000 a month (AGL-4227)', () => {
   it('Pro is not touched by Starter\'s start month', async () => {
     seedOrg('pro')
     mockEmailSends = (PLAN_ENTITLEMENTS.pro.emailSendsPerMonth as number) + 4_000
-    await runRollup(loadRoute(MONTH, '2026-12'))
+    await runRollup(loadRoute(MONTH, '2026-11'))
     const rollup = mockDocs.get(`orgs/org-1/usage/${MONTH}`)!
     expect(rollup['emailSendsOverageBilled']).toBe(true)
     expect(rollup['billedCents']).toBe(Math.round(4 * (PLAN_PRICING.pro.extraEmailSendsUsdPer1k as number) * 100))

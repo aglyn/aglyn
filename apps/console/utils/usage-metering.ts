@@ -387,7 +387,7 @@ export function billsEmailSendOverage(
  * past, the band alone would invoice Starter workspaces for mail sent before
  * the price existed — in the deploy month, and in any earlier org-month the
  * daily cron re-sweeps. Its own start month stops that: unset, Starter's
- * email overage is measured and withheld; set (production: `2026-12`), it
+ * email overage is measured and withheld; set (production: `2026-11`), it
  * bills from that month on and never for a month before it, however late
  * that month is swept. Pro and every other plan are untouched.
  */

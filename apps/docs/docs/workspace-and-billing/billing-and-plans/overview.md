@@ -251,10 +251,9 @@ Enforcement is switched on by us, at your request.
   counted toward your usage but is never blocked by the cap on a paid plan. Going over shows
   up as an overage on the usage rollup rather than as mail your customers never receive.
   Starter sends no campaigns, and instead includes **1,000 emails a month of everything it
-  sends** — receipts, notices, workflow mail and one-to-one CRM email together; from
-  **December 2026**, each 1,000 past that is billed at the rate on
-  [aglyn.com/pricing](https://aglyn.com/pricing). Earlier months are counted and shown,
-  never charged.
+  sends** — receipts, notices, workflow mail and one-to-one CRM email together; each
+  1,000 past that is billed at the rate on [aglyn.com/pricing](https://aglyn.com/pricing),
+  counted from **November 2026**. Earlier months are counted and shown, never charged.
 - Free sends up to **300 emails a month** — form confirmations, notices and everything
   else your sites send. Sign-in links, email verification, invitations, password resets
   and security notices are never counted and always go out. Past 300, your sites' emails

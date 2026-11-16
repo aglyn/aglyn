@@ -542,7 +542,7 @@ Each line's direction decides its order. **Price UP / band DOWN** publish on
 
 | Change | Direction | Code | Waits on |
 | --- | --- | --- | --- |
-| Starter email: past 1,000 a month at $2.50 per 1,000, one-to-one CRM inside the 1,000 | price UP (a new charge) | `INCLUDED_EMAIL_SENDS_BY_PLAN`, `PLAN_PRICING.starter.extraEmailSendsUsdPer1k` | the page first, then production's `BILL_STARTER_EMAIL_SENDS_FROM=2026-12` (Starter bills from December 2026; `BILL_EMAIL_SEND_OVERAGE_FROM` is already on for Pro) |
+| Starter email: past 1,000 a month at $2.50 per 1,000, one-to-one CRM inside the 1,000 | price UP (a new charge) | `INCLUDED_EMAIL_SENDS_BY_PLAN`, `PLAN_PRICING.starter.extraEmailSendsUsdPer1k` | the page first, then production's `BILL_STARTER_EMAIL_SENDS_FROM=2026-11` (Starter's email is counted from November 2026; `BILL_EMAIL_SEND_OVERAGE_FROM` is already on for Pro) |
 | Free email: a hard cap of 300 a month (account and security mail exempt) | band DOWN (a new cap) | `EMAIL_SENDS_MONTHLY_CAP_BY_PLAN`, `resolveMonthlyEmailCap` | the page first (nothing bills; the cap enforces from ship) |
 | API billed per started 256 KB, every plan | price UP (meter change) | `API_BILLING_UNIT_BYTES`, `chargeApiRequestSize` | the page and the API docs first |
 | Starter extra site $20 → $25, for everyone (no grandfathering) | price UP | `PLAN_PRICING.starter.extraHostMonthlyUsd`; `REPRICED_ADDONS` | the page first, then the v2 Stripe prices and `STRIPE_PRICE_STARTER_EXTRA_HOST_V2[_YEARLY]` |
