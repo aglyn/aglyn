@@ -143,7 +143,9 @@ export function isRoleEmailAddress(email: unknown): boolean {
 // The disposable-mailbox list lives in its own pure leaf, so the CRM's
 // company rules and the native apps can read it without this module
 // (AGL-4230).
-export { isDisposableEmailDomain } from './disposable-email-domains'
+import { isDisposableEmailDomain } from './disposable-email-domains'
+
+export { isDisposableEmailDomain }
 
 /**
  * The providers a mistyped domain is compared against. Long labels only: a
