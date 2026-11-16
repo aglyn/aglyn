@@ -56,6 +56,16 @@ function refuseFor(ctx: ApiV1Context, events: readonly ZapierHookEvent[]): Respo
     if (!spec) continue
     if (!ctx.scopes.includes(spec.scope)) return ApiErrors.insufficientScope(spec.scope, ctx.headers)
   }
+  // A hook is an OUTBOUND event feed, so it needs the plan's webhooks as well
+  // as its API (AGL-4226). Starter has the API and not webhooks: without this
+  // the API would reach around a feature the plan lacks.
+  if (!checkEntitlement(ctx.org as never, 'webhooks')) {
+    return ApiErrors.planRequired({
+      message: 'Zapier hooks need webhooks on this organization’s plan',
+      code: 'webhooks',
+      headers: ctx.headers,
+    })
+  }
   for (const event of events) {
     const spec = zapierHookEventSpec(event)
     if (spec?.feature && !checkEntitlement(ctx.org as never, spec.feature)) {
