@@ -76,6 +76,14 @@ struct HomeView: View {
 
   // MARK: The site, in one line
 
+  /// Visit site: the site's address, or, while it is in preview or maintenance, the link that enters it as the team (the
+  /// console's `SiteVisitButton`, AGL-4086).
+  private func visit(_ address: URL, hostID: String) {
+    guard site.entersAsTeam else { return navigation.openWeb(AglynWebPage(address)) }
+    let api = model.api
+    Task { navigation.openWeb(AglynWebPage(await SiteVisit.url(entersAsTeam: true, hostID: hostID, address: address, api: api))) }
+  }
+
   /// A phone's site line under the scope chip (Figma 22:176): its status, its address and Visit site.
   @ViewBuilder
   private var phoneSiteLine: some View {
@@ -86,7 +94,7 @@ struct HomeView: View {
         if let address { Text(address).font(AglynFont.subheadline).foregroundStyle(.secondary).lineLimit(1) }
         Spacer(minLength: AglynSpace.one)
         if let address, let url = URL(string: "https://\(address)/") {
-          Button("Visit site") { navigation.openWeb(AglynWebPage(url)) }
+          Button("Visit site") { visit(url, hostID: picked.id) }
             .font(AglynFont.strongSubheadline)
             .accessibilityIdentifier("home-visit-site")
         }
@@ -109,7 +117,7 @@ struct HomeView: View {
         if let chip = site.chip { StatusChip(chip.text, tone: chip.tone) }
         Spacer(minLength: AglynSpace.one)
         if let address, let url = URL(string: "https://\(address)/") {
-          Button("Visit site") { navigation.openWeb(AglynWebPage(url)) }
+          Button("Visit site") { visit(url, hostID: picked.id) }
             .buttonStyle(.aglynSecondary)
             .accessibilityIdentifier("home-visit-site")
         }

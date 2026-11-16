@@ -86,6 +86,7 @@ internal fun HomeScreen(
   val uriHandler = LocalUriHandler.current
   val host = hostDoc(services, site?.id)
   val now = remember { nowMillis() }
+  val visitScope = androidx.compose.runtime.rememberCoroutineScope()
   val prefs by services.accountPrefs.state.collectAsState()
   val openRecent = LocalOpenRecent.current
   val org = (orgDocLive(services, workspace.org?.id) as? Live.Ready)?.value?.data
@@ -102,7 +103,13 @@ internal fun HomeScreen(
         FirstRunContent(services)
         return@Column
       }
-      HomeSiteLine(workspace, host, now, services.api.origin, onSwitch = { navigator.command = ShellCommand.SWITCH_SITE }) { url -> runCatching { uriHandler.openUri(url) } }
+      HomeSiteLine(workspace, host, now, services.api.origin, onSwitch = { navigator.command = ShellCommand.SWITCH_SITE }) { url ->
+        // In preview or maintenance the site is entered as the team (the console's `SiteVisitButton`, AGL-4086).
+        val team = com.aglyn.core.SiteVisit.entersAsTeam((host as? Live.Ready)?.value?.data)
+        val hostId = site?.id
+        if (!team || hostId == null) runCatching { uriHandler.openUri(url) }
+        else visitScope.launch { runCatching { uriHandler.openUri(com.aglyn.core.SiteVisit.url(true, hostId, url, services.api)) } }
+      }
       if (site == null) {
         HomeUpgradeProposal(services, context, org, workspace.org?.name, workspace.org?.slug, com.aglyn.contracts.Contracts.platformBrandName)
       }
