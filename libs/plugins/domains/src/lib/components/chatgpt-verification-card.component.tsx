@@ -17,6 +17,7 @@
 
 'use client'
 
+import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import type { ConsoleHostVerificationZoneProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
@@ -38,6 +39,8 @@ import { useDomainsFetch, type DnsAnswer } from './domains-api'
  * which record to add there. A site on its free address is told to connect a
  * domain first, since it has no DNS of its own.
  */
+
+const HELP = pluginDocsHelp('chatgptVerification', { anchor: '#chatgpt' })
 
 const INTRO =
   'ChatGPT lists businesses, and the owner can claim theirs to keep its details right. Claiming yours takes proof that you control your site’s domain.'
@@ -65,7 +68,7 @@ export default function ChatgptVerificationCard(props: ConsoleHostVerificationZo
 
   if (!domain) {
     return (
-      <CardDisplay header="Verify with ChatGPT" contentGutterX contentGutterY>
+      <CardDisplay header="Verify with ChatGPT" help={HELP} contentGutterX contentGutterY>
         <Stack spacing={1.5}>
           <Typography variant="body2" color="text.secondary">
             {INTRO}
@@ -84,7 +87,7 @@ export default function ChatgptVerificationCard(props: ConsoleHostVerificationZo
   const ours = Boolean(answer?.ours)
   const existing = ours && answer ? findChatgptClaimRecord(answer.records) : null
   return (
-    <CardDisplay header="Verify with ChatGPT" contentGutterX contentGutterY>
+    <CardDisplay header="Verify with ChatGPT" help={HELP} contentGutterX contentGutterY>
       <Stack spacing={1.5} sx={{ alignItems: 'flex-start' }}>
         <Typography variant="body2" color="text.secondary">
           {INTRO}
