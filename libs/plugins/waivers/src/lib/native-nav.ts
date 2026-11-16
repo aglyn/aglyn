@@ -36,7 +36,7 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
     row: {
       id: 'waivers',
       label: 'Waivers',
-      icon: nativeNavIcon('signature', 'draw'),
+      icon: nativeNavIcon('signature', 'assignment'),
       screen: 'waivers.home',
       pluginId: 'waivers',
       order: 50,

@@ -5767,7 +5767,7 @@
                 },
                 "docs": "/commerce-and-bookings/commerce/waivers",
                 "icon": {
-                  "android": "draw",
+                  "android": "assignment",
                   "apple": "signature"
                 },
                 "id": "waivers",

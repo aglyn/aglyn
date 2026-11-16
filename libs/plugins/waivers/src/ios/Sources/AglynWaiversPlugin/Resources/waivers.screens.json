@@ -6,7 +6,7 @@
       "title": "Waivers",
       "label": "Waivers",
       "subtitle": "Signed waivers and the waivers you ask riders to sign",
-      "icon": "signature|draw",
+      "icon": "signature|assignment",
       "scope": "site",
       "links": [
         "/waivers"
@@ -160,7 +160,7 @@
           "when": "site.can[collectWaivers] || site.can[manageWaivers]",
           "items": "data.sigs.signatures",
           "load": "sigs",
-          "icon": "signature|draw",
+          "icon": "signature|assignment",
           "primary": [
             "{item.signerName}",
             {
@@ -304,7 +304,7 @@
       "id": "waivers.signatures",
       "title": "Signatures",
       "label": "Signatures",
-      "icon": "signature|draw",
+      "icon": "signature|assignment",
       "scope": "site",
       "constants": {
         "statuses": [
@@ -445,7 +445,7 @@
           "when": "site.can[collectWaivers] || site.can[manageWaivers]",
           "items": "data.sigs.signatures",
           "load": "sigs",
-          "icon": "signature|draw",
+          "icon": "signature|assignment",
           "primary": [
             "{item.signerName}",
             {
@@ -496,7 +496,7 @@
       "id": "waivers.signature",
       "title": "{data.sig.signature.signer.name|'Signature'}",
       "label": "Signature",
-      "icon": "signature|draw",
+      "icon": "signature|assignment",
       "scope": "site",
       "constants": {
         "statuses": [
@@ -813,7 +813,7 @@
             {
               "id": "publish",
               "label": "Publish",
-              "icon": "paperplane|publish",
+              "icon": "paperplane|public",
               "when": "data.w.waiver.status != published",
               "url": "/api/waivers/template",
               "body": {
@@ -827,7 +827,7 @@
             {
               "id": "unpublish",
               "label": "Unpublish",
-              "icon": "eye.slash|unpublished",
+              "icon": "eye.slash|visibility_off",
               "when": "data.w.waiver.status == published",
               "url": "/api/waivers/template",
               "body": {
