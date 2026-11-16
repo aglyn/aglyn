@@ -112,7 +112,14 @@ function refusalFor(status: number, payload: { error?: string; reason?: string }
   }
 }
 
-export function ConnectAppConsent() {
+export interface ConnectAppConsentProps {
+  /** How the page leaves. A full navigation; replaceable in a spec. */
+  navigate?: (url: string) => void
+}
+
+const assignLocation = (url: string) => window.location.assign(url)
+
+export function ConnectAppConsent({ navigate = assignLocation }: ConnectAppConsentProps) {
   const { data: user } = useUser()
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' })
   const [orgId, setOrgId] = useState('')
@@ -140,7 +147,7 @@ export function ConnectAppConsent() {
   /** Follow an address the server returned. Never one read from the page. */
   const leave = (redirectTo: string) => {
     setPhase({ kind: 'leaving' })
-    window.location.assign(redirectTo)
+    navigate(redirectTo)
   }
 
   useEffect(() => {
