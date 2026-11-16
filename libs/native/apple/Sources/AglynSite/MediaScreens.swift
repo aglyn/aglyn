@@ -118,6 +118,9 @@ struct MediaLibrary: View {
   @Environment(\.openURL) private var openURL
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var model = MediaListModel()
+  /// The workspace, for the video-uploads release flag (AGL-2830).
+  @State private var org = LiveDocument()
+  @State private var videoPausedOpen = false
   @State private var folders = LiveQuery()
   @State private var runner = ActionRunner()
   /// The files picked: one opens its details beside the grid, several the bulk panel.
@@ -195,11 +198,38 @@ struct MediaLibrary: View {
     ) { startUpload() }
   }
 
+  /// Video ingress is behind a release flag on every plan (AGL-2830), so the console states it as a fact, once the
+  /// workspace has answered so a workspace the flag is on for never sees it flash.
+  private var videoUploadsPaused: Bool {
+    guard context.staff == nil else { return false }
+    guard case .ready(let doc) = org.state else { return false }
+    return !releaseFlagOn(videoUploadsReleaseFlag, org: doc?.data, orgID: context.orgID, staff: false)
+  }
+
+  private var videoPausedChip: some View {
+    VStack(alignment: .leading, spacing: AglynSpace.half) {
+      Button {
+        videoPausedOpen.toggle()
+      } label: {
+        StatusChip("Video uploads paused")
+      }
+      .buttonStyle(.plain)
+      .help(videoUploadsPausedMessage)
+      .accessibilityHint(videoUploadsPausedMessage)
+      .accessibilityIdentifier("media-video-paused")
+      if videoPausedOpen { AglynHelperText(videoUploadsPausedMessage) }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .aglynContentEdges()
+    .padding(.vertical, AglynSpace.half)
+  }
+
   var body: some View {
     VStack(spacing: 0) {
       if let head {
         if wide { wideHead(head) } else { AglynListColumnHeader(head, primary: uploadAction) { newFolderButton(icon: true) } }
       }
+      if videoUploadsPaused { videoPausedChip }
       HStack(spacing: 0) {
         browser
         if wide && !selection.isEmpty {
@@ -268,6 +298,7 @@ struct MediaLibrary: View {
     }
     .quickLookPreview($quickLook)
     .safeAreaInset(edge: .bottom) { banners }
+    .task(id: context.orgID) { if let orgID = context.orgID { await org.bind(context.firestore, ["orgs", orgID]) } }
     .task(id: scope) {
       if let initialFolder { model.folder = .one(initialFolder) }
       model.start(context.firestore, scope: scope, scopeTokens: scopeTokens)

@@ -887,3 +887,10 @@ public func parseMediaQuarantine(_ answer: JSONValue?) -> [String: MediaQuaranti
   }
   return notices
 }
+
+/// The release flag video uploads are behind (`VIDEO_UPLOADS_RELEASE_FLAG`, AGL-2830).
+public let videoUploadsReleaseFlag = "release_video_uploads"
+
+/// What the library says while video uploads are paused (`VIDEO_UPLOADS_PAUSED_MESSAGE`).
+public let videoUploadsPausedMessage =
+  "Video uploads are paused. Videos already in your media library keep playing, and images and documents upload as usual."

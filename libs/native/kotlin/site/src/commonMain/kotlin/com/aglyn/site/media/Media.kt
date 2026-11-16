@@ -833,3 +833,10 @@ fun videoProbeFields(result: VideoProbeResult): Map<String, Any?> = buildMap {
   }
 }
 
+
+/** The release flag video uploads are behind (`VIDEO_UPLOADS_RELEASE_FLAG`, AGL-2830). */
+const val VIDEO_UPLOADS_RELEASE_FLAG = "release_video_uploads"
+
+/** What the library says while video uploads are paused (`VIDEO_UPLOADS_PAUSED_MESSAGE`). */
+const val VIDEO_UPLOADS_PAUSED_MESSAGE =
+  "Video uploads are paused. Videos already in your media library keep playing, and images and documents upload as usual."
