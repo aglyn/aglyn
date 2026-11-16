@@ -584,10 +584,16 @@ private struct ListingBody: View {
     let session = webAuthentication
     model.openPage = { url in await session.openHostedPage(url) }
     let name = listing.name
+    let firestore = context.firestore
+    let uid = context.uid
+    let purchases = purchases
     model.onFinish = { outcome in
       if let notice = payOutcomeNotice(outcome, name: name) {
         payNotice = (notice.text, notice.tone.aglynTone)
       }
+      // The licence is read again once a purchase ends, rather than waiting on the open listener: on the iPad simulator
+      // the listener did not deliver the new purchase until the page was opened again.
+      if outcome == .paid || outcome == .owned { purchases.start(firestore, listingPurchasesQuery(uid: uid)) }
     }
     pay = model
     Task { await model.buy(listingID: listing.id, name: name) }

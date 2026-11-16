@@ -303,7 +303,9 @@ private fun ListingBody(
   // in the publishing workspace, which the rules let anyone read of themselves, switches it off for a publisher's member
   // (AGL-3365).
   val asksToBuy = listing.paid && !mine && context.uid.isNotEmpty()
-  val purchases by remember(asksToBuy, context.uid, context.firestore) {
+  // Bumped once a purchase ends, so the licence is read again rather than left to the open listener.
+  var purchasesRead by remember(listing.id) { mutableStateOf(0) }
+  val purchases by remember(asksToBuy, context.uid, context.firestore, purchasesRead) {
     if (asksToBuy) context.firestore.observe(listingPurchasesQuery(context.uid)) else kotlinx.coroutines.flow.flowOf(Live.Ready(emptyList()))
   }.collectAsState(Live.Loading)
   val ownMembership by remember(asksToBuy, listing.profileId, context.uid, context.firestore) {
@@ -326,7 +328,10 @@ private fun ListingBody(
         MarketplacePayApi(context.api, orgId, context.hostId),
         // Stripe's pages go to the secure browser tab (the in-app browser's own routing).
         openPage = { uri.openUri(it) },
-        onFinish = { outcome -> payNotice = payOutcomeNotice(outcome, listing.name) },
+        onFinish = { outcome ->
+          payNotice = payOutcomeNotice(outcome, listing.name)
+          if (outcome == PayOutcome.Paid || outcome == PayOutcome.Owned) purchasesRead += 1
+        },
       )
     }
   }
