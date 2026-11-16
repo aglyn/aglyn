@@ -2399,6 +2399,18 @@ data class PickupLocationSettings(
     val readyWithinMinutes: Double? = null,
 )
 
+@Serializable
+data class PinHostResult(
+    val outcome: PinOrgOutcome,
+    val pinnedHosts: List<PinnedHost>,
+)
+
+@Serializable
+data class PinnedHost(
+    val hostId: String,
+    val orgId: String,
+)
+
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = PinOrgOutcomeSerializer::class)
 enum class PinOrgOutcome(val raw: String) {
@@ -4255,18 +4267,20 @@ internal data class ContractValuesPart5(
     @SerialName("PHONE_HOME_SITE_GROUP_LABEL") val phoneHomeSiteGroupLabel: String,
     @SerialName("PHONE_HOME_TEAM_LABEL") val phoneHomeTeamLabel: String,
     @SerialName("PHONE_HOME_WORKSPACE_GROUP_LABEL") val phoneHomeWorkspaceGroupLabel: String,
+    @SerialName("PINNED_HOSTS_FIELD") val pinnedHostsField: String,
+    @SerialName("PINNED_HOSTS_MAX") val pinnedHostsMax: Long,
     @SerialName("PINNED_ORGS_FIELD") val pinnedOrgsField: String,
     @SerialName("PINNED_ORGS_MAX") val pinnedOrgsMax: Long,
     @SerialName("PLAN_CARD_ADVANCE_MS") val planCardAdvanceMs: Long,
     @SerialName("PLAN_CARD_CONTEXT_METERS") val planCardContextMeters: Map<String, List<String>>,
     @SerialName("PLAN_CARD_CONTEXTS") val planCardContexts: List<String>,
     @SerialName("PLAN_CARD_HOME_SCREEN") val planCardHomeScreen: String,
-    @SerialName("PLAN_CARD_METER_LABELS") val planCardMeterLabels: Map<String, String>,
-    @SerialName("PLAN_CARD_METER_UNITS") val planCardMeterUnits: Map<String, String>,
 )
 
 @Serializable
 internal data class ContractValuesPart6(
+    @SerialName("PLAN_CARD_METER_LABELS") val planCardMeterLabels: Map<String, String>,
+    @SerialName("PLAN_CARD_METER_UNITS") val planCardMeterUnits: Map<String, String>,
     @SerialName("PLAN_CARD_METERS") val planCardMeters: List<String>,
     @SerialName("PLAN_CARD_SCREEN_CONTEXTS") val planCardScreenContexts: Map<String, String>,
     @SerialName("PLAN_CARD_WARNING_SHARE") val planCardWarningShare: Double,
@@ -4313,12 +4327,12 @@ internal data class ContractValuesPart6(
     @SerialName("PRODUCT_LIST_OPTIONS") val productListOptions: Map<String, List<ListFilterOption>>,
     @SerialName("PRODUCT_LIST_QUERY") val productListQuery: ListQueryDeclaration,
     @SerialName("PRODUCT_LIST_SELECT_FIELDS") val productListSelectFields: List<String>,
-    @SerialName("PUBLISHED_SITE_IMPACT") val publishedSiteImpact: Map<String, PublishedSiteImpact>,
-    @SerialName("PUBLISHER_AGREEMENT_CONSENT_LABEL") val publisherAgreementConsentLabel: String,
 )
 
 @Serializable
 internal data class ContractValuesPart7(
+    @SerialName("PUBLISHED_SITE_IMPACT") val publishedSiteImpact: Map<String, PublishedSiteImpact>,
+    @SerialName("PUBLISHER_AGREEMENT_CONSENT_LABEL") val publisherAgreementConsentLabel: String,
     @SerialName("PUBLISHER_AGREEMENT_TITLE") val publisherAgreementTitle: String,
     @SerialName("PUBLISHER_AGREEMENT_URL") val publisherAgreementUrl: String,
     @SerialName("PUBLISHER_AGREEMENT_VERSION") val publisherAgreementVersion: String,
@@ -4365,12 +4379,12 @@ internal data class ContractValuesPart7(
     @SerialName("TAB_BARS_FIELD") val tabBarsField: String,
     @SerialName("TAB_BARS_MAX") val tabBarsMax: Long,
     @SerialName("TASK_LIST_DECLARATION") val taskListDeclaration: ListQueryDeclaration,
-    @SerialName("TEMPLATE_KIND_OPTIONS") val templateKindOptions: List<ListFilterOption>,
-    @SerialName("TEMPLATE_LIST_BASE") val templateListBase: List<ListQueryFilter>,
 )
 
 @Serializable
 internal data class ContractValuesPart8(
+    @SerialName("TEMPLATE_KIND_OPTIONS") val templateKindOptions: List<ListFilterOption>,
+    @SerialName("TEMPLATE_LIST_BASE") val templateListBase: List<ListQueryFilter>,
     @SerialName("TEMPLATE_LIST_QUERY") val templateListQuery: ListQueryDeclaration,
     @SerialName("TENANT_EMAIL_COLLECTION") val tenantEmailCollection: String,
     @SerialName("TENANT_EMAILS") val tenantEmails: List<TenantEmailEntry>,
@@ -4643,14 +4657,16 @@ class ContractValues internal constructor(
     val phoneHomeSiteGroupLabel: String get() = part5.phoneHomeSiteGroupLabel
     val phoneHomeTeamLabel: String get() = part5.phoneHomeTeamLabel
     val phoneHomeWorkspaceGroupLabel: String get() = part5.phoneHomeWorkspaceGroupLabel
+    val pinnedHostsField: String get() = part5.pinnedHostsField
+    val pinnedHostsMax: Long get() = part5.pinnedHostsMax
     val pinnedOrgsField: String get() = part5.pinnedOrgsField
     val pinnedOrgsMax: Long get() = part5.pinnedOrgsMax
     val planCardAdvanceMs: Long get() = part5.planCardAdvanceMs
     val planCardContextMeters: Map<String, List<String>> get() = part5.planCardContextMeters
     val planCardContexts: List<String> get() = part5.planCardContexts
     val planCardHomeScreen: String get() = part5.planCardHomeScreen
-    val planCardMeterLabels: Map<String, String> get() = part5.planCardMeterLabels
-    val planCardMeterUnits: Map<String, String> get() = part5.planCardMeterUnits
+    val planCardMeterLabels: Map<String, String> get() = part6.planCardMeterLabels
+    val planCardMeterUnits: Map<String, String> get() = part6.planCardMeterUnits
     val planCardMeters: List<String> get() = part6.planCardMeters
     val planCardScreenContexts: Map<String, String> get() = part6.planCardScreenContexts
     val planCardWarningShare: Double get() = part6.planCardWarningShare
@@ -4697,8 +4713,8 @@ class ContractValues internal constructor(
     val productListOptions: Map<String, List<ListFilterOption>> get() = part6.productListOptions
     val productListQuery: ListQueryDeclaration get() = part6.productListQuery
     val productListSelectFields: List<String> get() = part6.productListSelectFields
-    val publishedSiteImpact: Map<String, PublishedSiteImpact> get() = part6.publishedSiteImpact
-    val publisherAgreementConsentLabel: String get() = part6.publisherAgreementConsentLabel
+    val publishedSiteImpact: Map<String, PublishedSiteImpact> get() = part7.publishedSiteImpact
+    val publisherAgreementConsentLabel: String get() = part7.publisherAgreementConsentLabel
     val publisherAgreementTitle: String get() = part7.publisherAgreementTitle
     val publisherAgreementUrl: String get() = part7.publisherAgreementUrl
     val publisherAgreementVersion: String get() = part7.publisherAgreementVersion
@@ -4745,8 +4761,8 @@ class ContractValues internal constructor(
     val tabBarsField: String get() = part7.tabBarsField
     val tabBarsMax: Long get() = part7.tabBarsMax
     val taskListDeclaration: ListQueryDeclaration get() = part7.taskListDeclaration
-    val templateKindOptions: List<ListFilterOption> get() = part7.templateKindOptions
-    val templateListBase: List<ListQueryFilter> get() = part7.templateListBase
+    val templateKindOptions: List<ListFilterOption> get() = part8.templateKindOptions
+    val templateListBase: List<ListQueryFilter> get() = part8.templateListBase
     val templateListQuery: ListQueryDeclaration get() = part8.templateListQuery
     val tenantEmailCollection: String get() = part8.tenantEmailCollection
     val tenantEmails: List<TenantEmailEntry> get() = part8.tenantEmails

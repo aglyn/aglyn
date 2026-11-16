@@ -3656,6 +3656,26 @@ public struct PickupLocationSettings: Codable, Hashable, Sendable {
   }
 }
 
+public struct PinHostResult: Codable, Hashable, Sendable {
+  public var outcome: PinOrgOutcome
+  public var pinnedHosts: [PinnedHost]
+
+  public init(outcome: PinOrgOutcome, pinnedHosts: [PinnedHost]) {
+    self.outcome = outcome
+    self.pinnedHosts = pinnedHosts
+  }
+}
+
+public struct PinnedHost: Codable, Hashable, Sendable {
+  public var hostId: String
+  public var orgId: String
+
+  public init(hostId: String, orgId: String) {
+    self.hostId = hostId
+    self.orgId = orgId
+  }
+}
+
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum PinOrgOutcome: String, Codable, CaseIterable, Hashable, Sendable {
   case alreadyPinned = "alreadyPinned"
@@ -6391,6 +6411,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let phoneHomeSiteGroupLabel: String
   public let phoneHomeTeamLabel: String
   public let phoneHomeWorkspaceGroupLabel: String
+  public let pinnedHostsField: String
+  public let pinnedHostsMax: Int
   public let pinnedOrgsField: String
   public let pinnedOrgsMax: Int
   public let planCardAdvanceMs: Int
@@ -6752,6 +6774,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case phoneHomeSiteGroupLabel = "PHONE_HOME_SITE_GROUP_LABEL"
     case phoneHomeTeamLabel = "PHONE_HOME_TEAM_LABEL"
     case phoneHomeWorkspaceGroupLabel = "PHONE_HOME_WORKSPACE_GROUP_LABEL"
+    case pinnedHostsField = "PINNED_HOSTS_FIELD"
+    case pinnedHostsMax = "PINNED_HOSTS_MAX"
     case pinnedOrgsField = "PINNED_ORGS_FIELD"
     case pinnedOrgsMax = "PINNED_ORGS_MAX"
     case planCardAdvanceMs = "PLAN_CARD_ADVANCE_MS"
