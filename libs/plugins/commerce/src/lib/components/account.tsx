@@ -17,6 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
+import { markSignedIn } from '@aglyn/aglyn/app-utils/sign-in-visibility'
 import * as CommerceModel from '../model'
 import { mdiAccountCircleOutline } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
@@ -106,8 +107,15 @@ const CustomerAccount = forwardRef<HTMLDivElement, CustomerAccountProps>(
         const response = await fetch(
           `/api/membership/account?hostId=${encodeURIComponent(hostId)}`,
         )
-        if (response.status === 401) return setAccount('anonymous')
-        if (response.ok) return setAccount(await response.json())
+        // What the session says is what the page shows (AGL-4231): elements
+        // shown to signed-in or signed-out visitors follow it here, without a
+        // reload, including a hint left behind by a session that has expired.
+        if (response.ok) {
+          const signedIn = await response.json()
+          markSignedIn(true)
+          return setAccount(signedIn)
+        }
+        if (response.status === 401) markSignedIn(false)
         setAccount('anonymous')
       } catch {
         setAccount('anonymous')
@@ -190,6 +198,7 @@ const CustomerAccount = forwardRef<HTMLDivElement, CustomerAccountProps>(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hostId }),
       }).catch(() => undefined)
+      markSignedIn(false)
       setAccount('anonymous')
     }, [hostId, siteFetch])
 

@@ -142,3 +142,26 @@ describe('iconPathsForSave', () => {
     ).toEqual({ startIconPath: undefined })
   })
 })
+
+/**
+ * Inside a repeat, an Icon can follow a record's icon field (AGL-4190). The
+ * record holds the icon's path beside its id, so the path is bound to the
+ * same field rather than looked up in a catalog the live page never loads.
+ */
+describe('an icon bound to a record field (AGL-4190)', () => {
+  const ATTRIBUTES = [
+    { name: 'startIconId', component: Aglyn.FieldComponentType.ICON_PICKER },
+  ] as never
+
+  it("binds the path to the same field's path", () => {
+    expect(
+      iconPathsForSave(ATTRIBUTES, { startIconId: '{{item.icon}}' }, {}),
+    ).toEqual({ startIconPath: '{{item.icon.iconPath}}' })
+  })
+
+  it('does not take a token with words around it for a record icon', () => {
+    expect(
+      iconPathsForSave(ATTRIBUTES, { startIconId: 'mdi-{{item.icon}}' }, {}),
+    ).toEqual({ startIconPath: undefined })
+  })
+})

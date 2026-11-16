@@ -23,6 +23,7 @@
  */
 import { buildDocsUrl } from '../../../../constants/docs-links'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
+import { CONNECTOR_RESOURCE_PATH } from '@aglyn/aglyn/app-utils/connector-discovery'
 import { ApiErrors, apiJson, withResponseHeaders } from '@aglyn/tenant-data-admin'
 import {
   API_BILLING_UNITS_HEADER,
@@ -157,6 +158,9 @@ async function serve(
         // The machine-readable twin (AGL-2733). A client that finds the root
         // should not have to read prose to discover the description exists.
         openapi: CUSTOMER_API_OPENAPI_PATH,
+        // The same API as MCP tools (AGL-4225), so a client that found the
+        // REST root learns there is a server an agent can connect to.
+        mcp: CONNECTOR_RESOURCE_PATH,
         // Only top-level resources belong here. Form submissions are a
         // sub-resource of sites (`/v1/sites/{id}/form-submissions`) and are
         // deliberately absent — advertising `forms` 404'd every client that

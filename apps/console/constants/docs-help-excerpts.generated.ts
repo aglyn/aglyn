@@ -82,7 +82,9 @@ export const DOCS_HELP_EXCERPTS = {
   connectAttentive: 'Send a site\'s contacts, their email marketing consent and its orders to your own Attentive account, for Attentive\'s journeys. Rolling out.',
   connectAutomatically: 'For a domain you already own, let your DNS provider add Aglyn\'s records for you in one click instead of copying them by hand.',
   connectConversionsApi: 'Send purchases and leads to your own Meta, TikTok and Pinterest ad accounts from the server, paired with your browser tags — only for visitors who allow advertising.',
+  connectQuickbooksOnline: 'Post every sale, refund, Aglyn fee and Stripe payout from your store to QuickBooks Online, mapped to the accounts you choose.',
   connectSmileIoOrYotpo: 'Keep your members\' points in your own Smile.io or Yotpo Loyalty account, earned and spent on every Aglyn order, online and at the register.',
+  connectXero: 'Post every sale, refund, Aglyn fee and Stripe payout from your store to Xero, mapped to the accounts you choose.',
   consoleAndSite: 'Task-ordered recipes for nav/pages/widgets/providers and canvas components/site runtimes.',
   consoleSearch: 'What the console search palette can find, how it matches what you type, and the two things it deliberately does not search.',
   consoleTour: 'Where things live in the Aglyn console app bar and navigation.',
@@ -228,6 +230,7 @@ export const DOCS_HELP_EXCERPTS = {
   shipping: 'Shipping zones and rates, local pickup, and the postal address each inventory location ships from.',
   shippingLabelsAndLiveRates: 'Buy carrier labels from your orders, one at a time or in a batch, quote live carrier rates at checkout, connect your own carrier accounts, and let carrier tracking move orders along and email customers. Rolling out.',
   shipWithYourOwnEasyshipSendcloudOrShipperhq: 'Connect your own Easyship or Sendcloud account to get rates and buy labels there, billed to you by that service, or ShipperHQ to price checkout shipping with your own rules. Rolling out.',
+  showToSignedInVisitors: 'Show an element only to visitors who are signed in to your site\'s account, or only to those who are not — "Sign in" for visitors and "Account" for members.',
   siteBackupAndPackages: 'Download a site or the items you pick as one package, import one into any of your sites, compare each item with the site\'s copy and choose how to handle it before anything is written, and undo an import.',
   siteLooks: 'How a site started with AI gets its look: the style you choose sets the range of themes, colors, fonts and buttons, and every site gets its own readable variation, saved as a theme you can edit.',
   siteProtection: 'Password-protect pages, design custom error pages, and put your site in maintenance mode.',
@@ -467,6 +470,9 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   },
   connectADomain: {
     '#steps': 'In the site\'s Admin page, choose Custom Domain in its navigation.',
+  },
+  connectXero: {
+    '#choose-an-organization': 'When your Xero login reaches more than one organization, the Accounting page asks which one this workspace posts to: pick it and select Use this organization.',
   },
   consoleSearch: {
     '#what-it-searches': 'Everything below is searched within the site you currently have open, plus your sites across the workspace: A group only appears if your plan includes it.',

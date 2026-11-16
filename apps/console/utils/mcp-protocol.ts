@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import type { McpTool } from './mcp-tools'
 
 /**
@@ -36,6 +37,14 @@ import type { McpTool } from './mcp-tools'
  * every one of them is asserted against the wire shape in
  * `specs/mcp-protocol.spec.ts`.
  */
+
+/**
+ * What `initialize` reports as `serverInfo.name` and what a client shows the
+ * person approving it. The server card publishes it as `title` and the RFC
+ * 9728 document as `resource_name`, so all three name the server alike
+ * (AGL-4225).
+ */
+export const MCP_SERVER_TITLE = `${PLATFORM_BRAND_NAME} API`
 
 /** The protocol revision this server implements. */
 export const MCP_PROTOCOL_VERSION = '2025-06-18'

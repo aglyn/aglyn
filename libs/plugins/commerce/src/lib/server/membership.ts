@@ -23,6 +23,7 @@ import {
   timingSafeEqual,
 } from 'crypto'
 import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
+import { signedInHintCookieName } from '@aglyn/aglyn/app-utils/sign-in-visibility'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 
 /**
@@ -209,10 +210,14 @@ export function setMemberCookie(
   // console __session cookie.
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : ''
   const base = `${name}=${token ?? ''}; Path=/; HttpOnly; SameSite=Lax${secure}`
-  res.setHeader(
-    'Set-Cookie',
-    token ? `${base}; Max-Age=${30 * 24 * 60 * 60}` : `${base}; Max-Age=0`,
-  )
+  const maxAge = token ? `; Max-Age=${30 * 24 * 60 * 60}` : '; Max-Age=0'
+  // The readable sign-in HINT beside it (AGL-4231): a `1` the page reads
+  // before its first paint to show "Account" rather than "Sign in". It
+  // carries nothing and grants nothing — the session above stays HttpOnly
+  // and is what every endpoint checks — so it may be readable, and it lives
+  // and dies with the session.
+  const hint = `${signedInHintCookieName(hostId)}=${token ? '1' : ''}; Path=/; SameSite=Lax${secure}`
+  res.setHeader('Set-Cookie', [`${base}${maxAge}`, `${hint}${maxAge}`])
 }
 
 export function readMemberSession(

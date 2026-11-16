@@ -114,7 +114,7 @@ object ReleaseFlagDefaults {
     "release_marketing" to ReleaseFlagValue(true, 0, listOf()),
     "release_redirects" to ReleaseFlagValue(true, 0, listOf()),
     "release_workflows" to ReleaseFlagValue(true, 0, listOf()),
-    "release_accounting" to ReleaseFlagValue(false, 0, listOf()),
+    "release_accounting" to ReleaseFlagValue(true, 100, listOf()),
     "release_weglot" to ReleaseFlagValue(true, 0, listOf()),
     "release_addon_store" to ReleaseFlagValue(true, 0, listOf()),
     "release_native_checkout" to ReleaseFlagValue(true, 0, listOf()),

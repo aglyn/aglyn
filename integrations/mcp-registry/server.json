@@ -1,0 +1,30 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.aglyn.app/mcp",
+  "title": "Aglyn API",
+  "description": "Your workspace data as tools: datasets, contacts, CRM, sites, forms, orders, products, media.",
+  "version": "1.0.0",
+  "websiteUrl": "https://docs.aglyn.com/api#mcp",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://app.aglyn.com/api/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Optional. An API key, instead of signing in. Leave it out and the client is asked to sign in.",
+          "isRequired": false,
+          "isSecret": true,
+          "value": "Bearer {api_key}",
+          "variables": {
+            "api_key": {
+              "description": "An API key from Settings → API keys (aglyn_sk_…).",
+              "isRequired": false,
+              "isSecret": true
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -221,9 +221,17 @@ export const DOCS_HELP_TOPICS = {
     path: '/marketing-and-automation/analytics/connect-conversions-api',
     title: 'Server-side ad conversions',
   },
+  connectQuickbooksOnline: {
+    path: '/commerce-and-bookings/commerce/connect-quickbooks-online',
+    title: 'Connect QuickBooks Online',
+  },
   connectSmileIoOrYotpo: {
     path: '/commerce-and-bookings/commerce/connect-smile-io-or-yotpo',
     title: 'Connect Smile.io or Yotpo Loyalty',
+  },
+  connectXero: {
+    path: '/commerce-and-bookings/commerce/connect-xero',
+    title: 'Connect Xero',
   },
   consoleAndSite: {
     path: '/developers/plugins/guides/console-and-site',
@@ -805,6 +813,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/commerce-and-bookings/commerce/ship-with-your-own-easyship-sendcloud-or-shipperhq',
     title: 'Ship with your own Easyship, Sendcloud or ShipperHQ',
   },
+  showToSignedInVisitors: {
+    path: '/building-sites/besigner/show-to-signed-in-visitors',
+    title: 'Show to signed-in or signed-out visitors',
+  },
   siteBackupAndPackages: {
     path: '/building-sites/site-backup-and-packages',
     title: 'Site backup and packages',
@@ -1016,7 +1028,9 @@ export const DOCS_HELP_ANCHORS = {
   connectAttentive: ['#before-you-start', '#connect', '#what-is-sent', '#who-is-sent', '#unsubscribes-stay-in-attentive', '#settings', '#sync-log', '#troubleshooting', '#disconnect'],
   connectAutomatically: ['#steps', '#no-button', '#problems'],
   connectConversionsApi: ['#conversions-api', '#meta-conversions-api', '#tiktok-events-api', '#pinterest-conversions-api', '#how-it-works', '#test-events', '#related'],
+  connectQuickbooksOnline: ['#before-you-start', '#connect', '#choose-your-accounts', '#what-is-posted', '#how-each-payment-is-posted', '#sales-tax-collected-by-aglyn', '#one-summary-a-day-instead', '#currency', '#sales-before-you-connected', '#when-something-does-not-post', '#disconnect'],
   connectSmileIoOrYotpo: ['#connect-your-account', '#who-earns', '#when-something-is-not-sent', '#disconnect'],
+  connectXero: ['#before-you-start', '#connect', '#choose-an-organization', '#choose-your-accounts', '#what-is-posted', '#how-each-payment-is-posted', '#sales-tax-collected-by-aglyn', '#one-summary-a-day-instead', '#currency', '#sales-before-you-connected', '#when-something-does-not-post', '#disconnect'],
   consoleAndSite: ['#add-a-console-page', '#add-a-widget-to-a-shell-zone', '#wrap-every-console-page-providers', '#add-a-canvas-component-besigner--published-sites', '#add-a-site-runtime', '#troubleshooting'],
   consoleSearch: ['#what-it-searches', '#searching-from-the-organization', '#how-matching-works', '#what-it-does-not-search', '#why-a-group-sometimes-says-it-was-only-partly-searched'],
   consoleTour: ['#the-app-bar', '#choose-a-workspace', '#in-context-help', '#filter-and-search', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#a-site-card', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#recent-activity', '#next', '#workspace-settings--notifications', '#organization-settings', '#organization-general', '#the-notifications-feed', '#all-notifications', '#notification-levels', '#notification-settings', '#one-kind-at-a-time', '#workspace-and-site-overrides', '#daily-digests', '#notification-sound', '#alerts-on-this-device'],
@@ -1103,7 +1117,7 @@ export const DOCS_HELP_ANCHORS = {
   membersOnly: ['#let-visitors-sign-up', '#sign-in-sign-up-and-recovery-pages', '#forgotten-passwords', '#gate-a-screen', '#manage-your-members', '#suspend-or-reactivate-a-member', '#tips', '#related'],
   menusAndNavigation: ['#dropdown-menu', '#mega-menu', '#drawer--menu-button', '#the-mobile-nav-preset', '#the-dropdown-panel-preset', '#interactions-for-menus', '#responsive-visibility', '#related'],
   migrationPatterns: ['#renamed-a-screen', '#consolidated-pages', '#moved-a-site-into-aglyn', '#avoiding-loops', '#related'],
-  modelBuilder: ['#define-the-model', '#display-name-vs-reference-id', '#page-address-fields', '#image-fields', '#page-fields', '#edit-records', '#tips', '#related'],
+  modelBuilder: ['#define-the-model', '#display-name-vs-reference-id', '#page-address-fields', '#image-fields', '#icon-fields', '#page-fields', '#edit-records', '#tips', '#related'],
   multilingual: ['#languages-card', '#locale-variants', '#hreflang--discovery', '#language-switcher', '#text-direction', '#related'],
   multiSelect: ['#select-multiple', '#move-the-whole-selection', '#what-the-inspector-shows', '#tips', '#related'],
   musicPlayer: ['#adding-tracks', '#rights', '#takedowns', '#related'],
@@ -1160,6 +1174,7 @@ export const DOCS_HELP_ANCHORS = {
   shipping: ['#zones-and-rates', '#ask-aglyn-ai', '#where-parcels-ship-from', '#labels-and-live-carrier-rates'],
   shippingLabelsAndLiveRates: ['#before-you-start', '#shipping-labels-settings', '#ship-from', '#boxes', '#label-options', '#checkout-services', '#paying-for-labels', '#carrier-accounts', '#product-shipping-fields', '#carrier-rates-at-checkout', '#address-checks', '#buy-a-label', '#void-a-label', '#batch-labels', '#return-labels', '#tracking', '#label-spend', '#troubleshooting', '#related'],
   shipWithYourOwnEasyshipSendcloudOrShipperhq: ['#before-you-start', '#connect-an-account', '#easyship', '#sendcloud', '#shipperhq', '#tracking-webhooks', '#what-changes', '#disconnect', '#troubleshooting', '#related'],
+  showToSignedInVisitors: ['#choose-who-sees-an-element', '#what-visitors-see'],
   siteBackupAndPackages: ['#backup-and-restore-card', '#what-a-package-carries', '#download-a-backup', '#export-items', '#import-a-package', '#1-upload', '#2-items', '#3-missing-items', '#4-changes', '#5-review', '#6-import', '#undo-an-import', '#moving-a-site-to-another-of-your-sites'],
   siteLooks: ['#choose-a-style', '#each-styles-layout', '#an-ai-starters-look', '#how-the-look-is-made', '#your-theme-afterwards', '#change-the-look-later', '#related'],
   siteProtection: ['#where-these-controls-live', '#per-screen-passwords', '#custom-error-screens', '#maintenance-mode', '#related'],
@@ -1399,6 +1414,9 @@ export const DOCS_HELP_SECTION_TITLES: {
   },
   connectADomain: {
     '#steps': 'Steps',
+  },
+  connectXero: {
+    '#choose-an-organization': 'Choose an organization',
   },
   consoleSearch: {
     '#what-it-searches': 'What it searches',
