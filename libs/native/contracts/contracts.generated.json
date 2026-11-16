@@ -4888,13 +4888,6 @@
           "surface": "orgPluginTab"
         },
         "where": "The console’s Domains page; no native screen yet"
-      },
-      {
-        "console": {
-          "id": "/waivers",
-          "surface": "hostPluginTab"
-        },
-        "where": "The console’s Waivers page; no native screen yet"
       }
     ],
     "lists": [
@@ -5766,6 +5759,22 @@
                 "order": 40,
                 "pluginId": "events-calendar",
                 "screen": "events-calendar.events"
+              },
+              {
+                "console": {
+                  "id": "/waivers",
+                  "surface": "hostPluginTab"
+                },
+                "docs": "/commerce-and-bookings/commerce/waivers",
+                "icon": {
+                  "android": "draw",
+                  "apple": "signature"
+                },
+                "id": "waivers",
+                "label": "Waivers",
+                "order": 50,
+                "pluginId": "waivers",
+                "screen": "waivers.home"
               }
             ]
           },
