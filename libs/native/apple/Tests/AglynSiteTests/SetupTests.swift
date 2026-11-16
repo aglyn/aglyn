@@ -374,4 +374,19 @@ final class SetupTests: XCTestCase {
     XCTAssertEqual(businessDetailsEmailError("not an email"), "Please enter an email address, like you@example.com")
     XCTAssertEqual(socialLinksMax, 8)
   }
+
+  /// "What your pages can use" reads what is typed: a new slogan shows at once, a cleared email falls back to the stored copy
+  /// as the console's form does, and the images are left out.
+  func testTheTokenListReadsWhatIsTyped() {
+    let host: [String: Any] = ["subdomain": "paws", "logoUrl": "https://cdn.example/logo.png", "business": ["supportEmail": "old@paws.example"]]
+    var form = businessDetailsForm(host)
+    form["seo.entity.slogan"] = "Calm hands"
+    form["seo.entity.email"] = ""
+    let rows = businessDetailsTokenRows(form, links: [SocialLink(label: "IG", url: "https://instagram.com/paws")], host: host)
+    XCTAssertEqual(rows.first { $0.key == "slogan" }?.value, "Calm hands")
+    XCTAssertEqual(rows.first { $0.key == "supportEmail" }?.value, "old@paws.example")
+    XCTAssertEqual(rows.first { $0.key == "instagramUrl" }?.value, "https://instagram.com/paws")
+    XCTAssertNil(rows.first { $0.type == "image" })
+    XCTAssertEqual(rows.first { $0.key == "phone" }?.set, false)
+  }
 }

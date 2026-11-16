@@ -1,7 +1,9 @@
 package com.aglyn.site.setup
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -15,9 +17,12 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import com.aglyn.contracts.Contracts
 import com.aglyn.core.rebased
@@ -60,6 +65,7 @@ internal fun BusinessDetailsCard(host: Map<String, Any?>, api: HostSettingsApi, 
   val emailError = businessDetailsEmailError(fields["seo.entity.email"].orEmpty())
   val siteName = host.text("displayName").trim()
   val legacyAddress = businessDetailsLegacyAddress(fields, host)
+  var showTokens by remember { mutableStateOf(false) }
   fun field(path: String) = fields[path].orEmpty()
   FormCard(
     title = "Business details",
@@ -131,5 +137,22 @@ internal fun BusinessDetailsCard(host: Map<String, Any?>, api: HostSettingsApi, 
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    // What a page, a template or an email can use from this card, with the value it would produce, read from what is on
+    // screen (the console's "Show what your pages can use"). A reference, not a field: it saves nothing.
+    TextButton(onClick = { showTokens = !showTokens }, modifier = Modifier.testTag("business-tokens-toggle")) {
+      Text(if (showTokens) "Hide what your pages can use" else "Show what your pages can use")
+    }
+    if (showTokens) {
+      businessDetailsTokenRows(fields.toMap(), links.toList(), host).forEach { row ->
+        Column(Modifier.fillMaxWidth()) {
+          Text(row.token, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace))
+          Text(
+            row.value ?: "not set on this site",
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (row.set) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+      }
+    }
   }
 }

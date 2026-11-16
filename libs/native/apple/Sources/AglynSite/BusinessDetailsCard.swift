@@ -22,6 +22,7 @@ struct BusinessDetailsCard: View {
   @State private var links: [SocialLink] = []
   @State private var seeded: (fields: [String: String], links: [SocialLink])?
   @State private var runner = ActionRunner()
+  @State private var showTokens = false
   private let contracts = ContractValues.shared
 
   private var storedFields: [String: String] { businessDetailsForm(host) }
@@ -84,6 +85,21 @@ struct BusinessDetailsCard: View {
       .accessibilityIdentifier("add-social-link")
       Text("Your pages can link each profile with the Facebook, Instagram, X, LinkedIn, YouTube and TikTok link variables, matched by its address.")
         .font(AglynFont.caption).foregroundStyle(.secondary)
+      // What a page, a template or an email can use from this card, with the value it would produce, read from what is on
+      // screen (the console's "Show what your pages can use"). A reference, not a field: it saves nothing.
+      Button(showTokens ? "Hide what your pages can use" : "Show what your pages can use") { showTokens.toggle() }
+        .buttonStyle(.borderless)
+        .accessibilityIdentifier("business-tokens-toggle")
+      if showTokens {
+        ForEach(businessDetailsTokenRows(fields, links: links, host: host), id: \.key) { row in
+          VStack(alignment: .leading, spacing: AglynSpace.half) {
+            Text(row.token).font(AglynFont.caption.monospaced()).textSelection(.enabled)
+            Text(row.value ?? "not set on this site").font(AglynFont.subheadline)
+              .foregroundStyle(row.set ? .primary : .secondary)
+          }
+          .accessibilityElement(children: .combine)
+        }
+      }
     }
     .accessibilityIdentifier("business-details")
     .onChange(of: storedFields, initial: true) { _, _ in rebase() }

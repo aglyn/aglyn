@@ -11,7 +11,7 @@ import Foundation
  * the TypeScript's own answers. The Kotlin contracts' BusinessDetails.kt.
  */
 
-private func trimmed(_ value: Any?) -> String { (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "" }
+// `trimmed(_:)` is the module's (AutomationRules.swift): text trimmed, anything else empty.
 
 private func asMap(_ value: Any?) -> [String: Any]? { value as? [String: Any] }
 

@@ -847,4 +847,19 @@ class SiteTest {
     assertEquals("Please enter an email address, like you@example.com", com.aglyn.site.setup.businessDetailsEmailError("not an email"))
     assertEquals(8, com.aglyn.site.setup.SOCIAL_LINKS_MAX)
   }
+
+  /** "What your pages can use" reads what is typed: a new slogan shows at once, a cleared email falls back to the stored copy, no images. */
+  @Test
+  fun theTokenListReadsWhatIsTyped() {
+    val host = mapOf("subdomain" to "paws", "logoUrl" to "https://cdn.example/logo.png", "business" to mapOf("supportEmail" to "old@paws.example"))
+    val form = com.aglyn.site.setup.businessDetailsForm(host).toMutableMap()
+    form["seo.entity.slogan"] = "Calm hands"
+    form["seo.entity.email"] = ""
+    val rows = com.aglyn.site.setup.businessDetailsTokenRows(form, listOf(com.aglyn.site.setup.SocialLink("IG", "https://instagram.com/paws")), host)
+    assertEquals("Calm hands", rows.first { it.key == "slogan" }.value)
+    assertEquals("old@paws.example", rows.first { it.key == "supportEmail" }.value)
+    assertEquals("https://instagram.com/paws", rows.first { it.key == "instagramUrl" }.value)
+    assertTrue(rows.none { it.type == "image" })
+    assertEquals(false, rows.first { it.key == "phone" }.set)
+  }
 }

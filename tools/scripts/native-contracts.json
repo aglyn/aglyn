@@ -19845,6 +19845,82 @@
         ]
       ]
     },
+    "hostTokenPreview": {
+      "module": "libs/aglyn/src/lib/app-utils/host-tokens.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "displayName": "Paws",
+            "subdomain": "paws"
+          }
+        ],
+        [
+          {
+            "displayName": "Paws",
+            "subdomain": "paws",
+            "cname": "https://paws.example",
+            "logoUrl": "https://cdn.example/logo.png",
+            "seo": {
+              "entity": {
+                "name": " Paws Grooming ",
+                "slogan": "Calm hands",
+                "telephone": "+1 (512) 555-0100",
+                "email": "hi@paws.example",
+                "address": {
+                  "streetAddress": "1 Main St",
+                  "addressLocality": "Austin",
+                  "addressRegion": "TX",
+                  "postalCode": "78701",
+                  "addressCountry": "US"
+                },
+                "areaServed": [
+                  "San Antonio, TX",
+                  "Austin"
+                ],
+                "sameAs": [
+                  "https://www.facebook.com/paws"
+                ]
+              }
+            },
+            "business": {
+              "supportEmail": "old@paws.example",
+              "address": "old block",
+              "socialLinks": [
+                {
+                  "label": "Instagram",
+                  "url": "https://instagram.com/paws"
+                },
+                {
+                  "label": "",
+                  "url": "https://x.com/paws"
+                },
+                {
+                  "label": "Bad",
+                  "url": "not a url"
+                }
+              ]
+            }
+          }
+        ],
+        [
+          {
+            "subdomain": "paws",
+            "seo": {
+              "entity": {
+                "telephone": "555 0100"
+              }
+            },
+            "business": {
+              "supportEmail": "old@paws.example",
+              "address": "4 Shore Rd\nMadison"
+            }
+          }
+        ]
+      ]
+    },
     "businessDetailsSeed": {
       "module": "libs/aglyn/src/lib/app-utils/business-details.ts",
       "args": [

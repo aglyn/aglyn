@@ -19679,6 +19679,768 @@
         }
       ]
     },
+    "hostTokenPreview": {
+      "module": "libs/aglyn/src/lib/app-utils/host-tokens.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": [
+            {
+              "description": "The business name from Setup → Business profile, or the site’s name when none is set.",
+              "key": "businessName",
+              "label": "Business name",
+              "set": false,
+              "token": "{{host.businessName}}",
+              "type": "text",
+              "whenEmpty": "blank"
+            },
+            {
+              "description": "A short line about the business, from Setup → Business profile.",
+              "key": "slogan",
+              "label": "Slogan",
+              "set": false,
+              "token": "{{host.slogan}}",
+              "type": "text",
+              "whenEmpty": "blank"
+            },
+            {
+              "description": "The site’s logo image.",
+              "key": "logo",
+              "label": "Logo",
+              "set": false,
+              "token": "{{host.logo}}",
+              "type": "image",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The logo to show on a dark background. The site’s logo when it has no dark one.",
+              "key": "logoDark",
+              "label": "Logo for dark backgrounds",
+              "set": false,
+              "token": "{{host.logoDark}}",
+              "type": "image",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The site’s public URL — its custom domain when connected.",
+              "key": "url",
+              "label": "Site address",
+              "set": false,
+              "token": "{{host.url}}",
+              "type": "url",
+              "whenEmpty": "blank"
+            },
+            {
+              "description": "The business’s phone number, as entered on Setup → Business profile.",
+              "key": "phone",
+              "label": "Phone",
+              "set": false,
+              "token": "{{host.phone}}",
+              "type": "text",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The phone number as a tel: link, for a Call button’s link. Dropped when the site has no phone.",
+              "key": "phoneLink",
+              "label": "Phone link",
+              "set": false,
+              "token": "{{host.phoneLink}}",
+              "type": "url",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The email address visitors write to, from Setup → Business profile.",
+              "key": "supportEmail",
+              "label": "Email",
+              "set": false,
+              "token": "{{host.supportEmail}}",
+              "type": "email",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The business’s postal address from Setup → Business profile, as one block of text.",
+              "key": "address",
+              "label": "Postal address",
+              "set": false,
+              "token": "{{host.address}}",
+              "type": "address",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The first area served, by its place name: San Antonio, for “San Antonio, TX”. From SEO → Local business.",
+              "key": "mainArea",
+              "label": "Main area",
+              "set": false,
+              "token": "{{host.mainArea}}",
+              "type": "text",
+              "whenEmpty": "blank"
+            },
+            {
+              "description": "Every area served, in order, separated by commas. From SEO → Local business.",
+              "key": "areasServed",
+              "label": "Areas served",
+              "set": false,
+              "token": "{{host.areasServed}}",
+              "type": "text",
+              "whenEmpty": "blank"
+            },
+            {
+              "description": "The site’s social profiles, as a list of labeled links.",
+              "key": "socialLinks",
+              "label": "Social links",
+              "set": false,
+              "token": "{{host.socialLinks}}",
+              "type": "text",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s Facebook profile, from Setup → Business profile.",
+              "key": "facebookUrl",
+              "label": "Facebook link",
+              "set": false,
+              "token": "{{host.facebookUrl}}",
+              "type": "url",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s Instagram profile, from Setup → Business profile.",
+              "key": "instagramUrl",
+              "label": "Instagram link",
+              "set": false,
+              "token": "{{host.instagramUrl}}",
+              "type": "url",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s X profile, from Setup → Business profile.",
+              "key": "xUrl",
+              "label": "X link",
+              "set": false,
+              "token": "{{host.xUrl}}",
+              "type": "url",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s LinkedIn profile, from Setup → Business profile.",
+              "key": "linkedinUrl",
+              "label": "LinkedIn link",
+              "set": false,
+              "token": "{{host.linkedinUrl}}",
+              "type": "url",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s YouTube profile, from Setup → Business profile.",
+              "key": "youtubeUrl",
+              "label": "YouTube link",
+              "set": false,
+              "token": "{{host.youtubeUrl}}",
+              "type": "url",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s TikTok profile, from Setup → Business profile.",
+              "key": "tiktokUrl",
+              "label": "TikTok link",
+              "set": false,
+              "token": "{{host.tiktokUrl}}",
+              "type": "url",
+              "whenEmpty": "omit-block"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "displayName": "Paws",
+              "subdomain": "paws"
+            }
+          ],
+          "result": [
+            {
+              "description": "The business name from Setup → Business profile, or the site’s name when none is set.",
+              "key": "businessName",
+              "label": "Business name",
+              "set": true,
+              "token": "{{host.businessName}}",
+              "type": "text",
+              "value": "Paws",
+              "whenEmpty": "blank"
+            },
+            {
+              "description": "A short line about the business, from Setup → Business profile.",
+              "key": "slogan",
+              "label": "Slogan",
+              "set": false,
+              "token": "{{host.slogan}}",
+              "type": "text",
+              "whenEmpty": "blank"
+            },
+            {
+              "description": "The site’s logo image.",
+              "key": "logo",
+              "label": "Logo",
+              "set": false,
+              "token": "{{host.logo}}",
+              "type": "image",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The logo to show on a dark background. The site’s logo when it has no dark one.",
+              "key": "logoDark",
+              "label": "Logo for dark backgrounds",
+              "set": false,
+              "token": "{{host.logoDark}}",
+              "type": "image",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The site’s public URL — its custom domain when connected.",
+              "key": "url",
+              "label": "Site address",
+              "set": true,
+              "token": "{{host.url}}",
+              "type": "url",
+              "value": "https://paws.aglyn.app",
+              "whenEmpty": "blank"
+            },
+            {
+              "description": "The business’s phone number, as entered on Setup → Business profile.",
+              "key": "phone",
+              "label": "Phone",
+              "set": false,
+              "token": "{{host.phone}}",
+              "type": "text",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The phone number as a tel: link, for a Call button’s link. Dropped when the site has no phone.",
+              "key": "phoneLink",
+              "label": "Phone link",
+              "set": false,
+              "token": "{{host.phoneLink}}",
+              "type": "url",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The email address visitors write to, from Setup → Business profile.",
+              "key": "supportEmail",
+              "label": "Email",
+              "set": false,
+              "token": "{{host.supportEmail}}",
+              "type": "email",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The business’s postal address from Setup → Business profile, as one block of text.",
+              "key": "address",
+              "label": "Postal address",
+              "set": false,
+              "token": "{{host.address}}",
+              "type": "address",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The first area served, by its place name: San Antonio, for “San Antonio, TX”. From SEO → Local business.",
+              "key": "mainArea",
+              "label": "Main area",
+              "set": false,
+              "token": "{{host.mainArea}}",
+              "type": "text",
+              "whenEmpty": "blank"
+            },
+            {
+              "description": "Every area served, in order, separated by commas. From SEO → Local business.",
+              "key": "areasServed",
+              "label": "Areas served",
+              "set": false,
+              "token": "{{host.areasServed}}",
+              "type": "text",
+              "whenEmpty": "blank"
+            },
+            {
+              "description": "The site’s social profiles, as a list of labeled links.",
+              "key": "socialLinks",
+              "label": "Social links",
+              "set": false,
+              "token": "{{host.socialLinks}}",
+              "type": "text",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s Facebook profile, from Setup → Business profile.",
+              "key": "facebookUrl",
+              "label": "Facebook link",
+              "set": false,
+              "token": "{{host.facebookUrl}}",
+              "type": "url",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s Instagram profile, from Setup → Business profile.",
+              "key": "instagramUrl",
+              "label": "Instagram link",
+              "set": false,
+              "token": "{{host.instagramUrl}}",
+              "type": "url",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s X profile, from Setup → Business profile.",
+              "key": "xUrl",
+              "label": "X link",
+              "set": false,
+              "token": "{{host.xUrl}}",
+              "type": "url",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s LinkedIn profile, from Setup → Business profile.",
+              "key": "linkedinUrl",
+              "label": "LinkedIn link",
+              "set": false,
+              "token": "{{host.linkedinUrl}}",
+              "type": "url",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s YouTube profile, from Setup → Business profile.",
+              "key": "youtubeUrl",
+              "label": "YouTube link",
+              "set": false,
+              "token": "{{host.youtubeUrl}}",
+              "type": "url",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s TikTok profile, from Setup → Business profile.",
+              "key": "tiktokUrl",
+              "label": "TikTok link",
+              "set": false,
+              "token": "{{host.tiktokUrl}}",
+              "type": "url",
+              "whenEmpty": "omit-block"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "displayName": "Paws",
+              "subdomain": "paws",
+              "cname": "https://paws.example",
+              "logoUrl": "https://cdn.example/logo.png",
+              "seo": {
+                "entity": {
+                  "name": " Paws Grooming ",
+                  "slogan": "Calm hands",
+                  "telephone": "+1 (512) 555-0100",
+                  "email": "hi@paws.example",
+                  "address": {
+                    "streetAddress": "1 Main St",
+                    "addressLocality": "Austin",
+                    "addressRegion": "TX",
+                    "postalCode": "78701",
+                    "addressCountry": "US"
+                  },
+                  "areaServed": [
+                    "San Antonio, TX",
+                    "Austin"
+                  ],
+                  "sameAs": [
+                    "https://www.facebook.com/paws"
+                  ]
+                }
+              },
+              "business": {
+                "supportEmail": "old@paws.example",
+                "address": "old block",
+                "socialLinks": [
+                  {
+                    "label": "Instagram",
+                    "url": "https://instagram.com/paws"
+                  },
+                  {
+                    "label": "",
+                    "url": "https://x.com/paws"
+                  },
+                  {
+                    "label": "Bad",
+                    "url": "not a url"
+                  }
+                ]
+              }
+            }
+          ],
+          "result": [
+            {
+              "description": "The business name from Setup → Business profile, or the site’s name when none is set.",
+              "key": "businessName",
+              "label": "Business name",
+              "set": true,
+              "token": "{{host.businessName}}",
+              "type": "text",
+              "value": "Paws Grooming",
+              "whenEmpty": "blank"
+            },
+            {
+              "description": "A short line about the business, from Setup → Business profile.",
+              "key": "slogan",
+              "label": "Slogan",
+              "set": true,
+              "token": "{{host.slogan}}",
+              "type": "text",
+              "value": "Calm hands",
+              "whenEmpty": "blank"
+            },
+            {
+              "description": "The site’s logo image.",
+              "key": "logo",
+              "label": "Logo",
+              "set": true,
+              "token": "{{host.logo}}",
+              "type": "image",
+              "value": "https://cdn.example/logo.png",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The logo to show on a dark background. The site’s logo when it has no dark one.",
+              "key": "logoDark",
+              "label": "Logo for dark backgrounds",
+              "set": true,
+              "token": "{{host.logoDark}}",
+              "type": "image",
+              "value": "https://cdn.example/logo.png",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The site’s public URL — its custom domain when connected.",
+              "key": "url",
+              "label": "Site address",
+              "set": true,
+              "token": "{{host.url}}",
+              "type": "url",
+              "value": "https://paws.example",
+              "whenEmpty": "blank"
+            },
+            {
+              "description": "The business’s phone number, as entered on Setup → Business profile.",
+              "key": "phone",
+              "label": "Phone",
+              "set": true,
+              "token": "{{host.phone}}",
+              "type": "text",
+              "value": "+1 (512) 555-0100",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The phone number as a tel: link, for a Call button’s link. Dropped when the site has no phone.",
+              "key": "phoneLink",
+              "label": "Phone link",
+              "set": true,
+              "token": "{{host.phoneLink}}",
+              "type": "url",
+              "value": "tel:+15125550100",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The email address visitors write to, from Setup → Business profile.",
+              "key": "supportEmail",
+              "label": "Email",
+              "set": true,
+              "token": "{{host.supportEmail}}",
+              "type": "email",
+              "value": "hi@paws.example",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The business’s postal address from Setup → Business profile, as one block of text.",
+              "key": "address",
+              "label": "Postal address",
+              "set": true,
+              "token": "{{host.address}}",
+              "type": "address",
+              "value": "1 Main St, Austin, TX, 78701, US",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The first area served, by its place name: San Antonio, for “San Antonio, TX”. From SEO → Local business.",
+              "key": "mainArea",
+              "label": "Main area",
+              "set": true,
+              "token": "{{host.mainArea}}",
+              "type": "text",
+              "value": "San Antonio",
+              "whenEmpty": "blank"
+            },
+            {
+              "description": "Every area served, in order, separated by commas. From SEO → Local business.",
+              "key": "areasServed",
+              "label": "Areas served",
+              "set": true,
+              "token": "{{host.areasServed}}",
+              "type": "text",
+              "value": "San Antonio, TX, Austin",
+              "whenEmpty": "blank"
+            },
+            {
+              "description": "The site’s social profiles, as a list of labeled links.",
+              "key": "socialLinks",
+              "label": "Social links",
+              "set": true,
+              "token": "{{host.socialLinks}}",
+              "type": "text",
+              "value": "Instagram · https://x.com/paws · Bad",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s Facebook profile, from Setup → Business profile.",
+              "key": "facebookUrl",
+              "label": "Facebook link",
+              "set": true,
+              "token": "{{host.facebookUrl}}",
+              "type": "url",
+              "value": "https://www.facebook.com/paws",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s Instagram profile, from Setup → Business profile.",
+              "key": "instagramUrl",
+              "label": "Instagram link",
+              "set": true,
+              "token": "{{host.instagramUrl}}",
+              "type": "url",
+              "value": "https://instagram.com/paws",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s X profile, from Setup → Business profile.",
+              "key": "xUrl",
+              "label": "X link",
+              "set": true,
+              "token": "{{host.xUrl}}",
+              "type": "url",
+              "value": "https://x.com/paws",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s LinkedIn profile, from Setup → Business profile.",
+              "key": "linkedinUrl",
+              "label": "LinkedIn link",
+              "set": false,
+              "token": "{{host.linkedinUrl}}",
+              "type": "url",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s YouTube profile, from Setup → Business profile.",
+              "key": "youtubeUrl",
+              "label": "YouTube link",
+              "set": false,
+              "token": "{{host.youtubeUrl}}",
+              "type": "url",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s TikTok profile, from Setup → Business profile.",
+              "key": "tiktokUrl",
+              "label": "TikTok link",
+              "set": false,
+              "token": "{{host.tiktokUrl}}",
+              "type": "url",
+              "whenEmpty": "omit-block"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "subdomain": "paws",
+              "seo": {
+                "entity": {
+                  "telephone": "555 0100"
+                }
+              },
+              "business": {
+                "supportEmail": "old@paws.example",
+                "address": "4 Shore Rd\nMadison"
+              }
+            }
+          ],
+          "result": [
+            {
+              "description": "The business name from Setup → Business profile, or the site’s name when none is set.",
+              "key": "businessName",
+              "label": "Business name",
+              "set": false,
+              "token": "{{host.businessName}}",
+              "type": "text",
+              "whenEmpty": "blank"
+            },
+            {
+              "description": "A short line about the business, from Setup → Business profile.",
+              "key": "slogan",
+              "label": "Slogan",
+              "set": false,
+              "token": "{{host.slogan}}",
+              "type": "text",
+              "whenEmpty": "blank"
+            },
+            {
+              "description": "The site’s logo image.",
+              "key": "logo",
+              "label": "Logo",
+              "set": false,
+              "token": "{{host.logo}}",
+              "type": "image",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The logo to show on a dark background. The site’s logo when it has no dark one.",
+              "key": "logoDark",
+              "label": "Logo for dark backgrounds",
+              "set": false,
+              "token": "{{host.logoDark}}",
+              "type": "image",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The site’s public URL — its custom domain when connected.",
+              "key": "url",
+              "label": "Site address",
+              "set": true,
+              "token": "{{host.url}}",
+              "type": "url",
+              "value": "https://paws.aglyn.app",
+              "whenEmpty": "blank"
+            },
+            {
+              "description": "The business’s phone number, as entered on Setup → Business profile.",
+              "key": "phone",
+              "label": "Phone",
+              "set": true,
+              "token": "{{host.phone}}",
+              "type": "text",
+              "value": "555 0100",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The phone number as a tel: link, for a Call button’s link. Dropped when the site has no phone.",
+              "key": "phoneLink",
+              "label": "Phone link",
+              "set": true,
+              "token": "{{host.phoneLink}}",
+              "type": "url",
+              "value": "tel:5550100",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The email address visitors write to, from Setup → Business profile.",
+              "key": "supportEmail",
+              "label": "Email",
+              "set": true,
+              "token": "{{host.supportEmail}}",
+              "type": "email",
+              "value": "old@paws.example",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The business’s postal address from Setup → Business profile, as one block of text.",
+              "key": "address",
+              "label": "Postal address",
+              "set": true,
+              "token": "{{host.address}}",
+              "type": "address",
+              "value": "4 Shore Rd\nMadison",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The first area served, by its place name: San Antonio, for “San Antonio, TX”. From SEO → Local business.",
+              "key": "mainArea",
+              "label": "Main area",
+              "set": false,
+              "token": "{{host.mainArea}}",
+              "type": "text",
+              "whenEmpty": "blank"
+            },
+            {
+              "description": "Every area served, in order, separated by commas. From SEO → Local business.",
+              "key": "areasServed",
+              "label": "Areas served",
+              "set": false,
+              "token": "{{host.areasServed}}",
+              "type": "text",
+              "whenEmpty": "blank"
+            },
+            {
+              "description": "The site’s social profiles, as a list of labeled links.",
+              "key": "socialLinks",
+              "label": "Social links",
+              "set": false,
+              "token": "{{host.socialLinks}}",
+              "type": "text",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s Facebook profile, from Setup → Business profile.",
+              "key": "facebookUrl",
+              "label": "Facebook link",
+              "set": false,
+              "token": "{{host.facebookUrl}}",
+              "type": "url",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s Instagram profile, from Setup → Business profile.",
+              "key": "instagramUrl",
+              "label": "Instagram link",
+              "set": false,
+              "token": "{{host.instagramUrl}}",
+              "type": "url",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s X profile, from Setup → Business profile.",
+              "key": "xUrl",
+              "label": "X link",
+              "set": false,
+              "token": "{{host.xUrl}}",
+              "type": "url",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s LinkedIn profile, from Setup → Business profile.",
+              "key": "linkedinUrl",
+              "label": "LinkedIn link",
+              "set": false,
+              "token": "{{host.linkedinUrl}}",
+              "type": "url",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s YouTube profile, from Setup → Business profile.",
+              "key": "youtubeUrl",
+              "label": "YouTube link",
+              "set": false,
+              "token": "{{host.youtubeUrl}}",
+              "type": "url",
+              "whenEmpty": "omit-block"
+            },
+            {
+              "description": "The address of the site’s TikTok profile, from Setup → Business profile.",
+              "key": "tiktokUrl",
+              "label": "TikTok link",
+              "set": false,
+              "token": "{{host.tiktokUrl}}",
+              "type": "url",
+              "whenEmpty": "omit-block"
+            }
+          ]
+        }
+      ]
+    },
     "imageEditContentType": {
       "module": "libs/aglyn/src/lib/app-utils/image-edit.ts",
       "cases": [

@@ -4,6 +4,8 @@ import com.aglyn.contracts.Contracts
 import com.aglyn.contracts.PluginCatalog
 import com.aglyn.contracts.businessDetailsSeed
 import com.aglyn.contracts.businessDetailsWrite
+import com.aglyn.contracts.HostTokenPreviewRow
+import com.aglyn.contracts.hostTokenPreview
 import com.aglyn.contracts.resolveHostEnabledPlugins
 import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
@@ -263,6 +265,32 @@ fun businessDetailsPayload(values: Map<String, String>, links: List<SocialLink>,
     if (blank && held != null && held.toString() != "") written.putPath(path, FirestoreDelete)
   }
   return withoutEmptyMaps(written)
+}
+
+/**
+ * The site as the card's "What your pages can use" reads it (the console's FormSpy values): the stored document with what is
+ * typed laid over it, a cleared field left out as the form leaves it out.
+ */
+fun businessDetailsPreviewHost(values: Map<String, String>, links: List<SocialLink>, host: Map<String, Any?>?): Map<String, Any?> {
+  val next = deepMutable(host.orEmpty())
+  for (path in BUSINESS_DETAILS_TEXT_PATHS) {
+    val value = values[path]?.ifEmpty { null }
+    if (value != null) next.putPath(path, value) else next.removePath(path)
+  }
+  next.putPath("business.socialLinks", links.map { mapOf("label" to it.label, "url" to it.url) })
+  return next
+}
+
+/** The variables the card lists: every `host.*` one but the images, as the console's list leaves them out of text. */
+fun businessDetailsTokenRows(values: Map<String, String>, links: List<SocialLink>, host: Map<String, Any?>?): List<HostTokenPreviewRow> =
+  hostTokenPreview(businessDetailsPreviewHost(values, links, host)).filter { it.type != "image" }
+
+@Suppress("UNCHECKED_CAST")
+private fun MutableMap<String, Any?>.removePath(path: String) {
+  val keys = path.split('.')
+  var node: MutableMap<String, Any?> = this
+  for (key in keys.dropLast(1)) node = node[key] as? MutableMap<String, Any?> ?: return
+  node.remove(keys.last())
 }
 
 @Suppress("UNCHECKED_CAST")

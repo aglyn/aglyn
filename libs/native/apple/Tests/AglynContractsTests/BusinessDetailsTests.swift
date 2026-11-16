@@ -41,6 +41,21 @@ final class BusinessDetailsTests: XCTestCase {
     }
   }
 
+  /// "What your pages can use" (`hostTokenPreview`): every variable with the value the console says it produces.
+  func testHostTokenPreview() {
+    for item in cases("hostTokenPreview") {
+      let rows = hostTokenPreview(item.args[0] as? [String: Any]).map { row -> [String: Any] in
+        var out: [String: Any] = [
+          "key": row.key, "type": row.type, "label": row.label, "description": row.description, "whenEmpty": row.whenEmpty,
+          "token": row.token, "set": row.set,
+        ]
+        if let value = row.value { out["value"] = value }
+        return out
+      }
+      XCTAssertEqual(canonical(rows), canonical(item.result), "\(item.args)")
+    }
+  }
+
   func testValues() {
     let contracts = ContractValues.shared
     XCTAssertEqual(contracts.siteSloganMaxLength, 120)

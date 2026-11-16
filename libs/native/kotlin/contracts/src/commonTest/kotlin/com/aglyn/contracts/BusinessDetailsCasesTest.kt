@@ -44,6 +44,19 @@ class BusinessDetailsCasesTest {
     assertEquals(map(result), businessDetailsSeed(map(args[0])), args.toString())
   }
 
+  /** "What your pages can use" (`hostTokenPreview`): every variable with the value the console says it produces. */
+  @Test
+  fun hostTokenPreview() = cases("hostTokenPreview").forEach { (args, result) ->
+    val rows = hostTokenPreview(map(args[0])).map { row ->
+      buildMap<String, Any?> {
+        put("key", row.key); put("type", row.type); put("label", row.label); put("description", row.description)
+        put("whenEmpty", row.whenEmpty); put("token", row.token); put("set", row.set)
+        row.value?.let { put("value", it) }
+      }
+    }
+    assertEquals(plainJson(result), rows, args.toString())
+  }
+
   @Test
   fun values() {
     assertEquals(120L, Contracts.siteSloganMaxLength)

@@ -311,6 +311,34 @@ public func businessDetailsPayload(_ values: [String: String], links: [SocialLin
   return withoutEmptyMaps(written)
 }
 
+/// The site as the card's "What your pages can use" reads it (the console's FormSpy values): the stored document with what
+/// is typed laid over it, a cleared field left out as the form leaves it out.
+public func businessDetailsPreviewHost(_ values: [String: String], links: [SocialLink], host: [String: Any]?) -> [String: Any] {
+  var next = host ?? [:]
+  for path in businessDetailsTextPaths {
+    let value = values[path].flatMap { $0.isEmpty ? nil : $0 }
+    place(&next, path.split(separator: ".").map(String.init)[...], value)
+  }
+  place(&next, ["business", "socialLinks"], links.map { ["label": $0.label, "url": $0.url] })
+  return next
+}
+
+/// The variables the card lists: every `host.*` one but the images, as the console's list leaves them out of text.
+public func businessDetailsTokenRows(_ values: [String: String], links: [SocialLink], host: [String: Any]?) -> [HostTokenPreviewRow] {
+  hostTokenPreview(businessDetailsPreviewHost(values, links: links, host: host)).filter { $0.type != "image" }
+}
+
+private func place(_ node: inout [String: Any], _ keys: ArraySlice<String>, _ value: Any?) {
+  guard let key = keys.first else { return }
+  if keys.count == 1 {
+    node[key] = value
+    return
+  }
+  var child = node[key] as? [String: Any] ?? [:]
+  place(&child, keys.dropFirst(), value)
+  node[key] = child
+}
+
 private func withoutEmptyMaps(_ map: [String: Any]) -> [String: Any] {
   map.compactMapValues { value in
     guard let child = value as? [String: Any] else { return value }
