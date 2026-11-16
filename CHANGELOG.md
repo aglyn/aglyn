@@ -9,6 +9,27 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.23.1 — 2026-11-16
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.23.0...v1.23.1)
+
+### Added
+
+- **domains:** verify a site's domain with ChatGPT from its SEO setup, beside its other search engine verifications
+
+### Fixed
+
+- **ai:** Improve it lets a redesigned page's call and email buttons use the site's own phone and email ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **seed:** leave the store's Stripe account to Set up payments
+- **apple:** a REST sign-in names the person from the token when the answer does not ([AGL-4010](https://linear.app/aglyn/issue/AGL-4010))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **seed:** connect Payments, ShipStation, ShippingEasy and Email platforms in test mode
+
+</details>
+
 ## v1.23.0 — 2026-11-16
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.22.4...v1.23.0)
