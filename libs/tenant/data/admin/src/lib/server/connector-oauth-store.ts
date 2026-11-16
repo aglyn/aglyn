@@ -255,14 +255,19 @@ export interface ConnectorTokenResponse {
   scope: string
 }
 
-export type ConnectorTokenResult =
-  | {
-      ok: true
-      tokens: ConnectorTokenResponse
-      /** For the activity log: set only when the exchange created a connection. */
-      connected?: { grantId: string; orgId: string; uid: string; email: string | null; clientName: string }
-    }
-  | { ok: false; error: 'invalid_grant' | 'invalid_scope' | 'invalid_target'; description: string }
+/**
+ * `tokens` on success; `error` and `description` otherwise. Flat rather than
+ * a discriminated union: `strictNullChecks` is off repo-wide, and narrowing
+ * on a boolean literal does not survive it.
+ */
+export interface ConnectorTokenResult {
+  ok: boolean
+  tokens?: ConnectorTokenResponse
+  /** For the activity log: set only when the exchange created a connection. */
+  connected?: { grantId: string; orgId: string; uid: string; email: string | null; clientName: string }
+  error?: 'invalid_grant' | 'invalid_scope' | 'invalid_target'
+  description?: string
+}
 
 const invalidGrant = (description: string): ConnectorTokenResult => ({
   ok: false,
@@ -706,6 +711,61 @@ export async function verifyConnectorAccessToken(
   } catch {
     return null
   }
+}
+
+// ── Consent: which workspaces may be connected ──────────────────────────────
+
+/** A workspace the consent screen offers. */
+export interface ConnectableWorkspace {
+  orgId: string
+  name: string
+  slug: string
+  /** False when the plan lacks API access: shown, with the way to upgrade. */
+  entitled: boolean
+}
+
+/** Most workspaces the consent screen considers for one person. */
+const MAX_CONNECTABLE_WORKSPACES = 100
+
+/**
+ * The workspaces `uid` could connect an app to: those where they are an
+ * org-wide member holding "Manage API keys", and that no lock covers for
+ * them. A workspace without the plan is INCLUDED, flagged, so the screen can
+ * say what it needs rather than leave it out; one the person cannot manage
+ * is not theirs to offer and is left out.
+ */
+export async function listConnectableWorkspaces(uid: string): Promise<ConnectableWorkspace[]> {
+  const memberships = await db()
+    .collection('users')
+    .doc(uid)
+    .collection('orgs')
+    .limit(MAX_CONNECTABLE_WORKSPACES)
+    .get()
+  const results = await Promise.all(
+    memberships.docs.map(async (entry): Promise<ConnectableWorkspace | null> => {
+      const orgId = entry.id
+      try {
+        const membership = await resolveOrgMembership(uid, orgId)
+        if (!membership || !isOrgWideMember(membership.member)) return null
+        if (!(await memberHasOrgPermission(orgId, membership.member, 'org.apiKeys'))) return null
+        const org = (await db().collection('orgs').doc(orgId).get()).data()
+        if (!org) return null
+        if (await getLockdownVerdict({ uid, org, intent: 'write' })) return null
+        return {
+          orgId,
+          name: String(org.name ?? '') || String(org.slug ?? orgId),
+          slug: String(org.slug ?? ''),
+          entitled: checkEntitlement(org, 'apiAccess'),
+        }
+      } catch {
+        // One unreadable workspace must not hide the others.
+        return null
+      }
+    }),
+  )
+  return results
+    .filter((workspace): workspace is ConnectableWorkspace => workspace !== null)
+    .sort((a, b) => a.name.localeCompare(b.name))
 }
 
 // ── Settings: Connected apps ────────────────────────────────────────────────

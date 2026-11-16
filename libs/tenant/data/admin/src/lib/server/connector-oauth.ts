@@ -310,9 +310,17 @@ export const MAX_CLIENT_NAME_LENGTH = 80
 /** Shown when a client registers without naming itself. */
 export const UNNAMED_CLIENT = 'Unnamed app'
 
-export type RegistrationResult =
-  | { ok: true; clientName: string; redirectUris: string[] }
-  | { ok: false; error: 'invalid_redirect_uri' | 'invalid_client_metadata'; description: string }
+/**
+ * Flat rather than a discriminated union: `strictNullChecks` is off repo-wide,
+ * and narrowing on a boolean literal does not survive it.
+ */
+export interface RegistrationResult {
+  ok: boolean
+  clientName?: string
+  redirectUris?: string[]
+  error?: 'invalid_redirect_uri' | 'invalid_client_metadata'
+  description?: string
+}
 
 /**
  * The display name, made safe to put on a consent screen: control and

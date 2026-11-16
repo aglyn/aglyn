@@ -38,6 +38,10 @@ import { parseSignedOut } from './app/api/auth/session/session-tombstone'
 import { enforceSanctionsGeo } from './constants/sanctions-geo'
 import { nativeAppAssociationRoute } from '@aglyn/aglyn/app-utils/native-app-association'
 import {
+  CONNECTOR_AUTHORIZE_PATH,
+  connectorDiscoveryRoute,
+} from '@aglyn/aglyn/app-utils/connector-discovery'
+import {
   isTrackingHostName,
   trackingHostPath,
   trackingHostProbeBody,
@@ -148,6 +152,9 @@ const WELL_KNOWN_PREFIX = '/.well-known'
  * it is the one page the COOP header in `applyCsp` does not isolate.
  */
 const EDIT_ACCESS_PATH = '/edit-access'
+
+/** The first segment of the connector consent page (AGL-4225). */
+const CONNECTOR_SEGMENT = CONNECTOR_AUTHORIZE_PATH.split('/')[1]
 
 /**
  * A 404 with a page in it (AGL-3261).
@@ -448,6 +455,15 @@ export async function middleware(request: NextRequest) {
   if (associationRoute) {
     return NextResponse.rewrite(new URL(associationRoute, request.url))
   }
+  // Connector sign-in's three discovery documents (AGL-4225), the same way:
+  // by exact path, so every other name in the namespace still 404s. NOT on
+  // the auth origin, which is not the issuer — its gate below stays closed
+  // and an OAuth probe there still finds nothing.
+  const onAuthOrigin = hostnameOf(request.headers.get('host')) === `auth.${WORKSPACE_DOMAIN}`
+  const discoveryRoute = onAuthOrigin ? null : connectorDiscoveryRoute(pathname)
+  if (discoveryRoute) {
+    return NextResponse.rewrite(new URL(discoveryRoute, request.url))
+  }
   if (
     pathname === WELL_KNOWN_PREFIX ||
     pathname.startsWith(`${WELL_KNOWN_PREFIX}/`)
@@ -481,10 +497,23 @@ export async function middleware(request: NextRequest) {
   // same refusal further down (AGL-3017), but it has to ASK first, because
   // there a first segment can legitimately name a workspace. Here it cannot:
   // the auth origin holds no workspace, so no verdict is worth spending.
-  if (hostnameOf(request.headers.get('host')) === `auth.${WORKSPACE_DOMAIN}`) {
-    if (!isConsoleRouteSegment(firstSegment(request))) {
+  //
+  // `oauth` is the one console segment the auth origin never serves
+  // (AGL-4225). The consent page belongs to the issuer, which is the console
+  // origin, and answering it here would put back the endpoint AGL-3090
+  // closed on the host a scanner reads as our sign-in.
+  if (onAuthOrigin) {
+    const first = firstSegment(request)
+    if (!isConsoleRouteSegment(first) || first === CONNECTOR_SEGMENT) {
       return refuseNotFound()
     }
+  }
+  // Under `oauth`, exactly the consent page exists (AGL-4225). Every other
+  // path below it is refused here: the static segment does not stop
+  // `[orgSlug]/[...pluginSlug]` claiming `/oauth/token` and answering 200,
+  // which is the soft-404 that once read as an authorization server.
+  if (firstSegment(request) === CONNECTOR_SEGMENT && pathname !== CONNECTOR_AUTHORIZE_PATH) {
+    return refuseNotFound()
   }
 
   // CSP script-src: ENFORCING for everyone (AGL-518, AGL-523).
@@ -586,6 +615,10 @@ export async function middleware(request: NextRequest) {
   // scripts are nonced from the CSP header, not from this.
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-nonce', nonce)
+  const consentPage = pathname === CONNECTOR_AUTHORIZE_PATH
+  const pageDirectives = consentPage
+    ? baseDirectives.replace(/frame-ancestors [^;]*/, "frame-ancestors 'none'")
+    : baseDirectives
   const applyCsp = (res: NextResponse) => {
     // Resolves the `report-to` group named in the policies below. Without this
     // header `report-to` names a group the browser has never heard of, and
@@ -633,8 +666,14 @@ export async function middleware(request: NextRequest) {
     // that DID NOT run, which is the most urgent thing the log can carry.
     res.headers.set(
       'Content-Security-Policy',
-      `${scriptSrc}; ${baseDirectives}; ${reportDirectives}`,
+      `${scriptSrc}; ${pageDirectives}; ${reportDirectives}`,
     )
+    // The consent page may not be framed by ANYONE (AGL-4225), first-party
+    // hosts included: `frame-ancestors` above admits the marketing site and
+    // the other first-party origins, and a page that can frame the Allow
+    // button can trick a click on it. `X-Frame-Options` for a browser that
+    // predates `frame-ancestors`.
+    if (consentPage) res.headers.set('X-Frame-Options', 'DENY')
     // The candidate `img-src`, measured before it is enforced (AGL-1685).
     // It carries its own `report-uri`/`report-to`: a report-only policy with no
     // reporting directive is the exact mistake AGL-518 shipped for months —

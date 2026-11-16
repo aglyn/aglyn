@@ -51,9 +51,10 @@ export const ORG_SLUG_PATTERN = SUBDOMAIN_PATTERN
  * Org workspace slugs ride the host reserved/profanity blocklist plus
  * console-specific labels the workspace router must own. `kiosk` is the
  * console's public device route (AGL-3608), which a static segment serves
- * ahead of any workspace of that name.
+ * ahead of any workspace of that name; `oauth` is the connector consent page
+ * (AGL-4225), the same way.
  */
-const RESERVED_ORG_ONLY = new Set(['staff', 'org', 'orgs', 'workspace', 'kiosk'])
+const RESERVED_ORG_ONLY = new Set(['staff', 'org', 'orgs', 'workspace', 'kiosk', 'oauth'])
 
 /**
  * The label this deployment serves its own console on, when it has one
