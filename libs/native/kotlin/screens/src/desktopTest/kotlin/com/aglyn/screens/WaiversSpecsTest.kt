@@ -85,7 +85,7 @@ class WaiversSpecsTest : SpecTestBase() {
     assertEquals("false", ScreenValues.text(ScreenValues.resolve(fields.getValue("allowMinors").initial!!, model.context)))
     assertEquals(
       json("""{"hostId":"h1","waiverId":"w1","waiver":{"title":"Rider release","body":"Ride.","checkboxes":[{"id":"read","label":"I have read it."},{"label":"Helmet on."}],
-        "adultAge":19,"allowMinors":true,"validity":{"kind":"days","days":30}}}"""),
+        "adultAge":19.0,"allowMinors":true,"validity":{"kind":"days","days":30.0}}}"""),
       model.body(model.form("edit"), """{"title":"Rider release","body":"Ride.","checkboxes":["I have read it.","Helmet on."],"adultAge":"19","allowMinors":true,"kind":"days","days":30}"""),
     )
     val fresh = screen(editor, mapOf("waiverId" to ""), "{}")
