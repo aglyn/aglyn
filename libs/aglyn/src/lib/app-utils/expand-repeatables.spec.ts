@@ -21,6 +21,7 @@ import {
   REPEAT_CONNECTION_PROP,
   repeatKey,
   repeatKeys,
+  substituteRecordTokens,
   withoutRepeatDirective,
 } from './expand-repeatables'
 
@@ -508,5 +509,46 @@ describe('visibility bound to a record (AGL-4212)', () => {
     nodes.reply.props = { hideUnless: '{{prop.showReply}}' }
     const [, second] = cardsOf(expandRepeatables(nodes, rows) as Record<string, any>)
     expect(second.nodes).toEqual(['rep__list__1__text', 'rep__list__1__reply'])
+  })
+})
+
+/**
+ * A record's icon is a map, `{ iconId, iconPath }` (AGL-4190). An Icon element
+ * bound to it takes the id as its icon and the path from the same field, so
+ * the live page draws it without the icon catalog.
+ */
+describe("a record's icon field (AGL-4190)", () => {
+  const record = {
+    name: 'Amazon S3',
+    icon: { iconId: 'bucket-outline', iconPath: 'M4,4H20V20H4Z' },
+    location: { latitude: 30.2, longitude: -97.7 },
+  }
+
+  it('reads the icon as its id and its path as a part of the field', () => {
+    expect(
+      substituteRecordTokens(
+        { iconId: '{{item.icon}}', iconPath: '{{item.icon.iconPath}}' },
+        { record },
+      ),
+    ).toEqual({ iconId: 'bucket-outline', iconPath: 'M4,4H20V20H4Z' })
+  })
+
+  it('prints no [object Object] for any other map', () => {
+    expect(substituteRecordTokens({ children: 'At {{item.location}}' }, { record })).toEqual({
+      children: 'At ',
+    })
+  })
+
+  it('still hops a reference before reading a part of a map', () => {
+    expect(
+      substituteRecordTokens(
+        { children: '{{item.author.name}}' },
+        {
+          record: { author: 'a1' },
+          model: { references: { author: 'People' } },
+          datasetsByKey: { People: { records: [{ $id: 'a1', name: 'June' }] } },
+        },
+      ),
+    ).toEqual({ children: 'June' })
   })
 })

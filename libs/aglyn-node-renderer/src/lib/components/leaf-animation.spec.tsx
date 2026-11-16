@@ -190,3 +190,18 @@ describe('Leaf element animation (AGL-2486)', () => {
     expect(el.hidden).toBe(false)
   })
 })
+
+/** "Show to" (AGL-4231): an attribute the published page's style rule reads. */
+describe('Leaf "Show to" signed-in or signed-out visitors (AGL-4231)', () => {
+  it('writes the audience as an attribute and never hands the prop to the element', () => {
+    const el = renderNode({ showTo: 'signedIn' })
+    expect(el.getAttribute('data-aglyn-show-to')).toBe('signedIn')
+    expect(el.getAttribute('showto')).toBeNull()
+  })
+
+  it('writes nothing for everyone', () => {
+    const el = renderNode({ showTo: 'everyone' })
+    expect(el.getAttribute('data-aglyn-show-to')).toBeNull()
+    expect(el.getAttribute('showto')).toBeNull()
+  })
+})

@@ -245,17 +245,17 @@ export const PLUGIN_DOCS = {
   connectOtherAccounting: {
     path: '/commerce-and-bookings/commerce/connect-other-accounting-software',
     title: 'Connect other accounting software',
-    excerpt: 'Post every sale, refund, Aglyn fee and Stripe payout from your store to accounting software other than QuickBooks Online or Xero, such as QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books or Wave. Rolling out.',
+    excerpt: 'Post every sale, refund, Aglyn fee and Stripe payout from your store to accounting software other than QuickBooks Online or Xero, such as QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books or Wave. Not offered yet.',
   },
   connectQuickbooksOnline: {
     path: '/commerce-and-bookings/commerce/connect-quickbooks-online',
     title: 'Connect QuickBooks Online',
-    excerpt: 'Post every sale, refund, Aglyn fee and Stripe payout from your store to QuickBooks Online, mapped to the accounts you choose. Rolling out.',
+    excerpt: 'Post every sale, refund, Aglyn fee and Stripe payout from your store to QuickBooks Online, mapped to the accounts you choose.',
   },
   connectXero: {
     path: '/commerce-and-bookings/commerce/connect-xero',
     title: 'Connect Xero',
-    excerpt: 'Post every sale, refund, Aglyn fee and Stripe payout from your store to Xero, mapped to the accounts you choose. Rolling out.',
+    excerpt: 'Post every sale, refund, Aglyn fee and Stripe payout from your store to Xero, mapped to the accounts you choose.',
   },
   consoleTour: {
     path: '/getting-started/console-tour',

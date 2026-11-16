@@ -16,6 +16,7 @@ of task, not after it goes wrong.
 | cut, update or merge a promotion | `feedback_a_promotion_pr_must_be_a_pinned_branch_not_main.md`, `feedback_open_promotion_pr_carries_all_of_main.md`, `feedback_every_promotion_ends_with_tag_and_rules_deploy.md`, `project_zach_decision_2026_09_29_three_promotions_a_day.md`, `feedback_major_version_only_when_asked.md` |
 | fix how a site looks | `feedback_site_look_fixes_go_in_the_besigner_not_mui_code.md` |
 | write a guide, a site build step or an AI site part | `feedback_no_code_for_users_ever.md` |
+| change anything a person sees in the console, or a native screen | the section "The console and the native apps change together" below |
 | change a legal document | `feedback_legal_gdocs_are_source_of_truth.md`: the Google Doc first, then the website |
 
 For any other kind of task, `grep -rli '<2–3 task keywords>'` that folder and
@@ -75,6 +76,32 @@ The session that sees it owns it to green, in the same turn:
 
 ⛔ "It will roll clear in N hours", "it rides the next promotion" and "a
 peer is on it" are not states a red check may be left in.
+
+## The console and the native apps change together
+
+Standing, 2026-11-16: everything that exists in the console exists in the native
+apps (iPhone, iPad, Mac, Android), except the Besigner itself. Surfaces drifted
+because web PRs landed alone: site pinning (AGL-4005, AGL-4165) reached the
+console in October and neither app had it a month later, and a gap sweep found
+148 more (`docs/mobile/console-parity.md`, "Gap sweep" section).
+
+So a change to anything a person sees or does in the console ships in ONE of
+these two ways, decided before the PR opens:
+
+1. **The same PR changes Apple and Kotlin too**, driven on both, with the Figma
+   file updated (the native rules in `docs/mobile/`). This is the default.
+2. **The PR adds an unticked row to `docs/mobile/console-parity.md`** naming the
+   change and the console file, because the native half is genuinely larger
+   than the web half. The row is the debt; a native lane picks it up.
+
+The reverse holds too: a native change to shared behaviour gets its console
+twin. Every PR body that touches `apps/console`, `libs/plugins/*/src/lib` or a
+native app carries a `Native:` line (or `Console:` for a native PR): "same PR",
+"parity row added: <row>", or "n/a: <why no person-facing change>". A body
+without it is incomplete.
+
+⛔ "The apps can catch up later" with no row is not an option: that is how a
+whole feature goes missing without anyone deciding it should.
 
 ## Every PR body details every change and every commit in it
 
