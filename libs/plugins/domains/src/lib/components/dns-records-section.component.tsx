@@ -37,6 +37,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DOMAINS_API_ROUTES } from '../constants/bundle-common'
+import { findChatgptClaimRecord } from '../model/chatgpt-verification'
 import {
   CAA_TAGS,
   DNS_EDITABLE_TYPES,
@@ -49,6 +50,7 @@ import {
   type DnsRecordInput,
   type DnsRecordView,
 } from '../model/dns-records'
+import { ChatgptVerificationDialog } from './chatgpt-verification-dialog.component'
 import { DomainsRequestError, useDomainsFetch, type DnsAnswer } from './domains-api'
 
 /*
@@ -57,6 +59,9 @@ import { DomainsRequestError, useDomainsFetch, type DnsAnswer } from './domains-
  * for the site the name serves are listed, labeled, and never editable here.
  * A name on another provider's nameservers gets the reason and no editor:
  * its records live there.
+ *
+ * "Verify with ChatGPT" sits beside it either way: the one record ChatGPT
+ * asks a business owner for, added from a paste when the DNS is kept here.
  */
 
 /** The chip on a record the platform keeps, in the deployment's own brand. */
@@ -136,6 +141,7 @@ export function DnsRecordsSection(props: DnsRecordsSectionProps) {
   const [moveError, setMoveError] = useState<string | null>(null)
   /** Set once the registrar took the change; the new nameservers take a while to show. */
   const [moved, setMoved] = useState(false)
+  const [verifyingChatgpt, setVerifyingChatgpt] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -269,6 +275,23 @@ export function DnsRecordsSection(props: DnsRecordsSectionProps) {
   if (loadError) return <Alert severity="warning">{loadError}</Alert>
   if (!answer) return null
 
+  const chatgptButton = (
+    <Button size="small" onClick={() => setVerifyingChatgpt(true)}>
+      {'Verify with ChatGPT'}
+    </Button>
+  )
+  const chatgptDialog = (
+    <ChatgptVerificationDialog
+      open={verifyingChatgpt}
+      orgId={orgId}
+      domain={domain}
+      ours={answer.ours}
+      existing={findChatgptClaimRecord(answer.records)}
+      onClose={() => setVerifyingChatgpt(false)}
+      onSaved={() => void load()}
+    />
+  )
+
   if (!answer.ours) {
     const current = answer.nameservers.length ? answer.nameservers.join(', ') : 'another provider’s nameservers'
     const moving = moved || Boolean(answer.moving)
@@ -278,18 +301,21 @@ export function DnsRecordsSection(props: DnsRecordsSectionProps) {
           <Typography variant="subtitle1" component="h3">
             {'DNS records'}
           </Typography>
-          {moving ? null : (
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => {
-                setMoveError(null)
-                setConfirmingMove(true)
-              }}
-            >
-              {`Use ${PLATFORM_BRAND_NAME}’s nameservers`}
-            </Button>
-          )}
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            {chatgptButton}
+            {moving ? null : (
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => {
+                  setMoveError(null)
+                  setConfirmingMove(true)
+                }}
+              >
+                {`Use ${PLATFORM_BRAND_NAME}’s nameservers`}
+              </Button>
+            )}
+          </Stack>
         </Stack>
         {moving ? (
           <Alert severity="success">
@@ -336,6 +362,7 @@ export function DnsRecordsSection(props: DnsRecordsSectionProps) {
             </Button>
           </DialogActions>
         </Dialog>
+        {chatgptDialog}
       </Stack>
     )
   }
@@ -350,9 +377,12 @@ export function DnsRecordsSection(props: DnsRecordsSectionProps) {
         <Typography variant="subtitle1" component="h3">
           {'DNS records'}
         </Typography>
-        <Button size="small" variant="outlined" onClick={() => open(null)}>
-          {'Add record'}
-        </Button>
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+          {chatgptButton}
+          <Button size="small" variant="outlined" onClick={() => open(null)}>
+            {'Add record'}
+          </Button>
+        </Stack>
       </Stack>
       {answer.siteConnected ? (
         <Typography variant="body2" color="text.secondary">
@@ -369,6 +399,7 @@ export function DnsRecordsSection(props: DnsRecordsSectionProps) {
         onOpen={(_id, row) => open(row as RecordRow)}
       />
 
+      {chatgptDialog}
       <Dialog open={Boolean(editing)} onClose={busy ? undefined : () => setEditing(null)} fullWidth maxWidth="sm">
         <DialogTitle>{editing?.id ? 'Edit record' : 'Add a record'}</DialogTitle>
         <DialogContent>

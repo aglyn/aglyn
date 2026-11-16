@@ -127,3 +127,66 @@ describe('Use our nameservers', () => {
     expect(moveButton()).toBeNull()
   })
 })
+
+describe('Verify with ChatGPT', () => {
+  const VALUE = 'openai-business-claim=pMWmOoxSrczpNWx3baISGFkU5Xl33YxUTyJjCdG1TFk'
+  const open = async () => fireEvent.click(await screen.findByRole('button', { name: 'Verify with ChatGPT' }))
+  const paste = (text: string) =>
+    fireEvent.change(screen.getByLabelText('Value from ChatGPT'), { target: { value: text } })
+  const sent = () => JSON.parse(String((posts()[0][2] as RequestInit).body))
+
+  it('adds the record from a paste when the DNS is kept here', async () => {
+    answers(OURS)
+    render(<DnsRecordsSection orgId="org-1" domain="testbakery.com" />)
+    await open()
+    paste(`"${VALUE}"`)
+    fireEvent.click(screen.getByRole('button', { name: 'Add record' }))
+    expect(await screen.findByText(/choose Verify domain\. If ChatGPT/)).toBeTruthy()
+    expect(sent()).toEqual({
+      orgId: 'org-1',
+      domain: 'testbakery.com',
+      action: 'create',
+      record: { type: 'TXT', name: 'openai-business-claim', value: VALUE, ttl: 60 },
+    })
+  })
+
+  it('replaces the record the domain already has', async () => {
+    const existing = {
+      id: 'rec_9',
+      type: 'TXT',
+      name: 'openai-business-claim',
+      value: 'openai-business-claim=anOlderValue0123456789',
+      ttl: 60,
+      priority: null,
+      managed: false,
+      editable: true,
+    }
+    answers({ ...OURS, records: [existing] })
+    render(<DnsRecordsSection orgId="org-1" domain="testbakery.com" />)
+    await open()
+    expect(screen.getByText(/already has a ChatGPT verification record/)).toBeTruthy()
+    paste(VALUE)
+    fireEvent.click(screen.getByRole('button', { name: 'Replace record' }))
+    await waitFor(() => expect(posts()).toHaveLength(1))
+    expect(sent()).toMatchObject({ action: 'update', recordId: 'rec_9' })
+  })
+
+  it('writes nothing for a paste that is not ChatGPT’s value', async () => {
+    answers(OURS)
+    render(<DnsRecordsSection orgId="org-1" domain="testbakery.com" />)
+    await open()
+    paste('google-site-verification=abc')
+    fireEvent.click(screen.getByRole('button', { name: 'Add record' }))
+    expect(await screen.findByText(/doesn’t look like ChatGPT’s value/)).toBeTruthy()
+    expect(posts()).toHaveLength(0)
+  })
+
+  it('says where the record goes when the DNS is kept elsewhere', async () => {
+    answers(ELSEWHERE)
+    render(<DnsRecordsSection orgId="org-1" domain="testbakery.com" />)
+    await open()
+    expect(screen.getByText(/keeps its DNS with another provider/)).toBeTruthy()
+    expect(screen.queryByLabelText('Value from ChatGPT')).toBeNull()
+    expect(posts()).toHaveLength(0)
+  })
+})
