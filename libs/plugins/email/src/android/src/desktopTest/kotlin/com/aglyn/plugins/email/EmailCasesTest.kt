@@ -18,6 +18,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import com.aglyn.core.sendLinkReport
 
 /** Replays the console's own answers (function-cases.generated.json) through the Email plugin's ports. */
 class EmailCasesTest {

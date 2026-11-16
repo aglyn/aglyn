@@ -37084,6 +37084,159 @@
           null
         ]
       ]
+    },
+    "outreachSequenceReport": {
+      "module": "libs/plugins/outreach/src/lib/model/sequence-report.ts",
+      "args": [
+        [
+          null,
+          false
+        ],
+        [
+          null,
+          true
+        ],
+        [
+          {
+            "sent": 0
+          },
+          true,
+          false
+        ],
+        [
+          {
+            "sent": 12,
+            "people": 8
+          },
+          false
+        ],
+        [
+          {
+            "sent": 12,
+            "people": 8
+          },
+          true
+        ],
+        [
+          {
+            "sent": 40,
+            "people": 20,
+            "clicks": 9,
+            "uniqueClicks": 6,
+            "machineClicks": 3,
+            "clickTracked": true,
+            "lastClickAtMs": 1793000000000
+          },
+          true
+        ],
+        [
+          {
+            "sent": 40,
+            "clicks": 2,
+            "uniqueClicks": 2,
+            "clickTracked": true
+          },
+          true
+        ],
+        [
+          {
+            "sent": 30,
+            "people": 15,
+            "openTracked": true,
+            "openPeople": 10,
+            "opens": 14,
+            "uniqueOpens": 5,
+            "machineOpens": 6,
+            "proxyOpens": 9,
+            "lastOpenAtMs": 1793100000000,
+            "clickTracked": true,
+            "uniqueClicks": 1,
+            "clicks": 1
+          },
+          true,
+          true
+        ],
+        [
+          {
+            "sent": 30,
+            "people": 15,
+            "openTracked": true,
+            "openPeople": 10,
+            "uniqueOpens": 0,
+            "machineOpens": 4
+          },
+          true,
+          true
+        ],
+        [
+          {
+            "sent": 30,
+            "people": 15,
+            "openTracked": true,
+            "openPeople": 10,
+            "uniqueOpens": 3
+          },
+          true,
+          false
+        ],
+        [
+          {
+            "sent": 5,
+            "people": 5
+          },
+          false,
+          true
+        ],
+        [
+          {
+            "sent": "7",
+            "people": -2,
+            "clicks": null,
+            "uniqueClicks": "x",
+            "clickTracked": true
+          },
+          true
+        ]
+      ]
+    },
+    "outreachSequenceLinkReport": {
+      "module": "libs/plugins/outreach/src/lib/model/sequence-report.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "links": {
+              "a": {
+                "url": "https://juniper.example/shop",
+                "clicks": 4
+              },
+              "b": {
+                "url": "https://juniper.example/about",
+                "clicks": 4
+              },
+              "c": {
+                "url": "https://juniper.example/class",
+                "clicks": 1
+              }
+            },
+            "overflowClicks": 0,
+            "unattributedClicks": 2
+          }
+        ],
+        [
+          {
+            "links": {
+              "a": {
+                "url": "https://juniper.example/",
+                "clicks": 3
+              }
+            },
+            "overflowClicks": 5
+          }
+        ]
+      ]
     }
   }
 }
