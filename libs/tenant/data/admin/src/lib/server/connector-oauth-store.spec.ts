@@ -1,0 +1,401 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * @jest-environment node
+ */
+
+/**
+ * The connector store's lifecycle, serially (AGL-4225): a code is spent once
+ * and a second use revokes what it produced, a refresh token rotates and a
+ * reused one revokes the connection, every token dies with its connection,
+ * and nothing secret is ever written down.
+ *
+ * Against an in-memory double that commits a transaction's writes only when
+ * its body resolves. What a double cannot prove — that two CONCURRENT
+ * exchanges cannot both commit — is `connector-oauth-store.emulator.spec.ts`.
+ */
+
+type Data = Record<string, unknown>
+const mockDocs = new Map<string, Data>()
+
+jest.mock('firebase-admin/firestore', () => ({
+  __esModule: true,
+  Timestamp: { fromMillis: (ms: number) => ({ toMillis: () => ms }) },
+}))
+
+jest.mock('./organizations', () => ({
+  resolveOrgMembership: jest.fn(),
+  memberHasOrgPermission: jest.fn(),
+}))
+jest.mock('./lockdown', () => ({ getLockdownVerdict: jest.fn() }))
+
+jest.mock('./firebase-admin', () => {
+  const ref = (collection: string, id: string) => {
+    const key = `${collection}/${id}`
+    const snapshot = () => {
+      const data = mockDocs.get(key)
+      return { id, exists: data !== undefined, data: () => (data ? { ...data } : undefined), ref: self }
+    }
+    const self = {
+      id,
+      key,
+      get: async () => snapshot(),
+      create: async (data: Data) => {
+        if (mockDocs.has(key)) throw new Error(`already exists: ${key}`)
+        mockDocs.set(key, { ...data })
+      },
+      set: async (data: Data) => void mockDocs.set(key, { ...data }),
+      update: async (patch: Data) => {
+        if (!mockDocs.has(key)) throw new Error(`no document: ${key}`)
+        mockDocs.set(key, { ...mockDocs.get(key), ...patch })
+      },
+      delete: async () => void mockDocs.delete(key),
+    }
+    return self
+  }
+  const query = (collection: string, filters: Array<[string, unknown]>) => ({
+    where: (field: string, _op: string, value: unknown) => query(collection, [...filters, [field, value]]),
+    get: async () => {
+      const docs = [...mockDocs.entries()]
+        .filter(([key]) => key.startsWith(`${collection}/`))
+        .filter(([, data]) => filters.every(([field, value]) => data[field] === value))
+        .map(([key, data]) => ({ id: key.slice(collection.length + 1), data: () => ({ ...data }) }))
+      return { docs, empty: docs.length === 0 }
+    },
+  })
+  const firestore = {
+    collection: (name: string) => ({
+      doc: (id: string) => ref(name, id),
+      ...query(name, []),
+    }),
+    runTransaction: async <T>(body: (tx: unknown) => Promise<T>): Promise<T> => {
+      const writes: Array<() => Promise<void>> = []
+      type R = ReturnType<typeof ref>
+      const tx = {
+        get: (target: R) => target.get(),
+        create: (target: R, data: Data) => void writes.push(() => target.create(data)),
+        update: (target: R, data: Data) => void writes.push(() => target.update(data)),
+        set: (target: R, data: Data) => void writes.push(() => target.set(data)),
+        delete: (target: R) => void writes.push(() => target.delete()),
+      }
+      const result = await body(tx)
+      for (const write of writes) await write()
+      return result
+    },
+  }
+  return { firebaseAdmin: { app: () => ({ firestore: () => firestore }) } }
+})
+
+import {
+  type ConnectorLiveness,
+  disconnectConnectorGrant,
+  exchangeConnectorCode,
+  listConnectorGrants,
+  mintConnectorCode,
+  readConnectorClient,
+  readConnectorGrantAsKey,
+  refreshConnectorTokens,
+  registerConnectorClient,
+  revokeConnectorToken,
+  verifyConnectorAccessToken,
+} from './connector-oauth-store'
+import { CONNECTOR_CLIENT_IDLE_TTL_MS, CONNECTOR_CODE_TTL_MS, pkceS256Challenge } from './connector-oauth'
+
+const NOW = Date.UTC(2026, 10, 16, 12)
+const CLAUDE = 'https://claude.ai/api/mcp/auth_callback'
+const VERIFIER = 'a'.repeat(20) + 'B'.repeat(23) + '-._~'
+const CHALLENGE = pkceS256Challenge(VERIFIER)
+
+let verdict: ConnectorLiveness = 'live'
+const liveness = jest.fn(async () => verdict)
+const opts = (now = NOW) => ({ now, liveness })
+
+async function connect(scopes = ['contacts:read', 'contacts:write'], orgId = 'org-1', uid = 'user-1') {
+  const client = await registerConnectorClient({ clientName: 'Claude', redirectUris: [CLAUDE] }, NOW)
+  const code = await mintConnectorCode(
+    {
+      clientId: client.clientId,
+      redirectUri: CLAUDE,
+      codeChallenge: CHALLENGE,
+      orgId,
+      uid,
+      email: 'owner@example.com',
+      scopes: scopes as never,
+      resource: 'https://app.example.com/api/mcp',
+    },
+    NOW,
+  )
+  return { client, code }
+}
+
+const exchange = (client: { clientId: string }, code: string, overrides: Record<string, unknown> = {}, now = NOW) =>
+  exchangeConnectorCode(
+    { code, clientId: client.clientId, redirectUri: CLAUDE, codeVerifier: VERIFIER, ...overrides },
+    opts(now),
+  )
+
+async function connected(scopes?: string[], orgId?: string, uid?: string) {
+  const { client, code } = await connect(scopes, orgId, uid)
+  const result = await exchange(client, code)
+  if (!result.ok) throw new Error(result.description)
+  return { client, code, result }
+}
+
+const grantDocs = () =>
+  [...mockDocs.entries()].filter(([key]) => key.startsWith('oauthGrants/')).map(([, data]) => data)
+
+beforeEach(() => {
+  mockDocs.clear()
+  verdict = 'live'
+  liveness.mockClear()
+})
+
+describe('registration', () => {
+  it('reads back a live client and forgets a lapsed one', async () => {
+    const client = await registerConnectorClient({ clientName: 'Claude', redirectUris: [CLAUDE] }, NOW)
+    expect(await readConnectorClient(client.clientId, NOW)).toEqual({
+      clientId: client.clientId,
+      clientName: 'Claude',
+      redirectUris: [CLAUDE],
+    })
+    expect(await readConnectorClient(client.clientId, NOW + CONNECTOR_CLIENT_IDLE_TTL_MS)).toBeNull()
+    expect(await readConnectorClient('aglyn_client_nope', NOW)).toBeNull()
+  })
+})
+
+describe('the code exchange', () => {
+  it('creates one connection and resolves its access token to the workspace, the app and the person', async () => {
+    const { result } = await connected()
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.tokens).toMatchObject({
+      token_type: 'Bearer',
+      expires_in: 3600,
+      scope: 'contacts:read contacts:write',
+    })
+    expect(result.connected).toMatchObject({ orgId: 'org-1', uid: 'user-1', clientName: 'Claude' })
+    const verified = await verifyConnectorAccessToken(result.tokens.access_token, opts())
+    expect(verified).toEqual({
+      orgId: 'org-1',
+      keyId: result.connected?.grantId,
+      scopes: ['contacts:read', 'contacts:write'],
+      name: 'Claude',
+      uid: 'user-1',
+    })
+    // The full check at exchange: lock and plan as well as membership.
+    expect(liveness).toHaveBeenCalledWith('org-1', 'user-1', { lockdown: true, entitlement: true })
+  })
+
+  it('refuses a wrong verifier, client or address WITHOUT spending the code', async () => {
+    const { client, code } = await connect()
+    expect(await exchange(client, code, { codeVerifier: 'b'.repeat(43) })).toMatchObject({ ok: false, error: 'invalid_grant' })
+    expect(await exchange(client, code, { clientId: 'aglyn_client_someoneelse0000' })).toMatchObject({ ok: false })
+    expect(await exchange(client, code, { redirectUri: 'http://localhost:9/cb' })).toMatchObject({ ok: false })
+    expect(await exchange(client, code, { resource: 'https://app.example.com/api/other' })).toMatchObject({ ok: false })
+    expect(grantDocs()).toHaveLength(0)
+    expect((await exchange(client, code)).ok).toBe(true)
+  })
+
+  it('spends a code once, and a second use revokes the connection the first produced', async () => {
+    const { client, code, result } = await connected()
+    if (!result.ok) throw new Error('unreachable')
+    const replay = await exchange(client, code)
+    expect(replay).toMatchObject({ ok: false, error: 'invalid_grant' })
+    expect(grantDocs()[0]).toMatchObject({ revokedReason: 'code_replayed' })
+    expect(await verifyConnectorAccessToken(result.tokens.access_token, opts())).toBeNull()
+    expect(await refreshConnectorTokens({ refreshToken: result.tokens.refresh_token, clientId: client.clientId }, opts())).toMatchObject({ ok: false })
+  })
+
+  it('refuses an expired code', async () => {
+    const { client, code } = await connect()
+    expect(await exchange(client, code, {}, NOW + CONNECTOR_CODE_TTL_MS)).toMatchObject({ ok: false, error: 'invalid_grant' })
+  })
+
+  it('creates nothing when the person no longer may connect the workspace', async () => {
+    const { client, code } = await connect()
+    verdict = 'no_permission'
+    expect(await exchange(client, code)).toMatchObject({ ok: false, error: 'invalid_grant' })
+    expect(grantDocs()).toHaveLength(0)
+  })
+
+  it('replaces an earlier connection of the same app, workspace and person — and nothing else', async () => {
+    const client = await registerConnectorClient({ clientName: 'Claude', redirectUris: [CLAUDE] }, NOW)
+    const approve = async (orgId: string) => {
+      const code = await mintConnectorCode(
+        { clientId: client.clientId, redirectUri: CLAUDE, codeChallenge: CHALLENGE, orgId, uid: 'user-1', email: null, scopes: ['contacts:read'], resource: null },
+        NOW,
+      )
+      const result = await exchange(client, code)
+      if (!result.ok) throw new Error(result.description)
+      return result
+    }
+    const first = await approve('org-1')
+    const other = await approve('org-2')
+    const second = await approve('org-1')
+    expect(await verifyConnectorAccessToken(first.tokens.access_token, opts())).toBeNull()
+    expect(await verifyConnectorAccessToken(other.tokens.access_token, opts())).not.toBeNull()
+    expect(await verifyConnectorAccessToken(second.tokens.access_token, opts())).not.toBeNull()
+    expect(await listConnectorGrants('org-1', NOW)).toHaveLength(1)
+  })
+})
+
+describe('refresh', () => {
+  it('rotates: the new pair works and the old refresh token is spent', async () => {
+    const { client, result } = await connected()
+    if (!result.ok) throw new Error('unreachable')
+    const next = await refreshConnectorTokens({ refreshToken: result.tokens.refresh_token, clientId: client.clientId }, opts(NOW + 1000))
+    if (!next.ok) throw new Error(next.description)
+    expect(next.tokens.refresh_token).not.toBe(result.tokens.refresh_token)
+    expect(await verifyConnectorAccessToken(next.tokens.access_token, opts(NOW + 1000))).not.toBeNull()
+    expect(liveness).toHaveBeenLastCalledWith('org-1', 'user-1')
+  })
+
+  it('a reused refresh token revokes the whole connection, including the token that replaced it', async () => {
+    const { client, result } = await connected()
+    if (!result.ok) throw new Error('unreachable')
+    const next = await refreshConnectorTokens({ refreshToken: result.tokens.refresh_token, clientId: client.clientId }, opts())
+    if (!next.ok) throw new Error(next.description)
+    const reuse = await refreshConnectorTokens({ refreshToken: result.tokens.refresh_token, clientId: client.clientId }, opts())
+    expect(reuse).toMatchObject({ ok: false, error: 'invalid_grant' })
+    expect(grantDocs()[0]).toMatchObject({ revokedReason: 'refresh_replayed' })
+    expect(await refreshConnectorTokens({ refreshToken: next.tokens.refresh_token, clientId: client.clientId }, opts())).toMatchObject({ ok: false })
+    expect(await verifyConnectorAccessToken(next.tokens.access_token, opts())).toBeNull()
+  })
+
+  it('refuses another client’s refresh token without revoking anything', async () => {
+    const { result } = await connected()
+    if (!result.ok) throw new Error('unreachable')
+    expect(
+      await refreshConnectorTokens({ refreshToken: result.tokens.refresh_token, clientId: 'aglyn_client_someoneelse0000' }, opts()),
+    ).toMatchObject({ ok: false, error: 'invalid_grant' })
+    expect(grantDocs()[0].revokedAt).toBeNull()
+  })
+
+  it('may narrow the access, never widen it', async () => {
+    const { client, result } = await connected(['contacts:read'])
+    if (!result.ok) throw new Error('unreachable')
+    expect(
+      await refreshConnectorTokens({ refreshToken: result.tokens.refresh_token, clientId: client.clientId, scope: 'contacts:read contacts:write' }, opts()),
+    ).toMatchObject({ ok: false, error: 'invalid_scope' })
+    const narrowed = await refreshConnectorTokens({ refreshToken: result.tokens.refresh_token, clientId: client.clientId, scope: 'contacts:read' }, opts())
+    expect(narrowed).toMatchObject({ ok: true, tokens: { scope: 'contacts:read' } })
+  })
+
+  it('ends the connection when the person lost access or the workspace is locked', async () => {
+    const { client, result } = await connected()
+    if (!result.ok) throw new Error('unreachable')
+    verdict = 'locked'
+    expect(
+      await refreshConnectorTokens({ refreshToken: result.tokens.refresh_token, clientId: client.clientId }, opts()),
+    ).toMatchObject({ ok: false, error: 'invalid_grant' })
+    expect(grantDocs()[0]).toMatchObject({ revokedReason: 'locked' })
+  })
+})
+
+describe('verification', () => {
+  it('a removed member’s app stops on its next call, and the connection is ended', async () => {
+    const { result } = await connected()
+    if (!result.ok) throw new Error('unreachable')
+    verdict = 'not_member'
+    expect(await verifyConnectorAccessToken(result.tokens.access_token, opts())).toBeNull()
+    expect(grantDocs()[0]).toMatchObject({ revokedReason: 'not_member' })
+  })
+
+  it('an access token lasts an hour', async () => {
+    const { result } = await connected()
+    if (!result.ok) throw new Error('unreachable')
+    expect(await verifyConnectorAccessToken(result.tokens.access_token, opts(NOW + 3_599_000))).not.toBeNull()
+    expect(await verifyConnectorAccessToken(result.tokens.access_token, opts(NOW + 3_600_000))).toBeNull()
+  })
+
+  it('answers null without revoking when a read fails', async () => {
+    const { result } = await connected()
+    if (!result.ok) throw new Error('unreachable')
+    const failing = jest.fn(async () => {
+      throw new Error('firestore unavailable')
+    })
+    expect(await verifyConnectorAccessToken(result.tokens.access_token, { now: NOW, liveness: failing })).toBeNull()
+    expect(grantDocs()[0].revokedAt).toBeNull()
+  })
+})
+
+describe('revocation endpoint', () => {
+  it('a refresh token ends the connection; an access token ends only itself; another client changes nothing', async () => {
+    const a = await connected()
+    if (!a.result.ok) throw new Error('unreachable')
+    await revokeConnectorToken({ token: a.result.tokens.refresh_token, clientId: 'aglyn_client_someoneelse0000' }, NOW)
+    expect(await verifyConnectorAccessToken(a.result.tokens.access_token, opts())).not.toBeNull()
+
+    await revokeConnectorToken({ token: a.result.tokens.access_token, clientId: a.client.clientId }, NOW)
+    expect(await verifyConnectorAccessToken(a.result.tokens.access_token, opts())).toBeNull()
+    const again = await refreshConnectorTokens({ refreshToken: a.result.tokens.refresh_token, clientId: a.client.clientId }, opts())
+    if (!again.ok) throw new Error(again.description)
+
+    await revokeConnectorToken({ token: again.tokens.refresh_token, clientId: a.client.clientId }, NOW)
+    expect(await verifyConnectorAccessToken(again.tokens.access_token, opts())).toBeNull()
+    expect(grantDocs()[0]).toMatchObject({ revokedReason: 'client_revoked' })
+  })
+
+  it('ignores junk and unknown tokens', async () => {
+    await expect(revokeConnectorToken({ token: 'nope', clientId: 'x' }, NOW)).resolves.toBeUndefined()
+  })
+})
+
+describe('Connected apps', () => {
+  it('lists live connections without secrets, and disconnects only this workspace’s', async () => {
+    const { result } = await connected(['contacts:read'])
+    if (!result.ok) throw new Error('unreachable')
+    const listed = await listConnectorGrants('org-1', NOW)
+    expect(listed).toEqual([
+      {
+        grantId: result.connected?.grantId,
+        appName: 'Claude',
+        returnsTo: 'claude.ai',
+        connectedBy: 'owner@example.com',
+        connectedAt: new Date(NOW).toISOString(),
+        lastUsedAt: new Date(NOW).toISOString(),
+        access: 'view',
+      },
+    ])
+    expect(JSON.stringify(listed)).not.toMatch(/aglyn_(at|rt|ac)_/)
+
+    expect(await disconnectConnectorGrant('org-2', result.connected?.grantId, NOW)).toEqual({ disconnected: false, appName: null })
+    expect(await disconnectConnectorGrant('org-1', result.connected?.grantId, NOW)).toEqual({ disconnected: true, appName: 'Claude' })
+    expect(await listConnectorGrants('org-1', NOW)).toEqual([])
+    expect(await verifyConnectorAccessToken(result.tokens.access_token, opts())).toBeNull()
+    expect(await disconnectConnectorGrant('org-1', result.connected?.grantId, NOW)).toEqual({ disconnected: false, appName: null })
+  })
+
+  it('reads a connection the way a REST hook reads its key, until it ends', async () => {
+    const { result } = await connected(['contacts:read'])
+    if (!result.ok) throw new Error('unreachable')
+    const grantId = result.connected?.grantId as string
+    expect(await readConnectorGrantAsKey('org-1', grantId, opts())).toEqual({ keyId: grantId, name: 'Claude', scopes: ['contacts:read'] })
+    expect(await readConnectorGrantAsKey('org-2', grantId, opts())).toBeNull()
+    await disconnectConnectorGrant('org-1', grantId, NOW)
+    expect(await readConnectorGrantAsKey('org-1', grantId, opts())).toBeNull()
+  })
+})
+
+it('never writes a code, a token or a verifier down — only their hashes', async () => {
+  const { client, code, result } = await connected()
+  if (!result.ok) throw new Error('unreachable')
+  const next = await refreshConnectorTokens({ refreshToken: result.tokens.refresh_token, clientId: client.clientId }, opts())
+  if (!next.ok) throw new Error(next.description)
+  const stored = JSON.stringify([...mockDocs.entries()])
+  for (const secret of [code, VERIFIER, result.tokens.access_token, result.tokens.refresh_token, next.tokens.access_token, next.tokens.refresh_token]) {
+    expect(stored).not.toContain(secret)
+  }
+})
