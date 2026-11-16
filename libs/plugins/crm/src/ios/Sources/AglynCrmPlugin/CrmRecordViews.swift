@@ -32,6 +32,13 @@ struct RecordsSection: View {
   @State private var search = ""
   @State private var selection: String?
   @State private var creating = false
+  /// Picking several rows for one act (the console's ticked rows and its bulk bar).
+  @State private var selecting = false
+  @State private var picked = Set<String>()
+  @State private var bulkAction: CrmBulkAction?
+  @State private var confirming: CrmBulkAction?
+  @State private var bulkBusy = false
+  @State private var bulkResult: CrmBulkResult?
 
   private var filters: [CrmFilter] { (contactEmailFilter(openEmail).map { [$0] } ?? []) + crmFilters(kind, scope) }
 
@@ -81,7 +88,29 @@ struct RecordsSection: View {
       startedNew = true
       creating = true
     }
+    .sheet(item: $bulkAction) { action in
+      let rows = pickedRows
+      CrmBulkSheet(
+        action: action, kind: kind, count: rows.count, reference: reference,
+        pipeline: kind == .deal ? crmBulkPipeline(rows).map { reference.pipeline($0) } : nil
+      ) { value in await runBulk(action, rows: rows, value: value) }
+    }
+    .alert(
+      confirmation?.title ?? "", isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),
+      presenting: confirming
+    ) { action in
+      Button("Cancel", role: .cancel) { confirming = nil }
+      Button(confirmation?.button ?? action.label, role: .destructive) {
+        let rows = pickedRows
+        confirming = nil
+        Task { await runBulk(action, rows: rows, value: CrmBulkValue()) }
+      }
+      .accessibilityIdentifier("crm-bulk-confirm")
+    } message: { _ in
+      Text(confirmation?.message ?? "")
+    }
     .task(id: "\(filterID)|\(search)") {
+      picked = []
       if filterID.isEmpty { filterID = filters.first?.id ?? "" }
       if selection == nil { selection = initial }
       let filter = filters.first { $0.id == filterID } ?? filters[0]
@@ -94,14 +123,69 @@ struct RecordsSection: View {
   }
 
   private var chips: some View {
-    ScrollView(.horizontal, showsIndicators: false) {
-      HStack(spacing: AglynSpace.one) {
-        ForEach(filters) { filter in
-          AglynChoiceChip(filter.label, selected: filterID == filter.id) { filterID = filter.id }
+    HStack(spacing: 0) {
+      ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: AglynSpace.one) {
+          ForEach(filters) { filter in
+            AglynChoiceChip(filter.label, selected: filterID == filter.id) { filterID = filter.id }
+          }
         }
+        .aglynContentEdges()
+        .padding(.vertical, AglynSpace.one)
+      }
+      if scope.canWrite {
+        CrmSelectToggle(selecting: $selecting) { picked = [] }
+          .aglynContentEdges()
+      }
+    }
+  }
+
+  /// The ticked rows the list still shows, as the bar reads them.
+  private var pickedRows: [CrmBulkRow] {
+    (list?.rows ?? []).filter { picked.contains($0.id) }.map { crmBulkRow($0, scope: scope) }
+  }
+
+  private var confirmation: CrmBulkConfirm? {
+    confirming.flatMap { crmBulkConfirm($0, noun: CrmBulkNoun(kind), count: picked.count) }
+  }
+
+  /// Whether the role may use an act: every act writes, the stage acts ask "Move contacts and deals between stages",
+  /// and a workspace whose plan lacks the CRM keeps a contact's owner, stage and company locked.
+  private func bulkEnabled(_ action: CrmBulkAction) -> Bool {
+    guard scope.canWrite else { return false }
+    if (action == .stage || action == .lost) && !scope.movesStages(on: nil) { return false }
+    if kind == .contact && !scope.suite && [.owner, .stage, .company].contains(action) { return false }
+    return true
+  }
+
+  private func pickBulk(_ action: CrmBulkAction) {
+    bulkResult = nil
+    if action.confirms { confirming = action } else { bulkAction = action }
+  }
+
+  private func runBulk(_ action: CrmBulkAction, rows: [CrmBulkRow], value: CrmBulkValue) async {
+    bulkBusy = true
+    let result = await api.bulk(action, kind: kind, rows: rows, value: value, reference: reference)
+    bulkBusy = false
+    bulkResult = result
+    // The rows a delete removed are gone from the list; the refused ones stay ticked so the reader sees which.
+    if action.destructive { picked = Set(result.keep) }
+    list?.retry()
+  }
+
+  @ViewBuilder
+  private var bulkBar: some View {
+    if selecting && !picked.isEmpty || bulkResult != nil {
+      VStack(spacing: AglynSpace.one) {
+        if selecting && !picked.isEmpty {
+          CrmBulkBar(
+            count: picked.count, actions: crmBulkActions(kind, orgLevel: scope.orgLevel), busy: bulkBusy, enabled: bulkEnabled,
+            pick: pickBulk, clear: { picked = [] })
+        }
+        CrmBulkNotices(result: $bulkResult)
       }
       .aglynContentEdges()
-      .padding(.vertical, AglynSpace.one)
+      .padding(.bottom, AglynSpace.one)
     }
   }
 
@@ -109,6 +193,7 @@ struct RecordsSection: View {
   private func listPane(selectable: Bool) -> some View {
     VStack(spacing: 0) {
       chips
+      bulkBar
       if let list {
         if !list.ready {
           List { SkeletonRows(count: 6) }.aglynListBackground()
@@ -141,7 +226,9 @@ struct RecordsSection: View {
   private func rows(_ list: LiveQueryList<CrmRow>, selectable: Bool) -> some View {
     ForEach(list.rows) { row in
       Group {
-        if selectable {
+        if selecting {
+          CrmPickRow(picked: picked.contains(row.id), toggle: { toggle(row.id) }) { CrmRowView(row: row, reference: reference) }
+        } else if selectable {
           CrmRowView(row: row, reference: reference).aglynSelectableRow(row.id, selection: $selection)
         } else {
           AglynPushLink {
@@ -157,6 +244,10 @@ struct RecordsSection: View {
     if list.hasMore {
       Button("Show more") { list.loadMore() }.frame(maxWidth: .infinity)
     }
+  }
+
+  private func toggle(_ id: String) {
+    if picked.contains(id) { picked.remove(id) } else { picked.insert(id) }
   }
 }
 

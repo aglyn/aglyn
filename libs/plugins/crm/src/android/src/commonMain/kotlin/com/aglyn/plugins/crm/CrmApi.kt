@@ -48,6 +48,7 @@ object CrmRoutes {
   const val EMAIL_SEND = "/api/crm/email-send"
   const val PICKLIST_VALUES = "/api/crm/picklist-values"
   const val MEMBERS = "/api/orgs/members"
+  const val ORG_ACTIVITY = "/api/crm/org-activity"
 }
 
 /** A new document id, as `createResourceUid` mints them: twenty URL-safe characters. */
@@ -181,6 +182,25 @@ class CrmApi(private val api: ConsoleApiClient, private val writer: FirestoreWri
     return (answer?.get("removed") as? JsonPrimitive)?.contentOrNull
   }
 
+  /** `crm/contact-update` for many contacts at once: one answer per contact (the bulk bar's `updateMany`). */
+  suspend fun updateContacts(ids: List<String>, set: Map<String, Any?>): List<CrmBulkAnswer> =
+    crmBulkAnswers(api.request(CrmRoutes.CONTACT_UPDATE, ApiMethod.POST, firestoreJson(scope.routeScope + mapOf("contactIds" to ids, "set" to set))))
+
+  /** A contact's stage on a named site: the workspace's bulk bar moves each row on the site that holds it. */
+  suspend fun setContactStage(id: String, stage: String?, site: String) {
+    api.request(CrmRoutes.CONTACT_STAGE, ApiMethod.POST, firestoreJson(mapOf("orgId" to scope.orgId, "hostId" to site, "contactId" to id, "lifecycleStage" to stage)))
+  }
+
+  /** `crm/contact-remove` for many contacts at once: one answer per contact. */
+  suspend fun removeContacts(ids: List<String>): List<CrmBulkAnswer> =
+    crmBulkAnswers(api.request(CrmRoutes.CONTACT_REMOVE, ApiMethod.POST, body("contactIds" to ids)))
+
+  /** A bulk act's line in the workspace's activity feed (`crm/org-activity`), from the workspace's own CRM. A miss never fails the act. */
+  suspend fun logBulk(sentence: String, kind: String, done: Int) {
+    if (!scope.workspaceWide || done == 0) return
+    quietly { api.request(CrmRoutes.ORG_ACTIVITY, ApiMethod.POST, firestoreJson(mapOf("orgId" to scope.orgId, "action" to sentence, "target" to mapOf("type" to kind)))) }
+  }
+
   /** A lead's status, as the console's status menu writes it: the meaning and its label. */
   suspend fun setLeadStatus(id: String, status: String, label: String, reason: String? = null) {
     updateRecord(
@@ -266,6 +286,12 @@ class CrmApi(private val api: ConsoleApiClient, private val writer: FirestoreWri
   suspend fun deleteTask(taskId: String, links: Map<String, String?>) {
     writer.delete("${crmPath(scope.orgId, "crmTasks")}/$taskId")
     refreshNextActivity(links)
+  }
+
+  /** A task's due date, as the bulk bar sets it: the document under the rules, then the linked records' next activity. */
+  suspend fun setTaskDue(task: CrmTask, dueAtMs: Long?) {
+    writer.merge("${crmPath(scope.orgId, "crmTasks")}/${task.id}", mapOf("dueAtMs" to dueAtMs, "updatedAt" to firestoreNow()))
+    refreshNextActivity(task.links)
   }
 
   private suspend fun refreshNextActivity(links: Map<String, String?>) {

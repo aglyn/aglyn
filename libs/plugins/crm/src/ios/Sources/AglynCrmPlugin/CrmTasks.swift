@@ -266,17 +266,52 @@ struct TasksSection: View {
   @State private var search = ""
   @State private var editing: CrmTask?
   @State private var creating = false
+  /// Picking several tasks for one act (the console's ticked rows and its bulk bar).
+  @State private var selecting = false
+  @State private var picked = Set<String>()
+  @State private var bulkAction: CrmBulkAction?
+  @State private var confirming: CrmBulkAction?
+  @State private var bulkBusy = false
+  @State private var bulkResult: CrmBulkResult?
+
+  private var pickedTasks: [CrmTask] { list.rows.filter { picked.contains($0.id) } }
 
   var body: some View {
     VStack(spacing: 0) {
-      Picker("View", selection: $view) {
-        ForEach(TaskView.allCases) { Text($0.label).tag($0) }
+      HStack {
+        Picker("View", selection: $view) {
+          ForEach(TaskView.allCases) { Text($0.label).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .fixedSize()
+        Spacer(minLength: AglynSpace.one)
+        if scope.canWrite { CrmSelectToggle(selecting: $selecting) { picked = [] } }
       }
-      .pickerStyle(.segmented)
-      .fixedSize()
       .frame(maxWidth: .infinity, alignment: .leading)
       .aglynContentEdges()
       .padding(.vertical, AglynSpace.two)
+      if selecting && !picked.isEmpty || bulkResult != nil {
+        VStack(spacing: AglynSpace.one) {
+          if selecting && !picked.isEmpty {
+            CrmBulkBar(
+              count: picked.count, actions: crmBulkTaskActions, busy: bulkBusy, enabled: { _ in scope.canWrite },
+              pick: { action in
+                bulkResult = nil
+                if action.confirms {
+                  confirming = action
+                } else if action.immediate {
+                  let tasks = pickedTasks
+                  Task { await runBulk(action, tasks: tasks, value: CrmBulkValue()) }
+                } else {
+                  bulkAction = action
+                }
+              }, clear: { picked = [] })
+          }
+          CrmBulkNotices(result: $bulkResult)
+        }
+        .aglynContentEdges()
+        .padding(.bottom, AglynSpace.one)
+      }
       if !list.ready {
         List { SkeletonRows(count: 6) }.aglynListBackground()
       } else if let failure = list.failure {
@@ -286,6 +321,12 @@ struct TasksSection: View {
       } else {
         List {
           ForEach(list.rows) { task in
+            if selecting {
+              CrmPickRow(picked: picked.contains(task.id), toggle: {
+                if picked.contains(task.id) { picked.remove(task.id) } else { picked.insert(task.id) }
+              }) { TaskRowView(task: task, reference: reference) }
+              .aglynListRow()
+            } else {
             TaskRowView(
               task: task, reference: reference,
               onToggle: scope.canWrite
@@ -298,6 +339,7 @@ struct TasksSection: View {
             .contentShape(Rectangle())
             .onTapGesture { if scope.canWrite { editing = task } }
             .aglynListRow()
+            }
           }
           if list.hasMore { Button("Show more") { list.loadMore() }.frame(maxWidth: .infinity) }
         }
@@ -308,7 +350,28 @@ struct TasksSection: View {
     .aglynSearchable(text: $searchText, prompt: "Search tasks", onSubmit: { search = searchText })
     .onChange(of: searchText) { _, text in if text.isEmpty { search = "" } }
     .aglynPrimaryAction(id: "crm-new-task", "New task", systemImage: "plus", enabled: scope.canWrite, help: permissionRefusalText(ContractValues.shared.orgRoleGrants, key: "data.manage")) { creating = true }
+    .sheet(item: $bulkAction) { action in
+      let tasks = pickedTasks
+      CrmBulkSheet(action: action, kind: nil, count: tasks.count, reference: reference, initialDue: tasks.first?.dueAtMs) { value in
+        await runBulk(action, tasks: tasks, value: value)
+      }
+    }
+    .alert(
+      confirming.flatMap { crmBulkConfirm($0, noun: .task, count: picked.count) }?.title ?? "",
+      isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }), presenting: confirming
+    ) { action in
+      Button("Cancel", role: .cancel) { confirming = nil }
+      Button(crmBulkConfirm(action, noun: .task, count: picked.count)?.button ?? action.label, role: .destructive) {
+        let tasks = pickedTasks
+        confirming = nil
+        Task { await runBulk(action, tasks: tasks, value: CrmBulkValue()) }
+      }
+      .accessibilityIdentifier("crm-bulk-confirm")
+    } message: { action in
+      Text(crmBulkConfirm(action, noun: .task, count: picked.count)?.message ?? "")
+    }
     .task(id: "\(view.rawValue)|\(search)") {
+      picked = []
       let plan = taskViewPlan(view, nowMs: Int64(Date().timeIntervalSince1970 * 1000), uid: scope.uid)
       let search = search
       list.show(context.firestore) { tasksQuery(scope, plan, search: search, limit: $0) }
@@ -330,5 +393,14 @@ struct TasksSection: View {
         try await api.saveTask(task.id, $0)
       }
     }
+  }
+
+  private func runBulk(_ action: CrmBulkAction, tasks: [CrmTask], value: CrmBulkValue) async {
+    bulkBusy = true
+    let result = await api.bulkTasks(action, tasks: tasks, value: value, reference: reference)
+    bulkBusy = false
+    bulkResult = result
+    if action == .delete || action == .complete { picked = Set(result.keep) }
+    list.retry()
   }
 }
