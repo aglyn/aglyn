@@ -40,7 +40,7 @@ public enum SetupSection: String, CaseIterable, Identifiable, Sendable {
 
   public var supporting: String {
     switch self {
-    case .details: "Logo, business details, layout and languages"
+    case .details: "Logo, layout and languages"
     case .business: "What the business is, for everything that writes about it"
     case .seo: "Search title, social image, business profile and verification"
     case .tracking: "Analytics, ad tags and the consent banner"

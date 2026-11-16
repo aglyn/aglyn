@@ -64243,7 +64243,7 @@
                       "id": "details",
                       "surface": "setupSection"
                     },
-                    "description": "Logo, business details, layout and languages",
+                    "description": "Logo, layout and languages",
                     "icon": {
                       "android": "info",
                       "apple": "info.circle"
@@ -64421,7 +64421,7 @@
                       "id": "details",
                       "surface": "setupSection"
                     },
-                    "description": "Logo, business details, layout and languages",
+                    "description": "Logo, layout and languages",
                     "icon": {
                       "android": "info",
                       "apple": "info.circle"
