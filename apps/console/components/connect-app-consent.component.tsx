@@ -217,6 +217,7 @@ export function ConnectAppConsent({ navigate = assignLocation }: ConnectAppConse
           </CardDisplay>
         ) : (
           <ConsentCard
+            account={user?.email ?? null}
             description={phase.description}
             orgId={orgId}
             onOrgId={setOrgId}
@@ -235,6 +236,8 @@ export function ConnectAppConsent({ navigate = assignLocation }: ConnectAppConse
 ConnectAppConsent.displayName = 'ConnectAppConsent'
 
 interface ConsentCardProps {
+  /** The signed-in address doing the approving, so a wrong account is seen. */
+  account: string | null
   description: Description
   orgId: string
   onOrgId: (orgId: string) => void
@@ -247,7 +250,7 @@ interface ConsentCardProps {
 }
 
 function ConsentCard(props: ConsentCardProps) {
-  const { description, orgId, onOrgId, level, onLevel, busy, problem, onAllow, onCancel } = props
+  const { account, description, orgId, onOrgId, level, onLevel, busy, problem, onAllow, onCancel } = props
   const { app, workspaces, access } = description
   const planLabel = planLabelGrantingFeature('apiAccess') ?? 'Pro'
   const chosen = access.find((choice) => choice.level === level) ?? access[0]
@@ -265,6 +268,17 @@ function ConsentCard(props: ConsentCardProps) {
       contentGutterY
     >
       <Stack spacing={3}>
+        <Stack spacing={1}>
+          {account ? (
+            <Typography variant="body2">
+              {'Signed in as '}
+              <strong>{account}</strong>
+            </Typography>
+          ) : null}
+          <Alert severity="warning">
+            {`Only continue if you started connecting ${app.name} yourself, just now. If you didn’t, choose Cancel.`}
+          </Alert>
+        </Stack>
         {workspaces.length === 0 ? (
           <Alert severity="info">
             {'You don’t manage API access in any workspace, so there is nothing to connect yet. ' +

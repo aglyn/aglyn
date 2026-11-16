@@ -142,7 +142,9 @@ What the app receives instead of a key:
   scopes the person's choice grants: every `:read` scope for View only, every
   scope for View and make changes.
 - A **refresh token** (`aglyn_rt_…`) that the app trades for a new pair. Each one
-  works once; a refresh token used a second time ends the connection.
+  works once. A retry within 30 seconds of the trade is refused and changes
+  nothing, so an app that lost the answer is not disconnected; used again any
+  later, it ends the connection.
 
 A connection is a person's, unlike a key. Connecting takes the **Manage API keys**
 permission in the workspace, and the connection stops working the moment that
@@ -158,6 +160,7 @@ For client developers, it is OAuth 2.1 with PKCE, public clients only:
 | Authorization | `/oauth/authorize` with `response_type=code`, `code_challenge_method=S256` and a `state`. The answer carries `iss`. |
 | Token | `/api/oauth/token`, form-encoded, `authorization_code` or `refresh_token`. Codes last five minutes and work once. |
 | Revocation | `/api/oauth/revoke` (RFC 7009). Revoking a refresh token ends the connection. |
+| Limits | A failed token request counts against the calling address and client; past 30 a minute the endpoint answers `429` with `error: "invalid_request"` and `Retry-After`. |
 
 ## Keep keys safe
 

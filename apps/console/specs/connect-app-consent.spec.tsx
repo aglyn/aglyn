@@ -29,7 +29,7 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
   authorizedFetch: (...args: unknown[]) => mockFetch(...args),
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
-  useUser: () => ({ data: { uid: 'user-1' } }),
+  useUser: () => ({ data: { uid: 'user-1', email: 'owner@example.com' } }),
 }))
 jest.mock('@aglyn/shared-ui-jsx/components/background-image.component', () => ({
   BackgroundImageComponent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -75,6 +75,14 @@ describe('the consent screen (AGL-4225)', () => {
       action: 'describe',
       query: 'client_id=c&redirect_uri=https%3A%2F%2Fevil.example%2Fcb&state=s',
     })
+  })
+
+  it('says which account is approving, and to continue only if they started it', async () => {
+    mockFetch.mockResolvedValueOnce(answer(200, DESCRIPTION))
+    render(<ConnectAppConsent navigate={assign} />)
+    expect(await screen.findByText('owner@example.com')).toBeTruthy()
+    expect(screen.getByText(/Signed in as/)).toBeTruthy()
+    expect(screen.getByText(/Only continue if you started connecting Claude yourself/)).toBeTruthy()
   })
 
   it('shows a workspace without the plan, but it cannot be chosen', async () => {
