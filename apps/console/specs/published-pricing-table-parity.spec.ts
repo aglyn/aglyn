@@ -943,9 +943,9 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
     // band in (AGL-4126).
     // CODE AHEAD OF THE PAGE (AGL-4226): Starter bills overage from its
     // release; the page states the rate after billing is live.
-    it('API requests per 1,000 over limit — $0.50 · $0.50 in code; the page still reads — · $0.50', () => {
+    it('API requests per 1,000 over limit — $3.00 · $0.50 in code; the page still reads — · $0.50', () => {
       const PUBLISHED = [null, 0.5]
-      const CODE_AHEAD = [0.5, 0.5]
+      const CODE_AHEAD = [3, 0.5]
       expect(PAID.map((p) => PLAN_PRICING[p].extraApiRequestsUsdPer1k)).toEqual(CODE_AHEAD)
       expect(PUBLISHED[1]).toBe(CODE_AHEAD[1])
     })

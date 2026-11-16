@@ -39,10 +39,11 @@ import {
 import { runPluginEventHandlers } from '@aglyn/aglyn/server'
 import {
   ADDON_KINDS,
+  addonChargedUnitUsd,
+  addonKindFromPriceId,
   addonPriceId,
   addonQuantitiesFromItems,
   addonMaxForBaseline,
-  addonUnitUsd,
   findPlanItem,
   planAndIntervalFromPriceId,
   type AddonKind,
@@ -456,7 +457,9 @@ async function handler(request: Request): Promise<Response> {
       const quantities = addonQuantitiesFromItems(items)
       const catalog = Object.fromEntries(
         ADDON_KINDS.map((kind) => {
-          const unitUsd = addonUnitUsd(kind, plan)
+          // What the add-on is CHARGED at now (AGL-4227), which can trail a
+          // catalog price whose new Stripe price is not configured yet.
+          const unitUsd = addonChargedUnitUsd(kind, plan, interval)
           const max = addonMax(kind, baseline, plan)
           return [kind, {
             unitUsd,
@@ -541,7 +544,7 @@ async function handler(request: Request): Promise<Response> {
         { status: 400 },
       )
     }
-    const unitUsd = addonUnitUsd(kind, plan)
+    const unitUsd = addonChargedUnitUsd(kind, plan, interval)
     if (unitUsd === null) {
       return Response.json({
         error: 'Your plan does not sell this add-on — upgrade to add it',
@@ -554,7 +557,13 @@ async function handler(request: Request): Promise<Response> {
         error: 'This add-on price is not configured yet',
       }, { status: 501 })
     }
-    const existing = items.find((item) => item?.price?.id === priceId)
+    // The item already selling this KIND (AGL-4227), whatever price it carries:
+    // a Starter subscription bought its extra site at $20, and a later change
+    // updates that item's quantity in place rather than adding a second item
+    // at the new price beside it, which would double-count the sites.
+    const existing =
+      items.find((item) => item?.price?.id === priceId) ??
+      items.find((item) => addonKindFromPriceId(item?.price?.id) === kind)
     /**
      * This add-on's quantity RIGHT NOW: 0 when no item exists, and `null`
      * when an item exists but Stripe reports no quantity on it at all

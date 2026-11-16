@@ -1335,8 +1335,8 @@ describe('Starter API overage reaches the meter (AGL-4226)', () => {
     expect(some.rollup['apiRequests']).toBe(used)
     expect(some.rollup['apiOverageUsd']).toBeCloseTo(expectedUsd, 2)
     expect(some.cents - none.cents).toBe(Math.round(expectedUsd * 100))
-    // $9.75 at $0.50 — stated once, while the rate is what the owner set.
-    if (rate === 0.5) expect(some.cents - none.cents).toBe(975)
+    // $58.50 at $3.00 — stated once, while the rate is what the owner set.
+    if (rate === 3) expect(some.cents - none.cents).toBe(5850)
   })
 
   it('bills nothing for requests inside the band', async () => {

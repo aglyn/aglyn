@@ -18,7 +18,12 @@
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
 import { ApiErrors, apiJson } from '@aglyn/tenant-data-admin'
 import { buildDocsUrl } from '../../../constants/docs-links'
-import { authenticateApiV1 } from '../../../utils/api-v1'
+import {
+  API_BILLING_UNITS_HEADER,
+  apiRequestBodyBytes,
+  authenticateApiV1,
+  chargeApiRequestSize,
+} from '../../../utils/api-v1'
 import {
   buildCustomerApiOpenApi,
   CUSTOMER_API_MOUNT,
@@ -107,6 +112,15 @@ export async function POST(request: Request): Promise<Response> {
     ),
   )
 
+  // Billed units across this POST's tool calls (AGL-4227). The POST itself
+  // was counted once by `authenticateApiV1` and protocol messages
+  // (`initialize`, `tools/list`, `ping`, notifications) are never
+  // size-weighted; a `tools/call` is weighted by the request it dispatches
+  // and the response it gets, like the REST call it is. The first tool call
+  // stands on the unit the POST already counted; each one after it is
+  // charged in full.
+  let billedUnits = 1
+  let toolCallsCharged = 0
   const deps = {
     tools,
     serverName: SERVER_NAME,
@@ -122,7 +136,17 @@ export async function POST(request: Request): Promise<Response> {
         args,
         `${origin}${CUSTOMER_API_MOUNT}`,
       )
-      return readOutcome(await dispatchResource(toolRequest, context, segments))
+      const requestBytes = await apiRequestBodyBytes(toolRequest)
+      const outcome = await readOutcome(await dispatchResource(toolRequest, context, segments))
+      const units = chargeApiRequestSize(
+        context,
+        requestBytes,
+        new TextEncoder().encode(outcome.text).byteLength,
+        toolCallsCharged === 0 ? 1 : 0,
+      )
+      billedUnits += toolCallsCharged === 0 ? units - 1 : units
+      toolCallsCharged += 1
+      return outcome
     },
   }
 
@@ -138,13 +162,15 @@ export async function POST(request: Request): Promise<Response> {
     if (response) responses.push(response)
   }
 
+  const unitsHeader = { [API_BILLING_UNITS_HEADER]: String(billedUnits) }
   if (responses.length === 0) {
-    return new Response(null, { status: 202, headers: context.headers })
+    return new Response(null, { status: 202, headers: { ...context.headers, ...unitsHeader } })
   }
 
   return apiJson(Array.isArray(payload) ? responses : responses[0], {
     headers: {
       ...context.headers,
+      ...unitsHeader,
       'MCP-Protocol-Version': MCP_PROTOCOL_VERSION,
     },
   })

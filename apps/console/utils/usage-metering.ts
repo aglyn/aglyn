@@ -41,7 +41,9 @@ import {
 
 /**
  * Usage metering (AGL-41): converts per-host counters into an estimated
- * monthly infra cost, billed to the org at cost × 1.30. Rates are OUR
+ * monthly infra cost, billed to the org at cost × `METERED_PRICE_MULTIPLE`
+ * (1.3388, so cost + 30% is what is KEPT after Stripe's 2.9%; AGL-3476,
+ * comment corrected in AGL-4227). Rates are OUR
  * unit costs (operator-tuned; validate against a real Firebase + Vercel
  * invoice month before enabling live metered billing). Pure data module —
  * shared by the Billing page estimate and the report-usage rollup route.
@@ -139,8 +141,10 @@ export {
  *   + 4 KB in and out through Fast Data Transfer and Fast Origin Transfer at
  *   $0.35 and $0.43 a decimal GB ($0.0000032); and the Firestore side at
  *   `nam5` — 12 reads × $0.0000006 + 9 writes × $0.0000018 ($0.0000234).
- *   $0.0000590 a submission, ×1.3 is $0.0767 per 1,000, rounded up to $0.08
- *   and pinned so the billed figure lands on it: $0.08 ÷ 1.3 ÷ 1,000.
+ *   $0.0000590 a submission, carried as $0.0615 per 1,000 ($0.08 ÷ 1.3 ÷
+ *   1,000, the pin set when the price was cost × 1.3). Since AGL-3476 the
+ *   published price is `publishedMeteredPrice` — × 1.3388, rounded UP — so
+ *   it is $0.083 per 1,000, not $0.08 (comment corrected in AGL-4227).
  */
 export const METERED_UNIT_RATES_USD = {
   storagePerGbMonth: 0.026,

@@ -77,6 +77,7 @@ export const QUOTA_LABELS: Readonly<Record<string, string>> = {
   apiRequestsPerMonth: 'API requests / mo',
   apiRequestsPerMinutePerOrg: 'API requests / min (workspace)',
   maxApiRequestsPerMonth: 'API requests / mo, ceiling',
+  maxCrmRecords: 'CRM records, ceiling',
   productsPerHost: 'Products / site',
   inventoryLocations: 'Inventory locations',
   posRegisters: 'POS registers (base)',

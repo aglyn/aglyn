@@ -28,6 +28,7 @@
 import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
 import { MEDIA_CDN_ROUTE } from '@aglyn/aglyn/app-utils/media-ref'
 import {
+  API_BILLING_UNIT_BYTES,
   checkApiRequestQuota,
   checkDataStorageQuota,
   checkEntitlement,
@@ -1166,6 +1167,10 @@ export async function handleUsage(
         // ceiling, or `null` where there is none (Pro and up). Additive, so a
         // client reading the band's four fields is unaffected.
         ceiling: Number.isFinite(apiQuota.ceiling) ? apiQuota.ceiling : null,
+        // What one counted unit is (AGL-4227): a request is one unit per
+        // started 256 KB of the larger of its request and response body, so
+        // `used` counts units, not calls.
+        unitBytes: API_BILLING_UNIT_BYTES,
       },
       dataStorageMb: usageBand(
         storageQuota.usedMb,

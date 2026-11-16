@@ -53,6 +53,7 @@
  */
 
 import {
+  INCLUDED_EMAIL_SENDS_BY_PLAN,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
@@ -482,5 +483,60 @@ describe('with the switch unset or in the future, it does not', () => {
     expect(mockDocs.get(`orgs/org-1/usage/${MONTH}`)!['billedCents']).toBe(
       Math.round((4_000 / 1000) * RATE_PER_1K * 100),
     )
+  })
+})
+
+describe('Starter bills every email past 1,000 a month (AGL-4227)', () => {
+  /**
+   * Starter's CAMPAIGN band is 0 — campaigns start at Pro — so measuring its
+   * overage against that band priced nothing at any volume, and its receipts,
+   * notices and one-to-one CRM mail cost the platform up to $27 a month
+   * unbilled. It now bills against `INCLUDED_EMAIL_SENDS_BY_PLAN.starter`,
+   * every send on the cost meter counted, through the same path as Pro's:
+   * `emailSendsOverage` → `priceEmailSendOverage` → `billedCents` → the one
+   * org-month meter event, behind the same `BILL_EMAIL_SEND_OVERAGE_FROM`.
+   */
+  const STARTER_BAND = INCLUDED_EMAIL_SENDS_BY_PLAN.starter as number
+  const STARTER_RATE = PLAN_PRICING.starter.extraEmailSendsUsdPer1k as number
+
+  it('includes 1,000 of everything, at $2.50 past it', () => {
+    expect(STARTER_BAND).toBe(1_000)
+    expect(STARTER_RATE).toBe(2.5)
+    // Campaigns still start at Pro: the campaign band is untouched.
+    expect(PLAN_ENTITLEMENTS.starter.emailSendsPerMonth).toBe(0)
+    // Above Pro's rate, so the ladder points up.
+    expect(STARTER_RATE).toBeGreaterThan(PLAN_PRICING.pro.extraEmailSendsUsdPer1k as number)
+  })
+
+  it('a month inside the 1,000 bills nothing', async () => {
+    seedOrg('starter')
+    mockEmailSends = STARTER_BAND
+    await runRollup(loadRoute(MONTH))
+    const rollup = mockDocs.get(`orgs/org-1/usage/${MONTH}`)!
+    expect(rollup['emailSendsOverage']).toBe(0)
+    expect(rollup['billedCents']).toBe(0)
+  })
+
+  it('with the switch on, the excess reaches the meter event at Starter\'s rate', async () => {
+    seedOrg('starter')
+    mockEmailSends = STARTER_BAND + 4_000
+    await runRollup(loadRoute(MONTH))
+    const rollup = mockDocs.get(`orgs/org-1/usage/${MONTH}`)!
+    expect(rollup['emailSendsOverage']).toBe(4_000)
+    // 4,000 at $2.50/1,000 = $10.00.
+    expect(rollup['billedCents']).toBe(Math.round(4 * STARTER_RATE * 100))
+    expect(rollup['billedCents']).toBe(1_000)
+    expect(meterEvents).toHaveLength(1)
+    expect(Number(meterEvents[0].get('payload[value]'))).toBe(1_000)
+  })
+
+  it('with the switch unset, it is measured and withheld, exactly like Pro\'s', async () => {
+    seedOrg('starter')
+    mockEmailSends = STARTER_BAND + 4_000
+    await runRollup(loadRoute())
+    const rollup = mockDocs.get(`orgs/org-1/usage/${MONTH}`)!
+    expect(rollup['emailSendsOverage']).toBe(4_000)
+    expect(rollup['billedCents']).toBe(0)
+    expect(rollup['emailSendsOverageWithheldUsd']).toBe(10)
   })
 })

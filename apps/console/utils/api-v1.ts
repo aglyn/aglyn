@@ -34,6 +34,7 @@ import {
 // the catalog with no I/O, so there is nothing for a spec to stand in for.
 import {
   apiMonthlyRefusalMessage,
+  apiRequestBillingUnits,
   apiWorkspaceRateLimitPerMinute,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
@@ -172,6 +173,7 @@ export function apiUsageMonth(now = new Date()): string {
 function recordApiRequest(
   firestore: FirebaseFirestore.Firestore,
   orgId: string,
+  units = 1,
 ): void {
   const month = apiUsageMonth()
   void firestore
@@ -181,7 +183,7 @@ function recordApiRequest(
     .doc(month)
     .set(
       {
-        count: firebaseAdmin.firestore.FieldValue.increment(1),
+        count: firebaseAdmin.firestore.FieldValue.increment(units),
         month,
         updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       },
@@ -510,4 +512,62 @@ export async function authenticateApiV1(
       },
     },
   }
+}
+
+
+/** The header that says how many billed units a response was charged (AGL-4227). */
+export const API_BILLING_UNITS_HEADER = 'X-Api-Billing-Units'
+
+/**
+ * The byte length of a request's body, read WITHOUT consuming it (AGL-4227):
+ * `Content-Length` when the client sent a valid one, otherwise the body
+ * itself, read from a clone. A method without a body is 0.
+ */
+export async function apiRequestBodyBytes(request: Request): Promise<number> {
+  if (request.method === 'GET' || request.method === 'HEAD') return 0
+  const declared = Number(request.headers.get('content-length'))
+  if (Number.isFinite(declared) && declared >= 0 && request.headers.has('content-length')) {
+    return declared
+  }
+  try {
+    return (await request.clone().arrayBuffer()).byteLength
+  } catch {
+    return 0
+  }
+}
+
+/** A response body's byte length, read from a clone so the body still streams. */
+export async function apiResponseBodyBytes(response: Response): Promise<number> {
+  if (!response.body) return 0
+  try {
+    return (await response.clone().arrayBuffer()).byteLength
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Charge a served request its SIZE (AGL-4227): one billed unit per started
+ * 256 KB of the larger of its request and response body
+ * (`apiRequestBillingUnits`). The pipeline already counted the call's first
+ * unit before the handler ran, so only the units past it are added — onto the
+ * same monthly counter the invoice, the ceiling and the usage meter read. The
+ * per-minute limits are not touched: they count calls.
+ *
+ * `alreadyCharged` is how many of this request's units are on the counter
+ * already: 1 for a REST call; for an MCP batch, 1 for the first tool call and
+ * 0 for every one after it, since the POST carrying them counted once.
+ *
+ * Returns the units the request came to, for the response header.
+ */
+export function chargeApiRequestSize(
+  context: Pick<ApiV1Context, 'firestore' | 'orgId'>,
+  requestBytes: number,
+  responseBytes: number,
+  alreadyCharged = 1,
+): number {
+  const units = apiRequestBillingUnits(requestBytes, responseBytes)
+  const extra = units - Math.max(0, alreadyCharged)
+  if (extra > 0) recordApiRequest(context.firestore, context.orgId, extra)
+  return units
 }

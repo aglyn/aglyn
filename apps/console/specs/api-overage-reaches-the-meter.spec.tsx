@@ -103,10 +103,10 @@ import BillingUsageComponent from '../components/billing/billing-usage.component
 
 /** Pro: `apiRequestsPerMonth: 1,500`, `extraApiRequestsUsdPer1k: 0.5` — Business's band
  * and rate, which moved into Pro with the API in pricing v4 (AGL-4126). */
-const PRO = { $id: 'org-1', plan: 'pro' } as any
+const PRO = { $id: 'org-1', plan: 'pro', billingStatus: 'active' } as any
 /**
  * Starter, paying: 500 requests included since AGL-4226, Pro's rate past them,
- * and a 50,000 monthly ceiling.
+ * and a 20,000 monthly ceiling.
  */
 const STARTER = { $id: 'org-1', plan: 'starter', billingStatus: 'active' } as any
 /** Free: no API requests included at all, so there is no meter to caption. */
@@ -253,17 +253,17 @@ describe('a plan that cannot be charged is quoted nothing', () => {
 describe('Starter is told its overage AND its ceiling (AGL-4226)', () => {
   it('prices the overage at Starter\'s rate and names the ceiling and the plan without one', async () => {
     const quota = checkApiRequestQuota(STARTER, 10_500)
-    expect(quota.overageRateUsd).toBe(0.5)
+    expect(quota.overageRateUsd).toBe(3)
     mockApiRequests = 10_500
     render(<BillingUsageComponent org={STARTER} hosts={HOSTS} />)
     await waitFor(() => {
       expect(screen.getByText(/API overage/)).toBeTruthy()
     })
     expect(screen.getByText(/API overage/).textContent).toContain('10,000 requests')
-    expect(screen.getByText(/API overage/).textContent).toContain('≈$5.00')
+    expect(screen.getByText(/API overage/).textContent).toContain('≈$30.00')
     const ceiling = screen.getByTestId('api-ceiling-caption').textContent ?? ''
-    expect(ceiling).toContain('50,000')
-    expect(ceiling).toContain('39,500 left')
+    expect(ceiling).toContain('20,000')
+    expect(ceiling).toContain('9,500 left')
     expect(ceiling).toContain('Pro has no monthly ceiling')
   })
 

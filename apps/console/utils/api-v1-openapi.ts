@@ -618,6 +618,7 @@ export function buildCustomerApiOpenApi(
     'X-Workspace-RateLimit-Limit': { $ref: '#/components/headers/XWorkspaceRateLimitLimit' },
     'X-Workspace-RateLimit-Remaining': { $ref: '#/components/headers/XWorkspaceRateLimitRemaining' },
     'X-Workspace-RateLimit-Reset': { $ref: '#/components/headers/XWorkspaceRateLimitReset' },
+    'X-Api-Billing-Units': { $ref: '#/components/headers/XApiBillingUnits' },
   }
   for (const [pathName, pathItem] of Object.entries(paths)) {
     if (pathName === '/v1/openapi.json') continue
@@ -709,6 +710,7 @@ export function buildCustomerApiOpenApi(
         XRateLimitScope: { description: 'Which budget the `RateLimit-*` headers describe: `key`, or `workspace` on a refusal by the workspace limit.', schema: { type: 'string', enum: ['key', 'workspace'] } },
         XWorkspaceRateLimitLimit: { description: 'Requests the whole workspace may make per minute, across every key. Absent where the plan sets no workspace limit.', schema: { type: 'integer' } },
         XWorkspaceRateLimitRemaining: { description: 'Requests the workspace has left in the current minute.', schema: { type: 'integer' } },
+        XApiBillingUnits: { description: 'Billed units this request was charged on the monthly quota: one per started 256 KB (262,144 bytes) of the larger of its request and response body, never fewer than one.', schema: { type: 'integer', minimum: 1 } },
         XWorkspaceRateLimitReset: { description: 'When the workspace window resets, as a Unix timestamp in seconds.', schema: { type: 'integer' } },
       },
       schemas,

@@ -304,3 +304,33 @@ describe('AGL-4226 · one per-minute budget for the whole workspace', () => {
     expect(bucket('apiv1-org:org-1')?.['count']).toBe(1)
   })
 })
+
+describe('AGL-4227 · a request is billed by its size', () => {
+  it('a small call is one unit, and says so', async () => {
+    freshKey()
+    const response = await call()
+    expect(response.status).toBe(200)
+    expect(response.headers.get('X-Api-Billing-Units')).toBe('1')
+    // The one unit the pipeline counts before the handler, and nothing more.
+    expect(mockMeterWrites.filter((w: any) => typeof w?.count === 'number' && w.count > 1)).toEqual([])
+  })
+
+  it('a 600 KB body is three units: the first counted up front, two added after', async () => {
+    freshKey()
+    const before = mockMeterWrites.length
+    const body = 'x'.repeat(600 * 1024)
+    const response = await GET(
+      new Request('https://app.aglyn.com/api/v1', {
+        method: 'POST',
+        headers: { authorization: 'Bearer k', 'content-length': String(body.length) },
+        body,
+      }),
+      { params: Promise.resolve({ route: [] as string[] }) },
+    )
+    // A wrong method is still a billed request, and its body is still weighed.
+    expect(response.status).toBe(405)
+    expect(response.headers.get('X-Api-Billing-Units')).toBe('3')
+    const counts = mockMeterWrites.slice(before).map((w: any) => w?.count)
+    expect(counts).toEqual([1, 2])
+  })
+})

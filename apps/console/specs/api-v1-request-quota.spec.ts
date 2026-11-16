@@ -138,7 +138,7 @@ beforeEach(() => {
     keyId: 'key-1',
     scopes: ['read'],
   })
-  mockGetOrgDoc.mockResolvedValue({ plan: 'business' })
+  mockGetOrgDoc.mockResolvedValue({ plan: 'business', billingStatus: 'active' })
   mockLockdownRefusal.mockResolvedValue(null)
 })
 
@@ -149,20 +149,20 @@ describe('the /api/v1 chokepoint enforces the monthly request quota (AGL-2163)',
     // and the answer is still 200. This is the assertion that would have
     // caught the naive version of this fix.
     mockApiUsageCount = 10_000_000
-    expect(checkApiRequestQuota({ plan: 'business' } as never, 10_000_000).allowed).toBe(true)
+    expect(checkApiRequestQuota({ plan: 'business', billingStatus: 'active' } as never, 10_000_000).allowed).toBe(true)
     const response = await call()
     expect(response.status).toBe(200)
     // …and it did not even look: a paying customer pays no read for a check
     // whose answer their plan already determines.
     expect(mockApiUsageReads).toBe(0)
-    expect(apiRequestEnforcementShape({ plan: 'business' } as never)).toBe(
+    expect(apiRequestEnforcementShape({ plan: 'business', billingStatus: 'active' } as never)).toBe(
       'never-blocks',
     )
   })
 
   it('every self-serve plan that ships with API access is never-blocks', async () => {
     for (const plan of ['business', 'scale', 'advanced', 'agency']) {
-      expect(apiRequestEnforcementShape({ plan } as never)).toBe('never-blocks')
+      expect(apiRequestEnforcementShape({ plan, billingStatus: 'active' } as never)).toBe('never-blocks')
     }
     // Enterprise publishes no rate, and since 2026-09-07 its band is a finite
     // fallback of 10,000,000 (twice Agency's) rather than UNLIMITED — so on

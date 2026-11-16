@@ -25,6 +25,7 @@ import {
   cheapestPlanWithoutApiCeiling,
   CRM_EMAIL_USAGE_COLLECTION,
   crmEmailUsageDayKey,
+  emailSendsBillingBand,
   emailSendsOverage,
   PLAN_LABELS,
   PLAN_PRICING,
@@ -831,9 +832,11 @@ export function BillingUsageComponent(props: BillingUsageProps) {
    * an overage of 0, which suppresses the caption. That is the right default:
    * an unread meter must not print a charge.
    */
+  // The plan's email BILLING band (AGL-4227) — the band `report-usage`
+  // bills against, which on Starter is 1,000 emails of everything.
   const emailOverage = emailSendsOverage(
     totalEmails ?? 0,
-    entitlements.emailSendsPerMonth,
+    emailSendsBillingBand(org),
   )
   const emailOveragePrice = priceEmailSendOverage(org, emailOverage)
   // ...unless the invoice is withholding it (AGL-1658). AGL-1604 stopped the
@@ -1110,7 +1113,7 @@ export function BillingUsageComponent(props: BillingUsageProps) {
         </Typography>
       ) : null}
       {/* The month's hard stop (AGL-4226), on a plan that has one and bills
-          up to it: Starter, at 50,000. Read off `checkApiRequestQuota`'s own
+          up to it: Starter, at 20,000. Read off `checkApiRequestQuota`'s own
           `ceiling`, so it says what the pipeline refuses at. Shown once the
           counter has read, and never on Pro and up, which have none. */}
       {apiRequests != null &&
