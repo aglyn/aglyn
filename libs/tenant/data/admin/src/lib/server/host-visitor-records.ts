@@ -56,7 +56,7 @@ import {
   resolveOrgIdForHost,
   scopedToHost,
 } from './organizations'
-import { crmCaptureAdmitted } from './crm-capture-band'
+import { captureAdmitsPerson } from './crm-records'
 import {
   composeContactName,
   crmLeadListFields,
@@ -521,7 +521,7 @@ export async function addHostLeadOutcome(options: {
       : leadsRef.doc()
     /*
      * THE CRM RECORDS BAND, for a NEW person (AGL-4227) — the same rule the
-     * contact door asks (`crmCaptureAdmitted`). On a plan that sells no
+     * contact door asks (`captureAdmitsPerson`). On a plan that sells no
      * records past its band (Free) a capture past it files no new lead; the
      * submission, booking or order that carried the person is kept where it
      * lives, and the visitor is never told. A returning person is an update
@@ -534,7 +534,7 @@ export async function addHostLeadOutcome(options: {
       const orgRef = leadsRef.parent
       // An org that could not be read is not judged as Free: the capture is
       // kept, as every other lookup failure on this door keeps it.
-      if (owner?.org && orgRef && !(await crmCaptureAdmitted(owner.org as never, orgRef))) {
+      if (owner?.org && orgRef && !(await captureAdmitsPerson(owner.org as never, orgRef))) {
         await hostRef
           .collection('counters')
           .doc('contactsDropped')

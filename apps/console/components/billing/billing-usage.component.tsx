@@ -837,7 +837,7 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     : null
   const recordsQuota = checkCrmRecordsQuota(org, crmRecordsCount ?? 0)
   /*
-   * The people a capture is held to (AGL-4227, `crmCaptureAdmitted`): the
+   * The people a capture is held to (AGL-4227, `captureAdmitsPerson`): the
    * band's records, plus the filed leads where the plan sells nothing past
    * it. `null` until every part has answered.
    */

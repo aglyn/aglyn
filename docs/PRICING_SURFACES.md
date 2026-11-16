@@ -547,7 +547,7 @@ Each line's direction decides its order. **Price UP / band DOWN** publish on
 | API billed per started 256 KB, every plan | price UP (meter change) | `API_BILLING_UNIT_BYTES`, `chargeApiRequestSize` | the page and the API docs first |
 | Starter extra site $20 → $25, for everyone (no grandfathering) | price UP | `PLAN_PRICING.starter.extraHostMonthlyUsd`; `REPRICED_ADDONS` | the page first, then the v2 Stripe prices and `STRIPE_PRICE_STARTER_EXTRA_HOST_V2[_YEARLY]` |
 | Starter CRM records stop at Pro's 10,000 | band DOWN | `maxCrmRecords` | the page first |
-| Free keeps 100 people for the CRM (contacts and filed leads together); past it captures add no one | band DOWN (leads were uncounted) | `crmCaptureAdmitted` | the page first: it shows Free's CRM records as "—" today |
+| Free keeps 100 people for the CRM (contacts and filed leads together); past it captures add no one | band DOWN (leads were uncounted) | `captureAdmitsPerson` | the page first: it shows Free's CRM records as "—" today |
 | Retired plans' API overage → $0.50 | price UP, no subscribers | `PLAN_PRICING.{scale,advanced,agency}` | nothing (no column on the page) |
 
 `tables.json` carries the new Starter extra-site and email cells; the

@@ -40,8 +40,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
-import { countCrmRecords, restampCrmListFieldsAt } from './crm-records'
-import { crmCaptureAdmitted } from './crm-capture-band'
+import { captureAdmitsPerson, capturePeopleCount, restampCrmListFieldsAt } from './crm-records'
 import { hostErasedEmails, hostRefusesCaptureForErasure } from './email-suppression'
 import { scheduleCapturedEmailCheck } from './capture-email-check'
 import {
@@ -1016,7 +1015,7 @@ export async function upsertHostContact(
             contactsRef.parent ??
             firestore.collection('orgs').doc(String(orgBilling?.orgId ?? ''))
           // The capture rule both capture doors share (AGL-4227).
-          return crmCaptureAdmitted(
+          return captureAdmitsPerson(
             (orgBilling?.org as any) ?? null,
             orgRef,
             contactsRef,
@@ -1313,21 +1312,15 @@ export async function prepareContactCaptureBatch(
         .filter((email): email is string => !!email),
     ),
   ]
+  const org = (orgBilling?.org as never) ?? null
+  // The capture tally both doors share (AGL-4227, `capturePeopleCount`).
   const [existing, erased, counted] = await Promise.all([
     findContactsByEmail(contactsRef, addresses),
     hostErasedEmails(hostId, addresses, firestore),
-    countCrmRecords(orgRef, contactsRef),
+    capturePeopleCount(org, orgRef, contactsRef),
   ])
 
-  const org = (orgBilling?.org as never) ?? null
-  // On a plan that sells no records past its band, the leads a capture filed
-  // share the band too (AGL-4227, `crmCaptureAdmitted`).
-  const leadsShareBand = checkCrmRecordsQuota(org, 0).overageRateUsd === null
-  let used =
-    counted.crmRecordsCount +
-    (leadsShareBand
-      ? Number((await orgRef.collection('leads').count().get()).data()?.count ?? 0) || 0
-      : 0)
+  let used = counted
   const claimed = new Set<string>()
   const tickets = new Map<string, boolean>()
   const admit = (): boolean => {

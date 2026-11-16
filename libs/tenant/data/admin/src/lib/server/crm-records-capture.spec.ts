@@ -22,7 +22,7 @@
  * Paid plans get the by-hand verdict unchanged.
  */
 
-import { crmCaptureAdmitted } from './crm-capture-band'
+import { crmCaptureAdmitted } from './crm-records'
 
 function orgRefWith(counts: Record<string, number>) {
   const collection = (name: string) => ({
