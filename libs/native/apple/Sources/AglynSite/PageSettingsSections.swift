@@ -73,17 +73,10 @@ struct PageScheduleSection: View {
         }
         .accessibilityIdentifier("page-schedule-skipped")
       }
-      HStack(spacing: AglynSpace.two) {
-        Button("Schedule publish", systemImage: "calendar") {
-          open(.schedule(page, unpublish: false, versionID: nil))
-        }
-        .disabled(!canPublish || !ready || locked || page.versionID == nil)
-        .accessibilityIdentifier("page-schedule-publish")
-        Button("Schedule unpublish", systemImage: "calendar") {
-          open(.schedule(page, unpublish: true, versionID: nil))
-        }
-        .disabled(!canPublish || !ready || locked || !live)
-        .accessibilityIdentifier("page-schedule-unpublish")
+      // Side by side where they fit; on a phone, one under the other rather than each wrapped onto two lines.
+      ViewThatFits(in: .horizontal) {
+        HStack(spacing: AglynSpace.two) { scheduleButtons(ready: ready, locked: locked) }
+        VStack(alignment: .leading, spacing: AglynSpace.one) { scheduleButtons(ready: ready, locked: locked) }
       }
       .buttonStyle(.borderless)
       if locked {
@@ -92,6 +85,22 @@ struct PageScheduleSection: View {
         AglynHelperText("Your role on this site can edit content but not publish it.")
       }
     }
+  }
+
+  @ViewBuilder
+  private func scheduleButtons(ready: Bool, locked: Bool) -> some View {
+    Button("Schedule publish", systemImage: "calendar") {
+      open(.schedule(page, unpublish: false, versionID: nil))
+    }
+    .fixedSize()
+    .disabled(!canPublish || !ready || locked || page.versionID == nil)
+    .accessibilityIdentifier("page-schedule-publish")
+    Button("Schedule unpublish", systemImage: "calendar") {
+      open(.schedule(page, unpublish: true, versionID: nil))
+    }
+    .fixedSize()
+    .disabled(!canPublish || !ready || locked || !live)
+    .accessibilityIdentifier("page-schedule-unpublish")
   }
 
   private func cancel(_ message: String) {
