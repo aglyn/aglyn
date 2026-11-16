@@ -375,6 +375,7 @@ private fun PageDetail(
           open(PageDialog.Schedule(page, unpublish))
         }
         PageAccessSection(page, row.livePath, settings, (host as? Live.Ready)?.value, settingsApi, runner, canEdit, canPublish)
+        PageSeoSection(context, hostId, page, row.livePath, (screen as? Live.Ready)?.value?.data, (host as? Live.Ready)?.value?.data, settingsApi, runner, canEdit)
       }
       // What the page is doing, then who touched it (the console's page view, AGL-4011): its traffic above its activity.
       com.aglyn.site.analytics.PageTrafficCard(context.firestore, context.api, hostId, page.id, upgrade = { context.navigate("core.billing.plans") })

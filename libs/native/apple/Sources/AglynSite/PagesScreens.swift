@@ -571,6 +571,11 @@ struct PageDetail: View {
           PageAccessSection(
             page: page, livePath: row.livePath, settings: settings, host: model.host.state.value??.data, api: settingsAPI,
             runner: runner, canEdit: canEdit, canPublish: canPublish)
+          PageSeoSection(
+            context: context, hostID: hostID, page: page, livePath: row.livePath, screen: screen.state.value??.data,
+            host: model.host.state.value??.data, api: settingsAPI, runner: runner, canEdit: canEdit
+          )
+          .id(page.id)
         }
         // What the page is doing, then who touched it (the console's page view, AGL-4011): its traffic above its activity.
         Section {
