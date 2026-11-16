@@ -840,7 +840,7 @@
           "type": "actions",
           "id": "password",
           "title": "Password",
-          "when": "data.member.email && (site.can[site.manage] || org.can[members.manage])",
+          "when": "data.member.email && site.can[site.manage] || data.member.email && org.can[members.manage]",
           "footer": "For a member locked out of their account on this site. This is their site sign-in only — it has nothing to do with any Aglyn console account they may also have.",
           "items": [
             {
