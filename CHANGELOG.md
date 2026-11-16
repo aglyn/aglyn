@@ -15,6 +15,7 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **accounting:** release_accounting on by default for every workspace ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
 - **api:** an MCP Registry server.json for the remote MCP server, not published ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
 - **api:** the API catalog, the customer OpenAPI and the REST root name the MCP server and how to sign in ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
 - **api:** MCP server card, documentation members in both sign-in documents, and a scope challenge on 403 ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
@@ -30,6 +31,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **staff:** new-account notice waits for the sign-up's acquisition record before saying there is none ([AGL-4229](https://linear.app/aglyn/issue/AGL-4229))
 - **console:** a signed-out tab parks its refused listens until somebody signs in ([AGL-2945](https://linear.app/aglyn/issue/AGL-2945))
 - **console:** an invitee who signs up lands in the invited workspace ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
 - **api:** declare the MCP schema host as never requested, and drop a dead assignment lint refuses ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
