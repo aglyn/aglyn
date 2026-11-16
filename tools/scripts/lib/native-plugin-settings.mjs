@@ -67,6 +67,8 @@ export function pluginSettingsScreen({ schema, label, checking }) {
     constants: { defaults: schema.defaults },
     load: { settings: { doc: `orgs/{org.id}/pluginSettings/${id}`, optional: true } },
     blocks: [
+      // The schema's notice, as the console's card draws it above the fields (an info alert).
+      ...noticeBlocks(schema),
       {
         type: 'form',
         ...(checking ? { checking } : {}),
@@ -129,6 +131,8 @@ export function sitePluginSettingsScreen({ schema, label }) {
       site: { doc: `hosts/{site.id}/pluginSettings/${id}`, optional: true },
     },
     blocks: [
+      // The schema's notice, as the console's card draws it above the fields (an info alert).
+      ...noticeBlocks(schema),
       {
         type: 'form',
         checking: 'site plugin settings',
@@ -144,6 +148,11 @@ export function sitePluginSettingsScreen({ schema, label }) {
       },
     ],
   }
+}
+
+/** The schema's `notice` as an info notice block, or none. */
+function noticeBlocks(schema) {
+  return schema.notice ? [{ type: 'notice', tone: 'info', text: schema.notice }] : []
 }
 
 /** The spec file: a workspace screen and a site screen per schema, in plugin order. */

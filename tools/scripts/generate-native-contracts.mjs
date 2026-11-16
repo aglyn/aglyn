@@ -73,6 +73,8 @@ const PLUGIN_SETTINGS = [
   { module: 'libs/plugins/ai/src/lib/plugin-config.ts', name: 'AI_CONFIG_SCHEMA', label: 'AI' },
   { module: 'libs/plugins/commerce/src/lib/plugin-config.ts', name: 'COMMERCE_CONFIG_SCHEMA', label: 'Commerce' },
   { module: 'libs/plugins/bookings/src/lib/plugin-config.ts', name: 'BOOKINGS_CONFIG_SCHEMA', label: 'Bookings' },
+  { module: 'libs/plugins/waivers/src/lib/constants/settings.ts', name: 'WAIVERS_CONFIG_SCHEMA', label: 'Waivers' },
+  { module: 'libs/plugins/weglot/src/lib/model/weglot-settings.ts', name: 'WEGLOT_CONFIG_SCHEMA', label: 'Weglot' },
 ]
 
 // The planner bounds a day in local time; the cases are recorded in UTC and

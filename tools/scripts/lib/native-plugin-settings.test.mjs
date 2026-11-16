@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { pluginSettingsScreen } from './native-plugin-settings.mjs'
+import { pluginSettingsScreen, sitePluginSettingsScreen } from './native-plugin-settings.mjs'
 
 const schema = {
   pluginId: 'demo',
@@ -31,6 +31,15 @@ test('a schema becomes one form that writes every field under the plugin', () =>
   assert.deepEqual(screen.constants.defaults, schema.defaults)
   assert.equal(form.submit.write.doc, 'orgs/{org.id}/pluginSettings/demo')
   assert.deepEqual(Object.keys(form.submit.write.fields), ['on', 'days', 'mode', 'path', 'updatedBy'])
+})
+
+test("a schema's notice heads both screens, as the console's card draws it", () => {
+  const noticed = { ...schema, notice: 'Ask your own lawyer.' }
+  for (const screen of [pluginSettingsScreen({ schema: noticed, label: 'Demo' }), sitePluginSettingsScreen({ schema: noticed, label: 'Demo' })]) {
+    assert.deepEqual(screen.blocks[0], { type: 'notice', tone: 'info', text: 'Ask your own lawyer.' })
+    assert.equal(screen.blocks[1].type, 'form')
+  }
+  assert.equal(pluginSettingsScreen({ schema, label: 'Demo' }).blocks[0].type, 'form')
 })
 
 /**
