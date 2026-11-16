@@ -423,7 +423,7 @@ struct CrmBulkResult: Equatable {
 
 extension CrmAPI {
   /// One act over a record list's ticked rows, sent where the console sends it.
-  func bulk(
+  @MainActor func bulk(
     _ action: CrmBulkAction, kind: CrmKind, rows picked: [CrmBulkRow], value: CrmBulkValue, reference: CrmReference
   ) async -> CrmBulkResult {
     let noun = CrmBulkNoun(kind)
@@ -527,7 +527,7 @@ extension CrmAPI {
 
   /// One act over the ticked tasks (`tasks-bulk-bar.tsx`): Complete and Assign through their routes, the due date and
   /// the delete client-direct, then the linked records' next activity.
-  func bulkTasks(_ action: CrmBulkAction, tasks picked: [CrmTask], value: CrmBulkValue, reference: CrmReference) async -> CrmBulkResult {
+  @MainActor func bulkTasks(_ action: CrmBulkAction, tasks picked: [CrmTask], value: CrmBulkValue, reference: CrmReference) async -> CrmBulkResult {
     let noun = CrmBulkNoun.task
     let byID = Dictionary(picked.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     var rows = picked.map(crmBulkRow)
