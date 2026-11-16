@@ -221,9 +221,17 @@ export const DOCS_HELP_TOPICS = {
     path: '/marketing-and-automation/analytics/connect-conversions-api',
     title: 'Server-side ad conversions',
   },
+  connectQuickbooksOnline: {
+    path: '/commerce-and-bookings/commerce/connect-quickbooks-online',
+    title: 'Connect QuickBooks Online',
+  },
   connectSmileIoOrYotpo: {
     path: '/commerce-and-bookings/commerce/connect-smile-io-or-yotpo',
     title: 'Connect Smile.io or Yotpo Loyalty',
+  },
+  connectXero: {
+    path: '/commerce-and-bookings/commerce/connect-xero',
+    title: 'Connect Xero',
   },
   consoleAndSite: {
     path: '/developers/plugins/guides/console-and-site',
@@ -1016,7 +1024,9 @@ export const DOCS_HELP_ANCHORS = {
   connectAttentive: ['#before-you-start', '#connect', '#what-is-sent', '#who-is-sent', '#unsubscribes-stay-in-attentive', '#settings', '#sync-log', '#troubleshooting', '#disconnect'],
   connectAutomatically: ['#steps', '#no-button', '#problems'],
   connectConversionsApi: ['#conversions-api', '#meta-conversions-api', '#tiktok-events-api', '#pinterest-conversions-api', '#how-it-works', '#test-events', '#related'],
+  connectQuickbooksOnline: ['#before-you-start', '#connect', '#choose-your-accounts', '#what-is-posted', '#how-each-payment-is-posted', '#sales-tax-collected-by-aglyn', '#one-summary-a-day-instead', '#currency', '#sales-before-you-connected', '#when-something-does-not-post', '#disconnect'],
   connectSmileIoOrYotpo: ['#connect-your-account', '#who-earns', '#when-something-is-not-sent', '#disconnect'],
+  connectXero: ['#before-you-start', '#connect', '#choose-an-organization', '#choose-your-accounts', '#what-is-posted', '#how-each-payment-is-posted', '#sales-tax-collected-by-aglyn', '#one-summary-a-day-instead', '#currency', '#sales-before-you-connected', '#when-something-does-not-post', '#disconnect'],
   consoleAndSite: ['#add-a-console-page', '#add-a-widget-to-a-shell-zone', '#wrap-every-console-page-providers', '#add-a-canvas-component-besigner--published-sites', '#add-a-site-runtime', '#troubleshooting'],
   consoleSearch: ['#what-it-searches', '#searching-from-the-organization', '#how-matching-works', '#what-it-does-not-search', '#why-a-group-sometimes-says-it-was-only-partly-searched'],
   consoleTour: ['#the-app-bar', '#choose-a-workspace', '#in-context-help', '#filter-and-search', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#a-site-card', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#recent-activity', '#next', '#workspace-settings--notifications', '#organization-settings', '#organization-general', '#the-notifications-feed', '#all-notifications', '#notification-levels', '#notification-settings', '#one-kind-at-a-time', '#workspace-and-site-overrides', '#daily-digests', '#notification-sound', '#alerts-on-this-device'],
@@ -1399,6 +1409,9 @@ export const DOCS_HELP_SECTION_TITLES: {
   },
   connectADomain: {
     '#steps': 'Steps',
+  },
+  connectXero: {
+    '#choose-an-organization': 'Choose an organization',
   },
   consoleSearch: {
     '#what-it-searches': 'What it searches',
