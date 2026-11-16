@@ -109,6 +109,12 @@ internal fun PhoneHome(
 internal fun PhoneHomeHeader(services: ShellServices, context: ShellPluginContext, workspace: WorkspaceState, onVisit: (String) -> Unit) {
   workspace.site?.let { site ->
     PhoneSiteLine(services, site, onVisit)
+    // Site Care's Request a change (the console's site dashboard, AGL-3959): off with the reason without Site Care.
+    workspace.org?.id?.let { orgId ->
+      androidx.compose.runtime.key(orgId, site.id) {
+        com.aglyn.site.sitecare.SiteCareRequestButton(services.api, orgId, site.id, onAddSiteCare = { context.navigate("core.billing") })
+      }
+    }
     return
   }
   val org = (orgDocLive(services, workspace.org?.id) as? Live.Ready)?.value?.data

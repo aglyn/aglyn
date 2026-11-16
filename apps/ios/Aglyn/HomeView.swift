@@ -3,6 +3,7 @@
 
 import AglynContracts
 import AglynCore
+import AglynSite
 import AglynPluginHost
 import AglynUI
 import SwiftUI
@@ -32,6 +33,7 @@ struct HomeView: View {
           // bell's Activity and each tile's count.
           // The tiles are the body; the numbers (AGL-4011) follow them, the same cards a Mac's Home draws.
           phoneSiteLine
+          siteCare
           if picked == nil { HomeWorkspaceStats(part: .proposal) }
           PhoneHomeTiles()
           if let picked { HomeSiteStats(site: picked) } else { HomeWorkspaceStats(part: .glance) }
@@ -76,6 +78,18 @@ struct HomeView: View {
 
   // MARK: The site, in one line
 
+  /// Site Care's Request a change (the console's site dashboard, AGL-3959): off with the reason on a workspace without it.
+  @ViewBuilder
+  private var siteCare: some View {
+    if let picked, let orgID = model.workspace?.org?.id, let api = model.api {
+      SiteCareRequestButton(api: api, orgID: orgID, hostID: picked.id) {
+        navigation.mode = .workspaceSettings
+        navigation.select(.plugin("core.billing"))
+      }
+      .id("\(orgID):\(picked.id)")
+    }
+  }
+
   /// Visit site: the site's address, or, while it is in preview or maintenance, the link that enters it as the team (the
   /// console's `SiteVisitButton`, AGL-4086).
   private func visit(_ address: URL, hostID: String) {
@@ -116,6 +130,7 @@ struct HomeView: View {
         Text(picked.name).font(AglynFont.title2).lineLimit(1)
         if let chip = site.chip { StatusChip(chip.text, tone: chip.tone) }
         Spacer(minLength: AglynSpace.one)
+        siteCare
         if let address, let url = URL(string: "https://\(address)/") {
           Button("Visit site") { visit(url, hostID: picked.id) }
             .buttonStyle(.aglynSecondary)
