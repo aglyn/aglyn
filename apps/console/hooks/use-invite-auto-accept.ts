@@ -38,12 +38,20 @@ export interface InviteAutoAcceptState {
   statusOf: (inviteId: string) => InviteAutoAcceptStatus | undefined
   /** Workspace slugs joined in this tab, kept until their membership arrives. */
   joinedSlugs: ReadonlySet<string>
+  /**
+   * An automatic join in this tab is in flight, or has succeeded (AGL-4047).
+   * The accepted invitation leaves the pending list before its membership
+   * reaches the workspace list, and the home page reads this so that gap
+   * never looks like an account with no invitation and no workspace.
+   */
+  joining: boolean
 }
 
 export const InviteAutoAcceptContext = createContext<InviteAutoAcceptState>({
   enabled: false,
   statusOf: () => undefined,
   joinedSlugs: new Set(),
+  joining: false,
 })
 
 export function useInviteAutoAccept(): InviteAutoAcceptState {
@@ -54,12 +62,16 @@ export function useInviteAutoAccept(): InviteAutoAcceptState {
  * Whether an automatic join should also open the workspace: only when the
  * person is already on one of its pages (the link they were invited by) or on
  * the console home. Anyone working in another workspace stays where they are.
+ *
+ * On the home page only the NEWEST invitation opens (AGL-4047): with two
+ * waiting, each join used to navigate and whichever answered last won.
  */
 export function autoJoinOpensWorkspace(
   pathname: string,
   orgSlug: string | null | undefined,
+  newest = true,
 ): boolean {
-  if (pathname === '/' || pathname === '') return true
+  if (pathname === '/' || pathname === '') return newest
   if (!orgSlug) return false
   return pathname === `/${orgSlug}` || pathname.startsWith(`/${orgSlug}/`)
 }

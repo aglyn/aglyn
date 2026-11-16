@@ -27,6 +27,7 @@ import {
 } from '../hooks/use-invite-auto-accept'
 import { useInviteResponse } from '../hooks/use-invite-response'
 import { usePendingInvites } from '../hooks/use-pending-invites'
+import { latestInvite } from '../utils/invite-order'
 
 /**
  * Invitations take effect on their own (AGL-4023): the moment a person is in
@@ -85,11 +86,18 @@ export function InviteAutoAcceptProvider({ children }: { children: ReactNode }) 
 
   useEffect(() => {
     if (impersonating !== false) return
+    // Of several invitations, the newest is the one a person landing on the
+    // home page is opened into (AGL-4047); the rest join where they stand.
+    const newestId = latestInvite(invites)?.$id
     for (const invite of invites) {
       if (attempted.current.has(invite.$id)) continue
       attempted.current.add(invite.$id)
       setStatuses((current) => ({ ...current, [invite.$id]: 'joining' }))
-      const navigate = autoJoinOpensWorkspace(pathnameRef.current, invite.orgSlug)
+      const navigate = autoJoinOpensWorkspace(
+        pathnameRef.current,
+        invite.orgSlug,
+        invite.$id === newestId,
+      )
       void respond(invite, 'accept', { navigate, quiet: true }).then((accepted) => {
         setStatuses((current) => ({
           ...current,
@@ -108,6 +116,7 @@ export function InviteAutoAcceptProvider({ children }: { children: ReactNode }) 
       enabled: impersonating === null ? null : !impersonating,
       statusOf: (inviteId) => statuses[inviteId],
       joinedSlugs,
+      joining: Object.values(statuses).some((status) => status !== 'failed'),
     }),
     [impersonating, statuses, joinedSlugs],
   )
