@@ -318,7 +318,8 @@ private struct ListingDetail: View {
         AglynEmptyState("Could not load this listing", systemImage: "exclamationmark.triangle", message: "Check the connection and try again.")
       } else if let doc = listing.document.map(ListingRow.init), !doc.deleted, !doc.workspaceLocked {
         ListingBody(
-          context: context, listing: doc, hostPin: hostPin.document, orgPin: orgPin.document, pinsPhase: pinsPhase(doc), runner: runner
+          context: context, listing: doc, document: listing.document?.data, hostPin: hostPin.document, orgPin: orgPin.document,
+          pinsPhase: pinsPhase(doc), runner: runner
         ) { sheet = $0 }
       } else {
         AglynEmptyState("This listing does not exist", systemImage: "storefront", message: "It may have been removed.")
@@ -400,6 +401,8 @@ private struct ListingDetail: View {
 private struct ListingBody: View {
   let context: NativePluginContext
   let listing: ListingRow
+  /// The listing document's fields, which the publisher's Verified card reads.
+  let document: [String: Any]?
   let hostPin: FirestoreDocument?
   let orgPin: FirestoreDocument?
   /// "loading", "error" or "ready": whether the pins have answered (AGL-4047).
@@ -486,6 +489,9 @@ private struct ListingBody: View {
             caption: listing.ratingCount > 0 ? "\(listing.ratingCount) ratings" : "Not yet rated")
           AglynFigureTile("Installs", value: "\(listing.activeInstalls ?? listing.installCount)", caption: "\(listing.installCount) all time")
         }
+      }
+      if mine, plugin, let document {
+        ListingVerificationSection(context: context, listingID: listing.id, listing: document)
       }
       if mine, plugin {
         ListingConnectionCredentialsSections(context: context, model: credentials, api: credentialsAPI)
