@@ -37,15 +37,21 @@ class WaiversSpecsTest : SpecTestBase() {
     assertEquals(listOf("noContact", "signaturesTools", "signatures", "waivers"), model.shown())
     val rows = (0..2).map { model.row("data.list.waivers", it) }
     assertEquals(listOf("Good for a year", "Good through Dec 31, 2026", "Good for one visit (the day it is signed)"), rows.map { model.line("waivers", "secondary", it) })
-    val actions = model.rowActions("waivers")
-    fun shown(row: JsonElement) = actions.filter { ScreenValues.condition(it.whenCondition, row) }.map { it.id }
-    assertEquals(listOf("copyLink", "openLink"), shown(rows[0]))
-    assertEquals(listOf("copyLink"), shown(rows[1]))
-    assertEquals("https://shop.example.com/sign-waiver?waiver=w1", ScreenValues.render(actions.first { it.id == "copyLink" }.copy!!, rows[0]))
-    val bare = home(origin = null)
-    val first = bare.row("data.list.waivers")
-    assertEquals(listOf("copyConsoleLink", "openConsoleLink"), actions.filter { ScreenValues.condition(it.whenCondition, first) }.map { it.id })
-    assertEquals("https://console.test/kiosk/waivers/sign?host=h1&waiver=w1", ScreenValues.render(actions.first { it.id == "copyConsoleLink" }.copy!!, first))
+    assertEquals(listOf("share"), model.rowActions("waivers").map { it.id })
+
+    // Share for signing: the store's own signing page, its QR code and Copy link; a draft says to publish first.
+    val share = spec("waivers", "waivers.share")
+    fun shareOf(origin: String?, status: String) = screen(
+      share, mapOf("waiverId" to "w1"),
+      """{"list":{"waivers":[${waiver("w1", status, """{"kind":"visit"}""")}],"signPageOrigin":${origin?.let { "\"$it\"" } ?: "null"}}}""",
+    )
+    val own = shareOf("https://shop.example.com", "published")
+    assertEquals(listOf("ownSite", "link", "code", "copy"), own.shown())
+    assertEquals("https://shop.example.com/sign-waiver?waiver=w1", ScreenValues.render(own.block("code").string("value")!!, own.context))
+    assertEquals(listOf("copyLink"), own.actionsShown("copy"))
+    val bare = shareOf(null, "draft")
+    assertEquals(listOf("draft", "consoleSite", "link", "codeConsole", "copy"), bare.shown())
+    assertEquals("https://console.test/kiosk/waivers/sign?host=h1&waiver=w1", ScreenValues.render(bare.block("codeConsole").string("value")!!, bare.context))
   }
 
   @Test

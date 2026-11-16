@@ -3436,6 +3436,7 @@
         "contributes": {
           "screens": [
             "waivers.home",
+            "waivers.share",
             "waivers.signatures",
             "waivers.signature",
             "waivers.waiver"

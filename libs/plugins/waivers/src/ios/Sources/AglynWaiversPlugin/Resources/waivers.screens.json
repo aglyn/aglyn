@@ -260,34 +260,16 @@
           ],
           "actions": [
             {
-              "id": "copyLink",
-              "label": "Copy share link",
-              "icon": "doc.on.doc|content_copy",
-              "when": "data.list.signPageOrigin",
-              "copy": "{data.list.signPageOrigin}/sign-waiver?waiver={item.id}",
-              "success": "Link copied"
-            },
-            {
-              "id": "copyConsoleLink",
-              "label": "Copy share link",
-              "icon": "doc.on.doc|content_copy",
-              "when": "!data.list.signPageOrigin",
-              "copy": "{app.origin}/kiosk/waivers/sign?host={site.id}&waiver={item.id}",
-              "success": "Link copied"
-            },
-            {
-              "id": "openLink",
-              "label": "Open the signing page",
-              "icon": "arrow.up.right.square|open_in_new",
-              "when": "item.status == published && data.list.signPageOrigin",
-              "link": "{data.list.signPageOrigin}/sign-waiver?waiver={item.id}"
-            },
-            {
-              "id": "openConsoleLink",
-              "label": "Open the signing page",
-              "icon": "arrow.up.right.square|open_in_new",
-              "when": "item.status == published && !data.list.signPageOrigin",
-              "link": "{app.origin}/kiosk/waivers/sign?host={site.id}&waiver={item.id}"
+              "id": "share",
+              "label": "Share",
+              "icon": "square.and.arrow.up|share",
+              "url": null,
+              "navigate": {
+                "screen": "waivers.share",
+                "params": {
+                  "waiverId": "{item.id}"
+                }
+              }
             }
           ],
           "empty": "No waivers yet. Write your waiver once, publish it, and riders can sign it before they arrive or at the window.",
@@ -297,6 +279,130 @@
               "waiverId": "{item.id}"
             }
           }
+        }
+      ]
+    },
+    {
+      "id": "waivers.share",
+      "title": "Share for signing",
+      "label": "Share for signing",
+      "icon": "square.and.arrow.up|share",
+      "scope": "site",
+      "constants": {
+        "statuses": [
+          {
+            "id": "draft",
+            "label": "Draft"
+          },
+          {
+            "id": "published",
+            "label": "Published"
+          },
+          {
+            "id": "retired",
+            "label": "Retired"
+          }
+        ],
+        "methods": [
+          {
+            "id": "online",
+            "label": "Online"
+          },
+          {
+            "id": "at_window",
+            "label": "At the window"
+          },
+          {
+            "id": "paper",
+            "label": "On paper"
+          }
+        ],
+        "defaultBoxes": [
+          "I have read this waiver and I understand it."
+        ]
+      },
+      "load": {
+        "list": {
+          "url": "/api/waivers/templates?hostId={site.id}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "draft",
+          "tone": "warning",
+          "when": "data.list.waivers[id=params.waiverId].status != published",
+          "text": "Publish this waiver first: the link takes signatures only while it is published."
+        },
+        {
+          "type": "notice",
+          "id": "ownSite",
+          "tone": "info",
+          "when": "data.list.signPageOrigin",
+          "text": "Riders open this link on their own phone to sign before they arrive. It opens on your site, with your header and footer. Print the QR code for the gate or the window."
+        },
+        {
+          "type": "notice",
+          "id": "consoleSite",
+          "tone": "info",
+          "when": "!data.list.signPageOrigin",
+          "text": "Riders open this link on their own phone to sign before they arrive. Print the QR code for the gate or the window."
+        },
+        {
+          "type": "fields",
+          "id": "link",
+          "rows": [
+            {
+              "label": "Waiver",
+              "value": "{data.list.waivers[id=params.waiverId].title}"
+            },
+            {
+              "label": "Link",
+              "value": "{data.list.signPageOrigin}/sign-waiver?waiver={params.waiverId}",
+              "when": "data.list.signPageOrigin"
+            },
+            {
+              "label": "Link",
+              "value": "{app.origin}/kiosk/waivers/sign?host={site.id}&waiver={params.waiverId}",
+              "when": "!data.list.signPageOrigin"
+            }
+          ]
+        },
+        {
+          "type": "qr",
+          "id": "code",
+          "value": "{data.list.signPageOrigin}/sign-waiver?waiver={params.waiverId}",
+          "when": "data.list.signPageOrigin",
+          "caption": "QR code for {data.list.waivers[id=params.waiverId].title}"
+        },
+        {
+          "type": "qr",
+          "id": "codeConsole",
+          "value": "{app.origin}/kiosk/waivers/sign?host={site.id}&waiver={params.waiverId}",
+          "when": "!data.list.signPageOrigin",
+          "caption": "QR code for {data.list.waivers[id=params.waiverId].title}"
+        },
+        {
+          "type": "actions",
+          "id": "copy",
+          "items": [
+            {
+              "id": "copyLink",
+              "label": "Copy link",
+              "icon": "doc.on.doc|content_copy",
+              "when": "data.list.signPageOrigin",
+              "copy": "{data.list.signPageOrigin}/sign-waiver?waiver={params.waiverId}",
+              "success": "Copied"
+            },
+            {
+              "id": "copyConsoleLink",
+              "label": "Copy link",
+              "icon": "doc.on.doc|content_copy",
+              "when": "!data.list.signPageOrigin",
+              "copy": "{app.origin}/kiosk/waivers/sign?host={site.id}&waiver={params.waiverId}",
+              "success": "Copied"
+            }
+          ]
         }
       ]
     },
