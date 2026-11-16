@@ -75,6 +75,8 @@ export const QUOTA_LABELS: Readonly<Record<string, string>> = {
   dataStorageMbPerOrg: 'Data storage MB (org)',
   templatesPerHost: 'Templates / site',
   apiRequestsPerMonth: 'API requests / mo',
+  apiRequestsPerMinutePerOrg: 'API requests / min (workspace)',
+  maxApiRequestsPerMonth: 'API requests / mo, ceiling',
   productsPerHost: 'Products / site',
   inventoryLocations: 'Inventory locations',
   posRegisters: 'POS registers (base)',

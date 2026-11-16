@@ -104,8 +104,13 @@ import BillingUsageComponent from '../components/billing/billing-usage.component
 /** Pro: `apiRequestsPerMonth: 1,500`, `extraApiRequestsUsdPer1k: 0.5` — Business's band
  * and rate, which moved into Pro with the API in pricing v4 (AGL-4126). */
 const PRO = { $id: 'org-1', plan: 'pro' } as any
-/** Starter: no API requests included at all, so there is no meter to caption. */
-const STARTER = { $id: 'org-1', plan: 'starter' } as any
+/**
+ * Starter, paying: 500 requests included since AGL-4226, Pro's rate past them,
+ * and a 50,000 monthly ceiling.
+ */
+const STARTER = { $id: 'org-1', plan: 'starter', billingStatus: 'active' } as any
+/** Free: no API requests included at all, so there is no meter to caption. */
+const FREE = { $id: 'org-1', plan: 'free' } as any
 /**
  * Enterprise with a contracted `UNLIMITED` request band, and no published
  * overage rate. The plan row itself is a finite fallback of 170,000 since
@@ -213,11 +218,11 @@ describe('a workspace over the band is told the price', () => {
 
 describe('a plan that cannot be charged is quoted nothing', () => {
   it('shows no meter at all when the plan includes no API access', async () => {
-    // Starter's `apiRequestsPerMonth` is 0 — the REST API is not part of the plan,
+    // Free's `apiRequestsPerMonth` is 0 — the REST API is not part of the plan,
     // so a meter reading `0 / 0` would invent a quota out of an absence.
-    expect(resolveOrgEntitlements(STARTER).apiRequestsPerMonth).toBe(0)
+    expect(resolveOrgEntitlements(FREE).apiRequestsPerMonth).toBe(0)
     mockApiRequests = 5_000
-    render(<BillingUsageComponent org={STARTER} hosts={HOSTS} />)
+    render(<BillingUsageComponent org={FREE} hosts={HOSTS} />)
     await waitFor(() => {
       expect(screen.getByText('Sites')).toBeTruthy()
     })
@@ -242,5 +247,32 @@ describe('a plan that cannot be charged is quoted nothing', () => {
     expect(row.textContent).not.toContain('/ 0')
     expect(screen.queryByText(/API overage/)).toBeNull()
     expect(checkApiRequestQuota(ENTERPRISE, 90_000_000).overageRequests).toBe(0)
+  })
+})
+
+describe('Starter is told its overage AND its ceiling (AGL-4226)', () => {
+  it('prices the overage at Starter\'s rate and names the ceiling and the plan without one', async () => {
+    const quota = checkApiRequestQuota(STARTER, 10_500)
+    expect(quota.overageRateUsd).toBe(0.5)
+    mockApiRequests = 10_500
+    render(<BillingUsageComponent org={STARTER} hosts={HOSTS} />)
+    await waitFor(() => {
+      expect(screen.getByText(/API overage/)).toBeTruthy()
+    })
+    expect(screen.getByText(/API overage/).textContent).toContain('10,000 requests')
+    expect(screen.getByText(/API overage/).textContent).toContain('≈$5.00')
+    const ceiling = screen.getByTestId('api-ceiling-caption').textContent ?? ''
+    expect(ceiling).toContain('50,000')
+    expect(ceiling).toContain('39,500 left')
+    expect(ceiling).toContain('Pro has no monthly ceiling')
+  })
+
+  it('Pro has no ceiling caption', async () => {
+    mockApiRequests = 10_500
+    render(<BillingUsageComponent org={{ ...PRO, billingStatus: 'active' }} hosts={HOSTS} />)
+    await waitFor(() => {
+      expect(screen.getByText(/API overage/)).toBeTruthy()
+    })
+    expect(screen.queryByTestId('api-ceiling-caption')).toBeNull()
   })
 })

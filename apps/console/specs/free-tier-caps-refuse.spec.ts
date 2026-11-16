@@ -341,6 +341,12 @@ const DIMENSIONS: Record<string, Dimension> = {
  * completeness check is that "we decided" is written down.
  */
 const NOT_A_CAP: Record<string, string> = {
+  // AGL-4226: Free has no API, so its `apiRequestsPerMonth` of 0 is the wall
+  // and neither of these is ever reached on it.
+  apiRequestsPerMinutePerOrg:
+    'a per-minute rate limit on the API, which Free does not carry — the durable limiter in `api-v1.ts` enforces it on the plans that do.',
+  maxApiRequestsPerMonth:
+    'a ceiling ABOVE an API band, read only where overage is sold; Free sells none, so its band of 0 is the wall.',
   maxManagersPerOrg:
     'a ceiling ON the managers cap, not a cap of its own — it clamps ' +
     'included + purchased inside `checkSeatQuota`, and is driven through ' +

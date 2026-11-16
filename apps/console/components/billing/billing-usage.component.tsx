@@ -22,9 +22,11 @@ import {
   checkCrmRecordsQuota,
   checkPluginOrgCapacityQuota,
   checkSeatQuota,
+  cheapestPlanWithoutApiCeiling,
   CRM_EMAIL_USAGE_COLLECTION,
   crmEmailUsageDayKey,
   emailSendsOverage,
+  PLAN_LABELS,
   PLAN_PRICING,
   planLabelGrantingFeature,
   priceEmailSendOverage,
@@ -806,6 +808,8 @@ export function BillingUsageComponent(props: BillingUsageProps) {
    * cannot be charged.
    */
   const apiQuota = checkApiRequestQuota(org, apiRequests ?? 0)
+  // The plan the ceiling caption names as the way past it (AGL-4226).
+  const uncappedApiPlan = cheapestPlanWithoutApiCeiling()
   // The run overage (pricing v4) from the workspace-counted run bands,
   // matched by the entitlement each band is held to. A band still loading
   // reads 0, which is never over a band, so no figure appears early.
@@ -1103,6 +1107,27 @@ export function BillingUsageComponent(props: BillingUsageProps) {
             `over the included band at $${apiQuota.overageRateUsd.toFixed(2)}` +
             `/1,000 — ≈$${apiQuota.overageMonthlyUsd.toFixed(2)} on this ` +
             "month's invoice."}
+        </Typography>
+      ) : null}
+      {/* The month's hard stop (AGL-4226), on a plan that has one and bills
+          up to it: Starter, at 50,000. Read off `checkApiRequestQuota`'s own
+          `ceiling`, so it says what the pipeline refuses at. Shown once the
+          counter has read, and never on Pro and up, which have none. */}
+      {apiRequests != null &&
+      apiQuota.overageRateUsd != null &&
+      Number.isFinite(apiQuota.ceiling) ? (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'block', mt: -1.5, mb: 2 }}
+          data-testid="api-ceiling-caption"
+        >
+          {`API requests stop at ${apiQuota.ceiling.toLocaleString()} this month ` +
+            `(${Math.max(0, apiQuota.ceiling - apiQuota.used).toLocaleString()} left), ` +
+            'overage included, until the month turns.' +
+            (uncappedApiPlan && uncappedApiPlan !== resolveEffectivePlan(org)
+              ? ` ${PLAN_LABELS[uncappedApiPlan]} has no monthly ceiling.`
+              : '')}
         </Typography>
       ) : null}
       {/* Workflow and action runs, once for the organization (AGL-3472):
