@@ -3652,6 +3652,24 @@
       "id": "help-desks",
       "package": "@aglyn/plugins-help-desks",
       "uses": ["commerce"],
+      "mobile": {
+        "$comment": "Help desks natively (Gorgias, Re:amaze, Kustomer, Gladly and Richpanel with the merchant's own credentials), from the spec in src/android/screens/help-desks.screens.json. It sits in the site's plugin settings (sitePluginSettings zone) and Setup's Integrations card (hostSettings).",
+        "ios": {
+          "module": "AglynHelpDesksPlugin",
+          "register": "registerHelpDesksNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.helpdesks",
+          "register": "registerHelpDesksNative"
+        },
+        "contributes": {
+          "screens": [
+            "help-desks.service",
+            "help-desks.provider"
+          ],
+          "widgets": ["help-desks.service.card"]
+        }
+      },
       "register": {
         "consoleDeclarations": "registerHelpDesksConsoleDeclarations",
         "console": "registerHelpDesksConsole",
