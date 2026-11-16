@@ -101,13 +101,7 @@ const CONSOLE_PROJECT = 'aglyn-console'
  * hidden, and the check fails the moment one becomes admitted and is still
  * listed — so the list can only shrink.
  */
-const OWED_CONSOLE_BYPASS = new Set([
-  '/api/mcp',
-  '/api/mcp/server-card',
-  '/api/oauth/register',
-  '/api/oauth/token',
-  '/api/oauth/revoke',
-])
+const OWED_CONSOLE_BYPASS = new Set([])
 
 /**
  * Advertised paths that answer HTML to a person, whose posture is a product
