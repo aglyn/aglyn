@@ -611,6 +611,12 @@
               "subtitle": "Templates, checkout and receipts"
             },
             {
+              "title": "Quotes",
+              "icon": "doc.text|request_quote",
+              "screen": "commerce.quoteSettings",
+              "subtitle": "What every new quote starts with, and what customers confirm before they approve a proof"
+            },
+            {
               "title": "Return settings",
               "icon": "settings|settings",
               "screen": "commerce.returnSettings",

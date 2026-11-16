@@ -27,6 +27,7 @@ import {
   RETURN_STATUS_LABELS,
 } from './model/commerce-returns'
 import { SHIPSTATION_STATUS_NAMES } from './model/shipstation'
+import { QUOTE_DEFAULT_APPROVAL_STATEMENTS, QUOTE_MAX_APPROVAL_STATEMENTS } from './model/commerce-quotes'
 import {
   ORDER_WEBHOOK_DELIVERY_STATUS_LABELS,
   ORDER_WEBHOOK_MAX_ENDPOINTS,
@@ -82,6 +83,15 @@ describe('native commerce screens', () => {
     )
     expect(rows(screens['commerce.return'].constants.reasons)).toEqual(
       Object.entries(RETURN_REASON_LABELS),
+    )
+  })
+
+  it('start quotes with the console defaults and its statement cap (AGL-4206)', () => {
+    const screen = screens['commerce.quoteSettings']
+    expect(screen.constants.defaultStatements).toEqual([...QUOTE_DEFAULT_APPROVAL_STATEMENTS])
+    expect(screen.blocks[0].submit.disabledWhen).toContain(`form.approvalStatements.${QUOTE_MAX_APPROVAL_STATEMENTS}`)
+    expect(screen.blocks[0].fields.find((field: { key: string }) => field.key === 'approvalStatements').help).toContain(
+      `up to ${QUOTE_MAX_APPROVAL_STATEMENTS}`,
     )
   })
 
