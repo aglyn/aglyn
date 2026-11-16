@@ -222,3 +222,43 @@ describe('the /api/v1 chokepoint enforces the monthly request quota (AGL-2163)',
     expect((await call()).status).toBe(429)
   })
 })
+
+describe('Starter stops at its monthly ceiling at the chokepoint (AGL-4226)', () => {
+  const { PLAN_ENTITLEMENTS } = jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
+  )
+  const CEILING = PLAN_ENTITLEMENTS.starter.maxApiRequestsPerMonth as number
+  const BAND = PLAN_ENTITLEMENTS.starter.apiRequestsPerMonth as number
+
+  it('meters past the band, then refuses at the ceiling with a message that names it', async () => {
+    mockGetOrgDoc.mockResolvedValue({ plan: 'starter', billingStatus: 'active' })
+    mockApiUsageCount = BAND + 10_000
+    expect((await call()).status).toBe(200)
+    mockApiUsageCount = CEILING
+    const refused = await call()
+    expect(refused.status).toBe(429)
+    // Seconds to the UTC month boundary, never to the next minute.
+    expect(Number(refused.headers.get('Retry-After'))).toBeGreaterThan(60)
+    const body = await refused.json()
+    expect(body.error.code).toBe('monthly_request_ceiling')
+    expect(body.error.message).toContain(CEILING.toLocaleString('en-US'))
+    expect(body.error.message).toContain('Pro has no monthly ceiling')
+  })
+
+  it('a Starter workspace with no live subscription stops at the band, and says why', async () => {
+    mockGetOrgDoc.mockResolvedValue({ plan: 'starter' })
+    mockApiUsageCount = BAND - 1
+    expect((await call()).status).toBe(200)
+    mockApiUsageCount = BAND
+    const refused = await call()
+    expect(refused.status).toBe(429)
+    expect((await refused.json()).error.code).toBe('monthly_request_quota')
+  })
+
+  it('Pro has no ceiling and still pays no read for it', async () => {
+    mockGetOrgDoc.mockResolvedValue({ plan: 'pro', billingStatus: 'active' })
+    mockApiUsageCount = 10_000_000
+    expect((await call()).status).toBe(200)
+    expect(mockApiUsageReads).toBe(0)
+  })
+})

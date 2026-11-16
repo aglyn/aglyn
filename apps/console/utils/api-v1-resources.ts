@@ -1155,12 +1155,18 @@ export async function handleUsage(
     {
       object: 'usage',
       month,
-      apiRequests: usageBand(
-        apiQuota.used,
-        apiQuota.included,
-        apiQuota.remaining,
-        apiQuota.overageRateUsd,
-      ),
+      apiRequests: {
+        ...usageBand(
+          apiQuota.used,
+          apiQuota.included,
+          apiQuota.remaining,
+          apiQuota.overageRateUsd,
+        ),
+        // The month's hard stop, overage included (AGL-4226): Starter's
+        // ceiling, or `null` where there is none (Pro and up). Additive, so a
+        // client reading the band's four fields is unaffected.
+        ceiling: Number.isFinite(apiQuota.ceiling) ? apiQuota.ceiling : null,
+      },
       dataStorageMb: usageBand(
         storageQuota.usedMb,
         storageQuota.includedMb,

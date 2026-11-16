@@ -1296,3 +1296,62 @@ describe('a workspace with no sites is swept and billed (AGL-3445)', () => {
     expect(meterEvents).toHaveLength(0)
   })
 })
+
+describe('Starter API overage reaches the meter (AGL-4226)', () => {
+  /**
+   * The billing half of opening the API on Starter, proved on the route that
+   * bills it: a closed month's `apiUsage` count is priced at Starter's rate
+   * past its band, folded into the ONE cents value of the org-month meter
+   * event, and sent — to a Starter subscription carrying the metered item,
+   * exactly as Pro's is. Measured as a DIFFERENCE between two sweeps that
+   * differ only in the API count, so the storage, page-view and form lines
+   * this fixture also carries cannot stand in for it.
+   */
+  const {
+    PLAN_ENTITLEMENTS,
+    PLAN_PRICING,
+  } = jest.requireActual('@aglyn/aglyn/app-utils/plan-entitlements')
+  const band = PLAN_ENTITLEMENTS.starter.apiRequestsPerMonth as number
+  const rate = PLAN_PRICING.starter.extraApiRequestsUsdPer1k as number
+
+  async function closedSweepCents(apiCount: number) {
+    seedOrg()
+    mockDocs.set(`orgs/org-1/apiUsage/${CLOSED}`, { count: apiCount })
+    meterEvents.length = 0
+    const response = await runSweep(loadRoute())
+    expect(response.status).toBe(200)
+    expect(meterEvents).toHaveLength(1)
+    return {
+      cents: Number(meterEvents[0].get('payload[value]')),
+      rollup: mockDocs.get(`orgs/org-1/usage/${CLOSED}`)!,
+    }
+  }
+
+  it('prices the requests past the band at Starter\'s rate and sends them on the meter event', async () => {
+    const none = await closedSweepCents(0)
+    const used = band + 19_500
+    const some = await closedSweepCents(used)
+    const expectedUsd = (19_500 / 1000) * rate
+    expect(some.rollup['apiRequests']).toBe(used)
+    expect(some.rollup['apiOverageUsd']).toBeCloseTo(expectedUsd, 2)
+    expect(some.cents - none.cents).toBe(Math.round(expectedUsd * 100))
+    // $9.75 at $0.50 — stated once, while the rate is what the owner set.
+    if (rate === 0.5) expect(some.cents - none.cents).toBe(975)
+  })
+
+  it('bills nothing for requests inside the band', async () => {
+    const none = await closedSweepCents(0)
+    const inside = await closedSweepCents(band)
+    expect(inside.cents).toBe(none.cents)
+    expect(inside.rollup['apiOverageUsd']).toBe(0)
+  })
+
+  it('a Starter workspace with no live subscription is priced nothing past its band', async () => {
+    seedOrg()
+    mockDocs.set('orgs/org-1', { plan: 'starter' })
+    mockDocs.set(`orgs/org-1/apiUsage/${CLOSED}`, { count: band + 19_500 })
+    await runSweep(loadRoute())
+    // The pipeline refused it at the band; the rollup agrees there is nothing to sell.
+    expect(mockDocs.get(`orgs/org-1/usage/${CLOSED}`)!['apiOverageUsd']).toBe(0)
+  })
+})
