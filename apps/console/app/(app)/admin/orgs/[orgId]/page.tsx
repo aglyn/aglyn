@@ -54,6 +54,10 @@ import { CardColumns } from '@aglyn/shared-ui-jsx/components/card-columns'
 import StaffOrgAdminActionsCard from '../../../../../components/staff-org-admin-actions-card.component'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import StaffAcquisitionCard from '../../../../../components/staff-acquisition-card.component'
+import {
+  StaffUsageLevelField,
+  timestampMs,
+} from '../../../../../components/staff-usage-level.component'
 import OrgActivityCard from '../../../../../components/org-activity-card.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -1279,6 +1283,32 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                       )}
                       build={clientBuild}
                     />
+                  ),
+                },
+                {
+                  children: (
+                    /*
+                     * The staff usage level (AGL-4228): how much this
+                     * workspace uses the platform, as staff judged it.
+                     * Carries to the owner unless unticked; a carry never
+                     * lowers a higher level.
+                     */
+                    <CardDisplay header={'Usage level'} contentGutterX contentGutterY>
+                      <StaffUsageLevelField
+                        key={orgId}
+                        target="org"
+                        id={orgId}
+                        level={orgDoc?.usageLevel}
+                        setAtMs={timestampMs(orgDoc?.usageLevelAt)}
+                        carries={['owner']}
+                        // Patched in place: a full re-read would blank the page.
+                        onChanged={(level) =>
+                          setOrgDoc((current: any) =>
+                            current ? { ...current, usageLevel: level, usageLevelAt: Date.now() } : current,
+                          )
+                        }
+                      />
+                    </CardDisplay>
                   ),
                 },
                 {

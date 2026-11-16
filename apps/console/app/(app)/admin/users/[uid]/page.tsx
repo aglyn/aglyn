@@ -50,6 +50,10 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import StaffAcquisitionCard from '../../../../../components/staff-acquisition-card.component'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
+import {
+  StaffUsageLevelField,
+  timestampMs,
+} from '../../../../../components/staff-usage-level.component'
 import StaffOnly from '../../../../../components/staff-only.component'
 import AccountAvatar from '../../../../../components/account-avatar.component'
 import MainLayout from '../../../../../components/layouts/main.layout'
@@ -88,6 +92,9 @@ interface UserDetail {
   user: {
     uid: string
     email: string | null
+    /** The staff usage level (AGL-4228). */
+    usageLevel?: string | null
+    usageLevelAt?: { seconds: number } | null
     /** Resolved through the account-identity resolver (AGL-3721). */
     displayName: string | null
     photoUrl?: string | null
@@ -443,6 +450,24 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                   <CardColumns
                     spacing={3}
                     items={[
+                      {
+                        /*
+                         * The staff usage level (AGL-4228): how much this
+                         * person uses the platform, as staff judged it.
+                         */
+                        key: 'usageLevel',
+                        children: (
+                          <CardDisplay header="Usage level" contentGutterX contentGutterY>
+                            <StaffUsageLevelField
+                              key={uid}
+                              target="user"
+                              id={uid}
+                              level={detail?.user?.usageLevel}
+                              setAtMs={timestampMs(detail?.user?.usageLevelAt)}
+                            />
+                          </CardDisplay>
+                        ),
+                      },
                       {
                         key: 'identity',
                         children: (
