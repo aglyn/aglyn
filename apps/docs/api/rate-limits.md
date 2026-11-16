@@ -121,7 +121,8 @@ When you exceed a limit, the request returns `429` with a `Retry-After` header
   hammering the endpoint keeps the window pinned — back off rather than retrying
   immediately.
 - Prefer a larger `?limit=` over more requests when reading collections: one call for
-  100 records costs one request, a hundred calls cost a hundred.
+  100 records costs one call against the rate limits and is billed by its size (below),
+  while a hundred calls cost a hundred.
 
 ### Creating a site has its own budget too {#site-create-budget}
 
@@ -167,7 +168,7 @@ to its plan:
 
 | Plan | Included requests / month | Overage | Monthly ceiling |
 | --- | --- | --- | --- |
-| Starter | 500 | Metered per additional 1,000, at the rate on [aglyn.com/pricing](https://aglyn.com/pricing) | 50,000 requests, then refused until the month turns |
+| Starter | 500 | Metered per additional 1,000, at the rate on [aglyn.com/pricing](https://aglyn.com/pricing) | 20,000 requests, then refused until the month turns |
 | Pro | 1,500 | Metered per additional 1,000, at the rate on [aglyn.com/pricing](https://aglyn.com/pricing) | None |
 | Custom | Set by your agreement | — | Set by your agreement |
 
@@ -175,7 +176,7 @@ Requests beyond the included quota **keep working** and bill as metered overage 
 monthly invoice, so a bulk import doesn't stop when the included requests run out.
 
 **Starter has a monthly ceiling; Pro has none.** On Starter, once the workspace has
-made 50,000 requests in a calendar month (UTC) — the included 500 and the overage
+made 20,000 requests in a calendar month (UTC) — the included 500 and the overage
 together — every further request is refused with `429` and code
 `monthly_request_ceiling` until the month turns, with `Retry-After` counting down to
 it. Move to Pro for an integration that needs more: its overage keeps billing with no
@@ -206,3 +207,25 @@ whichever limit refused it.
 
 In practice: a buggy client looping on a 404 costs you quota, but an unauthenticated
 or rate-limited one doesn't.
+
+### Billed units: requests are counted by size {#billed-units}
+
+The monthly quota, the overage and Starter's ceiling count **billed units**, not calls.
+A request is **one unit per started 256 KB** (262,144 bytes) of the larger of its
+request body and its response body, and never less than one:
+
+| Request | Units |
+| --- | --- |
+| A default page of 25 records (tens of KB) | 1 |
+| A page of 100 records of about 3 KB each (about 300 KB) | 2 |
+| A 1 MB request body (a file of about 750 KB, base64-encoded) | 4 |
+| A body at the 4.5 MB limit | 18 |
+
+Every response says what it was charged in `X-Api-Billing-Units`, and
+[`GET /v1/usage`](usage.md) reports the month in units (`apiRequests.used`) with the
+unit's size (`apiRequests.unitBytes`). The per-minute rate limits are different: they
+count **calls**, whatever their size.
+
+Over the [MCP server](/guides/your-first-api-call#mcp), protocol messages —
+`initialize`, `tools/list`, `ping` and notifications — are never weighed. A tool call
+is weighed like the REST call it makes: its request and its response.

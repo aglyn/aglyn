@@ -506,10 +506,9 @@ Revert: point `v0clP6xQl-`'s `versionId` back at `d4QVrkm2vn` and revalidate.
 
 ### 2026-11-16 — the API on Starter: code first, the page after billing (AGL-4226)
 
-Starter gains the API (500 requests a month, $0.50 per 1,000 past them, a
-50,000 monthly ceiling) and every plan a per-workspace rate limit. A band going
-UP publishes after billing is live, so this change is code-only and the page
-follows the release:
+Starter gains the API (500 requests a month, $3.00 per 1,000 past them, a
+20,000 monthly ceiling) and every plan a per-workspace rate limit. The API on
+Starter is a NEW line (a band up), so it publishes after billing is live:
 
 - `tables.json` is regenerated and now carries the Starter cells and two new
   compare rows, **API monthly ceiling** and **API requests per minute, whole
@@ -521,8 +520,8 @@ follows the release:
 - `/pricing`, the calculator variables, the comparison pages and the Figma
   frames change by hand after the release, from before→after rows the owner
   approves.
-- **Two numbers may move after a pricing audit**: Starter's overage rate and
-  its ceiling. Each is written once —
+- **Starter's overage rate and its ceiling** (moved from $0.50 / 50,000 to
+  $3.00 / 20,000 by the overage audit, 2026-11-16). Each is written once —
   `PLAN_PRICING.starter.extraApiRequestsUsdPer1k` and
   `PLAN_ENTITLEMENTS.starter.maxApiRequestsPerMonth` — and the specs, the
   refusal message, the console captions and `tables.json` read them. What
@@ -531,9 +530,29 @@ follows the release:
   `apps/docs/docs/workspace-and-billing/billing-and-plans/overview.md`), the
   native overage screen's `const.pricing.starter`
   (`libs/native/screens/billing-overage.screens.json`, held to the code by
-  `native-billing-overage-matches-the-console.spec.ts`), the `$24.75` and
-  `975` guards in `api-request-guards.spec.ts` and `report-usage/route.spec.ts`
+  `native-billing-overage-matches-the-console.spec.ts`), the `$58.50` and
+  `5850` guards in `api-request-guards.spec.ts` and `report-usage/route.spec.ts`
   (each conditional on today's figures), the decision-log entry, and the page.
+
+### 2026-11-16 — overage audit corrections: prices UP go on the page first (AGL-4227)
+
+Each line's direction decides its order. **Price UP / band DOWN** publish on
+`/pricing`, the calculator and the comparison pages before billing moves;
+**band UP / new line** publish after.
+
+| Change | Direction | Code | Waits on |
+| --- | --- | --- | --- |
+| Starter email: past 1,000 a month at $2.50 per 1,000, one-to-one CRM inside the 1,000 | price UP (a new charge) | `INCLUDED_EMAIL_SENDS_BY_PLAN`, `PLAN_PRICING.starter.extraEmailSendsUsdPer1k` | the page first, then `BILL_EMAIL_SEND_OVERAGE_FROM` (it gates Pro's email too) |
+| Starter / Free daily transactional ceiling 1,000 → 250, 200 → 50 | band DOWN (an abuse line, published nowhere) | `TRANSACTIONAL_EMAILS_PER_DAY_BY_PLAN` | nothing on the page; takes effect on deploy |
+| API billed per started 256 KB, every plan | price UP (meter change) | `API_BILLING_UNIT_BYTES`, `chargeApiRequestSize` | the page and the API docs first |
+| Starter extra site $20 → $25 | price UP | `PLAN_PRICING.starter.extraHostMonthlyUsd`; `REPRICED_ADDONS` | the page first, then the v2 Stripe prices and `STRIPE_PRICE_STARTER_EXTRA_HOST_V2[_YEARLY]` |
+| Starter CRM records stop at Pro's 10,000 | band DOWN | `maxCrmRecords` | the page first |
+| Retired plans' API overage → $0.50 | price UP, no subscribers | `PLAN_PRICING.{scale,advanced,agency}` | nothing (no column on the page) |
+
+`tables.json` carries the new Starter extra-site and email cells; the
+builder declares the extra-site cell ahead of the frame
+(`USAGE_STALE['Extra site, per month · Starter']`), and the email row is
+already declared absent from the page.
 
 ## Enterprise has no price here, but it has bands
 

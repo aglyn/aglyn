@@ -189,7 +189,7 @@ only signal that you're pointed at the wrong thing.
 
 ### List records
 
-`GET /v1/datasets/{datasetId}/records` — scope `datasets:read`.
+`GET /v1/datasets/{datasetId}/records` — scope `datasets:read`. Billed by size: a page this large can be more than one [billed unit](../rate-limits.md#billed-units) — one per started 256 KB of the response.
 [Paginated](../conventions.md#pagination), ordered by record id — see
 [ordering](../conventions.md#ordering), because it is *not* newest-first.
 

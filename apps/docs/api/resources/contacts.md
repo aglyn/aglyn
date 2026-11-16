@@ -134,7 +134,7 @@ any of them is a `400 validation_failed` naming the key, not a silent drop.
 
 ### List contacts
 
-`GET /v1/contacts` — scope `contacts:read`. [Paginated](../conventions.md#pagination),
+`GET /v1/contacts` — scope `contacts:read`. Billed by size: a page this large can be more than one [billed unit](../rate-limits.md#billed-units) — one per started 256 KB of the response. [Paginated](../conventions.md#pagination),
 ordered by contact id (see [ordering](../conventions.md#ordering) — not newest-first).
 
 | Param | Notes |

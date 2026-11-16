@@ -250,6 +250,12 @@ Enforcement is switched on by us, at your request.
   resets, invites, order confirmations, booking reminders and workflow notifications — is
   counted toward your usage but is never blocked by the cap, at any plan. Going over shows
   up as an overage on the usage rollup rather than as mail your customers never receive.
+  Starter sends no campaigns, and instead includes **1,000 emails a month of everything it
+  sends** — receipts, notices, workflow mail and one-to-one CRM email together; past
+  that, each 1,000 is billed at the rate on [aglyn.com/pricing](https://aglyn.com/pricing).
+- On Starter, CRM records past the included amount are billed up to Pro's included
+  amount; past that, new contacts, companies and deals are refused with a prompt to move
+  to Pro, and every record you already have is kept. Pro has no such ceiling.
 - Usage is rolled up with a **cost-plus estimate** for metered features.
 
 ### The Usage card {#usage-card}
@@ -600,7 +606,7 @@ organization**, and the plans differ in how much they allow:
 |---|---|---|---|
 | Included requests / month | 500 | 1,500 | Set by your agreement |
 | Past the included requests | Metered per additional 1,000 | Metered per additional 1,000 | — |
-| Monthly ceiling | 50,000 requests, then refused until the month turns | None | Set by your agreement |
+| Monthly ceiling | 20,000 requests, then refused until the month turns | None | Set by your agreement |
 | Requests per minute, whole workspace | 120 | 600 | Set by your agreement |
 | Requests per minute, per key | 120 | 120 | 120 |
 | Webhooks and Zapier hooks | Not included | Included | Included |

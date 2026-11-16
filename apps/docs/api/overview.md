@@ -24,7 +24,7 @@ calls from a dialer, back up records, or build an integration.
 :::info Plan availability
 The REST API is included on **Starter**, **Pro** and **Custom**. Create keys from
 **Organization → Settings → API keys**. What differs by plan is how much: Starter
-includes 500 requests a month and stops at 50,000, at 120 a minute for the whole
+includes 500 requests a month and stops at 20,000, at 120 a minute for the whole
 workspace; Pro includes 1,500 with no monthly ceiling, at 600 a minute; Custom's
 limits are set by your agreement. See [Rate limits & usage](rate-limits.md).
 :::
@@ -186,7 +186,7 @@ each CRM collection, for sizing a sync. See [Usage](usage.md).
 {
   "object": "usage",
   "month": "2026-08",
-  "apiRequests": { "used": 18422, "included": 100000, "remaining": 81578, "metered": true, "ceiling": null }
+  "apiRequests": { "used": 18422, "included": 100000, "remaining": 81578, "metered": true, "ceiling": null, "unitBytes": 262144 }
 }
 ```
 
