@@ -964,7 +964,7 @@
         {
           "type": "form",
           "id": "edit",
-          "when": "site.can[manageWaivers]",
+          "when": "site.can[manageWaivers] && params.waiverId",
           "fields": [
             {
               "key": "title",
@@ -1107,6 +1107,153 @@
             },
             "success": "Saved.",
             "reload": true
+          }
+        },
+        {
+          "type": "form",
+          "id": "create",
+          "when": "site.can[manageWaivers] && !params.waiverId",
+          "fields": [
+            {
+              "key": "title",
+              "label": "Title",
+              "kind": "text",
+              "required": true,
+              "initial": "{data.w.waiver.title}",
+              "help": "What signers see at the top, like “Rider release and waiver”."
+            },
+            {
+              "key": "body",
+              "label": "Waiver text",
+              "kind": "multiline",
+              "required": true,
+              "initial": "{data.w.waiver.body}",
+              "placeholder": "Write your waiver here in your own words: the activity, the risks a rider takes on, what they agree to, and anything they must tell you before they ride."
+            },
+            {
+              "key": "checkboxes",
+              "label": "Boxes every signer must tick",
+              "kind": "lines",
+              "initial": "{data.w.waiver.checkboxes.*.label|const.defaultBoxes}",
+              "help": "One per line, up to 12."
+            },
+            {
+              "key": "adultAge",
+              "label": "Adult age",
+              "kind": "select",
+              "initial": "{data.w.waiver.adultAge|'18'}",
+              "options": [
+                {
+                  "value": "18",
+                  "label": "18"
+                },
+                {
+                  "value": "19",
+                  "label": "19"
+                },
+                {
+                  "value": "20",
+                  "label": "20"
+                },
+                {
+                  "value": "21",
+                  "label": "21"
+                }
+              ],
+              "help": "Signers under this age need a parent or guardian to sign for them."
+            },
+            {
+              "key": "allowMinors",
+              "label": "A parent or guardian may sign for people under the adult age",
+              "kind": "toggle",
+              "initial": "{data.w.waiver.allowMinors ?? 'true'}"
+            },
+            {
+              "key": "kind",
+              "label": "One signature is good for",
+              "kind": "select",
+              "initial": "{data.w.waiver.validity.kind|'visit'}",
+              "options": [
+                {
+                  "value": "visit",
+                  "label": "One visit: the day it is signed"
+                },
+                {
+                  "value": "season",
+                  "label": "A season, through a day you choose"
+                },
+                {
+                  "value": "days",
+                  "label": "A number of days"
+                }
+              ]
+            },
+            {
+              "key": "endDayKey",
+              "label": "Last day of the season",
+              "kind": "date",
+              "initial": "{data.w.waiver.validity.endDayKey}",
+              "when": "form.kind == season",
+              "required": true
+            },
+            {
+              "key": "days",
+              "label": "Days, the signing day included",
+              "kind": "number",
+              "min": 1,
+              "max": 400,
+              "initial": "{data.w.waiver.validity.days|'365'}",
+              "when": "form.kind == days",
+              "required": true
+            }
+          ],
+          "submit": {
+            "id": "save",
+            "label": "Save",
+            "icon": "checkmark|check",
+            "url": "/api/waivers/templates",
+            "body": {
+              "hostId": "{site.id}",
+              "waiver": {
+                "title": "{form.title}",
+                "body": "{form.body}",
+                "checkboxes": {
+                  "$map": {
+                    "list": "{form.checkboxes}",
+                    "where": "item",
+                    "fields": {
+                      "id?": "{data.w.waiver.checkboxes[label=item].id}",
+                      "label": "{item}"
+                    }
+                  }
+                },
+                "adultAge": {
+                  "$number": "{form.adultAge}"
+                },
+                "allowMinors": "{form.allowMinors}",
+                "validity": {
+                  "$if": "form.kind == season",
+                  "then": {
+                    "kind": "season",
+                    "endDayKey": "{form.endDayKey}"
+                  },
+                  "else": {
+                    "$if": "form.kind == days",
+                    "then": {
+                      "kind": "days",
+                      "days": {
+                        "$number": "{form.days}"
+                      }
+                    },
+                    "else": {
+                      "kind": "visit"
+                    }
+                  }
+                }
+              }
+            },
+            "success": "Saved.",
+            "back": true
           }
         },
         {

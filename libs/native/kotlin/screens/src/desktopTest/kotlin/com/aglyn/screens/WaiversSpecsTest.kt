@@ -95,11 +95,27 @@ class WaiversSpecsTest : SpecTestBase() {
       model.body(model.form("edit"), """{"title":"Rider release","body":"Ride.","checkboxes":["I have read it.","Helmet on."],"adultAge":"19","allowMinors":true,"kind":"days","days":30}"""),
     )
     val fresh = screen(editor, mapOf("waiverId" to ""), "{}")
-    val season = fresh.body(fresh.form("edit"), """{"title":"T","body":"B","checkboxes":[],"adultAge":"18","allowMinors":false,"kind":"season","endDayKey":"2026-12-31"}""").jsonObject
+    val season = fresh.body(fresh.form("create"), """{"title":"T","body":"B","checkboxes":[],"adultAge":"18","allowMinors":false,"kind":"season","endDayKey":"2026-12-31"}""").jsonObject
     assertTrue("waiverId" !in season)
     assertEquals(json("""{"kind":"season","endDayKey":"2026-12-31"}"""), season.getValue("waiver").jsonObject.getValue("validity"))
-    val newFields = fresh.fieldsShown("edit").associateBy { it.key }
+    assertTrue("edit" !in fresh.shown() && "create" in fresh.shown() && fresh.form("create").back, "a new waiver goes back to the list it now heads")
+    val newFields = fresh.fieldsShown("create").associateBy { it.key }
     assertEquals("true", ScreenValues.text(ScreenValues.resolve(newFields.getValue("allowMinors").initial!!, fresh.context)))
     assertEquals("Version 3 · (current)", model.line("versions", "primary", model.row("data.w.versions")))
+  }
+}
+
+/** A day key is a calendar day, not a moment: it reads the same in every time zone (the console's `formatDayKey`). */
+class CalendarDayFormatTest {
+  @Test
+  fun aDayKeyIsTheSameDayWhereverTheDeviceIs() {
+    val before = ScreenValues.timeZone
+    try {
+      ScreenValues.timeZone = "America/Chicago"
+      assertEquals("Nov 15, 2027", ScreenValues.render("{item.day:date}", kotlinx.serialization.json.Json.parseToJsonElement("""{"item":{"day":"2027-11-15"}}""")))
+      assertEquals("Nov 15, 2027", ScreenValues.render("{item.at:date}", kotlinx.serialization.json.Json.parseToJsonElement("""{"item":{"at":1826301600000}}""")))
+    } finally {
+      ScreenValues.timeZone = before
+    }
   }
 }
