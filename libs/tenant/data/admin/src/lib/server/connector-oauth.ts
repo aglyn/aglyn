@@ -50,6 +50,8 @@ import {
   connectorResourceFor,
 } from '@aglyn/aglyn/app-utils/connector-discovery'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
+import { type PlatformHostInputs, platformHostInputs } from '@aglyn/aglyn/app-utils/first-party-hosts'
+import { TENANT_APEX } from '@aglyn/aglyn/app-utils/tenant-apex'
 import { API_SCOPES, type ApiScope, isApiScope, normalizeScopes } from './api-keys'
 
 // ── Credentials ─────────────────────────────────────────────────────────────
@@ -291,6 +293,33 @@ function parseUrl(value: string): URL | null {
   }
 }
 
+/**
+ * The hosts a person reads as THIS PLATFORM — its workspace domain and every
+ * subdomain of it (the console, the auth origin, every workspace), the
+ * configured console and docs hosts, the marketing home, and the tenant apex
+ * and every site under it. A code may never be "sent to" one of them: the
+ * consent screen would show an address the person trusts as ours, for a
+ * client a stranger registered. Read from the same configuration the rest of
+ * the platform reads (`platformHostInputs`, `TENANT_APEX`), never spelled.
+ */
+export function isPlatformHost(hostname: string, inputs: PlatformHostInputs = platformHostInputs()): boolean {
+  const host = hostname.toLowerCase()
+  const hostOfUrl = (value: string | null | undefined) => {
+    try {
+      return value ? new URL(value).hostname.toLowerCase() : ''
+    } catch {
+      return ''
+    }
+  }
+  const apexes = [inputs.workspaceDomain, inputs.tenantDomain || TENANT_APEX]
+    .map((value) => String(value ?? '').trim().toLowerCase().replace(/^\.+|\.+$/g, ''))
+    .filter(Boolean)
+  const home = hostOfUrl(inputs.homeUrl)
+  const exact = [hostOfUrl(inputs.consoleUrl), hostOfUrl(inputs.docsUrl), home, home ? `www.${home.replace(/^www\./, '')}` : '']
+    .filter(Boolean)
+  return exact.includes(host) || apexes.some((apex) => host === apex || host.endsWith(`.${apex}`))
+}
+
 /** The kind of address, once it has passed the policy. */
 type RedirectKind = 'web' | 'loopback' | 'app'
 
@@ -307,7 +336,7 @@ function classifyRedirect(uri: unknown): { kind: RedirectKind; url: URL } | null
   if (url.username || url.password || url.hash) return null
   if (CONNECTOR_APP_CALLBACKS.includes(uri)) return { kind: 'app', url }
   if (url.protocol === 'https:') {
-    if (!DOMAIN_NAME.test(url.hostname)) return null
+    if (!DOMAIN_NAME.test(url.hostname) || isPlatformHost(url.hostname)) return null
     return { kind: 'web', url }
   }
   if (url.protocol === 'http:') {
@@ -414,9 +443,42 @@ const BLANK_RENDERING = /[⠀ㅤᅟᅠﾠ᠎឴឵⁡-⁤͏]/gu
 /** Every quotation mark, so a name cannot open or close a quotation around itself. */
 const QUOTES = /["'`«»‘-‟‹›❛-❞⹂〝-〟＂＇\p{Pi}\p{Pf}]/gu
 
-/** The words a name may not be or contain: ours, and the neutral fallback. */
+/**
+ * Cyrillic, Greek and Armenian letters that read as Latin ones, folded to the
+ * Latin letter for the reserved-name test only (the name itself is never
+ * rewritten). Enough to catch a whole-word look-alike of the brand in a
+ * single non-Latin script; a name that MIXES Latin with Cyrillic or Greek is
+ * refused outright by {@link mixesScripts}.
+ */
+const CONFUSABLE_TO_LATIN: Readonly<Record<string, string>> = {
+  а: 'a', в: 'b', с: 'c', е: 'e', һ: 'h', і: 'i', ј: 'j', к: 'k', ӏ: 'l', м: 'm', н: 'h', о: 'o', р: 'p',
+  ԛ: 'q', ѕ: 's', т: 't', у: 'y', х: 'x', ԍ: 'g', ԁ: 'd', ԝ: 'w', ь: 'b', ү: 'y', ո: 'n', ս: 'u', ց: 'g',
+  հ: 'h', օ: 'o', α: 'a', β: 'b', ε: 'e', η: 'n', ι: 'i', κ: 'k', ν: 'v', ο: 'o', ρ: 'p', τ: 't', υ: 'u',
+  χ: 'x', γ: 'y', ϲ: 'c', ϳ: 'j', ℓ: 'l',
+}
+
+/**
+ * A name reduced to what it reads as: compatibility-folded, accents removed,
+ * look-alike letters folded to Latin, lower-cased, and everything that is not
+ * a letter or digit dropped — so `Aglyn's`, `A g l y n`, `AglynAI` and a
+ * Cyrillic `Аglyn` all contain `aglyn`.
+ */
+function readsAs(value: string): string {
+  return Array.from(value.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase())
+    .map((char) => CONFUSABLE_TO_LATIN[char] ?? char)
+    .join('')
+    .replace(/[^\p{L}\p{N}]/gu, '')
+}
+
+/** The words a name may not contain anywhere: ours, and the neutral fallback. */
 function reservedNameWords(): string[] {
-  return [PLATFORM_BRAND_NAME, UNNAMED_CLIENT].map((word) => word.normalize('NFKC').toLowerCase())
+  return [PLATFORM_BRAND_NAME, UNNAMED_CLIENT].map(readsAs).filter(Boolean)
+}
+
+/** True when a name mixes Latin letters with Cyrillic or Greek ones — a homoglyph's tell. */
+function mixesScripts(name: string): boolean {
+  const latin = /\p{Script=Latin}/u.test(name)
+  return latin && (/\p{Script=Cyrillic}/u.test(name) || /\p{Script=Greek}/u.test(name))
 }
 
 /**
@@ -441,6 +503,10 @@ function cleanClientName(value: unknown): string {
   if (typeof value !== 'string') return ''
   const cleaned = value
     .normalize('NFKC')
+    // Default-ignorable code points — variation selectors (`A\uFE0Fglyn`,
+    // `Ag\u{E0100}lyn`), Mongolian free variation selectors, joiners — are
+    // invisible by definition, so they are removed rather than spaced.
+    .replace(/\p{Default_Ignorable_Code_Point}/gu, '')
     .replace(/[\p{Cc}\p{Cf}\p{Co}\p{Cn}\p{Cs}\p{Zl}\p{Zp}]/gu, ' ')
     .replace(BLANK_RENDERING, ' ')
     .replace(QUOTES, '')
@@ -453,17 +519,16 @@ function cleanClientName(value: unknown): string {
 }
 
 /**
- * True when a sanitized name is, or contains as a word, this platform's own
- * brand name or the neutral fallback label — case-insensitively, after NFKC.
- * Such a name is refused at registration: an app may not present itself as
- * the platform, nor as "no name".
+ * True when a sanitized name may not be registered: it mixes Latin letters
+ * with Cyrillic or Greek ones, or what it reads as (`readsAs`) contains this
+ * platform's brand name or the neutral fallback label ANYWHERE — `AglynAI`,
+ * `Aglyn's Assistant`, `Unnamed app`. An app may not present itself as the
+ * platform, nor as "no name".
  */
 export function isReservedClientName(name: string): boolean {
-  const folded = name.normalize('NFKC').toLowerCase()
-  return reservedNameWords().some((word) => {
-    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}($|[^\\p{L}\\p{N}])`, 'u').test(folded)
-  })
+  if (mixesScripts(name)) return true
+  const folded = readsAs(name)
+  return reservedNameWords().some((word) => folded.includes(word))
 }
 
 /**

@@ -39,6 +39,7 @@ import {
   constantTimeEqual,
   describeConnectorAccess,
   describeRedirectTarget,
+  isPlatformHost,
   generateConnectorAccessToken,
   deriveConnectorClientId,
   generateConnectorCode,
@@ -252,6 +253,35 @@ describe('redirect addresses: the open policy', () => {
     expect(isAllowedRedirectUri(uri)).toBe(false)
   })
 
+  it.each([
+    ['the console', 'https://app.aglyn.com/cb'],
+    ['the auth origin', 'https://auth.aglyn.com/cb'],
+    ['a workspace subdomain', 'https://acme.aglyn.com/cb'],
+    ['the marketing home', 'https://aglyn.com/cb'],
+    ['the marketing home with www', 'https://www.aglyn.com/cb'],
+    ['the tenant apex', 'https://aglyn.app/cb'],
+    ['a customer site on the tenant apex', 'https://some-site.aglyn.app/cb'],
+  ])('refuses %s: a code is never sent to a host read as the platform itself', (_label, uri) => {
+    expect(isAllowedRedirectUri(uri)).toBe(false)
+  })
+
+  it('reads the platform’s hosts from configuration, not spelling', () => {
+    const inputs = {
+      workspaceDomain: 'example.org',
+      consoleUrl: 'https://console.example.net',
+      docsUrl: 'https://docs.example.io',
+      homeUrl: 'https://example.org',
+      tenantDomain: 'sites.example.net',
+      development: false,
+    }
+    expect(isPlatformHost('console.example.net', inputs)).toBe(true)
+    expect(isPlatformHost('acme.example.org', inputs)).toBe(true)
+    expect(isPlatformHost('shop.sites.example.net', inputs)).toBe(true)
+    expect(isPlatformHost('docs.example.io', inputs)).toBe(true)
+    expect(isPlatformHost('example.net', inputs)).toBe(false)
+    expect(isPlatformHost('claude.ai', inputs)).toBe(false)
+  })
+
   it('matches exactly, except that a loopback port is the client’s to choose', () => {
     expect(redirectUriMatches(CLAUDE, CLAUDE)).toBe(true)
     expect(redirectUriMatches('http://localhost:1111/callback', 'http://localhost:2222/callback')).toBe(true)
@@ -351,8 +381,38 @@ describe('registration', () => {
     })
   })
 
-  it('does not refuse a name that only contains the platform name inside a word', () => {
-    expect(validateClientRegistration({ client_name: 'Paglynx', redirect_uris: [CLAUDE] })).toMatchObject({ ok: true })
+  it.each([
+    // The third review's inputs: invisible selectors and joiners inside the brand…
+    ['a variation selector', 'A️glyn'],
+    ['a variation selector-1', 'Ag︀lyn'],
+    ['a Mongolian free variation selector', 'Ag᠋lyn'],
+    ['a supplementary variation selector', 'Ag\u{E0100}lyn'],
+    ['the fallback label with a selector', 'Unnamed️ app'],
+    // …homoglyphs…
+    ['a Cyrillic A', 'Аglyn'],
+    ['a Greek Alpha', 'Αglyn'],
+    ['the fallback label with a Cyrillic a', 'Unnamed аpp'],
+    ['the brand spelled wholly in look-alikes', 'Аԍӏуո'],
+    // …and the brand inside a longer name, with or without punctuation.
+    ['AglynSupport', 'AglynSupport'],
+    ['AglynAI', 'AglynAI'],
+    ['a possessive', 'Aglyn’s Assistant'],
+    ['a straight-quote possessive', "Aglyn's Assistant"],
+    ['spaced letters', 'A g l y n'],
+    ['accented letters', 'Áglýn'],
+    ['the brand inside a word', 'Paglynx'],
+  ])('refuses %s as an app name', (_label, name) => {
+    expect(validateClientRegistration({ client_name: name, redirect_uris: [CLAUDE] })).toMatchObject({
+      ok: false,
+      error: 'invalid_client_metadata',
+    })
+  })
+
+  it('refuses any name mixing Latin with Cyrillic or Greek, and allows one script alone', () => {
+    expect(validateClientRegistration({ client_name: 'Curсor', redirect_uris: [CLAUDE] })).toMatchObject({ ok: false })
+    expect(validateClientRegistration({ client_name: 'Cursor Σ', redirect_uris: [CLAUDE] })).toMatchObject({ ok: false })
+    expect(validateClientRegistration({ client_name: 'Курсор', redirect_uris: [CLAUDE] })).toMatchObject({ ok: true })
+    expect(validateClientRegistration({ client_name: 'Cursor', redirect_uris: [CLAUDE] })).toMatchObject({ ok: true })
   })
 
   it.each([
@@ -377,9 +437,10 @@ describe('registration', () => {
   it('makes a name safe to show, and names the nameless', () => {
     expect(sanitizeClientName('  Claude\u0000‮ Code \n ')).toBe('Claude Code')
     expect(sanitizeClientName('x'.repeat(200))).toHaveLength(60)
-    // Bidi overrides and isolates, zero-width characters, line breaks.
-    expect(sanitizeClientName('Good‮App⁦x⁩')).toBe('Good App x')
-    expect(sanitizeClientName('A​B‍C﻿D')).toBe('A B C D')
+    // Bidi overrides and isolates and zero-width characters are invisible, so
+    // they are removed outright; line breaks become spaces.
+    expect(sanitizeClientName('Good‮App⁦x⁩')).toBe('GoodAppx')
+    expect(sanitizeClientName('A​B‍C﻿D')).toBe('ABCD')
     expect(sanitizeClientName('Line one\nline two three')).toBe('Line one line two three')
     // Stacked combining marks are cut to two.
     expect(sanitizeClientName('q́̂̃̄̅')).toBe('q́̂')
