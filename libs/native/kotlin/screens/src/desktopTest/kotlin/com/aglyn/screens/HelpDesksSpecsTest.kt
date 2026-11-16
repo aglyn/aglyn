@@ -59,7 +59,7 @@ class HelpDesksSpecsTest : SpecTestBase() {
       json("""{"hostId":"h1","provider":"reamaze","targetId":"ch2","syncCustomers":true,"sendTickets":true}"""),
       active.body(active.form("settings"), """{"targetId":"ch2","syncCustomers":true,"sendTickets":true}"""),
     )
-    assertEquals(listOf("syncNow", "disconnect"), provider("reamaze", "[${conn("error", ""","lastError":"Re:amaze refused the token.""")}]").actionsShown("manage"))
+    assertEquals(listOf("syncNow", "disconnect"), provider("reamaze", "[${conn("error", ""","lastError":"Re:amaze refused the token."""")}]").actionsShown("manage"))
     assertEquals(listOf("resume", "disconnect"), provider("reamaze", "[${conn("paused")}]").actionsShown("manage"))
     assertEquals(listOf("reconnect", "disconnect"), provider("reamaze", "[${conn("reconnect")}]").actionsShown("manage"))
   }
