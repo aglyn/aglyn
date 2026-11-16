@@ -1532,6 +1532,17 @@ jobs:
 
       - run: npm run check:json-duplicate-keys
 
+      # AGL-4225. What the platform publishes for agents, measured against the
+      # source: robots.txt's AI agents are the ones the WAF admits, every path
+      # a tenant's /openapi.json names is reachable by a stranger, and the MCP
+      # server's every advertised address composes to a console route, takes
+      # its origin from the one helper, and is named alike by the tenant API
+      # catalog and the MCP Registry entry. Pure node, no network. Until now it
+      # ran in no workflow, so it held only when someone remembered it.
+      - run: npm run test:agent-readiness
+
+      - run: npm run check:agent-readiness
+
       # AGL-2480 — eslint over `tools/` itself. There is no `tools/project.json`,
       # so `tools/` is in NO nx project and `nx affected -t lint` has never
       # reached one of its 214 `.mjs` files. That is the whole tree this
