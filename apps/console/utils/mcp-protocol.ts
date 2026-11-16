@@ -25,7 +25,7 @@ import type { McpTool } from './mcp-tools'
  * JSON object instead of opening an SSE stream, and a server that holds no
  * session between calls is the shape this belongs in: the route is serverless,
  * so there is no instance for a session to live on, and every call already
- * carries the one piece of state that matters — the API key.
+ * carries the one piece of state that matters — the credential.
  *
  * Written out rather than taken from the reference SDK, and the reason is the
  * checkout rather than the protocol. `node_modules` is one directory shared by
@@ -39,6 +39,23 @@ import type { McpTool } from './mcp-tools'
 
 /** The protocol revision this server implements. */
 export const MCP_PROTOCOL_VERSION = '2025-06-18'
+
+/**
+ * Revisions a client may ask for and be answered in (AGL-4225). Each is
+ * served by exactly what this file does — stateless Streamable HTTP, one
+ * JSON answer per request, tools only — so echoing one back is a promise
+ * already kept. Anything else is answered with {@link MCP_PROTOCOL_VERSION},
+ * which the specification leaves the client to accept or disconnect over.
+ * `2024-11-05` is absent: it is the HTTP+SSE transport, which this is not.
+ */
+export const MCP_SUPPORTED_PROTOCOL_VERSIONS: readonly string[] = ['2025-06-18', '2025-03-26']
+
+/** The version `initialize` answers with, given what the client asked for. */
+export function negotiateProtocolVersion(requested: unknown): string {
+  return typeof requested === 'string' && MCP_SUPPORTED_PROTOCOL_VERSIONS.includes(requested)
+    ? requested
+    : MCP_PROTOCOL_VERSION
+}
 
 /** JSON-RPC 2.0 error codes, plus nothing of our own. */
 export const JSON_RPC_ERRORS = {
@@ -118,7 +135,9 @@ export async function handleMcpMessage(
   switch (message.method) {
     case 'initialize':
       return ok(id, {
-        protocolVersion: MCP_PROTOCOL_VERSION,
+        protocolVersion: negotiateProtocolVersion(
+          (message.params as { protocolVersion?: unknown } | undefined)?.protocolVersion,
+        ),
         // Tools only. Declaring a capability this server does not serve would
         // have a client call it and be refused for a reason it cannot act on.
         capabilities: { tools: {} },
@@ -135,8 +154,10 @@ export async function handleMcpMessage(
       return ok(id, {
         tools: deps.tools.map((tool) => ({
           name: tool.name,
+          title: tool.title,
           description: tool.description,
           inputSchema: tool.inputSchema,
+          annotations: tool.annotations,
         })),
       })
 

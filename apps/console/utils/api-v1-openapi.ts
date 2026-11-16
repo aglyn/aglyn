@@ -50,6 +50,12 @@
  */
 
 import { MEDIA_EMBEDDED_GROUP_ORDER } from '@aglyn/aglyn/app-utils/media-embedded-fields'
+import {
+  CONNECTOR_AUTHORIZE_PATH,
+  CONNECTOR_TOKEN_PATH,
+} from '@aglyn/aglyn/app-utils/connector-discovery'
+import { API_SCOPES } from '@aglyn/tenant-data-admin/server/api-keys'
+import { connectorScopeWords } from '@aglyn/tenant-data-admin/server/connector-oauth'
 // The description's shape and its field schemas are the data layer's, where a
 // plugin that serves a resource describes it in the same terms.
 import {
@@ -406,6 +412,7 @@ export function buildCustomerApiOpenApi(
         operationId: op.operationId,
         summary: op.summary,
         ...(op.description ? { description: op.description } : {}),
+        ...(op.destructive ? { 'x-destructive': true } : {}),
         tags: [resource.tag],
         ...(parameters.length ? { parameters } : {}),
         ...(op.accepts
@@ -669,7 +676,10 @@ export function buildCustomerApiOpenApi(
     servers: [
       { url: `${origin}${CUSTOMER_API_MOUNT}`, description: options.brandName },
     ],
-    security: [{ apiKey: [] }],
+    // Either credential, at the document level (AGL-4225): an API key, or the
+    // hourly access token an app such as Claude gets by signing in. Both are
+    // resolved by the same authenticator and held to the same scopes.
+    security: [{ apiKey: [] }, { connector: [] }],
     tags: [
       ...tags,
       { name: 'Service', description: 'The API’s description of itself.' },
@@ -684,6 +694,29 @@ export function buildCustomerApiOpenApi(
             'An API key, sent as `Authorization: Bearer aglyn_sk_…`. Keys are ' +
             'organization credentials, not user ones — there is no user ' +
             'scope to evaluate. Mint and revoke them in the console.',
+        },
+        connector: {
+          type: 'oauth2',
+          description:
+            'Sign-in for an app that acts for a person — Claude and other MCP ' +
+            'clients (OAuth 2.1, authorization code with PKCE, public clients ' +
+            'only). The person picks a workspace and an access level; the app ' +
+            'gets an hourly access token, sent as `Authorization: Bearer ' +
+            'aglyn_at_…`, and a refresh token that rotates on every use. A ' +
+            'connection stops working when it is disconnected in Settings or ' +
+            'its person loses "Manage API keys" in the workspace. Clients ' +
+            'register dynamically; codes are delivered only to registered ' +
+            'Claude and loopback addresses.',
+          flows: {
+            authorizationCode: {
+              authorizationUrl: `${origin}${CONNECTOR_AUTHORIZE_PATH}`,
+              tokenUrl: `${origin}${CONNECTOR_TOKEN_PATH}`,
+              refreshUrl: `${origin}${CONNECTOR_TOKEN_PATH}`,
+              scopes: Object.fromEntries(
+                API_SCOPES.map((scope) => [scope, connectorScopeWords(scope)]),
+              ),
+            },
+          },
         },
       },
       headers: {

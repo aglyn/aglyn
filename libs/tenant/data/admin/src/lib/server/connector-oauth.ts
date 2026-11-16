@@ -465,6 +465,11 @@ const SCOPE_WORDS: Record<ApiScope, { area: string; words: string }> = {
   'crm:write': { area: 'CRM', words: 'Add, edit and delete companies, deals, tasks and activities, and work leads' },
 }
 
+/** One scope in plain words, e.g. for a published description of the scopes. */
+export function connectorScopeWords(scope: ApiScope): string {
+  return SCOPE_WORDS[scope].words
+}
+
 export interface ConnectorAccessArea {
   area: string
   abilities: string[]

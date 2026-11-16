@@ -16,7 +16,8 @@
  */
 
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
-import { ApiErrors, apiJson } from '@aglyn/tenant-data-admin'
+import { connectorResourceMetadataUrl } from '@aglyn/aglyn/app-utils/connector-discovery'
+import { ApiErrors, apiJson, withResponseHeaders } from '@aglyn/tenant-data-admin'
 import { buildDocsUrl } from '../../../constants/docs-links'
 import { authenticateApiV1 } from '../../../utils/api-v1'
 import {
@@ -48,10 +49,16 @@ import { buildMcpTools, buildToolRequest } from '../../../utils/mcp-tools'
  * published OpenAPI document, so the surface cannot drift from what `/api/v1`
  * says it serves.
  *
- * Auth is the same `Authorization: Bearer aglyn_sk_…` key, verified by the
- * same `authenticateApiV1`, before any message is parsed. `/api/*` is outside
- * the console middleware matcher, so this route carries its own gate exactly
- * as `/v1` does — the console session is never the credential here.
+ * Auth is an `Authorization: Bearer` credential — an `aglyn_sk_…` key, or
+ * the hourly `aglyn_at_…` token an app such as Claude gets by signing in
+ * (AGL-4225) — verified by the same `authenticateApiV1`, before any message
+ * is parsed. `/api/*` is outside the console middleware matcher, so this
+ * route carries its own gate exactly as `/v1` does — the console session is
+ * never the credential here.
+ *
+ * A 401 names where sign-in is described (RFC 9728 §5.1): that challenge is
+ * how a client that was handed only this URL finds out it can sign in, and
+ * which server to ask. `/api/v1` answers its 401 unchanged.
  */
 // lockdown-423: via apps/console/utils/api-v1.ts — every tool call is
 // authenticated there before it reaches `dispatchResource`, so the verdict runs
@@ -76,9 +83,22 @@ async function readOutcome(response: Response) {
   return { text, isError: !response.ok }
 }
 
+/**
+ * The challenge a 401 carries, so a client can discover sign-in. Only the
+ * 401: a 403 or a 429 is about a credential that WAS recognised, and sending
+ * the client off to sign in again would not help it.
+ */
+function withSignInChallenge(response: Response, origin: string): Response {
+  if (response.status !== 401) return response
+  return withResponseHeaders(response, {
+    'WWW-Authenticate': `Bearer resource_metadata="${connectorResourceMetadataUrl(origin)}"`,
+  })
+}
+
 export async function POST(request: Request): Promise<Response> {
+  const origin = new URL(request.url).origin
   const authenticated = await authenticateApiV1(request)
-  if (authenticated instanceof Response) return authenticated
+  if (authenticated instanceof Response) return withSignInChallenge(authenticated, origin)
   const context = authenticated.context
 
   let payload: unknown
@@ -95,7 +115,6 @@ export async function POST(request: Request): Promise<Response> {
     )
   }
 
-  const origin = new URL(request.url).origin
   const tools = buildMcpTools(
     buildCustomerApiOpenApi(
       {

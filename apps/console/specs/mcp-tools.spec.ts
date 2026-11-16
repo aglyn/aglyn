@@ -100,6 +100,47 @@ describe('MCP tools derived from the v1 document (AGL-3091)', () => {
   })
 })
 
+describe('what a client is told about each tool (AGL-4225)', () => {
+  it('names every tool within the 64 characters clients accept', () => {
+    for (const tool of tools) {
+      expect(tool.name.length).toBeLessThanOrEqual(64)
+      expect(tool.name).toMatch(/^[A-Za-z0-9_-]+$/)
+    }
+  })
+
+  it('titles every tool with its summary', () => {
+    for (const tool of tools) expect(tool.title).toBeTruthy()
+    expect(tools.find((tool) => tool.name === 'listSites')?.title).toBe('List sites')
+  })
+
+  it('marks a read read-only, a delete destructive, and any other write neither', () => {
+    for (const tool of tools) {
+      expect(tool.annotations.readOnlyHint).toBe(tool.method === 'GET')
+      if (tool.method === 'DELETE') expect(tool.annotations.destructiveHint).toBe(true)
+    }
+    const create = tools.find((tool) => tool.name === 'createSite')
+    expect(create?.annotations).toEqual({ readOnlyHint: false, destructiveHint: false })
+  })
+
+  it('marks a write the operation calls destructive — the contact merge removes a contact', () => {
+    expect(tools.find((tool) => tool.name === 'mergeContact')?.annotations).toEqual({
+      readOnlyHint: false,
+      destructiveHint: true,
+    })
+  })
+
+  it('hands over input schemas with no reference into a document the client never sees', () => {
+    // A tool schema travels alone; `#/components/...` would point at nothing.
+    for (const tool of tools) {
+      expect(JSON.stringify(tool.inputSchema)).not.toContain('#/components/')
+    }
+    const create = tools.find((tool) => tool.name === 'createSite')
+    const body = (create?.inputSchema.properties as Record<string, Record<string, unknown>>)[MCP_BODY_ARGUMENT]
+    expect(body.type).toBe('object')
+    expect(body.properties).toBeDefined()
+  })
+})
+
 describe('turning a tool call back into a v1 request (AGL-3091)', () => {
   const toolNamed = (name: string) => {
     const tool = tools.find((candidate) => candidate.name === name)
