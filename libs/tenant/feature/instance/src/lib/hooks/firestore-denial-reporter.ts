@@ -213,6 +213,36 @@ export function refusedArrivalDelayMs(streakStartedAt: number): number {
   )
 }
 
+/**
+ * Whether the app has told us nobody is signed in to this tab.
+ *
+ * A tab can be signed out with its page still mounted: the idle sign-out
+ * (AGL-664) keeps the tree up behind the "sign in again" prompt so the reader
+ * resumes where they were. Every listen that page reopens is then a certain
+ * refusal, and it stays one until somebody signs in. The tab behind the
+ * 2026-11-15 storm was exactly this, an AI job page two hours idle.
+ *
+ * So while this is set, {@link scheduleRefusedReopen} parks the reopen: no
+ * timer, and an arrival wakes nothing. Clearing it reopens every parked
+ * listen once. The heal broadcast is untouched and still reopens at once.
+ *
+ * Unset by default, and an app that never calls the setter (the tenant
+ * runtime, tests) keeps the cadence it had.
+ */
+let sessionSignedOut = false
+const parkedReopens = new Set<() => void>()
+
+/**
+ * Tell refused listeners whether anybody is signed in to this tab. Called by
+ * the app that owns the auth session, on every change of its user.
+ */
+export function setFirestoreSessionSignedOut(next: boolean): void {
+  const was = sessionSignedOut
+  sessionSignedOut = next
+  // Iterates a COPY: each wake settles its schedule and leaves the set.
+  if (was && !next) for (const wake of [...parkedReopens]) wake()
+}
+
 /** No `document` (SSR, a worker) counts as visible: nothing to wait for. */
 function tabIsHidden(): boolean {
   return (
@@ -260,7 +290,8 @@ export function scheduleRefusedReopen(
 
   /** Reopen no later than `atMs`; an earlier due time already set wins. */
   const arm = (atMs: number) => {
-    if (settled || atMs >= dueAt) return
+    // Signed out: parked until `setFirestoreSessionSignedOut(false)` or a heal.
+    if (settled || sessionSignedOut || atMs >= dueAt) return
     if (atMs <= Date.now()) {
       fire()
       return
@@ -283,6 +314,7 @@ export function scheduleRefusedReopen(
 
   const cancel = () => {
     settled = true
+    parkedReopens.delete(fire)
     disarm()
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', onVisibilityChange)
@@ -298,6 +330,7 @@ export function scheduleRefusedReopen(
   if (typeof window !== 'undefined') {
     window.addEventListener('focus', onArrival)
   }
+  parkedReopens.add(fire)
   if (!tabIsHidden()) arm(scheduledAt + refusedRetryDelayMs(streakStartedAt))
 
   return cancel

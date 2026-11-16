@@ -168,6 +168,7 @@ export * from './palette-sx'
 export * from './scheme-sx'
 // An element pinned to one color scheme (AGL-3284).
 export * from './element-color-scheme'
+export * from './sign-in-visibility'
 export * from './create-resource-uid'
 export * from './decompress'
 export * from './stored-nodes'
