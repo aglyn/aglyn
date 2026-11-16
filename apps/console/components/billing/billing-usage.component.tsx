@@ -26,6 +26,7 @@ import {
   CRM_EMAIL_USAGE_COLLECTION,
   crmEmailUsageDayKey,
   emailSendsBillingBand,
+  resolveMonthlyEmailCap,
   emailSendsOverage,
   PLAN_LABELS,
   PLAN_PRICING,
@@ -476,6 +477,17 @@ export function BillingUsageComponent(props: BillingUsageProps) {
    * `null` until read: an unread counter has no honest overage to quote.
    */
   const [totalEmails, setTotalEmails] = useState<number | null>(null)
+  // Emails a sending limit refused this month (AGL-4227) — the daily ceiling
+  // on every plan, Free's monthly cap — so a dropped email is shown, not hidden.
+  const [refusedEmails, setRefusedEmails] = useState<number | null>(null)
+  // The month's count Free's cap is held to (AGL-4227): its own field on the
+  // ceiling's counter, every email but account and security mail.
+  const [cappedMonthEmails, setCappedMonthEmails] = useState<number | null>(null)
+  // Whether this month's rollup bills email past the band (AGL-4227): the
+  // server's verdict, which the console cannot read off the environment.
+  const [emailOverageBilledThisMonth, setEmailOverageBilledThisMonth] = useState<
+    boolean | null
+  >(null)
   /*
    * Each workspace-counted band's month (AGL-3472), by band id, off
    * `orgs/{orgId}/counters/{orgCounter}`. A band stays absent until its read
@@ -653,6 +665,26 @@ export function BillingUsageComponent(props: BillingUsageProps) {
         // The overage caption stays hidden rather than quoting a charge off a
         // reading that never arrived.
       })
+    void getDoc(doc(firestore, 'orgs', orgId, 'counters', 'transactionalEmailSends'))
+      .then((snapshot) => {
+        if (active) {
+          const monthKey = new Date().toISOString().slice(0, 7)
+          setCappedMonthEmails(snapshot.exists() ? Number(snapshot.data()?.[monthKey] ?? 0) : 0)
+        }
+      })
+      .catch(() => {
+        // The cap caption stays hidden rather than showing a count that never arrived.
+      })
+    void getDoc(doc(firestore, 'orgs', orgId, 'counters', 'transactionalEmailsRefused'))
+      .then((snapshot) => {
+        if (active) {
+          const monthKey = new Date().toISOString().slice(0, 7)
+          setRefusedEmails(snapshot.exists() ? Number(snapshot.data()?.[monthKey] ?? 0) : 0)
+        }
+      })
+      .catch(() => {
+        // No line is shown rather than a count that never arrived.
+      })
     // Dataset storage comes from the monthly rollup (report-usage); the
     // current month may not exist yet, so fall back to the previous one. The
     // rollup's `siteSizeMb` was read here too until AGL-1370 removed the site
@@ -674,6 +706,9 @@ export function BillingUsageComponent(props: BillingUsageProps) {
           const data = rollup.exists() ? (rollup.data() ?? {}) : {}
           if (typeof data['dataStorageMb'] === 'number') {
             storage = data['dataStorageMb']
+          }
+          if (key === month && typeof data['emailSendsOverageBilled'] === 'boolean') {
+            setEmailOverageBilledThisMonth(data['emailSendsOverageBilled'])
           }
         } catch {
           // Meter keeps its "not yet metered" state on failure.
@@ -811,6 +846,8 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   const apiQuota = checkApiRequestQuota(org, apiRequests ?? 0)
   // The plan the ceiling caption names as the way past it (AGL-4226).
   const uncappedApiPlan = cheapestPlanWithoutApiCeiling()
+  // Free's hard monthly email limit (AGL-4227); UNLIMITED on every other plan.
+  const monthlyEmailCap = resolveMonthlyEmailCap(org)
   // The run overage (pricing v4) from the workspace-counted run bands,
   // matched by the entitlement each band is held to. A band still loading
   // reads 0, which is never over a band, so no figure appears early.
@@ -1253,12 +1290,53 @@ export function BillingUsageComponent(props: BillingUsageProps) {
               a rate of 2.5 interpolates as "$2.5", a price missing its cents
               column on the one line that is about money. */}
           {`${emailOverage.toLocaleString()} emails over your included ` +
-            `${entitlements.emailSendsPerMonth.toLocaleString()} this month ` +
+            `${emailSendsBillingBand(org).toLocaleString()} this month ` +
             `at $${emailOveragePrice.overageRateUsd.toFixed(2)}/1,000 — ` +
-            `≈$${emailOveragePrice.overageMonthlyUsd.toFixed(2)} on this ` +
-            "month's invoice. Transactional mail — receipts, invites, " +
-            'password resets — is never refused at the cap, so it is what ' +
-            'takes an organization past the band.'}
+            // The rollup's own verdict (AGL-4227): a month the email switch
+            // does not reach yet — Starter before its start month — is
+            // measured and not charged, and the caption says so.
+            (emailOverageBilledThisMonth === false
+              ? 'not charged for this month. '
+              : `≈$${emailOveragePrice.overageMonthlyUsd.toFixed(2)} on this ` +
+                "month's invoice. ") +
+            'Transactional mail — receipts, invites, password resets — is ' +
+            'never refused by the included amount, so it is what takes an ' +
+            'organization past it.'}
+        </Typography>
+      ) : null}
+      {/* FREE'S HARD MONTHLY EMAIL LIMIT (AGL-4227), on the meter's own
+          page: what it is, what stops at it, what still goes out, and the
+          way past it. Shown once the counter has read. */}
+      {Number.isFinite(monthlyEmailCap) && cappedMonthEmails != null ? (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'block', mb: 2 }}
+          data-testid="email-monthly-cap-caption"
+        >
+          {`${cappedMonthEmails.toLocaleString()} of ${monthlyEmailCap.toLocaleString()} ` +
+            'emails this month. Your plan sends up to ' +
+            `${monthlyEmailCap.toLocaleString()} emails a month; past that, ` +
+            'emails from your site stop until the 1st (UTC). Sign-in links, ' +
+            'invitations and password resets always go out. Upgrade in ' +
+            'Billing to send more.'}
+        </Typography>
+      ) : null}
+      {/* A DROPPED EMAIL IS SAID (AGL-4227): the count a sending limit
+          refused this month, on any plan. It promises no retry — most
+          refused messages are not sent again. */}
+      {refusedEmails != null && refusedEmails > 0 ? (
+        <Typography
+          variant="caption"
+          color="warning.main"
+          sx={{ display: 'block', mb: 2 }}
+          data-testid="email-refused-caption"
+        >
+          {`${refusedEmails.toLocaleString()} ${refusedEmails === 1 ? 'email was' : 'emails were'} ` +
+            'not sent this month because a sending limit was reached. ' +
+            (Number.isFinite(monthlyEmailCap)
+              ? 'Upgrade in Billing to send more.'
+              : 'Contact support if your site needs to send more.')}
         </Typography>
       ) : null}
       {/*

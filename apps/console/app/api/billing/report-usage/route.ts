@@ -44,7 +44,7 @@ import {
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/server'
 import {
-  billsEmailSendOverage,
+  emailOverageBillsForOrg,
   billsOrgLibraryStorage,
   estimateMonthlyUsageCost,
   estimateRunOverage,
@@ -1035,10 +1035,10 @@ async function handler(request: Request): Promise<Response> {
       // allowance — and most of that mail is transactional, which no cap was
       // ever allowed to refuse.
       const emailOveragePrice = priceEmailSendOverage(orgData, emailOverage)
-      const emailOverageBilled = billsEmailSendOverage(
-        month,
-        process.env.BILL_EMAIL_SEND_OVERAGE_FROM,
-      )
+      // The org's own verdict (AGL-4227): the platform switch, and Starter's
+      // own start month, so a Starter month before it prices $0 however late
+      // it is swept.
+      const emailOverageBilled = emailOverageBillsForOrg(orgData, month)
       const emailOverageUsd = emailOverageBilled
         ? emailOveragePrice.overageMonthlyUsd
         : 0

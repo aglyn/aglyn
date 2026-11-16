@@ -22,8 +22,10 @@
 // (AGL-405). The specific modules underneath are safe in both.
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation'
 import {
+  INCLUDED_EMAIL_SENDS_BY_PLAN,
   PAGE_VIEW_CDN_REQUEST_COST_USD,
   publishedMeteredPrice,
+  resolveEffectivePlan,
   bandwidthGbFromPageViews,
   pageViewsFromBandwidthGb,
   planMetersInfraOverage,
@@ -373,6 +375,32 @@ export function billsEmailSendOverage(
   configuredStart: string | null | undefined,
 ): boolean {
   return billsFromMonth(month, configuredStart)
+}
+
+/**
+ * Whether `month`'s invoice charges THIS org for email past its band
+ * (AGL-4227): `BILL_EMAIL_SEND_OVERAGE_FROM` as for every plan and, on a plan
+ * billed against its own email band (`INCLUDED_EMAIL_SENDS_BY_PLAN` —
+ * Starter), ALSO `BILL_STARTER_EMAIL_SENDS_FROM`, read the same way.
+ *
+ * Starter's band and rate are new. With the platform switch already in the
+ * past, the band alone would invoice Starter workspaces for mail sent before
+ * the price existed — in the deploy month, and in any earlier org-month the
+ * daily cron re-sweeps. Its own start month stops that: unset, Starter's
+ * email overage is measured and withheld; set (production: `2026-12`), it
+ * bills from that month on and never for a month before it, however late
+ * that month is swept. Pro and every other plan are untouched.
+ */
+export function emailOverageBillsForOrg(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  month: string,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): boolean {
+  if (!billsFromMonth(month, env['BILL_EMAIL_SEND_OVERAGE_FROM'])) return false
+  if (INCLUDED_EMAIL_SENDS_BY_PLAN[resolveEffectivePlan(org)] !== undefined) {
+    return billsFromMonth(month, env['BILL_STARTER_EMAIL_SENDS_FROM'])
+  }
+  return true
 }
 
 /**
