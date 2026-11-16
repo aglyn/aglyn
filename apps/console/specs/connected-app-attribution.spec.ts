@@ -72,7 +72,7 @@ describe('connected-app attribution (AGL-4225)', () => {
 
   it('keeps a self-chosen name from becoming a link in staff mail', () => {
     const shown = unlinkable('Connected app evil.com/login') as string
-    expect(shown.replace(/​/g, '')).toBe('Connected app evil.com/login')
+    expect(shown.replace(/\u200B/g, '')).toBe('Connected app evil.com/login')
     expect(shown).not.toMatch(/evil\.com/)
     expect(unlinkable('Connected app https://evil.com')).not.toMatch(/https:\/\//)
     expect(unlinkable(null)).toBeNull()

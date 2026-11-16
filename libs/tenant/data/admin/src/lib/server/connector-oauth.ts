@@ -329,6 +329,7 @@ function classifyRedirect(uri: unknown): { kind: RedirectKind; url: URL } | null
   // Nothing a parser would silently drop or reinterpret: control characters,
   // whitespace, backslashes. The canonical-form check below would catch most;
   // refusing them first means none can reach it.
+  // eslint-disable-next-line no-control-regex -- refusing control characters is the point
   if (/[\u0000- \u007f-\u009f\\]/.test(uri)) return null
   if (uri.includes('#')) return null
   const url = parseUrl(uri)
@@ -438,7 +439,8 @@ export interface RegistrationResult {
  * Mongolian vowel separator and the like — which would let a "name" be
  * empty to the eye while not empty to a test for emptiness.
  */
-const BLANK_RENDERING = /[⠀ㅤᅟᅠﾠ᠎឴឵⁡-⁤͏]/gu
+// eslint-disable-next-line no-misleading-character-class -- each code point is listed on its own, on purpose
+const BLANK_RENDERING = /[\u{2800}\u{3164}\u{115F}\u{1160}\u{FFA0}\u{180E}\u{17B4}\u{17B5}\u{2061}-\u{2064}\u{34F}]/gu
 
 /** Every quotation mark, so a name cannot open or close a quotation around itself. */
 const QUOTES = /["'`«»‘-‟‹›❛-❞⹂〝-〟＂＇\p{Pi}\p{Pf}]/gu
