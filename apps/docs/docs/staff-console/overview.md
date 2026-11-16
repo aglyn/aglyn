@@ -220,6 +220,23 @@ Each list can be filtered by **Usage level** (*is*, or *is any of*), across the 
 list rather than the page on screen, so *Not reviewed* is the queue still to look at.
 Customers never see their level.
 
+#### Account usage level {#usage-level-account}
+
+The **Usage level** card on an account's staff page records how much that person uses
+Aglyn. Pick a level from the card's menu; it saves at once and shows when it was last set.
+
+#### Organization usage level {#usage-level-organization}
+
+The **Usage level** card on an organization's staff page records how much that workspace
+uses Aglyn. Pick a level from the card's menu. Leave **Also set the workspace owner** ticked
+to raise the owner's own level to match; it never lowers a higher one.
+
+#### Site usage level {#usage-level-site}
+
+The **Usage level** card on a site's staff page records how much that site is used. Pick a
+level from the card's menu. Leave **Also set its workspace** and **Also set the workspace
+owner** ticked to raise those to match; neither is ever lowered.
+
 #### Filter the directory {#filter-the-directory}
 
 The grid's toolbar filters and searches the whole directory, not the page on screen.

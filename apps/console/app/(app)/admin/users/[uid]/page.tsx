@@ -459,7 +459,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                         children: (
                           <CardDisplay
                             header="Usage level"
-                            help={docsHelp('staffConsole', { anchor: '#usage-level' })}
+                            help={docsHelp('staffConsole', { anchor: '#usage-level-account' })}
                             contentGutterX
                             contentGutterY
                           >
