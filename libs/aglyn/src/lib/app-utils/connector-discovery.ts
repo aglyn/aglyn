@@ -136,7 +136,7 @@ export function mcpServerCardUrl(origin: string): string {
  * `app.aglyn.com` → `com.aglyn.app/mcp`.
  */
 export function mcpServerCardName(origin: string): string {
-  let host = ''
+  let host: string
   try {
     host = new URL(origin).hostname
   } catch {
