@@ -16,7 +16,7 @@
             "meteredInfraPassThrough": false
           },
           "starter": {
-            "extraApiRequestsUsdPer1k": null,
+            "extraApiRequestsUsdPer1k": 0.5,
             "extraContactsUsdPer1k": 1,
             "extraEmailSendsUsdPer1k": null,
             "meteredInfraPassThrough": true

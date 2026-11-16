@@ -22871,6 +22871,20 @@
               "help": "Empty inherits the plan default. 0 is a real limit of none."
             },
             {
+              "key": "quota.apiRequestsPerMinutePerOrg",
+              "label": "Limit: API requests / min (workspace)",
+              "kind": "number",
+              "initial": "{item.entitlements.apiRequestsPerMinutePerOrg}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.maxApiRequestsPerMonth",
+              "label": "Limit: API requests / mo, ceiling",
+              "kind": "number",
+              "initial": "{item.entitlements.maxApiRequestsPerMonth}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
               "key": "quota.datasetsPerOrg",
               "label": "Limit: Datasets (org)",
               "kind": "number",

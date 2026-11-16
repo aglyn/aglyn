@@ -440,6 +440,25 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
     title: 'Developer & API',
     rows: [
       { label: 'API access', value: talk((p) => perMonth(E(p).apiRequestsPerMonth)) },
+      // The two API limits Starter has and Pro lifts (AGL-4226), read off the
+      // entitlements so the page cannot quote a limit the pipeline does not
+      // enforce. A plan without the API shows a dash, not a limit.
+      {
+        label: 'API monthly ceiling',
+        value: talk((p) => {
+          if (!F(p).apiAccess) return NO
+          const ceiling = Number(E(p).maxApiRequestsPerMonth)
+          return Number.isFinite(ceiling) ? perMonth(ceiling) : 'None'
+        }),
+      },
+      {
+        label: 'API requests per minute, whole workspace',
+        value: talk((p) => {
+          if (!F(p).apiAccess) return NO
+          const perMinute = Number(E(p).apiRequestsPerMinutePerOrg)
+          return Number.isFinite(perMinute) ? `${perMinute.toLocaleString('en-US')} / min` : 'Unlimited'
+        }),
+      },
       { label: 'Webhooks', value: (p) => bool(F(p).webhooks) },
       // The frame lists this capability TWICE — as "Site backup & restore"
       // under Sites & publishing and again here as "Site export & backup".
@@ -1087,7 +1106,12 @@ if (!frameTable) {
  * stale" has to be an argument someone made once, not a shrug the reconciler
  * repeats forever. An entry here that stops diverging fails too.
  */
-const EXPECTED_MISSING: Record<string, string> = {}
+const EXPECTED_MISSING: Record<string, string> = {
+  'API monthly ceiling':
+    'AGL-4226: Starter\'s 50,000-request monthly stop, enforced by `checkApiRequestQuota`. The page and the frame gain the row with the Starter API launch, which publishes after billing is live (a band going up publishes after billing)',
+  'API requests per minute, whole workspace':
+    'AGL-4226: the workspace rate limit, enforced by `authenticateApiV1`. Published with the Starter API launch, as above',
+}
 
 for (const [label, [why]] of injected('--declare-missing-row', 2)) {
   EXPECTED_MISSING[label] = why
@@ -1128,7 +1152,12 @@ for (const [label, [why]] of injected('--declare-extra-row', 2)) {
  * matching and is reported as resolved, so it cannot outlive its reason. An
  * exemption that outlives its reason is just an untested cell.
  */
-const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {}
+const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {
+  'API access · Starter': {
+    frame: NO,
+    why: 'AGL-4226 opens the API on Starter (500 requests a month). A band going up publishes once billing for it is live, so the page and the frame move after the release, with the owner\'s approval of the rows',
+  },
+}
 
 /*
  * `--declare-stale-cell='<row> · <plan>|<frame value>'`, repeatable.
@@ -1667,7 +1696,12 @@ tierStrip.finish()
  * bound achieves nothing. The pair is only ever right together, and this is
  * what reads the half of it that lives on the page.
  *=========================================*/
-const USAGE_STALE: Record<string, Divergence> = {}
+const USAGE_STALE: Record<string, Divergence> = {
+  'API requests, per 1,000 over limit · Starter': {
+    frame: NO,
+    why: 'AGL-4226: Starter is billed API overage from its release; the page and the frame state the rate when the Starter API launch publishes, after billing is live',
+  },
+}
 
 /**
  * The rate the product BILLS and the page has never stated.
