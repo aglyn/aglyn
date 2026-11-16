@@ -56,6 +56,7 @@ import {
   CONNECTOR_ACCESS_TOKEN_TTL_MS,
   CONNECTOR_ACCESS_TOKENS_COLLECTION,
   CONNECTOR_CLIENT_IDLE_TTL_MS,
+  CONNECTOR_CLIENT_UNUSED_TTL_MS,
   CONNECTOR_CLIENTS_COLLECTION,
   CONNECTOR_CODE_TTL_MS,
   CONNECTOR_CODES_COLLECTION,
@@ -158,6 +159,16 @@ export interface ConnectorClientRegistration {
   created: boolean
 }
 
+export interface RegisterOptions {
+  /**
+   * May this call create a NEW client? The route says no when the caller's
+   * address has spent its creation budget; a repeat of an existing
+   * registration is still answered. `null` is returned when creating was
+   * needed and refused.
+   */
+  mayCreate?: boolean
+}
+
 /**
  * Store a validated registration, IDEMPOTENTLY. The caller has run
  * `validateClientRegistration`.
@@ -172,15 +183,19 @@ export interface ConnectorClientRegistration {
 export async function registerConnectorClient(
   input: { clientName: string; redirectUris: string[] },
   now = Date.now(),
-): Promise<ConnectorClientRegistration> {
+  options: RegisterOptions = {},
+): Promise<ConnectorClientRegistration | null> {
   const clientId = deriveConnectorClientId(input.clientName, input.redirectUris)
   const ref = db().collection(CONNECTOR_CLIENTS_COLLECTION).doc(clientId)
-  return db().runTransaction(async (tx): Promise<ConnectorClientRegistration> => {
+  return db().runTransaction(async (tx): Promise<ConnectorClientRegistration | null> => {
     const snap = await tx.get(ref)
     const existing = snap.exists ? (snap.data() ?? {}) : null
     if (existing && msOf(existing.expiresAt) > now) {
+      // A repeat buys a USED client its idle life and an unused one only
+      // another day, so re-registering cannot keep junk alive for long.
+      const life = existing.firstUsedAt ? CONNECTOR_CLIENT_IDLE_TTL_MS : CONNECTOR_CLIENT_UNUSED_TTL_MS
       if (now - msOf(existing.lastUsedAt) >= CLIENT_TOUCH_INTERVAL_MS) {
-        tx.update(ref, { lastUsedAt: at(now), expiresAt: at(now + CONNECTOR_CLIENT_IDLE_TTL_MS) })
+        tx.update(ref, { lastUsedAt: at(now), expiresAt: at(now + life) })
       }
       return {
         clientId,
@@ -190,13 +205,15 @@ export async function registerConnectorClient(
         created: false,
       }
     }
+    if (options.mayCreate === false) return null
     tx.set(ref, {
       clientId,
       clientName: input.clientName,
       redirectUris: input.redirectUris,
       createdAt: at(now),
       lastUsedAt: at(now),
-      expiresAt: at(now + CONNECTOR_CLIENT_IDLE_TTL_MS),
+      firstUsedAt: null,
+      expiresAt: at(now + CONNECTOR_CLIENT_UNUSED_TTL_MS),
     })
     return { clientId, clientName: input.clientName, redirectUris: input.redirectUris, issuedAtMs: now, created: true }
   })
@@ -225,8 +242,16 @@ async function touchConnectorClient(clientId: string, now: number): Promise<void
     const ref = db().collection(CONNECTOR_CLIENTS_COLLECTION).doc(clientId)
     const snap = await ref.get()
     if (!snap.exists) return
-    if (now - msOf(snap.data()?.lastUsedAt) < CLIENT_TOUCH_INTERVAL_MS) return
-    await ref.update({ lastUsedAt: at(now), expiresAt: at(now + CONNECTOR_CLIENT_IDLE_TTL_MS) })
+    const data = snap.data() ?? {}
+    // A first approval promotes an unused registration to its full idle life
+    // at once; after that, at most one write a day.
+    const promote = !data.firstUsedAt
+    if (!promote && now - msOf(data.lastUsedAt) < CLIENT_TOUCH_INTERVAL_MS) return
+    await ref.update({
+      lastUsedAt: at(now),
+      expiresAt: at(now + CONNECTOR_CLIENT_IDLE_TTL_MS),
+      ...(promote ? { firstUsedAt: at(now) } : {}),
+    })
   } catch {
     // Housekeeping only: a missed touch costs at most a later re-registration.
   }
@@ -268,7 +293,7 @@ export async function mintConnectorCode(input: MintCodeInput, now = Date.now()):
       usedAt: null,
       grantId: null,
     })
-  touchConnectorClient(input.clientId, now).catch(() => undefined)
+  await touchConnectorClient(input.clientId, now)
   return code
 }
 
@@ -489,7 +514,7 @@ export async function exchangeConnectorCode(
       connectedByEmail: email,
       clientId: client.clientId,
       clientName: client.clientName,
-      redirectHost: describeRedirectTarget(String(data.redirectUri)).host,
+      redirectHost: describeRedirectTarget(String(data.redirectUri)).label,
       scopes,
       createdAt: at(now),
       lastUsedAt: at(now),
@@ -703,7 +728,7 @@ export interface VerifiedConnectorToken {
   /** The connection id, so rate limits and attribution follow the connection. */
   keyId: string
   scopes: ApiScope[]
-  /** The app's name, e.g. "Claude" — what its writes are attributed to. */
+  /** The name the app registered under — what its writes are attributed to. */
   name: string
   /** The person who connected it; the user-scope lockdown applies to them. */
   uid: string
@@ -836,7 +861,7 @@ export async function listConnectableWorkspaces(uid: string): Promise<Connectabl
 export interface PublicConnectorGrant {
   grantId: string
   appName: string
-  /** The host the app received its code at, e.g. `claude.ai` or `localhost`. */
+  /** Where the app received its code: a website's host, `<scheme>://`, or `this computer`. */
   returnsTo: string
   connectedBy: string | null
   connectedAt: string | null

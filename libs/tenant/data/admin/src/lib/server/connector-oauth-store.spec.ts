@@ -115,6 +115,7 @@ import {
 } from './connector-oauth-store'
 import {
   CONNECTOR_CLIENT_IDLE_TTL_MS,
+  CONNECTOR_CLIENT_UNUSED_TTL_MS,
   CONNECTOR_CODE_TTL_MS,
   CONNECTOR_REFRESH_REUSE_GRACE_MS,
   CONNECTOR_REFRESH_TOKEN_TTL_MS,
@@ -182,12 +183,41 @@ describe('registration', () => {
     expect(clientDocs()).toHaveLength(1)
     // Within the day: nothing written at all.
     expect(mockDocs.get(`oauthClients/${first.clientId}`)).toEqual(stored)
-    // A day on: the idle clock moves, and only that.
+    // Approved once, a repeat a day on moves the idle clock and nothing else.
+    await mintConnectorCode(
+      { clientId: first.clientId, redirectUri: CLAUDE, codeChallenge: CHALLENGE, orgId: 'org-1', uid: 'user-1', email: null, scopes: ['contacts:read'], resource: null },
+      NOW + 120_000,
+    )
     const DAY = 24 * 60 * 60 * 1000
-    await registerConnectorClient({ clientName: 'Claude', redirectUris: [CLAUDE] }, NOW + DAY)
+    const later = NOW + 120_000 + DAY
+    const repeat = await registerConnectorClient({ clientName: 'Claude', redirectUris: [CLAUDE] }, later)
+    expect(repeat).toMatchObject({ clientId: first.clientId, created: false, issuedAtMs: NOW })
     const touched = mockDocs.get(`oauthClients/${first.clientId}`) as Record<string, { toMillis: () => number }>
-    expect(touched.expiresAt.toMillis()).toBe(NOW + DAY + CONNECTOR_CLIENT_IDLE_TTL_MS)
+    expect(touched.expiresAt.toMillis()).toBe(later + CONNECTOR_CLIENT_IDLE_TTL_MS)
     expect(touched.createdAt.toMillis()).toBe(NOW)
+    expect(clientDocs()).toHaveLength(1)
+  })
+
+  it('keeps an unapproved registration a day, and a first approval gives it the full idle life', async () => {
+    const client = await registerConnectorClient({ clientName: 'Some app', redirectUris: [CLAUDE] }, NOW)
+    expect(await readConnectorClient(client.clientId, NOW + CONNECTOR_CLIENT_UNUSED_TTL_MS)).toBeNull()
+
+    const used = await registerConnectorClient({ clientName: 'Used app', redirectUris: [CLAUDE] }, NOW)
+    await mintConnectorCode(
+      { clientId: used.clientId, redirectUri: CLAUDE, codeChallenge: CHALLENGE, orgId: 'org-1', uid: 'user-1', email: null, scopes: ['contacts:read'], resource: null },
+      NOW + 60_000,
+    )
+    expect(await readConnectorClient(used.clientId, NOW + CONNECTOR_CLIENT_UNUSED_TTL_MS + 60_000)).not.toBeNull()
+    expect(await readConnectorClient(used.clientId, NOW + CONNECTOR_CLIENT_IDLE_TTL_MS)).not.toBeNull()
+  })
+
+  it('answers a repeat but creates nothing when creation is not allowed', async () => {
+    const first = await registerConnectorClient({ clientName: 'Claude', redirectUris: [CLAUDE] }, NOW)
+    expect(await registerConnectorClient({ clientName: 'Claude', redirectUris: [CLAUDE] }, NOW, { mayCreate: false })).toMatchObject({
+      clientId: first?.clientId,
+      created: false,
+    })
+    expect(await registerConnectorClient({ clientName: 'New', redirectUris: [CLAUDE] }, NOW, { mayCreate: false })).toBeNull()
     expect(clientDocs()).toHaveLength(1)
   })
 

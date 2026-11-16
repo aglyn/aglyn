@@ -32,7 +32,7 @@ import {
   buildAuthorizeRedirect,
   buildProtectedResourceMetadata,
   CONNECTOR_ACCESS_TOKEN_PREFIX,
-  CONNECTOR_REDIRECT_ALLOWLIST,
+  CONNECTOR_REDIRECT_POLICY,
   CONNECTOR_VIEW_SCOPES,
   connectorAccessOptions,
   constantTimeEqual,
@@ -132,43 +132,109 @@ describe('PKCE (S256 only)', () => {
   })
 })
 
-describe('redirect addresses', () => {
-  it('is ONE list: Claude’s two callbacks and loopback', () => {
-    expect(CONNECTOR_REDIRECT_ALLOWLIST.exact).toEqual([
-      'https://claude.ai/api/mcp/auth_callback',
-      'https://claude.com/api/mcp/auth_callback',
-    ])
-    expect(CONNECTOR_REDIRECT_ALLOWLIST.loopbackHosts).toEqual(['localhost', '127.0.0.1'])
+describe('redirect addresses: the open policy', () => {
+  it('is ONE policy: loopback hosts and a denylist of schemes', () => {
+    expect(CONNECTOR_REDIRECT_POLICY.loopbackHosts).toEqual(['localhost', '127.0.0.1', '[::1]'])
+    for (const scheme of ['javascript', 'data', 'file', 'blob', 'about', 'vbscript', 'ws', 'wss', 'ftp', 'http']) {
+      expect(CONNECTOR_REDIRECT_POLICY.deniedSchemes).toContain(scheme)
+    }
   })
 
   it.each([
-    ['claude.ai', CLAUDE],
-    ['claude.com', 'https://claude.com/api/mcp/auth_callback'],
+    ['Claude', CLAUDE],
+    ['ChatGPT-style web callback', 'https://chatgpt.com/connector_platform_oauth_redirect'],
+    ['a web callback with a query', 'https://app.example.com/oauth/callback?client=1'],
+    ['a deep domain', 'https://a.b.example.co.uk/cb'],
+    ['a punycode domain', 'https://xn--bcher-kva.example/cb'],
     ['localhost with a port', 'http://localhost:33418/callback'],
     ['localhost without a port', 'http://localhost/callback'],
     ['127.0.0.1', 'http://127.0.0.1:8080/oauth/callback'],
+    ['IPv6 loopback', 'http://[::1]:6274/oauth/callback'],
+    ['Cursor', 'cursor://anysphere.cursor-retrieval/oauth/callback'],
+    ['VS Code', 'vscode://vscode.github-authentication/did-authenticate'],
+    ['a reverse-domain scheme', 'com.example.app:/oauth2redirect'],
+    ['a scheme with + and -', 'my-app+dev://cb'],
   ])('admits %s', (_label, uri) => {
     expect(isAllowedRedirectUri(uri)).toBe(true)
   })
 
   it.each([
-    ['another https host', 'https://evil.example/api/mcp/auth_callback'],
-    ['a claude look-alike', 'https://claude.ai.evil.example/api/mcp/auth_callback'],
-    ['Claude over http', 'http://claude.ai/api/mcp/auth_callback'],
-    ['Claude with a query', `${CLAUDE}?next=https://evil.example`],
-    ['Claude with a fragment', `${CLAUDE}#x`],
-    ['Claude on another path', 'https://claude.ai/api/mcp/auth_callback/../x'],
-    ['loopback over https', 'https://localhost:3000/callback'],
+    // user info and authority confusion
+    ['user info', 'https://user@example.com/cb'],
+    ['user info hiding the real host', 'https://example.com@evil.example/cb'],
+    ['a password', 'https://a:b@example.com/cb'],
     ['loopback with user info', 'http://user@localhost:3000/callback'],
+    ['an app link with user info', 'cursor://u@anysphere.cursor-retrieval/cb'],
+    // fragments
+    ['a fragment', `${CLAUDE}#x`],
+    ['an empty fragment', `${CLAUDE}#`],
     ['loopback with a fragment', 'http://localhost:3000/callback#x'],
-    ['a non-canonical loopback spelling', 'http://LOCALHOST:3000/callback'],
+    // case and canonical form
+    ['an upper-case host', 'https://Example.com/cb'],
+    ['an upper-case scheme', 'HTTPS://example.com/cb'],
+    ['an upper-case app scheme', 'Cursor://cb'],
+    ['an upper-case loopback', 'http://LOCALHOST:3000/callback'],
+    ['a dot segment', 'https://example.com/a/../cb'],
+    ['a default port spelled out', 'https://example.com:443/cb'],
+    ['no path', 'https://example.com'],
     ['a loopback with no path', 'http://localhost:3000'],
-    ['a loopback look-alike host', 'http://localhost.evil.example/callback'],
-    ['IPv6 loopback', 'http://[::1]:3000/callback'],
-    ['a custom scheme', 'claude://callback'],
+    // trailing dots
+    ['a trailing-dot host', 'https://example.com./cb'],
+    ['a trailing-dot loopback', 'http://localhost./cb'],
+    // IP literals, every spelling
+    ['https on an IPv4 literal', 'https://93.184.216.34/cb'],
+    ['https on loopback', 'https://127.0.0.1/cb'],
+    ['https on an IPv6 literal', 'https://[2001:db8::1]/cb'],
+    ['a hex IPv4', 'http://0x7f000001/cb'],
+    ['an octal IPv4', 'http://0177.0.0.1/cb'],
+    ['a short IPv4', 'http://127.1/cb'],
+    ['an IPv4-mapped IPv6 loopback', 'http://[::ffff:127.0.0.1]/cb'],
+    ['another 127/8 address', 'http://127.0.0.2/cb'],
+    ['the unspecified address', 'http://0.0.0.0/cb'],
+    // plain http off loopback, and look-alikes
+    ['http on the web', 'http://example.com/cb'],
+    ['http on a loopback look-alike', 'http://localhost.evil.example/callback'],
+    ['http on a loopback prefix', 'http://127.0.0.1.evil.example/cb'],
+    ['a bare name', 'https://intranet/cb'],
+    ['a numeric TLD', 'https://example.123/cb'],
+    // backslashes, control characters, whitespace
+    ['a backslash authority', 'https:\\\\evil.example/cb'],
+    ['a backslash in the path', 'https://example.com\\@evil.example/cb'],
+    ['a tab', 'https://exam\tple.com/cb'],
+    ['a newline', 'https://example.com/cb\n'],
+    ['a carriage return', 'https://example.com/\rcb'],
+    ['a NUL', 'https://example.com/cb\u0000'],
+    ['a C1 control', 'https://example.com/cb\u0085'],
+    ['a leading space', ' https://example.com/cb'],
+    ['an inner space', 'https://example.com/c b'],
+    // encoded characters in the authority
+    ['an encoded host character', 'https://ex%61mple.com/cb'],
+    ['an encoded dot', 'https://example%2Ecom/cb'],
+    ['an encoded loopback', 'http://local%68ost/cb'],
+    ['an app link with a stray percent', 'cursor://cb/%zz'],
+    // dangerous and web-handled schemes, including nested
     ['javascript:', 'javascript:alert(1)'],
-    ['an absurd length', `http://localhost/${'a'.repeat(600)}`],
+    ['javascript with slashes', 'javascript://example.com/%0Aalert(1)'],
+    ['data:', 'data:text/html,<script>alert(1)</script>'],
+    ['file:', 'file:///etc/passwd'],
+    ['blob:', 'blob:https://example.com/uuid'],
+    ['about:', 'about:blank'],
+    ['vbscript:', 'vbscript:msgbox(1)'],
+    ['ws:', 'ws://example.com/cb'],
+    ['wss:', 'wss://example.com/cb'],
+    ['ftp:', 'ftp://example.com/cb'],
+    ['view-source:', 'view-source:https://example.com/'],
+    ['intent:', 'intent://cb#Intent;scheme=x;end'],
+    ['mailto:', 'mailto:someone@example.com'],
+    ['an opaque app link carrying a scheme', 'myapp:javascript:alert(1)'],
+    ['an opaque app link', 'myapp:cb'],
+    ['a one-letter scheme', 'c://cb'],
+    ['a scheme with an underscore', 'my_app://cb'],
+    ['a scheme starting with a digit', '1app://cb'],
+    // limits
+    ['an absurd length', `https://example.com/${'a'.repeat(600)}`],
     ['nothing', ''],
+    ['not a string', 42],
   ])('refuses %s', (_label, uri) => {
     expect(isAllowedRedirectUri(uri)).toBe(false)
   })
@@ -176,9 +242,12 @@ describe('redirect addresses', () => {
   it('matches exactly, except that a loopback port is the client’s to choose', () => {
     expect(redirectUriMatches(CLAUDE, CLAUDE)).toBe(true)
     expect(redirectUriMatches('http://localhost:1111/callback', 'http://localhost:2222/callback')).toBe(true)
+    expect(redirectUriMatches('http://[::1]:1/cb', 'http://[::1]:2/cb')).toBe(true)
     expect(redirectUriMatches('http://localhost:1111/callback', 'http://localhost:1111/other')).toBe(false)
     expect(redirectUriMatches('http://localhost:1111/callback', 'http://127.0.0.1:1111/callback')).toBe(false)
     expect(redirectUriMatches('http://localhost/cb?a=1', 'http://localhost:9/cb?a=2')).toBe(false)
+    expect(redirectUriMatches('https://example.com/cb', 'https://example.com:8443/cb')).toBe(false)
+    expect(redirectUriMatches('cursor://a/cb', 'cursor://a/cb2')).toBe(false)
     expect(redirectUriMatches(CLAUDE, 'https://claude.com/api/mcp/auth_callback')).toBe(false)
   })
 
@@ -186,12 +255,17 @@ describe('redirect addresses', () => {
     expect(matchRegisteredRedirect([CLAUDE], CLAUDE)).toBe(CLAUDE)
     expect(matchRegisteredRedirect(['http://localhost:1/cb'], 'http://localhost:5/cb')).toBe('http://localhost:5/cb')
     expect(matchRegisteredRedirect([CLAUDE], 'https://claude.com/api/mcp/auth_callback')).toBeNull()
-    expect(matchRegisteredRedirect(['https://evil.example/cb'], 'https://evil.example/cb')).toBeNull()
+    expect(matchRegisteredRedirect(['https://example.com/cb'], 'https://example.com/cb/')).toBeNull()
+    // A registration can only ever hold allowed addresses, but the check holds anyway.
+    expect(matchRegisteredRedirect(['javascript:alert(1)'], 'javascript:alert(1)')).toBeNull()
   })
 
-  it('names the host a code goes back to, and whether it is this computer', () => {
-    expect(describeRedirectTarget(CLAUDE)).toEqual({ host: 'claude.ai', local: false })
-    expect(describeRedirectTarget('http://127.0.0.1:9/cb')).toEqual({ host: '127.0.0.1', local: true })
+  it('names the destination from the address alone: host, app scheme, or this computer', () => {
+    expect(describeRedirectTarget(CLAUDE)).toEqual({ kind: 'web', label: 'claude.ai' })
+    expect(describeRedirectTarget('cursor://anysphere.cursor-retrieval/cb')).toEqual({ kind: 'app', label: 'cursor://' })
+    expect(describeRedirectTarget('com.example.app:/cb')).toEqual({ kind: 'app', label: 'com.example.app://' })
+    expect(describeRedirectTarget('http://127.0.0.1:9/cb')).toEqual({ kind: 'loopback', label: 'this computer' })
+    expect(describeRedirectTarget('http://[::1]:9/cb')).toEqual({ kind: 'loopback', label: 'this computer' })
   })
 })
 
@@ -209,7 +283,7 @@ describe('registration', () => {
 
   it('refuses an address off the list as invalid_redirect_uri', () => {
     expect(
-      validateClientRegistration({ redirect_uris: [CLAUDE, 'https://evil.example/cb'] }),
+      validateClientRegistration({ redirect_uris: [CLAUDE, 'javascript:alert(1)'] }),
     ).toMatchObject({ ok: false, error: 'invalid_redirect_uri' })
     expect(validateClientRegistration({ redirect_uris: [] })).toMatchObject({ ok: false, error: 'invalid_redirect_uri' })
     expect(validateClientRegistration({})).toMatchObject({ ok: false, error: 'invalid_redirect_uri' })
@@ -226,7 +300,15 @@ describe('registration', () => {
 
   it('makes a name safe to show, and names the nameless', () => {
     expect(sanitizeClientName('  Claude\u0000‮ Code \n ')).toBe('Claude Code')
-    expect(sanitizeClientName('x'.repeat(200))).toHaveLength(80)
+    expect(sanitizeClientName('x'.repeat(200))).toHaveLength(60)
+    // Bidi overrides and isolates, zero-width characters, line breaks.
+    expect(sanitizeClientName('Good‮App⁦x⁩')).toBe('Good App x')
+    expect(sanitizeClientName('A​B‍C﻿D')).toBe('A B C D')
+    expect(sanitizeClientName('Line one\nline two three')).toBe('Line one line two three')
+    // Stacked combining marks are cut to two.
+    expect(sanitizeClientName('q́̂̃̄̅')).toBe('q́̂')
+    // The cap never splits a surrogate pair.
+    expect(Array.from(sanitizeClientName('\u{1F600}'.repeat(70)))).toHaveLength(60)
     expect(sanitizeClientName(undefined)).toBe('Unnamed app')
     expect(sanitizeClientName('​')).toBe('Unnamed app')
   })

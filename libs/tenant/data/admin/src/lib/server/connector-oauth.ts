@@ -18,9 +18,10 @@
 /**
  * CONNECTOR SIGN-IN, THE PURE HALF (AGL-4225).
  *
- * A person adds the MCP endpoint to Claude, signs in to the console, picks a
- * workspace and allows it; Claude then calls `/api/v1` through `/api/mcp` with
- * a credential nobody copied. This is OAuth 2.1 with PKCE, public clients
+ * A person adds the MCP endpoint to an MCP client — Claude, ChatGPT, Cursor,
+ * VS Code or any other — signs in to the console, picks a workspace and
+ * allows it; the client then calls `/api/v1` through `/api/mcp` with a
+ * credential nobody copied. This is OAuth 2.1 with PKCE, public clients
  * only, and everything in this file is a rule about it that needs no store:
  * which redirect addresses may receive a code, the PKCE check, what a
  * registration may carry, which access a person may choose, the shape of the
@@ -31,11 +32,11 @@
  *
  * Two properties the whole design leans on, stated once:
  *
- *  - A code goes ONLY to an address on {@link CONNECTOR_REDIRECT_ALLOWLIST}.
- *    Registration is unauthenticated, so the client's own list is not a
- *    control; the allowlist is. A stranger can register a client, but the
- *    code it obtains can only be delivered to Claude or to the person's own
- *    machine.
+ *  - A code is useless without the PKCE verifier of the sign-in that asked
+ *    for it, and goes only to an address the client registered under
+ *    {@link CONNECTOR_REDIRECT_POLICY}. Registration is open to any client,
+ *    so the CONSENT SCREEN is the control on who gets access: it shows what
+ *    the app calls itself and, unmissably, where the code is going.
  *  - No secret is stored. Codes, access and refresh tokens are kept as their
  *    SHA-256, the document id IS the hash (the `apiKeys` pattern), and the
  *    raw value exists only in the response that hands it out.
@@ -94,6 +95,15 @@ export const CONNECTOR_REFRESH_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000
  * refresh token issued to it, by construction rather than by a later touch.
  */
 export const CONNECTOR_CLIENT_IDLE_TTL_MS = CONNECTOR_REFRESH_TOKEN_TTL_MS + 24 * 60 * 60 * 1000
+
+/**
+ * A registration's life until it is first USED — until a person approves it
+ * on the consent screen. Registration is open to anyone and its variety is
+ * unbounded, so a client nobody ever approves is kept for a day, not for the
+ * idle life above: storage held by junk registrations is bounded by the
+ * per-address creation rate times one day.
+ */
+export const CONNECTOR_CLIENT_UNUSED_TTL_MS = 24 * 60 * 60 * 1000
 
 /**
  * How long a just-rotated refresh token may come back without ending the
@@ -224,28 +234,45 @@ export function verifyPkceS256(verifier: unknown, challenge: unknown): boolean {
 // ── Redirect addresses ──────────────────────────────────────────────────────
 
 /**
- * EVERY address a code may be delivered to. The one list.
+ * WHICH addresses a code may be delivered to. The one policy, for any MCP
+ * client — Claude, ChatGPT, Cursor, VS Code, an inspector — that registers.
  *
- * `exact` entries are compared as whole strings. A loopback entry admits
- * `http://<host>[:<port>]/<path>` on the named hosts, which is how a desktop
- * client (Claude Code) receives a code on the person's own machine (RFC 8252
- * §7.3); the port is the client's to choose at sign-in time, so it is ignored
- * when an authorize request is matched against the registration.
+ *  - `https://` on a real domain name: no IP literal, no trailing dot, no
+ *    user info, no fragment. A web client's callback.
+ *  - `http://` ONLY on loopback (`localhost`, `127.0.0.1`, `[::1]`), any
+ *    port (RFC 8252 §7.3): a desktop client listening on the person's own
+ *    machine. The port is ignored when matching, since the client picks it
+ *    at sign-in time.
+ *  - A private-use scheme (RFC 8252 §7.1) — `cursor://…`, `vscode://…`,
+ *    `com.example.app:/cb` — for a native client, under a conservative
+ *    grammar and never one of {@link CONNECTOR_REDIRECT_POLICY.deniedSchemes}.
  *
- * Adding a client to this list is a security decision, not a configuration
- * change: it names a party that will hold a credential into every workspace
- * whose member connects it.
+ * Registration is open, so this policy is NOT what keeps a code out of the
+ * wrong hands; PKCE binds a code to whoever started the sign-in, and the
+ * consent screen shows the person exactly where they are being sent. What the
+ * policy does guarantee is that every address is unambiguous: it must be in
+ * the canonical form the URL parser prints, so the string checked here is the
+ * string a browser navigates to and every later comparison is plain equality.
  */
-export const CONNECTOR_REDIRECT_ALLOWLIST = Object.freeze({
-  exact: Object.freeze([
-    'https://claude.ai/api/mcp/auth_callback',
-    'https://claude.com/api/mcp/auth_callback',
+export const CONNECTOR_REDIRECT_POLICY = Object.freeze({
+  loopbackHosts: Object.freeze(['localhost', '127.0.0.1', '[::1]']),
+  /**
+   * Schemes that execute, read local data, reach the web unencrypted, or are
+   * handled by the browser itself rather than handed to an app.
+   */
+  deniedSchemes: Object.freeze([
+    'about', 'blob', 'chrome', 'chrome-extension', 'data', 'file', 'filesystem', 'ftp', 'http', 'https',
+    'intent', 'jar', 'javascript', 'mailto', 'moz-extension', 'sms', 'tel', 'vbscript', 'view-source', 'ws', 'wss',
   ]),
-  loopbackHosts: Object.freeze(['localhost', '127.0.0.1']),
 })
 
 /** Longest redirect address accepted, in characters. */
 export const MAX_REDIRECT_URI_LENGTH = 512
+
+/** RFC 3986 scheme grammar, lower case only, and kept short. */
+const PRIVATE_SCHEME = /^[a-z][a-z0-9+.-]{1,63}$/
+/** A domain name as a person reads it: dotted labels and an alphabetic TLD. */
+const DOMAIN_NAME = /^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/
 
 function parseUrl(value: string): URL | null {
   try {
@@ -255,31 +282,41 @@ function parseUrl(value: string): URL | null {
   }
 }
 
-/** A loopback address on the allowlist, parsed; `null` for anything else. */
-function parseLoopback(value: string): URL | null {
-  const url = parseUrl(value)
-  if (!url || url.protocol !== 'http:') return null
-  if (!CONNECTOR_REDIRECT_ALLOWLIST.loopbackHosts.includes(url.hostname)) return null
-  return url
+/** The kind of address, once it has passed the policy. */
+type RedirectKind = 'web' | 'loopback' | 'app'
+
+/** Classify `uri` under the policy, or `null` when a code may not go there. */
+function classifyRedirect(uri: unknown): { kind: RedirectKind; url: URL } | null {
+  if (typeof uri !== 'string' || !uri || uri.length > MAX_REDIRECT_URI_LENGTH) return null
+  // Nothing a parser would silently drop or reinterpret: control characters,
+  // whitespace, backslashes. The canonical-form check below would catch most;
+  // refusing them first means none can reach it.
+  if (/[\u0000-\u0020\u007f-\u009f\\]/.test(uri)) return null
+  if (uri.includes('#')) return null
+  const url = parseUrl(uri)
+  if (!url || url.href !== uri) return null
+  if (url.username || url.password || url.hash) return null
+  const scheme = url.protocol.slice(0, -1)
+
+  if (scheme === 'https') {
+    if (!DOMAIN_NAME.test(url.hostname)) return null
+    return { kind: 'web', url }
+  }
+  if (scheme === 'http') {
+    if (!CONNECTOR_REDIRECT_POLICY.loopbackHosts.includes(url.hostname)) return null
+    return { kind: 'loopback', url }
+  }
+  if (!PRIVATE_SCHEME.test(scheme) || CONNECTOR_REDIRECT_POLICY.deniedSchemes.includes(scheme)) return null
+  // `scheme://authority/…` or `scheme:/path`, never an opaque `scheme:rest`
+  // that could carry another scheme inside it.
+  if (!uri.startsWith(`${scheme}:/`)) return null
+  if (/%(?![0-9A-F]{2})/i.test(uri)) return null
+  return { kind: 'app', url }
 }
 
-/**
- * May a code ever be delivered to `uri`?
- *
- * The value must be in its CANONICAL form — exactly what the URL parser would
- * print — so every later comparison can be plain string equality and no
- * parser difference between us and a browser can make two spellings of one
- * address disagree. No fragment (RFC 6749 §3.1.2) and no user info.
- */
+/** May a code ever be delivered to `uri`? */
 export function isAllowedRedirectUri(uri: unknown): uri is string {
-  if (typeof uri !== 'string' || !uri || uri.length > MAX_REDIRECT_URI_LENGTH) return false
-  if (CONNECTOR_REDIRECT_ALLOWLIST.exact.includes(uri)) return true
-  const url = parseLoopback(uri)
-  if (!url) return false
-  if (url.href !== uri) return false
-  if (url.hash || uri.includes('#')) return false
-  if (url.username || url.password) return false
-  return true
+  return classifyRedirect(uri) !== null
 }
 
 /**
@@ -290,16 +327,10 @@ export function isAllowedRedirectUri(uri: unknown): uri is string {
  */
 export function redirectUriMatches(registered: string, presented: string): boolean {
   if (registered === presented) return true
-  const a = parseLoopback(registered)
-  const b = parseLoopback(presented)
-  if (!a || !b) return false
-  return (
-    a.hostname === b.hostname &&
-    a.pathname === b.pathname &&
-    a.search === b.search &&
-    !a.hash &&
-    !b.hash
-  )
+  const a = classifyRedirect(registered)
+  const b = classifyRedirect(presented)
+  if (a?.kind !== 'loopback' || b?.kind !== 'loopback') return false
+  return a.url.hostname === b.url.hostname && a.url.pathname === b.url.pathname && a.url.search === b.url.search
 }
 
 /** `presented` when it is allowed AND registered by this client; otherwise `null`. */
@@ -311,17 +342,26 @@ export function matchRegisteredRedirect(
   return registered.some((uri) => redirectUriMatches(uri, presented)) ? presented : null
 }
 
+/** Where a code goes, as the consent screen and Connected apps name it. */
+export interface RedirectTarget {
+  /** A website, an app on this device, or this computer. */
+  kind: RedirectKind
+  /** The host for `web`, `<scheme>://` for `app`, and `this computer` for loopback. */
+  label: string
+}
+
 /**
- * Where a code is being sent, as a person reads it on the consent screen:
- * the host, and whether that host is this computer.
+ * Where a code is being sent, in the terms a person can check: the website's
+ * host, the app link's scheme, or "this computer". Derived from the address
+ * itself, never from anything the client says about itself.
  */
-export function describeRedirectTarget(uri: string): { host: string; local: boolean } {
-  const url = parseUrl(uri)
-  if (!url) return { host: '', local: false }
-  return {
-    host: url.hostname,
-    local: CONNECTOR_REDIRECT_ALLOWLIST.loopbackHosts.includes(url.hostname),
-  }
+export function describeRedirectTarget(uri: string): RedirectTarget {
+  const classified = classifyRedirect(uri)
+  if (!classified) return { kind: 'web', label: '' }
+  const { kind, url } = classified
+  if (kind === 'loopback') return { kind, label: 'this computer' }
+  if (kind === 'app') return { kind, label: `${url.protocol}//` }
+  return { kind, label: url.hostname }
 }
 
 // ── Registration (RFC 7591) ─────────────────────────────────────────────────
@@ -331,7 +371,7 @@ export const MAX_REGISTRATION_BYTES = 8 * 1024
 /** Most redirect addresses one registration may carry. */
 export const MAX_REDIRECT_URIS = 5
 /** Longest app name kept, in characters. */
-export const MAX_CLIENT_NAME_LENGTH = 80
+export const MAX_CLIENT_NAME_LENGTH = 60
 /** Shown when a client registers without naming itself. */
 export const UNNAMED_CLIENT = 'Unnamed app'
 
@@ -356,12 +396,19 @@ export interface RegistrationResult {
 export function sanitizeClientName(value: unknown): string {
   if (typeof value !== 'string') return UNNAMED_CLIENT
   const cleaned = value
-    .replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, ' ')
+    .normalize('NFC')
+    // Controls, format characters (bidi overrides and isolates, zero-width
+    // joiners and spaces), line and paragraph separators, private-use,
+    // unassigned and lone surrogate code points: anything that could reorder,
+    // hide or break the text it sits in.
+    .replace(/[\p{Cc}\p{Cf}\p{Co}\p{Cn}\p{Cs}\p{Zl}\p{Zp}]/gu, ' ')
+    // Stacked combining marks, which can spill a name over the lines around it.
+    .replace(/(\p{M}{2})\p{M}+/gu, '$1')
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, MAX_CLIENT_NAME_LENGTH)
-    .trim()
-  return cleaned || UNNAMED_CLIENT
+  // Capped by code point, so the cap cannot split a surrogate pair.
+  const capped = Array.from(cleaned).slice(0, MAX_CLIENT_NAME_LENGTH).join('').trim()
+  return capped || UNNAMED_CLIENT
 }
 
 /**
