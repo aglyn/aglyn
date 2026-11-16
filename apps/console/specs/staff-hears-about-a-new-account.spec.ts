@@ -126,6 +126,22 @@ jest.mock('../app/api/_lib/security-alerts', () => ({
  * callback, so discarding it would make every test below pass against a route
  * that announces nothing.
  */
+/*
+ * The notice waits up to `ACQUISITION_WAIT_MS` for the sign-up's acquisition
+ * write before saying there is none (AGL-4229), on a real clock. This file is
+ * about WHEN an account is announced, not what the notice says about where it
+ * came from, so it runs the real announcement with no wait;
+ * `growth-announcements.spec.ts` proves the wait itself.
+ */
+jest.mock('../app/api/_lib/growth-announcements', () => {
+  const actual = jest.requireActual('../app/api/_lib/growth-announcements')
+  return {
+    __esModule: true,
+    ...actual,
+    announceNewAccount: (account: unknown) => actual.announceNewAccount(account, { waitMs: 0 }),
+  }
+})
+
 jest.mock('next/server', () => ({
   __esModule: true,
   after: (fn: () => unknown) => {

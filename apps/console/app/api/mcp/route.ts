@@ -33,6 +33,7 @@ import {
 import {
   handleMcpMessage,
   JSON_RPC_ERRORS,
+  MCP_SERVER_TITLE,
   type JsonRpcMessage,
   negotiateProtocolVersion,
   type JsonRpcResponse,
@@ -68,8 +69,11 @@ import { buildMcpTools, buildToolRequest } from '../../../utils/mcp-tools'
 
 export const dynamic = 'force-dynamic'
 
-/** What `initialize` reports, and what a client shows the person approving it. */
-const SERVER_NAME = `${PLATFORM_BRAND_NAME} API`
+/**
+ * What `initialize` reports, and what a client shows the person approving it.
+ * The same value the server card (`./server-card`) publishes as its `title`.
+ */
+const SERVER_NAME = MCP_SERVER_TITLE
 
 /**
  * A model is handed the API's own JSON, verbatim.

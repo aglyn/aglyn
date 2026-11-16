@@ -80,8 +80,29 @@ interface SubstituteContext {
   missing?: 'token' | 'empty'
 }
 
-const displayValue = (value: unknown): string =>
-  Array.isArray(value) ? value.join(', ') : String(value)
+/**
+ * A plain object's part a token can name (AGL-4190): `{{item.icon.iconPath}}`
+ * reads the `iconPath` of a record's icon. Only text and numbers are parts;
+ * anything else is not something a page can print.
+ */
+function plainObjectPart(value: unknown, key: string): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  if (!Object.prototype.hasOwnProperty.call(value, key)) return null
+  const part = (value as Record<string, unknown>)[key]
+  return typeof part === 'string' || typeof part === 'number' ? String(part) : null
+}
+
+/**
+ * A field's value as page text. A list is its entries, comma-joined. A map
+ * that names an icon (`{ iconId, iconPath }`, AGL-4190) is the icon's id,
+ * which is what an Icon element's icon holds; any other map is nothing,
+ * rather than the `[object Object]` a page would otherwise print.
+ */
+const displayValue = (value: unknown): string => {
+  if (Array.isArray(value)) return value.join(', ')
+  if (value && typeof value === 'object') return plainObjectPart(value, 'iconId') ?? ''
+  return String(value)
+}
 
 /** Resolves `{{item.ref.field}}`: FKey(s) → target document field value. */
 function resolveReferenceHop(
@@ -117,7 +138,11 @@ function substituteValue(
       ITEM_TOKEN_PATTERN,
       (token, field: string, hop?: string) => {
         if (hop) {
-          const resolved = resolveReferenceHop(context, field, hop)
+          // A reference's target field first (AGL-180); otherwise a part of
+          // the field's own map, such as an icon's path (AGL-4190).
+          const resolved =
+            resolveReferenceHop(context, field, hop) ??
+            plainObjectPart(record[field], hop)
           return resolved != null ? resolved : unresolved(token)
         }
         return record[field] != null
