@@ -39,7 +39,7 @@ struct ListColumn: Identifiable, Equatable, Sendable {
     page = json["sort"]?["page"]?.stringValue
     type = json["sort"]?["type"]?.stringValue ?? "text"
     first = json["sort"]?["first"]?.stringValue == "desc" ? "desc" : "asc"
-    ranks = json["sort"]?["ranks"].arrayOfStrings
+    ranks = json["sort"]?["ranks"].arrayOfStrings ?? []
   }
 }
 

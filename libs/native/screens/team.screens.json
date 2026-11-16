@@ -409,6 +409,12 @@
         "roles": {
           "url": "/api/orgs/roles?orgId={org.id}"
         },
+        "changes": {
+          "url": "/api/orgs/activity?orgId={org.id}&targetId={params.uid}",
+          "when": "org.can[org.auditLog]",
+          "cursor": "nextCursor",
+          "items": "entries"
+        },
         "activity": {
           "url": "/api/orgs/activity?orgId={org.id}&actorId={params.uid}&scope=org-wide",
           "when": "org.can[org.auditLog]",
@@ -727,6 +733,18 @@
               "back": true
             }
           ]
+        },
+        {
+          "type": "list",
+          "title": "Changes to this member",
+          "when": "org.can[org.auditLog]",
+          "load": "changes",
+          "items": "data.changes.entries",
+          "primary": "{item.actionLabel|item.action:activity}",
+          "secondary": "{item.actorEmail|item.actorEmailNow|item.apiKeyName|item.connectedAppLabel|'System'}",
+          "tertiary": "{item.createdAt:datetime}",
+          "icon": "clock|schedule",
+          "empty": "Nothing yet."
         },
         {
           "type": "list",
