@@ -557,6 +557,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                            */
                           <CardDisplay
                             header={'Usage level'}
+                            help={docsHelp('staffConsole', { anchor: '#usage-level' })}
                             contentGutterX
                             contentGutterY
                           >

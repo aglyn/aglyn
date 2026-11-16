@@ -1039,6 +1039,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#success-manager': 'Name the success manager an organization is promised: enter their Name and Email and Save.',
     '#suppressed-numbers': 'Suppressed numbers lists every record, most recently changed first, a page at a time, and its heading counts every number currently suppressed across the whole list, not only the page on screen.',
     '#system-emails': 'The mail Aglyn itself sends: organization invites, the monthly usage summary, the email copy of console notifications, staff alerts, workspace notices, the CRM digest and task reminders, the weekly insights digest,…',
+    '#usage-level': 'Every account, organization and site carries a usage level: how much it actually uses Aglyn, as someone on staff judged it after looking.',
     '#user-activity': 'The console actions this account took itself, across every organization and site, newest first — as distinct from the staff actions taken on it.',
     '#user-audit-trail': 'On the detail page, Recent audit trail (what was done by or to the account) and Data access by staff (who only looked at its data) each page through the account\'s whole audit trail, newest first.',
     '#user-data-access': 'Data access by staff lists each time a staff member opened this account\'s private data without changing it — reading a sent email, for one.',

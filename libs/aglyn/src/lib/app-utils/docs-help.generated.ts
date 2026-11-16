@@ -1384,6 +1384,7 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#success-manager': 'Success manager',
     '#suppressed-numbers': 'Suppressed numbers',
     '#system-emails': 'System emails',
+    '#usage-level': 'Usage level',
     '#user-activity': 'Activity by this account',
     '#user-audit-trail': 'Recent audit trail',
     '#user-data-access': 'Data access by staff',

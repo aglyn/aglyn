@@ -457,7 +457,12 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                          */
                         key: 'usageLevel',
                         children: (
-                          <CardDisplay header="Usage level" contentGutterX contentGutterY>
+                          <CardDisplay
+                            header="Usage level"
+                            help={docsHelp('staffConsole', { anchor: '#usage-level' })}
+                            contentGutterX
+                            contentGutterY
+                          >
                             <StaffUsageLevelField
                               key={uid}
                               target="user"

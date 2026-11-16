@@ -1293,7 +1293,12 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                      * Carries to the owner unless unticked; a carry never
                      * lowers a higher level.
                      */
-                    <CardDisplay header={'Usage level'} contentGutterX contentGutterY>
+                    <CardDisplay
+                      header={'Usage level'}
+                      help={docsHelp('staffConsole', { anchor: '#usage-level' })}
+                      contentGutterX
+                      contentGutterY
+                    >
                       <StaffUsageLevelField
                         key={orgId}
                         target="org"
