@@ -699,7 +699,8 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
    * Starter's band is 0 and `emailSendsOverage` can never compute an excess
    * for it. A rate there would advertise a fee that cannot be charged.
    */
-  const EMAIL_CELLS = ['—', '$2.25', 'Custom']
+  // Starter bills email past 1,000 a month since AGL-4227.
+  const EMAIL_CELLS = ['$2.50', '$2.25', 'Custom']
 
   it('holds the absence declaration while the page carries the row NOWHERE', () => {
     // The committed state, asserted rather than assumed: no breakpoint states
@@ -793,7 +794,7 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     assert.ok(email, 'the email overage row is not published')
     // The plans sold since pricing v4 (AGL-4126), then Custom.
     assert.deepEqual(email.values, {
-      starter: '—',
+      starter: '$2.50',
       pro: '$2.25',
       enterprise: 'Custom',
     })
