@@ -15,6 +15,7 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **data:** an Icon field for datasets, bound by an Icon element in a repeat ([AGL-4190](https://linear.app/aglyn/issue/AGL-4190))
 - **accounting:** release_accounting on by default for every workspace ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
 - **api:** an MCP Registry server.json for the remote MCP server, not published ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
 - **api:** the API catalog, the customer OpenAPI and the REST root name the MCP server and how to sign in ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
