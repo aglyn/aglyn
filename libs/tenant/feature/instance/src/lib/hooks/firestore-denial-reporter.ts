@@ -179,6 +179,40 @@ export function refusedRetryDelayMs(streakStartedAt: number): number {
   )
 }
 
+/** The longest an arrival is ever held back from reopening a refused listen. */
+export const REFUSED_ARRIVAL_CEILING_MS = 2 * 60_000
+/** An arrival's hold is the streak's age divided by this, floor to ceiling. */
+const REFUSED_ARRIVAL_AGE_DIVISOR = 20
+
+/**
+ * How soon after a refusal an ARRIVAL (focus, the tab becoming visible) may
+ * reopen the listen.
+ *
+ * It was a flat 2s, on the reasoning that an arrival is a person. It is not
+ * always one: a window that is driven rather than used (a second monitor
+ * beside a busy app, a browser under automation, a kiosk shell) takes focus
+ * events all day, and each reopen that is refused schedules the next, which
+ * the next focus event wakes 2s later. A console left open on a session that
+ * could read nothing ran every listener on its page that way for 20 hours on
+ * 2026-11-15/16: 107,000 refusals, up to 247 a minute, against a normal day
+ * of about 100.
+ *
+ * So the hold grows with the streak's age like the timer does, a twentieth
+ * of it up to two minutes. A young fault still answers an arrival in 2s. An
+ * old one answers at most every two minutes, which caps a churning window at
+ * 30 reopens an hour per listener, and a person coming back to a backed-off
+ * page is still served at once in the usual case, because the refusal that
+ * scheduled the pending reopen is minutes old by then. A re-authentication
+ * never waits on this: the heal broadcast reopens with no hold at all.
+ */
+export function refusedArrivalDelayMs(streakStartedAt: number): number {
+  const age = Math.max(0, Date.now() - streakStartedAt)
+  return Math.min(
+    REFUSED_ARRIVAL_CEILING_MS,
+    Math.max(SESSION_REFUSED_RETRY_DELAY_MS, age / REFUSED_ARRIVAL_AGE_DIVISOR),
+  )
+}
+
 /** No `document` (SSR, a worker) counts as visible: nothing to wait for. */
 function tabIsHidden(): boolean {
   return (
@@ -199,9 +233,9 @@ function tabIsHidden(): boolean {
  * A person arriving reopens at once, whatever the cadence: the tab becoming
  * visible or the window regaining focus. (The heal broadcast is the third
  * instant road; the hooks subscribe to it themselves.) Arrivals are held to
- * one reopen no sooner than {@link SESSION_REFUSED_RETRY_DELAY_MS} after the
- * refusal that scheduled this, so focus churn can never run the loop faster
- * than the fixed cadence it replaced.
+ * one reopen no sooner than {@link refusedArrivalDelayMs} after the refusal
+ * that scheduled this, so focus churn can never run the loop faster than 2s,
+ * and runs it slower the longer the refusals have lasted.
  */
 export function scheduleRefusedReopen(
   reopen: () => void,
@@ -238,7 +272,7 @@ export function scheduleRefusedReopen(
 
   const onArrival = () => {
     if (tabIsHidden()) return
-    arm(scheduledAt + SESSION_REFUSED_RETRY_DELAY_MS)
+    arm(scheduledAt + refusedArrivalDelayMs(streakStartedAt))
   }
 
   // `visibilitychange` fires on the way INTO hidden as well as out of it.

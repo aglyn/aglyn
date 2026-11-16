@@ -83,7 +83,7 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       # fetch-depth 0 is REQUIRED. The comparison IS a git history question —
       # the last commit touching `cloud/functions` at the baseline — and a
@@ -150,4 +150,22 @@ jobs:
           FUNCTIONS_CHECK_ACCESS_TOKEN: ${{ secrets.FUNCTIONS_CHECK_ACCESS_TOKEN }}
           FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
           FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
-        run: npm run check:functions-drift
+        # A push run starts the second the promotion merges, and the functions
+        # deploy that follows the merge takes a few minutes: v1.22.0 and v1.22.4
+        # both read STALE here at +1 min and were deployed by +4 min, then
+        # stayed red until the next day's schedule. So a push run asks again
+        # for up to 12 minutes before it says stale. A schedule or a manual run
+        # has no deploy to wait for and answers once.
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "push" ]; then
+            npm run check:functions-drift
+            exit $?
+          fi
+          for attempt in 1 2 3 4 5 6 7 8 9; do
+            if npm run check:functions-drift; then exit 0; fi
+            if [ "$attempt" -lt 9 ]; then
+              echo "::notice::Functions do not match the promoted commit yet (attempt $attempt of 9); asking again in 90 s."
+              sleep 90
+            fi
+          done
+          exit 1

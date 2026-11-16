@@ -85,8 +85,11 @@ android {
       // provider buttons draw (a tap stops at the provider hand-off; nothing signs in to Google locally).
       buildConfigField("String", "PASSKEY_RP_ID", quoted(setting("debugPasskeyRpId", "")))
       buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", quoted(setting("debugGoogleWebClientId", "")))
-      buildConfigField("String", "DEBUG_EMAIL", quoted("mobile-owner@example.test"))
-      buildConfigField("String", "DEBUG_PASSWORD", quoted("seed-$emulatorProject-mobile"))
+      // `-Paglyn.debugAccount=staff`: the seeded staff account (tools/scripts/seed-native/account.mjs), to see the staff
+      // console, as the Apple apps' `-AglynDebugAccount staff`.
+      val debugStaff = setting("debugAccount", "") == "staff"
+      buildConfigField("String", "DEBUG_EMAIL", quoted(if (debugStaff) "mobile-staff@example.test" else "mobile-owner@example.test"))
+      buildConfigField("String", "DEBUG_PASSWORD", quoted(if (debugStaff) "seed-$emulatorProject-staff" else "seed-$emulatorProject-mobile"))
     }
     release {
       isMinifyEnabled = true
