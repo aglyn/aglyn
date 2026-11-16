@@ -39,6 +39,9 @@ jest.mock('../utils/api-v1', () => {
     authenticateApiV1: async () => ({
       context: { orgId: 'org-1', keyId: 'k', scopes: ['datasets:read'], headers: {}, org: {}, firestore: {} },
     }),
+    // The connector's per-call charge (AGL-4225): every tool call after the
+    // first is charged its first unit here, allowed.
+    chargeApiV1Call: async () => ({ refusal: null, headers: {} }),
     chargeApiRequestSize: (_ctx: unknown, requestBytes: number, responseBytes: number, alreadyCharged = 1) => {
       mockCharges.push({ requestBytes, responseBytes, alreadyCharged })
       return apiRequestBillingUnits(requestBytes, responseBytes)
@@ -95,12 +98,12 @@ describe('AGL-4227 · MCP billing units', () => {
     expect(response.headers.get('X-Api-Billing-Units')).toBe('3')
   })
 
-  it('charges every tool call after the first in full', async () => {
+  it('charges every tool call after the first in full: its first unit by the per-call charge, the rest by size', async () => {
     const response = await rpc([
       { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'listDatasets', arguments: {} } },
       { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'listDatasets', arguments: {} } },
     ])
-    expect(mockCharges.map((charge) => charge.alreadyCharged)).toEqual([1, 0])
+    expect(mockCharges.map((charge) => charge.alreadyCharged)).toEqual([1, 1])
     expect(response.headers.get('X-Api-Billing-Units')).toBe('6')
   })
 })

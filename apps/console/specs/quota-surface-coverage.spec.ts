@@ -202,6 +202,10 @@ const SURFACE_EXCLUSIONS: Record<string, string> = {
   maxMembersPerHost: 'add-on purchase ceiling; shown as "(max N)" on the plan grid',
   maxDatasetsPerOrg:
     'add-on purchase ceiling; surfaces in the downgrade-impact summary',
+  // AGL-4227. Starter's CRM-record ceiling (Pro's included amount): a stop on
+  // the records meter that already has its odometer, named where it bites.
+  maxCrmRecords:
+    'a ceiling over the CRM records band, whose meter is the CRM records row; named in the refusal (`crmRecordsRefusalMessage`) and the billing docs',
 }
 
 /**

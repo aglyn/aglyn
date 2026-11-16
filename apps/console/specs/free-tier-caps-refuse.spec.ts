@@ -345,6 +345,8 @@ const NOT_A_CAP: Record<string, string> = {
   // and neither of these is ever reached on it.
   apiRequestsPerMinutePerOrg:
     'a per-minute rate limit on the API, which Free does not carry — the durable limiter in `api-v1.ts` enforces it on the plans that do.',
+  maxCrmRecords:
+    'a ceiling ABOVE the CRM records band, read only where overage is sold; Free sells none, so its band is the wall.',
   maxApiRequestsPerMonth:
     'a ceiling ABOVE an API band, read only where overage is sold; Free sells none, so its band of 0 is the wall.',
   maxManagersPerOrg:

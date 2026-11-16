@@ -895,8 +895,14 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * than the next plan at every count, so the rate sits above the steepest
      * step on both billing intervals (2026-09-20).
      */
-    it('Extra site, per month — $20 · $20', () => {
-      expect(PAID.map((p) => PLAN_PRICING[p].extraHostMonthlyUsd)).toEqual([20, 20])
+    // CODE AHEAD OF THE PAGE (AGL-4227): Starter's extra site is $25 in the
+    // catalog, a price going UP, which publishes on the page first; the
+    // console charges and quotes $20 until the $25 Stripe price exists.
+    it('Extra site, per month — $25 · $20 in code; the page still reads $20 · $20', () => {
+      const PUBLISHED = [20, 20]
+      const CODE_AHEAD = [25, 20]
+      expect(PAID.map((p) => PLAN_PRICING[p].extraHostMonthlyUsd)).toEqual(CODE_AHEAD)
+      expect(PUBLISHED[1]).toBe(CODE_AHEAD[1])
     })
 
     it('Extra team seat, per month — $5 · $4', () => {
