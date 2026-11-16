@@ -616,8 +616,8 @@ organization**, and the plans differ in how much they allow:
   until the next calendar month (UTC). Pro has no ceiling.
 - The workspace limit counts every key together, so adding keys doesn't add capacity
   past it. See [Rate limits & usage](/api/rate-limits).
-- On Starter, a workspace that can't be billed for overage — no active subscription,
-  or a 100% discount on the whole bill — stops at its 500 included requests.
+- On any plan, a workspace that can't be billed for overage — no active subscription,
+  or a 100% discount on the whole bill — stops at its included requests.
 - The billing page shows an **API requests** meter, and the usage-cap banner warns at 80%
   and 100% of the included quota.
 - Only requests that pass authentication and the rate limits are counted — rejected calls
