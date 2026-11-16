@@ -20,7 +20,7 @@ import { connectorResourceMetadataUrl } from '@aglyn/aglyn/app-utils/connector-d
 import { ApiErrors, apiJson, readCappedBody, withResponseHeaders } from '@aglyn/tenant-data-admin'
 import { connectorOrigin, refuseOnAuthOrigin } from '../_lib/connector-oauth-http'
 import { buildDocsUrl } from '../../../constants/docs-links'
-import { authenticateApiV1 } from '../../../utils/api-v1'
+import { authenticateApiV1, chargeApiV1Call } from '../../../utils/api-v1'
 import {
   buildCustomerApiOpenApi,
   CUSTOMER_API_MOUNT,
@@ -170,6 +170,7 @@ async function answer(request: Request): Promise<Response> {
     ),
   )
 
+  let callsMade = 0
   const deps = {
     tools,
     serverName: SERVER_NAME,
@@ -180,6 +181,15 @@ async function answer(request: Request): Promise<Response> {
       // calling. Answered rather than asserted because a throw here would be
       // reported as a transport failure for what is a naming mistake.
       if (!tool) return { text: `No tool named ${name}`, isError: true }
+      // The request's own charge pays for its first tool call; every later
+      // one in a batch is charged as a request of its own, and one the budget
+      // no longer covers is refused by itself, with the API's own 429 body,
+      // rather than run silently past the limit (AGL-4225).
+      callsMade += 1
+      if (callsMade > 1) {
+        const refused = await chargeApiV1Call(context)
+        if (refused) return readOutcome(refused)
+      }
       const { request: toolRequest, segments } = buildToolRequest(
         tool,
         args,

@@ -25,12 +25,15 @@
  */
 
 const mockAuthenticate = jest.fn()
+const mockCharge = jest.fn()
+const mockDispatch = jest.fn()
 jest.mock('../utils/api-v1', () => ({
   authenticateApiV1: (...args: unknown[]) => mockAuthenticate(...args),
+  chargeApiV1Call: (...args: unknown[]) => mockCharge(...args),
 }))
 jest.mock('../utils/api-v1-resources', () => ({
   describePluginApiV1Resources: async () => [],
-  dispatchResource: jest.fn(),
+  dispatchResource: (...args: unknown[]) => mockDispatch(...args),
 }))
 
 import { ApiErrors } from '@aglyn/tenant-data-admin'
@@ -150,6 +153,38 @@ describe('a browser-based MCP client can use the endpoint (AGL-4225)', () => {
     expect(challenged.headers.get('access-control-expose-headers')).toContain('WWW-Authenticate')
     expect(challenged.headers.get('access-control-expose-headers')).toContain('MCP-Protocol-Version')
     expect(challenged.headers.get('www-authenticate')).toContain('resource_metadata=')
+  })
+})
+
+describe('every tool call in a batch is a request of its own (AGL-4225)', () => {
+  const context = { orgId: 'org-1', keyId: 'grant_x', keyName: 'Cursor', scopes: [], org: {}, firestore: {}, headers: {} }
+  const call = (id: number) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'listSites', arguments: {} } })
+  const send = (body: unknown) =>
+    POST(new Request('https://app.aglyn.com/api/mcp', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }))
+
+  beforeEach(() => {
+    mockAuthenticate.mockResolvedValue({ context })
+    mockCharge.mockReset()
+    mockDispatch.mockReset()
+    mockDispatch.mockImplementation(async () => Response.json({ object: 'list', data: [] }))
+  })
+
+  it('charges every call after the first, which the request itself paid for', async () => {
+    mockCharge.mockResolvedValue(null)
+    const answers = await (await send([call(1), call(2), call(3), { jsonrpc: '2.0', id: 4, method: 'ping' }])).json()
+    expect(answers).toHaveLength(4)
+    expect(mockCharge).toHaveBeenCalledTimes(2)
+    expect(mockDispatch).toHaveBeenCalledTimes(3)
+  })
+
+  it('refuses each call the budget no longer covers, by itself, and does not run it', async () => {
+    mockCharge
+      .mockResolvedValueOnce(null)
+      .mockImplementation(async () => ApiErrors.rateLimited(30))
+    const answers = await (await send([call(1), call(2), call(3), call(4)])).json()
+    expect(answers.map((answer: { result: { isError: boolean } }) => answer.result.isError)).toEqual([false, false, true, true])
+    expect(JSON.parse(answers[2].result.content[0].text)).toMatchObject({ error: { type: 'rate_limited' } })
+    expect(mockDispatch).toHaveBeenCalledTimes(2)
   })
 })
 
