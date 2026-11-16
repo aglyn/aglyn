@@ -32,6 +32,7 @@ import {
   buildAuthorizeRedirect,
   buildProtectedResourceMetadata,
   CONNECTOR_ACCESS_TOKEN_PREFIX,
+  CONNECTOR_APP_CALLBACKS,
   CONNECTOR_REDIRECT_POLICY,
   CONNECTOR_VIEW_SCOPES,
   connectorAccessOptions,
@@ -133,11 +134,28 @@ describe('PKCE (S256 only)', () => {
 })
 
 describe('redirect addresses: the open policy', () => {
-  it('is ONE policy: loopback hosts and a denylist of schemes', () => {
+  it('is ONE policy: https domains, loopback hosts, and an exact app-callback list that starts empty', () => {
     expect(CONNECTOR_REDIRECT_POLICY.loopbackHosts).toEqual(['localhost', '127.0.0.1', '[::1]'])
-    for (const scheme of ['javascript', 'data', 'file', 'blob', 'about', 'vbscript', 'ws', 'wss', 'ftp', 'http']) {
-      expect(CONNECTOR_REDIRECT_POLICY.deniedSchemes).toContain(scheme)
-    }
+    expect(CONNECTOR_APP_CALLBACKS).toEqual([])
+  })
+
+  it.each([
+    // The second review's inputs: each launches a program, or reaches the
+    // web through one, with arguments the registrant chose.
+    ['Safari via x-safari-https', 'x-safari-https://evil.com/cb'],
+    ['Chrome via googlechromes', 'googlechromes://evil.com/cb'],
+    ['the Windows app installer', 'ms-appinstaller://?source=https://evil.com/app.msix'],
+    ['an iOS enterprise install', 'itms-services://?action=download-manifest&url=https://evil.com/m.plist'],
+    ['an SMB share', 'smb://evil.com/share'],
+    ['a Shortcuts run', 'shortcuts://run-shortcut?name=x'],
+    ['a VS Code clone link', 'vscode://vscode.git/clone?url=https://evil.com/repo.git'],
+    ['a Cursor MCP install link', 'cursor://anysphere.cursor-deeplink/mcp/install?config=e30='],
+    // Ordinary app links are refused too, until one is on the exact list.
+    ['Cursor’s app-link callback', 'cursor://anysphere.cursor-mcp/oauth/callback'],
+    ['a VS Code auth link', 'vscode://vscode.github-authentication/did-authenticate'],
+    ['a reverse-domain scheme', 'com.example.app:/oauth2redirect'],
+  ])('refuses the app link %s', (_label, uri) => {
+    expect(isAllowedRedirectUri(uri)).toBe(false)
   })
 
   it.each([
@@ -150,10 +168,8 @@ describe('redirect addresses: the open policy', () => {
     ['localhost without a port', 'http://localhost/callback'],
     ['127.0.0.1', 'http://127.0.0.1:8080/oauth/callback'],
     ['IPv6 loopback', 'http://[::1]:6274/oauth/callback'],
-    ['Cursor', 'cursor://anysphere.cursor-retrieval/oauth/callback'],
-    ['VS Code', 'vscode://vscode.github-authentication/did-authenticate'],
-    ['a reverse-domain scheme', 'com.example.app:/oauth2redirect'],
-    ['a scheme with + and -', 'my-app+dev://cb'],
+    ['Cursor’s loopback callback', 'http://localhost:8787/callback'],
+    ['an https callback on a non-default port', 'https://app.example.com:8443/cb'],
   ])('admits %s', (_label, uri) => {
     expect(isAllowedRedirectUri(uri)).toBe(true)
   })
@@ -164,7 +180,6 @@ describe('redirect addresses: the open policy', () => {
     ['user info hiding the real host', 'https://example.com@evil.example/cb'],
     ['a password', 'https://a:b@example.com/cb'],
     ['loopback with user info', 'http://user@localhost:3000/callback'],
-    ['an app link with user info', 'cursor://u@anysphere.cursor-retrieval/cb'],
     // fragments
     ['a fragment', `${CLAUDE}#x`],
     ['an empty fragment', `${CLAUDE}#`],
@@ -172,7 +187,6 @@ describe('redirect addresses: the open policy', () => {
     // case and canonical form
     ['an upper-case host', 'https://Example.com/cb'],
     ['an upper-case scheme', 'HTTPS://example.com/cb'],
-    ['an upper-case app scheme', 'Cursor://cb'],
     ['an upper-case loopback', 'http://LOCALHOST:3000/callback'],
     ['a dot segment', 'https://example.com/a/../cb'],
     ['a default port spelled out', 'https://example.com:443/cb'],
@@ -211,7 +225,6 @@ describe('redirect addresses: the open policy', () => {
     ['an encoded host character', 'https://ex%61mple.com/cb'],
     ['an encoded dot', 'https://example%2Ecom/cb'],
     ['an encoded loopback', 'http://local%68ost/cb'],
-    ['an app link with a stray percent', 'cursor://cb/%zz'],
     // dangerous and web-handled schemes, including nested
     ['javascript:', 'javascript:alert(1)'],
     ['javascript with slashes', 'javascript://example.com/%0Aalert(1)'],
@@ -247,7 +260,6 @@ describe('redirect addresses: the open policy', () => {
     expect(redirectUriMatches('http://localhost:1111/callback', 'http://127.0.0.1:1111/callback')).toBe(false)
     expect(redirectUriMatches('http://localhost/cb?a=1', 'http://localhost:9/cb?a=2')).toBe(false)
     expect(redirectUriMatches('https://example.com/cb', 'https://example.com:8443/cb')).toBe(false)
-    expect(redirectUriMatches('cursor://a/cb', 'cursor://a/cb2')).toBe(false)
     expect(redirectUriMatches(CLAUDE, 'https://claude.com/api/mcp/auth_callback')).toBe(false)
   })
 
@@ -260,10 +272,20 @@ describe('redirect addresses: the open policy', () => {
     expect(matchRegisteredRedirect(['javascript:alert(1)'], 'javascript:alert(1)')).toBeNull()
   })
 
-  it('names the destination from the address alone: host, app scheme, or this computer', () => {
-    expect(describeRedirectTarget(CLAUDE)).toEqual({ kind: 'web', label: 'claude.ai' })
-    expect(describeRedirectTarget('cursor://anysphere.cursor-retrieval/cb')).toEqual({ kind: 'app', label: 'cursor://' })
-    expect(describeRedirectTarget('com.example.app:/cb')).toEqual({ kind: 'app', label: 'com.example.app://' })
+  it('names the destination from the address alone: host, port and path; or this computer', () => {
+    expect(describeRedirectTarget(CLAUDE)).toEqual({
+      kind: 'web',
+      label: 'claude.ai',
+      host: 'claude.ai',
+      path: '/api/mcp/auth_callback',
+    })
+    expect(describeRedirectTarget('https://login.bank.example.evil.com:8443/phish?step=2')).toEqual({
+      kind: 'web',
+      label: 'login.bank.example.evil.com:8443',
+      host: 'login.bank.example.evil.com',
+      port: '8443',
+      path: '/phish?step=2',
+    })
     expect(describeRedirectTarget('http://127.0.0.1:9/cb')).toEqual({ kind: 'loopback', label: 'this computer' })
     expect(describeRedirectTarget('http://[::1]:9/cb')).toEqual({ kind: 'loopback', label: 'this computer' })
   })
@@ -281,9 +303,26 @@ describe('registration', () => {
     expect(result).toEqual({ ok: true, clientName: 'Claude', redirectUris: [CLAUDE] })
   })
 
-  it('refuses an address off the list as invalid_redirect_uri', () => {
+  it('drops addresses the policy refuses and keeps the rest — Cursor’s three-address registration', () => {
     expect(
-      validateClientRegistration({ redirect_uris: [CLAUDE, 'javascript:alert(1)'] }),
+      validateClientRegistration({
+        client_name: 'Cursor',
+        redirect_uris: [
+          'cursor://anysphere.cursor-mcp/oauth/callback',
+          'https://cursor.com/agents/mcp/oauth/callback',
+          'http://localhost:8787/callback',
+        ],
+      }),
+    ).toEqual({
+      ok: true,
+      clientName: 'Cursor',
+      redirectUris: ['https://cursor.com/agents/mcp/oauth/callback', 'http://localhost:8787/callback'],
+    })
+  })
+
+  it('refuses a registration with no usable address as invalid_redirect_uri', () => {
+    expect(
+      validateClientRegistration({ redirect_uris: ['javascript:alert(1)', 'ms-appinstaller://?source=x'] }),
     ).toMatchObject({ ok: false, error: 'invalid_redirect_uri' })
     expect(validateClientRegistration({ redirect_uris: [] })).toMatchObject({ ok: false, error: 'invalid_redirect_uri' })
     expect(validateClientRegistration({})).toMatchObject({ ok: false, error: 'invalid_redirect_uri' })
@@ -298,6 +337,43 @@ describe('registration', () => {
     }
   })
 
+  it.each([
+    ['the platform name', 'Aglyn'],
+    ['the platform name in another case', 'AGLYN'],
+    ['the platform name as a word', 'Official Aglyn Connector'],
+    ['the platform name in full-width letters', '\uFF21\uFF47\uFF4C\uFF59\uFF4E Sync'],
+    ['the neutral label', 'Unnamed app'],
+    ['the neutral label among words', 'My unnamed app'],
+  ])('refuses %s as an app name', (_label, name) => {
+    expect(validateClientRegistration({ client_name: name, redirect_uris: [CLAUDE] })).toMatchObject({
+      ok: false,
+      error: 'invalid_client_metadata',
+    })
+  })
+
+  it('does not refuse a name that only contains the platform name inside a word', () => {
+    expect(validateClientRegistration({ client_name: 'Paglynx', redirect_uris: [CLAUDE] })).toMatchObject({ ok: true })
+  })
+
+  it.each([
+    ['only punctuation', '!!! ---'],
+    ['only Braille blanks', '\u2800\u2800\u2800'],
+    ['only Hangul fillers', '\u3164\u115F\u1160\uFFA0'],
+    ['only quotation marks', '“”«»‘’'],
+    ['only zero-width characters', '\u200b\u200d\ufeff'],
+  ])('falls back to the neutral label for a name of %s', (_label, name) => {
+    expect(validateClientRegistration({ client_name: name, redirect_uris: [CLAUDE] })).toMatchObject({
+      ok: true,
+      clientName: 'Unnamed app',
+    })
+  })
+
+  it('strips every quotation mark and NFKC-folds compatibility forms', () => {
+    expect(sanitizeClientName('“Claude” «Pro» ‘x’ „y‟ "z" \'w\' `v`')).toBe('Claude Pro x y z w v')
+    expect(sanitizeClientName('\uFF23\uFF55\uFF52\uFF53\uFF4F\uFF52')).toBe('Cursor')
+    expect(sanitizeClientName('ﬁle tool')).toBe('file tool')
+  })
+
   it('makes a name safe to show, and names the nameless', () => {
     expect(sanitizeClientName('  Claude\u0000‮ Code \n ')).toBe('Claude Code')
     expect(sanitizeClientName('x'.repeat(200))).toHaveLength(60)
@@ -308,7 +384,9 @@ describe('registration', () => {
     // Stacked combining marks are cut to two.
     expect(sanitizeClientName('q́̂̃̄̅')).toBe('q́̂')
     // The cap never splits a surrogate pair.
-    expect(Array.from(sanitizeClientName('\u{1F600}'.repeat(70)))).toHaveLength(60)
+    expect(Array.from(sanitizeClientName('\u{20000}'.repeat(70)))).toHaveLength(60)
+    // A name of pictures alone has no letter or digit to read.
+    expect(sanitizeClientName('\u{1F600}\u{1F600}')).toBe('Unnamed app')
     expect(sanitizeClientName(undefined)).toBe('Unnamed app')
     expect(sanitizeClientName('​')).toBe('Unnamed app')
   })
@@ -321,16 +399,20 @@ describe('access', () => {
     expect(scopesForAccess('change', null)).toEqual([...API_SCOPES])
   })
 
-  it('narrows both to what the client asked for', () => {
+  it('narrows both to the areas the client asked about', () => {
     const asked = ['contacts:read', 'contacts:write'] as const
     expect(scopesForAccess('view', [...asked])).toEqual(['contacts:read'])
     expect(scopesForAccess('change', [...asked])).toEqual(['contacts:read', 'contacts:write'])
   })
 
-  it('offers a choice only when it is a real one', () => {
+  it('always offers "View only", first, however the request is written', () => {
     expect(connectorAccessOptions(null)).toEqual(['view', 'change'])
     expect(connectorAccessOptions(['contacts:read'])).toEqual(['view'])
-    expect(connectorAccessOptions(['contacts:write'])).toEqual(['change'])
+    // The second review's input: a write-only request used to remove View only.
+    expect(connectorAccessOptions(['contacts:write'])).toEqual(['view', 'change'])
+    expect(scopesForAccess('view', ['contacts:write'])).toEqual(['contacts:read'])
+    expect(scopesForAccess('change', ['contacts:write'])).toEqual(['contacts:read', 'contacts:write'])
+    expect(scopesForAccess('view', ['crm:write', 'sites:publish'])).toEqual(['sites:read', 'crm:read'])
   })
 
   it('ignores unknown scopes, and refuses a request that names only unknown ones', () => {

@@ -144,6 +144,15 @@ export async function checkConnectorLiveness(
   return 'live'
 }
 
+/**
+ * Which refusals END a connection: the person is no longer an org-wide
+ * member, or no longer holds "Manage API keys". A lock or a plan change is
+ * the workspace's passing state, and refuses without revoking (AGL-4225).
+ */
+export function endsConnection(verdict: ConnectorLiveness): boolean {
+  return verdict === 'not_member' || verdict === 'no_permission'
+}
+
 /** Injected by tests; the real check otherwise. */
 export type LivenessCheck = typeof checkConnectorLiveness
 
@@ -191,11 +200,12 @@ export async function registerConnectorClient(
     const snap = await tx.get(ref)
     const existing = snap.exists ? (snap.data() ?? {}) : null
     if (existing && msOf(existing.expiresAt) > now) {
-      // A repeat buys a USED client its idle life and an unused one only
-      // another day, so re-registering cannot keep junk alive for long.
-      const life = existing.firstUsedAt ? CONNECTOR_CLIENT_IDLE_TTL_MS : CONNECTOR_CLIENT_UNUSED_TTL_MS
-      if (now - msOf(existing.lastUsedAt) >= CLIENT_TOUCH_INTERVAL_MS) {
-        tx.update(ref, { lastUsedAt: at(now), expiresAt: at(now + life) })
+      // A repeat extends only a client a person has approved. An unapproved
+      // one keeps the week it was created with, however often it is
+      // re-registered — otherwise repeats could keep junk alive forever and
+      // the storage bound in the register route would not hold.
+      if (existing.firstUsedAt && now - msOf(existing.lastUsedAt) >= CLIENT_TOUCH_INTERVAL_MS) {
+        tx.update(ref, { lastUsedAt: at(now), expiresAt: at(now + CONNECTOR_CLIENT_IDLE_TTL_MS) })
       }
       return {
         clientId,
@@ -623,8 +633,12 @@ export async function refreshConnectorTokens(
     lockdown: true,
   })
   if (verdict !== 'live') {
-    await revokeConnectorGrant(grantId, verdict, now).catch(() => undefined)
-    return invalidGrant('The connection is no longer valid')
+    // A lock is temporary and is the workspace's or the platform's state, not
+    // the person's: the refresh is refused and the connection kept, exactly
+    // as an API key survives a lock. Only losing membership or the
+    // permission ends it.
+    if (endsConnection(verdict)) await revokeConnectorGrant(grantId, verdict, now).catch(() => undefined)
+    return invalidGrant(verdict === 'locked' ? 'The workspace is locked' : 'The connection is no longer valid')
   }
 
   const grantRef = db().collection(CONNECTOR_GRANTS_COLLECTION).doc(grantId)
@@ -779,7 +793,7 @@ export async function verifyConnectorAccessToken(
     if (verdict !== 'live') {
       // Awaited: only a refusal pays for it, and Settings should stop
       // listing the connection by the time this caller hears 401.
-      await revokeConnectorGrant(grantId, verdict, now).catch(() => undefined)
+      if (endsConnection(verdict)) await revokeConnectorGrant(grantId, verdict, now).catch(() => undefined)
       return null
     }
 

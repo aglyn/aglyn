@@ -49,6 +49,7 @@ import {
   CONNECTOR_TOKEN_PATH,
   connectorResourceFor,
 } from '@aglyn/aglyn/app-utils/connector-discovery'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { API_SCOPES, type ApiScope, isApiScope, normalizeScopes } from './api-keys'
 
 // ── Credentials ─────────────────────────────────────────────────────────────
@@ -99,11 +100,13 @@ export const CONNECTOR_CLIENT_IDLE_TTL_MS = CONNECTOR_REFRESH_TOKEN_TTL_MS + 24 
 /**
  * A registration's life until it is first USED — until a person approves it
  * on the consent screen. Registration is open to anyone and its variety is
- * unbounded, so a client nobody ever approves is kept for a day, not for the
- * idle life above: storage held by junk registrations is bounded by the
- * per-address creation rate times one day.
+ * unbounded, so a client nobody ever approves is kept for a week, not for the
+ * idle life above: long enough that a client which cached its id is not
+ * dead-ended by a person who approves days later, and short enough that the
+ * storage junk registrations hold is bounded by the creation rate times seven
+ * days (see the register route).
  */
-export const CONNECTOR_CLIENT_UNUSED_TTL_MS = 24 * 60 * 60 * 1000
+export const CONNECTOR_CLIENT_UNUSED_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 /**
  * How long a just-rotated refresh token may come back without ending the
@@ -240,12 +243,16 @@ export function verifyPkceS256(verifier: unknown, challenge: unknown): boolean {
  *  - `https://` on a real domain name: no IP literal, no trailing dot, no
  *    user info, no fragment. A web client's callback.
  *  - `http://` ONLY on loopback (`localhost`, `127.0.0.1`, `[::1]`), any
- *    port (RFC 8252 §7.3): a desktop client listening on the person's own
- *    machine. The port is ignored when matching, since the client picks it
- *    at sign-in time.
- *  - A private-use scheme (RFC 8252 §7.1) — `cursor://…`, `vscode://…`,
- *    `com.example.app:/cb` — for a native client, under a conservative
- *    grammar and never one of {@link CONNECTOR_REDIRECT_POLICY.deniedSchemes}.
+ *    port (RFC 8252 §7.3): how a native or desktop client receives a code on
+ *    the person's own machine. The port is ignored when matching, since the
+ *    client picks it at sign-in time.
+ *  - An app-link callback ONLY when it is on
+ *    {@link CONNECTOR_APP_CALLBACKS}, compared as the whole string. An open
+ *    rule for private-use schemes cannot be made safe: the scheme decides
+ *    which program the operating system hands the address to, and
+ *    `ms-appinstaller:`, `itms-services:`, `x-safari-https:`,
+ *    `shortcuts://run-shortcut`, or an editor's own install or clone link
+ *    would all be launched from our origin with attacker-chosen arguments.
  *
  * Registration is open, so this policy is NOT what keeps a code out of the
  * wrong hands; PKCE binds a code to whoever started the sign-in, and the
@@ -256,21 +263,23 @@ export function verifyPkceS256(verifier: unknown, challenge: unknown): boolean {
  */
 export const CONNECTOR_REDIRECT_POLICY = Object.freeze({
   loopbackHosts: Object.freeze(['localhost', '127.0.0.1', '[::1]']),
-  /**
-   * Schemes that execute, read local data, reach the web unencrypted, or are
-   * handled by the browser itself rather than handed to an app.
-   */
-  deniedSchemes: Object.freeze([
-    'about', 'blob', 'chrome', 'chrome-extension', 'data', 'file', 'filesystem', 'ftp', 'http', 'https',
-    'intent', 'jar', 'javascript', 'mailto', 'moz-extension', 'sms', 'tel', 'vbscript', 'view-source', 'ws', 'wss',
-  ]),
 })
+
+/**
+ * App-link callbacks a native client may register, each an EXACT address —
+ * no query or path variation. An entry is added only on a client vendor's
+ * request and against its own published documentation, because it names a
+ * program the operating system will launch from our origin.
+ *
+ * Empty: no MCP client vendor's own documentation names an app-link OAuth
+ * callback that could be verified for this list. Native clients use a
+ * loopback address instead, which every major one supports.
+ */
+export const CONNECTOR_APP_CALLBACKS: readonly string[] = Object.freeze([])
 
 /** Longest redirect address accepted, in characters. */
 export const MAX_REDIRECT_URI_LENGTH = 512
 
-/** RFC 3986 scheme grammar, lower case only, and kept short. */
-const PRIVATE_SCHEME = /^[a-z][a-z0-9+.-]{1,63}$/
 /** A domain name as a person reads it: dotted labels and an alphabetic TLD. */
 const DOMAIN_NAME = /^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/
 
@@ -291,27 +300,21 @@ function classifyRedirect(uri: unknown): { kind: RedirectKind; url: URL } | null
   // Nothing a parser would silently drop or reinterpret: control characters,
   // whitespace, backslashes. The canonical-form check below would catch most;
   // refusing them first means none can reach it.
-  if (/[\u0000-\u0020\u007f-\u009f\\]/.test(uri)) return null
+  if (/[\u0000- \u007f-\u009f\\]/.test(uri)) return null
   if (uri.includes('#')) return null
   const url = parseUrl(uri)
   if (!url || url.href !== uri) return null
   if (url.username || url.password || url.hash) return null
-  const scheme = url.protocol.slice(0, -1)
-
-  if (scheme === 'https') {
+  if (CONNECTOR_APP_CALLBACKS.includes(uri)) return { kind: 'app', url }
+  if (url.protocol === 'https:') {
     if (!DOMAIN_NAME.test(url.hostname)) return null
     return { kind: 'web', url }
   }
-  if (scheme === 'http') {
+  if (url.protocol === 'http:') {
     if (!CONNECTOR_REDIRECT_POLICY.loopbackHosts.includes(url.hostname)) return null
     return { kind: 'loopback', url }
   }
-  if (!PRIVATE_SCHEME.test(scheme) || CONNECTOR_REDIRECT_POLICY.deniedSchemes.includes(scheme)) return null
-  // `scheme://authority/…` or `scheme:/path`, never an opaque `scheme:rest`
-  // that could carry another scheme inside it.
-  if (!uri.startsWith(`${scheme}:/`)) return null
-  if (/%(?![0-9A-F]{2})/i.test(uri)) return null
-  return { kind: 'app', url }
+  return null
 }
 
 /** May a code ever be delivered to `uri`? */
@@ -344,24 +347,38 @@ export function matchRegisteredRedirect(
 
 /** Where a code goes, as the consent screen and Connected apps name it. */
 export interface RedirectTarget {
-  /** A website, an app on this device, or this computer. */
+  /** A website, an app link on the allowlist, or this computer. */
   kind: RedirectKind
-  /** The host for `web`, `<scheme>://` for `app`, and `this computer` for loopback. */
+  /**
+   * One line naming it: the host (with its port when not the default) for a
+   * website, the whole address for an app link, `this computer` for loopback.
+   */
   label: string
+  /** For a website: the host, in full. */
+  host?: string
+  /** For a website: the port, when the address names one. */
+  port?: string
+  /** For a website: the path and query the code is delivered to. */
+  path?: string
 }
 
 /**
- * Where a code is being sent, in the terms a person can check: the website's
- * host, the app link's scheme, or "this computer". Derived from the address
- * itself, never from anything the client says about itself.
+ * Where a code is being sent, in the terms a person can check, derived from
+ * the address alone and never from anything the client says about itself.
  */
 export function describeRedirectTarget(uri: string): RedirectTarget {
   const classified = classifyRedirect(uri)
   if (!classified) return { kind: 'web', label: '' }
   const { kind, url } = classified
   if (kind === 'loopback') return { kind, label: 'this computer' }
-  if (kind === 'app') return { kind, label: `${url.protocol}//` }
-  return { kind, label: url.hostname }
+  if (kind === 'app') return { kind, label: url.href }
+  return {
+    kind,
+    label: url.port ? `${url.hostname}:${url.port}` : url.hostname,
+    host: url.hostname,
+    ...(url.port ? { port: url.port } : {}),
+    path: `${url.pathname}${url.search}`,
+  }
 }
 
 // ── Registration (RFC 7591) ─────────────────────────────────────────────────
@@ -388,27 +405,65 @@ export interface RegistrationResult {
 }
 
 /**
- * The display name, made safe to put on a consent screen: control and
- * formatting characters removed, whitespace collapsed, length capped. It is
- * self-asserted and stays so — the screen also names the host the code goes
- * back to, which is the part the allowlist makes true.
+ * Code points that render as nothing — Braille blank, the Hangul fillers,
+ * Mongolian vowel separator and the like — which would let a "name" be
+ * empty to the eye while not empty to a test for emptiness.
+ */
+const BLANK_RENDERING = /[⠀ㅤᅟᅠﾠ᠎឴឵⁡-⁤͏]/gu
+
+/** Every quotation mark, so a name cannot open or close a quotation around itself. */
+const QUOTES = /["'`«»‘-‟‹›❛-❞⹂〝-〟＂＇\p{Pi}\p{Pf}]/gu
+
+/** The words a name may not be or contain: ours, and the neutral fallback. */
+function reservedNameWords(): string[] {
+  return [PLATFORM_BRAND_NAME, UNNAMED_CLIENT].map((word) => word.normalize('NFKC').toLowerCase())
+}
+
+/**
+ * The display name, made safe to show (AGL-4225). It is self-asserted and
+ * stays so; the consent screen shows it as the app's own label for itself,
+ * under the address the code goes to, which is the part a person can check.
+ *
+ * NFKC-normalized (so full-width and compatibility forms read as their plain
+ * letters), with controls, format characters (bidi overrides and isolates,
+ * zero-width joiners), line breaks, private-use, unassigned and lone
+ * surrogate code points, blank-rendering characters and every quotation mark
+ * removed, stacked accents cut to two, whitespace collapsed and the length
+ * capped. A name left with no letter or digit becomes {@link UNNAMED_CLIENT}.
+ * Whether a name is ACCEPTABLE is {@link isReservedClientName}'s question.
  */
 export function sanitizeClientName(value: unknown): string {
-  if (typeof value !== 'string') return UNNAMED_CLIENT
+  return cleanClientName(value) || UNNAMED_CLIENT
+}
+
+/** {@link sanitizeClientName} without the fallback: `''` when nothing usable is left. */
+function cleanClientName(value: unknown): string {
+  if (typeof value !== 'string') return ''
   const cleaned = value
-    .normalize('NFC')
-    // Controls, format characters (bidi overrides and isolates, zero-width
-    // joiners and spaces), line and paragraph separators, private-use,
-    // unassigned and lone surrogate code points: anything that could reorder,
-    // hide or break the text it sits in.
+    .normalize('NFKC')
     .replace(/[\p{Cc}\p{Cf}\p{Co}\p{Cn}\p{Cs}\p{Zl}\p{Zp}]/gu, ' ')
-    // Stacked combining marks, which can spill a name over the lines around it.
+    .replace(BLANK_RENDERING, ' ')
+    .replace(QUOTES, '')
     .replace(/(\p{M}{2})\p{M}+/gu, '$1')
     .replace(/\s+/g, ' ')
     .trim()
   // Capped by code point, so the cap cannot split a surrogate pair.
   const capped = Array.from(cleaned).slice(0, MAX_CLIENT_NAME_LENGTH).join('').trim()
-  return capped || UNNAMED_CLIENT
+  return /[\p{L}\p{N}]/u.test(capped) ? capped : ''
+}
+
+/**
+ * True when a sanitized name is, or contains as a word, this platform's own
+ * brand name or the neutral fallback label — case-insensitively, after NFKC.
+ * Such a name is refused at registration: an app may not present itself as
+ * the platform, nor as "no name".
+ */
+export function isReservedClientName(name: string): boolean {
+  const folded = name.normalize('NFKC').toLowerCase()
+  return reservedNameWords().some((word) => {
+    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}($|[^\\p{L}\\p{N}])`, 'u').test(folded)
+  })
 }
 
 /**
@@ -438,18 +493,34 @@ export function validateClientRegistration(body: unknown): RegistrationResult {
       description: `At most ${MAX_REDIRECT_URIS} redirect_uris are accepted`,
     }
   }
+  // Addresses the policy refuses are DROPPED, not fatal, and the response
+  // lists only what was kept (RFC 7591 §3.2.1 lets the server replace
+  // metadata). A client such as Cursor registers an app link, a web callback
+  // and a loopback address together and signs in at whichever is kept; the
+  // registration fails only when nothing usable is left.
   const redirectUris: string[] = []
   for (const uri of uris) {
-    if (!isAllowedRedirectUri(uri)) {
-      return {
-        ok: false,
-        error: 'invalid_redirect_uri',
-        description: 'A redirect_uri is not one this server delivers codes to',
-      }
-    }
-    if (!redirectUris.includes(uri)) redirectUris.push(uri)
+    if (isAllowedRedirectUri(uri) && !redirectUris.includes(uri)) redirectUris.push(uri)
   }
-  return { ok: true, clientName: sanitizeClientName(record.client_name), redirectUris }
+  if (!redirectUris.length) {
+    return {
+      ok: false,
+      error: 'invalid_redirect_uri',
+      description:
+        'No redirect_uri is one this server delivers codes to: use https on a domain name, or http on a loopback address',
+    }
+  }
+  // A name that cleans to nothing falls back to the neutral label; a name
+  // that IS or contains our brand or that label is refused outright.
+  const cleaned = cleanClientName(record.client_name)
+  if (cleaned && isReservedClientName(cleaned)) {
+    return {
+      ok: false,
+      error: 'invalid_client_metadata',
+      description: 'client_name may not use this platform’s name or the name given to unnamed apps',
+    }
+  }
+  return { ok: true, clientName: cleaned || UNNAMED_CLIENT, redirectUris }
 }
 
 // ── Access ──────────────────────────────────────────────────────────────────
@@ -484,26 +555,41 @@ export function parseRequestedScopes(
 }
 
 /** The scopes an access level grants, narrowed to what was requested. */
+/** The area a scope belongs to: `contacts` for `contacts:write`. */
+const areaOf = (scope: string) => scope.slice(0, scope.indexOf(':'))
+
+/**
+ * The scopes an access level grants for what was requested (AGL-4225).
+ *
+ * "View only" is the `:read` scope of every AREA the client asked about —
+ * a request for `contacts:write` alone still offers viewing contacts — or
+ * every `:read` scope when it asked for nothing in particular. It never
+ * depends on the client asking for reads, so a client cannot take the
+ * choice away.
+ *
+ * "View and make changes" is what was asked for plus that view: a client
+ * that may change contacts may also see them. Every `API_SCOPES` entry when
+ * nothing in particular was asked for.
+ */
 export function scopesForAccess(
   level: ConnectorAccessLevel,
   requested: readonly ApiScope[] | null,
 ): ApiScope[] {
-  const base = level === 'view' ? CONNECTOR_VIEW_SCOPES : API_SCOPES
-  return base.filter((scope) => !requested || requested.includes(scope))
+  if (!requested) return level === 'view' ? [...CONNECTOR_VIEW_SCOPES] : [...API_SCOPES]
+  const areas = new Set(requested.map(areaOf))
+  const view = CONNECTOR_VIEW_SCOPES.filter((scope) => areas.has(areaOf(scope)))
+  if (level === 'view') return view
+  return API_SCOPES.filter((scope) => view.includes(scope) || requested.includes(scope))
 }
 
 /**
- * Which of the two choices the screen offers. "View and make changes" is
- * offered only when it would grant more than "View only"; "View only" only
- * when it would grant something.
+ * Which choices the screen offers. "View only" ALWAYS, first, and it is the
+ * default; "View and make changes" only when it would grant more.
  */
 export function connectorAccessOptions(requested: readonly ApiScope[] | null): ConnectorAccessLevel[] {
   const view = scopesForAccess('view', requested)
   const change = scopesForAccess('change', requested)
-  const options: ConnectorAccessLevel[] = []
-  if (view.length) options.push('view')
-  if (change.length > view.length) options.push('change')
-  return options
+  return change.length > view.length ? ['view', 'change'] : ['view']
 }
 
 /** The level a set of scopes amounts to, for the Connected apps list. */

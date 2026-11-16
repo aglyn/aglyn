@@ -211,6 +211,16 @@ describe('registration', () => {
     expect(await readConnectorClient(used.clientId, NOW + CONNECTOR_CLIENT_IDLE_TTL_MS)).not.toBeNull()
   })
 
+  it('never extends an unapproved registration by repeating it, so the storage bound holds', async () => {
+    const DAY = 24 * 60 * 60 * 1000
+    expect(CONNECTOR_CLIENT_UNUSED_TTL_MS).toBe(7 * DAY)
+    const client = await registerConnectorClient({ clientName: 'Junk', redirectUris: [CLAUDE] }, NOW)
+    for (let day = 1; day < 7; day += 1) {
+      await registerConnectorClient({ clientName: 'Junk', redirectUris: [CLAUDE] }, NOW + day * DAY)
+    }
+    expect(await readConnectorClient(client?.clientId, NOW + 7 * DAY)).toBeNull()
+  })
+
   it('answers a repeat but creates nothing when creation is not allowed', async () => {
     const first = await registerConnectorClient({ clientName: 'Claude', redirectUris: [CLAUDE] }, NOW)
     expect(await registerConnectorClient({ clientName: 'Claude', redirectUris: [CLAUDE] }, NOW, { mayCreate: false })).toMatchObject({
@@ -409,15 +419,33 @@ describe('refresh', () => {
     expect(narrowed).toMatchObject({ ok: true, tokens: { scope: 'contacts:read' } })
   })
 
-  it('ends the connection when the person lost access or the workspace is locked', async () => {
+  it('a lock refuses the refresh but ends nothing; losing access ends the connection', async () => {
     const { client, result } = await connected()
     if (!result.ok) throw new Error('unreachable')
     verdict = 'locked'
     expect(
       await refreshConnectorTokens({ refreshToken: result.tokens.refresh_token, clientId: client.clientId }, opts()),
-    ).toMatchObject({ ok: false, error: 'invalid_grant' })
-    expect(grantDocs()[0]).toMatchObject({ revokedReason: 'locked' })
+    ).toMatchObject({ ok: false, error: 'invalid_grant', description: 'The workspace is locked' })
+    expect(grantDocs()[0].revokedAt).toBeNull()
+    // Lifted: the same refresh token still works.
+    verdict = 'live'
+    const after = await refreshConnectorTokens({ refreshToken: result.tokens.refresh_token, clientId: client.clientId }, opts())
+    if (!after.ok) throw new Error(after.description)
+    verdict = 'no_permission'
+    expect(
+      await refreshConnectorTokens({ refreshToken: after.tokens.refresh_token, clientId: client.clientId }, opts()),
+    ).toMatchObject({ ok: false })
+    expect(grantDocs()[0]).toMatchObject({ revokedReason: 'no_permission' })
   })
+
+  it('a lock seen on a call ends nothing either', async () => {
+    const { result } = await connected()
+    if (!result.ok) throw new Error('unreachable')
+    verdict = 'locked'
+    expect(await verifyConnectorAccessToken(result.tokens.access_token, opts())).toBeNull()
+    expect(grantDocs()[0].revokedAt).toBeNull()
+  })
+
 })
 
 describe('verification', () => {
