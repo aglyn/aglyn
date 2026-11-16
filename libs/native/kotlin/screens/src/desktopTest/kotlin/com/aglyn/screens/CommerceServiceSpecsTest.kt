@@ -796,7 +796,7 @@ class CommerceServiceSpecsTest {
     assertEquals("Order paid", ScreenValues.render(block.string("primary")!!, row))
     // A Zap that takes several events lists every one, as the console's eventsSentence does.
     val several = zapier(true, """[{"id":"hk2","events":["order.paid","order.refunded","custom.thing"],"lastDeliveryAt":null}]""")
-    assertEquals("Order paid, Order refunded, custom.thing", ScreenValues.render(block.string("primary")!!, several.row("data.hooks.hooks")))
+    assertEquals("Order paid, Order refunded, custom.thing", ScreenValues.render(block.string("primary")!!, ScreenContext.with(several.context, "item", several.context.jsonObject["data"]!!.jsonObject["hooks"]!!.jsonObject["hooks"]!!.jsonArray[0])))
     assertEquals("Zapier", ScreenValues.render(block.string("tertiary")!!, row))
     val disconnect = block.raw.jsonObject["actions"]!!.jsonArray.mapNotNull { ActionSpec.parse(it) }.first()
     assertEquals(json("""{"hostId":"h1","hookId":"hk1"}"""), ScreenValues.resolveBody(disconnect.body!!, row))
