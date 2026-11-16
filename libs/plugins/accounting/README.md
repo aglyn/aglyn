@@ -15,4 +15,5 @@ NetSuite, Sage, FreshBooks, Zoho Books, Wave and the rest Codat reaches
 Env-gated: a provider is offered only when its app credentials
 (`INTUIT_CLIENT_ID`/`INTUIT_CLIENT_SECRET`/`INTUIT_ENVIRONMENT`, or
 `XERO_CLIENT_ID`/`XERO_CLIENT_SECRET`, or `CODAT_API_KEY`) and `ACCOUNTING_TOKEN_KEY` are set on
-the console, and the page is behind `release_accounting`, off by default.
+the console, and the page is behind `release_accounting`, on for every workspace
+since 2026-11-16 and still the kill switch.

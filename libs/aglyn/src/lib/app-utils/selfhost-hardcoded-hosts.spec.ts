@@ -357,9 +357,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
   },
   {
     file: 'apps/tenant/app/api/api-catalog/route.ts',
-    count: 2,
+    count: 1,
     reason:
-      'AGL-2750. Readers of NEXT_PUBLIC_CONSOLE_URL and NEXT_PUBLIC_DOCS_ORIGIN, ' +
+      'AGL-2750, lowered from 2 by AGL-4225: the console origin now comes from ' +
+      '`platformConsoleOrigin()` (the MCP entry needs the same origin the sign-in ' +
+      'documents use), so only the NEXT_PUBLIC_DOCS_ORIGIN default is left here. ' +
+      'Originally: readers of NEXT_PUBLIC_CONSOLE_URL and NEXT_PUBLIC_DOCS_ORIGIN, ' +
       'whose literals are only their `||` defaults — case (a), the same shape and ' +
       'the same two variables as `api/edit-context/route.ts` below and the ' +
       "middleware's console redirect. Both are documented in `.env.selfhost.example` " +

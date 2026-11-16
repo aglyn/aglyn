@@ -20,6 +20,7 @@ import {
   attributeFieldValueShape,
   type BindableAttributeField,
   matchComponentPropToken,
+  matchWholeItemToken,
   REUSABLE_PROP_KINDS,
   reusablePropBindsToField,
   unofferedChoiceValues,
@@ -128,6 +129,12 @@ export interface PropertyBindingOptions {
   tokenLabelContext?: TokenLabelContext
   /** Whose properties these are, for what an empty picker says. */
   owner?: 'component' | 'layout'
+  /**
+   * Record fields this field can follow inside a repeat (AGL-4190): an Icon
+   * picker, a record's icon field. Offered beside any properties, and on
+   * their own outside a component editor.
+   */
+  recordBindings?: readonly BindingOption[]
 }
 
 /**
@@ -155,15 +162,16 @@ export function withPropertyBinding<T extends Record<string, unknown>>(
     control,
     tokenLabelContext,
     owner = 'component',
+    recordBindings = [],
   } = options
-  if (!componentProps || !control) return field
+  if ((!componentProps && !recordBindings.length) || !control) return field
   const declared: BindableAttributeField = {
     ...(declaredField ?? field),
     component: declaredComponent,
   }
   if (attributeFieldValueShape(declared) === undefined) return field
   if (field['isReadOnly'] || field['isDisabled']) return field
-  const bindable = componentProps.filter((prop) =>
+  const bindable = (componentProps ?? []).filter((prop) =>
     reusablePropBindsToField(prop, declared),
   )
   const kinds = propertyKindsBindableTo(declared)
@@ -171,12 +179,17 @@ export function withPropertyBinding<T extends Record<string, unknown>>(
     ...field,
     component: PROPERTY_BINDING_FIELD_COMPONENT,
     bindingControl: control,
-    bindingOptions: componentPropBindingOptions(bindable, owner),
+    bindingOptions: [
+      ...componentPropBindingOptions(bindable, owner),
+      ...recordBindings,
+    ],
     bindingProps: bindable,
     bindingKinds: kinds,
-    bindingEmptyText:
-      `This ${owner} has no ${kinds || 'matching'} properties yet. Add one ` +
-      'under File ▸ Properties…, then bind it here.',
+    bindingRecordFields: recordBindings.length > 0,
+    bindingEmptyText: componentProps
+      ? `This ${owner} has no ${kinds || 'matching'} properties yet. Add one ` +
+        'under File ▸ Properties…, then bind it here.'
+      : 'The repeated records have no field of this kind.',
     tokenLabelContext,
   }
 }
@@ -275,6 +288,8 @@ export interface PropertyBindingFieldProps {
   /** Those props' kinds in the panel's words, e.g. `Choice`. */
   bindingKinds?: string
   bindingEmptyText?: string
+  /** Whether record fields are among the options (AGL-4190). */
+  bindingRecordFields?: boolean
   tokenLabelContext?: TokenLabelContext
   FormFieldGridProps?: FormFieldGridProps
 }
@@ -297,6 +312,20 @@ export function describePropertyBinding(options: {
   fieldOptions?: unknown
 }): { text: string; error: boolean } {
   const { token, resolved, bindingProps, bindingKinds, fieldOptions } = options
+  if (matchWholeItemToken(token) != null) {
+    // A record field (AGL-4190): each copy of the repeat follows its own record.
+    return resolved.known
+      ? {
+          text: `Each copy shows its own record's ${resolved.label}.`,
+          error: false,
+        }
+      : {
+          text:
+            'The repeated records have no field by that name, so this shows ' +
+            'nothing. Bind a field they have, or remove the binding.',
+          error: true,
+        }
+  }
   const name = matchComponentPropToken(token)
   const prop = (bindingProps ?? []).find((entry) => entry?.name === name)
   if (!prop) {
@@ -358,6 +387,7 @@ export function PropertyBindingField(props: PropertyBindingFieldProps) {
     bindingProps,
     bindingKinds,
     bindingEmptyText,
+    bindingRecordFields,
     tokenLabelContext = {},
     ...fieldProps
   } = props
@@ -368,7 +398,8 @@ export function PropertyBindingField(props: PropertyBindingFieldProps) {
   const [pillAnchor, setPillAnchor] = useState<HTMLElement | null>(null)
 
   const bound =
-    matchComponentPropToken(input.value) != null
+    matchComponentPropToken(input.value) != null ||
+    matchWholeItemToken(input.value) != null
       ? String(input.value).trim()
       : null
   const resolved = useMemo(
@@ -379,10 +410,15 @@ export function PropertyBindingField(props: PropertyBindingFieldProps) {
     typeof fieldProps.label === 'string' && fieldProps.label
       ? fieldProps.label
       : undefined
+  const target = bindingRecordFields
+    ? bindingProps?.length
+      ? 'property or record field'
+      : 'record field'
+    : 'property'
   const bind: FieldBindAction = {
     label: bound
-      ? `Change the property ${labelText ?? 'this field'} is bound to`
-      : `Bind ${labelText ?? 'this field'} to a property`,
+      ? `Change the ${target} ${labelText ?? 'this field'} is bound to`
+      : `Bind ${labelText ?? 'this field'} to a ${target}`,
     onOpen: setMenuAnchor,
   }
   const gridProps: FormFieldGridProps = {
