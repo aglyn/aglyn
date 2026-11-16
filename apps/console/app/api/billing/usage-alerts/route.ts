@@ -911,6 +911,22 @@ async function handler(request: Request): Promise<Response> {
       // The band email bills against, and Free's hard cap (AGL-4227).
       const emailBillingBand = emailSendsBillingBand(orgData as never)
       const monthlyEmailCap = resolveMonthlyEmailCap(orgData as never)
+      // The people a capture keeps on a plan WITHOUT the CRM (AGL-4227): its
+      // contacts, companies, deals and filed leads share the one band, and
+      // past it a capture adds no one. Counted only where that band binds.
+      const keepsPeopleForUpgrade =
+        !entitlements.features.crm && Number.isFinite(entitlements.contactsPerHost)
+      const capturedPeople = keepsPeopleForUpgrade
+        ? (
+            await Promise.all(
+              ['contacts', 'companies', 'deals', 'leads'].map(async (name) =>
+                Number(
+                  (await org.ref.collection(name).count().get()).data()?.count ?? 0,
+                ) || 0,
+              ),
+            )
+          ).reduce((sum, value) => sum + value, 0)
+        : 0
       const emailOverageBills =
         emailOverageBillsForOrg(orgData as never, month) &&
         priceEmailSendOverage(orgData as never, 0).overageRateUsd !== null
@@ -1199,6 +1215,35 @@ async function handler(request: Request): Promise<Response> {
             'Nothing is charged. At the limit, emails from your site stop until ' +
             'the 1st (UTC) — sign-in and password mail still goes out — unless ' +
             'you upgrade in Billing.',
+        },
+        {
+          // THE PEOPLE A PLAN WITHOUT THE CRM KEEPS (AGL-4227): past the band
+          // a form entry is still saved under Forms, but no person is added.
+          // `limit` is UNLIMITED where the band does not bind, which skips it.
+          key: 'capturedPeople',
+          label: 'people kept for the CRM',
+          used: capturedPeople,
+          limit: keepsPeopleForUpgrade ? entitlements.contactsPerHost : UNLIMITED,
+          cadence: 'crossing',
+          outcome: 'stops',
+          lead: () =>
+            `${workspace.possessive} sites have kept ` +
+            usagePhrase({
+              used: capturedPeople,
+              limit: entitlements.contactsPerHost,
+              usedText: formatCount(capturedPeople),
+              limitText: formatCount(entitlements.contactsPerHost),
+              noun: 'people from forms, bookings and sign-ups',
+            }) +
+            '.',
+          reached:
+            'New people are not being added. Every form entry is still saved ' +
+            'under Forms, but no contact is made from it, now or later. ' +
+            'Everyone already kept is waiting for the CRM — upgrade in Billing ' +
+            'to keep adding people.',
+          approach:
+            'Nothing is charged. At the limit, form entries are still saved under ' +
+            'Forms, but no new people are added unless you upgrade in Billing.',
         },
         // Each org capacity a plugin backs, measured against the limit its
         // create is refused at: included plus bought, clamped to the plan's

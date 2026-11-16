@@ -41,6 +41,7 @@ import {
 import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
 import { countCrmRecords, restampCrmListFieldsAt } from './crm-records'
+import { crmCaptureAdmitted } from './crm-capture-band'
 import { hostErasedEmails, hostRefusesCaptureForErasure } from './email-suppression'
 import { scheduleCapturedEmailCheck } from './capture-email-check'
 import {
@@ -1014,11 +1015,12 @@ export async function upsertHostContact(
           const orgRef =
             contactsRef.parent ??
             firestore.collection('orgs').doc(String(orgBilling?.orgId ?? ''))
-          const { crmRecordsCount } = await countCrmRecords(orgRef, contactsRef)
-          return checkCrmRecordsQuota(
+          // The capture rule both capture doors share (AGL-4227).
+          return crmCaptureAdmitted(
             (orgBilling?.org as any) ?? null,
-            crmRecordsCount,
-          ).allowed
+            orgRef,
+            contactsRef,
+          )
         })()
     if (!admitted) {
       await hostRef
@@ -1318,7 +1320,14 @@ export async function prepareContactCaptureBatch(
   ])
 
   const org = (orgBilling?.org as never) ?? null
-  let used = counted.crmRecordsCount
+  // On a plan that sells no records past its band, the leads a capture filed
+  // share the band too (AGL-4227, `crmCaptureAdmitted`).
+  const leadsShareBand = checkCrmRecordsQuota(org, 0).overageRateUsd === null
+  let used =
+    counted.crmRecordsCount +
+    (leadsShareBand
+      ? Number((await orgRef.collection('leads').count().get()).data()?.count ?? 0) || 0
+      : 0)
   const claimed = new Set<string>()
   const tickets = new Map<string, boolean>()
   const admit = (): boolean => {

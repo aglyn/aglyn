@@ -531,12 +531,17 @@ logged activities, pipelines and custom fields are not counted.
   records are **metered overage** on your monthly invoice, at a per-1,000 rate that is
   lower on Pro — see [pricing](https://aglyn.com/pricing) for the current rate on your
   plan, per extra 1,000 records per month.
-- On **Free**, which includes no CRM, the band is a hard limit on capture: past 100
-  records a site adds no new person — a new visitor keeps their member account and
-  orders, but no contact is kept — and the count of missed captures is recorded. On
-  **Billing → Usage** the band reads **Stored records (organization)**, captioned *At
-  this limit your sites stop adding new people. Working with them is part of the CRM,
-  included from Starter.* The Free plan card names no CRM records.
+- On **Free**, which includes no CRM, the band is a hard limit on capture: your sites
+  keep up to **100 people** — contacts and the leads a form files, together — ready for
+  the CRM when you upgrade. Past 100 a site adds no new person: the form entry is still
+  saved under **Forms** and the visitor sees the normal confirmation, a new visitor keeps
+  their member account and orders, and someone already kept is still updated, but no new
+  contact or lead is made, and none is made later from the entries saved meanwhile.
+  Everyone already kept stays. On **Billing → Usage** the band reads **Stored records
+  (organization)**, and at the limit it says new people are not being added, that form
+  entries are still saved under Forms, and that upgrading keeps adding people; the owner
+  is also told as the count nears and reaches 100. The Free plan card names no CRM
+  records.
 - **The billed count is the size of your CRM at the end of the month**, not its size
   on any other day. The three collections are a running total rather than a monthly
   tally, so a month has to be charged on one moment in it, and that moment is the
@@ -571,8 +576,8 @@ Two things do not depend on the plan:
 - **Capture.** Every form submission, sign-up, order or booking that carries an email
   address updates the person in Contacts, and a form files a lead only when its lead
   routing is on — the same on Free as on a paid plan. Those records are kept and count
-  against the [band](#crm-records); on Free the CRM that shows them is locked, and they
-  are there when the plan includes it.
+  against the [band](#crm-records); on Free the CRM that shows them is locked, they stop
+  growing at 100 people (leads included), and they are there when the plan includes it.
 - **Privacy requests.** Members holding **Privacy requests**, which workspace owners and
   admins hold by default, export every contact and every lead the workspace holds, and
   erase a person by email address, from **Settings → Privacy**

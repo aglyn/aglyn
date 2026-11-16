@@ -431,6 +431,10 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   const [contactsCount, setContactsCount] = useState<number | null>(null)
   const [companiesCount, setCompaniesCount] = useState<number | null>(null)
   const [dealsCount, setDealsCount] = useState<number | null>(null)
+  // The leads a capture filed (AGL-4227): on a plan that sells no records
+  // past its band they share it, so the meter counts them too. A refused
+  // read counts none rather than holding the meter back.
+  const [leadsCount, setLeadsCount] = useState<number | null>(null)
   /*
    * One-to-one CRM emails sent today, ORG-WIDE (AGL-2611) — read from the
    * per-UTC-day document the send route increments and `checkCrmEmailQuota`
@@ -548,6 +552,13 @@ export function BillingUsageComponent(props: BillingUsageProps) {
       })
       .catch(() => {
         // Meter keeps its "not yet metered" state on failure.
+      })
+    void getCountFromServer(collection(firestore, 'orgs', orgId, 'leads'))
+      .then((snapshot) => {
+        if (active) setLeadsCount(snapshot.data().count)
+      })
+      .catch(() => {
+        if (active) setLeadsCount(0)
       })
     void getCountFromServer(collection(firestore, 'orgs', orgId, 'deals'))
       .then((snapshot) => {
@@ -825,6 +836,20 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     ? recordsParts.contacts + recordsParts.companies + recordsParts.deals
     : null
   const recordsQuota = checkCrmRecordsQuota(org, crmRecordsCount ?? 0)
+  /*
+   * The people a capture is held to (AGL-4227, `crmCaptureAdmitted`): the
+   * band's records, plus the filed leads where the plan sells nothing past
+   * it. `null` until every part has answered.
+   */
+  const leadsShareBand = recordsQuota.overageRateUsd === null
+  const capturedPeople =
+    crmRecordsCount == null || (leadsShareBand && leadsCount == null)
+      ? null
+      : crmRecordsCount + (leadsShareBand ? (leadsCount ?? 0) : 0)
+  const capturedPeopleFull =
+    capturedPeople != null &&
+    Number.isFinite(entitlements.contactsPerHost) &&
+    capturedPeople >= entitlements.contactsPerHost
   /** Whether the plan carries the CRM, which decides what the band is called. */
   const crmIncluded = entitlements.features.crm
   /*
@@ -1042,7 +1067,7 @@ export function BillingUsageComponent(props: BillingUsageProps) {
       */}
       <UsageMeter
         label={crmIncluded ? 'CRM records (organization)' : 'Stored records (organization)'}
-        used={crmRecordsCount}
+        used={leadsShareBand ? capturedPeople : crmRecordsCount}
         limit={entitlements.contactsPerHost}
         help={docsHelp('billing', { anchor: '#crm-records' })}
       />
@@ -1063,10 +1088,22 @@ export function BillingUsageComponent(props: BillingUsageProps) {
             ? `Contacts ${recordsParts.contacts.toLocaleString()} · ` +
               `Companies ${recordsParts.companies.toLocaleString()} · ` +
               `Deals ${recordsParts.deals.toLocaleString()}`
-            : 'At this limit your sites stop adding new people. Working with ' +
-              `them is part of the CRM, included from ${
-                planLabelGrantingFeature('crm') ?? 'a paid plan'
-              }.`}
+            : capturedPeopleFull
+              ? // FULL (AGL-4227): what stops, what is still kept, and the
+                // way on. No back-fill is promised: entries saved meanwhile
+                // are not turned into contacts later.
+                'Your workspace holds the most people your plan keeps, so new ' +
+                'people from forms, bookings and sign-ups are not being added. ' +
+                'Every form entry is still saved under Forms, but no contact is ' +
+                'made from it, now or later. Everyone already held is kept for ' +
+                `the CRM, included from ${
+                  planLabelGrantingFeature('crm') ?? 'a paid plan'
+                } — upgrade in Billing to keep adding people.`
+              : 'The people your sites meet through forms, bookings and ' +
+                'sign-ups are kept here, ready for the CRM, included from ' +
+                `${planLabelGrantingFeature('crm') ?? 'a paid plan'}. At this ` +
+                'limit no new people are added; form entries are still saved ' +
+                'under Forms.'}
         </Typography>
       ) : null}
       {showRecordsOverage ? (
