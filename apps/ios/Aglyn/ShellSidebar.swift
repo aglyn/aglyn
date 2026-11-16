@@ -103,12 +103,17 @@ struct ScopeHeader: View {
           WorkspaceButton()
         }
       case .workspaceSettings, .siteSettings, .admin:
+        // The staff list leads back to the everyday list it was opened over: the site's, or the workspace's.
         backButton(
           navigation.mode == .siteSettings
-            ? (scope.site?.name ?? "Site") : navigation.mode == .admin ? "Back" : (scope.org?.name ?? "Workspace"),
+            ? (scope.site?.name ?? "Site")
+            : navigation.mode == .admin ? (scope.site?.name ?? scope.org?.name ?? "Back") : (scope.org?.name ?? "Workspace"),
           identifier: "sidebar-back-mode"
         ) { navigation.leaveMode() }
-        Text(navigation.mode == .siteSettings ? "Site settings" : navigation.mode == .admin ? "Admin" : "Workspace settings")
+        Text(
+          navigation.mode == .siteSettings
+            ? "Site settings" : navigation.mode == .admin ? StaffConsole.title : "Workspace settings"
+        )
           .font(.system(size: AglynShellMetrics.modeTitle, weight: .semibold))
           .foregroundStyle(AglynColor.textPrimary)
           .accessibilityAddTraits(.isHeader)
@@ -132,8 +137,9 @@ struct ScopeHeader: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .help("Back to \(title)")
-    .accessibilityLabel("Back to \(title)")
+    // A way back with no place to name (the staff console of an account with no workspace) says only "Back".
+    .help(title == "Back" ? title : "Back to \(title)")
+    .accessibilityLabel(title == "Back" ? title : "Back to \(title)")
     .accessibilityIdentifier(identifier)
   }
 }

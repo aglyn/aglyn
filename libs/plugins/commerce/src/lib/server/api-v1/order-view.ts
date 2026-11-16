@@ -20,6 +20,7 @@ import { fulfillmentLineQuantities } from '../../model/order-fulfillment'
 import { fulfillmentTrackingUrl } from '../../model/tracking-url'
 import { orderTaxEngineView } from '../../model/commerce-tax-engine'
 import { orderIsTestMode } from '../../model/commerce-orders'
+import { orderPayments, type OrderPaymentMethod } from '../../model/commerce-pos'
 
 /**
  * The public order shape from an order's data (AGL-3611): the same object the
@@ -62,7 +63,16 @@ export function orderViewFromData(id: string, data: Record<string, any>) {
       // Optional lines the buyer added at checkout (AGL-3635), inside
       // `totalCents` and outside `itemsCents`.
       extrasCents: Number(totals.extrasCents ?? 0) || 0,
+      // A register tip (AGL-3607), on top of `totalCents` and not revenue.
+      tipCents: Math.max(0, Math.round(Number(totals.tipCents ?? 0)) || 0),
     },
+    // How a register sale was paid (AGL-3614): one entry per tender that
+    // succeeded. A ledger needs it because only the card tenders went through
+    // Stripe; cash went in the drawer, a gift card spent value the store
+    // already held. Empty for every sale that is not the register's.
+    payments: orderPaymentsView(data),
+    // The part of `discountCents` a gift card paid online (AGL-3614).
+    giftCardRedeemedCents: Math.max(0, Math.round(Number(data.giftCardRedeemedCents ?? 0)) || 0),
     // What those lines were and whose offer each was: the fact a plugin that
     // insures a parcel reads off `order.paid` to know it was bought.
     extras: (Array.isArray(data.extras) ? data.extras : [])
@@ -185,4 +195,36 @@ export function orderCreditsView(data: Record<string, any>): Array<{
       appliedAs: 'tender' as const,
     }))
   return [...online, ...register].filter((credit) => credit.reference && credit.amountCents > 0)
+}
+
+const CARD_METHODS: ReadonlySet<OrderPaymentMethod> = new Set(['card_present', 'card_keyed', 'card_link'])
+
+/**
+ * A register sale's settled tenders as the order event names them (AGL-3614).
+ * An order from before the split-tender ledger is one payment, inferred the
+ * way the register's own reader infers it, with the order's tip and fee.
+ */
+export function orderPaymentsView(data: Record<string, any>): Array<{
+  method: OrderPaymentMethod
+  amountCents: number
+  tipCents: number
+  feeCents: number
+}> {
+  if (data?.channel !== 'pos') return []
+  const whole = (value: unknown) => Math.max(0, Math.round(Number(value ?? 0)) || 0)
+  return orderPayments(data)
+    .filter((payment) => payment.status === 'succeeded')
+    .map((payment) => {
+      const legacy = payment.id === 'legacy'
+      return {
+        method: payment.method,
+        amountCents: whole(payment.amountCents),
+        tipCents: whole(legacy ? data.totals?.tipCents : payment.tipCents),
+        // The application fee Stripe took from this payment; a tender Stripe
+        // never saw carried none.
+        feeCents: legacy
+          ? CARD_METHODS.has(payment.method) ? whole(data.totals?.feeCents ?? data.feeCents) : 0
+          : whole(payment.feeCents),
+      }
+    })
 }

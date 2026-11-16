@@ -74,6 +74,9 @@ accounts and tax codes, how sales are posted and a start date, then select
 | **Stripe clearing account** | Every sale is paid into it and every payout leaves it, so it returns to zero with each payout. |
 | **Aglyn fee expense** | Where the Aglyn fee on each sale is recorded. |
 | **Payout bank account** | The bank account Stripe pays out to. |
+| **Tips** | Where tips taken at the register are recorded. Leave it empty to use sales income. |
+| **Cash and other payments** | A bank account for money that does not go through Stripe: cash at the register, room charges, and sales on a marketplace. |
+| **Gift card liability** | Where gift cards you sell are owed until they are spent. |
 | **Sales tax codes** | The tax code for orders with sales tax, and for orders without. |
 
 Nothing is posted until the accounts are chosen.
@@ -86,6 +89,12 @@ Nothing is posted until the accounts are chosen.
 | A refund | A payment out of the Stripe clearing account against the income account. |
 | The Aglyn fee on a sale | A cost from the Stripe clearing account to the fee expense account. |
 | A Stripe payout | A **transfer** from the Stripe clearing account to the payout bank account. |
+| A sale paid in cash, by room charge or on a marketplace | Its income, then a **transfer** of that share from the Stripe clearing account to the cash and other payments account. |
+
+A gift card sold is owed on the gift card liability, and one spent comes off
+it; store credit is a discount; a tip is its own line. A refund comes back the
+way the sale was paid, in proportion. A sale made with Stripe in test mode is
+never posted.
 
 Sales and refunds are all filed under one customer, and fees under one
 supplier, which Aglyn adds to your books the first time it posts.

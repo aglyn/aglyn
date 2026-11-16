@@ -586,6 +586,7 @@ const FIND_BY_KIND: Readonly<
   fee: { dataType: 'directCosts', scope: 'connection', field: 'reference' },
   'fee-refund': { dataType: 'directIncomes', scope: 'connection', field: 'reference' },
   payout: { dataType: 'transfers', scope: 'connection', field: 'description' },
+  settlement: { dataType: 'transfers', scope: 'connection', field: 'description' },
   summary: { dataType: 'journalEntries', scope: 'company', field: 'description' },
 }
 

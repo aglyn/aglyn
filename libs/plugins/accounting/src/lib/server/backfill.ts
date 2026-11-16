@@ -46,7 +46,7 @@ import type { AccountingOrderSnapshot, AccountingRefundSnapshot } from '../model
 import { connectionRef, type AccountingConnectionRecord } from './connection-store'
 import type { AccountingEngineDeps } from './sync-engine'
 import { enqueueOrderPaid } from './sync-engine'
-import { feeRefundedFor, merchantShareOfRefund, snapshotFromOrderEvent } from './sync-intake'
+import { feeRefundedFor, isTestModeOrder, merchantShareOfRefund, snapshotFromOrderEvent } from './sync-intake'
 import { createSyncItems, itemsForRefund, syncItemId } from './sync-store'
 
 /** Where a backfill stands, on the connection document. */
@@ -71,6 +71,7 @@ export function snapshotFromHistoryEntry(
   entry: OrderHistoryEntry,
 ): AccountingOrderSnapshot | null {
   if (entry.paidAtMs === null || !entry.order?.id) return null
+  if (isTestModeOrder(entry.order)) return null
   const snapshot = snapshotFromOrderEvent(entry.order, { orgId, hostId, occurredAtMs: entry.paidAtMs })
   if (snapshot.totals.totalCents <= 0) return null
   return { ...snapshot, taxInclusive: entry.taxInclusive === true, taxKey: entry.taxRateId ?? null }

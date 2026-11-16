@@ -75,7 +75,23 @@ export interface OrderEventOrder {
     feeCents: number
     /** Optional lines the buyer added at checkout (AGL-3635), inside `totalCents` and outside `itemsCents`. */
     extrasCents?: number
+    /** A register tip (AGL-3607), on top of `totalCents`; the merchant's, not revenue. */
+    tipCents?: number
   }
+  /**
+   * How a register sale was paid (AGL-3614): each tender that succeeded, with
+   * its tip and the application fee Stripe took from it. Only the card
+   * tenders (`card_present`, `card_keyed`, `card_link`) went through Stripe.
+   * Empty for a sale that is not the register's.
+   */
+  payments?: Array<{
+    method: 'cash' | 'card_present' | 'card_keyed' | 'card_link' | 'gift_card' | 'folio' | 'credit'
+    amountCents: number
+    tipCents: number
+    feeCents: number
+  }>
+  /** The part of `totals.discountCents` a gift card paid online (AGL-3614). */
+  giftCardRedeemedCents?: number
   refundedCents: number
   /** The tax regime: `stripe-automatic`, `manual`, `none`, or `null` when not recorded. */
   taxMode: string | null

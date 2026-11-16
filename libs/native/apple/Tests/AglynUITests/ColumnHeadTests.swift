@@ -71,6 +71,58 @@
       XCTAssertTrue(placed(open.environment(\.aglynColumnHeadOffer, head())))
     }
 
+    private final class Probe {
+      var offered: Bool?
+      var section: Bool?
+    }
+
+    /// What a screen drawn at `probe`'s place reads from its environment.
+    private struct ProbeView: View {
+      @Environment(\.aglynColumnHeadOffer) private var offer
+      @Environment(\.aglynSection) private var section
+      let probe: Probe
+
+      var body: some View {
+        let _ = {
+          probe.offered = offer != nil
+          probe.section = section
+        }()
+        Color.clear
+      }
+    }
+
+    private func host<V: View>(_ view: V, wide: Bool = true) {
+      let host = NSHostingView(rootView: view.environment(\.aglynWideChrome, wide))
+      host.frame = NSRect(x: 0, y: 0, width: 1200, height: 800)
+      host.layoutSubtreeIfNeeded()
+      RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+    }
+
+    /// The list column took the area's head and its crumbs head the detail: a screen drawn in that detail (Analytics ›
+    /// Funnels) is not offered them again, so no second crumb row repeats over it (AGL-4058).
+    func testAScreenInsideTheDetailIsNotOfferedTheHeadAgain() {
+      let inList = Probe()
+      let inDetail = Probe()
+      host(
+        AglynListDetailColumns { ProbeView(probe: inList) } detail: { ProbeView(probe: inDetail) }
+          .environment(\.aglynColumnHeadOffer, head()))
+      XCTAssertEqual(inList.offered, false)
+      XCTAssertEqual(inDetail.offered, false)
+    }
+
+    /// A section of another screen's detail draws as one column on the Mac and iPad; a phone pushes it as a screen.
+    func testASectionHeadTellsTheScreenItIsASection() {
+      let wide = Probe()
+      host(ProbeView(probe: wide).aglynSectionHead("Funnels"))
+      XCTAssertEqual(wide.section, true)
+      let phone = Probe()
+      host(ProbeView(probe: phone).aglynSectionHead("Funnels"), wide: false)
+      XCTAssertEqual(phone.section, false)
+      let alone = Probe()
+      host(ProbeView(probe: alone))
+      XCTAssertEqual(alone.section, false)
+    }
+
     private func height(_ sections: [AglynAreaSection], width: CGFloat) -> CGFloat {
       let host = NSHostingController(rootView: AglynAreaSectionChips(sections, inset: 24).environment(\.aglynWideChrome, true))
       return host.sizeThatFits(in: CGSize(width: width, height: 1000)).height

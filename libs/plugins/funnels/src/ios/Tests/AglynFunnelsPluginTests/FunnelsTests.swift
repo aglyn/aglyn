@@ -232,4 +232,17 @@ final class FunnelsTests: XCTestCase {
   func testTheWaitsTheCardOffers() {
     XCTAssertEqual(dropOffWaits(), [1, 24, 72, 168])
   }
+
+  /// As a section of Analytics' detail the funnel is picked in the head, as the card's Funnel and Range selects read.
+  func testTheSectionPicksAFunnelAsTheCardsSelectsDo() {
+    let rows = [row("fn1"), row("fn2", draft: true)]
+    XCTAssertEqual(funnelChoiceLabel(rows[0]), "Signup")
+    XCTAssertEqual(funnelChoiceLabel(rows[1]), "Signup (draft)")
+    XCTAssertEqual(funnelShown(rows, picked: "fn2")?.id, "fn2")
+    // Nothing picked yet, or the picked one deleted: the first, as the card shows.
+    XCTAssertEqual(funnelShown(rows, picked: nil)?.id, "fn1")
+    XCTAssertEqual(funnelShown(rows, picked: "gone")?.id, "fn1")
+    XCTAssertNil(funnelShown([], picked: nil))
+    XCTAssertEqual(funnelRanges.map(funnelRangeLabel), ["Last 7 days", "Last 14 days", "Last 30 days", "Last 90 days"])
+  }
 }

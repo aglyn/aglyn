@@ -49,6 +49,24 @@ final class NavHistoryTests: XCTestCase {
     XCTAssertEqual(history.back(), Place(screen: "orders", site: "s1"))
   }
 
+  /// A screen pushed over the place on screen is a place after it; closing back to the place before is Back to it, so
+  /// Forward still reopens the screen, and anything else closed to is a new place.
+  func testAScreenPushedOrClosedFromInsideThePlace() {
+    var history = NavHistory(Place(screen: "home"))
+    history.record(Place(screen: "orders"))
+    history.show(Place(screen: "orders/1041"))
+    XCTAssertEqual(history.places.map(\.screen), ["home", "orders", "orders/1041"])
+    history.show(Place(screen: "orders"))
+    XCTAssertEqual(history.current.screen, "orders", "closing the order is Back to Orders")
+    XCTAssertTrue(history.canGoForward)
+    XCTAssertEqual(history.forward()?.screen, "orders/1041")
+    history.show(Place(screen: "orders/1041"))
+    XCTAssertEqual(history.places.count, 3, "the place on screen again is not recorded twice")
+    history.show(Place(screen: "orders/1041/refund"))
+    history.show(Place(screen: "orders"))
+    XCTAssertEqual(history.places.map(\.screen), ["home", "orders", "orders/1041", "orders/1041/refund", "orders"])
+  }
+
   func testOnlyTheNewestPlacesAreKept() {
     var history = NavHistory(Place(screen: "0"), limit: 3)
     for n in 1...5 { history.record(Place(screen: "\(n)")) }

@@ -133,15 +133,15 @@ internal fun WorkspaceRail(
         AllWorkspacesTile(rail.total.toInt(), actions.all)
       }
     }
-    // The foot (Figma Rail, Staff = Yes): Admin (Figma's bare outline shield, Icon/admin 3:142) above Create new, then the
-    // account, each in a utility box.
+    // The foot (Figma Rail, Staff = Yes): the staff console (Figma's bare outline shield, Icon/admin 3:142) above Create
+    // new, then the account, each in a utility box.
     actions.admin?.let { admin ->
       Surface(
         onClick = admin,
         shape = RoundedCornerShape(m.utilityRadius),
         color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.size(m.utility).railTooltip("Admin").testTag("rail-admin").semantics { contentDescription = "Admin" },
+        modifier = Modifier.size(m.utility).railTooltip(STAFF_CONSOLE_TITLE).testTag("rail-admin").semantics { contentDescription = STAFF_CONSOLE_TITLE },
       ) { Box(contentAlignment = Alignment.Center) { Icon(AglynIcons.named("shield"), null, Modifier.size(m.utilityIcon)) } }
     }
     Surface(

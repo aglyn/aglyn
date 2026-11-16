@@ -107,6 +107,10 @@ const ROLE_HELP: Readonly<Record<AccountingAccountRole, string>> = {
   feeExpense: `Where the ${PLATFORM_BRAND_NAME} fee on each sale is recorded as an expense.`,
   payoutBank: 'The bank account Stripe pays out to.',
   taxLiability: 'Where sales tax collected is recorded by the daily summary.',
+  tips: 'Where tips taken at the register are recorded. Sales income when left empty; tips your staff are owed belong in a liability account.',
+  otherPayments:
+    'A bank account for money that does not go through Stripe: cash at the register, room charges, and sales on a marketplace. Needed once one of those sales arrives.',
+  giftCards: 'Where gift cards you sell are owed until they are spent. Needed once a gift card is sold or spent.',
 }
 
 const taxKeyLabel = (key: string) =>
@@ -536,7 +540,13 @@ function MappingCard(props: {
                 }
               >
                 <MenuItem value="">
-                  <em>{role === 'shippingIncome' ? 'Same as sales income' : 'Choose an account'}</em>
+                  <em>
+                    {role === 'shippingIncome' || role === 'tips'
+                      ? 'Same as sales income'
+                      : role === 'otherPayments' || role === 'giftCards'
+                        ? 'Not set'
+                        : 'Choose an account'}
+                  </em>
                 </MenuItem>
                 {choices.map((account) => (
                   <MenuItem key={account.id} value={account.id}>

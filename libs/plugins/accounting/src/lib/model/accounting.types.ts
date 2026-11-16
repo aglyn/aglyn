@@ -85,6 +85,14 @@ export type AccountingSyncMode = (typeof ACCOUNTING_SYNC_MODES)[number]
  * - `payoutBank` — the bank account a payout lands in.
  * - `taxLiability` — where collected sales tax is credited by a daily summary
  *   journal. A per-order sale leaves tax to the ledger's own tax codes.
+ * - `tips` — where a register tip is credited; `income` when unset. A tip the
+ *   staff are owed belongs in a liability account.
+ * - `otherPayments` — the bank-type account money taken outside Stripe lands
+ *   in: cash at the register, a room charge, a marketplace's sale. A sale is
+ *   paid into clearing like any other and that share moves on from there.
+ *   Asked for only when such a sale arrives.
+ * - `giftCards` — the liability a gift card sold is credited to and a gift
+ *   card spent is taken out of. Asked for only when one is sold or spent.
  */
 export const ACCOUNTING_ACCOUNT_ROLES = [
   'income',
@@ -93,6 +101,9 @@ export const ACCOUNTING_ACCOUNT_ROLES = [
   'feeExpense',
   'payoutBank',
   'taxLiability',
+  'tips',
+  'otherPayments',
+  'giftCards',
 ] as const
 export type AccountingAccountRole = (typeof ACCOUNTING_ACCOUNT_ROLES)[number]
 
@@ -202,7 +213,7 @@ export interface AccountingOptionsResponse {
 }
 
 /** The kinds of thing that become a ledger document. */
-export const ACCOUNTING_SYNC_KINDS = ['sale', 'refund', 'fee', 'fee-refund', 'payout', 'summary'] as const
+export const ACCOUNTING_SYNC_KINDS = ['sale', 'refund', 'fee', 'fee-refund', 'payout', 'summary', 'settlement'] as const
 export type AccountingSyncKind = (typeof ACCOUNTING_SYNC_KINDS)[number]
 
 export const ACCOUNTING_SYNC_STATUSES = ['pending', 'synced', 'needs_attention', 'skipped'] as const

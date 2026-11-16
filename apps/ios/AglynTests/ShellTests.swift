@@ -61,6 +61,23 @@ final class ShellTests: XCTestCase {
     XCTAssertEqual(navigation.paths[.notifications], [])
   }
 
+  /// A starred order keeps its Starred row selected while it is open, and screens pushed on it keep it; Back to Orders
+  /// gives the selection back to the Orders row (the Mac sidebar kept the starred order highlighted).
+  func testBackOverAStarredPlaceSelectsTheAreasRowAgain() {
+    let navigation = ShellNavigation()
+    let orders = ShellSection.plugin("commerce.orders")
+    let order = Route.screen("commerce.order", ["orderId": "1041"])
+    navigation.section = orders
+    navigation.paths[orders] = [order]
+    navigation.starKey = "order-1041"
+    navigation.push(.screen("commerce.refund", ["orderId": "1041"]))
+    XCTAssertEqual(navigation.starKey, "order-1041", "a screen over the starred order keeps it selected")
+    navigation.paths[orders] = [order]
+    XCTAssertEqual(navigation.starKey, "order-1041")
+    navigation.paths[orders] = []
+    XCTAssertNil(navigation.starKey, "Back to Orders selects the Orders row")
+  }
+
   /// Opening a site, or going back to the whole workspace, starts every screen at its root: the workspace's search
   /// results pushed on its Home never show under the site's Home (P4).
   func testOpeningAScopeStartsItsScreensAtTheirRoots() {
@@ -132,6 +149,52 @@ final class ShellTests: XCTestCase {
   /// Documents-folder prompt on the Mac and hung the run.
   func testBothAppsKeepFirebasesAppDelegateProxyOff() {
     XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: "FirebaseAppDelegateProxyEnabled") as? Bool, false)
+  }
+
+  /// The account menu's Staff console row (AGL-3667, the console's user menu) is offered to a staff token only, and its
+  /// list holds every staff screen, each of which this app has.
+  func testOnlyAStaffTokenIsOfferedTheStaffConsole() {
+    let staff = TokenClaims(["staff": .bool(true)])
+    XCTAssertTrue(StaffConsole.offered(staff))
+    XCTAssertFalse(StaffConsole.offered(TokenClaims()))
+    XCTAssertFalse(StaffConsole.offered(TokenClaims(["staff": .bool(false)])))
+    XCTAssertFalse(StaffConsole.offered(TokenClaims(["staffRole": .string("super")])), "a role without the claim is not staff")
+    XCTAssertTrue(AppModel.staffNavGroups(for: TokenClaims()).isEmpty)
+
+    let registry = NativePluginRegistry()
+    _ = NativePluginLoader.load(
+      [CoreScreens.manifestEntry] + AppModel.platformEntries + NativePluginManifest.entries, into: registry)
+    let rows = AppModel.staffNavGroups(for: staff).flatMap(\.rows)
+    XCTAssertEqual(rows.map(\.screen), ScreenCatalog.shared.group("staff").map(\.id))
+    for screen in ["core.staff.overview", "core.staff.orgs", "core.staff.users", "core.staff.support"] {
+      XCTAssertTrue(rows.contains { $0.screen == screen }, "the staff list holds \(screen)")
+    }
+    for row in rows { XCTAssertNotNil(registry.screen(row.screen), "\(row.screen) is not registered") }
+  }
+
+  /// On iPad and the Mac the Staff console row opens the staff list as the sidebar's mode, on its first row; on a phone
+  /// its list is pushed on Home. Its way back is the everyday list, from Home.
+  func testTheStaffConsoleOpensTheStaffListAndLeadsBack() {
+    let wide = ShellNavigation()
+    wide.select(.plugin("commerce.orders"))
+    StaffConsole.open(wide, first: .plugin("core.staff.overview"))
+    XCTAssertEqual(wide.mode, .admin)
+    XCTAssertEqual(wide.section, .plugin("core.staff.overview"))
+    wide.leaveMode()
+    XCTAssertEqual(wide.mode, .main)
+    XCTAssertEqual(wide.section, .home)
+
+    let phone = ShellNavigation()
+    phone.compact = true
+    phone.select(.plugin("commerce.orders"))
+    StaffConsole.open(phone, first: .plugin("core.staff.overview"))
+    XCTAssertEqual(phone.mode, .admin)
+    XCTAssertEqual(phone.section, .home)
+    XCTAssertEqual(phone.paths[.home], [.modeList])
+    phone.push(.screen("core.staff.orgs", [:]))
+    phone.leaveMode()
+    XCTAssertEqual(phone.mode, .main)
+    XCTAssertEqual(phone.paths[.home] ?? [], [])
   }
 
   /// Every row the nav manifest lists opens a screen this app has (AGL-3945): a row with none would be a dead end.
@@ -212,6 +275,59 @@ final class ShellTests: XCTestCase {
     navigation.goBack()
     navigation.select(.analytics)
     XCTAssertFalse(navigation.canGoForward)
+  }
+
+  /// Sell › Orders, then Starred › Order 1041 (the order opened over Orders, the section on screen): Back returns to
+  /// Orders, not to the place before Orders, and Forward reopens the order (the Mac drive of 2026-11-14).
+  func testBackFromAStarredOrderOpenedOverOrdersReturnsToOrders() {
+    let navigation = ShellNavigation()
+    let orders = ShellSection.plugin("commerce.orders")
+    let order = Route.screen("commerce.order", ["orderId": "o-1041"])
+    navigation.select(.plugin("site.pages"))
+    navigation.select(orders)
+    navigation.land(orders, stack: [order])
+    XCTAssertEqual(navigation.paths[orders], [order])
+
+    navigation.goBack()
+    XCTAssertEqual(navigation.section, orders)
+    XCTAssertEqual(navigation.paths[orders], [], "Back shows the Orders list")
+    navigation.goBack()
+    XCTAssertEqual(navigation.section, .plugin("site.pages"))
+    navigation.goForward()
+    navigation.goForward()
+    XCTAssertEqual(navigation.section, orders)
+    XCTAssertEqual(navigation.paths[orders], [order], "Forward reopens the order")
+
+    // The same place opened again is not a new one.
+    navigation.land(orders, stack: [order])
+    XCTAssertFalse(navigation.canGoForward)
+    navigation.goBack()
+    XCTAssertEqual(navigation.paths[orders], [])
+  }
+
+  /// An order opened from its row is a place over Orders too: Back returns to the list, and the head's crumb back to
+  /// Orders is Back to it, so Forward reopens the order.
+  func testBackFromAPushedScreenReturnsToTheListUnderIt() {
+    let navigation = ShellNavigation()
+    let orders = ShellSection.plugin("commerce.orders")
+    let order = Route.screen("commerce.order", ["orderId": "o-1041"])
+    navigation.select(orders)
+    navigation.push(order)
+    navigation.goBack()
+    XCTAssertEqual(navigation.section, orders)
+    XCTAssertEqual(navigation.paths[orders], [])
+    navigation.goForward()
+    XCTAssertEqual(navigation.paths[orders], [order])
+    navigation.paths[orders] = []
+    XCTAssertTrue(navigation.canGoForward, "the crumb back to Orders is Back")
+    navigation.goBack()
+    XCTAssertEqual(navigation.section, .home)
+    // Another section and back again keeps the screen open over it.
+    navigation.goForward()
+    navigation.goForward()
+    navigation.select(.analytics)
+    navigation.goBack()
+    XCTAssertEqual(navigation.paths[orders], [order])
   }
 
   /// Back out of Workspace settings, or out of the whole workspace, returns to the sidebar's mode and scope the place
