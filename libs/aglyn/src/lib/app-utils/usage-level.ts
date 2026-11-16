@@ -21,7 +21,7 @@
  * How much an account, a workspace or a site actually uses the platform, as
  * a member of staff judged it after looking. It is a category staff pick, not
  * a measurement, and it is never "real" or "fake": everybody who signs up is
- * a real person, they just use Aglyn to very different degrees.
+ * a real person, they just use the platform to very different degrees.
  *
  * Stored on the thing itself — `users/{uid}`, `orgs/{orgId}`, `hosts/{hostId}`
  * — as `usageLevel`, beside who set it and when. Only staff write it, through
@@ -78,7 +78,7 @@ export const USAGE_LEVEL_DESCRIPTIONS: Readonly<Record<UsageLevel, string>> = {
   trying: 'Signed up and looked around; little or nothing of their own built.',
   building: 'Putting their own content in; not live or not used yet.',
   live: 'Published their own site and using it for their business.',
-  power: 'Runs their business on Aglyn: several sites, daily use, or selling through it.',
+  power: 'Runs their business on the platform: several sites, daily use, or selling through it.',
 }
 
 /** The chip's MUI color, so the five read apart at a glance. */
