@@ -222,6 +222,11 @@ export const PLUGIN_DOCS = {
     title: 'Product catalog',
     excerpt: 'Products with options and variants, categories, tags, and manual or smart collections.',
   },
+  chatgptVerification: {
+    path: '/building-sites/seo/overview',
+    title: 'SEO Toolkit',
+    excerpt: 'Per-page SEO, sitemap and robots, Open Graph/Twitter cards, and structured data.',
+  },
   commerce: {
     path: '/commerce-and-bookings/commerce/overview',
     title: 'Commerce',
@@ -625,6 +630,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   buildAWorkflow: ['#1-open-the-workflows-page', '#2-choose-a-trigger', '#3-add-steps', '#waiting', '#4-save-and-test', '#duplicate-a-workflow', '#tips', '#related'],
   buyADomain: ['#steps', '#site-has-a-domain', '#confirm-email', '#renewals', '#problems', '#transfer', '#after'],
   catalog: ['#products-options-and-variants', '#more-than-100-combinations', '#add-ons', '#price-by-size', '#add-ons-on-the-product-page', '#picture-cards', '#free-mockup', '#sell-in-person-only', '#offer-on-the-kiosk', '#billing-modes-and-subscriptions', '#subscriptions-list', '#ai', '#categories-and-tags', '#collections', '#product-reviews', '#show-reviews', '#review-settings', '#review-moderation', '#slugs', '#merchant-center-feed', '#related'],
+  chatgptVerification: ['#per-screen-seo', '#how-a-page-title-is-built', '#variables-so-a-title-is-not-a-copy-of-your-site-name', '#site-wide-defaults', '#site-description', '#title-separator', '#title-pattern', '#favicon', '#app-icon', '#site-social-image', '#every-icon-size-is-generated-for-you', '#your-sites-install-details-the-web-app-manifest', '#what-language-your-site-says-it-is-in', '#seo-check', '#target-keywords', '#check-one-page', '#search-engine-visibility', '#the-whole-site', '#a-single-page', '#verify-your-site-with-google-search-console', '#chatgpt', '#sitemap--robots', '#one-index-one-file-per-section', '#social-cards', '#what-each-kind-of-page-emits', '#structured-data', '#entity-card', '#entity-type', '#entity-description', '#entity-website', '#entity-contact', '#entity-logo', '#local-businesses', '#ai-agents', '#markdown-for-any-page', '#llmstxt', '#ai-agents-card', '#openapijson', '#well-knownapi-catalog', '#crawler-access', '#analytics-integration', '#related'],
   commerce: ['#who-charges-what', '#products-hub', '#inventory', '#inventory-locations', '#reserved-stock', '#stock-movements', '#gift-cards', '#recovery-and-alerts', '#orders', '#orders-screen', '#order-statuses', '#order-money-tiles', '#a-lost-dispute', '#payment-methods', '#shipping--taxes', '#tax-settings', '#lodging-tax-on-reservations', '#storefront-sales-tax', '#destination-coverage', '#pickup-and-local-delivery', '#dropshipping', '#store-settings', '#discounts-and-coupons', '#discounts', '#coupons', '#commerce-glance', '#commerce-analytics', '#related'],
   commerceEndToEnd: ['#1-connect-payments', '#2-create-products', '#3-design-the-storefront', '#catalog-search-filters-and-sort', '#category-pages', '#the-product-page-template', '#4-what-checkout-does', '#paying-without-leaving-your-site', '#5-run-orders-from-the-console', '#6-subscriptions--the-stripe-portal', '#member-updates', '#related'],
   companies: ['#the-companies-list', '#create-a-company', '#the-lists-behind-the-choices', '#a-companys-page', '#contact-roles', '#contacts-at-a-company', '#linked-on-capture', '#import', '#export', '#deleting-a-company', '#who-can-see-a-company', '#files', '#related'],
@@ -900,6 +906,9 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
     '#review-moderation': 'Review moderation',
     '#review-settings': 'Review settings',
     '#subscriptions-list': 'Your subscribers',
+  },
+  chatgptVerification: {
+    '#chatgpt': 'Verify your business with ChatGPT',
   },
   commerce: {
     '#commerce-analytics': 'Commerce analytics',
