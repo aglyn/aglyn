@@ -12,7 +12,7 @@ final class DomainsPluginTests: XCTestCase {
   @MainActor
   func testRegistersItsDeclaredScreens() {
     let registry = NativePluginRegistry()
-    let declared = NativeContributionDeclaration(screens: ["domains.list", "domains.domain"], widgets: [], deepLinks: [])
+    let declared = NativeContributionDeclaration(screens: ["domains.list", "domains.domain"], widgets: [], deepLinks: ["domains.list.link", "domains.domain.link"])
     let result = NativePluginLoader.load(
       [NativePluginManifestEntry(id: "domains", contributes: declared, register: registerDomainsNative)], into: registry)
     XCTAssertEqual(result.failed, [])

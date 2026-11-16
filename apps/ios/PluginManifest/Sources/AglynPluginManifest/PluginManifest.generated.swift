@@ -90,7 +90,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "domains",
-      contributes: ["screens": ["domains.domain", "domains.list"]],
+      contributes: ["screens": ["domains.domain", "domains.list"], "deepLinks": ["domains.domain.link", "domains.list.link"]],
       register: AglynDomainsPlugin.registerDomainsNative
     ),
     NativePluginManifestEntry(

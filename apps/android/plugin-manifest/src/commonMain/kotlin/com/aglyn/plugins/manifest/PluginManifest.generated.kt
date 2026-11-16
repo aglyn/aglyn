@@ -92,7 +92,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "domains",
-            contributes = mapOf("screens" to listOf("domains.domain", "domains.list")),
+            contributes = mapOf("screens" to listOf("domains.domain", "domains.list"), "deepLinks" to listOf("domains.domain.link", "domains.list.link")),
             register = ::registerDomainsNative,
         ),
         NativePluginManifestEntry(

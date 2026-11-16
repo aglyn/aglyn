@@ -16,7 +16,7 @@ class DomainsNativeTest {
   private val declared = mapOf(
     "screens" to listOf("domains.list", "domains.domain"),
     "widgets" to listOf(),
-    "deepLinks" to listOf(),
+    "deepLinks" to listOf("domains.list.link", "domains.domain.link"),
   )
 
   @Test
