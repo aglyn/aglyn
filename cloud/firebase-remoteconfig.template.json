@@ -16,9 +16,9 @@
     },
     "release_accounting": {
       "defaultValue": {
-        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+        "value": "{\"enabled\":true,\"rolloutPercent\":100,\"note\":\"On for every workspace (QuickBooks Online and Xero live)\"}"
       },
-      "description": "Accounting (AGL-3614): QuickBooks Online and Xero sync of commerce sales, refunds, fees and payouts. OFF by default; turn on only once the console has an Intuit or Xero app's credentials.",
+      "description": "Accounting (AGL-3614): QuickBooks Online and Xero sync of commerce sales, refunds, fees and payouts. On for every workspace since 2026-11-16; the kill switch.",
       "valueType": "JSON"
     },
     "release_bookings": {
