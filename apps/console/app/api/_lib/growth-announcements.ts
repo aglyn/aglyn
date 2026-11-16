@@ -302,6 +302,11 @@ export interface NewSiteAnnouncement {
   /** Who made it: an address for a console session, a label for an API key. */
   createdBy: string | null
   /**
+   * `createdBy` is a NAME an integration or connected app gave itself, not a
+   * person's address, so it is shown as text that no mail client links.
+   */
+  createdByIsName?: boolean
+  /**
    * How it was started: the guided AI start, a starter design, a starter
    * picked from the marketplace (AGL-4049), the API, or a create that was
    * resumed.
@@ -309,6 +314,15 @@ export interface NewSiteAnnouncement {
   start?: 'guided-ai' | 'starter' | 'marketplace-starter' | 'api' | 'resumed'
   /** The style the person chose, by its name (AGL-4049); `null` or absent for none. */
   style?: string | null
+}
+
+/**
+ * `text` with a zero-width space after every `.`, `:`, `/` and `@`, so a mail
+ * client's auto-linker finds no domain, scheme or address in it while a
+ * person reads it unchanged. For a name a third party chose (AGL-4225).
+ */
+export function unlinkable(text: string | null): string | null {
+  return text === null ? null : text.replace(/([.:/@])/g, '$1\u200b')
 }
 
 /**
@@ -323,7 +337,10 @@ export interface NewSiteAnnouncement {
  * platform subdomain. The email's text blocks are linkified when rendered.
  */
 export async function announceNewSite(site: NewSiteAnnouncement): Promise<void> {
-  const { hostId, displayName, subdomain, orgSlug, createdBy, start, style } = site
+  const { hostId, displayName, subdomain, orgSlug, start, style } = site
+  // A name an app or key chose for itself can look like a domain or an
+  // address; staff mail must not turn it into a link (AGL-4225).
+  const createdBy = site.createdByIsName ? unlinkable(site.createdBy) : site.createdBy
   try {
     if (isSignupCanaryOrgSlug(orgSlug) || isSignupCanaryEmail(createdBy)) return
     const liveUrl = `https://${subdomain}.${TENANT_APEX}`

@@ -106,7 +106,7 @@ jest.mock('firebase-admin/firestore', () => ({
   Timestamp: { fromMillis: (ms: number) => ({ toMillis: () => ms }) },
 }))
 
-import { PREAUTH_LOOKUP_LIMIT, resetPreAuthLookupBudgetForTests } from '../utils/api-v1'
+import { chargeApiV1Call, PREAUTH_LOOKUP_LIMIT, resetPreAuthLookupBudgetForTests } from '../utils/api-v1'
 import { GET } from '../app/api/v1/[[...route]]/route'
 
 const GRANT = 'grant_AAAAAAAAAAAAAAAA'
@@ -171,7 +171,8 @@ describe('a connector token through the /api/v1 door (AGL-4225)', () => {
     storeConnection(credential)
     const response = await call(credential)
     expect(response.status).toBe(200)
-    expect(await response.json()).toMatchObject({
+    expect(await response.json()).toEqual({
+      object: 'connected_app',
       org: 'org-1',
       name: 'Claude',
       scopes: ['contacts:read', 'sites:read'],
@@ -266,4 +267,16 @@ describe('a connector token through the /api/v1 door (AGL-4225)', () => {
     expect((await call(token('one-more-junk'))).status).toBe(429)
     expect((await call(live)).status).toBe(200)
   })
+
+  it('charges an extra call in a batch as its own request, and refuses it when the budget is spent', async () => {
+    const context = { orgId: 'org-1', keyId: GRANT, keyName: 'Claude', scopes: [], org: { plan: 'business' }, firestore: { collection: () => ({ doc: () => ({ collection: () => ({ doc: () => ({ set: async () => void mockUsageWrites.push('extra') }) }) }) }) }, headers: {} }
+    expect(await chargeApiV1Call(context as never)).toBeNull()
+    expect(mockConsumeRateLimit).toHaveBeenCalledWith(`apiv1:${GRANT}`)
+    expect(mockUsageWrites).toEqual(['extra'])
+    mockConsumeRateLimit.mockResolvedValueOnce({ allowed: false, limit: 120, remaining: 0, resetMs: Date.now() + 30_000 })
+    const refused = await chargeApiV1Call(context as never)
+    expect(refused?.status).toBe(429)
+    expect(mockUsageWrites).toEqual(['extra'])
+  })
 })
+

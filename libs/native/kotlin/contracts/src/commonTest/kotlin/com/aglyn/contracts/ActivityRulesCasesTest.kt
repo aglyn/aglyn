@@ -54,6 +54,7 @@ class ActivityRulesCasesTest {
     assertEquals("Mailbox", activityTypeLabel("outreach:mailbox"))
     assertEquals("jordan@example.com", activityActorLabel(ActivityEntryFields(actorId = "u1", actorEmail = "jordan@example.com")))
     assertEquals("API key Zapier", activityActorLabel(ActivityEntryFields(apiKeyName = "Zapier")))
+    assertEquals("Connected app Cursor", activityActorLabel(ActivityEntryFields(connectedAppName = "Cursor")))
     assertEquals("Account u1", activityActorLabel(ActivityEntryFields(actorId = "u1")))
     assertEquals("Workflow Follow-up", activityActorLabel(ActivityEntryFields(targetType = "workflow", targetName = "Follow-up", actorId = "system:engine")))
     assertEquals("$brand staff (staff@example.com)", activityActorLabel(ActivityEntryFields(staffActorEmail = "staff@example.com")))

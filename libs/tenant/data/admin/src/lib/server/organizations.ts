@@ -1550,6 +1550,8 @@ export async function logHostActivity(
       // A key's entry names the key (AGL-2632); a person's carries no such
       // field, so the two are told apart by its presence.
       ...(actor.apiKeyName ? { apiKeyName: actor.apiKeyName } : {}),
+      // A connected app's entry names the app instead (AGL-4225).
+      ...(actor.connectedAppName ? { connectedAppName: actor.connectedAppName } : {}),
       action,
       target: {
         type: target.type,
@@ -1562,6 +1564,7 @@ export async function logHostActivity(
       searchTokens: activitySearchTokens({
         actorEmail: actor.email,
         apiKeyName: actor.apiKeyName,
+        connectedAppName: actor.connectedAppName,
         target,
       }),
       createdAt: FieldValue.serverTimestamp(),

@@ -462,8 +462,8 @@ export function buildCustomerApiOpenApi(
   paths['/v1/me'] = {
     get: {
       operationId: 'getKeyIdentity',
-      summary: 'Introspect the calling key',
-      description: 'Says which organization and scopes this key carries. Never returns the key.',
+      summary: 'Introspect the calling credential',
+      description: 'Says what the calling credential is — an API key or a connected app — and which organization and scopes it carries. Never returns the secret.',
       tags: ['Service'],
       responses: {
         '200': {
@@ -554,10 +554,17 @@ export function buildCustomerApiOpenApi(
       type: 'object',
       required: ['object'],
       properties: {
-        object: { type: 'string', const: 'api_key' },
-        org: { type: 'string', description: 'Organization this key belongs to.' },
-        name: { type: ['string', 'null'], description: 'The name the organization gave the key, e.g. `Zapier`.' },
-        scopes: { type: 'array', items: { type: 'string' }, description: 'What the key may do.' },
+        object: {
+          type: 'string',
+          enum: ['api_key', 'connected_app'],
+          description: '`api_key` for an API key; `connected_app` for an app a person connected by signing in.',
+        },
+        org: { type: 'string', description: 'Organization this credential belongs to.' },
+        name: {
+          type: ['string', 'null'],
+          description: 'The name the organization gave the key, e.g. `Zapier` — or, for a connected app, the name the app registered under.',
+        },
+        scopes: { type: 'array', items: { type: 'string' }, description: 'What the credential may do.' },
       },
       additionalProperties: true,
     },

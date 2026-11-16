@@ -346,6 +346,28 @@ async function refuseIfApiQuotaExhausted(
 }
 
 /**
+ * Charge one MORE request to an already-authenticated credential (AGL-4225).
+ *
+ * `authenticateApiV1` charges a request once: one rate-limit unit, one usage
+ * count. An MCP batch is one HTTP request that can carry many `tools/call`
+ * messages, each a full `/v1` dispatch, so every call after the first is
+ * charged here as its own request — the same per-credential limit, the same
+ * monthly quota, the same meter — and refused, as itself, when the budget is
+ * spent. `null` to proceed, or the refusal to report for that one call.
+ */
+export async function chargeApiV1Call(context: ApiV1Context): Promise<Response | null> {
+  const rate = await consumeRateLimit(`apiv1:${context.keyId}`)
+  const headers = rateLimitHeaders(rate)
+  if (!rate.allowed) {
+    return ApiErrors.rateLimited(Math.ceil((rate.resetMs - Date.now()) / 1000), headers)
+  }
+  const quotaRefusal = await refuseIfApiQuotaExhausted(context.firestore, context.orgId, context.org, headers)
+  if (quotaRefusal) return quotaRefusal
+  recordApiRequest(context.firestore, context.orgId)
+  return null
+}
+
+/**
  * Authenticate a v1 request. Returns an `ApiV1Context` on success, or an
  * error `Response` (401 unknown key, 403 plan required, 429 rate limited)
  * to return as-is.
@@ -539,6 +561,8 @@ export async function authenticateApiV1(
       orgId: verified.orgId,
       keyId: verified.keyId,
       keyName: verified.name || null,
+      // Only a connection carries a person (AGL-4225).
+      credential: verified.uid ? 'connected_app' : 'api_key',
       scopes: verified.scopes,
       org,
       firestore,

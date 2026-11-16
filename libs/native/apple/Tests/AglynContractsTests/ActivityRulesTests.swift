@@ -55,6 +55,7 @@ final class ActivityRulesTests: XCTestCase {
   func testActor() {
     XCTAssertEqual(activityActorLabel(.init(actorId: "u1", actorEmail: "jordan@example.com")), "jordan@example.com")
     XCTAssertEqual(activityActorLabel(.init(apiKeyName: "Zapier")), "API key Zapier")
+    XCTAssertEqual(activityActorLabel(.init(connectedAppName: "Cursor")), "Connected app Cursor")
     XCTAssertEqual(activityActorLabel(.init(actorId: "api")), "API key")
     XCTAssertEqual(activityActorLabel(.init(actorId: "u1")), "Account u1")
     XCTAssertEqual(activityActorLabel(.init(actorId: "u1", actorEmailNow: "lee@example.com")), "lee@example.com")
