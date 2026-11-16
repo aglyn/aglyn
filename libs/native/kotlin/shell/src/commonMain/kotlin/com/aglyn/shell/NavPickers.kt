@@ -323,6 +323,7 @@ private fun AddWorkspaceRow(services: ShellServices) {
   PickerRow("Add workspace", null, false, "picker-add-workspace", leading = { Icon(AglynIcons.named("add"), null, Modifier.size(24.dp)) }) { open = true }
   if (!open) return
   var name by remember { mutableStateOf("") }
+  var slug by remember { mutableStateOf<String?>(null) }
   var error by remember { mutableStateOf<String?>(null) }
   var busy by remember { mutableStateOf(false) }
   val scope = rememberCoroutineScope()
@@ -331,15 +332,22 @@ private fun AddWorkspaceRow(services: ShellServices) {
     modifier = Modifier.sheetEntrance(com.aglyn.ui.SheetEntrance.GROW).testTag("add-workspace-dialog"),
     title = { Text("Add a workspace") },
     text = {
-      OutlinedTextField(
-        name,
-        onValueChange = { name = it; error = null },
-        label = { Text("Workspace name") },
-        singleLine = true,
-        isError = error != null,
-        supportingText = { Text(error ?: "A workspace holds your sites, team and billing.") },
-        modifier = Modifier.fillMaxWidth().testTag("add-workspace-name"),
-      )
+      Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+          name,
+          onValueChange = { name = it; error = null },
+          label = { Text("Workspace name") },
+          singleLine = true,
+          isError = error != null,
+          supportingText = { Text(error ?: "A workspace holds your sites, team and billing.") },
+          modifier = Modifier.fillMaxWidth().testTag("add-workspace-name"),
+        )
+        // The Workspace URL (the console's field): made from the name until the person types their own.
+        WorkspaceUrlField(slug ?: com.aglyn.core.WorkspaceName.slug(name), services.config.workspaceDomain) {
+          slug = com.aglyn.core.WorkspaceName.urlInput(it)
+          error = null
+        }
+      }
     },
     confirmButton = {
       Button(shape = com.aglyn.ui.controlShape(), 
@@ -347,7 +355,7 @@ private fun AddWorkspaceRow(services: ShellServices) {
         onClick = {
           busy = true
           scope.launch {
-            val outcome = services.signUp.createWorkspace(name)
+            val outcome = services.signUp.createWorkspace(name, slug ?: com.aglyn.core.WorkspaceName.slug(name))
             busy = false
             val created = outcome.orgId
             if (created != null) {

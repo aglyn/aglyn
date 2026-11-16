@@ -206,6 +206,9 @@ object WorkspaceName {
 
   fun helper(workspaceDomain: String) = "This becomes your workspace address, e.g. acme-inc.$workspaceDomain"
 
+  /** What the Workspace URL field takes as it is typed: lower case, as the console's field lower-cases it. */
+  fun urlInput(text: String): String = text.lowercase()
+
   /** The address a name becomes, or "" when nothing usable remains. */
   fun slug(name: String): String {
     var slug = stripMarks(name.lowercase())
@@ -327,9 +330,16 @@ class SignUpService(
     return OnboardingPlanIntent.parse(queryParams(query))
   }
 
-  /** Creates the workspace (`createSignUpWorkspace`). A 409 means the address was taken and nothing was created. */
-  suspend fun createWorkspace(name: String): SignUpWorkspaceOutcome = try {
-    val answer = api.request("/api/orgs/create", ApiMethod.POST, buildJsonObject { put("name", name.trim()) }) as? JsonObject
+  /**
+   * Creates the workspace (`createSignUpWorkspace`). A 409 means the address was taken and nothing was created. [slug] is the
+   * Workspace URL the person typed (the console's Create an organization sends it); none lets the route make one.
+   */
+  suspend fun createWorkspace(name: String, slug: String? = null): SignUpWorkspaceOutcome = try {
+    val body = buildJsonObject {
+      put("name", name.trim())
+      slug?.let { put("slug", it.trim()) }
+    }
+    val answer = api.request("/api/orgs/create", ApiMethod.POST, body) as? JsonObject
     SignUpWorkspaceOutcome(answer.string("slug"), answer.string("orgId"), null)
   } catch (error: CancellationException) {
     throw error
