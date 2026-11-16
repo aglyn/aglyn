@@ -543,7 +543,6 @@ Each line's direction decides its order. **Price UP / band DOWN** publish on
 | Change | Direction | Code | Waits on |
 | --- | --- | --- | --- |
 | Starter email: past 1,000 a month at $2.50 per 1,000, one-to-one CRM inside the 1,000 | price UP (a new charge) | `INCLUDED_EMAIL_SENDS_BY_PLAN`, `PLAN_PRICING.starter.extraEmailSendsUsdPer1k` | the page first, then `BILL_EMAIL_SEND_OVERAGE_FROM` (it gates Pro's email too) |
-| Starter / Free daily transactional ceiling 1,000 → 250, 200 → 50 | band DOWN (an abuse line, published nowhere) | `TRANSACTIONAL_EMAILS_PER_DAY_BY_PLAN` | nothing on the page; takes effect on deploy |
 | API billed per started 256 KB, every plan | price UP (meter change) | `API_BILLING_UNIT_BYTES`, `chargeApiRequestSize` | the page and the API docs first |
 | Starter extra site $20 → $25 | price UP | `PLAN_PRICING.starter.extraHostMonthlyUsd`; `REPRICED_ADDONS` | the page first, then the v2 Stripe prices and `STRIPE_PRICE_STARTER_EXTRA_HOST_V2[_YEARLY]` |
 | Starter CRM records stop at Pro's 10,000 | band DOWN | `maxCrmRecords` | the page first |

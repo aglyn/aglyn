@@ -33,7 +33,7 @@
  * ## An abuse ceiling, not a plan dimension
  *
  * The figures below are containment lines, sized so that no real store meets
- * them: a busy Starter store confirms a few dozen orders a day, and 250 is
+ * them: a busy Starter store confirms a few dozen orders a day, and 1,000 is
  * that day many times over. A workspace that reaches one is a script, a
  * compromised account or a workflow in a loop, and the response is an
  * incident staff look at, not an upgrade prompt.
@@ -79,13 +79,8 @@ export const TRANSACTIONAL_EMAILS_PER_DAY_KEY = 'transactionalEmailsPerDay'
  * an agreement that wants a number writes it as the override.
  */
 export const TRANSACTIONAL_EMAILS_PER_DAY_BY_PLAN: Readonly<Record<OrgPlan, number>> = {
-  // A stopgap (AGL-4227) until Starter's mail bills past 1,000 a month in
-  // production: 250 a day bounds a Starter workspace's unbilled mail at about
-  // $6.75 a month of provider cost (from $27), and 50 bounds Free's at $1.35
-  // (from $5.40). Still far above a real store's day; security mail stays
-  // exempt at the send seam.
-  free: 50,
-  starter: 250,
+  free: 200,
+  starter: 1_000,
   pro: 5_000,
   business: 10_000,
   scale: 15_000,

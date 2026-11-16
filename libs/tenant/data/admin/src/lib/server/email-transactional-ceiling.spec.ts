@@ -436,7 +436,7 @@ describe('a site’s receipts, end to end through the installed gate', () => {
 
   it('stamps the org’s ceiling on the workspace, override first', async () => {
     mockOrgs.set(HOST, { name: 'Acme', plan: 'starter', billingStatus: 'active' })
-    expect((await hostSendingIdentity(HOST)).workspace?.transactionalEmailsPerDay).toBe(250)
+    expect((await hostSendingIdentity(HOST)).workspace?.transactionalEmailsPerDay).toBe(1_000)
     mockOrgs.set(HOST, {
       name: 'Acme',
       plan: 'starter',

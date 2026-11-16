@@ -35,9 +35,9 @@ import {
 const PLANS = Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]
 
 describe('the daily transactional ceiling per plan (AGL-4145)', () => {
-  it('holds the figures the margin check set, lowered for Free and Starter by AGL-4227', () => {
-    expect(TRANSACTIONAL_EMAILS_PER_DAY_BY_PLAN.free).toBe(50)
-    expect(TRANSACTIONAL_EMAILS_PER_DAY_BY_PLAN.starter).toBe(250)
+  it('holds the figures the margin check set', () => {
+    expect(TRANSACTIONAL_EMAILS_PER_DAY_BY_PLAN.free).toBe(200)
+    expect(TRANSACTIONAL_EMAILS_PER_DAY_BY_PLAN.starter).toBe(1_000)
     expect(TRANSACTIONAL_EMAILS_PER_DAY_BY_PLAN.pro).toBe(5_000)
     expect(TRANSACTIONAL_EMAILS_PER_DAY_BY_PLAN.enterprise).toBe(UNLIMITED)
   })
@@ -67,9 +67,9 @@ describe('the daily transactional ceiling per plan (AGL-4145)', () => {
   })
 
   it('reads a canceled paid plan, or no plan at all, as Free', () => {
-    expect(resolveTransactionalEmailDailyCeiling({ plan: 'pro', billingStatus: 'canceled' } as never)).toBe(50)
-    expect(resolveTransactionalEmailDailyCeiling(null)).toBe(50)
-    expect(resolveTransactionalEmailDailyCeiling({} as never)).toBe(50)
+    expect(resolveTransactionalEmailDailyCeiling({ plan: 'pro', billingStatus: 'canceled' } as never)).toBe(200)
+    expect(resolveTransactionalEmailDailyCeiling(null)).toBe(200)
+    expect(resolveTransactionalEmailDailyCeiling({} as never)).toBe(200)
   })
 
   describe('the per-org override', () => {
@@ -91,7 +91,7 @@ describe('the daily transactional ceiling per plan (AGL-4145)', () => {
 
     it('ignores anything that is not a finite number of 0 or more', () => {
       for (const bad of [-1, Number.NaN, Number.POSITIVE_INFINITY, '9000', null, true]) {
-        expect(resolveTransactionalEmailDailyCeiling(withOverride(bad))).toBe(250)
+        expect(resolveTransactionalEmailDailyCeiling(withOverride(bad))).toBe(1_000)
       }
     })
 
