@@ -418,7 +418,13 @@ private fun PageDialogs(context: NativePluginContext, hostId: String, dialog: Pa
   val done = { close() }
   when (dialog) {
     null -> Unit
-    PageDialog.Gallery -> TemplateGalleryDialog(context, hostId, "page", onChoose = { onOpen(PageDialog.UseTemplate(it)) }, onDismiss = close)
+    PageDialog.Gallery -> TemplateGalleryDialog(
+      context, hostId, "page", onChoose = { onOpen(PageDialog.UseTemplate(it)) }, onDismiss = close,
+      onInstalled = { message ->
+        close()
+        runner.notice = message
+      },
+    )
     is PageDialog.UseTemplate -> UseTemplateDialog(context, hostId, dialog.row, onDone = { _, id -> close(); onSelectNew(id) }, onDismiss = close)
     is PageDialog.SaveTemplate -> SaveAsTemplateDialog(
       context,

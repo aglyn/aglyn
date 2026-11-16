@@ -6479,6 +6479,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let siteJourneyKeyMax: Int
   public let siteListDeclaration: ListQueryDeclaration
   public let siteMemberListQuery: ListQueryDeclaration
+  public let siteTemplateShelfBase: [ListQueryFilter]
+  public let siteTemplateShelfQuery: ListQueryDeclaration
   public let starColors: [StarColor]
   public let starredField: String
   public let starredMax: Int
@@ -6840,6 +6842,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case siteJourneyKeyMax = "SITE_JOURNEY_KEY_MAX"
     case siteListDeclaration = "SITE_LIST_DECLARATION"
     case siteMemberListQuery = "SITE_MEMBER_LIST_QUERY"
+    case siteTemplateShelfBase = "SITE_TEMPLATE_SHELF_BASE"
+    case siteTemplateShelfQuery = "SITE_TEMPLATE_SHELF_QUERY"
     case starColors = "STAR_COLORS"
     case starredField = "STARRED_FIELD"
     case starredMax = "STARRED_MAX"

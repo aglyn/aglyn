@@ -34,8 +34,20 @@ struct TemplateGallerySheet: View {
   let kind: String
   let onChoose: (ArtifactRow) -> Void
   let close: () -> Void
+  /// A shelf installed a bundle into the library: the gallery closes and the screen says what landed.
+  var onInstalled: ((String) -> Void)? = nil
   @State private var model = ArtifactListModel()
   @State private var searchText = ""
+  /// How each shelf in the `templateGallery` zone stands, by the name it reports under.
+  @State private var shelves: [String: TemplateGalleryShelfState] = [:]
+
+  private var shelvesHaveSomething: Bool { shelves.values.contains { $0 != .empty } }
+
+  private var zone: TemplateGalleryZone {
+    TemplateGalleryZone(
+      hostID: hostID, kind: kind, search: model.search, onInstalled: { message in if let onInstalled { onInstalled(message) } else { close() } },
+      reportShelf: { id, state in if shelves[id] != state { shelves[id] = state } })
+  }
 
   var body: some View {
     NavigationStack {
@@ -47,12 +59,16 @@ struct TemplateGallerySheet: View {
           AglynEmptyState("Could not load templates", systemImage: SiteSymbols.error, message: message) {
             Button("Try again") { model.refresh() }
           }
-        case .ready(let rows) where rows.isEmpty:
-          AglynEmptyState(
-            model.search.isEmpty ? "No \(noun(kind)) templates yet" : "No templates match", systemImage: ArtifactKind.template.systemImage,
-            message: model.search.isEmpty ? "Save one from an existing \(noun(kind)), or start blank." : "Try another search.")
         case .ready(let rows):
           List {
+            // Nothing in the library and no shelf with anything: the gallery's own empty line, as the console's counts
+            // every shelf before it says nothing matches.
+            if rows.isEmpty && !shelvesHaveSomething {
+              AglynEmptyState(
+                model.search.isEmpty ? "No \(noun(kind)) templates yet" : "No templates match", systemImage: ArtifactKind.template.systemImage,
+                message: model.search.isEmpty ? "Save one from an existing \(noun(kind)), or start blank." : "Try another search.")
+                .listRowBackground(Color.clear)
+            }
             ForEach(rows) { row in
               Button {
                 onChoose(row)
@@ -68,6 +84,9 @@ struct TemplateGallerySheet: View {
               .accessibilityIdentifier("template-\(row.id)")
             }
             if model.hasMore { AglynLoadMoreRow("Show more templates") { model.loadMore() } }
+            // The `templateGallery` zone (AGL-3080): shelves plugins add, the marketplace's site templates among them.
+            SlotWidgets(context: context, slot: TemplateGalleryZone.slot)
+              .environment(\.templateGalleryZone, zone)
           }
           .accessibilityIdentifier("template-gallery-list")
         }

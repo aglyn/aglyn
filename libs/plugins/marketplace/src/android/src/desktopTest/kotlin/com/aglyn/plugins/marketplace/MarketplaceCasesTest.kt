@@ -49,6 +49,27 @@ class MarketplaceCasesTest {
   }
 
   @Test
+  fun templateShelfAsksAndSaysWhatTheConsoleDoes() {
+    val plain = templateShelfQuery("", 24)
+    assertEquals(LISTINGS, plain.collectionPath)
+    assertEquals(24, plain.limit)
+    assertEquals(true, plain.filters.toString().contains("kind"), plain.toString())
+    val searched = templateShelfQuery("  bakery  ", 24)
+    assertEquals(true, searched.filters.toString().contains("nameTokens"), searched.toString())
+    assertEquals("5 pages · v3 · free", templateShelfFacts(5.0, "3", 0.0))
+    assertEquals("? pages · v1.2.0 · \$12", templateShelfFacts(null, "1.2.0", 12.0))
+    assertEquals(
+      "Saved 1 template from \"Bakery\" to your library — open Templates to create pages from them.",
+      templateInstalledMessage(1, "Bakery"),
+    )
+    assertEquals(true, templateInstalledMessage(5, "Bakery").startsWith("Saved 5 templates"))
+    assertEquals(com.aglyn.pluginhost.TemplateGalleryShelfState.EMPTY, templateShelfState(offered = false, loading = true, visible = true))
+    assertEquals(com.aglyn.pluginhost.TemplateGalleryShelfState.LOADING, templateShelfState(offered = true, loading = true, visible = false))
+    assertEquals(com.aglyn.pluginhost.TemplateGalleryShelfState.SHOWN, templateShelfState(offered = true, loading = false, visible = true))
+    assertEquals(com.aglyn.pluginhost.TemplateGalleryShelfState.EMPTY, templateShelfState(offered = true, loading = false, visible = false))
+  }
+
+  @Test
   fun installStateCases() = cases("resolvePluginInstallState").forEach { (args, result) ->
     fun pin(json: JsonElement) = (json as? JsonObject)?.let { obj -> obj["version"]?.let { (it as JsonPrimitive).content } }
     val state = resolvePluginInstallState(str(args[0]), pin(args[1]), args[1] is JsonObject, pin(args[2]), args[2] is JsonObject)

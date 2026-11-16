@@ -10180,6 +10180,25 @@
       }
     ]
   },
+  "SITE_TEMPLATE_SHELF_BASE": [
+    {
+      "op": "==",
+      "path": "kind",
+      "value": "template"
+    }
+  ],
+  "SITE_TEMPLATE_SHELF_QUERY": {
+    "fields": [],
+    "search": {
+      "tokensPath": "nameTokens"
+    },
+    "sorts": [
+      {
+        "direction": "asc",
+        "path": "__name__"
+      }
+    ]
+  },
   "STAR_COLORS": [
     "blue",
     "purple",

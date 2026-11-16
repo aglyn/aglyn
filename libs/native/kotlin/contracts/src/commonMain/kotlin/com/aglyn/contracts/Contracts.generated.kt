@@ -4351,6 +4351,8 @@ internal data class ContractValuesPart7(
     @SerialName("SITE_JOURNEY_KEY_MAX") val siteJourneyKeyMax: Long,
     @SerialName("SITE_LIST_DECLARATION") val siteListDeclaration: ListQueryDeclaration,
     @SerialName("SITE_MEMBER_LIST_QUERY") val siteMemberListQuery: ListQueryDeclaration,
+    @SerialName("SITE_TEMPLATE_SHELF_BASE") val siteTemplateShelfBase: List<ListQueryFilter>,
+    @SerialName("SITE_TEMPLATE_SHELF_QUERY") val siteTemplateShelfQuery: ListQueryDeclaration,
     @SerialName("STAR_COLORS") val starColors: List<StarColor>,
     @SerialName("STARRED_FIELD") val starredField: String,
     @SerialName("STARRED_MAX") val starredMax: Long,
@@ -4365,12 +4367,12 @@ internal data class ContractValuesPart7(
     @SerialName("TAB_BARS_FIELD") val tabBarsField: String,
     @SerialName("TAB_BARS_MAX") val tabBarsMax: Long,
     @SerialName("TASK_LIST_DECLARATION") val taskListDeclaration: ListQueryDeclaration,
-    @SerialName("TEMPLATE_KIND_OPTIONS") val templateKindOptions: List<ListFilterOption>,
-    @SerialName("TEMPLATE_LIST_BASE") val templateListBase: List<ListQueryFilter>,
 )
 
 @Serializable
 internal data class ContractValuesPart8(
+    @SerialName("TEMPLATE_KIND_OPTIONS") val templateKindOptions: List<ListFilterOption>,
+    @SerialName("TEMPLATE_LIST_BASE") val templateListBase: List<ListQueryFilter>,
     @SerialName("TEMPLATE_LIST_QUERY") val templateListQuery: ListQueryDeclaration,
     @SerialName("TENANT_EMAIL_COLLECTION") val tenantEmailCollection: String,
     @SerialName("TENANT_EMAILS") val tenantEmails: List<TenantEmailEntry>,
@@ -4731,6 +4733,8 @@ class ContractValues internal constructor(
     val siteJourneyKeyMax: Long get() = part7.siteJourneyKeyMax
     val siteListDeclaration: ListQueryDeclaration get() = part7.siteListDeclaration
     val siteMemberListQuery: ListQueryDeclaration get() = part7.siteMemberListQuery
+    val siteTemplateShelfBase: List<ListQueryFilter> get() = part7.siteTemplateShelfBase
+    val siteTemplateShelfQuery: ListQueryDeclaration get() = part7.siteTemplateShelfQuery
     val starColors: List<StarColor> get() = part7.starColors
     val starredField: String get() = part7.starredField
     val starredMax: Long get() = part7.starredMax
@@ -4745,8 +4749,8 @@ class ContractValues internal constructor(
     val tabBarsField: String get() = part7.tabBarsField
     val tabBarsMax: Long get() = part7.tabBarsMax
     val taskListDeclaration: ListQueryDeclaration get() = part7.taskListDeclaration
-    val templateKindOptions: List<ListFilterOption> get() = part7.templateKindOptions
-    val templateListBase: List<ListQueryFilter> get() = part7.templateListBase
+    val templateKindOptions: List<ListFilterOption> get() = part8.templateKindOptions
+    val templateListBase: List<ListQueryFilter> get() = part8.templateListBase
     val templateListQuery: ListQueryDeclaration get() = part8.templateListQuery
     val tenantEmailCollection: String get() = part8.tenantEmailCollection
     val tenantEmails: List<TenantEmailEntry> get() = part8.tenantEmails

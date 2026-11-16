@@ -298,6 +298,22 @@ final class MarketplaceTests: XCTestCase {
         installPictureReadPhase(orgPinPending: pin as? String == "pending", orgPin: read, sitePins: input["sitePins"] as? String ?? ""),
         item.result as? String, "\(item.args)")
     }
+    // The template gallery's shelf (the console's TemplateGalleryShelf).
+    let plain = templateShelfQuery(search: "", limit: 24)
+    XCTAssertEqual(plain.collection, [listingsCollection])
+    XCTAssertEqual(plain.limit, 24)
+    XCTAssertTrue("\(plain.filters) \(plain.equals)".contains("kind"))
+    XCTAssertTrue("\(templateShelfQuery(search: " bakery ", limit: 24).filters)".contains("nameTokens"))
+    XCTAssertEqual(templateShelfFacts(screenCount: 5, version: "3", priceUSD: 0), "5 pages · v3 · free")
+    XCTAssertEqual(templateShelfFacts(screenCount: nil, version: "1.2.0", priceUSD: 12), "? pages · v1.2.0 · $12")
+    XCTAssertEqual(
+      templateInstalledMessage(added: 1, name: "Bakery"),
+      "Saved 1 template from \"Bakery\" to your library — open Templates to create pages from them.")
+    XCTAssertTrue(templateInstalledMessage(added: 5, name: "Bakery").hasPrefix("Saved 5 templates"))
+    XCTAssertEqual(templateShelfState(offered: false, loading: true, visible: true), .empty)
+    XCTAssertEqual(templateShelfState(offered: true, loading: true, visible: false), .loading)
+    XCTAssertEqual(templateShelfState(offered: true, loading: false, visible: true), .shown)
+    XCTAssertEqual(templateShelfState(offered: true, loading: false, visible: false), .empty)
     for item in try functionCases("installPlanOutcome") {
       let input = object(item.args[0])
       let outcome = installPlanOutcome(
