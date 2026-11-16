@@ -34,7 +34,7 @@ jest.mock('../utils/api-v1-resources', () => ({
 }))
 
 import { ApiErrors } from '@aglyn/tenant-data-admin'
-import { POST } from '../app/api/mcp/route'
+import { GET, POST } from '../app/api/mcp/route'
 
 const call = (origin = 'https://app.aglyn.com') =>
   POST(
@@ -74,3 +74,61 @@ describe('the MCP sign-in challenge (AGL-4225)', () => {
     expect(planRefusal.headers.get('www-authenticate')).toBeNull()
   })
 })
+
+describe('the MCP endpoint’s own limits and answers (AGL-4225)', () => {
+  const context = {
+    orgId: 'org-1',
+    keyId: 'grant_x',
+    keyName: 'Claude',
+    scopes: [],
+    org: {},
+    firestore: {},
+    headers: { 'X-RateLimit-Limit': '120' },
+  }
+  const send = (body: string, headers: Record<string, string> = {}) =>
+    POST(
+      new Request('https://app.aglyn.com/api/mcp', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...headers },
+        body,
+      }),
+    )
+
+  beforeEach(() => mockAuthenticate.mockResolvedValue({ context }))
+
+  it('is not served on the auth origin, and spends no credential check there', async () => {
+    mockAuthenticate.mockClear()
+    const onAuth = await POST(
+      new Request('https://auth.aglyn.com/api/mcp', {
+        method: 'POST',
+        headers: { 'x-forwarded-host': 'auth.aglyn.com' },
+        body: '{}',
+      }),
+    )
+    expect(onAuth.status).toBe(404)
+    expect(onAuth.headers.get('www-authenticate')).toBeNull()
+    expect(GET(new Request('https://auth.aglyn.com/api/mcp', { headers: { 'x-forwarded-host': 'auth.aglyn.com' } })).status).toBe(404)
+    expect(mockAuthenticate).not.toHaveBeenCalled()
+  })
+
+  it('refuses a body over the cap and a batch over 20 messages', async () => {
+    expect((await send(' '.repeat(6 * 1024 * 1024 + 1))).status).toBe(413)
+    const ping = (id: number) => ({ jsonrpc: '2.0', id, method: 'ping' })
+    const tooMany = await send(JSON.stringify(Array.from({ length: 21 }, (_, i) => ping(i))))
+    expect(tooMany.status).toBe(400)
+    expect((await send(JSON.stringify([]))).status).toBe(400)
+    const twenty = await send(JSON.stringify(Array.from({ length: 20 }, (_, i) => ping(i))))
+    expect(twenty.status).toBe(200)
+    expect(await twenty.json()).toHaveLength(20)
+  })
+
+  it('names the revision it answered in', async () => {
+    const init = await send(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26' } }))
+    expect(init.headers.get('mcp-protocol-version')).toBe('2025-03-26')
+    const later = await send(JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'ping' }), { 'mcp-protocol-version': '2025-03-26' })
+    expect(later.headers.get('mcp-protocol-version')).toBe('2025-03-26')
+    const unknown = await send(JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'ping' }), { 'mcp-protocol-version': '1999-01-01' })
+    expect(unknown.headers.get('mcp-protocol-version')).toBe('2025-06-18')
+  })
+})
+

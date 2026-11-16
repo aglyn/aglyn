@@ -41,7 +41,12 @@ type Schema = Record<string, unknown>
 export interface McpToolAnnotations {
   /** A GET: reads and changes nothing. */
   readonly readOnlyHint: boolean
-  /** A DELETE, or a write the operation marks `x-destructive`. */
+  /**
+   * MCP defines `false` as "only adds". So it is `true` for anything that can
+   * overwrite or remove what is there — PATCH, PUT, DELETE, or a write the
+   * operation marks `x-destructive` — and `false` only for a POST that
+   * creates. Meaningless on a read, where it is `false`.
+   */
   readonly destructiveHint: boolean
 }
 
@@ -193,7 +198,11 @@ export function buildMcpTools(document: Schema): McpTool[] {
         description: describeOperation(operation as Schema),
         annotations: {
           readOnlyHint: method === 'get',
-          destructiveHint: method === 'delete' || (operation as Schema)['x-destructive'] === true,
+          destructiveHint:
+            method === 'patch' ||
+            method === 'put' ||
+            method === 'delete' ||
+            (method !== 'get' && (operation as Schema)['x-destructive'] === true),
         },
         inputSchema: buildInputSchema(operation as Schema, named),
         method: method.toUpperCase(),

@@ -17,7 +17,8 @@
 
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
 import { connectorResourceMetadataUrl } from '@aglyn/aglyn/app-utils/connector-discovery'
-import { ApiErrors, apiJson, withResponseHeaders } from '@aglyn/tenant-data-admin'
+import { ApiErrors, apiJson, readCappedBody, withResponseHeaders } from '@aglyn/tenant-data-admin'
+import { connectorOrigin, refuseOnAuthOrigin } from '../_lib/connector-oauth-http'
 import { buildDocsUrl } from '../../../constants/docs-links'
 import { authenticateApiV1 } from '../../../utils/api-v1'
 import {
@@ -32,8 +33,8 @@ import {
 import {
   handleMcpMessage,
   JSON_RPC_ERRORS,
-  MCP_PROTOCOL_VERSION,
   type JsonRpcMessage,
+  negotiateProtocolVersion,
   type JsonRpcResponse,
 } from '../../../utils/mcp-protocol'
 import { buildMcpTools, buildToolRequest } from '../../../utils/mcp-tools'
@@ -84,6 +85,22 @@ async function readOutcome(response: Response) {
 }
 
 /**
+ * The largest request read, in bytes. A tool call can carry a file upload as
+ * base64 — the `/v1` media create takes one — so this sits just above what
+ * the hosting platform itself accepts (4.5 MB on Vercel) and exists for the
+ * deployments without that ceiling.
+ */
+const MCP_MAX_BODY_BYTES = 6 * 1024 * 1024
+
+/**
+ * The most messages one JSON-RPC batch may carry. The whole batch is one
+ * request — one rate-limit charge, one usage count — while every
+ * `tools/call` in it is a full `/v1` dispatch, so an unbounded batch would be
+ * unbounded work for the price of one call.
+ */
+const MCP_MAX_BATCH = 20
+
+/**
  * The challenge a 401 carries, so a client can discover sign-in. Only the
  * 401: a 403 or a 429 is about a credential that WAS recognised, and sending
  * the client off to sign in again would not help it.
@@ -96,23 +113,25 @@ function withSignInChallenge(response: Response, origin: string): Response {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const origin = new URL(request.url).origin
+  const elsewhere = refuseOnAuthOrigin(request)
+  if (elsewhere) return elsewhere
+  const { origin } = connectorOrigin(request)
   const authenticated = await authenticateApiV1(request)
   if (authenticated instanceof Response) return withSignInChallenge(authenticated, origin)
   const context = authenticated.context
+  const refuse = (status: number, code: number, message: string) =>
+    apiJson({ jsonrpc: '2.0', id: null, error: { code, message } }, { status, headers: context.headers })
 
+  const text = await readCappedBody(request, MCP_MAX_BODY_BYTES)
+  if (text === null) return refuse(413, JSON_RPC_ERRORS.invalidRequest, 'Request too large')
   let payload: unknown
   try {
-    payload = await request.json()
+    payload = JSON.parse(text)
   } catch {
-    return apiJson(
-      {
-        jsonrpc: '2.0',
-        id: null,
-        error: { code: JSON_RPC_ERRORS.parseError, message: 'Invalid JSON' },
-      },
-      { status: 400, headers: context.headers },
-    )
+    return refuse(400, JSON_RPC_ERRORS.parseError, 'Invalid JSON')
+  }
+  if (Array.isArray(payload) && (payload.length === 0 || payload.length > MCP_MAX_BATCH)) {
+    return refuse(400, JSON_RPC_ERRORS.invalidRequest, `A batch carries 1 to ${MCP_MAX_BATCH} messages`)
   }
 
   const tools = buildMcpTools(
@@ -164,9 +183,22 @@ export async function POST(request: Request): Promise<Response> {
   return apiJson(Array.isArray(payload) ? responses : responses[0], {
     headers: {
       ...context.headers,
-      'MCP-Protocol-Version': MCP_PROTOCOL_VERSION,
+      'MCP-Protocol-Version': answeredVersion(messages, request),
     },
   })
+}
+
+/**
+ * The revision this answer is in: what `initialize` negotiated when the
+ * request is one, otherwise what the client says it speaks in its
+ * `MCP-Protocol-Version` header, held to the revisions this server serves.
+ */
+function answeredVersion(messages: readonly JsonRpcMessage[], request: Request): string {
+  const initialize = messages.find((message) => message?.method === 'initialize')
+  if (initialize) {
+    return negotiateProtocolVersion((initialize.params as { protocolVersion?: unknown } | undefined)?.protocolVersion)
+  }
+  return negotiateProtocolVersion(request.headers.get('mcp-protocol-version'))
 }
 
 /**
@@ -174,6 +206,6 @@ export async function POST(request: Request): Promise<Response> {
  * to, and the specification lets a server answer `GET` with 405 to say so —
  * which is a clearer answer to a client than an SSE stream that never emits.
  */
-export function GET(): Response {
-  return ApiErrors.methodNotAllowed({ headers: { Allow: 'POST' } })
+export function GET(request: Request): Response {
+  return refuseOnAuthOrigin(request) ?? ApiErrors.methodNotAllowed({ headers: { Allow: 'POST' } })
 }

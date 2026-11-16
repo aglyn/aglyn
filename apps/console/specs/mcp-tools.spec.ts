@@ -113,14 +113,24 @@ describe('what a client is told about each tool (AGL-4225)', () => {
     expect(tools.find((tool) => tool.name === 'listSites')?.title).toBe('List sites')
   })
 
-  it('marks a read read-only, a delete destructive, and any other write neither', () => {
+  it('marks every tool by its method: reads read-only, creates additive, everything else destructive', () => {
+    // Exhaustive over the real tool list, so a new operation is judged too.
+    const counts: Record<string, number> = {}
     for (const tool of tools) {
-      expect(tool.annotations.readOnlyHint).toBe(tool.method === 'GET')
-      if (tool.method === 'DELETE') expect(tool.annotations.destructiveHint).toBe(true)
+      counts[tool.method] = (counts[tool.method] ?? 0) + 1
+      const flagged = ['mergeContact'].includes(tool.name)
+      const expected =
+        tool.method === 'GET'
+          ? { readOnlyHint: true, destructiveHint: false }
+          : tool.method === 'POST'
+            ? { readOnlyHint: false, destructiveHint: flagged }
+            : { readOnlyHint: false, destructiveHint: true }
+      expect({ name: tool.name, ...tool.annotations }).toEqual({ name: tool.name, ...expected })
     }
-    const create = tools.find((tool) => tool.name === 'createSite')
-    expect(create?.annotations).toEqual({ readOnlyHint: false, destructiveHint: false })
+    // Every method the document uses is present, so no branch above is vacuous.
+    expect(Object.keys(counts).sort()).toEqual(['DELETE', 'GET', 'PATCH', 'POST'])
   })
+
 
   it('marks a write the operation calls destructive — the contact merge removes a contact', () => {
     expect(tools.find((tool) => tool.name === 'mergeContact')?.annotations).toEqual({
