@@ -45,7 +45,7 @@
  * would otherwise write for itself. No Firestore, no React.
  */
 
-import { isDisposableEmailDomain } from '@aglyn/shared-util-email/email-deliverability'
+import { isDisposableEmailDomain } from '@aglyn/shared-util-email/disposable-email-domains'
 import {
   type AglynPostalAddress,
   normalizeAddress,
