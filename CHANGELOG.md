@@ -22,6 +22,7 @@ content on the marketing site and is written separately.
 
 - **ops:** one half-written import no longer 500s the AI jobs list, and three checks stop reading red falsely
 - **console:** a refused listen woken by window focus backs off with its age ([AGL-2945](https://linear.app/aglyn/issue/AGL-2945))
+- **ai:** Improve it no longer keeps a page's old layout over a short tagline or a button that calls the business ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
 - **ci:** Functions drift waits out the deploy on a promotion push instead of reading stale at +1 min
 - **apple:** Analytics › Funnels draws as one column, the funnel picked in its head ([AGL-4058](https://linear.app/aglyn/issue/AGL-4058))
 - **apple:** the staff console back link with no place to name reads "Back" ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667))
