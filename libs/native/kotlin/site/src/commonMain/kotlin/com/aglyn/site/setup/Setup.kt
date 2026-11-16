@@ -202,6 +202,10 @@ fun socialLinksOf(host: Map<String, Any?>?): List<SocialLink> = (host.at("busine
   SocialLink((map["label"] as? String).orEmpty(), (map["url"] as? String).orEmpty())
 }.orEmpty()
 
+/** What the favicon card says before an icon is chosen (the console's `FAVICON_HINT`). */
+const val FAVICON_HINT =
+  "Recommended: one square PNG, SVG or JPG, 512×512 or larger — every tab, bookmark and home-screen size is generated for you."
+
 /** The SEO form's limits (`hostSeo`, `hostSeoEntity`, `hostSeoAgent`). */
 object SeoLimits {
   const val TITLE = 60
@@ -490,6 +494,14 @@ class HostSettingsApi(private val api: ConsoleApiClient, private val writer: Fir
   suspend fun replace(fields: Map<String, Any?>) {
     writer.update(path, fields + ("updatedAt" to firestoreNow()))
     announce()
+  }
+
+  /**
+   * The favicon's save (the console's `saveMirroredHostFields`): the route writes `seo.favicon` (`""` clears it) and puts it
+   * on every member's site list row in the same request.
+   */
+  suspend fun saveFavicon(favicon: String) {
+    api.request("/api/hosts/sync-memberships", ApiMethod.POST, jsonValue(mapOf("hostId" to hostId, "favicon" to favicon)))
   }
 
   private suspend fun theme(body: Map<String, Any?>): JsonElement? =

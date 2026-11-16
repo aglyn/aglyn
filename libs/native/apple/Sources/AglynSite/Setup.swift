@@ -252,6 +252,10 @@ public func socialLinks(of host: [String: Any]?) -> [SocialLink] {
   } ?? []
 }
 
+/// What the favicon card says before an icon is chosen (the console's `FAVICON_HINT`).
+public let faviconHint =
+  "Recommended: one square PNG, SVG or JPG, 512×512 or larger — every tab, bookmark and home-screen size is generated for you."
+
 /// The SEO form's limits (`hostSeo`, `hostSeoEntity`, `hostSeoAgent`).
 public enum SeoLimits {
   public static let title = 60
@@ -636,6 +640,12 @@ public struct HostSettingsAPI: Sendable {
     data["updatedAt"] = Date()
     try await writer.merge(path, data)
     await announce()
+  }
+
+  /// The favicon's save (the console's `saveMirroredHostFields`): the route writes `seo.favicon` (`""` clears it) and puts it
+  /// on every member's site list row in the same request.
+  public func saveFavicon(_ favicon: String) async throws {
+    _ = try await api.request("/api/hosts/sync-memberships", method: .post, body: jsonBody(["hostId": hostID, "favicon": favicon]))
   }
 
   private func theme(_ body: [String: Any?]) async throws -> JSONValue? {

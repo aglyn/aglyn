@@ -321,4 +321,19 @@ final class SetupTests: XCTestCase {
     XCTAssertEqual(listed.map(\.id), ["theme-cool", "theme-warm", "installed--harvest"])
     XCTAssertEqual(listed.map(\.kind), ["custom", "custom", "installed"])
   }
+
+  /// The favicon saves through the console's route (`saveMirroredHostFields`), which re-fans it into every member's site
+  /// list row: never a direct write of `seo.favicon`.
+  func testTheFaviconSavesThroughTheMembershipsRoute() async throws {
+    let transport = FontsTransport()
+    let api = ConsoleAPIClient(origin: "https://console.test", getIDToken: { _ in "t" }, transport: transport, sleep: { _ in }, maxAttempts: 1)
+    let settings = HostSettingsAPI(api: api, writer: NoFirestoreWrites(), hostID: "h1")
+    try await settings.saveFavicon("https://cdn.example.com/icon.png")
+    try await settings.saveFavicon("")
+    XCTAssertEqual(transport.sent.map { $0.url?.path }, ["/api/hosts/sync-memberships", "/api/hosts/sync-memberships"])
+    let bodies = transport.sent.compactMap { $0.httpBody.flatMap { JSONValue.decode($0) } }
+    XCTAssertEqual(bodies.first?["hostId"]?.stringValue, "h1")
+    XCTAssertEqual(bodies.first?["favicon"]?.stringValue, "https://cdn.example.com/icon.png")
+    XCTAssertEqual(bodies.last?["favicon"]?.stringValue, "")
+  }
 }

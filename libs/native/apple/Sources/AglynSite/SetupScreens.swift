@@ -462,11 +462,12 @@ private struct SeoSection: View {
         "Page title pattern", text: f("seo.titlePattern"), max: SeoLimits.titlePattern,
         supporting: "Empty uses \(contracts.defaultTitlePattern)", placeholder: contracts.defaultTitlePattern, enabled: canEdit)
     }
+    FaviconCard(context: context, host: host, api: api, canEdit: canEdit)
     HostTextCard(
-      title: "Icons and social image", host: host, paths: ["seo.favicon", "seo.appIcon", "seo.image", "seo.imageAlt"], api: api,
+      title: "App icon and social image", host: host, paths: ["seo.appIcon", "seo.image", "seo.imageAlt"], api: api,
       canEdit: canEdit, message: "Choose each image from your media library."
     ) { f in
-      ForEach([("seo.favicon", "Favicon"), ("seo.appIcon", "App icon"), ("seo.image", "Social image")], id: \.0) { path, label in
+      ForEach([("seo.appIcon", "App icon"), ("seo.image", "Social image")], id: \.0) { path, label in
         MediaImageField(context: context, label: label, value: f(path), enabled: canEdit)
       }
       AglynCountedField(
@@ -524,6 +525,48 @@ private struct SeoSection: View {
     ("streetAddress", "Street"), ("addressLocality", "City"), ("addressRegion", "Region"), ("postalCode", "Postal code"),
     ("addressCountry", "Country"),
   ]
+}
+
+/// The site's favicon (the console's FaviconCard): picked from the media library, or an icon's address pasted, and saved
+/// through the console's route (`/api/hosts/sync-memberships`), which writes `seo.favicon` and puts the new icon on every
+/// member's site list in the same request, as the console's save does.
+private struct FaviconCard: View {
+  let context: NativePluginContext
+  let host: [String: Any]
+  let api: HostSettingsAPI
+  let canEdit: Bool
+  @State private var value = ""
+  @State private var seeded: String?
+  @State private var runner = newRunner()
+
+  private var stored: String { textAt(host, "seo.favicon") }
+
+  var body: some View {
+    AglynFormCard(
+      "Favicon", message: faviconHint, dirty: value != stored, canSave: canEdit, busy: runner.busy, error: runner.error,
+      notice: runner.notice,
+      onDiscard: {
+        value = stored
+        runner.clear()
+      },
+      onSave: {
+        let next = value.trimmed
+        runner.run(next.isEmpty ? "Favicon removed" : "Favicon saved") { try await api.saveFavicon(next) }
+      }
+    ) {
+      MediaImageField(context: context, label: "Favicon", value: $value, enabled: canEdit)
+      AglynCountedField(
+        "Or paste an icon URL", text: $value,
+        supporting: "An external icon is a legitimate answer — most sites pick from the library above.", keyboard: .url,
+        enabled: canEdit)
+    }
+    .accessibilityIdentifier("favicon-card")
+    .onChange(of: stored, initial: true) { _, next in
+      // A newer copy of the site keeps what was typed and moves every other field to it (AGL-4047).
+      value = seeded.map { rebased(value, previous: $0, next: next) } ?? next
+      seeded = next
+    }
+  }
 }
 
 private struct LocalBusinessCard: View {

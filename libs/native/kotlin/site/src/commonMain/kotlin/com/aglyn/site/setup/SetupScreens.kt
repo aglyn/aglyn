@@ -413,15 +413,16 @@ private fun SeoSection(context: NativePluginContext, hostId: String, host: Map<S
       supporting = "Empty uses ${c.defaultTitlePattern}",
     )
   }
+  FaviconCard(context, host, api, canEdit)
   HostTextCard(
-    "Icons and social image",
+    "App icon and social image",
     host,
-    listOf("seo.favicon", "seo.appIcon", "seo.image", "seo.imageAlt"),
+    listOf("seo.appIcon", "seo.image", "seo.imageAlt"),
     api,
     canEdit,
     description = "Choose each image from your media library.",
   ) { f ->
-    for ((path, label) in listOf("seo.favicon" to "Favicon", "seo.appIcon" to "App icon", "seo.image" to "Social image")) {
+    for ((path, label) in listOf("seo.appIcon" to "App icon", "seo.image" to "Social image")) {
       MediaImageField(context, label, f[path].orEmpty(), { f[path] = it }, enabled = canEdit)
     }
     CountedTextField("Image description", f["seo.imageAlt"].orEmpty(), { f["seo.imageAlt"] = it }, max = SeoLimits.IMAGE_ALT, enabled = canEdit, supporting = "What the social image shows, for screen readers")
@@ -470,6 +471,39 @@ private fun SeoSection(context: NativePluginContext, hostId: String, host: Map<S
       modifier = Modifier.testTag("seo-discourage"),
     )
     runner.error?.let { NoticeBanner(it, StatusTone.ERROR) }
+  }
+}
+
+/**
+ * The site's favicon (the console's FaviconCard): picked from the media library, or an icon's address pasted, and saved
+ * through the console's route (`/api/hosts/sync-memberships`), which writes `seo.favicon` and puts the new icon on every
+ * member's site list in the same request, as the console's save does.
+ */
+@Composable
+private fun FaviconCard(context: NativePluginContext, host: Map<String, Any?>, api: HostSettingsApi, canEdit: Boolean) {
+  val stored = host.text("seo.favicon")
+  val value = rememberRebased(stored)
+  val runner = rememberRunner()
+  FormCard(
+    title = "Favicon",
+    description = FAVICON_HINT,
+    dirty = value.value != stored,
+    canSave = canEdit,
+    busy = runner.busy,
+    error = runner.error,
+    notice = runner.notice,
+    onDiscard = { value.value = stored; runner.clear() },
+    onSave = {
+      val next = value.value.trim()
+      runner.run(if (next.isEmpty()) "Favicon removed" else "Favicon saved") { api.saveFavicon(next) }
+    },
+    modifier = Modifier.testTag("favicon-card"),
+  ) {
+    MediaImageField(context, "Favicon", value.value, { value.value = it }, enabled = canEdit)
+    CountedTextField(
+      "Or paste an icon URL", value.value, { value.value = it }, enabled = canEdit, keyboardType = KeyboardType.Uri,
+      supporting = "An external icon is a legitimate answer — most sites pick from the library above.",
+    )
   }
 }
 
