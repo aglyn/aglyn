@@ -1104,6 +1104,14 @@
     {
       "path": "libs/shared/util/tools/src/lib/list-query/list-query-refusals.ts",
       "why": "Reached by the CRM list declarations: the planner's refusal wording."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/artifact-provenance.ts",
+      "why": "Where an installed copy came from (resolveProvenance), read by the native listing page to decide whether a copy is behind the listing and offer the update review (AGL-3668); no imports."
+    },
+    {
+      "path": "libs/plugins/marketplace/src/lib/model/artifact-merge.ts",
+      "why": "The words an update review uses for each change (describeChange, summarizeValue), replayed by the native update review of a copied listing (AGL-3668); imports only the pure artifact-provenance."
     }
   ]
 }
