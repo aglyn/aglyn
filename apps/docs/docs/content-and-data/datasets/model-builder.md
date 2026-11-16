@@ -75,6 +75,17 @@ To show the photo, select an Image inside a repeat or on a record template, pres
 When Aglyn AI builds a dataset for a list people look at, such as pieces, a menu or
 classes, it adds this field and gives each record a stock photo you can replace.
 
+### Icon fields {#icon-fields}
+
+An **Icon** field gives each record its own icon: an integration's logo mark, a service,
+a perk. Pick **Icon** in the field's type list. In the record editor, press **Choose
+icon** and pick one from the same icon library the Icon element offers. The records list
+shows each record's icon beside its name.
+
+To show it, select an Icon inside a repeat or on a record template, press the `{}` button
+beside its **Icon**, and pick the field from the record's group. Each copy of the repeat
+then shows its own record's icon, on the live site as in the Besigner.
+
 ### Page fields {#page-fields}
 
 A **Page** field links a record to one of your site's pages: each service to the page
