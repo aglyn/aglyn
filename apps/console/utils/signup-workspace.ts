@@ -480,3 +480,54 @@ export function needsBackstopWorkspace(
   if (!Number.isFinite(createdMs)) return false
   return nowMs - createdMs < SIGN_UP_WORKSPACE_BACKSTOP_MS
 }
+
+/**
+ * How long a verified sign-up waits to learn whether an invitation is
+ * waiting for it (AGL-4047). The route answers in well under a second; past
+ * this the door provisions as it always has.
+ */
+export const SIGN_UP_INVITE_CHECK_MS = 3_000
+
+/**
+ * Is an invitation waiting for this verified account (AGL-4047)?
+ *
+ * Asked by the verified sign-up doors (Google, single sign-on) just after the
+ * account exists and before they create a workspace: a person who was
+ * invited is opened into the invited workspace by the console's automatic
+ * join, and a workspace of their own made here would be one they never asked
+ * for — and the one they were dropped into. Asked with the account's own
+ * token, so only the holder of a confirmed address ever learns it has an
+ * invitation; the form never asks before the account exists.
+ *
+ * `false` on a refusal, a failure or no answer inside the deadline: the door
+ * then provisions as before, which is the worst case this replaces.
+ */
+export async function hasPendingInvite(
+  user: MaybeTokenSource,
+  deadlineMs = SIGN_UP_INVITE_CHECK_MS,
+): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<false>((resolve) => {
+    timer = setTimeout(() => resolve(false), deadlineMs)
+  })
+  const ask = (async () => {
+    try {
+      const response = await authorizedFetch(user, '/api/orgs/invites?mine=1')
+      if (!response.ok) return false
+      const payload = await response.json().catch(() => null)
+      const invites: unknown[] = Array.isArray(payload?.invites)
+        ? payload.invites
+        : []
+      return invites.some(
+        (invite) => Boolean((invite as { orgId?: unknown } | null)?.orgId),
+      )
+    } catch {
+      return false
+    }
+  })()
+  try {
+    return await Promise.race([ask, late])
+  } finally {
+    clearTimeout(timer)
+  }
+}
