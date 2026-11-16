@@ -813,6 +813,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/commerce-and-bookings/commerce/ship-with-your-own-easyship-sendcloud-or-shipperhq',
     title: 'Ship with your own Easyship, Sendcloud or ShipperHQ',
   },
+  showToSignedInVisitors: {
+    path: '/building-sites/besigner/show-to-signed-in-visitors',
+    title: 'Show to signed-in or signed-out visitors',
+  },
   siteBackupAndPackages: {
     path: '/building-sites/site-backup-and-packages',
     title: 'Site backup and packages',
@@ -1113,7 +1117,7 @@ export const DOCS_HELP_ANCHORS = {
   membersOnly: ['#let-visitors-sign-up', '#sign-in-sign-up-and-recovery-pages', '#forgotten-passwords', '#gate-a-screen', '#manage-your-members', '#suspend-or-reactivate-a-member', '#tips', '#related'],
   menusAndNavigation: ['#dropdown-menu', '#mega-menu', '#drawer--menu-button', '#the-mobile-nav-preset', '#the-dropdown-panel-preset', '#interactions-for-menus', '#responsive-visibility', '#related'],
   migrationPatterns: ['#renamed-a-screen', '#consolidated-pages', '#moved-a-site-into-aglyn', '#avoiding-loops', '#related'],
-  modelBuilder: ['#define-the-model', '#display-name-vs-reference-id', '#page-address-fields', '#image-fields', '#page-fields', '#edit-records', '#tips', '#related'],
+  modelBuilder: ['#define-the-model', '#display-name-vs-reference-id', '#page-address-fields', '#image-fields', '#icon-fields', '#page-fields', '#edit-records', '#tips', '#related'],
   multilingual: ['#languages-card', '#locale-variants', '#hreflang--discovery', '#language-switcher', '#text-direction', '#related'],
   multiSelect: ['#select-multiple', '#move-the-whole-selection', '#what-the-inspector-shows', '#tips', '#related'],
   musicPlayer: ['#adding-tracks', '#rights', '#takedowns', '#related'],
@@ -1170,6 +1174,7 @@ export const DOCS_HELP_ANCHORS = {
   shipping: ['#zones-and-rates', '#ask-aglyn-ai', '#where-parcels-ship-from', '#labels-and-live-carrier-rates'],
   shippingLabelsAndLiveRates: ['#before-you-start', '#shipping-labels-settings', '#ship-from', '#boxes', '#label-options', '#checkout-services', '#paying-for-labels', '#carrier-accounts', '#product-shipping-fields', '#carrier-rates-at-checkout', '#address-checks', '#buy-a-label', '#void-a-label', '#batch-labels', '#return-labels', '#tracking', '#label-spend', '#troubleshooting', '#related'],
   shipWithYourOwnEasyshipSendcloudOrShipperhq: ['#before-you-start', '#connect-an-account', '#easyship', '#sendcloud', '#shipperhq', '#tracking-webhooks', '#what-changes', '#disconnect', '#troubleshooting', '#related'],
+  showToSignedInVisitors: ['#choose-who-sees-an-element', '#what-visitors-see'],
   siteBackupAndPackages: ['#backup-and-restore-card', '#what-a-package-carries', '#download-a-backup', '#export-items', '#import-a-package', '#1-upload', '#2-items', '#3-missing-items', '#4-changes', '#5-review', '#6-import', '#undo-an-import', '#moving-a-site-to-another-of-your-sites'],
   siteLooks: ['#choose-a-style', '#each-styles-layout', '#an-ai-starters-look', '#how-the-look-is-made', '#your-theme-afterwards', '#change-the-look-later', '#related'],
   siteProtection: ['#where-these-controls-live', '#per-screen-passwords', '#custom-error-screens', '#maintenance-mode', '#related'],
