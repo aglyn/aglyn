@@ -479,6 +479,20 @@ function healthyConsoleConfig() {
         conditionGroup: [{ conditions: [{ type: 'path', op: 'pre', value: '/.well-known/' }] }],
       },
       {
+        name: 'MCP + connector sign-in bypass',
+        id: 'rule_mcp_connector_sign_in',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [
+          {
+            conditions: [
+              { type: 'path', op: 're', value: '^/api/(mcp(/server-card)?|oauth/(register|token|revoke))$' },
+            ],
+          },
+        ],
+      },
+      {
         name: 'Native app API bypass',
         id: 'rule_native_app_api',
         active: true,

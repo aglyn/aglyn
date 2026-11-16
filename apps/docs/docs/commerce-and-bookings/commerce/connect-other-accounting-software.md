@@ -1,16 +1,17 @@
 ---
 sidebar_position: 22
 title: Connect other accounting software
-description: Post every sale, refund, Aglyn fee and Stripe payout from your store to accounting software other than QuickBooks Online or Xero, such as QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books or Wave. Rolling out.
+description: Post every sale, refund, Aglyn fee and Stripe payout from your store to accounting software other than QuickBooks Online or Xero, such as QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books or Wave. Not offered yet.
 unlisted: true
 ---
 
 # Connect other accounting software
 
-:::caution Rolling out
-Accounting is a **release-flagged feature** that is **not yet available** on
-aglyn.com-hosted workspaces. Until it is switched on for your workspace, the
-**Accounting** tab does not appear in your organization.
+:::note Not offered yet
+**Connect other accounting software** is not yet offered on aglyn.com-hosted
+workspaces: the **Accounting** tab connects
+[QuickBooks Online](./connect-quickbooks-online.md) and
+[Xero](./connect-xero.md).
 :::
 
 When your books are not in QuickBooks Online or Xero, **Connect other
