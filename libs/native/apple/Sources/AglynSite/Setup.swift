@@ -681,6 +681,14 @@ public struct HostSettingsAPI: Sendable {
 
   public func deleteTheme(_ id: String) async throws { _ = try await theme(["action": "delete", "id": id]) }
 
+  /// The picker's preview of a theme before it is used (`preview`): its colours and type ramp in light and dark, with the
+  /// edits stashed on it laid over, as the console's preview renders it. Changes nothing.
+  public func previewTheme(kind: String, id: String? = nil) async throws -> ThemePreviewAnswer {
+    var target: [String: Any?] = ["kind": kind]
+    if let id { target["id"] = id }
+    return themePreviewAnswer(of: try await theme(["action": "preview", "target": target]))
+  }
+
   /// Back to the email's default design (`versionId: null`), as Reset to default does.
   public func resetEmail(_ key: String) async throws {
     try await writer.merge(path + ["emailTemplates", key], ["versionId": NSNull()])

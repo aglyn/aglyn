@@ -546,6 +546,13 @@ class HostSettingsApi(private val api: ConsoleApiClient, private val writer: Fir
     theme(mapOf("action" to "delete", "id" to id))
   }
 
+  /**
+   * The picker's preview of a theme before it is used (`preview`): its colours and type ramp in light and dark, with the edits
+   * stashed on it laid over, as the console's preview renders it. Changes nothing.
+   */
+  suspend fun previewTheme(kind: String, id: String? = null): ThemePreviewAnswer =
+    themePreviewAnswerOf(theme(mapOf("action" to "preview", "target" to buildMap { put("kind", kind); id?.let { put("id", it) } })))
+
   /** Back to the email's default design (`versionId: null`), as Reset to default does. */
   suspend fun resetEmail(key: String) {
     writer.update("$path/emailTemplates/$key", mapOf("versionId" to null))
