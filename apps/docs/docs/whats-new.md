@@ -10,7 +10,18 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## November 2026 — Aglyn 1.0 (newest)
+## November 2026 — accounting sync (newest)
+
+- **Accounting** — connect [QuickBooks Online](commerce-and-bookings/commerce/connect-quickbooks-online.md)
+  or [Xero](commerce-and-bookings/commerce/connect-xero.md) and every paid order, refund,
+  Aglyn fee and Stripe payout is posted to your books as it happens, to the accounts you
+  choose: a sales receipt (or invoice and payment) per order, or one summary journal a
+  day. Cash, room charges, tips, gift cards, store credit and marketplace sales each post
+  the way they were paid. Set a start date to bring in earlier sales; anything the ledger
+  refuses waits under **Needs attention** with its reason and a Retry button. Included
+  with every plan that sells online.
+
+## November 2026 — Aglyn 1.0
 
 - **Messages on a quote.** [Messages with your customer](commerce-and-bookings/commerce/quotes-and-proofs.md#messages)
   — reply to a customer from the quote, in the same email conversation as the quote,
@@ -917,26 +928,6 @@ for the how-to.
   on or off, shows what each needs and its limits, and asks Stripe to enable them on
   your payout account. Stablecoin payments can be turned on when the platform offers
   them.
-
-<!--
-  AGL-3614 — Accounting is built and release-flagged OFF (`release_accounting`) until a
-  deployment has its Intuit or Xero app credentials, or a Codat API key (AGL-3636, AGL-3701). This entry is held unpublished, like
-  the two guides it links (`unlisted: true`): when the flag is switched on, remove this
-  comment's markers, move "(newest)" here from the heading below, and delete
-  `unlisted: true` from commerce-and-bookings/commerce/connect-quickbooks-online.md and
-  connect-xero.md.
-
-## October 2026 — accounting sync
-
-- **Accounting** — connect [QuickBooks Online](commerce-and-bookings/commerce/connect-quickbooks-online.md)
-  or [Xero](commerce-and-bookings/commerce/connect-xero.md) — or, where offered, QuickBooks
-  Desktop, NetSuite, Sage, FreshBooks, Zoho Books or Wave — and every paid order, refund,
-  Aglyn fee and Stripe payout is posted to your books as it happens, to the accounts you
-  choose: a sales receipt (or invoice and payment) per order, or one summary journal a
-  day. Set a start date to bring in earlier sales; anything the ledger refuses waits
-  under **Needs attention** with its reason and a Retry button. Included with every plan
-  that sells online.
--->
 
 <!--
   AGL-3644 — Delivery apps are built and hidden until a deployment holds a partner

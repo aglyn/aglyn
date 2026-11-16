@@ -39,6 +39,7 @@ let mockAuth: object | null = { name: 'auth' }
 let mockEmit: ((user: { uid: string } | null) => void) | null = null
 const mockUnsubscribe = jest.fn()
 const mockHeal = jest.fn()
+const mockSignedOut = jest.fn()
 
 jest.mock('firebase/auth', () => ({
   onIdTokenChanged: (
@@ -53,6 +54,7 @@ jest.mock('firebase/auth', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useAuth: () => mockAuth,
   reportFirestoreSessionHeal: () => mockHeal(),
+  setFirestoreSessionSignedOut: (next: boolean) => mockSignedOut(next),
 }))
 
 import { useCrossTabSessionHeal } from '../hooks/use-cross-tab-session-heal'
@@ -63,6 +65,7 @@ beforeEach(() => {
   mockAuth = { name: 'auth' }
   mockEmit = null
   mockHeal.mockClear()
+  mockSignedOut.mockClear()
   mockUnsubscribe.mockClear()
 })
 
@@ -110,6 +113,18 @@ describe('useCrossTabSessionHeal', () => {
     emit('user-1')
     emit(null)
     expect(mockHeal).not.toHaveBeenCalled()
+  })
+
+  it('tells refused listeners when nobody is signed in, and when somebody is again', () => {
+    // A page held mounted behind the re-auth prompt parks its refused
+    // listens on this, instead of reopening them into certain denials.
+    renderHook(() => useCrossTabSessionHeal())
+    emit('user-1')
+    expect(mockSignedOut).toHaveBeenLastCalledWith(false)
+    emit(null)
+    expect(mockSignedOut).toHaveBeenLastCalledWith(true)
+    emit('user-1')
+    expect(mockSignedOut).toHaveBeenLastCalledWith(false)
   })
 
   it('unsubscribes, and does nothing without an auth instance', () => {
