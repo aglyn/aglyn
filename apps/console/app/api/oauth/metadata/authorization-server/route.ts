@@ -19,7 +19,12 @@ import {
   buildAuthorizationServerMetadata,
   CONNECTOR_CORS_HEADERS,
 } from '@aglyn/tenant-data-admin'
-import { connectorPreflight } from '../../../_lib/connector-oauth-http'
+import {
+  connectorOrigin,
+  connectorPreflight,
+  discoveryCacheControl,
+  refuseOnAuthOrigin,
+} from '../../../_lib/connector-oauth-http'
 
 // lockdown-423: exempt — a public discovery document (RFC 8414) fetched with
 // no caller identity; it names the sign-in endpoints and acts for no
@@ -29,13 +34,16 @@ export const dynamic = 'force-dynamic'
 
 /**
  * `/.well-known/oauth-authorization-server`, rewritten here by
- * `middleware.ts` (AGL-4225). The issuer is the origin the request arrived
- * on, so every deployment describes itself and none names another.
+ * `middleware.ts` (AGL-4225). The issuer is `connectorOrigin` — the
+ * configured console URL, or the proxy-reported host where none is set — and
+ * the auth origin is refused, because it is not the issuer.
  */
 export function GET(request: Request): Response {
-  const origin = new URL(request.url).origin
-  return Response.json(buildAuthorizationServerMetadata(origin), {
-    headers: { ...CONNECTOR_CORS_HEADERS, 'Cache-Control': 'public, max-age=300' },
+  const refused = refuseOnAuthOrigin(request)
+  if (refused) return refused
+  const origin = connectorOrigin(request)
+  return Response.json(buildAuthorizationServerMetadata(origin.origin), {
+    headers: { ...CONNECTOR_CORS_HEADERS, 'Cache-Control': discoveryCacheControl(origin) },
   })
 }
 

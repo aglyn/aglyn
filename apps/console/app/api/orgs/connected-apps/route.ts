@@ -39,6 +39,7 @@ import {
   memberHasOrgPermission,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import { recordWithoutFailing } from '../../_lib/connector-oauth-http'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 async function handler(request: Request): Promise<Response> {
@@ -101,11 +102,14 @@ async function handler(request: Request): Promise<Response> {
     if (!grantId) return Response.json({ error: 'Missing grantId' }, { status: 400 })
     const result = await disconnectConnectorGrant(orgId, grantId)
     if (result.disconnected) {
-      await logOrgActivity(orgId, { uid: decoded.uid, email: decoded.email }, 'Disconnected an app', {
-        type: 'org',
-        id: grantId,
-        ...(result.appName ? { name: result.appName } : {}),
-      })
+      // The connection has ended; the record of it must not turn that into a 500.
+      await recordWithoutFailing(() =>
+        logOrgActivity(orgId, { uid: decoded.uid, email: decoded.email }, 'Disconnected an app', {
+          type: 'org',
+          id: grantId,
+          ...(result.appName ? { name: result.appName } : {}),
+        }),
+      )
     }
     return Response.json({ disconnected: result.disconnected })
   } catch (error) {

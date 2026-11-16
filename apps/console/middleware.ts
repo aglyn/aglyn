@@ -457,8 +457,10 @@ export async function middleware(request: NextRequest) {
   }
   // Connector sign-in's three discovery documents (AGL-4225), the same way:
   // by exact path, so every other name in the namespace still 404s. NOT on
-  // the auth origin, which is not the issuer — its gate below stays closed
-  // and an OAuth probe there still finds nothing.
+  // the auth origin, which is not the issuer: there the namespace stays
+  // refused here, and `/oauth/*` below. The connector's API routes on that
+  // host (`/api/oauth/*`, `/api/mcp`) sit outside this middleware's matcher
+  // and refuse it themselves, through `refuseOnAuthOrigin`.
   const onAuthOrigin = hostnameOf(request.headers.get('host')) === `auth.${WORKSPACE_DOMAIN}`
   const discoveryRoute = onAuthOrigin ? null : connectorDiscoveryRoute(pathname)
   if (discoveryRoute) {

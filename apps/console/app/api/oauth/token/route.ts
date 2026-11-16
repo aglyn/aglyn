@@ -19,6 +19,7 @@ import { connectorResourceFor } from '@aglyn/aglyn/app-utils/connector-discovery
 import {
   CONNECTOR_CORS_HEADERS,
   exchangeConnectorCode,
+  isConnectorClientIdFormat,
   logOrgActivity,
   NO_STORE_HEADERS,
   oauthErrorResponse,
@@ -27,8 +28,11 @@ import {
 } from '@aglyn/tenant-data-admin'
 import {
   connectorBudget,
+  connectorOrigin,
   connectorPreflight,
   readConnectorForm,
+  recordWithoutFailing,
+  refuseOnAuthOrigin,
 } from '../../_lib/connector-oauth-http'
 
 // lockdown-423: exempt — an OAuth endpoint answers in OAuth's own errors, so
@@ -43,9 +47,19 @@ export const dynamic = 'force-dynamic'
 const MAX_TOKEN_REQUEST_BYTES = 4 * 1024
 
 /**
- * FAILED token requests one address may make per window. Only failures are
- * counted — a client refreshing on schedule must never be refused by its own
- * traffic — and a guess at a code or a refresh token is a failure.
+ * FAILED token requests per window. Only failures are counted — a client
+ * refreshing on schedule must never be refused by its own traffic — and a
+ * guess at a code or a refresh token is a failure.
+ *
+ * Kept per address AND per registered client. Claude calls from a provider's
+ * shared addresses, so a per-address bucket alone would let one tenant's
+ * misbehaving connection refuse every other tenant's refresh. A failure made
+ * with a REGISTERED client id is charged to that client's own bucket at the
+ * address; one with no client, an unknown client or a malformed request is
+ * charged to the address. A request is refused when either bucket it would
+ * draw on is spent. Nothing here reads anything before the refusal: the
+ * client id is taken from the form, and an invented one is charged to the
+ * address once its lookup finds nothing, so inventing ids buys nothing.
  */
 const FAILURES = connectorBudget('oauth-token-failures', 30, 60_000)
 
@@ -58,10 +72,14 @@ const FAILURES = connectorBudget('oauth-token-failures', 30, 60_000)
  * the token or the verifier it was given — each description is a constant.
  */
 export async function POST(request: Request): Promise<Response> {
-  const refused = FAILURES.refusal(request)
-  if (refused) return refused
+  const elsewhere = refuseOnAuthOrigin(request)
+  if (elsewhere) return elsewhere
+  const addressRefused = FAILURES.refusal(request)
+  if (addressRefused) return addressRefused
+  /** Which bucket a failure is charged to; the client's once it is known to exist. */
+  let chargeTo: string | undefined
   const fail = (status: number, error: string, description?: string) => {
-    FAILURES.charge(request)
+    FAILURES.charge(request, chargeTo)
     return oauthErrorResponse(status, error, description)
   }
 
@@ -72,8 +90,12 @@ export async function POST(request: Request): Promise<Response> {
   }
   const { params, duplicated } = form
   if (duplicated.length) return fail(400, 'invalid_request', 'A parameter was sent more than once')
+  if (isConnectorClientIdFormat(params.client_id)) {
+    const clientRefused = FAILURES.refusal(request, params.client_id)
+    if (clientRefused) return clientRefused
+  }
 
-  const origin = new URL(request.url).origin
+  const { origin } = connectorOrigin(request)
   if (params.resource && params.resource !== connectorResourceFor(origin)) {
     return fail(400, 'invalid_target', 'resource must be this server’s MCP endpoint')
   }
@@ -82,6 +104,7 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const client = await readConnectorClient(params.client_id)
     if (!client) return fail(401, 'invalid_client', 'The client is not registered')
+    chargeTo = client.clientId
 
     if (params.grant_type === 'authorization_code') {
       if (!params.code || !params.redirect_uri || !params.code_verifier) {
@@ -95,12 +118,17 @@ export async function POST(request: Request): Promise<Response> {
         resource: params.resource,
       })
       if (!result.ok) return fail(400, result.error, result.description)
-      if (result.connected) {
-        await logOrgActivity(
-          result.connected.orgId,
-          { uid: result.connected.uid, email: result.connected.email },
-          'Connected an app',
-          { type: 'org', id: result.connected.grantId, name: result.connected.clientName },
+      // The exchange is committed: the code is spent and the tokens exist.
+      // Nothing after this line may stop them reaching the client.
+      const connected = result.connected
+      if (connected) {
+        await recordWithoutFailing(() =>
+          logOrgActivity(
+            connected.orgId,
+            { uid: connected.uid, email: connected.email },
+            'Connected an app',
+            { type: 'org', id: connected.grantId, name: connected.clientName },
+          ),
         )
       }
       return Response.json(result.tokens, { headers: { ...NO_STORE_HEADERS, ...CONNECTOR_CORS_HEADERS } })

@@ -30,9 +30,12 @@
  * themselves are built by `connector-oauth.ts` in the data layer, from these
  * same constants.
  *
- * Nothing here names a host. Issuer and resource are the console origin the
- * request arrived on, so a preview deployment, localhost and a self-hosted
- * install each describe themselves.
+ * Nothing here names a host: these are paths, and the functions below take
+ * the origin as an argument. Which origin is decided in ONE place, the
+ * console's `connectorOrigin` — the configured console URL
+ * (`NEXT_PUBLIC_CONSOLE_URL`) when it is set, and only otherwise the host the
+ * deployment's proxy reports. A request header cannot choose the issuer of a
+ * deployment that has configured its console URL.
  *==========================================*/
 
 /** The MCP endpoint, which is the protected resource. */

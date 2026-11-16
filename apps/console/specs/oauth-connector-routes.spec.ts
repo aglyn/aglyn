@@ -106,6 +106,7 @@ import { POST as token } from '../app/api/oauth/token/route'
 import { POST as revoke } from '../app/api/oauth/revoke/route'
 import { POST as consent } from '../app/api/oauth/consent/route'
 import { GET as listApps, POST as appsAction } from '../app/api/orgs/connected-apps/route'
+import { connectorOrigin } from '../app/api/_lib/connector-oauth-http'
 
 const ORIGIN = 'https://app.aglyn.com'
 const CLAUDE = 'https://claude.ai/api/mcp/auth_callback'
@@ -474,3 +475,133 @@ describe('/api/orgs/connected-apps', () => {
     )
   })
 })
+
+describe('fixes from review (AGL-4225)', () => {
+  const tokens = {
+    access_token: `aglyn_at_${'a'.repeat(43)}`,
+    token_type: 'Bearer',
+    expires_in: 3600,
+    refresh_token: `aglyn_rt_${'r'.repeat(43)}`,
+    scope: 'contacts:read',
+  }
+
+  it('1 · a failing activity log after a committed exchange still hands the tokens over', async () => {
+    mockStore.exchangeConnectorCode.mockResolvedValue({
+      ok: true,
+      tokens,
+      connected: { grantId: 'grant_x', orgId: 'org-1', uid: 'user-1', email: null, clientName: 'Claude' },
+    })
+    mockLogOrgActivity.mockImplementationOnce(() => {
+      throw new Error('firestore down')
+    })
+    const response = await token(
+      form({ grant_type: 'authorization_code', client_id: CLIENT_ID, code: 'aglyn_ac_x', redirect_uri: CLAUDE, code_verifier: 'v'.repeat(43) }),
+    )
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual(tokens)
+
+    mockLogOrgActivity.mockRejectedValueOnce(new Error('firestore down'))
+    expect((await token(form({ grant_type: 'authorization_code', client_id: CLIENT_ID, code: 'aglyn_ac_y', redirect_uri: CLAUDE, code_verifier: 'v'.repeat(43) }))).status).toBe(200)
+  })
+
+  it('1 · a failing activity log after a Disconnect still reports the disconnect', async () => {
+    mockStore.disconnectConnectorGrant.mockResolvedValue({ disconnected: true, appName: 'Claude' })
+    mockLogOrgActivity.mockRejectedValueOnce(new Error('firestore down'))
+    const response = await appsAction(
+      new Request(`${ORIGIN}/api/orgs/connected-apps`, {
+        method: 'POST',
+        headers: { authorization: 'Bearer id-token', 'content-type': 'application/json' },
+        body: JSON.stringify({ orgId: 'org-1', action: 'disconnect', grantId: 'grant_x' }),
+      }),
+    )
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ disconnected: true })
+  })
+
+  it('8 · every connector route refuses on the auth origin', async () => {
+    const onAuth = (path: string, init: RequestInit = {}) =>
+      new Request(`https://auth.aglyn.com${path}`, {
+        ...init,
+        headers: { 'x-forwarded-host': 'auth.aglyn.com', ...(init.headers as Record<string, string>) },
+      })
+    const post = { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'a=1' }
+    const answers = [
+      protectedResource(onAuth('/api/oauth/metadata/protected-resource')),
+      authorizationServer(onAuth('/api/oauth/metadata/authorization-server')),
+      await register(onAuth('/api/oauth/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })),
+      await token(onAuth('/api/oauth/token', post)),
+      await revoke(onAuth('/api/oauth/revoke', post)),
+      await consent(onAuth('/api/oauth/consent', { method: 'POST', headers: { authorization: 'Bearer id-token' }, body: '{}' })),
+    ]
+    expect(answers.map((response) => response.status)).toEqual([404, 404, 404, 404, 404, 404])
+    expect(mockVerifyIdToken).not.toHaveBeenCalled()
+    expect(mockStore.readConnectorClient).not.toHaveBeenCalled()
+  })
+
+  describe('9 · one origin', () => {
+    const saved = process.env.NEXT_PUBLIC_CONSOLE_URL
+    afterEach(() => {
+      if (saved === undefined) delete process.env.NEXT_PUBLIC_CONSOLE_URL
+      else process.env.NEXT_PUBLIC_CONSOLE_URL = saved
+    })
+
+    it('is the configured console URL, whatever Host the request carries, and only then cacheable', async () => {
+      process.env.NEXT_PUBLIC_CONSOLE_URL = 'https://app.aglyn.com/'
+      const spoofed = new Request('https://evil.example/api/oauth/metadata/authorization-server', {
+        headers: { 'x-forwarded-host': 'evil.example', host: 'evil.example' },
+      })
+      expect(connectorOrigin(spoofed)).toEqual({ origin: 'https://app.aglyn.com', configured: true })
+      const response = authorizationServer(spoofed)
+      expect((await response.json()).issuer).toBe('https://app.aglyn.com')
+      expect(response.headers.get('cache-control')).toBe('public, max-age=300')
+    })
+
+    it('without one, is the proxy-reported host and protocol, and is never cached', () => {
+      delete process.env.NEXT_PUBLIC_CONSOLE_URL
+      const viaProxy = new Request('http://10.0.0.5:3000/api/oauth/metadata/protected-resource', {
+        headers: { 'x-forwarded-host': 'console.example.com', 'x-forwarded-proto': 'https' },
+      })
+      expect(connectorOrigin(viaProxy)).toEqual({ origin: 'https://console.example.com', configured: false })
+      expect(protectedResource(viaProxy).headers.get('cache-control')).toBe('no-store')
+    })
+
+    it('decides the token endpoint’s resource check', async () => {
+      process.env.NEXT_PUBLIC_CONSOLE_URL = 'https://app.aglyn.com'
+      mockStore.refreshConnectorTokens.mockResolvedValue({ ok: true, tokens })
+      const asked = (resource: string) =>
+        token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: 'x', resource }))
+      expect((await asked('https://app.aglyn.com/api/mcp')).status).toBe(200)
+      expect((await asked(`${ORIGIN.replace('app.aglyn.com', 'evil.example')}/api/mcp`)).status).toBe(400)
+    })
+  })
+
+  it('10 · an empty state comes back as given', async () => {
+    const response = await consentCall({ action: 'deny', query: authorizeQuery({ state: '' }) })
+    const url = new URL((await response.json()).redirectTo)
+    expect(url.searchParams.has('state')).toBe(true)
+    expect(url.searchParams.get('state')).toBe('')
+  })
+
+  it('10 · a refused token request is a 429 with invalid_request and Retry-After', async () => {
+    mockStore.readConnectorClient.mockResolvedValue(null)
+    for (let i = 0; i < 30; i += 1) await token(form({ grant_type: 'refresh_token', client_id: 'aglyn_client_nope', refresh_token: 'x' }))
+    const refused = await token(form({ grant_type: 'refresh_token', client_id: 'aglyn_client_nope', refresh_token: 'x' }))
+    expect(refused.status).toBe(429)
+    expect(await refused.json()).toMatchObject({ error: 'invalid_request' })
+    expect(Number(refused.headers.get('retry-after'))).toBeGreaterThan(0)
+  })
+
+  it('12 · one client failing at a shared address does not refuse another client there', async () => {
+    const OTHER = `aglyn_client_${'B'.repeat(22)}`
+    mockStore.readConnectorClient.mockImplementation(async (id: string) => ({ ...CLIENT, clientId: id }))
+    mockStore.refreshConnectorTokens.mockImplementation(async ({ clientId }: { clientId: string }) =>
+      clientId === CLIENT_ID ? { ok: false, error: 'invalid_grant', description: 'no' } : { ok: true, tokens },
+    )
+    for (let i = 0; i < 30; i += 1) {
+      expect((await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: 'x' }))).status).toBe(400)
+    }
+    expect((await token(form({ grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: 'x' }))).status).toBe(429)
+    expect((await token(form({ grant_type: 'refresh_token', client_id: OTHER, refresh_token: 'x' }))).status).toBe(200)
+  })
+})
+

@@ -26,6 +26,7 @@ import {
   connectorBudget,
   connectorPreflight,
   readConnectorForm,
+  refuseOnAuthOrigin,
 } from '../../_lib/connector-oauth-http'
 
 // lockdown-423: exempt — revoking can only take access away, and a locked
@@ -48,6 +49,8 @@ const REVOCATIONS = connectorBudget('oauth-revoke', 60, 60_000)
  * tokens are touched.
  */
 export async function POST(request: Request): Promise<Response> {
+  const elsewhere = refuseOnAuthOrigin(request)
+  if (elsewhere) return elsewhere
   const refused = REVOCATIONS.refusal(request)
   if (refused) return refused
   REVOCATIONS.charge(request)

@@ -16,8 +16,9 @@
  */
 
 /**
- * The HTTP edges shared by the unauthenticated connector endpoints
- * (AGL-4225): a per-address budget, the CORS preflight, and the form body.
+ * The HTTP edges shared by the connector endpoints (AGL-4225): the origin
+ * they speak for, the auth-origin refusal, a per-address budget, the CORS
+ * preflight, the form body, and logging that cannot fail a response.
  *
  * Each budget is per instance and in memory, like `/api/v1`'s pre-auth
  * lookup budget and for the same reason: a durable counter costs a Firestore
@@ -29,6 +30,7 @@ import {
   readClientIp,
 } from '@aglyn/aglyn/app-utils/request-ip'
 import {
+  ApiErrors,
   checkRateLimit,
   CONNECTOR_CORS_HEADERS,
   oauthErrorResponse,
@@ -36,30 +38,129 @@ import {
   type RateLimitState,
   readCappedBody,
 } from '@aglyn/tenant-data-admin'
+import { hostnameOf, WORKSPACE_DOMAIN } from '../../../constants/workspace-domain'
 
-export interface ConnectorBudget {
-  /** `null` to proceed, or the 429 to return. Spends nothing. */
-  refusal(request: Request): Response | null
-  /** Count one request (or one failure) against the caller's address. */
-  charge(request: Request): void
+/**
+ * The host a request was addressed to, by the same trusted-proxy rule as
+ * `plugin-api-cross-origin.ts`: `x-forwarded-host` first (behind Vercel it is
+ * the public hostname, set by the edge), then `host`.
+ */
+function addressedHost(request: Request): string {
+  const forwarded = (request.headers.get('x-forwarded-host') ?? '').split(',')[0]?.trim()
+  return (forwarded || request.headers.get('host') || new URL(request.url).host).toLowerCase()
 }
 
-/** A fixed-window budget of `limit` per `windowMs`, per client address. */
+/** The configured console origin, from `NEXT_PUBLIC_CONSOLE_URL`, or `null`. */
+function configuredConsoleOrigin(): string | null {
+  const raw = String(process.env.NEXT_PUBLIC_CONSOLE_URL ?? '').trim()
+  if (!raw) return null
+  try {
+    const url = new URL(raw)
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.origin : null
+  } catch {
+    return null
+  }
+}
+
+/** The origin connector sign-in speaks for, and whether it is fixed by configuration. */
+export interface ConnectorOrigin {
+  /** Issuer, resource base, `iss`, and the base every endpoint URL is built on. */
+  origin: string
+  /**
+   * True when the origin comes from configuration and so is the same for
+   * every request — the only case a discovery document may be cached.
+   */
+  configured: boolean
+}
+
+/**
+ * THE origin of connector sign-in: one answer for the issuer, the resource,
+ * `iss`, the token endpoint's `resource` check and the MCP challenge, so they
+ * can never name two different servers.
+ *
+ * The configured console URL when there is one: then no request header can
+ * move it. Without one (local development, a preview, an install that has
+ * not set it) it is the host the request was addressed to, read by the
+ * trusted-proxy rule above, and the protocol the proxy reports — so an
+ * install that leaves `NEXT_PUBLIC_CONSOLE_URL` unset trusts its proxy's
+ * `Host`, which is why every production deployment should set it.
+ */
+export function connectorOrigin(request: Request): ConnectorOrigin {
+  const configured = configuredConsoleOrigin()
+  if (configured) return { origin: configured, configured: true }
+  const url = new URL(request.url)
+  const proto = (request.headers.get('x-forwarded-proto') ?? '').split(',')[0]?.trim().toLowerCase()
+  const protocol = proto === 'https' || proto === 'http' ? `${proto}:` : url.protocol
+  return { origin: `${protocol}//${addressedHost(request)}`, configured: false }
+}
+
+/** Cache header for a discovery document: cacheable only when the origin cannot vary. */
+export function discoveryCacheControl(origin: ConnectorOrigin): string {
+  return origin.configured ? 'public, max-age=300' : 'no-store'
+}
+
+/**
+ * 404 on the auth origin (`auth.<workspace domain>`), or `null` to proceed.
+ *
+ * That host renders the credential prompt and proxies Firebase's helper; it
+ * is not the issuer and serves no part of connector sign-in (AGL-3090). The
+ * middleware cannot say so for these, because `/api/*` sits outside its
+ * matcher, so every connector route — discovery, register, token, revoke,
+ * consent and the MCP endpoint — asks here first.
+ */
+export function refuseOnAuthOrigin(request: Request): Response | null {
+  return hostnameOf(addressedHost(request)) === `auth.${WORKSPACE_DOMAIN}` ? ApiErrors.notFound() : null
+}
+
+/**
+ * Run a write that records something AFTER the response's outcome is
+ * decided — an activity entry once tokens are issued, a connection ended —
+ * so that it cannot turn that outcome into a 500. A lost log line costs a
+ * row in a feed; a 500 after a committed code exchange costs the client its
+ * tokens, and its retry then reads as a replay.
+ */
+export async function recordWithoutFailing(write: () => Promise<unknown>): Promise<void> {
+  try {
+    await write()
+  } catch (error) {
+    console.error('connector: a record after the outcome failed', error instanceof Error ? error.name : 'unknown')
+  }
+}
+
+export interface ConnectorBudget {
+  /**
+   * `null` to proceed, or the 429 to return. Spends nothing. `within`
+   * narrows the bucket below the address — see the token route.
+   */
+  refusal(request: Request, within?: string): Response | null
+  /** Count one request (or one failure) against the caller's address. */
+  charge(request: Request, within?: string): void
+}
+
+/**
+ * A fixed-window budget of `limit` per `windowMs`, per client address — or
+ * per address AND `within`, when the caller names a narrower bucket.
+ *
+ * The refusal is a 429 with `Retry-After` and `error: "invalid_request"`:
+ * RFC 6749 has no rate-limit code, and `invalid_request` is the one every
+ * client already handles as "this request was refused, do not retry it
+ * as-is"; the status and `Retry-After` carry the rest.
+ */
 export function connectorBudget(name: string, limit: number, windowMs: number): ConnectorBudget {
   const store = new Map<string, RateLimitState>()
-  const keyFor = (request: Request) =>
-    `${name}:${readClientIp(request.headers) ?? NO_CLIENT_ADDRESS_BUCKET}`
+  const keyFor = (request: Request, within?: string) =>
+    `${name}:${readClientIp(request.headers) ?? NO_CLIENT_ADDRESS_BUCKET}${within ? `:${within}` : ''}`
   return {
-    refusal(request) {
-      const state = peekRateLimit(keyFor(request), { limit, windowMs, store })
+    refusal(request, within) {
+      const state = peekRateLimit(keyFor(request, within), { limit, windowMs, store })
       if (state.allowed) return null
       const retryAfter = Math.max(1, Math.ceil((state.resetMs - Date.now()) / 1000))
-      return oauthErrorResponse(429, 'temporarily_unavailable', 'Too many requests from this address', {
+      return oauthErrorResponse(429, 'invalid_request', 'Too many requests — retry after the time given', {
         'Retry-After': String(retryAfter),
       })
     },
-    charge(request) {
-      checkRateLimit(keyFor(request), { limit, windowMs, store })
+    charge(request, within) {
+      checkRateLimit(keyFor(request, within), { limit, windowMs, store })
     },
   }
 }

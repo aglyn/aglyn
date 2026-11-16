@@ -19,7 +19,12 @@ import {
   buildProtectedResourceMetadata,
   CONNECTOR_CORS_HEADERS,
 } from '@aglyn/tenant-data-admin'
-import { connectorPreflight } from '../../../_lib/connector-oauth-http'
+import {
+  connectorOrigin,
+  connectorPreflight,
+  discoveryCacheControl,
+  refuseOnAuthOrigin,
+} from '../../../_lib/connector-oauth-http'
 
 // lockdown-423: exempt — a public discovery document (RFC 9728) fetched with
 // no caller identity; it describes the MCP endpoint and acts for no
@@ -35,9 +40,11 @@ export const dynamic = 'force-dynamic'
  * say the same thing.
  */
 export function GET(request: Request): Response {
-  const origin = new URL(request.url).origin
-  return Response.json(buildProtectedResourceMetadata(origin), {
-    headers: { ...CONNECTOR_CORS_HEADERS, 'Cache-Control': 'public, max-age=300' },
+  const refused = refuseOnAuthOrigin(request)
+  if (refused) return refused
+  const origin = connectorOrigin(request)
+  return Response.json(buildProtectedResourceMetadata(origin.origin), {
+    headers: { ...CONNECTOR_CORS_HEADERS, 'Cache-Control': discoveryCacheControl(origin) },
   })
 }
 

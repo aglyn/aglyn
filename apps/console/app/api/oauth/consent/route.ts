@@ -37,6 +37,7 @@ import {
   scopesForAccess,
   validateAuthorizeRequest,
 } from '@aglyn/tenant-data-admin'
+import { connectorOrigin, refuseOnAuthOrigin } from '../../_lib/connector-oauth-http'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
@@ -87,6 +88,8 @@ const refuse = (status: number, error: string, extra: Record<string, unknown> = 
   Response.json({ error, ...extra }, { status, headers: { 'Cache-Control': 'no-store' } })
 
 export async function POST(request: Request): Promise<Response> {
+  const elsewhere = refuseOnAuthOrigin(request)
+  if (elsewhere) return elsewhere
   const authorization = request.headers.get('authorization') ?? ''
   const idToken = authorization.startsWith('Bearer ') ? authorization.slice(7) : ''
   if (!idToken) return refuse(401, 'Unauthenticated')
@@ -111,7 +114,7 @@ export async function POST(request: Request): Promise<Response> {
     }
     if (!decoded.email_verified) return emailUnverifiedResponse()
 
-    const origin = new URL(request.url).origin
+    const { origin } = connectorOrigin(request)
     const { params, duplicated } = parseQuery(body.query)
     const client = await readConnectorClient(params.client_id)
     const validation = validateAuthorizeRequest(params, { origin, client, duplicated })
