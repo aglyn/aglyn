@@ -154,11 +154,17 @@ Unticked rows and platforms, and what each needs:
   post-purchase, tax service, fulfillment network and courier cards were not
   opened on any device. The seed now connects every one of these services on
   `mobile-demo-site`, in test mode where the service has one
-  (`tools/scripts/seed-native/integrations.mjs`), and a console served by
-  `serve-emulated` holds each plugin's published local sealing key and offers
-  each service with placeholder or sandbox settings
-  (`tools/scripts/lib/emulated-env.mjs`), so all eleven cards draw there and
-  are ready to drive.
+  (`tools/scripts/seed-native/integrations.mjs`): every plugin card on the
+  store's settings pages, the store's own ShipStation and ShippingEasy cards
+  (Shipping & delivery) and the site's Email platforms card (Mailchimp). A
+  console served by `serve-emulated` holds each plugin's published local
+  sealing key and offers each service with placeholder or sandbox settings
+  (`tools/scripts/lib/emulated-env.mjs`), so every card draws there and is
+  ready to drive. Payments is not seeded: the register's card readers and
+  Tap to Pay charge the account on the owner's profile, so it has to be a
+  real Stripe TEST account, made once with Set up payments on a console that
+  holds the Stripe test key; the seed prints which account the profile
+  names.
 - Plugin marketplace (Apple, Kotlin): the seed has no marketplace listings, so
   Browse was empty wherever it was opened (Mac, Android phone and tablet). A
   listing's page, install, purchase and update, and the seller panel, were not
