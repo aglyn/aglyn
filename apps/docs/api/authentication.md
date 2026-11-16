@@ -7,8 +7,8 @@ description: Authenticate REST API requests with an organization API key, scoped
 # Authentication
 
 Every request authenticates with an **API key** — a secret that identifies your
-organization. Keys look like `aglyn_sk_…`. An app that acts for a person, such as
-Claude, can [sign in](#apps-that-sign-in) instead.
+organization. Keys look like `aglyn_sk_…`. An app that acts for a person — an AI
+assistant or a code editor that speaks MCP — can [sign in](#apps-that-sign-in) instead.
 
 A key carries the organization's access, not a person's: it keeps working after the
 teammate who created it leaves, and it isn't limited by their role.
@@ -128,11 +128,12 @@ Two endpoints need no scope at all: [`GET /v1`](overview.md#get-v1) and
 
 ## Apps that sign in
 
-An app that acts for a person — [Claude](/marketing-and-automation/workflows-and-actions/claude)
-or another Model Context Protocol client — doesn't need a key. Point it at
+An app that acts for a person — any Model Context Protocol client, such as an AI
+assistant, a code editor or an MCP inspector — doesn't need a key. Point it at
 `https://app.aglyn.com/api/mcp` and it asks the person to sign in, pick a
 workspace and choose **View only** or **View and make changes**. Nothing is
-copied anywhere.
+copied anywhere. The consent screen names the app as it names itself and shows,
+above everything else, the address the app will receive the connection at.
 
 What the app receives instead of a key:
 
@@ -156,11 +157,13 @@ For client developers, it is OAuth 2.1 with PKCE, public clients only:
 | | |
 | --- | --- |
 | Discovery | A `401` from `/api/mcp` carries `WWW-Authenticate: Bearer resource_metadata="https://app.aglyn.com/.well-known/oauth-protected-resource/api/mcp"`. The authorization server is described at `/.well-known/oauth-authorization-server` (RFC 8414). |
-| Registration | Dynamic (RFC 7591) at `/api/oauth/register`. Codes are delivered only to Claude's callback addresses and to loopback addresses (`http://localhost` or `http://127.0.0.1`, any port), so a `redirect_uri` anywhere else is refused. No client secret is issued. |
+| Registration | Dynamic (RFC 7591) at `/api/oauth/register`, open to any client. Send `client_name` (up to 60 characters; control and invisible characters are removed) and up to five `redirect_uris`. No client secret is issued, and an identical registration returns the same `client_id`. Unused registrations expire after a day. |
+| Redirect addresses | Each must be exactly as a URL parser prints it, with no user info and no fragment, and one of: `https://` on a domain name (not an IP address); `http://` on `localhost`, `127.0.0.1` or `[::1]` only, any port; or a private-use app scheme such as `cursor://…` or `com.example.app:/callback` (RFC 8252). Web-handled and dangerous schemes (`javascript`, `data`, `file`, `blob`, `about`, `ws`, `wss`, `ftp`, `mailto`, …) are refused. At sign-in the `redirect_uri` must match a registered one exactly, except that a loopback port may differ. |
+| Browser clients | `/api/mcp` answers CORS from any origin without credentials, and exposes `WWW-Authenticate` and `MCP-Protocol-Version`. |
 | Authorization | `/oauth/authorize` with `response_type=code`, `code_challenge_method=S256` and a `state`. The answer carries `iss`. |
 | Token | `/api/oauth/token`, form-encoded, `authorization_code` or `refresh_token`. Codes last five minutes and work once. |
 | Revocation | `/api/oauth/revoke` (RFC 7009). Revoking a refresh token ends the connection. |
-| Limits | A failed token request counts against the calling address and client; past 30 a minute the endpoint answers `429` with `error: "invalid_request"` and `Retry-After`. |
+| Limits | A failed token request counts against the calling address and client; past 30 a minute the endpoint answers `429` with `error: "invalid_request"` and `Retry-After`. Registration allows 300 requests and 60 new clients per address per 10 minutes. |
 
 ## Keep keys safe
 

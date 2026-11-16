@@ -677,7 +677,7 @@ export function buildCustomerApiOpenApi(
       { url: `${origin}${CUSTOMER_API_MOUNT}`, description: options.brandName },
     ],
     // Either credential, at the document level (AGL-4225): an API key, or the
-    // hourly access token an app such as Claude gets by signing in. Both are
+    // hourly access token any MCP client gets by signing in. Both are
     // resolved by the same authenticator and held to the same scopes.
     security: [{ apiKey: [] }, { connector: [] }],
     tags: [
@@ -698,15 +698,16 @@ export function buildCustomerApiOpenApi(
         connector: {
           type: 'oauth2',
           description:
-            'Sign-in for an app that acts for a person — Claude and other MCP ' +
-            'clients (OAuth 2.1, authorization code with PKCE, public clients ' +
+            'Sign-in for an app that acts for a person — any MCP client ' +
+            '(OAuth 2.1, authorization code with PKCE, public clients ' +
             'only). The person picks a workspace and an access level; the app ' +
             'gets an hourly access token, sent as `Authorization: Bearer ' +
             'aglyn_at_…`, and a refresh token that rotates on every use. A ' +
             'connection stops working when it is disconnected in Settings or ' +
             'its person loses "Manage API keys" in the workspace. Clients ' +
-            'register dynamically; codes are delivered only to registered ' +
-            'Claude and loopback addresses.',
+            'register dynamically, and a code is delivered only to an address ' +
+            'the client registered: https on a domain name, http on loopback, ' +
+            'or a private-use app scheme.',
           flows: {
             authorizationCode: {
               authorizationUrl: `${origin}${CONNECTOR_AUTHORIZE_PATH}`,
