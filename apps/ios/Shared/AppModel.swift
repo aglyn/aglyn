@@ -30,6 +30,8 @@ final class AppModel {
   private(set) var workspace: WorkspaceStore?
   /// The signed-in person's pins, recents, stars, workspace colors and theme (`users/{uid}`), synced with the console.
   private(set) var preferences: AccountPreferencesStore?
+  /// Whether the device has a network connection, for the title bar's Offline indicator (AGL-1056).
+  let network = NetworkStatus()
   /// The signed-in person's invitations, joined on their own (AGL-4023): never an Accept step.
   private(set) var invites: InviteAutoJoin?
   /// The workspace and site (by address) of a link opened before anyone was signed in on this launch.
