@@ -133,7 +133,7 @@ export function OrgConnectedAppsCard() {
     <CardDisplay
       header={'Connected apps'}
       help={docsHelp('billing', {
-        anchor: '#api-access',
+        anchor: '#connected-apps',
         title: 'Connected apps',
         excerpt:
           'Apps connected to this workspace by signing in rather than with an API key. ' +
