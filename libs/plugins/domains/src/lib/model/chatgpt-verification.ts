@@ -66,3 +66,14 @@ export function findChatgptClaimRecord(records: readonly DnsRecordView[]): DnsRe
     ) ?? null
   )
 }
+
+/**
+ * The domain a site's ChatGPT record goes on: the site's own domain without a
+ * leading `www.`, because ChatGPT asks for the record on the domain itself.
+ * `null` for a site with no domain.
+ */
+export function siteDomainForChatgpt(connectedDomain: string | null | undefined): string | null {
+  const domain = String(connectedDomain ?? '').trim().toLowerCase().replace(/\.$/, '')
+  if (!domain) return null
+  return domain.startsWith('www.') ? domain.slice(4) : domain
+}

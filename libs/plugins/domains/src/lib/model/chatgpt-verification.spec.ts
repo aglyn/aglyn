@@ -21,6 +21,7 @@ import {
   chatgptClaimValue,
   chatgptClaimValueError,
   findChatgptClaimRecord,
+  siteDomainForChatgpt,
 } from './chatgpt-verification'
 import { invalidDnsRecordFields, type DnsRecordView } from './dns-records'
 
@@ -77,5 +78,14 @@ describe('findChatgptClaimRecord', () => {
     expect(findChatgptClaimRecord([view({ name: '_dmarc' }), claim])).toBe(claim)
     expect(findChatgptClaimRecord([view({ type: 'CNAME', name: 'openai-business-claim' })])).toBeNull()
     expect(findChatgptClaimRecord([])).toBeNull()
+  })
+})
+
+describe('siteDomainForChatgpt', () => {
+  it('is the site’s domain without www, and null with none', () => {
+    expect(siteDomainForChatgpt('www.TestBakery.com')).toBe('testbakery.com')
+    expect(siteDomainForChatgpt('shop.testbakery.com')).toBe('shop.testbakery.com')
+    expect(siteDomainForChatgpt('')).toBeNull()
+    expect(siteDomainForChatgpt(null)).toBeNull()
   })
 })

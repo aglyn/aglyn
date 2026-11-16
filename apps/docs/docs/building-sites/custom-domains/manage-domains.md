@@ -116,29 +116,6 @@ nameservers** and confirm. Records kept at the old provider stop applying, such 
 email (MX) records, so note the ones you need first and add them again under **DNS
 records** afterwards. The change can take up to 48 hours to reach everyone.
 
-## Verify your business with ChatGPT {#chatgpt}
-
-ChatGPT lists businesses, and the owner of a business can claim its listing to keep its
-details up to date. To claim yours, ChatGPT asks you to show that you control your
-website's domain. For a domain that uses Aglyn's nameservers, Aglyn adds the proof for
-you.
-
-1. In ChatGPT, open **Business** from the sidebar, search for your business and select
-   it.
-2. When ChatGPT asks how to verify your claim, choose **Website domain**. It shows a
-   record with a **Value**. Copy the value.
-3. Here, open the domain and press **Verify with ChatGPT** above its DNS records.
-4. Paste the value and press **Add record**.
-5. Back in ChatGPT, press **Verify domain**. If ChatGPT doesn't see the record yet, wait
-   a few minutes and try again.
-
-If the domain already has a ChatGPT record, a new value replaces it.
-
-If your domain keeps its DNS with another provider, add the record ChatGPT shows at that
-provider instead: a **TXT** record named `openai-business-claim` with the value ChatGPT
-gives you. A site on its free Aglyn address has no domain of its own to verify, so
-[connect a domain](connect-a-domain.md) first.
-
 ## Move a domain to another registrar {#transfer-out}
 
 See [Moving a domain to another registrar](buy-a-domain.md#transfer).

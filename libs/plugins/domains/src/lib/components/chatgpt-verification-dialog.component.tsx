@@ -30,7 +30,7 @@ import type { DnsRecordView } from '../model/dns-records'
 import { useDomainsFetch } from './domains-api'
 
 /*
- * VERIFY WITH CHATGPT, from a domain's DNS section. A business owner claims
+ * VERIFY WITH CHATGPT, opened from the card on a site's SEO setup. A business owner claims
  * their business in ChatGPT by proving they control its domain with one TXT
  * record. For a name whose DNS is kept here, they paste the value ChatGPT
  * shows and the record is added (or the old one replaced). For a name on
