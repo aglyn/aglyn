@@ -275,6 +275,17 @@ describe('recordPlatformMarketingConsent', () => {
 describe('recordPlatformAccountContact', () => {
   const CREATED = Date.UTC(2026, 9, 21, 15)
 
+  /*
+   * The cases below are the process with no record plugin — a self-hosted
+   * install without the CRM, a script with no plugin boot — where the seam
+   * answers `null` and the row is written directly. The seam's own cases
+   * follow them.
+   */
+  const noKeeper = {
+    capture: (async () => null) as never,
+    orgIdForHost: async () => 'org-operator',
+  }
+
   it('makes every new account a lead on the marketing host, with no consent either way', async () => {
     const db = fakeFirestore({
       [`users/${UID}`]: { firstName: 'Ada', lastName: 'Example' },
@@ -287,6 +298,7 @@ describe('recordPlatformAccountContact', () => {
       firestore: db,
       hostId: HOST,
       upsert,
+      ...noKeeper,
     })
     expect(result).toEqual({ status: 'recorded', contactId: 'contact-1', created: true })
     expect(upsertCalls).toHaveLength(1)
@@ -314,13 +326,14 @@ describe('recordPlatformAccountContact', () => {
       firestore: fakeFirestore(),
       hostId: HOST,
       upsert,
+      ...noKeeper,
     })
     expect(upsertCalls[0]?.name).toBe('Token Name')
   })
 
   it('records nothing without a marketing host or an address, and says which', async () => {
     const db = fakeFirestore()
-    const base = { uid: UID, email: EMAIL, createdAtMs: CREATED, firestore: db, upsert }
+    const base = { uid: UID, email: EMAIL, createdAtMs: CREATED, firestore: db, upsert, ...noKeeper }
     expect(await recordPlatformAccountContact({ ...base, hostId: null })).toEqual({
       status: 'unconfigured',
     })
@@ -338,8 +351,123 @@ describe('recordPlatformAccountContact', () => {
       firestore: fakeFirestore(),
       hostId: HOST,
       upsert: (async () => ({ refused: 'erased' })) as never,
+      ...noKeeper,
     })
     expect(result).toEqual({ status: 'refused', reason: 'erased' })
+  })
+
+  /*
+   * THROUGH THE CAPTURE SEAM (AGL-4230). The plugin that keeps people files
+   * the account the way it files every other door's capture — company at
+   * the email's domain, an owner, `contactCreated` — so the writer hands it
+   * over rather than writing the row itself. That the CRM then does those
+   * three things is `platform-account-contact.spec.ts`'s claim, on the
+   * plugin's side of the seam.
+   */
+  describe('through the contact-capture seam', () => {
+    const captured: Array<Record<string, unknown>> = []
+    const capture = (verdict: unknown) =>
+      (async (request: Record<string, unknown>) => {
+        captured.push(request)
+        return verdict
+      }) as never
+    const orgIdForHost = jest.fn<Promise<string | null>, [string]>(
+      async () => 'org-operator',
+    )
+
+    beforeEach(() => {
+      captured.length = 0
+      orgIdForHost.mockClear()
+    })
+
+    it('hands the account to the plugin that keeps people, as a relationship', async () => {
+      const result = await recordPlatformAccountContact({
+        uid: UID,
+        email: EMAIL,
+        name: 'Token Name',
+        createdAtMs: CREATED,
+        firestore: fakeFirestore({
+          [`users/${UID}`]: { firstName: 'Ada', lastName: 'Example' },
+        }),
+        hostId: HOST,
+        upsert,
+        orgIdForHost,
+        capture: capture({ ok: true, record: 'contact', contactId: 'contact-7', created: true }),
+      })
+      expect(result).toEqual({ status: 'recorded', contactId: 'contact-7', created: true })
+      expect(orgIdForHost).toHaveBeenCalledWith(HOST)
+      expect(captured).toEqual([
+        {
+          orgId: 'org-operator',
+          hostId: HOST,
+          identity: { email: EMAIL, name: 'Ada Example' },
+          interaction: {
+            source: 'account',
+            atMs: CREATED,
+            summary: PLATFORM_ACCOUNT_CREATED_SUMMARY,
+          },
+          lifecycleFloor: 'lead',
+          surface: 'relationship',
+        },
+      ])
+      // No consent either way, and no second, direct write.
+      expect(captured[0]).not.toHaveProperty('marketingConsent')
+      expect(upsertCalls).toHaveLength(0)
+    })
+
+    it('reports the keeper’s refusal instead of throwing', async () => {
+      const result = await recordPlatformAccountContact({
+        uid: UID,
+        email: EMAIL,
+        createdAtMs: CREATED,
+        firestore: fakeFirestore(),
+        hostId: HOST,
+        upsert,
+        orgIdForHost,
+        capture: capture({ ok: false, reason: 'band', error: 'At the limit.' }),
+      })
+      expect(result).toEqual({ status: 'refused', reason: 'band' })
+      expect(upsertCalls).toHaveLength(0)
+    })
+
+    it('never counts a lead as the account’s contact', async () => {
+      const result = await recordPlatformAccountContact({
+        uid: UID,
+        email: EMAIL,
+        createdAtMs: CREATED,
+        firestore: fakeFirestore(),
+        hostId: HOST,
+        upsert,
+        orgIdForHost,
+        capture: capture({ ok: true, record: 'lead', leadId: 'lead-1', created: true }),
+      })
+      expect(result).toEqual({ status: 'refused', reason: 'filed-as-lead' })
+    })
+
+    it('writes the row directly when no plugin keeps people, or the site has no org', async () => {
+      const base = {
+        uid: UID,
+        email: EMAIL,
+        createdAtMs: CREATED,
+        firestore: fakeFirestore(),
+        hostId: HOST,
+        upsert,
+      }
+      expect(
+        await recordPlatformAccountContact({ ...base, orgIdForHost, capture: capture(null) }),
+      ).toEqual({ status: 'recorded', contactId: 'contact-1', created: true })
+      expect(captured).toHaveLength(1)
+      expect(
+        await recordPlatformAccountContact({
+          ...base,
+          orgIdForHost: async () => null,
+          capture: capture({ ok: true, record: 'contact', contactId: 'x', created: true }),
+        }),
+      ).toEqual({ status: 'recorded', contactId: 'contact-1', created: true })
+      // The org-less site never reached the seam.
+      expect(captured).toHaveLength(1)
+      expect(upsertCalls).toHaveLength(2)
+    })
   })
 })
 
