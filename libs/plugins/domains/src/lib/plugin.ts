@@ -25,6 +25,7 @@ const BuyDomainCard = lazy(() => import('./components/buy-domain-card.component'
 const ConnectAutomatically = lazy(
   () => import('./components/connect-automatically.component'),
 )
+const ChatgptVerificationCard = lazy(() => import('./components/chatgpt-verification-card.component'))
 const DomainsPage = lazy(() => import('./components/domains-page.component'))
 
 /**
@@ -61,6 +62,15 @@ export function registerDomainsConsole(): void {
         title: 'Connect automatically',
         featureFlag: 'customDomain',
         Component: ConnectAutomatically,
+      },
+      {
+        // On the site's SEO setup, with its other verifications. No plan
+        // gate: a site with no domain is told to connect one, and the plan
+        // that takes is the Custom Domain page's to say.
+        slot: Aglyn.CONSOLE_WIDGET_SLOTS.hostVerification,
+        widgetId: 'domains-chatgpt-verification',
+        title: 'Verify with ChatGPT',
+        Component: ChatgptVerificationCard,
       },
     ],
     orgNavItems: [

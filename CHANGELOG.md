@@ -9,17 +9,23 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
-## v1.23.0 — 2026-11-15
+## v1.23.0 — 2026-11-16
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.22.4...v1.23.0)
 
 ### Added
 
 - **accounting:** post each sale where its money really is ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
+- **native:** a Staff console row in the account menu opens the staff list ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667))
 
 ### Fixed
 
 - **ops:** one half-written import no longer 500s the AI jobs list, and three checks stop reading red falsely
+- **console:** a refused listen woken by window focus backs off with its age ([AGL-2945](https://linear.app/aglyn/issue/AGL-2945))
+- **ai:** Improve it no longer keeps a page's old layout over a short tagline or a button that calls the business ([AGL-4152](https://linear.app/aglyn/issue/AGL-4152))
+- **ci:** Functions drift waits out the deploy on a promotion push instead of reading stale at +1 min
+- **apple:** Analytics › Funnels draws as one column, the funnel picked in its head ([AGL-4058](https://linear.app/aglyn/issue/AGL-4058))
+- **apple:** the staff console back link with no place to name reads "Back" ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667))
 - **apple:** title-bar Back returns to Orders from a starred order opened over it ([AGL-4059](https://linear.app/aglyn/issue/AGL-4059))
 - **apple:** Back over a starred place gives the selection back to its area's row ([AGL-4059](https://linear.app/aglyn/issue/AGL-4059))
 

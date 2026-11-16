@@ -225,6 +225,9 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#review-settings': 'The Reviews card on Products → Promotions decides who can review your products and when customers are asked for a review.',
     '#subscriptions-list': 'Products → Subscriptions lists every subscription on the site, newest first.',
   },
+  chatgptVerification: {
+    '#chatgpt': 'ChatGPT lists businesses, and the owner of a business can claim its listing to keep its details right.',
+  },
   commerce: {
     '#commerce-analytics': 'The Commerce analytics card, in the Analytics section of the products hub, shows the last 30 days of revenue, orders and average order value, a 14-day revenue trend and your top products.',
     '#commerce-glance': 'The Commerce card on your site\'s overview and Analytics pages shows the last 30 days of sales at a glance: revenue, orders, average order value, and how many products are low on stock.',

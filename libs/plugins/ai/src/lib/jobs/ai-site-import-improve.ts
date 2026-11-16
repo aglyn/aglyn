@@ -39,9 +39,18 @@
  * Nothing here runs with the flag off, or for Keep my site.
  *=========================================*/
 
-import { fenceUntrustedText, UNTRUSTED_TEXT_RULE } from '@aglyn/shared-util-tools/untrusted-text'
-import type { AiLayoutDesign, AiLayoutHeroVariant } from '../layout-language/ai-layout-design'
-import { aiLayoutDesignChoices, aiLayoutGroupVariant } from '../layout-language/ai-layout-design'
+import {
+  fenceUntrustedText,
+  UNTRUSTED_TEXT_RULE,
+} from '@aglyn/shared-util-tools/untrusted-text'
+import type {
+  AiLayoutDesign,
+  AiLayoutHeroVariant,
+} from '../layout-language/ai-layout-design'
+import {
+  aiLayoutDesignChoices,
+  aiLayoutGroupVariant,
+} from '../layout-language/ai-layout-design'
 import {
   AI_LAYOUT_ALIGNS,
   AI_LAYOUT_BANDS,
@@ -55,8 +64,15 @@ import {
   type AiLayoutSection,
   type AiLayoutSettlement,
 } from '../layout-language/ai-layout-language'
+import { aiLayoutTelHref } from '../layout-language/ai-layout-frame-source'
 import { AI_ICON_WORDS } from '../runtime/ai-icon-library'
-import type { AiSiteImportAddedSection, AiSiteImportPagePictures, AiSiteImportPageRole, AiSiteImportPlan, SiteImportLineRef } from '../model/ai-site-import'
+import type {
+  AiSiteImportAddedSection,
+  AiSiteImportPagePictures,
+  AiSiteImportPageRole,
+  AiSiteImportPlan,
+  SiteImportLineRef,
+} from '../model/ai-site-import'
 import { aiSiteHomeArc } from '../model/ai-site-home-arcs'
 import {
   SITE_IMPORT_IMPROVED_MEANING,
@@ -67,17 +83,33 @@ import {
   type SiteImportPageFidelity,
 } from '../model/ai-site-import-fidelity'
 import { aiSiteImportImageIsMark } from '../model/ai-site-import-marks'
-import { siteImportLedger, type SiteImportLedger, type SiteImportLedgerItem, type SiteImportLedgerLine } from '../model/ai-site-import-ledger'
+import {
+  siteImportLedger,
+  type SiteImportLedger,
+  type SiteImportLedgerItem,
+  type SiteImportLedgerLine,
+} from '../model/ai-site-import-ledger'
 import { AI_SITE_IMPORT_PAGE_CEILING_CREDITS } from '../model/ai-site-import'
 import { aiCacheWriteHourSurchargeUsd } from '../providers/cache-write-hour'
-import { aiBilledRatesForModel, estimateAiBilledUsd } from '../providers/catalog'
+import {
+  aiBilledRatesForModel,
+  estimateAiBilledUsd,
+} from '../providers/catalog'
 import type { AiSystemBlock, AiTool, AiUsage } from '../providers/contract'
 import { assistCreditsFromUsd } from '../usage/assist-credits'
 import type { AiGenerationCheck } from '../runtime/ai-doctrine'
-import type { AiCopyFraming, AiDoctrineViolation } from '../runtime/ai-doctrine-validators'
+import type {
+  AiCopyFraming,
+  AiDoctrineViolation,
+} from '../runtime/ai-doctrine-validators'
 import type { SiteImportBlock } from '../site-import/site-import-html'
 import { siteImportLabel } from '../site-import/site-import-page'
-import { aiSiteImportHonesty, aiSiteImportImprovedPlaced, type AiSiteImportImprovedBlock, type AiSiteImportImprovedSection } from './ai-site-import-honesty'
+import {
+  aiSiteImportHonesty,
+  aiSiteImportImprovedPlaced,
+  type AiSiteImportImprovedBlock,
+  type AiSiteImportImprovedSection,
+} from './ai-site-import-honesty'
 import { aiSiteImportSectionActions } from './ai-site-import-actions'
 import {
   aiSiteImportLayoutOf,
@@ -87,9 +119,13 @@ import {
   aiSiteImportTakePicture,
   type AiSiteImportDesigned,
 } from './ai-site-import-compile'
-import { aiSiteImportTextParts, type AiSiteImportDocument } from './ai-site-import-document'
+import {
+  aiSiteImportTextParts,
+  type AiSiteImportDocument,
+} from './ai-site-import-document'
 
-const clean = (text: unknown): string => (typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '')
+const clean = (text: unknown): string =>
+  typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : ''
 
 /*------------------------------------------
  * The tool and its cached text
@@ -106,7 +142,20 @@ export const AI_SITE_IMPORT_IMPROVE_KIND = 'page-improve'
 export const AI_SITE_IMPORT_IMPROVE_MAX_ITEMS = 24
 
 /** What a block may be: the layout language's words and groups, and `keep`. A customer's quote and a figure only ever arrive by `keep`. */
-export const AI_SITE_IMPORT_IMPROVE_BLOCK_KINDS = ['eyebrow', 'heading', 'lede', 'text', 'note', 'list', 'button', 'image', 'cards', 'steps', 'faq', 'keep'] as const
+export const AI_SITE_IMPORT_IMPROVE_BLOCK_KINDS = [
+  'eyebrow',
+  'heading',
+  'lede',
+  'text',
+  'note',
+  'list',
+  'button',
+  'image',
+  'cards',
+  'steps',
+  'faq',
+  'keep',
+] as const
 
 const ITEM_SCHEMA = {
   type: 'object',
@@ -140,7 +189,8 @@ const BLOCK_SCHEMA = {
 /** The redesign tool: the `submit_page` language, a `keep` block, and a picture on an item by its ref. */
 export const AI_SITE_IMPORT_IMPROVE_TOOL: AiTool = {
   name: 'submit_improved_page',
-  description: 'Submit the redesigned page: its sections in order, in the layout language, each thing the page must keep placed with a keep block.',
+  description:
+    'Submit the redesigned page: its sections in order, in the layout language, each thing the page must keep placed with a keep block.',
   strict: true,
   inputSchema: {
     type: 'object',
@@ -189,7 +239,7 @@ export const AI_SITE_IMPORT_IMPROVE_TEXT = [
   'Where a link goes (to): page:<id> for a page the ledger names, #<n> for section n of this page, form for the form on this page, phone or email for the number or address the page gives, or an https: address the ledger lists. Every link the ledger lists must go somewhere on the page, as a button or an item.',
   '',
   "A designer's page is made of sections like these; choose and order the ones this page needs:",
-  '- Hero: the page title, a lede, a filled primary button and a quieter second one, beside a picture (cols [7, 5]: the words in col 0, the picture in col 1) or with the picture behind the words (one column, the picture first). Every opening places a picture: the page\'s own by keep, else an image block.',
+  "- Hero: the page title, a lede, a filled primary button and a quieter second one, beside a picture (cols [7, 5]: the words in col 0, the picture in col 1) or with the picture behind the words (one column, the picture first). Every opening places a picture: the page's own by keep, else an image block.",
   '- Offer as a card grid: a heading, a lede, then cards, one item for each service or thing offered, each with an icon; three or four across.',
   '- Figures or badges: figures the ledger holds, kept (keep stats:n); plain facts the page states, such as how long the business has run or that it is licensed, as cards of two to four items with icons, each saying the fact exactly as the page does.',
   '- How it works: a heading and steps of three or four items, from first asking to done.',
@@ -220,8 +270,20 @@ export function aiSiteImportImproveDigest(input: {
   plan?: AiSiteImportPlan | null
 }): string {
   return [
-    fenceUntrustedText("What the owner's site says of itself", [clean(input.siteName), ...input.scope].filter(Boolean).join('\n'), { maxChars: AI_SITE_IMPORT_IMPROVE_DIGEST_CHARS }),
-    ...(input.plan ? [fenceUntrustedText('The plan every page of this site is drawn to', JSON.stringify(input.plan), { maxChars: 4_000 })] : []),
+    fenceUntrustedText(
+      "What the owner's site says of itself",
+      [clean(input.siteName), ...input.scope].filter(Boolean).join('\n'),
+      { maxChars: AI_SITE_IMPORT_IMPROVE_DIGEST_CHARS },
+    ),
+    ...(input.plan
+      ? [
+          fenceUntrustedText(
+            'The plan every page of this site is drawn to',
+            JSON.stringify(input.plan),
+            { maxChars: 4_000 },
+          ),
+        ]
+      : []),
   ].join('\n')
 }
 
@@ -229,7 +291,9 @@ export function aiSiteImportImproveDigest(input: {
 export const AI_SITE_IMPORT_IMPROVE_DIGEST_CHARS = 16_000
 
 /** A redesign's system blocks: the platform's text cached across sites, then this site's digest, cached once per site. The ledger rides the user turn. */
-export function aiSiteImportImproveInstructions(digest: string): readonly AiSystemBlock[] {
+export function aiSiteImportImproveInstructions(
+  digest: string,
+): readonly AiSystemBlock[] {
   return [
     { text: AI_SITE_IMPORT_IMPROVE_TEXT, cacheBreakpoint: true },
     { text: UNTRUSTED_TEXT_RULE },
@@ -244,9 +308,11 @@ export function aiSiteImportImproveInstructions(digest: string): readonly AiSyst
 /** The most characters a page's ledger shows. */
 export const AI_SITE_IMPORT_LEDGER_MAX_CHARS = 16_000
 
-const textOf = (block: SiteImportBlock | undefined): string => (block && block.kind !== 'image' ? clean(block.text) : '')
+const textOf = (block: SiteImportBlock | undefined): string =>
+  block && block.kind !== 'image' ? clean(block.text) : ''
 
-const short = (text: string, most = 80) => (text.length > most ? `${text.slice(0, most - 1)}…` : text)
+const short = (text: string, most = 80) =>
+  text.length > most ? `${text.slice(0, most - 1)}…` : text
 
 /**
  * The lines each picture of a page stands with (AGL-4152): the words after it
@@ -254,20 +320,44 @@ const short = (text: string, most = 80) => (text.length > most ? `${text.slice(0
  * photo over its caption lays them out. What the ledger tells a redesign a
  * picture goes with, and what a card written of those words is given it by.
  */
-export function aiSiteImportPictureCaptions(ledger: Pick<SiteImportLedger, 'items' | 'lines'>): Map<string, SiteImportLedgerLine[]> {
-  const pictures = ledger.items.filter((item) => item.kind === 'picture' && item.lines[0] !== undefined)
+export function aiSiteImportPictureCaptions(
+  ledger: Pick<SiteImportLedger, 'items' | 'lines'>,
+): Map<string, SiteImportLedgerLine[]> {
+  const pictures = ledger.items.filter(
+    (item) => item.kind === 'picture' && item.lines[0] !== undefined,
+  )
   const out = new Map<string, SiteImportLedgerLine[]>()
   for (const item of pictures) {
     const at = item.lines[0] as number
-    const next = Math.min(...pictures.filter((other) => other.section === item.section && (other.lines[0] as number) > at).map((other) => other.lines[0] as number), Number.POSITIVE_INFINITY)
-    const lines = ledger.lines.filter((line) => line.section === item.section && line.line > at && line.line < next && !line.group).slice(0, 2)
+    const next = Math.min(
+      ...pictures
+        .filter(
+          (other) =>
+            other.section === item.section && (other.lines[0] as number) > at,
+        )
+        .map((other) => other.lines[0] as number),
+      Number.POSITIVE_INFINITY,
+    )
+    const lines = ledger.lines
+      .filter(
+        (line) =>
+          line.section === item.section &&
+          line.line > at &&
+          line.line < next &&
+          !line.group,
+      )
+      .slice(0, 2)
     if (lines.length) out.set(item.ref, lines)
   }
   return out
 }
 
 /** A ledger item, in a few words: what it is and what it shows. */
-function shownItem(item: SiteImportLedgerItem, doc: Pick<AiSiteImportDocument, 'blocks' | 'photos'>, captions?: ReadonlyMap<string, SiteImportLedgerLine[]>): string {
+function shownItem(
+  item: SiteImportLedgerItem,
+  doc: Pick<AiSiteImportDocument, 'blocks' | 'photos'>,
+  captions?: ReadonlyMap<string, SiteImportLedgerLine[]>,
+): string {
   const must = item.must ? ' must' : ''
   const words = item.lines.map((ref) => textOf(doc.blocks[ref])).filter(Boolean)
   switch (item.kind) {
@@ -277,7 +367,10 @@ function shownItem(item: SiteImportLedgerItem, doc: Pick<AiSiteImportDocument, '
       const photo = doc.photos.find((entry) => entry.from === url)
       const alt = block?.kind === 'image' ? clean(block.alt) : ''
       // The words it stands with, by their numbers: a card written of them takes it by its ref (AGL-4152).
-      const with_ = captions?.get(item.ref)?.map((line) => `[${line.line}]`).join(', ')
+      const with_ = captions
+        ?.get(item.ref)
+        ?.map((line) => `[${line.line}]`)
+        .join(', ')
       return `${item.ref}${must} (${photo?.width && photo.height ? `${photo.width}×${photo.height}, ` : ''}"${short(alt, 60)}"${with_ ? `, with ${with_}` : ''})`
     }
     case 'form':
@@ -296,7 +389,9 @@ function shownItem(item: SiteImportLedgerItem, doc: Pick<AiSiteImportDocument, '
       const node = item.node?.kind === 'group' ? item.node : null
       const alts = item.lines.flatMap((ref) => {
         const entry = doc.blocks[ref]
-        return entry?.kind === 'image' && clean(entry.alt) ? [`"${short(clean(entry.alt), 40)}"`] : []
+        return entry?.kind === 'image' && clean(entry.alt)
+          ? [`"${short(clean(entry.alt), 40)}"`]
+          : []
       })
       return `${item.ref}${must} (a gallery of ${node?.items.length ?? 0} photos, drawn as a grid${node?.columns ? ` ${node.columns} across` : ''}${alts.length ? `: ${alts.slice(0, 4).join(', ')}${alts.length > 4 ? ', …' : ''}` : ''})`
     }
@@ -305,10 +400,27 @@ function shownItem(item: SiteImportLedgerItem, doc: Pick<AiSiteImportDocument, '
     case 'group': {
       const node = item.node?.kind === 'group' ? item.node : null
       // Each item by its first line that says something in words: a step's number is no title.
-      const titles = (node?.items ?? []).map((entry) => textOf(doc.blocks[entry.lines.find((ref) => /\p{L}/u.test(textOf(doc.blocks[ref]))) as number])).filter(Boolean)
-      const linked = (node?.items ?? []).filter((entry) => entry.to || entry.lines.some((ref) => doc.blocks[ref]?.kind === 'link')).length
+      const titles = (node?.items ?? [])
+        .map((entry) =>
+          textOf(
+            doc.blocks[
+              entry.lines.find((ref) =>
+                /\p{L}/u.test(textOf(doc.blocks[ref])),
+              ) as number
+            ],
+          ),
+        )
+        .filter(Boolean)
+      const linked = (node?.items ?? []).filter(
+        (entry) =>
+          entry.to ||
+          entry.lines.some((ref) => doc.blocks[ref]?.kind === 'link'),
+      ).length
       const kind = node?.group === 'text' || !node ? 'like items' : node.group
-      const shown = titles.slice(0, item.folded ? 16 : 6).map((title) => `"${short(title, 40)}"`).join(', ')
+      const shown = titles
+        .slice(0, item.folded ? 16 : 6)
+        .map((title) => `"${short(title, 40)}"`)
+        .join(', ')
       return `${item.ref}${must} (${node?.items.length ?? 0} ${kind}${linked ? `, ${linked} linked` : ''}: ${shown}${titles.length > (item.folded ? 16 : 6) ? ', …' : ''}${item.holds?.length ? `; holds ${item.holds.join(', ')}` : ''})`
     }
     default:
@@ -321,32 +433,66 @@ function shownItem(item: SiteImportLedgerItem, doc: Pick<AiSiteImportDocument, '
  * each link goes, and every line it rewrites, numbered. Uncached, per page, and
  * fenced by the prompt: every word of it is the owner's.
  */
-export function aiSiteImportLedgerText(ledger: SiteImportLedger, doc: Pick<AiSiteImportDocument, 'blocks' | 'photos'>, destinations: ReadonlyMap<string, string>): string {
+export function aiSiteImportLedgerText(
+  ledger: SiteImportLedger,
+  doc: Pick<AiSiteImportDocument, 'blocks' | 'photos'>,
+  destinations: ReadonlyMap<string, string>,
+): string {
   // A link a folded group holds goes where it went by its keep: it is not listed again.
-  const folded = new Set(ledger.items.flatMap((item) => (item.folded ? item.lines : [])))
+  const folded = new Set(
+    ledger.items.flatMap((item) => (item.folded ? item.lines : [])),
+  )
   const links = ledger.links.flatMap((link) => {
     const to = destinations.get(link.ref)
-    return to && !folded.has(link.line) ? [`${link.ref} → ${to} ("${short(link.text, 60)}")`] : []
+    return to && !folded.has(link.line)
+      ? [`${link.ref} → ${to} ("${short(link.text, 60)}")`]
+      : []
   })
   // A long page shows each group by its titles alone, kept whole: what is around them is written (AGL-4152).
-  const lines = ledger.folded ? ledger.lines.filter((line) => !line.group) : ledger.lines
+  const lines = ledger.folded
+    ? ledger.lines.filter((line) => !line.group)
+    : ledger.lines
   const captions = aiSiteImportPictureCaptions(ledger)
   return [
-    ...(ledger.folded ? ['This page is long: its groups are folded, each shown by its titles and kept whole with keep.'] : []),
+    ...(ledger.folded
+      ? [
+          'This page is long: its groups are folded, each shown by its titles and kept whole with keep.',
+        ]
+      : []),
     'Things to place with keep, each once; "must" may not be left out:',
-    ...(ledger.items.length ? ledger.items.map((item) => shownItem(item, doc, captions)) : ['(none)']),
+    ...(ledger.items.length
+      ? ledger.items.map((item) => shownItem(item, doc, captions))
+      : ['(none)']),
     '',
     'Links that must go somewhere on the page:',
     ...(links.length ? links : ['(none)']),
     '',
     'The lines of the old page, by section, which you rewrite as the page needs:',
-    ...lines.map((line) => `[${line.line}] section ${line.section + 1}, ${line.kind}${line.group && !ledger.folded ? ` in ${line.group}` : ''}: ${line.text}`),
+    ...lines.map(
+      (line) =>
+        `[${line.line}] section ${line.section + 1}, ${line.kind}${line.group && !ledger.folded ? ` in ${line.group}` : ''}: ${line.text}`,
+    ),
   ].join('\n')
 }
 
+/** A phone number in a run of words, as a destination reads it. */
+const PHONE =
+  /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d{2,4}[\s.-]\d{3,4}(?:[\s.-]\d{2,4})?/
+/** An email address in a run of words. */
+const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/u
+
 /** Everywhere a link may go on this page, as an answer writes it, each with the destination it means. */
-export function aiSiteImportImproveDestinations(doc: AiSiteImportDocument, ledger: SiteImportLedger, input: { sections?: number; formSection?: number | null } = {}): Map<string, string> {
-  const scope = { doc, pathTo: new Map(doc.links.map((link) => [link.path.replace(/\/+$/, '') || '/', link.id])) }
+export function aiSiteImportImproveDestinations(
+  doc: AiSiteImportDocument,
+  ledger: SiteImportLedger,
+  input: { sections?: number; formSection?: number | null } = {},
+): Map<string, string> {
+  const scope = {
+    doc,
+    pathTo: new Map(
+      doc.links.map((link) => [link.path.replace(/\/+$/, '') || '/', link.id]),
+    ),
+  }
   const out = new Map<string, string>()
   for (const link of ledger.links) {
     const to = aiSiteImportLinkTo(scope, link.href)
@@ -357,13 +503,33 @@ export function aiSiteImportImproveDestinations(doc: AiSiteImportDocument, ledge
   }
   for (const page of doc.links) out.set(`page:${page.id}`, `page:${page.id}`)
   // A new page has no contact line of its own: it may send a visitor to what the site gives (AGL-4152).
-  const text = [...doc.blocks.map((block) => (block.kind === 'image' ? '' : block.text)), ...(doc.proposed ? (doc.siteLines ?? []) : [])].join(' \n ')
-  const phone = /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d{2,4}[\s.-]\d{3,4}(?:[\s.-]\d{2,4})?/.exec(text)?.[0]
-  if (phone && phone.replace(/\D/g, '').length >= 7) out.set('phone', `tel:${phone.replace(/[^\d+]/g, '')}`)
-  const email = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/u.exec(text)?.[0]
+  const text = [
+    ...doc.blocks.map((block) => (block.kind === 'image' ? '' : block.text)),
+    ...(doc.proposed ? (doc.siteLines ?? []) : []),
+  ].join(' \n ')
+  const phone = PHONE.exec(text)?.[0]
+  if (phone && phone.replace(/\D/g, '').length >= 7)
+    out.set('phone', `tel:${phone.replace(/[^\d+]/g, '')}`)
+  const email = EMAIL.exec(text)?.[0]
   if (email) out.set('email', `mailto:${email}`)
-  for (const [key, to] of [...out]) if (key === 'phone' || key === 'email') out.set(to, to)
-  if (input.formSection !== null && input.formSection !== undefined) out.set('form', `#${input.formSection + 1}`)
+  // Any page may call or write to the site's own number and address, which its header and footer give on every
+  // page, as its home page gives them (AGL-4152): the first that reads as one, as the frame's call button takes it.
+  if (!out.has('phone')) {
+    const tel = (doc.siteContacts?.phones ?? [])
+      .map((entry) => aiLayoutTelHref(PHONE.exec(entry)?.[0] ?? entry))
+      .find((href) => !!href && href.replace(/\D/g, '').length >= 7)
+    if (tel) out.set('phone', tel)
+  }
+  if (!out.has('email')) {
+    const site = (doc.siteContacts?.emails ?? [])
+      .map((entry) => EMAIL.exec(entry)?.[0])
+      .find(Boolean)
+    if (site) out.set('email', `mailto:${site}`)
+  }
+  for (const [key, to] of [...out])
+    if (key === 'phone' || key === 'email') out.set(to, to)
+  if (input.formSection !== null && input.formSection !== undefined)
+    out.set('form', `#${input.formSection + 1}`)
   else {
     // A page with no form of its own sends `form` to the site's page that holds one, as a link to that page goes (AGL-4152).
     const formPage = aiSiteImportFormPageOf(doc)
@@ -379,7 +545,9 @@ export function aiSiteImportImproveDestinations(doc: AiSiteImportDocument, ledge
  * on. `null` where no page of the site holds one, where that page is not one a
  * link may go to, or where it is the page itself, which holds its form in place.
  */
-export function aiSiteImportFormPageOf(doc: Pick<AiSiteImportDocument, 'plan' | 'formPage' | 'links' | 'url'>): string | null {
+export function aiSiteImportFormPageOf(
+  doc: Pick<AiSiteImportDocument, 'plan' | 'formPage' | 'links' | 'url'>,
+): string | null {
   const cta = doc.plan?.nav.primaryCta
   const id = (cta?.target === 'form' ? cta.page : undefined) ?? doc.formPage
   if (!id || !doc.links.some((page) => page.id === id)) return null
@@ -392,7 +560,9 @@ export function aiSiteImportFormPageOf(doc: Pick<AiSiteImportDocument, 'plan' | 
  * link to it from itself goes nowhere a visitor is not already. `null` where
  * the import plans it under no id, as the home page.
  */
-export function aiSiteImportOwnPage(doc: Pick<AiSiteImportDocument, 'url' | 'links'>): string | null {
+export function aiSiteImportOwnPage(
+  doc: Pick<AiSiteImportDocument, 'url' | 'links'>,
+): string | null {
   let path: string
   try {
     path = new URL(doc.url).pathname.replace(/\/+$/, '') || '/'
@@ -419,12 +589,20 @@ export function aiSiteImportImprovePrompt(input: {
   return [
     `Page: "${input.screen.title}" at ${input.screen.slug}`,
     // A page the site's plan proposed: there is no old page to keep, so it is written whole from what the site says.
-    ...(input.doc.proposed ? ['This page is new: the site has no such page yet. Its one line says what it tells a visitor. Write it from what the site says of itself and what this kind of business generally does, inventing no fact.'] : []),
+    ...(input.doc.proposed
+      ? [
+          'This page is new: the site has no such page yet. Its one line says what it tells a visitor. Write it from what the site says of itself and what this kind of business generally does, inventing no fact.',
+        ]
+      : []),
     ...(input.roleLines ?? []),
     ...(input.sizeLines ?? []),
     ...input.kindLines,
     "The page's ledger, what it holds and where it links:",
-    fenceUntrustedText(`The owner's page ${input.doc.url}`, aiSiteImportLedgerText(input.ledger, input.doc, input.destinations), { maxChars: AI_SITE_IMPORT_LEDGER_MAX_CHARS }),
+    fenceUntrustedText(
+      `The owner's page ${input.doc.url}`,
+      aiSiteImportLedgerText(input.ledger, input.doc, input.destinations),
+      { maxChars: AI_SITE_IMPORT_LEDGER_MAX_CHARS },
+    ),
     `Design seed: ${input.seed}.`,
   ].join('\n')
 }
@@ -439,7 +617,9 @@ export function aiSiteImportImprovePrompt(input: {
  * and a gallery none: its pictures are what it is for, and a section added
  * to a page of photos only stands between a visitor and them.
  */
-export const AI_SITE_IMPORT_NEW_SECTIONS: Readonly<Record<AiSiteImportPageRole, number>> = {
+export const AI_SITE_IMPORT_NEW_SECTIONS: Readonly<
+  Record<AiSiteImportPageRole, number>
+> = {
   home: 2,
   service: 2,
   about: 1,
@@ -457,7 +637,9 @@ export const AI_SITE_IMPORT_NEW_SECTIONS: Readonly<Record<AiSiteImportPageRole, 
  * its contact lines and its facts, each held whole on their own lines, and its
  * intent, so its prose is held only at the floor a rewritten line is.
  */
-export const AI_SITE_IMPORT_ROLE_MEANING: Readonly<Partial<Record<AiSiteImportPageRole, number>>> = { contact: SITE_IMPORT_MEANING_FLOOR }
+export const AI_SITE_IMPORT_ROLE_MEANING: Readonly<
+  Partial<Record<AiSiteImportPageRole, number>>
+> = { contact: SITE_IMPORT_MEANING_FLOOR }
 
 /** The share of its old words a page of a role keeps. */
 export function aiSiteImportMeaningShare(role: AiSiteImportPageRole): number {
@@ -471,12 +653,23 @@ export const AI_SITE_IMPORT_REWORK_LEAST_WORDS = 4
 export const AI_SITE_IMPORT_IMPROVE_MOST_SECTIONS = 10
 
 /** What a page is for, as its plan says, else from its address and what it holds. */
-export function aiSiteImportPageRoleOf(doc: Pick<AiSiteImportDocument, 'role' | 'proposed' | 'url' | 'title' | 'blocks' | 'forms' | 'layout'>, slug: string): AiSiteImportPageRole {
+export function aiSiteImportPageRoleOf(
+  doc: Pick<
+    AiSiteImportDocument,
+    'role' | 'proposed' | 'url' | 'title' | 'blocks' | 'forms' | 'layout'
+  >,
+  slug: string,
+): AiSiteImportPageRole {
   if (doc.role) return doc.role
   if (slug === '/' || slug === '') return 'home'
   const words = `${slug} ${doc.title}`.toLowerCase()
   if (/\b(?:faq|faqs|questions)\b/.test(words)) return 'faq'
-  if (/\b(?:contact|visit|find-us|location|book|booking|estimate|quote)\b/.test(words)) return 'contact'
+  if (
+    /\b(?:contact|visit|find-us|location|book|booking|estimate|quote)\b/.test(
+      words,
+    )
+  )
+    return 'contact'
   if (/\b(?:about|story|team|people)\b/.test(words)) return 'about'
   if (/\b(?:pricing|prices|rates|plans)\b/.test(words)) return 'pricing'
   if (/\b(?:gallery|portfolio|projects|work)\b/.test(words)) return 'gallery'
@@ -485,33 +678,69 @@ export function aiSiteImportPageRoleOf(doc: Pick<AiSiteImportDocument, 'role' | 
 }
 
 /** How many new sections a page is asked for: its role's, where the page has room, and none on a long page, whose groups fold. */
-export function aiSiteImportNewSectionsWanted(role: AiSiteImportPageRole, ledger: Pick<SiteImportLedger, 'folded' | 'lines' | 'items'>, proposed = false): number {
+export function aiSiteImportNewSectionsWanted(
+  role: AiSiteImportPageRole,
+  ledger: Pick<SiteImportLedger, 'folded' | 'lines' | 'items'>,
+  proposed = false,
+): number {
   if (proposed || ledger.folded) return 0
-  const sections = new Set([...ledger.lines.map((line) => line.section), ...ledger.items.map((item) => item.section)]).size
-  return Math.max(0, Math.min(AI_SITE_IMPORT_NEW_SECTIONS[role], AI_SITE_IMPORT_IMPROVE_MOST_SECTIONS - 1 - sections))
+  const sections = new Set([
+    ...ledger.lines.map((line) => line.section),
+    ...ledger.items.map((item) => item.section),
+  ]).size
+  return Math.max(
+    0,
+    Math.min(
+      AI_SITE_IMPORT_NEW_SECTIONS[role],
+      AI_SITE_IMPORT_IMPROVE_MOST_SECTIONS - 1 - sections,
+    ),
+  )
 }
 
 /** What each role's page tells, in the order a designer would tell it. */
 const ROLE_PLAN: Readonly<Record<AiSiteImportPageRole, string>> = {
   home: 'the front door of the site: the hero, what the business offers, why choose it, how it works, the questions people ask, and the closing band',
-  service: 'what the service is: the hero, what is included as cards, how it works as steps, why choose it, the questions people ask about it, and the closing band',
-  about: 'the story and the people: the hero, the story beside a picture, what the business values or why choose it as cards, a kept quote where the ledger has one, and the closing band',
-  contact: 'how to reach the business: a short, welcoming opening, the form on a framed ground beside how to reach it, what happens after a visitor writes where the site says so, and no closing band',
-  gallery: 'the work in pictures: the hero, the pictures in rows with short captions, what the work is, and the closing band',
-  pricing: 'the prices, exactly as kept: the hero, the plans or table kept whole, what is included, the questions people ask about paying, and the closing band',
+  service:
+    'what the service is: the hero, what is included as cards, how it works as steps, why choose it, the questions people ask about it, and the closing band',
+  about:
+    'the story and the people: the hero, the story beside a picture, what the business values or why choose it as cards, a kept quote where the ledger has one, and the closing band',
+  contact:
+    'how to reach the business: a short, welcoming opening, the form on a framed ground beside how to reach it, what happens after a visitor writes where the site says so, and no closing band',
+  gallery:
+    'the work in pictures: the hero, the pictures in rows with short captions, what the work is, and the closing band',
+  pricing:
+    'the prices, exactly as kept: the hero, the plans or table kept whole, what is included, the questions people ask about paying, and the closing band',
   faq: 'the questions: a short opening, the questions as a faq, and the closing band',
-  other: 'what the page is for: the hero, its content drawn as groups and pictures, and the closing band',
+  other:
+    'what the page is for: the hero, its content drawn as groups and pictures, and the closing band',
 }
 
 /** The lines a redesign's request says of its page's role and what it needs (AGL-4152). */
-export function aiSiteImportImproveRoleLines(input: { role: AiSiteImportPageRole; wanted: number; folded: boolean; kind?: string | null; seed: number }): string[] {
+export function aiSiteImportImproveRoleLines(input: {
+  role: AiSiteImportPageRole
+  wanted: number
+  folded: boolean
+  kind?: string | null
+  seed: number
+}): string[] {
   const { role, wanted } = input
   // A home tells its story as a site start's does (`ai-site-home-arcs.ts`), one of its kind's arcs by the job's seed.
-  const arc = role === 'home' ? aiSiteHomeArc({ kind: input.kind ?? null, seed: input.seed }) : null
+  const arc =
+    role === 'home'
+      ? aiSiteHomeArc({ kind: input.kind ?? null, seed: input.seed })
+      : null
   return [
     `This page's role: ${role}, ${ROLE_PLAN[role]}.`,
-    ...(arc ? [`This home tells its story in this order, after the hero: ${arc.sections.map((section) => section.words).join('; ')}. Where it says the brief, read what the site says. Fold the old page's sections into these, and keep the order.`] : []),
-    wanted ? `It needs at least ${wanted} new ${wanted === 1 ? 'section' : 'sections'}: ${wanted === 1 ? 'one' : 'sections'} the old page has nowhere, for this role.` : input.folded ? 'It is long: plan its order and its grounds, keep its groups whole, and add nothing it does not need.' : 'It needs no new section; organize and draw what it has.',
+    ...(arc
+      ? [
+          `This home tells its story in this order, after the hero: ${arc.sections.map((section) => section.words).join('; ')}. Where it says the brief, read what the site says. Fold the old page's sections into these, and keep the order.`,
+        ]
+      : []),
+    wanted
+      ? `It needs at least ${wanted} new ${wanted === 1 ? 'section' : 'sections'}: ${wanted === 1 ? 'one' : 'sections'} the old page has nowhere, for this role.`
+      : input.folded
+        ? 'It is long: plan its order and its grounds, keep its groups whole, and add nothing it does not need.'
+        : 'It needs no new section; organize and draw what it has.',
   ]
 }
 
@@ -525,13 +754,24 @@ export function aiSiteImportImproveRoleLines(input: { role: AiSiteImportPageRole
  * band or a label over a kept group, reworks nothing: any new section that
  * happens to say its two or three words would otherwise read as its rework.
  */
-export function aiSiteImportImproveNewSections(answer: readonly AiSiteImportImprovedSection[], ledger: Pick<SiteImportLedger, 'lines' | 'items'>): number[] {
+export function aiSiteImportImproveNewSections(
+  answer: readonly AiSiteImportImprovedSection[],
+  ledger: Pick<SiteImportLedger, 'lines' | 'items'>,
+): number[] {
   const kinds = new Map(ledger.items.map((item) => [item.ref, item.kind]))
   const sources = new Map<number, string[]>()
-  for (const line of ledger.lines) sources.set(line.section, [...(sources.get(line.section) ?? []), line.text])
+  for (const line of ledger.lines)
+    sources.set(line.section, [...(sources.get(line.section) ?? []), line.text])
   const said = answer.map((section) =>
     section.blocks
-      .flatMap((block) => (block.kind === 'keep' ? [] : [block.kind === 'image' ? '' : (block.text ?? ''), ...(block.items ?? []).flatMap((item) => [item.title, item.text])]))
+      .flatMap((block) =>
+        block.kind === 'keep'
+          ? []
+          : [
+              block.kind === 'image' ? '' : (block.text ?? ''),
+              ...(block.items ?? []).flatMap((item) => [item.title, item.text]),
+            ],
+      )
       .join(' '),
   )
   const reworked = new Set<number>()
@@ -539,7 +779,8 @@ export function aiSiteImportImproveNewSections(answer: readonly AiSiteImportImpr
   for (const [at, lines] of sources) {
     if (at === 0) continue
     const text = lines.join(' ')
-    if (siteImportContentWords(text) < AI_SITE_IMPORT_REWORK_LEAST_WORDS) continue
+    if (siteImportContentWords(text) < AI_SITE_IMPORT_REWORK_LEAST_WORDS)
+      continue
     let best = -1
     let most = 0.5
     said.forEach((words, index) => {
@@ -554,20 +795,44 @@ export function aiSiteImportImproveNewSections(answer: readonly AiSiteImportImpr
   const last = answer.length - 1
   return answer.flatMap((section, index) => {
     if (index === 0 || reworked.has(index)) return []
-    if (section.blocks.some((block) => block.kind === 'keep' && kinds.get(block.ref) !== 'picture')) return []
-    const groups = section.blocks.filter((block) => block.kind !== 'keep' && (block.items?.length ?? 0) >= 2)
-    const words = section.blocks.filter((block) => block.kind === 'text' || block.kind === 'lede')
+    if (
+      section.blocks.some(
+        (block) => block.kind === 'keep' && kinds.get(block.ref) !== 'picture',
+      )
+    )
+      return []
+    const groups = section.blocks.filter(
+      (block) => block.kind !== 'keep' && (block.items?.length ?? 0) >= 2,
+    )
+    const words = section.blocks.filter(
+      (block) => block.kind === 'text' || block.kind === 'lede',
+    )
     // A closing band: a heading, a line at most and a button, last.
-    if (index === last && !groups.length && words.length <= 1 && section.blocks.some((block) => block.kind === 'button')) return []
+    if (
+      index === last &&
+      !groups.length &&
+      words.length <= 1 &&
+      section.blocks.some((block) => block.kind === 'button')
+    )
+      return []
     return groups.length || words.length ? [index] : []
   })
 }
 
 /** A section's shape, as a designer tells sections apart: what the variety of a page is counted in. */
-function shapeOf(section: AiSiteImportImprovedSection, kinds: ReadonlyMap<string, string>): string {
-  const kept = section.blocks.flatMap((block) => (block.kind === 'keep' ? [kinds.get(block.ref) ?? ''] : []))
-  const pictures = kept.filter((kind) => kind === 'picture').length + section.blocks.filter((block) => block.kind === 'image').length
-  const group = section.blocks.find((block) => block.kind !== 'keep' && (block.items?.length ?? 0) >= 2)
+function shapeOf(
+  section: AiSiteImportImprovedSection,
+  kinds: ReadonlyMap<string, string>,
+): string {
+  const kept = section.blocks.flatMap((block) =>
+    block.kind === 'keep' ? [kinds.get(block.ref) ?? ''] : [],
+  )
+  const pictures =
+    kept.filter((kind) => kind === 'picture').length +
+    section.blocks.filter((block) => block.kind === 'image').length
+  const group = section.blocks.find(
+    (block) => block.kind !== 'keep' && (block.items?.length ?? 0) >= 2,
+  )
   if (kept.includes('form')) return 'form'
   if (kept.includes('quote')) return 'quote'
   if (group) return group.kind
@@ -575,7 +840,10 @@ function shapeOf(section: AiSiteImportImprovedSection, kinds: ReadonlyMap<string
   if (whole) return whole
   if (pictures >= 2) return 'pictures'
   if (pictures && section.cols) return 'split'
-  return section.blocks.some((block) => block.kind === 'button') && !section.blocks.some((block) => block.kind === 'text') ? 'band' : 'words'
+  return section.blocks.some((block) => block.kind === 'button') &&
+    !section.blocks.some((block) => block.kind === 'text')
+    ? 'band'
+    : 'words'
 }
 
 /** What a redesign is asked to be, by its role (AGL-4152). */
@@ -589,7 +857,13 @@ export interface AiSiteImportImproveNeeds {
 export const AI_SITE_IMPORT_IMPROVE_LEAST_SHAPES = 3
 
 /** Roles whose opening holds a picture. */
-const PICTURED_OPENINGS: ReadonlySet<AiSiteImportPageRole> = new Set(['home', 'service', 'about', 'gallery', 'other'])
+const PICTURED_OPENINGS: ReadonlySet<AiSiteImportPageRole> = new Set([
+  'home',
+  'service',
+  'about',
+  'gallery',
+  'other',
+])
 
 /**
  * Whether a redesign is planned as a designer's page (AGL-4152), answer by
@@ -597,7 +871,13 @@ const PICTURED_OPENINGS: ReadonlySet<AiSiteImportPageRole> = new Set(['home', 's
  * sections drawn in more than one or two shapes. Each miss is named for the
  * one re-ask.
  */
-export function aiSiteImportImprovePlanMisses(answer: readonly AiSiteImportImprovedSection[], input: { ledger: Pick<SiteImportLedger, 'lines' | 'items' | 'folded'>; needs: AiSiteImportImproveNeeds }): AiDoctrineViolation[] {
+export function aiSiteImportImprovePlanMisses(
+  answer: readonly AiSiteImportImprovedSection[],
+  input: {
+    ledger: Pick<SiteImportLedger, 'lines' | 'items' | 'folded'>
+    needs: AiSiteImportImproveNeeds
+  },
+): AiDoctrineViolation[] {
   const out: AiDoctrineViolation[] = []
   const added = aiSiteImportImproveNewSections(answer, input.ledger)
   if (added.length < input.needs.wanted) {
@@ -608,13 +888,33 @@ export function aiSiteImportImprovePlanMisses(answer: readonly AiSiteImportImpro
     })
   }
   const opening = answer[0]?.blocks ?? []
-  if (PICTURED_OPENINGS.has(input.needs.role) && !opening.some((block) => block.kind === 'image' || (block.kind === 'keep' && block.ref.startsWith('picture:')))) {
-    out.push({ rule: null, code: 'improve-opening', message: "The opening has no picture. Place the page's own picture there with keep, or an image block, beside the words or behind them." })
+  if (
+    PICTURED_OPENINGS.has(input.needs.role) &&
+    !opening.some(
+      (block) =>
+        block.kind === 'image' ||
+        (block.kind === 'keep' && block.ref.startsWith('picture:')),
+    )
+  ) {
+    out.push({
+      rule: null,
+      code: 'improve-opening',
+      message:
+        "The opening has no picture. Place the page's own picture there with keep, or an image block, beside the words or behind them.",
+    })
   }
-  const kinds = new Map(input.ledger.items.map((item) => [item.ref, item.kind as string]))
-  const shapes = new Set(answer.slice(1).map((section) => shapeOf(section, kinds)))
+  const kinds = new Map(
+    input.ledger.items.map((item) => [item.ref, item.kind as string]),
+  )
+  const shapes = new Set(
+    answer.slice(1).map((section) => shapeOf(section, kinds)),
+  )
   if (answer.length >= 4 && shapes.size < AI_SITE_IMPORT_IMPROVE_LEAST_SHAPES) {
-    out.push({ rule: null, code: 'improve-shapes', message: `The sections after the opening are drawn in ${shapes.size === 1 ? 'one shape' : `${shapes.size} shapes`}. Vary them: a card grid, steps, words beside a picture, a row of pictures, a faq, a quote on its own ground, a closing band.` })
+    out.push({
+      rule: null,
+      code: 'improve-shapes',
+      message: `The sections after the opening are drawn in ${shapes.size === 1 ? 'one shape' : `${shapes.size} shapes`}. Vary them: a card grid, steps, words beside a picture, a row of pictures, a faq, a quote on its own ground, a closing band.`,
+    })
   }
   return out
 }
@@ -624,33 +924,78 @@ export function aiSiteImportImprovePlanMisses(answer: readonly AiSiteImportImpro
  *-----------------------------------------*/
 
 /** A redesign's answer, read by position: `null` where it gave no section it can draw. */
-export function aiReadImprovedPage(raw: unknown, settled: AiLayoutSettlement[] = []): AiSiteImportImprovedSection[] | null {
-  const given = raw && typeof raw === 'object' && Array.isArray((raw as Record<string, unknown>)['sections']) ? ((raw as Record<string, unknown>)['sections'] as unknown[]) : null
+export function aiReadImprovedPage(
+  raw: unknown,
+  settled: AiLayoutSettlement[] = [],
+): AiSiteImportImprovedSection[] | null {
+  const given =
+    raw &&
+    typeof raw === 'object' &&
+    Array.isArray((raw as Record<string, unknown>)['sections'])
+      ? ((raw as Record<string, unknown>)['sections'] as unknown[])
+      : null
   if (!given) return null
   const sections: AiSiteImportImprovedSection[] = []
   given.forEach((entry, index) => {
-    const section = entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : null
+    const section =
+      entry && typeof entry === 'object'
+        ? (entry as Record<string, unknown>)
+        : null
     if (!section) return
-    const cols = Array.isArray(section['cols']) ? section['cols'].filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0).slice(0, AI_LAYOUT_MAX_COLS).map((value) => Math.min(12, Math.max(1, Math.round(value)))) : []
+    const cols = Array.isArray(section['cols'])
+      ? section['cols']
+          .filter(
+            (value): value is number =>
+              typeof value === 'number' && Number.isFinite(value) && value > 0,
+          )
+          .slice(0, AI_LAYOUT_MAX_COLS)
+          .map((value) => Math.min(12, Math.max(1, Math.round(value))))
+      : []
     const blocks: AiSiteImportImprovedBlock[] = []
-    ;(Array.isArray(section['blocks']) ? section['blocks'] : []).forEach((raw: unknown, position: number) => {
-      const entry = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null
-      if (!entry) return
-      const col = typeof entry['col'] === 'number' && Number.isInteger(entry['col']) && entry['col'] >= 0 && cols.length >= 2 ? Math.min(entry['col'], cols.length - 1) : undefined
-      if (entry['kind'] === 'keep') {
-        const ref = clean(entry['ref'])
-        if (ref) blocks.push({ kind: 'keep', ref, ...(col !== undefined ? { col } : {}) })
-        return
-      }
-      const block = aiReadLayoutBlock(entry, `sections[${index}].blocks[${position}]`, settled, { mostItems: AI_SITE_IMPORT_IMPROVE_MAX_ITEMS })
-      if (!block) return
-      const { col: _col, ...rest } = block
-      blocks.push({ ...rest, ...(col !== undefined ? { col } : {}) })
-    })
+    ;(Array.isArray(section['blocks']) ? section['blocks'] : []).forEach(
+      (raw: unknown, position: number) => {
+        const entry =
+          raw && typeof raw === 'object'
+            ? (raw as Record<string, unknown>)
+            : null
+        if (!entry) return
+        const col =
+          typeof entry['col'] === 'number' &&
+          Number.isInteger(entry['col']) &&
+          entry['col'] >= 0 &&
+          cols.length >= 2
+            ? Math.min(entry['col'], cols.length - 1)
+            : undefined
+        if (entry['kind'] === 'keep') {
+          const ref = clean(entry['ref'])
+          if (ref)
+            blocks.push({
+              kind: 'keep',
+              ref,
+              ...(col !== undefined ? { col } : {}),
+            })
+          return
+        }
+        const block = aiReadLayoutBlock(
+          entry,
+          `sections[${index}].blocks[${position}]`,
+          settled,
+          { mostItems: AI_SITE_IMPORT_IMPROVE_MAX_ITEMS },
+        )
+        if (!block) return
+        const { col: _col, ...rest } = block
+        blocks.push({ ...rest, ...(col !== undefined ? { col } : {}) })
+      },
+    )
     if (!blocks.length) return
     const band = AI_LAYOUT_BANDS.find((value) => value === section['band'])
     const align = AI_LAYOUT_ALIGNS.find((value) => value === section['align'])
-    sections.push({ ...(band ? { band } : {}), ...(cols.length >= 2 ? { cols } : {}), ...(align ? { align } : {}), blocks })
+    sections.push({
+      ...(band ? { band } : {}),
+      ...(cols.length >= 2 ? { cols } : {}),
+      ...(align ? { align } : {}),
+      blocks,
+    })
   })
   return sections.length ? sections : null
 }
@@ -663,10 +1008,17 @@ export function aiReadImprovedPage(raw: unknown, settled: AiLayoutSettlement[] =
 export const AI_SITE_IMPORT_COVER_LEAST_RATIO = 1.3
 
 /** The heroes that box their photo under the words: a masthead's and an editorial's. */
-const BOXED_HEROES: ReadonlySet<AiLayoutHeroVariant> = new Set(['column', 'editorial'])
+const BOXED_HEROES: ReadonlySet<AiLayoutHeroVariant> = new Set([
+  'column',
+  'editorial',
+])
 
 /** The heroes that lay their photo edge to edge behind the words, which a square or a portrait cannot fill. */
-const COVERING_HEROES: ReadonlySet<AiLayoutHeroVariant> = new Set(['cover', 'poster', 'panel'])
+const COVERING_HEROES: ReadonlySet<AiLayoutHeroVariant> = new Set([
+  'cover',
+  'poster',
+  'panel',
+])
 
 /**
  * The site's hero as a page brought in draws it: a collage or a portrait holds
@@ -675,17 +1027,31 @@ const COVERING_HEROES: ReadonlySet<AiLayoutHeroVariant> = new Set(['cover', 'pos
  * wide photo under centered words reads as a picture pasted below a heading,
  * the way an old page looks, never as a brand's opening.
  */
-export function aiSiteImportImproveHero(design: AiLayoutDesign, plan?: AiSiteImportPlan | null, opening?: { ratio?: number } | null): AiLayoutImportHero {
-  const chosen = (plan?.design.hero as AiLayoutHeroVariant | undefined) ?? aiLayoutDesignChoices(design).hero
+export function aiSiteImportImproveHero(
+  design: AiLayoutDesign,
+  plan?: AiSiteImportPlan | null,
+  opening?: { ratio?: number } | null,
+): AiLayoutImportHero {
+  const chosen =
+    (plan?.design.hero as AiLayoutHeroVariant | undefined) ??
+    aiLayoutDesignChoices(design).hero
   const ratio = opening?.ratio ?? 0
-  if (BOXED_HEROES.has(chosen) && ratio >= AI_SITE_IMPORT_COVER_LEAST_RATIO) return 'cover'
+  if (BOXED_HEROES.has(chosen) && ratio >= AI_SITE_IMPORT_COVER_LEAST_RATIO)
+    return 'cover'
   // A square or a portrait is never stretched behind the words (AGL-4152): it sits beside them.
-  if (COVERING_HEROES.has(chosen) && ratio > 0 && ratio < AI_SITE_IMPORT_COVER_LEAST_RATIO) return 'split'
+  if (
+    COVERING_HEROES.has(chosen) &&
+    ratio > 0 &&
+    ratio < AI_SITE_IMPORT_COVER_LEAST_RATIO
+  )
+    return 'split'
   return chosen === 'collage' || chosen === 'portrait' ? 'split' : chosen
 }
 
 /** How many of a group's items sit across: planned for how much each says. */
-export function aiSiteImportImproveColumns(items: readonly AiLayoutItem[]): number {
+export function aiSiteImportImproveColumns(
+  items: readonly AiLayoutItem[],
+): number {
   const count = items.length
   if (count <= 3) return count
   const longest = Math.max(...items.map((item) => item.text.length))
@@ -693,7 +1059,14 @@ export function aiSiteImportImproveColumns(items: readonly AiLayoutItem[]): numb
   return 3
 }
 
-const WORD_KINDS = new Set(['eyebrow', 'heading', 'lede', 'text', 'note', 'button'])
+const WORD_KINDS = new Set([
+  'eyebrow',
+  'heading',
+  'lede',
+  'text',
+  'note',
+  'button',
+])
 
 /** The longest quote a kept set of quotes sets side by side. */
 const QUOTE_ACROSS_CHARS = 220
@@ -706,7 +1079,9 @@ const QUOTE_ACROSS_CHARS = 220
  * never two, which rule 16 refuses as a repeated inline style. Pictures side
  * by side in a row are cropped alike, whatever shapes they came in.
  */
-export const AI_SITE_IMPORT_IMPROVE_FRAME_PX: Readonly<Record<'wide' | 'column', number>> = { wide: 420, column: 300 }
+export const AI_SITE_IMPORT_IMPROVE_FRAME_PX: Readonly<
+  Record<'wide' | 'column', number>
+> = { wide: 420, column: 300 }
 
 /** The shape a picture on a card is cropped to (AGL-4152): every card of a row alike. */
 const CARD_FRAME = '4 / 3'
@@ -734,7 +1109,10 @@ const CARD_PICTURE_KEPT = 0.5
  * Where no card says a photo's words but the one section's unplaced photos
  * number exactly the cards, they are taken in order, as the source laid them.
  */
-export function aiSiteImportCardPictures(answer: readonly AiSiteImportImprovedSection[], ledger: Pick<SiteImportLedger, 'items' | 'lines'>): Map<AiSiteImportImprovedBlock, string[]> {
+export function aiSiteImportCardPictures(
+  answer: readonly AiSiteImportImprovedSection[],
+  ledger: Pick<SiteImportLedger, 'items' | 'lines'>,
+): Map<AiSiteImportImprovedBlock, string[]> {
   const placed = new Set(aiSiteImportImprovedPlaced(answer, ledger))
   const captions = aiSiteImportPictureCaptions(ledger)
   const taken = new Set<string>()
@@ -744,9 +1122,15 @@ export function aiSiteImportCardPictures(answer: readonly AiSiteImportImprovedSe
       if (block.kind !== 'cards') continue
       const items = block.items ?? []
       if (items.length < 2 || items.some((item) => item.ref)) continue
-      const pool = ledger.items.filter((item) => item.kind === 'picture' && !placed.has(item.ref) && !taken.has(item.ref))
+      const pool = ledger.items.filter(
+        (item) =>
+          item.kind === 'picture' &&
+          !placed.has(item.ref) &&
+          !taken.has(item.ref),
+      )
       if (pool.length < items.length) continue
-      const said = (ref: string) => (captions.get(ref) ?? []).map((line) => line.text)
+      const said = (ref: string) =>
+        (captions.get(ref) ?? []).map((line) => line.text)
       const chosen: string[] = []
       for (const item of items) {
         const words = `${item.title} ${item.text}`
@@ -756,7 +1140,10 @@ export function aiSiteImportCardPictures(answer: readonly AiSiteImportImprovedSe
           if (chosen.includes(picture.ref)) continue
           const lines = said(picture.ref)
           if (!lines.length) continue
-          const kept = Math.max(siteImportContentKept(lines[0] as string, words), siteImportContentKept(lines.join(' '), words))
+          const kept = Math.max(
+            siteImportContentKept(lines[0] as string, words),
+            siteImportContentKept(lines.join(' '), words),
+          )
           if (kept >= most) {
             most = kept
             best = picture.ref
@@ -766,7 +1153,14 @@ export function aiSiteImportCardPictures(answer: readonly AiSiteImportImprovedSe
         chosen.push(best)
       }
       const sections = new Set(pool.map((picture) => picture.section))
-      const refs = chosen.length === items.length ? chosen : !chosen.length && sections.size === 1 && pool.length === items.length ? pool.map((picture) => picture.ref) : null
+      const refs =
+        chosen.length === items.length
+          ? chosen
+          : !chosen.length &&
+              sections.size === 1 &&
+              pool.length === items.length
+            ? pool.map((picture) => picture.ref)
+            : null
       if (!refs) continue
       for (const ref of refs) taken.add(ref)
       out.set(block, refs)
@@ -787,13 +1181,22 @@ export interface AiSiteImportImprovedPage {
 }
 
 /** The sections' names: each heading's words, as a label, told apart. */
-function sectionNames(sections: readonly AiLayoutSection[], title: string): string[] {
+function sectionNames(
+  sections: readonly AiLayoutSection[],
+  title: string,
+): string[] {
   const taken = new Set<string>()
   return sections.map((section, index) => {
-    const heading = section.blocks.find((block) => block.kind === 'heading' && block.text)?.text
-    const base = siteImportLabel(heading ?? '') || (index === 0 ? siteImportLabel(title) : '') || `Section ${index + 1}`
+    const heading = section.blocks.find(
+      (block) => block.kind === 'heading' && block.text,
+    )?.text
+    const base =
+      siteImportLabel(heading ?? '') ||
+      (index === 0 ? siteImportLabel(title) : '') ||
+      `Section ${index + 1}`
     let name = base
-    for (let at = 2; taken.has(name.toLowerCase()); at += 1) name = `${base.slice(0, 50)} (${at})`
+    for (let at = 2; taken.has(name.toLowerCase()); at += 1)
+      name = `${base.slice(0, 50)} (${at})`
     taken.add(name.toLowerCase())
     return name
   })
@@ -808,29 +1211,45 @@ function sectionNames(sections: readonly AiLayoutSection[], title: string): stri
  * leaves a column empty in is drawn as one column. A client's logo the source
  * showed beside its words read, as a cover, as the page's own work.
  */
-export function aiSiteImportOpeningPhoto(answer: readonly AiSiteImportImprovedSection[], input: { doc: Pick<AiSiteImportDocument, 'blocks' | 'photos'>; ledger: Pick<SiteImportLedger, 'items'> }): AiSiteImportImprovedSection[] {
+export function aiSiteImportOpeningPhoto(
+  answer: readonly AiSiteImportImprovedSection[],
+  input: {
+    doc: Pick<AiSiteImportDocument, 'blocks' | 'photos'>
+    ledger: Pick<SiteImportLedger, 'items'>
+  },
+): AiSiteImportImprovedSection[] {
   const [first, ...rest] = answer
   if (!first) return [...answer]
   const { doc, ledger } = input
   const items = new Map(ledger.items.map((item) => [item.ref, item]))
   const imageOf = (ref: string) => {
     const item = items.get(ref)
-    const block = item?.kind === 'picture' ? doc.blocks[item.lines[0] as number] : undefined
+    const block =
+      item?.kind === 'picture' ? doc.blocks[item.lines[0] as number] : undefined
     return block?.kind === 'image' ? block : null
   }
   const markAt = (ref: string) => {
     const image = imageOf(ref)
     return !!image && aiSiteImportImageIsMark(image, doc.photos)
   }
-  const marks = new Set(first.blocks.filter((block) => block.kind === 'keep' && markAt(block.ref)))
+  const marks = new Set(
+    first.blocks.filter((block) => block.kind === 'keep' && markAt(block.ref)),
+  )
   if (!marks.size) return [...answer]
   const placed = new Set(aiSiteImportImprovedPlaced(answer, ledger))
   const ratioOf = (ref: string) => {
     const url = imageOf(ref)?.url
-    const photo = url ? doc.photos.find((entry) => entry.from === url) : undefined
+    const photo = url
+      ? doc.photos.find((entry) => entry.from === url)
+      : undefined
     return photo?.width && photo.height ? photo.width / photo.height : 0
   }
-  const spare = ledger.items.filter((item) => item.kind === 'picture' && !placed.has(item.ref) && !markAt(item.ref)).sort((a, b) => ratioOf(b.ref) - ratioOf(a.ref))
+  const spare = ledger.items
+    .filter(
+      (item) =>
+        item.kind === 'picture' && !placed.has(item.ref) && !markAt(item.ref),
+    )
+    .sort((a, b) => ratioOf(b.ref) - ratioOf(a.ref))
   let next = 0
   const blocks = first.blocks.flatMap((block) => {
     if (!marks.has(block) || block.kind !== 'keep') return [block]
@@ -839,9 +1258,16 @@ export function aiSiteImportOpeningPhoto(answer: readonly AiSiteImportImprovedSe
   })
   // A row with a column left empty is no row.
   const cols = first.cols
-  const emptied = !!cols && cols.some((_, col) => !blocks.some((block) => block.col === col))
+  const emptied =
+    !!cols && cols.some((_, col) => !blocks.some((block) => block.col === col))
   const opening: AiSiteImportImprovedSection = emptied
-    ? { ...(first.band ? { band: first.band } : {}), ...(first.align ? { align: first.align } : {}), blocks: blocks.map(({ col: _col, ...block }) => block as AiSiteImportImprovedBlock) }
+    ? {
+        ...(first.band ? { band: first.band } : {}),
+        ...(first.align ? { align: first.align } : {}),
+        blocks: blocks.map(
+          ({ col: _col, ...block }) => block as AiSiteImportImprovedBlock,
+        ),
+      }
     : { ...first, blocks }
   return [opening, ...rest]
 }
@@ -874,40 +1300,100 @@ const LINE_SAID_KEPT = 0.5
  */
 export function aiSiteImportFilledSections(
   answer: readonly AiSiteImportImprovedSection[],
-  input: { doc: Pick<AiSiteImportDocument, 'blocks'>; ledger: Pick<SiteImportLedger, 'items' | 'lines'> },
-): { sections: AiSiteImportImprovedSection[]; hollow: string[]; asWritten: Set<AiSiteImportImprovedBlock> } {
+  input: {
+    doc: Pick<AiSiteImportDocument, 'blocks'>
+    ledger: Pick<SiteImportLedger, 'items' | 'lines'>
+  },
+): {
+  sections: AiSiteImportImprovedSection[]
+  hollow: string[]
+  asWritten: Set<AiSiteImportImprovedBlock>
+} {
   const { doc, ledger } = input
   const items = new Map(ledger.items.map((item) => [item.ref, item]))
   const draws = (block: AiSiteImportImprovedBlock): boolean => {
     if (block.kind !== 'keep') return true
     const item = items.get(block.ref)
     if (!item) return false
-    return item.kind === 'picture' ? doc.blocks[item.lines[0] as number]?.kind === 'image' : !!item.node
+    return item.kind === 'picture'
+      ? doc.blocks[item.lines[0] as number]?.kind === 'image'
+      : !!item.node
   }
-  const hollowAt = (section: AiSiteImportImprovedSection | undefined) => !!section && section.blocks.every((block) => LABEL_KINDS.has(block.kind) || !draws(block))
+  const hollowAt = (section: AiSiteImportImprovedSection | undefined) =>
+    !!section &&
+    section.blocks.every(
+      (block) => LABEL_KINDS.has(block.kind) || !draws(block),
+    )
   const asWritten = new Set<AiSiteImportImprovedBlock>()
-  if (!answer.slice(1).some(hollowAt)) return { sections: [...answer], hollow: [], asWritten }
+  if (!answer.slice(1).some(hollowAt))
+    return { sections: [...answer], hollow: [], asWritten }
   const placed = new Set(aiSiteImportImprovedPlaced(answer, ledger))
   const said = answer
-    .flatMap((section) => section.blocks.flatMap((block) => (block.kind === 'keep' ? [] : [block.kind === 'image' ? '' : (block.text ?? ''), ...(block.items ?? []).flatMap((item) => [item.title, item.text])])))
+    .flatMap((section) =>
+      section.blocks.flatMap((block) =>
+        block.kind === 'keep'
+          ? []
+          : [
+              block.kind === 'image' ? '' : (block.text ?? ''),
+              ...(block.items ?? []).flatMap((item) => [item.title, item.text]),
+            ],
+      ),
+    )
     .join(' ')
-  const unsaid = (line: SiteImportLedgerLine) => !(line.group && placed.has(line.group)) && siteImportContentKept(line.text, said) < LINE_SAID_KEPT
+  const unsaid = (line: SiteImportLedgerLine) =>
+    !(line.group && placed.has(line.group)) &&
+    siteImportContentKept(line.text, said) < LINE_SAID_KEPT
   const words = (text: string) => text.match(/[\p{L}\p{N}]+/gu)?.length ?? 0
   // The old section a heading names, and what of it the page has nowhere: its group, else its lines.
   const refillOf = (heading: string): AiSiteImportImprovedBlock[] => {
-    const names = (line: SiteImportLedgerLine) => siteImportContentWords(line.text) > 0 && siteImportContentKept(line.text, heading) >= NAMES_SOURCE_KEPT
-    const named = ledger.lines.find((line) => line.kind === 'heading' && names(line)) ?? ledger.lines.find((line) => !line.group && words(line.text) <= HEADING_LINE_WORDS && names(line))
+    const names = (line: SiteImportLedgerLine) =>
+      siteImportContentWords(line.text) > 0 &&
+      siteImportContentKept(line.text, heading) >= NAMES_SOURCE_KEPT
+    const named =
+      ledger.lines.find((line) => line.kind === 'heading' && names(line)) ??
+      ledger.lines.find(
+        (line) =>
+          !line.group && words(line.text) <= HEADING_LINE_WORDS && names(line),
+      )
     if (!named) return []
-    const rest = (section: number) => ledger.lines.filter((line) => line.section === section && line.line !== named.line && line.kind !== 'link')
+    const rest = (section: number) =>
+      ledger.lines.filter(
+        (line) =>
+          line.section === section &&
+          line.line !== named.line &&
+          line.kind !== 'link',
+      )
     // A heading the old page set on its own, over the next section's things, names those.
-    const at = rest(named.section).length || ledger.items.some((item) => item.section === named.section) ? named.section : named.section + 1
-    const group = ledger.items.find((item) => item.section === at && item.kind === 'group' && !placed.has(item.ref) && item.node)
+    const at =
+      rest(named.section).length ||
+      ledger.items.some((item) => item.section === named.section)
+        ? named.section
+        : named.section + 1
+    const group = ledger.items.find(
+      (item) =>
+        item.section === at &&
+        item.kind === 'group' &&
+        !placed.has(item.ref) &&
+        item.node,
+    )
     if (group) return [{ kind: 'keep', ref: group.ref }]
-    const lines = rest(at).filter((line) => line.kind !== 'heading' && unsaid(line))
-    if (lines.length >= 2) return [{ kind: 'list', items: lines.map((line) => ({ title: line.text, text: '' })) }]
-    return lines.length === 1 ? [{ kind: 'text', text: (lines[0] as SiteImportLedgerLine).text }] : []
+    const lines = rest(at).filter(
+      (line) => line.kind !== 'heading' && unsaid(line),
+    )
+    if (lines.length >= 2)
+      return [
+        {
+          kind: 'list',
+          items: lines.map((line) => ({ title: line.text, text: '' })),
+        },
+      ]
+    return lines.length === 1
+      ? [{ kind: 'text', text: (lines[0] as SiteImportLedgerLine).text }]
+      : []
   }
-  const spanning = (block: AiSiteImportImprovedBlock): AiSiteImportImprovedBlock => {
+  const spanning = (
+    block: AiSiteImportImprovedBlock,
+  ): AiSiteImportImprovedBlock => {
     const { col: _col, ...rest } = block
     return rest as AiSiteImportImprovedBlock
   }
@@ -919,10 +1405,20 @@ export function aiSiteImportFilledSections(
       out.push(section)
       return
     }
-    const labels = section.blocks.filter((block) => LABEL_KINDS.has(block.kind)).map(spanning)
+    const labels = section.blocks
+      .filter((block) => LABEL_KINDS.has(block.kind))
+      .map(spanning)
     const heading = labels.find((block) => block.kind === 'heading')
-    const name = clean(heading && heading.kind !== 'keep' ? heading.text : labels[0] && labels[0].kind !== 'keep' ? labels[0].text : '') || `section ${index + 1}`
-    const refill = heading && heading.kind !== 'keep' ? refillOf(heading.text ?? '') : []
+    const name =
+      clean(
+        heading && heading.kind !== 'keep'
+          ? heading.text
+          : labels[0] && labels[0].kind !== 'keep'
+            ? labels[0].text
+            : '',
+      ) || `section ${index + 1}`
+    const refill =
+      heading && heading.kind !== 'keep' ? refillOf(heading.text ?? '') : []
     if (refill.length) {
       for (const block of refill) {
         if (block.kind === 'keep') placed.add(block.ref)
@@ -930,11 +1426,18 @@ export function aiSiteImportFilledSections(
       }
       const { cols: _cols, ...rest } = section
       out.push({ ...rest, blocks: [...labels, ...refill] })
-      hollow.push(`"${short(name, 60)}" refilled from its old section (${refill[0]?.kind === 'keep' ? refill[0].ref : `${refill[0]?.items?.length ?? 1} lines`})`)
+      hollow.push(
+        `"${short(name, 60)}" refilled from its old section (${refill[0]?.kind === 'keep' ? refill[0].ref : `${refill[0]?.items?.length ?? 1} lines`})`,
+      )
       return
     }
     const next = queue[index + 1]
-    if (labels.length && next && !next.blocks.some((block) => block.kind === 'heading') && !hollowAt(next)) {
+    if (
+      labels.length &&
+      next &&
+      !next.blocks.some((block) => block.kind === 'heading') &&
+      !hollowAt(next)
+    ) {
       queue[index + 1] = { ...next, blocks: [...labels, ...next.blocks] }
       hollow.push(`"${short(name, 60)}" handed to the section after it`)
       return
@@ -955,10 +1458,22 @@ export function aiSiteImportFilledSections(
  */
 export function aiSiteImportEvenCards(
   answer: readonly AiSiteImportImprovedSection[],
-  input: { doc: Pick<AiSiteImportDocument, 'blocks' | 'photos'>; ledger: Pick<SiteImportLedger, 'items' | 'lines'>; carded: ReadonlyMap<AiSiteImportImprovedBlock, string[]> },
-): { sections: AiSiteImportImprovedSection[]; slots: Map<AiSiteImportImprovedBlock, Set<number>>; evened: string[] } {
+  input: {
+    doc: Pick<AiSiteImportDocument, 'blocks' | 'photos'>
+    ledger: Pick<SiteImportLedger, 'items' | 'lines'>
+    carded: ReadonlyMap<AiSiteImportImprovedBlock, string[]>
+  },
+): {
+  sections: AiSiteImportImprovedSection[]
+  slots: Map<AiSiteImportImprovedBlock, Set<number>>
+  evened: string[]
+} {
   const { doc, ledger, carded } = input
-  const pictures = new Map(ledger.items.filter((item) => item.kind === 'picture').map((item) => [item.ref, item]))
+  const pictures = new Map(
+    ledger.items
+      .filter((item) => item.kind === 'picture')
+      .map((item) => [item.ref, item]),
+  )
   const imageOf = (ref: string | undefined) => {
     const item = ref ? pictures.get(ref) : undefined
     const block = item ? doc.blocks[item.lines[0] as number] : undefined
@@ -979,24 +1494,39 @@ export function aiSiteImportEvenCards(
     blocks: section.blocks.map((block): AiSiteImportImprovedBlock => {
       if (block.kind !== 'cards' || (block.items?.length ?? 0) < 2) return block
       const items = block.items as AiLayoutItem[]
-      const refs = items.map((item, at) => (isPicture(item.ref) ? (item.ref as string) : (carded.get(block)?.[at] ?? null)))
+      const refs = items.map((item, at) =>
+        isPicture(item.ref)
+          ? (item.ref as string)
+          : (carded.get(block)?.[at] ?? null),
+      )
       const shown = refs.filter(Boolean).length
       const iconed = items.filter((item) => item.icon).length
       const iconsEven = iconed === items.length || iconed === 0
       if (iconsEven && shown === 0) return block
-      if (iconsEven && shown === items.length) return { ...block, items: items.map((item, at) => withRef(item, refs[at] ?? null)) }
+      if (iconsEven && shown === items.length)
+        return {
+          ...block,
+          items: items.map((item, at) => withRef(item, refs[at] ?? null)),
+        }
       const every = shown * 2 > items.length
       const given = refs.slice()
       const slotted = new Set<number>()
       if (every && shown < items.length) {
-        const pool = [...pictures.keys()].filter((ref) => isPhoto(ref) && !placed.has(ref) && !given.includes(ref))
+        const pool = [...pictures.keys()].filter(
+          (ref) => isPhoto(ref) && !placed.has(ref) && !given.includes(ref),
+        )
         items.forEach((item, at) => {
           if (given[at]) return
           const words = `${item.title} ${item.text}`
           const best = pool
             .map((ref) => {
-              const said = (captions.get(ref) ?? []).map((line) => line.text).join(' ')
-              return { ref, kept: said ? siteImportContentKept(said, words) : 0 }
+              const said = (captions.get(ref) ?? [])
+                .map((line) => line.text)
+                .join(' ')
+              return {
+                ref,
+                kept: said ? siteImportContentKept(said, words) : 0,
+              }
             })
             .sort((a, b) => b.kept - a.kept)[0]
           if (best) {
@@ -1006,9 +1536,18 @@ export function aiSiteImportEvenCards(
           } else slotted.add(at)
         })
       }
-      if (shown && !every) evened.push(`${items.length} cards drawn with no picture, ${shown} of them had one`)
-      if (every && shown < items.length) evened.push(`${items.length} cards each given a picture, ${shown} of them had one (${slotted.size} to fill)`)
-      if (!iconsEven) evened.push(`${items.length} cards drawn with no icon, ${iconed} of them had one`)
+      if (shown && !every)
+        evened.push(
+          `${items.length} cards drawn with no picture, ${shown} of them had one`,
+        )
+      if (every && shown < items.length)
+        evened.push(
+          `${items.length} cards each given a picture, ${shown} of them had one (${slotted.size} to fill)`,
+        )
+      if (!iconsEven)
+        evened.push(
+          `${items.length} cards drawn with no icon, ${iconed} of them had one`,
+        )
       const next: AiSiteImportImprovedBlock = {
         ...block,
         items: items.map((item, at) => {
@@ -1032,42 +1571,82 @@ function withRef(item: AiLayoutItem, ref: string | null): AiLayoutItem {
 }
 
 /** The sections a redesign holds, in the compiler's language: every `keep` expanded to the source's own blocks, every link resolved. */
-export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSection[], input: AiSiteImportImproveCompileInput): AiSiteImportImprovedPage {
+export function aiSiteImportImprovedPage(
+  given: readonly AiSiteImportImprovedSection[],
+  input: AiSiteImportImproveCompileInput,
+): AiSiteImportImprovedPage {
   const { doc, ledger, design, destinations } = input
   // A brand's mark is never the opening's photo (AGL-4152); no section is a heading alone; a row of cards shows a
   // picture on every card or on none.
-  const filled = aiSiteImportFilledSections(aiSiteImportOpeningPhoto(given, { doc, ledger }), { doc, ledger })
-  const even = aiSiteImportEvenCards(filled.sections, { doc, ledger, carded: aiSiteImportCardPictures(filled.sections, ledger) })
+  const filled = aiSiteImportFilledSections(
+    aiSiteImportOpeningPhoto(given, { doc, ledger }),
+    { doc, ledger },
+  )
+  const even = aiSiteImportEvenCards(filled.sections, {
+    doc,
+    ledger,
+    carded: aiSiteImportCardPictures(filled.sections, ledger),
+  })
   const answer = even.sections
-  const scope = aiSiteImportMapScope(doc, { formId: input.formId, finish: 'improve' })
+  const scope = aiSiteImportMapScope(doc, {
+    formId: input.formId,
+    finish: 'improve',
+  })
   const items = new Map(ledger.items.map((item) => [item.ref, item]))
   const choices = aiLayoutDesignChoices(design)
   const written: string[] = []
   // A brand band in a brand the theme had to deepen would read as neither: dark holds its place.
-  const deepened = !!input.theme && !!input.theme.button.fill && input.theme.button.fill !== input.theme.light.brand
+  const deepened =
+    !!input.theme &&
+    !!input.theme.button.fill &&
+    input.theme.button.fill !== input.theme.light.brand
   // A link to the page it is on, or to the section it sits in, goes nowhere (AGL-4152): to the page's form where it
   // keeps one, which is what a contact page's "Request a quote" means, else it is left out.
   const own = aiSiteImportOwnPage(doc)
   const resolve = (to: string | undefined, at: number): string | undefined => {
     if (!to) return undefined
     const resolved = destinations.get(to) ?? undefined
-    if (!resolved || (resolved !== own && resolved !== `#${at + 1}`)) return resolved
+    if (!resolved || (resolved !== own && resolved !== `#${at + 1}`))
+      return resolved
     const form = destinations.get('form')
     return form && form !== `#${at + 1}` ? form : undefined
   }
   const say = (text: string | undefined) => {
     if (text?.trim()) written.push(clean(text))
   }
-  const pictureOf = (ref: string, frame: { ratio: string } | { height: number }) => {
+  const pictureOf = (
+    ref: string,
+    frame: { ratio: string } | { height: number },
+  ) => {
     const item = items.get(ref)
     if (item?.kind !== 'picture') return null
     const picture = aiSiteImportTakePicture(scope, item.lines[0])
-    return picture ? { ...picture, fit: { ...frame, cropped: true as const, objectFit: 'cover' as const, rounded: true as const } } : null
+    return picture
+      ? {
+          ...picture,
+          fit: {
+            ...frame,
+            cropped: true as const,
+            objectFit: 'cover' as const,
+            rounded: true as const,
+          },
+        }
+      : null
   }
   // A few short quotes kept whole sit side by side, as a designer sets them, wherever the old page stacked them; in a column, one under another.
-  const across = (block: AiLayoutBlock, inColumn: boolean): Partial<AiLayoutBlock> => {
+  const across = (
+    block: AiLayoutBlock,
+    inColumn: boolean,
+  ): Partial<AiLayoutBlock> => {
     const items = block.items ?? []
-    if (block.kind !== 'quotes' || inColumn || items.length < 2 || items.length > 4 || items.some((entry) => entry.title.length > QUOTE_ACROSS_CHARS)) return {}
+    if (
+      block.kind !== 'quotes' ||
+      inColumn ||
+      items.length < 2 ||
+      items.length > 4 ||
+      items.some((entry) => entry.title.length > QUOTE_ACROSS_CHARS)
+    )
+      return {}
     return { columns: Math.min(3, items.length) }
   }
   const keepOf = (ref: string, col: number | undefined): AiLayoutBlock[] => {
@@ -1075,13 +1654,25 @@ export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSec
     if (!item) return []
     const placed = col !== undefined ? { col } : {}
     if (item.kind === 'picture') {
-      const picture = pictureOf(ref, { height: col !== undefined ? AI_SITE_IMPORT_IMPROVE_FRAME_PX.column : AI_SITE_IMPORT_IMPROVE_FRAME_PX.wide })
+      const picture = pictureOf(ref, {
+        height:
+          col !== undefined
+            ? AI_SITE_IMPORT_IMPROVE_FRAME_PX.column
+            : AI_SITE_IMPORT_IMPROVE_FRAME_PX.wide,
+      })
       return picture ? [{ kind: 'image', picture, ...placed }] : []
     }
     if (!item.node) return []
     scope.answer = null
     scope.groupAt = 0
-    return aiSiteImportNodeBlocks(scope, [item.node], { cols: null, allowed: false }).map((block) => ({ ...block, ...placed, ...across(block, col !== undefined) }))
+    return aiSiteImportNodeBlocks(scope, [item.node], {
+      cols: null,
+      allowed: false,
+    }).map((block) => ({
+      ...block,
+      ...placed,
+      ...across(block, col !== undefined),
+    }))
   }
   // The page's own photo an opening that asks for a picture takes (AGL-4152), and which of its things it was. The
   // source's pictures a written set of cards stands for are its items' refs by now (`aiSiteImportEvenCards`).
@@ -1090,16 +1681,36 @@ export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSec
   const openingPicture = (): AiLayoutPicture | null => {
     if (ownOpening.taken) return null
     const ratioOf = (line: SiteImportLineRef | undefined) => {
-      const image = line === undefined || scope.used.has(line) ? undefined : doc.blocks[line]
-      if (image?.kind !== 'image' || aiSiteImportImageIsMark(image, scope.photos)) return 0
+      const image =
+        line === undefined || scope.used.has(line)
+          ? undefined
+          : doc.blocks[line]
+      if (
+        image?.kind !== 'image' ||
+        aiSiteImportImageIsMark(image, scope.photos)
+      )
+        return 0
       const photo = scope.photos.get(image.url)
       return photo?.width && photo.height ? photo.width / photo.height : 0
     }
-    const widest = (found: Array<{ ref: string | null; line: SiteImportLineRef | undefined }>) => found.filter((entry) => ratioOf(entry.line) > 0).sort((a, b) => ratioOf(b.line) - ratioOf(a.line))[0]
+    const widest = (
+      found: Array<{ ref: string | null; line: SiteImportLineRef | undefined }>,
+    ) =>
+      found
+        .filter((entry) => ratioOf(entry.line) > 0)
+        .sort((a, b) => ratioOf(b.line) - ratioOf(a.line))[0]
     // Its photo no section places; else one of a gallery it keeps, which shows the rest.
     const pick =
-      widest(ledger.items.filter((item) => item.kind === 'picture' && !asked.has(item.ref)).map((item) => ({ ref: item.ref, line: item.lines[0] }))) ??
-      widest(ledger.items.filter((item) => item.kind === 'gallery' && asked.has(item.ref)).flatMap((item) => item.lines.map((line) => ({ ref: null, line }))))
+      widest(
+        ledger.items
+          .filter((item) => item.kind === 'picture' && !asked.has(item.ref))
+          .map((item) => ({ ref: item.ref, line: item.lines[0] })),
+      ) ??
+      widest(
+        ledger.items
+          .filter((item) => item.kind === 'gallery' && asked.has(item.ref))
+          .flatMap((item) => item.lines.map((line) => ({ ref: null, line }))),
+      )
     const picture = pick ? aiSiteImportTakePicture(scope, pick.line) : null
     if (!picture) return null
     ownOpening.taken = true
@@ -1108,7 +1719,13 @@ export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSec
   }
   const sections = answer.map((section, index): AiLayoutSection => {
     scope.at = `sections[${index}]`
-    const words = section.blocks.flatMap((block) => (block.kind === 'heading' || block.kind === 'eyebrow' ? [block.text ?? ''] : [])).join(' ')
+    const words = section.blocks
+      .flatMap((block) =>
+        block.kind === 'heading' || block.kind === 'eyebrow'
+          ? [block.text ?? '']
+          : [],
+      )
+      .join(' ')
     const drawn = section.blocks.flatMap((raw): AiLayoutBlock[] => {
       if (raw.kind === 'keep') return keepOf(raw.ref, raw.col)
       const block = raw
@@ -1120,9 +1737,16 @@ export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSec
         const own = index === 0 && !block.picture?.src ? openingPicture() : null
         return [{ ...rest, ...(own ? { picture: own } : {}), ...placed }]
       }
-      if (block.kind === 'text' || block.kind === 'lede' || block.kind === 'note') {
+      if (
+        block.kind === 'text' ||
+        block.kind === 'lede' ||
+        block.kind === 'note'
+      ) {
         if (!filled.asWritten.has(block)) say(block.text)
-        return aiSiteImportTextParts(block.text ?? '').map((part) => ({ ...block, text: part }))
+        return aiSiteImportTextParts(block.text ?? '').map((part) => ({
+          ...block,
+          text: part,
+        }))
       }
       if (block.kind === 'heading' || block.kind === 'eyebrow') {
         say(block.text)
@@ -1144,59 +1768,156 @@ export function aiSiteImportImprovedPage(given: readonly AiSiteImportImprovedSec
           say(item.text)
         }
         // A card left a slot so its row shows a picture on every card: the page step's pictures fill it.
-        const slot = even.slots.get(block)?.has(at) ? { src: '', alt: clean(item.title) || clean(item.text), fit: { ratio: CARD_FRAME, cropped: true as const, objectFit: 'cover' as const, rounded: true as const } } : null
-        const picture = item.ref ? pictureOf(item.ref, { ratio: CARD_FRAME }) : slot
+        const slot = even.slots.get(block)?.has(at)
+          ? {
+              src: '',
+              alt: clean(item.title) || clean(item.text),
+              fit: {
+                ratio: CARD_FRAME,
+                cropped: true as const,
+                objectFit: 'cover' as const,
+                rounded: true as const,
+              },
+            }
+          : null
+        const picture = item.ref
+          ? pictureOf(item.ref, { ratio: CARD_FRAME })
+          : slot
         const to = resolve(item.to, index)
         const { ref: _ref, to: _to, ...rest } = item
-        return { ...rest, ...(block.kind === 'steps' ? { figure: String(at + 1) } : {}), ...(picture ? { picture } : {}), ...(to ? { to } : {}) }
+        return {
+          ...rest,
+          ...(block.kind === 'steps' ? { figure: String(at + 1) } : {}),
+          ...(picture ? { picture } : {}),
+          ...(to ? { to } : {}),
+        }
       })
-      if (block.kind === 'list') return [{ ...block, items: groupItems, columns: groupItems.length >= 6 ? 2 : 1 }]
-      if (block.kind === 'faq') return [{ ...block, items: groupItems, columns: 1 }]
+      if (block.kind === 'list')
+        return [
+          {
+            ...block,
+            items: groupItems,
+            columns: groupItems.length >= 6 ? 2 : 1,
+          },
+        ]
+      if (block.kind === 'faq')
+        return [{ ...block, items: groupItems, columns: 1 }]
       const pictured = groupItems.every((item) => item.picture)
       const iconed = groupItems.every((item) => item.icon)
       const wanted = aiLayoutGroupVariant(design, choices, words)
-      const variant = pictured ? (choices.group === 'cards' ? 'articles' : 'pictures') : wanted === 'icons' && !iconed ? 'cards' : wanted === 'menu' || wanted === 'pictures' || wanted === 'articles' ? 'cards' : wanted
-      return [{ ...block, items: groupItems, columns: aiSiteImportImproveColumns(groupItems), variant }]
+      const variant = pictured
+        ? choices.group === 'cards'
+          ? 'articles'
+          : 'pictures'
+        : wanted === 'icons' && !iconed
+          ? 'cards'
+          : wanted === 'menu' || wanted === 'pictures' || wanted === 'articles'
+            ? 'cards'
+            : wanted
+      return [
+        {
+          ...block,
+          items: groupItems,
+          columns: aiSiteImportImproveColumns(groupItems),
+          variant,
+        },
+      ]
     })
     // Each call to action once, in its place (AGL-4152).
-    const tidy = aiSiteImportSectionActions({ cols: section.cols, blocks: drawn }, input.plan?.nav.primaryCta?.label)
+    const tidy = aiSiteImportSectionActions(
+      { cols: section.cols, blocks: drawn },
+      input.plan?.nav.primaryCta?.label,
+    )
     const blocks = tidy.blocks
-    const pictures = blocks.filter((block) => block.kind === 'image' || block.kind === 'video')
-    const opens = index === 0 && pictures.length === 1 && blocks.every((block) => block.kind === 'image' || block.kind === 'video' || WORD_KINDS.has(block.kind))
-    const opening = pictures[0]?.kind === 'image' ? (pictures[0].picture ?? null) : null
-    const hero = opens ? aiSiteImportImproveHero(design, input.plan, opening) : null
+    const pictures = blocks.filter(
+      (block) => block.kind === 'image' || block.kind === 'video',
+    )
+    const opens =
+      index === 0 &&
+      pictures.length === 1 &&
+      blocks.every(
+        (block) =>
+          block.kind === 'image' ||
+          block.kind === 'video' ||
+          WORD_KINDS.has(block.kind),
+      )
+    const opening =
+      pictures[0]?.kind === 'image' ? (pictures[0].picture ?? null) : null
+    const hero = opens
+      ? aiSiteImportImproveHero(design, input.plan, opening)
+      : null
     const band = section.band === 'brand' && deepened ? 'dark' : section.band
     return {
       ...(band ? { band } : {}),
       ...(section.align ? { align: section.align } : {}),
       // A hero draws its own columns, and frames its own picture.
       ...(tidy.cols && !hero ? { cols: tidy.cols } : {}),
-      ...(hero ? { hero, blocks: blocks.map((block) => (block.kind === 'image' && block.picture ? { ...block, picture: { ...block.picture, fit: undefined } } : block)) } : { blocks }),
+      ...(hero
+        ? {
+            hero,
+            blocks: blocks.map((block) =>
+              block.kind === 'image' && block.picture
+                ? { ...block, picture: { ...block.picture, fit: undefined } }
+                : block,
+            ),
+          }
+        : { blocks }),
     }
   })
   const names = sectionNames(sections, doc.title)
-  const added: AiSiteImportAddedSection[] = aiSiteImportImproveNewSections(answer, ledger).map((index) => {
+  const added: AiSiteImportAddedSection[] = aiSiteImportImproveNewSections(
+    answer,
+    ledger,
+  ).map((index) => {
     const group = sections[index]?.blocks.find((block) => block.items?.length)
-    return { heading: names[index] as string, ...(group?.items?.length ? { items: group.items.length } : {}) }
+    return {
+      heading: names[index] as string,
+      ...(group?.items?.length ? { items: group.items.length } : {}),
+    }
   })
-  const placed = new Set([...asked, ...(ownOpening.ref ? [ownOpening.ref] : [])])
+  const placed = new Set([
+    ...asked,
+    ...(ownOpening.ref ? [ownOpening.ref] : []),
+  ])
   const allPictures = ledger.items.filter((item) => item.kind === 'picture')
-  const unplaced = allPictures.filter((item) => !placed.has(item.ref)).flatMap((item) => {
-    const block = doc.blocks[item.lines[0] as number]
-    return block?.kind === 'image' ? [block.url] : []
-  })
+  const unplaced = allPictures
+    .filter((item) => !placed.has(item.ref))
+    .flatMap((item) => {
+      const block = doc.blocks[item.lines[0] as number]
+      return block?.kind === 'image' ? [block.url] : []
+    })
   return {
-    given: { sections, used: scope.used, missing: scope.missing, settled: scope.settled },
+    given: {
+      sections,
+      used: scope.used,
+      missing: scope.missing,
+      settled: scope.settled,
+    },
     names,
     written,
     added,
     pictures: {
       // A gallery's photo the opening shows is the source's too.
-      source: allPictures.length - unplaced.length + (ownOpening.taken && !ownOpening.ref ? 1 : 0),
+      source:
+        allPictures.length -
+        unplaced.length +
+        (ownOpening.taken && !ownOpening.ref ? 1 : 0),
       stock: 0,
       generated: 0,
       slots: sections.reduce(
-        (total, section) => total + section.blocks.filter((block) => block.kind === 'image' && !block.picture).length + section.blocks.reduce((cards, block) => cards + (block.items ?? []).filter((item) => item.picture && !item.picture.src).length, 0),
+        (total, section) =>
+          total +
+          section.blocks.filter(
+            (block) => block.kind === 'image' && !block.picture,
+          ).length +
+          section.blocks.reduce(
+            (cards, block) =>
+              cards +
+              (block.items ?? []).filter(
+                (item) => item.picture && !item.picture.src,
+              ).length,
+            0,
+          ),
         0,
       ),
       unplaced,
@@ -1224,7 +1945,8 @@ export const AI_SITE_IMPORT_LISTING_ROOM_CREDITS = 10
  * (`aiSiteImportImproveTokensWithin`): an answer asks no more than the
  * ceiling buys, and a re-ask it cannot pay for is not asked.
  */
-export const AI_SITE_IMPORT_IMPROVE_CEILING_CREDITS = AI_SITE_IMPORT_PAGE_CEILING_CREDITS - AI_SITE_IMPORT_LISTING_ROOM_CREDITS
+export const AI_SITE_IMPORT_IMPROVE_CEILING_CREDITS =
+  AI_SITE_IMPORT_PAGE_CEILING_CREDITS - AI_SITE_IMPORT_LISTING_ROOM_CREDITS
 
 /**
  * Characters a token is counted at before a request is sent (AGL-4152). No
@@ -1245,17 +1967,29 @@ const CHARS_PER_TOKEN = 3
  */
 export const AI_TOOL_USE_PROMPT_TOKENS = 350
 
-const ZERO: AiUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
+const ZERO: AiUsage = {
+  inputTokens: 0,
+  outputTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+}
 
 const plus = (a: AiUsage, b: AiUsage): AiUsage => ({
   inputTokens: a.inputTokens + b.inputTokens,
   outputTokens: a.outputTokens + b.outputTokens,
   cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
   cacheWriteTokens: a.cacheWriteTokens + b.cacheWriteTokens,
-  ...(a.cacheWriteHourTokens !== undefined || b.cacheWriteHourTokens !== undefined ? { cacheWriteHourTokens: (a.cacheWriteHourTokens ?? 0) + (b.cacheWriteHourTokens ?? 0) } : {}),
+  ...(a.cacheWriteHourTokens !== undefined ||
+  b.cacheWriteHourTokens !== undefined
+    ? {
+        cacheWriteHourTokens:
+          (a.cacheWriteHourTokens ?? 0) + (b.cacheWriteHourTokens ?? 0),
+      }
+    : {}),
 })
 
-const tokensOf = (chars: number) => Math.ceil(Math.max(0, chars) / CHARS_PER_TOKEN)
+const tokensOf = (chars: number) =>
+  Math.ceil(Math.max(0, chars) / CHARS_PER_TOKEN)
 
 /**
  * What a request reads before it is sent, at worst (AGL-4152): every byte of
@@ -1266,9 +2000,21 @@ const tokensOf = (chars: number) => Math.ceil(Math.max(0, chars) / CHARS_PER_TOK
  * as input. `system` is the blocks as sent, the doctrine's own first
  * (`aiDoctrineSystemBlocks`), and `toolChars` the tool's definition.
  */
-export function aiSiteImportImproveInputUsage(input: { system: readonly AiSystemBlock[]; toolChars: number; promptChars: number; hour?: boolean }): AiUsage {
-  const shared = input.system.reduce((last, block, index) => (block.cacheBreakpoint && !block.site ? index : last), -1)
-  const cached = input.system.reduce((last, block, index) => (block.cacheBreakpoint ? index : last), -1)
+export function aiSiteImportImproveInputUsage(input: {
+  system: readonly AiSystemBlock[]
+  toolChars: number
+  promptChars: number
+  hour?: boolean
+}): AiUsage {
+  const shared = input.system.reduce(
+    (last, block, index) =>
+      block.cacheBreakpoint && !block.site ? index : last,
+    -1,
+  )
+  const cached = input.system.reduce(
+    (last, block, index) => (block.cacheBreakpoint ? index : last),
+    -1,
+  )
   let sharedChars = input.toolChars
   let siteChars = 0
   let uncachedChars = input.promptChars
@@ -1287,8 +2033,14 @@ export function aiSiteImportImproveInputUsage(input: { system: readonly AiSystem
 }
 
 /** What a usage is billed in credits on a model, an hour-long cache write at its own rate, as the meter bills it. */
-export function aiSiteImportImproveCredits(usage: AiUsage, model: string): number {
-  return assistCreditsFromUsd(estimateAiBilledUsd(usage, model) + aiCacheWriteHourSurchargeUsd(usage, aiBilledRatesForModel(model)))
+export function aiSiteImportImproveCredits(
+  usage: AiUsage,
+  model: string,
+): number {
+  return assistCreditsFromUsd(
+    estimateAiBilledUsd(usage, model) +
+      aiCacheWriteHourSurchargeUsd(usage, aiBilledRatesForModel(model)),
+  )
 }
 
 /**
@@ -1296,10 +2048,20 @@ export function aiSiteImportImproveCredits(usage: AiUsage, model: string): numbe
  * spent and `input` still to read, and stay inside `ceiling` credits; at
  * most `most`, and 0 where its reading alone would pass the ceiling.
  */
-export function aiSiteImportImproveTokensWithin(input: { model: string; spent: AiUsage; input: AiUsage; ceiling?: number; most: number }): number {
+export function aiSiteImportImproveTokensWithin(input: {
+  model: string
+  spent: AiUsage
+  input: AiUsage
+  ceiling?: number
+  most: number
+}): number {
   const ceiling = input.ceiling ?? AI_SITE_IMPORT_IMPROVE_CEILING_CREDITS
   const before = plus(input.spent, input.input)
-  const fits = (tokens: number) => aiSiteImportImproveCredits({ ...before, outputTokens: before.outputTokens + tokens }, input.model) <= ceiling
+  const fits = (tokens: number) =>
+    aiSiteImportImproveCredits(
+      { ...before, outputTokens: before.outputTokens + tokens },
+      input.model,
+    ) <= ceiling
   if (!fits(0)) return 0
   let low = 0
   let high = Math.max(0, Math.floor(input.most))
@@ -1326,7 +2088,8 @@ export const AI_SITE_IMPORT_CUT_OFF_REASK_ROOM = 0.6
 export const AI_SITE_IMPORT_IMPROVE_LEAST_TOKENS = 1_200
 
 /** What the re-ask of a cut-off page is told makes it smaller (AGL-4152), in one sentence. */
-export const AI_SITE_IMPORT_IMPROVE_CUT_OFF_SMALLER = "Write a page about half as long as the one cut off: fewer sections, shorter copy, and each long group of the ledger kept whole with keep rather than written again."
+export const AI_SITE_IMPORT_IMPROVE_CUT_OFF_SMALLER =
+  'Write a page about half as long as the one cut off: fewer sections, shorter copy, and each long group of the ledger kept whole with keep rather than written again.'
 
 /** What a re-ask reads beyond its first request: the re-ask's own words naming what missed. */
 const REASK_TOKENS = 600
@@ -1341,7 +2104,11 @@ const REASK_TOKENS = 600
  * credits, some 900 tokens.
  */
 export function aiSiteImportImproveReaskInput(spent: AiUsage): AiUsage {
-  return { ...ZERO, inputTokens: spent.inputTokens + REASK_TOKENS, cacheReadTokens: spent.cacheReadTokens + spent.cacheWriteTokens }
+  return {
+    ...ZERO,
+    inputTokens: spent.inputTokens + REASK_TOKENS,
+    cacheReadTokens: spent.cacheReadTokens + spent.cacheWriteTokens,
+  }
 }
 
 /**
@@ -1352,14 +2119,37 @@ export function aiSiteImportImproveReaskInput(spent: AiUsage): AiUsage {
  * again, at about its first length; a re-ask for a page cut off asks for one
  * about half as long, so it needs room for that.
  */
-export function aiSiteImportImproveReaskTokens(input: { model: string; spent: AiUsage; lastOutput: number; cutOff?: boolean; most: number; ceiling?: number }): number {
-  const room = aiSiteImportImproveTokensWithin({ model: input.model, spent: input.spent, input: aiSiteImportImproveReaskInput(input.spent), most: input.most, ...(input.ceiling !== undefined ? { ceiling: input.ceiling } : {}) })
-  return room >= aiSiteImportImproveReaskNeeds(input.lastOutput, input.cutOff) ? room : 0
+export function aiSiteImportImproveReaskTokens(input: {
+  model: string
+  spent: AiUsage
+  lastOutput: number
+  cutOff?: boolean
+  most: number
+  ceiling?: number
+}): number {
+  const room = aiSiteImportImproveTokensWithin({
+    model: input.model,
+    spent: input.spent,
+    input: aiSiteImportImproveReaskInput(input.spent),
+    most: input.most,
+    ...(input.ceiling !== undefined ? { ceiling: input.ceiling } : {}),
+  })
+  return room >= aiSiteImportImproveReaskNeeds(input.lastOutput, input.cutOff)
+    ? room
+    : 0
 }
 
 /** The least room a re-ask after an answer of `lastOutput` tokens must have (AGL-4152). */
-export function aiSiteImportImproveReaskNeeds(lastOutput: number, cutOff = false): number {
-  return cutOff ? Math.max(AI_SITE_IMPORT_IMPROVE_LEAST_TOKENS, Math.ceil(lastOutput * AI_SITE_IMPORT_CUT_OFF_REASK_ROOM)) : Math.ceil(lastOutput * AI_SITE_IMPORT_REASK_ROOM)
+export function aiSiteImportImproveReaskNeeds(
+  lastOutput: number,
+  cutOff = false,
+): number {
+  return cutOff
+    ? Math.max(
+        AI_SITE_IMPORT_IMPROVE_LEAST_TOKENS,
+        Math.ceil(lastOutput * AI_SITE_IMPORT_CUT_OFF_REASK_ROOM),
+      )
+    : Math.ceil(lastOutput * AI_SITE_IMPORT_REASK_ROOM)
 }
 
 /*------------------------------------------
@@ -1404,8 +2194,13 @@ export const AI_SITE_IMPORT_THIN_MOST_SECTIONS = 6
 export const AI_SITE_IMPORT_MEANING_WORDS_SHARE = 0.8
 
 /** How many words the old page says, over its lines. */
-export function aiSiteImportLedgerWords(ledger: Pick<SiteImportLedger, 'lines'>): number {
-  return ledger.lines.reduce((total, line) => total + (line.text.match(/[\p{L}\p{N}]+/gu)?.length ?? 0), 0)
+export function aiSiteImportLedgerWords(
+  ledger: Pick<SiteImportLedger, 'lines'>,
+): number {
+  return ledger.lines.reduce(
+    (total, line) => total + (line.text.match(/[\p{L}\p{N}]+/gu)?.length ?? 0),
+    0,
+  )
 }
 
 /** What a page's first answer may write, and what it is planned to. */
@@ -1450,27 +2245,77 @@ export function aiSiteImportImproveRoom(input: {
   ceiling?: number
 }): AiSiteImportImproveRoom {
   const ceiling = input.ceiling ?? AI_SITE_IMPORT_IMPROVE_CEILING_CREDITS
-  const estimated = aiSiteImportImproveInputUsage({ system: input.system, toolChars: input.toolChars, promptChars: input.promptChars, ...(input.hour ? { hour: true } : {}) })
-  const first = aiSiteImportImproveTokensWithin({ model: input.model, spent: input.spent, input: estimated, most: input.most, ceiling })
+  const estimated = aiSiteImportImproveInputUsage({
+    system: input.system,
+    toolChars: input.toolChars,
+    promptChars: input.promptChars,
+    ...(input.hour ? { hour: true } : {}),
+  })
+  const first = aiSiteImportImproveTokensWithin({
+    model: input.model,
+    spent: input.spent,
+    input: estimated,
+    most: input.most,
+    ceiling,
+  })
   // An answer and a re-ask of it at nine tenths of its length, both inside the ceiling.
-  const both = aiSiteImportImproveTokensWithin({ model: input.model, spent: plus(input.spent, estimated), input: aiSiteImportImproveReaskInput(estimated), most: input.most * 2, ceiling })
+  const both = aiSiteImportImproveTokensWithin({
+    model: input.model,
+    spent: plus(input.spent, estimated),
+    input: aiSiteImportImproveReaskInput(estimated),
+    most: input.most * 2,
+    ceiling,
+  })
   const mendable = Math.floor(both / (1 + AI_SITE_IMPORT_REASK_ROOM))
   const words = aiSiteImportLedgerWords(input.ledger)
-  const thin = !input.proposed && words < AI_SITE_IMPORT_THIN_PAGE_WORDS ? words : null
+  const thin =
+    !input.proposed && words < AI_SITE_IMPORT_THIN_PAGE_WORDS ? words : null
   // What it must say to keep the owner's meaning, which no re-ask is worth falling short of (AGL-4152).
-  const meaning = fifty(aiSiteImportLedgerWords({ lines: input.ledger.lines.filter((line) => !line.group) }) * AI_SITE_IMPORT_MEANING_WORDS_SHARE)
-  const least = Math.max(AI_SITE_IMPORT_LEAST_PAGE_TOKENS, AI_SITE_IMPORT_THIN_MOST_SECTIONS * AI_SITE_IMPORT_SECTION_TOKENS + meaning * AI_SITE_IMPORT_WORD_TOKENS)
+  const meaning = fifty(
+    aiSiteImportLedgerWords({
+      lines: input.ledger.lines.filter((line) => !line.group),
+    }) * AI_SITE_IMPORT_MEANING_WORDS_SHARE,
+  )
+  const least = Math.max(
+    AI_SITE_IMPORT_LEAST_PAGE_TOKENS,
+    AI_SITE_IMPORT_THIN_MOST_SECTIONS * AI_SITE_IMPORT_SECTION_TOKENS +
+      meaning * AI_SITE_IMPORT_WORD_TOKENS,
+  )
   const share = Math.floor(first * AI_SITE_IMPORT_ROOM_SHARE)
   const target = Math.min(share, Math.max(mendable, least))
-  const most = thin === null ? AI_SITE_IMPORT_IMPROVE_MOST_SECTIONS : AI_SITE_IMPORT_THIN_MOST_SECTIONS
+  const most =
+    thin === null
+      ? AI_SITE_IMPORT_IMPROVE_MOST_SECTIONS
+      : AI_SITE_IMPORT_THIN_MOST_SECTIONS
   // As many sections as the room holds at a section's usual words, and fewer where the owner's meaning needs the words.
-  const shaped = Math.floor(target / (AI_SITE_IMPORT_SECTION_TOKENS + SECTION_WORDS * AI_SITE_IMPORT_WORD_TOKENS))
-  const meant = Math.floor((target - meaning * AI_SITE_IMPORT_WORD_TOKENS) / AI_SITE_IMPORT_SECTION_TOKENS)
-  const sections = Math.min(most, Math.max(AI_SITE_IMPORT_LEAST_SECTIONS, Math.min(shaped, meant)))
-  const room = fifty((target - sections * AI_SITE_IMPORT_SECTION_TOKENS) / AI_SITE_IMPORT_WORD_TOKENS)
+  const shaped = Math.floor(
+    target /
+      (AI_SITE_IMPORT_SECTION_TOKENS +
+        SECTION_WORDS * AI_SITE_IMPORT_WORD_TOKENS),
+  )
+  const meant = Math.floor(
+    (target - meaning * AI_SITE_IMPORT_WORD_TOKENS) /
+      AI_SITE_IMPORT_SECTION_TOKENS,
+  )
+  const sections = Math.min(
+    most,
+    Math.max(AI_SITE_IMPORT_LEAST_SECTIONS, Math.min(shaped, meant)),
+  )
+  const room = fifty(
+    (target - sections * AI_SITE_IMPORT_SECTION_TOKENS) /
+      AI_SITE_IMPORT_WORD_TOKENS,
+  )
   // A thin page says about four times what its owner did, with a line of its own for each new section.
-  const said = thin === null ? room : Math.min(room, Math.max(200, fifty(thin * 4 + 150)))
-  return { first, estimated, target, sections, words: Math.max(150, said), thin }
+  const said =
+    thin === null ? room : Math.min(room, Math.max(200, fifty(thin * 4 + 150)))
+  return {
+    first,
+    estimated,
+    target,
+    sections,
+    words: Math.max(150, said),
+    thin,
+  }
 }
 
 /**
@@ -1480,7 +2325,10 @@ export function aiSiteImportImproveRoom(input: {
  * and on a thin page, that it stays short and says no figure the site does
  * not. Never the platform's vocabulary: its numbers are no one's fact.
  */
-export function aiSiteImportImproveSizeLines(room: AiSiteImportImproveRoom, input: { most: number; groups: boolean }): string[] {
+export function aiSiteImportImproveSizeLines(
+  room: AiSiteImportImproveRoom,
+  input: { most: number; groups: boolean },
+): string[] {
   return [
     ...(room.first < input.most
       ? [
@@ -1488,7 +2336,9 @@ export function aiSiteImportImproveSizeLines(room: AiSiteImportImproveRoom, inpu
         ]
       : []),
     ...(room.thin !== null
-      ? ['This page says little, so it stays short: write what it says and what this kind of business generally does, and give a count, size, year or quantity only where the site states it, never one such work usually has.']
+      ? [
+          'This page says little, so it stays short: write what it says and what this kind of business generally does, and give a count, size, year or quantity only where the site states it, never one such work usually has.',
+        ]
       : []),
   ]
 }
@@ -1535,11 +2385,18 @@ export const AI_SITE_IMPORT_REDESIGN_WHY_CHARS = 300
  * page's log and its record say, so a miss can be read after the job, when
  * the answer itself is gone. For the job's record, never the owner's row.
  */
-export function aiSiteImportRedesignWhy(violations: readonly AiDoctrineViolation[]): string[] {
+export function aiSiteImportRedesignWhy(
+  violations: readonly AiDoctrineViolation[],
+): string[] {
   const out: string[] = []
   for (const violation of violations) {
-    const said = clean(`${violation.code}: ${violation.message}${violation.detail ? ` ${violation.detail}` : ''}`)
-    const line = said.length > AI_SITE_IMPORT_REDESIGN_WHY_CHARS ? `${said.slice(0, AI_SITE_IMPORT_REDESIGN_WHY_CHARS - 1)}…` : said
+    const said = clean(
+      `${violation.code}: ${violation.message}${violation.detail ? ` ${violation.detail}` : ''}`,
+    )
+    const line =
+      said.length > AI_SITE_IMPORT_REDESIGN_WHY_CHARS
+        ? `${said.slice(0, AI_SITE_IMPORT_REDESIGN_WHY_CHARS - 1)}…`
+        : said
     if (!out.includes(line)) out.push(line)
     if (out.length >= AI_SITE_IMPORT_REDESIGN_WHY_MOST) break
   }
@@ -1547,8 +2404,15 @@ export function aiSiteImportRedesignWhy(violations: readonly AiDoctrineViolation
 }
 
 /** Whether every miss of an answer is one it may be taken with past its last re-ask. */
-export function aiSiteImportImproveOnlySoft(violations: readonly AiDoctrineViolation[]): boolean {
-  return violations.length > 0 && violations.every((violation) => AI_SITE_IMPORT_IMPROVE_SOFT_CODES.has(violation.code))
+export function aiSiteImportImproveOnlySoft(
+  violations: readonly AiDoctrineViolation[],
+): boolean {
+  return (
+    violations.length > 0 &&
+    violations.every((violation) =>
+      AI_SITE_IMPORT_IMPROVE_SOFT_CODES.has(violation.code),
+    )
+  )
 }
 
 /**
@@ -1558,7 +2422,9 @@ export function aiSiteImportImproveOnlySoft(violations: readonly AiDoctrineViola
  * were held to what the site says when it was made, so a redesign that
  * repeats them invents nothing.
  */
-export function aiSiteImportPlanLines(plan: AiSiteImportPlan | null | undefined): string[] {
+export function aiSiteImportPlanLines(
+  plan: AiSiteImportPlan | null | undefined,
+): string[] {
   if (!plan) return []
   return [
     plan.site.what,
@@ -1571,7 +2437,8 @@ export function aiSiteImportPlanLines(plan: AiSiteImportPlan | null | undefined)
 }
 
 /** A web address's top-level part, which says nothing of a name. */
-const TLD = /\.(?:com|org|net|io|co|ai|app|dev|us|uk|ca|au|de|fr|info|biz|me|shop|store|site|online)(?:\.[a-z]{2})?$/i
+const TLD =
+  /\.(?:com|org|net|io|co|ai|app|dev|us|uk|ca|au|de|fr|info|biz|me|shop|store|site|online)(?:\.[a-z]{2})?$/i
 
 /**
  * The ways a site's name is said (AGL-4152), where it is written as one run
@@ -1582,10 +2449,17 @@ const TLD = /\.(?:com|org|net|io|co|ai|app|dev|us|uk|ca|au|de|fr|info|biz|me|sho
  * site" of "roofingsite"). A redesign that names the business as a visitor
  * would invents nothing.
  */
-export function aiSiteImportNameVariants(name: string, said: ReadonlySet<string>): string[] {
+export function aiSiteImportNameVariants(
+  name: string,
+  said: ReadonlySet<string>,
+): string[] {
   const text = clean(name)
   if (!text || /\s/.test(text) || text.length < 4) return []
-  const bare = text.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, '').replace(TLD, '')
+  const bare = text
+    .replace(/^https?:\/\//i, '')
+    .replace(/^www\./i, '')
+    .replace(/\/.*$/, '')
+    .replace(TLD, '')
   // A run of small letters as the words the site says, longest first; itself where they do not make it up.
   const segment = (run: string): string[] => {
     if (run.length < 6 || said.has(run.toLowerCase())) return [run]
@@ -1593,7 +2467,8 @@ export function aiSiteImportNameVariants(name: string, said: ReadonlySet<string>
     let rest = run.toLowerCase()
     while (rest) {
       let found = ''
-      for (let end = rest.length; end >= 3 && !found; end -= 1) if (said.has(rest.slice(0, end))) found = rest.slice(0, end)
+      for (let end = rest.length; end >= 3 && !found; end -= 1)
+        if (said.has(rest.slice(0, end))) found = rest.slice(0, end)
       if (!found) return [run]
       out.push(found)
       rest = rest.slice(found.length)
@@ -1609,57 +2484,132 @@ export function aiSiteImportNameVariants(name: string, said: ReadonlySet<string>
       if (!lead) return segment(part)
       const caps = lead[1] as string
       const tail = `${caps.slice(-1)}${lead[2] as string}`
-      return said.has(tail.toLowerCase()) ? [caps.slice(0, -1), tail] : [caps, ...segment(lead[2] as string)]
+      return said.has(tail.toLowerCase())
+        ? [caps.slice(0, -1), tail]
+        : [caps, ...segment(lead[2] as string)]
     })
-  const titled = words.map((word) => (/^[a-z]/.test(word) ? `${word[0]?.toUpperCase()}${word.slice(1)}` : word)).join(' ')
-  return [...new Set([bare, titled])].filter((variant) => variant && variant !== text)
+  const titled = words
+    .map((word) =>
+      /^[a-z]/.test(word) ? `${word[0]?.toUpperCase()}${word.slice(1)}` : word,
+    )
+    .join(' ')
+  return [...new Set([bare, titled])].filter(
+    (variant) => variant && variant !== text,
+  )
 }
 
 /** Every line a redesign's facts may come from: its page, what the site says of itself, its wave's other pages, its plan, its name. */
-export function aiSiteImportImproveScope(doc: Pick<AiSiteImportDocument, 'blocks' | 'siteLines' | 'scope' | 'title'> & { plan?: AiSiteImportPlan | null }, siteName: string | null): string[] {
-  const own = doc.blocks.flatMap((block) => (block.kind === 'image' ? (block.alt ? [block.alt] : []) : block.text ? [block.text] : []))
-  const lines = [...own, ...(doc.siteLines ?? []), ...(doc.scope ?? []), ...aiSiteImportPlanLines(doc.plan), doc.title, ...(siteName ? [siteName] : [])].map(clean).filter(Boolean)
+export function aiSiteImportImproveScope(
+  doc: Pick<
+    AiSiteImportDocument,
+    'blocks' | 'siteLines' | 'scope' | 'title'
+  > & { plan?: AiSiteImportPlan | null },
+  siteName: string | null,
+): string[] {
+  const own = doc.blocks.flatMap((block) =>
+    block.kind === 'image'
+      ? block.alt
+        ? [block.alt]
+        : []
+      : block.text
+        ? [block.text]
+        : [],
+  )
+  const lines = [
+    ...own,
+    ...(doc.siteLines ?? []),
+    ...(doc.scope ?? []),
+    ...aiSiteImportPlanLines(doc.plan),
+    doc.title,
+    ...(siteName ? [siteName] : []),
+  ]
+    .map(clean)
+    .filter(Boolean)
   // The site's name as a visitor says it, where it is written as an address or run together (AGL-4152).
-  const said = new Set(lines.flatMap((line) => line.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []))
-  const names = [...new Set([...(siteName ? [siteName] : []), ...(doc.siteLines ?? []).slice(0, 6)])]
-  const variants = names.flatMap((name) => aiSiteImportNameVariants(name, said)).filter((variant) => !lines.includes(variant))
+  const said = new Set(
+    lines.flatMap((line) => line.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []),
+  )
+  const names = [
+    ...new Set([
+      ...(siteName ? [siteName] : []),
+      ...(doc.siteLines ?? []).slice(0, 6),
+    ]),
+  ]
+  const variants = names
+    .flatMap((name) => aiSiteImportNameVariants(name, said))
+    .filter((variant) => !lines.includes(variant))
   return [...lines, ...variants]
 }
 
 /** What each line that missed says to the one re-ask. */
 const MISS: Readonly<Record<string, string>> = {
-  facts: 'The page leaves out a fact the owner gives. Say every name, number, price, date, phone and address the ledger shows.',
-  invented: 'The page says something nothing on the site supports. Leave it out, or say only what the site states.',
+  facts:
+    'The page leaves out a fact the owner gives. Say every name, number, price, date, phone and address the ledger shows.',
+  invented:
+    'The page says something nothing on the site supports. Leave it out, or say only what the site states.',
   held: 'Something the ledger marks must is not on the page. Place it with a keep block.',
-  links: 'A link the ledger lists goes nowhere on the page. Link to it from a button or an item.',
-  meaning: "The page has drifted from what the owner says. Keep more of the old page's substance in the new words.",
+  links:
+    'A link the ledger lists goes nowhere on the page. Link to it from a button or an item.',
+  meaning:
+    "The page has drifted from what the owner says. Keep more of the old page's substance in the new words.",
   cta: 'The opening needs a filled primary button with a real destination, and the last section a button or the form: close on a call to action.',
-  rhythm: 'Neighboring sections sit on one ground. Alternate plain and soft, or set one on a strong band.',
-  columns: 'Sections stack like things in one column, or the page draws no group at all. Set a picture beside its words, and three or more like items as cards, steps or a faq.',
-  framing: 'A picture is drawn taller than a screen holds. Set it in a column, or on a card.',
-  contrast: 'A section is drawn on a ground its words do not read on. Choose another band.',
-  phone: 'A section does not hold on a phone. Use the language’s rows and groups, which stack.',
+  rhythm:
+    'Neighboring sections sit on one ground. Alternate plain and soft, or set one on a strong band.',
+  columns:
+    'Sections stack like things in one column, or the page draws no group at all. Set a picture beside its words, and three or more like items as cards, steps or a faq.',
+  framing:
+    'A picture is drawn taller than a screen holds. Set it in a column, or on a card.',
+  contrast:
+    'A section is drawn on a ground its words do not read on. Choose another band.',
+  phone:
+    'A section does not hold on a phone. Use the language’s rows and groups, which stack.',
 }
 
 /** A scored redesign's misses, each as the re-ask names it: what is red on its ledger and its design lines. */
-export function aiSiteImportImprovedMisses(report: Pick<SiteImportPageFidelity, 'improved'>): AiDoctrineViolation[] {
+export function aiSiteImportImprovedMisses(
+  report: Pick<SiteImportPageFidelity, 'improved'>,
+): AiDoctrineViolation[] {
   const improved = report.improved
   if (!improved) return []
   return improved.red.flatMap((name) => {
     if (name === 'frame') return []
-    const ledger = improved.ledger as unknown as Record<string, { missing?: string[]; found?: string[]; at?: string[] } | undefined>
-    const shown = [...(ledger[name]?.missing ?? []), ...(ledger[name]?.found ?? [])].map((token) => token.replace(/^[a-z]+:/, ''))
+    const ledger = improved.ledger as unknown as Record<
+      string,
+      { missing?: string[]; found?: string[]; at?: string[] } | undefined
+    >
+    const shown = [
+      ...(ledger[name]?.missing ?? []),
+      ...(ledger[name]?.found ?? []),
+    ].map((token) => token.replace(/^[a-z]+:/, ''))
     // The line each invented value sat in (AGL-4152), so the re-ask can mend that sentence and a later read can see it.
     const at = ledger[name]?.at ?? []
     const message = MISS[name] ?? `The page falls short on ${name}.`
-    const detail = [...(shown.length ? [`Named: ${shown.join(', ')}.`] : []), ...(at.length ? [`In: ${at.map((line) => `"${line}"`).join('; ')}.`] : [])].join(' ')
-    return [{ rule: null, code: `improve-${name}`, message, ...(detail ? { detail } : {}) }]
+    const detail = [
+      ...(shown.length ? [`Named: ${shown.join(', ')}.`] : []),
+      ...(at.length
+        ? [`In: ${at.map((line) => `"${line}"`).join('; ')}.`]
+        : []),
+    ].join(' ')
+    return [
+      {
+        rule: null,
+        code: `improve-${name}`,
+        message,
+        ...(detail ? { detail } : {}),
+      },
+    ]
   })
 }
 
 /** A redesign's read for a page: its ledger, and everywhere a link may go. */
-export function aiSiteImportImproveLedger(doc: AiSiteImportDocument): SiteImportLedger {
-  return siteImportLedger({ layout: aiSiteImportLayoutOf(doc), blocks: doc.blocks, photos: doc.photos })
+export function aiSiteImportImproveLedger(
+  doc: AiSiteImportDocument,
+): SiteImportLedger {
+  return siteImportLedger({
+    layout: aiSiteImportLayoutOf(doc),
+    blocks: doc.blocks,
+    photos: doc.photos,
+  })
 }
 
 /**
@@ -1681,7 +2631,10 @@ export function aiSiteImportImproveCheck<T>(input: {
   needs?: AiSiteImportImproveNeeds | null
   /** Words the platform's own request put to the answer (its role's lines), no one's name or fact. */
   vocabulary?: readonly string[]
-  build: (page: AiSiteImportImprovedPage) => { value: T | null; violations: AiDoctrineViolation[] }
+  build: (page: AiSiteImportImprovedPage) => {
+    value: T | null
+    violations: AiDoctrineViolation[]
+  }
   score: (built: T, destinations: readonly string[]) => AiDoctrineViolation[]
   /**
    * The last answer read again once no re-ask is left (AGL-4152): its soft
@@ -1694,16 +2647,57 @@ export function aiSiteImportImproveCheck<T>(input: {
     // What the read settles, a block it leaves out among them, is kept for the page's log (AGL-4152).
     const notes: AiLayoutSettlement[] = []
     const read = aiReadImprovedPage(answer, notes)
-    if (!read) return { value: null, violations: [{ rule: null, code: 'improve-unreadable', message: `The answer gave no section that can be drawn. Answer with ${AI_SITE_IMPORT_IMPROVE_TOOL.name}.` }] }
-    const formAt = read.findIndex((section) => section.blocks.some((block) => block.kind === 'keep' && block.ref.startsWith('form:')))
-    const destinations = aiSiteImportImproveDestinations(input.doc, input.ledger, { sections: read.length, formSection: formAt === -1 ? null : formAt })
+    if (!read)
+      return {
+        value: null,
+        violations: [
+          {
+            rule: null,
+            code: 'improve-unreadable',
+            message: `The answer gave no section that can be drawn. Answer with ${AI_SITE_IMPORT_IMPROVE_TOOL.name}.`,
+          },
+        ],
+      }
+    const formAt = read.findIndex((section) =>
+      section.blocks.some(
+        (block) => block.kind === 'keep' && block.ref.startsWith('form:'),
+      ),
+    )
+    const destinations = aiSiteImportImproveDestinations(
+      input.doc,
+      input.ledger,
+      { sections: read.length, formSection: formAt === -1 ? null : formAt },
+    )
     const own = aiSiteImportOwnPage(input.doc)
-    const honesty = aiSiteImportHonesty(read, { ledger: input.ledger, scope: input.scope, destinations, framing: input.framing ?? null, vocabulary: input.vocabulary ?? [], own })
+    const honesty = aiSiteImportHonesty(read, {
+      ledger: input.ledger,
+      scope: input.scope,
+      destinations,
+      framing: input.framing ?? null,
+      vocabulary: input.vocabulary ?? [],
+      own,
+    })
     // What it lost and how it is planned, named together, so the one re-ask mends both.
-    const planned = input.needs ? aiSiteImportImprovePlanMisses(read, { ledger: input.ledger, needs: input.needs }) : []
-    const missed: string[] = input.lenient ? planned.map((violation) => violation.code) : []
-    if (honesty.length || (planned.length && !input.lenient)) return { value: null, violations: [...honesty, ...planned] }
-    const page = aiSiteImportImprovedPage(read, { doc: input.doc, ledger: input.ledger, design: input.design, destinations, formId: input.formId, plan: input.plan ?? null, theme: input.theme ?? null })
+    const planned = input.needs
+      ? aiSiteImportImprovePlanMisses(read, {
+          ledger: input.ledger,
+          needs: input.needs,
+        })
+      : []
+    const missed: string[] = input.lenient
+      ? planned.map((violation) => violation.code)
+      : []
+    if (honesty.length || (planned.length && !input.lenient))
+      return { value: null, violations: [...honesty, ...planned] }
+    const page = aiSiteImportImprovedPage(read, {
+      doc: input.doc,
+      ledger: input.ledger,
+      design: input.design,
+      destinations,
+      formId: input.formId,
+      plan: input.plan ?? null,
+      theme: input.theme ?? null,
+    })
     const built = input.build(page)
     if (!built.value) return { value: null, violations: built.violations }
     // A link the source makes to the page it is on asks nothing of the page (AGL-4152).
@@ -1712,9 +2706,21 @@ export function aiSiteImportImproveCheck<T>(input: {
       return to && to !== own ? [to] : []
     })
     const scored = input.score(built.value, [...new Set(wanted)])
-    const refused = input.lenient ? scored.filter((violation) => !AI_SITE_IMPORT_IMPROVE_SOFT_CODES.has(violation.code)) : scored
+    const refused = input.lenient
+      ? scored.filter(
+          (violation) => !AI_SITE_IMPORT_IMPROVE_SOFT_CODES.has(violation.code),
+        )
+      : scored
     if (refused.length) return { value: null, violations: refused }
     missed.push(...scored.map((violation) => violation.code))
-    return { value: { built: built.value, page, ...(missed.length ? { missed: [...new Set(missed)] } : {}), ...(notes.length ? { read: notes } : {}) }, violations: [] }
+    return {
+      value: {
+        built: built.value,
+        page,
+        ...(missed.length ? { missed: [...new Set(missed)] } : {}),
+        ...(notes.length ? { read: notes } : {}),
+      },
+      violations: [],
+    }
   }
 }
