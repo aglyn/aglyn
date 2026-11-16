@@ -104,6 +104,11 @@ running the deploy, which is the one action that can destroy them.
 | `apiIdempotency` | `expiresAt` | REST/POS/marketplace replay keys (AGL-618, AGL-1978). **30 days** (`API_IDEMPOTENCY_RETENTION_DAYS` in `libs/aglyn/src/lib/app-utils/api-idempotency.ts`). Not merely a key: a settled claim stores the **original response body**, which for the REST API is the created record's `values` — so this collection was a permanent second copy of every record created through the API, surviving the record's own deletion. Top-level and `orgId`-keyed, so `eraseOrgIdempotencyKeys` sweeps it on erasure; the TTL is what bounds it for a **live** org. The published contract in `apps/docs/api/conventions.md` moved from "never expire" to the 30-day window in the same change. TTL `ACTIVE`, enabled and verified 2026-08-19. |
 | `authHandoffs` | `expiresAt` | Cross-domain console session handoff records (AGL-1902). Each holds the SHA-256 of **two** secrets that together buy a session, plus the `uid` it would be minted for — so an unexpired leftover is the one document in the database worth stealing. Expiry is enforced in code on redemption as well; the TTL is what bounds the row itself, and it is the only thing bounding it on a self-host install. Top-level, single-use, both hashes nulled on consume. TTL `ACTIVE`, enabled and verified 2026-08-20. |
 | `nativeHandoffs` | `expiresAt` | The native apps' console hand-off codes (AGL-3816). Each holds the SHA-256 of a one-time code, the PKCE challenge it is bound to and the `uid` a custom token would be minted for. Redeemable for 120 seconds and deleted on redemption, so the TTL bounds only a code nobody redeemed. Top-level, single-use. TTL **OWED**: run the command below after the index deploy that declares it. |
+| `oauthCodes` | `expiresAt` | Connector sign-in's one-time codes (AGL-4225): the SHA-256 of the code, the client, redirect address and PKCE challenge it is bound to, the workspace, the approving `uid` and address. **5 minutes**; marked used on exchange, kept until expiry so a replay can be recognised. Top-level, `orgId`-keyed, swept on erasure. TTL **OWED**: run the command below after the index deploy that declares it. |
+| `oauthAccessTokens` | `expiresAt` | Connector access tokens (AGL-4225), stored as SHA-256 only: the connection, workspace, person and scopes. **1 hour**. TTL **OWED**, as above. |
+| `oauthRefreshTokens` | `expiresAt` | Connector refresh tokens (AGL-4225), SHA-256 only; each is rotated on use and the spent one kept to its expiry so reuse is recognised. **90 days**. TTL **OWED**, as above. |
+| `oauthGrants` | `expiresAt` | A connection — one app, one workspace, one person, with the approver's address (AGL-4225). Live connections slide **90 days** on each refresh; an ended one is stamped to expire at once. TTL **OWED**, as above. |
+| `oauthClients` | `expiresAt` | A connector's registration (AGL-4225): its self-asserted name and redirect addresses. **91 days** idle, pushed on by every token issued, so a client always outlives its tokens. Registration is open and idempotent; this is what bounds the ones nobody uses. TTL **OWED**, as above. |
 | `packageImports` | `expiresAt` | A site package import's record (AGL-3533, AGL-3543) at `hosts/{hostId}/packageImports/{importId}`: who imported what, each item's decision and target. **8 days** — the 7-day undo window and a day (`PACKAGE_LEDGER_RETENTION_MS` in `apps/console/app/api/_lib/site-package-ledger.ts`); the import route stamps `packageLedgerExpiry(...)` when it files the record and again when the import applies. Undo itself closes at 7 days in code (`packageImportUndoable`). **OWED: not yet enabled** — run the command below after the index deploy that carries the declaration. |
 | `snapshots` | `expiresAt` | The undo snapshot beneath a package import (AGL-3543), `packageImports/{importId}/snapshots/{n}`: every replaced or merged item's previous content **verbatim**, as JSON pieces of up to 900,000 characters — a whole-site restore into itself snapshots the whole site. Same 8 days; `writeLedgerPieces` stamps each piece, since TTL does not cascade from the record. The collection-group name is the generic `snapshots`; nothing else in the schema writes a subcollection by that name. **OWED: not yet enabled.** |
 | `writtenPaths` | `expiresAt` | The document paths a package import wrote per item (AGL-3543), `packageImports/{importId}/writtenPaths/{n}`, which undo deletes. Same 8 days, same writer. **OWED: not yet enabled.** |
@@ -162,6 +167,26 @@ gcloud firestore fields ttls update expiresAt \
 # AGL-3816 — OWED, run after the index deploy that declares it:
 gcloud firestore fields ttls update expiresAt \
   --collection-group=nativeHandoffs --enable-ttl \
+  --project=aglyn-main --database='(default)'
+# AGL-4225 — OWED, run after the index deploy that declares it:
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=oauthCodes --enable-ttl \
+  --project=aglyn-main --database='(default)'
+# AGL-4225 — OWED, run after the index deploy that declares it:
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=oauthAccessTokens --enable-ttl \
+  --project=aglyn-main --database='(default)'
+# AGL-4225 — OWED, run after the index deploy that declares it:
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=oauthRefreshTokens --enable-ttl \
+  --project=aglyn-main --database='(default)'
+# AGL-4225 — OWED, run after the index deploy that declares it:
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=oauthGrants --enable-ttl \
+  --project=aglyn-main --database='(default)'
+# AGL-4225 — OWED, run after the index deploy that declares it:
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=oauthClients --enable-ttl \
   --project=aglyn-main --database='(default)'
 # AGL-2917 — OWED, run after the index deploy that declares it:
 gcloud firestore fields ttls update expiresAt \

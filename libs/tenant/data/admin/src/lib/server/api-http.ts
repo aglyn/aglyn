@@ -75,10 +75,17 @@ export const ApiErrors = {
       'API access requires the Pro plan or above',
       init,
     ),
+  // The challenge RFC 6750 §3.1 gives a bearer credential that lacks a scope,
+  // naming the one it lacks, so an app that signed in can ask the person for
+  // it rather than read prose (AGL-4225). Scope tokens are `[a-z:]` only, so
+  // the quoted value needs no escaping.
   insufficientScope: (scope: string, headers?: Record<string, string>) =>
     errorResponse(403, 'insufficient_scope', `Missing the "${scope}" scope`, {
       code: scope,
-      headers,
+      headers: {
+        ...headers,
+        'WWW-Authenticate': `Bearer error="insufficient_scope", scope="${scope}"`,
+      },
     }),
   forbidden: (init?: ApiResponseInit) =>
     errorResponse(403, 'forbidden', 'Not permitted', init),
@@ -126,6 +133,15 @@ export const ApiErrors = {
     }),
   internal: (init?: ApiResponseInit) =>
     errorResponse(500, 'internal_error', 'Something went wrong', init),
+  /**
+   * 503: the request could not be judged because a dependency failed, so
+   * nothing about the credential or the request is wrong (AGL-4225). Carries
+   * `Retry-After`; a client should simply try again.
+   */
+  unavailable: (retryAfterSec: number, headers?: Record<string, string>) =>
+    errorResponse(503, 'service_unavailable', 'Temporarily unavailable — try again shortly', {
+      headers: { 'Retry-After': String(Math.max(1, retryAfterSec)), ...headers },
+    }),
 }
 
 /**

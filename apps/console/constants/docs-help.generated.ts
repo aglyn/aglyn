@@ -221,9 +221,17 @@ export const DOCS_HELP_TOPICS = {
     path: '/marketing-and-automation/analytics/connect-conversions-api',
     title: 'Server-side ad conversions',
   },
+  connectQuickbooksOnline: {
+    path: '/commerce-and-bookings/commerce/connect-quickbooks-online',
+    title: 'Connect QuickBooks Online',
+  },
   connectSmileIoOrYotpo: {
     path: '/commerce-and-bookings/commerce/connect-smile-io-or-yotpo',
     title: 'Connect Smile.io or Yotpo Loyalty',
+  },
+  connectXero: {
+    path: '/commerce-and-bookings/commerce/connect-xero',
+    title: 'Connect Xero',
   },
   consoleAndSite: {
     path: '/developers/plugins/guides/console-and-site',
@@ -995,7 +1003,7 @@ export const DOCS_HELP_ANCHORS = {
   automationsWithAi: ['#draft', '#org-automations', '#change', '#explain', '#why-a-run-failed', '#what-is-sent', '#who-can-use-it', '#related'],
   bandwidth: ['#what-each-plan-includes', '#where-to-see-it', '#paused', '#timing', '#reducing-bandwidth', '#reference', '#how-usage-is-counted', '#which-views-are-counted', '#the-two-mechanisms', '#what-a-visitors-browser-gets', '#fail-open-on-purpose', '#self-hosting', '#related'],
   besigner: ['#preview-vs-canvas', '#publish-from-a-preview', '#what-you-can-do', '#the-canvas', '#hierarchy-panel', '#the-inspector', '#inline-and-rich-text', '#reusable-components', '#editing-together', '#ai-in-the-canvas', '#related'],
-  billing: ['#billing-page', '#current-plan', '#locked-features', '#billing-link', '#tiers--entitlements', '#made-with-badge', '#leaving-notice', '#plan-without-subscription', '#upgrade-proposal', '#enterprise', '#single-sign-on-and-enforcement', '#usage-meters', '#usage-card', '#metered-usage-estimate', '#usage-history', '#campaign-sending-pace', '#who-is-generating-what', '#ai-allotments', '#storage-overage', '#if-you-would-rather-uploads-stopped', '#files-on-quotes-and-forms', '#assist-overage', '#stop-ai-assist-at-the-included-band', '#ai-overage-ceiling', '#free-ai-credits', '#ai-credit-alerts', '#usage-budget', '#seats', '#crm-records', '#the-crm-suite', '#one-to-one-email', '#organization-data', '#api-access', '#payments', '#outstanding', '#plan-total', '#what-you-will-pay', '#switch-with-a-code', '#billing-history', '#billing-email', '#payment-methods', '#billing-address', '#billing-address-on-profile', '#tax-ids', '#sales-tax', '#platform-fees', '#related'],
+  billing: ['#billing-page', '#current-plan', '#locked-features', '#billing-link', '#tiers--entitlements', '#made-with-badge', '#leaving-notice', '#plan-without-subscription', '#upgrade-proposal', '#enterprise', '#single-sign-on-and-enforcement', '#usage-meters', '#usage-card', '#metered-usage-estimate', '#usage-history', '#campaign-sending-pace', '#who-is-generating-what', '#ai-allotments', '#storage-overage', '#if-you-would-rather-uploads-stopped', '#files-on-quotes-and-forms', '#assist-overage', '#stop-ai-assist-at-the-included-band', '#ai-overage-ceiling', '#free-ai-credits', '#ai-credit-alerts', '#usage-budget', '#seats', '#crm-records', '#the-crm-suite', '#one-to-one-email', '#organization-data', '#api-access', '#connected-apps', '#payments', '#outstanding', '#plan-total', '#what-you-will-pay', '#switch-with-a-code', '#billing-history', '#billing-email', '#payment-methods', '#billing-address', '#billing-address-on-profile', '#tax-ids', '#sales-tax', '#platform-fees', '#related'],
   bindings: ['#binding-tokens', '#rename-safe-id-tokens', '#insert-a-variable', '#token-pills', '#in-the-canvas-text-editor', '#site-details', '#typed-variables', '#no-code-functions', '#functions-card', '#parameters-a-visitor-can-answer', '#a-calculator-you-lay-out', '#where-used--safety', '#workflows', '#related'],
   bookings: ['#set-up-bookings', '#draft-services', '#price-labels', '#phone-and-address', '#taking-bookings', '#reminders', '#payments-and-fees', '#service-tax', '#manage', '#booking-from-the-crm', '#canceling-and-refunding', '#export-bookings', '#related'],
   bringMySite: ['#start', '#your-current-website', '#prove-it-is-yours', '#read-my-site', '#not-brought-in', '#keep-or-improve', '#improve-planned', '#waves', '#your-sites-preview', '#review-a-wave', '#photos', '#never-brought-in', '#when-an-import-waits', '#turned-away'],
@@ -1016,7 +1024,9 @@ export const DOCS_HELP_ANCHORS = {
   connectAttentive: ['#before-you-start', '#connect', '#what-is-sent', '#who-is-sent', '#unsubscribes-stay-in-attentive', '#settings', '#sync-log', '#troubleshooting', '#disconnect'],
   connectAutomatically: ['#steps', '#no-button', '#problems'],
   connectConversionsApi: ['#conversions-api', '#meta-conversions-api', '#tiktok-events-api', '#pinterest-conversions-api', '#how-it-works', '#test-events', '#related'],
+  connectQuickbooksOnline: ['#before-you-start', '#connect', '#choose-your-accounts', '#what-is-posted', '#how-each-payment-is-posted', '#sales-tax-collected-by-aglyn', '#one-summary-a-day-instead', '#currency', '#sales-before-you-connected', '#when-something-does-not-post', '#disconnect'],
   connectSmileIoOrYotpo: ['#connect-your-account', '#who-earns', '#when-something-is-not-sent', '#disconnect'],
+  connectXero: ['#before-you-start', '#connect', '#choose-an-organization', '#choose-your-accounts', '#what-is-posted', '#how-each-payment-is-posted', '#sales-tax-collected-by-aglyn', '#one-summary-a-day-instead', '#currency', '#sales-before-you-connected', '#when-something-does-not-post', '#disconnect'],
   consoleAndSite: ['#add-a-console-page', '#add-a-widget-to-a-shell-zone', '#wrap-every-console-page-providers', '#add-a-canvas-component-besigner--published-sites', '#add-a-site-runtime', '#troubleshooting'],
   consoleSearch: ['#what-it-searches', '#searching-from-the-organization', '#how-matching-works', '#what-it-does-not-search', '#why-a-group-sometimes-says-it-was-only-partly-searched'],
   consoleTour: ['#the-app-bar', '#choose-a-workspace', '#in-context-help', '#filter-and-search', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#a-site-card', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#recent-activity', '#next', '#workspace-settings--notifications', '#organization-settings', '#organization-general', '#the-notifications-feed', '#all-notifications', '#notification-levels', '#notification-settings', '#one-kind-at-a-time', '#workspace-and-site-overrides', '#daily-digests', '#notification-sound', '#alerts-on-this-device'],
@@ -1103,7 +1113,7 @@ export const DOCS_HELP_ANCHORS = {
   membersOnly: ['#let-visitors-sign-up', '#sign-in-sign-up-and-recovery-pages', '#forgotten-passwords', '#gate-a-screen', '#manage-your-members', '#suspend-or-reactivate-a-member', '#tips', '#related'],
   menusAndNavigation: ['#dropdown-menu', '#mega-menu', '#drawer--menu-button', '#the-mobile-nav-preset', '#the-dropdown-panel-preset', '#interactions-for-menus', '#responsive-visibility', '#related'],
   migrationPatterns: ['#renamed-a-screen', '#consolidated-pages', '#moved-a-site-into-aglyn', '#avoiding-loops', '#related'],
-  modelBuilder: ['#define-the-model', '#display-name-vs-reference-id', '#page-address-fields', '#image-fields', '#page-fields', '#edit-records', '#tips', '#related'],
+  modelBuilder: ['#define-the-model', '#display-name-vs-reference-id', '#page-address-fields', '#image-fields', '#icon-fields', '#page-fields', '#edit-records', '#tips', '#related'],
   multilingual: ['#languages-card', '#locale-variants', '#hreflang--discovery', '#language-switcher', '#text-direction', '#related'],
   multiSelect: ['#select-multiple', '#move-the-whole-selection', '#what-the-inspector-shows', '#tips', '#related'],
   musicPlayer: ['#adding-tracks', '#rights', '#takedowns', '#related'],
@@ -1305,6 +1315,7 @@ export const DOCS_HELP_SECTION_TITLES: {
     '#billing-link': 'Billing links in emails',
     '#billing-page': 'The Billing page',
     '#campaign-sending-pace': 'Campaign sending pace',
+    '#connected-apps': 'Connected apps',
     '#crm-records': 'CRM records',
     '#current-plan': 'Current plan',
     '#if-you-would-rather-uploads-stopped': 'If you would rather uploads stopped',
@@ -1398,6 +1409,9 @@ export const DOCS_HELP_SECTION_TITLES: {
   },
   connectADomain: {
     '#steps': 'Steps',
+  },
+  connectXero: {
+    '#choose-an-organization': 'Choose an organization',
   },
   consoleSearch: {
     '#what-it-searches': 'What it searches',

@@ -297,6 +297,11 @@ Authenticate with the key you made in Step 1, as a bearer token:
 Authorization: Bearer aglyn_sk_...
 ```
 
+A client that signs people in — Claude is one — needs no key at all: it is
+answered `401` with the address of the sign-in description, and the person
+connects a workspace in the browser. See
+[apps that sign in](/api/authentication#apps-that-sign-in).
+
 The transport is Streamable HTTP, and the server keeps no session between
 calls — every request carries its own key, so there is nothing to resume and
 nothing to expire. Point your client's MCP configuration at the URL above and

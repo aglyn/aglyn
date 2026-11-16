@@ -23,6 +23,7 @@
  */
 import { buildDocsUrl } from '../../../../constants/docs-links'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
+import { CONNECTOR_RESOURCE_PATH } from '@aglyn/aglyn/app-utils/connector-discovery'
 import { ApiErrors, apiJson } from '@aglyn/tenant-data-admin'
 import { authenticateApiV1 } from '../../../../utils/api-v1'
 import {
@@ -132,6 +133,9 @@ async function dispatch(
         // The machine-readable twin (AGL-2733). A client that finds the root
         // should not have to read prose to discover the description exists.
         openapi: CUSTOMER_API_OPENAPI_PATH,
+        // The same API as MCP tools (AGL-4225), so a client that found the
+        // REST root learns there is a server an agent can connect to.
+        mcp: CONNECTOR_RESOURCE_PATH,
         // Only top-level resources belong here. Form submissions are a
         // sub-resource of sites (`/v1/sites/{id}/form-submissions`) and are
         // deliberately absent — advertising `forms` 404'd every client that
@@ -159,7 +163,14 @@ async function dispatch(
     return apiJson(
       // `name` (AGL-3643) is how an integration that holds several keys —
       // Zapier's connection label — tells them apart without the secret.
-      { object: 'api_key', org: context.orgId, name: context.keyName, scopes: context.scopes },
+      // A connection answers as what it is (AGL-4225), with the same fields:
+      // `name` is then the name the app registered under.
+      {
+        object: context.credential === 'connected_app' ? 'connected_app' : 'api_key',
+        org: context.orgId,
+        name: context.keyName,
+        scopes: context.scopes,
+      },
       { headers },
     )
   }

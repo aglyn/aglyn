@@ -82,7 +82,9 @@ export const DOCS_HELP_EXCERPTS = {
   connectAttentive: 'Send a site\'s contacts, their email marketing consent and its orders to your own Attentive account, for Attentive\'s journeys. Rolling out.',
   connectAutomatically: 'For a domain you already own, let your DNS provider add Aglyn\'s records for you in one click instead of copying them by hand.',
   connectConversionsApi: 'Send purchases and leads to your own Meta, TikTok and Pinterest ad accounts from the server, paired with your browser tags — only for visitors who allow advertising.',
+  connectQuickbooksOnline: 'Post every sale, refund, Aglyn fee and Stripe payout from your store to QuickBooks Online, mapped to the accounts you choose.',
   connectSmileIoOrYotpo: 'Keep your members\' points in your own Smile.io or Yotpo Loyalty account, earned and spent on every Aglyn order, online and at the register.',
+  connectXero: 'Post every sale, refund, Aglyn fee and Stripe payout from your store to Xero, mapped to the accounts you choose.',
   consoleAndSite: 'Task-ordered recipes for nav/pages/widgets/providers and canvas components/site runtimes.',
   consoleSearch: 'What the console search palette can find, how it matches what you type, and the two things it deliberately does not search.',
   consoleTour: 'Where things live in the Aglyn console app bar and navigation.',
@@ -373,6 +375,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#billing-link': 'A billing link in an email from Aglyn — a failed-payment notice, say — opens the Billing page of your workspace, asking you to sign in first if you need to.',
     '#billing-page': 'Organization → Billing is where your workspace\'s plan, usage, invoices and billing details live, in four tabs: Plan, Usage, Invoices and Settings.',
     '#campaign-sending-pace': 'Campaign emails (this hour, organization) shows how many campaign emails your workspace has sent this hour against the most it may send in an hour, so a very large send is spread out rather than refused.',
+    '#connected-apps': 'Connected apps lists every app that was connected to the workspace by signing in instead of with an API key, such as an AI assistant.',
     '#crm-records': 'Your CRM — the contacts captured from forms, member sign-ups, buyers and bookings, and the companies and deals your team files beside them — is priced as one CRM records band, not a hard cap.',
     '#current-plan': 'The Current plan card at the top of the Plan tab names your plan, the state of its subscription and its price, with the plan\'s headline limits — sites, team seats and campaign emails a month — beside it.',
     '#if-you-would-rather-uploads-stopped': 'Set a monthly storage cap on the Storage cap card under Billing → Usage when you would rather new uploads stopped than pay for extra storage past a figure you choose.',
@@ -466,6 +469,9 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   },
   connectADomain: {
     '#steps': 'In the site\'s Admin page, choose Custom Domain in its navigation.',
+  },
+  connectXero: {
+    '#choose-an-organization': 'When your Xero login reaches more than one organization, the Accounting page asks which one this workspace posts to: pick it and select Use this organization.',
   },
   consoleSearch: {
     '#what-it-searches': 'Everything below is searched within the site you currently have open, plus your sites across the workspace: A group only appears if your plan includes it.',

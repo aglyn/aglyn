@@ -50,6 +50,16 @@
  */
 
 import { MEDIA_EMBEDDED_GROUP_ORDER } from '@aglyn/aglyn/app-utils/media-embedded-fields'
+import {
+  CONNECTOR_AUTHORIZE_PATH,
+  CONNECTOR_RESOURCE_PATH,
+  CONNECTOR_TOKEN_PATH,
+  connectorAuthorizationServerMetadataUrl,
+  connectorResourceMetadataUrl,
+  mcpServerCardUrl,
+} from '@aglyn/aglyn/app-utils/connector-discovery'
+import { API_SCOPES } from '@aglyn/tenant-data-admin/server/api-keys'
+import { connectorScopeWords } from '@aglyn/tenant-data-admin/server/connector-oauth'
 // The description's shape and its field schemas are the data layer's, where a
 // plugin that serves a resource describes it in the same terms.
 import {
@@ -406,6 +416,7 @@ export function buildCustomerApiOpenApi(
         operationId: op.operationId,
         summary: op.summary,
         ...(op.description ? { description: op.description } : {}),
+        ...(op.destructive ? { 'x-destructive': true } : {}),
         tags: [resource.tag],
         ...(parameters.length ? { parameters } : {}),
         ...(op.accepts
@@ -455,8 +466,8 @@ export function buildCustomerApiOpenApi(
   paths['/v1/me'] = {
     get: {
       operationId: 'getKeyIdentity',
-      summary: 'Introspect the calling key',
-      description: 'Says which organization and scopes this key carries. Never returns the key.',
+      summary: 'Introspect the calling credential',
+      description: 'Says what the calling credential is — an API key or a connected app — and which organization and scopes it carries. Never returns the secret.',
       tags: ['Service'],
       responses: {
         '200': {
@@ -540,6 +551,8 @@ export function buildCustomerApiOpenApi(
         name: { type: 'string' },
         version: { type: 'string', const: CUSTOMER_API_VERSION },
         documentation: { type: 'string', description: 'Where the prose documentation lives.' },
+        openapi: { type: 'string', description: 'Path of this API\'s OpenAPI description, on the same origin.' },
+        mcp: { type: 'string', description: 'Path of the MCP endpoint that serves this API as tools, on the same origin.' },
         resources: { type: 'array', items: { type: 'string' }, description: 'Top-level resource names.' },
       },
     },
@@ -547,10 +560,17 @@ export function buildCustomerApiOpenApi(
       type: 'object',
       required: ['object'],
       properties: {
-        object: { type: 'string', const: 'api_key' },
-        org: { type: 'string', description: 'Organization this key belongs to.' },
-        name: { type: ['string', 'null'], description: 'The name the organization gave the key, e.g. `Zapier`.' },
-        scopes: { type: 'array', items: { type: 'string' }, description: 'What the key may do.' },
+        object: {
+          type: 'string',
+          enum: ['api_key', 'connected_app'],
+          description: '`api_key` for an API key; `connected_app` for an app a person connected by signing in.',
+        },
+        org: { type: 'string', description: 'Organization this credential belongs to.' },
+        name: {
+          type: ['string', 'null'],
+          description: 'The name the organization gave the key, e.g. `Zapier` — or, for a connected app, the name the app registered under.',
+        },
+        scopes: { type: 'array', items: { type: 'string' }, description: 'What the credential may do.' },
       },
       additionalProperties: true,
     },
@@ -643,7 +663,17 @@ export function buildCustomerApiOpenApi(
       summary: `Programmatic access to an organization's data on ${options.brandName}.`,
       description:
         `The customer REST API. Authenticate with an API key as a bearer ` +
-        'token; every response is JSON.\n\n' +
+        'token, or with the access token an app gets by signing in (the ' +
+        '`connector` scheme); every response is JSON.\n\n' +
+        '## MCP server\n\n' +
+        `The same API is served as Model Context Protocol tools at ` +
+        `\`${origin}${CONNECTOR_RESOURCE_PATH}\` (Streamable HTTP). Any MCP ` +
+        'client can connect with an API key, or sign in: an unauthenticated ' +
+        'call is answered `401` with `WWW-Authenticate: Bearer ' +
+        `resource_metadata="${connectorResourceMetadataUrl(origin)}"\` ` +
+        '(RFC 9728), and the authorization server is described at ' +
+        `\`${connectorAuthorizationServerMetadataUrl(origin)}\` (RFC 8414). ` +
+        `Its server card is \`${mcpServerCardUrl(origin)}\`.\n\n` +
         '## Pagination\n\n' +
         'Every list returns `{ object: "list", data, next_cursor, has_more }` ' +
         'and pages with an opaque cursor. **`has_more` is the only ' +
@@ -669,7 +699,10 @@ export function buildCustomerApiOpenApi(
     servers: [
       { url: `${origin}${CUSTOMER_API_MOUNT}`, description: options.brandName },
     ],
-    security: [{ apiKey: [] }],
+    // Either credential, at the document level (AGL-4225): an API key, or the
+    // hourly access token any MCP client gets by signing in. Both are
+    // resolved by the same authenticator and held to the same scopes.
+    security: [{ apiKey: [] }, { connector: [] }],
     tags: [
       ...tags,
       { name: 'Service', description: 'The API’s description of itself.' },
@@ -682,8 +715,35 @@ export function buildCustomerApiOpenApi(
           scheme: 'bearer',
           description:
             'An API key, sent as `Authorization: Bearer aglyn_sk_…`. Keys are ' +
-            'organization credentials, not user ones — there is no user ' +
-            'scope to evaluate. Mint and revoke them in the console.',
+            'organization credentials, not user ones, and each carries the ' +
+            'scopes chosen when it was made (the same names as the ' +
+            '`connector` scheme lists); an operation outside them is refused ' +
+            '`403 insufficient_scope`. Mint and revoke them in the console.',
+        },
+        connector: {
+          type: 'oauth2',
+          description:
+            'Sign-in for an app that acts for a person — any MCP client ' +
+            '(OAuth 2.1, authorization code with PKCE, public clients ' +
+            'only). The person picks a workspace and an access level; the app ' +
+            'gets an hourly access token, sent as `Authorization: Bearer ' +
+            'aglyn_at_…`, and a refresh token that rotates on every use. A ' +
+            'connection stops working when it is disconnected in Settings or ' +
+            'its person loses "Manage API keys" in the workspace. Clients ' +
+            'register dynamically, and a code is delivered only to an address ' +
+            'the client registered: https on a domain name that is not this ' +
+            'platform’s own, http on loopback, or an app-link callback ' +
+            'added for that client on request.',
+          flows: {
+            authorizationCode: {
+              authorizationUrl: `${origin}${CONNECTOR_AUTHORIZE_PATH}`,
+              tokenUrl: `${origin}${CONNECTOR_TOKEN_PATH}`,
+              refreshUrl: `${origin}${CONNECTOR_TOKEN_PATH}`,
+              scopes: Object.fromEntries(
+                API_SCOPES.map((scope) => [scope, connectorScopeWords(scope)]),
+              ),
+            },
+          },
         },
       },
       headers: {

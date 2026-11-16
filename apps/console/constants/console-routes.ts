@@ -41,6 +41,9 @@ export const CONSOLE_TOP_LEVEL_SEGMENTS = new Set([
   'edit-access',
   'kiosk',
   'manage',
+  // The connector consent page (AGL-4225), `/oauth/authorize` and nothing
+  // else below it — the middleware refuses every other `/oauth/*` path.
+  'oauth',
   // A site photo link's page (AGL-3957): `/p/{linkId}`, opened on a phone with no sign-in.
   'p',
   'reset-password',
@@ -88,6 +91,9 @@ export const APEX_PATH_SEGMENTS: ReadonlySet<string> = new Set([
   // workspace, and the address is scanned off a screen on whatever host the
   // console answers to.
   'p',
+  // The connector consent page (AGL-4225): `/oauth/authorize` is the
+  // issuer's, never a workspace's, on every host that serves it.
+  'oauth',
 ])
 
 /**

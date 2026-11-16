@@ -22,7 +22,9 @@ import {
   isNotification,
   JSON_RPC_ERRORS,
   MCP_PROTOCOL_VERSION,
+  MCP_SUPPORTED_PROTOCOL_VERSIONS,
   type McpHandlerDeps,
+  negotiateProtocolVersion,
 } from '../utils/mcp-protocol'
 
 /**
@@ -32,7 +34,9 @@ import {
  */
 const TOOL = {
   name: 'listDatasets',
+  title: 'List datasets',
   description: 'List datasets',
+  annotations: { readOnlyHint: true, destructiveHint: false },
   inputSchema: { type: 'object', properties: {} },
   method: 'GET',
   path: '/v1/datasets',
@@ -67,6 +71,24 @@ describe('the MCP handshake (AGL-3091)', () => {
     })
   })
 
+  it('answers in the revision a client asked for when it is one this server speaks (AGL-4225)', async () => {
+    const asked = async (protocolVersion: unknown) =>
+      (
+        (await handleMcpMessage(
+          { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion } },
+          deps(),
+        )) as { result: { protocolVersion: string } }
+      ).result.protocolVersion
+    for (const version of MCP_SUPPORTED_PROTOCOL_VERSIONS) {
+      expect(await asked(version)).toBe(version)
+    }
+    // The SSE-transport revision, a future one, and junk all get ours.
+    expect(await asked('2024-11-05')).toBe(MCP_PROTOCOL_VERSION)
+    expect(await asked('2099-01-01')).toBe(MCP_PROTOCOL_VERSION)
+    expect(await asked(42)).toBe(MCP_PROTOCOL_VERSION)
+    expect(negotiateProtocolVersion(undefined)).toBe(MCP_PROTOCOL_VERSION)
+  })
+
   it('answers the initialized notification with nothing at all', async () => {
     expect(
       await handleMcpMessage(
@@ -93,7 +115,7 @@ describe('the MCP handshake (AGL-3091)', () => {
 })
 
 describe('tools over the wire (AGL-3091)', () => {
-  it('lists a tool with the three fields a client reads', async () => {
+  it('lists a tool with the fields a client reads, its title and its hints included', async () => {
     const response = await handleMcpMessage(
       { jsonrpc: '2.0', id: 2, method: 'tools/list' },
       deps(),
@@ -105,8 +127,10 @@ describe('tools over the wire (AGL-3091)', () => {
         tools: [
           {
             name: 'listDatasets',
+            title: 'List datasets',
             description: 'List datasets',
             inputSchema: { type: 'object', properties: {} },
+            annotations: { readOnlyHint: true, destructiveHint: false },
           },
         ],
       },

@@ -127,8 +127,8 @@ export const PLUGIN_RELEASE_FLAGS: readonly PluginReleaseFlagDefinition[] = [
   {
     "key": "release_accounting",
     "label": "Accounting",
-    "description": "QuickBooks Online and Xero sync for commerce, and through Codat QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books and Wave: sales receipts or a daily summary journal, refunds, platform fees and Stripe payouts, with a mapping page and a sync log (AGL-3614, AGL-3636). OFF by default; needs the deployment's Intuit or Xero app credentials or Codat API key, and the accounting token key, on the console.",
-    "defaultEnabled": false,
+    "description": "QuickBooks Online and Xero sync for commerce, and through Codat QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books and Wave: sales receipts or a daily summary journal, refunds, platform fees and Stripe payouts, with a mapping page and a sync log (AGL-3614, AGL-3636). On for every workspace; needs the deployment's Intuit or Xero app credentials or Codat API key, and the accounting token key, on the console.",
+    "defaultEnabled": true,
     "navTabId": "nav-tab-org-accounting"
   },
   {

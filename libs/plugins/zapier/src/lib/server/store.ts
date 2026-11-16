@@ -53,6 +53,8 @@ export interface ZapierHookRecord {
   /** The public id of the API key that subscribed it. */
   keyId: string
   keyName: string | null
+  /** Who subscribed it, in words (AGL-4225); see `ZapierHookView.keyLabel`. */
+  keyLabel?: string | null
   createdAtMs: number
   updatedAtMs: number
   /** Deliveries that failed in a row; a success resets it. */
@@ -115,6 +117,7 @@ export function zapierHookView(hook: ZapierHook): ZapierHookView {
     events: [...hook.events],
     target: hostOf(hook.targetUrl),
     keyName: hook.keyName ?? null,
+    keyLabel: hook.keyLabel ?? null,
     created: iso(hook.createdAtMs) ?? new Date(0).toISOString(),
     lastDeliveryAt: iso(hook.lastDeliveryAtMs),
     lastDeliveryStatus: hook.lastDeliveryStatus ?? null,
@@ -163,6 +166,7 @@ export function createFirestoreZapierHookStore(
             events: record.events,
             keyId: record.keyId,
             keyName: record.keyName,
+            keyLabel: record.keyLabel ?? null,
             updatedAtMs: record.updatedAtMs,
           }
           transaction.update(same.ref, patch)

@@ -55,6 +55,13 @@ export interface ApiV1Operation {
   readonly creates?: boolean
   /** Entitlement the call needs, named in the 403. */
   readonly entitlement?: string
+  /**
+   * `true` for a write that destroys something although its method is not
+   * DELETE — a merge that removes the losing record. Published as
+   * `x-destructive`, which the MCP tool list reads as `destructiveHint`
+   * (AGL-4225) so a client can ask before running it.
+   */
+  readonly destructive?: boolean
 }
 
 export interface ApiV1ResourceDescription {
