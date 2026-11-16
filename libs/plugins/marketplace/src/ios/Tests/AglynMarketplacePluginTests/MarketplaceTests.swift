@@ -351,6 +351,13 @@ final class MarketplaceTests: XCTestCase {
     XCTAssertEqual(
       artifactUpdateSummary(mode: "copy", answer: .object(["version": .number(2)])),
       "Installed v2 as a new copy — your customized version is kept, no longer linked to the listing.")
+    // The template library's "Update available" (the console's TemplateInstallStatus).
+    XCTAssertEqual(templateReplaceQuestion("Bakery").title, "Replace your edited copy?")
+    XCTAssertTrue(templateReplaceQuestion("Bakery").message.hasPrefix("You have edited \"Bakery\" since installing it."))
+    XCTAssertEqual(templateUpdatedMessage(version: "3"), "Updated to v3 — pages you already created are unchanged.")
+    let installedTemplate: [String: Any] = ["source": ["type": "marketplace", "listingId": "l1", "version": "2"]]
+    XCTAssertEqual(copyUpdateState(installed: installedTemplate, latestVersion: "3", artifactType: "template").state, "update-available")
+    XCTAssertEqual(copyUpdateState(installed: installedTemplate, latestVersion: "2", artifactType: "template").state, "current")
     for item in try functionCases("installPlanOutcome") {
       let input = object(item.args[0])
       let outcome = installPlanOutcome(

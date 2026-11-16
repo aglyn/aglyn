@@ -104,6 +104,30 @@ class MarketplaceCasesTest {
   }
 
   @Test
+  fun templateUpdateChipWords() {
+    val (title, body) = templateReplaceQuestion("Bakery")
+    assertEquals("Replace your edited copy?", title)
+    assertEquals(true, body.startsWith("You have edited \"Bakery\" since installing it."))
+    assertEquals("Updated to v3 — pages you already created are unchanged.", templateUpdatedMessage("3"))
+    val source = mapOf("source" to mapOf("type" to "marketplace", "listingId" to "l1", "version" to "2"))
+    assertEquals("update-available", copyUpdateState(source, "3", "template").first)
+    assertEquals("current", copyUpdateState(source, "2", "template").first)
+    assertEquals(
+      mapOf("hostId" to "h1", "templateId" to "t1", "displayName" to "Bakery", "sourceType" to "marketplace", "listingId" to "l1", "version" to "2", "edited" to "true"),
+      com.aglyn.site.artifacts.templateInstallStatusProps(
+        com.aglyn.site.artifacts.ArtifactRow(
+          id = "t1", name = "Bakery", description = null, kind = "page", versionId = null, parentLayoutId = null, sourceType = "marketplace",
+          sourceListingId = "l1", sourceVersion = "2", edited = true, starterId = null, starterName = null, starterOrder = null,
+          libraryRow = true, updatedAt = null, createdAt = null,
+        ),
+        "h1",
+      ),
+    )
+    assertEquals(false, com.aglyn.site.artifacts.isInstalledTemplateSource("authored"))
+    assertEquals(true, com.aglyn.site.artifacts.isInstalledTemplateSource("marketplace"))
+  }
+
+  @Test
   fun installStateCases() = cases("resolvePluginInstallState").forEach { (args, result) ->
     fun pin(json: JsonElement) = (json as? JsonObject)?.let { obj -> obj["version"]?.let { (it as JsonPrimitive).content } }
     val state = resolvePluginInstallState(str(args[0]), pin(args[1]), args[1] is JsonObject, pin(args[2]), args[2] is JsonObject)

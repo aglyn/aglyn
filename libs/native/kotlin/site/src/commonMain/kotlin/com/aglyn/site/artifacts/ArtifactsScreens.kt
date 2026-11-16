@@ -174,7 +174,7 @@ fun ArtifactsScreen(context: NativePluginContext, kind: ArtifactKind, initialId:
               )
             } else {
               LazyColumn(Modifier.fillMaxSize().testTag("${kind.collection}-list"), state = listState) {
-                items(rows, key = { it.id }) { row -> ArtifactListRow(kind, row, row.id == selected) { onSelect(row.id) } }
+                items(rows, key = { it.id }) { row -> ArtifactListRow(context, kind, row, row.id == selected) { onSelect(row.id) } }
                 if (model.hasMore) item { SkeletonList(rows = 2) }
               }
             }
@@ -243,7 +243,7 @@ private fun rowSupporting(kind: ArtifactKind, row: ArtifactRow): String = listOf
 ).joinToString(" · ").ifEmpty { "No description" }
 
 @Composable
-private fun ArtifactListRow(kind: ArtifactKind, row: ArtifactRow, selected: Boolean, onClick: () -> Unit) {
+private fun ArtifactListRow(context: NativePluginContext, kind: ArtifactKind, row: ArtifactRow, selected: Boolean, onClick: () -> Unit) {
   AglynListItem(
     title = if (row.isStarterBundle) row.starterName ?: row.name else row.name,
     supporting = rowSupporting(kind, row),
@@ -251,7 +251,13 @@ private fun ArtifactListRow(kind: ArtifactKind, row: ArtifactRow, selected: Bool
     selected = selected,
     trailing = {
       when {
-        kind == ArtifactKind.TEMPLATE -> StatusChip(if (row.isStarterBundle) "Starter bundle" else templateSourceLabel(row.sourceType), StatusTone.NEUTRAL)
+        kind == ArtifactKind.TEMPLATE -> androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+          StatusChip(if (row.isStarterBundle) "Starter bundle" else templateSourceLabel(row.sourceType), StatusTone.NEUTRAL)
+          // What the plugin that installed this template says about the copy (an update to take), drawn by that plugin.
+          if (isInstalledTemplateSource(row.sourceType)) {
+            SlotWidgets(context, TEMPLATE_INSTALL_STATUS_SLOT, props = templateInstallStatusProps(row, context.hostId.orEmpty()))
+          }
+        }
         row.versionId == null -> StatusChip("No version yet", StatusTone.NEUTRAL)
         else -> Unit
       }
