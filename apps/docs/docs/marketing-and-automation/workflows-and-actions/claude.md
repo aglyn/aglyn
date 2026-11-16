@@ -1,15 +1,15 @@
 ---
 sidebar_position: 6
-title: Claude
-description: Connect Claude to your Aglyn workspace so it can look things up and make changes for you - contacts, orders, form submissions, site content and more - after you sign in and choose what it may do. Rolling out.
+title: Claude and other AI assistants
+description: Connect Claude, or any AI assistant that supports connectors, to your Aglyn workspace so it can look things up and make changes for you - contacts, orders, form submissions, site content and more - after you sign in and choose what it may do. Rolling out.
 unlisted: true
 ---
 
-# Claude
+# Claude and other AI assistants
 
 :::caution Rolling out
-Signing in to Aglyn from Claude is **not yet available**. Until it is, Claude
-will not be able to finish connecting.
+Signing in to Aglyn from an AI assistant is **not yet available**. Until it is,
+an assistant will not be able to finish connecting.
 :::
 
 Connect [Claude](https://claude.ai) to your workspace and ask it for things in
@@ -17,8 +17,11 @@ plain words: *"Who filled in the contact form this week?"*, *"Add these five
 services to my site"*, *"Mark order 1042 shipped with this tracking number"*,
 *"Log my call with Dana and remind me on Friday."*
 
-You sign in to Aglyn and choose what Claude may do. There is nothing to copy
-or paste, and you can disconnect it at any time.
+You sign in to Aglyn and choose what the assistant may do. There is nothing to
+copy or paste, and you can disconnect it at any time.
+
+The steps below use Claude. [Other assistants](#other-assistants) connect the
+same way.
 
 ## Connect Claude
 
@@ -41,6 +44,23 @@ owners and admins have. It is part of plans that include API access.
 On a Team or Enterprise plan for Claude, an owner of your Claude organization
 adds the connector once, and each person then connects with their own Aglyn
 sign-in.
+
+## Other assistants {#other-assistants}
+
+Aglyn works with any assistant or tool that supports the Model Context
+Protocol (MCP) with sign-in, not only Claude.
+
+1. In the assistant, find where it adds a connector, app or MCP server.
+2. Enter the address `https://app.aglyn.com/api/mcp`.
+3. Sign in to Aglyn when it asks, pick the workspace and what the assistant may
+   do, and choose **Allow**.
+
+Before you choose Allow, Aglyn shows the name the app gives itself and **where
+it returns to**. Check that this is the assistant you started from. Only
+continue if you started connecting it yourself.
+
+Everything on this page applies to any connected assistant: what it can and
+cannot do, your plan, and how to disconnect it.
 
 ## What Claude can do
 
@@ -82,9 +102,9 @@ there, in your own signed-in window.
 ## Disconnect Claude
 
 1. In Aglyn, open your workspace's **Settings → API keys**.
-2. Under **Connected apps**, find *Claude* and choose **Disconnect**.
+2. Under **Connected apps**, find the assistant and choose **Disconnect**.
 
-Claude loses access right away. You can also remove the connector in Claude's
+It loses access right away. You can also remove the connector in Claude's
 own settings.
 
 Everything Claude does counts toward your plan's API requests, the same as any
