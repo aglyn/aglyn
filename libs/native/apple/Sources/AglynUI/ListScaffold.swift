@@ -681,6 +681,14 @@ extension View {
   }
 }
 
+extension EnvironmentValues {
+  /// A screen drawn as one section of another screen's detail column on the Mac and iPad (`aglynSectionHead`): that
+  /// screen already sits in the area's detail, beside the list of sections, so it draws as ONE column, picking its item
+  /// in its head as the section's card does in the console (Funnels' "Funnel" select), never a list and detail of its
+  /// own as a third and fourth column (AGL-4058).
+  @Entry public var aglynSection: Bool = false
+}
+
 private struct AglynSectionHeadModifier: ViewModifier {
   @Environment(\.aglynWideChrome) private var wide
   let title: String
@@ -697,6 +705,8 @@ private struct AglynSectionHeadModifier: ViewModifier {
         // The section's own chrome, read here and kept here: its head draws it, and the area's head never sees it.
         .overlayPreferenceValue(AglynScreenChromeKey.self, alignment: .top) { chrome in row(chrome) }
         .transformPreference(AglynScreenChromeKey.self) { $0 = AglynScreenChrome() }
+        // Already beside the area's list of sections, so it draws as one column (`aglynSection`).
+        .environment(\.aglynSection, true)
     } else {
       content
     }

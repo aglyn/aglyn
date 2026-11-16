@@ -34,7 +34,9 @@
  *    on a dead session; that is what did not scale with users.
  *  - A person arriving reopens at once: the AGL-664 heal broadcast, the tab
  *    becoming visible, the window regaining focus. Arrivals cannot run the
- *    loop faster than one reopen per 2s after a refusal.
+ *    loop faster than one reopen per 2s after a refusal, and the hold grows
+ *    with the streak's age to two minutes, so a window that takes focus
+ *    events all day costs 30 opens an hour, not 1,800.
  *  - A hidden tab reopens nothing on a timer (AGL-2944).
  */
 
@@ -43,6 +45,7 @@ import { useFirestoreCollection } from './use-firestore-collection'
 import { useFirestoreDoc } from './use-firestore-doc'
 import { useDocData } from './helpers/use-doc'
 import {
+  REFUSED_ARRIVAL_CEILING_MS,
   REFUSED_RETRY_CEILING_MS,
   reportFirestoreSessionHeal,
   reportFirestoreServerRead,
@@ -325,13 +328,15 @@ describe.each([
   /**
    * A person coming back to the window is the recovery the old 2s timer was
    * standing in for. Focus reopens a backed-off listen at once, instead of
-   * leaving them in front of a refused page for minutes.
+   * leaving them in front of a refused page for minutes. "At once" is for
+   * the usual return, minutes after the refusal that scheduled the pending
+   * reopen, which is longer than any hold an arrival is given.
    */
   it('the window regaining focus reopens a backed-off listen at once', () => {
     mount()
     const opened = backOffForHalfAnHour()
 
-    act(() => jest.advanceTimersByTime(SESSION_REFUSED_RETRY_DELAY_MS + 100))
+    act(() => jest.advanceTimersByTime(REFUSED_ARRIVAL_CEILING_MS))
     expect(mockHandlers).toHaveLength(opened)
 
     act(() => focusWindow())
@@ -340,12 +345,13 @@ describe.each([
 
   /**
    * Arrivals are held to one reopen, no sooner than 2s after the refusal
-   * that scheduled it — so a window flickering between focus and blur can
+   * that scheduled it, so a window flickering between focus and blur can
    * never run the loop faster than the fixed cadence this replaced.
    */
-  it('focus churn earns one reopen, no sooner than 2s after the refusal', () => {
+  it('focus churn on a young fault earns one reopen, no sooner than 2s after the refusal', () => {
     mount()
-    const opened = backOffForHalfAnHour()
+    measureOpens(MAX_RETRIES * RETRY_DELAY_MS + 100)
+    const opened = mockHandlers.length
 
     act(() => {
       for (let i = 0; i < 10; i += 1) {
@@ -357,12 +363,66 @@ describe.each([
 
     act(() => jest.advanceTimersByTime(SESSION_REFUSED_RETRY_DELAY_MS))
     expect(mockHandlers).toHaveLength(opened + 1)
+  })
+
+  /**
+   * The hold grows with the streak. Half an hour in it is over 90s, so churn
+   * right after a refusal reopens nothing for a minute, where the flat 2s
+   * hold reopened on the next focus event. By the two-minute ceiling it has.
+   */
+  it('focus churn on an old fault earns one reopen, held a twentieth of its age', () => {
+    mount()
+    const opened = backOffForHalfAnHour()
+
+    act(() => {
+      for (let i = 0; i < 60; i += 1) {
+        focusWindow()
+        jest.advanceTimersByTime(1000)
+      }
+    })
+    expect(mockHandlers).toHaveLength(opened)
+
+    act(() => {
+      jest.advanceTimersByTime(REFUSED_ARRIVAL_CEILING_MS - 60_000)
+      focusWindow()
+    })
+    expect(mockHandlers).toHaveLength(opened + 1)
 
     act(() => {
       focusWindow()
       focusWindow()
     })
     expect(mockHandlers).toHaveLength(opened + 1)
+  })
+
+  /**
+   * THE 2026-11-15 measurement. A window that takes a focus event every
+   * second, on a session that is refused everything, reopened each listener
+   * every 2s for as long as it stayed open: 1,800 opens an hour, the cadence
+   * AGL-2945 had removed from the timer and left on this road. An hour of
+   * that now costs about what the first hour of the timer does, and every
+   * hour after it at most 30.
+   */
+  it('a window taking focus events all day costs 30 opens an hour, not 1,800', () => {
+    mount()
+    const churn = (durationMs: number): number => {
+      act(() => {
+        denyPending()
+        for (let elapsed = 0; elapsed < durationMs; elapsed += 1000) {
+          focusWindow()
+          jest.advanceTimersByTime(1000)
+          denyPending()
+        }
+      })
+      return mockHandlers.length
+    }
+
+    const firstHour = churn(HOUR_MS)
+    expect(firstHour).toBeLessThan(150)
+
+    const secondHour = churn(HOUR_MS) - firstHour
+    expect(secondHour).toBeGreaterThan(0)
+    expect(secondHour).toBeLessThanOrEqual(HOUR_MS / REFUSED_ARRIVAL_CEILING_MS + 1)
   })
 
   /**

@@ -40,6 +40,11 @@ export const ROLE_CLASSIFICATIONS: Readonly<Record<AccountingAccountRole, readon
   payoutBank: ['bank'],
   feeExpense: ['expense'],
   taxLiability: ['liability'],
+  // A tip the staff are owed is a liability; one the business keeps is income.
+  tips: ['income', 'liability'],
+  // Money moves into it by a transfer, which both ledgers make only between bank-type accounts.
+  otherPayments: ['bank'],
+  giftCards: ['liability'],
 }
 
 /** What each role is called on the form. */
@@ -50,6 +55,9 @@ export const ROLE_LABELS: Readonly<Record<AccountingAccountRole, string>> = {
   feeExpense: `${PLATFORM_BRAND_NAME} fee expense`,
   payoutBank: 'Payout bank account',
   taxLiability: 'Sales tax liability',
+  tips: 'Tips',
+  otherPayments: 'Cash and other payments',
+  giftCards: 'Gift card liability',
 }
 
 export interface AccountingMappingIssue {

@@ -1779,6 +1779,10 @@ struct AccountSheet: View {
           if model.registry.screen(AccountPlaces.marketplaceScreen) != nil {
             row("Marketplace", "storefront") { navigation.push(.screen(AccountPlaces.marketplaceScreen, [:])) }
           }
+          if StaffConsole.offered(model.claims) {
+            row(StaffConsole.title, StaffConsole.systemImage) { StaffConsole.open(model: model, navigation: navigation) }
+              .accessibilityIdentifier("account-staff-console")
+          }
           if let docs = AccountPlaces.documentation(model) { row("Documentation", "book") { navigation.openWeb(docs) } }
           if model.registry.screen(AccountPlaces.reportScreen) != nil {
             row("Report an issue", "flag") { navigation.push(.screen(AccountPlaces.reportScreen, [:])) }

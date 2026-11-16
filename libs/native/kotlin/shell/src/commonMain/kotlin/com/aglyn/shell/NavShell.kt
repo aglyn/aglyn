@@ -269,7 +269,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     }
   }
 
-  val actions = remember(navigator, chrome, services) {
+  val staffFirst = staffGroups.firstOrNull()?.rows?.firstOrNull()?.key
+  val actions = remember(navigator, chrome, services, screenSession.claims.isStaff, wide, staffFirst) {
     ShellActions(
       openScreen = { screen, params ->
         chrome.closeMenus()
@@ -289,6 +290,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
       signOut = { exitScope.launch { services.signOut() } },
       editProfile = { chrome.closeMenus(); navigator.select(NavKeys.of("core.account.profile", emptyMap())) },
       notificationSettings = { chrome.settingsMode = null; navigator.select(ShellNavigator.SETTINGS); navigator.push(Route.NotificationSettings) },
+      staffConsole = staffConsoleAction(screenSession.claims.isStaff) { openStaffConsole(chrome, navigator, wide, staffFirst) },
     )
   }
 
@@ -498,7 +500,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
       modeTitle = when (chrome.settingsMode) {
         NativeNavListId.WORKSPACE_SETTINGS -> "Workspace settings"
         NativeNavListId.SITE_SETTINGS -> "Site settings"
-        STAFF_MODE -> "Admin"
+        STAFF_MODE -> STAFF_CONSOLE_TITLE
         else -> null
       },
       onExitMode = { chrome.settingsMode = null; navigator.select(ShellNavigator.HOME) },
@@ -506,7 +508,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
       modeBack = when (chrome.settingsMode) {
         NativeNavListId.SITE_SETTINGS -> workspace.site?.name ?: "Site"
         NativeNavListId.WORKSPACE_SETTINGS -> workspace.org?.name ?: "Workspace"
-        STAFF_MODE -> workspace.org?.name ?: "Back"
+        // The everyday list it was opened over: the site's, or the whole workspace's.
+        STAFF_MODE -> workspace.site?.name ?: workspace.org?.name ?: "Back"
         else -> null
       },
     )
@@ -615,7 +618,7 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
                   open = { orgId -> chrome.settingsMode = null; services.workspace.selectOrg(orgId); navigator.select(ShellNavigator.HOME) },
                   all = { chrome.picker = PickerStep.WORKSPACE },
                   create = { chrome.createMenu = true },
-                  admin = if (screenSession.claims.isStaff) ({ chrome.settingsMode = STAFF_MODE; staffGroups.firstOrNull()?.rows?.firstOrNull()?.let { navigator.select(it.key) } }) else null,
+                  admin = actions.staffConsole,
                   account = { chrome.accountMenu = true },
                   color = { chrome.colorFor = it },
                   settings = { orgId -> services.workspace.selectOrg(orgId); actions.enterSettings(NativeNavListId.WORKSPACE_SETTINGS) },

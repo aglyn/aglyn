@@ -125,6 +125,11 @@ export interface OrderLineItem {
   variantLabel?: string
   sku?: string
   productType?: ProductType
+  /**
+   * A gift card was sold on this line (AGL-3614): the buyer paid for value the
+   * store still owes, so a ledger books it as a liability and not as revenue.
+   */
+  giftCard?: boolean
   quantity: number
   /** Per-unit price in cents at purchase time, its modifiers included. */
   unitAmountCents: number
@@ -471,6 +476,12 @@ export interface HostOrder {
   useDayKeys?: string[]
   /** Optional lines the buyer added at checkout (AGL-3635); see {@link OrderExtra}. */
   extras?: OrderExtra[]
+  /**
+   * The part of `totals.discountCents` a gift card paid (AGL-3614): an online
+   * redemption is taken as a Stripe discount, but the card was money the store
+   * already holds, so a ledger reduces its gift card liability by this much.
+   */
+  giftCardRedeemedCents?: number
   /**
    * Store credit another plugin kept that came off an ONLINE sale (AGL-3640),
    * as its provider recorded it. A register sale's credit is one of its

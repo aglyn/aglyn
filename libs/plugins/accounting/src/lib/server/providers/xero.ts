@@ -655,7 +655,8 @@ export function createXeroProvider(config: XeroConfig, options: AccountingHttpOp
           const row = await findOne(session, 'BankTransactions', { where: `Reference==${xeroLiteral(externalId)}` })
           return row ? { id: String(row['BankTransactionID']), type: 'BankTransaction' } : null
         }
-        case 'payout': {
+        case 'payout':
+        case 'settlement': {
           const row = await findOne(session, 'BankTransfers', { where: `Reference==${xeroLiteral(externalId)}` })
           return row ? { id: String(row['BankTransferID']), type: 'BankTransfer' } : null
         }

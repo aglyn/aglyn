@@ -290,8 +290,13 @@ for (const target of copyTargets) {
 // compareMirrorListings), but they stay in memory: only counts are printed, so
 // no customer media path reaches a CI log.
 
-/** Pages of 1000. 20 is ~20k objects — two orders of magnitude over today's 451. */
-const MAX_LIST_PAGES = 20
+/**
+ * Pages of 1000. The media bucket passed 20k objects on 2026-11-12 and the old
+ * cap of 20 turned every run red as "truncated", so the cap is a runaway
+ * guard, not a size estimate: 1000 pages is a million objects, and a listing
+ * that long still reports itself truncated rather than complete.
+ */
+const MAX_LIST_PAGES = 1000
 
 /**
  * @returns {Promise<{ objects: number, newest: string | null, truncated: boolean, items: { name: string, timeCreated?: string }[] }>}

@@ -26,6 +26,7 @@ import {
   STORIES,
   askedFor,
   awaitPublished,
+  npmViewVersion,
   consumerManifest,
   exampleProblems,
   examplesWithoutStory,
@@ -134,6 +135,25 @@ describe('the registry proof waits out the read lag', () => {
       sleep: async () => {},
     })
     assert.deepEqual(missing, ['b'])
+  })
+})
+
+describe('a package is on the registry once its tarball answers', () => {
+  const view = (tarballUp, stdout) =>
+    npmViewVersion('@aglyn/a', '1.0.0', { exec: async () => ({ stdout }), head: async () => tarballUp })
+  const packument = JSON.stringify([{ version: '1.0.0', 'dist.tarball': 'https://registry.example/a-1.0.0.tgz' }])
+
+  it('is not there while the packument answers and the tarball does not', async () => {
+    assert.equal(await view(false, packument), null)
+  })
+
+  it('is there when both answer, as a list of one or as one object', async () => {
+    assert.equal(await view(true, packument), '1.0.0')
+    assert.equal(await view(true, JSON.stringify({ version: '1.0.0', 'dist.tarball': 'https://registry.example/a-1.0.0.tgz' })), '1.0.0')
+  })
+
+  it('is not there when npm has no such version', async () => {
+    assert.equal(await view(true, ''), null)
   })
 })
 

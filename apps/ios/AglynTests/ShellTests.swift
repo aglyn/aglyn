@@ -151,6 +151,52 @@ final class ShellTests: XCTestCase {
     XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: "FirebaseAppDelegateProxyEnabled") as? Bool, false)
   }
 
+  /// The account menu's Staff console row (AGL-3667, the console's user menu) is offered to a staff token only, and its
+  /// list holds every staff screen, each of which this app has.
+  func testOnlyAStaffTokenIsOfferedTheStaffConsole() {
+    let staff = TokenClaims(["staff": .bool(true)])
+    XCTAssertTrue(StaffConsole.offered(staff))
+    XCTAssertFalse(StaffConsole.offered(TokenClaims()))
+    XCTAssertFalse(StaffConsole.offered(TokenClaims(["staff": .bool(false)])))
+    XCTAssertFalse(StaffConsole.offered(TokenClaims(["staffRole": .string("super")])), "a role without the claim is not staff")
+    XCTAssertTrue(AppModel.staffNavGroups(for: TokenClaims()).isEmpty)
+
+    let registry = NativePluginRegistry()
+    _ = NativePluginLoader.load(
+      [CoreScreens.manifestEntry] + AppModel.platformEntries + NativePluginManifest.entries, into: registry)
+    let rows = AppModel.staffNavGroups(for: staff).flatMap(\.rows)
+    XCTAssertEqual(rows.map(\.screen), ScreenCatalog.shared.group("staff").map(\.id))
+    for screen in ["core.staff.overview", "core.staff.orgs", "core.staff.users", "core.staff.support"] {
+      XCTAssertTrue(rows.contains { $0.screen == screen }, "the staff list holds \(screen)")
+    }
+    for row in rows { XCTAssertNotNil(registry.screen(row.screen), "\(row.screen) is not registered") }
+  }
+
+  /// On iPad and the Mac the Staff console row opens the staff list as the sidebar's mode, on its first row; on a phone
+  /// its list is pushed on Home. Its way back is the everyday list, from Home.
+  func testTheStaffConsoleOpensTheStaffListAndLeadsBack() {
+    let wide = ShellNavigation()
+    wide.select(.plugin("commerce.orders"))
+    StaffConsole.open(wide, first: .plugin("core.staff.overview"))
+    XCTAssertEqual(wide.mode, .admin)
+    XCTAssertEqual(wide.section, .plugin("core.staff.overview"))
+    wide.leaveMode()
+    XCTAssertEqual(wide.mode, .main)
+    XCTAssertEqual(wide.section, .home)
+
+    let phone = ShellNavigation()
+    phone.compact = true
+    phone.select(.plugin("commerce.orders"))
+    StaffConsole.open(phone, first: .plugin("core.staff.overview"))
+    XCTAssertEqual(phone.mode, .admin)
+    XCTAssertEqual(phone.section, .home)
+    XCTAssertEqual(phone.paths[.home], [.modeList])
+    phone.push(.screen("core.staff.orgs", [:]))
+    phone.leaveMode()
+    XCTAssertEqual(phone.mode, .main)
+    XCTAssertEqual(phone.paths[.home] ?? [], [])
+  }
+
   /// Every row the nav manifest lists opens a screen this app has (AGL-3945): a row with none would be a dead end.
   func testEveryManifestRowOpensAScreenTheAppHas() {
     let registry = NativePluginRegistry()

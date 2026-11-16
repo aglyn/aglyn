@@ -47,6 +47,7 @@ import type {
   OrderRefundedEventPayload,
 } from '@aglyn/plugins-commerce/contracts'
 import { toCents } from '../model/accounting-money'
+import { settlementOf } from '../model/accounting-transforms'
 import type {
   AccountingOrderSnapshot,
   AccountingPayoutSnapshot,
@@ -123,7 +124,24 @@ export function snapshotFromOrderEvent(
   // merchant's account, so it is neither the merchant's liability nor money
   // in their clearing account: the sale is posted without it.
   const taxCents = toCents(totals.taxCents)
-  const marketplaceTaxCents = order.taxMode === MARKETPLACE_TAX_MODE ? taxCents : 0
+  // A marketplace's sale was paid to the marketplace, which also collects
+  // and remits its tax (`taxRemittedByChannel`): the merchant is paid the
+  // rest from there, never through Stripe.
+  const marketplace = order.channel === MARKETPLACE_CHANNEL
+  const marketplaceTaxCents = order.taxMode === MARKETPLACE_TAX_MODE || marketplace ? taxCents : 0
+  const extras = (Array.isArray(order.extras) ? order.extras : [])
+    .map((extra) => ({ label: String(extra?.label ?? '').trim() || 'Extra', amountCents: toCents(extra?.amountCents) }))
+    .filter((extra) => extra.amountCents > 0)
+  const payments = (Array.isArray(order.payments) ? order.payments : [])
+    .map((payment) => ({
+      method: String(payment?.method ?? ''),
+      amountCents: toCents(payment?.amountCents),
+      tipCents: toCents(payment?.tipCents),
+      feeCents: toCents(payment?.feeCents),
+    }))
+    .filter((payment) => payment.method && payment.amountCents + payment.tipCents > 0)
+  const tipCents = toCents(totals.tipCents)
+  const giftCardRedeemedCents = Math.min(toCents(order.giftCardRedeemedCents), toCents(totals.discountCents))
   return {
     orgId: context.orgId,
     hostId: context.hostId,
@@ -140,6 +158,7 @@ export function snapshotFromOrderEvent(
       sku: typeof line['sku'] === 'string' ? (line['sku'] as string) : null,
       quantity: Number(line['quantity'] ?? 0),
       unitAmountCents: toCents(line['unitAmountCents']),
+      ...(line['giftCard'] === true ? { giftCard: true } : {}),
     })),
     totals: {
       itemsCents: toCents(totals.itemsCents),
@@ -148,12 +167,29 @@ export function snapshotFromOrderEvent(
       discountCents: toCents(totals.discountCents),
       totalCents: Math.max(0, toCents(totals.totalCents) - marketplaceTaxCents),
       feeCents: toCents(totals.feeCents),
+      ...(tipCents > 0 ? { tipCents } : {}),
     },
     // Storefront prices are tax-exclusive: the tax is added at checkout.
     taxInclusive: false,
     taxKey: null,
     ...(marketplaceTaxCents > 0 ? { marketplaceTaxCents } : {}),
+    ...(extras.length ? { extras } : {}),
+    ...(payments.length ? { payments } : {}),
+    ...(giftCardRedeemedCents > 0 ? { giftCardRedeemedCents } : {}),
+    ...(marketplace ? { settledOutsideStripe: true } : {}),
   }
+}
+
+/** The channel a marketplace's sale is recorded under (commerce's `channel-orders`). */
+export const MARKETPLACE_CHANNEL = 'marketplace'
+
+/**
+ * A Stripe test-mode sale (`livemode: false`): a store rehearsing its
+ * checkout moved no money, so nothing of it reaches the books. An order that
+ * does not say is taken as real, as every order before the field was.
+ */
+export function isTestModeOrder(order: Pick<OrderEventOrder, 'livemode'> | null | undefined): boolean {
+  return order?.livemode === false
 }
 
 /**
@@ -178,10 +214,13 @@ export function merchantShareOfRefund(order: AccountingOrderSnapshot, amountCent
  * amount refunded.
  */
 export function feeRefundedFor(order: AccountingOrderSnapshot, amountCents: number): number {
-  const total = toCents(order.totals.totalCents)
-  const fee = toCents(order.totals.feeCents)
-  if (total <= 0 || fee <= 0 || amountCents <= 0) return 0
-  return Math.min(fee, Math.round((fee * amountCents) / total))
+  // Only the fee Stripe took comes back through Stripe; a register's tips are
+  // part of what was paid.
+  const settlement = settlementOf(order)
+  const paid = toCents(order.totals.totalCents) + settlement.tipCents
+  const fee = settlement.stripeFeeCents
+  if (paid <= 0 || fee <= 0 || amountCents <= 0) return 0
+  return Math.min(fee, Math.round((fee * amountCents) / paid))
 }
 
 // ── Queueing ──────────────────────────────────────────────────────────────
@@ -242,6 +281,7 @@ export async function onOrderPaid(
   const firestore = deps.firestore()
   const orgId = await orgOfHost(firestore, envelope.hostId, envelope.orgId)
   if (!orgId) return 0
+  if (isTestModeOrder(order)) return 0
   const snapshot = snapshotFromOrderEvent(order, { orgId, hostId: envelope.hostId, occurredAtMs: envelope.occurredAtMs })
   if (snapshot.totals.totalCents <= 0) return 0
   return enqueueOrderPaid(deps, snapshot)
@@ -256,6 +296,7 @@ export async function onOrderRefunded(
   const refund = envelope.payload?.refund
   const amountCents = toCents(refund?.amountCents)
   if (!order?.id || amountCents <= 0) return 0
+  if (isTestModeOrder(order)) return 0
   const firestore = deps.firestore()
   const orgId = await orgOfHost(firestore, envelope.hostId, envelope.orgId)
   if (!orgId) return 0

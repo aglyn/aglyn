@@ -2206,6 +2206,8 @@ export function aiSiteImportWaveClosed(state: AiSiteImportState, index: number, 
  * running, with nothing running it.
  */
 export function aiSiteImportCanceled(state: AiSiteImportState, at: string): AiSiteImportState {
+  // No waves yet (the site was never read): there is nothing to stop.
+  if (!Array.isArray(state.waves)) return { ...state, autoContinue: false }
   return {
     ...state,
     autoContinue: false,
@@ -2220,6 +2222,10 @@ export function aiSiteImportCanceled(state: AiSiteImportState, at: string): AiSi
 /** The state as the console reads it: every page's read text left off. */
 export function aiSiteImportWire(state: AiSiteImportState | null | undefined): AiSiteImportState | null {
   if (!state) return null
+  // A state with no pages is not one yet: a field written onto a job before
+  // its site was read leaves `siteImport` holding that field alone, and one
+  // such job must not take the workspace's whole job list down with it.
+  if (!Array.isArray(state.pages)) return null
   // What the site's pages say is the redesigns' (AGL-4152): the console reads none of it.
   const { said: _said, ...rest } = state
   return {

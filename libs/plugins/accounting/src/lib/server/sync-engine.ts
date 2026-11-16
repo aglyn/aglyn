@@ -68,7 +68,9 @@ import {
   buildFeeRefundDoc,
   buildPayoutDoc,
   buildRefundDoc,
+  buildRefundSettlementDoc,
   buildSaleDoc,
+  buildSettlementDoc,
   buildSummaryDoc,
   docAmountCents,
   refundPostings,
@@ -150,6 +152,10 @@ export function documentFor(item: AccountingSyncItemRecord, connection: Accounti
     case 'payout':
       if (!item.payout) throw new AccountingTransformError('invalid', 'The payout has no snapshot.')
       return buildPayoutDoc(item.payout, mapping)
+    case 'settlement':
+      if (item.refund) return buildRefundSettlementDoc(item.refund, mapping)
+      if (!item.order) throw new AccountingTransformError('invalid', 'The transfer has no order snapshot.')
+      return buildSettlementDoc(item.order, mapping)
     case 'summary': {
       if (!item.summary) throw new AccountingTransformError('invalid', 'The summary has no postings.')
       const doc = buildSummaryDoc(item.summary, mapping)
@@ -249,6 +255,7 @@ export async function postItem(context: PassContext, item: AccountingSyncItemRec
         break
       }
       case 'payout':
+      case 'settlement':
         ref = await withSession(context, (session) => provider.createDeposit(session, doc, { ...base, customerId: null }))
         break
       case 'summary': {

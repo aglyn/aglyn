@@ -27,7 +27,7 @@ import type { OrderEventOrder } from '@aglyn/plugins-commerce/contracts'
 import { registerAccountingServerDeclarations } from '../declarations.server'
 import { EMPTY_ACCOUNTING_MAPPING } from '../model/accounting.types'
 import { asFirestore, memoryFirestore } from '../testing/memory-firestore'
-import { feeItemId, feeRefundItemId, refundItemId, saleItemId } from './sync-store'
+import { feeItemId, feeRefundItemId, refundItemId, saleItemId, settlementItemId } from './sync-store'
 import {
   feeRefundedFor,
   merchantShareOfRefund,
@@ -79,6 +79,62 @@ const envelope = <Payload>(payload: Payload, id = 'evt-1') => ({
 })
 
 describe('the event intake', () => {
+  it('leaves a Stripe test-mode sale and its refund out of the books', async () => {
+    const { deps, store } = setup()
+    const rehearsal = { ...orderView, livemode: false }
+    expect(await onOrderPaid(deps, envelope({ order: rehearsal }))).toBe(0)
+    expect(
+      await onOrderRefunded(deps, envelope({ order: rehearsal, refund: { id: 're_1', amountCents: 500, lineItemIds: [], full: false } })),
+    ).toBe(0)
+    expect([...store.documents.keys()].filter((path) => path.includes('accountingSyncItems'))).toEqual([])
+  })
+
+  it('reads a register sale’s tenders, tips, extras and gift cards, and queues the cash share’s transfer', async () => {
+    const { deps, item } = setup()
+    const register: OrderEventOrder = {
+      ...orderView,
+      channel: 'pos',
+      lineItems: [
+        { name: 'Mug', quantity: 1, unitAmountCents: 2500 },
+        { name: 'Gift card', quantity: 1, unitAmountCents: 1000, giftCard: true },
+      ],
+      totals: { itemsCents: 3500, shippingCents: 0, taxCents: 0, discountCents: 300, totalCents: 3700, feeCents: 40, extrasCents: 500, tipCents: 200 },
+      extras: [{ id: 'x1', pluginId: 'p', key: 'k', label: 'Gift wrap', amountCents: 500, quoteRef: null }],
+      payments: [
+        { method: 'card_present', amountCents: 2000, tipCents: 200, feeCents: 40 },
+        { method: 'cash', amountCents: 1700, tipCents: 0, feeCents: 0 },
+      ],
+      giftCardRedeemedCents: 300,
+    }
+    const snapshot = snapshotFromOrderEvent(register, { orgId: 'org-1', hostId: 'host-1', occurredAtMs: 7 })
+    expect(snapshot).toMatchObject({
+      lines: [{ name: 'Mug' }, { name: 'Gift card', giftCard: true }],
+      totals: { tipCents: 200 },
+      extras: [{ label: 'Gift wrap', amountCents: 500 }],
+      payments: [{ method: 'card_present' }, { method: 'cash', amountCents: 1700 }],
+      giftCardRedeemedCents: 300,
+    })
+    expect(await onOrderPaid(deps, envelope({ order: register }))).toBe(3)
+    expect(item(settlementItemId({ hostId: 'host-1', orderId: 'order-1' }))).toMatchObject({
+      kind: 'settlement',
+      amountCents: 1700,
+      dependsOn: saleItemId({ hostId: 'host-1', orderId: 'order-1' }),
+    })
+    expect(item(feeItemId({ hostId: 'host-1', orderId: 'order-1' }))).toMatchObject({ amountCents: 40 })
+  })
+
+  it('reads a marketplace sale as paid outside Stripe, its tax the marketplace’s to remit', () => {
+    const snapshot = snapshotFromOrderEvent(
+      { ...orderView, channel: 'marketplace', totals: { ...orderView.totals, feeCents: 0 } },
+      { orgId: 'org-1', hostId: 'host-1', occurredAtMs: 7 },
+    )
+    expect(snapshot).toMatchObject({
+      settledOutsideStripe: true,
+      marketplaceTaxCents: 240,
+      totals: { taxCents: 0, totalCents: 3000 },
+    })
+  })
+
   it('reads commerce’s order view into the sync’s snapshot', () => {
     expect(snapshotFromOrderEvent(orderView, { orgId: 'org-1', hostId: 'host-1', occurredAtMs: 7 })).toMatchObject({
       orderId: 'order-1',
