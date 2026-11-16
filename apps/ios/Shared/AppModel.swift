@@ -163,7 +163,13 @@ final class AppModel {
 
   /// Re-reads the claims from the ID token (forced after a re-auth).
   func refreshClaims(force: Bool) async {
-    claims = TokenClaims(idToken: try? await auth?.idToken(forceRefresh: force))
+    guard let auth else {
+      claims = TokenClaims()
+      return
+    }
+    // Only the person in use's own claims: an answer for the person before a switch is dropped (AGL-3667).
+    guard let read = await auth.currentClaims(forceRefresh: force) else { return }
+    claims = read
   }
 
   /// What every spec screen reads about who is signed in and where.
