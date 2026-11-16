@@ -558,9 +558,10 @@ async function handler(request: Request): Promise<Response> {
       }, { status: 501 })
     }
     // The item already selling this KIND (AGL-4227), whatever price it carries:
-    // a Starter subscription bought its extra site at $20, and a later change
-    // updates that item's quantity in place rather than adding a second item
-    // at the new price beside it, which would double-count the sites.
+    // an item bought at Starter's old $20 extra-site price is changed IN PLACE
+    // rather than joined by a second item at the new price, which would
+    // double-count the sites. There is no grandfathering: the change also
+    // moves it onto the current price (below).
     const existing =
       items.find((item) => item?.price?.id === priceId) ??
       items.find((item) => addonKindFromPriceId(item?.price?.id) === kind)
@@ -649,7 +650,16 @@ async function handler(request: Request): Promise<Response> {
     const itemParams: Array<[string, string]> = existing
       ? quantity === 0
         ? [['id', String(existing.id)], ['deleted', 'true']]
-        : [['id', String(existing.id)], ['quantity', String(quantity)]]
+        : [
+            ['id', String(existing.id)],
+            // An item on a superseded price (Starter's $20 extra site) moves
+            // to the price this add-on sells at now — no one keeps an old
+            // price (AGL-4227).
+            ...(existing?.price?.id && existing.price.id !== priceId
+              ? ([['price', priceId]] as Array<[string, string]>)
+              : []),
+            ['quantity', String(quantity)],
+          ]
       : [['price', priceId], ['quantity', String(quantity)]]
 
     /*

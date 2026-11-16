@@ -118,8 +118,9 @@ function env(name: string): string | null {
  * change.
  *
  * The existing price stays RECOGNISED either way (`addonKindFromPriceId`), so
- * a subscription that already carries it keeps counting its sites, and a
- * quantity change updates that item in place at the price it has.
+ * a subscription that already carries it keeps counting its sites. There is
+ * NO grandfathering: a quantity change moves that same item onto the current
+ * price (`/api/billing/addons`), never a second item beside it.
  */
 const REPRICED_ADDONS: Partial<
   Record<`${OrgPlan}:${AddonKind}`, { envSuffix: string; legacyUsd: number }>
