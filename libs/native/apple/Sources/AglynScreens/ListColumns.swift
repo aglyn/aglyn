@@ -22,6 +22,9 @@ struct ListColumn: Identifiable, Equatable, Sendable {
   let page: String?
   let type: String
   let first: String
+  /// A fixed order for a field's values (`sort.ranks`, the console's role rank owner → viewer): a value is read as its place
+  /// in the list, and one the list lacks after every listed one.
+  let ranks: [String]
 
   var sortable: Bool { route != nil || page != nil }
 
@@ -36,6 +39,7 @@ struct ListColumn: Identifiable, Equatable, Sendable {
     page = json["sort"]?["page"]?.stringValue
     type = json["sort"]?["type"]?.stringValue ?? "text"
     first = json["sort"]?["first"]?.stringValue == "desc" ? "desc" : "asc"
+    ranks = json["sort"]?["ranks"].arrayOfStrings
   }
 }
 
@@ -82,8 +86,13 @@ enum ListColumns {
   /// The positions of `rows` in the order `sorted` puts them in.
   static func order(_ rows: [JSONValue], by column: ListColumn, descending: Bool, in context: JSONValue) -> [Int] {
     guard let path = column.page else { return Array(rows.indices) }
-    let keyed = rows.enumerated().map { offset, row in
-      (offset, row, ScreenValues.lookup(path, in: ScreenContext.with(context, item: row)))
+    let keyed = rows.enumerated().map { offset, row -> (Int, JSONValue, JSONValue?) in
+      let scope = ScreenContext.with(context, item: row)
+      // A template (`{item.displayName|item.email}`) sorts by what it reads as; a path by the value there.
+      let value = path.contains("{") ? JSONValue.string(ScreenValues.render(path, in: scope)) : ScreenValues.lookup(path, in: scope)
+      guard !column.ranks.isEmpty else { return (offset, row, value) }
+      let rank = column.ranks.firstIndex(of: ScreenValues.text(value)) ?? column.ranks.count
+      return (offset, row, .number(Double(rank)))
     }
     func missing(_ value: JSONValue?) -> Bool {
       switch value {
@@ -93,7 +102,7 @@ enum ListColumns {
       }
     }
     func before(_ a: JSONValue?, _ b: JSONValue?) -> Bool {
-      switch column.type {
+      switch column.ranks.isEmpty ? column.type : "number" {
       case "number":
         let x = ScreenValues.number(a) ?? 0
         let y = ScreenValues.number(b) ?? 0

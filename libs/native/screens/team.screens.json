@@ -13,9 +13,30 @@
         "/team",
         "/team/members"
       ],
+      "constants": {
+        "accessLabels": {
+          "manager": "Team manager",
+          "collaborator": "Site collaborator",
+          "siteMember": "Site member"
+        }
+      },
       "load": {
         "members": {
-          "url": "/api/orgs/members?orgId={org.id}"
+          "url": "/api/orgs/members?orgId={org.id}",
+          "cursor": "nextCursor",
+          "items": "members",
+          "filters": [
+            {
+              "field": "role",
+              "op": "equals",
+              "value": "{params.role}"
+            },
+            {
+              "field": "access",
+              "op": "equals",
+              "value": "{params.access}"
+            }
+          ]
         },
         "invites": {
           "url": "/api/orgs/invites?orgId={org.id}",
@@ -130,6 +151,68 @@
           ],
           "confirm": "They become the owner once they accept. Billing and every site go with the workspace.",
           "success": "Handoff sent to {form.email}"
+        },
+        {
+          "id": "filter",
+          "label": "Filter the list",
+          "icon": "line.3.horizontal.decrease|filter_list",
+          "prompt": [
+            {
+              "key": "role",
+              "label": "Role",
+              "kind": "select",
+              "initial": "{params.role}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Any"
+                },
+                {
+                  "value": "owner",
+                  "label": "Owner"
+                },
+                {
+                  "value": "admin",
+                  "label": "Admin"
+                },
+                {
+                  "value": "editor",
+                  "label": "Editor"
+                },
+                {
+                  "value": "viewer",
+                  "label": "Viewer"
+                }
+              ]
+            },
+            {
+              "key": "access",
+              "label": "Access",
+              "kind": "select",
+              "initial": "{params.access}",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Any"
+                },
+                {
+                  "value": "manager",
+                  "label": "Team manager"
+                },
+                {
+                  "value": "collaborator",
+                  "label": "Site collaborator"
+                }
+              ]
+            }
+          ],
+          "navigate": {
+            "screen": "core.team",
+            "params": {
+              "role": "{form.role}",
+              "access": "{form.access}"
+            }
+          }
         }
       ],
       "blocks": [
@@ -156,7 +239,9 @@
         {
           "type": "list",
           "title": "Members",
+          "load": "members",
           "items": "data.members.members",
+          "search": true,
           "split": true,
           "primary": "{item.displayName|item.email|item.$id}",
           "secondary": "{item.email}",
@@ -176,6 +261,39 @@
               "text": "Staff",
               "when": "item.staffSeat",
               "tone": "warning"
+            }
+          ],
+          "columns": [
+            {
+              "id": "member",
+              "label": "Member",
+              "value": "{item.displayName|item.email|item.$id}",
+              "always": true,
+              "sort": {
+                "page": "{item.displayName|item.email|item.$id}"
+              }
+            },
+            {
+              "id": "role",
+              "label": "Role",
+              "value": "{item.role:title}",
+              "sort": {
+                "page": "item.role",
+                "ranks": [
+                  "owner",
+                  "admin",
+                  "editor",
+                  "viewer"
+                ]
+              }
+            },
+            {
+              "id": "access",
+              "label": "Access",
+              "value": "{item.consoleUserType:labeled/const.accessLabels}",
+              "sort": {
+                "page": "item.consoleUserType"
+              }
             }
           ],
           "open": {

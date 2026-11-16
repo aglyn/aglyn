@@ -448,6 +448,22 @@ class ScreenSpecTest {
     assertNull(ListColumns.routeValue(ListOrder("plan", false), columns))
   }
 
+  /** The Team roster's sorts (the console's MEMBER_SORTS): Role by rank, owner first, an unranked role after; Member by what the row reads as. */
+  @Test
+  fun aRankedColumnOrdersByRankAndATemplateByWhatItReads() {
+    val role = ListColumn(Json.parseToJsonElement("""{"id":"role","sort":{"page":"item.role","ranks":["owner","admin","editor","viewer"]}}"""))
+    val rows = Json.parseToJsonElement(
+      """[{"id":"a","role":"viewer"},{"id":"b","role":"owner"},{"id":"c","role":"editor"},{"id":"d","role":"guest"},{"id":"e","role":"admin"}]""",
+    ) as JsonArray
+    fun ids(column: ListColumn, rows: JsonArray, descending: Boolean) =
+      ListColumns.sorted(rows, column, descending, JsonObject(emptyMap())).map { it.str("id") }
+    assertEquals(listOf("b", "e", "c", "a", "d"), ids(role, rows, false))
+    assertEquals(listOf("d", "a", "c", "e", "b"), ids(role, rows, true))
+    val member = ListColumn(Json.parseToJsonElement("""{"id":"member","sort":{"page":"{item.displayName|item.email}"}}"""))
+    val people = Json.parseToJsonElement("""[{"id":"x","email":"zed@example.test"},{"id":"y","displayName":"Amy"}]""") as JsonArray
+    assertEquals(listOf("y", "x"), ids(member, people, false))
+  }
+
   /** A page column orders the rows on the screen: numbers as numbers, text without regard to case; a row without the value goes last either way, and ties keep their order. */
   @Test
   fun pageColumnsOrderRowsAndPutMissingLast() {
