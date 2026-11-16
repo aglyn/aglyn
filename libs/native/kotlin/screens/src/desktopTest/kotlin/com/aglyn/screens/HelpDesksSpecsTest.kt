@@ -32,6 +32,8 @@ class HelpDesksSpecsTest : SpecTestBase() {
       .map { ScreenContext.with(model.context, "item", it) }
       .filter { ScreenValues.condition(list.string("filter"), it) }
     assertEquals(listOf("Gorgias", "Re:amaze"), rows.map { ScreenValues.render(list.string("primary")!!, it) })
+    val none = screen(spec("help-desks", "help-desks.service"), mapOf("pluginId" to "help-desks"), """{"conn":{"available":[],"connections":[]}}""")
+    assertEquals(listOf("unavailable"), none.shown())
   }
 
   @Test

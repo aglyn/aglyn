@@ -244,6 +244,13 @@
           "text": "{app.permissionRefusal[helpDesks.manage]}"
         },
         {
+          "type": "notice",
+          "id": "unavailable",
+          "tone": "info",
+          "when": "data.conn && !data.conn.available.0 && !data.conn.connections.0",
+          "text": "Help desks are not available on this deployment yet."
+        },
+        {
           "type": "list",
           "id": "providers",
           "title": "Help desks",
