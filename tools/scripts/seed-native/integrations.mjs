@@ -7,17 +7,18 @@
 /**
  * The demo site's connected services, each in test mode where the service
  * has one, so the commerce settings screen's Connected services cards
- * (`commerceSettings` zone), the store's own connection pages (Payments,
- * ShipStation, ShippingEasy) and the site setup's Email platforms card show a
+ * (`commerceSettings` zone), the store's own ShipStation and ShippingEasy
+ * cards (Shipping & delivery) and the site setup's Email platforms card show a
  * connection rather than only the connect buttons. Each document is the one
  * the connect route writes, at its own path and in its own shape:
  *
- * - Payments (Stripe Connect): the owner's `profiles/{uid}` names a TEST-mode
- *   account (`stripeAccountLivemode: false`) with charges and payouts on and
- *   direct charges, the fields `/api/commerce/connect` records. A profile that
- *   already names an account keeps it, so a real Stripe test account a reader
- *   drive put there survives a reseed; the placeholder is one Stripe refuses,
- *   so anything that calls Stripe with it fails rather than charging.
+ * - Payments (Stripe Connect) is NOT written. Every money route, the
+ *   register's card readers and Tap to Pay among them, charges the account on
+ *   the owner's `profiles/{uid}`, and the console's Set up payments retrieves
+ *   it before anything else, so a made-up account id would turn "set up
+ *   payments, then drive a reader" into a refusal at both steps. The account
+ *   comes from Set up payments on a console holding the Stripe TEST key (a
+ *   real test account); the seed only reports what the profile names.
  * - ShipStation: `commerceShipStationConnections/{hostId}`, a Custom Store login.
  * - ShippingEasy: `commerceShippingEasyConnections/{hostId}`, placeholder keys.
  * - Email platforms: `marketingPlatformConnections/{hostId}_mailchimp`, an API-key
@@ -388,23 +389,12 @@ export async function seedIntegrations({ put, get, uid, orgId, hostId, now: date
     updatedAtMs: now - HOUR,
   })
 
-  // Payments (Stripe Connect, TEST mode): what `/api/commerce/connect` records on
-  // the owner's profile once Stripe says charges and payouts are on. Kept when
-  // the profile already names an account (a real test account a drive set).
+  // Payments (Stripe Connect): read, never written (see the header). Said in
+  // the summary so the drive knows whether Set up payments is still owed.
   const profile = (await get?.(`profiles/${uid}`)) ?? null
-  if (!profile?.stripeAccountId) {
-    await put(
-      `profiles/${uid}`,
-      {
-        stripeAccountId: 'acct_seedtest0000000001',
-        stripeChargesEnabled: true,
-        stripeChargeModel: 'direct',
-        stripePayoutsEnabled: true,
-        stripeAccountLivemode: false,
-      },
-      { merge: true },
-    )
-  }
+  const payments = profile?.stripeAccountId
+    ? `Payments on the owner's ${{ false: 'TEST', true: 'LIVE' }[profile.stripeAccountLivemode] ?? 'unrecorded-mode'} account ${profile.stripeAccountId}, charges ${profile.stripeChargesEnabled ? 'on' : 'off'}`
+    : 'Payments not set up (Set up payments on a console with the Stripe test key)'
 
   // ShipStation (Custom Store): the login ShipStation calls the order feed
   // with; the password is a placeholder nobody can sign in with.
@@ -466,5 +456,6 @@ export async function seedIntegrations({ put, get, uid, orgId, hostId, now: date
     updatedAtMs: connectedAtMs,
   })
 
-  return '15 services connected (test mode where offered)'
+  console.log(`seed-native-emulator: ${payments}`)
+  return `14 services connected (test mode where offered); ${payments}`
 }
