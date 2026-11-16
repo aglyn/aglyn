@@ -858,13 +858,35 @@ export function buildAuthorizeRedirect(
 
 // ── Discovery documents ─────────────────────────────────────────────────────
 
-/** RFC 9728: what the MCP endpoint is, and who issues credentials for it. */
-export function buildProtectedResourceMetadata(origin: string): Record<string, unknown> {
+/**
+ * Optional human-facing members of the two discovery documents. Passed in
+ * rather than derived, because the docs origin is the operator's
+ * configuration and this layer does not read it.
+ */
+export interface ConnectorDiscoveryDocs {
+  /** Where a developer reads how to connect (the docs page for sign-in). */
+  documentationUrl?: string
+  /** What the resource is called, for a client to show (RFC 9728 `resource_name`). */
+  resourceName?: string
+}
+
+/**
+ * RFC 9728: what the MCP endpoint is, and who issues credentials for it.
+ *
+ * `resource_name` and `resource_documentation` are RFC 9728 §2 members,
+ * omitted rather than emitted empty when the caller has none.
+ */
+export function buildProtectedResourceMetadata(
+  origin: string,
+  docs: ConnectorDiscoveryDocs = {},
+): Record<string, unknown> {
   return {
     resource: connectorResourceFor(origin),
     authorization_servers: [origin],
     scopes_supported: [...API_SCOPES],
     bearer_methods_supported: ['header'],
+    ...(docs.resourceName ? { resource_name: docs.resourceName } : {}),
+    ...(docs.documentationUrl ? { resource_documentation: docs.documentationUrl } : {}),
   }
 }
 
@@ -873,7 +895,10 @@ export function buildProtectedResourceMetadata(origin: string): Record<string, u
  * honouring a metadata document would mean fetching a URL a stranger chose,
  * from the server, on an unauthenticated request.
  */
-export function buildAuthorizationServerMetadata(origin: string): Record<string, unknown> {
+export function buildAuthorizationServerMetadata(
+  origin: string,
+  docs: ConnectorDiscoveryDocs = {},
+): Record<string, unknown> {
   return {
     issuer: origin,
     authorization_endpoint: `${origin}${CONNECTOR_AUTHORIZE_PATH}`,
@@ -887,6 +912,8 @@ export function buildAuthorizationServerMetadata(origin: string): Record<string,
     revocation_endpoint_auth_methods_supported: ['none'],
     scopes_supported: [...API_SCOPES],
     authorization_response_iss_parameter_supported: true,
+    // RFC 8414 §2: human-readable documentation for developers.
+    ...(docs.documentationUrl ? { service_documentation: docs.documentationUrl } : {}),
   }
 }
 

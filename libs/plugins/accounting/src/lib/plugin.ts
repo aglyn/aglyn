@@ -40,8 +40,8 @@ const AccountingConsolePage = lazy(() => import('./components/accounting-console
  * THREE GATES, each answered by the shell:
  *
  * - the RELEASE flag `release_accounting`, through the nav item's `navTabId`
- *   — off by default, and switched on only once a deployment has its Intuit
- *   or Xero credentials, so no customer meets a page with nothing to connect;
+ *   — on for every workspace since 2026-11-16, when aglyn.com had live Intuit
+ *   and Xero apps; still the kill switch, globally or for one org;
  * - the ENTITLEMENT `features.commerce`: accounting comes with every plan
  *   that sells, and no plan without;
  * - the PERMISSION `accounting.manage`, which owners and admins hold.
@@ -60,7 +60,7 @@ export function registerAccountingConsole(): void {
         sections: ACCOUNTING_CONSOLE_SECTIONS,
         navTabId: 'nav-tab-org-accounting',
         icon: { path: mdiBookOpenVariant.path },
-        header: { title: 'Accounting', icon: { path: mdiBookOpenVariant.path } },
+        header: { title: 'Accounting', icon: { path: mdiBookOpenVariant.path }, docsTopic: 'connectQuickbooksOnline' },
         Component: AccountingConsolePage,
       },
     ],

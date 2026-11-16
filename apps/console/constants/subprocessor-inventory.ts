@@ -934,6 +934,12 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
       'The `jsonSchemaDialect` identifier emitted in the per-site OpenAPI document (AGL-2716), naming which JSON Schema draft the document conforms to. A version string in a document we publish; never dereferenced by us, and an agent that resolves it does so on its own account.',
     dataReceived: 'Nothing. No request is made.',
   },
+  'static.modelcontextprotocol.io': {
+    disposition: 'no-request',
+    reason:
+      'The `$schema` identifier the MCP Server Card (`/api/mcp/server-card`, SEP-2127) and the MCP Registry `server.json` must carry, naming the schema version they conform to (AGL-4225). A version string in documents we publish; never dereferenced by us, and a client that resolves it does so on its own account.',
+    dataReceived: 'Nothing. No request is made.',
+  },
   'schema.org': {
     disposition: 'no-request',
     reason:
