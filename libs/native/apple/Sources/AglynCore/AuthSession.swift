@@ -26,10 +26,15 @@ public struct AglynUser: Equatable, Sendable {
     self.photoURL = photoURL
   }
 
-  /// The same person with what a fresh token says about the address and the picture.
+  /// The same person with what a fresh token says about the address and the picture, and the token's `name` when no
+  /// display name is known yet. A REST sign-in reads the name off the answer, and an answer can come without one (the
+  /// Auth emulator's `signInWithPassword` never sends it) while the account has one, which the console's SDK reads off
+  /// the account. Without this the account menu showed the email where the console shows the name (AGL-4010).
   func fromToken(_ claims: TokenClaims) -> AglynUser {
     AglynUser(
-      uid: uid, email: email, displayName: displayName, emailVerified: claims.emailVerified,
+      uid: uid, email: email,
+      displayName: displayName ?? claims.values["name"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 },
+      emailVerified: claims.emailVerified,
       photoURL: claims.values["picture"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 } ?? photoURL)
   }
 }
