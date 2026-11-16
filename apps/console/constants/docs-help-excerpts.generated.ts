@@ -82,7 +82,9 @@ export const DOCS_HELP_EXCERPTS = {
   connectAttentive: 'Send a site\'s contacts, their email marketing consent and its orders to your own Attentive account, for Attentive\'s journeys. Rolling out.',
   connectAutomatically: 'For a domain you already own, let your DNS provider add Aglyn\'s records for you in one click instead of copying them by hand.',
   connectConversionsApi: 'Send purchases and leads to your own Meta, TikTok and Pinterest ad accounts from the server, paired with your browser tags — only for visitors who allow advertising.',
+  connectQuickbooksOnline: 'Post every sale, refund, Aglyn fee and Stripe payout from your store to QuickBooks Online, mapped to the accounts you choose.',
   connectSmileIoOrYotpo: 'Keep your members\' points in your own Smile.io or Yotpo Loyalty account, earned and spent on every Aglyn order, online and at the register.',
+  connectXero: 'Post every sale, refund, Aglyn fee and Stripe payout from your store to Xero, mapped to the accounts you choose.',
   consoleAndSite: 'Task-ordered recipes for nav/pages/widgets/providers and canvas components/site runtimes.',
   consoleSearch: 'What the console search palette can find, how it matches what you type, and the two things it deliberately does not search.',
   consoleTour: 'Where things live in the Aglyn console app bar and navigation.',
@@ -467,6 +469,9 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
   },
   connectADomain: {
     '#steps': 'In the site\'s Admin page, choose Custom Domain in its navigation.',
+  },
+  connectXero: {
+    '#choose-an-organization': 'When your Xero login reaches more than one organization, the Accounting page asks which one this workspace posts to: pick it and select Use this organization.',
   },
   consoleSearch: {
     '#what-it-searches': 'Everything below is searched within the site you currently have open, plus your sites across the workspace: A group only appears if your plan includes it.',
