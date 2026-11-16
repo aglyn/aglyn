@@ -382,6 +382,40 @@ class CrmApi(private val api: ConsoleApiClient, private val writer: FirestoreWri
     api.request(CrmRoutes.EMAIL_SEND, ApiMethod.POST, body(*(links + mapOf("subject" to subject.trim(), "body" to message.trim())).toList().toTypedArray()))
   }
 
+  /*---------- email templates ----------*/
+
+  private val templatesPath get() = crmPath(scope.orgId, CRM_EMAIL_TEMPLATES_COLLECTION)
+
+  /** A new template or snippet (the drawer's create and Save as template), stamped as every CRM record is. */
+  suspend fun createTemplate(name: String, kind: String, visibility: String, subject: String, body: String) {
+    val now = nowMillis()
+    val stamp = crmTemplateStamp(scope)
+    writer.merge(
+      "$templatesPath/${newRecordId()}",
+      mapOf(
+        "name" to name, "kind" to kind, "visibility" to visibility, "subject" to if (kind == "template") subject else "", "body" to body,
+        "createdByUid" to scope.uid, "createdAtMs" to now, "updatedAtMs" to now, "hostId" to stamp.first, "visibleTo" to stamp.second,
+        "createdAt" to firestoreNow(), "updatedAt" to firestoreNow(),
+      ) + if (visibility == "personal") mapOf("ownerUid" to scope.uid) else emptyMap(),
+    )
+  }
+
+  /** An edit: the drawer's fields, the owner kept for a personal one and dropped for a shared one. */
+  suspend fun updateTemplate(id: String, name: String, kind: String, visibility: String, subject: String, body: String) {
+    writer.merge(
+      "$templatesPath/$id",
+      mapOf(
+        "name" to name, "kind" to kind, "visibility" to visibility, "subject" to if (kind == "template") subject else "", "body" to body,
+        "ownerUid" to if (visibility == "personal") scope.uid else com.aglyn.core.FirestoreDelete,
+        "updatedAtMs" to nowMillis(), "updatedAt" to firestoreNow(),
+      ),
+    )
+  }
+
+  suspend fun deleteTemplate(id: String) {
+    writer.delete("$templatesPath/$id")
+  }
+
   /*---------- the team ----------*/
 
   suspend fun members(): List<CrmMember> {
