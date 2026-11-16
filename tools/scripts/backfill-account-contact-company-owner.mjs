@@ -198,6 +198,9 @@ async function main() {
       return { action: 'link', companyId: doc.id, detail: `${doc.get('name') ?? doc.id} (${doc.id})` }
     }
     const name = crm.companyNameForDomain(domain)
+    if (!crm.companyDomainMintable(domain)) {
+      return { action: 'none', detail: `no company at ${domain}; a school or student domain is never created` }
+    }
     return autoCreate
       ? { action: 'create', detail: `new company "${name}" (${domain})` }
       : { action: 'none', detail: `no company at ${domain}; would create "${name}" if auto-create were on` }
