@@ -1357,13 +1357,18 @@ private fun MediaDetailBody(
   var alt by remember(item.id, item.alt) { mutableStateOf(item.alt) }
   var description by remember(item.id, item.description) { mutableStateOf(item.description) }
   var tags by remember(item.id, item.tags) { mutableStateOf(item.tags.joinToString(", ")) }
+  // The custom metadata rows as edited (the console drawer's Key / Value rows).
+  var meta by remember(item.id, item.customMetadata) { mutableStateOf(item.customMetadata.entries.sortedBy { it.key }.map { it.key to it.value }) }
+  val editedMeta = meta.map { it.first.trim() to it.second }.filter { it.first.isNotEmpty() }.distinctBy { it.first }.toMap()
+  val metaDirty = editedMeta != item.customMetadata
   var moving by remember(item.id) { mutableStateOf(false) }
   var audioReplacement by remember(item.id) { mutableStateOf<PickedFile?>(null) }
   var deleting by remember(item.id) { mutableStateOf(false) }
   var references by remember(item.id) { mutableStateOf<List<MediaReference>?>(null) }
   val altMax = Contracts.mediaAltMaxLength.toInt()
-  val dirty = fileName.trim() != item.fileName || alt.trim() != item.alt || description.trim() != item.description ||
+  val detailsDirty = fileName.trim() != item.fileName || alt.trim() != item.alt || description.trim() != item.description ||
     tags.split(',').map { it.trim().lowercase() }.filter { it.isNotEmpty() } != item.tags
+  val dirty = detailsDirty || metaDirty
   val now = remember(item.updatedAt) { nowMillis() }
   val orgWideEditor = scope !is MediaScope.Org || context.orgRole in setOf("owner", "admin")
   val disabled by produceState<MediaQuarantineNotice?>(null, api, item.id) { value = api.quarantine(listOf(item.id))[item.id] }
@@ -1515,6 +1520,17 @@ private fun MediaDetailBody(
       OutlinedTextField(alt, { alt = it.take(altMax) }, label = { Text("Alt text") }, supportingText = { Text("Describes the image for screen readers and search. ${alt.length}/$altMax") }, enabled = canEdit, modifier = Modifier.fillMaxWidth().testTag("media-alt"))
       OutlinedTextField(description, { description = it }, label = { Text("Description") }, enabled = canEdit, modifier = Modifier.fillMaxWidth())
       OutlinedTextField(tags, { tags = it }, label = { Text("Tags") }, supportingText = { Text("Separate tags with commas.") }, singleLine = true, enabled = canEdit, modifier = Modifier.fillMaxWidth().testTag("media-tags"))
+      Text("Custom metadata", fontSize = metrics.groupLabel, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      meta.forEachIndexed { index, (key, value) ->
+        Row(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
+          OutlinedTextField(key, { next -> meta = meta.toMutableList().also { it[index] = next to value } }, label = { Text("Key") }, singleLine = true, enabled = canEdit, modifier = Modifier.weight(1f).testTag("media-meta-key"))
+          OutlinedTextField(value, { next -> meta = meta.toMutableList().also { it[index] = key to next } }, label = { Text("Value") }, singleLine = true, enabled = canEdit, modifier = Modifier.weight(1f).testTag("media-meta-value"))
+          androidx.compose.material3.IconButton(onClick = { meta = meta.filterIndexed { i, _ -> i != index } }, enabled = canEdit) {
+            Icon(AglynIcons.named("remove"), contentDescription = "Remove field")
+          }
+        }
+      }
+      TextButton(onClick = { meta = meta + ("" to "") }, enabled = canEdit, modifier = Modifier.testTag("media-meta-add")) { Text("Add field") }
       Row(
         Modifier.fillMaxWidth().clickable(enabled = canEdit) { moving = true }.padding(vertical = space(0.5f)).testTag("media-folder"),
         verticalAlignment = Alignment.CenterVertically,
@@ -1527,14 +1543,25 @@ private fun MediaDetailBody(
       Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
         Button(
           onClick = {
+            val nextMeta = editedMeta.takeIf { metaDirty }
+            val saveDetails = detailsDirty
             runner.run("Details saved.") {
-              api.saveDetails(item.id, fileName.trim(), alt.trim(), description.trim(), tags.split(',').map { it.trim() }.filter { it.isNotEmpty() })
+              if (saveDetails) api.saveDetails(item.id, fileName.trim(), alt.trim(), description.trim(), tags.split(',').map { it.trim() }.filter { it.isNotEmpty() })
+              nextMeta?.let { api.setCustomMetadata(item.id, it) }
             }
           },
           enabled = canEdit && dirty && fileName.isNotBlank() && !runner.busy,
           modifier = Modifier.testTag("media-save"),
         ) { Text("Save") }
-        if (dirty) TextButton(onClick = { fileName = item.fileName; alt = item.alt; description = item.description; tags = item.tags.joinToString(", ") }) { Text("Discard") }
+        if (dirty) {
+          TextButton(onClick = {
+            fileName = item.fileName
+            alt = item.alt
+            description = item.description
+            tags = item.tags.joinToString(", ")
+            meta = item.customMetadata.entries.sortedBy { it.key }.map { it.key to it.value }
+          }) { Text("Discard") }
+        }
       }
     }
     HorizontalDivider()

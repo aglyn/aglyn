@@ -193,6 +193,8 @@ public struct MediaItem: Identifiable, Equatable, Sendable {
   public let folderID: String?
   public let alt: String
   public let description: String
+  /// The file's own key/value pairs (`customMetadata`), as the library's drawer edits them.
+  public let customMetadata: [String: String]
   public let tags: [String]
   public let isPrivate: Bool
   public let createdAt: Date?
@@ -231,6 +233,7 @@ public struct MediaItem: Identifiable, Equatable, Sendable {
     folderID = blank(doc.string("folderId"))
     alt = doc.string("alt") ?? ""
     description = doc.string("description") ?? ""
+    customMetadata = (doc.data["customMetadata"] as? [String: Any] ?? [:]).compactMapValues { $0 is NSNull ? nil : "\($0)" }
     tags = (doc.data["tags"] as? [Any])?.compactMap { $0 as? String } ?? []
     isPrivate = doc.bool("private") == true
     createdAt = doc.date("createdAt")
@@ -759,6 +762,11 @@ public struct MediaAPI: Sendable {
         "action": "update-details", "mediaId": id, "fileName": fileName, "alt": alt, "description": description,
         "tags": tags,
       ])
+  }
+
+  /// Replaces a file's custom metadata (`custom-metadata`): the route trims keys, drops reserved ones and caps the pairs.
+  public func setCustomMetadata(_ id: String, _ metadata: [String: String]) async throws {
+    try await post("/api/media/folders", ["action": "custom-metadata", "mediaId": id, "customMetadata": metadata])
   }
 
   /// Sets one file's tags and nothing else (the route keeps its name, alt text and description).
