@@ -594,7 +594,7 @@
             "duplicateOf": null,
             "values": {
               "free": "—",
-              "starter": "50k / mo",
+              "starter": "20k / mo",
               "pro": "None",
               "enterprise": "Talk to us"
             }
@@ -678,7 +678,7 @@
         "label": "Extra site, per month",
         "rate": "extraHostMonthlyUsd",
         "values": {
-          "starter": "$20",
+          "starter": "$25",
           "pro": "$20",
           "enterprise": "Custom"
         }
@@ -723,7 +723,7 @@
         "label": "API requests, per 1,000 over limit",
         "rate": "extraApiRequestsUsdPer1k",
         "values": {
-          "starter": "$0.50",
+          "starter": "$3",
           "pro": "$0.50",
           "enterprise": "Custom"
         }
@@ -741,7 +741,7 @@
         "label": "Email sends, per 1,000 over the included band",
         "rate": "extraEmailSendsUsdPer1k",
         "values": {
-          "starter": "—",
+          "starter": "$2.50",
           "pro": "$2.25",
           "enterprise": "Custom"
         }

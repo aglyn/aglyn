@@ -1108,7 +1108,7 @@ if (!frameTable) {
  */
 const EXPECTED_MISSING: Record<string, string> = {
   'API monthly ceiling':
-    'AGL-4226: Starter\'s 50,000-request monthly stop, enforced by `checkApiRequestQuota`. The page and the frame gain the row with the Starter API launch, which publishes after billing is live (a band going up publishes after billing)',
+    'AGL-4226: Starter\'s 20,000-request monthly stop, enforced by `checkApiRequestQuota`. The page and the frame gain the row with the Starter API launch, which publishes after billing is live (a band going up publishes after billing)',
   'API requests per minute, whole workspace':
     'AGL-4226: the workspace rate limit, enforced by `authenticateApiV1`. Published with the Starter API launch, as above',
 }
@@ -1697,6 +1697,10 @@ tierStrip.finish()
  * what reads the half of it that lives on the page.
  *=========================================*/
 const USAGE_STALE: Record<string, Divergence> = {
+  'Extra site, per month · Starter': {
+    frame: '$20',
+    why: 'AGL-4227: Starter\'s extra site rises to $25 so three Starter sites cost more than Pro on both intervals. A price going up publishes on the page before billing moves; the console keeps charging and quoting $20 until the $25 Stripe price is configured',
+  },
   'API requests, per 1,000 over limit · Starter': {
     frame: NO,
     why: 'AGL-4226: Starter is billed API overage from its release; the page and the frame state the rate when the Starter API launch publishes, after billing is live',

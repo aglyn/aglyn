@@ -16,9 +16,9 @@
             "meteredInfraPassThrough": false
           },
           "starter": {
-            "extraApiRequestsUsdPer1k": 0.5,
+            "extraApiRequestsUsdPer1k": 3,
             "extraContactsUsdPer1k": 1,
-            "extraEmailSendsUsdPer1k": null,
+            "extraEmailSendsUsdPer1k": 2.5,
             "meteredInfraPassThrough": true
           },
           "pro": {
@@ -34,7 +34,7 @@
             "meteredInfraPassThrough": true
           },
           "advanced": {
-            "extraApiRequestsUsdPer1k": 0.25,
+            "extraApiRequestsUsdPer1k": 0.5,
             "extraContactsUsdPer1k": 0.4,
             "extraEmailSendsUsdPer1k": 1.85,
             "meteredInfraPassThrough": true

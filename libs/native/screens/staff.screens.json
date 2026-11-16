@@ -22850,6 +22850,13 @@
               "help": "Empty inherits the plan default. 0 is a real limit of none."
             },
             {
+              "key": "quota.maxCrmRecords",
+              "label": "Limit: CRM records, ceiling",
+              "kind": "number",
+              "initial": "{item.entitlements.maxCrmRecords}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
               "key": "quota.emailSendsPerMonth",
               "label": "Limit: Campaign email sends / mo",
               "kind": "number",
