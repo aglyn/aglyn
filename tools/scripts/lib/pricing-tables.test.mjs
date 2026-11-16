@@ -780,6 +780,24 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     assert.match(run.stderr, /CRM records, per 1,000 over the included band \[mobile\]/)
   })
 
+  it('publishes every email a plan includes a month, from the catalog, before one-to-one email (AGL-4227)', () => {
+    resetFixtures()
+    const tables = JSON.parse(readFileSync(TABLES, 'utf8'))
+    const group = tables.compare.groups.find((g) => g.title === 'Content & data')
+    assert.ok(group, 'the Content & data group is missing')
+    const labels = group.rows.map((r) => r.label)
+    const at = labels.indexOf('Emails included / mo')
+    assert.ok(at >= 0, 'the Emails included row is not published')
+    assert.equal(labels[at + 1], 'One-to-one emails / day')
+    // Free's hard cap, Starter's billed band, Pro's campaign band.
+    assert.deepEqual(group.rows[at].values, {
+      free: '300',
+      starter: '1,000',
+      pro: '2,500',
+      enterprise: 'Talk to us',
+    })
+  })
+
   it('publishes both billed rates, at the values the billing code reads', () => {
     // The rates themselves, pinned in the generated artifact. `--check` diffs
     // the committed `tables.json` byte for byte, so moving either constant

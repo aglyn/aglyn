@@ -110,6 +110,10 @@ import {
   SITE_CARE_ADDON_MONTHLY_USD,
   UNLIMITED,
 } from '@aglyn/aglyn'
+import {
+  EMAIL_SENDS_MONTHLY_CAP_BY_PLAN,
+  INCLUDED_EMAIL_SENDS_BY_PLAN,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { OrgPlan } from '@aglyn/aglyn'
 
 /**
@@ -500,6 +504,26 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
             ?.defaultEnabled,
         ).toBe(true)
       })
+    })
+
+    /**
+     * CODE AHEAD OF THE PAGE (AGL-4227): every email a plan's sites send in a
+     * month — Free's hard 300, Starter's billed 1,000, Pro's 2,500. The
+     * generator emits the row (declared missing from the frame until the page
+     * session publishes it); this pins the catalog figures the page will
+     * carry, so the page's transcription replaces the expectation when it
+     * lands.
+     */
+    it('Emails included / mo — 300 · 1,000 · 2,500 (code ahead of the page)', () => {
+      const CODE_AHEAD = [300, 1000, 2500]
+      expect(
+        PUBLISHED_COLUMNS.map(
+          (plan) =>
+            EMAIL_SENDS_MONTHLY_CAP_BY_PLAN[plan] ??
+            INCLUDED_EMAIL_SENDS_BY_PLAN[plan] ??
+            PLAN_ENTITLEMENTS[plan].emailSendsPerMonth,
+        ),
+      ).toEqual(CODE_AHEAD)
     })
 
     it('One-to-one emails / day — — · 35 · 150', () => {

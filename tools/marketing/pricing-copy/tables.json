@@ -335,6 +335,16 @@
             }
           },
           {
+            "label": "Emails included / mo",
+            "duplicateOf": null,
+            "values": {
+              "free": "300",
+              "starter": "1,000",
+              "pro": "2,500",
+              "enterprise": "Talk to us"
+            }
+          },
+          {
             "label": "One-to-one emails / day",
             "duplicateOf": null,
             "values": {

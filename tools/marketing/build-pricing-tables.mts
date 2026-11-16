@@ -56,6 +56,8 @@ import {
   PAGE_VIEW_CDN_REQUEST_COST_USD,
   publishedMeteredPrice,
   SELF_SERVE_PLANS,
+  EMAIL_SENDS_MONTHLY_CAP_BY_PLAN,
+  INCLUDED_EMAIL_SENDS_BY_PLAN,
 } from '../../libs/aglyn/src/lib/app-utils/plan-entitlements.ts'
 import {
   AI_CREDIT_BLOCK_MONTHLY_USD,
@@ -337,6 +339,20 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
       { label: 'CRM: contacts, leads, companies, deals & tasks', value: crm(() => YES) },
       // Free's dash here is the cap itself: `crmEmailsPerDay` is 0 and
       // `checkCrmEmailQuota` refuses every send at it.
+      // EVERY email a plan's sites send in a month (AGL-4227), the one figure
+      // each plan holds it to: Free's hard cap, Starter's billed band of
+      // everything it sends, and from Pro the campaign band the overage
+      // bills past. Read from the catalog in that order, never typed in.
+      {
+        label: 'Emails included / mo',
+        value: talk((p) =>
+          num(
+            EMAIL_SENDS_MONTHLY_CAP_BY_PLAN[p] ??
+              INCLUDED_EMAIL_SENDS_BY_PLAN[p] ??
+              E(p).emailSendsPerMonth,
+          ),
+        ),
+      },
       { label: 'One-to-one emails / day', value: talk((p) => num(E(p).crmEmailsPerDay)) },
       { label: 'Campaign emails / mo', value: talk((p) => num(E(p).emailSendsPerMonth)) },
       // Beside the send band rather than beside "Custom domain & SSL", which
@@ -1111,6 +1127,8 @@ const EXPECTED_MISSING: Record<string, string> = {
     'AGL-4226: Starter\'s 20,000-request monthly stop, enforced by `checkApiRequestQuota`. The page and the frame gain the row with the Starter API launch, which publishes after billing is live (a band going up publishes after billing)',
   'API requests per minute, whole workspace':
     'AGL-4226: the workspace rate limit, enforced by `authenticateApiV1`. Published with the Starter API launch, as above',
+  'Emails included / mo':
+    'AGL-4227: every email a plan holds its sites to in a month (Free\'s 300 hard cap, Starter\'s billed 1,000, Pro\'s 2,500). The page session publishes the row; Free\'s cap is a band going down, so the page goes first',
 }
 
 for (const [label, [why]] of injected('--declare-missing-row', 2)) {
