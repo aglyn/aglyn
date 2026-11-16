@@ -9170,6 +9170,89 @@
         }
       ]
     },
+    "crmTelHref": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "  "
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "+15125550199"
+          ],
+          "result": "tel:+15125550199"
+        },
+        {
+          "args": [
+            "(512) 555-0199"
+          ],
+          "result": "tel:5125550199"
+        },
+        {
+          "args": [
+            "512.555.0199"
+          ],
+          "result": "tel:5125550199"
+        },
+        {
+          "args": [
+            "+1 512 555 0199"
+          ],
+          "result": "tel:+15125550199"
+        },
+        {
+          "args": [
+            "12"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "123"
+          ],
+          "result": "tel:123"
+        },
+        {
+          "args": [
+            "ext 12"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "+44 20 7946 0958"
+          ],
+          "result": "tel:+442079460958"
+        },
+        {
+          "args": [
+            "555-CALL-NOW"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            "+123456789012345678901"
+          ],
+          "result": null
+        }
+      ]
+    },
     "currencyFractionDigits": {
       "module": "libs/aglyn/src/lib/app-utils/contact-custom-fields.ts",
       "cases": [
