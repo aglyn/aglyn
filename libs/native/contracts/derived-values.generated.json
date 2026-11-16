@@ -2660,8 +2660,8 @@
       "plans": []
     },
     "release_accounting": {
-      "enabled": false,
-      "rolloutPercent": 0,
+      "enabled": true,
+      "rolloutPercent": 100,
       "plans": []
     },
     "release_weglot": {
