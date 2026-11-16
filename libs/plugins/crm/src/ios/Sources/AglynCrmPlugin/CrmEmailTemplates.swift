@@ -3,6 +3,7 @@
 
 import AglynContracts
 import AglynCore
+import AglynPluginHost
 import AglynUI
 import SwiftUI
 
@@ -112,7 +113,7 @@ extension CrmAPI {
       templatesPath + [id],
       [
         "name": name, "kind": kind, "visibility": visibility, "subject": kind == "template" ? subject : "", "body": body,
-        "ownerUid": visibility == "personal" ? scope.uid as Any : FirestoreSentinel.delete,
+        "ownerUid": visibility == "personal" ? scope.uid as Any : FirestoreSentinel.delete as Any,
         "updatedAtMs": Int64(Date().timeIntervalSince1970 * 1000), "updatedAt": FirestoreSentinel.serverTimestamp,
       ], merge: true)
   }
