@@ -50,7 +50,10 @@ class NativePluginManifestTest {
     assertEquals("commerce.reservations" to site, screenOf("/acme/hosts/shop/products/reservations"))
     assertEquals("commerce.shipping" to site, screenOf("/acme/hosts/shop/products/shipping"))
     assertEquals("commerce.notifications" to site, screenOf("/acme/hosts/shop/products/notifications"))
-    assertEquals(null, screenOf("/acme/hosts/shop/products/subscriptions?subscription=s1"))
+    // Subscriptions and one subscription, the renewal notification's link (AGL-4191).
+    assertEquals("commerce.subscriptions" to site, screenOf("/acme/hosts/shop/products/subscriptions"))
+    assertEquals("commerce.subscription" to site + mapOf("subscription" to "s1", "subscriptionId" to "s1"), screenOf("/acme/hosts/shop/products/subscriptions?subscription=s1"))
+    assertEquals(null, screenOf("/acme/hosts/shop/products/checkout"))
     assertEquals(null, screenOf("/acme/hosts/shop/products/pos"))
     val org = mapOf("orgSlug" to "acme")
     assertEquals("marketplace.sell" to org + mapOf("section" to "payouts"), screenOf("/acme/marketplace/payouts"))
