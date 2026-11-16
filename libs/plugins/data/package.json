@@ -28,6 +28,7 @@
     "@aglyn/aglyn": "1.23.1",
     "@aglyn/shared-data-mdi": "1.23.1",
     "@aglyn/shared-ui-jsx": "1.23.1",
+    "@aglyn/shared-ui-jsx-forms": "1.23.1",
     "@aglyn/shared-ui-next": "1.23.1",
     "@aglyn/shared-ui-snackstack": "1.23.1",
     "@aglyn/shared-util-http": "1.23.1",

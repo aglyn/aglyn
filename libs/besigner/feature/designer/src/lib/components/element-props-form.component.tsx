@@ -46,6 +46,9 @@ import {
   inheritedMediaAlt,
   intrinsicMediaSize,
   linkTargetKind,
+  matchWholeItemToken,
+  RECORD_ICON_FIELD_TYPE,
+  RECORD_ICON_PATH_PART,
   VIDEO_COMPONENT_ID,
   videoMediaProps,
   MISSING_BINDING_LABEL,
@@ -183,7 +186,7 @@ import { readAttributeFieldValue } from '../utils/attribute-field-value'
 import { besignerDocsUrl } from '../utils/docs-help'
 import { buildStyleThemeScales } from '../utils/theme-scale-options'
 import { numericTextValue } from '../utils/numeric-text-value'
-import useInsertTokenOptions from '../hooks/use-insert-token-options'
+import useInsertTokenOptions, { itemFieldBindingOptions } from '../hooks/use-insert-token-options'
 import useRepeatSources from '../hooks/use-repeat-sources'
 import {
   InteractionsContext,
@@ -555,6 +558,13 @@ export function iconPathsForSave(
     const pickedId = values[attribute.name]
     if (typeof pickedId !== 'string' || !pickedId) {
       paths[pathProp] = undefined
+      continue
+    }
+    // Bound to a record's icon field (AGL-4190): each copy of the repeat
+    // reads its own record's path, so the path follows the same field.
+    const recordField = matchWholeItemToken(pickedId)
+    if (recordField) {
+      paths[pathProp] = `{{item.${recordField}.${RECORD_ICON_PATH_PART}}}`
       continue
     }
     const unchanged = pickedId === stored?.[attribute.name]
@@ -2182,7 +2192,24 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       options: insertOptions,
       labelContext: tokenLabelContext,
       inRepeat,
+      itemFields,
+      itemNoun,
+      entityLabel: repeatEntityLabel,
     } = useInsertTokenOptions(node)
+    /**
+     * Inside a repeat, an Icon picker can follow a record's icon field
+     * (AGL-4190), which each copy then draws with its own record's icon.
+     * Only icon fields are offered: anything else would hand the picker a
+     * value that is no icon.
+     */
+    const recordIconBindings = useMemo(
+      () =>
+        itemFieldBindingOptions(
+          { itemFields, itemNoun, entityLabel: repeatEntityLabel },
+          RECORD_ICON_FIELD_TYPE,
+        ),
+      [itemFields, itemNoun, repeatEntityLabel],
+    )
     // Re-render when the installed-plugin set changes (AGL-1030).
     const knownPluginInstallsVersion = useSyncExternalStore(
       subscribeKnownPluginInstalls,
@@ -2346,6 +2373,10 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             declaredComponent: rawAttributes?.[index]?.component,
             declaredField: rawAttributes?.[index],
             componentProps: editedComponentProps,
+            recordBindings:
+              rawAttributes?.[index]?.component === FieldComponentType.ICON_PICKER
+                ? recordIconBindings
+                : undefined,
             owner: componentPropsOwner,
             control: (
               elementPropsComponentMapper as Record<
@@ -2382,6 +2413,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       editedComponentProps,
       componentPropsOwner,
       fieldContext,
+      recordIconBindings,
     ])
 
     // The placed component's properties (AGL-1247), each drawn with the
