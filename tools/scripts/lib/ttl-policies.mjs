@@ -163,6 +163,14 @@ export const TTL_POLICIES = Object.freeze([
     // redemption; this bounds a code nobody redeemed.
     why: 'native app console hand-off codes',
   },
+  // AGL-4225 — connector sign-in. Codes, access and refresh tokens are kept
+  // as SHA-256 only; connections name a workspace and a person; clients are
+  // open registrations. Every reader checks `expiresAt` itself.
+  { collection: 'oauthCodes', field: 'expiresAt', why: 'connector one-time codes, 5 minutes' },
+  { collection: 'oauthAccessTokens', field: 'expiresAt', why: 'connector access tokens, 1 hour' },
+  { collection: 'oauthRefreshTokens', field: 'expiresAt', why: 'connector refresh tokens, 90 days' },
+  { collection: 'oauthGrants', field: 'expiresAt', why: 'connector connections, 90 days sliding' },
+  { collection: 'oauthClients', field: 'expiresAt', why: 'connector client registrations, 91 days idle' },
   {
     collection: 'packageImports',
     field: 'expiresAt',

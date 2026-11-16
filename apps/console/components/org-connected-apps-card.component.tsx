@@ -23,6 +23,7 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
+import { docsHelp } from '../constants/docs-links'
 import useOrgPermissions from '../hooks/use-org-permissions'
 import { useOrgScope } from '../hooks/use-org-scope'
 
@@ -128,7 +129,18 @@ export function OrgConnectedAppsCard() {
   if (!currentOrg || !canManage) return null
 
   return (
-    <CardDisplay header={'Connected apps'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Connected apps'}
+      help={docsHelp('billing', {
+        anchor: '#api-access',
+        title: 'Connected apps',
+        excerpt:
+          'Apps connected to this workspace by signing in rather than with an API key. ' +
+          'Each acts with the access chosen when it was connected; Disconnect ends it at once.',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={2}>
         <Typography variant="body2" color="text.secondary">
           {'Apps that people connected to this workspace by signing in, such as Claude. ' +
