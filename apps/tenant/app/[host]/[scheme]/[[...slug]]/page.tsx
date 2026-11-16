@@ -37,6 +37,11 @@ import {
   ELEMENT_ANIMATION_STYLE_ID,
   pageAnimationAssets,
 } from '@aglyn/tenant-runtime/element-animation-assets'
+import {
+  nodesUseShowTo,
+  SIGN_IN_VISIBILITY_SCRIPT,
+  SIGN_IN_VISIBILITY_STYLE,
+} from '@aglyn/aglyn/app-utils/sign-in-visibility'
 import type { Metadata } from 'next'
 import { notFound, permanentRedirect, redirect } from 'next/navigation'
 import { hostSeoTitleParts } from '../../../../utils/not-found-title'
@@ -1586,6 +1591,12 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
   // keyframes plus, only when a scroll trigger is present, ~700 bytes of
   // inline IntersectionObserver. See the module for the full reasoning.
   const animation = pageAnimationAssets(clientProps.nodes)
+  // "Show to" signed-in or signed-out visitors (AGL-4231): a page where any
+  // element uses it carries one style rule and a one-line script that marks
+  // `<html>` from the readable sign-in hint before the first paint, so the
+  // right header button is the only one a visitor ever sees. Withheld when
+  // nothing on the page uses it.
+  const signInVisibility = nodesUseShowTo(clientProps.nodes)
   // The first-touch capture (AGL-3289), on the platform's OWN sites only —
   // the marketing site, never a customer's: a custom domain the first-party
   // host registry names. Decided here on the server, so a customer's page
@@ -1607,6 +1618,16 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
         // request inline. The tenant sends no `script-src` (AGL-1228), so no
         // nonce is involved.
         <script dangerouslySetInnerHTML={{ __html: animation.scriptText }} />
+      ) : null}
+      {signInVisibility ? (
+        <>
+          <style
+            id="aglyn-sign-in-visibility"
+            // Constants of ours; no author input reaches either.
+            dangerouslySetInnerHTML={{ __html: SIGN_IN_VISIBILITY_STYLE }}
+          />
+          <script dangerouslySetInnerHTML={{ __html: SIGN_IN_VISIBILITY_SCRIPT }} />
+        </>
       ) : null}
       {jsonLd.map((json, index) => (
         <script

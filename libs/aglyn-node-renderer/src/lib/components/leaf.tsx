@@ -45,6 +45,11 @@ import {
 } from '@aglyn/aglyn/app-utils/enabled-plugins-context'
 import { NodeIdentityContext } from '@aglyn/aglyn/app-utils/node-identity'
 import {
+  NODE_SHOW_TO_PROP,
+  resolveShowTo,
+  SHOW_TO_ATTRIBUTE,
+} from '@aglyn/aglyn/app-utils/sign-in-visibility'
+import {
   ELEMENT_COLOR_SCHEME_VISITOR,
   type ElementColorScheme,
   NODE_COLOR_SCHEME_PROP,
@@ -228,6 +233,9 @@ export const Leaf = observer(
       // A pinned color scheme (AGL-3284) is a directive to the renderer, like
       // the two groups above: consumed below, never handed to the component.
       [NODE_COLOR_SCHEME_PROP]: _colorScheme,
+      // Who sees it (AGL-4231): an attribute the published page's own style
+      // rule reads, never a prop the component receives.
+      [NODE_SHOW_TO_PROP]: _showTo,
       ...resolvedProps
     } = (node?.resolvedProps ?? node?.props ?? {}) as Record<string, any>
 
@@ -236,6 +244,7 @@ export const Leaf = observer(
     // JS on any surface. The besigner canvas never ships that stylesheet
     // (same posture as the AGL-562 hidden class), so an author sees the
     // element in its normal, selectable, un-animated state while editing.
+    const showTo = resolveShowTo(_showTo)
     const animation = resolveElementAnimation({
       [NODE_ANIMATION_PROP]: _animation,
       [NODE_ANIMATION_TRIGGER_PROP]: _animationTrigger,
@@ -466,6 +475,10 @@ export const Leaf = observer(
       // Before the spreads: the animation trigger/repeat attributes are ours,
       // but an element that genuinely declared one of these should win.
       ...animation?.attributes,
+      // Signed-in or signed-out visitors only (AGL-4231). Decided in the
+      // visitor's browser by the page's style rule, so the canvas, which
+      // ships no such rule, shows every element to its author.
+      ...(showTo ? { [SHOW_TO_ATTRIBUTE]: showTo } : {}),
       ...resolvedProps,
       ...rest,
       className: mergedClassName,
