@@ -63,7 +63,12 @@
 
 import { contrastRatio } from '@aglyn/aglyn/app-utils/site-theme'
 import type { SiteImportBlock } from '../site-import/site-import-html'
-import { SITE_IMPORT_PLAY_WORDS, siteImportWidthOf, type AiSiteImportFinish, type AiSiteImportWords } from './ai-site-import'
+import {
+  SITE_IMPORT_PLAY_WORDS,
+  siteImportWidthOf,
+  type AiSiteImportFinish,
+  type AiSiteImportWords,
+} from './ai-site-import'
 import { siteImportLedger } from './ai-site-import-ledger'
 import { aiHexOklch } from './ai-site-look'
 import type {
@@ -140,7 +145,10 @@ export interface SiteImportPageFidelity {
   words: SiteImportFidelityWords
   sections: SiteImportFidelityCount
   /** Sections drawn in the source's band, in order. */
-  bands: SiteImportFidelityCount & { read: SiteImportBand[]; drawn: SiteImportBand[] }
+  bands: SiteImportFidelityCount & {
+    read: SiteImportBand[]
+    drawn: SiteImportBand[]
+  }
   /** Sections drawn as wide as the source runs them, or wider (AGL-4083); one the source sets no cap on counts as kept. */
   widths: SiteImportFidelityCount
   /** The source's rows of two or more columns, set side by side on the page. */
@@ -223,7 +231,10 @@ export interface SiteImportPageFidelity {
    * page's ground draws lighter than the theme's, and one on its page's ground
    * draws on the theme's, for two near whites read alike by ΔE alone.
    */
-  ground?: SiteImportFidelityCount & { theme: SiteImportFidelityTheme['from'] | null; worst: number | null }
+  ground?: SiteImportFidelityCount & {
+    theme: SiteImportFidelityTheme['from'] | null
+    worst: number | null
+  }
   /**
    * Under Keep my site (AGL-4152), the same sections in the theme's dark
    * scheme: on the source's own dark fill within OKLab ΔE 0.05 where its
@@ -235,7 +246,9 @@ export interface SiteImportPageFidelity {
    * source's (`SITE_IMPORT_MEASURE_SHARE`): measured where the reader kept the
    * source's measure. `shares` are the two shares compared.
    */
-  measure?: SiteImportFidelityCount & { shares: { source: number; built: number } | null }
+  measure?: SiteImportFidelityCount & {
+    shares: { source: number; built: number } | null
+  }
   /** Each section's ink on its ground, and a filled button's label on its fill, at 4.5:1 or better: measured where a theme is given. */
   readable?: SiteImportFidelityCount
   /** The lines Improve it scores the build on against its source: whether it reads better (AGL-4152). */
@@ -289,8 +302,17 @@ export interface SiteImportImprovedFidelity {
 }
 
 /** The design lines of a generative Improve it (AGL-4152). */
-export const SITE_IMPORT_IMPROVED_LINES = ['cta', 'rhythm', 'columns', 'framing', 'contrast', 'frame', 'phone'] as const
-export type SiteImportImprovedLineName = (typeof SITE_IMPORT_IMPROVED_LINES)[number]
+export const SITE_IMPORT_IMPROVED_LINES = [
+  'cta',
+  'rhythm',
+  'columns',
+  'framing',
+  'contrast',
+  'frame',
+  'phone',
+] as const
+export type SiteImportImprovedLineName =
+  (typeof SITE_IMPORT_IMPROVED_LINES)[number]
 
 /** The share of a source's content words a redesign keeps on its page (AGL-4152). */
 export const SITE_IMPORT_IMPROVED_MEANING = 0.6
@@ -370,7 +392,12 @@ export interface SiteImportFidelityTheme {
     fillDark?: string | null
     labelDark?: string | null
     case: 'upper' | 'none' | null
-    outlined?: { text: unknown; border: unknown; fill: unknown; case: 'upper' | 'none' | null }
+    outlined?: {
+      text: unknown
+      border: unknown
+      fill: unknown
+      case: 'upper' | 'none' | null
+    }
     text?: { case: 'upper' | 'none' | null }
   }
 }
@@ -425,7 +452,12 @@ export interface SiteImportFidelityMeaning {
   ratio: number
   floor: number
   /** The lines below the floor, for a report. */
-  examples: Array<{ line: SiteImportLineRef; kept: number; source: string; built: string }>
+  examples: Array<{
+    line: SiteImportLineRef
+    kept: number
+    source: string
+    built: string
+  }>
 }
 
 /** How far a ground of the theme may sit from the source's (AGL-4152), in OKLab. */
@@ -446,7 +478,16 @@ export const SITE_IMPORT_MEASURE_SHARE = 0.1
 export const SITE_IMPORT_MEANING_FLOOR = 0.3
 
 /** The measures Improve it prints as free (AGL-4152): what it may change. */
-export const SITE_IMPORT_IMPROVE_FREE: readonly string[] = ['bands', 'widths', 'rows', 'framing', 'ground', 'measure', 'align', 'boxed']
+export const SITE_IMPORT_IMPROVE_FREE: readonly string[] = [
+  'bands',
+  'widths',
+  'rows',
+  'framing',
+  'ground',
+  'measure',
+  'align',
+  'boxed',
+]
 
 /** A page's source as the import read it: its layout over its main-region blocks, and its photos as the library holds them. */
 export interface SiteImportFidelitySource {
@@ -454,7 +495,13 @@ export interface SiteImportFidelitySource {
   /** The page's main-region blocks, which the layout's lines are indexes of. */
   blocks: readonly SiteImportBlock[]
   /** The source's pictures as the site's library holds them (`from` → `src`, and their size); without them a picture is counted, not placed. */
-  photos?: ReadonlyArray<{ from?: string; src: string; width?: number; height?: number; graphic?: boolean }>
+  photos?: ReadonlyArray<{
+    from?: string
+    src: string
+    width?: number
+    height?: number
+    graphic?: boolean
+  }>
   /** What the source holds that a visitor cannot see (AGL-4152): a build that draws any of it fails `concealed`. */
   concealed?: { pictures: readonly string[]; words: readonly string[] }
 }
@@ -463,7 +510,8 @@ export interface SiteImportFidelitySource {
  * Words and lines
  *-----------------------------------------*/
 
-const clean = (text: unknown): string => (typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '')
+const clean = (text: unknown): string =>
+  typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : ''
 
 const WORD = /[\p{L}\p{N}]+/gu
 
@@ -474,7 +522,8 @@ const wordsOf = (text: string): string[] => text.match(WORD) ?? []
  * A line's words as one string, for comparing two lines whatever their
  * spacing and marks; a line of marks alone (a table's "✓", a "—") as it is.
  */
-const wordLine = (text: string): string => wordsOf(text).join(' ') || clean(text)
+const wordLine = (text: string): string =>
+  wordsOf(text).join(' ') || clean(text)
 
 /** Whether a block is a line of the page: a link inside a sentence is in its sentence. */
 function isLine(block: SiteImportBlock | undefined): boolean {
@@ -507,8 +556,10 @@ function shownTexts(node: SiteImportFidelityNode | undefined): string[] {
     const value = clean(props[key])
     if (value) out.push(value)
   }
-  if (node.componentId === 'muiTabs' && typeof props['labels'] === 'string') out.push(...props['labels'].split('\n').map(clean).filter(Boolean))
-  if (node.componentId === 'dataTable' && typeof props['rows'] === 'string') out.push(...tableCells(props['rows']))
+  if (node.componentId === 'muiTabs' && typeof props['labels'] === 'string')
+    out.push(...props['labels'].split('\n').map(clean).filter(Boolean))
+  if (node.componentId === 'dataTable' && typeof props['rows'] === 'string')
+    out.push(...tableCells(props['rows']))
   return out
 }
 
@@ -516,13 +567,24 @@ function shownTexts(node: SiteImportFidelityNode | undefined): string[] {
 function hasDestination(node: SiteImportFidelityNode | undefined): boolean {
   if (!node) return false
   const props = node.props ?? {}
-  return !!clean(props['screenId']) || !!clean(props['href']) || !!clean(props['to']) || (node.interactions?.length ?? 0) > 0
+  return (
+    !!clean(props['screenId']) ||
+    !!clean(props['href']) ||
+    !!clean(props['to']) ||
+    (node.interactions?.length ?? 0) > 0
+  )
 }
 
-const BUTTON_VARIANT: Readonly<Record<SiteImportButtonStyle, string>> = { primary: 'contained', secondary: 'outlined', quiet: 'text' }
+const BUTTON_VARIANT: Readonly<Record<SiteImportButtonStyle, string>> = {
+  primary: 'contained',
+  secondary: 'outlined',
+  quiet: 'text',
+}
 
 /** A section's band as the compiler draws it: a dark scheme, the paper ground, the brand fill, else plain. */
-export function siteImportFidelityBandOf(node: SiteImportFidelityNode | undefined): SiteImportBand {
+export function siteImportFidelityBandOf(
+  node: SiteImportFidelityNode | undefined,
+): SiteImportBand {
   if (node?.props?.['colorScheme'] === 'dark') return 'dark'
   const ground = node?.sx?.['bgcolor']
   if (ground === 'background.paper') return 'soft'
@@ -531,9 +593,13 @@ export function siteImportFidelityBandOf(node: SiteImportFidelityNode | undefine
 }
 
 /** The node a stored page or layout hangs from: the canvas root, else the one with no parent. */
-export function siteImportFidelityTreeOf(nodes: Readonly<Record<string, SiteImportFidelityNode>>): SiteImportFidelityTree {
+export function siteImportFidelityTreeOf(
+  nodes: Readonly<Record<string, SiteImportFidelityNode>>,
+): SiteImportFidelityTree {
   const ids = Object.keys(nodes)
-  const rootId = nodes['_@_'] ? '_@_' : (ids.find((id) => !nodes[id]?.parentId) ?? ids[0] ?? '_@_')
+  const rootId = nodes['_@_']
+    ? '_@_'
+    : (ids.find((id) => !nodes[id]?.parentId) ?? ids[0] ?? '_@_')
   return { rootId, nodes }
 }
 
@@ -566,7 +632,8 @@ class Built {
       const at = this.order.length
       this.enter.set(id, at)
       this.order.push(id)
-      for (const text of shownTexts(tree.nodes[id])) this.pieces.push({ node: id, text, key: wordLine(text), at })
+      for (const text of shownTexts(tree.nodes[id]))
+        this.pieces.push({ node: id, text, key: wordLine(text), at })
       for (const child of tree.nodes[id]?.nodes ?? []) visit(child, id)
       this.exit.set(id, this.order.length - 1)
     }
@@ -585,7 +652,8 @@ class Built {
   /** A node and the nodes holding it, nearest first, up to the page's root. */
   ancestry(id: string): string[] {
     const out: string[] = []
-    for (let at: string | undefined = id; at; at = this.parent.get(at)) out.push(at)
+    for (let at: string | undefined = id; at; at = this.parent.get(at))
+      out.push(at)
     return out
   }
 
@@ -594,18 +662,28 @@ class Built {
     const start = this.enter.get(a)
     const end = this.exit.get(a)
     const point = this.enter.get(b)
-    return start !== undefined && end !== undefined && point !== undefined && point >= start && point <= end
+    return (
+      start !== undefined &&
+      end !== undefined &&
+      point !== undefined &&
+      point >= start &&
+      point <= end
+    )
   }
 
   /** The nodes under one, itself included, in document order. */
   under(id: string): string[] {
     const start = this.enter.get(id)
     const end = this.exit.get(id)
-    return start === undefined || end === undefined ? [] : this.order.slice(start, end + 1)
+    return start === undefined || end === undefined
+      ? []
+      : this.order.slice(start, end + 1)
   }
 
   children(id: string): string[] {
-    return (this.tree.nodes[id]?.nodes ?? []).filter((child) => this.enter.has(child))
+    return (this.tree.nodes[id]?.nodes ?? []).filter((child) =>
+      this.enter.has(child),
+    )
   }
 
   /** The deepest node holding every one of `ids`. */
@@ -626,12 +704,19 @@ class Built {
   }
 }
 
-const ratioKept = (source: number, built: number): SiteImportFidelityCount => ({ source, built, ratio: source > 0 ? Math.min(1, built / source) : 1 })
+const ratioKept = (source: number, built: number): SiteImportFidelityCount => ({
+  source,
+  built,
+  ratio: source > 0 ? Math.min(1, built / source) : 1,
+})
 
 const ratioBoth = (source: number, built: number): SiteImportFidelityCount => ({
   source,
   built,
-  ratio: Math.max(source, built) > 0 ? Math.min(source, built) / Math.max(source, built) : 1,
+  ratio:
+    Math.max(source, built) > 0
+      ? Math.min(source, built) / Math.max(source, built)
+      : 1,
 })
 
 /*------------------------------------------
@@ -661,27 +746,46 @@ class Placement {
     sectionRoots: ReadonlyArray<string | null>,
   ) {
     const photoOf = new Map<string, string>()
-    for (const photo of source.photos ?? []) if (photo.from) photoOf.set(photo.from, photo.src)
+    for (const photo of source.photos ?? [])
+      if (photo.from) photoOf.set(photo.from, photo.src)
     source.layout.sections.forEach((section, index) => {
       const root = sectionRoots[index] ?? built.tree.rootId
       const scope = new Set(built.under(root))
       const pieces = built.pieces.filter((piece) => scope.has(piece.node))
       this.scopes[index] = pieces
       // A film's poster is placed as its Video element's (AGL-4140).
-      const images = built.under(root).filter((id) => built.node(id)?.componentId === 'image' || built.node(id)?.componentId === 'video')
+      const images = built
+        .under(root)
+        .filter(
+          (id) =>
+            built.node(id)?.componentId === 'image' ||
+            built.node(id)?.componentId === 'video',
+        )
       let cursor = -1
       let previous: SiteImportLineRef | null = null
       // Each line's own words, so a line found only in part never takes a piece another line is shown in whole (AGL-4152).
-      const own = new Set(section.lines.flatMap((ref) => {
-        const line = source.blocks[ref]
-        return isLine(line) && line.kind !== 'image' ? [wordLine(clean(line.text))] : []
-      }))
+      const own = new Set(
+        section.lines.flatMap((ref) => {
+          const line = source.blocks[ref]
+          return isLine(line) && line.kind !== 'image'
+            ? [wordLine(clean(line.text))]
+            : []
+        }),
+      )
       for (const ref of section.lines) {
         const block = source.blocks[ref]
         if (!isLine(block)) continue
         if (block.kind === 'image') {
           const src = photoOf.get(block.url)
-          const found = src ? images.find((id) => !this.imageClaimed.has(id) && built.node(id)?.props?.[built.node(id)?.componentId === 'video' ? 'poster' : 'src'] === src) : undefined
+          const found = src
+            ? images.find(
+                (id) =>
+                  !this.imageClaimed.has(id) &&
+                  built.node(id)?.props?.[
+                    built.node(id)?.componentId === 'video' ? 'poster' : 'src'
+                  ] === src,
+              )
+            : undefined
           if (found) {
             this.imageClaimed.add(found)
             this.of.set(ref, found)
@@ -689,7 +793,13 @@ class Placement {
           previous = ref
           continue
         }
-        const piece = this.find(pieces, clean(block.text), cursor, previous, own)
+        const piece = this.find(
+          pieces,
+          clean(block.text),
+          cursor,
+          previous,
+          own,
+        )
         if (piece) {
           this.claimedBy.set(piece, ref)
           this.of.set(ref, piece.node)
@@ -701,7 +811,13 @@ class Placement {
   }
 
   /** The piece showing a line: its words exactly, else a part of them (a long paragraph split), else the run it was joined into. */
-  private find(pieces: readonly Piece[], text: string, cursor: number, previous: SiteImportLineRef | null, own: ReadonlySet<string> = new Set()): Piece | null {
+  private find(
+    pieces: readonly Piece[],
+    text: string,
+    cursor: number,
+    previous: SiteImportLineRef | null,
+    own: ReadonlySet<string> = new Set(),
+  ): Piece | null {
     const key = wordLine(text)
     if (!key) return null
     const free = (piece: Piece) => {
@@ -715,19 +831,36 @@ class Placement {
         if (!best) return piece
         const gap = Math.abs(piece.at - cursor)
         const bestGap = Math.abs(best.at - cursor)
-        return gap < bestGap || (gap === bestGap && piece.at >= cursor && best.at < cursor) ? piece : best
+        return gap < bestGap ||
+          (gap === bestGap && piece.at >= cursor && best.at < cursor)
+          ? piece
+          : best
       }, null)
     // A line of marks a build joined to the line before it (a "—" beside its label) is in that line's piece,
     // never the same mark further down the page, which would leave that one's line with nothing.
     if (!wordsOf(text).length && previous !== null) {
-      const joined = pieces.find((piece) => this.claimedBy.get(piece) === previous && clean(piece.text) !== text && clean(piece.text).endsWith(text))
+      const joined = pieces.find(
+        (piece) =>
+          this.claimedBy.get(piece) === previous &&
+          clean(piece.text) !== text &&
+          clean(piece.text).endsWith(text),
+      )
       if (joined) return joined
     }
-    const exact = pieces.filter((piece) => piece.key === key && this.claimedBy.get(piece) === undefined)
+    const exact = pieces.filter(
+      (piece) => piece.key === key && this.claimedBy.get(piece) === undefined,
+    )
     if (exact.length) return pick(exact)
     const padded = ` ${key} `
     // A reworded heading that reads "…, and agencies build a hundred" never takes the card titled "Agencies".
-    const part = pieces.filter((piece) => free(piece) && piece.key && !(piece.key !== key && own.has(piece.key)) && (` ${piece.key} `.includes(padded) || padded.includes(` ${piece.key} `)))
+    const part = pieces.filter(
+      (piece) =>
+        free(piece) &&
+        piece.key &&
+        !(piece.key !== key && own.has(piece.key)) &&
+        (` ${piece.key} `.includes(padded) ||
+          padded.includes(` ${piece.key} `)),
+    )
     return pick(part)
   }
 
@@ -741,11 +874,24 @@ class Placement {
   placeRewritten(): void {
     this.source.layout.sections.forEach((section, index) => {
       const pieces = this.scopes[index] ?? []
-      const lines = section.lines.filter((ref) => isLine(this.source.blocks[ref]) && this.source.blocks[ref]?.kind !== 'image')
+      const lines = section.lines.filter(
+        (ref) =>
+          isLine(this.source.blocks[ref]) &&
+          this.source.blocks[ref]?.kind !== 'image',
+      )
       let run: SiteImportLineRef[] = []
       let from = -1
       const settle = (to: number) => {
-        if (run.length) this.align(run, pieces.filter((piece) => piece.at >= from && piece.at <= to && this.claimedBy.get(piece) === undefined))
+        if (run.length)
+          this.align(
+            run,
+            pieces.filter(
+              (piece) =>
+                piece.at >= from &&
+                piece.at <= to &&
+                this.claimedBy.get(piece) === undefined,
+            ),
+          )
         run = []
       }
       for (const ref of lines) {
@@ -761,22 +907,42 @@ class Placement {
       settle(Number.POSITIVE_INFINITY)
       // A line its neighbors leave no room for (one drawn out of the source's order) is looked for among the section's free pieces.
       const left = lines.filter((ref) => !this.of.has(ref))
-      if (left.length) this.align(left, pieces.filter((piece) => this.claimedBy.get(piece) === undefined))
+      if (left.length)
+        this.align(
+          left,
+          pieces.filter((piece) => this.claimedBy.get(piece) === undefined),
+        )
     })
   }
 
   /** A run of lines set to free pieces in order (G4): as many pairs as can be, then the most content kept. */
-  private align(lines: readonly SiteImportLineRef[], pieces: readonly Piece[]): void {
+  private align(
+    lines: readonly SiteImportLineRef[],
+    pieces: readonly Piece[],
+  ): void {
     if (!lines.length || !pieces.length) return
-    const text = (ref: SiteImportLineRef) => clean((this.source.blocks[ref] as { text?: string } | undefined)?.text)
-    const best: number[][] = Array.from({ length: lines.length + 1 }, () => new Array<number>(pieces.length + 1).fill(0))
+    const text = (ref: SiteImportLineRef) =>
+      clean((this.source.blocks[ref] as { text?: string } | undefined)?.text)
+    const best: number[][] = Array.from({ length: lines.length + 1 }, () =>
+      new Array<number>(pieces.length + 1).fill(0),
+    )
     for (let i = 1; i <= lines.length; i += 1) {
       for (let j = 1; j <= pieces.length; j += 1) {
-        const pair = (best[i - 1]?.[j - 1] ?? 0) + 1 + contentKept(text(lines[i - 1] as number), (pieces[j - 1] as Piece).text)
-        ;(best[i] as number[])[j] = Math.max(pair, best[i - 1]?.[j] ?? 0, best[i]?.[j - 1] ?? 0)
+        const pair =
+          (best[i - 1]?.[j - 1] ?? 0) +
+          1 +
+          contentKept(
+            text(lines[i - 1] as number),
+            (pieces[j - 1] as Piece).text,
+          )
+        ;(best[i] as number[])[j] = Math.max(
+          pair,
+          best[i - 1]?.[j] ?? 0,
+          best[i]?.[j - 1] ?? 0,
+        )
       }
     }
-    for (let i = lines.length, j = pieces.length; i > 0 && j > 0; ) {
+    for (let i = lines.length, j = pieces.length; i > 0 && j > 0;) {
       const here = best[i]?.[j] ?? 0
       if (here === (best[i - 1]?.[j] ?? 0)) i -= 1
       else if (here === (best[i]?.[j - 1] ?? 0)) j -= 1
@@ -795,12 +961,26 @@ class Placement {
   /** The pieces of the page's sections no line of the source claimed, nor holds as a part of its words: lines the page added. */
   unclaimed(): Piece[] {
     const pieces = [...new Set(this.scopes.flat())]
-    const said = this.source.layout.sections.flatMap((section) => section.lines).map((ref) => ` ${wordLine(clean((this.source.blocks[ref] as { text?: string } | undefined)?.text))} `)
-    return pieces.filter((piece) => this.claimedBy.get(piece) === undefined && !!piece.key && !said.some((line) => line.includes(` ${piece.key} `)))
+    const said = this.source.layout.sections
+      .flatMap((section) => section.lines)
+      .map(
+        (ref) =>
+          ` ${wordLine(clean((this.source.blocks[ref] as { text?: string } | undefined)?.text))} `,
+      )
+    return pieces.filter(
+      (piece) =>
+        this.claimedBy.get(piece) === undefined &&
+        !!piece.key &&
+        !said.some((line) => line.includes(` ${piece.key} `)),
+    )
   }
 
   /** The nodes a list of lines is shown by, and whether every one of them was found. */
-  nodesOf(refs: readonly SiteImportLineRef[]): { nodes: string[]; whole: boolean; measured: boolean } {
+  nodesOf(refs: readonly SiteImportLineRef[]): {
+    nodes: string[]
+    whole: boolean
+    measured: boolean
+  } {
     const nodes: string[] = []
     let whole = true
     let measured = false
@@ -833,14 +1013,28 @@ interface Unit {
  * unit whose lines are not held apart from another's (thirteen cards' titles
  * in one stack under their thirteen lines) has no element of its own.
  */
-function unitsOn(built: Built, placement: Placement, parts: ReadonlyArray<readonly SiteImportLineRef[]>, stop: string | null): Unit[] {
+function unitsOn(
+  built: Built,
+  placement: Placement,
+  parts: ReadonlyArray<readonly SiteImportLineRef[]>,
+  stop: string | null,
+): Unit[] {
   const found = parts.map((refs) => placement.nodesOf(refs))
   return found.map((part, index) => {
-    const others = found.flatMap((other, at) => (at === index ? [] : other.nodes))
+    const others = found.flatMap((other, at) =>
+      at === index ? [] : other.nodes,
+    )
     const anchor = built.common(part.nodes)
-    if (!anchor || others.some((node) => built.holds(anchor, node))) return { ...part, element: null }
+    if (!anchor || others.some((node) => built.holds(anchor, node)))
+      return { ...part, element: null }
     let element = anchor
-    for (let up = built.parent.get(element); up && up !== stop && !others.some((node) => built.holds(up as string, node)); up = built.parent.get(up)) {
+    for (
+      let up = built.parent.get(element);
+      up &&
+      up !== stop &&
+      !others.some((node) => built.holds(up as string, node));
+      up = built.parent.get(up)
+    ) {
       element = up
       if (built.node(up)?.componentId === 'section') break
     }
@@ -852,8 +1046,14 @@ function unitsOn(built: Built, placement: Placement, parts: ReadonlyArray<readon
 function setsSideBySide(node: SiteImportFidelityNode | undefined): boolean {
   if (!node) return false
   const props = node.props ?? {}
-  if (node.componentId === 'muiGrid') return props['container'] === true || props['container'] === 'true'
-  if (node.componentId === 'muiStack') return props['direction'] === 'row' || (typeof props['direction'] === 'string' && /\b(?:sm|md|lg):row\b/.test(props['direction']))
+  if (node.componentId === 'muiGrid')
+    return props['container'] === true || props['container'] === 'true'
+  if (node.componentId === 'muiStack')
+    return (
+      props['direction'] === 'row' ||
+      (typeof props['direction'] === 'string' &&
+        /\b(?:sm|md|lg):row\b/.test(props['direction']))
+    )
   return false
 }
 
@@ -863,21 +1063,31 @@ function setsSideBySide(node: SiteImportFidelityNode | undefined): boolean {
  * build draws as the portrait, small, over its words (AGL-4107), not as two
  * columns across the page.
  */
-function isByline(source: SiteImportFidelitySource, cells: ReadonlyArray<{ nodes: SiteImportLayoutNode[] }>): boolean {
+function isByline(
+  source: SiteImportFidelitySource,
+  cells: ReadonlyArray<{ nodes: SiteImportLayoutNode[] }>,
+): boolean {
   if (cells.length !== 2) return false
-  const at = cells.findIndex((cell) => cell.nodes.length === 1 && cell.nodes[0]?.kind === 'picture')
+  const at = cells.findIndex(
+    (cell) => cell.nodes.length === 1 && cell.nodes[0]?.kind === 'picture',
+  )
   if (at === -1) return false
   const words = cells[1 - at]?.nodes ?? []
   if (!words.every((node) => node.kind === 'line')) return false
   const count = words.reduce((total, node) => {
     const block = node.kind === 'line' ? source.blocks[node.line] : undefined
-    return total + (block && block.kind !== 'image' ? wordsOf(clean(block.text)).length : 0)
+    return (
+      total +
+      (block && block.kind !== 'image' ? wordsOf(clean(block.text)).length : 0)
+    )
   }, 0)
   return count > 0 && count <= 12
 }
 
 /** Every node of a section's layout, rows, cells and tab panels opened, in order. */
-function layoutNodes(nodes: readonly SiteImportLayoutNode[]): SiteImportLayoutNode[] {
+function layoutNodes(
+  nodes: readonly SiteImportLayoutNode[],
+): SiteImportLayoutNode[] {
   const out: SiteImportLayoutNode[] = []
   const visit = (list: readonly SiteImportLayoutNode[]) => {
     for (const node of list) {
@@ -895,9 +1105,13 @@ function linesOf(nodes: readonly SiteImportLayoutNode[]): SiteImportLineRef[] {
   const out: SiteImportLineRef[] = []
   for (const node of layoutNodes(nodes)) {
     if (node.kind === 'line' || node.kind === 'picture') out.push(node.line)
-    else if (node.kind === 'group') for (const item of node.items) out.push(...item.lines)
-    else if (node.kind === 'table') for (const row of node.rows) for (const cell of row.cells) out.push(...cell.lines)
-    else if (node.kind === 'tabs') for (const tab of node.tabs) if (tab.label !== null) out.push(tab.label)
+    else if (node.kind === 'group')
+      for (const item of node.items) out.push(...item.lines)
+    else if (node.kind === 'table')
+      for (const row of node.rows)
+        for (const cell of row.cells) out.push(...cell.lines)
+    else if (node.kind === 'tabs')
+      for (const tab of node.tabs) if (tab.label !== null) out.push(tab.label)
   }
   return out
 }
@@ -912,7 +1126,11 @@ function linesOf(nodes: readonly SiteImportLayoutNode[]): SiteImportLineRef[] {
  * Scored with a `finish` or its `words` (AGL-4152), the page is scored as
  * that finish asks, with the measures it adds; with neither, as before.
  */
-export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteImportFidelityTree, options: SiteImportFidelityOptions = {}): SiteImportPageFidelity {
+export function siteImportFidelity(
+  source: SiteImportFidelitySource,
+  tree: SiteImportFidelityTree,
+  options: SiteImportFidelityOptions = {},
+): SiteImportPageFidelity {
   const finished = !!options.finish || !!options.words
   // An import that names no finish reads as Keep my site (AGL-4152).
   const finish: AiSiteImportFinish = options.finish ?? 'keep'
@@ -925,7 +1143,9 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
   const drawnSections = built.children(tree.rootId)
   // The build draws each of the source's sections as one, in order; a page whose count differs is searched whole.
   const aligned = drawnSections.length === sections.length
-  const roots = sections.map((_, index) => (aligned ? (drawnSections[index] ?? null) : null))
+  const roots = sections.map((_, index) =>
+    aligned ? (drawnSections[index] ?? null) : null,
+  )
   const placement = new Placement(built, source, roots)
   // Lines a rewrite changed are found by their place and their content (G4).
   if (improvedWords) placement.placeRewritten()
@@ -933,12 +1153,23 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
 
   const words = wordsScore(source, built, finish === 'improve')
   // Improved, a page's bands are read as its colors alone say; kept, against its page's ground (AGL-4152).
-  const read = sections.map((section) => (finished && finish === 'improve' ? (section.absoluteBand ?? section.band) : section.band))
-  const drawn = drawnSections.map((id) => siteImportFidelityBandOf(built.node(id)))
+  const read = sections.map((section) =>
+    finished && finish === 'improve'
+      ? (section.absoluteBand ?? section.band)
+      : section.band,
+  )
+  const drawn = drawnSections.map((id) =>
+    siteImportFidelityBandOf(built.node(id)),
+  )
   const bandsKept = read.filter((band, index) => drawn[index] === band).length
 
   const rows = { source: 0, built: 0 }
-  const groups: Partial<Record<SiteImportGroupKind, { groups: number; groupsKept: number; items: number; itemsKept: number }>> = {}
+  const groups: Partial<
+    Record<
+      SiteImportGroupKind,
+      { groups: number; groupsKept: number; items: number; itemsKept: number }
+    >
+  > = {}
   const tables = { source: 0, built: 0 }
   const tabs = { source: 0, built: 0 }
   const buttons = { source: 0, built: 0, unlinked: 0 }
@@ -949,13 +1180,23 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
   const boxed = { source: 0, built: 0 }
   const icons = { source: 0, built: 0, lone: 0 }
   // The films drawn as the Video element, playing from an address (AGL-4140).
-  const drawnFilms = built.order.filter((id) => built.node(id)?.componentId === 'video' && !!clean(built.node(id)?.props?.['src'])).length
+  const drawnFilms = built.order.filter(
+    (id) =>
+      built.node(id)?.componentId === 'video' &&
+      !!clean(built.node(id)?.props?.['src']),
+  ).length
   const films = drawnFilms > 0
   /** Whether a button of the source is drawn in its style, going where it goes; under Keep my site, in its case and fill too. */
-  const buttonKept = (line: SiteImportLineRef, style: SiteImportButtonStyle): boolean => {
+  const buttonKept = (
+    line: SiteImportLineRef,
+    style: SiteImportButtonStyle,
+  ): boolean => {
     const id = placement.of.get(line)
     const drawnAs = id ? built.node(id) : undefined
-    const drawn = drawnAs?.componentId === 'muiButton' && drawnAs.props?.['variant'] === BUTTON_VARIANT[style] && hasDestination(drawnAs)
+    const drawn =
+      drawnAs?.componentId === 'muiButton' &&
+      drawnAs.props?.['variant'] === BUTTON_VARIANT[style] &&
+      hasDestination(drawnAs)
     if (!pinned) return drawn
     const cased = look.caseKept(id ?? null, style)
     if (cased !== null) {
@@ -987,20 +1228,32 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
           if (!node.button) {
             // A link standing on its own is drawn as a text button: under Keep my site it is held to the source's case as one (AGL-4152).
             const id = placement.of.get(node.line)
-            if (pinned && block?.kind === 'link' && id && built.node(id)?.componentId === 'muiButton') {
+            if (
+              pinned &&
+              block?.kind === 'link' &&
+              id &&
+              built.node(id)?.componentId === 'muiButton'
+            ) {
               buttons.source += 1
               if (buttonKept(node.line, 'quiet')) buttons.built += 1
             }
             break
           }
           // A button whose words say it plays a film plays the page's film where one is drawn (AGL-4140).
-          if (block?.kind === 'paragraph' && films && SITE_IMPORT_PLAY_WORDS.test(block.text)) {
+          if (
+            block?.kind === 'paragraph' &&
+            films &&
+            SITE_IMPORT_PLAY_WORDS.test(block.text)
+          ) {
             buttons.source += 1
             if (buttonKept(node.line, node.button)) buttons.built += 1
             break
           }
           // A button that goes nowhere a page can send a visitor (a film's play button its script runs) is kept as its words.
-          if (block?.kind !== 'link' || !/^(?:https?:|mailto:|tel:)/i.test(block.href)) {
+          if (
+            block?.kind !== 'link' ||
+            !/^(?:https?:|mailto:|tel:)/i.test(block.href)
+          ) {
             buttons.unlinked += 1
             break
           }
@@ -1012,24 +1265,60 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
           const cells = node.cells.filter((cell) => linesOf(cell.nodes).length)
           if (cells.length < 2 || isByline(source, cells)) break
           rows.source += 1
-          const units = unitsOn(built, placement, cells.map((cell) => linesOf(cell.nodes)), root)
-          const parents = new Set(units.map((unit) => (unit.element ? built.parent.get(unit.element) : null)))
+          const units = unitsOn(
+            built,
+            placement,
+            cells.map((cell) => linesOf(cell.nodes)),
+            root,
+          )
+          const parents = new Set(
+            units.map((unit) =>
+              unit.element ? built.parent.get(unit.element) : null,
+            ),
+          )
           const parent = parents.size === 1 ? [...parents][0] : null
-          if (units.every((unit) => unit.whole && unit.element) && parent && setsSideBySide(built.node(parent))) rows.built += 1
+          if (
+            units.every((unit) => unit.whole && unit.element) &&
+            parent &&
+            setsSideBySide(built.node(parent))
+          )
+            rows.built += 1
           break
         }
         case 'group': {
           // Improved, a link every item repeats is shown once after the group (AGL-4152): no item holds it.
-          const shared = finish === 'improve' ? sharedLinkLines(source.blocks, node.items) : null
-          const units = unitsOn(built, placement, node.items.map((item) => (shared ? item.lines.filter((line) => !shared.has(line)) : item.lines)), root)
+          const shared =
+            finish === 'improve'
+              ? sharedLinkLines(source.blocks, node.items)
+              : null
+          const units = unitsOn(
+            built,
+            placement,
+            node.items.map((item) =>
+              shared
+                ? item.lines.filter((line) => !shared.has(line))
+                : item.lines,
+            ),
+            root,
+          )
           // Each item's own icon and its bullets' marks, in the element that is the item.
           node.items.forEach((item, at) => {
             // Its corner arrow too (AGL-4138): a card's "↗" is an icon of its own.
-            const wanted = (item.icon !== undefined ? 1 : 0) + (item.mark !== undefined ? 1 : 0) + (item.listIcon !== undefined ? (item.list?.length ?? 0) : 0)
+            const wanted =
+              (item.icon !== undefined ? 1 : 0) +
+              (item.mark !== undefined ? 1 : 0) +
+              (item.listIcon !== undefined ? (item.list?.length ?? 0) : 0)
             if (!wanted) return
             icons.source += wanted
             const element = units[at]?.element
-            if (element) icons.built += Math.min(wanted, built.under(element).filter((id) => built.node(id)?.componentId === 'icon').length)
+            if (element)
+              icons.built += Math.min(
+                wanted,
+                built
+                  .under(element)
+                  .filter((id) => built.node(id)?.componentId === 'icon')
+                  .length,
+              )
           })
           // Lines that only share a shape are drawn as their lines: no group to keep.
           if (node.group === 'text') break
@@ -1037,9 +1326,15 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
           const judged = units.filter((unit) => unit.measured && unit.element)
           if (finished && boxesKept(node) && judged.length) {
             boxed.source += 1
-            if (judged.every((unit) => boxedOn(built, unit) === node.boxed)) boxed.built += 1
+            if (judged.every((unit) => boxedOn(built, unit) === node.boxed))
+              boxed.built += 1
           }
-          const entry = (groups[node.group] ??= { groups: 0, groupsKept: 0, items: 0, itemsKept: 0 })
+          const entry = (groups[node.group] ??= {
+            groups: 0,
+            groupsKept: 0,
+            items: 0,
+            itemsKept: 0,
+          })
           let kept = 0
           let measured = 0
           node.items.forEach((item, at) => {
@@ -1056,12 +1351,30 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
         }
         case 'table': {
           tables.source += 1
-          const cells = node.rows.flatMap((row) => row.cells.map((cell) => wordLine(cell.lines.map((ref) => clean((source.blocks[ref] as { text?: string })?.text)).join(' '))).filter(Boolean))
+          const cells = node.rows.flatMap((row) =>
+            row.cells
+              .map((cell) =>
+                wordLine(
+                  cell.lines
+                    .map((ref) =>
+                      clean((source.blocks[ref] as { text?: string })?.text),
+                    )
+                    .join(' '),
+                ),
+              )
+              .filter(Boolean),
+          )
           // The theme's Table element, every cell of the source's in it.
           const kept = built.under(root ?? tree.rootId).some((id) => {
             const drawnAs = built.node(id)
-            if (drawnAs?.componentId !== 'dataTable' || typeof drawnAs.props?.['rows'] !== 'string') return false
-            const shown = new Set(tableCells(drawnAs.props['rows']).map(wordLine))
+            if (
+              drawnAs?.componentId !== 'dataTable' ||
+              typeof drawnAs.props?.['rows'] !== 'string'
+            )
+              return false
+            const shown = new Set(
+              tableCells(drawnAs.props['rows']).map(wordLine),
+            )
             return cells.every((cell) => shown.has(cell))
           })
           if (kept) tables.built += 1
@@ -1069,13 +1382,20 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
         }
         case 'tabs': {
           tabs.source += 1
-          const labels = node.tabs.flatMap((tab) => (tab.label !== null ? [tab.label] : []))
+          const labels = node.tabs.flatMap((tab) =>
+            tab.label !== null ? [tab.label] : [],
+          )
           const found = placement.nodesOf(labels)
           if (!found.whole || !found.nodes.length) break
           // The Tabs element names every tab itself; a strip draws each label as an element of its own, side by side.
           const one = new Set(found.nodes).size === 1
           const strip = built.common(found.nodes)
-          if (one ? built.node(found.nodes[0] as string)?.componentId === 'muiTabs' : !!strip && setsSideBySide(built.node(strip))) tabs.built += 1
+          if (
+            one
+              ? built.node(found.nodes[0] as string)?.componentId === 'muiTabs'
+              : !!strip && setsSideBySide(built.node(strip))
+          )
+            tabs.built += 1
           break
         }
         default:
@@ -1089,13 +1409,30 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
   const headings = headingsScore(source, built, placement)
   const widths = widthsScore(sections, built, roots)
   const forms = ratioBoth(
-    sections.reduce((total, section) => total + layoutNodes(section.nodes).filter((node) => node.kind === 'form').length, 0),
+    sections.reduce(
+      (total, section) =>
+        total +
+        layoutNodes(section.nodes).filter((node) => node.kind === 'form')
+          .length,
+      0,
+    ),
     built.order.filter((id) => built.node(id)?.componentId === 'form').length,
   )
   // A film playing behind a section's words is drawn as its poster there, and is the pictures' to count.
   const videos = ratioKept(
     sections.reduce(
-      (total, section) => total + layoutNodes(section.nodes).reduce((count, node) => count + (node.kind === 'video' ? 1 : node.kind === 'group' ? node.items.filter((item) => item.video !== undefined).length : 0), 0),
+      (total, section) =>
+        total +
+        layoutNodes(section.nodes).reduce(
+          (count, node) =>
+            count +
+            (node.kind === 'video'
+              ? 1
+              : node.kind === 'group'
+                ? node.items.filter((item) => item.video !== undefined).length
+                : 0),
+          0,
+        ),
       0,
     ),
     drawnFilms,
@@ -1108,7 +1445,13 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
     widths,
     rows: ratioKept(rows.source, rows.built),
     groups: Object.fromEntries(
-      Object.entries(groups).map(([kind, entry]) => [kind, { groups: ratioKept(entry.groups, entry.groupsKept), items: ratioKept(entry.items, entry.itemsKept) }]),
+      Object.entries(groups).map(([kind, entry]) => [
+        kind,
+        {
+          groups: ratioKept(entry.groups, entry.groupsKept),
+          items: ratioKept(entry.items, entry.itemsKept),
+        },
+      ]),
     ),
     tables: ratioKept(tables.source, tables.built),
     tabs: ratioKept(tabs.source, tabs.built),
@@ -1117,7 +1460,10 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
     ...galleriesScore(source, built, placement),
     framing,
     icons: { ...ratioKept(icons.source, icons.built), lone: icons.lone },
-    buttons: { ...ratioKept(buttons.source, buttons.built), unlinked: buttons.unlinked },
+    buttons: {
+      ...ratioKept(buttons.source, buttons.built),
+      unlinked: buttons.unlinked,
+    },
     headings,
     forms,
     videos,
@@ -1125,29 +1471,67 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
   if (!finished) return { ...lowestOf(pageMeasures(report)), ...report }
 
   // The measures a finish adds (AGL-4152).
-  if (pinned) report.buttons = { ...report.buttons, case: ratioKept(buttonCase.source, buttonCase.built), fill: ratioKept(buttonFill.source, buttonFill.built), outline: ratioKept(buttonOutline.source, buttonOutline.built) }
+  if (pinned)
+    report.buttons = {
+      ...report.buttons,
+      case: ratioKept(buttonCase.source, buttonCase.built),
+      fill: ratioKept(buttonFill.source, buttonFill.built),
+      outline: ratioKept(buttonOutline.source, buttonOutline.built),
+    }
   const added: Partial<SiteImportPageFidelity> = {
     scoredAs: { finish, words: improvedWords ? 'improved' : 'kept' },
-    free: finish === 'improve' ? [...SITE_IMPORT_IMPROVE_FREE, ...(improvedWords ? ['words'] : [])] : improvedWords ? ['words'] : [],
+    free:
+      finish === 'improve'
+        ? [...SITE_IMPORT_IMPROVE_FREE, ...(improvedWords ? ['words'] : [])]
+        : improvedWords
+          ? ['words']
+          : [],
     align: alignScore(source, built, placement, pinned),
     boxed: ratioKept(boxed.source, boxed.built),
     ground: groundScore(sections, look, roots, pinned),
     ...(pinned ? { darkGround: darkGroundScore(sections, look, roots) } : {}),
     measure: measureScore(source, built, placement, roots),
     readable: look.readable(drawnSections),
-    ...(finish === 'improve' ? { design: designScore(source, built, placement, look, roots, drawnSections) } : {}),
+    ...(finish === 'improve'
+      ? {
+          design: designScore(
+            source,
+            built,
+            placement,
+            look,
+            roots,
+            drawnSections,
+          ),
+        }
+      : {}),
     ...(improvedWords ? wordingScores(source, built, placement) : {}),
   }
   const full = { ...report, ...added }
   if (options.improved && finish === 'improve') {
-    const improved = improvedScore(source, built, look, drawnSections, options.improved)
-    const ledger = Object.entries(improved.ledger) as Array<[string, SiteImportImprovedLine]>
+    const improved = improvedScore(
+      source,
+      built,
+      look,
+      drawnSections,
+      options.improved,
+    )
+    const ledger = Object.entries(improved.ledger) as Array<
+      [string, SiteImportImprovedLine]
+    >
     // A redesign plans its own sections: what it scores on is what its ledger held, and the lowest of those.
-    const lowest = ledger.reduce<[string, number] | null>((least, [name, line]) => {
-      const ratio = line.of > 0 ? Math.min(1, line.done / line.of) : 1
-      return !line.ok && (!least || ratio < least[1]) ? [name, ratio] : least
-    }, null)
-    return { ...full, improved, score: lowest ? lowest[1] : 1, lowest: lowest ? lowest[0] : null }
+    const lowest = ledger.reduce<[string, number] | null>(
+      (least, [name, line]) => {
+        const ratio = line.of > 0 ? Math.min(1, line.done / line.of) : 1
+        return !line.ok && (!least || ratio < least[1]) ? [name, ratio] : least
+      },
+      null,
+    )
+    return {
+      ...full,
+      improved,
+      score: lowest ? lowest[1] : 1,
+      lowest: lowest ? lowest[0] : null,
+    }
   }
   return { ...lowestOf(finishMeasures(full)), ...full }
 }
@@ -1158,7 +1542,9 @@ export function siteImportFidelity(source: SiteImportFidelitySource, tree: SiteI
  * content alone, its words among it unless they were improved; everything it
  * may change prints as free.
  */
-function finishMeasures(report: Omit<SiteImportPageFidelity, 'score' | 'lowest'>): Array<[string, SiteImportFidelityCount]> {
+function finishMeasures(
+  report: Omit<SiteImportPageFidelity, 'score' | 'lowest'>,
+): Array<[string, SiteImportFidelityCount]> {
   const free = new Set(report.free ?? [])
   const pins: Array<[string, SiteImportFidelityCount | undefined]> = [
     ['align', report.align],
@@ -1167,8 +1553,17 @@ function finishMeasures(report: Omit<SiteImportPageFidelity, 'score' | 'lowest'>
     ['darkGround', report.darkGround],
     ['measure', report.measure],
   ]
-  const words: Array<[string, SiteImportFidelityCount]> = report.scoredAs?.finish === 'improve' && !free.has('words') ? [['words', report.words]] : []
-  return [...words, ...pageMeasures(report), ...pins.filter((entry): entry is [string, SiteImportFidelityCount] => !!entry[1])].filter(([name]) => !free.has(name))
+  const words: Array<[string, SiteImportFidelityCount]> =
+    report.scoredAs?.finish === 'improve' && !free.has('words')
+      ? [['words', report.words]]
+      : []
+  return [
+    ...words,
+    ...pageMeasures(report),
+    ...pins.filter(
+      (entry): entry is [string, SiteImportFidelityCount] => !!entry[1],
+    ),
+  ].filter(([name]) => !free.has(name))
 }
 
 /**
@@ -1177,38 +1572,83 @@ function finishMeasures(report: Omit<SiteImportPageFidelity, 'score' | 'lowest'>
  * every fact and every line, and each line's meaning at the floor; under
  * Keep my site, its alignment, boxes, grounds in both schemes and measure.
  */
-export function siteImportFidelityHolds(report: SiteImportPageFidelity, threshold = SITE_IMPORT_FIDELITY_THRESHOLD): boolean {
+export function siteImportFidelityHolds(
+  report: SiteImportPageFidelity,
+  threshold = SITE_IMPORT_FIDELITY_THRESHOLD,
+): boolean {
   if (report.improved) return report.improved.holds
   if (report.score < threshold) return false
   const improvedWords = report.scoredAs?.words === 'improved'
-  if (improvedWords ? report.facts?.ratio !== 1 || report.lines?.ratio !== 1 || (report.meaning?.below ?? 0) > 0 : report.words.ratio !== 1) return false
+  if (
+    improvedWords
+      ? report.facts?.ratio !== 1 ||
+        report.lines?.ratio !== 1 ||
+        (report.meaning?.below ?? 0) > 0
+      : report.words.ratio !== 1
+  )
+    return false
   if (report.scoredAs?.finish !== 'keep') return true
-  return [report.align, report.boxed, report.ground, report.darkGround, report.measure].every((count) => !count || count.ratio === 1)
+  return [
+    report.align,
+    report.boxed,
+    report.ground,
+    report.darkGround,
+    report.measure,
+  ].every((count) => !count || count.ratio === 1)
 }
 
 /** Whether an item of a group is kept: its own element, every line of it found, and the parts its kind and source say it has. */
-function itemKept(built: Built, kind: SiteImportGroupKind, item: SiteImportLayoutItem, unit: Unit): boolean {
+function itemKept(
+  built: Built,
+  kind: SiteImportGroupKind,
+  item: SiteImportLayoutItem,
+  unit: Unit,
+): boolean {
   if (!unit.whole || !unit.element) return false
   const element = unit.element
   // A question opens its answer: the theme's accordion.
-  if (kind === 'faq' && !built.has(element, (node) => node.componentId === 'muiAccordion')) return false
+  if (
+    kind === 'faq' &&
+    !built.has(element, (node) => node.componentId === 'muiAccordion')
+  )
+    return false
   // An item the source made a link as a whole still goes there.
   if (item.to && !built.has(element, hasDestination)) return false
   // A picture of the item's own, where the library's copy is not known to the score; a film's poster is its Video element's (AGL-4140).
-  if (item.image !== undefined && !built.has(element, (node) => node.componentId === 'image' || node.componentId === 'video')) return false
+  if (
+    item.image !== undefined &&
+    !built.has(
+      element,
+      (node) => node.componentId === 'image' || node.componentId === 'video',
+    )
+  )
+    return false
   return true
 }
 
 /** The link lines of a group's items that every item carries, the same words to the same place: one call to action, said on each. */
-function sharedLinkLines(blocks: readonly SiteImportBlock[], items: ReadonlyArray<{ lines: readonly SiteImportLineRef[] }>): Set<SiteImportLineRef> {
+function sharedLinkLines(
+  blocks: readonly SiteImportBlock[],
+  items: ReadonlyArray<{ lines: readonly SiteImportLineRef[] }>,
+): Set<SiteImportLineRef> {
   if (items.length < 2) return new Set()
   const keyOf = (line: SiteImportLineRef) => {
     const block = blocks[line]
-    return block?.kind === 'link' && !block.inline ? `${wordLine(clean(block.text)).toLowerCase()}\u0000${block.href}` : null
+    return block?.kind === 'link' && !block.inline
+      ? `${wordLine(clean(block.text)).toLowerCase()}\u0000${block.href}`
+      : null
   }
-  const each = items.map((item) => new Set(item.lines.flatMap((line) => keyOf(line) ?? [])))
-  const common = [...(each[0] ?? [])].filter((key) => each.every((keys) => keys.has(key)))
-  return new Set(items.flatMap((item) => item.lines.filter((line) => common.includes(keyOf(line) ?? ''))))
+  const each = items.map(
+    (item) => new Set(item.lines.flatMap((line) => keyOf(line) ?? [])),
+  )
+  const common = [...(each[0] ?? [])].filter((key) =>
+    each.every((keys) => keys.has(key)),
+  )
+  return new Set(
+    items.flatMap((item) =>
+      item.lines.filter((line) => common.includes(keyOf(line) ?? '')),
+    ),
+  )
 }
 
 /**
@@ -1217,10 +1657,15 @@ function sharedLinkLines(blocks: readonly SiteImportBlock[], items: ReadonlyArra
  * same place may be shown once or as often as it is said (AGL-4152): the page
  * shows each call to action once, and a page drawn as before is no worse.
  */
-function wordsScore(source: SiteImportFidelitySource, built: Built, improve = false): SiteImportFidelityWords {
+function wordsScore(
+  source: SiteImportFidelitySource,
+  built: Built,
+  improve = false,
+): SiteImportFidelityWords {
   const tally = (lines: readonly string[]) => {
     const counts = new Map<string, number>()
-    for (const word of lines.flatMap(wordsOf)) counts.set(word, (counts.get(word) ?? 0) + 1)
+    for (const word of lines.flatMap(wordsOf))
+      counts.set(word, (counts.get(word) ?? 0) + 1)
     return counts
   }
   const links = new Set<string>()
@@ -1231,12 +1676,22 @@ function wordsScore(source: SiteImportFidelitySource, built: Built, improve = fa
     links.add(key)
     return false
   }
-  const lines = source.blocks.filter((block): block is Exclude<SiteImportBlock, { kind: 'image' }> => isLine(block) && block.kind !== 'image')
+  const lines = source.blocks.filter(
+    (block): block is Exclude<SiteImportBlock, { kind: 'image' }> =>
+      isLine(block) && block.kind !== 'image',
+  )
   const full = tally(lines.map((block) => clean(block.text)))
-  const least = tally(lines.filter((block) => !again(block)).map((block) => clean(block.text)))
+  const least = tally(
+    lines.filter((block) => !again(block)).map((block) => clean(block.text)),
+  )
   const shown = tally(built.pieces.map((piece) => piece.text))
   // Each word as often as the page shows it, between the least the source asks and all it says.
-  const said = new Map([...full].map(([word, count]) => [word, Math.min(count, Math.max(least.get(word) ?? 0, shown.get(word) ?? 0))]))
+  const said = new Map(
+    [...full].map(([word, count]) => [
+      word,
+      Math.min(count, Math.max(least.get(word) ?? 0, shown.get(word) ?? 0)),
+    ]),
+  )
   let sourceWords = 0
   let builtWords = 0
   let both = 0
@@ -1263,30 +1718,63 @@ function wordsScore(source: SiteImportFidelitySource, built: Built, improve = fa
   }
 }
 
-const WIDTH_RANK: Readonly<Record<SiteImportWidth, number>> = { sm: 0, md: 1, lg: 2, xl: 3 }
+const WIDTH_RANK: Readonly<Record<SiteImportWidth, number>> = {
+  sm: 0,
+  md: 1,
+  lg: 2,
+  xl: 3,
+}
 
 /** The sections as wide as their source: each section's Container against the cap the source sets; a section nothing caps runs the whole page. */
-function widthsScore(sections: readonly SiteImportLayoutSection[], built: Built, roots: ReadonlyArray<string | null>): SiteImportFidelityCount {
+function widthsScore(
+  sections: readonly SiteImportLayoutSection[],
+  built: Built,
+  roots: ReadonlyArray<string | null>,
+): SiteImportFidelityCount {
   const kept = sections.filter((section, index) => {
     const wanted = siteImportWidthOf(section.width)
     if (!wanted) return true
     const root = roots[index]
     if (!root) return false
-    const container = built.under(root).find((id) => built.node(id)?.componentId === 'muiContainer' && !built.node(id)?.props?.['disableGutters'])
+    const container = built
+      .under(root)
+      .find(
+        (id) =>
+          built.node(id)?.componentId === 'muiContainer' &&
+          !built.node(id)?.props?.['disableGutters'],
+      )
     if (!container) return true
-    const rank = WIDTH_RANK[built.node(container)?.props?.['maxWidth'] as SiteImportWidth]
+    const rank =
+      WIDTH_RANK[built.node(container)?.props?.['maxWidth'] as SiteImportWidth]
     return rank !== undefined && rank >= WIDTH_RANK[wanted]
   })
   return ratioKept(sections.length, kept.length)
 }
 
 /** The pictures: placed where the library's copies are known, else counted. */
-function picturesScore(source: SiteImportFidelitySource, built: Built, placement: Placement): SiteImportFidelityCount {
-  const refs = source.layout.sections.flatMap((section) => section.lines).filter((ref) => source.blocks[ref]?.kind === 'image' && isLine(source.blocks[ref]))
+function picturesScore(
+  source: SiteImportFidelitySource,
+  built: Built,
+  placement: Placement,
+): SiteImportFidelityCount {
+  const refs = source.layout.sections
+    .flatMap((section) => section.lines)
+    .filter(
+      (ref) =>
+        source.blocks[ref]?.kind === 'image' && isLine(source.blocks[ref]),
+    )
   // A film's poster is a picture drawn, on its Video element (AGL-4140).
-  const drawn = built.order.filter((id) => built.node(id)?.componentId === 'image' || (built.node(id)?.componentId === 'video' && !!clean(built.node(id)?.props?.['poster']))).length
+  const drawn = built.order.filter(
+    (id) =>
+      built.node(id)?.componentId === 'image' ||
+      (built.node(id)?.componentId === 'video' &&
+        !!clean(built.node(id)?.props?.['poster'])),
+  ).length
   if (!source.photos?.length) return ratioBoth(refs.length, drawn)
-  return ratioKept(refs.length, refs.filter((ref) => placement.of.has(ref)).length)
+  return ratioKept(
+    refs.length,
+    refs.filter((ref) => placement.of.has(ref)).length,
+  )
 }
 
 /**
@@ -1294,8 +1782,17 @@ function picturesScore(source: SiteImportFidelitySource, built: Built, placement
  * placed, each an Image cropped to fill its cell, in a row of columns. A photo
  * drawn as a mark (fitted whole, as small as a logo) is a gallery lost.
  */
-function galleriesScore(source: SiteImportFidelitySource, built: Built, placement: Placement): Pick<SiteImportPageFidelity, 'galleries'> {
-  const galleries = source.layout.sections.flatMap((section) => layoutNodes(section.nodes)).filter((node): node is SiteImportLayoutGroup => node.kind === 'group' && !!node.gallery)
+function galleriesScore(
+  source: SiteImportFidelitySource,
+  built: Built,
+  placement: Placement,
+): Pick<SiteImportPageFidelity, 'galleries'> {
+  const galleries = source.layout.sections
+    .flatMap((section) => layoutNodes(section.nodes))
+    .filter(
+      (node): node is SiteImportLayoutGroup =>
+        node.kind === 'group' && !!node.gallery,
+    )
   if (!galleries.length) return {}
   const drawn = galleries.filter((group) =>
     group.items.every((item) =>
@@ -1303,8 +1800,15 @@ function galleriesScore(source: SiteImportFidelitySource, built: Built, placemen
         if (source.blocks[ref]?.kind !== 'image') return true
         const id = placement.of.get(ref)
         const node = id ? built.node(id) : undefined
-        if (node?.componentId !== 'image' || node.props?.['objectFit'] === 'contain' || node.props?.['width'] === 'auto') return false
-        return built.ancestry(id as string).some((at) => setsSideBySide(built.node(at)))
+        if (
+          node?.componentId !== 'image' ||
+          node.props?.['objectFit'] === 'contain' ||
+          node.props?.['width'] === 'auto'
+        )
+          return false
+        return built
+          .ancestry(id as string)
+          .some((at) => setsSideBySide(built.node(at)))
       }),
     ),
   )
@@ -1312,12 +1816,22 @@ function galleriesScore(source: SiteImportFidelitySource, built: Built, placemen
 }
 
 /** What a visitor of the source cannot see and a visitor of the build can (AGL-4152): a hidden picture, or a line that is only a screen reader's label. */
-function concealedScore(source: SiteImportFidelitySource, built: Built): SiteImportFidelityCount {
+function concealedScore(
+  source: SiteImportFidelitySource,
+  built: Built,
+): SiteImportFidelityCount {
   const pictures = new Set(source.concealed?.pictures ?? [])
-  const copies = new Set((source.photos ?? []).flatMap((photo) => (photo.from && pictures.has(photo.from) ? [photo.src] : [])))
+  const copies = new Set(
+    (source.photos ?? []).flatMap((photo) =>
+      photo.from && pictures.has(photo.from) ? [photo.src] : [],
+    ),
+  )
   const drawn = built.order.filter((id) => {
     const src = clean(built.node(id)?.props?.['src'])
-    return built.node(id)?.componentId === 'image' && (pictures.has(src) || copies.has(src))
+    return (
+      built.node(id)?.componentId === 'image' &&
+      (pictures.has(src) || copies.has(src))
+    )
   }).length
   const labels = new Set((source.concealed?.words ?? []).map(wordLine))
   const said = built.pieces.filter((piece) => labels.has(piece.key)).length
@@ -1342,7 +1856,8 @@ function shapeOf(value: unknown): number | null {
 /** A height in px as the compiler writes one: "320px", 320. */
 function heightOf(value: unknown): number | null {
   if (typeof value === 'number') return value > 1 ? value : null
-  const match = typeof value === 'string' ? /^\s*(\d*\.?\d+)px\s*$/.exec(value) : null
+  const match =
+    typeof value === 'string' ? /^\s*(\d*\.?\d+)px\s*$/.exec(value) : null
   return match ? Number(match[1]) : null
 }
 
@@ -1351,23 +1866,41 @@ function heightOf(value: unknown): number | null {
  * the frame holding it alone that sets one; `whole` where nothing frames it, or
  * it is fitted inside its box (`contain`), which cuts nothing.
  */
-function builtFrame(built: Built, id: string): { ratios: number[]; height: number | null } | 'whole' {
+function builtFrame(
+  built: Built,
+  id: string,
+): { ratios: number[]; height: number | null } | 'whole' {
   const image = built.node(id)
   if (!image) return 'whole'
   if (image.props?.['objectFit'] === 'contain') return 'whole'
-  const read = (node: SiteImportFidelityNode | undefined): { ratios: number[]; height: number | null } | null => {
+  const read = (
+    node: SiteImportFidelityNode | undefined,
+  ): { ratios: number[]; height: number | null } | null => {
     const sx = node?.sx ?? {}
-    const height = heightOf(node?.componentId === 'image' ? (node.props?.['height'] ?? sx['height']) : sx['height'])
+    const height = heightOf(
+      node?.componentId === 'image'
+        ? (node.props?.['height'] ?? sx['height'])
+        : sx['height'],
+    )
     if (height !== null) return { ratios: [], height }
     const ratio = sx['aspectRatio']
-    const ratios = (ratio && typeof ratio === 'object' ? Object.values(ratio) : [ratio]).map(shapeOf).filter((value): value is number => value !== null)
+    const ratios = (
+      ratio && typeof ratio === 'object' ? Object.values(ratio) : [ratio]
+    )
+      .map(shapeOf)
+      .filter((value): value is number => value !== null)
     return ratios.length ? { ratios, height: null } : null
   }
   const own = read(image)
   if (own) return own
   const frame = built.parent.get(id)
   const holder = frame ? built.node(frame) : undefined
-  if (holder && built.children(frame as string).length === 1 && holder.componentId === 'muiBox') return read(holder) ?? 'whole'
+  if (
+    holder &&
+    built.children(frame as string).length === 1 &&
+    holder.componentId === 'muiBox'
+  )
+    return read(holder) ?? 'whole'
   return 'whole'
 }
 
@@ -1379,12 +1912,21 @@ function builtFrame(built: Built, id: string): { ratios: number[]; height: numbe
  * shown in no box. A round portrait and the picture a section lays behind
  * its words are not scored, nor a picture whose own shape is not known.
  */
-function framingScore(source: SiteImportFidelitySource, built: Built, placement: Placement): SiteImportFidelityCount {
+function framingScore(
+  source: SiteImportFidelitySource,
+  built: Built,
+  placement: Placement,
+): SiteImportFidelityCount {
   const sizes = new Map<string, number>()
-  for (const photo of source.photos ?? []) if (photo.from && photo.width && photo.height) sizes.set(photo.from, photo.width / photo.height)
+  for (const photo of source.photos ?? [])
+    if (photo.from && photo.width && photo.height)
+      sizes.set(photo.from, photo.width / photo.height)
   let measured = 0
   let kept = 0
-  const score = (ref: SiteImportLineRef, fit: SiteImportPictureFit | undefined) => {
+  const score = (
+    ref: SiteImportLineRef,
+    fit: SiteImportPictureFit | undefined,
+  ) => {
     const block = source.blocks[ref]
     const id = placement.of.get(ref)
     if (block?.kind !== 'image' || !id || (fit?.radius ?? 0) >= 999) return
@@ -1392,7 +1934,12 @@ function framingScore(source: SiteImportFidelitySource, built: Built, placement:
     const own = sizes.get(block.url) ?? fit?.ratio ?? null
     if (fit?.height) {
       measured += 1
-      if (frame !== 'whole' && frame.height !== null && Math.abs(frame.height / fit.height - 1) <= SAME_SHAPE) kept += 1
+      if (
+        frame !== 'whole' &&
+        frame.height !== null &&
+        Math.abs(frame.height / fit.height - 1) <= SAME_SHAPE
+      )
+        kept += 1
       return
     }
     const wanted = fit?.box ?? own
@@ -1402,43 +1949,84 @@ function framingScore(source: SiteImportFidelitySource, built: Built, placement:
       if (!fit?.box) kept += 1
       return
     }
-    if (frame.height === null && frame.ratios.every((ratio) => Math.abs(ratio / wanted - 1) <= SAME_SHAPE)) kept += 1
+    if (
+      frame.height === null &&
+      frame.ratios.every((ratio) => Math.abs(ratio / wanted - 1) <= SAME_SHAPE)
+    )
+      kept += 1
   }
   for (const section of source.layout.sections) {
     // A picture the section lays behind its words fills the band, as it is meant to.
-    const behind = section.hero?.picture === 'behind' ? section.lines.find((ref) => source.blocks[ref]?.kind === 'image') : undefined
+    const behind =
+      section.hero?.picture === 'behind'
+        ? section.lines.find((ref) => source.blocks[ref]?.kind === 'image')
+        : undefined
     for (const node of layoutNodes(section.nodes)) {
-      if (node.kind === 'picture' && node.line !== behind) score(node.line, node.fit)
+      if (node.kind === 'picture' && node.line !== behind)
+        score(node.line, node.fit)
       // A film's poster is framed as any picture is (AGL-4140).
-      if (node.kind === 'video' && node.poster !== undefined && node.poster !== behind) score(node.poster, node.fit)
+      if (
+        node.kind === 'video' &&
+        node.poster !== undefined &&
+        node.poster !== behind
+      )
+        score(node.poster, node.fit)
       // A gallery crops its photos to one shape so its rows line up (AGL-4152): `galleries` holds it.
-      if (node.kind === 'group' && !node.gallery) for (const item of node.items) if (item.image !== undefined && item.image !== behind) score(item.image, item.imageFit)
+      if (node.kind === 'group' && !node.gallery)
+        for (const item of node.items)
+          if (item.image !== undefined && item.image !== behind)
+            score(item.image, item.imageFit)
     }
   }
   return ratioKept(measured, kept)
 }
 
 /** The headings: each of the source's drawn as a heading (an `h1`–`h6`, or the question of an accordion). */
-function headingsScore(source: SiteImportFidelitySource, built: Built, placement: Placement): SiteImportFidelityCount {
+function headingsScore(
+  source: SiteImportFidelitySource,
+  built: Built,
+  placement: Placement,
+): SiteImportFidelityCount {
   // Words a source sets in a heading and groups as a customer's quote are that quote (AGL-4152), no part of the page's outline.
-  const quoted = new Set(source.layout.sections.flatMap((section) => layoutNodes(section.nodes)).flatMap((node) => (node.kind === 'group' && node.group === 'quotes' ? node.items.flatMap((item) => item.lines) : [])))
-  const refs = source.layout.sections.flatMap((section: SiteImportLayoutSection) => section.lines).filter((ref) => source.blocks[ref]?.kind === 'heading' && !quoted.has(ref))
+  const quoted = new Set(
+    source.layout.sections
+      .flatMap((section) => layoutNodes(section.nodes))
+      .flatMap((node) =>
+        node.kind === 'group' && node.group === 'quotes'
+          ? node.items.flatMap((item) => item.lines)
+          : [],
+      ),
+  )
+  const refs = source.layout.sections
+    .flatMap((section: SiteImportLayoutSection) => section.lines)
+    .filter((ref) => source.blocks[ref]?.kind === 'heading' && !quoted.has(ref))
   const kept = refs.filter((ref) => {
     const id = placement.of.get(ref)
     const node = id ? built.node(id) : undefined
-    return !!node && (/^h[1-6]$/.test(String(node.props?.['component'] ?? '')) || node.componentId === 'muiAccordionSummary')
+    return (
+      !!node &&
+      (/^h[1-6]$/.test(String(node.props?.['component'] ?? '')) ||
+        node.componentId === 'muiAccordionSummary')
+    )
   })
   return ratioKept(refs.length, kept.length)
 }
 
 /** Every structural measure of a page by name, groups by kind. */
-function pageMeasures(report: Omit<SiteImportPageFidelity, 'score' | 'lowest'>): Array<[string, SiteImportFidelityCount]> {
+function pageMeasures(
+  report: Omit<SiteImportPageFidelity, 'score' | 'lowest'>,
+): Array<[string, SiteImportFidelityCount]> {
   return [
     ['sections', report.sections],
     ['bands', report.bands],
     ['widths', report.widths],
     ['rows', report.rows],
-    ...Object.entries(report.groups).map(([kind, entry]): [string, SiteImportFidelityCount] => [`${kind} items`, entry.items]),
+    ...Object.entries(report.groups).map(
+      ([kind, entry]): [string, SiteImportFidelityCount] => [
+        `${kind} items`,
+        entry.items,
+      ],
+    ),
     ['tables', report.tables],
     ['tabs', report.tabs],
     ['pictures', report.pictures],
@@ -1448,13 +2036,20 @@ function pageMeasures(report: Omit<SiteImportPageFidelity, 'score' | 'lowest'>):
     ['headings', report.headings],
     ['forms', report.forms],
     ['videos', report.videos],
-    ...(report.concealed ? [['concealed', report.concealed] as [string, SiteImportFidelityCount]] : []),
-    ...(report.galleries ? [['galleries', report.galleries] as [string, SiteImportFidelityCount]] : []),
+    ...(report.concealed
+      ? [['concealed', report.concealed] as [string, SiteImportFidelityCount]]
+      : []),
+    ...(report.galleries
+      ? [['galleries', report.galleries] as [string, SiteImportFidelityCount]]
+      : []),
   ]
 }
 
 /** The score: the lowest ratio, and the measure it came from. */
-function lowestOf(measures: ReadonlyArray<[string, SiteImportFidelityCount]>): { score: number; lowest: string | null } {
+function lowestOf(measures: ReadonlyArray<[string, SiteImportFidelityCount]>): {
+  score: number
+  lowest: string | null
+} {
   let score = 1
   let lowest: string | null = null
   for (const [name, count] of measures) {
@@ -1470,32 +2065,52 @@ function lowestOf(measures: ReadonlyArray<[string, SiteImportFidelityCount]>): {
  * The finish: the look kept, the design improved, the words held (AGL-4152)
  *-----------------------------------------*/
 
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
 
 /** What a path of keys holds in a record, or `undefined`. */
-const pathIn = (value: unknown, ...keys: string[]): unknown => keys.reduce<unknown>((node, key) => (isRecord(node) ? node[key] : undefined), value)
+const pathIn = (value: unknown, ...keys: string[]): unknown =>
+  keys.reduce<unknown>(
+    (node, key) => (isRecord(node) ? node[key] : undefined),
+    value,
+  )
 
 const round = (value: number) => Math.round(value * 1000) / 1000
 
 /** A color as `#rrggbb`, or `null` for anything else. */
 function hexOf(value: unknown): string | null {
-  if (typeof value !== 'string' || !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(value.trim())) return null
+  if (
+    typeof value !== 'string' ||
+    !/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(value.trim())
+  )
+    return null
   const hex = value.trim().toLowerCase()
-  return hex.length === 4 ? `#${[...hex.slice(1)].map((digit) => digit + digit).join('')}` : hex
+  return hex.length === 4
+    ? `#${[...hex.slice(1)].map((digit) => digit + digit).join('')}`
+    : hex
 }
 
 /** How far apart two `#rrggbb` colors sit in OKLab (AGL-4152). */
 export function siteImportOklabDelta(a: string, b: string): number {
   const one = aiHexOklch(a)
   const two = aiHexOklch(b)
-  const at = (color: { C: number; h: number }, part: 'a' | 'b') => color.C * (part === 'a' ? Math.cos((color.h * Math.PI) / 180) : Math.sin((color.h * Math.PI) / 180))
-  return Math.hypot(one.L - two.L, at(one, 'a') - at(two, 'a'), at(one, 'b') - at(two, 'b'))
+  const at = (color: { C: number; h: number }, part: 'a' | 'b') =>
+    color.C *
+    (part === 'a'
+      ? Math.cos((color.h * Math.PI) / 180)
+      : Math.sin((color.h * Math.PI) / 180))
+  return Math.hypot(
+    one.L - two.L,
+    at(one, 'a') - at(two, 'a'),
+    at(one, 'b') - at(two, 'b'),
+  )
 }
 
 /** The contrast an ink and its ground read at: the doctrine's 4.5:1. */
 const READS_AT = 4.5
 
-const reads = (ink: string, ground: string) => (contrastRatio(ink, ground) ?? 0) >= READS_AT
+const reads = (ink: string, ground: string) =>
+  (contrastRatio(ink, ground) ?? 0) >= READS_AT
 
 function schemeOf(colors: unknown): SiteImportFidelityScheme | null {
   if (!isRecord(colors)) return null
@@ -1512,7 +2127,10 @@ function schemeOf(colors: unknown): SiteImportFidelityScheme | null {
 }
 
 /** A color a style names, in a scheme: a palette path (`primary.main`) as the scheme draws it, a color as itself. */
-function colorIn(value: unknown, scheme: SiteImportFidelityScheme): string | null {
+function colorIn(
+  value: unknown,
+  scheme: SiteImportFidelityScheme,
+): string | null {
   const own = hexOf(value)
   if (own || typeof value !== 'string') return own
   const paths: Readonly<Record<string, string | null>> = {
@@ -1530,13 +2148,22 @@ function colorIn(value: unknown, scheme: SiteImportFidelityScheme): string | nul
 }
 
 /** The color a theme draws an outlined button's words in, in its light scheme: its own style's, else the brand's. */
-export function siteImportOutlinedColorOf(theme: SiteImportFidelityTheme): string | null {
+export function siteImportOutlinedColorOf(
+  theme: SiteImportFidelityTheme,
+): string | null {
   const named = theme.button.outlined?.text
-  return named === null || named === undefined ? theme.light.brand : colorIn(named, theme.light)
+  return named === null || named === undefined
+    ? theme.light.brand
+    : colorIn(named, theme.light)
 }
 
 /** A CSS `text-transform` as the case a button's words are set in. */
-const CASE_OF: Readonly<Record<string, 'upper' | 'none'>> = { uppercase: 'upper', none: 'none', capitalize: 'none', lowercase: 'none' }
+const CASE_OF: Readonly<Record<string, 'upper' | 'none'>> = {
+  uppercase: 'upper',
+  none: 'none',
+  capitalize: 'none',
+  lowercase: 'none',
+}
 
 /**
  * The colors and buttons of a theme, as a page is drawn in them (AGL-4152):
@@ -1547,7 +2174,10 @@ const CASE_OF: Readonly<Record<string, 'upper' | 'none'>> = { uppercase: 'upper'
  * `from` says whether the theme is the one the site stores or one computed
  * from its site style. `null` for a theme with no light ground.
  */
-export function siteImportFidelityThemeOf(theme: unknown, from: SiteImportFidelityTheme['from'] = 'theme'): SiteImportFidelityTheme | null {
+export function siteImportFidelityThemeOf(
+  theme: unknown,
+  from: SiteImportFidelityTheme['from'] = 'theme',
+): SiteImportFidelityTheme | null {
   const light = schemeOf(pathIn(theme, 'colorSchemes', 'light'))
   if (!light?.ground) return null
   const button = pathIn(theme, 'components', 'MuiButton')
@@ -1556,13 +2186,25 @@ export function siteImportFidelityThemeOf(theme: unknown, from: SiteImportFideli
   const stylesOf = (variant: 'contained' | 'outlined' | 'text') => {
     const own = (Array.isArray(variants) ? variants : []).filter((entry) => {
       const color = pathIn(entry, 'props', 'color')
-      return pathIn(entry, 'props', 'variant') === variant && (color === undefined || color === 'primary')
+      return (
+        pathIn(entry, 'props', 'variant') === variant &&
+        (color === undefined || color === 'primary')
+      )
     })
-    return [...[...own].reverse().flatMap((entry) => [pathIn(entry, 'sx'), pathIn(entry, 'style')]), pathIn(button, 'styleOverrides', `${variant}Primary`), pathIn(button, 'styleOverrides', variant)].filter(isRecord)
+    return [
+      ...[...own]
+        .reverse()
+        .flatMap((entry) => [pathIn(entry, 'sx'), pathIn(entry, 'style')]),
+      pathIn(button, 'styleOverrides', `${variant}Primary`),
+      pathIn(button, 'styleOverrides', variant),
+    ].filter(isRecord)
   }
   const contained = stylesOf('contained')
   const dark = schemeOf(pathIn(theme, 'colorSchemes', 'dark'))
-  const pickIn = (scheme: SiteImportFidelityScheme, ...keys: string[]) => contained.flatMap((style) => keys.map((key) => colorIn(style[key], scheme))).find((color): color is string => !!color) ?? null
+  const pickIn = (scheme: SiteImportFidelityScheme, ...keys: string[]) =>
+    contained
+      .flatMap((style) => keys.map((key) => colorIn(style[key], scheme)))
+      .find((color): color is string => !!color) ?? null
   const pick = (...keys: string[]) => pickIn(light, ...keys)
   const transform = [
     pathIn(button, 'styleOverrides', 'root', 'textTransform'),
@@ -1570,12 +2212,20 @@ export function siteImportFidelityThemeOf(theme: unknown, from: SiteImportFideli
     pathIn(theme, 'typography', 'variants', 'button', 'textTransform'),
     pathIn(theme, 'typography', 'button', 'textTransform'),
   ].find((value): value is string => typeof value === 'string')
-  const caseIn = (styles: ReadonlyArray<Record<string, unknown>>): 'upper' | 'none' | null => {
-    const own = [...styles.map((style) => style['textTransform']), transform].find((value): value is string => typeof value === 'string')
+  const caseIn = (
+    styles: ReadonlyArray<Record<string, unknown>>,
+  ): 'upper' | 'none' | null => {
+    const own = [
+      ...styles.map((style) => style['textTransform']),
+      transform,
+    ].find((value): value is string => typeof value === 'string')
     return own ? (CASE_OF[own] ?? null) : null
   }
   const outlined = stylesOf('outlined')
-  const named = (...keys: string[]) => outlined.flatMap((style) => keys.map((key) => style[key])).find((value) => value !== undefined) ?? null
+  const named = (...keys: string[]) =>
+    outlined
+      .flatMap((style) => keys.map((key) => style[key]))
+      .find((value) => value !== undefined) ?? null
   return {
     from,
     light,
@@ -1583,9 +2233,19 @@ export function siteImportFidelityThemeOf(theme: unknown, from: SiteImportFideli
     button: {
       fill: pick('backgroundColor', 'bgcolor', 'background'),
       label: pick('color'),
-      ...(dark ? { fillDark: pickIn(dark, 'backgroundColor', 'bgcolor', 'background'), labelDark: pickIn(dark, 'color') } : {}),
+      ...(dark
+        ? {
+            fillDark: pickIn(dark, 'backgroundColor', 'bgcolor', 'background'),
+            labelDark: pickIn(dark, 'color'),
+          }
+        : {}),
       case: caseIn(contained),
-      outlined: { text: named('color'), border: named('borderColor'), fill: named('backgroundColor', 'bgcolor', 'background'), case: caseIn(outlined) },
+      outlined: {
+        text: named('color'),
+        border: named('borderColor'),
+        fill: named('backgroundColor', 'bgcolor', 'background'),
+        case: caseIn(outlined),
+      },
       text: { case: caseIn(stylesOf('text')) },
     },
   }
@@ -1617,23 +2277,37 @@ class LookOf {
   ground(id: string): string | null {
     const scheme = this.scheme(id)
     const fill = this.built.node(id)?.sx?.['bgcolor']
-    return scheme ? (fill === undefined || fill === null ? scheme.ground : colorIn(fill, scheme)) : null
+    return scheme
+      ? fill === undefined || fill === null
+        ? scheme.ground
+        : colorIn(fill, scheme)
+      : null
   }
 
   /** The words' ink on that ground: the brand's label on a brand band, the scheme's ink elsewhere. */
   ink(id: string): string | null {
     const scheme = this.scheme(id)
-    return scheme ? (this.built.node(id)?.sx?.['bgcolor'] === 'primary.main' ? scheme.onBrand : scheme.ink) : null
+    return scheme
+      ? this.built.node(id)?.sx?.['bgcolor'] === 'primary.main'
+        ? scheme.onBrand
+        : scheme.ink
+      : null
   }
 
   /** A filled button's fill: its own, else the theme's for filled buttons, else its scheme's brand. */
   fill(id: string): string | null {
     const scheme = this.scheme(id)
     if (!scheme) return null
-    const own = this.built.node(id)?.sx?.['bgcolor'] ?? this.built.node(id)?.sx?.['backgroundColor']
+    const own =
+      this.built.node(id)?.sx?.['bgcolor'] ??
+      this.built.node(id)?.sx?.['backgroundColor']
     if (own !== undefined) return colorIn(own, scheme)
     const button = this.theme?.button
-    return (scheme === this.theme?.dark ? (button?.fillDark ?? button?.fill) : button?.fill) ?? scheme.brand
+    return (
+      (scheme === this.theme?.dark
+        ? (button?.fillDark ?? button?.fill)
+        : button?.fill) ?? scheme.brand
+    )
   }
 
   /** A filled button's label: its own, else the theme's for filled buttons, else the words on its scheme's brand. */
@@ -1643,7 +2317,11 @@ class LookOf {
     const own = this.built.node(id)?.sx?.['color']
     if (own !== undefined) return colorIn(own, scheme)
     const button = this.theme?.button
-    return (scheme === this.theme?.dark ? (button?.labelDark ?? button?.label) : button?.label) ?? scheme.onBrand
+    return (
+      (scheme === this.theme?.dark
+        ? (button?.labelDark ?? button?.label)
+        : button?.label) ?? scheme.onBrand
+    )
   }
 
   /**
@@ -1654,12 +2332,27 @@ class LookOf {
    */
   caseKept(id: string | null, style: SiteImportButtonStyle): boolean | null {
     const facts = this.facts
-    const wanted = style === 'primary' ? facts?.buttonCase : style === 'secondary' ? (facts?.outlinedCase === undefined ? facts?.buttonCase : facts.outlinedCase) : facts?.textCase === undefined ? facts?.buttonCase : facts.textCase
+    const wanted =
+      style === 'primary'
+        ? facts?.buttonCase
+        : style === 'secondary'
+          ? facts?.outlinedCase === undefined
+            ? facts?.buttonCase
+            : facts.outlinedCase
+          : facts?.textCase === undefined
+            ? facts?.buttonCase
+            : facts.textCase
     if (wanted !== 'upper' && wanted !== 'none') return null
     const own = id ? this.built.node(id)?.sx?.['textTransform'] : undefined
     const button = this.theme?.button
-    const themed = style === 'primary' ? button?.case : style === 'secondary' ? (button?.outlined?.case ?? button?.case) : (button?.text?.case ?? button?.case)
-    const drawn = typeof own === 'string' ? (CASE_OF[own] ?? 'none') : (themed ?? null)
+    const themed =
+      style === 'primary'
+        ? button?.case
+        : style === 'secondary'
+          ? (button?.outlined?.case ?? button?.case)
+          : (button?.text?.case ?? button?.case)
+    const drawn =
+      typeof own === 'string' ? (CASE_OF[own] ?? 'none') : (themed ?? null)
     return drawn === null ? null : drawn === wanted
   }
 
@@ -1674,8 +2367,12 @@ class LookOf {
     const wanted = hexOf(this.facts?.buttonFill)
     if (!wanted || !this.theme) return null
     if (siteImportOklabDelta(wanted, this.page()) < LIKE_THE_PAGE) return null
-    const drawn = id ? this.fill(id) : (this.theme.button.fill ?? this.theme.light.brand)
-    return drawn ? siteImportOklabDelta(wanted, drawn) <= SITE_IMPORT_GROUND_DELTA : null
+    const drawn = id
+      ? this.fill(id)
+      : (this.theme.button.fill ?? this.theme.light.brand)
+    return drawn
+      ? siteImportOklabDelta(wanted, drawn) <= SITE_IMPORT_GROUND_DELTA
+      : null
   }
 
   /**
@@ -1692,12 +2389,32 @@ class LookOf {
     const fill = style?.fill ?? null
     const ownFill = hexOf(this.facts?.outlinedFill)
     const filled = fill !== null && fill !== 'transparent' && fill !== 'none'
-    if (ownFill ? !filled || siteImportOklabDelta(ownFill, colorIn(fill, scheme) ?? ownFill) > SITE_IMPORT_GROUND_DELTA : filled) return false
-    const near = (color: string | null, to: string | null | undefined) => !!color && !!to && siteImportOklabDelta(color, to) <= SITE_IMPORT_OUTLINE_DELTA
-    const named = [style?.text, style?.border].map((color) => (color === null || color === undefined ? scheme.brand : colorIn(color, scheme)))
+    if (
+      ownFill
+        ? !filled ||
+          siteImportOklabDelta(ownFill, colorIn(fill, scheme) ?? ownFill) >
+            SITE_IMPORT_GROUND_DELTA
+        : filled
+    )
+      return false
+    const near = (color: string | null, to: string | null | undefined) =>
+      !!color &&
+      !!to &&
+      siteImportOklabDelta(color, to) <= SITE_IMPORT_OUTLINE_DELTA
+    const named = [style?.text, style?.border].map((color) =>
+      color === null || color === undefined
+        ? scheme.brand
+        : colorIn(color, scheme),
+    )
     // A grey or a black of the source's is its words' color: the theme's words are their own ink, not a pin.
     const light = aiHexOklch(wanted).C < 0.03 ? scheme.ink : wanted
-    return named.every((color) => (scheme === this.theme?.light ? near(color, light) : near(color, scheme.brand) || near(color, scheme.brandLight) || near(color, scheme.ink)))
+    return named.every((color) =>
+      scheme === this.theme?.light
+        ? near(color, light)
+        : near(color, scheme.brand) ||
+          near(color, scheme.brandLight) ||
+          near(color, scheme.ink),
+    )
   }
 
   /** The source's page ground: white where it sets none. */
@@ -1710,7 +2427,9 @@ class LookOf {
     const scheme = this.theme?.dark ?? null
     if (!scheme) return null
     const fill = this.built.node(id)?.sx?.['bgcolor']
-    return fill === undefined || fill === null ? scheme.ground : colorIn(fill, scheme)
+    return fill === undefined || fill === null
+      ? scheme.ground
+      : colorIn(fill, scheme)
   }
 
   /** The inks and grounds the page shows: each section's, and each filled button's label on its fill, once each. */
@@ -1723,7 +2442,11 @@ class LookOf {
     for (const id of sectionIds) add(this.ink(id), this.ground(id))
     for (const id of this.built.order) {
       const node = this.built.node(id)
-      if (node?.componentId === 'muiButton' && node.props?.['variant'] === 'contained') add(this.label(id), this.fill(id))
+      if (
+        node?.componentId === 'muiButton' &&
+        node.props?.['variant'] === 'contained'
+      )
+        add(this.label(id), this.fill(id))
     }
     return [...out.values()]
   }
@@ -1731,7 +2454,10 @@ class LookOf {
   /** The inks and grounds that read at 4.5:1, over those the theme says. */
   readable(sectionIds: readonly string[]): SiteImportFidelityCount {
     const pairs = this.pairs(sectionIds)
-    return ratioKept(pairs.length, pairs.filter(([ink, ground]) => reads(ink, ground)).length)
+    return ratioKept(
+      pairs.length,
+      pairs.filter(([ink, ground]) => reads(ink, ground)).length,
+    )
   }
 }
 
@@ -1747,28 +2473,59 @@ function boxesKept(group: SiteImportLayoutGroup): boolean {
 /** Whether a node draws a box: a card or a paper, or a fill, a shadow or a border on two sides or more of its own. */
 function drawsBox(node: SiteImportFidelityNode | undefined): boolean {
   if (!node || node.componentId === 'section') return false
-  if (node.componentId === 'muiCard' || node.componentId === 'muiPaper') return true
+  if (node.componentId === 'muiCard' || node.componentId === 'muiPaper')
+    return true
   const sx = node.sx ?? {}
-  const sides = ['borderTop', 'borderRight', 'borderBottom', 'borderLeft'].filter((side) => !!sx[side]).length
-  return (sx['bgcolor'] !== undefined && sx['bgcolor'] !== 'transparent') || !!sx['border'] || sides >= 2 || (!!sx['boxShadow'] && sx['boxShadow'] !== 'none')
+  const sides = [
+    'borderTop',
+    'borderRight',
+    'borderBottom',
+    'borderLeft',
+  ].filter((side) => !!sx[side]).length
+  return (
+    (sx['bgcolor'] !== undefined && sx['bgcolor'] !== 'transparent') ||
+    !!sx['border'] ||
+    sides >= 2 ||
+    (!!sx['boxShadow'] && sx['boxShadow'] !== 'none')
+  )
 }
 
 /** Whether an item of a group is drawn boxed: a box under its element holding every part of it. */
 function boxedOn(built: Built, unit: Unit): boolean {
   if (!unit.element) return false
-  return built.under(unit.element).some((id) => drawsBox(built.node(id)) && unit.nodes.every((node) => built.holds(id, node)))
+  return built
+    .under(unit.element)
+    .some(
+      (id) =>
+        drawsBox(built.node(id)) &&
+        unit.nodes.every((node) => built.holds(id, node)),
+    )
 }
 
 /** The lines a section sets in its own flow: its lines and its rows' cells', not its groups', tables' or tabs'. */
-function flowLines(nodes: readonly SiteImportLayoutNode[]): SiteImportLineRef[] {
-  return nodes.flatMap((node) => (node.kind === 'line' && !node.button ? [node.line] : node.kind === 'row' ? node.cells.flatMap((cell) => flowLines(cell.nodes)) : []))
+function flowLines(
+  nodes: readonly SiteImportLayoutNode[],
+): SiteImportLineRef[] {
+  return nodes.flatMap((node) =>
+    node.kind === 'line' && !node.button
+      ? [node.line]
+      : node.kind === 'row'
+        ? node.cells.flatMap((cell) => flowLines(cell.nodes))
+        : [],
+  )
 }
 
 /** The paragraphs past which a section is a long read, set at `md` and at the start (the compile's own count). */
 const LONG_READ_PARAGRAPHS = 4
 
 /** Whether a section of the source is a long read: more paragraphs in its own flow (not its groups') than a section's words, which a page sets at the start to be read. */
-const longRead = (source: SiteImportFidelitySource, section: SiteImportLayoutSection) => flowLines(section.nodes).filter((ref) => source.blocks[ref]?.kind === 'paragraph').length > LONG_READ_PARAGRAPHS
+const longRead = (
+  source: SiteImportFidelitySource,
+  section: SiteImportLayoutSection,
+) =>
+  flowLines(section.nodes).filter(
+    (ref) => source.blocks[ref]?.kind === 'paragraph',
+  ).length > LONG_READ_PARAGRAPHS
 
 /**
  * The sections set as the source sets them (AGL-4152): their headings, else
@@ -1777,23 +2534,42 @@ const longRead = (source: SiteImportFidelitySource, section: SiteImportLayoutSec
  * opening a hero draws is held to it too: a centered opening drawn at the
  * start is the opening moved. Elsewhere it is the hero's to place.
  */
-function alignScore(source: SiteImportFidelitySource, built: Built, placement: Placement, pinned: boolean): SiteImportFidelityCount {
+function alignScore(
+  source: SiteImportFidelitySource,
+  built: Built,
+  placement: Placement,
+  pinned: boolean,
+): SiteImportFidelityCount {
   let measured = 0
   let kept = 0
   for (const [index, section] of source.layout.sections.entries()) {
     if (index === 0 && section.hero?.picture && !pinned) continue
     const own = flowLines(section.nodes)
     const headings = own.filter((ref) => source.blocks[ref]?.kind === 'heading')
-    const lines = (headings.length ? headings : own.filter((ref) => ['paragraph', 'list-item', 'quote'].includes(source.blocks[ref]?.kind ?? ''))).flatMap((ref) => {
+    const lines = (
+      headings.length
+        ? headings
+        : own.filter((ref) =>
+            ['paragraph', 'list-item', 'quote'].includes(
+              source.blocks[ref]?.kind ?? '',
+            ),
+          )
+    ).flatMap((ref) => {
       const id = placement.of.get(ref)
       const node = id ? built.node(id) : undefined
       return node?.componentId === 'muiTypography' ? [node] : []
     })
     if (!lines.length) continue
     measured += 1
-    const centered = lines.filter((node) => node.props?.['align'] === 'center').length
+    const centered = lines.filter(
+      (node) => node.props?.['align'] === 'center',
+    ).length
     const drawn = centered * 2 > lines.length ? 'center' : 'start'
-    if (drawn === section.align || (drawn === 'start' && longRead(source, section))) kept += 1
+    if (
+      drawn === section.align ||
+      (drawn === 'start' && longRead(source, section))
+    )
+      kept += 1
   }
   return ratioKept(measured, kept)
 }
@@ -1814,7 +2590,12 @@ function placeOn(ground: string, page: string): -1 | 0 | 1 {
  * the page too: two near whites read alike by ΔE, and swapped they draw the
  * wrong bands dark in the dark scheme.
  */
-function groundScore(sections: readonly SiteImportLayoutSection[], look: LookOf, roots: ReadonlyArray<string | null>, ordered: boolean): NonNullable<SiteImportPageFidelity['ground']> {
+function groundScore(
+  sections: readonly SiteImportLayoutSection[],
+  look: LookOf,
+  roots: ReadonlyArray<string | null>,
+  ordered: boolean,
+): NonNullable<SiteImportPageFidelity['ground']> {
   if (!look.theme) return { ...ratioKept(0, 0), theme: null, worst: null }
   const themePage = look.theme.light.ground as string
   let measured = 0
@@ -1822,16 +2603,29 @@ function groundScore(sections: readonly SiteImportLayoutSection[], look: LookOf,
   let worst: number | null = null
   for (const [index, section] of sections.entries()) {
     const wanted = hexOf(section.background)
-    if (!wanted || section.backdrop?.kind === 'picture' || section.backdrop?.kind === 'video') continue
+    if (
+      !wanted ||
+      section.backdrop?.kind === 'picture' ||
+      section.backdrop?.kind === 'video'
+    )
+      continue
     measured += 1
     const root = roots[index]
     const drawn = root ? look.ground(root) : null
     if (!drawn) continue
     const delta = siteImportOklabDelta(wanted, drawn)
     worst = Math.max(worst ?? 0, delta)
-    if (delta <= SITE_IMPORT_GROUND_DELTA && (!ordered || placeOn(wanted, look.page()) === placeOn(drawn, themePage))) kept += 1
+    if (
+      delta <= SITE_IMPORT_GROUND_DELTA &&
+      (!ordered || placeOn(wanted, look.page()) === placeOn(drawn, themePage))
+    )
+      kept += 1
   }
-  return { ...ratioKept(measured, kept), theme: look.theme.from, worst: worst === null ? null : round(worst) }
+  return {
+    ...ratioKept(measured, kept),
+    theme: look.theme.from,
+    worst: worst === null ? null : round(worst),
+  }
 }
 
 /**
@@ -1842,7 +2636,11 @@ function groundScore(sections: readonly SiteImportLayoutSection[], look: LookOf,
  * set apart from it, and a dark band of the source no lighter than the dark
  * page. A brand band is the brand's in either scheme, and is not scored.
  */
-function darkGroundScore(sections: readonly SiteImportLayoutSection[], look: LookOf, roots: ReadonlyArray<string | null>): NonNullable<SiteImportPageFidelity['darkGround']> {
+function darkGroundScore(
+  sections: readonly SiteImportLayoutSection[],
+  look: LookOf,
+  roots: ReadonlyArray<string | null>,
+): NonNullable<SiteImportPageFidelity['darkGround']> {
   const darkPage = look.theme?.dark?.ground ?? null
   if (!darkPage) return { ...ratioKept(0, 0), worst: null }
   let measured = 0
@@ -1850,7 +2648,13 @@ function darkGroundScore(sections: readonly SiteImportLayoutSection[], look: Loo
   let worst: number | null = null
   for (const [index, section] of sections.entries()) {
     const wanted = hexOf(section.background)
-    if (!wanted || section.band === 'brand' || section.backdrop?.kind === 'picture' || section.backdrop?.kind === 'video') continue
+    if (
+      !wanted ||
+      section.band === 'brand' ||
+      section.backdrop?.kind === 'picture' ||
+      section.backdrop?.kind === 'video'
+    )
+      continue
     measured += 1
     const root = roots[index]
     const drawn = root ? look.darkGround(root) : null
@@ -1863,35 +2667,70 @@ function darkGroundScore(sections: readonly SiteImportLayoutSection[], look: Loo
       continue
     }
     const place = placeOn(drawn, darkPage)
-    const wantedPlace = section.band === 'dark' ? -1 : placeOn(wanted, look.page())
-    if (wantedPlace === -1 ? (section.band === 'dark' ? place <= 0 : place !== 0) : place === wantedPlace) kept += 1
+    const wantedPlace =
+      section.band === 'dark' ? -1 : placeOn(wanted, look.page())
+    if (
+      wantedPlace === -1
+        ? section.band === 'dark'
+          ? place <= 0
+          : place !== 0
+        : place === wantedPlace
+    )
+      kept += 1
   }
-  return { ...ratioKept(measured, kept), worst: worst === null ? null : round(worst) }
+  return {
+    ...ratioKept(measured, kept),
+    worst: worst === null ? null : round(worst),
+  }
 }
 
 /** The width a page is measured at (AGL-4152): the 1280 the 11/4 live checks set the source beside the import at. */
 const VIEW_PX = 1280
 
 /** The Container element's Max Width steps, in px, as the theme's breakpoints set them. */
-const CONTAINER_PX: Readonly<Record<string, number>> = { xs: 444, sm: 600, md: 900, lg: 1200, xl: 1536 }
+const CONTAINER_PX: Readonly<Record<string, number>> = {
+  xs: 444,
+  sm: 600,
+  md: 900,
+  lg: 1200,
+  xl: 1536,
+}
 
 /** What a responsive value is at the width a page is measured at: its `lg`, else the nearest below. */
 function atView(value: unknown): unknown {
   if (!isRecord(value)) return value
-  for (const key of ['lg', 'md', 'sm', 'xs']) if (value[key] !== undefined) return value[key]
+  for (const key of ['lg', 'md', 'sm', 'xs'])
+    if (value[key] !== undefined) return value[key]
   return undefined
 }
 
 /** A Grid item's columns, of 12, at the width a page is measured at: `xs:12 md:6` is 6. */
 function gridSpan(size: unknown): number | null {
   if (typeof size === 'number') return size
-  const steps = typeof size === 'string' ? Object.fromEntries(size.split(/\s+/).flatMap((part) => (/^(\w+):(\d+)$/.exec(part) ? [[part.split(':')[0], Number(part.split(':')[1])]] : []))) : isRecord(size) ? size : null
+  const steps =
+    typeof size === 'string'
+      ? Object.fromEntries(
+          size
+            .split(/\s+/)
+            .flatMap((part) =>
+              /^(\w+):(\d+)$/.exec(part)
+                ? [[part.split(':')[0], Number(part.split(':')[1])]]
+                : [],
+            ),
+        )
+      : isRecord(size)
+        ? size
+        : null
   const span = steps ? atView(steps) : null
   return typeof span === 'number' && span > 0 ? Math.min(12, span) : null
 }
 
 /** How wide a node's box runs at the width a page is measured at, in px, from its section down, and how wide its section's content runs. */
-function boxPx(built: Built, id: string, root: string | null): { box: number; section: number } {
+function boxPx(
+  built: Built,
+  id: string,
+  root: string | null,
+): { box: number; section: number } {
   const chain = built.ancestry(id).reverse()
   const from = root ? chain.indexOf(root) : 0
   let width = VIEW_PX
@@ -1904,22 +2743,33 @@ function boxPx(built: Built, id: string, root: string | null): { box: number; se
       if (cap) width = Math.min(width, cap)
       section ??= width
     }
-    if (node.componentId === 'muiGrid' && !setsSideBySide(node)) width *= (gridSpan(node.props?.['size']) ?? 12) / 12
+    if (node.componentId === 'muiGrid' && !setsSideBySide(node))
+      width *= (gridSpan(node.props?.['size']) ?? 12) / 12
     const max = atView(node.sx?.['maxWidth'])
-    if (typeof max === 'number') width = max <= 1 ? width * max : Math.min(width, max)
-    else if (typeof max === 'string' && CONTAINER_PX[max]) width = Math.min(width, CONTAINER_PX[max] as number)
-    else if (typeof max === 'string' && /^\d+(?:\.\d+)?%$/.test(max)) width *= parseFloat(max) / 100
-    else if (typeof max === 'string' && /^\d+(?:\.\d+)?px$/.test(max)) width = Math.min(width, parseFloat(max))
+    if (typeof max === 'number')
+      width = max <= 1 ? width * max : Math.min(width, max)
+    else if (typeof max === 'string' && CONTAINER_PX[max])
+      width = Math.min(width, CONTAINER_PX[max] as number)
+    else if (typeof max === 'string' && /^\d+(?:\.\d+)?%$/.test(max))
+      width *= parseFloat(max) / 100
+    else if (typeof max === 'string' && /^\d+(?:\.\d+)?px$/.test(max))
+      width = Math.min(width, parseFloat(max))
   }
   return { box: width, section: section ?? VIEW_PX }
 }
 
 /** The hero heading's box as a share of its section, against the source's measure: within 10%, where the reader kept it. */
-function measureScore(source: SiteImportFidelitySource, built: Built, placement: Placement, roots: ReadonlyArray<string | null>): NonNullable<SiteImportPageFidelity['measure']> {
+function measureScore(
+  source: SiteImportFidelitySource,
+  built: Built,
+  placement: Placement,
+  roots: ReadonlyArray<string | null>,
+): NonNullable<SiteImportPageFidelity['measure']> {
   const index = source.layout.sections.findIndex((section) => !!section.hero)
   const section = source.layout.sections[index]
   const wanted = section?.hero?.measure
-  if (!section || typeof wanted !== 'number' || !(wanted > 0)) return { ...ratioKept(0, 0), shares: null }
+  if (!section || typeof wanted !== 'number' || !(wanted > 0))
+    return { ...ratioKept(0, 0), shares: null }
   const across = Math.min(section.width ?? VIEW_PX, VIEW_PX)
   const share = Math.min(1, wanted / across)
   const heading = section.lines.find((ref) => {
@@ -1927,26 +2777,46 @@ function measureScore(source: SiteImportFidelitySource, built: Built, placement:
     return block?.kind === 'heading' && block.level === 1
   })
   const id = heading === undefined ? undefined : placement.of.get(heading)
-  if (!id) return { ...ratioKept(1, 0), shares: { source: round(share), built: 0 } }
+  if (!id)
+    return { ...ratioKept(1, 0), shares: { source: round(share), built: 0 } }
   const drawn = boxPx(built, id, roots[index] ?? null)
   const builtShare = Math.min(1, drawn.box / drawn.section)
-  return { ...ratioKept(1, Math.abs(builtShare / share - 1) <= SITE_IMPORT_MEASURE_SHARE ? 1 : 0), shares: { source: round(share), built: round(builtShare) } }
+  return {
+    ...ratioKept(
+      1,
+      Math.abs(builtShare / share - 1) <= SITE_IMPORT_MEASURE_SHARE ? 1 : 0,
+    ),
+    shares: { source: round(share), built: round(builtShare) },
+  }
 }
 
 /** How wide a section's words run at the width a page is measured at: its first Container's Max Width, else the page. */
 function runPx(built: Built, root: string | undefined | null): number {
-  const container = root ? built.under(root).find((id) => built.node(id)?.componentId === 'muiContainer') : undefined
-  const cap = container ? CONTAINER_PX[String(atView(built.node(container)?.props?.['maxWidth']))] : undefined
+  const container = root
+    ? built
+        .under(root)
+        .find((id) => built.node(id)?.componentId === 'muiContainer')
+    : undefined
+  const cap = container
+    ? CONTAINER_PX[String(atView(built.node(container)?.props?.['maxWidth']))]
+    : undefined
   return Math.min(cap ?? VIEW_PX, VIEW_PX)
 }
 
 /** A section's band as Improve it reads it: by its color alone. */
-const bandAsItsColor = (section: SiteImportLayoutSection | undefined) => section?.absoluteBand ?? section?.band
+const bandAsItsColor = (section: SiteImportLayoutSection | undefined) =>
+  section?.absoluteBand ?? section?.band
 
 /** A line of the design measure: the share of what it asks the source and the build each do, `null` where neither is asked anything. */
-function designLine(source: [number, number], built: [number, number]): SiteImportDesignLine | null {
+function designLine(
+  source: [number, number],
+  built: [number, number],
+): SiteImportDesignLine | null {
   if (!source[1] || !built[1]) return null
-  return { source: round(source[0] / source[1]), built: round(built[0] / built[1]) }
+  return {
+    source: round(source[0] / source[1]),
+    built: round(built[0] / built[1]),
+  }
 }
 
 /**
@@ -1954,34 +2824,97 @@ function designLine(source: [number, number], built: [number, number]): SiteImpo
  * its rhythm, its measure, its opening, its groups and its colors. Better is
  * at or above the source on every line and above it on one.
  */
-function designScore(source: SiteImportFidelitySource, built: Built, placement: Placement, look: LookOf, roots: ReadonlyArray<string | null>, drawnSections: readonly string[]): SiteImportDesignFidelity {
+function designScore(
+  source: SiteImportFidelitySource,
+  built: Built,
+  placement: Placement,
+  look: LookOf,
+  roots: ReadonlyArray<string | null>,
+  drawnSections: readonly string[],
+): SiteImportDesignFidelity {
   const sections = source.layout.sections
   // Rhythm: neighbors set apart by their bands, or a rule between them.
-  const apart = (pairs: number, at: (index: number) => boolean): [number, number] => [Array.from({ length: pairs }, (_, index) => at(index)).filter(Boolean).length, pairs]
-  const ruled = (id: string | undefined) => !!id && (!!built.node(id)?.sx?.['borderTop'] || !!built.node(id)?.sx?.['borderBottom'])
-  const drawnBand = (id: string | undefined) => siteImportFidelityBandOf(id ? built.node(id) : undefined)
+  const apart = (
+    pairs: number,
+    at: (index: number) => boolean,
+  ): [number, number] => [
+    Array.from({ length: pairs }, (_, index) => at(index)).filter(Boolean)
+      .length,
+    pairs,
+  ]
+  const ruled = (id: string | undefined) =>
+    !!id &&
+    (!!built.node(id)?.sx?.['borderTop'] ||
+      !!built.node(id)?.sx?.['borderBottom'])
+  const drawnBand = (id: string | undefined) =>
+    siteImportFidelityBandOf(id ? built.node(id) : undefined)
   const rhythm = designLine(
-    apart(Math.max(0, sections.length - 1), (index) => bandAsItsColor(sections[index]) !== bandAsItsColor(sections[index + 1])),
-    apart(Math.max(0, drawnSections.length - 1), (index) => drawnBand(drawnSections[index]) !== drawnBand(drawnSections[index + 1]) || ruled(drawnSections[index]) || ruled(drawnSections[index + 1])),
+    apart(
+      Math.max(0, sections.length - 1),
+      (index) =>
+        bandAsItsColor(sections[index]) !== bandAsItsColor(sections[index + 1]),
+    ),
+    apart(
+      Math.max(0, drawnSections.length - 1),
+      (index) =>
+        drawnBand(drawnSections[index]) !==
+          drawnBand(drawnSections[index + 1]) ||
+        ruled(drawnSections[index]) ||
+        ruled(drawnSections[index + 1]),
+    ),
   )
   // Measure: words that run no wider than `lg`, a long read no wider than `md`, each section as its Container runs it.
-  const caps = sections.map((section) => (longRead(source, section) ? (CONTAINER_PX['md'] as number) : (CONTAINER_PX['lg'] as number)))
+  const caps = sections.map((section) =>
+    longRead(source, section)
+      ? (CONTAINER_PX['md'] as number)
+      : (CONTAINER_PX['lg'] as number),
+  )
   const measure = designLine(
     // The source's cap read as the Container step a page brought in draws it at; a section it sets none on runs the page.
-    [sections.filter((section, index) => Math.min(CONTAINER_PX[siteImportWidthOf(section.width) ?? 'xl'] as number, VIEW_PX) <= (caps[index] as number)).length, sections.length],
-    [drawnSections.filter((id, index) => runPx(built, id) <= (caps[index] ?? (CONTAINER_PX['lg'] as number))).length, drawnSections.length],
+    [
+      sections.filter(
+        (section, index) =>
+          Math.min(
+            CONTAINER_PX[siteImportWidthOf(section.width) ?? 'xl'] as number,
+            VIEW_PX,
+          ) <= (caps[index] as number),
+      ).length,
+      sections.length,
+    ],
+    [
+      drawnSections.filter(
+        (id, index) =>
+          runPx(built, id) <= (caps[index] ?? (CONTAINER_PX['lg'] as number)),
+      ).length,
+      drawnSections.length,
+    ],
   )
   // Opening: a first section holding a picture opens as the hero, its heading and its picture together.
   const first = sections[0]
-  const pictured = !!first && (first.lines.some((ref) => source.blocks[ref]?.kind === 'image') || first.backdrop?.kind === 'picture' || first.backdrop?.kind === 'video')
-  const title = sections.flatMap((section) => section.lines).find((ref) => {
-    const block = source.blocks[ref]
-    return block?.kind === 'heading' && block.level === 1
-  })
+  const pictured =
+    !!first &&
+    (first.lines.some((ref) => source.blocks[ref]?.kind === 'image') ||
+      first.backdrop?.kind === 'picture' ||
+      first.backdrop?.kind === 'video')
+  const title = sections
+    .flatMap((section) => section.lines)
+    .find((ref) => {
+      const block = source.blocks[ref]
+      return block?.kind === 'heading' && block.level === 1
+    })
   const titleNode = title === undefined ? undefined : placement.of.get(title)
   const opener = drawnSections[0]
-  const opens = !!opener && !!titleNode && built.holds(opener, titleNode) && built.has(opener, (node) => node.componentId === 'image' || node.componentId === 'video')
-  const opening = pictured ? designLine([first?.hero?.picture ? 1 : 0, 1], [opens ? 1 : 0, 1]) : null
+  const opens =
+    !!opener &&
+    !!titleNode &&
+    built.holds(opener, titleNode) &&
+    built.has(
+      opener,
+      (node) => node.componentId === 'image' || node.componentId === 'video',
+    )
+  const opening = pictured
+    ? designLine([first?.hero?.picture ? 1 : 0, 1], [opens ? 1 : 0, 1])
+    : null
   // Grouped: three or more like items drawn as one group: each its own element, held together apart from the section's other lines.
   let runs = 0
   let sourceGrouped = 0
@@ -1991,12 +2924,29 @@ function designScore(source: SiteImportFidelitySource, built: Built, placement: 
       if (node.kind !== 'group' || node.items.length < 3) continue
       runs += 1
       if (node.group !== 'text') sourceGrouped += 1
-      const units = unitsOn(built, placement, node.items.map((item) => item.lines), roots[index] ?? null).filter((unit) => unit.measured)
-      const parents = new Set(units.map((unit) => (unit.element ? built.parent.get(unit.element) : null)))
+      const units = unitsOn(
+        built,
+        placement,
+        node.items.map((item) => item.lines),
+        roots[index] ?? null,
+      ).filter((unit) => unit.measured)
+      const parents = new Set(
+        units.map((unit) =>
+          unit.element ? built.parent.get(unit.element) : null,
+        ),
+      )
       const parent = parents.size === 1 ? [...parents][0] : null
       const mine = new Set(node.items.flatMap((item) => item.lines))
-      const others = section.lines.flatMap((ref) => (mine.has(ref) ? [] : [placement.of.get(ref)])).filter((id): id is string => !!id)
-      if (units.length >= 3 && parent && units.every((unit) => unit.element) && !others.some((id) => built.holds(parent, id))) builtGrouped += 1
+      const others = section.lines
+        .flatMap((ref) => (mine.has(ref) ? [] : [placement.of.get(ref)]))
+        .filter((id): id is string => !!id)
+      if (
+        units.length >= 3 &&
+        parent &&
+        units.every((unit) => unit.element) &&
+        !others.some((id) => built.holds(parent, id))
+      )
+        builtGrouped += 1
     }
   }
   const grouped = designLine([sourceGrouped, runs], [builtGrouped, runs])
@@ -2006,15 +2956,29 @@ function designScore(source: SiteImportFidelitySource, built: Built, placement: 
   const ink = hexOf(facts?.text)
   for (const section of sections) {
     const ground = hexOf(section.background)
-    if (ink && ground && (bandAsItsColor(section) === 'plain' || bandAsItsColor(section) === 'soft')) sourcePairs.push([ink, ground])
+    if (
+      ink &&
+      ground &&
+      (bandAsItsColor(section) === 'plain' ||
+        bandAsItsColor(section) === 'soft')
+    )
+      sourcePairs.push([ink, ground])
   }
   const buttonFill = hexOf(facts?.buttonFill)
   const buttonText = hexOf(facts?.buttonText)
   if (buttonFill && buttonText) sourcePairs.push([buttonText, buttonFill])
   const builtPairs = look.pairs(drawnSections)
-  const readable = designLine([sourcePairs.filter(([a, b]) => reads(a, b)).length, sourcePairs.length], [builtPairs.filter(([a, b]) => reads(a, b)).length, builtPairs.length])
-  const lines = [rhythm, measure, opening, grouped, readable].filter((line): line is SiteImportDesignLine => !!line)
-  const better = lines.length > 0 && lines.every((line) => line.built >= line.source) && lines.some((line) => line.built > line.source)
+  const readable = designLine(
+    [sourcePairs.filter(([a, b]) => reads(a, b)).length, sourcePairs.length],
+    [builtPairs.filter(([a, b]) => reads(a, b)).length, builtPairs.length],
+  )
+  const lines = [rhythm, measure, opening, grouped, readable].filter(
+    (line): line is SiteImportDesignLine => !!line,
+  )
+  const better =
+    lines.length > 0 &&
+    lines.every((line) => line.built >= line.source) &&
+    lines.some((line) => line.built > line.source)
   return { rhythm, measure, opening, grouped, readable, better }
 }
 
@@ -2024,7 +2988,9 @@ function designScore(source: SiteImportFidelitySource, built: Built, placement: 
 
 /** The words that carry no content of a line: what a rewrite may change freely. */
 const STOP_WORDS = new Set(
-  'a about all also an and any are as at be been but by can do does each for from get had has have he her here his how i if in into is it its just me more most my no not of on one only or our out over own so some such than that the their them then there these they this those to too up us very was we were what when where which who why will with you your yours'.split(' '),
+  'a about all also an and any are as at be been but by can do does each for from get had has have he her here his how i if in into is it its just me more most my no not of on one only or our out over own so some such than that the their them then there these they this those to too up us very was we were what when where which who why will with you your yours'.split(
+    ' ',
+  ),
 )
 
 /** A word's crude stem (G4): its case and one ending dropped, so "builds", "building" and "build" read as one word. */
@@ -2046,7 +3012,12 @@ function stemOf(word: string): string {
 }
 
 /** A line's content words, by stem. */
-const contentOf = (text: string): Set<string> => new Set(wordsOf(text).filter((word) => word.length >= 2 && !STOP_WORDS.has(word.toLowerCase())).map(stemOf))
+const contentOf = (text: string): Set<string> =>
+  new Set(
+    wordsOf(text)
+      .filter((word) => word.length >= 2 && !STOP_WORDS.has(word.toLowerCase()))
+      .map(stemOf),
+  )
 
 /**
  * The share of a line's content words another keeps (G4): 1 for a line with
@@ -2072,15 +3043,36 @@ function contentKept(line: string, rewrite: string): number {
 }
 
 /** The facts a run of words carries, each by its kind, in the order they are taken: emails, addresses, phones, numbers. */
-const FACTS: ReadonlyArray<readonly [string, RegExp, (found: string) => string | null]> = [
-  ['email', /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/gu, (found) => found.toLowerCase()],
+const FACTS: ReadonlyArray<
+  readonly [string, RegExp, (found: string) => string | null]
+> = [
+  [
+    'email',
+    /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/gu,
+    (found) => found.toLowerCase(),
+  ],
   [
     'url',
     /\bhttps?:\/\/[^\s<>"'()]+|\bwww\.[^\s<>"'()]+|\b(?:[a-z0-9-]+\.)+(?:com|org|net|io|co|ai|app|dev|us|uk|ca|au|de|fr|info|biz|me|shop|store|site|online)\b(?:\/[^\s<>"'()]*)?/giu,
-    (found) => found.toLowerCase().replace(/[.,;:!?]+$/, '').replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, ''),
+    (found) =>
+      found
+        .toLowerCase()
+        .replace(/[.,;:!?]+$/, '')
+        .replace(/^https?:\/\//, '')
+        .replace(/^www\./, '')
+        .replace(/\/$/, ''),
   ],
-  ['phone', /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d{2,4}[\s.-]\d{3,4}(?:[\s.-]\d{2,4})?/g, (found) => (found.replace(/\D/g, '').length >= 7 ? found.replace(/\D/g, '') : null)],
-  ['number', /[$€£¥₹]?\s?\d+(?:[.,]\d+)*\s?%?/gu, (found) => found.replace(/\s+/g, '').replace(/[.,]+$/, '')],
+  [
+    'phone',
+    /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d{2,4}[\s.-]\d{3,4}(?:[\s.-]\d{2,4})?/g,
+    (found) =>
+      found.replace(/\D/g, '').length >= 7 ? found.replace(/\D/g, '') : null,
+  ],
+  [
+    'number',
+    /[$€£¥₹]?\s?\d+(?:[.,]\d+)*\s?%?/gu,
+    (found) => found.replace(/\s+/g, '').replace(/[.,]+$/, ''),
+  ],
 ]
 
 /** A line's facts: its prices and numbers with their currency, emails, phones and addresses, each as often as it says it. */
@@ -2099,7 +3091,9 @@ function factsIn(text: string): string[] {
 }
 
 /** The words of a line in capitals, each with whether it opens a sentence. */
-function capitalsIn(text: string): Array<{ word: string; opens: boolean; afterSubject: boolean }> {
+function capitalsIn(
+  text: string,
+): Array<{ word: string; opens: boolean; afterSubject: boolean }> {
   const out: Array<{ word: string; opens: boolean; afterSubject: boolean }> = []
   let last = 0
   let before = ''
@@ -2107,16 +3101,19 @@ function capitalsIn(text: string): Array<{ word: string; opens: boolean; afterSu
     const at = match.index ?? 0
     const opens = last === 0 || /[.!?:;•·|—–"“(]/.test(text.slice(last, at))
     // "We Specialize in…", "We Document every job": a word straight after its sentence's subject is what it does, capitalized for show (AGL-4152).
-    const afterSubject = !opens && SUBJECTS.has(before) && /^\s+$/.test(text.slice(last, at))
+    const afterSubject =
+      !opens && SUBJECTS.has(before) && /^\s+$/.test(text.slice(last, at))
     last = at + match[0].length
     before = match[0].toLowerCase()
-    if (/^\p{Lu}/u.test(match[0])) out.push({ word: match[0], opens, afterSubject })
+    if (/^\p{Lu}/u.test(match[0]))
+      out.push({ word: match[0], opens, afterSubject })
   }
   return out
 }
 
 /** A web or an email address in a run of words, whose words are written small whatever they name. */
-const ADDRESSES = /\S+@\S+|(?:https?:\/\/)?[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+(?:\/\S*)?/gu
+const ADDRESSES =
+  /\S+@\S+|(?:https?:\/\/)?[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+(?:\/\S*)?/gu
 
 /** The words a sentence's subject is said by, which the word after it acts for: never a name before a name. */
 const SUBJECTS = new Set(['i', 'we', 'you', 'they'])
@@ -2136,7 +3133,11 @@ export function siteImportNameKey(word: string): string {
 /** Every name key a run of words says: each word, and each run of initials written with stops or hyphens ("H-E-B", "H.E.B."). */
 function nameKeysIn(text: string): string[] {
   const words = wordsOf(text).map((word) => word.toLowerCase())
-  const initials = [...text.matchAll(/(?<![\p{L}\p{N}])\p{L}(?:[.-]\p{L})+\.?(?![\p{L}\p{N}])/gu)].map((match) => siteImportNameKey(match[0]))
+  const initials = [
+    ...text.matchAll(
+      /(?<![\p{L}\p{N}])\p{L}(?:[.-]\p{L})+\.?(?![\p{L}\p{N}])/gu,
+    ),
+  ].map((match) => siteImportNameKey(match[0]))
   return [...words, ...initials]
 }
 
@@ -2166,14 +3167,35 @@ export interface SiteImportFactScope {
  * own words for what a page tells, which its request puts to the model
  * ("why choose it", "how it works"). They are said; they name and claim nothing.
  */
-export function siteImportFactScope(sourceTexts: readonly string[], vocabulary: readonly string[] = []): SiteImportFactScope {
-  const said = new Set([...sourceTexts, ...vocabulary].flatMap(wordsOf).map((word) => word.toLowerCase()))
+export function siteImportFactScope(
+  sourceTexts: readonly string[],
+  vocabulary: readonly string[] = [],
+): SiteImportFactScope {
+  const said = new Set(
+    [...sourceTexts, ...vocabulary]
+      .flatMap(wordsOf)
+      .map((word) => word.toLowerCase()),
+  )
   // A word the source also writes in small letters is an ordinary word, wherever it capitalizes it (AGL-4152);
   // never in an address, where a name is written small ("example.app").
-  const small = new Set(sourceTexts.flatMap((text) => wordsOf(text.replace(ADDRESSES, ' '))).filter((word) => /^\p{Ll}/u.test(word)))
+  const small = new Set(
+    sourceTexts
+      .flatMap((text) => wordsOf(text.replace(ADDRESSES, ' ')))
+      .filter((word) => /^\p{Ll}/u.test(word)),
+  )
   const names = sourceTexts
     .filter((text) => !shouted(text))
-    .flatMap((text) => capitalsIn(text).filter((entry) => !entry.opens && entry.word.length > 1 && !entry.afterSubject && !small.has(entry.word.toLowerCase())).map((entry) => entry.word))
+    .flatMap((text) =>
+      capitalsIn(text)
+        .filter(
+          (entry) =>
+            !entry.opens &&
+            entry.word.length > 1 &&
+            !entry.afterSubject &&
+            !small.has(entry.word.toLowerCase()),
+        )
+        .map((entry) => entry.word),
+    )
   return {
     names: new Set(names),
     said,
@@ -2182,7 +3204,8 @@ export function siteImportFactScope(sourceTexts: readonly string[], vocabulary: 
 }
 
 /** Whether a scope says a word in any case or any of its endings. */
-const saidIn = (scope: SiteImportFactScope, word: string) => scope.said.has(word.toLowerCase()) || !!scope.stems?.has(stemOf(word))
+const saidIn = (scope: SiteImportFactScope, word: string) =>
+  scope.said.has(word.toLowerCase()) || !!scope.stems?.has(stemOf(word))
 
 /**
  * The fact tokens one line says (G4), each as often as it says it: its
@@ -2192,13 +3215,25 @@ const saidIn = (scope: SiteImportFactScope, word: string) => scope.said.has(word
  * Two lines with the same tokens keep the same facts, which is how the
  * wording pass holds each line it rewrites (`ai-site-import-wording.ts`).
  */
-export function siteImportFactTokens(text: string, scope: SiteImportFactScope, own: boolean): string[] {
+export function siteImportFactTokens(
+  text: string,
+  scope: SiteImportFactScope,
+  own: boolean,
+): string[] {
   const out = factsIn(text)
   for (const entry of capitalsIn(text)) {
     if (scope.names.has(entry.word)) out.push(`name:${entry.word}`)
     // A name the source never says, past a sentence's first word, is one the rewrite made up.
     // A word every sentence uses ("Us", "Our", "With") is no one's name, capitalized in a title or not (AGL-4152).
-    else if (own && !entry.opens && entry.word.length > 1 && !shouted(text) && !saidIn(scope, entry.word) && !STOP_WORDS.has(entry.word.toLowerCase())) out.push(`name:${entry.word}`)
+    else if (
+      own &&
+      !entry.opens &&
+      entry.word.length > 1 &&
+      !shouted(text) &&
+      !saidIn(scope, entry.word) &&
+      !STOP_WORDS.has(entry.word.toLowerCase())
+    )
+      out.push(`name:${entry.word}`)
   }
   return out
 }
@@ -2209,11 +3244,16 @@ export function siteImportFactTokens(text: string, scope: SiteImportFactScope, o
  * capitalizes past a sentence's first — as often as the source says it,
  * and no fact or name the source does not have.
  */
-function factsScore(sourceTexts: readonly string[], builtTexts: readonly string[]): SiteImportFidelityFacts {
+function factsScore(
+  sourceTexts: readonly string[],
+  builtTexts: readonly string[],
+): SiteImportFidelityFacts {
   const scope = siteImportFactScope(sourceTexts)
   const tally = (texts: readonly string[], own: boolean) => {
     const counts = new Map<string, number>()
-    for (const text of texts) for (const token of siteImportFactTokens(text, scope, own)) counts.set(token, (counts.get(token) ?? 0) + 1)
+    for (const text of texts)
+      for (const token of siteImportFactTokens(text, scope, own))
+        counts.set(token, (counts.get(token) ?? 0) + 1)
     return counts
   }
   const from = tally(sourceTexts, false)
@@ -2234,25 +3274,67 @@ function factsScore(sourceTexts: readonly string[], builtTexts: readonly string[
     if (count > (from.get(token) ?? 0)) extra.push(token)
   }
   const most = Math.max(source, builtCount)
-  return { source, built: builtCount, missing: source - both, extra: builtCount - both, ratio: most > 0 ? both / most : 1, examples: { missing: missing.slice(0, 8), extra: extra.slice(0, 8) } }
+  return {
+    source,
+    built: builtCount,
+    missing: source - both,
+    extra: builtCount - both,
+    ratio: most > 0 ? both / most : 1,
+    examples: { missing: missing.slice(0, 8), extra: extra.slice(0, 8) },
+  }
 }
 
 /** A page's words improved (G4): its facts, its lines each placed once, and each rewrite's meaning. */
-function wordingScores(source: SiteImportFidelitySource, built: Built, placement: Placement): Pick<SiteImportPageFidelity, 'facts' | 'lines' | 'meaning'> {
-  const text = (ref: SiteImportLineRef) => clean((source.blocks[ref] as { text?: string } | undefined)?.text)
-  const lines = source.layout.sections.flatMap((section) => section.lines).filter((ref) => isLine(source.blocks[ref]) && source.blocks[ref]?.kind !== 'image')
+function wordingScores(
+  source: SiteImportFidelitySource,
+  built: Built,
+  placement: Placement,
+): Pick<SiteImportPageFidelity, 'facts' | 'lines' | 'meaning'> {
+  const text = (ref: SiteImportLineRef) =>
+    clean((source.blocks[ref] as { text?: string } | undefined)?.text)
+  const lines = source.layout.sections
+    .flatMap((section) => section.lines)
+    .filter(
+      (ref) =>
+        isLine(source.blocks[ref]) && source.blocks[ref]?.kind !== 'image',
+    )
   const placed = lines.filter((ref) => placement.of.has(ref)).length
   const extra = placement.unclaimed().length
-  const rewritten = [...placement.rewrittenAs].flatMap(([ref, rewrite]) => (contentOf(text(ref)).size ? [{ line: ref, kept: round(contentKept(text(ref), rewrite)), source: text(ref), built: rewrite }] : []))
-  const below = rewritten.filter((line) => line.kept < SITE_IMPORT_MEANING_FLOOR)
+  const rewritten = [...placement.rewrittenAs].flatMap(([ref, rewrite]) =>
+    contentOf(text(ref)).size
+      ? [
+          {
+            line: ref,
+            kept: round(contentKept(text(ref), rewrite)),
+            source: text(ref),
+            built: rewrite,
+          },
+        ]
+      : [],
+  )
+  const below = rewritten.filter(
+    (line) => line.kept < SITE_IMPORT_MEANING_FLOOR,
+  )
   return {
-    facts: factsScore(source.blocks.flatMap((block) => (isLine(block) && block.kind !== 'image' ? [clean(block.text)] : [])), built.pieces.map((piece) => piece.text)),
-    lines: { source: lines.length, built: placed, ratio: lines.length + extra > 0 ? placed / (lines.length + extra) : 1, extra },
+    facts: factsScore(
+      source.blocks.flatMap((block) =>
+        isLine(block) && block.kind !== 'image' ? [clean(block.text)] : [],
+      ),
+      built.pieces.map((piece) => piece.text),
+    ),
+    lines: {
+      source: lines.length,
+      built: placed,
+      ratio: lines.length + extra > 0 ? placed / (lines.length + extra) : 1,
+      extra,
+    },
     meaning: {
       lines: rewritten.length,
       below: below.length,
       lowest: rewritten.reduce((least, line) => Math.min(least, line.kept), 1),
-      ratio: rewritten.length ? (rewritten.length - below.length) / rewritten.length : 1,
+      ratio: rewritten.length
+        ? (rewritten.length - below.length) / rewritten.length
+        : 1,
       floor: SITE_IMPORT_MEANING_FLOOR,
       examples: below.slice(0, 8),
     },
@@ -2278,7 +3360,11 @@ const PHONE_PX = 360
 /** The tallest fixed picture a phone reads, in px. */
 const PHONE_PICTURE_PX = 520
 
-const line = (done: number, of: number, ok = done >= of): SiteImportImprovedLine => ({ done, of, ok })
+const line = (
+  done: number,
+  of: number,
+  ok = done >= of,
+): SiteImportImprovedLine => ({ done, of, ok })
 
 /** A piece that is only a number of a digit or two: a step's number, a count on a cart, no fact of the page's. */
 const bareNumber = (text: string) => /^\s*\d{1,2}\s*$/.test(text)
@@ -2298,16 +3384,24 @@ function ratioOf(value: unknown): number | null {
 function fixedHeightOf(value: unknown): number | null {
   const at = atView(value)
   if (typeof at === 'number') return at > 8 ? at : null
-  if (typeof at === 'string' && /^\d+(?:\.\d+)?px$/.test(at)) return Number.parseFloat(at)
+  if (typeof at === 'string' && /^\d+(?:\.\d+)?px$/.test(at))
+    return Number.parseFloat(at)
   return null
 }
 
 /** Whether a picture fills a frame that sets its own shape: laid over it, or at its whole height. */
-const fillsFrame = (node: SiteImportFidelityNode | undefined) => node?.sx?.['position'] === 'absolute' || node?.props?.['height'] === '100%' || node?.sx?.['height'] === '100%'
+const fillsFrame = (node: SiteImportFidelityNode | undefined) =>
+  node?.sx?.['position'] === 'absolute' ||
+  node?.props?.['height'] === '100%' ||
+  node?.sx?.['height'] === '100%'
 
 /** Whether a node shows a heading of the page's outline. */
 /** Elements that draw a run of like items as one group: a line inside one is no line stacked on its own. */
-const GROUPS_A_RUN: ReadonlySet<string> = new Set(['muiAccordion', 'muiList', 'muiCard'])
+const GROUPS_A_RUN: ReadonlySet<string> = new Set([
+  'muiAccordion',
+  'muiList',
+  'muiCard',
+])
 
 const isHeading = (node: SiteImportFidelityNode | undefined) => {
   if (node?.componentId !== 'muiTypography') return false
@@ -2331,63 +3425,153 @@ export const SITE_IMPORT_INVENTED_LINE_CHARS = 120
  * else the `SITE_IMPORT_INVENTED_LINE_CHARS` around the first place it says
  * `what`, an ellipsis where it was cut.
  */
-export function siteImportLineAround(text: string, what: string, most = SITE_IMPORT_INVENTED_LINE_CHARS): string {
+export function siteImportLineAround(
+  text: string,
+  what: string,
+  most = SITE_IMPORT_INVENTED_LINE_CHARS,
+): string {
   const line = clean(text)
   if (line.length <= most) return line
   const found = line.toLowerCase().indexOf(what.toLowerCase())
   const room = most - 2
-  const start = Math.max(0, Math.min(found < 0 ? 0 : found - Math.floor(room / 2), line.length - room))
+  const start = Math.max(
+    0,
+    Math.min(found < 0 ? 0 : found - Math.floor(room / 2), line.length - room),
+  )
   return `${start > 0 ? '…' : ''}${line.slice(start, start + room).trim()}${start + room < line.length ? '…' : ''}`
 }
 
 /** The kept ledger and the design lines of a page a generative Improve it built (AGL-4152). */
-function improvedScore(source: SiteImportFidelitySource, built: Built, look: LookOf, drawnSections: readonly string[], options: SiteImportImprovedOptions): SiteImportImprovedFidelity {
-  const ledger = siteImportLedger({ layout: source.layout, blocks: source.blocks, ...(source.photos ? { photos: source.photos } : {}) })
+function improvedScore(
+  source: SiteImportFidelitySource,
+  built: Built,
+  look: LookOf,
+  drawnSections: readonly string[],
+  options: SiteImportImprovedOptions,
+): SiteImportImprovedFidelity {
+  const ledger = siteImportLedger({
+    layout: source.layout,
+    blocks: source.blocks,
+    ...(source.photos ? { photos: source.photos } : {}),
+  })
   const pieces = built.pieces
-  const sourceTexts = source.blocks.flatMap((block) => (isLine(block) && block.kind !== 'image' ? [clean(block.text)] : []))
+  const sourceTexts = source.blocks.flatMap((block) =>
+    isLine(block) && block.kind !== 'image' ? [clean(block.text)] : [],
+  )
   const anywhere = [...sourceTexts, ...(options.scope ?? [])]
   const scope = siteImportFactScope(anywhere, options.vocabulary ?? [])
-  const shown = pieces.map((piece) => piece.text).filter((text) => !bareNumber(text))
-  const onPage = new Set(shown.flatMap((text) => siteImportFactTokens(text, scope, false)))
+  const shown = pieces
+    .map((piece) => piece.text)
+    .filter((text) => !bareNumber(text))
+  const onPage = new Set(
+    shown.flatMap((text) => siteImportFactTokens(text, scope, false)),
+  )
   // Facts: every one the source says, at least once anywhere on the page.
   const ownScope = siteImportFactScope(sourceTexts)
-  // A label in title case, "Start Now", says no one's name: its capitals are its style.
-  const titleCased = (text: string) => wordsOf(text).length >= 2 && wordsOf(text).every((word) => word.length < 3 || /^\p{Lu}/u.test(word))
+  // A label in title case, "Start Now", says no one's name: its capitals are its style. So does a short tagline
+  // mostly in title case, "Everything Done right" (AGL-4152): a sentence still holds its names.
+  const titleCased = (text: string) => {
+    const words = wordsOf(text)
+    if (words.length < 2) return false
+    const long = words.filter((word) => word.length >= 3)
+    const capped = long.filter((word) => /^\p{Lu}/u.test(word)).length
+    if (capped === long.length) return true
+    return (
+      words.length <= 4 &&
+      capped * 2 > long.length &&
+      !/[.!?,;:]\s*[\p{L}\p{N}]/u.test(text)
+    )
+  }
   // A page the site's plan proposed has no source to hold: only what it says is held (AGL-4152).
-  const said = options.proposed ? [] : [...new Set(sourceTexts.filter((text) => !bareNumber(text)).flatMap((text) => siteImportFactTokens(text, ownScope, false).filter((token) => !token.startsWith('name:') || !titleCased(text))))]
+  const said = options.proposed
+    ? []
+    : [
+        ...new Set(
+          sourceTexts
+            .filter((text) => !bareNumber(text))
+            .flatMap((text) =>
+              siteImportFactTokens(text, ownScope, false).filter(
+                (token) => !token.startsWith('name:') || !titleCased(text),
+              ),
+            ),
+        ),
+      ]
   // A name the page still says, in the sentence case a redesign writes its headings in, is kept (AGL-4152):
   // "Built on Stone" rewritten "built on stone" keeps its word, and a real name keeps its capital anyway.
   // A name is kept in any of its forms: its possessive, its initials with stops or hyphens (AGL-4152).
   const wordsOnPage = new Set(shown.flatMap(nameKeysIn))
-  const missingFacts = said.filter((token) => !onPage.has(token) && !(token.startsWith('name:') && wordsOnPage.has(siteImportNameKey(token.slice(5)))))
+  const missingFacts = said.filter(
+    (token) =>
+      !onPage.has(token) &&
+      !(
+        token.startsWith('name:') &&
+        wordsOnPage.has(siteImportNameKey(token.slice(5)))
+      ),
+  )
   // Invented: none that nothing the import read says.
-  const allowed = new Set(anywhere.flatMap((text) => siteImportFactTokens(text, scope, false)))
-  const found = [...new Set(shown.flatMap((text) => siteImportFactTokens(text, scope, true)))].filter((token) => !allowed.has(token) && token !== 'name:FAQ' && token !== 'name:FAQs')
+  const allowed = new Set(
+    anywhere.flatMap((text) => siteImportFactTokens(text, scope, false)),
+  )
+  const found = [
+    ...new Set(
+      shown.flatMap((text) => siteImportFactTokens(text, scope, true)),
+    ),
+  ].filter(
+    (token) =>
+      !allowed.has(token) && token !== 'name:FAQ' && token !== 'name:FAQs',
+  )
   // The line each was found in, cut short around it (AGL-4152): never the page whole.
   const inventedAt = [
     ...new Set(
       found.slice(0, 8).flatMap((token) => {
-        const text = shown.find((entry) => siteImportFactTokens(entry, scope, true).includes(token))
-        return text ? [siteImportLineAround(text, token.slice(token.indexOf(':') + 1))] : []
+        const text = shown.find((entry) =>
+          siteImportFactTokens(entry, scope, true).includes(token),
+        )
+        return text
+          ? [siteImportLineAround(text, token.slice(token.indexOf(':') + 1))]
+          : []
       }),
     ),
   ]
   // Held: every thing that must land, on the page.
-  const photoOf = new Map((source.photos ?? []).flatMap((photo) => (photo.from ? [[photo.from, photo.src] as const] : [])))
+  const photoOf = new Map(
+    (source.photos ?? []).flatMap((photo) =>
+      photo.from ? [[photo.from, photo.src] as const] : [],
+    ),
+  )
   const keys = pieces.map((piece) => ` ${piece.key} `)
   const shows = (ref: SiteImportLineRef) => {
-    const key = wordLine(clean((source.blocks[ref] as { text?: string } | undefined)?.text))
+    const key = wordLine(
+      clean((source.blocks[ref] as { text?: string } | undefined)?.text),
+    )
     return !key || keys.some((piece) => piece.includes(` ${key} `))
   }
-  const srcs = new Set(built.order.flatMap((id) => [built.node(id)?.props?.['src'], built.node(id)?.props?.['poster']].filter(Boolean) as unknown[]))
-  const formsDrawn = built.order.filter((id) => built.node(id)?.componentId === 'form').length
-  const formsWanted = options.forms ?? ledger.items.filter((item) => item.kind === 'form').length
+  const srcs = new Set(
+    built.order.flatMap(
+      (id) =>
+        [
+          built.node(id)?.props?.['src'],
+          built.node(id)?.props?.['poster'],
+        ].filter(Boolean) as unknown[],
+    ),
+  )
+  const formsDrawn = built.order.filter(
+    (id) => built.node(id)?.componentId === 'form',
+  ).length
+  const formsWanted =
+    options.forms ?? ledger.items.filter((item) => item.kind === 'form').length
   const formOf = (ref: string) => Number(ref.slice(ref.indexOf(':') + 1))
-  const musts = ledger.items.filter((item) => item.must && (item.kind !== 'form' || formOf(item.ref) <= formsWanted))
+  const musts = ledger.items.filter(
+    (item) =>
+      item.must && (item.kind !== 'form' || formOf(item.ref) <= formsWanted),
+  )
   const missingHeld = musts
     .filter((item) => {
       if (item.kind === 'form') return formsDrawn < formOf(item.ref)
-      if (item.kind === 'video') return !built.order.some((id) => built.node(id)?.componentId === 'video')
+      if (item.kind === 'video')
+        return !built.order.some(
+          (id) => built.node(id)?.componentId === 'video',
+        )
       if (item.kind === 'picture') {
         const block = source.blocks[item.lines[0] as number]
         const src = block?.kind === 'image' ? photoOf.get(block.url) : undefined
@@ -2397,50 +3581,101 @@ function improvedScore(source: SiteImportFidelitySource, built: Built, look: Loo
     })
     .map((item) => item.ref)
   // Links: every destination the source's links have here, on the page.
-  const hrefs = new Set(built.order.flatMap((id) => {
-    const props = built.node(id)?.props ?? {}
-    return [props['href'], ...(clean(props['screenId']) ? [`page:${clean(props['screenId'])}`] : [])].filter((value): value is string => typeof value === 'string')
-  }))
+  const hrefs = new Set(
+    built.order.flatMap((id) => {
+      const props = built.node(id)?.props ?? {}
+      return [
+        props['href'],
+        ...(clean(props['screenId'])
+          ? [`page:${clean(props['screenId'])}`]
+          : []),
+      ].filter((value): value is string => typeof value === 'string')
+    }),
+  )
   const destinations = options.destinations ?? []
-  const missingLinks = destinations.filter((to) => !hrefs.has(to) && !hrefs.has(to.replace(/\/+$/, '')))
+  const missingLinks = destinations.filter(
+    (to) => !hrefs.has(to) && !hrefs.has(to.replace(/\/+$/, '')),
+  )
   // Meaning: the source's content words, on the page: of what it says, not of its labels (AGL-4152). A heading or a
   // button of a few words ("Contact us", "Visit or call") is one a redesign is asked to write again as a promise,
   // and on a short page such as a contact page its labels alone would hold the share down; their facts are held above.
-  const sourceWords = contentOf(sourceTexts.filter((text) => contentOf(text).size >= SITE_IMPORT_MEANING_LEAST_WORDS).join(' '))
+  const sourceWords = contentOf(
+    sourceTexts
+      .filter((text) => contentOf(text).size >= SITE_IMPORT_MEANING_LEAST_WORDS)
+      .join(' '),
+  )
   const pageWords = contentOf(pieces.map((piece) => piece.text).join(' '))
   const kept = [...sourceWords].filter((stem) => pageWords.has(stem)).length
-  const meaningOk = options.proposed === true || sourceWords.size === 0 || kept / sourceWords.size >= (options.meaning ?? SITE_IMPORT_IMPROVED_MEANING)
+  const meaningOk =
+    options.proposed === true ||
+    sourceWords.size === 0 ||
+    kept / sourceWords.size >= (options.meaning ?? SITE_IMPORT_IMPROVED_MEANING)
   const ledgerLines = {
-    facts: { ...line(said.length - missingFacts.length, said.length), missing: missingFacts.slice(0, 8) },
-    invented: { ...line(found.length ? 0 : 1, 1), found: found.slice(0, 8), ...(inventedAt.length ? { at: inventedAt } : {}) },
-    held: { ...line(musts.length - missingHeld.length, musts.length), missing: missingHeld },
-    links: { ...line(destinations.length - missingLinks.length, destinations.length), missing: missingLinks.slice(0, 8) },
+    facts: {
+      ...line(said.length - missingFacts.length, said.length),
+      missing: missingFacts.slice(0, 8),
+    },
+    invented: {
+      ...line(found.length ? 0 : 1, 1),
+      found: found.slice(0, 8),
+      ...(inventedAt.length ? { at: inventedAt } : {}),
+    },
+    held: {
+      ...line(musts.length - missingHeld.length, musts.length),
+      missing: missingHeld,
+    },
+    links: {
+      ...line(destinations.length - missingLinks.length, destinations.length),
+      missing: missingLinks.slice(0, 8),
+    },
     meaning: line(kept, sourceWords.size, meaningOk),
   }
 
-  const has = (id: string, test: (node: SiteImportFidelityNode) => boolean) => built.has(id, test)
+  const has = (id: string, test: (node: SiteImportFidelityNode) => boolean) =>
+    built.has(id, test)
   const opener = drawnSections[0]
   const closer = drawnSections[drawnSections.length - 1]
-  const filled = (node: SiteImportFidelityNode) => node.componentId === 'muiButton' && node.props?.['variant'] === 'contained' && hasDestination(node)
-  const asks = (node: SiteImportFidelityNode) => (node.componentId === 'muiButton' && hasDestination(node)) || node.componentId === 'form'
+  const filled = (node: SiteImportFidelityNode) =>
+    node.componentId === 'muiButton' &&
+    node.props?.['variant'] === 'contained' &&
+    hasDestination(node)
+  const asks = (node: SiteImportFidelityNode) =>
+    (node.componentId === 'muiButton' && hasDestination(node)) ||
+    node.componentId === 'form'
   // A page that draws its form asks with it (AGL-4152): a form in the first two sections opens on its ask, and one in
   // the last two closes on it, as a contact page is drawn (a short opening, the form, what happens after), with no band.
-  const formAt = drawnSections.findIndex((id) => has(id, (node) => node.componentId === 'form'))
-  const opens = !!opener && (has(opener, filled) || (formAt >= 0 && formAt <= 1))
-  const closes = !!closer && (has(closer, asks) || (formAt >= 0 && formAt >= drawnSections.length - 2))
-  const cta = opener && closer ? line((opens ? 1 : 0) + (closes ? 1 : 0), 2) : null
+  const formAt = drawnSections.findIndex((id) =>
+    has(id, (node) => node.componentId === 'form'),
+  )
+  const opens =
+    !!opener && (has(opener, filled) || (formAt >= 0 && formAt <= 1))
+  const closes =
+    !!closer &&
+    (has(closer, asks) || (formAt >= 0 && formAt >= drawnSections.length - 2))
+  const cta =
+    opener && closer ? line((opens ? 1 : 0) + (closes ? 1 : 0), 2) : null
   // Rhythm: neighbors on different grounds.
   const pairs = Math.max(0, drawnSections.length - 1)
-  const bandOf = (id: string | undefined) => siteImportFidelityBandOf(id ? built.node(id) : undefined)
-  const apart = Array.from({ length: pairs }, (_, at) => bandOf(drawnSections[at]) !== bandOf(drawnSections[at + 1])).filter(Boolean).length
-  const rhythm = pairs ? line(apart, pairs, apart / pairs >= RHYTHM_SHARE) : null
+  const bandOf = (id: string | undefined) =>
+    siteImportFidelityBandOf(id ? built.node(id) : undefined)
+  const apart = Array.from(
+    { length: pairs },
+    (_, at) => bandOf(drawnSections[at]) !== bandOf(drawnSections[at + 1]),
+  ).filter(Boolean).length
+  const rhythm = pairs
+    ? line(apart, pairs, apart / pairs >= RHYTHM_SHARE)
+    : null
   // Columns: no pictures stacked across the page, no run of headings or of short lines one under another, a row somewhere,
   // and, on a page of three sections or more, like items drawn as a group somewhere (AGL-4152).
   // A question list's questions and answers are one group, never a run of lines.
   const inRow = (id: string, root: string) => {
     for (const at of built.ancestry(id)) {
       if (at === root) return false
-      if (setsSideBySide(built.node(at)) || GROUPS_A_RUN.has(built.node(at)?.componentId ?? '')) return true
+      if (
+        setsSideBySide(built.node(at)) ||
+        GROUPS_A_RUN.has(built.node(at)?.componentId ?? '')
+      )
+        return true
     }
     return false
   }
@@ -2448,92 +3683,225 @@ function improvedScore(source: SiteImportFidelitySource, built: Built, look: Loo
     const nodes = built.under(id)
     const across = nodes.filter((at) => {
       // A picture of a row, such as a strip of logos, sits beside the others, whatever the width it is measured at.
-      if (built.node(at)?.componentId !== 'image' || fillsFrame(built.node(at)) || inRow(at, id)) return false
+      if (
+        built.node(at)?.componentId !== 'image' ||
+        fillsFrame(built.node(at)) ||
+        inRow(at, id)
+      )
+        return false
       const { box, section } = boxPx(built, at, id)
       return box >= 0.75 * section
     })
     if (across.length >= 2) return false
-    const heads = nodes.filter((at) => isHeading(built.node(at)) && !inRow(at, id))
+    const heads = nodes.filter(
+      (at) => isHeading(built.node(at)) && !inRow(at, id),
+    )
     if (heads.length >= 4) return false
     const lines = nodes.filter((at) => {
       const node = built.node(at)
-      return node?.componentId === 'muiTypography' && !isHeading(node) && node.props?.['component'] !== 'h1' && clean(node.props?.['children']).length > 0 && clean(node.props?.['children']).length < 200 && !inRow(at, id)
+      return (
+        node?.componentId === 'muiTypography' &&
+        !isHeading(node) &&
+        node.props?.['component'] !== 'h1' &&
+        clean(node.props?.['children']).length > 0 &&
+        clean(node.props?.['children']).length < 200 &&
+        !inRow(at, id)
+      )
     })
     return lines.length < 4
   }).length
-  const anyRow = drawnSections.some((id) => built.under(id).some((at) => id !== at && setsSideBySide(built.node(at)) && built.children(at).length >= 2))
+  const anyRow = drawnSections.some((id) =>
+    built
+      .under(id)
+      .some(
+        (at) =>
+          id !== at &&
+          setsSideBySide(built.node(at)) &&
+          built.children(at).length >= 2,
+      ),
+  )
   // A group: three or more cells of one grid, questions of one list, or lines of one list; a form's fields are its own.
   const anyGroup = drawnSections.some((id) =>
     built.under(id).some((at) => {
       const node = built.node(at)
-      if (node?.componentId === 'muiGrid' && setsSideBySide(node)) return built.children(at).length >= 3
-      if (node?.componentId === 'muiAccordion') return (built.parent.get(at) ? built.children(built.parent.get(at) as string).filter((child) => built.node(child)?.componentId === 'muiAccordion').length : 0) >= 3
+      if (node?.componentId === 'muiGrid' && setsSideBySide(node))
+        return built.children(at).length >= 3
+      if (node?.componentId === 'muiAccordion')
+        return (
+          (built.parent.get(at)
+            ? built
+                .children(built.parent.get(at) as string)
+                .filter(
+                  (child) => built.node(child)?.componentId === 'muiAccordion',
+                ).length
+            : 0) >= 3
+        )
       if (node?.componentId === 'muiList') return built.children(at).length >= 3
       return false
     }),
   )
   const columns = drawnSections.length
-    ? line(planned, drawnSections.length, planned === drawnSections.length && (drawnSections.length < 3 || (anyRow && (anyGroup || formAt >= 0))))
+    ? line(
+        planned,
+        drawnSections.length,
+        planned === drawnSections.length &&
+          (drawnSections.length < 3 || (anyRow && (anyGroup || formAt >= 0))),
+      )
     : null
   // Framing: every picture at a size a screen holds, in a frame it fills.
-  const natural = new Map((source.photos ?? []).flatMap((photo) => (photo.width && photo.height ? [[photo.src, photo.width / photo.height] as const] : [])))
-  const rootOf = (id: string) => drawnSections.find((root) => built.holds(root, id)) ?? null
-  const images = built.order.filter((id) => built.node(id)?.componentId === 'image')
+  const natural = new Map(
+    (source.photos ?? []).flatMap((photo) =>
+      photo.width && photo.height
+        ? [[photo.src, photo.width / photo.height] as const]
+        : [],
+    ),
+  )
+  const rootOf = (id: string) =>
+    drawnSections.find((root) => built.holds(root, id)) ?? null
+  const images = built.order.filter(
+    (id) => built.node(id)?.componentId === 'image',
+  )
   const framed = images.filter((id) => {
     const node = built.node(id) as SiteImportFidelityNode
-    const frame = fillsFrame(node) ? built.node(built.parent.get(id) ?? '') : node
-    const most = opener && built.holds(opener, id) ? FRAMED_OPENING_PX : FRAMED_PX
-    const fixed = fixedHeightOf(node.props?.['height']) ?? fixedHeightOf(frame?.sx?.['height'])
+    const frame = fillsFrame(node)
+      ? built.node(built.parent.get(id) ?? '')
+      : node
+    const most =
+      opener && built.holds(opener, id) ? FRAMED_OPENING_PX : FRAMED_PX
+    const fixed =
+      fixedHeightOf(node.props?.['height']) ??
+      fixedHeightOf(frame?.sx?.['height'])
     if (fixed !== null) return fixed <= most
     // A frame as tall as the screen says, a cover's, is no height a picture sets.
     if (fillsFrame(node) && !frame?.sx?.['aspectRatio']) return true
-    const ratio = ratioOf(frame?.sx?.['aspectRatio']) ?? ratioOf(node.sx?.['aspectRatio']) ?? natural.get(String(node.props?.['src'])) ?? 16 / 9
+    const ratio =
+      ratioOf(frame?.sx?.['aspectRatio']) ??
+      ratioOf(node.sx?.['aspectRatio']) ??
+      natural.get(String(node.props?.['src'])) ??
+      16 / 9
     return boxPx(built, id, rootOf(id)).box / ratio <= most
   }).length
   const framing = images.length ? line(framed, images.length) : null
   // Contrast: every ink reads, and the source's own brand fills its buttons.
   const facts = source.layout.look
-  const brand = [facts?.buttonFill, facts?.link, facts?.buttonOutline, ...(facts?.palette ?? [])].map(hexOf).find((hex): hex is string => !!hex && aiHexOklch(hex).C >= 0.04)
+  const brand = [
+    facts?.buttonFill,
+    facts?.link,
+    facts?.buttonOutline,
+    ...(facts?.palette ?? []),
+  ]
+    .map(hexOf)
+    .find((hex): hex is string => !!hex && aiHexOklch(hex).C >= 0.04)
   const pairsRead = look.pairs(drawnSections)
-  const fill = look.theme ? (look.theme.button.fill ?? look.theme.light.brand) : null
-  const brandShows = !brand || !fill || siteImportOklabDelta(brand, fill) <= SITE_IMPORT_OUTLINE_DELTA
-  const contrast = look.theme ? line(pairsRead.filter(([a, b]) => reads(a, b)).length + (brandShows ? 1 : 0), pairsRead.length + 1) : null
+  const fill = look.theme
+    ? (look.theme.button.fill ?? look.theme.light.brand)
+    : null
+  const brandShows =
+    !brand ||
+    !fill ||
+    siteImportOklabDelta(brand, fill) <= SITE_IMPORT_OUTLINE_DELTA
+  const contrast = look.theme
+    ? line(
+        pairsRead.filter(([a, b]) => reads(a, b)).length + (brandShows ? 1 : 0),
+        pairsRead.length + 1,
+      )
+    : null
   // Frame: a header with its row and a filled call to action, a phone menu, a footer.
   let frame: SiteImportImprovedLine | null = null
   if (options.frame) {
     const shell = new Built(options.frame)
-    const drawer = shell.order.find((id) => shell.node(id)?.componentId === 'muiDrawer') ?? null
-    const header = shell.order.find((id) => shell.node(id)?.componentId === 'muiAppBar' || shell.node(id)?.props?.['component'] === 'header') ?? null
-    const footer = shell.order.find((id) => shell.node(id)?.props?.['element'] === 'footer' || shell.node(id)?.props?.['component'] === 'footer') ?? null
-    const inHeader = header ? shell.under(header).filter((id) => !drawer || !shell.holds(drawer, id)) : []
-    const row = inHeader.some((id) => shell.node(id)?.props?.['component'] === 'nav')
+    const drawer =
+      shell.order.find((id) => shell.node(id)?.componentId === 'muiDrawer') ??
+      null
+    const header =
+      shell.order.find(
+        (id) =>
+          shell.node(id)?.componentId === 'muiAppBar' ||
+          shell.node(id)?.props?.['component'] === 'header',
+      ) ?? null
+    const footer =
+      shell.order.find(
+        (id) =>
+          shell.node(id)?.props?.['element'] === 'footer' ||
+          shell.node(id)?.props?.['component'] === 'footer',
+      ) ?? null
+    const inHeader = header
+      ? shell.under(header).filter((id) => !drawer || !shell.holds(drawer, id))
+      : []
+    const row = inHeader.some(
+      (id) => shell.node(id)?.props?.['component'] === 'nav',
+    )
     const button = inHeader.some((id) => {
       const node = shell.node(id)
       return !!node && filled(node)
     })
-    const links = footer ? shell.has(footer, (node) => hasDestination(node)) || shell.pieces.some((piece) => shell.holds(footer, piece.node)) : false
+    const links = footer
+      ? shell.has(footer, (node) => hasDestination(node)) ||
+        shell.pieces.some((piece) => shell.holds(footer, piece.node))
+      : false
     frame = line([row, button, !!drawer, links].filter(Boolean).length, 4)
   }
   // Phone: every row stacks, nothing wider or taller than a phone holds.
-  const nodes = built.order.map((id) => built.node(id)).filter((node): node is SiteImportFidelityNode => !!node)
-  const widths = (node: SiteImportFidelityNode) => [node.sx?.['width'], node.sx?.['minWidth'], node.props?.['width']].some((value) => {
-    const fixed = fixedHeightOf(typeof value === 'object' && value && 'xs' in (value as object) ? (value as Record<string, unknown>)['xs'] : value)
-    return fixed !== null && fixed > PHONE_PX
-  })
-  const tall = (node: SiteImportFidelityNode) => [node.props?.['height'], node.sx?.['height']].some((value) => {
-    const at = typeof value === 'object' && value && 'xs' in (value as object) ? (value as Record<string, unknown>)['xs'] : value
-    const fixed = fixedHeightOf(at)
-    return fixed !== null && fixed > PHONE_PICTURE_PX
-  })
-  const bars = nodes.filter((node) => (node.componentId === 'muiGrid' && crowdsPhone(node.props?.['size'])) || widths(node) || tall(node))
-  const phone = drawnSections.length ? line(drawnSections.length - Math.min(drawnSections.length, bars.length), drawnSections.length, bars.length === 0) : null
+  const nodes = built.order
+    .map((id) => built.node(id))
+    .filter((node): node is SiteImportFidelityNode => !!node)
+  const widths = (node: SiteImportFidelityNode) =>
+    [node.sx?.['width'], node.sx?.['minWidth'], node.props?.['width']].some(
+      (value) => {
+        const fixed = fixedHeightOf(
+          typeof value === 'object' && value && 'xs' in (value as object)
+            ? (value as Record<string, unknown>)['xs']
+            : value,
+        )
+        return fixed !== null && fixed > PHONE_PX
+      },
+    )
+  const tall = (node: SiteImportFidelityNode) =>
+    [node.props?.['height'], node.sx?.['height']].some((value) => {
+      const at =
+        typeof value === 'object' && value && 'xs' in (value as object)
+          ? (value as Record<string, unknown>)['xs']
+          : value
+      const fixed = fixedHeightOf(at)
+      return fixed !== null && fixed > PHONE_PICTURE_PX
+    })
+  const bars = nodes.filter(
+    (node) =>
+      (node.componentId === 'muiGrid' && crowdsPhone(node.props?.['size'])) ||
+      widths(node) ||
+      tall(node),
+  )
+  const phone = drawnSections.length
+    ? line(
+        drawnSections.length - Math.min(drawnSections.length, bars.length),
+        drawnSections.length,
+        bars.length === 0,
+      )
+    : null
 
-  const design: SiteImportImprovedFidelity['design'] = { cta, rhythm, columns, framing, contrast, frame, phone }
+  const design: SiteImportImprovedFidelity['design'] = {
+    cta,
+    rhythm,
+    columns,
+    framing,
+    contrast,
+    frame,
+    phone,
+  }
   const red = [
-    ...Object.entries(ledgerLines).filter(([, entry]) => !entry.ok).map(([name]) => name),
-    ...SITE_IMPORT_IMPROVED_LINES.filter((name) => design[name] && !design[name]?.ok),
+    ...Object.entries(ledgerLines)
+      .filter(([, entry]) => !entry.ok)
+      .map(([name]) => name),
+    ...SITE_IMPORT_IMPROVED_LINES.filter(
+      (name) => design[name] && !design[name]?.ok,
+    ),
   ]
-  return { ledger: ledgerLines, design, holds: Object.values(ledgerLines).every((entry) => entry.ok), red }
+  return {
+    ledger: ledgerLines,
+    design,
+    holds: Object.values(ledgerLines).every((entry) => entry.ok),
+    red,
+  }
 }
 
 /*------------------------------------------
@@ -2590,32 +3958,80 @@ export interface SiteImportFrameFidelity {
  * Menu element under its name, or its name as a link and the panel its hover
  * shows; what it holds, and whether it opens on hover.
  */
-function siteImportBuiltMenu(built: Built, row: string, name: string): { inside: string[]; hover: boolean } | null {
+function siteImportBuiltMenu(
+  built: Built,
+  row: string,
+  name: string,
+): { inside: string[]; hover: boolean } | null {
   const named = (id: string) => clean(labelOf(built.node(id))) === clean(name)
   const hoverSteps = (id: string): Array<Record<string, unknown>> =>
     (built.node(id)?.interactions ?? []).flatMap((interaction) => {
-      const record = interaction as { enabled?: boolean; trigger?: { event?: string }; steps?: unknown[] }
-      return record.enabled !== false && record.trigger?.event === 'elementHoverEnter' ? ((record.steps ?? []) as Array<Record<string, unknown>>) : []
+      const record = interaction as {
+        enabled?: boolean
+        trigger?: { event?: string }
+        steps?: unknown[]
+      }
+      return record.enabled !== false &&
+        record.trigger?.event === 'elementHoverEnter'
+        ? ((record.steps ?? []) as Array<Record<string, unknown>>)
+        : []
     })
-  const element = built.under(row).find((id) => (built.node(id)?.componentId === 'muiMegaMenu' || built.node(id)?.componentId === 'muiNavMenu') && named(id))
-  if (element) return { inside: built.under(element), hover: hoverSteps(element).some((step) => step['type'] === 'openMenu') }
-  const link = built.under(row).find((id) => LINK_COMPONENTS.has(built.node(id)?.componentId ?? '') && named(id))
+  const element = built
+    .under(row)
+    .find(
+      (id) =>
+        (built.node(id)?.componentId === 'muiMegaMenu' ||
+          built.node(id)?.componentId === 'muiNavMenu') &&
+        named(id),
+    )
+  if (element)
+    return {
+      inside: built.under(element),
+      hover: hoverSteps(element).some((step) => step['type'] === 'openMenu'),
+    }
+  const link = built
+    .under(row)
+    .find(
+      (id) =>
+        LINK_COMPONENTS.has(built.node(id)?.componentId ?? '') && named(id),
+    )
   if (!link) return null
   // The panel its hover shows: on the name itself, or on the item that holds the name and its panel.
   const item = built.children(row).find((id) => built.holds(id, link)) ?? link
-  const shown = [...hoverSteps(link), ...hoverSteps(item)].filter((step) => step['type'] === 'showElement')
-  const panelId = shown.map((step) => /^\[data-aglyn="leaf:(.+)"\]$/.exec(String(step['selector'] ?? ''))?.[1]).find((id): id is string => !!id && !!built.node(id))
+  const shown = [...hoverSteps(link), ...hoverSteps(item)].filter(
+    (step) => step['type'] === 'showElement',
+  )
+  const panelId = shown
+    .map(
+      (step) =>
+        /^\[data-aglyn="leaf:(.+)"\]$/.exec(
+          String(step['selector'] ?? ''),
+        )?.[1],
+    )
+    .find((id): id is string => !!id && !!built.node(id))
   if (!panelId) return null
-  return { inside: [...new Set([...built.under(item), ...built.under(panelId)])], hover: true }
+  return {
+    inside: [...new Set([...built.under(item), ...built.under(panelId)])],
+    hover: true,
+  }
 }
 
 /** A node's label as a menu, a link or a button carries it. */
 function labelOf(node: SiteImportFidelityNode | undefined): string {
   if (!node) return ''
-  return clean(node.props?.['label']) || clean(node.props?.['children']) || clean(node.props?.['ariaLabel'])
+  return (
+    clean(node.props?.['label']) ||
+    clean(node.props?.['children']) ||
+    clean(node.props?.['ariaLabel'])
+  )
 }
 
-const LINK_COMPONENTS = new Set(['muiScreenLink', 'muiButton', 'muiLinkBox', 'muiLink'])
+const LINK_COMPONENTS = new Set([
+  'muiScreenLink',
+  'muiButton',
+  'muiLinkBox',
+  'muiLink',
+])
 
 /**
  * A built header and footer scored against the source's (AGL-4109): the
@@ -2624,21 +4040,52 @@ const LINK_COMPONENTS = new Set(['muiScreenLink', 'muiButton', 'muiLinkBox', 'mu
  * labels on one line; the footer's columns, links, profiles and facts. The
  * score is the lowest ratio.
  */
-export function siteImportFrameFidelity(source: { nav: SiteImportNavTree | null | undefined; footer: SiteImportFooter | null | undefined }, tree: SiteImportFidelityTree): SiteImportFrameFidelity {
+export function siteImportFrameFidelity(
+  source: {
+    nav: SiteImportNavTree | null | undefined
+    footer: SiteImportFooter | null | undefined
+  },
+  tree: SiteImportFidelityTree,
+): SiteImportFrameFidelity {
   const built = new Built(tree)
   const all = built.order
-  const is = (componentId: string) => (id: string) => built.node(id)?.componentId === componentId
+  const is = (componentId: string) => (id: string) =>
+    built.node(id)?.componentId === componentId
   const drawer = all.find(is('muiDrawer')) ?? null
   const inDrawer = (id: string) => !!drawer && built.holds(drawer, id)
-  const header = all.find((id) => built.node(id)?.componentId === 'muiAppBar' || built.node(id)?.props?.['component'] === 'header') ?? null
-  const footer = all.find((id) => built.node(id)?.props?.['element'] === 'footer' || built.node(id)?.props?.['component'] === 'footer') ?? null
-  const inHeader = header ? built.under(header).filter((id) => !inDrawer(id)) : []
-  const row = inHeader.find((id) => built.node(id)?.props?.['component'] === 'nav') ?? null
+  const header =
+    all.find(
+      (id) =>
+        built.node(id)?.componentId === 'muiAppBar' ||
+        built.node(id)?.props?.['component'] === 'header',
+    ) ?? null
+  const footer =
+    all.find(
+      (id) =>
+        built.node(id)?.props?.['element'] === 'footer' ||
+        built.node(id)?.props?.['component'] === 'footer',
+    ) ?? null
+  const inHeader = header
+    ? built.under(header).filter((id) => !inDrawer(id))
+    : []
+  const row =
+    inHeader.find((id) => built.node(id)?.props?.['component'] === 'nav') ??
+    null
   const nav = source.nav ?? null
   const groups = nav?.items ?? []
 
   // The row: its items by name, in order; a menu drawn as its name and its panel by its name's.
-  const itemLabel = (id: string) => labelOf(built.node(id)) || labelOf(built.node(built.children(id).find((child) => LINK_COMPONENTS.has(built.node(child)?.componentId ?? '')) ?? ''))
+  const itemLabel = (id: string) =>
+    labelOf(built.node(id)) ||
+    labelOf(
+      built.node(
+        built
+          .children(id)
+          .find((child) =>
+            LINK_COMPONENTS.has(built.node(child)?.componentId ?? ''),
+          ) ?? '',
+      ),
+    )
   const rowItems = row ? built.children(row).map(itemLabel) : []
   const wanted = groups.map((item) => clean(item.label))
   const left = [...rowItems]
@@ -2650,7 +4097,9 @@ export function siteImportFrameFidelity(source: { nav: SiteImportNavTree | null 
       left.splice(at, 1)
     }
   }
-  const inOrder = rowItems.filter((label) => wanted.includes(label)).join('\n') === wanted.filter((label) => rowItems.includes(label)).join('\n')
+  const inOrder =
+    rowItems.filter((label) => wanted.includes(label)).join('\n') ===
+    wanted.filter((label) => rowItems.includes(label)).join('\n')
 
   // Each menu: drawn as one, under its name, with its entries, their lines and icons.
   const menus = { source: 0, built: 0 }
@@ -2663,9 +4112,15 @@ export function siteImportFrameFidelity(source: { nav: SiteImportNavTree | null 
   const hover = { source: 0, built: 0 }
   const filled = (id: string) => {
     const node = built.node(id)
-    return !!node && (node.componentId === 'muiCard' || node.props?.['colorScheme'] === 'dark' || node.sx?.['bgcolor'] !== undefined)
+    return (
+      !!node &&
+      (node.componentId === 'muiCard' ||
+        node.props?.['colorScheme'] === 'dark' ||
+        node.sx?.['bgcolor'] !== undefined)
+    )
   }
-  const label = (id: string) => labelOf(built.node(id)) || shownTexts(built.node(id))[0] || ''
+  const label = (id: string) =>
+    labelOf(built.node(id)) || shownTexts(built.node(id))[0] || ''
   for (const group of groups) {
     if (!group.items.length) continue
     menus.source += 1
@@ -2678,10 +4133,17 @@ export function siteImportFrameFidelity(source: { nav: SiteImportNavTree | null 
       if (entry.tile) tiles.source += 1
     }
     const columns = group.columns ?? []
-    const panelled = columns.length >= 2 || columns.some((column) => column.band !== 'plain' || !!column.image || column.lines.length > 0)
+    const panelled =
+      columns.length >= 2 ||
+      columns.some(
+        (column) =>
+          column.band !== 'plain' || !!column.image || column.lines.length > 0,
+      )
     if (panelled) {
       menuColumns.source += columns.length
-      panels.source += columns.filter((column) => column.band !== 'plain').length
+      panels.source += columns.filter(
+        (column) => column.band !== 'plain',
+      ).length
       pictures.source += columns.filter((column) => !!column.image).length
     }
     if (!drawnMenu) continue
@@ -2690,36 +4152,77 @@ export function siteImportFrameFidelity(source: { nav: SiteImportNavTree | null 
     const inside = drawnMenu.inside
     if (panelled) {
       // The panel's row: the part of it whose children hold the source's columns, each in its place.
-      const wanted = columns.map((column, index) => ({ column, labels: group.items.filter((entry) => Math.min(entry.at ?? 0, columns.length - 1) === index).map((entry) => clean(entry.label)) }))
+      const wanted = columns.map((column, index) => ({
+        column,
+        labels: group.items
+          .filter(
+            (entry) => Math.min(entry.at ?? 0, columns.length - 1) === index,
+          )
+          .map((entry) => clean(entry.label)),
+      }))
       const placed = (cell: string, want: (typeof wanted)[number]) => {
         const texts = new Set(built.under(cell).map(label))
-        return want.labels.every((name) => texts.has(name)) && (!want.column.heading || texts.has(clean(want.column.heading))) && want.column.lines.every((line) => texts.has(clean(line)))
+        return (
+          want.labels.every((name) => texts.has(name)) &&
+          (!want.column.heading || texts.has(clean(want.column.heading))) &&
+          want.column.lines.every((line) => texts.has(clean(line)))
+        )
       }
       let best: string[] = []
       for (const id of inside) {
         const cells = built.children(id)
         if (cells.length < columns.length) continue
-        const kept = wanted.filter((want, index) => !!cells[index] && placed(cells[index] as string, want)).length
-        if (kept > best.filter(Boolean).length) best = wanted.map((want, index) => (cells[index] && placed(cells[index] as string, want) ? (cells[index] as string) : ''))
+        const kept = wanted.filter(
+          (want, index) =>
+            !!cells[index] && placed(cells[index] as string, want),
+        ).length
+        if (kept > best.filter(Boolean).length)
+          best = wanted.map((want, index) =>
+            cells[index] && placed(cells[index] as string, want)
+              ? (cells[index] as string)
+              : '',
+          )
       }
       menuColumns.built += best.filter(Boolean).length
       columns.forEach((column, index) => {
         const cell = best[index]
         if (!cell) return
-        if (column.band !== 'plain' && built.under(cell).some(filled)) panels.built += 1
-        if (column.image && built.has(cell, (node) => node.componentId === 'image')) pictures.built += 1
+        if (column.band !== 'plain' && built.under(cell).some(filled))
+          panels.built += 1
+        if (
+          column.image &&
+          built.has(cell, (node) => node.componentId === 'image')
+        )
+          pictures.built += 1
       })
     }
-    const links = inside.filter((id) => LINK_COMPONENTS.has(built.node(id)?.componentId ?? ''))
+    const links = inside.filter((id) =>
+      LINK_COMPONENTS.has(built.node(id)?.componentId ?? ''),
+    )
     const texts = new Set(inside.flatMap((id) => shownTexts(built.node(id))))
     for (const entry of group.items) {
-      const link = links.find((id) => labelOf(built.node(id)) === clean(entry.label) || shownTexts(built.node(id)).includes(clean(entry.label)) || built.under(id).some((at) => shownTexts(built.node(at)).includes(clean(entry.label))))
+      const link = links.find(
+        (id) =>
+          labelOf(built.node(id)) === clean(entry.label) ||
+          shownTexts(built.node(id)).includes(clean(entry.label)) ||
+          built
+            .under(id)
+            .some((at) =>
+              shownTexts(built.node(at)).includes(clean(entry.label)),
+            ),
+      )
       if (!link) continue
       entries.built += 1
       if (entry.text && texts.has(clean(entry.text))) details.built += 1
-      if (entry.iconPath && built.has(link, (node) => node.componentId === 'icon')) details.built += 1
+      if (
+        entry.iconPath &&
+        built.has(link, (node) => node.componentId === 'icon')
+      )
+        details.built += 1
       // A tile: the icon held in a filled box of its own.
-      const icon = built.under(link).find((id) => built.node(id)?.componentId === 'icon')
+      const icon = built
+        .under(link)
+        .find((id) => built.node(id)?.componentId === 'icon')
       const box = icon ? built.parent.get(icon) : undefined
       if (entry.tile && box && box !== link && filled(box)) tiles.built += 1
     }
@@ -2729,19 +4232,35 @@ export function siteImportFrameFidelity(source: { nav: SiteImportNavTree | null 
   const ctas = { source: 0, built: 0 }
   for (const cta of nav?.ctas ?? []) {
     ctas.source += 1
-    const button = inHeader.find((id) => built.node(id)?.componentId === 'muiButton' && clean(built.node(id)?.props?.['children']) === clean(cta.label))
+    const button = inHeader.find(
+      (id) =>
+        built.node(id)?.componentId === 'muiButton' &&
+        clean(built.node(id)?.props?.['children']) === clean(cta.label),
+    )
     const node = button ? built.node(button) : undefined
-    if (node && node.props?.['variant'] === BUTTON_VARIANT[cta.style] && (!cta.href || hasDestination(node))) ctas.built += 1
+    if (
+      node &&
+      node.props?.['variant'] === BUTTON_VARIANT[cta.style] &&
+      (!cta.href || hasDestination(node))
+    )
+      ctas.built += 1
   }
 
   // The phone menu: every name, entry, link and button of the row.
-  const drawerTexts = new Set(drawer ? built.under(drawer).flatMap((id) => shownTexts(built.node(id))) : [])
+  const drawerTexts = new Set(
+    drawer
+      ? built.under(drawer).flatMap((id) => shownTexts(built.node(id)))
+      : [],
+  )
   const drawerWanted = [
     ...groups.flatMap((group) => [
       clean(group.label),
       ...group.items.map((entry) => clean(entry.label)),
       // Every word of a menu's panel too (AGL-4139): its columns' headings and lines.
-      ...(group.columns ?? []).flatMap((column) => [...(column.heading ? [clean(column.heading)] : []), ...column.lines.map(clean)]),
+      ...(group.columns ?? []).flatMap((column) => [
+        ...(column.heading ? [clean(column.heading)] : []),
+        ...column.lines.map(clean),
+      ]),
     ]),
     ...(nav?.ctas ?? []).map((cta) => clean(cta.label)),
   ].filter(Boolean)
@@ -2752,7 +4271,9 @@ export function siteImportFrameFidelity(source: { nav: SiteImportNavTree | null 
   const foot = source.footer ?? null
   const footIds = footer ? built.under(footer) : []
   const footTexts = new Set(footIds.flatMap((id) => shownTexts(built.node(id))))
-  const footLinks = footIds.filter((id) => LINK_COMPONENTS.has(built.node(id)?.componentId ?? ''))
+  const footLinks = footIds.filter((id) =>
+    LINK_COMPONENTS.has(built.node(id)?.componentId ?? ''),
+  )
   const footLinkLabels = footLinks.map((id) => labelOf(built.node(id)))
   const columnLinks = (foot?.columns ?? []).flatMap((column) => column.links)
   const linksWanted = [...columnLinks, ...(foot?.links ?? [])]
@@ -2765,42 +4286,111 @@ export function siteImportFrameFidelity(source: { nav: SiteImportNavTree | null 
       linkLeft.splice(at, 1)
     }
   }
-  const profiles = footIds.filter(is('socialLinks')).flatMap((id) => Object.entries(built.node(id)?.props ?? {}).filter(([, value]) => typeof value === 'string' && /^https?:/.test(value as string)))
-  const hrefs = new Set(footLinks.map((id) => clean(built.node(id)?.props?.['href'])))
-  const socialKept = (foot?.social ?? []).filter((profile) => profiles.some(([network, href]) => network === profile.network || href === profile.href) || hrefs.has(clean(profile.href))).length
-  const facts = [...(foot?.text ?? []), foot?.address, foot?.phone, foot?.email, foot?.copyright].map(clean).filter(Boolean)
+  const profiles = footIds
+    .filter(is('socialLinks'))
+    .flatMap((id) =>
+      Object.entries(built.node(id)?.props ?? {}).filter(
+        ([, value]) =>
+          typeof value === 'string' && /^https?:/.test(value as string),
+      ),
+    )
+  const hrefs = new Set(
+    footLinks.map((id) => clean(built.node(id)?.props?.['href'])),
+  )
+  const socialKept = (foot?.social ?? []).filter(
+    (profile) =>
+      profiles.some(
+        ([network, href]) =>
+          network === profile.network || href === profile.href,
+      ) || hrefs.has(clean(profile.href)),
+  ).length
+  const facts = [
+    ...(foot?.text ?? []),
+    foot?.address,
+    foot?.phone,
+    foot?.email,
+    foot?.copyright,
+  ]
+    .map(clean)
+    .filter(Boolean)
   // Its filled boxes, each a filled box holding its heading, words and links (AGL-4139).
   for (const box of foot?.panels ?? []) {
     panels.source += 1
-    const want = [box.heading, ...box.lines, ...(box.links ?? []).map((entry) => entry.label)].filter((text): text is string => !!text).map(clean)
-    if (footIds.some((id) => filled(id) && want.every((text) => built.under(id).some((at) => label(at) === text)))) panels.built += 1
+    const want = [
+      box.heading,
+      ...box.lines,
+      ...(box.links ?? []).map((entry) => entry.label),
+    ]
+      .filter((text): text is string => !!text)
+      .map(clean)
+    if (
+      footIds.some(
+        (id) =>
+          filled(id) &&
+          want.every((text) =>
+            built.under(id).some((at) => label(at) === text),
+          ),
+      )
+    )
+      panels.built += 1
   }
   // It opens with the logo: a picture before any of its words.
   const firstWords = footIds.find((id) => shownTexts(built.node(id)).length > 0)
-  const firstPicture = footIds.find((id) => built.node(id)?.componentId === 'image')
-  const logo = ratioKept(foot?.logo ? 1 : 0, foot?.logo && firstPicture && (!firstWords || footIds.indexOf(firstPicture) < footIds.indexOf(firstWords)) ? 1 : 0)
+  const firstPicture = footIds.find(
+    (id) => built.node(id)?.componentId === 'image',
+  )
+  const logo = ratioKept(
+    foot?.logo ? 1 : 0,
+    foot?.logo &&
+      firstPicture &&
+      (!firstWords ||
+        footIds.indexOf(firstPicture) < footIds.indexOf(firstWords))
+      ? 1
+      : 0,
+  )
 
   const report: Omit<SiteImportFrameFidelity, 'score' | 'lowest'> = {
     // Over the larger of the two: a row of the site's page titles in place of the source's menus scores low.
-    items: { source: wanted.length, built: matched, ratio: Math.max(wanted.length, rowItems.length) > 0 ? matched / Math.max(wanted.length, rowItems.length) : 1 },
+    items: {
+      source: wanted.length,
+      built: matched,
+      ratio:
+        Math.max(wanted.length, rowItems.length) > 0
+          ? matched / Math.max(wanted.length, rowItems.length)
+          : 1,
+    },
     inOrder,
     menus: ratioKept(menus.source, menus.built),
     entries: ratioKept(entries.source, entries.built),
     details: ratioKept(details.source, details.built),
     ctas: ratioKept(ctas.source, ctas.built),
-    drawer: ratioKept(drawerWanted.length, drawerWanted.filter((label) => drawerTexts.has(label)).length),
+    drawer: ratioKept(
+      drawerWanted.length,
+      drawerWanted.filter((label) => drawerTexts.has(label)).length,
+    ),
     phone: ratioKept(hasRow ? 1 : 0, hasRow && toggle && !!drawer ? 1 : 0),
-    nowrap: ratioKept(row ? 1 : 0, row && built.node(row)?.sx?.['whiteSpace'] === 'nowrap' ? 1 : 0),
+    nowrap: ratioKept(
+      row ? 1 : 0,
+      row && built.node(row)?.sx?.['whiteSpace'] === 'nowrap' ? 1 : 0,
+    ),
     menuColumns: ratioKept(menuColumns.source, menuColumns.built),
     panels: ratioKept(panels.source, panels.built),
     tiles: ratioKept(tiles.source, tiles.built),
     pictures: ratioKept(pictures.source, pictures.built),
     hover: ratioKept(hover.source, hover.built),
     logo,
-    columns: ratioKept(foot?.columns.length ?? 0, (foot?.columns ?? []).filter((column) => footTexts.has(clean(column.heading))).length),
+    columns: ratioKept(
+      foot?.columns.length ?? 0,
+      (foot?.columns ?? []).filter((column) =>
+        footTexts.has(clean(column.heading)),
+      ).length,
+    ),
     links: ratioKept(linksWanted.length, linksKept),
     social: ratioKept(foot?.social.length ?? 0, socialKept),
-    facts: ratioKept(facts.length, facts.filter((fact) => footTexts.has(fact)).length),
+    facts: ratioKept(
+      facts.length,
+      facts.filter((fact) => footTexts.has(fact)).length,
+    ),
   }
   const measures: Array<[string, SiteImportFidelityCount]> = [
     ['items', report.items],
