@@ -26,10 +26,9 @@
  * the sync writes that business's own sales into it at its direction — Aglyn
  * selects no ledger vendor, any more than it selects the mail provider a rep
  * connects for Sequences. So each is `not-a-subprocessor`, on the
- * customer-chosen-destination ground. ⚑ A classification for legal to
- * confirm before `release_accounting` is switched on for customers: if it
- * is not accepted, Intuit and Xero become published subprocessors with an
- * Annex row each.
+ * customer-chosen-destination ground, the classification `release_accounting`
+ * was released to every workspace under on 2026-11-16. Were it ever reversed,
+ * Intuit and Xero would become published subprocessors with an Annex row each.
  *
  * CODAT is different (AGL-3636): Aglyn chooses it and holds the account —
  * one API key for the deployment, one Codat company per workspace — and the
