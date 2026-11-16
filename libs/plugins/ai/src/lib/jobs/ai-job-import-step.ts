@@ -865,6 +865,8 @@ export function aiSiteImportDocumentFor(state: AiSiteImportState, page: AiSiteIm
       ? {
           generative: true as const,
           siteLines: aiSiteImportSiteLines(state),
+          // The site's own phones and emails, where any page's call and write buttons go (AGL-4152).
+          ...(state.home ? { siteContacts: { phones: state.home.facts.phones, emails: state.home.facts.emails } } : {}),
           scope: aiSiteImportWaveLines(state, page),
           ...(state.plan ? { plan: state.plan } : {}),
           // The page that holds the site's form, where a link to form goes from a page with none (AGL-4152).

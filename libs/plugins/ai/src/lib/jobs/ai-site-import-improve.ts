@@ -64,6 +64,7 @@ import {
   type AiLayoutSection,
   type AiLayoutSettlement,
 } from '../layout-language/ai-layout-language'
+import { aiLayoutTelHref } from '../layout-language/ai-layout-frame-source'
 import { AI_ICON_WORDS } from '../runtime/ai-icon-library'
 import type {
   AiSiteImportAddedSection,
@@ -477,8 +478,6 @@ export function aiSiteImportLedgerText(
 /** A phone number in a run of words, as a destination reads it. */
 const PHONE =
   /(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d{2,4}[\s.-]\d{3,4}(?:[\s.-]\d{2,4})?/
-/** A line that is a phone number and nothing else. */
-const PHONE_LINE = new RegExp(`^${PHONE.source}$`)
 /** An email address in a run of words. */
 const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/u
 
@@ -504,20 +503,29 @@ export function aiSiteImportImproveDestinations(
   }
   for (const page of doc.links) out.set(`page:${page.id}`, `page:${page.id}`)
   // A new page has no contact line of its own: it may send a visitor to what the site gives (AGL-4152).
-  const own = doc.blocks
-    .map((block) => (block.kind === 'image' ? '' : block.text))
-    .join(' \n ')
-  const site = doc.siteLines ?? []
-  const text = [own, ...(doc.proposed ? site : [])].join(' \n ')
-  // Any page may call or write to the site's own number and address, which its header and footer give on every page
-  // (AGL-4152): a line of the site's that is a phone and nothing else, so no other run of digits reads as one.
-  const phone =
-    PHONE.exec(text)?.[0] ??
-    site.map((line) => line.trim()).find((line) => PHONE_LINE.test(line))
+  const text = [
+    ...doc.blocks.map((block) => (block.kind === 'image' ? '' : block.text)),
+    ...(doc.proposed ? (doc.siteLines ?? []) : []),
+  ].join(' \n ')
+  const phone = PHONE.exec(text)?.[0]
   if (phone && phone.replace(/\D/g, '').length >= 7)
     out.set('phone', `tel:${phone.replace(/[^\d+]/g, '')}`)
-  const email = EMAIL.exec(text)?.[0] ?? EMAIL.exec(site.join(' \n '))?.[0]
+  const email = EMAIL.exec(text)?.[0]
   if (email) out.set('email', `mailto:${email}`)
+  // Any page may call or write to the site's own number and address, which its header and footer give on every
+  // page, as its home page gives them (AGL-4152): the first that reads as one, as the frame's call button takes it.
+  if (!out.has('phone')) {
+    const tel = (doc.siteContacts?.phones ?? [])
+      .map((entry) => aiLayoutTelHref(PHONE.exec(entry)?.[0] ?? entry))
+      .find((href) => !!href && href.replace(/\D/g, '').length >= 7)
+    if (tel) out.set('phone', tel)
+  }
+  if (!out.has('email')) {
+    const site = (doc.siteContacts?.emails ?? [])
+      .map((entry) => EMAIL.exec(entry)?.[0])
+      .find(Boolean)
+    if (site) out.set('email', `mailto:${site}`)
+  }
   for (const [key, to] of [...out])
     if (key === 'phone' || key === 'email') out.set(to, to)
   if (input.formSection !== null && input.formSection !== undefined)

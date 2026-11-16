@@ -379,6 +379,32 @@ Keep the code in place after verifying — both tools re-check it from time to t
 removing it un-verifies the site. Clearing a field and pressing **Update** removes that
 tag from every page.
 
+## Verify your business with ChatGPT {#chatgpt}
+
+ChatGPT lists businesses, and the owner of a business can claim its listing to keep its
+details right. To claim yours, ChatGPT asks you to show that you control your site's
+domain. The **Verify with ChatGPT** card, under **Search engine verification** in
+**Setup → SEO**, does that for you.
+
+1. In ChatGPT, open **Business** from the sidebar, search for your business and select
+   it.
+2. When ChatGPT asks how to verify your claim, choose **Website domain**. It shows a
+   record with a **Value**. Copy the value.
+3. In the **Verify with ChatGPT** card, press **Verify** with your domain's name.
+4. Paste the value and press **Add record**.
+5. Back in ChatGPT, press **Verify domain**. If ChatGPT doesn't see the record yet, wait
+   a few minutes and try again.
+
+Once the record is there, the card says so. If ChatGPT gives you a new value later, add
+it the same way and it replaces the old one.
+
+Aglyn adds the record for a domain [your workspace holds here](../custom-domains/manage-domains.md)
+that uses Aglyn's nameservers, and adding it takes a workspace owner or admin. For a
+domain that keeps its DNS with another provider, the card tells you which record to add
+there instead: a **TXT** record named `openai-business-claim` with the value ChatGPT
+gives you. A site on its free Aglyn address has no domain of its own to verify, so
+[connect a domain](../custom-domains/connect-a-domain.md) first.
+
 ## Sitemap & robots
 
 Aglyn generates **`sitemap.xml`** and **`robots.txt`** for your site automatically, so

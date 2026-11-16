@@ -330,6 +330,9 @@ const PLUGIN_TOPICS = {
   liveChat: '/building-sites/live-chat',
   // The domains plugin's Get a domain card on the Custom Domain page
   // (AGL-3962).
+  // The Verify with ChatGPT card on a site's Setup → SEO page, which the
+  // domains plugin contributes beside the search engine verification card.
+  chatgptVerification: '/building-sites/seo/overview',
   buyADomain: '/building-sites/custom-domains/buy-a-domain',
   // The workspace's Domains page (AGL-4040).
   manageDomains: '/building-sites/custom-domains/manage-domains',
