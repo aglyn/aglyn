@@ -60,6 +60,7 @@ import {
   CONNECTOR_CODE_TTL_MS,
   CONNECTOR_CODES_COLLECTION,
   CONNECTOR_GRANTS_COLLECTION,
+  CONNECTOR_REFRESH_REUSE_GRACE_MS,
   CONNECTOR_REFRESH_TOKEN_TTL_MS,
   CONNECTOR_REFRESH_TOKENS_COLLECTION,
   type ConnectorAccessLevel,
@@ -302,6 +303,12 @@ function issueTokens(
     expiresAt: at(now + CONNECTOR_REFRESH_TOKEN_TTL_MS),
     rotatedAt: null,
   })
+  // The client outlives every refresh token issued to it: its idle clock is
+  // pushed past this token's life in the same transaction that writes it.
+  tx.update(store.collection(CONNECTOR_CLIENTS_COLLECTION).doc(grant.clientId), {
+    lastUsedAt: at(now),
+    expiresAt: at(now + CONNECTOR_CLIENT_IDLE_TTL_MS),
+  })
   return {
     access_token: accessToken,
     token_type: 'Bearer',
@@ -364,8 +371,12 @@ export interface ExchangeCodeInput {
  * exchanges cannot both commit, and nothing is ever half-issued.
  *
  * A code presented after it was used is not just refused: the connection it
- * produced is revoked (RFC 6749 §4.1.2). Whoever holds the code now is not
- * who should, and the safe answer is that neither keeps access.
+ * produced is revoked (RFC 6749 §4.1.2) — but ONLY when the replay carries
+ * the client id, the redirect address and a PKCE verifier that answers the
+ * code's challenge. A spent code alone (from a browser history, a log, a
+ * screenshot) proves nothing about who holds the verifier, and letting it
+ * revoke would hand anyone who saw the address a way to disconnect the
+ * person. Without the bindings a replay is a plain `invalid_grant`.
  *
  * Bindings that do not match (client, address, verifier) refuse WITHOUT
  * spending the code, so a third party that learns a code cannot burn it out
@@ -405,6 +416,7 @@ export async function exchangeConnectorCode(
   if (!first.exists) return invalidGrant('The code is not valid')
   const preview = first.data() ?? {}
   if (preview.usedAt) {
+    if (bindingsHold(preview)) return invalidGrant('The code is not valid')
     if (typeof preview.grantId === 'string') {
       await revokeConnectorGrant(preview.grantId, 'code_replayed', now).catch(() => undefined)
     }
@@ -432,6 +444,7 @@ export async function exchangeConnectorCode(
     if (!snap.exists) return { kind: 'refused', description: 'The code is not valid' }
     const data = snap.data() ?? {}
     if (data.usedAt) {
+      if (bindingsHold(data)) return { kind: 'refused', description: 'The code is not valid' }
       return { kind: 'replayed', grantId: typeof data.grantId === 'string' ? data.grantId : null }
     }
     if (msOf(data.expiresAt) <= now) return { kind: 'refused', description: 'The code has expired' }
@@ -470,7 +483,6 @@ export async function exchangeConnectorCode(
   if (outcome.kind === 'refused') return invalidGrant(outcome.description)
 
   await replaceEarlierConnections({ grantId, clientId: client.clientId, orgId, uid }, now)
-  touchConnectorClient(client.clientId, now).catch(() => undefined)
   return {
     ok: true,
     tokens: outcome.tokens,
@@ -519,9 +531,11 @@ export interface RefreshInput {
  *
  * A refresh token presented AFTER it was rotated is evidence that two
  * parties hold it, and the connection is revoked — the legitimate client
- * re-connects, the other loses everything (OAuth 2.1 §4.3.1). That includes
- * a client that retries a refresh whose answer it lost; the cost is one
- * re-connect, and the alternative is a window in which a stolen token works.
+ * re-connects, the other loses everything (OAuth 2.1 §4.3.1). The exception
+ * is {@link CONNECTOR_REFRESH_REUSE_GRACE_MS} right after the rotation: a
+ * client that lost the answer and retries is refused (`invalid_grant`) but
+ * the connection survives, and the pair the first call issued keeps working.
+ * The retry gets no credentials, so the window grants nothing to a thief.
  *
  * Liveness is asked here with the lock check on, so a fully locked workspace
  * or a removed member ends the connection at the latest at the next refresh,
@@ -546,7 +560,9 @@ export async function refreshConnectorTokens(
   if (input.clientId !== preview.clientId) return invalidGrant('The refresh token was issued to another client')
   const grantId = String(preview.grantId ?? '')
   if (preview.rotatedAt) {
-    await revokeConnectorGrant(grantId, 'refresh_replayed', now).catch(() => undefined)
+    if (!withinReuseGrace(preview.rotatedAt, now)) {
+      await revokeConnectorGrant(grantId, 'refresh_replayed', now).catch(() => undefined)
+    }
     return invalidGrant('The refresh token has already been used')
   }
   if (msOf(preview.expiresAt) <= now) return invalidGrant('The refresh token has expired')
@@ -560,15 +576,19 @@ export async function refreshConnectorTokens(
   }
 
   const grantRef = db().collection(CONNECTOR_GRANTS_COLLECTION).doc(grantId)
+  const clientRef = db().collection(CONNECTOR_CLIENTS_COLLECTION).doc(String(preview.clientId))
   type Outcome =
     | { kind: 'issued'; tokens: ConnectorTokenResponse }
-    | { kind: 'replayed' }
+    | { kind: 'replayed'; graced: boolean }
     | { kind: 'refused'; error: 'invalid_grant' | 'invalid_scope'; description: string }
   const outcome: Outcome = await db().runTransaction(async (tx): Promise<Outcome> => {
-    const [snap, grantSnap] = await Promise.all([tx.get(ref), tx.get(grantRef)])
+    const [snap, grantSnap, clientSnap] = await Promise.all([tx.get(ref), tx.get(grantRef), tx.get(clientRef)])
     if (!snap.exists) return { kind: 'refused', error: 'invalid_grant', description: 'The refresh token is not valid' }
     const data = snap.data() ?? {}
-    if (data.rotatedAt) return { kind: 'replayed' }
+    if (data.rotatedAt) return { kind: 'replayed', graced: withinReuseGrace(data.rotatedAt, now) }
+    if (!clientSnap.exists) {
+      return { kind: 'refused', error: 'invalid_grant', description: 'The client is no longer registered' }
+    }
     if (msOf(data.expiresAt) <= now) {
       return { kind: 'refused', error: 'invalid_grant', description: 'The refresh token has expired' }
     }
@@ -598,14 +618,21 @@ export async function refreshConnectorTokens(
   })
 
   if (outcome.kind === 'replayed') {
-    await revokeConnectorGrant(grantId, 'refresh_replayed', now).catch(() => undefined)
+    if (!outcome.graced) {
+      await revokeConnectorGrant(grantId, 'refresh_replayed', now).catch(() => undefined)
+    }
     return invalidGrant('The refresh token has already been used')
   }
   if (outcome.kind === 'refused') {
     return { ok: false, error: outcome.error, description: outcome.description }
   }
-  touchConnectorClient(String(preview.clientId), now).catch(() => undefined)
   return { ok: true, tokens: outcome.tokens }
+}
+
+/** Was a refresh token rotated so recently that a reuse is a lost-answer retry? */
+function withinReuseGrace(rotatedAt: unknown, now: number): boolean {
+  const rotated = msOf(rotatedAt)
+  return rotated > 0 && now - rotated < CONNECTOR_REFRESH_REUSE_GRACE_MS
 }
 
 // ── Revocation endpoint (RFC 7009) ──────────────────────────────────────────
@@ -656,19 +683,27 @@ export interface VerifiedConnectorToken {
 }
 
 /**
- * Resolve an access token, or `null` when it is malformed, unknown, expired,
- * or its connection has ended or is no longer live.
+ * What {@link verifyConnectorAccessToken} answers when it could not find out:
+ * a read failed. Distinct from `null` (the token is no good) so the caller
+ * can say "try again" rather than "sign in again", and charge nobody for it.
+ */
+export const CONNECTOR_TOKEN_UNAVAILABLE = 'unavailable' as const
+
+/**
+ * Resolve an access token: the principal; `null` when it is malformed,
+ * unknown, expired, or its connection has ended or is no longer live; or
+ * {@link CONNECTOR_TOKEN_UNAVAILABLE} when a read failed.
  *
  * Reads the token, then the connection, then asks liveness: a Disconnect,
  * a removed member or a revoked permission takes effect on the next call.
  * A liveness answer of "no" revokes the connection; a READ that fails does
- * not — it answers `null` for this call and leaves the connection alone,
- * because a Firestore blip is not evidence about the person.
+ * not — a Firestore blip is not evidence about the person, nor about the
+ * token, so it is reported as unavailable and nothing is revoked.
  */
 export async function verifyConnectorAccessToken(
   token: string,
   options: { now?: number; liveness?: LivenessCheck } = {},
-): Promise<VerifiedConnectorToken | null> {
+): Promise<VerifiedConnectorToken | null | typeof CONNECTOR_TOKEN_UNAVAILABLE> {
   const now = options.now ?? Date.now()
   const liveness = options.liveness ?? checkConnectorLiveness
   if (!isConnectorAccessTokenFormat(token)) return null
@@ -709,7 +744,7 @@ export async function verifyConnectorAccessToken(
       uid: String(grant.uid),
     }
   } catch {
-    return null
+    return CONNECTOR_TOKEN_UNAVAILABLE
   }
 }
 

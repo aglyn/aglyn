@@ -92,7 +92,7 @@ describeOrSkip('connector credentials under concurrency (emulator)', () => {
     ])
   })
 
-  it('lets at most ONE of two simultaneous refreshes through, and a loser that saw the rotation ends the connection', async () => {
+  it('lets at most ONE of two simultaneous refreshes through, and the loser — inside the grace window — ends nothing', async () => {
     const { client, code } = await approve()
     const first = await exchangeConnectorCode(
       { code, clientId: client.clientId, redirectUri: CLAUDE, codeVerifier: VERIFIER },
@@ -106,11 +106,10 @@ describeOrSkip('connector credentials under concurrency (emulator)', () => {
       )
     const results = await Promise.all([attempt(), attempt()])
     const winners = results.filter((result) => result.ok)
-    expect(winners.length).toBeLessThanOrEqual(1)
-    // Whichever lost read a spent token, which is reuse: nothing survives.
-    for (const result of winners) {
-      if (!result.ok) continue
-      expect(await verifyConnectorAccessToken(result.tokens.access_token, { liveness: live })).toBeNull()
-    }
+    expect(winners).toHaveLength(1)
+    // A concurrent retry is the lost-answer case the grace window exists for:
+    // refused, and the winner's credentials keep working.
+    expect(await verifyConnectorAccessToken(winners[0].tokens.access_token, { liveness: live })).not.toBeNull()
   })
+
 })

@@ -87,11 +87,22 @@ export const CONNECTOR_CODE_TTL_MS = 5 * 60 * 1000
  */
 export const CONNECTOR_REFRESH_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000
 /**
- * An unused registration's life, refreshed whenever the client is used.
- * Registration is unauthenticated, so a client nobody uses must not live
- * forever; one in use is refreshed long before it lapses.
+ * An unused registration's life. Registration is unauthenticated, so a client
+ * nobody uses must not live forever. Every code exchange and refresh pushes
+ * it on in the same transaction that issues the refresh token, and it is a
+ * day LONGER than a refresh token's life — so a client always outlives every
+ * refresh token issued to it, by construction rather than by a later touch.
  */
-export const CONNECTOR_CLIENT_IDLE_TTL_MS = 90 * 24 * 60 * 60 * 1000
+export const CONNECTOR_CLIENT_IDLE_TTL_MS = CONNECTOR_REFRESH_TOKEN_TTL_MS + 24 * 60 * 60 * 1000
+
+/**
+ * How long a just-rotated refresh token may come back without ending the
+ * connection. A client whose refresh answer was lost in transit retries with
+ * the token it still holds; inside this window that retry is refused
+ * (`invalid_grant`) and the connection survives. Later reuse still ends it,
+ * because by then the token has been held by someone it should not have.
+ */
+export const CONNECTOR_REFRESH_REUSE_GRACE_MS = 30_000
 
 /** Admin-SDK-only collections, deny-all in the rules. */
 export const CONNECTOR_CLIENTS_COLLECTION = 'oauthClients'
@@ -449,11 +460,11 @@ const SCOPE_WORDS: Record<ApiScope, { area: string; words: string }> = {
   'datasets:read': { area: 'Datasets', words: 'See your datasets and their records' },
   'datasets:write': { area: 'Datasets', words: 'Add, edit and delete datasets and their records' },
   'contacts:read': { area: 'Contacts', words: 'See your contacts' },
-  'contacts:write': { area: 'Contacts', words: 'Add, edit and delete contacts' },
+  'contacts:write': { area: 'Contacts', words: 'Add, edit, merge and delete contacts' },
   'sites:read': { area: 'Sites', words: 'See your sites' },
-  'sites:publish': { area: 'Sites', words: 'Refresh your live pages so changes show right away' },
+  'sites:publish': { area: 'Sites', words: 'Publish your sites, so changes show on the live pages right away' },
   'sites:write': { area: 'Sites', words: 'Create new sites' },
-  'forms:read': { area: 'Form submissions', words: 'See what visitors sent through your forms' },
+  'forms:read': { area: 'Form submissions', words: 'See your form submissions — what visitors sent through your forms' },
   'forms:write': { area: 'Form submissions', words: 'Mark form submissions read and delete them' },
   'orders:read': { area: 'Orders', words: 'See your store orders' },
   'orders:write': { area: 'Orders', words: 'Mark orders shipped and add tracking numbers' },
@@ -461,8 +472,15 @@ const SCOPE_WORDS: Record<ApiScope, { area: string; words: string }> = {
   'bookings:read': { area: 'Bookings', words: 'See your bookings' },
   'media:read': { area: 'Media', words: 'See your media files' },
   'media:write': { area: 'Media', words: 'Upload media files' },
-  'crm:read': { area: 'CRM', words: 'See your companies, deals, tasks, activities and leads' },
-  'crm:write': { area: 'CRM', words: 'Add, edit and delete companies, deals, tasks and activities, and work leads' },
+  'crm:read': {
+    area: 'CRM',
+    words: 'See your companies, pipelines, deals, tasks, activities, leads and email templates',
+  },
+  'crm:write': {
+    area: 'CRM',
+    words:
+      'Add, edit and delete companies, deals, tasks and email templates; log and delete activities; add, edit and convert leads',
+  },
 }
 
 /** One scope in plain words, e.g. for a published description of the scopes. */
@@ -568,7 +586,8 @@ export function validateAuthorizeRequest(
 
   const rawState = params.state ?? null
   const stateOk = rawState === null || (typeof rawState === 'string' && rawState.length <= MAX_STATE_LENGTH)
-  const state = stateOk && rawState ? rawState : null
+  // Returned exactly as sent — an empty `state=` comes back empty, not dropped.
+  const state = stateOk ? rawState : null
   const refuse = (error: string, description: string): AuthorizeValidation => ({
     kind: 'redirect',
     redirectUri,

@@ -100,6 +100,7 @@ jest.mock('./firebase-admin', () => {
 })
 
 import {
+  CONNECTOR_TOKEN_UNAVAILABLE,
   type ConnectorLiveness,
   disconnectConnectorGrant,
   exchangeConnectorCode,
@@ -112,7 +113,13 @@ import {
   revokeConnectorToken,
   verifyConnectorAccessToken,
 } from './connector-oauth-store'
-import { CONNECTOR_CLIENT_IDLE_TTL_MS, CONNECTOR_CODE_TTL_MS, pkceS256Challenge } from './connector-oauth'
+import {
+  CONNECTOR_CLIENT_IDLE_TTL_MS,
+  CONNECTOR_CODE_TTL_MS,
+  CONNECTOR_REFRESH_REUSE_GRACE_MS,
+  CONNECTOR_REFRESH_TOKEN_TTL_MS,
+  pkceS256Challenge,
+} from './connector-oauth'
 
 const NOW = Date.UTC(2026, 10, 16, 12)
 const CLAUDE = 'https://claude.ai/api/mcp/auth_callback'
@@ -208,6 +215,21 @@ describe('the code exchange', () => {
     expect((await exchange(client, code)).ok).toBe(true)
   })
 
+  it('a spent code alone — no client, address or verifier — revokes nothing', async () => {
+    const { client, code, result } = await connected()
+    if (!result.ok) throw new Error('unreachable')
+    for (const overrides of [
+      { clientId: 'aglyn_client_someoneelse0000' },
+      { codeVerifier: 'b'.repeat(43) },
+      { codeVerifier: undefined },
+      { redirectUri: 'http://localhost:9/cb' },
+    ]) {
+      expect(await exchange(client, code, overrides)).toMatchObject({ ok: false, error: 'invalid_grant' })
+    }
+    expect(grantDocs()[0].revokedAt).toBeNull()
+    expect(await verifyConnectorAccessToken(result.tokens.access_token, opts())).not.toBeNull()
+  })
+
   it('spends a code once, and a second use revokes the connection the first produced', async () => {
     const { client, code, result } = await connected()
     if (!result.ok) throw new Error('unreachable')
@@ -267,11 +289,39 @@ describe('refresh', () => {
     if (!result.ok) throw new Error('unreachable')
     const next = await refreshConnectorTokens({ refreshToken: result.tokens.refresh_token, clientId: client.clientId }, opts())
     if (!next.ok) throw new Error(next.description)
-    const reuse = await refreshConnectorTokens({ refreshToken: result.tokens.refresh_token, clientId: client.clientId }, opts())
+    const later = NOW + CONNECTOR_REFRESH_REUSE_GRACE_MS
+    const reuse = await refreshConnectorTokens({ refreshToken: result.tokens.refresh_token, clientId: client.clientId }, opts(later))
     expect(reuse).toMatchObject({ ok: false, error: 'invalid_grant' })
     expect(grantDocs()[0]).toMatchObject({ revokedReason: 'refresh_replayed' })
     expect(await refreshConnectorTokens({ refreshToken: next.tokens.refresh_token, clientId: client.clientId }, opts())).toMatchObject({ ok: false })
     expect(await verifyConnectorAccessToken(next.tokens.access_token, opts())).toBeNull()
+  })
+
+  it('a retry inside the grace window is refused but ends nothing, and the new pair keeps working', async () => {
+    const { client, result } = await connected()
+    if (!result.ok) throw new Error('unreachable')
+    const next = await refreshConnectorTokens({ refreshToken: result.tokens.refresh_token, clientId: client.clientId }, opts())
+    if (!next.ok) throw new Error(next.description)
+    const retry = await refreshConnectorTokens(
+      { refreshToken: result.tokens.refresh_token, clientId: client.clientId },
+      opts(NOW + CONNECTOR_REFRESH_REUSE_GRACE_MS - 1),
+    )
+    expect(retry).toMatchObject({ ok: false, error: 'invalid_grant' })
+    expect(retry.tokens).toBeUndefined()
+    expect(grantDocs()[0].revokedAt).toBeNull()
+    expect(await verifyConnectorAccessToken(next.tokens.access_token, opts())).not.toBeNull()
+    expect((await refreshConnectorTokens({ refreshToken: next.tokens.refresh_token, clientId: client.clientId }, opts())).ok).toBe(true)
+  })
+
+  it('keeps the client alive past every refresh token it holds, however close to lapsing it was', async () => {
+    const { client, result } = await connected()
+    if (!result.ok) throw new Error('unreachable')
+    // Refresh at the last minute the refresh token is good for.
+    const late = NOW + CONNECTOR_REFRESH_TOKEN_TTL_MS - 60_000
+    const next = await refreshConnectorTokens({ refreshToken: result.tokens.refresh_token, clientId: client.clientId }, opts(late))
+    if (!next.ok) throw new Error(next.description)
+    // The token just issued lives CONNECTOR_REFRESH_TOKEN_TTL_MS; the client outlives it.
+    expect(await readConnectorClient(client.clientId, late + CONNECTOR_REFRESH_TOKEN_TTL_MS)).not.toBeNull()
   })
 
   it('refuses another client’s refresh token without revoking anything', async () => {
@@ -320,13 +370,15 @@ describe('verification', () => {
     expect(await verifyConnectorAccessToken(result.tokens.access_token, opts(NOW + 3_600_000))).toBeNull()
   })
 
-  it('answers null without revoking when a read fails', async () => {
+  it('answers UNAVAILABLE without revoking when a read fails', async () => {
     const { result } = await connected()
     if (!result.ok) throw new Error('unreachable')
     const failing = jest.fn(async () => {
       throw new Error('firestore unavailable')
     })
-    expect(await verifyConnectorAccessToken(result.tokens.access_token, { now: NOW, liveness: failing })).toBeNull()
+    expect(await verifyConnectorAccessToken(result.tokens.access_token, { now: NOW, liveness: failing })).toBe(
+      CONNECTOR_TOKEN_UNAVAILABLE,
+    )
     expect(grantDocs()[0].revokedAt).toBeNull()
   })
 })
