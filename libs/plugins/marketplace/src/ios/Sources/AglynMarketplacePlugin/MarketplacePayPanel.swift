@@ -133,9 +133,14 @@ struct MarketplacePayPanel: View {
   private func field(_ label: String, _ key: WritableKeyPath<PayBillingAddress, String>, content: TextContentKind, prompt: String? = nil)
     -> some View
   {
-    TextField(label, text: Binding(get: { address[keyPath: key] }, set: { address[keyPath: key] = $0 }), prompt: prompt.map { Text($0) })
-      .textContentKind(content)
-      .accessibilityIdentifier("marketplace-pay-address-\(label)")
+    // Labelled above the field, as the console's form and the app's Billing details label theirs: a placeholder alone
+    // goes away once the field is filled.
+    VStack(alignment: .leading, spacing: AglynSpace.half) {
+      Text(label).font(AglynFont.caption).foregroundStyle(.secondary)
+      TextField(label, text: Binding(get: { address[keyPath: key] }, set: { address[keyPath: key] = $0 }), prompt: prompt.map { Text($0) })
+        .textContentKind(content)
+        .accessibilityIdentifier("marketplace-pay-address-\(label)")
+    }
   }
 }
 

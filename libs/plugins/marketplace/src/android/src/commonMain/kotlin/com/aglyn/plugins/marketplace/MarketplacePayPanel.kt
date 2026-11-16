@@ -2,6 +2,7 @@ package com.aglyn.plugins.marketplace
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
@@ -74,7 +75,7 @@ fun MarketplacePayPanel(context: NativePluginContext, pay: MarketplacePay) {
               TextButton(onClick = { context.navigate("core.billing.settings") }) { Text("Open Billing") }
             })
           }
-          Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+          FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
             Button(onClick = { scope.launch { pay.pay() } }, enabled = !pay.busy, modifier = Modifier.testTag("marketplace-pay-confirm")) {
               Text(if (pay.busy) "Paying…" else "Pay ${formatPayCents(quote.totalCents)}")
             }
@@ -92,7 +93,7 @@ fun MarketplacePayPanel(context: NativePluginContext, pay: MarketplacePay) {
         PayTitle("Add a card to buy $name")
         PayHint("It stays on file for this workspace, in Billing, where you can change or remove it.")
         PayFailure(pay)
-        Row(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
           Button(onClick = { scope.launch { pay.addCard() } }, enabled = !pay.busy, modifier = Modifier.testTag("marketplace-pay-add-card")) {
             Text(if (pay.busy) "Opening…" else "Add a card on Stripe")
           }
@@ -116,7 +117,7 @@ fun MarketplacePayPanel(context: NativePluginContext, pay: MarketplacePay) {
           AddressField("Postal code", address.postalCode) { address = address.copy(postalCode = it) }
           AddressField("Country (2 letters)", address.country, placeholder = "US", capitals = true) { address = address.copy(country = it.take(2)) }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
           Button(
             onClick = { scope.launch { pay.saveAddress(address) } },
             enabled = !pay.busy && address.complete,
@@ -143,7 +144,7 @@ fun MarketplacePayPanel(context: NativePluginContext, pay: MarketplacePay) {
         }
         PayFailure(pay)
         if (pay.away) {
-          Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+          FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
             Button(onClick = { scope.launch { pay.backFromStripe() } }, enabled = !pay.busy) { Text("Check the payment") }
             PayCancel(pay)
           }

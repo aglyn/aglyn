@@ -398,7 +398,7 @@ final class MarketplacePay {
     defer { busy = false }
     do {
       let ended = try await quote()
-      if ended == .owned { return finish(.owned) }
+      if case .owned? = ended { return finish(.owned) }
       if case .stopped(let message, _)? = ended { error = message }
     } catch {
       self.error = "The payment could not open. Check your connection and try again."
