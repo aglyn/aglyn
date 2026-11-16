@@ -315,38 +315,89 @@ public func canCreateSite(name: String, subdomain: String, pick: SiteStarterSumm
 /// AI start (`guidedStart` in its answer), and the app has no such start to land
 /// on, which would leave an empty site. `style` is the one the person chose: the
 /// site starts in its look, and the route records it on the site.
-public func createSiteBody(orgID: String, name: String, subdomain: String, style: String) -> [String: String] {
+public func createSiteBody(orgID: String, name: String, subdomain: String, style: String, preview: Bool = false) -> JSONValue {
   [
-    "displayName": name.trimmingCharacters(in: .whitespacesAndNewlines),
-    "subdomain": subdomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-    "orgId": orgID,
+    "displayName": .string(name.trimmingCharacters(in: .whitespacesAndNewlines)),
+    "subdomain": .string(subdomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()),
+    "orgId": .string(orgID),
     "start": "starter",
-    "style": style,
+    "style": .string(style),
+    "preview": .bool(preview),
   ]
 }
 
 /// What Create site sends for a starter from the marketplace, as the console's own "Choose your starter" does: the
 /// listing, with no style, since the starter brings its own look.
-public func createSiteBody(orgID: String, name: String, subdomain: String, starter listingID: String) -> JSONValue {
+public func createSiteBody(
+  orgID: String, name: String, subdomain: String, starter listingID: String, preview: Bool = false
+) -> JSONValue {
   [
     "displayName": .string(name.trimmingCharacters(in: .whitespacesAndNewlines)),
     "subdomain": .string(subdomain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()),
     "orgId": .string(orgID),
     "start": "starter",
     "starter": ["listingId": .string(listingID)],
+    "preview": .bool(preview),
   ]
 }
 
+/// "Start in preview" (AGL-4086)'s default for how a site starts, as the console's `sitePreviewStartsOn`: on for a site
+/// brought in from somewhere else, off for everything else. The app's Create site always starts a starter site, so off
+/// until the person turns it on.
+public func sitePreviewStartsOn(_ start: String?) -> Bool { start == "import" }
+
+/// What "Start in preview" says under it (the console's `StartInPreviewSwitch`).
+public func startInPreviewCaption(_ on: Bool) -> String {
+  on
+    ? "Only you and your team can see the site until you make it public in Admin → Error pages. Visitors see \"Coming soon\"."
+    : "Visitors can see the site as soon as it has a page."
+}
+
+/// `6 of 10 sites · Pro plan` beside Create site (the console's `describeSiteAllowance`, AGL-2166): nil while the plan or
+/// the sites are still being read, so a placeholder count never reads as a measurement. `limit` nil is no known cap
+/// ("6 sites"); an infinite or negative one is Unlimited.
+public func describeSiteAllowance(used: Int, limit: Double?, planLabel: String?, ready: Bool) -> String? {
+  guard ready, let planLabel, !planLabel.isEmpty else { return nil }
+  let cap: String? = limit.map { !$0.isFinite || $0 < 0 ? "Unlimited" : String(Int($0)) }
+  let sites = cap.map { "\(used) of \($0) site\($0 == "1" ? "" : "s")" } ?? "\(used) site\(used == 1 ? "" : "s")"
+  return "\(sites) · \(planLabel) plan"
+}
+
+/// The plan and its site cap, as `/api/orgs/entitlements` answers for a workspace: the effective plan's label, and
+/// `quotas.hostLimit` (a null there is the route's JSON for an unlimited cap).
+public struct SiteAllowancePlan: Equatable, Sendable {
+  public let planLabel: String
+  public let hostLimit: Double?
+
+  public init(planLabel: String, hostLimit: Double?) {
+    self.planLabel = planLabel
+    self.hostLimit = hostLimit
+  }
+
+  public init?(_ body: JSONValue) {
+    guard let plan = body["plan"]?.stringValue else { return nil }
+    planLabel = BundleWords.planLabels[plan] ?? plan.capitalized
+    let quotas = body["quotas"]
+    if let limit = quotas?["hostLimit"]?.numberValue {
+      hostLimit = limit
+    } else if quotas?["hostLimit"] != nil {
+      hostLimit = .infinity
+    } else {
+      hostLimit = nil
+    }
+  }
+}
+
 /// `POST /api/hosts/create`, the console's own Create site.
-public func createSite(_ api: ConsoleAPIClient, orgID: String, name: String, subdomain: String, start: SiteStart)
-  async throws -> CreateSiteResult
-{
+public func createSite(
+  _ api: ConsoleAPIClient, orgID: String, name: String, subdomain: String, start: SiteStart, preview: Bool = false
+) async throws -> CreateSiteResult {
   let body: JSONValue
   var listing = ""
   switch start {
-  case .style(let style): body = .from(createSiteBody(orgID: orgID, name: name, subdomain: subdomain, style: style))
+  case .style(let style): body = createSiteBody(orgID: orgID, name: name, subdomain: subdomain, style: style, preview: preview)
   case .starter(let listingID):
-    body = createSiteBody(orgID: orgID, name: name, subdomain: subdomain, starter: listingID)
+    body = createSiteBody(orgID: orgID, name: name, subdomain: subdomain, starter: listingID, preview: preview)
     listing = listingID
   }
   do {

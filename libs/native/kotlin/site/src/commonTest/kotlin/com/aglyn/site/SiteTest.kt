@@ -209,6 +209,28 @@ class SiteTest {
     // The console's "Create the starter site"; without it the server may leave the site empty for a guided start the app does not have.
     assertEquals("starter", body["start"]?.jsonPrimitive?.content)
     assertEquals("trades", body["style"]?.jsonPrimitive?.content)
+    // "Start in preview" (AGL-4086) rides the same request; off unless the person turns it on.
+    assertEquals("false", body["preview"]?.jsonPrimitive?.content)
+    assertEquals("true", createSiteBody("org1", "Shop", "shop", "trades", preview = true)["preview"]?.jsonPrimitive?.content)
+    assertEquals(false, com.aglyn.site.sites.sitePreviewStartsOn("starter"))
+    assertEquals(true, com.aglyn.site.sites.sitePreviewStartsOn("import"))
+  }
+
+  /** `6 of 10 sites · Pro plan` beside Create site, as the console's `describeSiteAllowance` says it. */
+  @Test
+  fun theSiteAllowanceReadsAsTheConsoleSaysIt() {
+    val describe = { used: Int, limit: Double?, plan: String?, ready: Boolean -> com.aglyn.site.sites.describeSiteAllowance(used, limit, plan, ready) }
+    assertEquals("6 of 10 sites · Pro plan", describe(6, 10.0, "Pro", true))
+    assertEquals("1 of 1 site · Free plan", describe(1, 1.0, "Free", true))
+    assertEquals("4 of Unlimited sites · Custom plan", describe(4, Double.POSITIVE_INFINITY, "Custom", true))
+    assertEquals("4 of Unlimited sites · Pro plan", describe(4, -1.0, "Pro", true))
+    assertEquals("1 site · Pro plan", describe(1, null, "Pro", true))
+    assertEquals(null, describe(0, 1.0, "Free", false))
+    assertEquals(null, describe(0, 1.0, null, true))
+    val pro = kotlinx.serialization.json.Json.parseToJsonElement("""{"plan":"pro","quotas":{"hostLimit":10}}""").jsonObject
+    assertEquals(com.aglyn.site.sites.SiteAllowancePlan("Pro", 10.0), com.aglyn.site.sites.SiteAllowancePlan.of(pro))
+    val custom = kotlinx.serialization.json.Json.parseToJsonElement("""{"plan":"enterprise","quotas":{"hostLimit":null}}""").jsonObject
+    assertEquals(Double.POSITIVE_INFINITY, com.aglyn.site.sites.SiteAllowancePlan.of(custom)?.hostLimit)
   }
 
   @Test

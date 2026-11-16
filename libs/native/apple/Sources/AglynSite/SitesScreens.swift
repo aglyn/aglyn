@@ -35,6 +35,8 @@ struct SitesScreen: View {
   @State private var pinning: PendingSitePin?
   /// The Created filter's sheet is open.
   @State private var choosingCreated = false
+  /// The workspace's plan and its site cap (`/api/orgs/entitlements`), for "6 of 10 sites · Pro plan".
+  @State private var allowancePlan: SiteAllowancePlan?
   @Environment(\.aglynWideChrome) private var wide
   @Environment(\.openURL) private var openURL
 
@@ -74,6 +76,12 @@ struct SitesScreen: View {
             choosingCreated = false
           } onCancel: {
             choosingCreated = false
+          }
+        }
+        .task(id: orgID) {
+          allowancePlan = nil
+          if let body = try? await context.api.request("/api/orgs/entitlements", query: [("orgId", orgID)]) {
+            allowancePlan = SiteAllowancePlan(body)
           }
         }
       } else {
@@ -128,8 +136,31 @@ struct SitesScreen: View {
     if preferences.toggleHostPin(row.id, orgID: orgID) == .full { pinning = PendingSitePin(id: row.id, name: row.name) }
   }
 
+  /// The list has answered, so the count is a measurement and not a placeholder.
+  private var listRead: Bool {
+    if case .ready = model.rows { return true }
+    return false
+  }
+
+  /// `6 of 10 sites · Pro plan` beside Create site (the console's AGL-2166 readout): the sites this person can open in the
+  /// workspace against the plan's cap, once both are read.
+  private var allowance: String? {
+    describeSiteAllowance(
+      used: context.sites.count, limit: allowancePlan?.hostLimit, planLabel: allowancePlan?.planLabel,
+      ready: allowancePlan != nil && listRead)
+  }
+
   private func list(selectable: Bool) -> some View {
     VStack(spacing: 0) {
+      if let allowance {
+        HStack {
+          Spacer(minLength: 0)
+          Text(allowance).font(AglynFont.subheadline).foregroundStyle(AglynColor.secondaryText)
+            .accessibilityIdentifier("sites-allowance")
+        }
+        .padding(.horizontal, AglynContentInsets.horizontal)
+        .padding(.bottom, AglynSpace.half)
+      }
       // On a phone the filter chips sit over the list; the Mac and iPad keep them in the list toolbar's Filter.
       if !wide {
         AglynChipRow(
@@ -560,6 +591,9 @@ struct CreateSiteSheet: View {
   /// The words the picker asks with, once the typing has settled.
   @State private var settledSearch = ""
   @State private var pick: SiteStarterSummary?
+  /// "Start in preview" (AGL-4086): only the team sees the site until it is made public. Off for a starter site, as the
+  /// console's default (`sitePreviewStartsOn`).
+  @State private var startInPreview = sitePreviewStartsOn("starter")
 
   private var usingStarters: Bool { startersOffered == true && pickerShown != false }
 
@@ -675,6 +709,10 @@ struct CreateSiteSheet: View {
       }
       if !subdomain.isEmpty && !isValidSubdomain(subdomain) {
         Text("3 to 30 letters, numbers or hyphens.").font(AglynFont.caption).foregroundStyle(AglynColor.error)
+      }
+      VStack(alignment: .leading, spacing: AglynSpace.half) {
+        Toggle("Start in preview", isOn: $startInPreview).disabled(runner.busy).accessibilityIdentifier("site-start-in-preview")
+        Text(startInPreviewCaption(startInPreview)).font(AglynFont.caption).foregroundStyle(AglynColor.secondaryText)
       }
       if !suggestions.isEmpty {
         VStack(alignment: .leading, spacing: AglynSpace.one) {
@@ -869,9 +907,9 @@ struct CreateSiteSheet: View {
       guard let style else { return }
       start = .style(style)
     }
-    let (name, subdomain, files) = (name, subdomain, brandFiles)
+    let (name, subdomain, files, preview) = (name, subdomain, brandFiles, startInPreview)
     runner.run {
-      switch try await createSite(context.api, orgID: orgID, name: name, subdomain: subdomain, start: start) {
+      switch try await createSite(context.api, orgID: orgID, name: name, subdomain: subdomain, start: start, preview: preview) {
       case .created(let hostID, _):
         // The logo, dark logo and favicon go in now the site has a library. A file that does not make it never costs
         // the site: it is said once, here, before the site opens.

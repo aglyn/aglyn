@@ -134,6 +134,19 @@ fun SitesScreen(context: NativePluginContext, initialSiteId: String? = null, sta
   val model = remember(orgId, context.uid) { SitesListModel(context.uid, orgId, context.firestore, scope) }
   LaunchedEffect(model) { model.reload() }
   val canCreate = com.aglyn.pluginhost.rememberMemberPermissions(context).can("hosts.create")
+  // `6 of 10 sites · Pro plan` beside Create site (the console's AGL-2166 readout): the plan and its cap from the
+  // entitlements route, the count from the workspace's sites once the list has answered.
+  val allowancePlan by produceState<SiteAllowancePlan?>(null, orgId) {
+    value = runCatching { context.api.request("/api/orgs/entitlements", query = mapOf("orgId" to orgId)) as? kotlinx.serialization.json.JsonObject }
+      .getOrNull()?.let(SiteAllowancePlan::of)
+  }
+  val workspaceSites = com.aglyn.pluginhost.rememberWorkspaceSites(context)
+  val allowance = describeSiteAllowance(
+    used = (workspaceSites as? Live.Ready)?.value?.size ?: 0,
+    limit = allowancePlan?.hostLimit,
+    planLabel = allowancePlan?.planLabel,
+    ready = allowancePlan != null && workspaceSites is Live.Ready,
+  )
   // Opened from Create new: the new-site form comes up at once (for those who may make one).
   var creating by remember { mutableStateOf(startNew && canCreate) }
   // The workspace's pinned sites, in the order pinned (`users/{uid}.pinnedHosts`, AGL-4005), live from the account.
@@ -185,6 +198,15 @@ fun SitesScreen(context: NativePluginContext, initialSiteId: String? = null, sta
     ) {
       for (refusal in model.refused) {
         NoticeBanner("That filter was not applied: ${refusal.reason}.", tone = StatusTone.WARNING, modifier = Modifier.padding(horizontal = space(2f)))
+      }
+      allowance?.let {
+        Text(
+          it,
+          Modifier.fillMaxWidth().padding(horizontal = space(2f)).padding(bottom = space(0.5f)).testTag("sites-allowance"),
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          textAlign = androidx.compose.ui.text.style.TextAlign.End,
+        )
       }
       RefreshableBox(model.refreshing, model::refresh) {
         LoadContent(model.rows, onRetry = { model.reload() }, failedTitle = "Could not load sites") { queried ->
@@ -461,6 +483,9 @@ private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close:
   var starterSearch by remember { mutableStateOf("") }
   var settledSearch by remember { mutableStateOf("") }
   var pick by remember { mutableStateOf<SiteStarterSummary?>(null) }
+  // "Start in preview" (AGL-4086): only the team sees the site until it is made public; off for a starter site, as the
+  // console's default (`sitePreviewStartsOn`).
+  var startInPreview by remember { mutableStateOf(sitePreviewStartsOn("starter")) }
   val usingStarters = offered == true && pickerShown != false
   val usingStyles = offered == false || pickerShown == false
   LaunchedEffect(starterSearch) {
@@ -508,7 +533,7 @@ private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close:
           val start = if (usingStarters) pick?.let { SiteStart.Starter(it.listingId) } else style?.let { SiteStart.Style(it) }
           if (start == null) return@Button
           runner.run {
-            when (val result = createSite(context.api, orgId, name, subdomain, start)) {
+            when (val result = createSite(context.api, orgId, name, subdomain, start, startInPreview)) {
               is CreateSiteResult.Created -> {
                 // The logo, dark logo and favicon go in now the site has a library. A file that does not make it never
                 // costs the site: it is said once, here, before the site opens.
@@ -559,6 +584,10 @@ private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close:
         modifier = Modifier.fillMaxWidth().testTag("site-subdomain"),
       )
       Text("You can connect your own domain later.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      com.aglyn.ui.SwitchRow(
+        "Start in preview", startInPreview, { startInPreview = it },
+        supporting = startInPreviewCaption(startInPreview), enabled = !runner.busy, modifier = Modifier.testTag("site-start-in-preview"),
+      )
       if (suggestions.isNotEmpty()) {
         Text("Try one of these:", style = MaterialTheme.typography.labelLarge)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
