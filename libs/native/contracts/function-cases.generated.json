@@ -2869,6 +2869,438 @@
         }
       ]
     },
+    "businessDetailsSeed": {
+      "module": "libs/aglyn/src/lib/app-utils/business-details.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "business": {
+                "supportEmail": " old@paws.example "
+              }
+            }
+          ],
+          "result": {
+            "business": {
+              "supportEmail": " old@paws.example "
+            },
+            "seo": {
+              "entity": {
+                "email": "old@paws.example"
+              }
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "seo": {
+                "entity": {
+                  "email": "new@paws.example"
+                }
+              },
+              "business": {
+                "supportEmail": "old@paws.example"
+              }
+            }
+          ],
+          "result": {
+            "business": {
+              "supportEmail": "old@paws.example"
+            },
+            "seo": {
+              "entity": {
+                "email": "new@paws.example"
+              }
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "displayName": "Paws",
+              "seo": {
+                "title": "Paws"
+              }
+            }
+          ],
+          "result": {
+            "displayName": "Paws",
+            "seo": {
+              "title": "Paws"
+            }
+          }
+        }
+      ]
+    },
+    "businessDetailsWrite": {
+      "module": "libs/aglyn/src/lib/app-utils/business-details.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "seo": {
+                "entity": {
+                  "name": " Paws ",
+                  "slogan": " Happy dogs ",
+                  "telephone": " +1 512-555-0100 ",
+                  "email": " hi@paws.example ",
+                  "address": {
+                    "streetAddress": " 1 Main St ",
+                    "addressLocality": "Austin",
+                    "addressRegion": "TX",
+                    "postalCode": "78701",
+                    "addressCountry": "US"
+                  }
+                }
+              },
+              "business": {
+                "socialLinks": [
+                  {
+                    "label": " Instagram ",
+                    "url": " https://instagram.com/paws "
+                  },
+                  {
+                    "label": "Empty",
+                    "url": "  "
+                  }
+                ]
+              }
+            },
+            null
+          ],
+          "result": {
+            "business": {
+              "address": "1 Main St, Austin, TX, 78701, US",
+              "socialLinks": [
+                {
+                  "label": "Instagram",
+                  "url": "https://instagram.com/paws"
+                }
+              ],
+              "supportEmail": "hi@paws.example"
+            },
+            "seo": {
+              "entity": {
+                "address": {
+                  "addressCountry": "US",
+                  "addressLocality": "Austin",
+                  "addressRegion": "TX",
+                  "postalCode": "78701",
+                  "streetAddress": "1 Main St"
+                },
+                "email": "hi@paws.example",
+                "name": "Paws",
+                "slogan": "Happy dogs",
+                "telephone": "+1 512-555-0100"
+              }
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "seo": {
+                "entity": {
+                  "name": "Paws"
+                }
+              }
+            },
+            {
+              "seo": {
+                "entity": {
+                  "email": "a@paws.example"
+                }
+              },
+              "business": {
+                "supportEmail": "a@paws.example"
+              }
+            }
+          ],
+          "result": {
+            "business": {
+              "supportEmail": ""
+            },
+            "seo": {
+              "entity": {
+                "name": "Paws"
+              }
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "seo": {
+                "entity": {
+                  "name": "Paws"
+                }
+              }
+            },
+            {
+              "seo": {
+                "entity": {
+                  "name": "Paws"
+                }
+              }
+            }
+          ],
+          "result": {
+            "business": {},
+            "seo": {
+              "entity": {
+                "name": "Paws"
+              }
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "seo": {
+                "entity": {
+                  "email": "a@paws.example"
+                }
+              }
+            },
+            {
+              "business": {
+                "address": "4 Shore Rd\nMadison, WI 53703"
+              }
+            }
+          ],
+          "result": {
+            "business": {
+              "supportEmail": "a@paws.example"
+            },
+            "seo": {
+              "entity": {
+                "email": "a@paws.example"
+              }
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "seo": {
+                "entity": {
+                  "address": {
+                    "streetAddress": "9 Lake Dr",
+                    "addressLocality": "Madison"
+                  }
+                }
+              }
+            },
+            {
+              "seo": {
+                "entity": {
+                  "address": {
+                    "streetAddress": "4 Shore Rd",
+                    "addressLocality": "Madison"
+                  }
+                }
+              },
+              "business": {
+                "address": "4 Shore Rd, Madison"
+              }
+            }
+          ],
+          "result": {
+            "business": {
+              "address": "9 Lake Dr, Madison"
+            },
+            "seo": {
+              "entity": {
+                "address": {
+                  "addressLocality": "Madison",
+                  "streetAddress": "9 Lake Dr"
+                }
+              }
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "seo": {
+                "entity": {}
+              }
+            },
+            {
+              "seo": {
+                "entity": {
+                  "address": {
+                    "streetAddress": "4 Shore Rd"
+                  }
+                }
+              },
+              "business": {
+                "address": "4 Shore Rd"
+              }
+            }
+          ],
+          "result": {
+            "business": {
+              "address": ""
+            },
+            "seo": {
+              "entity": {}
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "seo": {
+                "entity": {
+                  "address": {
+                    "streetAddress": "4 Shore Rd"
+                  }
+                }
+              },
+              "business": {
+                "address": "kept"
+              }
+            },
+            {
+              "seo": {
+                "entity": {
+                  "address": {
+                    "streetAddress": "4 Shore Rd"
+                  }
+                }
+              },
+              "business": {
+                "address": "kept"
+              }
+            }
+          ],
+          "result": {
+            "business": {
+              "address": "kept"
+            },
+            "seo": {
+              "entity": {
+                "address": {
+                  "streetAddress": "4 Shore Rd"
+                }
+              }
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "business": {
+                "socialLinks": [
+                  {
+                    "label": " L0 ",
+                    "url": " https://example.com/0 "
+                  },
+                  {
+                    "label": " L1 ",
+                    "url": " https://example.com/1 "
+                  },
+                  {
+                    "label": " L2 ",
+                    "url": " https://example.com/2 "
+                  },
+                  {
+                    "label": " L3 ",
+                    "url": " https://example.com/3 "
+                  },
+                  {
+                    "label": " L4 ",
+                    "url": " https://example.com/4 "
+                  },
+                  {
+                    "label": " L5 ",
+                    "url": " https://example.com/5 "
+                  },
+                  {
+                    "label": " L6 ",
+                    "url": " https://example.com/6 "
+                  },
+                  {
+                    "label": " L7 ",
+                    "url": " https://example.com/7 "
+                  },
+                  {
+                    "label": " L8 ",
+                    "url": " https://example.com/8 "
+                  },
+                  {
+                    "label": " L9 ",
+                    "url": " https://example.com/9 "
+                  }
+                ]
+              }
+            },
+            null
+          ],
+          "result": {
+            "business": {
+              "socialLinks": [
+                {
+                  "label": "L0",
+                  "url": "https://example.com/0"
+                },
+                {
+                  "label": "L1",
+                  "url": "https://example.com/1"
+                },
+                {
+                  "label": "L2",
+                  "url": "https://example.com/2"
+                },
+                {
+                  "label": "L3",
+                  "url": "https://example.com/3"
+                },
+                {
+                  "label": "L4",
+                  "url": "https://example.com/4"
+                },
+                {
+                  "label": "L5",
+                  "url": "https://example.com/5"
+                },
+                {
+                  "label": "L6",
+                  "url": "https://example.com/6"
+                },
+                {
+                  "label": "L7",
+                  "url": "https://example.com/7"
+                }
+              ]
+            },
+            "seo": {
+              "entity": {}
+            }
+          }
+        },
+        {
+          "args": [
+            {},
+            null
+          ],
+          "result": {
+            "business": {},
+            "seo": {
+              "entity": {}
+            }
+          }
+        }
+      ]
+    },
     "businessProfileFoundedProblem": {
       "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
       "cases": [

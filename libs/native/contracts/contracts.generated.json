@@ -187,6 +187,19 @@
       "path": "ratingAverage"
     }
   },
+  "BUSINESS_DETAILS_CLEARABLE_PATH_LIST": [
+    "seo.entity.name",
+    "seo.entity.slogan",
+    "seo.entity.telephone",
+    "seo.entity.email",
+    "seo.entity.address.streetAddress",
+    "seo.entity.address.addressLocality",
+    "seo.entity.address.addressRegion",
+    "seo.entity.address.postalCode",
+    "seo.entity.address.addressCountry",
+    "business.supportEmail",
+    "business.address"
+  ],
   "BUSINESS_PROFILE_FIELD_ORDER": [
     "whatYouDo",
     "services",
@@ -215,6 +228,7 @@
   "BUSINESS_PROFILE_SITE_DOC": "profile",
   "BUSINESS_PROFILE_SUBCOLLECTION": "businessProfile",
   "BUSINESS_PROFILE_WORKSPACE_DOC": "defaults",
+  "BUSINESS_SOCIAL_LINKS_MAX": 8,
   "BUSINESS_TONE_LABELS": {
     "friendly": "Friendly and warm",
     "plain": "Plain and direct",
@@ -10180,6 +10194,7 @@
       }
     ]
   },
+  "SITE_SLOGAN_MAX_LENGTH": 120,
   "STAR_COLORS": [
     "blue",
     "purple",

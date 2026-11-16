@@ -1,6 +1,9 @@
 package com.aglyn.site.setup
 
+import com.aglyn.contracts.Contracts
 import com.aglyn.contracts.PluginCatalog
+import com.aglyn.contracts.businessDetailsSeed
+import com.aglyn.contracts.businessDetailsWrite
 import com.aglyn.contracts.resolveHostEnabledPlugins
 import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
@@ -194,13 +197,97 @@ fun parseLocales(text: String): Pair<List<String>, String?> {
 /** One social link of the business details. */
 data class SocialLink(val label: String, val url: String)
 
-/** The business details card's list limit (`MAX_LINKS`). */
-const val SOCIAL_LINKS_MAX = 8
+/** The business details card's list limit (`BUSINESS_SOCIAL_LINKS_MAX`). */
+val SOCIAL_LINKS_MAX: Int get() = Contracts.businessSocialLinksMax.toInt()
 
 fun socialLinksOf(host: Map<String, Any?>?): List<SocialLink> = (host.at("business.socialLinks") as? List<*>)?.mapNotNull { row ->
   val map = row as? Map<*, *> ?: return@mapNotNull null
   SocialLink((map["label"] as? String).orEmpty(), (map["url"] as? String).orEmpty())
 }.orEmpty()
+
+/**
+ * The Business details card's text fields (Setup → Business profile, `hostBusinessDetails`, AGL-4136), in the console's
+ * order: the canonical paths every reader takes the site's name, slogan, phone, email and address from.
+ */
+val BUSINESS_DETAILS_TEXT_PATHS = listOf(
+  "seo.entity.name", "seo.entity.slogan", "seo.entity.telephone", "seo.entity.email", "seo.entity.address.streetAddress",
+  "seo.entity.address.addressLocality", "seo.entity.address.addressRegion", "seo.entity.address.postalCode",
+  "seo.entity.address.addressCountry",
+)
+
+/** The Business details card's text fields over [host], seeded as the console seeds them (`businessDetailsSeed`). */
+fun businessDetailsForm(host: Map<String, Any?>?): Map<String, String> {
+  val seeded = businessDetailsSeed(host)
+  return BUSINESS_DETAILS_TEXT_PATHS.associateWith { seeded.text(it) }
+}
+
+/**
+ * The one-block address the site prints while its structured address is empty, for the Street field's note; null once a
+ * part is filled in (the console's Street `resolveProps`).
+ */
+fun businessDetailsLegacyAddress(fields: Map<String, String>, host: Map<String, Any?>?): String? {
+  val block = host.text("business.address").trim()
+  val hasParts = BUSINESS_DETAILS_TEXT_PATHS.filter { it.startsWith("seo.entity.address.") }.any { fields[it].orEmpty().isNotBlank() }
+  if (block.isEmpty() || hasParts) return null
+  return block.replace(Regex("\\s*\n\\s*"), ", ")
+}
+
+private val BUSINESS_EMAIL_PATTERN = Regex("^\\s*[^\\s@]+@[^\\s@]+\\.[^\\s@]+\\s*$")
+
+/** Why the Business details card's Email cannot be saved, in the console's words, or null when it can (an empty one can). */
+fun businessDetailsEmailError(email: String): String? =
+  if (email.isEmpty() || BUSINESS_EMAIL_PATTERN.matches(email)) null else "Please enter an email address, like you@example.com"
+
+/**
+ * What the Business details card's Save writes, as the console's save writes it (AGL-4136): the fields the card holds, a
+ * cleared one left out as the form leaves it out, beside the two `business` copies as stored (the console's form submits
+ * the whole document, so an untouched copy is carried, not read as cleared), through [businessDetailsWrite] (trimmed, the
+ * copies kept in step), then every clearable path the save leaves blank and the site still holds deleted. Merged into the
+ * host document; an empty map is dropped, since a merge would store it over what the document holds.
+ */
+fun businessDetailsPayload(values: Map<String, String>, links: List<SocialLink>, stored: Map<String, Any?>?): Map<String, Any?> {
+  val fields = mutableMapOf<String, Any?>()
+  for (path in listOf("business.supportEmail", "business.address")) stored.at(path)?.let { fields.putPath(path, it) }
+  for (path in BUSINESS_DETAILS_TEXT_PATHS) {
+    val value = values[path].orEmpty()
+    if (value.isNotEmpty()) fields.putPath(path, value)
+  }
+  if (links.isNotEmpty() || stored.at("business.socialLinks") != null) {
+    fields.putPath("business.socialLinks", links.map { mapOf("label" to it.label, "url" to it.url) })
+  }
+  val written = deepMutable(businessDetailsWrite(fields, stored))
+  for (path in Contracts.businessDetailsClearablePathList) {
+    val submitted = written.at(path)
+    val blank = submitted == null || submitted.toString().trim().isEmpty()
+    val held = stored.at(path)
+    if (blank && held != null && held.toString() != "") written.putPath(path, FirestoreDelete)
+  }
+  return withoutEmptyMaps(written)
+}
+
+@Suppress("UNCHECKED_CAST")
+private fun deepMutable(map: Map<String, Any?>): MutableMap<String, Any?> =
+  map.mapValuesTo(mutableMapOf()) { (_, value) -> if (value is Map<*, *>) deepMutable(value as Map<String, Any?>) else value }
+
+@Suppress("UNCHECKED_CAST")
+private fun MutableMap<String, Any?>.putPath(path: String, value: Any?) {
+  val keys = path.split('.')
+  var node = this
+  for (key in keys.dropLast(1)) node = node.getOrPut(key) { mutableMapOf<String, Any?>() } as MutableMap<String, Any?>
+  node[keys.last()] = value
+}
+
+@Suppress("UNCHECKED_CAST")
+private fun withoutEmptyMaps(map: Map<String, Any?>): Map<String, Any?> = buildMap {
+  for ((key, value) in map) {
+    if (value is Map<*, *>) {
+      val kept = withoutEmptyMaps(value as Map<String, Any?>)
+      if (kept.isNotEmpty()) put(key, kept)
+    } else {
+      put(key, value)
+    }
+  }
+}
 
 /** The SEO form's limits (`hostSeo`, `hostSeoEntity`, `hostSeoAgent`). */
 object SeoLimits {
