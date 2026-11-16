@@ -88,9 +88,10 @@ public enum DeepLinks {
     return besignerSitePatterns.contains { matches($0, scope.rest) }
   }
 
-  /// The Besigner on one page's working version, under the picked site.
-  public static func besignerScreen(_ screenID: String, versionID: String) -> String {
-    "/screens/\(screenID)/versions/\(versionID)/besigner"
+  /// The Besigner on one page's working version, under the picked site, or that version's preview (`SCREEN_PREVIEW`:
+  /// the page as it would look, with Publish and Open in Besigner).
+  public static func besignerScreen(_ screenID: String, versionID: String, preview: Bool = false) -> String {
+    "/screens/\(screenID)/versions/\(versionID)/\(preview ? "preview" : "besigner")"
   }
 
   /// The path part of a console URL, an `aglyn://` URL, or a bare path.

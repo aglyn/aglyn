@@ -29,7 +29,8 @@
       "eventCalendar": false,
       "dataStore": false,
       "redirects": false,
-      "workflows": false
+      "workflows": false,
+      "scheduledPublishing": false
     },
     "starter": {
       "marketingOverlays": true,
@@ -49,7 +50,8 @@
       "eventCalendar": false,
       "dataStore": true,
       "redirects": true,
-      "workflows": true
+      "workflows": true,
+      "scheduledPublishing": false
     },
     "pro": {
       "marketingOverlays": true,
@@ -69,7 +71,8 @@
       "eventCalendar": false,
       "dataStore": true,
       "redirects": true,
-      "workflows": true
+      "workflows": true,
+      "scheduledPublishing": true
     },
     "business": {
       "marketingOverlays": true,
@@ -89,7 +92,8 @@
       "eventCalendar": false,
       "dataStore": true,
       "redirects": true,
-      "workflows": true
+      "workflows": true,
+      "scheduledPublishing": true
     },
     "scale": {
       "marketingOverlays": true,
@@ -109,7 +113,8 @@
       "eventCalendar": false,
       "dataStore": true,
       "redirects": true,
-      "workflows": true
+      "workflows": true,
+      "scheduledPublishing": true
     },
     "advanced": {
       "marketingOverlays": true,
@@ -129,7 +134,8 @@
       "eventCalendar": false,
       "dataStore": true,
       "redirects": true,
-      "workflows": true
+      "workflows": true,
+      "scheduledPublishing": true
     },
     "agency": {
       "marketingOverlays": true,
@@ -149,7 +155,8 @@
       "eventCalendar": false,
       "dataStore": true,
       "redirects": true,
-      "workflows": true
+      "workflows": true,
+      "scheduledPublishing": true
     },
     "enterprise": {
       "marketingOverlays": true,
@@ -169,7 +176,8 @@
       "eventCalendar": false,
       "dataStore": true,
       "redirects": true,
-      "workflows": true
+      "workflows": true,
+      "scheduledPublishing": true
     }
   },
   "grantedFrom": {
@@ -188,7 +196,8 @@
     "bookings": "Starter",
     "dataStore": "Starter",
     "redirects": "Starter",
-    "workflows": "Starter"
+    "workflows": "Starter",
+    "scheduledPublishing": "Pro"
   },
   "addOnNotices": {
     "eventCalendar": "The Event Calendar is a paid add-on ($9/mo for your whole workspace, supported directly by Aglyn). Enable it from Billing → Add-ons."
@@ -322,6 +331,13 @@
     },
     {
       "org": {
+        "plan": "free"
+      },
+      "feature": "scheduledPublishing",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "starter"
       },
       "feature": "marketingOverlays",
@@ -448,6 +464,13 @@
     },
     {
       "org": {
+        "plan": "starter"
+      },
+      "feature": "scheduledPublishing",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "pro"
       },
       "feature": "marketingOverlays",
@@ -574,6 +597,13 @@
     },
     {
       "org": {
+        "plan": "pro"
+      },
+      "feature": "scheduledPublishing",
+      "result": true
+    },
+    {
+      "org": {
         "plan": "business"
       },
       "feature": "marketingOverlays",
@@ -700,6 +730,13 @@
     },
     {
       "org": {
+        "plan": "business"
+      },
+      "feature": "scheduledPublishing",
+      "result": true
+    },
+    {
+      "org": {
         "plan": "enterprise"
       },
       "feature": "marketingOverlays",
@@ -826,6 +863,13 @@
     },
     {
       "org": {
+        "plan": "enterprise"
+      },
+      "feature": "scheduledPublishing",
+      "result": true
+    },
+    {
+      "org": {
         "plan": "nonsense"
       },
       "feature": "marketingOverlays",
@@ -952,6 +996,13 @@
     },
     {
       "org": {
+        "plan": "nonsense"
+      },
+      "feature": "scheduledPublishing",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "business",
         "billingStatus": "canceled"
       },
@@ -1097,6 +1148,14 @@
     {
       "org": {
         "plan": "business",
+        "billingStatus": "canceled"
+      },
+      "feature": "scheduledPublishing",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "business",
         "billingStatus": "past_due"
       },
       "feature": "marketingOverlays",
@@ -1240,6 +1299,14 @@
     },
     {
       "org": {
+        "plan": "business",
+        "billingStatus": "past_due"
+      },
+      "feature": "scheduledPublishing",
+      "result": true
+    },
+    {
+      "org": {
         "plan": "pro",
         "subscription": {
           "status": "unpaid"
@@ -1420,6 +1487,16 @@
     },
     {
       "org": {
+        "plan": "pro",
+        "subscription": {
+          "status": "unpaid"
+        }
+      },
+      "feature": "scheduledPublishing",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "free",
         "entitlements": {
           "planComp": {
@@ -1636,6 +1713,18 @@
     },
     {
       "org": {
+        "plan": "free",
+        "entitlements": {
+          "planComp": {
+            "plan": "business"
+          }
+        }
+      },
+      "feature": "scheduledPublishing",
+      "result": true
+    },
+    {
+      "org": {
         "plan": "starter",
         "billingStatus": "active",
         "entitlements": {
@@ -1871,6 +1960,19 @@
     {
       "org": {
         "plan": "starter",
+        "billingStatus": "active",
+        "entitlements": {
+          "planComp": {
+            "plan": "business"
+          }
+        }
+      },
+      "feature": "scheduledPublishing",
+      "result": false
+    },
+    {
+      "org": {
+        "plan": "starter",
         "billingStatus": "canceled",
         "entitlements": {
           "planComp": {
@@ -2104,6 +2206,19 @@
     },
     {
       "org": {
+        "plan": "starter",
+        "billingStatus": "canceled",
+        "entitlements": {
+          "planComp": {
+            "plan": "pro"
+          }
+        }
+      },
+      "feature": "scheduledPublishing",
+      "result": true
+    },
+    {
+      "org": {
         "plan": "free",
         "entitlements": {
           "features": {
@@ -2338,6 +2453,19 @@
     },
     {
       "org": {
+        "plan": "free",
+        "entitlements": {
+          "features": {
+            "abTesting": true,
+            "outreach": true
+          }
+        }
+      },
+      "feature": "scheduledPublishing",
+      "result": false
+    },
+    {
+      "org": {
         "plan": "enterprise",
         "entitlements": {
           "features": {
@@ -2550,6 +2678,18 @@
         }
       },
       "feature": "workflows",
+      "result": true
+    },
+    {
+      "org": {
+        "plan": "enterprise",
+        "entitlements": {
+          "features": {
+            "marketingOverlays": false
+          }
+        }
+      },
+      "feature": "scheduledPublishing",
       "result": true
     }
   ],
