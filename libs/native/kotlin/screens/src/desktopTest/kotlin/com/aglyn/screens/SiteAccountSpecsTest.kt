@@ -85,7 +85,7 @@ class SiteAccountSpecsTest : SpecTestBase() {
     assertEquals(json("""{"hostId":"h1","memberId":"sm-1","action":"setPassword","password":"pw-123456789012"}"""), model.body(set, """{"password":"pw-123456789012"}"""))
     val address = model.row("data.member.addresses")
     assertEquals("Jordan Lee · 1 Main St · Springfield IL 62701 · US", model.line("addresses", "primary", address))
-    val noEmail = account(""","email":null,"displayName":"Walk-in""")
+    val noEmail = account(""","email":null,"displayName":"Walk-in"""")
     assertTrue("noEmail" in noEmail.shown() && "password" !in noEmail.shown() && "addresses" !in noEmail.shown())
   }
 
