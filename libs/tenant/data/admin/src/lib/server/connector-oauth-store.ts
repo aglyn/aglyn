@@ -44,8 +44,9 @@
  * member's app stops on its next call rather than an hour later. A
  * connection found dead that way is revoked, so Settings stops listing it.
  * Workspace lockdown and the plan check run per call in `authenticateApiV1`,
- * the same chokepoint API keys go through; a full lock also refuses a
- * refresh and revokes the connection.
+ * the same chokepoint API keys go through. A full lock also refuses a
+ * refresh — as "try again later", never as a dead credential — and revokes
+ * nothing: a lock is temporary, and a connection survives it as a key does.
  */
 import { isOrgWideMember } from '@aglyn/aglyn/app-utils/organizations'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
@@ -82,6 +83,7 @@ import {
 } from './connector-oauth'
 import { firebaseAdmin } from './firebase-admin'
 import { getLockdownVerdict } from './lockdown'
+import { consumeRateLimit } from './rate-limit-store'
 import { memberHasOrgPermission, resolveOrgMembership } from './organizations'
 
 function db(): FirebaseFirestore.Firestore {
@@ -97,6 +99,9 @@ const isoOf = (value: unknown): string | null => {
   const ms = msOf(value)
   return ms ? new Date(ms).toISOString() : null
 }
+
+/** What a refresh refused by a lock tells the client to wait, in seconds. */
+const LOCKED_RETRY_AFTER_SEC = 300
 
 /** How often `lastUsedAt` may be written for one connection, at most. */
 const LAST_USED_WRITE_INTERVAL_MS = 60_000
@@ -267,6 +272,29 @@ async function touchConnectorClient(clientId: string, now: number): Promise<void
   }
 }
 
+/** Unapproved clients one account may approve — promote to the full idle life — per day. */
+export const CONNECTOR_PROMOTIONS_PER_DAY = 20
+
+/**
+ * May `uid` approve `clientId` now? Always for a client already approved by
+ * anyone. For a client nobody has approved yet, the first approval promotes
+ * it from the week an unapproved registration lives to the full idle life,
+ * so each account may promote at most {@link CONNECTOR_PROMOTIONS_PER_DAY}
+ * distinct clients a day — otherwise one account's approvals could keep an
+ * unlimited number of junk registrations alive. Counted on the durable
+ * per-key limiter, so it holds across instances.
+ */
+export async function reserveClientPromotion(uid: string, clientId: string, now = Date.now()): Promise<boolean> {
+  const snap = await db().collection(CONNECTOR_CLIENTS_COLLECTION).doc(clientId).get()
+  if (snap.exists && snap.data()?.firstUsedAt) return true
+  const result = await consumeRateLimit(`oauth-promote:${uid}`, {
+    limit: CONNECTOR_PROMOTIONS_PER_DAY,
+    windowMs: 24 * 60 * 60 * 1000,
+    now,
+  })
+  return result.allowed
+}
+
 // ── Codes ───────────────────────────────────────────────────────────────────
 
 export interface MintCodeInput {
@@ -328,7 +356,16 @@ export interface ConnectorTokenResult {
   tokens?: ConnectorTokenResponse
   /** For the activity log: set only when the exchange created a connection. */
   connected?: { grantId: string; orgId: string; uid: string; email: string | null; clientName: string }
-  error?: 'invalid_grant' | 'invalid_scope' | 'invalid_target'
+  error?: 'invalid_grant' | 'invalid_scope' | 'invalid_target' | 'temporarily_unavailable'
+  /**
+   * The code or refresh token was well-formed and resolved to NOTHING: the
+   * one kind of failure the token endpoint counts against the caller's
+   * address. A secret that resolved and was refused for another reason —
+   * reuse, expiry, the wrong client — is not a guess and is not counted.
+   */
+  unknown?: boolean
+  /** With `temporarily_unavailable`: seconds until a retry is worth making. */
+  retryAfterSec?: number
   description?: string
 }
 
@@ -475,7 +512,7 @@ export async function exchangeConnectorCode(
   }
 
   const first = await ref.get()
-  if (!first.exists) return invalidGrant('The code is not valid')
+  if (!first.exists) return { ...invalidGrant('The code is not valid'), unknown: true }
   const preview = first.data() ?? {}
   if (preview.usedAt) {
     if (bindingsHold(preview)) return invalidGrant('The code is not valid')
@@ -599,9 +636,11 @@ export interface RefreshInput {
  * the connection survives, and the pair the first call issued keeps working.
  * The retry gets no credentials, so the window grants nothing to a thief.
  *
- * Liveness is asked here with the lock check on, so a fully locked workspace
- * or a removed member ends the connection at the latest at the next refresh,
- * whether or not a call was made in between.
+ * Liveness is asked here with the lock check on. A removed member, or one
+ * who lost the permission, ends the connection at the latest at the next
+ * refresh. A full lock is answered `temporarily_unavailable` with a retry
+ * time and changes nothing, because `invalid_grant` would make the client
+ * throw its refresh token away and disconnect the person over a lock.
  */
 export async function refreshConnectorTokens(
   input: RefreshInput,
@@ -617,7 +656,7 @@ export async function refreshConnectorTokens(
     .doc(hashConnectorSecret(input.refreshToken))
 
   const first = await ref.get()
-  if (!first.exists) return invalidGrant('The refresh token is not valid')
+  if (!first.exists) return { ...invalidGrant('The refresh token is not valid'), unknown: true }
   const preview = first.data() ?? {}
   if (input.clientId !== preview.clientId) return invalidGrant('The refresh token was issued to another client')
   const grantId = String(preview.grantId ?? '')
@@ -637,8 +676,16 @@ export async function refreshConnectorTokens(
     // the person's: the refresh is refused and the connection kept, exactly
     // as an API key survives a lock. Only losing membership or the
     // permission ends it.
+    if (verdict === 'locked') {
+      return {
+        ok: false,
+        error: 'temporarily_unavailable',
+        description: 'The workspace is locked; try again later',
+        retryAfterSec: LOCKED_RETRY_AFTER_SEC,
+      }
+    }
     if (endsConnection(verdict)) await revokeConnectorGrant(grantId, verdict, now).catch(() => undefined)
-    return invalidGrant(verdict === 'locked' ? 'The workspace is locked' : 'The connection is no longer valid')
+    return invalidGrant('The connection is no longer valid')
   }
 
   const grantRef = db().collection(CONNECTOR_GRANTS_COLLECTION).doc(grantId)

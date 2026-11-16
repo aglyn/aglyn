@@ -42,6 +42,16 @@ jest.mock('./organizations', () => ({
 }))
 jest.mock('./lockdown', () => ({ getLockdownVerdict: jest.fn() }))
 
+/** The durable limiter, as a plain counter per key: the rule under test is the caller's. */
+const mockRateCounts = new Map<string, number>()
+jest.mock('./rate-limit-store', () => ({
+  consumeRateLimit: async (key: string, options: { limit: number }) => {
+    const count = (mockRateCounts.get(key) ?? 0) + 1
+    mockRateCounts.set(key, count)
+    return { allowed: count <= options.limit, limit: options.limit, remaining: 0, resetMs: 0 }
+  },
+}))
+
 jest.mock('./firebase-admin', () => {
   const ref = (collection: string, id: string) => {
     const key = `${collection}/${id}`
@@ -110,6 +120,7 @@ import {
   readConnectorGrantAsKey,
   refreshConnectorTokens,
   registerConnectorClient,
+  reserveClientPromotion,
   revokeConnectorToken,
   verifyConnectorAccessToken,
 } from './connector-oauth-store'
@@ -167,8 +178,31 @@ const grantDocs = () =>
 
 beforeEach(() => {
   mockDocs.clear()
+  mockRateCounts.clear()
   verdict = 'live'
   liveness.mockClear()
+})
+
+describe('promotions per account (AGL-4225)', () => {
+  it('lets one account bring at most 20 never-approved clients to life a day, and never limits an approved one', async () => {
+    const ids: string[] = []
+    for (let i = 0; i < 21; i += 1) {
+      const client = await registerConnectorClient({ clientName: `Junk ${i}`, redirectUris: [CLAUDE] }, NOW)
+      ids.push(client?.clientId as string)
+    }
+    const answers = []
+    for (const id of ids) answers.push(await reserveClientPromotion('user-1', id, NOW))
+    expect(answers.filter(Boolean)).toHaveLength(20)
+    expect(answers[20]).toBe(false)
+    // Another account has its own allowance.
+    expect(await reserveClientPromotion('user-2', ids[20], NOW)).toBe(true)
+    // A client someone already approved is never counted.
+    await mintConnectorCode(
+      { clientId: ids[0], redirectUri: CLAUDE, codeChallenge: CHALLENGE, orgId: 'org-1', uid: 'user-3', email: null, scopes: ['contacts:read'], resource: null },
+      NOW,
+    )
+    expect(await reserveClientPromotion('user-1', ids[0], NOW)).toBe(true)
+  })
 })
 
 describe('registration', () => {
@@ -316,6 +350,17 @@ describe('the code exchange', () => {
     expect(await refreshConnectorTokens({ refreshToken: result.tokens.refresh_token, clientId: client.clientId }, opts())).toMatchObject({ ok: false })
   })
 
+  it('marks a well-formed secret that resolves to nothing as unknown, and nothing else', async () => {
+    const { client, code } = await connect()
+    const missing = await exchange(client, `aglyn_ac_${'z'.repeat(43)}`)
+    expect(missing).toMatchObject({ ok: false, error: 'invalid_grant', unknown: true })
+    expect((await exchange(client, code, { codeVerifier: 'b'.repeat(43) })).unknown).toBeUndefined()
+    expect((await exchange(client, 'aglyn_ac_short')).unknown).toBeUndefined()
+    expect(
+      await refreshConnectorTokens({ refreshToken: `aglyn_rt_${'z'.repeat(43)}`, clientId: client.clientId }, opts()),
+    ).toMatchObject({ unknown: true })
+  })
+
   it('refuses an expired code', async () => {
     const { client, code } = await connect()
     expect(await exchange(client, code, {}, NOW + CONNECTOR_CODE_TTL_MS)).toMatchObject({ ok: false, error: 'invalid_grant' })
@@ -425,7 +470,7 @@ describe('refresh', () => {
     verdict = 'locked'
     expect(
       await refreshConnectorTokens({ refreshToken: result.tokens.refresh_token, clientId: client.clientId }, opts()),
-    ).toMatchObject({ ok: false, error: 'invalid_grant', description: 'The workspace is locked' })
+    ).toMatchObject({ ok: false, error: 'temporarily_unavailable', retryAfterSec: 300 })
     expect(grantDocs()[0].revokedAt).toBeNull()
     // Lifted: the same refresh token still works.
     verdict = 'live'
