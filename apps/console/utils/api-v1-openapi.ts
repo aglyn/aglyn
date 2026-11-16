@@ -713,8 +713,9 @@ export function buildCustomerApiOpenApi(
             'connection stops working when it is disconnected in Settings or ' +
             'its person loses "Manage API keys" in the workspace. Clients ' +
             'register dynamically, and a code is delivered only to an address ' +
-            'the client registered: https on a domain name, http on loopback, ' +
-            'or a private-use app scheme.',
+            'the client registered: https on a domain name that is not this ' +
+            'platform’s own, http on loopback, or an app-link callback ' +
+            'added for that client on request.',
           flows: {
             authorizationCode: {
               authorizationUrl: `${origin}${CONNECTOR_AUTHORIZE_PATH}`,

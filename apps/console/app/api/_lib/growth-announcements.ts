@@ -302,7 +302,7 @@ export interface NewSiteAnnouncement {
   /** Who made it: an address for a console session, a label for an API key. */
   createdBy: string | null
   /**
-   * `createdBy` is a NAME an integration or connected app gave itself, not a
+   * `createdBy` is a NAME a connected app gave itself, not a
    * person's address, so it is shown as text that no mail client links.
    */
   createdByIsName?: boolean

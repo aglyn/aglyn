@@ -18,7 +18,7 @@
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
 import { connectorResourceMetadataUrl } from '@aglyn/aglyn/app-utils/connector-discovery'
 import { ApiErrors, apiJson, readCappedBody, withResponseHeaders } from '@aglyn/tenant-data-admin'
-import { connectorOrigin, refuseOnAuthOrigin } from '../_lib/connector-oauth-http'
+import { connectorOrigin, refuseOnAuthOrigin, unconfiguredOriginResponse } from '../_lib/connector-oauth-http'
 import { buildDocsUrl } from '../../../constants/docs-links'
 import { authenticateApiV1, chargeApiV1Call } from '../../../utils/api-v1'
 import {
@@ -93,10 +93,9 @@ async function readOutcome(response: Response) {
 const MCP_MAX_BODY_BYTES = 6 * 1024 * 1024
 
 /**
- * The most messages one JSON-RPC batch may carry. The whole batch is one
- * request — one rate-limit charge, one usage count — while every
- * `tools/call` in it is a full `/v1` dispatch, so an unbounded batch would be
- * unbounded work for the price of one call.
+ * The most messages one JSON-RPC batch may carry. Every `tools/call` in a
+ * batch is charged as a request of its own (see `callTool`), so this bounds
+ * how much work one HTTP request can queue, not what it is billed.
  */
 const MCP_MAX_BATCH = 20
 
@@ -140,7 +139,9 @@ export async function POST(request: Request): Promise<Response> {
 }
 
 async function answer(request: Request): Promise<Response> {
-  const { origin } = connectorOrigin(request)
+  const resolved = connectorOrigin(request)
+  if (!resolved) return unconfiguredOriginResponse()
+  const { origin } = resolved
   const authenticated = await authenticateApiV1(request)
   if (authenticated instanceof Response) return withSignInChallenge(authenticated, origin)
   const context = authenticated.context
@@ -171,6 +172,7 @@ async function answer(request: Request): Promise<Response> {
   )
 
   let callsMade = 0
+  let latestHeaders: Record<string, string> = context.headers
   const deps = {
     tools,
     serverName: SERVER_NAME,
@@ -187,8 +189,10 @@ async function answer(request: Request): Promise<Response> {
       // rather than run silently past the limit (AGL-4225).
       callsMade += 1
       if (callsMade > 1) {
-        const refused = await chargeApiV1Call(context)
-        if (refused) return readOutcome(refused)
+        const charged = await chargeApiV1Call(context)
+        // The response reports the budget as it stands after the LAST charge.
+        latestHeaders = charged.headers
+        if (charged.refusal) return readOutcome(charged.refusal)
       }
       const { request: toolRequest, segments } = buildToolRequest(
         tool,
@@ -212,12 +216,12 @@ async function answer(request: Request): Promise<Response> {
   }
 
   if (responses.length === 0) {
-    return new Response(null, { status: 202, headers: context.headers })
+    return new Response(null, { status: 202, headers: latestHeaders })
   }
 
   return apiJson(Array.isArray(payload) ? responses : responses[0], {
     headers: {
-      ...context.headers,
+      ...latestHeaders,
       'MCP-Protocol-Version': answeredVersion(messages, request),
     },
   })

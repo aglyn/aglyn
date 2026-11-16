@@ -65,7 +65,7 @@ import {
   readApiV1UsageFigures,
 } from '@aglyn/tenant-data-admin/server/api-v1-resources'
 import type { ApiV1ResourceDescription } from '@aglyn/tenant-data-admin/server/api-v1-description'
-import { apiActorLabel, usageBand } from '@aglyn/tenant-data-admin/server/api-v1-kit'
+import { apiActorLabel, isConnectedAppContext, usageBand } from '@aglyn/tenant-data-admin/server/api-v1-kit'
 import { createHash, randomUUID } from 'crypto'
 import { Timestamp } from 'firebase-admin/firestore'
 import { type ApiV1Context, apiUsageMonth, requireScope } from './api-v1'
@@ -317,7 +317,9 @@ async function createSite(request: Request, ctx: ApiV1Context): Promise<Response
       // `Connected app Cursor` for a connection, never `API key Cursor`
       // (AGL-4225); the announcement keeps it from being read as a link.
       createdBy: apiActorLabel(ctx),
-      createdByIsName: true,
+      // Only an app's self-chosen name is kept from becoming a link; a key's
+      // name was typed by the organization and is shown as typed.
+      createdByIsName: isConnectedAppContext(ctx),
       start: 'api',
     })
     return apiJson(view, { status: 201, headers: ctx.headers })

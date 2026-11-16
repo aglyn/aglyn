@@ -353,18 +353,21 @@ async function refuseIfApiQuotaExhausted(
  * messages, each a full `/v1` dispatch, so every call after the first is
  * charged here as its own request — the same per-credential limit, the same
  * monthly quota, the same meter — and refused, as itself, when the budget is
- * spent. `null` to proceed, or the refusal to report for that one call.
+ * spent. Answers the refusal to report for that one call, or `null`, and the
+ * rate-limit headers as they stand after this charge.
  */
-export async function chargeApiV1Call(context: ApiV1Context): Promise<Response | null> {
+export async function chargeApiV1Call(
+  context: ApiV1Context,
+): Promise<{ refusal: Response | null; headers: Record<string, string> }> {
   const rate = await consumeRateLimit(`apiv1:${context.keyId}`)
   const headers = rateLimitHeaders(rate)
   if (!rate.allowed) {
-    return ApiErrors.rateLimited(Math.ceil((rate.resetMs - Date.now()) / 1000), headers)
+    return { refusal: ApiErrors.rateLimited(Math.ceil((rate.resetMs - Date.now()) / 1000), headers), headers }
   }
   const quotaRefusal = await refuseIfApiQuotaExhausted(context.firestore, context.orgId, context.org, headers)
-  if (quotaRefusal) return quotaRefusal
+  if (quotaRefusal) return { refusal: quotaRefusal, headers }
   recordApiRequest(context.firestore, context.orgId)
-  return null
+  return { refusal: null, headers }
 }
 
 /**

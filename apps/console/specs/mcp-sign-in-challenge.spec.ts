@@ -169,18 +169,24 @@ describe('every tool call in a batch is a request of its own (AGL-4225)', () => 
     mockDispatch.mockImplementation(async () => Response.json({ object: 'list', data: [] }))
   })
 
-  it('charges every call after the first, which the request itself paid for', async () => {
-    mockCharge.mockResolvedValue(null)
-    const answers = await (await send([call(1), call(2), call(3), { jsonrpc: '2.0', id: 4, method: 'ping' }])).json()
+  it('charges every call after the first, and reports the budget as the LAST charge left it', async () => {
+    let remaining = 119
+    mockCharge.mockImplementation(async () => {
+      remaining -= 1
+      return { refusal: null, headers: { 'RateLimit-Remaining': String(remaining) } }
+    })
+    const response = await send([call(1), call(2), call(3), { jsonrpc: '2.0', id: 4, method: 'ping' }])
+    const answers = await response.json()
     expect(answers).toHaveLength(4)
     expect(mockCharge).toHaveBeenCalledTimes(2)
     expect(mockDispatch).toHaveBeenCalledTimes(3)
+    expect(response.headers.get('ratelimit-remaining')).toBe('117')
   })
 
   it('refuses each call the budget no longer covers, by itself, and does not run it', async () => {
     mockCharge
-      .mockResolvedValueOnce(null)
-      .mockImplementation(async () => ApiErrors.rateLimited(30))
+      .mockResolvedValueOnce({ refusal: null, headers: {} })
+      .mockImplementation(async () => ({ refusal: ApiErrors.rateLimited(30), headers: { 'RateLimit-Remaining': '0' } }))
     const answers = await (await send([call(1), call(2), call(3), call(4)])).json()
     expect(answers.map((answer: { result: { isError: boolean } }) => answer.result.isError)).toEqual([false, false, true, true])
     expect(JSON.parse(answers[2].result.content[0].text)).toMatchObject({ error: { type: 'rate_limited' } })
