@@ -35,7 +35,12 @@ import {
   apiActorLabel,
   isConnectedAppContext,
 } from '@aglyn/tenant-data-admin/server/api-v1-kit'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { unlinkable } from '../app/api/_lib/growth-announcements'
+
+const ROOT = join(__dirname, '..', '..', '..')
+const read = (path: string) => readFileSync(join(ROOT, path), 'utf8')
 
 describe('connected-app attribution (AGL-4225)', () => {
   const key = { credential: 'api_key' as const, keyName: 'Zapier' }
@@ -72,4 +77,33 @@ describe('connected-app attribution (AGL-4225)', () => {
     expect(unlinkable('Connected app https://evil.com')).not.toMatch(/https:\/\//)
     expect(unlinkable(null)).toBeNull()
   })
+
+  it('names a Zapier hook a connection subscribed as the connection, not as an API key', () => {
+    const card = read('libs/plugins/zapier/src/lib/components/zapier-card.component.tsx')
+    expect(card).toContain('hook.keyLabel')
+    expect(read('libs/plugins/zapier/src/lib/server/hooks-api.ts')).toContain('keyLabel: apiActorLabel(ctx)')
+    expect(read('libs/plugins/zapier/src/ios/Sources/AglynZapierPlugin/Resources/zapier.screens.json')).toContain('{item.keyLabel|item.keyName}')
+  })
+
+  it('gives the native activity lists and run histories the labelled name, never the raw one', () => {
+    for (const screens of ['site', 'team', 'staff']) {
+      const json = read(`libs/native/screens/${screens}.screens.json`)
+      expect(json).toContain('item.connectedAppLabel')
+      expect(json).not.toContain('item.connectedAppName')
+    }
+    // The host activity writer stores that label beside the name.
+    expect(read('libs/tenant/data/admin/src/lib/server/organizations.ts')).toContain(
+      'connectedAppLabel: connectedAppActorLabel(actor.connectedAppName)',
+    )
+    expect(read('libs/native/apple/Sources/AglynContracts/AutomationRules.swift')).toContain('"Connected app \\(app)"')
+    expect(read('libs/native/kotlin/contracts/src/commonMain/kotlin/com/aglyn/contracts/AutomationRules.kt')).toContain(
+      '"Connected app $it"',
+    )
+  })
+
+  it('breaks only a connected app’s name in staff mail; a key’s name is shown as typed', () => {
+    const resources = read('apps/console/utils/api-v1-resources.ts')
+    expect(resources).toContain('createdByIsName: isConnectedAppContext(ctx)')
+  })
 })
+

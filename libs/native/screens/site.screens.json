@@ -1156,7 +1156,7 @@
           "items": "data.activity.items",
           "primary": "{item.action:activity}",
           "secondary": "{item.target.name|item.target.label|item.target.title|item.target.type:title}",
-          "tertiary": "{item.actorEmail|item.apiKeyName|item.connectedAppName|'System'} · {item.createdAt:datetime}",
+          "tertiary": "{item.actorEmail|item.apiKeyName|item.connectedAppLabel|'System'} · {item.createdAt:datetime}",
           "icon": "clock|schedule",
           "empty": "No activity yet."
         }
