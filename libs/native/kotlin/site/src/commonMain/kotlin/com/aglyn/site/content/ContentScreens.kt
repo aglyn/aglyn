@@ -434,6 +434,16 @@ private fun EntryEditor(
           DetailRow("Updated", entry.updatedAt?.let { relativeTime(it.epochMillis, now) })
           DetailRow("Entry id", entry.id)
         }
+        // What the entry is doing, then who touched it (the console's entry page, AGL-2498): its traffic counted against
+        // its own address, never the template screen's, then its activity.
+        com.aglyn.site.analytics.EntryTrafficCard(
+          context.firestore,
+          context.api,
+          hostId,
+          entry.slug.takeIf { it.isNotEmpty() }?.let { "/${collection.slug}/$it" },
+          upgrade = { context.navigate("core.billing.plans") },
+        )
+        com.aglyn.site.analytics.SiteActivityCard(context.firestore, context.api, hostId, targetId = entry.id, title = "Entry activity")
       }
       }
     }

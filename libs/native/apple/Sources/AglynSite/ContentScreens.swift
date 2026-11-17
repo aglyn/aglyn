@@ -352,6 +352,20 @@ private struct EntryForm: View {
         AglynDetailRow("Updated", value: entry.updatedAt.map { relativeTime($0) })
         AglynDetailRow("Entry id", value: entry.id)
       }
+      // What the entry is doing, then who touched it (the console's entry page, AGL-2498): its traffic counted against
+      // its own address, never the template screen's, then its activity.
+      Section {
+        EntryTrafficCard(
+          reader: env.context.firestore, api: env.context.api, hostID: env.hostID,
+          path: entry.slug.isEmpty ? nil : "/\(collection.slug)/\(entry.slug)"
+        ) { env.context.navigate("core.billing.plans") }
+      }
+      .aglynBareFormRow()
+      Section {
+        SiteActivityCard(
+          reader: env.context.firestore, api: env.context.api, hostID: env.hostID, targetID: entry.id, title: "Entry activity")
+      }
+      .aglynBareFormRow()
     }
     .formStyle(.aglynGrouped)
     .environment(\.aglynFormChecking, fromCache ? formHold("entry") : nil)
