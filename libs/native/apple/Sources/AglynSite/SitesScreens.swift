@@ -152,6 +152,8 @@ struct SitesScreen: View {
 
   private func list(selectable: Bool) -> some View {
     VStack(spacing: 0) {
+      // The one-time product-updates ask (AGL-3185), where the console puts it: over the Sites list.
+      ProductUpdatesAsk(context: context)
       if let allowance {
         HStack {
           Spacer(minLength: 0)

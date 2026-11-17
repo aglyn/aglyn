@@ -197,6 +197,8 @@ fun SitesScreen(context: NativePluginContext, initialSiteId: String? = null, sta
         ),
       ),
     ) {
+      // The one-time product-updates ask (AGL-3185), where the console puts it: over the Sites list.
+      ProductUpdatesAsk(context)
       for (refusal in model.refused) {
         NoticeBanner("That filter was not applied: ${refusal.reason}.", tone = StatusTone.WARNING, modifier = Modifier.padding(horizontal = space(2f)))
       }
