@@ -107,7 +107,9 @@ struct AiCrmRecordCard: View {
   private var orgID: String? { zone?.orgID ?? context.orgID }
 
   var body: some View {
-    Group {
+    // A stack, not a Group: an empty Group in the record page's List draws no row, so its `.task` never runs and the card
+    // never asks whether there is anything to show (the AI insight tile's shape).
+    VStack(spacing: 0) {
       if let zone, let kind, verdict == "ready" { content(zone, kind) }
     }
     // The member's verdict is part of the key: the workspace's roles can land after the page does, and the card reads again
