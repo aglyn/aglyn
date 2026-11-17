@@ -37549,6 +37549,113 @@
           null
         ]
       ]
+    },
+    "campaignRollup": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
+      "args": [
+        [
+          []
+        ],
+        [
+          [
+            {
+              "status": "draft"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "status": "sent",
+              "stats": {
+                "recipients": 10,
+                "sent": 10,
+                "delivered": 9,
+                "opens": 7,
+                "uniqueOpens": 5,
+                "clicks": 3,
+                "uniqueClicks": 2,
+                "unsubscribes": 1,
+                "bounced": 1
+              }
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "status": "sent",
+              "stats": {
+                "recipients": 10,
+                "sent": 10,
+                "delivered": 8,
+                "uniqueOpens": 4,
+                "uniqueClicks": 1,
+                "unsubscribes": 0,
+                "opens": 4,
+                "clicks": 1
+              }
+            },
+            {
+              "status": "sent",
+              "stats": {
+                "recipients": 5,
+                "sent": 5,
+                "opens": 2
+              }
+            },
+            {
+              "status": "scheduled",
+              "stats": {
+                "sent": 0
+              }
+            },
+            {
+              "status": "draft"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "status": "sending",
+              "stats": {
+                "sent": 40,
+                "audienceSize": 100,
+                "delivered": 38,
+                "uniqueOpens": 10
+              },
+              "resume": {
+                "remaining": 60,
+                "batch": 1,
+                "nextAtMs": 1700000000000
+              }
+            },
+            {
+              "status": "canceled",
+              "stats": {
+                "sent": 0
+              }
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "status": "canceled",
+              "stats": {
+                "sent": 3,
+                "delivered": 3,
+                "uniqueOpens": 0,
+                "unsubscribes": 0
+              }
+            },
+            {
+              "status": "failed"
+            }
+          ]
+        ]
+      ]
     }
   }
 }
