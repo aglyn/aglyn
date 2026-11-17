@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -41,7 +42,6 @@ import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.Busy
 import com.aglyn.ui.FormSheet
-import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.TextButton
 import com.aglyn.ui.space
@@ -139,14 +139,29 @@ fun crmListedViews(docs: List<FirestoreDoc>, uid: String): Pair<List<CrmSavedVie
 fun crmViewQuerySort(sorts: List<ListQuerySort>, sort: CrmViewSort?): ListQuerySort? =
   sort?.let { wanted -> sorts.firstOrNull { it.column == wanted.field && it.direction.raw == wanted.direction } }
 
-/** A view as one of the list's filters: its clauses, and its sort when the list can serve it. */
-fun crmViewFilter(view: CrmSavedView, kind: CrmKind): CrmFilter = CrmFilter(
-  CRM_VIEW_FILTER_PREFIX + view.id, view.name, view.state.filters.map { ListFilterRequest(it.field, it.op, it.value) },
-  sort = crmViewQuerySort(kind.declaration.sorts, view.state.sort),
-)
+/**
+ * A view as one of the list's filters: its clauses as the list's query asks them ([ask], the list's translation), the
+ * ones it cannot ask named with why, and its sort when the list can serve it.
+ */
+fun crmViewFilter(view: CrmSavedView, kind: CrmKind, ask: (ListFilterRequest) -> CrmClauseAsked = { CrmClauseAsked.Asked(it) }): CrmFilter {
+  val stored = view.state.filters.map { ListFilterRequest(it.field, it.op, it.value) }
+  val asked = mutableListOf<ListFilterRequest>()
+  val refused = mutableListOf<CrmViewRefusal>()
+  stored.zip(view.state.filters).forEach { (clause, saved) ->
+    when (val one = ask(clause)) {
+      is CrmClauseAsked.Asked -> asked += one.clause
+      is CrmClauseAsked.Refused -> refused += CrmViewRefusal(ListFilterRequest(saved.field, saved.op, saved.label ?: saved.value), one.reason)
+    }
+  }
+  return CrmFilter(
+    CRM_VIEW_FILTER_PREFIX + view.id, view.name, asked, sort = crmViewQuerySort(kind.declaration.sorts, view.state.sort),
+    stored = stored, refused = refused,
+  )
+}
 
-/** The clauses a filter carries, as a view stores them. */
-fun crmViewClauses(filter: CrmFilter): List<Map<String, Any?>> = filter.clauses.map { mapOf("field" to it.field, "op" to it.op, "value" to it.value) }
+/** The clauses a filter carries, as a view stores them: the reader's own (a chip's or a view's), never the translation its query asks. */
+fun crmViewClauses(filter: CrmFilter): List<Map<String, Any?>> =
+  (filter.stored ?: filter.clauses).map { mapOf("field" to it.field, "op" to it.op, "value" to it.value) }
 
 /** Who may change a view: its creator, or a member who reaches every site (`canEdit`). */
 fun crmCanEditView(view: CrmSavedView, scope: CrmScope): Boolean = scope.uid.isNotEmpty() && (view.createdByUid == scope.uid || scope.orgWide)
@@ -202,85 +217,83 @@ internal fun CrmViewsMenu(
   views: CrmViewsLive?,
   current: CrmFilter,
   onOpen: (String) -> Unit,
+  /** What an act came to ("View … saved"), which the list shows under its filters. */
+  onNotice: (String, StatusTone) -> Unit,
   onOpenAll: () -> Unit,
 ) {
   val coroutines = rememberCoroutineScope()
   var open by remember { mutableStateOf(false) }
   var naming by remember { mutableStateOf<CrmViewNaming?>(null) }
   var deleting by remember { mutableStateOf<CrmSavedView?>(null) }
-  var notice by remember { mutableStateOf<Pair<String, StatusTone>?>(null) }
   val busy = remember(naming, deleting) { Busy() }
   val allLabel = "All ${plural.lowercase()}"
   val openView = views?.all?.firstOrNull { CRM_VIEW_FILTER_PREFIX + it.id == current.key }
   val defaultId = views?.defaultId
   fun act(done: String, failed: String, work: suspend () -> Unit) {
     Busy().run(coroutines) {
-      notice = try {
+      try {
         work()
-        done to StatusTone.SUCCESS
+        onNotice(done, StatusTone.SUCCESS)
       } catch (error: Exception) {
-        failed to StatusTone.ERROR
+        onNotice(failed, StatusTone.ERROR)
       }
     }
   }
-  Column {
-    Box {
-      TextButton(onClick = { open = true }, modifier = Modifier.testTag("crm-views")) {
-        Icon(AglynIcons.named("bookmark"), null)
-        Text(openView?.name ?: "Views", maxLines = 1, overflow = TextOverflow.Ellipsis)
+  Box {
+    TextButton(onClick = { open = true }, modifier = Modifier.widthIn(max = space(22f)).testTag("crm-views")) {
+      Icon(AglynIcons.named("bookmark"), null)
+      Text(openView?.name ?: "Views", maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+    DropdownMenu(open, onDismissRequest = { open = false }) {
+      if (!views?.mine.isNullOrEmpty()) {
+        Text("My views", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = space(2f), vertical = space(1f)))
+        for (view in views!!.mine) CrmViewMenuItem(view, openView?.id == view.id, crmViewMenuDetail(view, scope.uid, defaultId)) { open = false; onOpen(view.id) }
       }
-      DropdownMenu(open, onDismissRequest = { open = false }) {
-        if (!views?.mine.isNullOrEmpty()) {
-          Text("My views", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = space(2f), vertical = space(1f)))
-          for (view in views!!.mine) CrmViewMenuItem(view, openView?.id == view.id, crmViewMenuDetail(view, scope.uid, defaultId)) { open = false; onOpen(view.id) }
-        }
-        if (!views?.shared.isNullOrEmpty()) {
-          Text("Shared with the team", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = space(2f), vertical = space(1f)))
-          for (view in views!!.shared) CrmViewMenuItem(view, openView?.id == view.id, crmViewMenuDetail(view, scope.uid, defaultId)) { open = false; onOpen(view.id) }
-        }
-        if (!views?.all.isNullOrEmpty()) HorizontalDivider()
+      if (!views?.shared.isNullOrEmpty()) {
+        Text("Shared with the team", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = space(2f), vertical = space(1f)))
+        for (view in views!!.shared) CrmViewMenuItem(view, openView?.id == view.id, crmViewMenuDetail(view, scope.uid, defaultId)) { open = false; onOpen(view.id) }
+      }
+      if (!views?.all.isNullOrEmpty()) HorizontalDivider()
+      DropdownMenuItem(
+        text = { Text(if (openView == null) "Save as view…" else "Save as new view…") }, enabled = scope.uid.isNotEmpty(),
+        onClick = { open = false; naming = CrmViewNaming.Create }, modifier = Modifier.testTag("crm-view-save-as"),
+      )
+      if (openView != null && crmCanEditView(openView, scope)) {
+        DropdownMenuItem(text = { Text("Rename…") }, onClick = { open = false; naming = CrmViewNaming.Rename(openView) }, modifier = Modifier.testTag("crm-view-rename"))
         DropdownMenuItem(
-          text = { Text(if (openView == null) "Save as view…" else "Save as new view…") }, enabled = scope.uid.isNotEmpty(),
-          onClick = { open = false; naming = CrmViewNaming.Create }, modifier = Modifier.testTag("crm-view-save-as"),
+          text = { Text(if (openView.shared) "Stop sharing" else "Share with the team") }, modifier = Modifier.testTag("crm-view-share"),
+          onClick = {
+            open = false
+            act(if (openView.shared) "The view is yours alone again" else "The view is shared with the team", "The view could not be changed.") {
+              api.shareView(openView.id, !openView.shared)
+            }
+          },
         )
-        if (openView != null && crmCanEditView(openView, scope)) {
-          DropdownMenuItem(text = { Text("Rename…") }, onClick = { open = false; naming = CrmViewNaming.Rename(openView) }, modifier = Modifier.testTag("crm-view-rename"))
-          DropdownMenuItem(
-            text = { Text(if (openView.shared) "Stop sharing" else "Share with the team") }, modifier = Modifier.testTag("crm-view-share"),
-            onClick = {
-              open = false
-              act(if (openView.shared) "The view is yours alone again" else "The view is shared with the team", "The view could not be changed.") {
-                api.shareView(openView.id, !openView.shared)
-              }
-            },
-          )
-        }
-        if (openView != null) {
-          val isDefault = defaultId == openView.id
-          DropdownMenuItem(
-            text = { Text(if (isDefault) "Clear default" else "Set as default") }, modifier = Modifier.testTag("crm-view-default"),
-            onClick = {
-              open = false
-              act(if (isDefault) "$allLabel opens first again" else "“${openView.name}” opens first from now on", "The default could not be changed.") {
-                api.setDefaultView(section, if (isDefault) null else openView.id)
-              }
-            },
-          )
-        } else if (defaultId != null) {
-          DropdownMenuItem(
-            text = { Text("Make ${allLabel.lowercase()} the default") }, modifier = Modifier.testTag("crm-view-default"),
-            onClick = { open = false; act("$allLabel opens first again", "The default could not be changed.") { api.setDefaultView(section, null) } },
-          )
-        }
-        if (openView != null && crmCanEditView(openView, scope)) {
-          DropdownMenuItem(
-            text = { Text("Delete view…", color = MaterialTheme.colorScheme.error) },
-            onClick = { open = false; deleting = openView }, modifier = Modifier.testTag("crm-view-delete"),
-          )
-        }
+      }
+      if (openView != null) {
+        val isDefault = defaultId == openView.id
+        DropdownMenuItem(
+          text = { Text(if (isDefault) "Clear default" else "Set as default") }, modifier = Modifier.testTag("crm-view-default"),
+          onClick = {
+            open = false
+            act(if (isDefault) "$allLabel opens first again" else "“${openView.name}” opens first from now on", "The default could not be changed.") {
+              api.setDefaultView(section, if (isDefault) null else openView.id)
+            }
+          },
+        )
+      } else if (defaultId != null) {
+        DropdownMenuItem(
+          text = { Text("Make ${allLabel.lowercase()} the default") }, modifier = Modifier.testTag("crm-view-default"),
+          onClick = { open = false; act("$allLabel opens first again", "The default could not be changed.") { api.setDefaultView(section, null) } },
+        )
+      }
+      if (openView != null && crmCanEditView(openView, scope)) {
+        DropdownMenuItem(
+          text = { Text("Delete view…", color = MaterialTheme.colorScheme.error) },
+          onClick = { open = false; deleting = openView }, modifier = Modifier.testTag("crm-view-delete"),
+        )
       }
     }
-    notice?.let { (text, tone) -> NoticeBanner(text, tone, Modifier.testTag("crm-view-notice")) }
   }
   naming?.let { mode ->
     val creating = mode is CrmViewNaming.Create
@@ -294,12 +307,12 @@ internal fun CrmViewsMenu(
           when (mode) {
             CrmViewNaming.Create -> {
               val id = api.createView(section, trimmed, shared, crmViewClauses(current), openView?.state?.columns.orEmpty(), openView?.state?.sort)
-              notice = "View “$trimmed” saved" to StatusTone.SUCCESS
+              onNotice("View “$trimmed” saved", StatusTone.SUCCESS)
               onOpen(id)
             }
             is CrmViewNaming.Rename -> {
               api.renameView(mode.view.id, trimmed)
-              notice = "Renamed to “$trimmed”" to StatusTone.SUCCESS
+              onNotice("Renamed to “$trimmed”", StatusTone.SUCCESS)
             }
           }
         }
@@ -329,7 +342,7 @@ internal fun CrmViewsMenu(
           api.deleteView(view.id)
           // A default pointing at nothing would open every visit on a missing view.
           if (defaultId == view.id) api.setDefaultView(section, null)
-          notice = "View “${view.name}” deleted" to StatusTone.SUCCESS
+          onNotice("View “${view.name}” deleted", StatusTone.SUCCESS)
           onOpenAll()
         }
       },
@@ -380,3 +393,151 @@ fun crmTaskViewFilter(view: TaskView, open: CrmSavedView?): CrmFilter = CrmFilte
   open?.let { CRM_VIEW_FILTER_PREFIX + it.id } ?: "task:${view.key}", open?.name ?: view.label,
   (if (view == TaskView.MINE) emptyList() else listOf(ListFilterRequest("view", "equals", view.key))) + (open?.let { crmTaskViewOpen(it).clauses } ?: emptyList()),
 )
+
+/*
+ * A stored clause as the list's query asks it (`crm-list-query.ts`, `contact-filters.ts`, `deal-filters.ts`,
+ * `lead-filters.ts`): a view keeps the clauses a reader set; each list translates them into the fields its records keep.
+ */
+
+/** How one stored clause is asked: a query clause, or why it cannot be (`CrmClauseAsked`). */
+sealed interface CrmClauseAsked {
+  data class Asked(val clause: ListFilterRequest) : CrmClauseAsked
+  data class Refused(val reason: String) : CrmClauseAsked
+}
+
+/** `crmClauseValues`: the comma-separated values of an `isAnyOf`, or the one value of anything else. */
+fun crmClauseValues(clause: ListFilterRequest): List<String> =
+  (if (clause.op == "isAnyOf") clause.value.split(",") else listOf(clause.value)).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+
+/** `crmAnyOf`: one value as `equals`, several as `isAnyOf`. */
+fun crmAnyOf(field: String, values: List<String>): CrmClauseAsked {
+  val unique = values.distinct()
+  if (unique.isEmpty()) return CrmClauseAsked.Refused("no value yet")
+  return CrmClauseAsked.Asked(
+    if (unique.size == 1) ListFilterRequest(field, "equals", unique[0]) else ListFilterRequest(field, "isAnyOf", unique.joinToString(",")),
+  )
+}
+
+private const val CRM_LIMITED_ACCESS =
+  "your access is limited to specific sites, which this filter cannot be combined with — an organization administrator can use it"
+
+/** A picklist filter's "None" (`LEAD_SOURCE_FILTER_NONE`). */
+const val CRM_PICKLIST_FILTER_NONE = "\u0000none"
+
+/** A number as JavaScript's `String(number)` spells the whole ones. */
+private fun jsNumber(value: Double): String =
+  if (value == kotlin.math.floor(value) && kotlin.math.abs(value) < 1e15) value.toLong().toString() else value.toString()
+
+private val CONTACT_AS_STORED = setOf("name", "email", "formIds", "hostId", "createdAt", "updatedAt", "nextTaskAtMs")
+private val CONTACT_FACETS = mapOf(
+  "ownerUid" to "owner", "lifecycleStage" to "stage", "source" to "source", "companyId" to "company", "tags" to "tag",
+  "ordersCount" to "orders", "ltvCents" to "ltv", "leadSource" to "leadSource",
+)
+
+/** `contactQueryClause`: a Contacts clause as its query asks it — a holder's field as that holder's facet key. */
+fun contactQueryClause(clause: ListFilterRequest, groupId: String?, foldsScope: Boolean): CrmClauseAsked {
+  if (clause.field in CONTACT_AS_STORED) {
+    if (clause.field == "formIds" && !foldsScope) return CrmClauseAsked.Refused(CRM_LIMITED_ACCESS)
+    return CrmClauseAsked.Asked(clause)
+  }
+  val verdicts = Contracts.nativeEmailStateStatuses
+  if (clause.field == "emailState") {
+    if (clause.op == "isEmpty") return CrmClauseAsked.Asked(ListFilterRequest("emailStatus", "equals", "none"))
+    if (clause.op == "isNotEmpty") return crmAnyOf("emailStatus", verdicts)
+    val values = crmClauseValues(clause)
+    if (values.any { it !in verdicts }) return CrmClauseAsked.Refused("pick one of the choices")
+    return crmAnyOf("emailStatus", values)
+  }
+  val facet = CONTACT_FACETS[clause.field]
+    ?: clause.field.takeIf { it.startsWith("custom_") && it.length > 7 }?.let { "custom.${it.removePrefix("custom_")}" }
+    ?: return CrmClauseAsked.Refused("this list does not filter by that")
+  if (!foldsScope) return CrmClauseAsked.Refused(CRM_LIMITED_ACCESS)
+  val group = groupId?.ifEmpty { null } ?: "*"
+  if (clause.op == "isNotEmpty") return CrmClauseAsked.Asked(ListFilterRequest("facetKeys", "contains", "$group:$facet"))
+  val keys = mutableListOf<String>()
+  for (value in crmClauseValues(clause)) {
+    val key = if (clause.op == "=") {
+      val number = value.toDoubleOrNull()?.takeIf { it.isFinite() } ?: return CrmClauseAsked.Refused("no value yet")
+      jsNumber(number)
+    } else {
+      facetKeyValue(value).ifEmpty { return CrmClauseAsked.Refused("no value yet") }
+    }
+    keys += "$group:$facet=$key"
+  }
+  // One key is an `array-contains`; several, an `array-contains-any`.
+  return when (val asked = crmAnyOf("facetKeys", keys)) {
+    is CrmClauseAsked.Asked -> if (asked.clause.op == "equals") CrmClauseAsked.Asked(asked.clause.copy(op = "contains")) else asked
+    is CrmClauseAsked.Refused -> asked
+  }
+}
+
+/** `dealQueryClause`: a Type or a Lead source by its key ("None" as `isEmpty`), every other clause as stored. */
+fun dealQueryClause(clause: ListFilterRequest): CrmClauseAsked {
+  val key = mapOf("type" to "typeKey", "leadSource" to "leadSourceKey")[clause.field] ?: return CrmClauseAsked.Asked(clause)
+  val values = crmClauseValues(clause)
+  if (clause.op == "isEmpty" || values == listOf(CRM_PICKLIST_FILTER_NONE)) return CrmClauseAsked.Asked(ListFilterRequest(key, "isEmpty", ""))
+  if (CRM_PICKLIST_FILTER_NONE in values) return CrmClauseAsked.Refused("\"None\" cannot be picked beside a value")
+  return crmAnyOf(key, values.mapNotNull { crmPicklistKey(it) })
+}
+
+/** `leadQueryClause`: a Leads clause as its query asks it; a value the list does not know is refused by name. */
+fun leadQueryClause(clause: ListFilterRequest, scopeTokens: List<String>?, foldsScope: Boolean): CrmClauseAsked {
+  val values = crmClauseValues(clause)
+  return when (clause.field) {
+    "status" -> {
+      val statuses = mutableListOf<String>()
+      for (value in values) {
+        when {
+          value == "open" -> statuses += Contracts.nativeCrmLeadOpenStatuses
+          value in Contracts.nativeCrmLeadStatuses -> statuses += value
+          else -> return CrmClauseAsked.Refused("$value is not a lead status")
+        }
+      }
+      crmAnyOf("status", statuses)
+    }
+    "emailState" -> {
+      val keys = mutableListOf<String>()
+      for (value in values) {
+        when {
+          value == "problem" -> keys += Contracts.nativeEmailStateStatuses.filter { it != "ok" }
+          value == "none" -> keys += "none"
+          value in Contracts.nativeEmailStateStatuses -> keys += value
+          else -> return CrmClauseAsked.Refused("$value is not an email verdict")
+        }
+      }
+      crmAnyOf("emailStatus", keys)
+    }
+    "leadSource" -> when {
+      clause.op == "isEmpty" || values == listOf(CRM_PICKLIST_FILTER_NONE) -> CrmClauseAsked.Asked(ListFilterRequest("leadSourceKey", "isEmpty", ""))
+      CRM_PICKLIST_FILTER_NONE in values -> CrmClauseAsked.Refused("\"No lead source\" cannot be picked beside a value")
+      else -> crmAnyOf("leadSourceKey", values.mapNotNull { crmPicklistKey(it) })
+    }
+    "leadSourceDirection" -> values.firstOrNull { it !in Contracts.nativeCrmLeadSourceDirections }
+      ?.let { CrmClauseAsked.Refused("$it is not a lead source direction") } ?: crmAnyOf("leadSourceDirection", values)
+    "ownerUid" -> crmAnyOf("ownerUid", values)
+    "industry", "rating" -> crmAnyOf(if (clause.field == "industry") "industryKey" else "ratingKey", values.mapNotNull { crmPicklistKey(it) })
+    "campaignIds" -> when {
+      values.size != 1 -> CrmClauseAsked.Refused("pick one campaign")
+      scopeTokens == null -> CrmClauseAsked.Asked(ListFilterRequest("campaignIds", "contains", values[0]))
+      !foldsScope -> CrmClauseAsked.Refused(CRM_LIMITED_ACCESS)
+      else -> CrmClauseAsked.Asked(ListFilterRequest("scopedCampaignIds", "isAnyOf", scopeTokens.joinToString(",") { "$it~${values[0]}" }))
+    }
+    else -> CrmClauseAsked.Refused("this list does not filter by that")
+  }
+}
+
+/** A stored clause through its list's translation (companies keep theirs as stored). */
+fun crmAskClause(kind: CrmKind, clause: ListFilterRequest, scope: CrmScope): CrmClauseAsked {
+  val folds = scope.workspaceWide || scope.orgWide
+  return when (kind) {
+    CrmKind.CONTACT -> contactQueryClause(clause, if (scope.workspaceWide) null else scope.groupId, folds)
+    CrmKind.DEAL -> dealQueryClause(clause)
+    CrmKind.LEAD -> leadQueryClause(clause, if (scope.workspaceWide) null else scope.readTokens, folds)
+    CrmKind.COMPANY -> CrmClauseAsked.Asked(clause)
+  }
+}
+
+/** A clause the list could not apply, said as the filter bar says it: "“Stage is Customer” was not applied: why." */
+data class CrmViewRefusal(val clause: ListFilterRequest, val reason: String) {
+  val sentence: String get() = "“${com.aglyn.pluginhost.clauseLabel(clause, emptyMap(), emptyMap())}” was not applied: $reason."
+}

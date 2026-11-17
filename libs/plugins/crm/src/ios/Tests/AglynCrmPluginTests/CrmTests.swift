@@ -136,6 +136,46 @@ final class CrmTests: XCTestCase {
     XCTAssertEqual(crmTaskViewFilter(.overdue, open: saved).clauses.count, 2)
   }
 
+  func testAViewsClausesAreAskedAsEachListAsksThem() throws {
+    func clause(_ value: Any) -> ListFilterRequest {
+      let o = value as! [String: Any]
+      return ListFilterRequest(field: o["field"] as! String, op: o["op"] as! String, value: o["value"] as! String)
+    }
+    func want(_ value: Any) -> CrmClauseAsked {
+      let o = value as! [String: Any]
+      if let why = o["refused"] as? String { return .refused(why) }
+      return .asked(clause(o))
+    }
+    for (index, item) in try functionCases("contactQueryClause").enumerated() {
+      let reader = item.args[1] as! [String: Any]
+      XCTAssertEqual(
+        contactQueryClause(clause(item.args[0]), groupID: reader["groupId"] as? String, foldsScope: reader["foldsScope"] as! Bool),
+        want(item.result), "case \(index)")
+    }
+    for (index, item) in try functionCases("dealQueryClause").enumerated() {
+      XCTAssertEqual(dealQueryClause(clause(item.args[0])), want(item.result), "case \(index)")
+    }
+    for (index, item) in try functionCases("leadQueryClause").enumerated() {
+      let reader = item.args.count > 1 ? item.args[1] as? [String: Any] : nil
+      XCTAssertEqual(
+        leadQueryClause(clause(item.args[0]), scopeTokens: reader?["scopeTokens"] as? [String], foldsScope: reader?["foldsScope"] as? Bool ?? true),
+        want(item.result), "case \(index)")
+    }
+  }
+
+  func testAViewsRefusedClauseIsSaidNotDropped() {
+    let view = CrmSavedView(
+      id: "v2", name: "Mixed", ownerUID: "u1", createdByUID: "u1", shared: false,
+      state: CrmViewState(filters: [
+        CrmViewClause(field: "type", op: "equals", value: "Renewal"), CrmViewClause(field: "type", op: "isAnyOf", value: "\u{0000}none,Renewal"),
+      ]))
+    let filter = crmViewFilter(view, kind: .deal, ask: dealQueryClause)
+    XCTAssertEqual(filter.clauses, [ListFilterRequest(field: "typeKey", op: "equals", value: "renewal")])
+    XCTAssertEqual(filter.refused.map(\.reason), ["\"None\" cannot be picked beside a value"])
+    // Saved again, the reader's own clauses are kept, never the translation.
+    XCTAssertEqual((crmViewClauses(filter).first?["field"] as? String), "type")
+  }
+
   func testATelLinkIsTheConsoles() throws {
     for (index, item) in try functionCases("crmTelHref").enumerated() {
       XCTAssertEqual(crmTelHref(item.args[0] as? String), item.result as? String, "case \(index)")

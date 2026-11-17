@@ -119,10 +119,11 @@ fun RecordsSection(
   var filterKey by rememberSaveable(kind) { mutableStateOf(filters.first().key) }
   // The section's saved views and the reader's default (`useCrmSavedView`): a view is one more filter the list runs.
   val views = rememberCrmViews(context, scope, kind.viewSection)
-  val viewFilters = views?.all.orEmpty().map { crmViewFilter(it, kind) }
+  val viewFilters = views?.all.orEmpty().map { view -> crmViewFilter(view, kind) { crmAskClause(kind, it, scope) } }
   val activeFilter = (filters + viewFilters).firstOrNull { it.key == filterKey } ?: filters.first()
   var picking by rememberSaveable(kind) { mutableStateOf(false) }
   var defaultApplied by rememberSaveable(kind) { mutableStateOf(false) }
+  var viewNotice by remember(kind) { mutableStateOf<Pair<String, StatusTone>?>(null) }
   // The reader's default view opens first, once, unless they already picked or the list was opened for an address.
   LaunchedEffect(views != null) {
     val ready = views ?: return@LaunchedEffect
@@ -176,11 +177,17 @@ fun RecordsSection(
           SearchField(search, { search = it; if (it.isBlank()) asked = "" }, placeholder = "Search ${kind.plural.lowercase()}", onSearch = { asked = search })
           Row(verticalAlignment = Alignment.CenterVertically) {
             if (scope.uid.isNotEmpty()) {
-              CrmViewsMenu(kind.viewSection, kind.plural, scope, api, views, activeFilter, { picking = true; filterKey = CRM_VIEW_FILTER_PREFIX + it }) { filterKey = filters.first().key }
+              CrmViewsMenu(
+                kind.viewSection, kind.plural, scope, api, views, activeFilter, { picking = true; filterKey = CRM_VIEW_FILTER_PREFIX + it },
+                { text, tone -> viewNotice = text to tone },
+              ) { filterKey = filters.first().key }
             }
             Box(Modifier.weight(1f)) { ChoiceChipRow(filters.map { ChipOption(it.key, it.label) }, filterKey, { picking = true; filterKey = it }) }
             if (scope.canWrite) CrmSelectToggle(bulk.selecting) { bulk.selecting = it; if (!it) bulk.picked = emptySet() }
           }
+          viewNotice?.let { (text, tone) -> NoticeBanner(text, tone, Modifier.testTag("crm-view-notice")) }
+          // A saved view's clauses this list cannot ask, said rather than silently dropped.
+          activeFilter.refused.forEach { NoticeBanner(it.sentence, StatusTone.WARNING) }
           // Counted over the rows the list still shows: an act that moves rows out of the view leaves none of them picked.
           if (bulk.selecting && pickedRows.isNotEmpty()) {
             CrmBulkBar(pickedRows.size, crmBulkActions(kind, scope.workspaceWide), bulk.running, ::bulkEnabled, { action -> bulk.pick(action) { runBulk(it, CrmBulkValue()) } }) { bulk.picked = emptySet() }

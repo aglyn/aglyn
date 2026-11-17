@@ -296,6 +296,7 @@ fun TasksSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, ref
   var openViewId by rememberSaveable { mutableStateOf<String?>(null) }
   var picking by rememberSaveable { mutableStateOf(false) }
   var defaultApplied by rememberSaveable { mutableStateOf(false) }
+  var viewNotice by remember { mutableStateOf<Pair<String, StatusTone>?>(null) }
   val openView = views?.all?.firstOrNull { it.id == openViewId }
   val opened = openView?.let(::crmTaskViewOpen)
   val shownView = opened?.view ?: view
@@ -333,7 +334,10 @@ fun TasksSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, ref
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
           if (scope.uid.isNotEmpty()) {
-            CrmViewsMenu(CRM_TASK_VIEW_SECTION, "Tasks", scope, api, views, crmTaskViewFilter(shownView, openView), { picking = true; openViewId = it }) { openViewId = null }
+            CrmViewsMenu(
+              CRM_TASK_VIEW_SECTION, "Tasks", scope, api, views, crmTaskViewFilter(shownView, openView), { picking = true; openViewId = it },
+              { text, tone -> viewNotice = text to tone },
+            ) { openViewId = null }
           }
           Box(Modifier.weight(1f)) {
             ChoiceChipRow(TaskView.entries.map { ChipOption(it.key, it.label) }, shownView.key, { key ->
@@ -344,6 +348,7 @@ fun TasksSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, ref
           }
           if (scope.canWrite) CrmSelectToggle(bulk.selecting) { bulk.selecting = it; if (!it) bulk.picked = emptySet() }
         }
+        viewNotice?.let { (text, tone) -> NoticeBanner(text, tone, Modifier.testTag("crm-view-notice")) }
         if (bulk.selecting && pickedTasks.isNotEmpty()) {
           CrmBulkBar(pickedTasks.size, CRM_BULK_TASK_ACTIONS, bulk.running, { scope.canWrite }, { action -> bulk.pick(action) { runBulk(it, CrmBulkValue()) } }) { bulk.picked = emptySet() }
         }

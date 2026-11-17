@@ -440,7 +440,9 @@
         "NATIVE_CRM_FIELD_TYPE_LABELS",
         "NATIVE_CRM_FIELD_CURRENCIES",
         "NATIVE_CRM_FIELD_DEFAULT_CURRENCY",
-        "NATIVE_CURRENCY_FRACTION_DIGITS"
+        "NATIVE_CURRENCY_FRACTION_DIGITS",
+        "NATIVE_EMAIL_STATE_STATUSES",
+        "NATIVE_CRM_LEAD_SOURCE_DIRECTIONS"
       ]
     },
     "libs/plugins/marketing/src/lib/model/native-vocabulary.ts": {
@@ -37856,6 +37858,396 @@
           "o1",
           "tasks",
           null
+        ]
+      ]
+    },
+    "contactQueryClause": {
+      "module": "libs/plugins/crm/src/lib/constants/contact-filters.ts",
+      "args": [
+        [
+          {
+            "field": "email",
+            "op": "startsWith",
+            "value": "pat"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "formIds",
+            "op": "contains",
+            "value": "f1"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": false
+          }
+        ],
+        [
+          {
+            "field": "formIds",
+            "op": "contains",
+            "value": "f1"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "emailState",
+            "op": "isEmpty",
+            "value": ""
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "emailState",
+            "op": "isNotEmpty",
+            "value": ""
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "emailState",
+            "op": "isAnyOf",
+            "value": "ok,bounced"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "emailState",
+            "op": "equals",
+            "value": "nope"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "lifecycleStage",
+            "op": "equals",
+            "value": "customer"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "lifecycleStage",
+            "op": "isAnyOf",
+            "value": "customer,lead"
+          },
+          {
+            "groupId": null,
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "ownerUid",
+            "op": "equals",
+            "value": "u1"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": false
+          }
+        ],
+        [
+          {
+            "field": "tags",
+            "op": "contains",
+            "value": "VIP Guest"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "source",
+            "op": "isNotEmpty",
+            "value": ""
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "custom_plan",
+            "op": "equals",
+            "value": "Enterprise"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "leadSource",
+            "op": "equals",
+            "value": "Trade show"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "ordersCount",
+            "op": "=",
+            "value": "3"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "companyId",
+            "op": "equals",
+            "value": "  "
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "industry",
+            "op": "equals",
+            "value": "x"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ]
+      ]
+    },
+    "dealQueryClause": {
+      "module": "libs/plugins/crm/src/lib/constants/deal-filters.ts",
+      "args": [
+        [
+          {
+            "field": "status",
+            "op": "equals",
+            "value": "won"
+          }
+        ],
+        [
+          {
+            "field": "type",
+            "op": "equals",
+            "value": "New Business"
+          }
+        ],
+        [
+          {
+            "field": "type",
+            "op": "isAnyOf",
+            "value": "New Business,Renewal"
+          }
+        ],
+        [
+          {
+            "field": "leadSource",
+            "op": "equals",
+            "value": "\u0000none"
+          }
+        ],
+        [
+          {
+            "field": "leadSource",
+            "op": "isEmpty",
+            "value": ""
+          }
+        ],
+        [
+          {
+            "field": "type",
+            "op": "isAnyOf",
+            "value": "\u0000none,Renewal"
+          }
+        ],
+        [
+          {
+            "field": "nextTaskAtMs",
+            "op": "isEmpty",
+            "value": ""
+          }
+        ]
+      ]
+    },
+    "leadQueryClause": {
+      "module": "libs/plugins/crm/src/lib/model/lead-filters.ts",
+      "args": [
+        [
+          {
+            "field": "status",
+            "op": "equals",
+            "value": "open"
+          }
+        ],
+        [
+          {
+            "field": "status",
+            "op": "isAnyOf",
+            "value": "new,qualified"
+          }
+        ],
+        [
+          {
+            "field": "status",
+            "op": "equals",
+            "value": "bogus"
+          }
+        ],
+        [
+          {
+            "field": "emailState",
+            "op": "isAnyOf",
+            "value": "problem,none"
+          }
+        ],
+        [
+          {
+            "field": "emailState",
+            "op": "equals",
+            "value": "bogus"
+          }
+        ],
+        [
+          {
+            "field": "leadSource",
+            "op": "equals",
+            "value": "\u0000none"
+          }
+        ],
+        [
+          {
+            "field": "leadSource",
+            "op": "isAnyOf",
+            "value": "\u0000none,Web"
+          }
+        ],
+        [
+          {
+            "field": "leadSource",
+            "op": "isAnyOf",
+            "value": "Web,Trade Show"
+          }
+        ],
+        [
+          {
+            "field": "leadSourceDirection",
+            "op": "equals",
+            "value": "inbound"
+          }
+        ],
+        [
+          {
+            "field": "leadSourceDirection",
+            "op": "equals",
+            "value": "sideways"
+          }
+        ],
+        [
+          {
+            "field": "ownerUid",
+            "op": "isAnyOf",
+            "value": "u1,u2"
+          }
+        ],
+        [
+          {
+            "field": "industry",
+            "op": "equals",
+            "value": "Food & Drink"
+          }
+        ],
+        [
+          {
+            "field": "rating",
+            "op": "equals",
+            "value": "Hot"
+          }
+        ],
+        [
+          {
+            "field": "campaignIds",
+            "op": "isAnyOf",
+            "value": "c1,c2"
+          }
+        ],
+        [
+          {
+            "field": "campaignIds",
+            "op": "equals",
+            "value": "c1"
+          }
+        ],
+        [
+          {
+            "field": "campaignIds",
+            "op": "equals",
+            "value": "c1"
+          },
+          {
+            "scopeTokens": [
+              "host:s1",
+              "group:g1"
+            ],
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "campaignIds",
+            "op": "equals",
+            "value": "c1"
+          },
+          {
+            "scopeTokens": [
+              "host:s1"
+            ],
+            "foldsScope": false
+          }
+        ],
+        [
+          {
+            "field": "name",
+            "op": "equals",
+            "value": "x"
+          }
         ]
       ]
     }

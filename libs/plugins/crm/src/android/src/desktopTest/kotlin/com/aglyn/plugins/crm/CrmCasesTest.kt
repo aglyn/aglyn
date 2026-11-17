@@ -149,6 +149,44 @@ class CrmCasesTest {
     assertEquals(2, crmTaskViewFilter(TaskView.OVERDUE, saved).clauses.size)
   }
 
+  private fun clause(element: JsonElement): ListFilterRequest {
+    val o = map(element)!!
+    return ListFilterRequest(o["field"] as String, o["op"] as String, o["value"] as String)
+  }
+
+  private fun asked(element: JsonElement): CrmClauseAsked {
+    val o = map(element)!!
+    return (o["refused"] as? String)?.let { CrmClauseAsked.Refused(it) } ?: CrmClauseAsked.Asked(clause(element))
+  }
+
+  @Test
+  fun aViewsClausesAreAskedAsEachListAsksThem() {
+    cases("contactQueryClause").forEach { (args, result) ->
+      val reader = map(args[1])!!
+      assertEquals(asked(result), contactQueryClause(clause(args[0]), reader["groupId"] as? String, reader["foldsScope"] as Boolean), args.toString())
+    }
+    cases("dealQueryClause").forEach { (args, result) -> assertEquals(asked(result), dealQueryClause(clause(args[0])), args.toString()) }
+    cases("leadQueryClause").forEach { (args, result) ->
+      val reader = args.getOrNull(1)?.let { map(it) }
+      @Suppress("UNCHECKED_CAST")
+      val tokens = reader?.get("scopeTokens") as? List<String>
+      assertEquals(asked(result), leadQueryClause(clause(args[0]), tokens, reader?.get("foldsScope") as? Boolean ?: true), args.toString())
+    }
+  }
+
+  @Test
+  fun aViewsRefusedClauseIsSaidNotDropped() {
+    val view = CrmSavedView(
+      "v2", "Mixed", "u1", "u1", false,
+      CrmViewState(listOf(CrmViewClause("type", "equals", "Renewal"), CrmViewClause("type", "isAnyOf", "${CRM_PICKLIST_FILTER_NONE},Renewal"))),
+    )
+    val filter = crmViewFilter(view, CrmKind.DEAL, ::dealQueryClause)
+    assertEquals(listOf(ListFilterRequest("typeKey", "equals", "renewal")), filter.clauses)
+    assertEquals(listOf("\"None\" cannot be picked beside a value"), filter.refused.map { it.reason })
+    // Saved again, the reader's own clauses are kept, never the translation.
+    assertEquals("type", crmViewClauses(filter).first()["field"])
+  }
+
   @Test
   fun crmTelHrefCases() = cases("crmTelHref").forEach { (args, result) ->
     assertEquals(plain(result), crmTelHref(plain(args[0]) as? String), args.toString())

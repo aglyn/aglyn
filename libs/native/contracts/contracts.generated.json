@@ -4479,6 +4479,10 @@
     "nurturing",
     "working"
   ],
+  "NATIVE_CRM_LEAD_SOURCE_DIRECTIONS": [
+    "inbound",
+    "outbound"
+  ],
   "NATIVE_CRM_LEAD_STATUSES": [
     "new",
     "nurturing",
@@ -4739,6 +4743,15 @@
     "xpf": 0,
     "yer": 0
   },
+  "NATIVE_EMAIL_STATE_STATUSES": [
+    "ok",
+    "undeliverable",
+    "bounced",
+    "blocked",
+    "unsubscribed",
+    "complained",
+    "do_not_contact"
+  ],
   "NATIVE_NAV_MANIFEST": {
     "create": [
       {

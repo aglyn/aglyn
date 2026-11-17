@@ -50,7 +50,7 @@ struct RecordsSection: View {
   /// The saved views as filters: the reader's own and the shared ones.
   private var viewFilters: [CrmFilter] {
     let listed = views.views(uid: scope.uid)
-    return (listed.mine + listed.shared).map { crmViewFilter($0, kind: kind) }
+    return (listed.mine + listed.shared).map { crmViewFilter($0, kind: kind) { crmAskClause(kind, $0, scope: scope) } }
   }
 
   /// What the list shows: the chip or view picked, the first chip until then (or while a view is still loading).
@@ -244,6 +244,10 @@ struct RecordsSection: View {
   private func listPane(selectable: Bool) -> some View {
     VStack(spacing: 0) {
       chips
+      // A saved view's clauses this list cannot ask, said rather than silently dropped.
+      ForEach(activeFilter.refused, id: \.sentence) { refusal in
+        AglynNotice(refusal.sentence, tone: .warning).aglynContentEdges()
+      }
       bulkBar
       if let list {
         if !list.ready {

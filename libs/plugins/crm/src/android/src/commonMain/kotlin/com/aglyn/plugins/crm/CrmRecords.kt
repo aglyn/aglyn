@@ -80,6 +80,13 @@ data class CrmFilter(
   val base: List<ListQueryFilter> = emptyList(),
   /** A saved view's order, when the list declares it; null keeps the list's own. */
   val sort: ListQuerySort? = null,
+  /**
+   * The clauses as a view stores them, where they differ from what the query asks (a contact's stage is stored as the
+   * stage and asked as the holder's facet key); null when they are the same.
+   */
+  val stored: List<ListFilterRequest>? = null,
+  /** A saved view's clauses the list could not ask, with why. */
+  val refused: List<CrmViewRefusal> = emptyList(),
 )
 
 /** The query param the Contacts list opens one person by (`CONTACTS_LIST_EMAIL_PARAM`). */
@@ -98,7 +105,10 @@ fun crmFilters(kind: CrmKind, scope: CrmScope): List<CrmFilter> {
   val mine = ListFilterRequest("ownerUid", "equals", scope.uid)
   return when (kind) {
     CrmKind.LEAD -> listOf(
-      CrmFilter("open", "Open", listOf(ListFilterRequest("status", "isAnyOf", Contracts.nativeCrmLeadOpenStatuses.joinToString(",")))),
+      CrmFilter(
+        "open", "Open", listOf(ListFilterRequest("status", "isAnyOf", Contracts.nativeCrmLeadOpenStatuses.joinToString(","))),
+        stored = listOf(ListFilterRequest("status", "equals", "open")),
+      ),
       CrmFilter("all", "All"),
     ) + Contracts.nativeCrmLeadStatuses.map { status ->
       CrmFilter(status, Contracts.crmLeadStatusLabels[status] ?: status, listOf(ListFilterRequest("status", "equals", status)))
@@ -106,9 +116,15 @@ fun crmFilters(kind: CrmKind, scope: CrmScope): List<CrmFilter> {
     // A contact's owner and stage are a site's own (its consent group's facet); the whole workspace lists them all.
     CrmKind.CONTACT -> if (scope.workspaceWide) listOf(CrmFilter("all", "All")) else listOf(
       CrmFilter("all", "All"),
-      CrmFilter("mine", "Mine", listOf(ListFilterRequest("facetKeys", "contains", "${scope.groupId}:owner=${facetKeyValue(scope.uid)}"))),
+      CrmFilter(
+        "mine", "Mine", listOf(ListFilterRequest("facetKeys", "contains", "${scope.groupId}:owner=${facetKeyValue(scope.uid)}")),
+        stored = listOf(mine),
+      ),
     ) + Contracts.contactLifecycleStageLabels.map { (stage, label) ->
-      CrmFilter(stage, label, listOf(ListFilterRequest("facetKeys", "contains", "${scope.groupId}:stage=${facetKeyValue(stage)}")))
+      CrmFilter(
+        stage, label, listOf(ListFilterRequest("facetKeys", "contains", "${scope.groupId}:stage=${facetKeyValue(stage)}")),
+        stored = listOf(ListFilterRequest("lifecycleStage", "equals", stage)),
+      )
     }
     CrmKind.COMPANY -> listOf(
       CrmFilter("all", "All"),

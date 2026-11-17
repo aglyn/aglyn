@@ -6375,11 +6375,13 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let nativeCrmFieldTypeLabels: [String: String]
   public let nativeCrmFieldTypes: [String]
   public let nativeCrmLeadOpenStatuses: [String]
+  public let nativeCrmLeadSourceDirections: [String]
   public let nativeCrmLeadStatuses: [String]
   public let nativeCrmPicklists: [NativeCrmPicklist]
   public let nativeCrmReportPeriods: [String]
   public let nativeCrmTaskKinds: [String]
   public let nativeCurrencyFractionDigits: [String: Double]
+  public let nativeEmailStateStatuses: [String]
   public let nativeNavManifest: NativeNavManifest
   public let nativeNavShellScreens: [String]
   public let nativeSiteCampaignsQuery: ListQueryDeclaration
@@ -6748,11 +6750,13 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case nativeCrmFieldTypeLabels = "NATIVE_CRM_FIELD_TYPE_LABELS"
     case nativeCrmFieldTypes = "NATIVE_CRM_FIELD_TYPES"
     case nativeCrmLeadOpenStatuses = "NATIVE_CRM_LEAD_OPEN_STATUSES"
+    case nativeCrmLeadSourceDirections = "NATIVE_CRM_LEAD_SOURCE_DIRECTIONS"
     case nativeCrmLeadStatuses = "NATIVE_CRM_LEAD_STATUSES"
     case nativeCrmPicklists = "NATIVE_CRM_PICKLISTS"
     case nativeCrmReportPeriods = "NATIVE_CRM_REPORT_PERIODS"
     case nativeCrmTaskKinds = "NATIVE_CRM_TASK_KINDS"
     case nativeCurrencyFractionDigits = "NATIVE_CURRENCY_FRACTION_DIGITS"
+    case nativeEmailStateStatuses = "NATIVE_EMAIL_STATE_STATUSES"
     case nativeNavManifest = "NATIVE_NAV_MANIFEST"
     case nativeNavShellScreens = "NATIVE_NAV_SHELL_SCREENS"
     case nativeSiteCampaignsQuery = "NATIVE_SITE_CAMPAIGNS_QUERY"

@@ -126,17 +126,27 @@ func crmViewQuerySort(_ sorts: [ListQuerySort], _ sort: CrmViewSort?) -> ListQue
   return sorts.first { $0.column == sort.field && $0.direction.rawValue == sort.direction }
 }
 
-/// A view as one of the list's filters: its clauses, and its sort when the list can serve it.
-func crmViewFilter(_ view: CrmSavedView, kind: CrmKind) -> CrmFilter {
-  CrmFilter(
-    id: crmViewFilterPrefix + view.id, label: view.name,
-    clauses: view.state.filters.map { ListFilterRequest(field: $0.field, op: $0.op, value: $0.value) },
-    sort: crmViewQuerySort(kind.declaration.sorts, view.state.sort))
+/// A view as one of the list's filters: its clauses as the list's query asks them (`ask`, the list's translation),
+/// the ones it cannot ask named with why, and its sort when the list can serve it.
+func crmViewFilter(_ view: CrmSavedView, kind: CrmKind, ask: (ListFilterRequest) -> CrmClauseAsked = { .asked($0) }) -> CrmFilter {
+  var asked: [ListFilterRequest] = []
+  var refused: [CrmViewRefusal] = []
+  let stored = view.state.filters.map { ListFilterRequest(field: $0.field, op: $0.op, value: $0.value) }
+  for (clause, saved) in zip(stored, view.state.filters) {
+    switch ask(clause) {
+    case .asked(let one): asked.append(one)
+    case .refused(let why): refused.append(CrmViewRefusal(clause: ListFilterRequest(field: saved.field, op: saved.op, value: saved.label ?? saved.value), reason: why))
+    }
+  }
+  return CrmFilter(
+    id: crmViewFilterPrefix + view.id, label: view.name, clauses: asked, sort: crmViewQuerySort(kind.declaration.sorts, view.state.sort),
+    stored: stored, refused: refused)
 }
 
-/// The clauses a filter carries, as a view stores them (the label kept for a view's own clause).
+/// The clauses a filter carries, as a view stores them: the reader's own (a chip's or a view's), never the
+/// translation its query asks.
 func crmViewClauses(_ filter: CrmFilter) -> [[String: Any]] {
-  filter.clauses.map { ["field": $0.field, "op": $0.op, "value": $0.value] }
+  (filter.stored ?? filter.clauses).map { ["field": $0.field, "op": $0.op, "value": $0.value] }
 }
 
 /// Who may change a view: its creator, or a member who reaches every site (`canEdit`).
@@ -436,4 +446,152 @@ func crmTaskViewFilter(_ view: TaskView, open: CrmSavedView?) -> CrmFilter {
   return CrmFilter(
     id: open.map { crmViewFilterPrefix + $0.id } ?? "task:\(view.rawValue)", label: open?.name ?? view.label,
     clauses: (view == .mine ? [] : [ListFilterRequest(field: "view", op: "equals", value: view.rawValue)]) + rest)
+}
+
+// MARK: A stored clause as the list's query asks it (`crm-list-query.ts`, `contact-filters.ts`, `deal-filters.ts`,
+// `lead-filters.ts`): a view keeps the clauses a reader set; each list translates them into the fields its records keep.
+
+/// How one stored clause is asked: a query clause, or why it cannot be (`CrmClauseAsked`).
+enum CrmClauseAsked: Equatable {
+  case asked(ListFilterRequest)
+  case refused(String)
+}
+
+/// `crmClauseValues`: the comma-separated values of an `isAnyOf`, or the one value of anything else.
+func crmClauseValues(_ clause: ListFilterRequest) -> [String] {
+  let raw = clause.op == "isAnyOf" ? clause.value.split(separator: ",", omittingEmptySubsequences: false).map(String.init) : [clause.value]
+  var seen: [String] = []
+  for value in raw.map({ $0.trimmingCharacters(in: .whitespaces) }) where !value.isEmpty && !seen.contains(value) { seen.append(value) }
+  return seen
+}
+
+/// `crmAnyOf`: one value as `equals`, several as `isAnyOf`.
+func crmAnyOf(_ field: String, _ values: [String]) -> CrmClauseAsked {
+  var unique: [String] = []
+  for value in values where !unique.contains(value) { unique.append(value) }
+  if unique.isEmpty { return .refused("no value yet") }
+  return .asked(unique.count == 1
+    ? ListFilterRequest(field: field, op: "equals", value: unique[0])
+    : ListFilterRequest(field: field, op: "isAnyOf", value: unique.joined(separator: ",")))
+}
+
+private let crmLimitedAccess =
+  "your access is limited to specific sites, which this filter cannot be combined with — an organization administrator can use it"
+/// A picklist filter's "None" (`LEAD_SOURCE_FILTER_NONE`).
+let crmPicklistFilterNone = "\u{0000}none"
+
+/// A number as JavaScript's `String(number)` spells the whole ones.
+private func jsNumber(_ value: Double) -> String {
+  value == value.rounded() && abs(value) < 1e15 ? String(Int64(value)) : String(value)
+}
+
+/// `contactQueryClause`: a Contacts clause as its query asks it — a holder's field as that holder's facet key.
+func contactQueryClause(_ clause: ListFilterRequest, groupID: String?, foldsScope: Bool) -> CrmClauseAsked {
+  let asStored: Set<String> = ["name", "email", "formIds", "hostId", "createdAt", "updatedAt", "nextTaskAtMs"]
+  if asStored.contains(clause.field) {
+    if clause.field == "formIds" && !foldsScope { return .refused(crmLimitedAccess) }
+    return .asked(clause)
+  }
+  let verdicts = ContractValues.shared.nativeEmailStateStatuses
+  if clause.field == "emailState" {
+    if clause.op == "isEmpty" { return .asked(ListFilterRequest(field: "emailStatus", op: "equals", value: "none")) }
+    if clause.op == "isNotEmpty" { return crmAnyOf("emailStatus", verdicts) }
+    let values = crmClauseValues(clause)
+    if values.contains(where: { !verdicts.contains($0) }) { return .refused("pick one of the choices") }
+    return crmAnyOf("emailStatus", values)
+  }
+  let facets = [
+    "ownerUid": "owner", "lifecycleStage": "stage", "source": "source", "companyId": "company", "tags": "tag",
+    "ordersCount": "orders", "ltvCents": "ltv", "leadSource": "leadSource",
+  ]
+  let facet = facets[clause.field] ?? (clause.field.hasPrefix("custom_") && clause.field.count > 7 ? "custom.\(clause.field.dropFirst(7))" : nil)
+  guard let facet else { return .refused("this list does not filter by that") }
+  guard foldsScope else { return .refused(crmLimitedAccess) }
+  let group = (groupID ?? "").isEmpty ? "*" : groupID!
+  if clause.op == "isNotEmpty" { return .asked(ListFilterRequest(field: "facetKeys", op: "contains", value: "\(group):\(facet)")) }
+  var keys: [String] = []
+  for value in crmClauseValues(clause) {
+    let key: String
+    if clause.op == "=" {
+      guard let number = Double(value), number.isFinite else { return .refused("no value yet") }
+      key = jsNumber(number)
+    } else {
+      key = facetKeyValue(value)
+      if key.isEmpty { return .refused("no value yet") }
+    }
+    keys.append("\(group):\(facet)=\(key)")
+  }
+  let asked = crmAnyOf("facetKeys", keys)
+  // One key is an `array-contains`; several, an `array-contains-any`.
+  if case .asked(let one) = asked, one.op == "equals" { return .asked(ListFilterRequest(field: one.field, op: "contains", value: one.value)) }
+  return asked
+}
+
+/// `dealQueryClause`: a Type or a Lead source by its key ("None" as `isEmpty`), every other clause as stored.
+func dealQueryClause(_ clause: ListFilterRequest) -> CrmClauseAsked {
+  guard let key = ["type": "typeKey", "leadSource": "leadSourceKey"][clause.field] else { return .asked(clause) }
+  let values = crmClauseValues(clause)
+  if clause.op == "isEmpty" || values == [crmPicklistFilterNone] { return .asked(ListFilterRequest(field: key, op: "isEmpty", value: "")) }
+  if values.contains(crmPicklistFilterNone) { return .refused("\"None\" cannot be picked beside a value") }
+  return crmAnyOf(key, values.compactMap { crmPicklistKey($0) })
+}
+
+/// `leadQueryClause`: a Leads clause as its query asks it; a value the list does not know is refused by name.
+func leadQueryClause(_ clause: ListFilterRequest, scopeTokens: [String]?, foldsScope: Bool) -> CrmClauseAsked {
+  let values = crmClauseValues(clause)
+  let contract = ContractValues.shared
+  switch clause.field {
+  case "status":
+    var statuses: [String] = []
+    for value in values {
+      if value == "open" { statuses += contract.nativeCrmLeadOpenStatuses } else if contract.nativeCrmLeadStatuses.contains(value) {
+        statuses.append(value)
+      } else { return .refused("\(value) is not a lead status") }
+    }
+    return crmAnyOf("status", statuses)
+  case "emailState":
+    var keys: [String] = []
+    for value in values {
+      if value == "problem" { keys += contract.nativeEmailStateStatuses.filter { $0 != "ok" } } else if value == "none" {
+        keys.append("none")
+      } else if contract.nativeEmailStateStatuses.contains(value) { keys.append(value) } else { return .refused("\(value) is not an email verdict") }
+    }
+    return crmAnyOf("emailStatus", keys)
+  case "leadSource":
+    if clause.op == "isEmpty" || values == [crmPicklistFilterNone] { return .asked(ListFilterRequest(field: "leadSourceKey", op: "isEmpty", value: "")) }
+    if values.contains(crmPicklistFilterNone) { return .refused("\"No lead source\" cannot be picked beside a value") }
+    return crmAnyOf("leadSourceKey", values.compactMap { crmPicklistKey($0) })
+  case "leadSourceDirection":
+    if let bad = values.first(where: { !contract.nativeCrmLeadSourceDirections.contains($0) }) { return .refused("\(bad) is not a lead source direction") }
+    return crmAnyOf("leadSourceDirection", values)
+  case "ownerUid":
+    return crmAnyOf("ownerUid", values)
+  case "industry", "rating":
+    return crmAnyOf(clause.field == "industry" ? "industryKey" : "ratingKey", values.compactMap { crmPicklistKey($0) })
+  case "campaignIds":
+    guard values.count == 1 else { return .refused("pick one campaign") }
+    guard let scopeTokens else { return .asked(ListFilterRequest(field: "campaignIds", op: "contains", value: values[0])) }
+    guard foldsScope else { return .refused(crmLimitedAccess) }
+    return .asked(ListFilterRequest(field: "scopedCampaignIds", op: "isAnyOf", value: scopeTokens.map { "\($0)~\(values[0])" }.joined(separator: ",")))
+  default:
+    return .refused("this list does not filter by that")
+  }
+}
+
+/// A stored clause through its list's translation (companies and tasks keep theirs as stored).
+func crmAskClause(_ kind: CrmKind, _ clause: ListFilterRequest, scope: CrmScope) -> CrmClauseAsked {
+  let folds = scope.orgLevel || scope.orgWide
+  switch kind {
+  case .contact: return contactQueryClause(clause, groupID: scope.orgLevel ? nil : scope.groupID, foldsScope: folds)
+  case .deal: return dealQueryClause(clause)
+  case .lead: return leadQueryClause(clause, scopeTokens: scope.orgLevel ? nil : scope.readTokens, foldsScope: folds)
+  case .company: return .asked(clause)
+  }
+}
+
+/// A clause the list could not apply, said as the filter bar says it: "“Stage is Customer” was not applied: why."
+struct CrmViewRefusal: Equatable {
+  let clause: ListFilterRequest
+  let reason: String
+  var sentence: String { "“\(clauseLabel(clause, headers: [:], choices: [:]))” was not applied: \(reason)." }
 }
