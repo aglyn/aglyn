@@ -231,7 +231,7 @@ fun CrmHubScreen(context: NativePluginContext, initial: CrmSection, params: Map<
         CrmSection.TASKS -> TasksSection(context, scope, api, reference)
         CrmSection.REPORTS -> ReportsSection(context, scope, reference)
         CrmSection.FIELDS -> FieldsSection(context, scope, api, reference)
-        CrmSection.SETTINGS -> SettingsSection(context, scope, reference)
+        CrmSection.SETTINGS -> SettingsSection(context, scope, api, reference)
       }
       }
     }
