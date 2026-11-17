@@ -69,6 +69,22 @@ final class CrmTests: XCTestCase {
     XCTAssertEqual(order.map(\.id), ["4", "2", "1"])
   }
 
+  func testATelLinkIsTheConsoles() throws {
+    for (index, item) in try functionCases("crmTelHref").enumerated() {
+      XCTAssertEqual(crmTelHref(item.args[0] as? String), item.result as? String, "case \(index)")
+    }
+  }
+
+  func testCallSaysWhyBeforeAnyoneTaps() {
+    XCTAssertEqual(crmCallNumber(.contact, ["phone": " ", "mobilePhone": "+15125550199"]), "+15125550199")
+    XCTAssertEqual(crmCallNumber(.company, ["mobilePhone": "+15125550199"]), nil)
+    XCTAssertEqual(crmCallReason(nil, doNotCall: false), "This record has no phone number")
+    XCTAssertEqual(crmCallReason("ext 12", doNotCall: false), "“ext 12” is not a number a dialer can take")
+    XCTAssertEqual(crmCallReason("+15125550199", doNotCall: true), crmDoNotCallHint)
+    XCTAssertNil(crmCallReason("+15125550199", doNotCall: false))
+    XCTAssertEqual(crmCallLabel(doNotCall: true), "Call (do not call)")
+  }
+
   func testScopeTokensAreTheConsoles() throws {
     for (index, item) in try functionCases("crmScopeTokens").enumerated() {
       XCTAssertEqual(crmScopeTokens(item.args[0] as? [String: Any], group(item.args[1])), item.result as? [String], "case \(index)")

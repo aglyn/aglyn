@@ -179,7 +179,7 @@ struct CrmRowView: View {
 }
 
 private enum RecordAction: String, Identifiable {
-  case edit, delete, log, email, task, status, unqualify, convert, stage, move, won, lost, addRole
+  case edit, delete, log, logCall, email, task, status, unqualify, convert, stage, move, won, lost, addRole
   var id: String { rawValue }
   /// A one-sentence confirmation with nothing to fill in: an alert, never a sheet (HIG alerts).
   var confirmsInAlert: Bool { self == .delete || self == .won }
@@ -202,6 +202,7 @@ struct RecordDetail: View {
   @State private var notice: String?
   @State private var error: String?
   @State private var site = LiveDoc()
+  @Environment(\.openURL) private var openURL
 
   private var scope: CrmScope { doc.document.map { recordScope(listScope, $0.data) } ?? listScope }
   /// "Move contacts and deals between stages", where this record's stage routes will ask it.
@@ -294,7 +295,8 @@ struct RecordDetail: View {
       if let error { AglynNotice(error, tone: .error) { self.error = nil } }
       Section {
         // The record's head (the calmer screens): the next step for this record as the one filled button, the rest in ⋯.
-        let acts = scope.canWrite ? recordActions(row) : (primary: nil, more: [])
+        // Dialling writes nothing, so Call stands for a reader too (`CrmCallButton`).
+        let acts = scope.canWrite ? recordActions(row) : (primary: nil, more: callActions(row).filter { $0.id == "crm-action-call" })
         if scope.canWrite && hasStage && !movesStages {
           AglynNotice(permissionRefusalText(ContractValues.shared.orgRoleGrants, key: crmMoveStagesKey), tone: .info)
             .accessibilityIdentifier("crm-stage-refusal")
@@ -324,7 +326,19 @@ struct RecordDetail: View {
           let display = field.spec.key == "ownerUid" ? reference.memberLabel(value) : fieldDisplay(field.spec, value)
           return display.flatMap { $0.isEmpty ? nil : (field, $0) }
         }
-        ForEach(shown, id: \.0.id) { PropertyRow($0.0.spec.label, $0.1) }
+        ForEach(shown, id: \.0.id) { field, display in
+          if field.spec.kind == .phone, let href = crmTelHref(display), let url = URL(string: href) {
+            // A number a dialler can take is a `tel:` link (`CrmPhoneLink`), flagged when they asked not to be phoned.
+            LabeledContent(field.spec.label) {
+              HStack(spacing: AglynSpace.half) {
+                Link(display, destination: url).accessibilityIdentifier("crm-phone-\(field.spec.key)")
+                if row.data["doNotCall"] as? Bool == true { Text("(do not call)").font(AglynFont.caption).foregroundStyle(AglynColor.warning) }
+              }
+            }
+          } else {
+            PropertyRow(field.spec.label, display)
+          }
+        }
         if shown.count < fields.count {
           Text("\(fields.count - shown.count) more fields are empty. Edit to fill them in.").font(AglynFont.caption).foregroundStyle(.secondary)
         }
@@ -412,6 +426,7 @@ struct RecordDetail: View {
   /// Email a contact, Move an open deal's stage, else Log activity), and every other act in ⋯, Remove or Delete last.
   private func recordActions(_ row: CrmRow) -> (primary: AglynRecordAction?, more: [AglynRecordAction]) {
     var acts: [(String, String, RecordAction)] = [("Edit", "pencil", .edit), ("Log activity", "note.text", .log)]
+    if kind != .deal { acts.append(("Log a call", "phone.badge.plus", .logCall)) }
     if crmHasEmail(row.data) || kind == .deal { acts.append(("Email", "envelope", .email)) }
     acts.append(("New task", "checklist", .task))
     let status = row.data["status"] as? String
@@ -442,7 +457,26 @@ struct RecordDetail: View {
       ) { action = act }
     }
     let primary = all.first { $0.id == "crm-action-\(next.rawValue)" }
-    return (primary, all.filter { $0.id != primary?.id })
+    let rest = all.filter { $0.id != primary?.id }
+    // Call sits beside Log a call, ahead of everything but Edit and Log activity.
+    let at = min(rest.firstIndex { $0.id == "crm-action-logCall" } ?? 2, rest.count)
+    var more = rest
+    more.insert(contentsOf: callActions(row), at: at)
+    return (primary, more)
+  }
+
+  /// **Call** (`CrmCallButton`): dials the record's number, switched off when there is none a dialler can take, and
+  /// worded as a warning for a person who asked not to be phoned.
+  private func callActions(_ row: CrmRow) -> [AglynRecordAction] {
+    guard kind != .deal else { return [] }
+    let phone = crmCallNumber(kind, row.data)
+    let doNotCall = kind != .company && row.data["doNotCall"] as? Bool == true
+    let href = crmTelHref(phone)
+    return [
+      AglynRecordAction("crm-action-call", crmCallLabel(doNotCall: doNotCall), systemImage: "phone", enabled: href != nil) {
+        if let href, let url = URL(string: href) { openURL(url) }
+      }
+    ]
   }
 
   @ViewBuilder
@@ -518,10 +552,10 @@ struct RecordDetail: View {
         if kind == .contact { try await api.updateContact(id, changes) } else { try await api.updateRecord(kind, id, changes) }
         done("\(kind.singular) saved.")
       }
-    case .log:
+    case .log, .logCall:
       LogActivitySheet(
         reader: context.firestore, scope: scope, reference: reference, start: activityPicks(row), deal: kind == .deal ? row.data : nil,
-        known: activityKnownLabels(row)
+        known: activityKnownLabels(row), initialKind: action == .logCall ? "call" : "note"
       ) { activityKind, body, outcome, minutes, direction, picks in
         let links = picks.map { crmActivityLinkFromPicks($0) } ?? [kind.linkField: id]
         try await api.logActivity(kind: activityKind, body: body, links: links, outcome: outcome, minutes: minutes, direction: direction)
@@ -835,8 +869,11 @@ struct LogActivitySheet: View {
   var deal: [String: Any]?
   /// Names for the records the fields open on, which the reference's windows may not hold.
   var known: [String: String] = [:]
+  /// The kind the sheet opens on: a note, or a call from **Log a call**.
+  var initialKind = "note"
   let save: (String, String, String?, Int?, String?, CrmActivityPicks?) async throws -> Void
   @State private var kind = "note"
+  @State private var startedKind = false
   @State private var text = ""
   @State private var outcome = ""
   @State private var minutes = ""
@@ -910,6 +947,11 @@ struct LogActivitySheet: View {
           if !picks.linked { Text("Name a contact, or what this is related to.").foregroundStyle(AglynColor.error) }
         }
       }
+    }
+    .onAppear {
+      guard !startedKind else { return }
+      startedKind = true
+      kind = initialKind
     }
     .task(id: "\(picks?.contactID ?? "")|\(dealsCompany ?? "")") {
       guard start != nil else { return }

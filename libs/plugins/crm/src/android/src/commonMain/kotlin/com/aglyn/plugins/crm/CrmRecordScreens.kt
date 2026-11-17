@@ -213,7 +213,7 @@ internal fun chipTone(kind: CrmKind, row: CrmRow): StatusTone = when (kind) {
 }
 
 /** What a record's screen offers, by object and by the member's role. */
-private enum class RecordDialog { EDIT, DELETE, LOG, EMAIL, TASK, STATUS, UNQUALIFY, CONVERT, STAGE, MOVE, WON, LOST }
+private enum class RecordDialog { EDIT, DELETE, LOG, LOG_CALL, EMAIL, TASK, STATUS, UNQUALIFY, CONVERT, STAGE, MOVE, WON, LOST }
 
 /**
  * One record: its header and actions, its properties (standard and custom),
@@ -251,7 +251,10 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
         ) {
           notice?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = { notice = null }) { Text("Dismiss") } }) }
           // One filled button, the next step for this record; the rest in ⋯.
-          val (primary, more) = if (scope.canWrite) recordActions(kind, row, movesStages) { dialog = it } else (null to emptyList())
+          val uri = androidx.compose.ui.platform.LocalUriHandler.current
+          // Dialling writes nothing, so Call stands for a reader too (`CrmCallButton`).
+          val call = callAction(kind, row) { runCatching { uri.openUri(it) } }
+          val (primary, more) = if (scope.canWrite) recordActions(kind, row, movesStages, call) { dialog = it } else (null to listOfNotNull(call))
           val hasStage = kind == CrmKind.CONTACT || (kind == CrmKind.DEAL && (row.data["status"] == "open" || row.data["status"] == null))
           if (scope.canWrite && hasStage && !movesStages) {
             NoticeBanner(com.aglyn.contracts.permissionRefusalText(CRM_MOVE_STAGES_KEY), StatusTone.INFO, Modifier.testTag("crm-stage-refusal"))
@@ -288,7 +291,20 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
               }
               display?.takeIf { it.isNotBlank() }?.let { field to it }
             }
-            shown.forEach { (field, display) -> PropertyRow(field.spec.label, display, Modifier.testTag("property-${field.spec.key}")) }
+            shown.forEach { (field, display) ->
+              val tel = if (field.spec.kind == FieldKind.PHONE) crmTelHref(display) else null
+              if (tel != null) {
+                // A number a dialler can take is a `tel:` link (`CrmPhoneLink`), flagged when they asked not to be phoned.
+                PropertyRow(field.spec.label, display, Modifier.testTag("property-${field.spec.key}")) {
+                  Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (row.data["doNotCall"] == true) Text("(do not call)", style = MaterialTheme.typography.labelSmall, color = com.aglyn.ui.LocalAglynPalette.current.warning.text)
+                    TextButton(onClick = { runCatching { uri.openUri(tel) } }, modifier = Modifier.testTag("crm-phone-${field.spec.key}")) { Text("Call") }
+                  }
+                }
+              } else {
+                PropertyRow(field.spec.label, display, Modifier.testTag("property-${field.spec.key}"))
+              }
+            }
             if (shown.size < fields.size) {
               Text("${fields.size - shown.size} more fields are empty. Edit to fill them in.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -309,12 +325,15 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
  * What a record's header offers: the next step for its state as the one filled button (Convert a qualified lead, Email a
  * contact, Move an open deal's stage), and every other act in ⋯, Remove or Delete last.
  */
-private fun recordActions(kind: CrmKind, row: CrmRow, movesStages: Boolean, open: (RecordDialog) -> Unit): Pair<com.aglyn.ui.RecordAction?, List<com.aglyn.ui.RecordAction>> {
+private fun recordActions(kind: CrmKind, row: CrmRow, movesStages: Boolean, call: com.aglyn.ui.RecordAction?, open: (RecordDialog) -> Unit): Pair<com.aglyn.ui.RecordAction?, List<com.aglyn.ui.RecordAction>> {
   fun act(label: String, icon: String, dialog: RecordDialog) =
     com.aglyn.ui.RecordAction("crm-action-${dialog.name.lowercase()}", label, icon, destructive = dialog == RecordDialog.DELETE, enabled = movesStages || dialog !in setOf(RecordDialog.STAGE, RecordDialog.MOVE, RecordDialog.WON, RecordDialog.LOST)) { open(dialog) }
   val all = buildList {
     add(act("Edit", "edit", RecordDialog.EDIT))
     add(act("Log activity", "sticky_note", RecordDialog.LOG))
+    // Call sits beside Log a call (`CrmCallButton`).
+    call?.let { add(it) }
+    if (kind != CrmKind.DEAL) add(act("Log a call", "call", RecordDialog.LOG_CALL))
     if (kind != CrmKind.COMPANY && crmHasEmail(row.data) || kind == CrmKind.DEAL) add(act("Email", "mail", RecordDialog.EMAIL))
     add(act("New task", "task", RecordDialog.TASK))
     when (kind) {
@@ -341,6 +360,17 @@ private fun recordActions(kind: CrmKind, row: CrmRow, movesStages: Boolean, open
   }
   val primary = all.firstOrNull { it.id == "crm-action-${next.name.lowercase()}" }
   return primary to all.filter { it != primary }
+}
+
+/**
+ * **Call** (`CrmCallButton`): dials the record's number, switched off when there is none a dialler can take, and worded as a
+ * warning for a person who asked not to be phoned. None on a deal.
+ */
+private fun callAction(kind: CrmKind, row: CrmRow, dial: (String) -> Unit): com.aglyn.ui.RecordAction? {
+  if (kind == CrmKind.DEAL) return null
+  val href = crmTelHref(crmCallNumber(kind, row.data))
+  val doNotCall = kind != CrmKind.COMPANY && row.data["doNotCall"] == true
+  return com.aglyn.ui.RecordAction("crm-action-call", crmCallLabel(doNotCall), "call", enabled = href != null) { href?.let(dial) }
 }
 
 /** A deal's stages as a path: done, current, ahead. */
@@ -581,7 +611,7 @@ private fun RecordDialogs(
         }
       },
     )
-    RecordDialog.LOG -> LogActivityDialog(
+    RecordDialog.LOG, RecordDialog.LOG_CALL -> LogActivityDialog(
       context,
       scope,
       reference,
@@ -590,6 +620,7 @@ private fun RecordDialogs(
       known = activityKnownLabels(kind, id, row),
       busy = busy,
       onDismiss = onClose,
+      initialKind = if (dialog == RecordDialog.LOG_CALL) "call" else "note",
     ) { activityKind, body, outcome, minutes, direction, picks ->
       busy.run(coroutines, { onClose(); onNotice("Logged.") }) {
         val links = picks?.let { crmActivityLinkFromPicks(it) } ?: mapOf(kind.linkField to id)
@@ -884,9 +915,11 @@ private fun LogActivityDialog(
   known: Map<String, String>,
   busy: Busy,
   onDismiss: () -> Unit,
+  /** The kind the dialog opens on: a note, or a call from **Log a call**. */
+  initialKind: String = "note",
   onLog: (kind: String, body: String, outcome: String?, minutes: Long?, direction: String?, picks: CrmActivityPicks?) -> Unit,
 ) {
-  var kind by remember { mutableStateOf("note") }
+  var kind by remember { mutableStateOf(initialKind) }
   var body by remember { mutableStateOf("") }
   var outcome by remember { mutableStateOf("") }
   var minutes by remember { mutableStateOf("") }

@@ -1034,6 +1034,15 @@ object ScreenValues {
 
   private val MONTHS = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
+  /** `2026-11-15` as `Nov 15, 2026`, with no time zone in between; null for anything that is not a plain calendar day. */
+  internal fun calendarDayText(text: String): String? {
+    val match = Regex("^(\\d{4})-(\\d{2})-(\\d{2})$").matchEntire(text) ?: return null
+    val (year, month, day) = match.destructured
+    val m = month.toInt(); val d = day.toInt()
+    if (m !in 1..12 || d !in 1..31) return null
+    return "${MONTHS[m - 1]} $d, ${year.toInt()}"
+  }
+
   private fun dateText(millis: Long, withTime: Boolean): String {
     val (year, month, dayOfMonth, hour, minuteOfHour) = localParts(millis, timeZone)
     val day = "${MONTHS[month - 1]} $dayOfMonth, $year"
@@ -1137,7 +1146,9 @@ object ScreenValues {
       parts[0].drop(5).toIntOrNull()?.let { count -> return text(JsonArray(value.take(count))) }
     }
     return when (parts[0]) {
-      "date" -> epochMillis(value)?.let { dateText(it, false) } ?: text(value)
+      // A calendar day as stored (`2026-11-15`, a waiver's day key) is that day wherever the device is; only a moment is read in
+      // the device's time zone (the console's `formatDayKey` reads a day key in UTC).
+      "date" -> (value as? JsonPrimitive)?.takeIf { it.isString }?.let { calendarDayText(it.content) } ?: epochMillis(value)?.let { dateText(it, false) } ?: text(value)
       "datetime" -> epochMillis(value)?.let { dateText(it, true) } ?: text(value)
       // A time of day alone: `3:05 PM`.
       "clock" -> epochMillis(value)?.let { at ->

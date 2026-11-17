@@ -221,9 +221,17 @@ export const DOCS_HELP_TOPICS = {
     path: '/marketing-and-automation/analytics/connect-conversions-api',
     title: 'Server-side ad conversions',
   },
+  connectQuickbooksOnline: {
+    path: '/commerce-and-bookings/commerce/connect-quickbooks-online',
+    title: 'Connect QuickBooks Online',
+  },
   connectSmileIoOrYotpo: {
     path: '/commerce-and-bookings/commerce/connect-smile-io-or-yotpo',
     title: 'Connect Smile.io or Yotpo Loyalty',
+  },
+  connectXero: {
+    path: '/commerce-and-bookings/commerce/connect-xero',
+    title: 'Connect Xero',
   },
   consoleAndSite: {
     path: '/developers/plugins/guides/console-and-site',
@@ -805,6 +813,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/commerce-and-bookings/commerce/ship-with-your-own-easyship-sendcloud-or-shipperhq',
     title: 'Ship with your own Easyship, Sendcloud or ShipperHQ',
   },
+  showToSignedInVisitors: {
+    path: '/building-sites/besigner/show-to-signed-in-visitors',
+    title: 'Show to signed-in or signed-out visitors',
+  },
   siteBackupAndPackages: {
     path: '/building-sites/site-backup-and-packages',
     title: 'Site backup and packages',
@@ -1016,7 +1028,9 @@ export const DOCS_HELP_ANCHORS = {
   connectAttentive: ['#before-you-start', '#connect', '#what-is-sent', '#who-is-sent', '#unsubscribes-stay-in-attentive', '#settings', '#sync-log', '#troubleshooting', '#disconnect'],
   connectAutomatically: ['#steps', '#no-button', '#problems'],
   connectConversionsApi: ['#conversions-api', '#meta-conversions-api', '#tiktok-events-api', '#pinterest-conversions-api', '#how-it-works', '#test-events', '#related'],
+  connectQuickbooksOnline: ['#before-you-start', '#connect', '#choose-your-accounts', '#what-is-posted', '#how-each-payment-is-posted', '#sales-tax-collected-by-aglyn', '#one-summary-a-day-instead', '#currency', '#sales-before-you-connected', '#when-something-does-not-post', '#disconnect'],
   connectSmileIoOrYotpo: ['#connect-your-account', '#who-earns', '#when-something-is-not-sent', '#disconnect'],
+  connectXero: ['#before-you-start', '#connect', '#choose-an-organization', '#choose-your-accounts', '#what-is-posted', '#how-each-payment-is-posted', '#sales-tax-collected-by-aglyn', '#one-summary-a-day-instead', '#currency', '#sales-before-you-connected', '#when-something-does-not-post', '#disconnect'],
   consoleAndSite: ['#add-a-console-page', '#add-a-widget-to-a-shell-zone', '#wrap-every-console-page-providers', '#add-a-canvas-component-besigner--published-sites', '#add-a-site-runtime', '#troubleshooting'],
   consoleSearch: ['#what-it-searches', '#searching-from-the-organization', '#how-matching-works', '#what-it-does-not-search', '#why-a-group-sometimes-says-it-was-only-partly-searched'],
   consoleTour: ['#the-app-bar', '#choose-a-workspace', '#in-context-help', '#filter-and-search', '#primary-navigation', '#editing-vs-managing', '#the-sites-list', '#a-site-card', '#the-status-pill', '#how-the-pill-is-decided', '#your-site-allowance', '#a-sites-dashboard', '#recent-activity', '#next', '#workspace-settings--notifications', '#organization-settings', '#organization-general', '#the-notifications-feed', '#all-notifications', '#notification-levels', '#notification-settings', '#one-kind-at-a-time', '#workspace-and-site-overrides', '#daily-digests', '#notification-sound', '#alerts-on-this-device'],
@@ -1103,7 +1117,7 @@ export const DOCS_HELP_ANCHORS = {
   membersOnly: ['#let-visitors-sign-up', '#sign-in-sign-up-and-recovery-pages', '#forgotten-passwords', '#gate-a-screen', '#manage-your-members', '#suspend-or-reactivate-a-member', '#tips', '#related'],
   menusAndNavigation: ['#dropdown-menu', '#mega-menu', '#drawer--menu-button', '#the-mobile-nav-preset', '#the-dropdown-panel-preset', '#interactions-for-menus', '#responsive-visibility', '#related'],
   migrationPatterns: ['#renamed-a-screen', '#consolidated-pages', '#moved-a-site-into-aglyn', '#avoiding-loops', '#related'],
-  modelBuilder: ['#define-the-model', '#display-name-vs-reference-id', '#page-address-fields', '#image-fields', '#page-fields', '#edit-records', '#tips', '#related'],
+  modelBuilder: ['#define-the-model', '#display-name-vs-reference-id', '#page-address-fields', '#image-fields', '#icon-fields', '#page-fields', '#edit-records', '#tips', '#related'],
   multilingual: ['#languages-card', '#locale-variants', '#hreflang--discovery', '#language-switcher', '#text-direction', '#related'],
   multiSelect: ['#select-multiple', '#move-the-whole-selection', '#what-the-inspector-shows', '#tips', '#related'],
   musicPlayer: ['#adding-tracks', '#rights', '#takedowns', '#related'],
@@ -1160,13 +1174,14 @@ export const DOCS_HELP_ANCHORS = {
   shipping: ['#zones-and-rates', '#ask-aglyn-ai', '#where-parcels-ship-from', '#labels-and-live-carrier-rates'],
   shippingLabelsAndLiveRates: ['#before-you-start', '#shipping-labels-settings', '#ship-from', '#boxes', '#label-options', '#checkout-services', '#paying-for-labels', '#carrier-accounts', '#product-shipping-fields', '#carrier-rates-at-checkout', '#address-checks', '#buy-a-label', '#void-a-label', '#batch-labels', '#return-labels', '#tracking', '#label-spend', '#troubleshooting', '#related'],
   shipWithYourOwnEasyshipSendcloudOrShipperhq: ['#before-you-start', '#connect-an-account', '#easyship', '#sendcloud', '#shipperhq', '#tracking-webhooks', '#what-changes', '#disconnect', '#troubleshooting', '#related'],
+  showToSignedInVisitors: ['#choose-who-sees-an-element', '#what-visitors-see'],
   siteBackupAndPackages: ['#backup-and-restore-card', '#what-a-package-carries', '#download-a-backup', '#export-items', '#import-a-package', '#1-upload', '#2-items', '#3-missing-items', '#4-changes', '#5-review', '#6-import', '#undo-an-import', '#moving-a-site-to-another-of-your-sites'],
   siteLooks: ['#choose-a-style', '#each-styles-layout', '#an-ai-starters-look', '#how-the-look-is-made', '#your-theme-afterwards', '#change-the-look-later', '#related'],
   siteProtection: ['#where-these-controls-live', '#per-screen-passwords', '#custom-error-screens', '#maintenance-mode', '#related'],
   siteSearch: ['#how-it-works', '#what-it-searches', '#the-layout-built-in-pages-use', '#configure-it', '#related'],
   siteStarters: ['#choose-your-starter', '#what-a-card-shows', '#where-starters-come-from', '#starters-and-ai-starters', '#a-starter-with-a-price', '#what-your-site-gets', '#make-it-your-own', '#who-can-use-them', '#publishing-your-own', '#in-the-aglyn-app', '#related'],
   sso: ['#setting-it-up', '#1-verify-your-domain', '#2-connect-your-identity-provider', '#rotating-your-signing-certificate', '#3-turn-it-on', '#how-it-works', '#enforcement', '#you-must-keep-one-way-in-that-does-not-go-through-your-idp', '#an-owner-who-signs-in-outside-your-identity-pool', '#or-a-break-glass-account-inside-the-pool', '#transferring-ownership-while-you-are-enforcing', '#if-we-cannot-check', '#consequences-worth-knowing-before-you-switch', '#testing-it', '#related'],
-  staffConsole: ['#runbooks', '#whats-there', '#staff-overview', '#staff-overview-organizations', '#staff-overview-signups', '#staff-overview-sites', '#staff-overview-users', '#staff-overview-mrr', '#staff-overview-newest-orgs', '#support-queue', '#plugin-reviews', '#plugin-reviews-site-starters', '#plugin-review-starter-status', '#plugin-review-starter-overview', '#plugin-review-starter-pages', '#plugin-review-starter-theme', '#plugin-review-starter-checklist', '#plugin-review-starter-verdict', '#plugin-review-starter-versions', '#plugin-review-starter-danger-zone', '#organizations-admin', '#filter-the-directory', '#organization-detail', '#staff-org-email', '#free-workspace-limit', '#first-party-hosts', '#entitlement-editor', '#plan-comps', '#build-for-a-client', '#client-build-screen', '#bundle-link', '#sites-admin', '#filter-the-site-list', '#site-detail', '#site-ownership', '#site-transfer', '#site-content', '#staff-automations', '#staff-org-automations', '#emails-sent', '#staff-media-library', '#users-admin', '#users-accounts', '#user-detail', '#user-identity', '#user-organizations', '#user-audit-trail', '#user-data-access', '#user-activity', '#legal-acceptances', '#acquisition', '#password-help', '#sign-one-device-out', '#email-delivery', '#import-delivery-history', '#organization-page-cards', '#org-staff-actions', '#org-edit', '#org-sites', '#org-members', '#org-effective-entitlements', '#org-metered-usage', '#enterprise-custom-billing', '#org-recent-admin-actions', '#org-activity', '#success-manager', '#site-page-cards', '#site-usage', '#site-settings-snapshot', '#staff-notes', '#broadcast-announcements', '#billing-insight', '#margin-utilization', '#margin-scan', '#margin-fleet-utilization', '#margin-fleet-margin', '#margin-by-organization', '#refunds', '#impersonation', '#system-emails', '#edit-a-system-email', '#platform-send-rate', '#platform-suppressions', '#platform-settings', '#feature-flags', '#multi-tenant-architecture', '#audit-archival', '#organization-suspension', '#operator-alerts', '#ai-monitoring', '#sales-tax-return', '#audit-log', '#audit-admin-actions', '#coupons', '#create-a-coupon', '#discount-floors', '#existing-coupons', '#contact-suppressions', '#record-a-dnc-request', '#suppressed-numbers', '#access', '#which-identity-holds-staff', '#staff-inside-a-customers-tenant--a-property-worth-knowing', '#offboarding', '#break-glass-access', '#requiring-sso-for-a-company-domain', '#why-am-i-getting-a-404', '#related'],
+  staffConsole: ['#runbooks', '#whats-there', '#staff-overview', '#staff-overview-organizations', '#staff-overview-signups', '#staff-overview-sites', '#staff-overview-users', '#staff-overview-mrr', '#staff-overview-newest-orgs', '#support-queue', '#plugin-reviews', '#plugin-reviews-site-starters', '#plugin-review-starter-status', '#plugin-review-starter-overview', '#plugin-review-starter-pages', '#plugin-review-starter-theme', '#plugin-review-starter-checklist', '#plugin-review-starter-verdict', '#plugin-review-starter-versions', '#plugin-review-starter-danger-zone', '#organizations-admin', '#usage-level', '#usage-level-account', '#usage-level-organization', '#usage-level-site', '#filter-the-directory', '#organization-detail', '#staff-org-email', '#free-workspace-limit', '#first-party-hosts', '#entitlement-editor', '#plan-comps', '#build-for-a-client', '#client-build-screen', '#bundle-link', '#sites-admin', '#filter-the-site-list', '#site-detail', '#site-ownership', '#site-transfer', '#site-content', '#staff-automations', '#staff-org-automations', '#emails-sent', '#staff-media-library', '#users-admin', '#users-accounts', '#user-detail', '#user-identity', '#user-organizations', '#user-audit-trail', '#user-data-access', '#user-activity', '#legal-acceptances', '#acquisition', '#password-help', '#sign-one-device-out', '#email-delivery', '#import-delivery-history', '#organization-page-cards', '#org-staff-actions', '#org-edit', '#org-sites', '#org-members', '#org-effective-entitlements', '#org-metered-usage', '#enterprise-custom-billing', '#org-recent-admin-actions', '#org-activity', '#success-manager', '#site-page-cards', '#site-usage', '#site-settings-snapshot', '#staff-notes', '#broadcast-announcements', '#billing-insight', '#margin-utilization', '#margin-scan', '#margin-fleet-utilization', '#margin-fleet-margin', '#margin-by-organization', '#refunds', '#impersonation', '#system-emails', '#edit-a-system-email', '#platform-send-rate', '#platform-suppressions', '#platform-settings', '#feature-flags', '#multi-tenant-architecture', '#audit-archival', '#organization-suspension', '#operator-alerts', '#ai-monitoring', '#sales-tax-return', '#audit-log', '#audit-admin-actions', '#coupons', '#create-a-coupon', '#discount-floors', '#existing-coupons', '#contact-suppressions', '#record-a-dnc-request', '#suppressed-numbers', '#access', '#which-identity-holds-staff', '#staff-inside-a-customers-tenant--a-property-worth-knowing', '#offboarding', '#break-glass-access', '#requiring-sso-for-a-company-domain', '#why-am-i-getting-a-404', '#related'],
   startWithAi: ['#how-do-you-want-to-start', '#start-from-an-ai-starter', '#the-questions', '#your-business', '#audience', '#style', '#sites-you-like', '#details', '#review', '#what-it-will-cost', '#what-gets-built', '#building-your-site', '#paused-or-out-of-credits', '#try-again', '#published-and-indexable', '#the-sites-search-listing', '#business-details', '#a-store-from-the-start', '#a-blog-from-the-start', '#events-from-the-start', '#on-the-free-plan', '#who-can-use-it', '#related'],
   stockPhotos: ['#where-the-photos-come-from', '#social-image', '#in-your-media-library', '#credits', '#the-photographers-credit', '#what-is-sent', '#related'],
   storeImportAndExport: ['#export', '#products-are-a-row-per-variant', '#the-shopify-preset', '#import', '#products', '#add-ons-check-in-and-quick-keys', '#categories', '#discounts-and-coupons', '#gift-cards', '#orders-are-exported-only'],
@@ -1399,6 +1414,9 @@ export const DOCS_HELP_SECTION_TITLES: {
   },
   connectADomain: {
     '#steps': 'Steps',
+  },
+  connectXero: {
+    '#choose-an-organization': 'Choose an organization',
   },
   consoleSearch: {
     '#what-it-searches': 'What it searches',
@@ -1971,6 +1989,9 @@ export const DOCS_HELP_SECTION_TITLES: {
     '#success-manager': 'Success manager',
     '#suppressed-numbers': 'Suppressed numbers',
     '#system-emails': 'System emails',
+    '#usage-level-account': 'Account usage level',
+    '#usage-level-organization': 'Organization usage level',
+    '#usage-level-site': 'Site usage level',
     '#user-activity': 'Activity by this account',
     '#user-audit-trail': 'Recent audit trail',
     '#user-data-access': 'Data access by staff',

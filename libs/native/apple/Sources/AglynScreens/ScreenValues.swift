@@ -1095,6 +1095,16 @@ public enum ScreenValues {
     ]
   }
 
+  /// `2026-11-15` as `Nov 15, 2026`, with no time zone in between; nil for anything that is not a plain calendar day.
+  static func calendarDayText(_ text: String) -> String? {
+    let parts = text.split(separator: "-", omittingEmptySubsequences: false)
+    guard text.count == 10, parts.count == 3, let year = Int(parts[0]), let month = Int(parts[1]), let day = Int(parts[2]),
+      parts[0].count == 4, (1...12).contains(month), (1...31).contains(day)
+    else { return nil }
+    let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    return "\(months[month - 1]) \(day), \(year)"
+  }
+
   private static func dateText(_ millis: Int64, _ pattern: String) -> String {
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -1200,6 +1210,9 @@ public enum ScreenValues {
     }
     switch name {
     case "date":
+      // A calendar day as stored (`2026-11-15`, a waiver's day key) is that day wherever the device is; only a moment is
+      // read in the device's time zone (the console's `formatDayKey` reads a day key in UTC).
+      if case .string(let text)? = value, let day = calendarDayText(text) { return day }
       return epochMillis(value).map { dateText($0, "MMM d, yyyy") } ?? text(value)
     case "datetime":
       return epochMillis(value).map { dateText($0, "MMM d, yyyy, h:mm a") } ?? text(value)

@@ -173,10 +173,27 @@ function buildInputSchema(operation: Schema, named: Record<string, Schema>): Sch
 }
 
 /**
- * Every operation in the document, as a tool.
+ * Operations deliberately NOT offered as tools, each with its reason. The one
+ * exception to "every operation is a tool"; adding to it is a decision, and
+ * `mcp-tools.spec.ts` pins the list.
+ */
+export const MCP_EXCLUDED_OPERATIONS: Readonly<Record<string, string>> = Object.freeze({
+  /*
+    `/v1/openapi.json` returns the whole OpenAPI document — every schema of
+    every operation, hundreds of kilobytes — into the model's context. A model
+    connected over MCP already holds the same information in a usable form:
+    each tool's own input schema and description, from `tools/list`. The
+    document stays public at its URL for a client that wants it (AGL-4225).
+  */
+  getApiDescription: 'returns the whole OpenAPI document; tools/list already carries each operation',
+})
+
+/**
+ * Every operation in the document, as a tool — except the few named in
+ * {@link MCP_EXCLUDED_OPERATIONS}.
  *
- * Nothing is filtered here. The document describes exactly the customer API,
- * so a filter would be a second opinion about what the API is, kept in a
+ * Nothing else is filtered here. The document describes exactly the customer
+ * API, so a filter would be a second opinion about what the API is, kept in a
  * second place, free to drift from the first.
  */
 export function buildMcpTools(document: Schema): McpTool[] {
@@ -191,6 +208,7 @@ export function buildMcpTools(document: Schema): McpTool[] {
       if (!METHODS.has(method)) continue
       const name = (operation as Schema).operationId
       if (typeof name !== 'string' || !name) continue
+      if (Object.prototype.hasOwnProperty.call(MCP_EXCLUDED_OPERATIONS, name)) continue
       const summary = (operation as Schema).summary
       tools.push({
         name,
@@ -215,6 +233,24 @@ export function buildMcpTools(document: Schema): McpTool[] {
 
 /** The arguments a tool call may carry. */
 export type McpToolArguments = Record<string, unknown>
+
+/**
+ * The path arguments a call left out or left empty, in path order.
+ *
+ * A missing one cannot be left to the API to refuse, because it is not
+ * refused — it MISROUTES. `/v1/sites/{siteId}/orders` with no `siteId` builds
+ * `/v1/sites//orders`, whose segments read as site `orders`, and the call is
+ * answered "No such site" about a site the model never named (AGL-4225, the
+ * first real session). The MCP endpoint refuses it by name instead.
+ */
+export function missingPathArguments(tool: McpTool, args: McpToolArguments): string[] {
+  const missing: string[] = []
+  for (const [, key] of tool.path.matchAll(PATH_PARAM)) {
+    const value = args[key]
+    if (value === undefined || value === null || String(value).trim() === '') missing.push(key)
+  }
+  return missing
+}
 
 /**
  * Build the request `dispatchResource` would have received over HTTP.

@@ -271,17 +271,44 @@ describe('GET /.well-known/api-catalog (AGL-2750)', () => {
     ])
   })
 
-  it('gives the MCP entry a doc but no spec — the tool list is the spec', async () => {
+  it('describes the MCP entry by its server card, its sign-in documents and its docs (AGL-4225)', async () => {
     const mcp = contextFor(
       await read().then((r) => r.body),
       'https://app.aglyn.com/api/mcp',
     )
-    expect(mcp['service-doc']).toEqual([
-      { href: 'https://docs.aglyn.com/api', type: 'text/html' },
+    // SEP-2127: the card is the server's machine-readable description, at
+    // `<endpoint>/server-card`, under its own media type. Never the OpenAPI
+    // document, which describes endpoints a tool client is not calling.
+    expect(mcp['service-desc']).toEqual([
+      {
+        href: 'https://app.aglyn.com/api/mcp/server-card',
+        type: 'application/mcp-server-card+json',
+      },
     ])
-    // `service-desc` would name a description of the ENDPOINTS to a client
-    // that is not calling them; `tools/list` is where a tool client asks.
-    expect(mcp['service-desc']).toBeUndefined()
+    // How a client signs in: the document the endpoint's 401 names (RFC 9728)
+    // and the authorization server's (RFC 8414), as `service-meta` — the
+    // registered relation for machine-readable metadata (RFC 8631 §4.3).
+    expect(mcp['service-meta']).toEqual([
+      {
+        href: 'https://app.aglyn.com/.well-known/oauth-protected-resource/api/mcp',
+        type: 'application/json',
+      },
+      {
+        href: 'https://app.aglyn.com/.well-known/oauth-authorization-server',
+        type: 'application/json',
+      },
+    ])
+    expect(mcp['service-doc']).toEqual([
+      { href: 'https://docs.aglyn.com/api#mcp', type: 'text/html' },
+    ])
+  })
+
+  it('uses only link relations RFC 9727 names', async () => {
+    const { body } = await read()
+    const allowed = new Set(['anchor', 'item', 'service-desc', 'service-doc', 'service-meta', 'status'])
+    for (const context of body.linkset) {
+      for (const key of Object.keys(context)) expect(allowed).toContain(key)
+    }
   })
 
   it("points the site's entry at this site's own origin, not the request's", async () => {

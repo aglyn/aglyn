@@ -84,6 +84,22 @@ class CrmCasesTest {
   }
 
   @Test
+  fun crmTelHrefCases() = cases("crmTelHref").forEach { (args, result) ->
+    assertEquals(plain(result), crmTelHref(plain(args[0]) as? String), args.toString())
+  }
+
+  @Test
+  fun callSaysWhyBeforeAnyoneTaps() {
+    assertEquals("+15125550199", crmCallNumber(CrmKind.CONTACT, mapOf("phone" to " ", "mobilePhone" to "+15125550199")))
+    assertEquals(null, crmCallNumber(CrmKind.COMPANY, mapOf("mobilePhone" to "+15125550199")))
+    assertEquals("This record has no phone number", crmCallReason(null, false))
+    assertEquals("“ext 12” is not a number a dialer can take", crmCallReason("ext 12", false))
+    assertEquals(CRM_DO_NOT_CALL_HINT, crmCallReason("+15125550199", true))
+    assertEquals(null, crmCallReason("+15125550199", false))
+    assertEquals("Call (do not call)", crmCallLabel(true))
+  }
+
+  @Test
   fun consentGroupForHostCases() = cases("consentGroupForHost").forEach { (args, result) ->
     val got = consentGroupForHost(map(args[0]), args[1].jsonPrimitive.content)
     assertEquals(group(result), got, args.toString())

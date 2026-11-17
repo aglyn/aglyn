@@ -55,6 +55,7 @@ import com.aglyn.ui.FieldSpec
 import com.aglyn.ui.LiveListPane
 import com.aglyn.ui.LiveQueryList
 import com.aglyn.ui.StatusChip
+import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.isoDayMillis
 import com.aglyn.ui.isoDayOf
@@ -220,11 +221,14 @@ fun TaskDialog(
     confirmEnabled = draft.title.isNotBlank() && (sites == null || site.isNotEmpty()),
     hold = if (held) com.aglyn.ui.FormHold.of("task") else null,
     busy = busy.busy,
-    error = busy.error,
+    // The route's refusal, in its own words: the console says it beside Save; here it heads the form, because under a form
+    // this long the dialog's own banner sat below the fold and a refused save looked like a press that did nothing.
+    error = null,
     onDismiss = onDismiss,
     dismissLabel = "Cancel",
     onConfirm = { onSave(draft.copy(sourceSite = site.takeIf { sites != null && it.isNotEmpty() && it != CRM_ORGANIZATION_CHOICE })) },
   ) {
+    busy.error?.let { NoticeBanner(it, StatusTone.ERROR, Modifier.testTag("task-error")) }
     if (sites != null) {
       FieldEditor(
         FieldSpec(

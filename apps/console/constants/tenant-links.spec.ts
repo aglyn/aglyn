@@ -38,8 +38,17 @@ describe('tenant-links', () => {
       expect(isLocalConsole('app.aglyn.com')).toBe(false)
     })
 
+    it('matches the loopback addresses a local console is reached at', () => {
+      // 10.0.2.2 is the Android emulator's address for the machine it runs on.
+      for (const hostname of ['127.0.0.1', '::1', '[::1]', '10.0.2.2']) {
+        expect(isLocalConsole(hostname)).toBe(true)
+      }
+      expect(isLocalConsole('10.0.2.3')).toBe(false)
+      expect(isLocalConsole('192.168.1.10')).toBe(false)
+    })
+
     it('is a subset of isPreviewConsole, which still covers both', () => {
-      for (const hostname of ['localhost', 'app.localhost']) {
+      for (const hostname of ['localhost', 'app.localhost', '127.0.0.1', '10.0.2.2']) {
         expect(isPreviewConsole(hostname)).toBe(true)
       }
     })

@@ -1184,6 +1184,31 @@ export const EXPECTED_POSTURE = Object.freeze([
         ]),
       }),
       Object.freeze({
+        name: 'MCP + connector sign-in bypass',
+        why: 'every MCP client and its servers call these from a non-browser HTTP stack and cannot solve a challenge, so POST /api/mcp answered a 429 challenge and no assistant could connect or sign in',
+        // Live since 2026-11-16 (AGL-4225). Measured first as a stranger:
+        // `POST /api/mcp` was 429 while `/api/v1/me` was 401. After: 401 with
+        // the JSON envelope, and `/oauth/authorize`, `/api/oauth/consent` and
+        // `/api/mcp/<anything else>` still 429.
+        //
+        // Each route does its own auth and limits: `/api/mcp` authenticates a
+        // bearer before parsing and carries the pre-auth lookup budget;
+        // register, token and revoke carry per-address budgets; the server
+        // card is public static metadata.
+        //
+        // EXACT paths, anchored at both ends. The consent page and its
+        // session-authenticated call stay challenged because they run in a
+        // person's browser, and the discovery documents are admitted by the
+        // `/.well-known/` rule above, not here.
+        conditions: Object.freeze([
+          Object.freeze({
+            type: 'path',
+            op: 're',
+            value: '^/api/(mcp(/server-card)?|oauth/(register|token|revoke))$',
+          }),
+        ]),
+      }),
+      Object.freeze({
         name: 'Native app API bypass',
         why: "the iOS, Android and desktop apps call console routes from URLSession/OkHttp, which cannot solve a challenge, so sign-up, SSO, passkeys, invites, the desktop hand-off and every signed-in call answered 429 HTML to the apps",
         // Live since 2026-10-15 (AGL-3800). Found while the round-3 store

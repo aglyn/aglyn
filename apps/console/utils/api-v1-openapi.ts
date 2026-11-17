@@ -52,7 +52,11 @@
 import { MEDIA_EMBEDDED_GROUP_ORDER } from '@aglyn/aglyn/app-utils/media-embedded-fields'
 import {
   CONNECTOR_AUTHORIZE_PATH,
+  CONNECTOR_RESOURCE_PATH,
   CONNECTOR_TOKEN_PATH,
+  connectorAuthorizationServerMetadataUrl,
+  connectorResourceMetadataUrl,
+  mcpServerCardUrl,
 } from '@aglyn/aglyn/app-utils/connector-discovery'
 import { API_SCOPES } from '@aglyn/tenant-data-admin/server/api-keys'
 import { connectorScopeWords } from '@aglyn/tenant-data-admin/server/connector-oauth'
@@ -67,6 +71,7 @@ import {
   RECORD_STAMPS as STAMPS,
   stringField as str,
   stringListField as strList,
+  SITE_ID_PATH_PARAM,
 } from '@aglyn/tenant-data-admin/server/api-v1-description'
 
 /** A JSON Schema / OpenAPI fragment. Same shape the tenant builder uses. */
@@ -137,11 +142,11 @@ const RESOURCES: readonly ResourceSpec[] = [
     ops: [
       { path: '/v1/sites', method: 'get', operationId: 'listSites', summary: 'List sites', list: true, returns: 'Site' },
       { path: '/v1/sites', method: 'post', operationId: 'createSite', summary: 'Create a site', accepts: 'SiteWrite', returns: 'Site', creates: true, description: 'Limited to 10 per hour per organization, separately from the request budget.' },
-      { path: '/v1/sites/{siteId}', method: 'get', operationId: 'getSite', summary: 'Retrieve a site', returns: 'Site', pathParams: [{ name: 'siteId', description: 'Site id.' }] },
+      { path: '/v1/sites/{siteId}', method: 'get', operationId: 'getSite', summary: 'Retrieve a site', returns: 'Site', pathParams: [SITE_ID_PATH_PARAM] },
       {
         path: '/v1/sites/{siteId}/publish', method: 'post', operationId: 'publishSite', summary: 'Publish a site', returns: 'PublishResult',
         description: 'Limited to 10 per site per hour, on top of — not instead of — the per-key limit. Sized to the work: one publish drops up to 250 cached pages, so minting extra keys does not raise it.',
-        pathParams: [{ name: 'siteId', description: 'Site id.' }],
+        pathParams: [SITE_ID_PATH_PARAM],
       },
     ],
   },
@@ -205,8 +210,8 @@ const RESOURCES: readonly ResourceSpec[] = [
       { path: '/v1/media', method: 'get', operationId: 'listOrgMedia', summary: 'List organization media', list: true, returns: 'MediaAsset', description: 'Rows deleted since they were written are dropped after the read, so pages can come back short.' },
       { path: '/v1/media', method: 'post', operationId: 'uploadOrgMedia', summary: 'Upload to the organization library', accepts: 'MediaUpload', returns: 'MediaAsset', creates: true },
       { path: '/v1/media/{mediaId}', method: 'get', operationId: 'getOrgMedia', summary: 'Retrieve an asset', returns: 'MediaAsset', pathParams: [{ name: 'mediaId', description: 'Asset id.' }] },
-      { path: '/v1/sites/{siteId}/media', method: 'get', operationId: 'listSiteMedia', summary: 'List a site’s media', list: true, returns: 'MediaAsset', pathParams: [{ name: 'siteId', description: 'Site id.' }] },
-      { path: '/v1/sites/{siteId}/media', method: 'post', operationId: 'uploadSiteMedia', summary: 'Upload to a site', accepts: 'MediaUpload', returns: 'MediaAsset', creates: true, pathParams: [{ name: 'siteId', description: 'Site id.' }] },
+      { path: '/v1/sites/{siteId}/media', method: 'get', operationId: 'listSiteMedia', summary: 'List a site’s media', list: true, returns: 'MediaAsset', pathParams: [SITE_ID_PATH_PARAM] },
+      { path: '/v1/sites/{siteId}/media', method: 'post', operationId: 'uploadSiteMedia', summary: 'Upload to a site', accepts: 'MediaUpload', returns: 'MediaAsset', creates: true, pathParams: [SITE_ID_PATH_PARAM] },
     ],
   },
 ]
@@ -398,7 +403,10 @@ export function buildCustomerApiOpenApi(
         '400': errorResponse('Validation failed. No data was read.'),
         '401': errorResponse('Missing, malformed, revoked or expired key.'),
         '404': errorResponse('No such record — or no such endpoint.'),
-        '429': errorResponse('Rate limit exceeded. `Retry-After` says how long.'),
+        '429': errorResponse(
+          'A limit refused it; `code` says which — `key_rate_limit`, `workspace_rate_limit`, ' +
+            '`monthly_request_ceiling` or `monthly_request_quota` — and `Retry-After` says how long.',
+        ),
       }
       if (op.entitlement) {
         responses['403'] = errorResponse(
@@ -547,6 +555,8 @@ export function buildCustomerApiOpenApi(
         name: { type: 'string' },
         version: { type: 'string', const: CUSTOMER_API_VERSION },
         documentation: { type: 'string', description: 'Where the prose documentation lives.' },
+        openapi: { type: 'string', description: 'Path of this API\'s OpenAPI description, on the same origin.' },
+        mcp: { type: 'string', description: 'Path of the MCP endpoint that serves this API as tools, on the same origin.' },
         resources: { type: 'array', items: { type: 'string' }, description: 'Top-level resource names.' },
       },
     },
@@ -625,6 +635,11 @@ export function buildCustomerApiOpenApi(
     'X-RateLimit-Limit': { $ref: '#/components/headers/XRateLimitLimit' },
     'X-RateLimit-Remaining': { $ref: '#/components/headers/XRateLimitRemaining' },
     'X-RateLimit-Reset': { $ref: '#/components/headers/XRateLimitReset' },
+    'X-RateLimit-Scope': { $ref: '#/components/headers/XRateLimitScope' },
+    'X-Workspace-RateLimit-Limit': { $ref: '#/components/headers/XWorkspaceRateLimitLimit' },
+    'X-Workspace-RateLimit-Remaining': { $ref: '#/components/headers/XWorkspaceRateLimitRemaining' },
+    'X-Workspace-RateLimit-Reset': { $ref: '#/components/headers/XWorkspaceRateLimitReset' },
+    'X-Api-Billing-Units': { $ref: '#/components/headers/XApiBillingUnits' },
   }
   for (const [pathName, pathItem] of Object.entries(paths)) {
     if (pathName === '/v1/openapi.json') continue
@@ -657,7 +672,17 @@ export function buildCustomerApiOpenApi(
       summary: `Programmatic access to an organization's data on ${options.brandName}.`,
       description:
         `The customer REST API. Authenticate with an API key as a bearer ` +
-        'token; every response is JSON.\n\n' +
+        'token, or with the access token an app gets by signing in (the ' +
+        '`connector` scheme); every response is JSON.\n\n' +
+        '## MCP server\n\n' +
+        `The same API is served as Model Context Protocol tools at ` +
+        `\`${origin}${CONNECTOR_RESOURCE_PATH}\` (Streamable HTTP). Any MCP ` +
+        'client can connect with an API key, or sign in: an unauthenticated ' +
+        'call is answered `401` with `WWW-Authenticate: Bearer ' +
+        `resource_metadata="${connectorResourceMetadataUrl(origin)}"\` ` +
+        '(RFC 9728), and the authorization server is described at ' +
+        `\`${connectorAuthorizationServerMetadataUrl(origin)}\` (RFC 8414). ` +
+        `Its server card is \`${mcpServerCardUrl(origin)}\`.\n\n` +
         '## Pagination\n\n' +
         'Every list returns `{ object: "list", data, next_cursor, has_more }` ' +
         'and pages with an opaque cursor. **`has_more` is the only ' +
@@ -677,6 +702,11 @@ export function buildCustomerApiOpenApi(
         'disagree. The RFC `Reset` is SECONDS REMAINING; the legacy one is a ' +
         'Unix timestamp. On a `401` they describe the per-address lookup ' +
         'budget rather than a key\'s, because the key was never identified.\n\n' +
+        'Two per-minute limits apply: the KEY\'s, and the WORKSPACE\'s across ' +
+        'all of its keys, sized by plan. `X-RateLimit-Scope` says which one ' +
+        'the `RateLimit-*` headers describe — the key\'s on every response but ' +
+        'a workspace refusal — and `X-Workspace-RateLimit-*` always report ' +
+        'the workspace\'s.\n\n' +
         `Full documentation: ${options.documentationUrl}`,
       contact: { name: options.brandName, url: options.documentationUrl },
     },
@@ -699,8 +729,10 @@ export function buildCustomerApiOpenApi(
           scheme: 'bearer',
           description:
             'An API key, sent as `Authorization: Bearer aglyn_sk_…`. Keys are ' +
-            'organization credentials, not user ones — there is no user ' +
-            'scope to evaluate. Mint and revoke them in the console.',
+            'organization credentials, not user ones, and each carries the ' +
+            'scopes chosen when it was made (the same names as the ' +
+            '`connector` scheme lists); an operation outside them is refused ' +
+            '`403 insufficient_scope`. Mint and revoke them in the console.',
         },
         connector: {
           type: 'oauth2',
@@ -736,6 +768,11 @@ export function buildCustomerApiOpenApi(
         XRateLimitRemaining: { description: 'Same number as `RateLimit-Remaining`.', schema: { type: 'integer' } },
         XRateLimitReset: { description: 'When the window resets, as a Unix TIMESTAMP in seconds — not a duration. Not interchangeable with `RateLimit-Reset`.', schema: { type: 'integer' } },
         RetryAfter: { description: 'Seconds to wait. Sent with a 429.', schema: { type: 'integer' } },
+        XRateLimitScope: { description: 'Which budget the `RateLimit-*` headers describe: `key`, or `workspace` on a refusal by the workspace limit.', schema: { type: 'string', enum: ['key', 'workspace'] } },
+        XWorkspaceRateLimitLimit: { description: 'Requests the whole workspace may make per minute, across every key. Absent where the plan sets no workspace limit.', schema: { type: 'integer' } },
+        XWorkspaceRateLimitRemaining: { description: 'Requests the workspace has left in the current minute.', schema: { type: 'integer' } },
+        XApiBillingUnits: { description: 'Billed units this request was charged on the monthly quota: one per started 256 KB (262,144 bytes) of the larger of its request and response body, never fewer than one.', schema: { type: 'integer', minimum: 1 } },
+        XWorkspaceRateLimitReset: { description: 'When the workspace window resets, as a Unix timestamp in seconds.', schema: { type: 'integer' } },
       },
       schemas,
     },

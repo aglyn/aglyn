@@ -93,6 +93,12 @@ import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
+import { StaffUsageLevelSelect } from '../../../../components/staff-usage-level.component'
+import {
+  readUsageLevel,
+  USAGE_LEVEL_FILTER_OPTIONS,
+  USAGE_LEVELS,
+} from '@aglyn/aglyn/app-utils/usage-level'
 import {
   formatStaffActivity,
   formatStaffTimestamp,
@@ -111,7 +117,7 @@ import {
  * The filterable fields that get a column of their own. The rest of
  * `ORG_LIST_FILTER_FIELDS` still reaches the filter panel, as hidden columns.
  */
-const ORG_FILTER_COLUMNS = ['name', 'plan', 'subscription', 'createdAt']
+const ORG_FILTER_COLUMNS = ['name', 'usageLevel', 'plan', 'subscription', 'createdAt']
 
 /**
  * Every status a Stripe subscription can be in, as the billing mirror stores
@@ -145,6 +151,7 @@ const ORG_LIST_FILTER_OPTIONS: Readonly<Record<string, readonly ListFilterOption
     label,
   })),
   suspended: ORG_SUSPENDED_FILTER_OPTIONS,
+  usageLevel: USAGE_LEVEL_FILTER_OPTIONS,
 }
 const ORG_SELECT_FIELDS = Object.keys(ORG_LIST_FILTER_OPTIONS)
 
@@ -158,11 +165,14 @@ const ORG_PAGE_SORTS = {
     isEnterpriseOrg(row as never) ? PLAN_LABELS.enterprise : resolveEffectivePlan(row as never),
   subscription: (row: any) => row.subscription?.status ?? null,
   siteLimit: (row: any) => resolveOrgEntitlements(row).hostLimit,
+  // Least use first, as the levels are declared — not A to Z by label.
+  usageLevel: (row: any) => USAGE_LEVELS.indexOf(readUsageLevel(row.usageLevel)),
 }
 const ORG_PAGE_SORT_HEADERS = {
   plan: 'Plan',
   subscription: 'Subscription',
   siteLimit: 'Site limit',
+  usageLevel: 'Usage level',
 }
 
 /** What a plugin column's cell receives for its row: the row, and its org id. */
@@ -380,6 +390,22 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
               {row.slug ?? row.$id}
             </Typography>
           </Stack>
+        ),
+      },
+      {
+        /*
+         * The staff usage level (AGL-4228): how much the workspace uses the
+         * platform, as staff judged it. Set right here, so a reviewer can go
+         * down the list and categorize as they go; filtered by the query.
+         */
+        field: 'usageLevel',
+        headerName: 'Usage level',
+        description: 'How much this workspace uses the platform, as staff judged it. Pick a level to set it.',
+        flex: 0.9,
+        minWidth: 170,
+        valueGetter: (_value, row: any) => readUsageLevel(row.usageLevel),
+        renderCell: ({ row }: any) => (
+          <StaffUsageLevelSelect target="org" id={String(row.$id)} level={row.usageLevel} />
         ),
       },
       {

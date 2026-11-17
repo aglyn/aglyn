@@ -15,11 +15,12 @@ their own, so you never copy a review by hand again.
   - **Google review cards**, **Google review list** and **Google review
     carousel**: a card for each review, with the reviewer's name and image,
     their stars, the date and what they wrote, plus your reply when you have
-    written one.
+    written one. A long review is cut to six lines with a **Continue reading**
+    link, so the cards in a row stay the same height.
   - **Review us on Google**: a link happy customers use to leave a review in
     one tap.
-  - **Google stars** and **Google reviewer image**, for building your own
-    review card.
+  - **Google stars**, **Google review text** and **Google reviewer image**,
+    for building your own review card.
 - **Your rating, review count and review link, for use anywhere on the site**,
   for example in a hero line or a footer (see *Use your rating in any text*
   below).
@@ -62,10 +63,16 @@ card changes with it.
 - **Reviewer photos**: select a reviewer image and set **Show** to **Google
   photo**. Reviewers who chose to stay anonymous on Google always show
   initials.
+- **Long reviews**: select a review's text and set **Lines shown** (1 to 20,
+  6 to start). A review longer than that ends in "…" and a **Continue
+  reading** link that opens it in place; a shorter one shows no link. The
+  whole review is always on the page for search engines.
 - **Your replies**: the reply block only appears on reviews you have replied
   to. Delete it to hide replies altogether.
 - **Wording**: "Response from the owner", "Reviews from Google" and "Review us
-  on Google" are ordinary text you can change.
+  on Google" are ordinary text you can change. "Continue reading" and "Show
+  less" are the review text's **Continue reading wording** and **Show less
+  wording**.
 
 The elements start with your site's own colors, fonts and dark mode. The
 rating always shows Google's own average and count, whatever you filter.
