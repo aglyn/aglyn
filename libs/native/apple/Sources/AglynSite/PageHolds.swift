@@ -133,8 +133,11 @@ public func fetchPageHolds(api: ConsoleAPIClient, hostID: String) async throws -
     canRequestReview: answer?["canRequestReview"]?.boolValue == true)
 }
 
-/// The console links a banner's buttons follow: the notice on Holds & reviews, and the support tickets.
-public func pageHoldDetailsLink(orgSlug: String, noticeID: String) -> String { "/\(orgSlug)/settings/holds?notice=\(noticeID)" }
+/// The console links a banner's buttons follow: Holds & reviews for View details, the notice there with its review
+/// request open for Request a review (`?notice=`, which the native Holds screen opens as the request), and the support
+/// tickets.
+public func pageHoldDetailsLink(orgSlug: String) -> String { "/\(orgSlug)/settings/holds" }
+public func pageHoldReviewLink(orgSlug: String, noticeID: String) -> String { "/\(orgSlug)/settings/holds?notice=\(noticeID)" }
 public func pageHoldSupportLink(orgSlug: String) -> String { "/\(orgSlug)/support/tickets" }
 
 /// The chips on a page's row.
@@ -174,11 +177,11 @@ struct PageHoldBanner: View {
           }
           if let orgSlug = context.orgSlug {
             AglynWrapRow(spacing: AglynSpace.one, lineSpacing: AglynSpace.one) {
-              Button("View details") { _ = context.openLink(pageHoldDetailsLink(orgSlug: orgSlug, noticeID: hold.noticeID)) }
+              Button("View details") { _ = context.openLink(pageHoldDetailsLink(orgSlug: orgSlug)) }
                 .buttonStyle(.aglynSecondary).accessibilityIdentifier("page-hold-details")
               if hold.reviewable && answer.canRequestReview && answer.orgID != nil {
                 // The request itself is made on the notice, where its note is written (Holds & reviews).
-                Button("Request a review") { _ = context.openLink(pageHoldDetailsLink(orgSlug: orgSlug, noticeID: hold.noticeID)) }
+                Button("Request a review") { _ = context.openLink(pageHoldReviewLink(orgSlug: orgSlug, noticeID: hold.noticeID)) }
                   .buttonStyle(.aglynSecondary).accessibilityIdentifier("page-hold-request-review")
               }
               Button("Contact support") { _ = context.openLink(pageHoldSupportLink(orgSlug: orgSlug)) }

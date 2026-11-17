@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -292,7 +293,12 @@ private fun PageRowItem(row: PageTreeRow, holds: List<PageHold>, selected: Boole
       icon = AglynIcons.named(if (row.page.isGroup) "folder" else if (row.home) "home" else "description"),
       selected = selected,
       trailing = {
-        Row(horizontalArrangement = Arrangement.spacedBy(space(0.5f))) {
+        // The chips wrap under each other rather than squeezing the page's name to "…" in a narrow list column.
+        FlowRow(
+          Modifier.widthIn(max = 176.dp),
+          horizontalArrangement = Arrangement.spacedBy(space(0.5f), Alignment.End),
+          verticalArrangement = Arrangement.spacedBy(space(0.5f)),
+        ) {
           // Held or flagged by the page review (AGL-3374): a chip per status beside the page's own.
           PageHoldChips(holds)
           if (row.home) StatusChip("Home", StatusTone.INFO)

@@ -69,6 +69,7 @@ final class PageHoldsTests: XCTestCase {
     let copy = pageHoldBannerCopy(rejected, target: HeldPageTarget(type: "screen", id: "x"), timeZone: TimeZone(identifier: "UTC")!)
     XCTAssertEqual(copy.title, "The page was not approved after review, and is not being served.")
     XCTAssertTrue(copy.lines.first?.hasPrefix("A review was requested on ") ?? false)
-    XCTAssertEqual(pageHoldDetailsLink(orgSlug: "acme", noticeID: "n1"), "/acme/settings/holds?notice=n1")
+    XCTAssertEqual(pageHoldDetailsLink(orgSlug: "acme"), "/acme/settings/holds")
+    XCTAssertEqual(pageHoldReviewLink(orgSlug: "acme", noticeID: "n1"), "/acme/settings/holds?notice=n1")
   }
 }

@@ -11,6 +11,7 @@ import com.aglyn.site.pages.holdsForTarget
 import com.aglyn.site.pages.pageHoldBannerCopy
 import com.aglyn.site.pages.pageHoldChips
 import com.aglyn.site.pages.pageHoldDetailsLink
+import com.aglyn.site.pages.pageHoldReviewLink
 import com.aglyn.ui.StatusTone
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -85,6 +86,7 @@ class PageHoldsTest {
     val copy = pageHoldBannerCopy(rejected, HeldPageTarget("screen", "x"), "UTC")
     assertEquals("The page was not approved after review, and is not being served.", copy.first)
     assertEquals("A review was requested on 1/1/1970, 12:00 AM.", copy.second.first())
-    assertEquals("/acme/settings/holds?notice=n1", pageHoldDetailsLink("acme", "n1"))
+    assertEquals("/acme/settings/holds", pageHoldDetailsLink("acme"))
+    assertEquals("/acme/settings/holds?notice=n1", pageHoldReviewLink("acme", "n1"))
   }
 }

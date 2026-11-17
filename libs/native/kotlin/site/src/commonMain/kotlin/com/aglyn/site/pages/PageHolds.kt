@@ -139,8 +139,12 @@ suspend fun fetchPageHolds(api: ConsoleApiClient, hostId: String): PageHoldsAnsw
   )
 }
 
-/** The console links a banner's buttons follow: the notice on Holds & reviews, and the support tickets. */
-fun pageHoldDetailsLink(orgSlug: String, noticeId: String): String = "/$orgSlug/settings/holds?notice=$noticeId"
+/**
+ * The console links a banner's buttons follow: Holds & reviews for View details, the notice there with its review request
+ * open for Request a review (`?notice=`, which the native Holds screen opens as the request), and the support tickets.
+ */
+fun pageHoldDetailsLink(orgSlug: String): String = "/$orgSlug/settings/holds"
+fun pageHoldReviewLink(orgSlug: String, noticeId: String): String = "/$orgSlug/settings/holds?notice=$noticeId"
 fun pageHoldSupportLink(orgSlug: String): String = "/$orgSlug/support/tickets"
 
 /** The chips on a page's row. */
@@ -156,10 +160,12 @@ fun PageHoldBanner(context: NativePluginContext, answer: PageHoldsAnswer?, targe
   answer ?: return
   for (hold in holdsForTarget(answer.holds, target)) {
     val (title, lines) = pageHoldBannerCopy(hold, target)
+    // The tone's own tint, as a notice draws it (the console's Alert severity).
+    val palette = com.aglyn.ui.LocalAglynPalette.current
     val container = when (hold.tone) {
-      StatusTone.ERROR -> MaterialTheme.colorScheme.errorContainer
-      StatusTone.INFO -> MaterialTheme.colorScheme.secondaryContainer
-      else -> MaterialTheme.colorScheme.tertiaryContainer
+      StatusTone.ERROR -> palette.error.main.copy(alpha = 0.14f)
+      StatusTone.INFO -> palette.primary.main.copy(alpha = 0.14f)
+      else -> palette.warning.main.copy(alpha = 0.18f)
     }
     Column(
       Modifier.fillMaxWidth().background(container, RoundedCornerShape(10)).padding(space(2f)).testTag("page-hold-banner"),
@@ -180,12 +186,12 @@ fun PageHoldBanner(context: NativePluginContext, answer: PageHoldsAnswer?, targe
       val orgSlug = context.orgSlug
       if (orgSlug != null) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
-          OutlinedButton(onClick = { context.openLink(pageHoldDetailsLink(orgSlug, hold.noticeId)) }, modifier = Modifier.testTag("page-hold-details")) {
+          OutlinedButton(onClick = { context.openLink(pageHoldDetailsLink(orgSlug)) }, modifier = Modifier.testTag("page-hold-details")) {
             Text("View details")
           }
           if (hold.reviewable && answer.canRequestReview && answer.orgId != null) {
             // The request itself is made on the notice, where its note is written (Holds & reviews).
-            OutlinedButton(onClick = { context.openLink(pageHoldDetailsLink(orgSlug, hold.noticeId)) }, modifier = Modifier.testTag("page-hold-request-review")) {
+            OutlinedButton(onClick = { context.openLink(pageHoldReviewLink(orgSlug, hold.noticeId)) }, modifier = Modifier.testTag("page-hold-request-review")) {
               Text("Request a review")
             }
           }
