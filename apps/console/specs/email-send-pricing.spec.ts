@@ -69,6 +69,7 @@ import {
   ORG_COGS_UNIT_RATES_USD,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
+  INCLUDED_EMAIL_SENDS_BY_PLAN,
   SELF_SERVE_PLANS,
   UNLIMITED,
   emailSendsOverage,
@@ -318,7 +319,8 @@ describe('the billed rate and the cost rate are different numbers', () => {
       ),
     ).toEqual({
       free: null,
-      starter: null,
+      // AGL-4227: billed past 1,000 emails a month of everything it sends.
+      starter: 2.5,
       pro: 2.25,
       business: 2,
       scale: 1.9,
@@ -676,9 +678,11 @@ describe('band and rate agree about whether an "over" exists', () => {
     // The same pair read from the other side, and the half that Starter now
     // exercises. `emailSendsOverage(total, 0)` is 0 at every volume, so the
     // rate would price nothing while telling a customer it prices something.
+    // The band a rate prices is the BILLING band (AGL-4227): Starter's
+    // campaign band is 0, its billing band 1,000 emails of everything.
     const offenders = PLAN_KEYS.filter(
       (plan) =>
-        PLAN_ENTITLEMENTS[plan].emailSendsPerMonth === 0 &&
+        (INCLUDED_EMAIL_SENDS_BY_PLAN[plan] ?? PLAN_ENTITLEMENTS[plan].emailSendsPerMonth) === 0 &&
         PLAN_PRICING[plan].extraEmailSendsUsdPer1k != null,
     )
     expect(offenders).toEqual([])
@@ -686,7 +690,7 @@ describe('band and rate agree about whether an "over" exists', () => {
     expect(emailSendsOverage(50_000, 0)).toBe(0)
   })
 
-  it('Free, Starter and Enterprise are the three deliberate nulls', () => {
+  it('Free and Enterprise are the two deliberate nulls (Starter left them in AGL-4227)', () => {
     // Free's band is 0 and it has no subscription to hang a metered item on —
     // the same reason every other `extra*` rate is null there. Starter's band
     // is 0 because campaign email begins at Pro; unlike Free it DOES carry a
@@ -695,17 +699,18 @@ describe('band and rate agree about whether an "over" exists', () => {
     // Enterprise publishes no list price at all; its terms are the agreement.
     expect(PLAN_PRICING.free.extraEmailSendsUsdPer1k).toBeNull()
     expect(PLAN_PRICING.free.basePriceMonthlyUsd).toBe(0)
-    expect(PLAN_PRICING.starter.extraEmailSendsUsdPer1k).toBeNull()
-    expect(PLAN_PRICING.starter.basePriceMonthlyUsd).toBeGreaterThan(0)
+    // Starter left the nulls in AGL-4227: its mail bills past 1,000 a month.
+    expect(PLAN_PRICING.starter.extraEmailSendsUsdPer1k).toBe(2.5)
+    expect(INCLUDED_EMAIL_SENDS_BY_PLAN.starter).toBe(1_000)
     expect(PLAN_PRICING.enterprise.extraEmailSendsUsdPer1k).toBeNull()
     expect(isCustomPricedPlan('enterprise')).toBe(true)
-    // Exactly three, enumerated rather than spot-checked: a fourth null
+    // Exactly two, enumerated rather than spot-checked: a third null
     // appearing anywhere is a tier that quietly stopped billing.
     expect(
       PLAN_KEYS.filter(
         (plan) => PLAN_PRICING[plan].extraEmailSendsUsdPer1k === null,
       ),
-    ).toEqual(['free', 'starter', 'enterprise'])
+    ).toEqual(['free', 'enterprise'])
   })
 })
 

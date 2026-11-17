@@ -56,10 +56,25 @@ const pooled = (over: Record<string, unknown>) => ({
   tenantId: null as string | null,
 })
 
+const mockUsageLevels = new Map<string, string>()
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
-    app: () => ({ auth: () => ({ verifyIdToken: async () => mockDecodedToken }) }),
+    app: () => ({
+      auth: () => ({ verifyIdToken: async () => mockDecodedToken }),
+      // The staff usage level (AGL-4228): the reviewed accounts, by uid.
+      firestore: () => ({
+        collection: () => ({
+          where: () => ({
+            select: () => ({
+              get: async () => ({
+                docs: [...mockUsageLevels].map(([id, level]) => ({ id, get: () => level })),
+              }),
+            }),
+          }),
+        }),
+      }),
+    }),
   },
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () => Response.json({ error: 'Verify' }, { status: 403 }),

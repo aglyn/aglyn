@@ -45,6 +45,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import com.aglyn.core.HostStatus
 import com.aglyn.core.HostStatusKind
 import com.aglyn.core.Live
@@ -354,6 +355,7 @@ internal fun siteFavicon(doc: com.aglyn.core.FirestoreDoc?): String? =
 fun SiteOverview(context: NativePluginContext, hostId: String) {
   val live = hostDoc(context, hostId)
   val uri = LocalUriHandler.current
+  val visitScope = rememberCoroutineScope()
   when (live) {
     Live.Loading -> SkeletonList(rows = 6, modifier = Modifier.padding(space(2f)))
     is Live.Failed -> EmptyState("Could not load this site", body = "You may no longer have access to it.", icon = AglynIcons.named("error"), tone = EmptyTone.ERROR)
@@ -388,7 +390,14 @@ fun SiteOverview(context: NativePluginContext, hostId: String) {
               }
             }
             (custom ?: platform)?.let { domain ->
-              OutlinedButton(onClick = { uri.openUri("https://$domain/") }, modifier = Modifier.testTag("site-visit")) {
+              OutlinedButton(
+                onClick = {
+                  // In preview or maintenance the site is entered as the team (the console's `SiteVisitButton`, AGL-4086).
+                  if (!com.aglyn.core.SiteVisit.entersAsTeam(doc.data)) runCatching { uri.openUri("https://$domain/") }
+                  else visitScope.launch { runCatching { uri.openUri(com.aglyn.core.SiteVisit.url(true, hostId, "https://$domain/", context.api)) } }
+                },
+                modifier = Modifier.testTag("site-visit"),
+              ) {
                 Icon(AglynIcons.named("open_in_new"), contentDescription = null)
                 Text("Visit site", Modifier.padding(start = space(1f)))
               }

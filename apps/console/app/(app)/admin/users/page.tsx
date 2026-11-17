@@ -16,6 +16,8 @@
  */
 'use client'
 
+import { StaffUsageLevelSelect } from '../../../../components/staff-usage-level.component'
+import { readUsageLevel } from '@aglyn/aglyn/app-utils/usage-level'
 import {
   mdiAccountCancelOutline,
   mdiAccountCheckOutline,
@@ -92,6 +94,7 @@ import {
   USER_LIST_DEFAULT_SORT,
   USER_LIST_FILTER_HEADERS,
   USER_LIST_FILTER_OPTIONS,
+  USER_LIST_PAGE_SORTS,
 } from '../../../../utils/list-filters'
 import { collapseAdminUserRows } from '../../../../utils/collapse-admin-user-rows'
 import {
@@ -148,7 +151,7 @@ const poolLabel = (tenantId: string | null) =>
  * The filterable fields that get a column. The rest of
  * `USER_LIST_FILTER_FIELDS` still reaches the filter panel, as hidden columns.
  */
-const USER_FILTER_COLUMNS = ['email', 'staffRole', 'createdAt', 'lastSignInAt', 'lastActiveAt']
+const USER_FILTER_COLUMNS = ['email', 'usageLevel', 'staffRole', 'createdAt', 'lastSignInAt', 'lastActiveAt']
 /** The account fields the panel shows as selects over their choices. */
 const USER_SELECT_FIELDS = Object.keys(USER_LIST_FILTER_OPTIONS)
 
@@ -426,6 +429,8 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
     sort: askedSort,
     onSortChange,
     rows: window.shown,
+    pageSorts: USER_LIST_PAGE_SORTS,
+    headers: { usageLevel: 'Usage level' },
   })
   const changeDisplayPage = useCallback(
     async (next: number) => {
@@ -634,6 +639,22 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
               </Tooltip>
             ) : null}
           </Stack>
+        ),
+      },
+      {
+        /*
+         * The staff usage level (AGL-4228): how much the person uses the
+         * platform, as staff judged it. Set right here; filtered and sorted
+         * over the whole directory by the route.
+         */
+        field: 'usageLevel',
+        headerName: 'Usage level',
+        description: 'How much this person uses the platform, as staff judged it. Pick a level to set it.',
+        flex: 0.9,
+        minWidth: 170,
+        valueGetter: (_value, row: any) => readUsageLevel(row.usageLevel),
+        renderCell: ({ row }: any) => (
+          <StaffUsageLevelSelect target="user" id={String(row.uid)} level={row.usageLevel} />
         ),
       },
       {

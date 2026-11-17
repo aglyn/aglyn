@@ -76,6 +76,12 @@ export interface TransactionalSendCeilingRequest {
   context: string | null
   /** The instant the claim is taken; the gate keys the UTC day off it. */
   nowMs: number
+  /**
+   * The organization's HARD MONTHLY cap (AGL-4227) — Free's, which cannot be
+   * billed for usage — or absent / `Infinity` for none. Counted on the same
+   * document as the day, on a month field that starts empty when it ships.
+   */
+  monthlyCeiling?: number
 }
 
 /** What a granted claim took, so the seam can hand it back. */
@@ -83,6 +89,8 @@ export interface TransactionalSendCeilingClaim {
   orgId: string
   /** The UTC day the claim was counted on, `YYYY-MM-DD`. */
   dayKey: string
+  /** The UTC month it was counted on too, `YYYY-MM`, when a monthly cap applied. */
+  monthKey?: string | null
   count: number
 }
 
@@ -95,6 +103,8 @@ export interface TransactionalSendCeilingVerdict {
   retryAtMs?: number
   /** Allowed only: the claim to release when the message does not leave. */
   claim?: TransactionalSendCeilingClaim | null
+  /** Refused only: which limit refused (AGL-4227) — the day's ceiling or the month's cap. */
+  period?: 'day' | 'month'
 }
 
 /** The durable half, installed once by `@aglyn/tenant-data-admin`. */
@@ -180,6 +190,8 @@ export interface TransactionalCeilingSubject {
   hostId: string | null
   /** A finite, non-negative whole number. `0` refuses every governed message. */
   ceiling: number
+  /** The hard monthly cap (AGL-4227); `Infinity` where the plan has none. */
+  monthlyCeiling: number
 }
 
 /**
@@ -213,10 +225,15 @@ export function transactionalCeilingSubject(input: {
   const raw = workspace?.transactionalEmailsPerDay
   if (typeof raw !== 'number' || Number.isNaN(raw)) return null
   if (raw === Number.POSITIVE_INFINITY) return null
+  const monthly = workspace?.emailsPerMonth
   return {
     orgId,
     hostId: String(workspace?.hostId ?? '').trim() || null,
     ceiling: Math.max(0, Math.floor(raw)),
+    monthlyCeiling:
+      typeof monthly === 'number' && Number.isFinite(monthly)
+        ? Math.max(0, Math.floor(monthly))
+        : Number.POSITIVE_INFINITY,
   }
 }
 
@@ -226,6 +243,17 @@ export function transactionalCeilingDayKey(nowMs: number = Date.now()): string {
 }
 
 /** The next UTC midnight after `nowMs` — when a refused organization sends again. */
+/** The UTC month a monthly-cap claim is counted on, `YYYY-MM` (AGL-4227). */
+export function transactionalCeilingMonthKey(nowMs: number = Date.now()): string {
+  return new Date(nowMs).toISOString().slice(0, 7)
+}
+
+/** When the monthly cap starts again: 00:00 UTC on the 1st of next month. */
+export function transactionalCeilingMonthResetMs(nowMs: number = Date.now()): number {
+  const now = new Date(nowMs)
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
+}
+
 export function transactionalCeilingResetMs(nowMs: number = Date.now()): number {
   const now = new Date(nowMs)
   return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)

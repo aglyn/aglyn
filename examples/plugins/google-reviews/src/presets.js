@@ -21,7 +21,7 @@
  *
  * Styles go in each node's own `sx`, never `props.sx`: only `node.sx` is the
  * record the Styles panel edits. The built-in elements belong to the `mui`
- * plugin; Stars and Reviewer image are this bundle's.
+ * plugin; Stars, Reviewer image and Review text are this bundle's.
  */
 
 import { ComponentCategory, NodeType } from '@aglyn/aglyn'
@@ -32,6 +32,7 @@ const MUI = 'mui'
 
 export const STARS_ID = 'aglyn.google-reviews.stars'
 export const REVIEWER_IMAGE_ID = 'aglyn.google-reviews.reviewer-image'
+export const REVIEW_TEXT_ID = 'aglyn.google-reviews.review-text'
 
 /** The connection, as a repeat names it. Persisted in pages; never rename. */
 export const REVIEWS_SOURCE = `${BUNDLE_ID}/google`
@@ -45,6 +46,7 @@ const ICONS = {
   list: 'M3,4H21V8H3V4M3,10H21V14H3V10M3,16H21V20H3V16Z',
   carousel: 'M7,19H17V4H7V19M2,17H6V6H2V17M18,6V17H22V6H18Z',
   link: 'M14,3V5H17.59L7.76,14.83L9.17,16.24L19,6.41V10H21V3M19,19H5V5H12V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V12H19V19Z',
+  text: 'M3,3H21V5H3V3M3,7H21V9H3V7M3,11H21V13H3V11M3,15H21V17H3V15M3,19H13V21H3V19Z',
   person: 'M12,4A4,4 0 0,1 16,8A4,4 0 0,1 12,12A4,4 0 0,1 8,8A4,4 0 0,1 12,4M12,14C16.42,14 20,15.79 20,18V20H4V18C4,15.79 7.58,14 12,14Z',
 }
 
@@ -78,6 +80,17 @@ const reviewerImage = () => ({
     anonymous: '{{item.anonymous}}',
     show: 'initials',
   },
+})
+
+/**
+ * What the reviewer wrote, cut to six lines with "Continue reading" when it
+ * runs longer, so the cards in a row stay the same height.
+ */
+const reviewText = () => ({
+  $id: null,
+  componentId: REVIEW_TEXT_ID,
+  pluginId: BUNDLE_ID,
+  props: { text: '{{item.comment}}', lines: 6, moreLabel: 'Continue reading', lessLabel: 'Show less' },
 })
 
 /**
@@ -163,7 +176,7 @@ const reviewCard = (layout) =>
                       },
                     ),
                     stars('{{item.stars}}'),
-                    text('body2', '{{item.comment}}', { sx: { whiteSpace: 'pre-line', overflowWrap: 'anywhere' } }),
+                    reviewText(),
                     node(
                       'muiStack',
                       { spacing: 0.5, hideUnless: '{{item.reply}}' },
@@ -295,6 +308,13 @@ export const presets = [
   preset('stars', 'Google stars', 'Five stars, filled to a rating.', ICONS.star, {
     ...stars('5', 'medium'),
   }),
+  preset(
+    'review-text',
+    'Google review text',
+    'What a reviewer wrote, cut to a few lines with "Continue reading". Place it inside a review card.',
+    ICONS.text,
+    reviewText(),
+  ),
   preset(
     'reviewer-image',
     'Google reviewer image',

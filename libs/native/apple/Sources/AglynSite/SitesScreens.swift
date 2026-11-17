@@ -484,7 +484,9 @@ struct SiteOverview: View {
         }
         if let domain, let url = URL(string: "https://\(domain)/") {
           Button {
-            openURL(url)
+            // In preview or maintenance the site is entered as the team (the console's `SiteVisitButton`, AGL-4086).
+            let (team, api, open) = (SiteVisit.entersAsTeam(doc.data), context.api, openURL)
+            Task { open(await SiteVisit.url(entersAsTeam: team, hostID: hostID, address: url, api: api)) }
           } label: {
             Label("Visit site", systemImage: "arrow.up.right.square")
           }
