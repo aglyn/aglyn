@@ -179,6 +179,28 @@ class SiteTest {
     assertTrue(SUBDOMAIN_PATTERN.matches("my-new-site"))
   }
 
+  /** The console's Created range: one condition on `createdAt`, and under it the list runs newest first. */
+  @Test
+  fun theCreatedFilterRangesOverCreatedNewestFirst() {
+    assertEquals(listOf("is", "after", "onOrAfter", "before", "onOrBefore"), com.aglyn.site.sites.SiteCreatedFilter.operators)
+    val created = com.aglyn.site.sites.SiteCreatedFilter("onOrAfter", "2026-11-01")
+    val query = com.aglyn.site.sites.sitesPlan("org1", "", SiteDomainFilter.ALL, created).toFirestoreQuery("users/u/hostMemberships", 30)
+    assertTrue(query.filters.any { it.field == "createdAt" && it.op == FilterOp.GTE })
+    assertEquals("createdAt", query.orderBy.first().field)
+    assertTrue(query.orderBy.first().descending)
+    assertEquals("Created on or after Nov 1, 2026", created.label)
+    assertTrue(com.aglyn.site.sites.sitesPlan("org1", "", SiteDomainFilter.ALL, com.aglyn.site.sites.SiteCreatedFilter("is", "soon")).refused.isNotEmpty())
+  }
+
+  /** Pinned sites lead the unfiltered list in the order pinned; a search or a filter keeps the query's order. */
+  @Test
+  fun pinnedSitesLeadTheUnfilteredList() {
+    fun row(id: String) = com.aglyn.site.sites.SiteRow(id, id.uppercase(), null, null, false, null, null)
+    val rows = listOf(row("a"), row("b"), row("c"))
+    assertEquals(listOf("c", "z", "a", "b"), com.aglyn.site.sites.sitesShown(rows, listOf("c", "z", "gone"), listOf(row("z")), false).map { it.id })
+    assertEquals(listOf("a", "b", "c"), com.aglyn.site.sites.sitesShown(rows, listOf("c"), emptyList(), true).map { it.id })
+  }
+
   @Test
   fun createsTheSiteWithTheStarterInTheChosenStyle() {
     val body = createSiteBody("org1", "  My Shop ", " MyShop ", "trades")

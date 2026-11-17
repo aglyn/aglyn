@@ -3,6 +3,7 @@
 
 import AglynContracts
 import AglynCore
+import AglynPluginHost
 import Foundation
 import Observation
 
@@ -34,20 +35,79 @@ public enum SiteDomainFilter: String, CaseIterable, Sendable {
   }
 }
 
-public func sitesRequest(orgID: String, search: String, domain: SiteDomainFilter) -> ListQueryRequest {
+/// The Created filter (the console's Created range, `SITE_FILTER_FIELDS`): one condition on the site's own `createdAt`
+/// and one day (`yyyy-MM-dd`). A range orders the list by the field it ranges over, so under it the sites run newest
+/// first; otherwise by name.
+public struct SiteCreatedFilter: Equatable, Sendable {
+  public var op: String
+  public var day: String
+
+  public init(op: String, day: String) {
+    self.op = op
+    self.day = day
+  }
+
+  /// The conditions the declaration offers on Created, in its order.
+  public static var operators: [String] {
+    ContractValues.shared.siteListDeclaration.fields.first { $0.column == "createdAt" }?.operators ?? []
+  }
+
+  public var clause: ListFilterRequest { ListFilterRequest(field: "createdAt", op: op, value: day) }
+
+  /// "Created after Nov 1, 2026", as the console's chip says it.
+  public var label: String {
+    let header = ContractValues.shared.siteFilterHeaders["createdAt"] ?? "Created"
+    return "\(header) \(listFilterOperatorLabel(op)) \(shownDay)"
+  }
+
+  private var shownDay: String {
+    let parse = DateFormatter()
+    parse.calendar = Calendar(identifier: .gregorian)
+    parse.locale = Locale(identifier: "en_US_POSIX")
+    parse.dateFormat = "yyyy-MM-dd"
+    guard let date = parse.date(from: day) else { return day }
+    return date.formatted(date: .abbreviated, time: .omitted)
+  }
+}
+
+public func sitesRequest(
+  orgID: String, search: String, domain: SiteDomainFilter, created: SiteCreatedFilter? = nil
+) -> ListQueryRequest {
   let typed = search.trimmingCharacters(in: .whitespacesAndNewlines)
+  var clauses = domain.value.map { [ListFilterRequest(field: "hasCustomDomain", op: "is", value: $0)] } ?? []
+  if let created { clauses.append(created.clause) }
   return ListQueryRequest(
-    base: [ListQueryFilter(op: .equal, path: "orgId", value: .string(orgID))],
-    clauses: domain.value.map { [ListFilterRequest(field: "hasCustomDomain", op: "is", value: $0)] } ?? [],
+    base: [ListQueryFilter(op: .equal, path: "orgId", value: .string(orgID))], clauses: clauses,
     search: typed.isEmpty ? nil : [typed])
 }
 
 /// The sites list's reader query: the plan over the member's own rows, one row past the window.
-public func sitesQuery(uid: String, orgID: String, search: String, domain: SiteDomainFilter, limit: Int)
-  -> FirestoreQuery
-{
-  planListQuery(ContractValues.shared.siteListDeclaration, sitesRequest(orgID: orgID, search: search, domain: domain))
+public func sitesQuery(
+  uid: String, orgID: String, search: String, domain: SiteDomainFilter, created: SiteCreatedFilter? = nil, limit: Int
+) -> FirestoreQuery {
+  sitesPlan(orgID: orgID, search: search, domain: domain, created: created)
     .firestoreQuery(["users", uid, "hostMemberships"], limit: limit)
+}
+
+/// The plan the list runs, with what it refused and why.
+public func sitesPlan(orgID: String, search: String, domain: SiteDomainFilter, created: SiteCreatedFilter?)
+  -> ListQueryPlan
+{
+  planListQuery(
+    ContractValues.shared.siteListDeclaration,
+    sitesRequest(orgID: orgID, search: search, domain: domain, created: created))
+}
+
+/// The list as it is drawn (the console's `SitesCards`): the sites the person pinned in this workspace lead it, in the
+/// order pinned, then the query's own rows. A search or a filter is the query's answer and keeps its order; its pinned
+/// sites show their pin where they fall. A pinned site the window has not reached yet still leads, from `pinnedRows`.
+public func sitesShown(
+  _ rows: [SiteRow], pinned: [String], pinnedRows: [SiteRow], filtering: Bool
+) -> [SiteRow] {
+  if filtering || rows.isEmpty || pinned.isEmpty { return rows }
+  let lead = pinned.compactMap { id in rows.first { $0.id == id } ?? pinnedRows.first { $0.id == id } }
+  let leading = Set(lead.map(\.id))
+  return lead + rows.filter { !leading.contains($0.id) }
 }
 
 /// One row of the list: the membership row's own fields.
@@ -95,11 +155,27 @@ public final class SitesListModel {
   public private(set) var hasMore = false
   public var search = "" { didSet { if oldValue != search { restart() } } }
   public var domain = SiteDomainFilter.all { didSet { if oldValue != domain { restart() } } }
+  public var created: SiteCreatedFilter? { didSet { if oldValue != created { restart() } } }
+  /// The pinned sites' own rows, read beside the window so a pin the window has not reached yet still leads.
+  public private(set) var pinnedRows: [SiteRow] = []
+
+  /// A search or a filter is on: the list is the query's answer, in its order.
+  public var filtering: Bool {
+    !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || domain != .all || created != nil
+  }
+
+  /// What the query could not take, in the planner's words (a Created day that is not a day).
+  public var refused: [ListQueryRefusal] {
+    sitesPlan(orgID: orgID, search: search, domain: domain, created: created).refused
+  }
 
   @ObservationIgnored private var reader: FirestoreReader?
   @ObservationIgnored private var uid = ""
   @ObservationIgnored private var orgID = ""
   @ObservationIgnored private var listener: FirestoreListening?
+  @ObservationIgnored private var pinnedListeners: [FirestoreListening] = []
+  @ObservationIgnored private var pinnedFor: [String] = []
+  @ObservationIgnored private var pinnedAnswers: [Int: [SiteRow]] = [:]
   @ObservationIgnored private var limit = sitesPageSize
 
   public init() {}
@@ -122,6 +198,35 @@ public final class SitesListModel {
   public func stop() {
     listener?.remove()
     listener = nil
+    pinnedListeners.forEach { $0.remove() }
+    pinnedListeners = []
+    pinnedFor = []
+  }
+
+  /// Reads the pinned sites' own membership rows (thirty to a query, Firestore's `in` limit), each kept only while it
+  /// is still in this workspace.
+  public func watchPinned(_ ids: [String]) {
+    guard ids != pinnedFor else { return }
+    pinnedFor = ids
+    pinnedListeners.forEach { $0.remove() }
+    pinnedListeners = []
+    guard let reader, !uid.isEmpty, !ids.isEmpty else {
+      pinnedRows = []
+      return
+    }
+    pinnedAnswers = [:]
+    let chunks = stride(from: 0, to: ids.count, by: 30).map { Array(ids[$0..<min($0 + 30, ids.count)]) }
+    for (index, chunk) in chunks.enumerated() {
+      let query = FirestoreQuery(
+        ["users", uid, "hostMemberships"],
+        filters: [ListQueryConstraint(path: ContractValues.shared.listQueryIdPath, op: .in, value: chunk)])
+      pinnedListeners.append(
+        reader.listen(query) { [weak self] result in
+          guard let self, self.pinnedFor == ids, case .success(let docs) = result else { return }
+          self.pinnedAnswers[index] = docs.filter { $0.string("orgId") == self.orgID }.map(SiteRow.init)
+          self.pinnedRows = self.pinnedAnswers.keys.sorted().flatMap { self.pinnedAnswers[$0] ?? [] }
+        })
+    }
   }
 
   private func restart() {
@@ -134,7 +239,7 @@ public final class SitesListModel {
     if !keep { rows = .loading }
     guard let reader, !orgID.isEmpty else { return }
     let window = limit
-    let query = sitesQuery(uid: uid, orgID: orgID, search: search, domain: domain, limit: window + 1)
+    let query = sitesQuery(uid: uid, orgID: orgID, search: search, domain: domain, created: created, limit: window + 1)
     listener = reader.listen(query) { [weak self] result in
       guard let self else { return }
       switch result {

@@ -177,6 +177,30 @@ final class SiteTests: XCTestCase {
     XCTAssertEqual(cleanSubdomainInput("My Site_2!"), "mysite2")
   }
 
+  /// The console's Created range: one condition on `createdAt`, and under it the list runs newest first.
+  func testTheCreatedFilterRangesOverCreatedNewestFirst() {
+    XCTAssertEqual(SiteCreatedFilter.operators, ["is", "after", "onOrAfter", "before", "onOrBefore"])
+    let created = SiteCreatedFilter(op: "onOrAfter", day: "2026-11-01")
+    let query = sitesQuery(uid: "u", orgID: "org1", search: "", domain: .all, created: created, limit: 31)
+    XCTAssertTrue(query.filters.contains { $0.path == "createdAt" && $0.op == .greaterThanOrEqual })
+    XCTAssertEqual(query.order.first?.field, "createdAt")
+    XCTAssertEqual(query.order.first?.descending, true)
+    XCTAssertTrue(created.label.hasPrefix("Created on or after "))
+    XCTAssertFalse(
+      sitesPlan(orgID: "org1", search: "", domain: .all, created: SiteCreatedFilter(op: "is", day: "soon")).refused.isEmpty,
+      "a day that is not a day is refused, as the console says")
+  }
+
+  /// Pinned sites lead the unfiltered list in the order pinned, from the window or their own rows; a search or a filter
+  /// keeps the query's order.
+  func testPinnedSitesLeadTheUnfilteredList() {
+    let rows = ["a", "b", "c"].map { SiteRow(doc($0, ["displayName": $0.uppercased()])) }
+    let far = SiteRow(doc("z", ["displayName": "Z"]))
+    XCTAssertEqual(sitesShown(rows, pinned: ["c", "z", "gone"], pinnedRows: [far], filtering: false).map(\.id), ["c", "z", "a", "b"])
+    XCTAssertEqual(sitesShown(rows, pinned: ["c"], pinnedRows: [], filtering: true).map(\.id), ["a", "b", "c"])
+    XCTAssertEqual(sitesShown([], pinned: ["c"], pinnedRows: [far], filtering: false).map(\.id), [])
+  }
+
   func testCreatesTheSiteWithTheStarterInTheChosenStyle() {
     XCTAssertEqual(
       createSiteBody(orgID: "org1", name: "  My Shop ", subdomain: " MyShop ", style: "trades"),

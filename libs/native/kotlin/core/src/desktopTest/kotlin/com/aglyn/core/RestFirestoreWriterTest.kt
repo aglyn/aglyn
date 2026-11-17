@@ -56,6 +56,31 @@ class RestFirestoreWriterTest {
     assertEquals("""{"timestampValue":"2023-11-14T22:13:20.000000005Z"}""", fields.getValue("updatedAt").toString())
   }
 
+  /** A site pin is ONE entry added (`arrayUnion`): a commit whose transform appends it, the other fields masked. */
+  @Test
+  fun anArrayChangeIsACommitWithATransform() = runTest {
+    var seen: io.ktor.client.request.HttpRequestData? = null
+    var body = ""
+    val http = HttpClient(MockEngine { request ->
+      seen = request
+      body = String(request.body.toByteArray())
+      respond("{}", HttpStatusCode.OK)
+    })
+    val rest = RestFirestoreReader(http, "demo-x", "127.0.0.1:8289", { "id-token" })
+    rest.merge("users/u1", mapOf("pinnedHosts" to FirestoreArrayChange.union(mapOf("orgId" to "o1", "hostId" to "h1"))))
+    assertEquals(HttpMethod.Post, seen!!.method)
+    assertEquals(true, seen!!.url.encodedPath.endsWith("/documents:commit"))
+    val write = Json.parseToJsonElement(body).jsonObject.getValue("writes").let { (it as kotlinx.serialization.json.JsonArray)[0].jsonObject }
+    assertEquals("\"projects/demo-x/databases/(default)/documents/users/u1\"", write.getValue("update").jsonObject.getValue("name").toString())
+    val transform = (write.getValue("updateTransforms") as kotlinx.serialization.json.JsonArray)[0].jsonObject
+    assertEquals("\"pinnedHosts\"", transform.getValue("fieldPath").toString())
+    assertEquals(
+      """{"values":[{"mapValue":{"fields":{"orgId":{"stringValue":"o1"},"hostId":{"stringValue":"h1"}}}}]}""",
+      transform.getValue("appendMissingElements").toString(),
+    )
+    assertEquals(setOf("removeAllFromArray"), RestFirestoreReader.arrayTransforms(mapOf("p" to FirestoreArrayChange.remove(listOf("a"))))[0].keys - "fieldPath")
+  }
+
   /** A polled read re-reads as soon as this reader writes: a screen shows its own save at once (AGL-3971). */
   @Test
   fun aWriteReReadsAPolledObservationAtOnce() = kotlinx.coroutines.runBlocking {

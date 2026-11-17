@@ -49,11 +49,57 @@ enum class SiteDomainFilter(val label: String, val value: String?) {
   NONE("No custom domain", "false"),
 }
 
-fun sitesRequest(orgId: String, search: String, domain: SiteDomainFilter): ListQueryRequest = ListQueryRequest(
+/**
+ * The Created filter (the console's Created range, `SITE_FILTER_FIELDS`): one condition on the site's own `createdAt`
+ * and one day (`yyyy-MM-dd`). A range orders the list by the field it ranges over, so under it the sites run newest
+ * first; otherwise by name.
+ */
+data class SiteCreatedFilter(val op: String, val day: String) {
+  val clause: ListFilterRequest get() = ListFilterRequest("createdAt", op, day)
+
+  /** "Created on or after Nov 1, 2026", as the console's chip says it. */
+  val label: String get() =
+    "${Contracts.siteFilterHeaders["createdAt"] ?: "Created"} ${com.aglyn.pluginhost.listFilterOperatorLabel(op)} ${shownDay(day)}"
+
+  companion object {
+    /** The conditions the declaration offers on Created, in its order. */
+    val operators: List<String> get() = Contracts.siteListDeclaration.fields.firstOrNull { it.column == "createdAt" }?.operators.orEmpty()
+
+    private val MONTHS = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+    /** `2026-11-01` as "Nov 1, 2026"; anything else as typed. */
+    fun shownDay(day: String): String {
+      val parts = Regex("^(\\d{4})-(\\d{2})-(\\d{2})$").matchEntire(day)?.groupValues ?: return day
+      val month = MONTHS.getOrNull(parts[2].toInt() - 1) ?: return day
+      return "$month ${parts[3].toInt()}, ${parts[1]}"
+    }
+  }
+}
+
+fun sitesRequest(orgId: String, search: String, domain: SiteDomainFilter, created: SiteCreatedFilter? = null): ListQueryRequest = ListQueryRequest(
   base = listOf(com.aglyn.contracts.ListQueryFilter(op = com.aglyn.contracts.ListQueryOp.EQUAL, path = "orgId", value = JsonPrimitive(orgId))),
-  clauses = buildList { domain.value?.let { add(ListFilterRequest("hasCustomDomain", "is", it)) } },
+  clauses = buildList {
+    domain.value?.let { add(ListFilterRequest("hasCustomDomain", "is", it)) }
+    created?.let { add(it.clause) }
+  },
   search = search.trim().ifEmpty { null }?.let { listOf(it) },
 )
+
+/** The plan the list runs, with what it refused and why. */
+fun sitesPlan(orgId: String, search: String, domain: SiteDomainFilter, created: SiteCreatedFilter?) =
+  planListQuery(Contracts.siteListDeclaration, sitesRequest(orgId, search, domain, created))
+
+/**
+ * The list as it is drawn (the console's `SitesCards`): the sites the person pinned in this workspace lead it, in the
+ * order pinned, then the query's own rows. A search or a filter is the query's answer and keeps its order; its pinned
+ * sites show their pin where they fall. A pinned site the window has not reached yet still leads, from [pinnedRows].
+ */
+fun sitesShown(rows: List<SiteRow>, pinned: List<String>, pinnedRows: List<SiteRow>, filtering: Boolean): List<SiteRow> {
+  if (filtering || rows.isEmpty() || pinned.isEmpty()) return rows
+  val lead = pinned.mapNotNull { id -> rows.firstOrNull { it.id == id } ?: pinnedRows.firstOrNull { it.id == id } }
+  val leading = lead.map { it.id }.toSet()
+  return lead + rows.filter { it.id !in leading }
+}
 
 /** One row of the list: the membership row's own fields. */
 data class SiteRow(
@@ -93,6 +139,19 @@ class SitesListModel(
     private set
   var domain by mutableStateOf(SiteDomainFilter.ALL)
     private set
+  var created by mutableStateOf<SiteCreatedFilter?>(null)
+    private set
+  /** The pinned sites' own rows, read beside the window so a pin the window has not reached yet still leads. */
+  var pinnedRows by mutableStateOf<List<SiteRow>>(emptyList())
+    private set
+  private var pinnedFor: List<String> = emptyList()
+  private var pinnedJob: Job? = null
+
+  /** A search or a filter is on: the list is the query's answer, in its order. */
+  val filtering: Boolean get() = search.isNotBlank() || domain != SiteDomainFilter.ALL || created != null
+
+  /** What the query could not take, in the planner's words (a Created day that is not a day). */
+  val refused get() = sitesPlan(orgId, search, domain, created).refused
   var rows by mutableStateOf<Load<List<SiteRow>>>(Load.Loading)
     private set
   var hasMore by mutableStateOf(false)
@@ -103,8 +162,41 @@ class SitesListModel(
   private var job: Job? = null
 
   private fun query(startAfter: List<Any?>? = null) =
-    planListQuery(Contracts.siteListDeclaration, sitesRequest(orgId, search, domain))
-      .toFirestoreQuery("users/$uid/hostMemberships", SITES_PAGE_SIZE, startAfter)
+    sitesPlan(orgId, search, domain, created).toFirestoreQuery("users/$uid/hostMemberships", SITES_PAGE_SIZE, startAfter)
+
+  /** Picks the Created filter, or clears it with null. */
+  fun pickCreated(next: SiteCreatedFilter?) {
+    if (next == created) return
+    created = next
+    reload()
+  }
+
+  /**
+   * Reads the pinned sites' own membership rows (thirty to a query, Firestore's `in` limit), each kept only while it is
+   * still in this workspace.
+   */
+  fun watchPinned(ids: List<String>) {
+    if (ids == pinnedFor) return
+    pinnedFor = ids
+    pinnedJob?.cancel()
+    if (ids.isEmpty()) {
+      pinnedRows = emptyList()
+      return
+    }
+    pinnedJob = scope.launch {
+      val read = ids.chunked(30).flatMap { chunk ->
+        runCatching {
+          firestore.page(
+            com.aglyn.core.FirestoreQuery(
+              "users/$uid/hostMemberships",
+              filters = listOf(com.aglyn.core.FirestoreFilter("__name__", com.aglyn.core.FilterOp.IN, chunk.map { "users/$uid/hostMemberships/$it" })),
+            ),
+          ).docs
+        }.getOrDefault(emptyList())
+      }
+      pinnedRows = read.filter { it.string("orgId") == orgId }.map(::siteRowOf)
+    }
+  }
 
   fun type(next: String) {
     if (next == search) return
