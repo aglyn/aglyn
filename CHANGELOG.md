@@ -9,6 +9,15 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.26.2 — 2026-11-17
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.26.1...v1.26.2)
+
+### Fixed
+
+- **native:** the Mac plays the picked notification sound in the background and when quit ([AGL-4215](https://linear.app/aglyn/issue/AGL-4215))
+- **native:** the Mac plays the picked notification sound while the app is in front ([AGL-4215](https://linear.app/aglyn/issue/AGL-4215))
+
 ## v1.26.1 — 2026-11-17
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.26.0...v1.26.1)
