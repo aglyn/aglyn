@@ -42,7 +42,7 @@ describe('native waivers screens', () => {
   })
 
   it('share the link the console shares', () => {
-    const text = JSON.stringify(screens['waivers.home'])
+    const text = JSON.stringify(screens['waivers.share'])
     expect(text).toContain(`{data.list.signPageOrigin}/${WAIVERS_SITE_SIGN_PATH}?waiver=`)
     expect(text).toContain(`{app.origin}/kiosk/waivers${WAIVERS_PUBLIC_PAGE_PATH}?host={site.id}&waiver=`)
   })
