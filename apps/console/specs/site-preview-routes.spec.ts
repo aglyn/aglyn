@@ -206,6 +206,59 @@ describe('/api/site-preview/link — the enter link (AGL-4086)', () => {
     expect(response.status).toBe(403)
   })
 
+  // The link as THIS console reaches the site (`siteLiveUrlForSlug`, #2749's
+  // rule): a deployed console the public origin (above), a local console the
+  // local tenant, a preview console the tenant preview deployment, both naming
+  // the site with `?tenantHost=`. A local console used to hand out links to the
+  // PRODUCTION site.
+  const linkFrom = async (consoleOrigin: string, body: Row) => {
+    const response = await previewLink(
+      new Request(`${consoleOrigin}/api/site-preview/link`, {
+        method: 'POST',
+        headers: { authorization: 'Bearer token', 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      }),
+    )
+    return { response, payload: (await response.json()) as { url?: string; error?: string } }
+  }
+
+  it('from a LOCAL console, links the local tenant and names the site', async () => {
+    mockHost = { ...SITE, cname: 'acme.example' }
+    for (const origin of ['http://localhost:4610', 'http://127.0.0.1:4610', 'http://10.0.2.2:4610']) {
+      const { response, payload } = await linkFrom(origin, { hostId: 'host-1', path: '/menu' })
+      expect(response.status).toBe(200)
+      const url = new URL(payload.url as string)
+      expect(url.origin).toBe('http://localhost:4500')
+      expect(url.pathname).toBe('/api/site-preview/enter')
+      expect(url.searchParams.get('tenantHost')).toBe('acme')
+      expect(url.searchParams.get('return')).toBe('/menu')
+      expect(verifySitePreviewToken('enter', url.searchParams.get('blob'), 'host-1')).not.toBeNull()
+    }
+  })
+
+  it('from a PREVIEW console, links the tenant preview deployment and names the site', async () => {
+    const { payload } = await linkFrom('https://aglyn-console-git-branch-aglyn.vercel.app', { hostId: 'host-1' })
+    const url = new URL(payload.url as string)
+    expect(url.origin).toBe('https://aglyn-tenant-git-main-aglyn.vercel.app')
+    expect(url.pathname).toBe('/api/site-preview/enter')
+    expect(url.searchParams.get('tenantHost')).toBe('acme')
+  })
+
+  it('from the DEPLOYED console, links the site itself with no override', async () => {
+    const { payload } = await linkFrom('https://app.aglyn.com', { hostId: 'host-1' })
+    const url = new URL(payload.url as string)
+    expect(url.origin).toBe('https://acme.aglyn.app')
+    expect(url.searchParams.has('tenantHost')).toBe(false)
+  })
+
+  it('refuses a site with no address, from any console', async () => {
+    mockHost = { ...SITE, subdomain: undefined }
+    for (const origin of ['http://localhost:4610', 'https://app.aglyn.com']) {
+      const { response } = await linkFrom(origin, { hostId: 'host-1' })
+      expect(response.status).toBe(409)
+    }
+  })
+
   it('mints one for staff, by the claim on the verified token', async () => {
     mockClaims = { uid: 'uid-staff', email_verified: true, staff: true }
     const { response, payload } = await linkOf({ hostId: 'host-1' })

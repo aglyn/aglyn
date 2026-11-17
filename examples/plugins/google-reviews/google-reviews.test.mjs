@@ -249,7 +249,7 @@ test('the bundle registers its elements, in its namespace, with the composable p
   // Elements panel no longer offers it (AGL-4212).
   assert.equal(surface.components.getPreset(`aglyn.google-reviews:${COMPONENT_ID}`), undefined)
   assert.deepEqual(
-    ['section', 'summary', 'cards', 'list', 'carousel', 'review-link', 'stars', 'reviewer-image'].map(
+    ['section', 'summary', 'cards', 'list', 'carousel', 'review-link', 'stars', 'review-text', 'reviewer-image'].map(
       (key) => surface.components.getPreset(`aglyn.google-reviews:${key}`)?.displayName,
     ),
     [
@@ -260,6 +260,7 @@ test('the bundle registers its elements, in its namespace, with the composable p
       'Google review carousel',
       'Review us on Google',
       'Google stars',
+      'Google review text',
       'Google reviewer image',
     ],
   )
@@ -414,7 +415,17 @@ test('stars, initials, dates and photos', () => {
 /* Composable presets and their two elements (AGL-4212)                  */
 /* ------------------------------------------------------------------ */
 
-const PRESET_KEYS = ['section', 'summary', 'cards', 'list', 'carousel', 'review-link', 'stars', 'reviewer-image']
+const PRESET_KEYS = [
+  'section',
+  'summary',
+  'cards',
+  'list',
+  'carousel',
+  'review-link',
+  'stars',
+  'review-text',
+  'reviewer-image',
+]
 const REVIEWS_SOURCE = 'aglyn.google-reviews/google'
 const SUMMARY_SOURCE = 'aglyn.google-reviews/google/fields'
 
@@ -457,7 +468,7 @@ test('the presets repeat over the google connection and name only fields it decl
       const scope = repeat ?? source
       for (const value of Object.values(node.props || {})) {
         for (const [, field] of String(value).matchAll(/\{\{item\.([A-Za-z]+)\}\}/g)) {
-          if (preset.$id.endsWith(':stars') || preset.$id.endsWith(':reviewer-image')) continue
+          if (/:(stars|review-text|reviewer-image)$/.test(preset.$id)) continue
           assert.ok(scope, `${preset.$id}: {{item.${field}}} sits inside a repeat`)
           const known = scope === SUMMARY_SOURCE ? summaryFields : itemFields
           assert.ok(known.has(field), `${preset.$id}: ${field} is declared for ${scope}`)
@@ -555,6 +566,48 @@ test('Reviewer image shows initials, or a photo only when chosen and allowed', a
   assert.doesNotMatch(elsewhere.html, /<img/, 'a host the page may not load is never drawn')
 })
 
+test('Review text cuts a long review to six lines behind "Continue reading", and keeps it all in the HTML', async () => {
+  const long = await renderPart('aglyn.google-reviews.review-text', { text: LONG, lines: 6 })
+  // The whole text is in the HTML for visitors and search engines.
+  assert.ok(long.html.includes(LONG))
+  assert.match(long.css, /-webkit-line-clamp:6/)
+  assert.match(long.css, /#1d4ed8/, 'the link is the theme\'s primary color')
+  const [, id] = /<p[^>]*id="([^"]+)"/.exec(long.html)
+  assert.match(long.html, new RegExp(`<button[^>]*aria-expanded="false"[^>]*aria-controls="${id}"[^>]*>Continue reading</button>`))
+  // A short one has no link, and nothing written draws nothing.
+  const short = await renderPart('aglyn.google-reviews.review-text', { text: 'Fast and friendly.', lines: 6 })
+  assert.match(short.html, />Fast and friendly\.</)
+  assert.doesNotMatch(short.html, /<button/)
+  assert.equal((await renderPart('aglyn.google-reviews.review-text', { text: '' })).html, '')
+  assert.equal((await renderPart('aglyn.google-reviews.review-text', { text: null })).html, '')
+  // Line breaks count as lines: seven short paragraphs run past six lines.
+  const paragraphs = await renderPart('aglyn.google-reviews.review-text', { text: 'Yes.\n'.repeat(7).trim(), lines: '6' })
+  assert.match(paragraphs.html, />Continue reading</)
+})
+
+test('Review text takes its lines, its wording and the author\'s styles', async () => {
+  const three = await renderPart('aglyn.google-reviews.review-text', {
+    text: 'Short, but three lines is little room. '.repeat(4),
+    lines: '3',
+    moreLabel: 'Read more',
+    'data-aglyn': 'n1',
+    sx: { color: '#123456', fontSize: '1.125rem' },
+  })
+  assert.match(three.css, /-webkit-line-clamp:3/)
+  assert.match(three.html, />Read more</)
+  assert.match(three.html, /data-aglyn="n1"/)
+  const rule = three.css.split('\n').find((line) => line.includes('#123456'))
+  assert.ok(rule && rule.includes('font-size:1.125rem'), 'the author\'s size reaches the text')
+  // Out of range or not a number: 1 to 20, and 6 when it is not a number.
+  for (const [lines, expected] of [['0', 1], [99, 20], ['abc', 6], [undefined, 6], ['', 6], [4.4, 4]]) {
+    const { css } = await renderPart('aglyn.google-reviews.review-text', { text: LONG, lines })
+    assert.match(css, new RegExp(`-webkit-line-clamp:${expected}(;|})`), `lines ${lines} → ${expected}`)
+  }
+  // A blank wording falls back to the default rather than an empty link.
+  const blank = await renderPart('aglyn.google-reviews.review-text', { text: LONG, moreLabel: '  ' })
+  assert.match(blank.html, />Continue reading</)
+})
+
 /* ------------------------------------------------------------------ */
 /* The presets as a published page composes them (AGL-4212)             */
 /* ------------------------------------------------------------------ */
@@ -618,6 +671,18 @@ test('the whole section composes into the summary, six newest rated cards and th
   assert.ok(texts.includes('Mar 14, 2026'), 'the date prints as a date')
   const stars = order.filter((node) => node.componentId === 'aglyn.google-reviews.stars').map((node) => node.props.value)
   assert.deepEqual(stars.map(String), ['4.6', '5', '4', '5', '3', '2', '5'])
+  // What each reviewer wrote goes to Review text, six lines and "Continue
+  // reading" to start; a review with nothing written has an empty one, which
+  // draws nothing.
+  const written = order.filter((node) => node.componentId === 'aglyn.google-reviews.review-text')
+  assert.deepEqual(
+    written.map((node) => node.props.text),
+    ['Fast and friendly.', LONG, '', 'Good work, slow quote.', 'Missed the first appointment.', 'Would hire again.'],
+  )
+  for (const node of written) {
+    assert.equal(node.props.lines, 6)
+    assert.equal(node.props.moreLabel, 'Continue reading')
+  }
   // Replies: only Jordan's and Alex's cards keep the block.
   assert.equal(texts.filter((text) => text === 'Response from the owner').length, 2)
   assert.ok(texts.includes('Thank you, Jordan!') && texts.includes('We are sorry, Alex.'))
@@ -663,3 +728,91 @@ test('a profile with no reviews yet shows only the review link (AGL-4212)', asyn
   const summary = await composePreset('summary', empty)
   assert.deepEqual(textsOf(summary), [], 'the rating on its own draws nothing')
 })
+
+/* ------------------------------------------------------------------ */
+/* In the browser: Review text measures what it cut                      */
+/* ------------------------------------------------------------------ */
+
+test('in the browser, Review text shows "Continue reading" only when the text was cut, and opens in place', async () => {
+  const { React, styles, surface } = await mount()
+  const { JSDOM } = await import('jsdom')
+  const { renderToString } = await import('react-dom/server')
+  const { hydrateRoot } = await import('react-dom/client')
+  const { act } = React
+  const { default: createCache } = await import('@emotion/cache')
+  const { CacheProvider } = await import('@emotion/react')
+  const dom = new JSDOM('<!doctype html><html><head></head><body></body></html>')
+  const saved = {}
+  const globals = { window: dom.window, document: dom.window.document, navigator: dom.window.navigator, HTMLElement: dom.window.HTMLElement }
+  for (const [name, value] of Object.entries(globals)) {
+    saved[name] = Object.getOwnPropertyDescriptor(globalThis, name)
+    Object.defineProperty(globalThis, name, { value, configurable: true, writable: true })
+  }
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true
+  // jsdom lays nothing out: a clamped paragraph is as tall as the test says.
+  let overflowing = false
+  const proto = dom.window.HTMLElement.prototype
+  Object.defineProperty(proto, 'scrollHeight', { configurable: true, get: () => (overflowing ? 200 : 100) })
+  Object.defineProperty(proto, 'clientHeight', { configurable: true, get: () => 100 })
+  const h = React.createElement
+  const theme = styles.createTheme({ palette: { primary: { main: '#1d4ed8' } } })
+  const app = (text) =>
+    h(
+      CacheProvider,
+      { value: Object.assign(createCache({ key: 'site' }), { compat: true }) },
+      h(styles.ThemeProvider, { theme }, h(surface.components.getFactory('aglyn.google-reviews.review-text'), { text, lines: 6 })),
+    )
+  const hydrate = async (text) => {
+    const container = dom.window.document.createElement('div')
+    // The server's HTML, as the page arrives.
+    container.innerHTML = renderToString(app(text))
+    dom.window.document.body.appendChild(container)
+    let root
+    await act(async () => {
+      root = hydrateRoot(container, app(text))
+    })
+    return { container, root }
+  }
+  try {
+    // The server guessed "cut" for a long review; the browser finds it fits.
+    overflowing = false
+    const fits = await hydrate(LONG)
+    assert.equal(fits.container.querySelector('button'), null, 'no link once it is measured to fit')
+    assert.ok(fits.container.textContent.includes(LONG))
+    await act(async () => fits.root.unmount())
+
+    // The server guessed "fits" for a short one; the browser finds it cut.
+    overflowing = true
+    const cut = await hydrate('Short.')
+    const button = cut.container.querySelector('button')
+    assert.ok(button, 'the link appears once it is measured to be cut')
+    assert.equal(button.textContent, 'Continue reading')
+    assert.equal(button.getAttribute('aria-expanded'), 'false')
+    const text = cut.container.querySelector(`#${CSS_ESCAPE(button.getAttribute('aria-controls'))}`)
+    assert.equal(text?.tagName, 'P', 'the link controls the text')
+    await act(async () => {
+      button.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
+    })
+    assert.equal(button.getAttribute('aria-expanded'), 'true')
+    assert.equal(button.textContent, 'Show less')
+    assert.equal(cut.container.querySelector('[data-review-text]').getAttribute('data-review-text'), 'open')
+    await act(async () => {
+      button.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
+    })
+    assert.equal(button.textContent, 'Continue reading', 'closes again, still cut')
+    await act(async () => cut.root.unmount())
+  } finally {
+    // Let React's scheduler finish with this window before it goes away.
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    delete proto.scrollHeight
+    delete proto.clientHeight
+    delete globalThis.IS_REACT_ACT_ENVIRONMENT
+    for (const [name, descriptor] of Object.entries(saved)) {
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor)
+      else delete globalThis[name]
+    }
+  }
+})
+
+/** useId ids hold colons, which a CSS selector must escape. */
+const CSS_ESCAPE = (id) => id.replace(/[^A-Za-z0-9_-]/g, (character) => `\\${character}`)

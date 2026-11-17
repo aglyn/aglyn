@@ -163,6 +163,27 @@ extension PushCenter: UNUserNotificationCenterDelegate {
       MainActor.assumeIsolated { NSWindow.allowsAutomaticWindowTabbing = Self.windowTabs }
     }
 
+    #if DEBUG
+      /// A Debug build takes a universal link the way the system hands one over (a browsing-web user activity to the
+      /// app's delegate) from `com.aglyn.debug.continueWebLink`, whose object is the link: an ad-hoc signed Debug build
+      /// has no associated domain, so the system never sends it one, and a link clicked in another app reaches a
+      /// signed build only as that activity (AGL-4059).
+      func applicationDidFinishLaunching(_ notification: Notification) {
+        DistributedNotificationCenter.default().addObserver(
+          forName: Notification.Name("com.aglyn.debug.continueWebLink"), object: nil, queue: .main
+        ) { note in
+          guard let link = note.object as? String, let url = URL(string: link) else { return }
+          MainActor.assumeIsolated {
+            let activity = NSUserActivity(activityType: NSUserActivityTypeBrowsingWeb)
+            activity.webpageURL = url
+            let delegate = NSApp.delegate
+            _ = delegate?.application?(NSApp, willContinueUserActivityWithType: NSUserActivityTypeBrowsingWeb)
+            _ = delegate?.application?(NSApp, continue: activity, restorationHandler: { _ in })
+          }
+        }
+      }
+    #endif
+
     func application(_ application: NSApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
       MainActor.assumeIsolated { Self.push?.didRegister(token: deviceToken) }
     }

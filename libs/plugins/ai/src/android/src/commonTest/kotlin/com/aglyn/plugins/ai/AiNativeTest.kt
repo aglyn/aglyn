@@ -275,5 +275,16 @@ class AiNativeTest {
     assertEquals(AiFollowView.Open("Open Site frame", "/acme/hosts/roofs/layouts/l1", "/acme/hosts/roofs/layouts/l1/versions/v1/besigner"), done.open)
     assertEquals(true, done.settled)
   }
-}
 
+  /** "Put in the form" says where each proposal went (AGL-4136): the name, email and phone to Business details. */
+  @Test
+  fun seoStagedNoteNamesWhereEachProposalWent() {
+    assertEquals("In the SEO forms below as unsaved changes. Review them, then press Save.", aiSeoStagedNote(listOf("seo.entity.description")))
+    assertEquals(
+      "The name, email and phone are in Business details on Setup → Business profile as unsaved changes. Review them there, then press Save.",
+      aiSeoStagedNote(listOf("seo.entity.email")),
+    )
+    val both = aiSeoStagedNote(listOf("seo.entity.type", "seo.entity.name"))
+    assertEquals(true, both.startsWith("In the SEO forms below") && both.endsWith("Review them there, then press Save."))
+  }
+}

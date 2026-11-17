@@ -661,6 +661,130 @@ function ReviewerImage(props) {
 }
 ReviewerImage.displayName = 'AglynGoogleReviewerImage';
 
+/* ------------------------------------------------------------------ */
+/* Review text                                                         */
+/* ------------------------------------------------------------------ */
+
+const REVIEW_TEXT_DEFAULTS = Object.freeze({
+  lines: 6,
+  moreLabel: 'Continue reading',
+  lessLabel: 'Show less',
+});
+
+/**
+ * A whole number of lines, 1 to 20, from what the attribute holds (a number,
+ * the text the Besigner stored, or nothing); anything else is the default.
+ */
+function reviewTextLines(value) {
+  const parsed = typeof value === 'number' ? value : Number(String(value ?? '').trim());
+  if (!Number.isFinite(parsed) || String(value ?? '').trim() === '') return REVIEW_TEXT_DEFAULTS.lines
+  return Math.min(20, Math.max(1, Math.round(parsed)))
+}
+
+/** About how many characters a line of a review card holds. */
+const CHARACTERS_PER_LINE = 45;
+
+/**
+ * Whether `text` probably runs past `lines` lines. The page is drawn on the
+ * server, where nothing can be measured, so this guess decides whether the
+ * HTML carries the "Continue reading" link; the browser measures the real
+ * text once it is on screen and corrects it.
+ */
+function probablyCut(text, lines) {
+  let used = 0;
+  for (const paragraph of String(text).split('\n')) {
+    used += Math.max(1, Math.ceil(paragraph.length / CHARACTERS_PER_LINE));
+    if (used > lines) return true
+  }
+  return false
+}
+
+/** A layout effect in the browser, where it runs before paint; none on the server. */
+const useBrowserLayoutEffect = typeof document === 'undefined' ? __aglynHostModule$8.useEffect : __aglynHostModule$8.useLayoutEffect;
+
+const label = (value, fallback) => (typeof value === 'string' && value.trim() ? value : fallback);
+
+/**
+ * What a reviewer wrote, cut to `lines` lines with an ellipsis. "Continue
+ * reading" shows only when the text was cut and opens it in place; it then
+ * reads "Show less". The whole text is always in the HTML, for visitors'
+ * screen readers and for search engines. Persisted id:
+ * `aglyn.google-reviews.review-text`.
+ */
+function ReviewText(props) {
+  const [own, rest] = split(props, ['text', 'lines', 'moreLabel', 'lessLabel']);
+  const { sx, ...root } = rest;
+  const text = typeof own.text === 'string' ? own.text.trim() : own.text == null ? '' : String(own.text).trim();
+  const lines = reviewTextLines(own.lines);
+  const textId = __aglynHostModule$8.useId();
+  // The paragraph, once it is on screen (a callback ref, so no ref is read while rendering).
+  const [element, setElement] = __aglynHostModule$8.useState(null);
+  const [open, setOpen] = __aglynHostModule$8.useState(false);
+  const [cut, setCut] = __aglynHostModule$8.useState(() => probablyCut(text, lines));
+
+  // Measure the clamped text whenever it or its width changes. While it is
+  // open there is nothing to measure, and the last answer stands.
+  useBrowserLayoutEffect(() => {
+    if (!element || open) return undefined
+    const measure = () => setCut(element.scrollHeight - element.clientHeight > 1);
+    measure();
+    if (typeof ResizeObserver !== 'function') return undefined
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect()
+  }, [element, text, lines, open]);
+
+  // A review with nothing written draws nothing, not an empty line.
+  if (!text) return null
+
+  return __aglynHostModule$8.createElement(
+    Box,
+    {
+      'data-review-text': open ? 'open' : 'clamped',
+      ...root,
+      sx: withAuthorSx(
+        { typography: 'body2', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5 },
+        sx,
+      ),
+    },
+    __aglynHostModule$8.createElement(
+      Box,
+      {
+        component: 'p',
+        id: textId,
+        ref: setElement,
+        sx: {
+          m: 0,
+          width: '100%',
+          whiteSpace: 'pre-line',
+          overflowWrap: 'anywhere',
+          ...(open
+            ? {}
+            : { display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: String(lines), overflow: 'hidden' }),
+        },
+      },
+      text,
+    ),
+    cut || open
+      ? __aglynHostModule$8.createElement(
+          Link,
+          {
+            component: 'button',
+            type: 'button',
+            underline: 'hover',
+            color: 'primary',
+            'aria-expanded': open,
+            'aria-controls': textId,
+            onClick: () => setOpen((value) => !value),
+            sx: { font: 'inherit', fontWeight: 600, textAlign: 'left', p: 0 },
+          },
+          open ? label(own.lessLabel, REVIEW_TEXT_DEFAULTS.lessLabel) : label(own.moreLabel, REVIEW_TEXT_DEFAULTS.moreLabel),
+        )
+      : null,
+  )
+}
+ReviewText.displayName = 'AglynGoogleReviewText';
+
 /**
  * @license
  * Copyright 2026 Aglyn LLC
@@ -674,6 +798,7 @@ const MUI = 'mui';
 
 const STARS_ID = 'aglyn.google-reviews.stars';
 const REVIEWER_IMAGE_ID = 'aglyn.google-reviews.reviewer-image';
+const REVIEW_TEXT_ID = 'aglyn.google-reviews.review-text';
 
 /** The connection, as a repeat names it. Persisted in pages; never rename. */
 const REVIEWS_SOURCE = `${BUNDLE_ID$1}/google`;
@@ -687,6 +812,7 @@ const ICONS = {
   list: 'M3,4H21V8H3V4M3,10H21V14H3V10M3,16H21V20H3V16Z',
   carousel: 'M7,19H17V4H7V19M2,17H6V6H2V17M18,6V17H22V6H18Z',
   link: 'M14,3V5H17.59L7.76,14.83L9.17,16.24L19,6.41V10H21V3M19,19H5V5H12V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V12H19V19Z',
+  text: 'M3,3H21V5H3V3M3,7H21V9H3V7M3,11H21V13H3V11M3,15H21V17H3V15M3,19H13V21H3V19Z',
   person: 'M12,4A4,4 0 0,1 16,8A4,4 0 0,1 12,12A4,4 0 0,1 8,8A4,4 0 0,1 12,4M12,14C16.42,14 20,15.79 20,18V20H4V18C4,15.79 7.58,14 12,14Z',
 };
 
@@ -720,6 +846,17 @@ const reviewerImage = () => ({
     anonymous: '{{item.anonymous}}',
     show: 'initials',
   },
+});
+
+/**
+ * What the reviewer wrote, cut to six lines with "Continue reading" when it
+ * runs longer, so the cards in a row stay the same height.
+ */
+const reviewText = () => ({
+  $id: null,
+  componentId: REVIEW_TEXT_ID,
+  pluginId: BUNDLE_ID$1,
+  props: { text: '{{item.comment}}', lines: 6, moreLabel: 'Continue reading', lessLabel: 'Show less' },
 });
 
 /**
@@ -805,7 +942,7 @@ const reviewCard = (layout) =>
                       },
                     ),
                     stars('{{item.stars}}'),
-                    text('body2', '{{item.comment}}', { sx: { whiteSpace: 'pre-line', overflowWrap: 'anywhere' } }),
+                    reviewText(),
                     node(
                       'muiStack',
                       { spacing: 0.5, hideUnless: '{{item.reply}}' },
@@ -937,6 +1074,13 @@ const presets$1 = [
   preset('stars', 'Google stars', 'Five stars, filled to a rating.', ICONS.star, {
     ...stars('5', 'medium'),
   }),
+  preset(
+    'review-text',
+    'Google review text',
+    'What a reviewer wrote, cut to a few lines with "Continue reading". Place it inside a review card.',
+    ICONS.text,
+    reviewText(),
+  ),
   preset(
     'reviewer-image',
     'Google reviewer image',
@@ -1099,6 +1243,49 @@ const reviewerImageSchema = {
 };
 
 /**
+ * Review text: what a reviewer wrote, cut to a few lines with "Continue
+ * reading" only when it runs longer, so the cards in a row stay the same
+ * height. Persisted id; never rename.
+ */
+const reviewTextSchema = {
+  $id: REVIEW_TEXT_ID,
+  pluginId: BUNDLE_ID,
+  displayName: 'Google review text',
+  description:
+    'What a reviewer wrote, cut to a few lines with an ellipsis. "Continue reading" shows only when it was cut, and opens it in place.',
+  category: __aglynHostModule$9.ComponentCategory.DATA_DISPLAY,
+  icon: { path: 'M3,3H21V5H3V3M3,7H21V9H3V7M3,11H21V13H3V11M3,15H21V17H3V15M3,19H13V21H3V19Z' },
+  flags: { selfClosing: __aglynHostModule$9.FEATURE_FLAG.ENABLED },
+  attributes: [
+    {
+      name: 'text',
+      label: 'Text',
+      description: "What the reviewer wrote. Inside a review it is the review's text.",
+      component: __aglynHostModule$9.FieldComponentType.TEXT_FIELD,
+    },
+    {
+      name: 'lines',
+      label: 'Lines shown',
+      description: `How many lines show before "Continue reading" (1 to 20, ${REVIEW_TEXT_DEFAULTS.lines} to start).`,
+      component: __aglynHostModule$9.FieldComponentType.TEXT_FIELD,
+      type: 'number',
+    },
+    {
+      name: 'moreLabel',
+      label: 'Continue reading wording',
+      description: 'The link that opens a review that was cut.',
+      component: __aglynHostModule$9.FieldComponentType.TEXT_FIELD,
+    },
+    {
+      name: 'lessLabel',
+      label: 'Show less wording',
+      description: 'The same link once the review is open.',
+      component: __aglynHostModule$9.FieldComponentType.TEXT_FIELD,
+    },
+  ],
+};
+
+/**
  * The one-piece element's preset, as v1.0.0 placed it. No longer offered
  * (AGL-4212): the Elements panel offers the composable presets instead, and
  * pages that already place the element keep rendering it.
@@ -1144,7 +1331,8 @@ function register() {
   __aglynHostModule$9.components.registerComponent(GoogleReviews, { ...schema, $id: 'aglyn.google-reviews.reviews' });
   __aglynHostModule$9.components.registerComponent(Stars, { ...starsSchema, $id: 'aglyn.google-reviews.stars' });
   __aglynHostModule$9.components.registerComponent(ReviewerImage, { ...reviewerImageSchema, $id: 'aglyn.google-reviews.reviewer-image' });
+  __aglynHostModule$9.components.registerComponent(ReviewText, { ...reviewTextSchema, $id: 'aglyn.google-reviews.review-text' });
   __aglynHostModule$9.components.registerPreset(presets);
 }
 
-export { BUNDLE_ID, COMPONENT_ID, legacyPresets, presets, register, reviewerImageSchema, schema, starsSchema };
+export { BUNDLE_ID, COMPONENT_ID, legacyPresets, presets, register, reviewTextSchema, reviewerImageSchema, schema, starsSchema };
