@@ -123,10 +123,22 @@ fun RecordsSection(
   val list = remember(kind, scope, context.firestore) {
     LiveQueryList(context.firestore, coroutines, 25) { doc -> crmRow(kind, doc, scope) }
   }
+  val bulk = remember(kind, scope) { CrmBulkState() }
+  val movesStages = rememberMovesStages(context, scope)
   LaunchedEffect(list, filterKey, asked) {
+    bulk.picked = emptySet()
     val filter = filters.firstOrNull { it.key == filterKey } ?: filters.first()
     list.show { limit -> crmListQuery(kind, scope, filter, asked, limit) }
   }
+  val listed = (list.rows as? Live.Ready)?.value.orEmpty()
+  val pickedRows = listed.filter { it.id in bulk.picked }.map { crmBulkRow(it, scope) }
+  fun runBulk(action: CrmBulkAction, value: CrmBulkValue) {
+    val rows = pickedRows
+    bulk.run(coroutines, keepPicked = action.destructive) { api.bulk(action, kind, rows, value, reference).also { list.retry() } }
+  }
+  fun bulkEnabled(action: CrmBulkAction): Boolean = scope.canWrite &&
+    !((action == CrmBulkAction.STAGE || action == CrmBulkAction.LOST) && !movesStages) &&
+    !(kind == CrmKind.CONTACT && !scope.suite && action in setOf(CrmBulkAction.OWNER, CrmBulkAction.STAGE, CrmBulkAction.COMPANY))
   var picked by rememberSaveable(kind) { mutableStateOf(initial) }
   // Asked to open the one contact with an address (`contactsListSeed`): on exactly one match the record opens; no
   // match leaves the filtered list on screen.
@@ -148,7 +160,15 @@ fun RecordsSection(
         }
         Column(Modifier.padding(horizontal = space(2f), vertical = space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
           SearchField(search, { search = it; if (it.isBlank()) asked = "" }, placeholder = "Search ${kind.plural.lowercase()}", onSearch = { asked = search })
-          ChoiceChipRow(filters.map { ChipOption(it.key, it.label) }, filterKey, { filterKey = it })
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) { ChoiceChipRow(filters.map { ChipOption(it.key, it.label) }, filterKey, { filterKey = it }) }
+            if (scope.canWrite) CrmSelectToggle(bulk.selecting) { bulk.selecting = it; if (!it) bulk.picked = emptySet() }
+          }
+          // Counted over the rows the list still shows: an act that moves rows out of the view leaves none of them picked.
+          if (bulk.selecting && pickedRows.isNotEmpty()) {
+            CrmBulkBar(pickedRows.size, crmBulkActions(kind, scope.workspaceWide), bulk.running, ::bulkEnabled, { action -> bulk.pick(action) { runBulk(it, CrmBulkValue()) } }) { bulk.picked = emptySet() }
+          }
+          CrmBulkNotices(bulk.result) { bulk.result = null }
         }
         LiveListPane(
           list,
@@ -162,15 +182,27 @@ fun RecordsSection(
             )
           },
         ) { row ->
-          AglynListItem(
-            title = row.title,
-            supporting = row.listSubtitle(reference).ifBlank { null },
-            icon = AglynIcons.named(kind.icon),
-            selected = row.id == selected,
-            trailing = row.chip?.let { { StatusChip(it, chipTone(kind, row)) } },
-            onClick = { picked = row.id; onSelect(row.id) },
-            modifier = Modifier.testTag("crm-row-${row.id}"),
-          )
+          if (bulk.selecting) {
+            CrmPickRow(row.id in bulk.picked, row.title, { bulk.toggle(row.id) }) { modifier ->
+              AglynListItem(
+                title = row.title,
+                supporting = row.listSubtitle(reference).ifBlank { null },
+                trailing = row.chip?.let { { StatusChip(it, chipTone(kind, row)) } },
+                onClick = { bulk.toggle(row.id) },
+                modifier = modifier.testTag("crm-row-${row.id}"),
+              )
+            }
+          } else {
+            AglynListItem(
+              title = row.title,
+              supporting = row.listSubtitle(reference).ifBlank { null },
+              icon = AglynIcons.named(kind.icon),
+              selected = row.id == selected,
+              trailing = row.chip?.let { { StatusChip(it, chipTone(kind, row)) } },
+              onClick = { picked = row.id; onSelect(row.id) },
+              modifier = Modifier.testTag("crm-row-${row.id}"),
+            )
+          }
         }
       }
     },
@@ -182,6 +214,19 @@ fun RecordsSection(
       }
     },
   )
+  bulk.action?.let { action ->
+    val rows = pickedRows
+    val pipeline = crmBulkPipeline(rows)
+    CrmBulkDialog(
+      action, kind, rows.size, reference, if (kind == CrmKind.DEAL && pipeline.one) reference.pipeline(pipeline.id) else null, null, bulk.busy,
+      onDismiss = { bulk.action = null },
+    ) { value -> runBulk(action, value) }
+  }
+  bulk.confirming?.let { action ->
+    crmBulkConfirm(action, CrmBulkNoun.of(kind), pickedRows.size)?.let { confirm ->
+      CrmBulkConfirmDialog(confirm, bulk.running, onDismiss = { bulk.confirming = null }) { runBulk(action, CrmBulkValue()) }
+    }
+  }
   if (creating) {
     CreateRecordDialog(context, kind, scope, api, reference, onDismiss = { creating = false }) { id -> creating = false; picked = id }
   }
