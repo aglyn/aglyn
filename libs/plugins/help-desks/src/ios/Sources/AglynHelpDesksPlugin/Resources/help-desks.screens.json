@@ -6,7 +6,7 @@
       "title": "Help desks",
       "label": "Help desks",
       "subtitle": "Show your support team each buyer's recent orders beside their tickets, and, if you choose, send contact form messages there as new tickets.",
-      "icon": "headphones|support_agent",
+      "icon": "headphones|support",
       "scope": "site",
       "order": 75,
       "zones": [
@@ -259,7 +259,7 @@
           "filter": "data.conn.available ~= @item.id || data.conn.connections.*.provider ~= @item.id",
           "primary": "{item.label}",
           "secondary": "{item.orders}",
-          "icon": "headphones|support_agent",
+          "icon": "headphones|support",
           "badges": [
             {
               "text": "{const.statuses[id=data.conn.connections[provider=item.id].status].label}",
@@ -291,7 +291,7 @@
       "id": "help-desks.provider",
       "title": "{const.providers[id=params.provider].label|'Help desk'}",
       "label": "Help desk",
-      "icon": "headphones|support_agent",
+      "icon": "headphones|support",
       "scope": "site",
       "load": {
         "conn": "/api/help-desks/connections?hostId={site.id}",
