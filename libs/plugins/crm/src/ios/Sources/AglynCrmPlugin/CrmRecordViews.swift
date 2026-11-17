@@ -146,7 +146,7 @@ struct RecordsSection: View {
   }
 
   private var confirmation: CrmBulkConfirm? {
-    confirming.flatMap { crmBulkConfirm($0, noun: CrmBulkNoun(kind), count: picked.count) }
+    confirming.flatMap { crmBulkConfirm($0, noun: CrmBulkNoun(kind), count: pickedRows.count) }
   }
 
   /// Whether the role may use an act: every act writes, the stage acts ask "Move contacts and deals between stages",
@@ -175,11 +175,12 @@ struct RecordsSection: View {
 
   @ViewBuilder
   private var bulkBar: some View {
-    if selecting && !picked.isEmpty || bulkResult != nil {
+    // Counted over the rows the list still shows: an act that moves rows out of the view leaves none of them picked.
+    if selecting && !pickedRows.isEmpty || bulkResult != nil {
       VStack(spacing: AglynSpace.one) {
-        if selecting && !picked.isEmpty {
+        if selecting && !pickedRows.isEmpty {
           CrmBulkBar(
-            count: picked.count, actions: crmBulkActions(kind, orgLevel: scope.orgLevel), busy: bulkBusy, enabled: bulkEnabled,
+            count: pickedRows.count, actions: crmBulkActions(kind, orgLevel: scope.orgLevel), busy: bulkBusy, enabled: bulkEnabled,
             pick: pickBulk, clear: { picked = [] })
         }
         CrmBulkNotices(result: $bulkResult)

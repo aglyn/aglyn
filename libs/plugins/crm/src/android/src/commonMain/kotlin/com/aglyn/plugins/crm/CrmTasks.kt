@@ -305,8 +305,8 @@ fun TasksSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, ref
           Box(Modifier.weight(1f)) { ChoiceChipRow(TaskView.entries.map { ChipOption(it.key, it.label) }, view.key, { key -> view = TaskView.entries.first { it.key == key } }) }
           if (scope.canWrite) CrmSelectToggle(bulk.selecting) { bulk.selecting = it; if (!it) bulk.picked = emptySet() }
         }
-        if (bulk.selecting && bulk.picked.isNotEmpty()) {
-          CrmBulkBar(bulk.picked.size, CRM_BULK_TASK_ACTIONS, bulk.running, { scope.canWrite }, { action -> bulk.pick(action) { runBulk(it, CrmBulkValue()) } }) { bulk.picked = emptySet() }
+        if (bulk.selecting && pickedTasks.isNotEmpty()) {
+          CrmBulkBar(pickedTasks.size, CRM_BULK_TASK_ACTIONS, bulk.running, { scope.canWrite }, { action -> bulk.pick(action) { runBulk(it, CrmBulkValue()) } }) { bulk.picked = emptySet() }
         }
         CrmBulkNotices(bulk.result) { bulk.result = null }
       }
@@ -336,7 +336,7 @@ fun TasksSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, ref
     CrmBulkDialog(action, null, tasks.size, reference, null, tasks.firstOrNull()?.dueAtMs, bulk.busy, onDismiss = { bulk.action = null }) { value -> runBulk(action, value) }
   }
   bulk.confirming?.let { action ->
-    crmBulkConfirm(action, CrmBulkNoun.TASK, bulk.picked.size)?.let { confirm ->
+    crmBulkConfirm(action, CrmBulkNoun.TASK, pickedTasks.size)?.let { confirm ->
       CrmBulkConfirmDialog(confirm, bulk.running, onDismiss = { bulk.confirming = null }) { runBulk(action, CrmBulkValue()) }
     }
   }

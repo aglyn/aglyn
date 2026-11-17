@@ -278,23 +278,24 @@ struct TasksSection: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      HStack {
-        Picker("View", selection: $view) {
-          ForEach(TaskView.allCases) { Text($0.label).tag($0) }
+      HStack(spacing: AglynSpace.one) {
+        // The views scroll on a phone, where all six are wider than the screen; Select stays in reach beside them.
+        ScrollView(.horizontal, showsIndicators: false) {
+          Picker("View", selection: $view) {
+            ForEach(TaskView.allCases) { Text($0.label).tag($0) }
+          }
+          .pickerStyle(.segmented)
+          .fixedSize()
         }
-        .pickerStyle(.segmented)
-        .fixedSize()
-        Spacer(minLength: AglynSpace.one)
         if scope.canWrite { CrmSelectToggle(selecting: $selecting) { picked = [] } }
       }
-      .frame(maxWidth: .infinity, alignment: .leading)
       .aglynContentEdges()
       .padding(.vertical, AglynSpace.two)
-      if selecting && !picked.isEmpty || bulkResult != nil {
+      if selecting && !pickedTasks.isEmpty || bulkResult != nil {
         VStack(spacing: AglynSpace.one) {
-          if selecting && !picked.isEmpty {
+          if selecting && !pickedTasks.isEmpty {
             CrmBulkBar(
-              count: picked.count, actions: crmBulkTaskActions, busy: bulkBusy, enabled: { _ in scope.canWrite },
+              count: pickedTasks.count, actions: crmBulkTaskActions, busy: bulkBusy, enabled: { _ in scope.canWrite },
               pick: { action in
                 bulkResult = nil
                 if action.confirms {
@@ -357,18 +358,18 @@ struct TasksSection: View {
       }
     }
     .alert(
-      confirming.flatMap { crmBulkConfirm($0, noun: .task, count: picked.count) }?.title ?? "",
+      confirming.flatMap { crmBulkConfirm($0, noun: .task, count: pickedTasks.count) }?.title ?? "",
       isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }), presenting: confirming
     ) { action in
       Button("Cancel", role: .cancel) { confirming = nil }
-      Button(crmBulkConfirm(action, noun: .task, count: picked.count)?.button ?? action.label, role: .destructive) {
+      Button(crmBulkConfirm(action, noun: .task, count: pickedTasks.count)?.button ?? action.label, role: .destructive) {
         let tasks = pickedTasks
         confirming = nil
         Task { await runBulk(action, tasks: tasks, value: CrmBulkValue()) }
       }
       .accessibilityIdentifier("crm-bulk-confirm")
     } message: { action in
-      Text(crmBulkConfirm(action, noun: .task, count: picked.count)?.message ?? "")
+      Text(crmBulkConfirm(action, noun: .task, count: pickedTasks.count)?.message ?? "")
     }
     .task(id: "\(view.rawValue)|\(search)") {
       picked = []

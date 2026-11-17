@@ -164,8 +164,9 @@ fun RecordsSection(
             Box(Modifier.weight(1f)) { ChoiceChipRow(filters.map { ChipOption(it.key, it.label) }, filterKey, { filterKey = it }) }
             if (scope.canWrite) CrmSelectToggle(bulk.selecting) { bulk.selecting = it; if (!it) bulk.picked = emptySet() }
           }
-          if (bulk.selecting && bulk.picked.isNotEmpty()) {
-            CrmBulkBar(bulk.picked.size, crmBulkActions(kind, scope.workspaceWide), bulk.running, ::bulkEnabled, { action -> bulk.pick(action) { runBulk(it, CrmBulkValue()) } }) { bulk.picked = emptySet() }
+          // Counted over the rows the list still shows: an act that moves rows out of the view leaves none of them picked.
+          if (bulk.selecting && pickedRows.isNotEmpty()) {
+            CrmBulkBar(pickedRows.size, crmBulkActions(kind, scope.workspaceWide), bulk.running, ::bulkEnabled, { action -> bulk.pick(action) { runBulk(it, CrmBulkValue()) } }) { bulk.picked = emptySet() }
           }
           CrmBulkNotices(bulk.result) { bulk.result = null }
         }
@@ -222,7 +223,7 @@ fun RecordsSection(
     ) { value -> runBulk(action, value) }
   }
   bulk.confirming?.let { action ->
-    crmBulkConfirm(action, CrmBulkNoun.of(kind), bulk.picked.size)?.let { confirm ->
+    crmBulkConfirm(action, CrmBulkNoun.of(kind), pickedRows.size)?.let { confirm ->
       CrmBulkConfirmDialog(confirm, bulk.running, onDismiss = { bulk.confirming = null }) { runBulk(action, CrmBulkValue()) }
     }
   }
