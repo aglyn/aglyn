@@ -38,6 +38,13 @@ import {
 } from '@aglyn/shared-ui-jsx/const/list-filter'
 import type { ListQueryRefusal } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { readStaffListQuery } from '../../../../utils/server/staff-list-query'
+import {
+  DEFAULT_USAGE_LEVEL,
+  readUsageLevel,
+  REVIEWED_USAGE_LEVELS,
+  USAGE_LEVEL_FIELD,
+  type UsageLevel,
+} from '@aglyn/aglyn/app-utils/usage-level'
 import { sortListRows } from '@aglyn/shared-util-tools/list-query/list-column-sort'
 import {
   accountLastActiveAt,
@@ -152,6 +159,26 @@ async function handler(request: Request): Promise<Response> {
     // way to reach the account at all. `tenantId` rides each row so the UI can
     // say which pool a user is in; it is also what a mutation needs, since
     // custom claims are per-pool.
+    /*
+     * THE STAFF USAGE LEVEL (AGL-4228). It lives on `users/{uid}`, not on the
+     * Auth record, so it is read the other way round: one query for every
+     * account staff have reviewed (`usageLevel in` the reviewed levels — a
+     * built-in single-field index), joined onto each row by uid. Everyone
+     * else is not reviewed, which is what an account with no level means.
+     * So the Usage level filter and sort match over the complete directory
+     * read, like every other clause on this list.
+     */
+    const usageLevels = new Map<string, UsageLevel>()
+    const reviewed = await firebaseAdmin
+      .app()
+      .firestore()
+      .collection('users')
+      .where(USAGE_LEVEL_FIELD, 'in', [...REVIEWED_USAGE_LEVELS])
+      .select(USAGE_LEVEL_FIELD)
+      .get()
+    for (const docSnap of reviewed.docs) {
+      usageLevels.set(docSnap.id, readUsageLevel(docSnap.get(USAGE_LEVEL_FIELD)))
+    }
     const serialize = (
       { record, tenantId, uidAlsoInPools }: PooledUserRecord,
       identity?: ResolvedAccountIdentity,
@@ -191,6 +218,8 @@ async function handler(request: Request): Promise<Response> {
        * a cover-up: one row per human, and the row still says it was two.
        */
       uidAlsoInPools: uidAlsoInPools ?? null,
+      /** The staff usage level (AGL-4228), joined from `users/{uid}`. */
+      usageLevel: usageLevels.get(record.uid) ?? DEFAULT_USAGE_LEVEL,
     })
     // Rows with their identity resolved: one `getAll` of `users/{uid}` for
     // just the rows whose Auth record leaves the name or photo blank.

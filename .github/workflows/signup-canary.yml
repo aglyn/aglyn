@@ -176,6 +176,9 @@ jobs:
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
           FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
           FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          # The operator's marketing site, whose CRM keeps a contact per
+          # account: the reap deletes the walk's (AGL-4230). Unset skips it.
+          PLATFORM_MARKETING_HOST_ID: ${{ vars.PLATFORM_MARKETING_HOST_ID }}
           # Where the welcome mail lands. Org creation welcomes the owner of a
           # first workspace, so this must be a REAL deliverable address — an
           # address that hard-bounces would cost the sending domain a bounce

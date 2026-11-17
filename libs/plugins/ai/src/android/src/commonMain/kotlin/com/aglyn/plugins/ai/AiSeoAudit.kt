@@ -28,6 +28,19 @@ val AI_SEO_SITE_FIELD_LABELS = linkedMapOf(
   "seo.agent.howToUse" to "How an agent should call you",
 )
 
+/**
+ * The proposed fields that live on Setup → Business profile's Business details card rather than on the SEO section
+ * (`AI_SEO_BUSINESS_DETAILS_FIELDS`, AGL-4136): "Put in the form" stages them there.
+ */
+val AI_SEO_BUSINESS_DETAILS_FIELDS = setOf("seo.entity.name", "seo.entity.email", "seo.entity.telephone")
+
+/** What "Put in the form" says once it staged [fields]: where each went, in the console's words. */
+fun aiSeoStagedNote(fields: List<String>): String = listOfNotNull(
+  "In the SEO forms below as unsaved changes. Review them, then press Save.".takeIf { fields.any { it !in AI_SEO_BUSINESS_DETAILS_FIELDS } },
+  "The name, email and phone are in Business details on Setup → Business profile as unsaved changes. Review them there, then press Save."
+    .takeIf { fields.any { it in AI_SEO_BUSINESS_DETAILS_FIELDS } },
+).joinToString(" ")
+
 /** The entity type's stored code, in words. */
 val AI_SEO_ENTITY_TYPE_WORDS = mapOf("1" to "An organization", "2" to "A person")
 
