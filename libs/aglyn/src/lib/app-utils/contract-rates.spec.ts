@@ -34,6 +34,7 @@ import {
   resolvePlanPricing,
   resolveOrgEntitlements,
   withoutContractCeilingFlag,
+  type ResolvedContractRates,
 } from './plan-entitlements'
 import {
   FULL_USE_QUOTE_MULTIPLE,
@@ -268,7 +269,7 @@ describe('the contract rate guard: cost + 30% at full use (AGL-4233)', () => {
   })
 
   it('a rate that sells nothing is not rated', () => {
-    const rates = { ...defaultContractRates(), posRegisterMonthlyUsd: null }
+    const rates: ResolvedContractRates = { ...defaultContractRates(), posRegisterMonthlyUsd: null }
     const verdict = checkContractRates(custom({}), rates)
     expect(verdict.checks.map((check) => check.key)).not.toContain('posRegisterMonthlyUsd')
   })
