@@ -1189,6 +1189,18 @@ public enum ScreenValues {
     }.joined(separator: " · ")
   }
 
+  /// A `yyyy-MM-dd` day's local midnight in Unix seconds; with `end`, the next day's (an inclusive day's exclusive bound).
+  static func daySeconds(_ day: String, end: Bool) -> Int64? {
+    let pieces = day.prefix(10).split(separator: "-").compactMap { Int($0) }
+    guard pieces.count == 3 else { return nil }
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = .current
+    guard let start = calendar.date(from: DateComponents(year: pieces[0], month: pieces[1], day: pieces[2])),
+      let at = end ? calendar.date(byAdding: .day, value: 1, to: start) : start
+    else { return nil }
+    return Int64(at.timeIntervalSince1970)
+  }
+
   /// A value in a named format. Unknown formats print the plain text.
   public static func formatted(_ value: JSONValue?, as format: String, in context: JSONValue) -> String {
     // `cents/<currency path>` reads the currency beside the amount.
@@ -1293,6 +1305,10 @@ public enum ScreenValues {
       if truthy(value) { return "#\(text(value))" }
       let id = parts.count > 1 ? text(lookup(parts[1], in: context)) : ""
       return id.isEmpty ? "#\u{2014}" : "#\(id.suffix(6).uppercased())"
+    case "dayseconds":
+      // `dayseconds` (or `dayseconds/end`): a picked day, `2026-11-01`, as the Unix seconds of its local midnight (or of the
+      // next day's), the bounds the console's invoice filters ask Stripe for (`planInvoiceQuery`). No day, nothing.
+      return daySeconds(text(value), end: parts.count > 1 && parts[1] == "end").map(String.init) ?? ""
     case "isodate":
       // A UTC day as `2026-10-09`: the day a stay starts on, which a device's zone must not move.
       guard let at = epochMillis(value) else { return "\u{2014}" }

@@ -1418,7 +1418,7 @@ epoch milliseconds, UTC unless `local` asks for the device's clock), `{"$slug": 
 (the entries of `{form}` whose names start with `prefix`, as `{ key, value }` rows).
 
 More formats: `amount` (whole cents as `12.50`, what a money field starts with), `code`
-(a coupon code as stored; `code/40` cuts it at 40), `token` (the search token of typed
+(a coupon code as stored; `code/40` cuts it at 40), `dayseconds` (a picked day, `2026-11-01`, as the Unix seconds of its local midnight; `dayseconds/end` the next day's, an inclusive day's exclusive bound, as the invoice list's Date filter asks Stripe), `token` (the search token of typed
 words), `sum` and `sumcents` (a list of numbers added up), `ahead` (how many of a list of
 times are still to come), `percentof/other.path` (this as a percentage of the number at the path, to one decimal, `0` where
 there is nothing to divide by). `{?a == b}` is a condition as true or false, and `a ?? b` takes the
