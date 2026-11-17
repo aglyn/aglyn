@@ -58,7 +58,8 @@ final class SitePagesModel {
   /// After a change: the pages it touched read again and placed where they now belong.
   func reread(_ ids: [String?]) async {
     guard let tree, let reader else { return }
-    await tree.reread(ids.compactMap { $0 }) { path in try await reader.readOnce(path) }
+    // The server's copy: a route has just changed these pages, and a listener's first answer is the cache's old one.
+    await tree.reread(ids.compactMap { $0 }) { path in try await reader.readFromServer(path) }
   }
 
   /// A page a link names: read if it is not yet, and its parents opened so its row is on screen.
