@@ -123,7 +123,12 @@ describe('APNs transport (AGL-3651)', () => {
     expect(calls[1].headers['apns-topic']).toBe('com.aglyn.pos')
     expect(calls[0].headers['authorization']).toMatch(/^bearer [\w-]+\.[\w-]+\.[\w-]+$/)
     expect(JSON.parse(calls[0].body)).toEqual({
-      aps: { alert: { title: 'New order #1042', body: '$12.50 from Acme' }, sound: 'aglyn-cowbell.caf' },
+      aps: {
+        alert: { title: 'New order #1042', body: '$12.50 from Acme' },
+        sound: 'aglyn-cowbell.caf',
+        // The Mac apps' notification service extension plays the sound (AGL-4215).
+        'mutable-content': 1,
+      },
       type: 'content.order',
       link: '/acme/orders/o1',
       orgId: 'org-1',
