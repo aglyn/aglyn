@@ -407,32 +407,35 @@ struct RecordDetail: View {
   /// where the record has tasks (not a lead), and an open deal's stages with a stage proposal.
   private func insightsZone(_ row: CrmRow, document: FirestoreDocument, pipeline: Pipeline) -> RecordInsightsZone {
     let openDeal = kind == .deal && (document.string("status") ?? "open") == "open"
+    let currentStage = document.string("stageId")
+    let stages: [RecordStage]? = openDeal ? pipeline.openStages.map { RecordStage(id: $0.id, name: $0.name) } : nil
+    var proposeTask: (@MainActor (ProposedTask, String) -> Void)?
+    if scope.canWrite && kind != .lead {
+      proposeTask = { task, _ in
+        var draft = taskDraft(row)
+        draft.title = task.title
+        draft.notes = task.notes
+        draft.kind = task.kind
+        draft.priority = task.priority
+        draft.dueAtMs = crmProposedDueAtMs(task.dueInDays)
+        proposedTask = draft
+        action = .task
+      }
+    }
+    var proposeStage: (@MainActor (String, String) -> Void)?
+    if openDeal && scope.canWrite {
+      proposeStage = { stageID, _ in
+        guard stageID != currentStage, let stage = pipeline.openStages.first(where: { $0.id == stageID }) else { return }
+        if !movesStages {
+          error = permissionRefusalText(ContractValues.shared.orgRoleGrants, key: crmMoveStagesKey)
+          return
+        }
+        proposedStage = RecordStage(id: stage.id, name: stage.name)
+      }
+    }
     return RecordInsightsZone(
       hostID: scope.hostID.isEmpty ? nil : scope.hostID, orgID: scope.orgID, recordKind: kind.rawValue, recordID: id, name: row.title,
-      stages: openDeal ? pipeline.openStages.map { RecordStage(id: $0.id, name: $0.name) } : nil,
-      stageID: openDeal ? document.string("stageId") : nil,
-      proposeTask: !scope.canWrite || kind == .lead
-        ? nil
-        : { task, _ in
-          var draft = taskDraft(row)
-          draft.title = task.title
-          draft.notes = task.notes
-          draft.kind = task.kind
-          draft.priority = task.priority
-          draft.dueAtMs = crmProposedDueAtMs(task.dueInDays)
-          proposedTask = draft
-          action = .task
-        },
-      proposeStage: openDeal && scope.canWrite
-        ? { stageID, _ in
-          guard let stage = pipeline.openStages.first(where: { $0.id == stageID }), stageID != document.string("stageId") else { return }
-          if !movesStages {
-            error = permissionRefusalText(ContractValues.shared.orgRoleGrants, key: crmMoveStagesKey)
-            return
-          }
-          proposedStage = RecordStage(id: stage.id, name: stage.name)
-        }
-        : nil)
+      stages: stages, stageID: openDeal ? currentStage : nil, proposeTask: proposeTask, proposeStage: proposeStage)
   }
 
   private func alertTitle(_ row: CrmRow) -> String {
