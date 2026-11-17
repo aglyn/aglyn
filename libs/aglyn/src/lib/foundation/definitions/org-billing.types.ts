@@ -565,6 +565,14 @@ export interface CoreOrgEntitlements {
    */
   contactsPerHost?: number
   /**
+   * The most CRM records (contacts + companies + deals) a workspace may hold,
+   * overage included (AGL-4227): Starter stops at Pro's included 10,000 and
+   * refuses the next NEW record with an upgrade message; records already
+   * held are never touched. `UNLIMITED` from Pro up. Never read below
+   * `contactsPerHost`.
+   */
+  maxCrmRecords?: number
+  /**
    * CAMPAIGN emails sendable per calendar month (AGL-161), and campaign
    * emails only (AGL-1438).
    *
@@ -587,9 +595,23 @@ export interface CoreOrgEntitlements {
   /** Action runs per calendar month (AGL-148). */
   actionRunsPerMonth?: number
   /** Included customer REST API requests per calendar month (AGL-634);
-   * Beyond it, metered overage per 1,000 where the plan prices it. Only
-   * Business/Advanced carry `apiAccess`, so lower tiers are 0. */
+   * Beyond it, metered overage per 1,000 where the plan prices it. Free,
+   * which has no API, is 0. */
   apiRequestsPerMonth?: number
+  /**
+   * Requests per minute for the WHOLE workspace on the customer API, every
+   * key and connection together (AGL-4226) — beside the per-key 120, not
+   * instead of it. `UNLIMITED` (Custom, unless an agreement sets a figure)
+   * asks only the per-key limit.
+   */
+  apiRequestsPerMinutePerOrg?: number
+  /**
+   * The most API requests a workspace may make in a calendar month, overage
+   * included (AGL-4226): a hard stop, refused with `429` until the month
+   * turns. `UNLIMITED` from Pro up. Never read below `apiRequestsPerMonth`
+   * — an override that raises the band raises the ceiling with it.
+   */
+  maxApiRequestsPerMonth?: number
   /** Dynamic data caps — org-scoped (AGL-239/240): datasets are shared
    * by every host in the org, so counts and size meter per org. */
   datasetsPerOrg?: number

@@ -58,13 +58,17 @@ export const SHOW_TO_ATTRIBUTE = 'data-aglyn-show-to'
 /** The attribute on `<html>` while the visitor is signed in. */
 export const SIGNED_IN_ROOT_ATTRIBUTE = 'data-aglyn-signed-in'
 
-/** The readable sign-in hint's name prefix; the site's id follows, as the session's does. */
-export const SIGNED_IN_HINT_COOKIE_PREFIX = 'aglyn_signed_in_'
-
-/** The readable "signed in" hint cookie for one site. */
-export function signedInHintCookieName(hostId: string): string {
-  return `${SIGNED_IN_HINT_COOKIE_PREFIX}${hostId.replace(/[^A-Za-z0-9_-]/g, '')}`
-}
+// The cookie names, and the middleware's repair of a missing or stale hint,
+// live in a module with no imports so the tenant middleware can take it whole.
+export {
+  MEMBER_SESSION_COOKIE_PREFIX,
+  memberSessionCookieName,
+  SIGNED_IN_HINT_COOKIE_PREFIX,
+  SIGNED_IN_HINT_MAX_AGE_SECONDS,
+  signedInHintCookieName,
+  signedInHintCorrections,
+} from './sign-in-hint-cookie'
+import { SIGNED_IN_HINT_COOKIE_PREFIX } from './sign-in-hint-cookie'
 
 /** A stored `showTo` as one of the two audiences, or `undefined` for everyone. */
 export function resolveShowTo(value: unknown): ShowToAudience | undefined {

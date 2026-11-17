@@ -180,9 +180,10 @@ describe('OrgApiKeysCard plan claim (AGL-1380)', () => {
     render(<OrgApiKeysCard />)
 
     expect(screen.getByText(UPGRADE_COPY)).toBeTruthy()
-    // …and names the plan that carries the API: Pro since pricing v4
-    // (AGL-4126), where it read "Business".
-    expect(screen.getByText('Pro')).toBeTruthy()
+    // …and names the cheapest plan that carries the API: Starter since
+    // AGL-4226 (Pro from pricing v4, AGL-4126; "Business" before that).
+    expect(screen.getByText('Starter')).toBeTruthy()
+    expect(screen.queryByText('Pro')).toBeNull()
     expect(screen.queryByText('Business')).toBeNull()
     expect(screen.queryByText('Checking your plan…')).toBeNull()
   })

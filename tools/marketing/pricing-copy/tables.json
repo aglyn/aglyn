@@ -175,7 +175,7 @@
             "values": {
               "free": "1",
               "starter": "2 · max 5",
-              "pro": "3 · unlimited",
+              "pro": "3 · no max",
               "enterprise": "Custom"
             }
           },
@@ -185,7 +185,7 @@
             "values": {
               "free": "1",
               "starter": "2 · max 10",
-              "pro": "3 · unlimited",
+              "pro": "3 · no max",
               "enterprise": "Custom"
             }
           },
@@ -230,7 +230,7 @@
             "values": {
               "free": "—",
               "starter": "2 · max 10",
-              "pro": "5 · unlimited",
+              "pro": "5 · no max",
               "enterprise": "Custom"
             }
           },
@@ -305,6 +305,16 @@
             }
           },
           {
+            "label": "Saved forms per site",
+            "duplicateOf": null,
+            "values": {
+              "free": "1",
+              "starter": "5",
+              "pro": "Unlimited",
+              "enterprise": "Talk to us"
+            }
+          },
+          {
             "label": "Form submissions / mo, per site",
             "duplicateOf": null,
             "values": {
@@ -332,6 +342,16 @@
               "starter": "✓",
               "pro": "✓",
               "enterprise": "✓"
+            }
+          },
+          {
+            "label": "Emails included / mo",
+            "duplicateOf": null,
+            "values": {
+              "free": "300",
+              "starter": "1,000",
+              "pro": "2,500",
+              "enterprise": "Talk to us"
             }
           },
           {
@@ -584,8 +604,28 @@
             "duplicateOf": null,
             "values": {
               "free": "—",
-              "starter": "—",
+              "starter": "500 / mo",
               "pro": "1.5k / mo",
+              "enterprise": "Talk to us"
+            }
+          },
+          {
+            "label": "API monthly ceiling",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "20k / mo",
+              "pro": "None",
+              "enterprise": "Talk to us"
+            }
+          },
+          {
+            "label": "API requests per minute, whole workspace",
+            "duplicateOf": null,
+            "values": {
+              "free": "—",
+              "starter": "120 / min",
+              "pro": "600 / min",
               "enterprise": "Talk to us"
             }
           },
@@ -658,7 +698,7 @@
         "label": "Extra site, per month",
         "rate": "extraHostMonthlyUsd",
         "values": {
-          "starter": "$20",
+          "starter": "$25",
           "pro": "$20",
           "enterprise": "Custom"
         }
@@ -703,7 +743,7 @@
         "label": "API requests, per 1,000 over limit",
         "rate": "extraApiRequestsUsdPer1k",
         "values": {
-          "starter": "—",
+          "starter": "$3",
           "pro": "$0.50",
           "enterprise": "Custom"
         }
@@ -712,7 +752,7 @@
         "label": "CRM records, per 1,000 over the included band",
         "rate": "extraContactsUsdPer1k",
         "values": {
-          "starter": "$1",
+          "starter": "$1, up to 10,000",
           "pro": "$0.75",
           "enterprise": "Custom"
         }
@@ -721,7 +761,7 @@
         "label": "Email sends, per 1,000 over the included band",
         "rate": "extraEmailSendsUsdPer1k",
         "values": {
-          "starter": "—",
+          "starter": "$2.50",
           "pro": "$2.25",
           "enterprise": "Custom"
         }

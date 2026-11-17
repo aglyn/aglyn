@@ -195,3 +195,28 @@ describe('the applinks paths follow the native deep-link grammar', () => {
     expect(opensInApp(components, '/signing-studio')).toBe(true)
   })
 })
+
+describe('the Android app claims the same console paths (AGL-4059)', () => {
+  const manifest = readFileSync(join(REPO_ROOT, 'apps/android/app/src/main/AndroidManifest.xml'), 'utf8')
+  const refused = [
+    ...manifest.matchAll(
+      /<uri-relative-filter-group android:allow="false"><data android:(path|pathPrefix)="([^"]+)" \/><\/uri-relative-filter-group>/g,
+    ),
+  ].map(([, kind, path]) => (kind === 'path' ? path : `${path}*`))
+
+  it('refuses exactly what the apple-app-site-association excludes', () => {
+    // Apple's `/x/*` is Android's pathPrefix `/x/`; `/_*` is pathPrefix `/_`.
+    const excluded = consoleAppLinksComponents()
+      .filter((component) => component.exclude)
+      .map((component) => component['/'])
+    expect(refused).toEqual(excluded)
+  })
+
+  it('claims every other console page with one verified filter on the console host', () => {
+    expect(manifest).toMatch(/<intent-filter android:autoVerify="true">[\s\S]*?<data android:host="\$\{consoleHost\}" \/>/)
+    const components = consoleAppLinksComponents()
+    for (const path of ['/', '/acme/hosts/shop/admin/plugins/p1', '/admin/orgs/o1', '/signup']) {
+      expect(opensInApp(components, path)).toBe(true)
+    }
+  })
+})

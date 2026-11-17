@@ -695,15 +695,21 @@ describe('the model is reading real bands, real rates and the real fee', () => {
    * `perApiRequest` was $0.000002 — about three reads — and counted no
    * Vercel cost at all, while every `/v1` request is a function invocation
    * behind a CDN request that reads, writes and answers. Priced for a default
-   * list page at the dearest region and nam5, it is $0.000117; and each paid
+   * list page at the dearest region and nam5, it was $0.000117; and each paid
    * API band is cut to the dollars it was sized to cost at the old rate, the
    * largest multiple of 500 requests inside them, so the bandwidth bands
    * absorb only what bandwidth costs.
+   *
+   * AGL-4226 added the WORKSPACE rate-limit window to every request (one read,
+   * one write), and Starter's monthly ceiling makes its month MEASURED (one
+   * more read). The ledger is the dearer of the two paths — Starter's, 32
+   * reads and 3 writes — and the rate is carried up to $0.00012. The bands
+   * stay at the sizes the old rate set; that is a sizing history, not a cost.
    */
   it('prices an API request as the function it is, and keeps each API band to its dollars', () => {
     const ledger =
-      31 * 0.0000006 +
-      2 * 0.0000018 +
+      32 * 0.0000006 +
+      3 * 0.0000018 +
       (0.4 / 3600) * VERCEL_PRICE_RANGE_USD.cpuPerHour.dearest +
       ((2 * 0.4) / 3600) * VERCEL_PRICE_RANGE_USD.memoryPerGbHour.dearest +
       0.6 / 1_000_000 +
@@ -712,8 +718,10 @@ describe('the model is reading real bands, real rates and the real fee', () => {
         ((VERCEL_PRICE_RANGE_USD.transferPerGb.dearest +
           VERCEL_PRICE_RANGE_USD.originTransferPerGb.dearest) /
           1_000_000_000)
-    expect(ledger).toBeCloseTo(0.00011612, 8)
-    expect(ORG_COGS_UNIT_RATES_USD.perApiRequest).toBe(0.000117)
+    expect(ledger).toBeCloseTo(0.00011852, 8)
+    // The never-measured path (Pro and up) is one read cheaper.
+    expect(ledger - 0.0000006).toBeCloseTo(0.00011792, 8)
+    expect(ORG_COGS_UNIT_RATES_USD.perApiRequest).toBe(0.00012)
     expect(ORG_COGS_UNIT_RATES_USD.perApiRequest).toBeGreaterThanOrEqual(ledger)
     // Pro carries Business's band since pricing v4 (AGL-4126): the API moved
     // in with the dollars it was sized to.
@@ -732,15 +740,28 @@ describe('the model is reading real bands, real rates and the real fee', () => {
         ]),
       ),
     ).toEqual({ pro: 1_500, business: 1_500, scale: 5_000, advanced: 17_000, agency: 85_000 })
+    // Read at the rate the bands were SIZED at (AGL-3444's $0.000117): the
+    // AGL-4226 re-derivation raised the cost of a request, not the bands.
+    const SIZED_AT_PER_REQUEST = 0.000117
     for (const [plan, dollars] of Object.entries(sizedToCost)) {
       const band = PLAN_ENTITLEMENTS[plan as OrgPlan].apiRequestsPerMonth
       // Inside the dollars, and the next 500 would not be.
-      expect(`${plan}: ${band * ORG_COGS_UNIT_RATES_USD.perApiRequest <= dollars}`).toBe(`${plan}: true`)
-      expect(`${plan}: ${(band + 500) * ORG_COGS_UNIT_RATES_USD.perApiRequest > dollars}`).toBe(
+      expect(`${plan}: ${band * SIZED_AT_PER_REQUEST <= dollars}`).toBe(`${plan}: true`)
+      expect(`${plan}: ${(band + 500) * SIZED_AT_PER_REQUEST > dollars}`).toBe(
         `${plan}: true`,
       )
       expect(band % 500).toBe(0)
     }
+    // Starter's band (AGL-4226) is not cost-sized: it is a third of Pro's, and
+    // it costs under half a percent of Starter's net annual price.
+    expect(PLAN_ENTITLEMENTS.starter.apiRequestsPerMonth).toBe(500)
+    expect(
+      PLAN_ENTITLEMENTS.starter.apiRequestsPerMonth * ORG_COGS_UNIT_RATES_USD.perApiRequest,
+    ).toBeCloseTo(0.06, 4)
+    expect(
+      (PLAN_ENTITLEMENTS.starter.apiRequestsPerMonth * ORG_COGS_UNIT_RATES_USD.perApiRequest) /
+        netPriceUsd('starter', 'year'),
+    ).toBeLessThan(0.005)
     // Enterprise's fallback stays twice Agency's.
     expect(PLAN_ENTITLEMENTS.enterprise.apiRequestsPerMonth).toBe(170_000)
     // A page of 100 — the most a client may ask for — is about three times
@@ -748,7 +769,9 @@ describe('the model is reading real bands, real rates and the real fee', () => {
     // the ceiling is named rather than priced.
     const maxPage =
       ledger + 75 * 0.0000006 + 75 * 3 * 1024 * ((0.35 + 0.43) / 1_000_000_000)
-    expect(maxPage / ledger).toBeGreaterThan(2.9)
+    // 2.9× since AGL-4226: the two rate-limit windows are a larger share of
+    // the default request than of a page of 100.
+    expect(maxPage / ledger).toBeGreaterThan(2.85)
     expect(maxPage / ledger).toBeLessThan(3)
   })
 
@@ -1158,7 +1181,8 @@ describe('what full utilization costs against each price, and where it stops cle
         ]),
       ),
     ).toEqual({
-      starter: '$15.51 net of Stripe, vs $11.85 cost',
+      // AGL-4226: + the 500 API requests ($0.06) and the re-derived request.
+      starter: '$15.51 net of Stripe, vs $11.91 cost',
       // Pricing v4 (AGL-4126): $49 annual against Pro's cost-bearing bands,
       // which stayed at their size, plus the 1,500 API requests that moved in
       // from Business ($0.18 at `perApiRequest`) — the decision log's $47.55
@@ -1202,7 +1226,7 @@ describe('what full utilization costs against each price, and where it stops cle
         PAID.map((plan) => [plan, [0.03, 0.25, 0.5, 1].map((u) => pct(plan, u, 'year'))]),
       ),
     ).toEqual({
-      starter: [84.4, 78.4, 59.9, 22.9],
+      starter: [84.4, 78.3, 59.7, 22.5],
       // v4: $49 against bands sized for $39, so 38% at 100% where it was 23.3%.
       pro: [84.8, 82.3, 67.5, 38],
     })
@@ -1224,7 +1248,7 @@ describe('what full utilization costs against each price, and where it stops cle
         PAID.map((plan) => [plan, [0.03, 0.25, 0.5, 1].map((u) => pct(plan, u, 'month'))]),
       ),
     ).toEqual({
-      starter: [87.9, 84.1, 72.2, 48.5],
+      starter: [87.9, 84, 72.1, 48.3],
       pro: [88, 86.2, 75.7, 54.7],
     })
   })
@@ -1288,7 +1312,8 @@ describe('what full utilization costs against each price, and where it stops cle
   /**
    * THE BAND THE LADDER ACTUALLY OCCUPIES.
    *
-   * Starter sits at 22.9% of the annual price — cost + 30% after Stripe's
+   * Starter sits at 22.5% of the annual price (22.9% until AGL-4226 added its
+   * 500 API requests and re-derived the request) — cost + 30% after Stripe's
    * fee is about 22.4% of a list price, so it sits a hair above the rule and
    * no higher (AGL-3469): its bands were cut until they cleared and no
    * further, because every unit cut is capacity the customer no longer has,
@@ -1301,7 +1326,7 @@ describe('what full utilization costs against each price, and where it stops cle
    * what every count lifted to unlimited is carried on. Business's bands at
    * $49 would have been 0.74× of full-use cost.
    */
-  it('runs at 22.9% on Starter and 38% on Pro at 100% annual, and is wider monthly', () => {
+  it('runs at 22.5% on Starter and 38% on Pro at 100% annual, and is wider monthly', () => {
     // The annual ladder, as a floor sweep rather than literals: every tier
     // clears 22%, Starter does not reach 23.5%, and Pro does not reach 39%.
     expect(tiersUnderFloor(PAID, 1, 0, 'year')).toEqual([])
@@ -1391,7 +1416,7 @@ describe('what full utilization costs against each price, and where it stops cle
           Number((weightOnly(plan as OrgPlan, gb, 'month') * 100).toFixed(1)),
         ]),
       ),
-    ).toEqual({ pro: 16.7, business: 10.9, scale: 8.7, advanced: 6.9, agency: 12.9 })
+    ).toEqual({ pro: 16.7, business: 10.9, scale: 8.6, advanced: 6.9, agency: 12.9 })
     // At Vercel's dearest region those bands are not close: every one of
     // them is 90 points or more under water on BOTH intervals.
     expect(
@@ -1405,11 +1430,11 @@ describe('what full utilization costs against each price, and where it stops cle
         ]),
       ),
     ).toEqual({
-      pro: [-129.9, -222.1],
+      pro: [-130, -222.1],
       business: [-118.6, -205.5],
       scale: [-117.8, -201.7],
       advanced: [-105.8, -173.6],
-      agency: [-90.9, -135.7],
+      agency: [-91, -135.8],
     })
     // BOTH WAYS, on the one axis that moved: the shipped band is strictly
     // better than the restored one on BOTH intervals, on every tier, and
@@ -1504,39 +1529,39 @@ describe('what full utilization costs against each price, and where it stops cle
     // 30% annually on every tier but Starter — and Pro, since its figures are
     // read at its pricing v4 price of $49 (AGL-4126), not the $39 of the day.
     expect(ladderAt(sold, CHEAPEST_WEIGHT_PER_GB_USD, 0)).toEqual({
-      starter: [49.3, 24.1],
+      starter: [49, 23.7],
       pro: [43.9, 22.7],
       business: [39.8, 17],
       scale: [39.5, 17.1],
       advanced: [37.7, 17.9],
-      agency: [34, 19],
+      agency: [34, 18.9],
     })
     // Past it at the cheapest region.
     expect(
       ladderAt(sold, CHEAPEST_WEIGHT_PER_GB_USD, CHEAPEST_REQUEST_COST_PER_GB_USD),
     ).toEqual({
-      starter: [21.4, -19.6],
+      starter: [21.1, -19.9],
       pro: [18.6, -12.9],
-      business: [21.3, -9.1],
+      business: [21.2, -9.1],
       scale: [23.2, -5.5],
       advanced: [25.6, 1.8],
       agency: [17.4, -1.5],
     })
     // …and at the dearest, which is the price the rule is held at.
     expect(ladderAt(sold, COST_PER_GB_USD, REQUEST_COST_PER_GB_USD)).toEqual({
-      starter: [-40.7, -116.5],
-      pro: [-37.6, -92],
+      starter: [-40.9, -116.9],
+      pro: [-37.6, -92.1],
       business: [-20, -67.1],
       scale: [-12.9, -55.8],
       advanced: [-1.2, -34],
-      agency: [-19.3, -47.1],
+      agency: [-19.4, -47.1],
     })
     // The first re-size, at the dearest region.
     expect(ladderAt(firstResize, COST_PER_GB_USD, REQUEST_COST_PER_GB_USD)).toEqual({
-      starter: [-2.5, -56.8],
+      starter: [-2.7, -57.2],
       pro: [22.4, -7.5],
       business: [23.5, -6],
-      scale: [24.2, -4.1],
+      scale: [24.2, -4.2],
       advanced: [25.9, 2.2],
       agency: [17.4, -1.5],
     })
@@ -1544,9 +1569,9 @@ describe('what full utilization costs against each price, and where it stops cle
     // annually — Starter's 20 GB too, which AGL-3469 then cut to 15. (Pro's
     // 35 GB would clear at its v4 price; the band it ships stayed at 25.)
     expect(ladderAt(secondResize, COST_PER_GB_USD, REQUEST_COST_PER_GB_USD)).toEqual({
-      starter: [35.8, 2.9],
+      starter: [35.5, 2.6],
       pro: [45.5, 25],
-      business: [39.6, 16.6],
+      business: [39.5, 16.6],
       scale: [38.3, 15.4],
       advanced: [37.1, 17.1],
       agency: [32.4, 17],
@@ -1621,7 +1646,7 @@ describe('what full utilization costs against each price, and where it stops cle
         ]),
       ),
     ).toEqual({
-      starter: [31.5, -3.8],
+      starter: [31.2, -4.2],
       // Read at Pro's v4 price ($49, AGL-4126); at the $39 of the day it was
       // [32.5, 5.1].
       pro: [44.4, 23.5],
@@ -1664,13 +1689,13 @@ describe('what full utilization costs against each price, and where it stops cle
       )
     // The cheapest region, inside the request allowance: weight alone.
     expect(ladderAt(CHEAPEST_WEIGHT_PER_GB_USD, 0)).toEqual({
-      starter: [75.5, 65],
+      starter: [75.3, 64.7],
       pro: [71, 60.9],
     })
     // The cheapest region, past the allowance.
     expect(ladderAt(CHEAPEST_WEIGHT_PER_GB_USD, CHEAPEST_REQUEST_COST_PER_GB_USD)).toEqual(
       {
-      starter: [67.1, 51.9],
+      starter: [66.9, 51.6],
       pro: [66, 53.8],
     },
     )
@@ -1707,7 +1732,7 @@ describe('what full utilization costs against each price, and where it stops cle
       bandwidth: 10.3281,
       datasetStorage: 0.36,
       // Business's 1,500 requests, which moved in with the API (pricing v4).
-      apiRequests: 0.1755,
+      apiRequests: 0.18,
       contacts: 2,
       emailSends: 2.25,
       assistCredits: 2.75,
@@ -1863,18 +1888,19 @@ describe('what full utilization costs against each price, and where it stops cle
   it('says what each of Starter\'s bands costs', () => {
     expect(listPriceUsd('starter', 'month')).toBe(25)
     expect(listPriceUsd('starter', 'year')).toBe(16)
-    expect(tierCostUsd('starter', 1)).toBeCloseTo(11.85, 2)
-    // The metered axes alone are $7.31 — $6.20 of which is bandwidth's
+    expect(tierCostUsd('starter', 1)).toBeCloseTo(11.91, 2)
+    // The metered axes alone are $7.37 — $6.20 of which is bandwidth's, and
+    // $0.06 the 500 API requests AGL-4226 added —
     // weight — plus the 750 assist credits at 75¢ and the 500 runs it sells,
     // 0.65¢; the requests are $3.36 and the CRM decision terms the $1.19 on
     // top: two collaborators and two team seats at 6¢, and 35 one-to-one
     // emails a day.
-    expect(Object.values(bandCostTerms('starter')).reduce((a, b) => a + b, 0)).toBeCloseTo(7.31, 2)
+    expect(Object.values(bandCostTerms('starter')).reduce((a, b) => a + b, 0)).toBeCloseTo(7.37, 2)
     expect(bandCostTerms('starter').bandwidth).toBeCloseTo(6.2, 2)
     expect(cdnRequestTerms('starter').cdnRequests).toBeCloseTo(3.36, 2)
     expect(crmDecisionTerms('starter').crmSeats).toBeCloseTo(0.24, 10)
     expect(PLAN_ENTITLEMENTS.starter.bandwidthGb).toBe(15)
-    expect(marginAtBandwidth('starter', 50, 'year')).toBeCloseTo(-1.165, 3)
+    expect(marginAtBandwidth('starter', 50, 'year')).toBeCloseTo(-1.169, 3)
     // The assist term is REAL here since AGL-3203, and it is the whole of
     // what the decision cost this tier: 750 credits, 75¢, and the rung still
     // clears zero with it counted.
@@ -1971,19 +1997,20 @@ describe('what full utilization costs against each price, and where it stops cle
     expect(bands).toEqual([...bands].sort((a, b) => a - b))
   })
 
-  it('Agency clears cost + 30% on both intervals, with $0.75 of cost to spare annually', () => {
+  it('Agency clears cost + 30% on both intervals, with $0.50 of cost to spare annually', () => {
     const cost = tierCostUsd('agency', 1)
-    expect(cost).toBeCloseTo(782.75, 2)
+    expect(cost).toBeCloseTo(783.0, 2)
     expect(listPriceUsd('agency', 'year')).toBe(1049)
     expect(netPriceUsd('agency', 'year')).toBe(1018.55)
     // 395 GB at $0.63712 a gigabyte all in is $251.66 of the cost — $163.18
     // of weight and $88.48 of requests. The AGL-3469 cuts (storage 60 → 20 GB
     // a site, forms 25,000 → 10,000 a site, dataset storage 500 → 200 GB) and
-    // the 510 seats counted where 250 were leave $0.75 of cost under the
+    // the 510 seats counted where 250 were leave $0.50 of cost (AGL-4226's
+    // re-derived API request took $0.25 of it) under the
     // $783.50 that cost + 30% allows annually: the next 5 GB, $3.19, would not
     // fit.
     const room = netPriceUsd('agency', 'year') / METERED_MARKUP - cost
-    expect(room).toBeCloseTo(0.75, 2)
+    expect(room).toBeCloseTo(0.5, 2)
     expect(5 * ALL_IN_COST_PER_GB_USD).toBeGreaterThan(room)
     expect(netPriceUsd('agency', 'month')).toBeGreaterThan(METERED_MARKUP * cost)
     // At the old $649 annual price ($630.15 net) the same cost is a $153
@@ -2501,9 +2528,9 @@ describe('the infra pass-through is priced by a different rule', () => {
         ]),
       ),
     ).toEqual({
-      starter: [48.1, 22.2],
+      starter: [47.8, 21.8],
       // At Pro's v4 price ($49, AGL-4126); [44.9, 22.8] at $39.
-      pro: [54.5, 37.6],
+      pro: [54.4, 37.6],
     })
     // …and the live pair weighs a gigabyte at less than that, which is the
     // room the shipped bands are sized into.

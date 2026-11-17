@@ -192,6 +192,23 @@ describeEmulated('connecting an app, end to end (emulators)', () => {
     expect(called.result.isError).toBe(false)
     expect(JSON.parse(called.result.content[0].text)).toMatchObject({ object: 'list' })
 
+    // The service tools answer from the same code the REST route uses
+    // (AGL-4225). Until they did, each answered "Unknown endpoint".
+    const service = async (id: number, name: string) => {
+      const answer = await (await rpc(first.access_token, { id, method: 'tools/call', params: { name, arguments: {} } })).json()
+      expect(answer.result.content[0].text).not.toMatch(/Unknown endpoint/)
+      expect(answer.result.isError).toBe(false)
+      return JSON.parse(answer.result.content[0].text)
+    }
+    expect(await service(30, 'getKeyIdentity')).toMatchObject({ object: 'connected_app', org: ORG })
+    expect(await service(31, 'getApiRoot')).toMatchObject({ object: 'api', version: 'v1', mcp: '/api/mcp' })
+    expect(await service(32, 'getUsage')).toBeTruthy()
+    // The whole OpenAPI document is deliberately not a tool; it is refused as
+    // an unknown tool, never as an unknown endpoint.
+    expect(listed.result.tools.map((tool: { name: string }) => tool.name)).not.toContain('getApiDescription')
+    const describedTool = await (await rpc(first.access_token, { id: 33, method: 'tools/call', params: { name: 'getApiDescription', arguments: {} } })).json()
+    expect(describedTool.error.message).toBe('No tool named getApiDescription')
+
     // "View only": a write tool is refused by the scope check, as a tool error.
     const write = await (await rpc(first.access_token, { id: 4, method: 'tools/call', params: { name: 'createSite', arguments: { body: { name: 'Nope' } } } })).json()
     expect(write.result.isError).toBe(true)

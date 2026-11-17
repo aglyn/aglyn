@@ -150,7 +150,7 @@ describe('the caption under it (AGL-2851)', () => {
     // The cap is on CAPTURE, which runs on every plan — so the sentence is
     // about new people arriving, not about a locked section.
     expect(
-      screen.getByText(/your sites stop adding new people/),
+      screen.getByText(/At this limit no new people are added; form entries are still saved under Forms\./),
     ).toBeTruthy()
     // Named rather than derived through `planLabelGrantingFeature`, which is
     // the call the component makes: deriving it here would assert `x === x`
@@ -158,6 +158,24 @@ describe('the caption under it (AGL-2851)', () => {
     expect(
       screen.getByText(/included from Starter\./),
     ).toBeTruthy()
+  })
+
+  it('at the band, says new people stop, entries stay under Forms, and nothing is back-filled (AGL-4227)', async () => {
+    // Leads share Free's band: 40 records + 60 leads fill the 100.
+    const before = { ...COUNTS }
+    Object.assign(COUNTS, { contacts: 20, companies: 10, deals: 10, leads: 60 })
+    try {
+      render(<BillingUsageComponent org={FREE} hosts={HOSTS} />)
+      const row = screen.getByText(CAPTURE_METER).parentElement as HTMLElement
+      // The meter counts the leads too: 40 records and 60 leads are 100.
+      await waitFor(() => expect(row.textContent).toContain('100 / 100'))
+      expect(screen.getByText(/new people from forms, bookings and sign-ups are not being added/)).toBeTruthy()
+      expect(screen.getByText(/Every form entry is still saved under Forms, but no contact is made from it, now or later\./)).toBeTruthy()
+      expect(screen.getByText(/upgrade in Billing to keep adding people\./)).toBeTruthy()
+    } finally {
+      for (const key of Object.keys(COUNTS)) delete COUNTS[key]
+      Object.assign(COUNTS, before)
+    }
   })
 
   it('breaks the band into the CRM sections that fill it, on Starter', async () => {
