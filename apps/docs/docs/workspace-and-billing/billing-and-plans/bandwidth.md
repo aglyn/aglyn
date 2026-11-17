@@ -51,7 +51,7 @@ those messages say depends on your plan, and the difference is the point:
   invoice.
 - **On Free** there is no overage to bill, only a stop, so passing 100% is told once, at
   the moment it happens: each site's managers get a notification and an email naming the
-  site and either its deadline — *"Upgrade or {site} pauses on …"*, the date and time in
+  site and either its deadline — *"Upgrade or your site pauses on …"*, the date and time in
   UTC, the first time — or that it is paused. The 100% usage message is not sent again
   on top of it. A banner across the top of the console says the same until you upgrade or
   the month turns.
