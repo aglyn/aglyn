@@ -5000,13 +5000,6 @@
       },
       {
         "console": {
-          "id": "/domains",
-          "surface": "orgPluginTab"
-        },
-        "where": "The console’s Domains page; no native screen yet"
-      },
-      {
-        "console": {
           "id": "/waivers",
           "surface": "hostPluginTab"
         },
@@ -5395,6 +5388,22 @@
                 "order": 70,
                 "pluginId": "accounting",
                 "screen": "accounting.books"
+              },
+              {
+                "console": {
+                  "id": "/domains",
+                  "surface": "orgPluginTab"
+                },
+                "docs": "/building-sites/custom-domains/manage-domains",
+                "icon": {
+                  "android": "dns",
+                  "apple": "network"
+                },
+                "id": "domains",
+                "label": "Domains",
+                "order": 75,
+                "pluginId": "domains",
+                "screen": "domains.list"
               },
               {
                 "console": {
