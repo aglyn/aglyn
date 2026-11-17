@@ -611,6 +611,12 @@
       "links": [
         "/manage/user/close"
       ],
+      "load": {
+        "closure": {
+          "url": "/api/closure-notices?subject=account",
+          "optional": true
+        }
+      },
       "blocks": [
         {
           "type": "actions",
@@ -632,6 +638,32 @@
           "type": "notice",
           "tone": "error",
           "text": "Closing the account deletes your sign-in and removes you from every workspace. Workspaces you own must be handed over or deleted first."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "!data.closure || data.closure.unavailable",
+          "text": "Some details of what this changes could not be checked right now. Try again in a moment before you confirm."
+        },
+        {
+          "type": "list",
+          "when": "data.closure.notices",
+          "items": "data.closure.notices",
+          "primary": "{item.title}",
+          "secondary": "{item.body}",
+          "wrap": true,
+          "icon": "exclamationmark.triangle|warning"
+        },
+        {
+          "type": "list",
+          "when": "data.closure.notices",
+          "items": "data.closure.notices",
+          "flatten": "items",
+          "primary": "{item.primary}",
+          "secondary": "{item.secondary}",
+          "tertiary": "{item.$parent.title}",
+          "trailing": "{item.amount}",
+          "icon": "list.bullet|list"
         },
         {
           "type": "actions",
