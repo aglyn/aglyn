@@ -175,6 +175,8 @@ struct WorkspacePickerList: View {
   @State private var query = ""
   @State private var shown = pickerPage
   @State private var adding = false
+  /// The console's Plan, Your role and Pinned filters, over the workspaces loaded.
+  @State private var filter = WorkspacePickerFilter()
 
   var body: some View {
     Group {
@@ -189,7 +191,46 @@ struct WorkspacePickerList: View {
       }
     }
     .aglynSearchable(text: $query, prompt: "Find a workspace")
+    .toolbar {
+      ToolbarItem(placement: .primaryAction) { filterMenu }
+    }
     .sheet(isPresented: $adding) { AddWorkspaceSheet { adding = false } }
+  }
+
+  /// One Filter: Plan, Your role and Pinned (the console's workspace list filters).
+  private var filterMenu: some View {
+    Menu {
+      Picker(WorkspacePickerFilter.headers["plan"] ?? "Plan", selection: $filter.plan) {
+        Text("Any").tag(String?.none)
+        ForEach(WorkspacePickerFilter.plans) { Text($0.label).tag(String?.some($0.value)) }
+      }
+      Picker(WorkspacePickerFilter.headers["role"] ?? "Your role", selection: $filter.role) {
+        Text("Any").tag(String?.none)
+        ForEach(WorkspacePickerFilter.roles) { Text($0.label).tag(String?.some($0.value)) }
+      }
+      Picker(WorkspacePickerFilter.headers["pinned"] ?? "Pinned", selection: $filter.pinned) {
+        Text("Any").tag(Bool?.none)
+        Text("Pinned").tag(Bool?.some(true))
+        Text("Not pinned").tag(Bool?.some(false))
+      }
+      if filter.isOn {
+        Button("Clear filters", systemImage: "xmark") { filter = WorkspacePickerFilter() }
+      }
+    } label: {
+      Label(
+        filter.isOn ? "Filter · \(filter.count)" : "Filter",
+        systemImage: filter.isOn ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+    }
+    .accessibilityIdentifier("picker-workspace-filter")
+  }
+
+  /// The loaded workspaces the filters admit; nil with none on.
+  private func filtered(_ workspace: WorkspaceStore) -> [WorkspaceOrg]? {
+    guard filter.isOn else { return nil }
+    let pins = Set(model.preferences?.pinned ?? [])
+    return workspace.orgs.filter { org in
+      filter.admits(org, plan: workspace.orgLogos[org.id]?.plan, pinned: pins.contains(org.id))
+    }
   }
 
   private func content(_ workspace: WorkspaceStore) -> some View {
@@ -200,13 +241,22 @@ struct WorkspacePickerList: View {
     let listed = pinnedIDs.union(recent.map(\.id))
     let rest = workspace.orgs.filter { !listed.contains($0.id) }
     let total = workspace.orgCount ?? workspace.orgs.count
-    let matches = matching(workspace.orgs)
+    let matches = matching(filtered(workspace) ?? workspace.orgs)
+    let narrowed = filtered(workspace)
     return List {
       if let matches {
         Section(matches.isEmpty ? "No workspace matches" : "Workspaces") {
           ForEach(matches) { row($0) }
           if workspace.hasMoreOrgs {
             Text("Searching the \(workspace.orgs.count) workspaces loaded so far.")
+              .font(AglynFont.caption).foregroundStyle(.secondary)
+          }
+        }
+      } else if let narrowed {
+        Section(narrowed.isEmpty ? "No workspace matches these filters" : "Workspaces · \(narrowed.count)") {
+          ForEach(narrowed) { row($0) }
+          if workspace.hasMoreOrgs {
+            Text("Filtering the \(workspace.orgs.count) workspaces loaded so far.")
               .font(AglynFont.caption).foregroundStyle(.secondary)
           }
         }
