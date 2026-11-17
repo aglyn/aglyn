@@ -1123,6 +1123,18 @@ public enum ScreenValues {
     }
   }
 
+  /// `fixed/N`: `value` to exactly `places` decimals, half away from zero, without grouping (`toFixed`).
+  static func fixedText(_ value: Double, places: Int) -> String {
+    var scale = 1.0
+    for _ in 0..<places { scale *= 10 }
+    let scaled = (abs(value) * scale + 0.5).rounded(.down)
+    let whole = Int64((scaled / scale).rounded(.down))
+    let fraction = Int64(scaled - Double(whole) * scale)
+    let raw = String(fraction)
+    let digits = places > 0 ? "." + String(repeating: "0", count: max(0, places - raw.count)) + raw : ""
+    return (value < 0 && scaled > 0 ? "-" : "") + String(whole) + digits
+  }
+
   /// Groups thousands with commas and keeps up to `fraction` decimals.
   static func grouped(_ value: Double, fraction: Int = 0) -> String {
     let formatter = NumberFormatter()
@@ -1265,6 +1277,10 @@ public enum ScreenValues {
       return formatOrderMoney(Int((amount * 100).rounded()), currency: "USD")
     case "bytes":
       return number(value).map(bytesText) ?? text(value)
+    // `fixed/N`: exactly N decimals, no grouping, as JavaScript's `toFixed` writes a figure (`$0.0123` an Assist cost).
+    case "fixed":
+      guard let amount = number(value) else { return text(value) }
+      return fixedText(amount, places: parts.count > 1 ? max(0, Int(parts[1]) ?? 2) : 2)
     case "megabytes":
       // Bytes as megabytes to one decimal, plain so a meter can read it back (the storage band's figure).
       return number(value).map { numberText(($0 / 1_048_576 * 10).rounded() / 10) } ?? text(value)
