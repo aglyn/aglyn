@@ -1091,6 +1091,18 @@
         "AI_INSIGHT_PLACEHOLDERS",
         "AI_INSIGHT_DIALOG_COPY"
       ]
+    },
+    "libs/aglyn/src/lib/app-utils/crm-email-templates.ts": {
+      "types": [
+        "CrmMergeFieldDefinition"
+      ],
+      "values": [
+        "CRM_EMAIL_TEMPLATE_NAME_MAX",
+        "CRM_EMAIL_TEMPLATES_LIMIT",
+        "CRM_EMAIL_TEMPLATE_KIND_LABELS",
+        "CRM_EMAIL_TEMPLATE_VISIBILITY_LABELS",
+        "CRM_MERGE_FIELDS"
+      ]
     }
   },
   "assembled": {
@@ -37408,6 +37420,132 @@
           {}
         ],
         [
+          null
+        ]
+      ]
+    },
+    "crmTelHref": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          ""
+        ],
+        [
+          "  "
+        ],
+        [
+          "+15125550199"
+        ],
+        [
+          "(512) 555-0199"
+        ],
+        [
+          "512.555.0199"
+        ],
+        [
+          "+1 512 555 0199"
+        ],
+        [
+          "12"
+        ],
+        [
+          "123"
+        ],
+        [
+          "ext 12"
+        ],
+        [
+          "+44 20 7946 0958"
+        ],
+        [
+          "555-CALL-NOW"
+        ],
+        [
+          "+123456789012345678901"
+        ]
+      ]
+    },
+    "normalizeCrmEmailTemplate": {
+      "module": "libs/aglyn/src/lib/app-utils/crm-email-templates.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "name": "  Intro  ",
+            "subject": "Hi {{contact.firstName}}",
+            "body": "Hello",
+            "kind": "snippet",
+            "visibility": "personal",
+            "ownerUid": "u1",
+            "createdByUid": "u1",
+            "createdAtMs": 5,
+            "updatedAtMs": 6,
+            "hostId": "h1",
+            "visibleTo": [
+              "host:h1"
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Shared one",
+            "kind": "bogus",
+            "visibility": "bogus",
+            "ownerUid": "u2",
+            "hostId": null
+          }
+        ],
+        [
+          {
+            "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "visibility": "shared",
+            "ownerUid": "u3"
+          }
+        ]
+      ]
+    },
+    "crmEmailTemplateIsListed": {
+      "module": "libs/aglyn/src/lib/app-utils/crm-email-templates.ts",
+      "args": [
+        [
+          {
+            "visibility": "shared"
+          },
+          null
+        ],
+        [
+          {
+            "visibility": "personal",
+            "ownerUid": "u1"
+          },
+          "u1"
+        ],
+        [
+          {
+            "visibility": "personal",
+            "ownerUid": "u1"
+          },
+          "u2"
+        ],
+        [
+          {
+            "visibility": "personal"
+          },
+          null
+        ],
+        [
+          {
+            "visibility": "personal",
+            "ownerUid": "u1"
+          },
           null
         ]
       ]

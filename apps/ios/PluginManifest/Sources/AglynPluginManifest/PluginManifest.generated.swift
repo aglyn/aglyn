@@ -13,6 +13,7 @@ import AglynCouriersPlugin
 import AglynCrmPlugin
 import AglynDataPlugin
 import AglynDeliveryAppsPlugin
+import AglynDomainsPlugin
 import AglynEmailPlugin
 import AglynEventsCalendarPlugin
 import AglynFormsPlugin
@@ -86,6 +87,11 @@ public enum NativePluginManifest {
       id: "delivery-apps",
       contributes: ["screens": ["delivery-apps.match", "delivery-apps.service", "delivery-apps.store"], "widgets": ["delivery-apps.pos-orders"]],
       register: AglynDeliveryAppsPlugin.registerDeliveryAppsNative
+    ),
+    NativePluginManifestEntry(
+      id: "domains",
+      contributes: ["screens": ["domains.domain", "domains.list"], "deepLinks": ["domains.domain.link", "domains.list.link"]],
+      register: AglynDomainsPlugin.registerDomainsNative
     ),
     NativePluginManifestEntry(
       id: "email",
