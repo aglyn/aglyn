@@ -157,7 +157,114 @@ export function bandwidthCapEngaged(
   if (!Number.isFinite(resolveOrgEntitlements(org).bandwidthGb)) return false
   const cap = org.bandwidthCap
   if (!cap || typeof cap !== 'object') return false
-  return cap.month === bandwidthCapMonthKey(now)
+  if (cap.month !== bandwidthCapMonthKey(now)) return false
+  // The one-time grace (AGL-4232): engaged, but not refusing until it ends.
+  // Nothing writes at that moment; every reader re-derives it from the clock.
+  return !(typeof cap.graceUntil === 'number' && now.getTime() < cap.graceUntil)
+}
+
+/**
+ * How long the ONE-TIME grace keeps a site online past its band (AGL-4232):
+ * the first time a site goes over, ever, it stays up this long so its owner
+ * can upgrade before visitors are turned away.
+ */
+export const BANDWIDTH_CAP_GRACE_MS = 72 * 60 * 60 * 1000
+
+/**
+ * When the grace ends, while one is running for this org this month; `null`
+ * when the org is not over its band, is already paused, or never had one.
+ * The owner's surfaces read this to say "upgrade or your site pauses on …".
+ */
+export function bandwidthCapGraceUntil(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  now: Date = new Date(),
+): number | null {
+  const cap = org?.bandwidthCap
+  if (!cap || typeof cap !== 'object' || cap.month !== bandwidthCapMonthKey(now)) return null
+  if (typeof cap.graceUntil !== 'number' || now.getTime() >= cap.graceUntil) return null
+  // Only where the cap would refuse were there no grace: an upgraded org has
+  // nothing to be warned about.
+  const { graceUntil: _running, ...withoutGrace } = cap
+  return bandwidthCapEngaged({ ...org, bandwidthCap: withoutGrace }, now) ? cap.graceUntil : null
+}
+
+/**
+ * The marker a writer stamps when the cap engages (AGL-1967/2155, AGL-4232):
+ * the month and its diagnostics, plus the grace window when the org's sites
+ * have never had one. ONE shape for every writer, so a reader cannot tell
+ * which of them stamped it.
+ */
+export function bandwidthCapMarker(options: {
+  month: string
+  nowMs: number
+  pageViews: number
+  includedPageViews: number
+  /** When the grace this engagement carries ends; null for none. */
+  graceUntil: number | null
+}): OrgBandwidthCap {
+  return {
+    month: options.month,
+    engagedAt: options.nowMs,
+    pageViews: Math.round(options.pageViews),
+    includedPageViews: Math.round(options.includedPageViews),
+    ...(options.graceUntil !== null ? { graceUntil: options.graceUntil } : {}),
+  }
+}
+
+/**
+ * The grace an engagement carries, from the org's sites as read (AGL-4232):
+ * a NEW one when none of them has ever had it, the one ALREADY RUNNING when
+ * a site's grant is still inside its window (so a writer re-engaging from a
+ * stale org doc never cuts a running grace short), else none.
+ */
+export function bandwidthGraceForEngagement(
+  hosts: ReadonlyArray<{ bandwidthGraceUsedAt?: unknown } | null | undefined>,
+  nowMs: number,
+): { graceUntil: number | null; grants: boolean } {
+  if (bandwidthGraceAvailable(hosts)) {
+    return { graceUntil: nowMs + BANDWIDTH_CAP_GRACE_MS, grants: true }
+  }
+  const latest = Math.max(
+    0,
+    ...hosts.map((host) =>
+      typeof host?.bandwidthGraceUsedAt === 'number' ? host.bandwidthGraceUsedAt : 0,
+    ),
+  )
+  const running = latest + BANDWIDTH_CAP_GRACE_MS
+  return { graceUntil: latest > 0 && nowMs < running ? running : null, grants: false }
+}
+
+/**
+ * Whether an org's sites are owed the one-time grace: it has at least one
+ * site, and none of them has ever had it (`AglynHost.bandwidthGraceUsedAt`).
+ */
+export function bandwidthGraceAvailable(
+  hosts: ReadonlyArray<{ bandwidthGraceUsedAt?: unknown } | null | undefined>,
+): boolean {
+  return (
+    hosts.length > 0 &&
+    hosts.every((host) => typeof host?.bandwidthGraceUsedAt !== 'number')
+  )
+}
+
+/**
+ * The grace deadline as the owner reads it: an unambiguous UTC date and
+ * time, e.g. "Thursday, November 19 at 3:04 PM UTC".
+ */
+export function formatBandwidthGraceDeadline(ms: number): string {
+  const date = new Date(ms)
+  const day = date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'UTC',
+  })
+  const time = date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  })
+  return `${day} at ${time} UTC`
 }
 
 /**
@@ -204,6 +311,30 @@ export function bandwidthCapApplies(
   })
 }
 
+/**
+ * What the OWNER is told when a grace starts (AGL-4232), in the console and by
+ * email: the deadline in plain words, with the way past it. `{site}` is
+ * filled by the notifier from the site it reads. `used` is the writer's own
+ * account of what was used (page views, or traffic including media).
+ */
+export function bandwidthGraceOwnerNotice(options: {
+  graceUntil: number
+  used: string
+  resumesOn: string
+}): BandwidthCapNotice {
+  const deadline = formatBandwidthGraceDeadline(options.graceUntil)
+  return {
+    title: `Upgrade or {site} pauses on ${deadline}`,
+    body:
+      `{site} has used ${options.used} this month. It stays online until ` +
+      `${deadline}. Upgrade in Billing before then to keep it online; if you ` +
+      `don't, visitors see a "temporarily unavailable" notice from then until ` +
+      `${options.resumesOn}. Nothing is charged for the extra traffic. This ` +
+      'extra time is given once per site, so in a later month a site past its ' +
+      'limit pauses straight away.',
+  }
+}
+
 /** What a visitor sees on a capped site. */
 export interface BandwidthCapNotice {
   title: string
@@ -229,12 +360,11 @@ export interface BandwidthCapNotice {
  * while keeping the WORDS separate is the split that keeps both honest.
  */
 export function bandwidthCapNotice(): BandwidthCapNotice {
+  // NEUTRAL (AGL-4232): nothing about limits, plans, traffic or pricing —
+  // those are the owner's to read in the console, not a visitor's.
   return {
-    title: 'Over the monthly traffic limit',
-    body:
-      'This site has used all of the traffic included with it this month, ' +
-      'so its pages are paused until the start of next month. Nothing is ' +
-      'wrong with your connection, and nothing here has been removed.',
+    title: 'Temporarily unavailable',
+    body: 'This site is temporarily unavailable.',
   }
 }
 

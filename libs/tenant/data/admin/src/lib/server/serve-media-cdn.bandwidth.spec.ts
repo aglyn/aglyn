@@ -584,8 +584,31 @@ describe('video alone engages the Free cap (AGL-3474)', () => {
     }
   }
 
+  it('the FIRST time over, grants the one-time grace: serves on, stamps the site, gives the deadline (AGL-4232)', async () => {
+    mockStore['orgs/org-1'] = freeOrg()
+    plantMonthOfMedia(1024 * 1024)
+    expect((await film()).statusCode).toBe(200)
+    const marker = mockStore['orgs/org-1']?.['bandwidthCap']
+    expect(marker.graceUntil).toBe(marker.engagedAt + 72 * 60 * 60 * 1000)
+    expect(mockStore['hosts/site-1']?.['bandwidthGraceUsedAt']).toBe(marker.engagedAt)
+    // Still serving after the verdict cache turns over: the grace runs.
+    invalidateMediaCdnLockCache()
+    expect((await film()).statusCode).toBe(200)
+    expect(mockNotices).toHaveLength(1)
+    expect(mockNotices[0]?.payload['title']).toMatch(/^Upgrade or \{site\} pauses on /)
+    expect(mockNotices[0]?.payload['body']).toContain('Nothing is charged')
+    expect(mockNotices[0]?.payload['body']).toContain(
+      `count ${ORIGIN_MEDIA_BANDWIDTH_WEIGHT}× toward it`,
+    )
+  })
+
   it('stamps the marker the beacon stamps, tells the site’s managers once, and refuses next', async () => {
     mockStore['orgs/org-1'] = freeOrg()
+    // This site had its one-time grace in an earlier month (AGL-4232).
+    mockStore['hosts/site-1'] = {
+      ...mockStore['hosts/site-1'],
+      bandwidthGraceUsedAt: Date.now() - 40 * 24 * 3_600_000,
+    }
     plantMonthOfMedia(1024 * 1024)
     // Served: the verdict this request read predates the stamp.
     expect((await film()).statusCode).toBe(200)

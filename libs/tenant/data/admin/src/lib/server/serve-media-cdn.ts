@@ -1740,7 +1740,7 @@ export async function serveMediaCdn(
     ) {
       res.setHeader('Cache-Control', 'no-store')
       res.setHeader('Retry-After', String(BANDWIDTH_CAP_RETRY_AFTER_SECONDS))
-      res.status(503).json({ error: 'Over the monthly traffic limit' })
+      res.status(503).json({ error: 'Temporarily unavailable' })
       return
     }
     /*

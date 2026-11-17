@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import {
   analyticsDayExpiresAt,
   checkRateLimit,
+  engageBandwidthCap,
   firebaseAdmin,
   getOrgForHost,
   getSiteLockdown,
@@ -492,28 +493,45 @@ async function engageFreePlanBandwidthCap(options: {
     // this one are the same guard reading the same field.
     const existing = org?.['bandwidthCap'] as { month?: string } | undefined
     if (existing?.month === month) return
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('orgs')
-      .doc(orgId)
-      .set(
-        {
-          // Byte-identical to what `usage-alerts` writes. `merge: true`
-          // because this is one field on a document that carries `plan`,
-          // `subscription`, `entitlements` and `hosts` — a non-merging `set`
-          // here would delete the org.
-          bandwidthCap: {
-            month,
-            engagedAt: Date.now(),
-            pageViews: Math.round(pageViews),
-            includedPageViews: Math.round(
-              Aglyn.pageViewsFromBandwidthGb(entitlements.bandwidthGb),
-            ),
-          },
-        },
-        { merge: true },
-      )
+    // The one engage write every writer shares (AGL-4232): the same marker
+    // `usage-alerts` and the media CDN stamp, in a transaction that re-reads
+    // it, and the one-time grace when the org's sites have never had it.
+    const firestore = firebaseAdmin.app().firestore()
+    // The org's sites, for the one-time grace (AGL-4232). Read only on the
+    // engage itself, once a month at most, never on a render.
+    const hosts = await firestore
+      .collection('hosts')
+      .where('orgId', '==', orgId)
+      .select('bandwidthGraceUsedAt')
+      .limit(100)
+      .get()
+    const engaged = await engageBandwidthCap({
+      orgRef: firestore.collection('orgs').doc(orgId),
+      hosts: hosts.docs,
+      month,
+      nowMs: Date.now(),
+      pageViews,
+      includedPageViews: Aglyn.pageViewsFromBandwidthGb(entitlements.bandwidthGb),
+    })
+    const includedViews = Math.round(
+      Aglyn.pageViewsFromBandwidthGb(entitlements.bandwidthGb),
+    ).toLocaleString()
+    if (engaged.graceUntil !== null) {
+      // A running grace carried forward was announced when it was granted.
+      if (!engaged.graceIsNew) return
+      const notice = Aglyn.bandwidthGraceOwnerNotice({
+        graceUntil: engaged.graceUntil,
+        used: `the ${includedViews} page views its plan includes`,
+        resumesOn: monthRolloverLabel(month),
+      })
+      await notifyHostManagers(hostId, {
+        type: 'system.bandwidthCapEngaged',
+        title: notice.title,
+        body: notice.body,
+        link: `/${hostId}`,
+      })
+      return
+    }
     // The owner has to hear it from us. The sweep pairs its cap with a 100%
     // bandwidth alert email — but the sweep is exactly what never ran for
     // these orgs, so without this the first a never-subscribed owner would

@@ -248,6 +248,20 @@ describe('THE EDGE VERDICT — the contract the middleware reads', () => {
     expect(await verdict()).toMatchObject({ overQuota: false })
   })
 
+  it('the ONE-TIME GRACE: overQuota FALSE while it runs, TRUE once it ends (AGL-4232)', async () => {
+    const graceUntil = Date.now() + 60_000
+    setOrg({ ...cappedFreeOrg, bandwidthCap: { ...CAP, graceUntil } })
+    expect(await verdict()).toMatchObject({ locked: false, overQuota: false })
+    // No write when it ends: the verdict re-derives from the clock.
+    setOrg({ ...cappedFreeOrg, bandwidthCap: { ...CAP, graceUntil: Date.now() - 1 } })
+    expect(await verdict()).toMatchObject({ locked: false, overQuota: true })
+  })
+
+  it('an UPGRADE during the grace or the pause brings the site back', async () => {
+    setOrg({ ...cappedPaidOrg, bandwidthCap: { ...CAP, graceUntil: Date.now() - 1 } })
+    expect(await verdict()).toMatchObject({ overQuota: false })
+  })
+
   it('answers overQuota FALSE for an uncapped free org', async () => {
     expect(await verdict()).toMatchObject({ overQuota: false })
   })
@@ -287,15 +301,30 @@ describe('THE NOTICE PAGE the middleware rewrites to', () => {
     const html = await response.text()
     expect(html).toContain('name="robots" content="noindex"')
     expect(html).toContain(bandwidthCapNotice().title)
+    // NEUTRAL (AGL-4232): the one sentence, and nothing about limits, plans,
+    // traffic or pricing.
+    expect(html).toContain('<p>This site is temporarily unavailable.</p>')
+    for (const leak of ['limit', 'traffic', 'bandwidth', 'plan', 'upgrade', 'month']) {
+      expect(html.toLowerCase().replace(/<head>[\s\S]*<\/head>/, '')).not.toContain(leak)
+    }
+  })
+
+  it('during the grace a stray request to the notice gets the generic body, never the cap (AGL-4232)', async () => {
+    setOrg({ ...cappedFreeOrg, bandwidthCap: { ...CAP, graceUntil: Date.now() + 60_000 } })
+    const response = await fetchNotice()
+    expect(response.headers.get('Retry-After')).toBe('60')
   })
 
   it('POSITIVE CONTROL: the same marker when PAID gets the generic body', async () => {
     // Not the cap copy — nothing about this org is capped, so a visitor who
     // navigates here directly cannot be shown a traffic-limit notice for it.
     setOrg(cappedPaidOrg)
-    const html = await (await fetchNotice()).text()
-    expect(html).not.toContain(bandwidthCapNotice().title)
-    expect(html).toContain('Temporarily unavailable')
+    const response = await fetchNotice()
+    // The generic refusal, not the cap's: its own body and its own minute.
+    expect(response.headers.get('Retry-After')).toBe('60')
+    const html = await response.text()
+    expect(html).not.toContain(`<p>${bandwidthCapNotice().body}</p>`)
+    expect(html).toContain('Please check back shortly.')
   })
 
   it('a capped site’s notice carries the SITE’s icons (AGL-3382)', async () => {
@@ -339,8 +368,10 @@ describe('THE NOTICE PAGE the middleware rewrites to', () => {
       suspendedAt: { seconds: 1_700_000_000 },
       suspendedReasonCode: 'security',
     })
-    const html = await (await fetchNotice()).text()
-    expect(html).not.toContain(bandwidthCapNotice().title)
+    const response = await fetchNotice()
+    const html = await response.text()
+    expect(html).not.toContain(`<p>${bandwidthCapNotice().body}</p>`)
+    expect(response.headers.get('Retry-After')).not.toBe('3600')
   })
 })
 

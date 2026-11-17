@@ -164,14 +164,18 @@ const mockDocHandle = (path: string) => ({
  */
 const mockQueryHandle = (
   path: string,
-  bounds: { gte?: string; lte?: string },
-) => ({
-  where: (_field: unknown, op: string, value: string) =>
+  bounds: { gte?: string; lte?: string; eq?: [string, string] },
+): any => ({
+  where: (field: unknown, op: string, value: string) =>
     mockQueryHandle(path, {
       ...bounds,
       ...(op === '>=' ? { gte: value } : {}),
       ...(op === '<=' ? { lte: value } : {}),
+      // A field equality (the cap's sites-of-the-org read, AGL-4232).
+      ...(op === '==' && typeof field === 'string' ? { eq: [field, value] as [string, string] } : {}),
     }),
+  select: () => mockQueryHandle(path, bounds),
+  limit: () => mockQueryHandle(path, bounds),
   get: async () => {
     const prefix = `${path}/`
     const docs = Object.entries(mockStore)
@@ -180,9 +184,11 @@ const mockQueryHandle = (
       .filter(({ id }) => !id.includes('/'))
       .filter(({ id }) => (bounds.gte === undefined ? true : id >= bounds.gte))
       .filter(({ id }) => (bounds.lte === undefined ? true : id <= bounds.lte))
+      .filter(({ data }) => (bounds.eq === undefined ? true : data?.[bounds.eq[0]] === bounds.eq[1]))
     return {
       docs: docs.map(({ id, data }) => ({
         id,
+        ref: mockDocHandle(`${path}/${id}`),
         get: (field: string) => data?.[field],
         data: () => data,
       })),
@@ -216,6 +222,12 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   )
   return {
     __esModule: true,
+  // The one engage write every cap writer shares (AGL-4232), for real, over
+  // this suite's own store.
+  engageBandwidthCap: (options: unknown) =>
+    jest
+      .requireActual('../../../libs/tenant/data/admin/src/lib/server/bandwidth-cap-engage')
+      .engageBandwidthCap(options),
     ...apiHttp,
     ...retention,
     firebaseAdmin: {
@@ -927,6 +939,20 @@ describe('the free-plan bandwidth cap engages at the beacon (AGL-2413)', () => {
     expect(bandwidthCapEngaged(mockStore['orgs/org-1'])).toBe(false)
     await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
     expect(bandwidthCapEngaged(mockStore['orgs/org-1'])).toBe(true)
+  })
+
+  it('the FIRST time a site goes over, it gets the one-time grace (AGL-4232)', async () => {
+    // A site the org holds, never given the grace before.
+    mockStore[`hosts/${HOST_ID}`] = { ...(mockStore[`hosts/${HOST_ID}`] ?? {}), orgId: 'org-1' }
+    plantMonthViews(OVER)
+    await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
+    const stamped = marker()
+    expect(stamped.graceUntil).toBe(stamped.engagedAt + 72 * 60 * 60 * 1000)
+    expect(mockStore[`hosts/${HOST_ID}`]?.['bandwidthGraceUsedAt']).toBe(stamped.engagedAt)
+    // Still serving: the reader every serving path calls says so.
+    expect(bandwidthCapEngaged(mockStore['orgs/org-1'])).toBe(false)
+    expect(capNotices()).toHaveLength(1)
+    expect(String(capNotices()[0]['title'])).toMatch(/^Upgrade or \{site\} pauses on /)
   })
 
   it('NEGATIVE CONTROL: inside the band, nothing is written', async () => {

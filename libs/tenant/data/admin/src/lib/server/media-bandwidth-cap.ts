@@ -28,6 +28,8 @@ import {
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from './firebase-admin'
 import { notifyHostManagers } from './notifications'
+import { engageBandwidthCap } from './bandwidth-cap-engage'
+import { bandwidthGraceOwnerNotice } from '@aglyn/aglyn/app-utils/bandwidth-cap'
 
 /**
  * The Free cap, engaged by the media CDN (AGL-3474).
@@ -164,7 +166,8 @@ export async function engageMediaBandwidthCap(
     const hosts = await firestore
       .collection('hosts')
       .where('orgId', '==', orgId)
-      .select()
+      // The one field the cap's grace reads (AGL-4232), and nothing else.
+      .select('bandwidthGraceUsedAt')
       .limit(MEDIA_BANDWIDTH_MAX_HOSTS)
       .get()
     const months = await Promise.all([
@@ -182,34 +185,44 @@ export async function engageMediaBandwidthCap(
     ) {
       return false
     }
-    // Stamped inside a transaction that re-reads the marker, so two instances
-    // crossing the band together stamp it, and tell the owner, once.
-    const stamped = await firestore.runTransaction(async (transaction) => {
-      const current = await transaction.get(orgRef)
-      if (current.get('bandwidthCap')?.month === month) return false
-      // `merge: true`: one field on a document that carries the plan, the
-      // subscription and the sites. A set without it would delete the org.
-      transaction.set(
-        orgRef,
-        {
-          bandwidthCap: {
-            month,
-            engagedAt: now.getTime(),
-            pageViews: Math.round(reading.meteredPageViews),
-            includedPageViews: Math.round(
-              pageViewsFromBandwidthGb(includedBandwidthGb),
-            ),
-          },
-        },
-        { merge: true },
-      )
-      return true
+    // The one engage write (AGL-4232): a transaction that re-reads the
+    // marker, so two instances crossing the band together stamp it, grant
+    // the one-time grace and tell the owner, once.
+    const engaged = await engageBandwidthCap({
+      orgRef,
+      hosts: hosts.docs,
+      month,
+      nowMs: now.getTime(),
+      pageViews: reading.meteredPageViews,
+      includedPageViews: pageViewsFromBandwidthGb(includedBandwidthGb),
     })
     rememberEngaged(orgId, month)
-    if (!stamped) return false
+    if (!engaged.stamped) return false
     const included = includedBandwidthGb.toLocaleString('en-US', {
       maximumFractionDigits: 2,
     })
+    if (engaged.graceUntil !== null) {
+      // A running grace carried forward was announced when it was granted.
+      if (!engaged.graceIsNew) return true
+      const notice = bandwidthGraceOwnerNotice({
+        graceUntil: engaged.graceUntil,
+        used:
+          `the ${included} GB of traffic its plan includes (video, audio and ` +
+          `files from your media library count ${ORIGIN_MEDIA_BANDWIDTH_WEIGHT}× toward it)`,
+        resumesOn: monthRolloverLabel(month),
+      })
+      await Promise.all(
+        hosts.docs.map((host) =>
+          notifyHostManagers(host.id, {
+            type: 'system.bandwidthCapEngaged',
+            title: notice.title,
+            body: notice.body,
+            link: `/${host.id}`,
+          }),
+        ),
+      )
+      return true
+    }
     // Every site's managers, because the cap pauses every site in the org.
     // `{site}` is filled by `notifyHostManagers` from the host it reads.
     await Promise.all(

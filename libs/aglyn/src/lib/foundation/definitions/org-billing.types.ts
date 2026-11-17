@@ -1099,6 +1099,13 @@ export interface OrgBandwidthCap {
   pageViews?: number
   /** The band those page views were measured against. Diagnostic. */
   includedPageViews?: number
+  /**
+   * The ONE-TIME grace (AGL-4232): epoch ms until which the org's sites stay
+   * online although the cap is engaged. Present only on the engagement that
+   * granted it, which is the first ever for the org's sites
+   * (`AglynHost.bandwidthGraceUsedAt`). Read through `bandwidthCapEngaged`.
+   */
+  graceUntil?: number
 }
 
 /**

@@ -3768,6 +3768,10 @@ service cloud.firestore {
                      'suspendedAt', 'suspendedReasonCode', 'suspendedMessage',
                      'suspendedUntilMs', 'suspendedMode', 'suspendedEnforcement',
                      'suspended', 'bandwidthCeiling',
+                     // The one-time bandwidth grace (AGL-4232): written once
+                     // by the cap's engage writer; a client that cleared it
+                     // would give its site a second grace.
+                     'bandwidthGraceUsedAt',
                      // The staff usage level (AGL-4228): staff's judgment of
                      // how much the site is used, written only by the audited
                      // `/api/admin/usage-level` route.
