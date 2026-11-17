@@ -74,6 +74,10 @@
       "why": "The CRM's vocabularies, scope tokens and list fields, read by the native contracts and the CRM's replayed function cases (AGL-3669)."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/dashboard-widget-prefs.ts",
+      "why": "A person's site dashboard arrangement (users/{uid}.dashboardWidgets: hidden cards and their order per workspace) and its pure rules, so the native Home hides and orders the cards the console's Customize dashboard does; no imports."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/detect-template-placeholders.ts",
       "why": "The {{name}} placeholders a saved template asks for when it is used; the native Save as template declares the same (AGL-3668)."
     },

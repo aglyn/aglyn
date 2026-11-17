@@ -18,6 +18,9 @@ struct HomeView: View {
   @Environment(ShellNavigation.self) private var navigation
   @State private var site = SiteStatus()
   @State private var prompt = ""
+  /// Customize dashboard (the console's site dashboard): the person's arrangement of this workspace's site Home.
+  @State private var dashboard = DashboardPrefsStore()
+  @State private var customizing = false
   /// The plugins' "Needs you" lines (the `homeNeedsYou` slot): each draws one line, or nothing when nothing waits.
   static let needsYouSlot = "homeNeedsYou"
 
@@ -36,13 +39,13 @@ struct HomeView: View {
           siteCare
           if picked == nil { HomeWorkspaceStats(part: .proposal) }
           PhoneHomeTiles()
-          if let picked { HomeSiteStats(site: picked) } else { HomeWorkspaceStats(part: .glance) }
+          if let picked { HomeSiteStats(site: picked, dashboard: dashboard) } else { HomeWorkspaceStats(part: .glance) }
         } else {
           scopeLine
           if picked == nil { HomeWorkspaceStats(part: .proposal) }
           needsYou
           // The numbers (AGL-4011): a site's Traffic, its cards and its activity; the workspace's cards.
-          if let picked { HomeSiteStats(site: picked) } else { HomeWorkspaceStats(part: .glance) }
+          if let picked { HomeSiteStats(site: picked, dashboard: dashboard) } else { HomeWorkspaceStats(part: .glance) }
           pickUp
           if picked != nil, model.registry.screen("ai.create") != nil { aiPrompt }
         }
@@ -73,10 +76,31 @@ struct HomeView: View {
     .refreshable { model.refresh() }
     .task(id: "\(picked?.id ?? ""):\(model.refreshToken)") {
       site.start(reader: model.reader, hostID: picked?.id)
+      dashboard.start(
+        reader: model.reader, uid: model.context(for: navigation)?.uid, orgID: model.workspace?.org?.id)
+    }
+    .sheet(isPresented: $customizing) {
+      DashboardCustomizeSheet(
+        rows: HomeSiteStats.customizeRows(model, navigation, dashboard), ready: dashboard.ready,
+        isHidden: { dashboard.isHidden($0) }, setHidden: { dashboard.setHidden($0, hidden: $1) },
+        move: { dashboard.move(groupIDs: $0, $1, delta: $2) })
     }
   }
 
   // MARK: The site, in one line
+
+  /// The console's Customize dashboard button, first in the site's header actions.
+  private var customizeButton: some View {
+    Button {
+      customizing = true
+    } label: {
+      Image(systemName: "rectangle.3.group")
+    }
+    .buttonStyle(.borderless)
+    .help("Customize dashboard")
+    .accessibilityLabel("Customize dashboard")
+    .accessibilityIdentifier("home-customize-dashboard")
+  }
 
   /// Site Care's Request a change (the console's site dashboard, AGL-3959): off with the reason on a workspace without it.
   @ViewBuilder
@@ -107,6 +131,7 @@ struct HomeView: View {
         if let chip = site.chip { StatusChip(chip.text, tone: chip.tone) }
         if let address { Text(address).font(AglynFont.subheadline).foregroundStyle(.secondary).lineLimit(1) }
         Spacer(minLength: AglynSpace.one)
+        customizeButton
         if let address, let url = URL(string: "https://\(address)/") {
           Button("Visit site") { visit(url, hostID: picked.id) }
             .font(AglynFont.strongSubheadline)
@@ -130,6 +155,7 @@ struct HomeView: View {
         Text(picked.name).font(AglynFont.title2).lineLimit(1)
         if let chip = site.chip { StatusChip(chip.text, tone: chip.tone) }
         Spacer(minLength: AglynSpace.one)
+        customizeButton
         siteCare
         if let address, let url = URL(string: "https://\(address)/") {
           Button("Visit site") { visit(url, hostID: picked.id) }

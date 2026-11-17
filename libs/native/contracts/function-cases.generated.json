@@ -22585,6 +22585,86 @@
         }
       ]
     },
+    "isDashboardWidgetHidden": {
+      "module": "libs/aglyn/src/lib/app-utils/dashboard-widget-prefs.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            "crm-glance"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            "inbox-glance"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            "core-host-analytics"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            "crm-glance"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            "inbox-glance"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            "core-host-analytics"
+          ],
+          "result": false
+        }
+      ]
+    },
     "isDefaultOffPerSite": {
       "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
       "cases": [
@@ -26196,6 +26276,3005 @@
         }
       ]
     },
+    "moveDashboardWidget": {
+      "module": "libs/aglyn/src/lib/app-utils/dashboard-widget-prefs.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "commerce-glance",
+            -1
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "commerce-glance",
+            1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "inbox-glance",
+              "commerce-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "commerce-glance",
+            2
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "inbox-glance",
+              "crm-glance",
+              "commerce-glance",
+              "crm-tasks-due"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "commerce-glance",
+            -5
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "crm-tasks-due",
+            -1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-tasks-due",
+              "crm-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "crm-tasks-due",
+            1
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "crm-tasks-due",
+            2
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "crm-tasks-due",
+            -5
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "inbox-glance",
+            -1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "inbox-glance",
+              "commerce-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "inbox-glance",
+            1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "commerce-glance",
+              "crm-glance",
+              "inbox-glance",
+              "crm-tasks-due"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "inbox-glance",
+            2
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "commerce-glance",
+              "crm-glance",
+              "crm-tasks-due",
+              "inbox-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "inbox-glance",
+            -5
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "workflows-host-activity",
+            -1
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "workflows-host-activity",
+            1
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "workflows-host-activity",
+            2
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "workflows-host-activity",
+            -5
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "missing",
+            -1
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "missing",
+            1
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "missing",
+            2
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "missing",
+            -5
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "commerce-glance",
+            -1
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "commerce-glance",
+            1
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "commerce-glance",
+            2
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "commerce-glance",
+            -5
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "crm-tasks-due",
+            -1
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "crm-tasks-due",
+            1
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "crm-tasks-due",
+            2
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "crm-tasks-due",
+            -5
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "inbox-glance",
+            -1
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "inbox-glance",
+            1
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "inbox-glance",
+            2
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "inbox-glance",
+            -5
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "workflows-host-activity",
+            -1
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "workflows-host-activity",
+            1
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "workflows-host-activity",
+            2
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "workflows-host-activity",
+            -5
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "missing",
+            -1
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "missing",
+            1
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "missing",
+            2
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "missing",
+            -5
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "commerce-glance",
+            -1
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "commerce-glance",
+            1
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "commerce-glance",
+            2
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "crm-glance",
+              "commerce-glance",
+              "crm-tasks-due"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "commerce-glance",
+            -5
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "crm-tasks-due",
+            -1
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-tasks-due",
+              "crm-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "crm-tasks-due",
+            1
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "crm-tasks-due",
+            2
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "crm-tasks-due",
+            -5
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "inbox-glance",
+            -1
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "inbox-glance",
+            1
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "commerce-glance",
+              "crm-glance",
+              "inbox-glance",
+              "crm-tasks-due"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "inbox-glance",
+            2
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "commerce-glance",
+              "crm-glance",
+              "crm-tasks-due",
+              "inbox-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "inbox-glance",
+            -5
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "workflows-host-activity",
+            -1
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "workflows-host-activity",
+            1
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "workflows-host-activity",
+            2
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "workflows-host-activity",
+            -5
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "missing",
+            -1
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "missing",
+            1
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "missing",
+            2
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "missing",
+            -5
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "commerce-glance",
+            -1
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "commerce-glance",
+            1
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "commerce-glance",
+            2
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "commerce-glance",
+            -5
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "crm-tasks-due",
+            -1
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "crm-tasks-due",
+            1
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "crm-tasks-due",
+            2
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "crm-tasks-due",
+            -5
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "inbox-glance",
+            -1
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "inbox-glance",
+            1
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "inbox-glance",
+            2
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "inbox-glance",
+            -5
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "workflows-host-activity",
+            -1
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "workflows-host-activity",
+            1
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "workflows-host-activity",
+            2
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "workflows-host-activity",
+            -5
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "missing",
+            -1
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "missing",
+            1
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "missing",
+            2
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "missing",
+            -5
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "commerce-glance",
+            -1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "commerce-glance",
+            1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "inbox-glance",
+              "commerce-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "commerce-glance",
+            2
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "inbox-glance",
+              "crm-glance",
+              "commerce-glance",
+              "crm-tasks-due"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "commerce-glance",
+            -5
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "crm-tasks-due",
+            -1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "commerce-glance",
+              "inbox-glance",
+              "crm-tasks-due",
+              "crm-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "crm-tasks-due",
+            1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "crm-tasks-due",
+            2
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "crm-tasks-due",
+            -5
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "inbox-glance",
+            -1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "inbox-glance",
+              "commerce-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "inbox-glance",
+            1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "commerce-glance",
+              "crm-glance",
+              "inbox-glance",
+              "crm-tasks-due"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "inbox-glance",
+            2
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "commerce-glance",
+              "crm-glance",
+              "crm-tasks-due",
+              "inbox-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "inbox-glance",
+            -5
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "workflows-host-activity",
+            -1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "workflows-host-activity",
+            1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "workflows-host-activity",
+            2
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "workflows-host-activity",
+            -5
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "missing",
+            -1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "missing",
+            1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "missing",
+            2
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "commerce-glance",
+              "inbox-glance",
+              "crm-glance",
+              "crm-tasks-due"
+            ],
+            "missing",
+            -5
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "commerce-glance",
+            -1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "commerce-glance",
+            1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "commerce-glance",
+            2
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "commerce-glance",
+            -5
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "crm-tasks-due",
+            -1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "crm-tasks-due",
+            1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "crm-tasks-due",
+            2
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "crm-tasks-due",
+            -5
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "inbox-glance",
+            -1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "inbox-glance",
+            1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "inbox-glance",
+            2
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "inbox-glance",
+            -5
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "workflows-host-activity",
+            -1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "workflows-host-activity",
+            1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "workflows-host-activity",
+            2
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "workflows-host-activity",
+            -5
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "missing",
+            -1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "missing",
+            1
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "missing",
+            2
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": [
+                "workflows-host-activity",
+                "crm-glance",
+                "commerce-glance"
+              ]
+            },
+            [
+              "workflows-host-activity"
+            ],
+            "missing",
+            -5
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        }
+      ]
+    },
     "movePinnedOrg": {
       "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
       "cases": [
@@ -27778,6 +30857,186 @@
             }
           ],
           "result": true
+        }
+      ]
+    },
+    "orderDashboardWidgets": {
+      "module": "libs/aglyn/src/lib/app-utils/dashboard-widget-prefs.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "widgetId": "commerce-glance"
+              },
+              {
+                "widgetId": "inbox-glance"
+              },
+              {
+                "widgetId": "crm-glance"
+              },
+              {
+                "widgetId": "crm-tasks-due"
+              },
+              {
+                "widgetId": "accounts-newest-site-users"
+              }
+            ],
+            []
+          ],
+          "result": [
+            {
+              "widgetId": "commerce-glance"
+            },
+            {
+              "widgetId": "inbox-glance"
+            },
+            {
+              "widgetId": "crm-glance"
+            },
+            {
+              "widgetId": "crm-tasks-due"
+            },
+            {
+              "widgetId": "accounts-newest-site-users"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "widgetId": "commerce-glance"
+              },
+              {
+                "widgetId": "inbox-glance"
+              },
+              {
+                "widgetId": "crm-glance"
+              },
+              {
+                "widgetId": "crm-tasks-due"
+              },
+              {
+                "widgetId": "accounts-newest-site-users"
+              }
+            ],
+            [
+              "crm-tasks-due",
+              "inbox-glance"
+            ]
+          ],
+          "result": [
+            {
+              "widgetId": "crm-tasks-due"
+            },
+            {
+              "widgetId": "inbox-glance"
+            },
+            {
+              "widgetId": "commerce-glance"
+            },
+            {
+              "widgetId": "crm-glance"
+            },
+            {
+              "widgetId": "accounts-newest-site-users"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "widgetId": "commerce-glance"
+              },
+              {
+                "widgetId": "inbox-glance"
+              },
+              {
+                "widgetId": "crm-glance"
+              },
+              {
+                "widgetId": "crm-tasks-due"
+              },
+              {
+                "widgetId": "accounts-newest-site-users"
+              }
+            ],
+            [
+              "missing",
+              "accounts-newest-site-users",
+              "commerce-glance"
+            ]
+          ],
+          "result": [
+            {
+              "widgetId": "accounts-newest-site-users"
+            },
+            {
+              "widgetId": "commerce-glance"
+            },
+            {
+              "widgetId": "inbox-glance"
+            },
+            {
+              "widgetId": "crm-glance"
+            },
+            {
+              "widgetId": "crm-tasks-due"
+            }
+          ]
+        },
+        {
+          "args": [
+            [],
+            [
+              "a"
+            ]
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            [
+              {
+                "widgetId": "commerce-glance"
+              },
+              {
+                "widgetId": "inbox-glance"
+              },
+              {
+                "widgetId": "crm-glance"
+              },
+              {
+                "widgetId": "crm-tasks-due"
+              },
+              {
+                "widgetId": "accounts-newest-site-users"
+              }
+            ],
+            [
+              "crm-glance",
+              "crm-glance"
+            ]
+          ],
+          "result": [
+            {
+              "widgetId": "crm-glance"
+            },
+            {
+              "widgetId": "commerce-glance"
+            },
+            {
+              "widgetId": "inbox-glance"
+            },
+            {
+              "widgetId": "crm-tasks-due"
+            },
+            {
+              "widgetId": "accounts-newest-site-users"
+            }
+          ]
         }
       ]
     },
@@ -43196,6 +46455,179 @@
             "textSize": "system",
             "theme": "aglyn",
             "useWorkspaceBrand": true
+          }
+        }
+      ]
+    },
+    "readDashboardWidgetPrefs": {
+      "module": "libs/aglyn/src/lib/app-utils/dashboard-widget-prefs.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "org-a": {
+                "hidden": [
+                  "crm-glance",
+                  7,
+                  "inbox-glance"
+                ],
+                "order": [
+                  "inbox-glance",
+                  "commerce-glance"
+                ]
+              },
+              "org-b": "nope",
+              "org-c": {
+                "hidden": "x"
+              }
+            },
+            "org-a"
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance",
+              "inbox-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "org-a": {
+                "hidden": [
+                  "crm-glance",
+                  7,
+                  "inbox-glance"
+                ],
+                "order": [
+                  "inbox-glance",
+                  "commerce-glance"
+                ]
+              },
+              "org-b": "nope",
+              "org-c": {
+                "hidden": "x"
+              }
+            },
+            "org-b"
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "org-a": {
+                "hidden": [
+                  "crm-glance",
+                  7,
+                  "inbox-glance"
+                ],
+                "order": [
+                  "inbox-glance",
+                  "commerce-glance"
+                ]
+              },
+              "org-b": "nope",
+              "org-c": {
+                "hidden": "x"
+              }
+            },
+            "org-c"
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "org-a": {
+                "hidden": [
+                  "crm-glance",
+                  7,
+                  "inbox-glance"
+                ],
+                "order": [
+                  "inbox-glance",
+                  "commerce-glance"
+                ]
+              },
+              "org-b": "nope",
+              "org-c": {
+                "hidden": "x"
+              }
+            },
+            "org-missing"
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "org-a": {
+                "hidden": [
+                  "crm-glance",
+                  7,
+                  "inbox-glance"
+                ],
+                "order": [
+                  "inbox-glance",
+                  "commerce-glance"
+                ]
+              },
+              "org-b": "nope",
+              "org-c": {
+                "hidden": "x"
+              }
+            },
+            null
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            null,
+            "org-a"
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            "text",
+            "org-a"
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "org-a": null
+            },
+            "org-a"
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
           }
         }
       ]
@@ -72803,6 +76235,270 @@
             "collection"
           ],
           "result": "[\"one\",2,true,[1]]"
+        }
+      ]
+    },
+    "setDashboardWidgetHidden": {
+      "module": "libs/aglyn/src/lib/app-utils/dashboard-widget-prefs.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            "crm-glance",
+            true
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            "crm-glance",
+            false
+          ],
+          "result": {
+            "hidden": [],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            "core-host-analytics",
+            true
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance",
+              "core-host-analytics"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "crm-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            "core-host-analytics",
+            false
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            "crm-glance",
+            true
+          ],
+          "result": {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            "crm-glance",
+            false
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            "core-host-analytics",
+            true
+          ],
+          "result": {
+            "hidden": [
+              "core-host-analytics"
+            ],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [],
+              "order": []
+            },
+            "core-host-analytics",
+            false
+          ],
+          "result": {
+            "hidden": [],
+            "order": []
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "a",
+                "crm-glance",
+                "b"
+              ],
+              "order": [
+                "x"
+              ]
+            },
+            "crm-glance",
+            true
+          ],
+          "result": {
+            "hidden": [
+              "a",
+              "b",
+              "crm-glance"
+            ],
+            "order": [
+              "x"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "a",
+                "crm-glance",
+                "b"
+              ],
+              "order": [
+                "x"
+              ]
+            },
+            "crm-glance",
+            false
+          ],
+          "result": {
+            "hidden": [
+              "a",
+              "b"
+            ],
+            "order": [
+              "x"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "a",
+                "crm-glance",
+                "b"
+              ],
+              "order": [
+                "x"
+              ]
+            },
+            "core-host-analytics",
+            true
+          ],
+          "result": {
+            "hidden": [
+              "a",
+              "crm-glance",
+              "b",
+              "core-host-analytics"
+            ],
+            "order": [
+              "x"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "hidden": [
+                "a",
+                "crm-glance",
+                "b"
+              ],
+              "order": [
+                "x"
+              ]
+            },
+            "core-host-analytics",
+            false
+          ],
+          "result": {
+            "hidden": [
+              "a",
+              "crm-glance",
+              "b"
+            ],
+            "order": [
+              "x"
+            ]
+          }
         }
       ]
     },

@@ -1822,6 +1822,7 @@
     "todo": "To-do"
   },
   "CROSS_MAX_DEPTH": 3,
+  "DASHBOARD_WIDGETS_FIELD": "dashboardWidgets",
   "DATASET_AUTHORABLE_FIELD_TYPES": [
     "text",
     "bool",
@@ -3094,6 +3095,7 @@
       }
     ]
   },
+  "HOST_ANALYTICS_WIDGET_ID": "core-host-analytics",
   "HOST_EVENTS": [
     {
       "label": "Form submitted",
