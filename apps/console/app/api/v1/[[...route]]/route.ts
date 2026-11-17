@@ -24,8 +24,15 @@
 import { buildDocsUrl } from '../../../../constants/docs-links'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/server'
 import { CONNECTOR_RESOURCE_PATH } from '@aglyn/aglyn/app-utils/connector-discovery'
-import { ApiErrors, apiJson } from '@aglyn/tenant-data-admin'
-import { authenticateApiV1 } from '../../../../utils/api-v1'
+import { ApiErrors, apiJson, withResponseHeaders } from '@aglyn/tenant-data-admin'
+import {
+  API_BILLING_UNITS_HEADER,
+  apiRequestBodyBytes,
+  apiResponseBodyBytes,
+  type ApiV1Context,
+  authenticateApiV1,
+  chargeApiRequestSize,
+} from '../../../../utils/api-v1'
 import {
   buildCustomerApiOpenApi,
   CUSTOMER_API_OPENAPI_PATH,
@@ -109,6 +116,24 @@ async function dispatch(
   if (authenticated instanceof Response) return authenticated
   const { context } = authenticated
 
+  // Measured BEFORE a handler reads the body (AGL-4227), so the size charged
+  // is the size that arrived.
+  const requestBytes = await apiRequestBodyBytes(request)
+  const response = await serve(request, context, segments)
+  const units = chargeApiRequestSize(
+    context,
+    requestBytes,
+    await apiResponseBodyBytes(response),
+  )
+  return withResponseHeaders(response, { [API_BILLING_UNITS_HEADER]: String(units) })
+}
+
+/** Everything an authenticated `/v1` request can reach. */
+async function serve(
+  request: Request,
+  context: ApiV1Context,
+  segments: string[],
+): Promise<Response> {
   const { headers } = context
 
   // Root + key introspection stay here; resources dispatch to their handlers.

@@ -20,7 +20,13 @@ import { connectorResourceMetadataUrl } from '@aglyn/aglyn/app-utils/connector-d
 import { ApiErrors, apiJson, readCappedBody, withResponseHeaders } from '@aglyn/tenant-data-admin'
 import { connectorOrigin, refuseOnAuthOrigin, unconfiguredOriginResponse } from '../_lib/connector-oauth-http'
 import { buildDocsUrl } from '../../../constants/docs-links'
-import { authenticateApiV1, chargeApiV1Call } from '../../../utils/api-v1'
+import {
+  API_BILLING_UNITS_HEADER,
+  apiRequestBodyBytes,
+  authenticateApiV1,
+  chargeApiRequestSize,
+  chargeApiV1Call,
+} from '../../../utils/api-v1'
 import {
   buildCustomerApiOpenApi,
   CUSTOMER_API_MOUNT,
@@ -128,7 +134,7 @@ const MCP_CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
   'Access-Control-Allow-Headers': 'Authorization, Content-Type, MCP-Protocol-Version, Mcp-Session-Id',
   'Access-Control-Expose-Headers':
-    'WWW-Authenticate, MCP-Protocol-Version, Mcp-Session-Id, Retry-After, RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset',
+    'WWW-Authenticate, MCP-Protocol-Version, Mcp-Session-Id, Retry-After, RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset, X-RateLimit-Scope, X-Workspace-RateLimit-Limit, X-Workspace-RateLimit-Remaining, X-Workspace-RateLimit-Reset, X-Api-Billing-Units',
   'Access-Control-Max-Age': '600',
 }
 
@@ -177,6 +183,14 @@ async function answer(request: Request): Promise<Response> {
 
   let callsMade = 0
   let latestHeaders: Record<string, string> = context.headers
+  // Billed units across this POST (AGL-4227). The POST was counted once by
+  // `authenticateApiV1`, and protocol messages (`initialize`, `tools/list`,
+  // `ping`, notifications) are never size-weighted. A `tools/call` is
+  // weighed by the request it dispatches and the response it gets, like the
+  // REST call it is: its first unit is the one already charged for it — the
+  // POST's for the first call, `chargeApiV1Call`'s for each after it
+  // (AGL-4225) — and the units past that are added by size.
+  let billedUnits = 1
   const deps = {
     tools,
     serverName: SERVER_NAME,
@@ -203,7 +217,18 @@ async function answer(request: Request): Promise<Response> {
         args,
         `${origin}${CUSTOMER_API_MOUNT}`,
       )
-      return readOutcome(await dispatchResource(toolRequest, context, segments))
+      const requestBytes = await apiRequestBodyBytes(toolRequest)
+      const outcome = await readOutcome(await dispatchResource(toolRequest, context, segments))
+      const units = chargeApiRequestSize(
+        context,
+        requestBytes,
+        new TextEncoder().encode(outcome.text).byteLength,
+        1,
+      )
+      // The POST's own unit stands for the first call's; every later call's
+      // first unit was charged above, so each adds its whole size.
+      billedUnits += callsMade === 1 ? units - 1 : units
+      return outcome
     },
   }
 
@@ -219,13 +244,15 @@ async function answer(request: Request): Promise<Response> {
     if (response) responses.push(response)
   }
 
+  const unitsHeader = { [API_BILLING_UNITS_HEADER]: String(billedUnits) }
   if (responses.length === 0) {
-    return new Response(null, { status: 202, headers: latestHeaders })
+    return new Response(null, { status: 202, headers: { ...latestHeaders, ...unitsHeader } })
   }
 
   return apiJson(Array.isArray(payload) ? responses : responses[0], {
     headers: {
       ...latestHeaders,
+      ...unitsHeader,
       'MCP-Protocol-Version': answeredVersion(messages, request),
     },
   })

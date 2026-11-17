@@ -31,7 +31,7 @@ to contacts still needs to see the request quota that would refuse it.
 {
   "object": "usage",
   "month": "2026-08",
-  "apiRequests":   { "used": 18422, "included": 100000, "remaining": 81578, "metered": true },
+  "apiRequests":   { "used": 18422, "included": 100000, "remaining": 81578, "metered": true, "ceiling": null, "unitBytes": 262144 },
   "contacts":      { "used": 3120,  "included": 50000,  "remaining": 46480, "metered": true },
   "crmRecords":    { "used": 3520,  "included": 50000,  "remaining": 46480, "metered": true },
   "datasets":      { "used": 4,     "included": 100,    "remaining": 96,    "metered": false },
@@ -51,7 +51,7 @@ to contacts still needs to see the request quota that would refuse it.
 | --- | --- | --- |
 | `object` | string | Always `"usage"`. |
 | `month` | string | The billing month these figures cover, `YYYY-MM`, UTC. |
-| `apiRequests` | band | Requests to `/v1` this month. |
+| `apiRequests` | band | Billed units this month — one per started 256 KB of each request's larger body, so a large page or upload counts more than once (see [billed units](rate-limits.md#billed-units)); `unitBytes` is the unit's size, `262144`. Carries one more field, `ceiling`: the most requests the month allows, overage included — 20,000 on Starter — or `null` where there is no ceiling (Pro and up). Past it every request is refused with `429` (`monthly_request_ceiling`) until the month turns. |
 | `contacts` | band | [Contacts](resources/contacts.md) in the organization, against the **CRM records band**. `used` is the number of contacts; `included` and `remaining` are the band's, which contacts share with companies and deals — so `remaining` can be smaller than `included − used`. Not monthly: it's the current size of the list. |
 | `crmRecords` | band | The CRM records band itself: contacts + [companies](resources/companies.md) + [deals](resources/deals.md) against the plan's included records. This is the figure the invoice and the console meter are computed from; `contacts` above keeps its shape for clients that only read it. |
 | `datasets` | band | [Datasets](resources/datasets.md) in the organization. Also not monthly. |
@@ -76,7 +76,8 @@ and the two answers are completely different:
 - **`metered: true`** — crossing the band **doesn't fail anything**. The excess bills
   as [overage](rate-limits.md#monthly-quota--overage) at your plan's rate. A bulk
   import runs to completion; a busy month costs more. This is the case for requests,
-  contacts and storage on Pro, the self-serve plan that includes the API. Custom has
+  contacts and storage on Starter and Pro. On Starter, requests stop at the monthly
+  `ceiling` the band reports (20,000), overage included; Pro has none (`null`). Custom has
   no overage rates, so all three are `metered: false` there.
 - **`metered: false`** — crossing the band is a **refusal**. Once `remaining` hits `0`
   the next write answers `403 plan_required` with the matching
