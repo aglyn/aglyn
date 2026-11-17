@@ -290,6 +290,18 @@ describe('the bandwidth pause banner (AGL-4232)', () => {
     expect(screen.queryByText(/pause/i)).toBeNull()
   })
 
+  it('a workspace that LAPSED to Free sees its dunning notice AND that its sites pause', () => {
+    renderBanner({ ...orgAt('unpaid'), bandwidthCap: { month, engagedAt: 1 } })
+    expect(screen.getByText(/Your sites are paused for visitors until the 1st/)).toBeTruthy()
+    expect(screen.getByText(/plan has stopped/i)).toBeTruthy()
+  })
+
+  it('says the extra time is given once, and that a surge can still pause it', () => {
+    renderBanner({ slug: 'acme', bandwidthCap: { month, engagedAt: 1, graceUntil: Date.now() + 60_000 } })
+    expect(screen.getByText(/An unusually large surge of traffic can still pause them before then\. This extra time is given once\./)).toBeTruthy()
+    expect(screen.queryByText(/once per site/)).toBeNull()
+  })
+
   it('says nothing about last month', () => {
     renderBanner({ slug: 'acme', bandwidthCap: { month: '2020-01', engagedAt: 1 } })
     expect(screen.queryByText(/pause/i)).toBeNull()

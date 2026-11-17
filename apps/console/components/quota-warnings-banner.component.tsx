@@ -563,6 +563,76 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
     )
   }
 
+  /*
+   * THE FREE PLAN'S BANDWIDTH PAUSE (AGL-4232), independent of a `plan` field
+   * (a never-subscribed Free org has none): the one-time grace's deadline
+   * while it runs, else that the sites are paused. Not dismissible — it clears
+   * itself when the owner upgrades or the month turns. Visitors are told only
+   * that the site is temporarily unavailable; this is where the reason and the
+   * upgrade are.
+   *
+   * SHOWN BESIDE the banner below it, never instead of it: a workspace that
+   * lapsed to Free sees its dunning notice AND that its sites pause, and the
+   * quota rows still list what else is near its limit. Only the suspension
+   * above outranks it, because a suspended workspace's sites are offline
+   * already.
+   */
+  const bandwidthGraceUntil = bandwidthCapGraceUntil(org as never)
+  // A grace that outlasts the month brings no pause, so no date is named.
+  const graceOutlastsMonth =
+    bandwidthGraceUntil !== null &&
+    bandwidthGraceOutlastsMonth(
+      bandwidthGraceUntil,
+      String((org as { bandwidthCap?: { month?: string } } | undefined)?.bandwidthCap?.month ?? ''),
+    )
+  const pauseBanner =
+    bandwidthGraceUntil !== null || bandwidthCapEngaged(org as never) ? (
+      <Alert
+        severity={bandwidthGraceUntil !== null ? 'warning' : 'error'}
+        sx={{ borderRadius: 0 }}
+        action={
+          orgWideViewer ? (
+            <AppLink
+              componentVariant="button"
+              color="inherit"
+              size="small"
+              href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}
+            >
+              {'Upgrade'}
+            </AppLink>
+          ) : undefined
+        }
+        data-testid="bandwidth-pause-banner"
+      >
+        {graceOutlastsMonth
+          ? "Your sites are past this month's included bandwidth and stay online: the " +
+            'month ends before their extra time would. This extra time is given once and ' +
+            `is now used, so next time they pause at the limit. ${
+              orgWideViewer ? 'Upgrade' : 'A workspace admin can upgrade'
+            } to keep them online whatever their traffic.`
+          : bandwidthGraceUntil !== null
+            ? `${orgWideViewer ? 'Upgrade' : 'A workspace admin needs to upgrade'} or ` +
+              `your sites pause on ${formatBandwidthGraceDeadline(bandwidthGraceUntil)}. ` +
+              "They have used this month's included bandwidth and stay online until " +
+              'then; after that, visitors see a "temporarily unavailable" notice until ' +
+              'the 1st. An unusually large surge of traffic can still pause them before ' +
+              'then. This extra time is given once.'
+            : "Your sites are paused for visitors until the 1st: they have used this month's " +
+              `included bandwidth. ${orgWideViewer ? 'Upgrade' : 'A workspace admin can upgrade'} ` +
+              'to bring them back within about a minute.'}
+      </Alert>
+    ) : null
+  /** The pause banner above another, when there is one to show. */
+  const withPause = (alert: JSX.Element): JSX.Element =>
+    pauseBanner ? (
+      <>
+        {pauseBanner}
+        {alert}
+      </>
+    ) : (
+      alert
+    )
+
   // Dunning (AGL-275): past_due is the grace window — entitlements keep
   // working, but the card needs fixing before the subscription dies.
   // Deliberately not dismissible; it clears when Stripe retries succeed.
@@ -622,7 +692,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   // started, and the workspace is not running on Free. Staff granted it
   // knowing the subscription's state; the invoices stay on Billing.
   if (billingStatus === 'incomplete' && !planComp) {
-    return (
+    return withPause(
       <Alert
         severity="warning"
         sx={{ borderRadius: 0 }}
@@ -653,7 +723,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
 
   const lapsed = billingStatus === 'unpaid' && !planComp
   if (billingStatus === 'past_due' || lapsed) {
-    return (
+    return withPause(
       <Alert
         severity={lapsed ? 'error' : 'warning'}
         sx={{ borderRadius: 0 }}
@@ -696,59 +766,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
     )
   }
 
-  /*
-   * THE FREE PLAN'S BANDWIDTH PAUSE (AGL-4232), above the dismissible quota
-   * rows and independent of a `plan` field (a never-subscribed Free org has
-   * none): the one-time grace's deadline while it runs, else that the sites
-   * are paused. Not dismissible — it clears itself when the owner upgrades
-   * or the month turns. Visitors are told only that the site is
-   * temporarily unavailable; this is where the reason and the upgrade are.
-   */
-  const bandwidthGraceUntil = bandwidthCapGraceUntil(org as never)
-  // A grace that outlasts the month brings no pause, so no date is named.
-  const graceOutlastsMonth =
-    bandwidthGraceUntil !== null &&
-    bandwidthGraceOutlastsMonth(
-      bandwidthGraceUntil,
-      String((org as { bandwidthCap?: { month?: string } } | undefined)?.bandwidthCap?.month ?? ''),
-    )
-  if (bandwidthGraceUntil !== null || bandwidthCapEngaged(org as never)) {
-    const upgrade = orgWideViewer ? (
-      <AppLink
-        componentVariant="button"
-        color="inherit"
-        size="small"
-        href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}
-      >
-        {'Upgrade'}
-      </AppLink>
-    ) : undefined
-    return (
-      <Alert
-        severity={bandwidthGraceUntil !== null ? 'warning' : 'error'}
-        sx={{ borderRadius: 0 }}
-        action={upgrade}
-        data-testid="bandwidth-pause-banner"
-      >
-        {graceOutlastsMonth
-          ? "Your sites are past this month's included bandwidth and stay online: the " +
-            'month ends before their extra time would. That extra time is now used, so ' +
-            `next time they pause at the limit. ${
-              orgWideViewer ? 'Upgrade' : 'A workspace admin can upgrade'
-            } to keep them online whatever their traffic.`
-          : bandwidthGraceUntil !== null
-          ? `${orgWideViewer ? 'Upgrade' : 'A workspace admin needs to upgrade'} or ` +
-            `your sites pause on ${formatBandwidthGraceDeadline(bandwidthGraceUntil)}. ` +
-            "They have used this month's included bandwidth and stay online until " +
-            'then; after that, visitors see a "temporarily unavailable" notice until the 1st.'
-          : "Your sites are paused for visitors until the 1st: they have used this month's " +
-            `included bandwidth. ${orgWideViewer ? 'Upgrade' : 'A workspace admin can upgrade'} ` +
-            'to bring them back within about a minute.'}
-      </Alert>
-    )
-  }
-
-  if (!plan || dismissed) return null
+  if (!plan || dismissed) return pauseBanner
   const storage = storageQuota(storageBand, scopedViewer)
   // The same point every Billing meter turns amber at.
   const breached = [...quotas, ...(storage ? [storage] : [])].filter(
@@ -757,7 +775,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
       quota.limit > 0 &&
       (quota.used / quota.limit) * 100 >= USAGE_METER_WARNING_PCT,
   )
-  if (!breached.length) return null
+  if (!breached.length) return pauseBanner
   const exceeded = breached.some((quota) => quota.used >= quota.limit)
   // A plugin band's row speaks for itself (AGL-2898); every other row shares
   // the one sentence below.
@@ -765,7 +783,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   const others = breached.filter((quota) => !quota.sentence)
   const names = others.map((quota) => quota.label).join(' and ')
 
-  return (
+  return withPause(
     <Alert
       severity={exceeded ? 'error' : 'warning'}
       sx={{ borderRadius: 0 }}
