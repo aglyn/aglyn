@@ -136,6 +136,8 @@ struct MediaLibrary: View {
   @State private var undo: (ids: [String], names: [String])?
   @State private var folderSheet: FolderSheet?
   @State private var filtersSheet = false
+  /// Get photos from a phone (AGL-3957): a site library only.
+  @State private var photoLinks = false
   @State private var deletingFolder: MediaFolder?
   @State private var bulkTag: Bool?
   @State private var bulkDeleting = false
@@ -198,7 +200,14 @@ struct MediaLibrary: View {
   var body: some View {
     VStack(spacing: 0) {
       if let head {
-        if wide { wideHead(head) } else { AglynListColumnHeader(head, primary: uploadAction) { newFolderButton(icon: true) } }
+        if wide {
+          wideHead(head)
+        } else {
+          AglynListColumnHeader(head, primary: uploadAction) {
+            photoLinkButton(icon: true)
+            newFolderButton(icon: true)
+          }
+        }
       }
       HStack(spacing: 0) {
         browser
@@ -212,7 +221,7 @@ struct MediaLibrary: View {
       .animation(reduceMotion ? nil : AglynShellMotion.drill, value: selection.isEmpty)
     }
     .background(AglynColor.paper)
-    .modifier(MediaShellActions(enabled: head == nil, upload: uploadAction, newFolder: newFolderButton(icon: false)))
+    .modifier(MediaShellActions(enabled: head == nil, upload: uploadAction, newFolder: shellExtras))
     .task(id: searchText) {
       try? await Task.sleep(nanoseconds: 300_000_000)
       if !Task.isCancelled { model.search = searchText }
@@ -231,6 +240,11 @@ struct MediaLibrary: View {
         let files = audioBatch ?? []
         audioBatch = nil
         if confirmed { upload(files, rightsConfirmed: true) }
+      }
+    }
+    .sheet(isPresented: $photoLinks) {
+      if case .site(let hostID) = scope {
+        PhotoLinksSheet(api: PhotoLinksAPI(api: context.api, hostID: hostID)) { photoLinks = false }
       }
     }
     .sheet(isPresented: $filtersSheet) {
@@ -305,8 +319,35 @@ struct MediaLibrary: View {
     } accessory: {
       head.star
       Spacer(minLength: AglynSpace.one)
+      photoLinkButton(icon: false).buttonStyle(AglynHeaderButtonStyle()).fixedSize()
       newFolderButton(icon: false).buttonStyle(AglynHeaderButtonStyle()).fixedSize()
       AglynPrimaryHeaderButton.blockable(uploadAction)
+    }
+  }
+
+  /// New folder, and Get a photo link before it on a site's library, where the shell draws the head.
+  private var shellExtras: some View {
+    HStack(spacing: AglynSpace.two) {
+      photoLinkButton(icon: true)
+      newFolderButton(icon: false)
+    }
+  }
+
+  /// Get a photo link, beside New folder on a site's own library; the workspace library takes no phone photos.
+  @ViewBuilder
+  private func photoLinkButton(icon: Bool) -> some View {
+    if case .site = scope, canEdit {
+      Button {
+        photoLinks = true
+      } label: {
+        if icon {
+          Label("Get a photo link", systemImage: "qrcode").labelStyle(.iconOnly)
+        } else {
+          Label("Get a photo link", systemImage: "qrcode").labelStyle(.titleAndIcon)
+        }
+      }
+      .help("Get photos from a phone")
+      .accessibilityIdentifier("media-photo-link")
     }
   }
 

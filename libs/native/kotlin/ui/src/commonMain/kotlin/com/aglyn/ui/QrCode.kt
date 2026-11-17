@@ -413,17 +413,18 @@ fun qrCodeFits(text: String): Boolean = QrCode.encode(text) != null
 
 /**
  * A QR code of [text] on a white card with its quiet zone, [size] across. Nothing is drawn when the text is longer
- * than a QR code carries ([qrCodeFits]).
+ * than a QR code carries ([qrCodeFits]). [label] is what a screen reader calls it ("Payment QR code" where it was first
+ * drawn, at the counter).
  */
 @Composable
-fun QrCodeImage(text: String, modifier: Modifier = Modifier, size: Dp = 256.dp, quietModules: Int = 4) {
+fun QrCodeImage(text: String, modifier: Modifier = Modifier, size: Dp = 256.dp, quietModules: Int = 4, label: String = "Payment QR code") {
   val code = remember(text) { QrCode.encode(text) } ?: return
   val total = code.size + quietModules * 2
   Canvas(
     modifier
       .size(size)
       .background(Color.White)
-      .semantics { contentDescription = "Payment QR code" },
+      .semantics { contentDescription = label },
   ) {
     val module = this.size.width / total
     for (y in 0 until code.size) {
