@@ -68,6 +68,39 @@ final class FirestoreLoadsTests: XCTestCase {
     XCTAssertEqual(query.limit, 20)
   }
 
+  /// Site activity's grammar: the order and a `$date` may be templates over the screen's params (a picked day is its
+  /// midnight, UTC), and a clause whose condition fails is left off. The Kotlin twin replays the spec itself.
+  @MainActor
+  func testTheOrderAndADateComeFromTheParams() async throws {
+    let spec: JSONValue = [
+      "collection": "hosts/{site.id}/activity", "orderBy": "{params.sort|'createdAt desc'}", "limit": 50,
+      "where": [
+        ["searchTokens", "array-contains", "{params.q:token}", "params.q"],
+        ["action", "==", "{params.action}", "params.action"],
+        ["createdAt", ">=", ["$date": "{params.from}"], "params.from"],
+        ["createdAt", "<", ["$date": "{params.before}"], "params.before"],
+      ],
+    ]
+    func ask(_ params: JSONValue) async throws -> FirestoreQuery {
+      let reader = Reader()
+      _ = try await FirestoreLoads.query(reader, spec, in: ["site": ["id": "h1"], "params": params])
+      return try XCTUnwrap(reader.queries.first)
+    }
+    let plain = try await ask([:])
+    XCTAssertTrue(plain.filters.isEmpty && plain.equals.isEmpty)
+    XCTAssertEqual(plain.order.map(\.field), ["createdAt"])
+    XCTAssertEqual(plain.order.map(\.descending), [true])
+    let narrowed = try await ask(["q": "  Ada Lovelace", "from": "2026-11-01", "before": "2026-11-16"])
+    XCTAssertEqual(narrowed.filters.map(\.path), ["searchTokens", "createdAt", "createdAt"])
+    XCTAssertEqual(narrowed.filters[0].value as? String, "ada")
+    XCTAssertEqual((narrowed.filters[1].value as? Date)?.timeIntervalSince1970, 1_793_491_200)
+    let action = try await ask(["action": "page.publish"])
+    XCTAssertEqual(action.equals.map(\.field), ["action"])
+    let sorted = try await ask(["sort": "action asc"])
+    XCTAssertEqual(sorted.order.map(\.field), ["action"])
+    XCTAssertEqual(sorted.order.map(\.descending), [false])
+  }
+
   @MainActor
   func testAnAggregateAsksTheServerForTheWholeCollectionAndReadsNoRows() async throws {
     let reader = Reader()
