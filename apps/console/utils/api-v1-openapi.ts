@@ -71,6 +71,7 @@ import {
   RECORD_STAMPS as STAMPS,
   stringField as str,
   stringListField as strList,
+  SITE_ID_PATH_PARAM,
 } from '@aglyn/tenant-data-admin/server/api-v1-description'
 
 /** A JSON Schema / OpenAPI fragment. Same shape the tenant builder uses. */
@@ -141,11 +142,11 @@ const RESOURCES: readonly ResourceSpec[] = [
     ops: [
       { path: '/v1/sites', method: 'get', operationId: 'listSites', summary: 'List sites', list: true, returns: 'Site' },
       { path: '/v1/sites', method: 'post', operationId: 'createSite', summary: 'Create a site', accepts: 'SiteWrite', returns: 'Site', creates: true, description: 'Limited to 10 per hour per organization, separately from the request budget.' },
-      { path: '/v1/sites/{siteId}', method: 'get', operationId: 'getSite', summary: 'Retrieve a site', returns: 'Site', pathParams: [{ name: 'siteId', description: 'Site id.' }] },
+      { path: '/v1/sites/{siteId}', method: 'get', operationId: 'getSite', summary: 'Retrieve a site', returns: 'Site', pathParams: [SITE_ID_PATH_PARAM] },
       {
         path: '/v1/sites/{siteId}/publish', method: 'post', operationId: 'publishSite', summary: 'Publish a site', returns: 'PublishResult',
         description: 'Limited to 10 per site per hour, on top of — not instead of — the per-key limit. Sized to the work: one publish drops up to 250 cached pages, so minting extra keys does not raise it.',
-        pathParams: [{ name: 'siteId', description: 'Site id.' }],
+        pathParams: [SITE_ID_PATH_PARAM],
       },
     ],
   },
@@ -209,8 +210,8 @@ const RESOURCES: readonly ResourceSpec[] = [
       { path: '/v1/media', method: 'get', operationId: 'listOrgMedia', summary: 'List organization media', list: true, returns: 'MediaAsset', description: 'Rows deleted since they were written are dropped after the read, so pages can come back short.' },
       { path: '/v1/media', method: 'post', operationId: 'uploadOrgMedia', summary: 'Upload to the organization library', accepts: 'MediaUpload', returns: 'MediaAsset', creates: true },
       { path: '/v1/media/{mediaId}', method: 'get', operationId: 'getOrgMedia', summary: 'Retrieve an asset', returns: 'MediaAsset', pathParams: [{ name: 'mediaId', description: 'Asset id.' }] },
-      { path: '/v1/sites/{siteId}/media', method: 'get', operationId: 'listSiteMedia', summary: 'List a site’s media', list: true, returns: 'MediaAsset', pathParams: [{ name: 'siteId', description: 'Site id.' }] },
-      { path: '/v1/sites/{siteId}/media', method: 'post', operationId: 'uploadSiteMedia', summary: 'Upload to a site', accepts: 'MediaUpload', returns: 'MediaAsset', creates: true, pathParams: [{ name: 'siteId', description: 'Site id.' }] },
+      { path: '/v1/sites/{siteId}/media', method: 'get', operationId: 'listSiteMedia', summary: 'List a site’s media', list: true, returns: 'MediaAsset', pathParams: [SITE_ID_PATH_PARAM] },
+      { path: '/v1/sites/{siteId}/media', method: 'post', operationId: 'uploadSiteMedia', summary: 'Upload to a site', accepts: 'MediaUpload', returns: 'MediaAsset', creates: true, pathParams: [SITE_ID_PATH_PARAM] },
     ],
   },
 ]
