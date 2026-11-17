@@ -136,6 +136,10 @@ final class SiteTests: XCTestCase {
     XCTAssertEqual(pageStatus(tree.first { $0.page.id == "folder" }!).label, "Group")
     XCTAssertEqual(pageStatus(tree.first { $0.page.id == "post" }!), PageStatus(label: "Published", live: true))
     XCTAssertEqual(livePageURL(routing, livePath: "/blog/post"), "https://shop.aglyn.app/blog/post")
+    // From a local console the live page is on the local tenant, never production (AGL-4086).
+    XCTAssertEqual(
+      livePageURL(routing, livePath: "/blog/post", consoleOrigin: "http://localhost:4610"),
+      "http://localhost:4500/blog/post?tenantHost=shop")
     XCTAssertEqual(movableParents(pages, pageID: "blog").map(\.id).sorted(), ["folder", "home", "orphan", "terms"])
   }
 

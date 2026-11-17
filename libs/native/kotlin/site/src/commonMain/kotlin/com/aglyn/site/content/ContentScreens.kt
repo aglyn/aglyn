@@ -327,7 +327,7 @@ private fun EntryEditor(
                 enabled = canPublish && !runner.busy,
                 modifier = Modifier.testTag("entry-unpublish"),
               ) { Text("Unpublish") }
-              val liveUrl = livePageUrl(routing, "/${collection.slug}/${entry.slug}")
+              val liveUrl = livePageUrl(routing, "/${collection.slug}/${entry.slug}", context.api.origin)
               if (liveUrl != null) {
                 OutlinedButton(onClick = { uri.openUri(liveUrl) }) {
                   Icon(AglynIcons.named("open_in_new"), contentDescription = null)

@@ -107,7 +107,7 @@ struct HomeView: View {
         if let chip = site.chip { StatusChip(chip.text, tone: chip.tone) }
         if let address { Text(address).font(AglynFont.subheadline).foregroundStyle(.secondary).lineLimit(1) }
         Spacer(minLength: AglynSpace.one)
-        if let address, let url = URL(string: "https://\(address)/") {
+        if address != nil, let url = picked.visitURL(hostCname: site.cname, consoleOrigin: model.api?.origin) {
           Button("Visit site") { visit(url, hostID: picked.id) }
             .font(AglynFont.strongSubheadline)
             .accessibilityIdentifier("home-visit-site")
@@ -131,7 +131,7 @@ struct HomeView: View {
         if let chip = site.chip { StatusChip(chip.text, tone: chip.tone) }
         Spacer(minLength: AglynSpace.one)
         siteCare
-        if let address, let url = URL(string: "https://\(address)/") {
+        if address != nil, let url = picked.visitURL(hostCname: site.cname, consoleOrigin: model.api?.origin) {
           Button("Visit site") { visit(url, hostID: picked.id) }
             .buttonStyle(.aglynSecondary)
             .accessibilityIdentifier("home-visit-site")

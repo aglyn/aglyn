@@ -165,6 +165,8 @@ class SiteTest {
     assertEquals("Draft", pageStatus(tree.first { it.page.id == "blog" }).label)
     assertEquals("Group", pageStatus(tree.first { it.page.id == "folder" }).label)
     assertEquals("https://shop.aglyn.app/blog/post", livePageUrl(routing, "/blog/post"))
+    // From a local console the live page is on the local tenant, never production (AGL-4086).
+    assertEquals("http://localhost:4500/blog/post?tenantHost=shop", livePageUrl(routing, "/blog/post", "http://10.0.2.2:4610"))
     assertEquals(listOf("folder", "home", "orphan", "terms"), movableParents(pages, "blog").map { it.id }.sorted())
   }
 
