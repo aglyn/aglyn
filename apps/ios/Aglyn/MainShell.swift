@@ -483,6 +483,8 @@ struct ShellFrame<Content: View>: View {
 
   var body: some View {
     content()
+      // The Terms moved (or there is no record): asked over every screen, never a wall (AGL-2316).
+      .safeAreaInset(edge: .top, spacing: 0) { LegalReacceptanceBanner() }
       .sheet(item: $navigation.picker) { picker in
         ScopePickerSheet(start: picker, twoStep: compact).environment(model).environment(navigation)
       }
