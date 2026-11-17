@@ -16,14 +16,15 @@ as it is on a paid plan**.
 :::info Plan availability
 Every plan has a bandwidth allowance. On a **paid** plan going past it is metered and
 billed, and your sites keep serving. On **Free** it is a hard stop: the site is paused
-until the start of the next month.
+until the start of the next month. The first time a site goes over, it stays online for
+72 hours first, so there is time to upgrade — see [The one-time grace](#grace).
 :::
 
 ## What each plan includes
 
 | Plan | Included bandwidth per month | Past the allowance |
 |---|---|---|
-| Free | 2 GB | Sites are **paused** until the start of next month |
+| Free | 2 GB | Sites are **paused** until the start of next month (the first time, after 72 hours) |
 | Starter | 15 GB | Keeps serving; the extra is billed |
 | Pro | 25 GB | Keeps serving; the extra is billed |
 | Custom | Set by your agreement | Keeps serving; not billed — your agreement sets the terms |
@@ -48,20 +49,28 @@ those messages say depends on your plan, and the difference is the point:
 - **On a paid plan** the 100% message reads *"You're past your included monthly bandwidth
   — extra usage is now billed"*, and tells you the overage appears on your monthly
   invoice.
-- **On Free** it reads *"You've reached your monthly bandwidth limit"*, and points you at
-  Billing to upgrade — because on Free there is no overage to bill, only a stop.
+- **On Free** it points you at Billing to upgrade — because on Free there is no overage
+  to bill, only a stop. The first time your sites go over it reads *"Bandwidth limit
+  reached: upgrade or your sites pause on …"* with the date and time in UTC; after that it
+  reads *"You've reached your monthly bandwidth limit"*.
+
+When a Free site goes over, its managers also get a notification and an email at that
+moment, which names the site and either its deadline or that it is paused, and a banner
+across the top of the console says the same until you upgrade or the month turns.
 
 ## What a paused Free site looks like {#paused}
 
-When a Free organization passes its band, its published sites stop serving pages and
+When a Free organization's pause takes hold, its published sites stop serving pages and
 answer with a plain notice instead, and the video, audio and files in its media library
 stop loading until the pause lifts:
 
-> **Over the monthly traffic limit**
+> **Temporarily unavailable**
 >
-> This site has used all of the traffic included with it this month, so its pages are
-> paused until the start of next month. Nothing is wrong with your connection, and
-> nothing here has been removed.
+> This site is temporarily unavailable.
+
+The notice says nothing about limits, plans or traffic: your visitors are not told why.
+The reason, and the way to lift it, are in your console and your inbox. Your own team sees
+the same notice on the public site; the console is where to upgrade.
 
 Three things are true about that page and are worth knowing before you see it:
 
@@ -78,6 +87,18 @@ Three things are true about that page and are worth knowing before you see it:
 
 Search engines are told not to index the notice, so a pause does not cost you your
 rankings.
+
+## The one-time grace {#grace}
+
+The **first time** a site goes over its band, it is not paused straight away. It stays
+online for **72 hours**, and you are told the exact date and time it will pause — in the
+console and by email — so you can upgrade before your visitors are turned away. If you
+upgrade before then, nothing pauses. If you don't, the site pauses at that time, as above,
+until the month turns over.
+
+This happens **once per site, ever**. In any later month, a site that goes over pauses as
+soon as it passes its band. A new month, changing plans and changing back, or anything else
+does not give the same site a second grace.
 
 ## Why a site can go over before it is paused {#timing}
 
@@ -209,10 +230,10 @@ mentions only one of them is incomplete.
 | Applies to | Free organizations only | Any plan |
 | Trips at | 1× the plan's band | 3× the plan's band (minimum 100,000 page views) |
 | Decided by | The analytics beacon and the media library's delivery route, sampled — plus the daily usage job organization-wide | The analytics beacon, sampled |
-| Recorded on | `orgs/{orgId}.bandwidthCap` | `hosts/{hostId}.bandwidthCeiling` |
+| Recorded on | `orgs/{orgId}.bandwidthCap` (its `graceUntil` while a one-time grace runs), and `hosts/{hostId}.bandwidthGraceUsedAt` once a site has had its grace | `hosts/{hostId}.bandwidthCeiling` |
 | Enforced at | Edge middleware **and** the page loader; the media library's delivery route for video and files | The page loader; the media library's delivery route for video and files |
-| Latency | Minutes | Minutes |
-| Visitor sees | The "Over the monthly traffic limit" notice | The "This site is temporarily unavailable" notice, **on Free only** |
+| Latency | Minutes; the first time, 72 hours later | Minutes |
+| Visitor sees | The "This site is temporarily unavailable" notice | The "This site is temporarily unavailable" notice, **on Free only** |
 
 The abuse ceiling exists for runaway traffic — a scraper or a loop. On a
 plan that meters overage it **flags the site and pages staff but changes nothing a visitor
