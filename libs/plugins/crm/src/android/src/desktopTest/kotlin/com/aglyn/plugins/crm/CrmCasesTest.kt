@@ -132,6 +132,24 @@ class CrmCasesTest {
   }
 
   @Test
+  fun aTaskViewOpensOnItsTaskViewAndClauses() {
+    val saved = CrmSavedView(
+      "t1", "Overdue calls", "u1", "u1", false,
+      CrmViewState(listOf(CrmViewClause("view", "equals", "overdue"), CrmViewClause("kind", "equals", "call"))),
+    )
+    val open = crmTaskViewOpen(saved)
+    assertEquals(TaskView.OVERDUE, open.view)
+    assertEquals(listOf(ListFilterRequest("kind", "equals", "call")), open.clauses)
+    assertEquals(null, open.sort)
+    // No `view` clause reads as "My tasks", as the console's TASK_VIEW_DEFAULT does.
+    assertEquals(TaskView.MINE, crmTaskViewOpen(CrmSavedView("t2", "x", "", "", false, CrmViewState())).view)
+    assertEquals(emptyList<ListFilterRequest>(), crmTaskViewFilter(TaskView.MINE, null).clauses)
+    assertEquals(listOf(ListFilterRequest("view", "equals", "done")), crmTaskViewFilter(TaskView.DONE, null).clauses)
+    assertEquals("view:t1", crmTaskViewFilter(TaskView.OVERDUE, saved).key)
+    assertEquals(2, crmTaskViewFilter(TaskView.OVERDUE, saved).clauses.size)
+  }
+
+  @Test
   fun crmTelHrefCases() = cases("crmTelHref").forEach { (args, result) ->
     assertEquals(plain(result), crmTelHref(plain(args[0]) as? String), args.toString())
   }

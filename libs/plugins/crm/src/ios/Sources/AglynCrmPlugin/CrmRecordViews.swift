@@ -162,7 +162,7 @@ struct RecordsSection: View {
     HStack(spacing: 0) {
       if !scope.uid.isEmpty {
         CrmViewsMenu(
-          kind: kind, scope: scope, api: api, model: views, current: activeFilter,
+          section: kind.viewSection, plural: kind.plural, scope: scope, api: api, model: views, current: activeFilter,
           open: { id in
             picking = true
             filterID = crmViewFilterPrefix + id

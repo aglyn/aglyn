@@ -119,6 +119,23 @@ final class CrmTests: XCTestCase {
     XCTAssertEqual(crmViewMenuDetail(view, uid: "u2", defaultID: "v1"), "Your default")
   }
 
+  func testATaskViewOpensOnItsTaskViewAndClauses() {
+    let saved = CrmSavedView(
+      id: "t1", name: "Overdue calls", ownerUID: "u1", createdByUID: "u1", shared: false,
+      state: CrmViewState(
+        filters: [CrmViewClause(field: "view", op: "equals", value: "overdue"), CrmViewClause(field: "kind", op: "equals", value: "call")]))
+    let open = crmTaskViewOpen(saved)
+    XCTAssertEqual(open.view, .overdue)
+    XCTAssertEqual(open.clauses, [ListFilterRequest(field: "kind", op: "equals", value: "call")])
+    XCTAssertNil(open.sort)
+    // No `view` clause reads as "My tasks", as the console's TASK_VIEW_DEFAULT does.
+    XCTAssertEqual(crmTaskViewOpen(CrmSavedView(id: "t2", name: "x", ownerUID: "", createdByUID: "", shared: false, state: CrmViewState())).view, .mine)
+    XCTAssertEqual(crmTaskViewFilter(.mine, open: nil).clauses, [])
+    XCTAssertEqual(crmTaskViewFilter(.done, open: nil).clauses, [ListFilterRequest(field: "view", op: "equals", value: "done")])
+    XCTAssertEqual(crmTaskViewFilter(.overdue, open: saved).id, "view:t1")
+    XCTAssertEqual(crmTaskViewFilter(.overdue, open: saved).clauses.count, 2)
+  }
+
   func testATelLinkIsTheConsoles() throws {
     for (index, item) in try functionCases("crmTelHref").enumerated() {
       XCTAssertEqual(crmTelHref(item.args[0] as? String), item.result as? String, "case \(index)")

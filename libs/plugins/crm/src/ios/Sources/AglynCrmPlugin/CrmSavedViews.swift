@@ -211,7 +211,9 @@ final class CrmViewsModel {
 
 /// The views menu (`CrmViewsControl`): the views to open, then what the reader may do to the open one.
 struct CrmViewsMenu: View {
-  let kind: CrmKind
+  /// The section the views belong to (`contacts`, … `tasks`) and what its records are called ("Tasks").
+  let section: String
+  let plural: String
   let scope: CrmScope
   let api: CrmAPI
   let model: CrmViewsModel
@@ -224,7 +226,6 @@ struct CrmViewsMenu: View {
   @State private var deleting: CrmSavedView?
   @State private var notice: String?
 
-  private var section: String { kind.viewSection }
   private var listed: (mine: [CrmSavedView], shared: [CrmSavedView]) { model.views(uid: scope.uid) }
   private var openView: CrmSavedView? {
     guard current.id.hasPrefix(crmViewFilterPrefix) else { return nil }
@@ -232,7 +233,7 @@ struct CrmViewsMenu: View {
     return (listed.mine + listed.shared).first { $0.id == id }
   }
   private var defaultID: String? { model.defaultID(orgID: scope.orgID, section: section) }
-  private var allLabel: String { "All \(kind.plural.lowercased())" }
+  private var allLabel: String { "All \(plural.lowercased())" }
 
   var body: some View {
     Menu {
@@ -311,8 +312,8 @@ struct CrmViewsMenu: View {
       .accessibilityIdentifier("crm-view-delete-confirm")
     } message: { view in
       Text(view.shared
-        ? "Everyone on the team who opens it will lose it; the \(kind.plural.lowercased()) themselves are untouched."
-        : "The \(kind.plural.lowercased()) themselves are untouched.")
+        ? "Everyone on the team who opens it will lose it; the \(plural.lowercased()) themselves are untouched."
+        : "The \(plural.lowercased()) themselves are untouched.")
     }
     .alert(notice ?? "", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
       Button("OK", role: .cancel) { notice = nil }
@@ -407,4 +408,32 @@ struct CrmViewNameSheet: View {
 struct CrmListKey: Equatable {
   let filter: CrmFilter
   let search: String
+}
+
+/// The section saved views of tasks belong to.
+let crmTaskViewSection = "tasks"
+
+/// A saved view of tasks as the list opens it (`tasks-section.tsx`): the task view its `view` clause holds ("My
+/// tasks" without one), the rest of its clauses on the query, and its sort when the list declares it.
+struct CrmTaskViewOpen: Equatable {
+  var view: TaskView
+  var clauses: [ListFilterRequest]
+  var sort: ListQuerySort?
+}
+
+func crmTaskViewOpen(_ saved: CrmSavedView) -> CrmTaskViewOpen {
+  let value = saved.state.filters.first { $0.field == "view" }?.value
+  return CrmTaskViewOpen(
+    view: value.flatMap(TaskView.init(rawValue:)) ?? .mine,
+    clauses: saved.state.filters.filter { $0.field != "view" }.map { ListFilterRequest(field: $0.field, op: $0.op, value: $0.value) },
+    sort: crmViewQuerySort(ContractValues.shared.taskListDeclaration.sorts, saved.state.sort))
+}
+
+/// What a task list saves as a view: its task view (none for "My tasks", which is what no clause reads as), then
+/// the open view's other clauses.
+func crmTaskViewFilter(_ view: TaskView, open: CrmSavedView?) -> CrmFilter {
+  let rest = open.map { crmTaskViewOpen($0).clauses } ?? []
+  return CrmFilter(
+    id: open.map { crmViewFilterPrefix + $0.id } ?? "task:\(view.rawValue)", label: open?.name ?? view.label,
+    clauses: (view == .mine ? [] : [ListFilterRequest(field: "view", op: "equals", value: view.rawValue)]) + rest)
 }

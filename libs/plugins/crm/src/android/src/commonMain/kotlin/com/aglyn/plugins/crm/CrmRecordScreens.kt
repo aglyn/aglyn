@@ -118,7 +118,7 @@ fun RecordsSection(
   val filters = remember(kind, scope, openEmail) { listOfNotNull(contactEmailFilter(openEmail)) + crmFilters(kind, scope) }
   var filterKey by rememberSaveable(kind) { mutableStateOf(filters.first().key) }
   // The section's saved views and the reader's default (`useCrmSavedView`): a view is one more filter the list runs.
-  val views = rememberCrmViews(context, scope, kind)
+  val views = rememberCrmViews(context, scope, kind.viewSection)
   val viewFilters = views?.all.orEmpty().map { crmViewFilter(it, kind) }
   val activeFilter = (filters + viewFilters).firstOrNull { it.key == filterKey } ?: filters.first()
   var picking by rememberSaveable(kind) { mutableStateOf(false) }
@@ -176,7 +176,7 @@ fun RecordsSection(
           SearchField(search, { search = it; if (it.isBlank()) asked = "" }, placeholder = "Search ${kind.plural.lowercase()}", onSearch = { asked = search })
           Row(verticalAlignment = Alignment.CenterVertically) {
             if (scope.uid.isNotEmpty()) {
-              CrmViewsMenu(kind, scope, api, views, activeFilter, { picking = true; filterKey = CRM_VIEW_FILTER_PREFIX + it }) { filterKey = filters.first().key }
+              CrmViewsMenu(kind.viewSection, kind.plural, scope, api, views, activeFilter, { picking = true; filterKey = CRM_VIEW_FILTER_PREFIX + it }) { filterKey = filters.first().key }
             }
             Box(Modifier.weight(1f)) { ChoiceChipRow(filters.map { ChipOption(it.key, it.label) }, filterKey, { picking = true; filterKey = it }) }
             if (scope.canWrite) CrmSelectToggle(bulk.selecting) { bulk.selecting = it; if (!it) bulk.picked = emptySet() }

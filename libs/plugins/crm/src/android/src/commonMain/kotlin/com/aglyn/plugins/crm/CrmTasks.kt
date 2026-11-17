@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.aglyn.contracts.Contracts
+import com.aglyn.contracts.ListFilterRequest
 import com.aglyn.contracts.ListQueryFilter
 import com.aglyn.contracts.ListQueryOp
 import com.aglyn.contracts.ListQueryRequest
@@ -130,7 +131,15 @@ fun taskViewPlan(view: TaskView, nowMs: Long, uid: String, startOfDay: (Long) ->
 /** Midnight of the device's day, as the console reads "today" in the browser's zone. */
 expect fun startOfLocalDay(nowMs: Long): Long
 
-fun tasksQuery(scope: CrmScope, plan: TaskViewPlan, search: String, limit: Int) = planListQuery(
+/** The task list's query: the view's plan as the base, a saved view's other clauses and its sort when one is open. */
+fun tasksQuery(
+  scope: CrmScope,
+  plan: TaskViewPlan,
+  search: String,
+  limit: Int,
+  clauses: List<ListFilterRequest> = emptyList(),
+  sort: ListQuerySort? = null,
+) = planListQuery(
   Contracts.taskListDeclaration,
   ListQueryRequest(
     base = scopeBase(scope) + listOfNotNull(
@@ -139,9 +148,9 @@ fun tasksQuery(scope: CrmScope, plan: TaskViewPlan, search: String, limit: Int) 
       plan.dueFrom?.let { ListQueryFilter(ListQueryOp.GREATER_THAN_OR_EQUAL, "dueAtMs", JsonPrimitive(it)) },
       plan.dueBefore?.let { ListQueryFilter(ListQueryOp.LESS_THAN, "dueAtMs", JsonPrimitive(it)) },
     ),
-    clauses = emptyList(),
+    clauses = clauses,
     search = search.trim().ifEmpty { null }?.let { listOf(it) },
-    sort = ListQuerySort(direction = if (plan.descending) ListQuerySortDirection.DESC else ListQuerySortDirection.ASC, path = "dueAtMs"),
+    sort = sort ?: ListQuerySort(direction = if (plan.descending) ListQuerySortDirection.DESC else ListQuerySortDirection.ASC, path = "dueAtMs"),
   ),
 ).toFirestoreQuery(crmPath(scope.orgId, "crmTasks"), limit)
   // Metadata changes too, so a list the server confirms stops reading as the cache's (AGL-4047).
@@ -281,10 +290,27 @@ fun TasksSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, ref
   var creating by remember { mutableStateOf(false) }
   val list = remember(scope, context.firestore) { LiveQueryList(context.firestore, coroutines, 25, ::taskOf) }
   val bulk = remember(scope) { CrmBulkState() }
-  LaunchedEffect(list, view, asked) {
+  // Saved views of tasks (`useCrmSavedView({ section: 'tasks' })`): the open one sets the task view, its other clauses
+  // and its sort; picking a task view leaves it.
+  val views = rememberCrmViews(context, scope, CRM_TASK_VIEW_SECTION)
+  var openViewId by rememberSaveable { mutableStateOf<String?>(null) }
+  var picking by rememberSaveable { mutableStateOf(false) }
+  var defaultApplied by rememberSaveable { mutableStateOf(false) }
+  val openView = views?.all?.firstOrNull { it.id == openViewId }
+  val opened = openView?.let(::crmTaskViewOpen)
+  val shownView = opened?.view ?: view
+  LaunchedEffect(views != null) {
+    val ready = views ?: return@LaunchedEffect
+    if (defaultApplied) return@LaunchedEffect
+    defaultApplied = true
+    // The reader's default view of tasks opens first, once, unless they already picked.
+    val id = ready.defaultId ?: return@LaunchedEffect
+    if (!picking && ready.all.any { it.id == id }) openViewId = id
+  }
+  LaunchedEffect(list, shownView, opened, asked) {
     bulk.picked = emptySet()
-    val plan = taskViewPlan(view, nowMillis(), scope.uid)
-    list.show { limit -> tasksQuery(scope, plan, asked, limit) }
+    val plan = taskViewPlan(shownView, nowMillis(), scope.uid)
+    list.show { limit -> tasksQuery(scope, plan, asked, limit, opened?.clauses.orEmpty(), opened?.sort) }
   }
   val pickedTasks = (list.rows as? Live.Ready)?.value.orEmpty().filter { it.id in bulk.picked }
   fun runBulk(action: CrmBulkAction, value: CrmBulkValue) {
@@ -306,7 +332,16 @@ fun TasksSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, ref
           }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-          Box(Modifier.weight(1f)) { ChoiceChipRow(TaskView.entries.map { ChipOption(it.key, it.label) }, view.key, { key -> view = TaskView.entries.first { it.key == key } }) }
+          if (scope.uid.isNotEmpty()) {
+            CrmViewsMenu(CRM_TASK_VIEW_SECTION, "Tasks", scope, api, views, crmTaskViewFilter(shownView, openView), { picking = true; openViewId = it }) { openViewId = null }
+          }
+          Box(Modifier.weight(1f)) {
+            ChoiceChipRow(TaskView.entries.map { ChipOption(it.key, it.label) }, shownView.key, { key ->
+              picking = true
+              openViewId = null
+              view = TaskView.entries.first { it.key == key }
+            })
+          }
           if (scope.canWrite) CrmSelectToggle(bulk.selecting) { bulk.selecting = it; if (!it) bulk.picked = emptySet() }
         }
         if (bulk.selecting && pickedTasks.isNotEmpty()) {
@@ -318,7 +353,7 @@ fun TasksSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, ref
         list,
         key = { it.id },
         failed = "Could not load tasks",
-        empty = { EmptyState(if (view == TaskView.DONE) "Nothing done yet" else "Nothing to do here", body = "Tasks you and your team add show up here.", icon = AglynIcons.named("task")) },
+        empty = { EmptyState(if (shownView == TaskView.DONE) "Nothing done yet" else "Nothing to do here", body = "Tasks you and your team add show up here.", icon = AglynIcons.named("task")) },
       ) { task ->
         if (bulk.selecting) {
           CrmPickRow(task.id in bulk.picked, task.title, { bulk.toggle(task.id) }) { modifier ->

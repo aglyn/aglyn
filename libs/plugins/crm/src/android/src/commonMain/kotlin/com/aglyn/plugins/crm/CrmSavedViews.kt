@@ -164,11 +164,11 @@ class CrmViewsLive(val mine: List<CrmSavedView>, val shared: List<CrmSavedView>,
 }
 
 @Composable
-internal fun rememberCrmViews(context: NativePluginContext, scope: CrmScope, kind: CrmKind): CrmViewsLive? {
-  val views = remember(scope.orgId, scope.hostId, kind, context.firestore) {
+internal fun rememberCrmViews(context: NativePluginContext, scope: CrmScope, section: String): CrmViewsLive? {
+  val views = remember(scope.orgId, scope.hostId, section, context.firestore) {
     context.firestore.observe(
       scopedQuery(
-        scope, CRM_VIEWS_COLLECTION, filters = listOf(FirestoreFilter("section", FilterOp.EQ, kind.viewSection)),
+        scope, CRM_VIEWS_COLLECTION, filters = listOf(FirestoreFilter("section", FilterOp.EQ, section)),
         orderBy = listOf(FirestoreOrder("name")), limit = CRM_VIEWS_LIMIT,
       ),
     )
@@ -183,7 +183,7 @@ internal fun rememberCrmViews(context: NativePluginContext, scope: CrmScope, kin
     Live.Loading -> return null
   }
   val (mine, shared) = crmListedViews(docs, scope.uid)
-  return CrmViewsLive(mine, shared, crmDefaultViewId(profileDoc?.data, scope.orgId, kind.viewSection))
+  return CrmViewsLive(mine, shared, crmDefaultViewId(profileDoc?.data, scope.orgId, section))
 }
 
 private sealed interface CrmViewNaming {
@@ -194,7 +194,9 @@ private sealed interface CrmViewNaming {
 /** The views menu (`CrmViewsControl`): the views to open, then what the reader may do to the open one. */
 @Composable
 internal fun CrmViewsMenu(
-  kind: CrmKind,
+  /** The section the views belong to (`contacts`, … `tasks`) and what its records are called ("Tasks"). */
+  section: String,
+  plural: String,
   scope: CrmScope,
   api: CrmApi,
   views: CrmViewsLive?,
@@ -208,8 +210,7 @@ internal fun CrmViewsMenu(
   var deleting by remember { mutableStateOf<CrmSavedView?>(null) }
   var notice by remember { mutableStateOf<Pair<String, StatusTone>?>(null) }
   val busy = remember(naming, deleting) { Busy() }
-  val section = kind.viewSection
-  val allLabel = "All ${kind.plural.lowercase()}"
+  val allLabel = "All ${plural.lowercase()}"
   val openView = views?.all?.firstOrNull { CRM_VIEW_FILTER_PREFIX + it.id == current.key }
   val defaultId = views?.defaultId
   fun act(done: String, failed: String, work: suspend () -> Unit) {
@@ -334,8 +335,8 @@ internal fun CrmViewsMenu(
       },
       { deleting = null },
       Modifier.testTag("crm-view-delete-confirm"),
-      body = if (view.shared) "Everyone on the team who opens it will lose it; the ${kind.plural.lowercase()} themselves are untouched."
-      else "The ${kind.plural.lowercase()} themselves are untouched.",
+      body = if (view.shared) "Everyone on the team who opens it will lose it; the ${plural.lowercase()} themselves are untouched."
+      else "The ${plural.lowercase()} themselves are untouched.",
       busy = busy.busy, error = busy.error, destructive = true,
     )
   }
@@ -355,3 +356,27 @@ private fun CrmViewMenuItem(view: CrmSavedView, picked: Boolean, detail: String?
     onClick = onClick, modifier = Modifier.testTag("crm-view-${view.id}"),
   )
 }
+
+/** The section saved views of tasks belong to. */
+const val CRM_TASK_VIEW_SECTION = "tasks"
+
+/**
+ * A saved view of tasks as the list opens it (`tasks-section.tsx`): the task view its `view` clause holds ("My
+ * tasks" without one), the rest of its clauses on the query, and its sort when the list declares it.
+ */
+data class CrmTaskViewOpen(val view: TaskView, val clauses: List<ListFilterRequest>, val sort: ListQuerySort?)
+
+fun crmTaskViewOpen(saved: CrmSavedView): CrmTaskViewOpen {
+  val value = saved.state.filters.firstOrNull { it.field == "view" }?.value
+  return CrmTaskViewOpen(
+    TaskView.entries.firstOrNull { it.key == value } ?: TaskView.MINE,
+    saved.state.filters.filter { it.field != "view" }.map { ListFilterRequest(it.field, it.op, it.value) },
+    crmViewQuerySort(Contracts.taskListDeclaration.sorts, saved.state.sort),
+  )
+}
+
+/** What a task list saves as a view: its task view (none for "My tasks", which no clause reads as), then the open view's other clauses. */
+fun crmTaskViewFilter(view: TaskView, open: CrmSavedView?): CrmFilter = CrmFilter(
+  open?.let { CRM_VIEW_FILTER_PREFIX + it.id } ?: "task:${view.key}", open?.name ?: view.label,
+  (if (view == TaskView.MINE) emptyList() else listOf(ListFilterRequest("view", "equals", view.key))) + (open?.let { crmTaskViewOpen(it).clauses } ?: emptyList()),
+)
