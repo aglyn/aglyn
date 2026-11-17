@@ -51,6 +51,6 @@ final class SiteLiveURLTests: XCTestCase {
       SiteLiveURL.home(subdomain: "juniper-street", cname: nil, consoleOrigin: nil)?.absoluteString,
       "https://juniper-street.aglyn.app/")
     XCTAssertNil(SiteLiveURL.home(subdomain: nil, cname: "only-custom.example", consoleOrigin: "http://localhost:4610"))
-    XCTAssertEqual(SiteLiveURL.consoleHostname("http://[::1]:4610"), "::1")
+    XCTAssertEqual(SiteLiveURL.consoleHostname("http://[::1]:4610"), "[::1]")
   }
 }
