@@ -26,10 +26,8 @@ import {
   CUSTOMER_API_MOUNT,
   CUSTOMER_API_VERSION,
 } from '../../../utils/api-v1-openapi'
-import {
-  describePluginApiV1Resources,
-  dispatchResource,
-} from '../../../utils/api-v1-resources'
+import { describePluginApiV1Resources } from '../../../utils/api-v1-resources'
+import { serveApiV1 } from '../../../utils/api-v1-service'
 import {
   handleMcpMessage,
   JSON_RPC_ERRORS,
@@ -38,14 +36,14 @@ import {
   negotiateProtocolVersion,
   type JsonRpcResponse,
 } from '../../../utils/mcp-protocol'
-import { buildMcpTools, buildToolRequest } from '../../../utils/mcp-tools'
+import { buildMcpTools, buildToolRequest, missingPathArguments } from '../../../utils/mcp-tools'
 
 /**
  * THE MCP ENDPOINT (AGL-3091).
  *
  * A second transport over `/api/v1`, never a second implementation of it. A
  * tool call is turned back into the request the resource dispatcher would have
- * received over HTTP and handed to `dispatchResource`, so auth, entitlement,
+ * received over HTTP and handed to `serveApiV1`, so auth, entitlement,
  * plan refusals, scope refusals, rate limiting and the error envelope are the
  * ones the REST API already has. The tools themselves are read out of the
  * published OpenAPI document, so the surface cannot drift from what `/api/v1`
@@ -63,7 +61,7 @@ import { buildMcpTools, buildToolRequest } from '../../../utils/mcp-tools'
  * which server to ask. `/api/v1` answers its 401 unchanged.
  */
 // lockdown-423: via apps/console/utils/api-v1.ts — every tool call is
-// authenticated there before it reaches `dispatchResource`, so the verdict runs
+// authenticated there before it reaches `serveApiV1`, so the verdict runs
 // beside the org-doc read exactly as it does for `/v1`. This route adds no
 // second door into the same handlers.
 
@@ -198,12 +196,25 @@ async function answer(request: Request): Promise<Response> {
         latestHeaders = charged.headers
         if (charged.refusal) return readOutcome(charged.refusal)
       }
+      // A missing path argument would misroute rather than fail; refuse it by
+      // name, in the API's own envelope, before anything is dispatched.
+      const missing = missingPathArguments(tool, args)
+      if (missing.length > 0) {
+        return readOutcome(
+          ApiErrors.badRequest({
+            message: `Missing required argument${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}`,
+            headers: context.headers,
+          }),
+        )
+      }
       const { request: toolRequest, segments } = buildToolRequest(
         tool,
         args,
         `${origin}${CUSTOMER_API_MOUNT}`,
       )
-      return readOutcome(await dispatchResource(toolRequest, context, segments))
+      // The same function the `/api/v1` route answers with, service paths
+      // included (AGL-4225): a tool is a path that route serves.
+      return readOutcome(await serveApiV1(toolRequest, context, segments))
     },
   }
 
