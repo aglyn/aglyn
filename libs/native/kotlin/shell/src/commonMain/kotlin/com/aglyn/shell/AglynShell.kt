@@ -59,6 +59,8 @@ fun AglynShell(
   /** A link to open once signed in: a tapped notification's, or an App Link / aglyn:// URL. */
   pendingLink: String? = null,
   onLinkOpened: () -> Unit = {},
+  /** A [pendingLink] from outside the app opens as a new tab on a window wide enough for tabs (the desktop, AGL-4059). */
+  linksInNewTab: Boolean = false,
   /** Light or dark regardless of the system's; null follows the system. */
   dark: Boolean? = null,
   /** The desktop's first window, and Android's first launch (on from its splash), play the launch intro. */
@@ -113,7 +115,7 @@ fun AglynShell(
         is AuthState.SignedIn -> androidx.compose.runtime.key(state.user.uid) {
           Box(Modifier.graphicsLayer { alpha = reveal.alpha; translationY = reveal.rise.dp.toPx() }) {
             AccountSwitchReset(navigator, state.user.uid)
-            SignedInShell(services, navigator, state.user.uid, pendingLink, onLinkOpened)
+            SignedInShell(services, navigator, state.user.uid, pendingLink, onLinkOpened, linksInNewTab)
           }
         }
       }

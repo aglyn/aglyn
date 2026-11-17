@@ -699,7 +699,8 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
    * Starter's band is 0 and `emailSendsOverage` can never compute an excess
    * for it. A rate there would advertise a fee that cannot be charged.
    */
-  const EMAIL_CELLS = ['—', '$2.25', 'Custom']
+  // Starter bills email past 1,000 a month since AGL-4227.
+  const EMAIL_CELLS = ['$2.50', '$2.25', 'Custom']
 
   it('holds the absence declaration while the page carries the row NOWHERE', () => {
     // The committed state, asserted rather than assumed: no breakpoint states
@@ -779,6 +780,24 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     assert.match(run.stderr, /CRM records, per 1,000 over the included band \[mobile\]/)
   })
 
+  it('publishes every email a plan includes a month, from the catalog, before one-to-one email (AGL-4227)', () => {
+    resetFixtures()
+    const tables = JSON.parse(readFileSync(TABLES, 'utf8'))
+    const group = tables.compare.groups.find((g) => g.title === 'Content & data')
+    assert.ok(group, 'the Content & data group is missing')
+    const labels = group.rows.map((r) => r.label)
+    const at = labels.indexOf('Emails included / mo')
+    assert.ok(at >= 0, 'the Emails included row is not published')
+    assert.equal(labels[at + 1], 'One-to-one emails / day')
+    // Free's hard cap, Starter's billed band, Pro's campaign band.
+    assert.deepEqual(group.rows[at].values, {
+      free: '300',
+      starter: '1,000',
+      pro: '2,500',
+      enterprise: 'Talk to us',
+    })
+  })
+
   it('publishes both billed rates, at the values the billing code reads', () => {
     // The rates themselves, pinned in the generated artifact. `--check` diffs
     // the committed `tables.json` byte for byte, so moving either constant
@@ -793,7 +812,7 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     assert.ok(email, 'the email overage row is not published')
     // The plans sold since pricing v4 (AGL-4126), then Custom.
     assert.deepEqual(email.values, {
-      starter: '—',
+      starter: '$2.50',
       pro: '$2.25',
       enterprise: 'Custom',
     })

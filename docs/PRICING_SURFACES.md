@@ -504,6 +504,57 @@ the Terms point at it rather than restate it.
 
 Revert: point `v0clP6xQl-`'s `versionId` back at `d4QVrkm2vn` and revalidate.
 
+### 2026-11-16 — the API on Starter: code first, the page after billing (AGL-4226)
+
+Starter gains the API (500 requests a month, $3.00 per 1,000 past them, a
+20,000 monthly ceiling) and every plan a per-workspace rate limit. The API on
+Starter is a NEW line (a band up), so it publishes after billing is live:
+
+- `tables.json` is regenerated and now carries the Starter cells and two new
+  compare rows, **API monthly ceiling** and **API requests per minute, whole
+  workspace**. `build-pricing-tables.mts` declares the two Starter cells
+  (`FRAME_STALE_CELLS['API access · Starter']`,
+  `USAGE_STALE['API requests, per 1,000 over limit · Starter']`) and the two
+  new rows (`EXPECTED_MISSING`) ahead of the frame. Each declaration fails the
+  reconciler the day the frame catches up, and is deleted then.
+- `/pricing`, the calculator variables, the comparison pages and the Figma
+  frames change by hand after the release, from before→after rows the owner
+  approves.
+- **Starter's overage rate and its ceiling** (moved from $0.50 / 50,000 to
+  $3.00 / 20,000 by the overage audit, 2026-11-16). Each is written once —
+  `PLAN_PRICING.starter.extraApiRequestsUsdPer1k` and
+  `PLAN_ENTITLEMENTS.starter.maxApiRequestsPerMonth` — and the specs, the
+  refusal message, the console captions and `tables.json` read them. What
+  still states them as literals, and moves by hand with either: the docs
+  (`apps/docs/api/{overview,rate-limits,usage}.md`,
+  `apps/docs/docs/workspace-and-billing/billing-and-plans/overview.md`), the
+  native overage screen's `const.pricing.starter`
+  (`libs/native/screens/billing-overage.screens.json`, held to the code by
+  `native-billing-overage-matches-the-console.spec.ts`), the `$58.50` and
+  `5850` guards in `api-request-guards.spec.ts` and `report-usage/route.spec.ts`
+  (each conditional on today's figures), the decision-log entry, and the page.
+
+### 2026-11-16 — overage audit corrections: prices UP go on the page first (AGL-4227)
+
+Each line's direction decides its order. **Price UP / band DOWN** publish on
+`/pricing`, the calculator and the comparison pages before billing moves;
+**band UP / new line** publish after.
+
+| Change | Direction | Code | Waits on |
+| --- | --- | --- | --- |
+| Starter email: past 1,000 a month at $2.50 per 1,000, one-to-one CRM inside the 1,000 | price UP (a new charge) | `INCLUDED_EMAIL_SENDS_BY_PLAN`, `PLAN_PRICING.starter.extraEmailSendsUsdPer1k` | the page first, then production's `BILL_STARTER_EMAIL_SENDS_FROM=2026-11` (Starter's email is counted from November 2026; `BILL_EMAIL_SEND_OVERAGE_FROM` is already on for Pro) |
+| Free email: a hard cap of 300 a month (account and security mail exempt) | band DOWN (a new cap) | `EMAIL_SENDS_MONTHLY_CAP_BY_PLAN`, `resolveMonthlyEmailCap` | the page first (nothing bills; the cap enforces from ship) |
+| API billed per started 256 KB, every plan | price UP (meter change) | `API_BILLING_UNIT_BYTES`, `chargeApiRequestSize` | the page and the API docs first |
+| Starter extra site $20 → $25, for everyone (no grandfathering) | price UP | `PLAN_PRICING.starter.extraHostMonthlyUsd`; `REPRICED_ADDONS` | the page first, then the v2 Stripe prices and `STRIPE_PRICE_STARTER_EXTRA_HOST_V2[_YEARLY]` |
+| Starter CRM records stop at Pro's 10,000 | band DOWN | `maxCrmRecords` | the page first |
+| Free keeps 100 people for the CRM (contacts and filed leads together); past it captures add no one | band DOWN (leads were uncounted) | `captureAdmitsPerson` | the page first: it shows Free's CRM records as "—" today |
+| Retired plans' API overage → $0.50 | price UP, no subscribers | `PLAN_PRICING.{scale,advanced,agency}` | nothing (no column on the page) |
+
+`tables.json` carries the new Starter extra-site and email cells; the
+builder declares the extra-site cell ahead of the frame
+(`USAGE_STALE['Extra site, per month · Starter']`), and the email row is
+already declared absent from the page.
+
 ## Enterprise has no price here, but it has bands
 
 `PLAN_ENTITLEMENTS.enterprise` is a row of **finite fallbacks** — twice

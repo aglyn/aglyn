@@ -157,6 +157,16 @@ export const NODE_HIDE_IF_PROP = 'hideIf'
 export const NODE_HIDE_UNLESS_PROP = 'hideUnless'
 
 /**
+ * Node prop: which visitors see the element (`signedIn`, `signedOut`; unset or
+ * `everyone` is all of them) — "Sign in" in a header for visitors, "Account"
+ * for the site's signed-in members. Read in the visitor's browser, because a
+ * published page is one cached page for everybody; see `sign-in-visibility`.
+ *
+ * Persisted in screen and component documents — never rename.
+ */
+export const NODE_SHOW_TO_PROP = 'showTo'
+
+/**
  * Instance props that move onto the definition's root when the two collapse
  * into one element (AGL-2521).
  *
@@ -174,6 +184,7 @@ export const NODE_HIDE_UNLESS_PROP = 'hideUnless'
 export const INSTANCE_CARRIED_PROPS: readonly string[] = [
   NODE_HIDE_IF_PROP,
   NODE_HIDE_UNLESS_PROP,
+  NODE_SHOW_TO_PROP,
   NODE_ANIMATION_PROP,
   NODE_ANIMATION_TRIGGER_PROP,
   NODE_ANIMATION_DURATION_PROP,

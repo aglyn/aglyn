@@ -65,6 +65,7 @@ import {
   formPropsOnBind,
   FORM_COMPONENT_ID,
   NODE_HIDE_UNLESS_PROP,
+  NODE_SHOW_TO_PROP,
   normalizeBindingTokens,
   readInstanceIconValue,
   readReusablePropValue,
@@ -80,6 +81,9 @@ import {
   listPropFedTextNodeIds,
   ScreenLinkContext,
   screenLinkTargetOptions,
+  SHOW_TO_EVERYONE,
+  SHOW_TO_SIGNED_IN,
+  SHOW_TO_SIGNED_OUT,
   subscribeKnownPluginInstalls,
   unresolvedScreenOption,
 } from '@aglyn/aglyn'
@@ -1432,6 +1436,38 @@ export function buildVisibilityFields(
 }
 
 /**
+ * "Show to" (AGL-4231), offered on every element: everyone, signed-in visitors
+ * or signed-out visitors — "Sign in" in a header for visitors and "Account"
+ * for members, a welcome only members see. Decided in the visitor's browser on
+ * the published site; the canvas shows every element so each can be edited.
+ *
+ * "Everyone" is a real value rather than `''`, for the reason the animation
+ * "None" is (AGL-1451): an empty value cannot persist, so the choice could
+ * never be taken back.
+ */
+export function buildAudienceFields(): Array<Record<string, unknown>> {
+  const description =
+    'Which visitors see this element on the live site. Signed in means ' +
+    "signed in to this site's account. It decides what shows, not what is " +
+    'private: put members-only content on a members-only page. In the ' +
+    'Besigner every element shows, so you can edit it.'
+  return [
+    {
+      name: NODE_SHOW_TO_PROP,
+      label: 'Show to',
+      description,
+      help: { title: 'Show to', excerpt: description },
+      component: FieldComponentType.SELECT,
+      options: [
+        { value: SHOW_TO_EVERYONE, label: 'Everyone' },
+        { value: SHOW_TO_SIGNED_IN, label: 'Signed-in visitors' },
+        { value: SHOW_TO_SIGNED_OUT, label: 'Signed-out visitors' },
+      ],
+    },
+  ]
+}
+
+/**
  * The animation fields every element gets (AGL-2486).
  *
  * Presets rather than a keyframes box, because the audience includes people
@@ -2457,7 +2493,10 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
 
     // Element animation (AGL-2486). Static, so it is built once rather than
     // per render; unlike the visibility directives it is offered everywhere.
-    const animationFields = useMemo(() => buildAnimationFields(), [])
+    const animationFields = useMemo(
+      () => [...buildAudienceFields(), ...buildAnimationFields()],
+      [],
+    )
 
     /**
      * Repeat (AGL-3111), offered on every element and every instance — the

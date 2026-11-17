@@ -20,6 +20,10 @@ import {
   pluginRequestFromWeb,
   Route,
 } from '@aglyn/aglyn/server'
+import {
+  emailSendsBillingBand,
+  resolveMonthlyEmailCap,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 // By path: the route's specs replace the `/server` barrel wholesale.
@@ -42,7 +46,7 @@ import {
 } from '@aglyn/aglyn/server'
 import {
   bandwidthGbFromPageViews,
-  billsEmailSendOverage,
+  emailOverageBillsForOrg,
   pageViewsFromBandwidthGb,
 } from '../../../../utils/usage-metering'
 import {
@@ -904,8 +908,27 @@ async function handler(request: Request): Promise<Response> {
       // All mail past the band is invoiced only once the switch names this
       // month AND the plan has a rate. Until then nothing is charged for it,
       // and transactional mail is never refused, so the notice must say both.
+      // The band email bills against, and Free's hard cap (AGL-4227).
+      const emailBillingBand = emailSendsBillingBand(orgData as never)
+      const monthlyEmailCap = resolveMonthlyEmailCap(orgData as never)
+      // The people a capture keeps on a plan WITHOUT the CRM (AGL-4227): its
+      // contacts, companies, deals and filed leads share the one band, and
+      // past it a capture adds no one. Counted only where that band binds.
+      const keepsPeopleForUpgrade =
+        !entitlements.features.crm && Number.isFinite(entitlements.contactsPerHost)
+      const capturedPeople = keepsPeopleForUpgrade
+        ? (
+            await Promise.all(
+              ['contacts', 'companies', 'deals', 'leads'].map(async (name) =>
+                Number(
+                  (await org.ref.collection(name).count().get()).data()?.count ?? 0,
+                ) || 0,
+              ),
+            )
+          ).reduce((sum, value) => sum + value, 0)
+        : 0
       const emailOverageBills =
-        billsEmailSendOverage(month, process.env.BILL_EMAIL_SEND_OVERAGE_FROM) &&
+        emailOverageBillsForOrg(orgData as never, month) &&
         priceEmailSendOverage(orgData as never, 0).overageRateUsd !== null
       // Whether a free site past its bandwidth band is paused — the cap
       // engages strictly PAST the band, so this asks the predicate with a
@@ -1132,16 +1155,18 @@ async function handler(request: Request): Promise<Response> {
           key: 'emailSendsTotal',
           label: 'total monthly email',
           used: emailSends,
-          limit: entitlements.emailSendsPerMonth,
+          // The band the invoice measures (AGL-4227): Starter's 1,000 emails
+          // of everything, the campaign band elsewhere.
+          limit: emailBillingBand,
           cadence: 'monthly',
           outcome: emailOverageBills ? 'bills' : 'continues',
           lead: () =>
             `${workspace.subject} has sent ` +
             usagePhrase({
               used: emailSends,
-              limit: entitlements.emailSendsPerMonth,
+              limit: emailBillingBand,
               usedText: formatCount(emailSends),
-              limitText: formatCount(entitlements.emailSendsPerMonth),
+              limitText: formatCount(emailBillingBand),
               noun: 'emails',
               suffix: 'this month',
             }) +
@@ -1157,6 +1182,68 @@ async function handler(request: Request): Promise<Response> {
             ? 'Nothing is stopped — past the included amount, extra email is ' +
               'billed on your monthly invoice.'
             : 'Nothing is stopped and nothing is charged.',
+        },
+        {
+          // FREE'S HARD MONTHLY CAP (AGL-4227): every email but account and
+          // security mail stops at it until the month turns, so the owner is
+          // told at 80% and at 100% in plain words, with the way past it.
+          // `limit` is UNLIMITED on every other plan, which skips the check.
+          key: 'emailSendsMonthlyCap',
+          label: 'monthly email limit',
+          used: emailSends,
+          limit: monthlyEmailCap,
+          cadence: 'monthly',
+          outcome: 'stops',
+          lead: () =>
+            `${workspace.subject} has sent ` +
+            usagePhrase({
+              used: emailSends,
+              limit: monthlyEmailCap,
+              usedText: formatCount(emailSends),
+              limitText: formatCount(monthlyEmailCap),
+              noun: 'emails',
+              suffix: 'this month',
+            }) +
+            '.',
+          reached:
+            'Emails from your site — form confirmations, notices and the rest — ' +
+            'are not being sent for the rest of this month, and they are not ' +
+            'sent later. Sign-in links, invitations and password resets still ' +
+            'go out. Sending starts again on the 1st (UTC); upgrade in Billing ' +
+            'to send more this month.',
+          approach:
+            'Nothing is charged. At the limit, emails from your site stop until ' +
+            'the 1st (UTC) — sign-in and password mail still goes out — unless ' +
+            'you upgrade in Billing.',
+        },
+        {
+          // THE PEOPLE A PLAN WITHOUT THE CRM KEEPS (AGL-4227): past the band
+          // a form entry is still saved under Forms, but no person is added.
+          // `limit` is UNLIMITED where the band does not bind, which skips it.
+          key: 'capturedPeople',
+          label: 'people kept for the CRM',
+          used: capturedPeople,
+          limit: keepsPeopleForUpgrade ? entitlements.contactsPerHost : UNLIMITED,
+          cadence: 'crossing',
+          outcome: 'stops',
+          lead: () =>
+            `${workspace.possessive} sites have kept ` +
+            usagePhrase({
+              used: capturedPeople,
+              limit: entitlements.contactsPerHost,
+              usedText: formatCount(capturedPeople),
+              limitText: formatCount(entitlements.contactsPerHost),
+              noun: 'people from forms, bookings and sign-ups',
+            }) +
+            '.',
+          reached:
+            'New people are not being added. Every form entry is still saved ' +
+            'under Forms, but no contact is made from it, now or later. ' +
+            'Everyone already kept is waiting for the CRM — upgrade in Billing ' +
+            'to keep adding people.',
+          approach:
+            'Nothing is charged. At the limit, form entries are still saved under ' +
+            'Forms, but no new people are added unless you upgrade in Billing.',
         },
         // Each org capacity a plugin backs, measured against the limit its
         // create is refused at: included plus bought, clamped to the plan's
