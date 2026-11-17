@@ -10,6 +10,15 @@
   <!-- Scan stock reads barcodes with the camera; a device without one still works. -->
   <uses-permission android:name="android.permission.CAMERA" />
   <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+  <!-- A console page the app has no screen for goes back to the person's browser, which the app has to be able to see
+       (AGL-4059, handBackWebOnlyLink). -->
+  <queries>
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <category android:name="android.intent.category.BROWSABLE" />
+      <data android:scheme="https" />
+    </intent>
+  </queries>
 
   <application
     android:name=".AglynApplication"
