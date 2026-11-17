@@ -368,7 +368,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#what-you-can-do': 'Drag-and-drop components from the drawer onto the canvas, and reparent them by dragging in the hierarchy or on the canvas.',
   },
   billing: {
-    '#api-access': 'The customer REST API is included on Pro and Custom — mint scoped API keys and call the versioned /v1 endpoints from anywhere.',
+    '#api-access': 'The customer REST API is included on Starter, Pro and Custom — mint scoped API keys and call the versioned /v1 endpoints from anywhere.',
     '#billing-address': 'The address Aglyn issues your invoices to, and the address sales tax on your Aglyn subscription is calculated from.',
     '#billing-address-on-profile': 'Settings → Profile shows your billing address read-only, beside the workspace\'s other details; change it on Billing → Settings.',
     '#billing-email': 'Invoices are sent to the billing email, along with receipts and — the one that matters most — the notices we send when a card fails and a subscription is about to lapse.',

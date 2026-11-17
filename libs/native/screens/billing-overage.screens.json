@@ -13,37 +13,43 @@
             "extraApiRequestsUsdPer1k": null,
             "extraContactsUsdPer1k": null,
             "extraEmailSendsUsdPer1k": null,
-            "meteredInfraPassThrough": false
+            "meteredInfraPassThrough": false,
+            "includedEmailSends": null
           },
           "starter": {
-            "extraApiRequestsUsdPer1k": null,
+            "extraApiRequestsUsdPer1k": 3,
             "extraContactsUsdPer1k": 1,
-            "extraEmailSendsUsdPer1k": null,
-            "meteredInfraPassThrough": true
+            "extraEmailSendsUsdPer1k": 2.5,
+            "meteredInfraPassThrough": true,
+            "includedEmailSends": 1000
           },
           "pro": {
             "extraApiRequestsUsdPer1k": 0.5,
             "extraContactsUsdPer1k": 0.75,
             "extraEmailSendsUsdPer1k": 2.25,
-            "meteredInfraPassThrough": true
+            "meteredInfraPassThrough": true,
+            "includedEmailSends": null
           },
           "business": {
             "extraApiRequestsUsdPer1k": 0.5,
             "extraContactsUsdPer1k": 0.5,
             "extraEmailSendsUsdPer1k": 2,
-            "meteredInfraPassThrough": true
+            "meteredInfraPassThrough": true,
+            "includedEmailSends": null
           },
           "advanced": {
-            "extraApiRequestsUsdPer1k": 0.25,
+            "extraApiRequestsUsdPer1k": 0.5,
             "extraContactsUsdPer1k": 0.4,
             "extraEmailSendsUsdPer1k": 1.85,
-            "meteredInfraPassThrough": true
+            "meteredInfraPassThrough": true,
+            "includedEmailSends": null
           },
           "enterprise": {
             "extraApiRequestsUsdPer1k": null,
             "extraContactsUsdPer1k": null,
             "extraEmailSendsUsdPer1k": null,
-            "meteredInfraPassThrough": false
+            "meteredInfraPassThrough": false,
+            "includedEmailSends": null
           }
         },
         "billed": {
@@ -68,6 +74,10 @@
         {
           "name": "libraryBilled",
           "when": "!data.config || data.config.orgLibraryBilledFrom ~= - && data.config.orgLibraryBilledFrom <= now.month"
+        },
+        {
+          "name": "includedEmailBilled",
+          "when": "!const.pricing[@data.ent.plan].includedEmailSends || data.config.includedEmailBilledFrom ~= - && data.config.includedEmailBilledFrom <= now.month"
         },
         {
           "name": "annual",
@@ -289,8 +299,14 @@
         {
           "type": "notice",
           "tone": "warning",
-          "when": "!is.comp && const.pricing[@data.ent.plan].extraEmailSendsUsdPer1k && data.ent.quotas.emailSendsPerMonth > 0 && data.emails[@now.month] > data.ent.quotas.emailSendsPerMonth",
+          "when": "!is.comp && const.pricing[@data.ent.plan].extraEmailSendsUsdPer1k && !const.pricing[@data.ent.plan].includedEmailSends && data.ent.quotas.emailSendsPerMonth > 0 && data.emails[@now.month] > data.ent.quotas.emailSendsPerMonth",
           "text": "{max(0, data.emails[@now.month] - data.ent.quotas.emailSendsPerMonth):number} emails over your included {data.ent.quotas.emailSendsPerMonth:number} this month at {const.pricing[@data.ent.plan].extraEmailSendsUsdPer1k:dollars}/1,000 — ≈{round(max(0, data.emails[@now.month] - data.ent.quotas.emailSendsPerMonth) / 1000 * const.pricing[@data.ent.plan].extraEmailSendsUsdPer1k * 100) / 100:dollars} on this month's invoice. Transactional mail — receipts, invites, password resets — is never refused at the cap, so it is what takes an organization past the band."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "!is.comp && const.pricing[@data.ent.plan].extraEmailSendsUsdPer1k && const.pricing[@data.ent.plan].includedEmailSends && is.includedEmailBilled && data.emails[@now.month] > const.pricing[@data.ent.plan].includedEmailSends",
+          "text": "{max(0, data.emails[@now.month] - const.pricing[@data.ent.plan].includedEmailSends):number} emails over your included {const.pricing[@data.ent.plan].includedEmailSends:number} this month at {const.pricing[@data.ent.plan].extraEmailSendsUsdPer1k:dollars}/1,000 — ≈{round(max(0, data.emails[@now.month] - const.pricing[@data.ent.plan].includedEmailSends) / 1000 * const.pricing[@data.ent.plan].extraEmailSendsUsdPer1k * 100) / 100:dollars} on this month's invoice. Transactional mail — receipts, invites, password resets — is never refused at the cap, so it is what takes an organization past the band."
         },
         {
           "type": "notice",

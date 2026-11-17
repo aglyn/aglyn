@@ -101,17 +101,23 @@ export function billingEstimateCases({ plans, usage, entitlements }) {
 export function overageCaptionCases({ plans, entitlements }) {
   const cases = []
   for (const plan of plans) {
-    const org = { plan }
+    // A live subscription, as the native tests seed the screen: a paid plan
+    // stored without one is never billed (`apiOverageRateUsd`), so a bare
+    // `{ plan }` would quote no API rate where the screen shows one.
+    const org = { plan, subscription: { status: 'active' } }
     const { features: _features, ...quotas } = entitlements.resolveOrgEntitlements(org)
     const finite = (value) => (Number.isFinite(value) ? value : null)
     const q = Object.fromEntries(Object.entries(quotas).map(([key, value]) => [key, finite(value)]))
+    // The band email is BILLED past (AGL-4227): Starter's 1,000 of everything
+    // it sends, every other plan's campaign band.
+    const emailBand = entitlements.emailSendsBillingBand(org)
     for (const extra of [0, 1, 1234, 56789]) {
       const records = quotas.contactsPerHost + extra
       const requests = quotas.apiRequestsPerMonth + extra
-      const emails = quotas.emailSendsPerMonth + extra
+      const emails = emailBand + extra
       const recordsResult = entitlements.checkCrmRecordsQuota(org, records)
       const apiResult = entitlements.checkApiRequestQuota(org, requests)
-      const emailOverage = entitlements.emailSendsOverage(emails, quotas.emailSendsPerMonth)
+      const emailOverage = entitlements.emailSendsOverage(emails, emailBand)
       const emailPrice = entitlements.priceEmailSendOverage(org, emailOverage)
       cases.push({
         name: `${plan}: ${extra} past each band`,
@@ -120,6 +126,7 @@ export function overageCaptionCases({ plans, entitlements }) {
         records: { total: records, parts: { contacts: Math.round(records / 2), companies: Math.round(records / 4), deals: records - Math.round(records / 2) - Math.round(records / 4) } },
         apiRequests: requests,
         emails,
+        emailBand: finite(emailBand),
         expect: {
           recordsOverage: recordsResult.overageRecords,
           recordsRate: recordsResult.overageRateUsd,

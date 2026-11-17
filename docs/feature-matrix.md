@@ -29,7 +29,7 @@ this file is the last step, not the decision.
 | `actions` | — | — | ✓ | ✓ |
 | `aiAssist` | — | ✓ | ✓ | ✓ |
 | `aiGenerative` | ✓ | ✓ | ✓ | ✓ |
-| `apiAccess` | — | — | ✓ | ✓ |
+| `apiAccess` | — | ✓ | ✓ | ✓ |
 | `bookings` | — | ✓ | ✓ | ✓ |
 | `commerce` | — | ✓ | ✓ | ✓ |
 | `commerceAnalytics` | — | — | ✓ | ✓ |

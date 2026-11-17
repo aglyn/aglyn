@@ -792,6 +792,30 @@ class SiteTest {
     assertEquals(listOf("theme-cool" to "custom", "theme-warm" to "custom", "installed--harvest" to "installed"), listed.map { it.id to it.kind })
   }
 
+  /** The favicon saves through the console's route (`saveMirroredHostFields`), which re-fans it into every member's site list row. */
+  @Test
+  fun theFaviconSavesThroughTheMembershipsRoute() = runTest {
+    val seen = mutableListOf<Pair<String, kotlinx.serialization.json.JsonObject>>()
+    val engine = MockEngine { request ->
+      val text = (request.body as? io.ktor.http.content.OutgoingContent.ByteArrayContent)?.bytes()?.decodeToString().orEmpty()
+      seen += request.url.encodedPath to Json.parseToJsonElement(text.ifEmpty { "{}" }).jsonObject
+      respond("{}", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+    }
+    val api = ConsoleApiClient(origin = "https://console.test/", http = HttpClient(engine), getIdToken = { "t" }, sleep = {}, maxAttempts = 1)
+    val writer = object : com.aglyn.core.FirestoreWriter {
+      override suspend fun merge(path: String, data: Map<String, Any?>) = error("the favicon is never a direct write")
+      override suspend fun delete(path: String) = error("no")
+      override suspend fun add(collectionPath: String, data: Map<String, Any?>): String = error("no")
+    }
+    val settings = com.aglyn.site.setup.HostSettingsApi(api, writer, "h1")
+    settings.saveFavicon("https://cdn.example.com/icon.png")
+    settings.saveFavicon("")
+    assertEquals(listOf("/api/hosts/sync-memberships", "/api/hosts/sync-memberships"), seen.map { it.first })
+    assertEquals("h1", seen[0].second["hostId"]?.jsonPrimitive?.content)
+    assertEquals("https://cdn.example.com/icon.png", seen[0].second["favicon"]?.jsonPrimitive?.content)
+    assertEquals("", seen[1].second["favicon"]?.jsonPrimitive?.content)
+  }
+
   /**
    * Business details (AGL-4136): the card writes what the console's save writes. The canonical `seo.entity.*` paths and the
    * slogan, the email and the formatted address kept in step in the `business` copies, a cleared field deleted with its

@@ -27,6 +27,7 @@ import {
   RECORD_STAMPS as STAMPS,
   stringField as str,
   stringListField as strList,
+  SITE_ID_PATH_PARAM,
 } from '@aglyn/tenant-data-admin/server/api-v1-description'
 
 /**
@@ -60,8 +61,8 @@ export const PRODUCTS_API_V1_DESCRIPTION: ApiV1ResourceDescription = {
     ...STAMPS,
   },
   ops: [
-    { path: '/v1/sites/{siteId}/products', method: 'get', operationId: 'listProducts', summary: 'List products', list: true, returns: 'Product', description: 'Rows deleted since they were written are dropped after the read, so pages can come back short.', pathParams: [{ name: 'siteId', description: 'Site id.' }] },
-    { path: '/v1/sites/{siteId}/products/{productId}', method: 'get', operationId: 'getProduct', summary: 'Retrieve a product', returns: 'Product', pathParams: [{ name: 'siteId', description: 'Site id.' }, { name: 'productId', description: 'Product id.' }] },
+    { path: '/v1/sites/{siteId}/products', method: 'get', operationId: 'listProducts', summary: 'List products', list: true, returns: 'Product', description: 'Rows deleted since they were written are dropped after the read, so pages can come back short.', pathParams: [SITE_ID_PATH_PARAM] },
+    { path: '/v1/sites/{siteId}/products/{productId}', method: 'get', operationId: 'getProduct', summary: 'Retrieve a product', returns: 'Product', pathParams: [SITE_ID_PATH_PARAM, { name: 'productId', description: 'Product id.' }] },
   ],
 }
 
@@ -109,8 +110,8 @@ export const ORDERS_API_V1_DESCRIPTION: ApiV1ResourceDescription = {
     created: STAMPS.created,
   },
   ops: [
-    { path: '/v1/sites/{siteId}/orders', method: 'get', operationId: 'listOrders', summary: 'List orders', list: true, returns: 'Order', filters: [q('channel', '`online` is a default rather than a stored value, so filtering on it drops older orders after the read.'), q('status', 'Order status.')], pathParams: [{ name: 'siteId', description: 'Site id.' }] },
-    { path: '/v1/sites/{siteId}/orders/{orderId}', method: 'get', operationId: 'getOrder', summary: 'Retrieve an order', returns: 'Order', pathParams: [{ name: 'siteId', description: 'Site id.' }, { name: 'orderId', description: 'Order id.' }] },
-    { path: '/v1/sites/{siteId}/orders/{orderId}', method: 'patch', operationId: 'updateOrder', summary: 'Move an order’s status', accepts: 'OrderWrite', returns: 'Order', description: 'An illegal transition is `409 conflict` (`code: "order_transition"`), and the message names the status it is in.', pathParams: [{ name: 'siteId', description: 'Site id.' }, { name: 'orderId', description: 'Order id.' }] },
+    { path: '/v1/sites/{siteId}/orders', method: 'get', operationId: 'listOrders', summary: 'List orders', list: true, returns: 'Order', filters: [q('channel', '`online` is a default rather than a stored value, so filtering on it drops older orders after the read.'), q('status', 'Order status.')], pathParams: [SITE_ID_PATH_PARAM] },
+    { path: '/v1/sites/{siteId}/orders/{orderId}', method: 'get', operationId: 'getOrder', summary: 'Retrieve an order', returns: 'Order', pathParams: [SITE_ID_PATH_PARAM, { name: 'orderId', description: 'Order id.' }] },
+    { path: '/v1/sites/{siteId}/orders/{orderId}', method: 'patch', operationId: 'updateOrder', summary: 'Move an order’s status', accepts: 'OrderWrite', returns: 'Order', description: 'An illegal transition is `409 conflict` (`code: "order_transition"`), and the message names the status it is in.', pathParams: [SITE_ID_PATH_PARAM, { name: 'orderId', description: 'Order id.' }] },
   ],
 }

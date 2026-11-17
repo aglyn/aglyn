@@ -44,6 +44,7 @@
  */
 import {
   CONTACT_FIELDS_MAX_PER_ORG,
+  crmRecordsRefusalMessage,
   type ContactFieldDefinition,
   CRM_COLLECTIONS,
   type CrmCollection,
@@ -122,9 +123,8 @@ export async function crmRecordsBandRefusal(
   )
   if (room.allowed) return null
   return ApiErrors.planRequired({
-    message:
-      `CRM records limit reached (${room.included} records across contacts, ` +
-      'companies and deals). Upgrade the plan to add more.',
+    // Names Starter's ceiling and the plan without one (AGL-4227).
+    message: crmRecordsRefusalMessage(ctx.org as never, room),
     code: 'crm_records_quota',
     headers: ctx.headers,
   })

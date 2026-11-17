@@ -108,7 +108,8 @@ const firestore: any = {
   },
 }
 
-const mockSendEmail = jest.fn(async (_options: any): Promise<any> => undefined)
+// A message that left (AGL-4227: a refused one is now a failure, not a send).
+const mockSendEmail = jest.fn(async (_options: any): Promise<any> => ({ sent: true, id: 'email_test' }))
 const mockRender = jest.fn(async (..._args: any[]) => null as any)
 const mockMeter = jest.fn(async (_hostId: string) => undefined)
 let emailConfigured = true
@@ -172,6 +173,26 @@ const shipment = (id: string, lineItemIds: number[], extra: Record<string, any> 
   lineItemIds,
   atMs: Date.now(),
   ...extra,
+})
+
+describe('a refused email is not recorded as sent (AGL-4227)', () => {
+  it('a sending limit refusing the receipt fails the channel, writes no "sent" and meters nothing', async () => {
+    seed({ fulfillments: [shipment('f1', [0], { carrier: 'UPS', trackingNumber: '1Z999' })] })
+    mockSendEmail.mockResolvedValueOnce({
+      sent: false,
+      reason: 'rate-limited',
+      detail: 'Monthly email limit reached (300 a month on this plan).',
+    })
+    const result = await notifyOrderBuyer(REF, 'shipped', { fulfillmentId: 'f1' })
+    expect(result).toMatchObject({
+      outcome: 'handled',
+      channels: [{ channel: 'email', outcome: 'failed', error: expect.stringContaining('Monthly email limit reached') }],
+    })
+    const stored = docs.get(ORDER_PATH)!
+    expect(stored.buyerNotifications?.['shipped__f1__email']?.state).not.toBe('sent')
+    expect((stored.timeline ?? []).some((entry: any) => entry.event === 'buyer-notified')).toBe(false)
+    expect(mockMeter).not.toHaveBeenCalled()
+  })
 })
 
 describe('notifyOrderBuyer (AGL-3610)', () => {

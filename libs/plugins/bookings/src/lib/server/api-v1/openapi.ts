@@ -24,6 +24,7 @@ import {
   objectKindField as OBJECT_FIELD,
   queryParam as q,
   stringField as str,
+  SITE_ID_PATH_PARAM,
 } from '@aglyn/tenant-data-admin/server/api-v1-description'
 
 /**
@@ -78,7 +79,7 @@ export const BOOKINGS_API_V1_DESCRIPTION: ApiV1ResourceDescription = {
         q('status', '`confirmed`, `pendingPayment` or `canceled`. An expired checkout is stored as `pendingPayment`.'),
         q('serviceId', 'Bookings of one service.'),
       ],
-      pathParams: [{ name: 'siteId', description: 'Site id.' }],
+      pathParams: [SITE_ID_PATH_PARAM],
     },
     {
       path: '/v1/sites/{siteId}/bookings/{bookingId}',
@@ -87,7 +88,7 @@ export const BOOKINGS_API_V1_DESCRIPTION: ApiV1ResourceDescription = {
       summary: 'Retrieve a booking',
       returns: 'Booking',
       pathParams: [
-        { name: 'siteId', description: 'Site id.' },
+        SITE_ID_PATH_PARAM,
         { name: 'bookingId', description: 'Booking id.' },
       ],
     },

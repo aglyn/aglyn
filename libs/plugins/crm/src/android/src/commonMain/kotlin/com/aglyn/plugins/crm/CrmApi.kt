@@ -96,13 +96,21 @@ data class ConvertDraft(
   val dealStageId: String?,
 )
 
+/**
+ * A task route's body: the site alone, or the workspace from its own CRM (`crmTaskCallScope`), then the fields the call
+ * names. A field left null is left out and never takes the scope's place: a new task saved from a site names no filing
+ * site of its own, and dropping `hostId` with it refused every such save as "Missing hostId".
+ */
+internal fun crmTaskRouteBody(scope: CrmScope, vararg pairs: Pair<String, Any?>): Map<String, Any?> =
+  (if (scope.hostId != null) mapOf("hostId" to scope.hostId) else mapOf("orgId" to scope.orgId)) + pairs.filter { it.second != null }
+
 class CrmApi(private val api: ConsoleApiClient, private val writer: FirestoreWriter, val scope: CrmScope, private val reader: FirestoreReader? = null) {
   private fun body(vararg pairs: Pair<String, Any?>): kotlinx.serialization.json.JsonElement =
     firestoreJson((scope.routeScope + pairs).filterValues { it != null })
 
   /** The site alone, or the workspace from its own CRM: the scope the task routes take (`{ orgId }` is the org-level hub). */
   private fun taskBody(vararg pairs: Pair<String, Any?>): kotlinx.serialization.json.JsonElement =
-    firestoreJson(((if (scope.hostId != null) mapOf("hostId" to scope.hostId) else mapOf("orgId" to scope.orgId)) + pairs).filterValues { it != null })
+    firestoreJson(crmTaskRouteBody(scope, *pairs))
 
   private suspend fun quietly(block: suspend () -> Unit) {
     try { block() } catch (error: Throwable) { if (error is CancellationException) throw error }
