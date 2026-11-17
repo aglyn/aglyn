@@ -5,7 +5,7 @@ import Foundation
 
 // Where a font preview comes from (the fonts plugin's `font-preview-url.ts`, AGL-3656): Google's CSS2 API asked for only the
 // letters a preview draws, and the font files that stylesheet names. Replayed from the console's own cases; the shared font
-// loader (AglynUI `WebFontLoader`) fetches them. The Kotlin kit's FontPreviewUrl.kt holds the same.
+// loader beside it (`WebFontLoader`) fetches them. The Kotlin kit's FontPreviewUrl.kt holds the same.
 
 /// The letters one preview may ask for; Google refuses a very long `text=`.
 public let fontPreviewMaxLetters = 160

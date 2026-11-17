@@ -1,7 +1,6 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
-import AglynCore
 import CoreText
 import CryptoKit
 import Foundation
