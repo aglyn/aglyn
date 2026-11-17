@@ -219,7 +219,8 @@ struct PhotoLinksSheet: View {
           Button {
             Task { await model.create(api) }
           } label: {
-            Label(model.busy == "create" ? "Making…" : "New link", systemImage: "qrcode").labelStyle(.titleAndIcon)
+            // Words, not the QR glyph alone: a toolbar draws a Label as its icon only.
+            Text(model.busy == "create" ? "Making…" : "New link")
           }
           .disabled(model.busy != nil || model.blocked || model.list == .pending)
           .accessibilityIdentifier("photo-links-new")
