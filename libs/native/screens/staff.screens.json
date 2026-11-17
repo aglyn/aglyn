@@ -982,6 +982,7 @@
           "type": "list",
           "title": "Usage by month",
           "items": "data.usage.months",
+          "columnsZone": "staffOrgUsageColumn",
           "primary": "{item.view.month}",
           "secondary": "{item.view.views} views · {item.view.storage} · {item.view.cost}",
           "tertiary": "{item.view.metered}",

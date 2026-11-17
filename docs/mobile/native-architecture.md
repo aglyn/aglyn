@@ -1359,7 +1359,7 @@ platform's secure generator (the console's password generator). Formats: `pairs`
 `key: value`, the keys untouched, where `facts` splits them into words), `labeled/<path>` (each id through the map at
 `<path>`), `before/-` and `after/-` (either side of the first separator), `date`, `datetime`,
 `cents` (`cents/<currency path>`), `dollars`, `bytes`, `number`, `percent`,
-`count`, `yesno`, `title`, `upper`, `json`. A `when` is clauses joined by
+`count`, `yesno`, `title`, `upper`, `json`, `fixed/N` (exactly N decimals without grouping, as `toFixed` writes a figure). A `when` is clauses joined by
 `&&` or `||`: `path`, `!path`, `path == a,b`, `path != a`. A body is resolved
 in place; `{"$if": "<when>", "then": X, "else": Y}` is one of two values (or nothing, which leaves the member out; `"$null"` sends null) and
 `{"$afterHours": "{form.hours}"}` is that many hours from `now.ms` in epoch milliseconds (nothing when blank); `{"$pick": {...}}` makes the list of keys whose values are truthy,
