@@ -1538,6 +1538,9 @@ private fun MediaDetailBody(
       }
     }
     HorizontalDivider()
+    val embeddedApi = remember(scope, context.api) { MediaEmbeddedApi(context.api, scope) }
+    MediaEmbeddedSection(item, embeddedApi, canEdit)
+    HorizontalDivider()
     Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
       Row(verticalAlignment = Alignment.CenterVertically) {
         Text("Used on", Modifier.weight(1f).semantics { heading() }, fontSize = metrics.groupLabel, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
