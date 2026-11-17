@@ -55,13 +55,17 @@ interface SeededOrg {
   plan: string
   subscription?: { status: string }
   /** An already-engaged cap, to prove the sweep does not rewrite it. */
-  bandwidthCap?: { month: string; engagedAt?: number }
+  bandwidthCap?: { month: string; engagedAt?: number; graceUntil?: number; pauseNotifiedAt?: number }
+  /** When the workspace had its one-time grace (AGL-4232), if ever. */
+  bandwidthGraceUsedAt?: number
 }
 interface SeededHost {
   id: string
   orgId: string
   /** This month's page views for the site. */
   pageViews: number
+  /** When the site had its one-time grace (AGL-4232), if ever. */
+  bandwidthGraceUsedAt?: number
 }
 
 let mockOrgs: SeededOrg[]
@@ -69,6 +73,7 @@ let mockHosts: SeededHost[]
 /** `get()` calls against the `hosts` collection, i.e. pages read. */
 let hostsPagesRead = 0
 let mockNotifications: Array<{ orgId: string; title: string; body: string }>
+const mockHostWrites: Array<{ hostId: string; data: Record<string, unknown> }> = []
 /** Every merge written back to an org doc, in order. */
 let mockOrgWrites: Array<{
   orgId: string
@@ -114,13 +119,31 @@ function analyticsCollection(pageViews: number): any {
 function fakeHostDoc(host: SeededHost) {
   return {
     id: host.id,
+    data: () =>
+      host.bandwidthGraceUsedAt === undefined
+        ? {}
+        : { bandwidthGraceUsedAt: host.bandwidthGraceUsedAt },
     get: (field: string) => (field === 'screens' ? {} : undefined),
     ref: {
       id: host.id,
+      path: `hosts/${host.id}`,
       collection: (name: string) =>
         name === 'analytics'
           ? analyticsCollection(host.pageViews)
           : emptyCollection(),
+      // Read inside the engage writer's transaction (AGL-4232).
+      get: async () => ({
+        exists: true,
+        ref: fakeHostDoc(host).ref,
+        data: () =>
+          host.bandwidthGraceUsedAt === undefined
+            ? {}
+            : { bandwidthGraceUsedAt: host.bandwidthGraceUsedAt },
+      }),
+      // The one-time grace stamp (AGL-4232) lands on the site.
+      update: async (value: Record<string, unknown>) => {
+        mockHostWrites.push({ hostId: host.id, data: value })
+      },
     },
   }
 }
@@ -131,6 +154,7 @@ function fakeOrgDoc(org: SeededOrg) {
     slug: org.id,
     ...(org.subscription ? { subscription: org.subscription } : {}),
     ...(org.bandwidthCap ? { bandwidthCap: org.bandwidthCap } : {}),
+    ...(org.bandwidthGraceUsedAt ? { bandwidthGraceUsedAt: org.bandwidthGraceUsedAt } : {}),
   }
   return {
     id: org.id,
@@ -138,6 +162,8 @@ function fakeOrgDoc(org: SeededOrg) {
     get: (field: string) => data[field],
     ref: {
       id: org.id,
+      path: `orgs/${org.id}`,
+      get: async () => ({ exists: true, data: () => data }),
       // The OPTIONS argument is captured too (AGL-2413). It was dropped until
       // then, which made the merge flag unassertable: a regression from
       // `set(updates, { merge: true })` to a bare `set(updates)` would wipe
@@ -156,6 +182,22 @@ function fakeOrgDoc(org: SeededOrg) {
 }
 
 const fakeFirestore = {
+  // The engage writer's transaction (AGL-4232), over these same refs: reads
+  // through `get`, writes applied when the body returns.
+  runTransaction: async (body: (tx: any) => Promise<unknown>) => {
+    const pending: Array<Promise<unknown>> = []
+    const result = await body({
+      get: (ref: any) => ref.get(),
+      set: (ref: any, value: unknown, options?: unknown) => {
+        pending.push(ref.set(value, options))
+      },
+      update: (ref: any, value: unknown) => {
+        pending.push(ref.update(value))
+      },
+    })
+    await Promise.all(pending)
+    return result
+  },
   collection: (name: string) => {
     if (name === 'orgs') {
       /**
@@ -261,8 +303,20 @@ const fakeFirestore = {
   },
 }
 
+const mockHostNotices: Array<{ hostId: string; title: string; body: string }> = []
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  // The crossing's one notice, per site (AGL-4232).
+  notifyHostManagers: async (hostId: string, payload: { title: string; body: string }) => {
+    mockHostNotices.push({ hostId, title: payload.title, body: payload.body })
+  },
+  // The one engage write every cap writer shares (AGL-4232), for real, over
+  // this suite's own store.
+  engageBandwidthCap: (options: unknown) =>
+    jest
+      .requireActual('../../../libs/tenant/data/admin/src/lib/server/bandwidth-cap-engage')
+      .engageBandwidthCap(options),
   firebaseAdmin: {
     app: () => ({ firestore: () => fakeFirestore }),
     firestore: { FieldPath: { documentId: () => '__name__' } },
@@ -320,6 +374,7 @@ const VIRAL = FREE_BAND_VIEWS * 100
 async function run() {
   mockNotifications = []
   mockOrgWrites = []
+  mockHostWrites.length = 0
   const response = await POST(
     new Request('https://app.aglyn.com/api/billing/usage-alerts', {
       method: 'POST',
@@ -350,11 +405,13 @@ const bandwidthAlert = () =>
   )
 
 beforeEach(() => {
+  mockHostNotices.length = 0
   process.env.CRON_SECRET = CRON_SECRET
   jest.clearAllMocks()
   mockHosts = []
   mockOrgs = []
   mockOrgWrites = []
+  mockHostWrites.length = 0
   hostsPagesRead = 0
 })
 
@@ -453,22 +510,137 @@ describe('the sweep engages the cap on a free org past its band', () => {
 })
 
 describe('the alert says which of the two actually happens (AGL-2070)', () => {
-  it('FREE at 100% is told it reached the limit — and now that is TRUE', async () => {
-    // The wall wording was already what this branch produced; what changed is
-    // that it stopped being a lie. Before the cap the customer read "you've
-    // reached your monthly bandwidth limit" while every page kept serving.
+  it('FREE at 80% is warned, with the upgrade path, and nothing engages (AGL-4232)', async () => {
     mockOrgs = [{ id: 'org-1', plan: 'free' }]
-    mockHosts = [{ id: 'site-a', orgId: 'org-1', pageViews: VIRAL }]
+    mockHosts = [{ id: 'site-a', orgId: 'org-1', pageViews: Math.round(FREE_BAND_VIEWS * 0.85) }]
     await run()
     const alert = bandwidthAlert()
-    expect(alert?.title).toMatch(/reached your monthly bandwidth limit/i)
-    // What visitors see, that nothing is charged, and the way back (AGL-3431).
-    expect(alert?.body).toMatch(/temporary notice until next month/i)
-    expect(alert?.body).toMatch(/nothing is charged/i)
-    expect(alert?.body).toMatch(/upgrade in Billing to keep them serving/i)
-    expect(alert?.body).not.toMatch(/invoice/i)
-    // …and the site really is stopped, in the same run.
+    expect(alert?.title).toMatch(/above 80% of your monthly bandwidth/i)
+    expect(alert?.body).toMatch(/upgrade in Billing/i)
+    expect(capWrite('org-1')).toBeUndefined()
+    expect(mockHostWrites).toEqual([])
+  })
+
+  it('FREE under the band: no alert, no cap, no grace spent', async () => {
+    mockOrgs = [{ id: 'org-1', plan: 'free' }]
+    mockHosts = [{ id: 'site-a', orgId: 'org-1', pageViews: Math.round(FREE_BAND_VIEWS * 0.5) }]
+    await run()
+    expect(bandwidthAlert()).toBeUndefined()
+    expect(capWrite('org-1')).toBeUndefined()
+    expect(mockHostWrites).toEqual([])
+  })
+
+  it('FREE at 100% the FIRST time: ONE notice, per site, with its deadline (AGL-4232)', async () => {
+    mockOrgs = [{ id: 'org-1', plan: 'free' }]
+    mockHosts = [{ id: 'site-a', orgId: 'org-1', pageViews: VIRAL }]
+    const before = Date.now()
+    await run()
+    expect(mockHostNotices).toHaveLength(1)
+    const [notice] = mockHostNotices
+    expect(notice.hostId).toBe('site-a')
+    expect(notice.title).toMatch(/^Upgrade or \{site\} pauses on \w+day, \w+ \d+ at \d+:\d\d [AP]M UTC$/)
+    expect(notice.body).toMatch(/stays online until/i)
+    expect(notice.body).toMatch(/temporarily unavailable/i)
+    expect(notice.body).toMatch(/An unusually large surge of traffic can still pause it before then\./)
+    expect(notice.body).toMatch(/This extra time is given once,/)
+    expect(notice.body).not.toMatch(/once per site/)
+    expect(notice.body).not.toMatch(/invoice/i)
+    // ONE notice per crossing: the 100% usage alert stays silent for it.
+    expect(bandwidthAlert()).toBeUndefined()
+    // The marker carries the grace; the workspace AND the site record it.
+    const marker = capWrite('org-1') as unknown as Record<string, number>
+    expect(marker['graceUntil']).toBeGreaterThanOrEqual(before + 72 * 3_600_000)
+    expect(marker['graceUntil']).toBeLessThanOrEqual(Date.now() + 72 * 3_600_000)
+    expect(capWriteRecord('org-1')?.data['bandwidthGraceUsedAt']).toBe(marker['engagedAt'])
+    expect(mockHostWrites).toEqual([
+      { hostId: 'site-a', data: { bandwidthGraceUsedAt: marker['engagedAt'] } },
+    ])
+  })
+
+  it('a workspace that had the grace gets none for a NEW site: deleting and re-making does not re-arm it', async () => {
+    mockOrgs = [{ id: 'org-1', plan: 'free', bandwidthGraceUsedAt: Date.now() - 40 * 86_400_000 }]
+    mockHosts = [{ id: 'site-new', orgId: 'org-1', pageViews: VIRAL }]
+    await run()
+    expect((capWrite('org-1') as unknown as Record<string, unknown>)['graceUntil']).toBeUndefined()
+    expect(mockHostWrites).toEqual([])
+    expect(mockHostNotices[0]?.title).toBe('{site} paused — monthly traffic limit reached')
+  })
+
+  it('a grace that OUTLASTS the month tells the owner no pause date (AGL-4232)', async () => {
+    // Granted 12:00 UTC on November 29: its 72 hours end after the 1st.
+    jest.useFakeTimers({
+      now: Date.UTC(2026, 10, 29, 12),
+      doNotFake: ['nextTick', 'setImmediate', 'setTimeout', 'setInterval', 'queueMicrotask', 'clearTimeout', 'clearInterval'],
+    })
+    try {
+      mockOrgs = [{ id: 'org-1', plan: 'free' }]
+      mockHosts = [{ id: 'site-a', orgId: 'org-1', pageViews: VIRAL }]
+      await run()
+      const [notice] = mockHostNotices
+      expect(notice.title).toBe('{site} is past its monthly traffic limit and stays online')
+      expect(notice.body).toMatch(/stays online: the month ends before its extra time would/)
+      expect(`${notice.title} ${notice.body}`).not.toMatch(/pauses on|until \w+day/)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('when a grace ENDS, the owner is told the sites are paused — once (AGL-4232)', async () => {
+    const month = new Date().toISOString().slice(0, 7)
+    const ended = { month, engagedAt: Date.now() - 80 * 3_600_000, graceUntil: Date.now() - 1 }
+    mockOrgs = [{ id: 'org-1', plan: 'free', bandwidthCap: ended }]
+    mockHosts = [{ id: 'site-a', orgId: 'org-1', pageViews: VIRAL, bandwidthGraceUsedAt: ended.engagedAt }]
+    await run()
+    expect(mockHostNotices.map((entry) => entry.title)).toEqual([
+      '{site} paused — monthly traffic limit reached',
+    ])
+    const marked = mockOrgWrites.find((write) => (write.data['bandwidthCap'] as any)?.pauseNotifiedAt)
+    expect(marked?.options).toEqual({ merge: true })
+    // A sweep that finds it already said writes and sends nothing more.
+    mockOrgs = [{ id: 'org-1', plan: 'free', bandwidthCap: { ...ended, pauseNotifiedAt: 1 } }]
+    mockHostNotices.length = 0
+    await run()
+    expect(mockHostNotices).toHaveLength(0)
+  })
+
+  it('while a grace runs, no pause is announced', async () => {
+    const month = new Date().toISOString().slice(0, 7)
+    mockOrgs = [
+      {
+        id: 'org-1',
+        plan: 'free',
+        bandwidthCap: { month, engagedAt: Date.now(), graceUntil: Date.now() + 3_600_000 },
+      },
+    ]
+    mockHosts = [{ id: 'site-a', orgId: 'org-1', pageViews: VIRAL, bandwidthGraceUsedAt: Date.now() }]
+    await run()
+    expect(mockHostNotices).toHaveLength(0)
+  })
+
+  it('FREE at 100% after its site already had the grace is paused at once', async () => {
+    mockOrgs = [{ id: 'org-1', plan: 'free' }]
+    mockHosts = [
+      {
+        id: 'site-a',
+        orgId: 'org-1',
+        pageViews: VIRAL,
+        // A grace from an earlier month: long over.
+        bandwidthGraceUsedAt: Date.now() - 40 * 24 * 3_600_000,
+      },
+    ]
+    await run()
+    const [notice] = mockHostNotices
+    expect(notice.title).toBe('{site} paused — monthly traffic limit reached')
+    // What visitors see, that nothing is charged, and the way back.
+    expect(notice.body).toMatch(/temporarily unavailable/i)
+    expect(notice.body).toMatch(/Nothing is charged/)
+    expect(notice.body).toMatch(/as soon as you upgrade in Billing/)
+    expect(notice.body).not.toMatch(/invoice/i)
+    expect(bandwidthAlert()).toBeUndefined()
+    // …and the site really is stopped, in the same run: no grace, no stamp.
     expect(capWrite('org-1')).toBeDefined()
+    expect((capWrite('org-1') as unknown as Record<string, unknown>)['graceUntil']).toBeUndefined()
+    expect(mockHostWrites).toEqual([])
   })
 
   it('PAID at 100% is told it is being BILLED, never that it is stuck', async () => {

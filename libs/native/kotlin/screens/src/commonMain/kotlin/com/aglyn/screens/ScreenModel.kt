@@ -152,6 +152,8 @@ data class ScreenSession(
       put("app", buildJsonObject {
         put("origin", origin)
         put("passkeyRp", passkeyRelyingParty)
+        // The platform's name, for words the console prints with it ("Aglyn staff · support").
+        put("brand", com.aglyn.core.AglynConfig.DEFAULT_BRAND_NAME)
         put("permissionRefusal", buildJsonObject { com.aglyn.contracts.Contracts.orgRoleGrants.permissions.forEach { put(it.key, com.aglyn.contracts.permissionRefusalText(it.key)) } })
         put("permissionCatalog", rows(false))
         put("narrowablePermissions", rows(true))
