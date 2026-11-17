@@ -886,4 +886,27 @@ class SiteTest {
     assertTrue(rows.none { it.type == "image" })
     assertEquals(false, rows.first { it.key == "phone" }.set)
   }
+
+  /** Site Care's Request a change asks the console's route as its button does (AGL-3959). */
+  @Test
+  fun siteCareAsksTheConsolesRoute() = runTest {
+    val seen = mutableListOf<io.ktor.client.request.HttpRequestData>()
+    val bodies = mutableListOf<String>()
+    var siteCare = true
+    val engine = MockEngine { request ->
+      seen += request
+      bodies += (request.body as? io.ktor.http.content.OutgoingContent.ByteArrayContent)?.bytes()?.decodeToString().orEmpty()
+      respond("""{"siteCare":$siteCare,"ticketId":"t1","dueAt":"Wednesday, November 18"}""", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+    }
+    val api = ConsoleApiClient(origin = "https://console.test/", http = HttpClient(engine), getIdToken = { "t" }, sleep = {}, maxAttempts = 1)
+    val care = com.aglyn.site.sitecare.SiteCareApi(api, "o1")
+    assertEquals(true, care.hasSiteCare())
+    assertEquals("status", seen[0].url.parameters["view"])
+    assertEquals("Wednesday, November 18", care.request("h1", "Hours", "Closed on the 25th"))
+    val sent = Json.parseToJsonElement(bodies[1]).jsonObject
+    assertEquals(listOf("o1", "h1", "Hours", "Closed on the 25th"), listOf("orgId", "hostId", "subject", "body").map { sent[it]?.jsonPrimitive?.content })
+    assertEquals("We have your request and will have it done by two business days from now. We will email you when it is done.", com.aglyn.site.sitecare.siteCareSentText(""))
+    siteCare = false
+    assertEquals(false, care.hasSiteCare())
+  }
 }
