@@ -82,6 +82,10 @@ public struct SiteCareRequestButton: View {
               .accessibilityIdentifier("site-care-add")
           }
         }
+      } else {
+        // An empty Group is no view, so its `.task` would never run and the button would never appear: hold a zero-size
+        // view while the route answers.
+        Color.clear.frame(width: 0, height: 0)
       }
     }
     .task(id: orgID) { siteCare = await SiteCareAPI(api: api, orgID: orgID).hasSiteCare() }
