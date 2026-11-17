@@ -9,6 +9,15 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.26.3 — 2026-11-17
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.26.2...v1.26.3)
+
+### Fixed
+
+- **console:** auth-doors asks a silent identity toolkit call once more before going red
+- **native:** the Mac notification extension starts its service so macOS can reach it ([AGL-4215](https://linear.app/aglyn/issue/AGL-4215))
+
 ## v1.26.2 — 2026-11-17
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.26.1...v1.26.2)
