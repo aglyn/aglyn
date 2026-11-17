@@ -1455,7 +1455,8 @@ keyed by resource id) from the resources load and the current stays load, as `un
 The context also carries `now` (UTC): `now.month` (`2026-10`), `now.prevMonth`,
 `now.day` (`2026-10-13`) and `now.year`, the keys the console's monthly
 counters and daily documents are named by, so `data.counter[@now.month]` reads
-this month's figure. A path `rows.*.field` is that field of every row, as a
+this month's figure. `app.brand` is the platform's name, for words the console prints with it
+(`{app.brand} staff · {item.staffRole}`). A path `rows.*.field` is that field of every row, as a
 list. `{a + b - c}` sums numbers (paths, literals, or a list, which adds up);
 a term that is missing makes the sum missing, and `x?` counts as zero where it
 is missing. `a ?? 'text'` keeps a real 0 or false.
