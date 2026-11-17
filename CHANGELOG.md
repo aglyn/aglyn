@@ -9,6 +9,12 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.26.1 — 2026-11-17
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.26.0...v1.26.1)
+
+1 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.26.0 — 2026-11-17
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.25.0...v1.26.0)
