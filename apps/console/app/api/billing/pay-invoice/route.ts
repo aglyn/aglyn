@@ -261,8 +261,17 @@ async function handler(request: Request): Promise<Response> {
         if (expanded.ok) intent = expanded.payload?.payment_intent ?? null
       }
       if (intent?.client_secret && intent?.status === 'requires_action') {
+        // The invoice's own Stripe page, for a payer with no Stripe.js to take
+        // the bank's step in place: the native apps open it in the system's
+        // secure browser, as their Billing does for a plan change the bank has
+        // to confirm. The console ignores it.
+        const hostedInvoiceUrl = String(invoice.payload?.hosted_invoice_url ?? '')
         return Response.json(
-          { requiresAction: true, paymentClientSecret: intent.client_secret },
+          {
+            requiresAction: true,
+            paymentClientSecret: intent.client_secret,
+            ...(hostedInvoiceUrl.startsWith('https://') ? { hostedInvoiceUrl } : {}),
+          },
           { status: 200 },
         )
       }

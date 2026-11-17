@@ -50,6 +50,15 @@
           "url": "/api/billing/host-usage?hostId={item.hostId}",
           "each": "data.collab.sites",
           "optional": true
+        },
+        "outstanding": {
+          "url": "/api/billing/pay-invoice",
+          "method": "POST",
+          "body": {
+            "orgId": "{org.id}",
+            "action": "get"
+          },
+          "optional": true
         }
       },
       "blocks": [
@@ -64,6 +73,70 @@
           "tone": "info",
           "when": "data.billing.subscription.pendingDowngrade",
           "text": "Moving to {const.labels[@data.billing.subscription.pendingDowngrade.plan]|data.billing.subscription.pendingDowngrade.plan:title} at the end of this period."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.outstanding.invoices.length == 1",
+          "text": "You have one unpaid invoice."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.outstanding.invoices.length > 1",
+          "text": "You have {data.outstanding.invoices.length} unpaid invoices."
+        },
+        {
+          "type": "list",
+          "title": "Outstanding",
+          "footer": "Anything unpaid, and the button that settles it.",
+          "when": "data.outstanding",
+          "items": "data.outstanding.invoices",
+          "primary": "{item.number|item.id} · {item.amountDueCents:cents/item.currency}",
+          "secondary": "{item.created:date}",
+          "icon": "doc.text|receipt_long",
+          "actions": [
+            {
+              "id": "payNow",
+              "label": "Pay now",
+              "icon": "creditcard|credit_card",
+              "when": "org.can[billing.manage]",
+              "url": "/api/billing/pay-invoice",
+              "body": {
+                "orgId": "{org.id}",
+                "action": "pay",
+                "invoiceId": "{item.id}"
+              },
+              "instead": [
+                {
+                  "when": "response.alreadyPaid",
+                  "title": "Already settled",
+                  "text": "That invoice is already settled."
+                },
+                {
+                  "when": "response.requiresAction && response.hostedInvoiceUrl",
+                  "title": "Your bank needs to confirm",
+                  "text": "Your bank needs to confirm this payment. Finish it on the invoice page we just opened; the invoice updates as soon as Stripe confirms it.",
+                  "open": "hostedInvoiceUrl"
+                },
+                {
+                  "when": "response.requiresAction",
+                  "title": "Your bank needs to confirm",
+                  "text": "Your bank needs to confirm this payment, but it cannot be finished here. Nothing has been charged."
+                }
+              ],
+              "success": "Payment submitted. This invoice updates as soon as Stripe confirms it.",
+              "reload": true
+            },
+            {
+              "id": "view",
+              "label": "View",
+              "icon": "doc.richtext|description",
+              "when": "item.hostedInvoiceUrl",
+              "link": "{item.hostedInvoiceUrl}"
+            }
+          ],
+          "empty": "Nothing outstanding."
         },
         {
           "type": "fields",
@@ -228,7 +301,6 @@
       ]
     },
     {
-
       "id": "core.billing.plans",
       "title": "Choose a plan",
       "icon": "sparkles|workspace_premium",
@@ -593,7 +665,6 @@
       }
     },
     {
-
       "id": "core.billing.invoices",
       "title": "Invoices",
       "icon": "doc.text|receipt_long",
@@ -664,7 +735,6 @@
       ]
     },
     {
-
       "id": "core.billing.usage",
       "title": "Usage",
       "icon": "chart.bar|bar_chart",
@@ -1208,7 +1278,6 @@
       ]
     },
     {
-
       "id": "core.billing.settings",
       "title": "Billing details",
       "icon": "building.columns|account_balance",
@@ -1486,7 +1555,6 @@
       ]
     },
     {
-
       "id": "core.billing.seats",
       "title": "Seats by site",
       "subtitle": "Collaborator and register seats",
@@ -1642,7 +1710,6 @@
       ]
     },
     {
-
       "id": "core.billing.addons",
       "title": "Plan add-ons",
       "subtitle": "Seats, sites and extras on your plan",
@@ -2217,7 +2284,6 @@
       }
     },
     {
-
       "id": "core.billing.usage.site",
       "title": "{params.siteName|'Site usage'}",
       "icon": "chart.bar|bar_chart",
@@ -2393,7 +2459,6 @@
       ]
     },
     {
-
       "id": "core.billing.cancel",
       "title": "Before you go",
       "icon": "xmark.circle|cancel",
@@ -2475,7 +2540,6 @@
       ]
     },
     {
-
       "id": "core.billing.cancel.offers",
       "title": "Before you go",
       "icon": "xmark.circle|cancel",
