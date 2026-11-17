@@ -139,6 +139,18 @@ export const CHECKS = Object.freeze([
       ),
   },
   {
+    // A native plugin registering an id its mobile.contributes does not
+    // declare, which unloads the whole plugin from the apps (AGL-3671).
+    // Under a second for every plugin, so it reads them all.
+    name: 'check:native-contribution-declarations',
+    script: 'tools/scripts/check-native-contribution-declarations.mjs',
+    scoped: false,
+    when: (path) =>
+      /^plugins\.config\.json$|^libs\/plugins\/[^/]+\/src\/(?:ios|android)\/|^tools\/scripts\/(?:check-native-contribution-declarations|lib\/native-contribution-declarations)\.mjs$/.test(
+        path,
+      ),
+  },
+  {
     name: 'check:page-view-rate',
     script: 'tools/scripts/check-page-view-rate.mjs',
     scoped: false,

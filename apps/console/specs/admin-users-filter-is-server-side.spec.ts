@@ -74,11 +74,24 @@ let mockScanTruncated = false
 
 const mockDecodedToken: Record<string, unknown> = {}
 
+const mockUsageLevels = new Map<string, string>()
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
     app: () => ({
       auth: () => ({ verifyIdToken: async () => mockDecodedToken }),
+      // The staff usage level (AGL-4228): the reviewed accounts, by uid.
+      firestore: () => ({
+        collection: () => ({
+          where: () => ({
+            select: () => ({
+              get: async () => ({
+                docs: [...mockUsageLevels].map(([id, level]) => ({ id, get: () => level })),
+              }),
+            }),
+          }),
+        }),
+      }),
     }),
   },
   isImpersonationSession: () => false,
@@ -264,6 +277,37 @@ describe('the column filter is answered by the server', () => {
 
   it('staff · is true reads the CLAIM, which the row carries', async () => {
     expect(uids(await filter('staff', 'is', 'true'))).toEqual(['uid-ada'])
+  })
+
+  describe('usageLevel (AGL-4228): joined from users/{uid}, over the whole directory', () => {
+    afterEach(() => mockUsageLevels.clear())
+
+    it('finds the account staff set to a level', async () => {
+      mockUsageLevels.set('uid-grace', 'live')
+      expect(uids(await filter('usageLevel', 'equals', 'live'))).toEqual(['uid-grace'])
+    })
+
+    it('reads an account nobody reviewed as unreviewed', async () => {
+      mockUsageLevels.set('uid-grace', 'live')
+      expect(uids(await filter('usageLevel', 'equals', 'unreviewed'))).toEqual(['uid-ada'])
+    })
+
+    it('isAnyOf matches any of the levels', async () => {
+      mockUsageLevels.set('uid-grace', 'power')
+      mockUsageLevels.set('uid-ada', 'trying')
+      expect(uids(await filter('usageLevel', 'isAnyOf', 'live,power')).sort()).toEqual([
+        'uid-grace',
+      ])
+    })
+
+    it('rides on every row', async () => {
+      mockUsageLevels.set('uid-ada', 'building')
+      const payload = await call({})
+      const levels = Object.fromEntries(
+        payload.users.map((row: any) => [row.uid, row.usageLevel]),
+      )
+      expect(levels).toEqual({ 'uid-ada': 'building', 'uid-grace': 'unreviewed' })
+    })
   })
 
   it('providers · contains matches inside a provider id', async () => {
