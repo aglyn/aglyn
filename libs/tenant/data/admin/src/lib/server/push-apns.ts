@@ -99,12 +99,19 @@ export function apnsProviderToken(credentials: ApnsCredentials, nowMs: number): 
  * The APNs payload: the alert, the person's picked sound and the tap data
  * beside `aps`. The sound names a file in the app's bundle; a build that
  * does not ship it yet plays the system sound instead.
+ *
+ * `mutable-content` routes the push through the app's notification service
+ * extension first (AGL-4215). macOS 26.6 plays its own built-in sound for any
+ * app-named sound, so the Mac apps' extension plays the picked file itself and
+ * shows the banner without a system sound. A device with no extension (iPhone,
+ * iPad, an older Mac build) ignores the flag and plays `sound` as before.
  */
 export function apnsPayload(message: PushMessage, sound?: NotificationSound): string {
   return JSON.stringify({
     aps: {
       alert: { title: message.title, ...(message.body ? { body: message.body } : {}) },
       sound: sound?.apple ?? 'default',
+      'mutable-content': 1,
     },
     ...message.data,
   })
