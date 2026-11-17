@@ -627,7 +627,12 @@ private fun RecordDialogs(
         api.logActivity(activityKind, body, links, byName = null, outcome = outcome, durationMinutes = minutes, direction = direction)
       }
     }
-    RecordDialog.EMAIL -> EmailDialog(row, busy, onClose) { subject, message ->
+    RecordDialog.EMAIL -> CrmEmailDialog(
+      context, scope, api, row,
+      // The records a letter from here reads its merge fields from: a deal's own and its Primary, else the record itself.
+      mapOf(kind.linkField to id) + if (kind == CrmKind.DEAL) listOfNotNull((row.data["contactId"] as? String)?.takeIf { it.isNotEmpty() }?.let { "contactId" to it }) else emptyList(),
+      busy, onClose,
+    ) { subject, message ->
       busy.run(coroutines, { onClose(); onNotice("Email sent.") }) { api.sendEmail(subject, message, mapOf(kind.linkField to id)) }
     }
     RecordDialog.TASK -> TaskDialog(
@@ -970,26 +975,6 @@ private fun LogActivityDialog(
         modifier = Modifier.testTag("activity-related"),
       ) { picks = current.copy(related = CrmRelated.ofKey(it)) }
     }
-  }
-}
-
-@Composable
-private fun EmailDialog(row: CrmRow, busy: Busy, onDismiss: () -> Unit, onSend: (String, String) -> Unit) {
-  var subject by remember { mutableStateOf("") }
-  var message by remember { mutableStateOf("") }
-  ActionDialog(
-    title = "Email ${row.title}",
-    body = (row.data["email"] as? String)?.let { "To $it. The email is logged on the record." },
-    icon = "mail",
-    confirmLabel = "Send",
-    confirmEnabled = subject.isNotBlank() && message.isNotBlank(),
-    busy = busy.busy,
-    error = busy.error,
-    onDismiss = onDismiss,
-    onConfirm = { onSend(subject, message) },
-  ) {
-    OutlinedTextField(subject, { subject = it.take(Contracts.crmEmailSubjectMax.toInt()) }, label = { Text("Subject") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-    OutlinedTextField(message, { message = it.take(Contracts.crmEmailBodyMax.toInt()) }, label = { Text("Message") }, minLines = 5, modifier = Modifier.fillMaxWidth())
   }
 }
 

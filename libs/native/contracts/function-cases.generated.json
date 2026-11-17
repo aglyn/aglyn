@@ -8249,6 +8249,59 @@
         }
       ]
     },
+    "crmEmailTemplateIsListed": {
+      "module": "libs/aglyn/src/lib/app-utils/crm-email-templates.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "visibility": "shared"
+            },
+            null
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "visibility": "personal",
+              "ownerUid": "u1"
+            },
+            "u1"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "visibility": "personal",
+              "ownerUid": "u1"
+            },
+            "u2"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibility": "personal"
+            },
+            null
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibility": "personal",
+              "ownerUid": "u1"
+            },
+            null
+          ],
+          "result": false
+        }
+      ]
+    },
     "crmFieldListFields": {
       "module": "libs/aglyn/src/lib/app-utils/crm.ts",
       "cases": [
@@ -26094,6 +26147,123 @@
             "c18",
             "c19"
           ]
+        }
+      ]
+    },
+    "normalizeCrmEmailTemplate": {
+      "module": "libs/aglyn/src/lib/app-utils/crm-email-templates.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": {
+            "body": "",
+            "createdAtMs": 0,
+            "createdByUid": "",
+            "hostId": null,
+            "kind": "template",
+            "name": "",
+            "subject": "",
+            "updatedAtMs": 0,
+            "visibility": "shared",
+            "visibleTo": []
+          }
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": {
+            "body": "",
+            "createdAtMs": 0,
+            "createdByUid": "",
+            "hostId": null,
+            "kind": "template",
+            "name": "",
+            "subject": "",
+            "updatedAtMs": 0,
+            "visibility": "shared",
+            "visibleTo": []
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "  Intro  ",
+              "subject": "Hi {{contact.firstName}}",
+              "body": "Hello",
+              "kind": "snippet",
+              "visibility": "personal",
+              "ownerUid": "u1",
+              "createdByUid": "u1",
+              "createdAtMs": 5,
+              "updatedAtMs": 6,
+              "hostId": "h1",
+              "visibleTo": [
+                "host:h1"
+              ]
+            }
+          ],
+          "result": {
+            "body": "Hello",
+            "createdAtMs": 5,
+            "createdByUid": "u1",
+            "hostId": "h1",
+            "kind": "snippet",
+            "name": "Intro",
+            "ownerUid": "u1",
+            "subject": "Hi {{contact.firstName}}",
+            "updatedAtMs": 6,
+            "visibility": "personal",
+            "visibleTo": [
+              "host:h1"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "Shared one",
+              "kind": "bogus",
+              "visibility": "bogus",
+              "ownerUid": "u2",
+              "hostId": null
+            }
+          ],
+          "result": {
+            "body": "",
+            "createdAtMs": 0,
+            "createdByUid": "",
+            "hostId": null,
+            "kind": "template",
+            "name": "Shared one",
+            "subject": "",
+            "updatedAtMs": 0,
+            "visibility": "shared",
+            "visibleTo": []
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "visibility": "shared",
+              "ownerUid": "u3"
+            }
+          ],
+          "result": {
+            "body": "",
+            "createdAtMs": 0,
+            "createdByUid": "",
+            "hostId": null,
+            "kind": "template",
+            "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "subject": "",
+            "updatedAtMs": 0,
+            "visibility": "shared",
+            "visibleTo": []
+          }
         }
       ]
     },
