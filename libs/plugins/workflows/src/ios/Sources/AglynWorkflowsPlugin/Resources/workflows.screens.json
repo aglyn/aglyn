@@ -59,7 +59,12 @@
           "title": "Site automations",
           "items": "data.actions.items",
           "primary": "{item.name|item.displayName|item.$id}",
-          "secondary": "Updated {item.updatedAt:datetime}",
+          "secondary": [
+            {
+              "text": "Updated {item.updatedAt:datetime}",
+              "when": "item.updatedAt != ''"
+            }
+          ],
           "icon": "bolt|bolt",
           "empty": "No automations on this site",
           "badges": [
@@ -99,7 +104,12 @@
           "title": "Organization automations that run here",
           "items": "data.orgAutomations.items",
           "primary": "{item.name|item.displayName|item.$id}",
-          "secondary": "Updated {item.updatedAt:datetime}",
+          "secondary": [
+            {
+              "text": "Updated {item.updatedAt:datetime}",
+              "when": "item.updatedAt != ''"
+            }
+          ],
           "icon": "bolt|bolt",
           "empty": "No organization automation runs on this site",
           "badges": [
@@ -139,7 +149,12 @@
           "title": "Workflows",
           "items": "data.workflows.items",
           "primary": "{item.name|item.displayName|item.$id}",
-          "secondary": "Updated {item.updatedAt:datetime}",
+          "secondary": [
+            {
+              "text": "Updated {item.updatedAt:datetime}",
+              "when": "item.updatedAt != ''"
+            }
+          ],
           "icon": "bolt|bolt",
           "empty": "No workflows on this site",
           "badges": [
@@ -205,7 +220,12 @@
           "title": "Automations",
           "items": "data.automations.items",
           "primary": "{item.name|item.displayName|item.$id}",
-          "secondary": "Updated {item.updatedAt:datetime}",
+          "secondary": [
+            {
+              "text": "Updated {item.updatedAt:datetime}",
+              "when": "item.updatedAt != ''"
+            }
+          ],
           "icon": "bolt|bolt",
           "empty": "This organization has no automations",
           "badges": [
