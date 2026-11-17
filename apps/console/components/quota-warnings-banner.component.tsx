@@ -31,6 +31,11 @@ import {
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import { USAGE_METER_WARNING_PCT } from '@aglyn/shared-ui-jsx/components/usage-meter.component'
 import { Alert, Button } from '@mui/material'
+import {
+  bandwidthCapEngaged,
+  bandwidthCapGraceUntil,
+  formatBandwidthGraceDeadline,
+} from '@aglyn/aglyn/app-utils/bandwidth-cap'
 import { collection, getCountFromServer } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
@@ -686,6 +691,45 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
             : 'Your last payment failed. Update your payment method to keep ' +
               'your plan — access continues while Stripe retries, and your ' +
               'plan stops if the retries run out.'}
+      </Alert>
+    )
+  }
+
+  /*
+   * THE FREE PLAN'S BANDWIDTH PAUSE (AGL-4232), above the dismissible quota
+   * rows and independent of a `plan` field (a never-subscribed Free org has
+   * none): the one-time grace's deadline while it runs, else that the sites
+   * are paused. Not dismissible — it clears itself when the owner upgrades
+   * or the month turns. Visitors are told only that the site is
+   * temporarily unavailable; this is where the reason and the upgrade are.
+   */
+  const bandwidthGraceUntil = bandwidthCapGraceUntil(org as never)
+  if (bandwidthGraceUntil !== null || bandwidthCapEngaged(org as never)) {
+    const upgrade = orgWideViewer ? (
+      <AppLink
+        componentVariant="button"
+        color="inherit"
+        size="small"
+        href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}
+      >
+        {'Upgrade'}
+      </AppLink>
+    ) : undefined
+    return (
+      <Alert
+        severity={bandwidthGraceUntil !== null ? 'warning' : 'error'}
+        sx={{ borderRadius: 0 }}
+        action={upgrade}
+        data-testid="bandwidth-pause-banner"
+      >
+        {bandwidthGraceUntil !== null
+          ? `${orgWideViewer ? 'Upgrade' : 'A workspace admin needs to upgrade'} or ` +
+            `your sites pause on ${formatBandwidthGraceDeadline(bandwidthGraceUntil)}. ` +
+            "They have used this month's included bandwidth and stay online until " +
+            'then; after that, visitors see a "temporarily unavailable" notice until the 1st.'
+          : "Your sites are paused for visitors until the 1st: they have used this month's " +
+            `included bandwidth. ${orgWideViewer ? 'Upgrade' : 'A workspace admin can upgrade'} ` +
+            'to bring them back within about a minute.'}
       </Alert>
     )
   }

@@ -35,8 +35,10 @@ import {
   runOverageSold,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
+  bandwidthCapGraceUntil,
   bandwidthCapMonthKey,
   bandwidthCapShouldEngage,
+  formatBandwidthGraceDeadline,
   type OrgBandwidthCap,
   checkDataStorageQuota,
   planMetersInfraOverage,
@@ -80,6 +82,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { usageNotificationLevel } from '@aglyn/aglyn/app-utils/notifications'
 import {
+  engageBandwidthCap,
   firebaseAdmin,
   notifyOrgAdmins,
   notifyRiskEvent,
@@ -939,6 +942,55 @@ async function handler(request: Request): Promise<Response> {
         includedBandwidthGb: entitlements.bandwidthGb,
       })
 
+      /*==========================================
+       * THE FREE PLAN'S BANDWIDTH HARD CAP (AGL-1967/2155), engaged BEFORE
+       * the checks below so the 100% bandwidth notice describes what the
+       * engagement actually did: a one-time grace with its deadline
+       * (AGL-4232), or a pause.
+       *
+       * THE DECISION IS MADE HERE because the numbers are already here. This
+       * sweep has just summed the org's page views for the current month and
+       * converted them to `bandwidthGb` against `entitlements.bandwidthGb` —
+       * the identical comparison the `bandwidth` alert below thresholds on.
+       * The serving path then reads the VERDICT off the org doc it already
+       * loads, so the cap costs no read on any render.
+       *
+       * THE ONE ENGAGE WRITE every writer shares (`engageBandwidthCap`): a
+       * transaction that re-reads the marker, so the beacon, the media CDN and
+       * this sweep engage it, and grant the grace, once. Guarded on the month
+       * here too, so the following 30 days of sweeps write nothing.
+       *
+       * NOTHING IS EVER CLEARED. The marker names its month; next month it
+       * stops matching. An org that UPGRADES is released without any write,
+       * because `bandwidthCapEngaged` re-reads the plan. NO CACHE FAN-OUT:
+       * the tenant's org doc is cached for 60 seconds and the middleware's
+       * verdict memo for 30, so the cap (or the end of its grace) takes
+       * effect within about a minute on its own.
+       *=========================================*/
+      const existingCap = orgData['bandwidthCap'] as OrgBandwidthCap | undefined
+      let bandwidthGraceUntil = bandwidthCapGraceUntil(orgData as never)
+      if (
+        bandwidthCapShouldEngage({
+          org: orgData as never,
+          usedBandwidthGb: bandwidthGb,
+          includedBandwidthGb: entitlements.bandwidthGb,
+        }) &&
+        existingCap?.month !== month
+      ) {
+        const engaged = await engageBandwidthCap({
+          orgRef: org.ref,
+          hosts: hosts.docs,
+          month,
+          nowMs: Date.now(),
+          pageViews,
+          includedPageViews: pageViewsFromBandwidthGb(entitlements.bandwidthGb),
+        })
+        capped.push({ orgId: org.id, month, graceUntil: engaged.graceUntil })
+        bandwidthGraceUntil = engaged.graceUntil
+      }
+      const bandwidthGraceDeadline =
+        bandwidthGraceUntil === null ? null : formatBandwidthGraceDeadline(bandwidthGraceUntil)
+
       /**
        * A band a plugin declares, as the sweep words and sends it: the lead
        * sentence is built here from the plugin's noun, so every notice opens
@@ -1376,6 +1428,10 @@ async function handler(request: Request): Promise<Response> {
           limitText: formatBandwidthGb(entitlements.bandwidthGb),
           cadence: 'monthly',
           outcome: metersInfra ? 'bills' : bandwidthPauses ? 'stops' : 'continues',
+          // The one-time grace (AGL-4232): the deadline is the news.
+          ...(bandwidthGraceDeadline && !metersInfra
+            ? { reachedTitle: `Bandwidth limit reached: upgrade or your sites pause on ${bandwidthGraceDeadline}` }
+            : {}),
           lead: () =>
             `${workspace.possessive} sites have used about ` +
             usagePhrase({
@@ -1392,11 +1448,18 @@ async function handler(request: Request): Promise<Response> {
               'is billed on your monthly invoice — upgrade in Billing for a ' +
               'bigger allowance, or set a monthly cap there if you would ' +
               'rather it stopped.'
-            : bandwidthPauses
-              ? 'Past the included amount, your sites show visitors a ' +
-                'temporary notice until next month — nothing is charged. ' +
-                'Upgrade in Billing to keep them serving.'
-              : 'Your sites keep serving and nothing extra is charged.',
+            : bandwidthGraceDeadline
+              ? `Your sites stay online until ${bandwidthGraceDeadline}. ` +
+                'Upgrade in Billing before then to keep them online; if you ' +
+                "don't, visitors see a \"temporarily unavailable\" notice from " +
+                'then until next month. Nothing is charged for the extra ' +
+                'traffic. This extra time is given once per site, so in a later ' +
+                'month a site past its limit pauses straight away.'
+              : bandwidthPauses
+                ? 'Past the included amount, your sites show visitors a ' +
+                  'temporary notice until next month — nothing is charged. ' +
+                  'Upgrade in Billing to keep them serving.'
+                : 'Your sites keep serving and nothing extra is charged.',
           approach: metersInfra
             ? 'Nothing is charged yet — past the included amount, extra ' +
               'bandwidth is billed on your monthly invoice unless you set a ' +
@@ -1779,55 +1842,7 @@ async function handler(request: Request): Promise<Response> {
         }
       }
 
-      /*==========================================
-       * THE FREE PLAN'S BANDWIDTH HARD CAP (AGL-1967/2155).
-       *
-       * Enforced from before public signups, so the cap is proven under real
-       * traffic while the cohort is small and a mistake is cheap.
-       *
-       * THE DECISION IS MADE HERE because the numbers are already here. This
-       * sweep has just summed the org's page views for the current month and
-       * converted them to `bandwidthGb` against `entitlements.bandwidthGb` —
-       * the identical comparison the `bandwidth` alert above thresholds on.
-       * The serving path then reads the VERDICT off the org doc it already
-       * loads, so the cap costs no read on any render. Re-deriving the figure
-       * anywhere else would be the AGL-1371 mistake: a cap that engages on a
-       * number the customer's own alert does not show.
-       *
-       * ONE WRITE, not two. This rides the `usageAlerts` set below rather than
-       * issuing its own, so engaging a cap costs nothing beyond what the sweep
-       * already spends on this org.
-       *
-       * NOTHING IS EVER CLEARED. The marker names its month; next month it
-       * stops matching. An org that UPGRADES is released faster still and
-       * without any write at all, because `bandwidthCapEngaged` re-reads the
-       * plan — see that function for why the asymmetry is deliberate.
-       *=========================================*/
-      const existingCap = orgData['bandwidthCap'] as OrgBandwidthCap | undefined
       const orgUpdates: Record<string, unknown> = {}
-      if (
-        bandwidthCapShouldEngage({
-          org: orgData as never,
-          usedBandwidthGb: bandwidthGb,
-          includedBandwidthGb: entitlements.bandwidthGb,
-        }) &&
-        existingCap?.month !== month
-      ) {
-        // Guarded on the month so a cap engages once and the following 30
-        // days of sweeps write nothing. The diagnostics are recorded at
-        // ENGAGE time on purpose: they answer "what tripped this" for a
-        // customer asking, and re-stamping them daily would replace the
-        // moment the site was paused with the moment it was last swept.
-        orgUpdates['bandwidthCap'] = {
-          month,
-          engagedAt: Date.now(),
-          pageViews: Math.round(pageViews),
-          includedPageViews: Math.round(
-            pageViewsFromBandwidthGb(entitlements.bandwidthGb),
-          ),
-        } satisfies OrgBandwidthCap
-        capped.push({ orgId: org.id, month })
-      }
 
       if (Object.keys(guardUpdates).length) {
         /*==========================================
@@ -1866,13 +1881,6 @@ async function handler(request: Request): Promise<Response> {
         orgUpdates['usageAlertsSeeded'] = { month, at: Date.now() }
       }
       if (Object.keys(orgUpdates).length) {
-        // NO CACHE FAN-OUT (deliberate). The tenant's org doc is cached for 60
-        // seconds and the middleware's verdict memo for 30, so the cap engages
-        // within about a minute of this write on its own. Busting
-        // `tenant-data:{hostId}` from here would mean one revalidate call per
-        // host of every capped org, from a cron that sweeps the whole
-        // platform — cost, and a fan-out that can fail, bought against a
-        // latency already dwarfed by this sweep's own daily period.
         await org.ref.set(orgUpdates, { merge: true })
       }
 

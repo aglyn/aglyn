@@ -167,6 +167,8 @@ function fakeHostDoc(host: SeededHost) {
         name === 'analytics'
           ? analyticsCollection(host.pageViews ?? 0)
           : emptyCollection(),
+      // The one-time grace stamp (AGL-4232) lands on the site.
+      set: async () => undefined,
     },
   }
 }
@@ -266,6 +268,11 @@ jest.mock('firebase-admin/firestore', () => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  // The one engage write every cap writer shares (AGL-4232), for real.
+  engageBandwidthCap: (options: unknown) =>
+    jest
+      .requireActual('../../../libs/tenant/data/admin/src/lib/server/bandwidth-cap-engage')
+      .engageBandwidthCap(options),
   firebaseAdmin: {
     app: () => ({ firestore: () => fakeFirestore }),
     firestore: { FieldPath: { documentId: () => '__name__' } },

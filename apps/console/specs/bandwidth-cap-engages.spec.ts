@@ -62,6 +62,8 @@ interface SeededHost {
   orgId: string
   /** This month's page views for the site. */
   pageViews: number
+  /** When the site had its one-time grace (AGL-4232), if ever. */
+  bandwidthGraceUsedAt?: number
 }
 
 let mockOrgs: SeededOrg[]
@@ -69,6 +71,7 @@ let mockHosts: SeededHost[]
 /** `get()` calls against the `hosts` collection, i.e. pages read. */
 let hostsPagesRead = 0
 let mockNotifications: Array<{ orgId: string; title: string; body: string }>
+const mockHostWrites: Array<{ hostId: string; data: Record<string, unknown> }> = []
 /** Every merge written back to an org doc, in order. */
 let mockOrgWrites: Array<{
   orgId: string
@@ -114,6 +117,10 @@ function analyticsCollection(pageViews: number): any {
 function fakeHostDoc(host: SeededHost) {
   return {
     id: host.id,
+    data: () =>
+      host.bandwidthGraceUsedAt === undefined
+        ? {}
+        : { bandwidthGraceUsedAt: host.bandwidthGraceUsedAt },
     get: (field: string) => (field === 'screens' ? {} : undefined),
     ref: {
       id: host.id,
@@ -121,6 +128,10 @@ function fakeHostDoc(host: SeededHost) {
         name === 'analytics'
           ? analyticsCollection(host.pageViews)
           : emptyCollection(),
+      // The one-time grace stamp (AGL-4232) lands on the site.
+      set: async (value: Record<string, unknown>) => {
+        mockHostWrites.push({ hostId: host.id, data: value })
+      },
     },
   }
 }
@@ -263,6 +274,12 @@ const fakeFirestore = {
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  // The one engage write every cap writer shares (AGL-4232), for real, over
+  // this suite's own store.
+  engageBandwidthCap: (options: unknown) =>
+    jest
+      .requireActual('../../../libs/tenant/data/admin/src/lib/server/bandwidth-cap-engage')
+      .engageBandwidthCap(options),
   firebaseAdmin: {
     app: () => ({ firestore: () => fakeFirestore }),
     firestore: { FieldPath: { documentId: () => '__name__' } },
@@ -320,6 +337,7 @@ const VIRAL = FREE_BAND_VIEWS * 100
 async function run() {
   mockNotifications = []
   mockOrgWrites = []
+  mockHostWrites.length = 0
   const response = await POST(
     new Request('https://app.aglyn.com/api/billing/usage-alerts', {
       method: 'POST',
@@ -355,6 +373,7 @@ beforeEach(() => {
   mockHosts = []
   mockOrgs = []
   mockOrgWrites = []
+  mockHostWrites.length = 0
   hostsPagesRead = 0
 })
 
@@ -453,12 +472,60 @@ describe('the sweep engages the cap on a free org past its band', () => {
 })
 
 describe('the alert says which of the two actually happens (AGL-2070)', () => {
-  it('FREE at 100% is told it reached the limit — and now that is TRUE', async () => {
+  it('FREE at 80% is warned, with the upgrade path, and nothing engages (AGL-4232)', async () => {
+    mockOrgs = [{ id: 'org-1', plan: 'free' }]
+    mockHosts = [{ id: 'site-a', orgId: 'org-1', pageViews: Math.round(FREE_BAND_VIEWS * 0.85) }]
+    await run()
+    const alert = bandwidthAlert()
+    expect(alert?.title).toMatch(/above 80% of your monthly bandwidth/i)
+    expect(alert?.body).toMatch(/upgrade in Billing/i)
+    expect(capWrite('org-1')).toBeUndefined()
+    expect(mockHostWrites).toEqual([])
+  })
+
+  it('FREE under the band: no alert, no cap, no grace spent', async () => {
+    mockOrgs = [{ id: 'org-1', plan: 'free' }]
+    mockHosts = [{ id: 'site-a', orgId: 'org-1', pageViews: Math.round(FREE_BAND_VIEWS * 0.5) }]
+    await run()
+    expect(bandwidthAlert()).toBeUndefined()
+    expect(capWrite('org-1')).toBeUndefined()
+    expect(mockHostWrites).toEqual([])
+  })
+
+  it('FREE at 100% the FIRST time is told its deadline: one-time grace (AGL-4232)', async () => {
+    mockOrgs = [{ id: 'org-1', plan: 'free' }]
+    mockHosts = [{ id: 'site-a', orgId: 'org-1', pageViews: VIRAL }]
+    const before = Date.now()
+    await run()
+    const alert = bandwidthAlert()
+    expect(alert?.title).toMatch(/^Bandwidth limit reached: upgrade or your sites pause on \w+day, \w+ \d+ at \d+:\d\d [AP]M UTC$/)
+    expect(alert?.body).toMatch(/stay online until/i)
+    expect(alert?.body).toMatch(/temporarily unavailable/i)
+    expect(alert?.body).toMatch(/given once per site/i)
+    expect(alert?.body).not.toMatch(/invoice/i)
+    // The marker carries the grace, and the site records it, durably.
+    const marker = capWrite("org-1") as unknown as Record<string, number>
+    expect(marker['graceUntil']).toBeGreaterThanOrEqual(before + 72 * 3_600_000)
+    expect(marker['graceUntil']).toBeLessThanOrEqual(Date.now() + 72 * 3_600_000)
+    expect(mockHostWrites).toEqual([
+      { hostId: 'site-a', data: { bandwidthGraceUsedAt: marker['engagedAt'] } },
+    ])
+  })
+
+  it('FREE at 100% after its site already had the grace is paused at once', async () => {
     // The wall wording was already what this branch produced; what changed is
     // that it stopped being a lie. Before the cap the customer read "you've
     // reached your monthly bandwidth limit" while every page kept serving.
     mockOrgs = [{ id: 'org-1', plan: 'free' }]
-    mockHosts = [{ id: 'site-a', orgId: 'org-1', pageViews: VIRAL }]
+    mockHosts = [
+      {
+        id: 'site-a',
+        orgId: 'org-1',
+        pageViews: VIRAL,
+        // A grace from an earlier month: long over.
+        bandwidthGraceUsedAt: Date.now() - 40 * 24 * 3_600_000,
+      },
+    ]
     await run()
     const alert = bandwidthAlert()
     expect(alert?.title).toMatch(/reached your monthly bandwidth limit/i)
@@ -467,8 +534,10 @@ describe('the alert says which of the two actually happens (AGL-2070)', () => {
     expect(alert?.body).toMatch(/nothing is charged/i)
     expect(alert?.body).toMatch(/upgrade in Billing to keep them serving/i)
     expect(alert?.body).not.toMatch(/invoice/i)
-    // …and the site really is stopped, in the same run.
+    // …and the site really is stopped, in the same run: no grace, no stamp.
     expect(capWrite('org-1')).toBeDefined()
+    expect((capWrite("org-1") as unknown as Record<string, unknown>)["graceUntil"]).toBeUndefined()
+    expect(mockHostWrites).toEqual([])
   })
 
   it('PAID at 100% is told it is being BILLED, never that it is stuck', async () => {

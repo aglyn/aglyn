@@ -45,7 +45,12 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
 import { type HelpTipContent } from '@aglyn/shared-ui-jsx'
 import { UsageMeter as SharedUsageMeter } from '@aglyn/shared-ui-jsx/components/usage-meter.component'
-import { Link, LinearProgress, Stack, Typography } from '@mui/material'
+import { Alert, Link, LinearProgress, Stack, Typography } from '@mui/material'
+import {
+  bandwidthCapEngaged,
+  bandwidthCapGraceUntil,
+  formatBandwidthGraceDeadline,
+} from '@aglyn/aglyn/app-utils/bandwidth-cap'
 import {
   collection,
   doc,
@@ -852,6 +857,11 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     capturedPeople >= entitlements.contactsPerHost
   /** Whether the plan carries the CRM, which decides what the band is called. */
   const crmIncluded = entitlements.features.crm
+  // The free plan's bandwidth pause (AGL-4232), read from the org doc the
+  // tenant enforces it from: the grace deadline while one runs, else whether
+  // the sites are paused now.
+  const bandwidthGraceUntil = bandwidthCapGraceUntil(org)
+  const bandwidthPaused = bandwidthCapEngaged(org)
   /*
    * API requests past the plan's included band, priced.
    *
@@ -1259,6 +1269,22 @@ export function BillingUsageComponent(props: BillingUsageProps) {
         unit="GB"
         help={docsHelp('bandwidth', { anchor: '#where-to-see-it' })}
       />
+      {/* THE FREE PLAN'S PAUSE, said to the owner (AGL-4232): the one-time
+          grace's deadline while it runs, or that the sites are paused. The
+          visitor's notice says neither; this is where the upgrade is. */}
+      {bandwidthGraceUntil !== null ? (
+        <Alert severity="warning" sx={{ mb: 2 }} data-testid="bandwidth-grace-alert">
+          {`Upgrade or your sites pause on ${formatBandwidthGraceDeadline(bandwidthGraceUntil)}. ` +
+            'They are past this month\'s included bandwidth and stay online until then; ' +
+            'after that, visitors see a "temporarily unavailable" notice until the 1st. ' +
+            'This extra time is given once per site.'}
+        </Alert>
+      ) : bandwidthPaused ? (
+        <Alert severity="error" sx={{ mb: 2 }} data-testid="bandwidth-paused-alert">
+          {'Your sites are paused for visitors until the 1st: they have used this ' +
+            'month\'s included bandwidth. Upgrade to bring them back within about a minute.'}
+        </Alert>
+      ) : null}
       {/* Campaign emails, the one operating quota that reached the customer
           only as a refusal. The label says CAMPAIGN because that is what the
           cap governs: transactional mail — receipts, booking reminders,

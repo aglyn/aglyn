@@ -101,6 +101,7 @@ let mockStaffNotifications: Array<{ title: string }>
 let mockOrgEmails: Array<{ orgId: string; subject: string }>
 /** Every staff email. */
 let mockStaffEmails: Array<{ subject: string }>
+const mockHostWrites: Array<{ hostId: string; data: Record<string, unknown> }> = []
 /** Every `set()` payload written to an org doc, with its options. */
 let mockOrgWrites: Array<{
   orgId: string
@@ -218,6 +219,10 @@ function fakeHostDoc(host: SeededHost) {
         name === 'analytics'
           ? analyticsCollection(host.pageViews, host.mediaBytes)
           : emptyCollection(),
+      // The one-time grace stamp (AGL-4232) lands on the site.
+      set: async (value: Record<string, unknown>) => {
+        mockHostWrites.push({ hostId: host.id, data: value })
+      },
     },
   }
 }
@@ -352,6 +357,12 @@ const fakeFirestore = {
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  // The one engage write every cap writer shares (AGL-4232), for real, over
+  // this suite's own store.
+  engageBandwidthCap: (options: unknown) =>
+    jest
+      .requireActual('../../../libs/tenant/data/admin/src/lib/server/bandwidth-cap-engage')
+      .engageBandwidthCap(options),
   firebaseAdmin: {
     app: () => ({ firestore: () => fakeFirestore }),
     firestore: { FieldPath: { documentId: () => '__name__' } },
@@ -453,6 +464,7 @@ async function run() {
   mockOrgEmails = []
   mockStaffEmails = []
   mockOrgWrites = []
+  mockHostWrites.length = 0
   const response = await POST(
     new Request('https://app.aglyn.com/api/billing/usage-alerts', {
       method: 'POST',
@@ -479,6 +491,7 @@ beforeEach(() => {
   mockOrgLibraryMediaBytes = {}
   duringSweep = null
   mockOrgWrites = []
+  mockHostWrites.length = 0
   mockOrgNotifications = []
   mockStaffNotifications = []
   mockOrgEmails = []

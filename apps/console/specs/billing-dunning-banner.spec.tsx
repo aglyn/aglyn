@@ -232,3 +232,39 @@ describe('the dunning banner survives the flip to unpaid (AGL-1877)', () => {
     expect(offending).toMatch(/retry window/i)
   })
 })
+
+/**
+ * THE FREE PLAN'S BANDWIDTH PAUSE, told to the owner (AGL-4232): the one-time
+ * grace's deadline while it runs, then that the sites are paused — on a
+ * never-subscribed Free org with no `plan` field too, and never on a paid one.
+ */
+describe('the bandwidth pause banner (AGL-4232)', () => {
+  const month = new Date().toISOString().slice(0, 7)
+  afterEach(() => {
+    sessionStorage.clear()
+  })
+
+  it('names the deadline while the grace runs, with the upgrade path', () => {
+    const graceUntil = Date.UTC(2099, 0, 1, 15, 4)
+    renderBanner({ slug: 'acme', bandwidthCap: { month, engagedAt: 1, graceUntil } })
+    expect(
+      screen.getByText(/^Upgrade or your sites pause on \w+day, \w+ \d+ at \d+:\d\d [AP]M UTC\./),
+    ).toBeTruthy()
+    expect(screen.getByText('Upgrade')).toBeTruthy()
+  })
+
+  it('says the sites are paused once the grace is over, or when there was none', () => {
+    renderBanner({ slug: 'acme', bandwidthCap: { month, engagedAt: 1, graceUntil: 1 } })
+    expect(screen.getByText(/Your sites are paused for visitors until the 1st/)).toBeTruthy()
+  })
+
+  it('says nothing about it on a paid plan, which bills instead', () => {
+    renderBanner({ ...orgAt('active'), bandwidthCap: { month, engagedAt: 1 } })
+    expect(screen.queryByText(/pause/i)).toBeNull()
+  })
+
+  it('says nothing about last month', () => {
+    renderBanner({ slug: 'acme', bandwidthCap: { month: '2020-01', engagedAt: 1 } })
+    expect(screen.queryByText(/pause/i)).toBeNull()
+  })
+})
