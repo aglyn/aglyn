@@ -24,6 +24,6 @@ class TaxEnginesNativeTest {
   fun everySpecNamesItsRoutesAndTheCommerceSettingsZone() {
     val specs = TaxEnginesScreenJson.files.flatMap { ScreenSpec.parseFile(it) }
     assertEquals(listOf("tax-engines.service").sorted(), specs.map { it.id }.sorted())
-    assertTrue(specs.any { "commerceSettings" in it.zones } || specs.all { it.zones.isEmpty() })
+    assertTrue(specs.any { "commerceSettingsTaxes" in it.zones } || specs.all { it.zones.isEmpty() })
   }
 }

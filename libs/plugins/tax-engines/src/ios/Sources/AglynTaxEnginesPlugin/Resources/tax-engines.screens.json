@@ -10,7 +10,7 @@
       "scope": "site",
       "order": 30,
       "zones": [
-        "commerceSettings"
+        "commerceSettingsTaxes"
       ],
       "showWhen": "data.conn.available",
       "load": {
