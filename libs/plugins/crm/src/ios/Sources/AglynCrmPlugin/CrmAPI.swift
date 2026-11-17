@@ -27,6 +27,7 @@ enum CrmRoutes {
   static let sharing = "/api/crm/sharing"
   static let emailSend = "/api/crm/email-send"
   static let members = "/api/orgs/members"
+  static let orgActivity = "/api/crm/org-activity"
 }
 
 struct TaskDraft: Equatable {
@@ -142,6 +143,40 @@ struct CrmAPI {
     _ = try await api.request(CrmRoutes.contactRemove, method: .post, body: body(["contactIds": [id]]))
   }
 
+  /// `crm/contact-update` for many contacts at once: one answer per contact (the bulk bar's `updateMany`).
+  func updateContacts(_ ids: [String], set: [String: JSONValue]) async throws -> [CrmBulkAnswer] {
+    var object: [String: JSONValue] = [:]
+    for (key, value) in scope.routeScope { if let value, let json = jsonValue(value) { object[key] = json } }
+    object["contactIds"] = .array(ids.map { .string($0) })
+    object["set"] = .object(set)
+    let answer = try await api.request(CrmRoutes.contactUpdate, method: .post, body: .object(object))
+    RestFirestoreReader.rereadNow()
+    return crmBulkAnswers(answer)
+  }
+
+  /// A contact's stage on a named site: the workspace's bulk bar moves each row on the site that holds it.
+  func setContactStage(_ id: String, _ stage: String?, site: String) async throws {
+    var object: [String: JSONValue] = ["orgId": .string(scope.orgID), "contactId": .string(id), "hostId": .string(site)]
+    object["lifecycleStage"] = stage.map { .string($0) } ?? .null
+    _ = try await api.request(CrmRoutes.contactStage, method: .post, body: .object(object))
+  }
+
+  /// `crm/contact-remove` for many contacts at once: one answer per contact.
+  func removeContacts(_ ids: [String]) async throws -> [CrmBulkAnswer] {
+    let answer = try await api.request(CrmRoutes.contactRemove, method: .post, body: body(["contactIds": ids]))
+    RestFirestoreReader.rereadNow()
+    return crmBulkAnswers(answer)
+  }
+
+  /// A bulk act's line in the workspace's activity feed (`crm/org-activity`), from the workspace's own CRM, as the
+  /// console's bars log it. A miss never fails the act.
+  func logBulk(_ sentence: String, kind: String, done: Int) async {
+    guard scope.orgLevel, done > 0 else { return }
+    _ = try? await api.request(
+      CrmRoutes.orgActivity, method: .post,
+      body: .object(["orgId": .string(scope.orgID), "action": .string(sentence), "target": .object(["type": .string(kind)])]))
+  }
+
   func setLeadStatus(_ id: String, status: String, label: String, reason: String? = nil) async throws {
     var changes: [String: Any] = ["status": status, "statusLabel": label]
     if status == "unqualified" {
@@ -224,6 +259,14 @@ struct CrmAPI {
 
   func deleteTask(_ task: CrmTask) async throws {
     try await reader.deleteDocument(crmPath(scope.orgID, "crmTasks") + [task.id])
+    await refreshNextActivity(task)
+  }
+
+  /// A task's due date, as the bulk bar sets it: the document under the rules, then the linked records' next activity.
+  func setTaskDue(_ task: CrmTask, _ dueAtMs: Int64?) async throws {
+    try await reader.setDocument(
+      crmPath(scope.orgID, "crmTasks") + [task.id],
+      ["dueAtMs": dueAtMs.map { $0 as Any } ?? NSNull(), "updatedAt": FirestoreSentinel.serverTimestamp], merge: true)
     await refreshNextActivity(task)
   }
 
