@@ -1432,7 +1432,7 @@
             {
               "id": "clear",
               "label": "Clear",
-              "icon": "xmark.circle|clear",
+              "icon": "xmark.circle|close",
               "when": "params.q || params.action || params.from || params.before || params.sort",
               "navigate": {
                 "screen": "core.site.activity",
