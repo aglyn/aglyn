@@ -206,7 +206,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "waivers",
-            contributes = mapOf("screens" to listOf("waivers.home", "waivers.share", "waivers.signature", "waivers.signatures", "waivers.waiver"), "widgets" to listOf("waivers.check-in-status"), "deepLinks" to listOf("waivers.home.link")),
+            contributes = mapOf("screens" to listOf("waivers.home", "waivers.paper", "waivers.share", "waivers.sign", "waivers.signature", "waivers.signatures", "waivers.signed", "waivers.waiver"), "widgets" to listOf("waivers.check-in-status"), "deepLinks" to listOf("waivers.home.link", "waivers.sign.link")),
             register = ::registerWaiversNative,
         ),
         NativePluginManifestEntry(
