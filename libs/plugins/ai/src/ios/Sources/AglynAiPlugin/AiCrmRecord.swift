@@ -110,7 +110,9 @@ struct AiCrmRecordCard: View {
     Group {
       if let zone, let kind, verdict == "ready" { content(zone, kind) }
     }
-    .task(id: "\(zone?.recordKind ?? "")/\(zone?.recordID ?? "")/\(orgID ?? "")") { await load() }
+    // The member's verdict is part of the key: the workspace's roles can land after the page does, and the card reads again
+    // once they say the member may generate (the console's widget gate, `permission: 'ai.generate'`).
+    .task(id: "\(zone?.recordKind ?? "")/\(zone?.recordID ?? "")/\(orgID ?? "")/\(zone?.hostID ?? "")/\(context.can("ai.generate"))") { await load() }
     .onDisappear { watching?.cancel() }
   }
 
