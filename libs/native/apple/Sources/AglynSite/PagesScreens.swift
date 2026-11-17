@@ -378,10 +378,17 @@ struct PageListRow: View {
         row.page.name, subtitle: subtitle,
         systemImage: row.page.isGroup ? SiteSymbols.group : row.home ? SiteSymbols.home : SiteSymbols.page
       ) {
-        HStack(spacing: AglynSpace.half) {
-          PageHoldChips(holds: holds)
-          if row.home { StatusChip("Home", tone: .info) }
-          if !row.page.isGroup { StatusChip(status.label, tone: status.live ? .success : .neutral) }
+        // A hold's chip goes above the page's own, each at its own width: beside them on a phone it squeezed the chips
+        // to a letter a line.
+        VStack(alignment: .trailing, spacing: AglynSpace.half) {
+          if !holds.isEmpty {
+            HStack(spacing: AglynSpace.half) { PageHoldChips(holds: holds) }.fixedSize()
+          }
+          HStack(spacing: AglynSpace.half) {
+            if row.home { StatusChip("Home", tone: .info) }
+            if !row.page.isGroup { StatusChip(status.label, tone: status.live ? .success : .neutral) }
+          }
+          .fixedSize()
         }
       }
     }
