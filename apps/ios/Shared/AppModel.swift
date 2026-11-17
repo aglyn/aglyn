@@ -36,6 +36,9 @@ final class AppModel {
   @ObservationIgnored private var pendingLinkScope: (orgSlug: String, hostSlug: String?)?
   /// The signed-in token's claims: the staff section shows only when they say staff.
   private(set) var claims = TokenClaims()
+  /// The workspace a first site was just made in (any, when its id was not answered): Sites opens with Create site
+  /// once it is the workspace in hand, as the console lands on the sites list with its dialog open.
+  var createSiteOnArrival: String?
   /// Bumped by Refresh (⌘R); live lists re-subscribe on it.
   private(set) var refreshToken = 0
   /// The screen this tablet was set up as instead of a register (a customer display or a self-service

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynCore
+import AglynSite
 import AglynUI
 import SwiftUI
 
@@ -145,6 +146,12 @@ struct RootView<Shell: View>: View {
     case .shell:
       if let auth = model.auth {
         shell(navigation)
+          // A first site's workspace has arrived: Sites, with Create site open (the console's `?create=site`).
+          .onChange(of: model.workspace?.org?.id, initial: true) { _, org in
+            guard let wanted = model.createSiteOnArrival, let org, wanted.isEmpty || wanted == org else { return }
+            model.createSiteOnArrival = nil
+            navigation.push(.screen(siteSitesScreen, ["new": "1"]))
+          }
           .environment(navigation)
           .focusedSceneValue(\.shellNavigation, navigation)
           // A support session says so on every screen, with its way back to the staff member's own session.

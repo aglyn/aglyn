@@ -201,6 +201,16 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
     }
   }
 
+  // A first site's workspace has arrived: Sites, with Create site open (the console's `?create=site`).
+  val createSiteIn = services.authFlow.createSiteOnArrival
+  LaunchedEffect(createSiteIn, workspace.org?.id) {
+    val wanted = createSiteIn ?: return@LaunchedEffect
+    val org = workspace.org?.id ?: return@LaunchedEffect
+    if (wanted.isNotEmpty() && wanted != org) return@LaunchedEffect
+    services.authFlow.createSiteOnArrival = null
+    context.navigate(com.aglyn.site.sites.SITE_SITES_SCREEN, mapOf("new" to "1"))
+  }
+
   // The token's claims gate the staff section; read from the token itself, as the console does.
   var claims by remember(uid) { mutableStateOf(com.aglyn.core.TokenClaims()) }
   LaunchedEffect(uid) { claims = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(false) }.getOrNull()) }

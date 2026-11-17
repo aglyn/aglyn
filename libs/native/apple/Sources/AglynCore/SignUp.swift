@@ -235,6 +235,32 @@ public struct PendingSignUpWorkspace: Equatable, Sendable {
 }
 
 /// What `/api/orgs/create` answered.
+/// The workspace a first site needs (the console's `createFirstSiteWorkspace`, AGL-3761): named for the account, made
+/// before the site, so the site is created inside it once the person picks how it starts.
+public enum FirstSiteWorkspace {
+  /// The account's own name, else its email's local part, else "workspace", at most 80 characters (`firstSiteWorkspaceName`).
+  public static func name(displayName: String?, email: String?) -> String {
+    let named = displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let local = email?.split(separator: "@", omittingEmptySubsequences: false).first.map {
+      String($0).trimmingCharacters(in: .whitespacesAndNewlines)
+    } ?? ""
+    let base = !named.isEmpty ? named : !local.isEmpty ? local : "workspace"
+    return String(base.prefix(80))
+  }
+
+  /// A second address for a name whose own was taken: its slug and a short suffix (`firstSiteWorkspaceFallbackSlug`).
+  public static func fallbackSlug(_ name: String, random: () -> Double = { Double.random(in: 0..<1) }) -> String {
+    var suffix = String(Int((random() * pow(36, 4)).rounded(.down)), radix: 36)
+    while suffix.count < 4 { suffix = "0" + suffix }
+    let own = WorkspaceName.slug(name)
+    let slug = "\((own.isEmpty ? "workspace" : own).prefix(25))-\(suffix)"
+    return WorkspaceName.slug(slug) == slug ? slug : "workspace-\(suffix)"
+  }
+
+  /// What the console says when the workspace could not be made.
+  public static let failed = "Your workspace could not be set up. Try again."
+}
+
 public struct SignUpWorkspaceOutcome: Equatable, Sendable {
   public var slug: String?
   public var orgID: String?
@@ -391,6 +417,31 @@ public struct SignUpService: Sendable {
     } catch {
       return SignUpWorkspaceOutcome(slug: nil, orgID: nil, error: nil)
     }
+  }
+
+  /// "Create site" from an account with no workspace (`createFirstSiteWorkspace`): the workspace for the first site,
+  /// named for the account (`derived`: nobody typed it), tried once more under a suffixed address when its own is taken.
+  public func createFirstSiteWorkspace(displayName: String?, email: String?) async -> SignUpWorkspaceOutcome {
+    let name = FirstSiteWorkspace.name(displayName: displayName, email: email)
+    func attempt(_ slug: String?) async -> (status: Int?, outcome: SignUpWorkspaceOutcome) {
+      var body: [String: JSONValue] = ["name": .string(name), "derived": .bool(true)]
+      if let slug { body["slug"] = .string(slug) }
+      do {
+        let answer = try await api.request("/api/orgs/create", method: .post, body: .object(body))
+        return (200, SignUpWorkspaceOutcome(slug: answer?["slug"]?.stringValue, orgID: answer?["orgId"]?.stringValue, error: nil))
+      } catch let error as ConsoleAPIError {
+        return (error.status, SignUpWorkspaceOutcome(slug: nil, orgID: nil, error: error.body?["error"]?.stringValue))
+      } catch {
+        return (nil, SignUpWorkspaceOutcome(slug: nil, orgID: nil, error: nil))
+      }
+    }
+    // A name with no usable address of its own goes straight to the suffixed one.
+    var tried = await attempt(WorkspaceName.slug(name).isEmpty ? FirstSiteWorkspace.fallbackSlug(name) : nil)
+    if tried.status == 409 { tried = await attempt(FirstSiteWorkspace.fallbackSlug(name)) }
+    guard tried.outcome.slug != nil else {
+      return SignUpWorkspaceOutcome(slug: nil, orgID: nil, error: tried.outcome.error ?? FirstSiteWorkspace.failed)
+    }
+    return tried.outcome
   }
 
   /// Records the product-updates opt-in (`postPlatformMarketingConsent`), only ever when it was ticked.

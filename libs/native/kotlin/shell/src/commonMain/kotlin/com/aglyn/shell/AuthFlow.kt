@@ -63,6 +63,8 @@ class AuthFlow {
   var pendingVerificationCode by mutableStateOf<String?>(null)
   /** A console link to open once the shell is up: where a new workspace with a plan lands. */
   var landingLink by mutableStateOf<String?>(null)
+  /** The workspace a first site was just made in ("" when its id was not answered): Sites opens with Create site once it is in hand. */
+  var createSiteOnArrival by mutableStateOf<String?>(null)
   var firstRun by mutableStateOf<FirstRunState>(FirstRunState.Idle)
   /** A console sign-in in flight (single sign-on, the desktop's sign-in): what the app keeps until the code comes back. */
   var pendingHandoff by mutableStateOf<com.aglyn.core.ConsoleHandoff.Pending?>(null)
@@ -248,6 +250,20 @@ suspend fun ShellServices.settleFirstRun(workspace: WorkspaceState) {
     return
   }
   authFlow.firstRun = if (pending.nameWasTyped) FirstRunState.Failed(pending.name, outcome.error) else FirstRunState.Idle
+}
+
+/**
+ * "Create site" from the empty workspace list (the console's "Create your first site", AGL-3761): the workspace for the first
+ * site, named for the account, then Sites with Create site open in it once it arrives. Null on success.
+ */
+suspend fun ShellServices.createFirstSite(): String? {
+  val user = signedInUser()
+  val outcome = signUp.createFirstSiteWorkspace(user?.displayName, user?.email)
+  if (outcome.slug == null) return outcome.error ?: com.aglyn.core.FirstSiteWorkspace.FAILED
+  authFlow.createSiteOnArrival = outcome.orgId.orEmpty()
+  authFlow.firstRun = FirstRunState.Idle
+  outcome.orgId?.let { workspace.selectOrg(it) }
+  return null
 }
 
 /** "Create an organization" from the empty workspace list, or "Create it now" for the name sign-up could not use. Null on success. */

@@ -11,6 +11,8 @@ struct FirstRunView: View {
   @Environment(AppModel.self) private var model
   @State private var creating = false
   @State private var name = ""
+  @State private var startingSite = false
+  @State private var siteError: String?
 
   var body: some View {
     VStack(alignment: .leading, spacing: AglynSpace.two) {
@@ -44,13 +46,30 @@ struct FirstRunView: View {
   }
 
   private var emptyState: some View {
+    // The console's empty home (AGL-3761): the first site sets the workspace up, or a workspace is made on its own.
     AglynEmptyState(
-      "No workspaces yet", systemImage: "building.2",
-      message: "A workspace is your organization: its sites, team, billing and plan live together."
+      "Create your first site", systemImage: "square.stack.3d.up",
+      message: "Your first site sets up your workspace automatically — no separate setup needed."
     ) {
-      Button("Create an organization") { creating = true }
-        .buttonStyle(.aglynProminent)
-        .accessibilityIdentifier("first-run-create")
+      VStack(spacing: AglynSpace.one) {
+        if let siteError { AglynNotice(siteError, tone: .error) }
+        Button(startingSite ? "Setting up your workspace…" : "Create site") { startFirstSite() }
+          .buttonStyle(.aglynProminent)
+          .disabled(startingSite)
+          .accessibilityIdentifier("first-run-create-site")
+        Button("Create an organization") { creating = true }
+          .buttonStyle(.borderless)
+          .accessibilityIdentifier("first-run-create")
+      }
+    }
+  }
+
+  private func startFirstSite() {
+    startingSite = true
+    siteError = nil
+    Task {
+      siteError = await model.createFirstSite()
+      startingSite = false
     }
   }
 

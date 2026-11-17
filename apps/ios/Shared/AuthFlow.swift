@@ -274,6 +274,19 @@ extension AppModel {
     firstRun = pending.nameWasTyped ? .failed(name: pending.name, error: outcome.error) : .idle
   }
 
+  /// "Create site" from the empty workspace list (the console's "Create your first site"): the workspace for the first
+  /// site, named for the account, then Sites with Create site open in it once it arrives (AGL-3761).
+  func createFirstSite() async -> String? {
+    guard let service = signUpService else { return "This build is not configured." }
+    let outcome = await service.createFirstSiteWorkspace(displayName: auth?.user?.displayName, email: auth?.user?.email)
+    guard outcome.slug != nil else { return outcome.error ?? FirstSiteWorkspace.failed }
+    createSiteOnArrival = outcome.orgID ?? ""
+    workspace?.reload()
+    firstRun = .idle
+    if let orgID = outcome.orgID { workspace?.open(orgID: orgID) }
+    return nil
+  }
+
   /// "Create an organization" from the empty workspace list, or "Create it now" for the name sign-up could not use.
   func createWorkspace(named name: String, slug: String? = nil) async -> String? {
     guard let service = signUpService else { return "This build is not configured." }
