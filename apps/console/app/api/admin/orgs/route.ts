@@ -38,6 +38,7 @@ import {
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { ORG_LIST_QUERY } from '../../../../utils/org-list-query'
+import { readUsageLevel, USAGE_LEVEL_FIELD } from '@aglyn/aglyn/app-utils/usage-level'
 import { overrideCount } from '../../../../utils/org-override-count'
 import {
   LAPSED_SUSPENSIONS_NOTICE,
@@ -222,6 +223,8 @@ async function handler(request: Request): Promise<Response> {
         suspendedReasonCode: data['suspendedReasonCode'] ?? null,
         suspendedMessage: data['suspendedMessage'] ?? null,
         erasureRequestedAt: ts(data['erasureRequestedAt']),
+        // The staff usage level (AGL-4228); the Usage level column shows and sets it.
+        usageLevel: readUsageLevel(data[USAGE_LEVEL_FIELD]),
       }
     })
     return Response.json(

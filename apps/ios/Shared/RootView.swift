@@ -20,6 +20,11 @@ struct RootView<Shell: View>: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   #if os(macOS)
     @Environment(\.controlActiveState) private var controlActiveState
+    /// When this window opened, and the window itself once known: a window the system opened only to carry a link
+    /// hands it to the window already open and closes (AGL-4059).
+    @State private var opened = Date()
+    @State private var window: NSWindow?
+    @State private var closeWhenFound = false
   #endif
 
   /// What the window shows once the app knows: each stage decides whether the Facets ground stays behind it.
@@ -85,21 +90,20 @@ struct RootView<Shell: View>: View {
       navigation.showSwitcher = false
       navigation.pendingInvite = nil
     }
-    .onOpenURL { url in
-      // A sign-up, sign-in, reset or verification link opens its own screen; any other link the signed-in shell.
-      let signedIn = model.auth?.user != nil
-      let target = navigation.linkTarget
-      if model.authFlow.open(url.absoluteString, signedIn: signedIn, onPlan: { plan in
-        if let slug = model.workspace?.org?.slug { model.open(plan.destination(orgSlug: slug), in: target) }
-      }) {
-        if model.auth?.user?.emailVerified == true { model.authFlow.pendingVerificationCode = nil }
-        return
+    .onOpenURL { url in openExternal(url) }
+    #if os(macOS)
+      // A console link clicked in another app reaches the Mac app as a universal link: a browsing-web user activity,
+      // which on the Mac does not come through `onOpenURL` (AGL-4059: the window it opened showed the home of the site
+      // already on screen, not the link).
+      .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+        if let url = activity.webpageURL { openExternal(url) }
       }
-      model.open(url.absoluteString, in: target)
-    }
-    // A link from outside the app (a browser, Mail, another app) opens in the window already open, in its tab in
-    // front (`linkTarget`), instead of a new window for each link: SwiftUI makes a window per link unless one says it
-    // takes them. With none open, the scene still opens one.
+      .background(WindowReader { found in foundWindow(found) })
+    #endif
+    // A link from outside the app (a browser, Mail, another app) opens in the window already open instead of a new
+    // window for each link: SwiftUI makes a window per link unless one says it takes them. With none open, the scene
+    // still opens one. A universal link carries nothing this can match, so on the Mac a window made for one hands the
+    // link on and closes (`MacLinkWindows`).
     .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
     .onChange(of: model.push.pendingLink) { openPendingPush() }
     #if os(macOS)
@@ -168,6 +172,39 @@ struct RootView<Shell: View>: View {
       }
     }
   }
+
+  /// A link from outside the app: a sign-up, sign-in, reset or verification link opens its own screen; any other link
+  /// the signed-in shell, on the workspace and site it names. On the Mac it opens as a new tab of the window in front
+  /// (`MacLinkWindows`), as the console's link opens a new browser tab; elsewhere in the tab in front.
+  private func openExternal(_ url: URL) {
+    let link = url.absoluteString
+    let signedIn = model.auth?.user != nil
+    let target = navigation.linkTarget
+    if model.authFlow.open(link, signedIn: signedIn, onPlan: { plan in
+      if let slug = model.workspace?.org?.slug { model.open(plan.destination(orgSlug: slug), in: target) }
+    }) {
+      if model.auth?.user?.emailVerified == true { model.authFlow.pendingVerificationCode = nil }
+      return
+    }
+    #if os(macOS)
+      if model.app == .aglyn {
+        if MacLinkWindows.shared.open(link, receivedBy: window, opened: opened, model: model) {
+          if let window { window.close() } else { closeWhenFound = true }
+        }
+        return
+      }
+    #endif
+    model.open(link, in: target)
+  }
+
+  #if os(macOS)
+    /// The window this view is in, once AppKit has it: a window made only to carry a link closes as soon as it is known.
+    private func foundWindow(_ found: NSWindow) {
+      guard window !== found else { return }
+      window = found
+      if closeWhenFound { found.close() }
+    }
+  #endif
 
   /// A tapped push's link, opened once someone is signed in, in the tab in front (on the Mac, of the key window).
   private func openPendingPush() {

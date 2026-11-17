@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-import { hostPublicOrigin, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { ENTRY_PREVIEW_PARAM } from '@aglyn/aglyn/app-utils/entry-preview-link'
+import { siteLiveUrlForSlug } from '@aglyn/aglyn/app-utils/site-live-url'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -48,6 +49,15 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  * the site's canonical public origin, which is also what keeps the preview off
  * the tenant's canonical-domain redirect.
  */
+/** The hostname the console was reached at, which decides where its links point. */
+function consoleHostname(request: Request): string | undefined {
+  try {
+    return new URL(request.url).hostname
+  } catch {
+    return undefined
+  }
+}
+
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } =
     await pluginRequestFromWeb(request)
@@ -109,13 +119,30 @@ async function handler(request: Request): Promise<Response> {
     })
     if (refusal) return refusal
 
-    // The site's own public address. A host with no public origin at all has
-    // no page to preview, so there is nothing to sign.
-    const origin = hostPublicOrigin({
-      cname: host.get('cname') as string | undefined,
-      subdomain: host.get('subdomain') as string | undefined,
-    })
-    if (!origin) {
+    // The site's address as THIS console reaches it, by the rule every other
+    // "view the site" link follows (`siteLiveUrlForSlug`): a deployed console
+    // links the site's public origin (a live custom domain first, the way its
+    // canonical does), while a local console links the local tenant and a
+    // preview console the tenant preview deployment, each naming the site
+    // with `?tenantHost=`. Built from the console host the request reached,
+    // never from anything in the body. This route used `hostPublicOrigin`
+    // alone, so a local or Vercel preview console handed out links to the
+    // PRODUCTION site for content that only exists where it was minted.
+    // A host the console cannot link at all has no page to preview, so there
+    // is nothing to sign.
+    //
+    // Each segment encoded on its own: a slug carrying a slash or a question
+    // mark would otherwise rewrite the address it is supposed to be part of.
+    const path = `/${encodeURIComponent(collectionSlug)}/${encodeURIComponent(entrySlug)}`
+    const siteUrl = siteLiveUrlForSlug(
+      {
+        cname: host.get('cname') as string | undefined,
+        subdomain: host.get('subdomain') as string | undefined,
+      },
+      path,
+      consoleHostname(request),
+    )
+    if (!siteUrl) {
       return Response.json(
         { error: 'Site has no public address yet' },
         { status: 409 },
@@ -127,11 +154,9 @@ async function handler(request: Request): Promise<Response> {
       collectionSlug,
       entrySlug,
     })
-    // Each segment encoded on its own: a slug carrying a slash or a question
-    // mark would otherwise rewrite the address it is supposed to be part of.
-    const path = `/${encodeURIComponent(collectionSlug)}/${encodeURIComponent(entrySlug)}`
-    const url = `${origin}${path}?${ENTRY_PREVIEW_PARAM}=${encodeURIComponent(token)}`
-    return Response.json({ url, expiresAtMs }, { status: 200 })
+    const url = new URL(siteUrl)
+    url.searchParams.set(ENTRY_PREVIEW_PARAM, token)
+    return Response.json({ url: url.toString(), expiresAtMs }, { status: 200 })
   } catch (error) {
     const unauthenticated = invalidIdTokenResponse(error)
     if (unauthenticated) return unauthenticated
