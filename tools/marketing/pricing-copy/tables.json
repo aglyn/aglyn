@@ -175,7 +175,7 @@
             "values": {
               "free": "1",
               "starter": "2 · max 5",
-              "pro": "3 · unlimited",
+              "pro": "3 · no max",
               "enterprise": "Custom"
             }
           },
@@ -185,7 +185,7 @@
             "values": {
               "free": "1",
               "starter": "2 · max 10",
-              "pro": "3 · unlimited",
+              "pro": "3 · no max",
               "enterprise": "Custom"
             }
           },
@@ -230,7 +230,7 @@
             "values": {
               "free": "—",
               "starter": "2 · max 10",
-              "pro": "5 · unlimited",
+              "pro": "5 · no max",
               "enterprise": "Custom"
             }
           },
@@ -302,6 +302,16 @@
               "starter": "✓",
               "pro": "✓",
               "enterprise": "✓"
+            }
+          },
+          {
+            "label": "Saved forms per site",
+            "duplicateOf": null,
+            "values": {
+              "free": "1",
+              "starter": "5",
+              "pro": "Unlimited",
+              "enterprise": "Talk to us"
             }
           },
           {
@@ -742,7 +752,7 @@
         "label": "CRM records, per 1,000 over the included band",
         "rate": "extraContactsUsdPer1k",
         "values": {
-          "starter": "$1",
+          "starter": "$1, up to 10,000",
           "pro": "$0.75",
           "enterprise": "Custom"
         }
