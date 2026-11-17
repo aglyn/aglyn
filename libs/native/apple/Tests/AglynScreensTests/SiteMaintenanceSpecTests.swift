@@ -46,6 +46,7 @@ final class SiteMaintenanceSpecTests: XCTestCase {
 
   /// Admin › Security lists the approved image hosts too (the console's first card), and every add and remove republishes
   /// the site, as the console's host-document writes of those CSP lists do.
+  @MainActor
   func testSecurityListsImageHostsAndEveryChangeRepublishes() throws {
     let spec = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.site.security" })
     let lists = spec.blocks.filter { $0.type == "list" }
