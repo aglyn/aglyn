@@ -26,7 +26,16 @@ import {
 } from '@aglyn/aglyn/server'
 // The Aglyn AI credit block (AGL-4144) by its own module, not the server
 // barrel route specs stub with a partial object.
-import { AI_CREDITS_PER_BLOCK } from '@aglyn/aglyn/app-utils/ai-credit-blocks'
+import {
+  AI_CREDIT_BLOCKS_MAX,
+  AI_CREDITS_PER_BLOCK,
+} from '@aglyn/aglyn/app-utils/ai-credit-blocks'
+import {
+  CONTRACT_ADDON_RATE_KEY,
+  contractAddonUnitUsd,
+  readOrgContract,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { contractAdditionFloor } from '@aglyn/aglyn/app-utils/full-use-cost'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -40,7 +49,7 @@ import { runPluginEventHandlers } from '@aglyn/aglyn/server'
 import {
   ADDON_KINDS,
   addonChargedUnitUsd,
-  addonKindFromPriceId,
+  addonKindOfItem,
   addonPriceId,
   addonQuantitiesFromItems,
   addonMaxForBaseline,
@@ -71,6 +80,12 @@ import {
   readImmediateCharge,
 } from '../../../../utils/server/immediate-charge'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { registerPluginServerDeclarations } from '../../../../constants/plugins.declarations.server.generated'
+import {
+  contractBillsOnNextInvoice,
+  ensureContractAddonPrice,
+} from '../../../../utils/server/contract-billing'
+import { raiseOperatorAlert } from '../../../../utils/server/operator-alerts-seam'
 
 // lockdown-423: exempt — self-serve billing surface. AGL-1501 keeps billing/maintenance-locked
 // sessions alive PRECISELY so members can reach billing and pay; a 423
@@ -426,7 +441,8 @@ async function handler(request: Request): Promise<Response> {
     // AGL-1028: moved to `orgs/{orgId}/billing/stripe`, org doc as fallback.
     // `seatAddons` stays inline on `org` — it is an entitlement input, so
     // `resolveOrgEntitlements` above still reads it straight off the org doc.
-    const customerId = (await readOrgBilling(orgId)).stripeCustomerId
+    const billingDoc = await readOrgBilling(orgId)
+    const customerId = billingDoc.stripeCustomerId
     let subscription: any = null
     if (customerId) {
       try {
@@ -453,18 +469,61 @@ async function handler(request: Request): Promise<Response> {
     const interval: BillingInterval =
       planItem?.price?.recurring?.interval === 'year' ? 'year' : 'month'
 
+    /*
+     * A Custom deal with a rate card (AGL-4233) sells its additions at its
+     * contract's rates, on per-workspace prices, instead of the catalog's.
+     * Only the kinds a rate card prices move; the flat catalog add-ons a Custom
+     * workspace could already buy (the Event Calendar) sell as before.
+     * Without a rate card this is null and nothing changes: every per-plan
+     * catalog rate on Custom is null.
+     */
+    const contract = readOrgContract(org)
+    /** Whether the contract's rate card prices this kind; others sell as before. */
+    const contractSells = (kind: AddonKind) =>
+      Boolean(contract) && Boolean(CONTRACT_ADDON_RATE_KEY[kind])
+    const stripeCall = (method: 'GET' | 'POST', path: string, params?: URLSearchParams) =>
+      stripeRequest(secretKey, method, path, params)
+    const unitUsdFor = (kind: AddonKind): number | null =>
+      contractSells(kind)
+        ? contractAddonUnitUsd(contract, kind)
+        : addonChargedUnitUsd(kind, plan, interval)
+    const maxFor = (kind: AddonKind): number => {
+      if (!contractSells(kind)) return addonMax(kind, baseline, plan)
+      if (contractAddonUnitUsd(contract, kind) === null) return 0
+      // Blocks of AI credits, 0 to 30, as on every plan that sells them.
+      if (kind === 'aiAddon') return AI_CREDIT_BLOCKS_MAX
+      return addonMax(kind, baseline, plan)
+    }
+    /** The price this kind is sold under now; minted for a contract on first use. */
+    const priceIdFor = async (kind: AddonKind): Promise<string | null> => {
+      if (!contractSells(kind)) return addonPriceId(kind, plan, interval)
+      const unitUsd = contractAddonUnitUsd(contract, kind)
+      if (unitUsd === null) return null
+      return ensureContractAddonPrice(stripeCall, {
+        orgId,
+        orgName: String(org?.displayName ?? org?.name ?? orgId),
+        kind,
+        interval,
+        unitUsd,
+      })
+    }
+
     if (action === 'get') {
       const quantities = addonQuantitiesFromItems(items)
       const catalog = Object.fromEntries(
         ADDON_KINDS.map((kind) => {
           // What the add-on is CHARGED at now (AGL-4227), which can trail a
           // catalog price whose new Stripe price is not configured yet.
-          const unitUsd = addonChargedUnitUsd(kind, plan, interval)
-          const max = addonMax(kind, baseline, plan)
+          const unitUsd = unitUsdFor(kind)
+          const max = maxFor(kind)
           return [kind, {
             unitUsd,
             max,
-            configured: Boolean(addonPriceId(kind, plan, interval)),
+            // A contract's price is minted on first purchase (AGL-4233), so
+            // any kind its rate card sells is ready to buy.
+            configured: contractSells(kind)
+              ? unitUsd !== null
+              : Boolean(addonPriceId(kind, plan, interval)),
             upgradeRequired: unitUsd === null || max <= 0,
             // The credits ONE block adds on top of the plan's own (AGL-4144),
             // so every client states the figure each block buys.
@@ -478,6 +537,11 @@ async function handler(request: Request): Promise<Response> {
         interval,
         quantities,
         catalog,
+        // How a Custom contract's addition reaches its bill (AGL-4233), so
+        // the confirm can say "on your next invoice" for a net-terms deal.
+        ...(contract
+          ? { contract: { billsOnNextInvoice: contractBillsOnNextInvoice(subscription) } }
+          : {}),
       }, { status: 200 })
     }
 
@@ -493,7 +557,7 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Unknown add-on' }, { status: 400 })
     }
     const quantity = Math.floor(Number(body?.quantity))
-    const max = addonMax(kind, baseline, plan)
+    const max = maxFor(kind)
     if (!Number.isFinite(quantity) || quantity < 0 || quantity > max) {
       return Response.json({
         error: max <= 0
@@ -544,14 +608,14 @@ async function handler(request: Request): Promise<Response> {
         { status: 400 },
       )
     }
-    const unitUsd = addonChargedUnitUsd(kind, plan, interval)
+    const unitUsd = unitUsdFor(kind)
     if (unitUsd === null) {
       return Response.json({
         error: 'Your plan does not sell this add-on — upgrade to add it',
         code: 'upgrade_required',
       }, { status: 409 })
     }
-    const priceId = addonPriceId(kind, plan, interval)
+    const priceId = await priceIdFor(kind)
     if (!priceId) {
       return Response.json({
         error: 'This add-on price is not configured yet',
@@ -564,7 +628,7 @@ async function handler(request: Request): Promise<Response> {
     // moves it onto the current price (below).
     const existing =
       items.find((item) => item?.price?.id === priceId) ??
-      items.find((item) => addonKindFromPriceId(item?.price?.id) === kind)
+      items.find((item) => addonKindOfItem(item) === kind)
     /**
      * This add-on's quantity RIGHT NOW: 0 when no item exists, and `null`
      * when an item exists but Stripe reports no quantity on it at all
@@ -663,6 +727,50 @@ async function handler(request: Request): Promise<Response> {
       : [['price', priceId], ['quantity', String(quantity)]]
 
     /*
+     * A Custom contract's addition (AGL-4233). An invoice deal (net terms)
+     * puts it on the NEXT invoice; a card deal is charged now, as Pro is.
+     */
+    const onNextInvoice = Boolean(contract) && contractBillsOnNextInvoice(subscription)
+    /*
+     * THE CONTRACT STILL CLEARS ITS QUOTE FLOOR (AGL-4233). Every rate on the
+     * card cleared cost + 30% when staff set it; this re-runs the whole
+     * contract — the negotiated base plus every addition at its rate, against
+     * the full-use cost of everything it then sells — the way a quote is
+     * rated. A miss is held for staff rather than sold, and nothing is charged.
+     */
+    if (contract && !isReduction) {
+      // The full-use cost reads every band a plugin declares (AI credits).
+      await registerPluginServerDeclarations()
+      const after = { ...addonQuantitiesFromItems(items), [kind]: quantity }
+      const floor = contractAdditionFloor({ ...org, ...billingDoc } as never, after)
+      if (!floor.ok) {
+        await raiseOperatorAlert('billing.contractAdditionHeld', {
+          dedupeKey: `${orgId}:${kind}:${quantity}`,
+          context: {
+            orgId,
+            orgName: String(org?.displayName ?? org?.name ?? '').trim(),
+            kind,
+            quantity: String(quantity),
+            netUsd: floor.netUsd.toFixed(2),
+            requiredNetUsd: Number.isFinite(floor.requiredNetUsd)
+              ? floor.requiredNetUsd.toFixed(2)
+              : 'unbounded',
+          },
+          orgId,
+        })
+        return Response.json(
+          {
+            error:
+              'This addition needs our team to review your agreement first. ' +
+              "We've let them know, and nothing has been charged.",
+            code: 'contract_review',
+          },
+          { status: 409 },
+        )
+      }
+    }
+
+    /*
      * A REDUCTION is quoted as what it is: nothing today.
      *
      * Answered here rather than by pricing it, because there is nothing to
@@ -714,7 +822,9 @@ async function handler(request: Request): Promise<Response> {
           // rather than the whole next renewal with the proration buried in
           // it — which is what makes a tax-inclusive "charged now" figure
           // readable off it at all.
-          '&subscription_proration_behavior=always_invoice' +
+          (onNextInvoice
+            ? '&subscription_proration_behavior=create_prorations'
+            : '&subscription_proration_behavior=always_invoice') +
           // Preview under the same tax setting the set-action applies
           // (AGL-1537), so the quoted proration matches the invoice.
           '&automatic_tax[enabled]=true',
@@ -736,6 +846,20 @@ async function handler(request: Request): Promise<Response> {
       // would name a number no invoice uses, which is the defect this same
       // page carries on its plan card.
       const taxCents = Number(preview?.tax ?? 0)
+      // A contract on net terms (AGL-4233) is charged nothing today: the
+      // proration is what the addition adds to the next invoice, before tax.
+      if (onNextInvoice) {
+        return Response.json({
+          amountDueCents: 0,
+          prorationCents,
+          taxCents: 0,
+          chargedNowCents: 0,
+          nextInvoiceCents: prorationCents,
+          onNextInvoice: true,
+          taxComplete: false,
+          currency: preview?.currency ?? 'usd',
+        }, { status: 200 })
+      }
       const chargedNowCents = Number(preview?.amount_due ?? 0)
       return Response.json({
         amountDueCents: chargedNowCents,
@@ -770,7 +894,9 @@ async function handler(request: Request): Promise<Response> {
         secretKey,
         subscription,
         items,
-        priceId: String(priceId),
+        // The price the item carries TODAY: a contract's item may still be on
+        // a rate the deal has since renegotiated (AGL-4233).
+        priceId: String(existing?.price?.id ?? priceId),
         kind,
         quantity,
       })
@@ -823,7 +949,13 @@ async function handler(request: Request): Promise<Response> {
      * period. Automatic tax applies to that invoice, so the amount taken is
      * tax-inclusive and the confirm has to quote it that way.
      */
-    const params = new URLSearchParams(immediateChargeParams(subscription))
+    // A contract on net terms (AGL-4233) prorates onto the NEXT invoice and
+    // is granted now; everything else is charged now and granted once paid.
+    const params = new URLSearchParams(
+      onNextInvoice
+        ? { proration_behavior: 'create_prorations' }
+        : immediateChargeParams(subscription),
+    )
     for (const [key, value] of itemParams) {
       params.set(`items[0][${key}]`, value)
     }
@@ -845,7 +977,9 @@ async function handler(request: Request): Promise<Response> {
       `subscriptions/${subscription.id}`,
       params,
     )
-    const charge = readImmediateCharge(updated)
+    const charge = onNextInvoice
+      ? { applied: true, paid: false }
+      : readImmediateCharge(updated)
     if (!charge.applied) {
       // NOTHING IS GRANTED. The subscription still carries the quantity that
       // was paid for, so nothing is mirrored, no schedule is refreshed and no
@@ -856,12 +990,12 @@ async function handler(request: Request): Promise<Response> {
         {
           ok: false,
           quantities: addonQuantitiesFromItems(items),
-          ...pendingChargeResponse(charge),
+          ...pendingChargeResponse(charge as ReturnType<typeof readImmediateCharge>),
         },
         { status: 200 },
       )
     }
-    const addonInvoice = updated?.latest_invoice ?? null
+    const addonInvoice = onNextInvoice ? null : (updated?.latest_invoice ?? null)
     // `paid` is the only affirmative, and with the change applied it is the
     // only outcome: an unpaid charge returns above.
     const chargePaid = charge.paid
@@ -916,6 +1050,7 @@ async function handler(request: Request): Promise<Response> {
         chargedNowCents: Number(addonInvoice?.amount_due ?? 0),
         chargeCurrency: String(addonInvoice?.currency ?? 'usd'),
         chargePaid,
+        ...(onNextInvoice ? { onNextInvoice: true } : {}),
         ...(scheduleRefreshFailed ? { scheduleRefreshFailed: true } : {}),
       },
       { status: 200 },

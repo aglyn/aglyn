@@ -118,7 +118,10 @@ export function aiAddonDescription(plan: OrgPlan | null): string {
     'Questions, copy, generated pages, emails, campaigns and products all ' +
     'draw on one pool of AI credits.'
   const blocks = `Add blocks on top: ${AI_CREDIT_BLOCK_TERMS}, up to ${AI_CREDIT_BLOCKS_MAX}.`
-  const included = plan ? PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth : 0
+  // A Custom agreement names its own included credits (AGL-4233), so the
+  // plan table's fallback figure is not quoted to it.
+  const included =
+    plan && !isCustomPricedPlan(plan) ? PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth : 0
   return included > 0 && Number.isFinite(included)
     ? `${pool} Your plan includes ${included.toLocaleString()} a month. ${blocks}`
     : `${pool} ${blocks}`
@@ -131,6 +134,14 @@ export function aiAddonDescription(plan: OrgPlan | null): string {
  * all." With none, the plan's own figure.
  */
 export function aiAddonIncludedLine(plan: OrgPlan | null, blocks: number): string {
+  // A Custom contract's blocks (AGL-4233) add to the credits its agreement
+  // includes, which the plan table does not know.
+  if (isCustomPricedPlan(plan)) {
+    return blocks > 0
+      ? `With ${aiCreditBlocksLabel(blocks)}: ${aiCreditBlocksCredits(blocks).toLocaleString()} ` +
+          "AI credits a month on top of your agreement's."
+      : "With no blocks: your agreement's own AI credits."
+  }
   const band = plan ? PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth : 0
   const total = includedAiCreditsPerMonth(band, blocks)
   if (!Number.isFinite(total)) return 'Your plan includes unlimited AI credits.'
@@ -155,9 +166,12 @@ export function aiAddonIncludedLine(plan: OrgPlan | null, blocks: number): strin
  */
 export function aiAddonOffer(
   plan: OrgPlan | null,
+  /** The route's catalog entry: a Custom contract that sells blocks (AGL-4233). */
+  entry?: { unitUsd: number | null; max: number } | null,
 ): 'included' | 'upgrade' | 'sold' {
   if (!plan) return 'upgrade'
   if (planSellsAiCredits(plan)) return 'sold'
+  if (isCustomPricedPlan(plan) && entry?.unitUsd != null && entry.max > 0) return 'sold'
   return isCustomPricedPlan(plan) ? 'included' : 'upgrade'
 }
 
@@ -444,8 +458,14 @@ export default function BillingAddonsCardComponent({
                 'for' +
                 (effectiveOn ? `, and it ends on ${effectiveOn}` : '') +
                 '. From then: '
-              : `$${chargedNowUsd} ${currency}${taxCaveat} will be charged to ` +
-                `your card now, prorated for the rest of this period. Ongoing: `) +
+              : preview.onNextInvoice
+                ? // A Custom contract paid by invoice (AGL-4233): nothing is
+                  // charged now; the prorated amount joins the next invoice.
+                  `$${prorationUsd} ${currency}, plus any sales tax, will be ` +
+                  'added to your next invoice, prorated for the rest of this ' +
+                  'period. You can use it as soon as you confirm. Ongoing: '
+                : `$${chargedNowUsd} ${currency}${taxCaveat} will be charged to ` +
+                  `your card now, prorated for the rest of this period. Ongoing: `) +
             (quantity === 0
               ? 'nothing — this add-on is removed.'
               : `$${monthlyUsd}/mo` +
@@ -642,7 +662,7 @@ export default function BillingAddonsCardComponent({
         // The AI add-on row on a plan that cannot buy it says WHICH way it
         // cannot — Enterprise already has it, Free upgrades to a plan that
         // sells it — where the catalog marks both `upgradeRequired`.
-        const aiOffer = row.kind === 'aiAddon' ? aiAddonOffer(plan) : 'sold'
+        const aiOffer = row.kind === 'aiAddon' ? aiAddonOffer(plan, entry) : 'sold'
         // Site Care on a plan that does not sell it keeps its switch, shown
         // off and disabled, with the reason beside it: a prerequisite is
         // shown, never hidden.

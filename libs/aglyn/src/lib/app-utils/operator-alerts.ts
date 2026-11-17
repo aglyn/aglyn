@@ -315,6 +315,43 @@ export const CORE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
     defaultEnabled: true,
   },
   {
+    // A Custom contract's usage billing reached its monthly ceiling
+    // (AGL-4233): usage stops billing and the hard caps return until the
+    // month turns. Should know: nothing is lost, but the customer is now
+    // being refused past their contract and the deal may want re-quoting.
+    type: 'billing.contractUsageCeiling',
+    label: 'Contract usage reached its monthly ceiling',
+    description:
+      'A Custom contract’s usage past its contracted amounts reached the monthly ceiling on automatic usage billing. Usage stops billing and the contract’s hard caps apply until next month. Raise the ceiling or re-quote the deal from the workspace’s staff page.',
+    tier: 'should',
+    category: 'billing',
+    title: 'Usage ceiling reached on {{orgName}} ({{month}})',
+    body:
+      'Workspace {{orgName}} ({{orgId}}) reached its {{ceiling}} monthly ceiling on usage billing for {{month}}. Usage past the contract is no longer billed and its hard caps apply until the month turns.',
+    link: '/admin/orgs/{{orgId}}',
+    delivery: 'immediate',
+    dedupeWindowMinutes: 31 * DAY,
+    defaultEnabled: true,
+  },
+  {
+    // A Custom contract's self-serve addition was held because the whole
+    // contract would fall under its quote floor (AGL-4233). Must know: a
+    // customer is waiting on staff for something they tried to buy.
+    type: 'billing.contractAdditionHeld',
+    label: 'Contract addition held for review',
+    description:
+      'A Custom contract’s customer tried to add capacity, and the contract with that addition would keep less than cost + 30% at full use. Nothing was charged or granted. Adjust the contract’s rates or bands, or re-quote, then let the customer know.',
+    tier: 'must',
+    category: 'billing',
+    title: 'Addition held on {{orgName}}',
+    body:
+      'Workspace {{orgName}} ({{orgId}}) tried to set {{kind}} to {{quantity}}. With it the contract keeps ${{netUsd}}/mo net of Stripe against ${{requiredNetUsd}} required, so it was held. Nothing was charged.',
+    link: '/admin/orgs/{{orgId}}',
+    delivery: 'immediate',
+    dedupeWindowMinutes: DAY,
+    defaultEnabled: true,
+  },
+  {
     // The scheduled reconciliation of Site Care extra time (AGL-3959): a
     // request's billed hours and the Stripe invoice item that carries them
     // disagree, or one exists without the other. Should know, not must:

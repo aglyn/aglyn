@@ -24,6 +24,7 @@ import {
   addonMaxForBaseline,
   addonMaxForPlan,
   addonUnitUsd,
+  isAddonKind,
   type AddonKind,
 } from '@aglyn/aglyn/app-utils/bundle-intent'
 // The Aglyn AI credit block (AGL-4144) by its own modules rather than the
@@ -363,7 +364,7 @@ export function isMeteredPriceId(priceId: string | null | undefined): boolean {
  * minus the metered item, and finally to `items[0]` so behaviour for those
  * subscriptions is unchanged.
  */
-export function findPlanItem<T extends { price?: { id?: string } | null }>(
+export function findPlanItem<T extends BillingItemLike>(
   items: readonly T[] | null | undefined,
 ): T | null {
   const list = items ?? []
@@ -371,7 +372,7 @@ export function findPlanItem<T extends { price?: { id?: string } | null }>(
   if (byPlanPrice) return byPlanPrice
   const notAnAddon = list.find(
     (item) =>
-      !addonKindFromPriceId(item?.price?.id) &&
+      !addonKindOfItem(item) &&
       !isMeteredPriceId(item?.price?.id),
   )
   return notAnAddon ?? list[0] ?? null
@@ -384,7 +385,7 @@ export function findPlanItem<T extends { price?: { id?: string } | null }>(
  */
 export function addonQuantitiesFromItems(
   items:
-    | Array<{ price?: { id?: string } | null; quantity?: number | null }>
+    | Array<BillingItemLike & { quantity?: number | null }>
     | null
     | undefined,
 ): Record<AddonKind, number> {
@@ -392,10 +393,50 @@ export function addonQuantitiesFromItems(
     ADDON_KINDS.map((kind) => [kind, 0]),
   ) as Record<AddonKind, number>
   for (const item of items ?? []) {
-    const kind = addonKindFromPriceId(item?.price?.id)
+    const kind = addonKindOfItem(item)
     if (kind) {
       quantities[kind] += Math.max(0, Math.floor(Number(item?.quantity ?? 0)))
     }
   }
   return quantities
+}
+
+/** A subscription item as far as classifying it needs. */
+export type BillingItemLike = {
+  price?: { id?: string; metadata?: Record<string, string> | null } | null
+}
+
+/**
+ * The price metadata key that names the add-on a Custom contract's own price
+ * sells (AGL-4233). A contract's add-ons bill on per-org prices at the deal's
+ * rates, which no `STRIPE_PRICE_*` env names, so they are recognised by this
+ * tag instead — on every reader that goes through `addonKindOfItem`, the
+ * webhook's `seatAddons` mirror included.
+ */
+export const CONTRACT_ADDON_KIND_METADATA = 'aglynAddonKind'
+
+/**
+ * Which add-on kind a subscription item sells: a Custom contract's tagged
+ * price first (AGL-4233), then the env price map. Null for the base plan
+ * item, the metered item and anything unknown.
+ */
+export function addonKindOfItem(item: BillingItemLike | null | undefined): AddonKind | null {
+  const tagged = item?.price?.metadata?.[CONTRACT_ADDON_KIND_METADATA]
+  if (isAddonKind(tagged)) return tagged
+  return addonKindFromPriceId(item?.price?.id)
+}
+
+/**
+ * The lookup key of a Custom contract's add-on price (AGL-4233): one per
+ * workspace, kind, interval and amount, so a price is minted once and found
+ * again, and a renegotiated rate is a new price (Stripe prices are
+ * immutable) rather than an edit.
+ */
+export function contractAddonLookupKey(
+  orgId: string,
+  kind: AddonKind,
+  interval: BillingInterval,
+  unitAmountCents: number,
+): string {
+  return `aglyn_contract_${orgId}_${kind}_${interval}_${Math.round(unitAmountCents)}`
 }

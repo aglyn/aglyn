@@ -25,7 +25,8 @@
  */
 export const overrideCount = (org: any): number =>
   Object.keys(org?.entitlements ?? {}).filter(
-    (key) => key !== 'features' && key !== 'planComp',
+    // A Custom contract's rate card (AGL-4233) is not a quota either.
+    (key) => key !== 'features' && key !== 'planComp' && key !== 'contract',
   ).length +
   Object.keys(org?.entitlements?.features ?? {}).length +
   Object.keys(org?.releaseFlags ?? {}).length
