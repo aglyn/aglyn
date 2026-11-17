@@ -384,7 +384,11 @@
         "CRM_ACTIVITIES_PER_RECORD_CEILING",
         "CRM_EMAIL_SUBJECT_MAX",
         "CRM_EMAIL_BODY_MAX",
-        "CRM_LEAD_CLOSED_STATUSES"
+        "CRM_LEAD_CLOSED_STATUSES",
+        "CRM_VIEW_NAME_MAX",
+        "CRM_VIEW_MAX_FILTERS",
+        "CRM_VIEW_MAX_COLUMNS",
+        "CRM_DEFAULT_VIEWS_FIELD"
       ]
     },
     "libs/plugins/crm/src/lib/constants/contact-filters.ts": {
@@ -37546,6 +37550,311 @@
             "visibility": "personal",
             "ownerUid": "u1"
           },
+          null
+        ]
+      ]
+    },
+    "normalizeCrmViewState": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "filters": [
+              {
+                "field": "ownerUid",
+                "op": "equals",
+                "value": "u1",
+                "label": "Dana"
+              },
+              {
+                "field": "",
+                "op": "equals",
+                "value": "x"
+              },
+              {
+                "field": "tags",
+                "op": "",
+                "value": "x"
+              },
+              {
+                "field": "tags",
+                "op": "contains",
+                "value": ""
+              },
+              {
+                "field": "nextTaskAtMs",
+                "op": "isEmpty",
+                "value": ""
+              },
+              {
+                "field": " status ",
+                "op": " isAnyOf ",
+                "value": " open,won "
+              }
+            ],
+            "columns": [
+              "name",
+              " email ",
+              "name",
+              "",
+              7
+            ],
+            "sort": {
+              "field": "name",
+              "direction": "desc"
+            }
+          }
+        ],
+        [
+          {
+            "filters": "nope",
+            "columns": {
+              "a": 1
+            },
+            "sort": {
+              "field": "updatedAt",
+              "direction": "sideways"
+            }
+          }
+        ],
+        [
+          {
+            "filters": [
+              {
+                "field": "a",
+                "op": "equals",
+                "value": "1"
+              },
+              {
+                "field": "b",
+                "op": "equals",
+                "value": "2"
+              },
+              {
+                "field": "c",
+                "op": "equals",
+                "value": "3"
+              },
+              {
+                "field": "d",
+                "op": "equals",
+                "value": "4"
+              },
+              {
+                "field": "e",
+                "op": "equals",
+                "value": "5"
+              },
+              {
+                "field": "f",
+                "op": "equals",
+                "value": "6"
+              },
+              {
+                "field": "g",
+                "op": "equals",
+                "value": "7"
+              },
+              {
+                "field": "h",
+                "op": "equals",
+                "value": "8"
+              },
+              {
+                "field": "i",
+                "op": "equals",
+                "value": "9"
+              },
+              {
+                "field": "j",
+                "op": "equals",
+                "value": "10"
+              },
+              {
+                "field": "k",
+                "op": "equals",
+                "value": "11"
+              },
+              {
+                "field": "l",
+                "op": "equals",
+                "value": "12"
+              },
+              {
+                "field": "m",
+                "op": "equals",
+                "value": "13"
+              },
+              {
+                "field": "n",
+                "op": "equals",
+                "value": "14"
+              },
+              {
+                "field": "o",
+                "op": "equals",
+                "value": "15"
+              },
+              {
+                "field": "p",
+                "op": "equals",
+                "value": "16"
+              },
+              {
+                "field": "q",
+                "op": "equals",
+                "value": "17"
+              },
+              {
+                "field": "r",
+                "op": "equals",
+                "value": "18"
+              },
+              {
+                "field": "s",
+                "op": "equals",
+                "value": "19"
+              },
+              {
+                "field": "t",
+                "op": "equals",
+                "value": "20"
+              },
+              {
+                "field": "u",
+                "op": "equals",
+                "value": "21"
+              }
+            ],
+            "sort": {
+              "field": "  "
+            }
+          }
+        ]
+      ]
+    },
+    "crmViewIsListed": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          {
+            "shared": true,
+            "ownerUid": "u2"
+          },
+          "u1"
+        ],
+        [
+          {
+            "shared": false,
+            "ownerUid": "u1"
+          },
+          "u1"
+        ],
+        [
+          {
+            "shared": false,
+            "ownerUid": "u2"
+          },
+          "u1"
+        ],
+        [
+          {
+            "shared": false,
+            "ownerUid": ""
+          },
+          ""
+        ],
+        [
+          {
+            "shared": false,
+            "ownerUid": "u1"
+          },
+          null
+        ]
+      ]
+    },
+    "crmDefaultViewId": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          null,
+          "o1",
+          "contacts"
+        ],
+        [
+          {
+            "crmDefaultViews": {
+              "o1": {
+                "contacts": "v1",
+                "deals": "  "
+              }
+            }
+          },
+          "o1",
+          "contacts"
+        ],
+        [
+          {
+            "crmDefaultViews": {
+              "o1": {
+                "contacts": "v1",
+                "deals": "  "
+              }
+            }
+          },
+          "o1",
+          "deals"
+        ],
+        [
+          {
+            "crmDefaultViews": {
+              "o1": {
+                "contacts": "v1"
+              }
+            }
+          },
+          "o2",
+          "contacts"
+        ],
+        [
+          {
+            "crmDefaultViews": [
+              "v1"
+            ]
+          },
+          "o1",
+          "contacts"
+        ],
+        [
+          {
+            "crmDefaultViews": {
+              "o1": {
+                "contacts": "v1"
+              }
+            }
+          },
+          null,
+          "contacts"
+        ]
+      ]
+    },
+    "crmDefaultViewPatch": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          "o1",
+          "leads",
+          "v9"
+        ],
+        [
+          "o1",
+          "tasks",
           null
         ]
       ]

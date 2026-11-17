@@ -5,6 +5,7 @@ import com.aglyn.contracts.ListFilterRequest
 import com.aglyn.contracts.ListQueryDeclaration
 import com.aglyn.contracts.ListQueryFilter
 import com.aglyn.contracts.ListQueryOp
+import com.aglyn.contracts.ListQuerySort
 import com.aglyn.contracts.ListQueryRequest
 import com.aglyn.contracts.currencyFractionDigits
 import com.aglyn.contracts.currencyInputText
@@ -72,7 +73,14 @@ fun scopeBase(scope: CrmScope): List<ListQueryFilter> =
   scope.readTokens?.let { listOf(ListQueryFilter(ListQueryOp.ARRAY_CONTAINS_ANY, "visibleTo", JsonArray(it.map(::JsonPrimitive)))) }.orEmpty()
 
 /** A chip over a list: the clauses it adds to the one query. */
-data class CrmFilter(val key: String, val label: String, val clauses: List<ListFilterRequest> = emptyList(), val base: List<ListQueryFilter> = emptyList())
+data class CrmFilter(
+  val key: String,
+  val label: String,
+  val clauses: List<ListFilterRequest> = emptyList(),
+  val base: List<ListQueryFilter> = emptyList(),
+  /** A saved view's order, when the list declares it; null keeps the list's own. */
+  val sort: ListQuerySort? = null,
+)
 
 /** The query param the Contacts list opens one person by (`CONTACTS_LIST_EMAIL_PARAM`). */
 const val CONTACTS_LIST_EMAIL_PARAM = "email"
@@ -134,10 +142,10 @@ fun crmListPlan(kind: CrmKind, scope: CrmScope, filter: CrmFilter, search: Strin
   val extra = filter.base +
     (if (kind == CrmKind.DEAL && pipelineId != null) listOf(ListQueryFilter(ListQueryOp.EQUAL, "pipelineId", JsonPrimitive(pipelineId))) else emptyList())
   val words = search.trim().ifEmpty { null }?.let { listOf(it) }
-  val scoped = ListQueryRequest(base = scopeBase(scope) + extra, clauses = filter.clauses, search = words)
+  val scoped = ListQueryRequest(base = scopeBase(scope) + extra, clauses = filter.clauses, search = words, sort = filter.sort)
   val impliesScope = { clause: ListFilterRequest -> kind == CrmKind.CONTACT && clause.field == "facetKeys" && clause.value.startsWith("${scope.groupId}:") }
   if (scope.orgWide && filter.clauses.any(impliesScope)) {
-    val trial = planListQuery(declaration, ListQueryRequest(base = extra, clauses = filter.clauses, search = words))
+    val trial = planListQuery(declaration, ListQueryRequest(base = extra, clauses = filter.clauses, search = words, sort = filter.sort))
     if (trial.served.any(impliesScope)) return trial
   }
   return planListQuery(declaration, scoped)

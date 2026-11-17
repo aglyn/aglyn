@@ -8249,6 +8249,122 @@
         }
       ]
     },
+    "crmDefaultViewId": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            "o1",
+            "contacts"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "crmDefaultViews": {
+                "o1": {
+                  "contacts": "v1",
+                  "deals": "  "
+                }
+              }
+            },
+            "o1",
+            "contacts"
+          ],
+          "result": "v1"
+        },
+        {
+          "args": [
+            {
+              "crmDefaultViews": {
+                "o1": {
+                  "contacts": "v1",
+                  "deals": "  "
+                }
+              }
+            },
+            "o1",
+            "deals"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "crmDefaultViews": {
+                "o1": {
+                  "contacts": "v1"
+                }
+              }
+            },
+            "o2",
+            "contacts"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "crmDefaultViews": [
+                "v1"
+              ]
+            },
+            "o1",
+            "contacts"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "crmDefaultViews": {
+                "o1": {
+                  "contacts": "v1"
+                }
+              }
+            },
+            null,
+            "contacts"
+          ],
+          "result": null
+        }
+      ]
+    },
+    "crmDefaultViewPatch": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "cases": [
+        {
+          "args": [
+            "o1",
+            "leads",
+            "v9"
+          ],
+          "result": {
+            "crmDefaultViews": {
+              "o1": {
+                "leads": "v9"
+              }
+            }
+          }
+        },
+        {
+          "args": [
+            "o1",
+            "tasks",
+            null
+          ],
+          "result": {
+            "crmDefaultViews": {
+              "o1": {
+                "tasks": null
+              }
+            }
+          }
+        }
+      ]
+    },
     "crmEmailTemplateIsListed": {
       "module": "libs/aglyn/src/lib/app-utils/crm-email-templates.ts",
       "cases": [
@@ -9735,6 +9851,61 @@
             "+123456789012345678901"
           ],
           "result": null
+        }
+      ]
+    },
+    "crmViewIsListed": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "shared": true,
+              "ownerUid": "u2"
+            },
+            "u1"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "shared": false,
+              "ownerUid": "u1"
+            },
+            "u1"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "shared": false,
+              "ownerUid": "u2"
+            },
+            "u1"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "shared": false,
+              "ownerUid": ""
+            },
+            ""
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "shared": false,
+              "ownerUid": "u1"
+            },
+            null
+          ],
+          "result": false
         }
       ]
     },
@@ -26263,6 +26434,353 @@
             "updatedAtMs": 0,
             "visibility": "shared",
             "visibleTo": []
+          }
+        }
+      ]
+    },
+    "normalizeCrmViewState": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": {
+            "columns": [],
+            "filters": [],
+            "sort": null
+          }
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": {
+            "columns": [],
+            "filters": [],
+            "sort": null
+          }
+        },
+        {
+          "args": [
+            {
+              "filters": [
+                {
+                  "field": "ownerUid",
+                  "op": "equals",
+                  "value": "u1",
+                  "label": "Dana"
+                },
+                {
+                  "field": "",
+                  "op": "equals",
+                  "value": "x"
+                },
+                {
+                  "field": "tags",
+                  "op": "",
+                  "value": "x"
+                },
+                {
+                  "field": "tags",
+                  "op": "contains",
+                  "value": ""
+                },
+                {
+                  "field": "nextTaskAtMs",
+                  "op": "isEmpty",
+                  "value": ""
+                },
+                {
+                  "field": " status ",
+                  "op": " isAnyOf ",
+                  "value": " open,won "
+                }
+              ],
+              "columns": [
+                "name",
+                " email ",
+                "name",
+                "",
+                7
+              ],
+              "sort": {
+                "field": "name",
+                "direction": "desc"
+              }
+            }
+          ],
+          "result": {
+            "columns": [
+              "name",
+              "email"
+            ],
+            "filters": [
+              {
+                "field": "ownerUid",
+                "label": "Dana",
+                "op": "equals",
+                "value": "u1"
+              },
+              {
+                "field": "nextTaskAtMs",
+                "op": "isEmpty",
+                "value": ""
+              },
+              {
+                "field": "status",
+                "op": "isAnyOf",
+                "value": "open,won"
+              }
+            ],
+            "sort": {
+              "direction": "desc",
+              "field": "name"
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "filters": "nope",
+              "columns": {
+                "a": 1
+              },
+              "sort": {
+                "field": "updatedAt",
+                "direction": "sideways"
+              }
+            }
+          ],
+          "result": {
+            "columns": [],
+            "filters": [],
+            "sort": {
+              "direction": "asc",
+              "field": "updatedAt"
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "filters": [
+                {
+                  "field": "a",
+                  "op": "equals",
+                  "value": "1"
+                },
+                {
+                  "field": "b",
+                  "op": "equals",
+                  "value": "2"
+                },
+                {
+                  "field": "c",
+                  "op": "equals",
+                  "value": "3"
+                },
+                {
+                  "field": "d",
+                  "op": "equals",
+                  "value": "4"
+                },
+                {
+                  "field": "e",
+                  "op": "equals",
+                  "value": "5"
+                },
+                {
+                  "field": "f",
+                  "op": "equals",
+                  "value": "6"
+                },
+                {
+                  "field": "g",
+                  "op": "equals",
+                  "value": "7"
+                },
+                {
+                  "field": "h",
+                  "op": "equals",
+                  "value": "8"
+                },
+                {
+                  "field": "i",
+                  "op": "equals",
+                  "value": "9"
+                },
+                {
+                  "field": "j",
+                  "op": "equals",
+                  "value": "10"
+                },
+                {
+                  "field": "k",
+                  "op": "equals",
+                  "value": "11"
+                },
+                {
+                  "field": "l",
+                  "op": "equals",
+                  "value": "12"
+                },
+                {
+                  "field": "m",
+                  "op": "equals",
+                  "value": "13"
+                },
+                {
+                  "field": "n",
+                  "op": "equals",
+                  "value": "14"
+                },
+                {
+                  "field": "o",
+                  "op": "equals",
+                  "value": "15"
+                },
+                {
+                  "field": "p",
+                  "op": "equals",
+                  "value": "16"
+                },
+                {
+                  "field": "q",
+                  "op": "equals",
+                  "value": "17"
+                },
+                {
+                  "field": "r",
+                  "op": "equals",
+                  "value": "18"
+                },
+                {
+                  "field": "s",
+                  "op": "equals",
+                  "value": "19"
+                },
+                {
+                  "field": "t",
+                  "op": "equals",
+                  "value": "20"
+                },
+                {
+                  "field": "u",
+                  "op": "equals",
+                  "value": "21"
+                }
+              ],
+              "sort": {
+                "field": "  "
+              }
+            }
+          ],
+          "result": {
+            "columns": [],
+            "filters": [
+              {
+                "field": "a",
+                "op": "equals",
+                "value": "1"
+              },
+              {
+                "field": "b",
+                "op": "equals",
+                "value": "2"
+              },
+              {
+                "field": "c",
+                "op": "equals",
+                "value": "3"
+              },
+              {
+                "field": "d",
+                "op": "equals",
+                "value": "4"
+              },
+              {
+                "field": "e",
+                "op": "equals",
+                "value": "5"
+              },
+              {
+                "field": "f",
+                "op": "equals",
+                "value": "6"
+              },
+              {
+                "field": "g",
+                "op": "equals",
+                "value": "7"
+              },
+              {
+                "field": "h",
+                "op": "equals",
+                "value": "8"
+              },
+              {
+                "field": "i",
+                "op": "equals",
+                "value": "9"
+              },
+              {
+                "field": "j",
+                "op": "equals",
+                "value": "10"
+              },
+              {
+                "field": "k",
+                "op": "equals",
+                "value": "11"
+              },
+              {
+                "field": "l",
+                "op": "equals",
+                "value": "12"
+              },
+              {
+                "field": "m",
+                "op": "equals",
+                "value": "13"
+              },
+              {
+                "field": "n",
+                "op": "equals",
+                "value": "14"
+              },
+              {
+                "field": "o",
+                "op": "equals",
+                "value": "15"
+              },
+              {
+                "field": "p",
+                "op": "equals",
+                "value": "16"
+              },
+              {
+                "field": "q",
+                "op": "equals",
+                "value": "17"
+              },
+              {
+                "field": "r",
+                "op": "equals",
+                "value": "18"
+              },
+              {
+                "field": "s",
+                "op": "equals",
+                "value": "19"
+              },
+              {
+                "field": "t",
+                "op": "equals",
+                "value": "20"
+              }
+            ],
+            "sort": null
           }
         }
       ]

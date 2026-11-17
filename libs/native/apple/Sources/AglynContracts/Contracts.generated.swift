@@ -6252,6 +6252,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let crmActivityDirectionLabels: [String: String]
   public let crmActivityKindLabels: [String: String]
   public let crmActivityKindNouns: [String: String]
+  public let crmDefaultViewsField: String
   public let crmEmailBodyMax: Int
   public let crmEmailSubjectMax: Int
   public let crmEmailTemplateKindLabels: [String: String]
@@ -6264,6 +6265,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let crmMergeFields: [CrmMergeFieldDefinition]
   public let crmReportPeriodLabels: [String: String]
   public let crmTaskKindLabels: [String: String]
+  public let crmViewMaxColumns: Int
+  public let crmViewMaxFilters: Int
+  public let crmViewNameMax: Int
   public let crossMaxDepth: Int
   public let datasetAuthorableFieldTypes: [DatasetFieldType]
   public let datasetFieldTypeLabels: [String: String]
@@ -6621,6 +6625,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case crmActivityDirectionLabels = "CRM_ACTIVITY_DIRECTION_LABELS"
     case crmActivityKindLabels = "CRM_ACTIVITY_KIND_LABELS"
     case crmActivityKindNouns = "CRM_ACTIVITY_KIND_NOUNS"
+    case crmDefaultViewsField = "CRM_DEFAULT_VIEWS_FIELD"
     case crmEmailBodyMax = "CRM_EMAIL_BODY_MAX"
     case crmEmailSubjectMax = "CRM_EMAIL_SUBJECT_MAX"
     case crmEmailTemplateKindLabels = "CRM_EMAIL_TEMPLATE_KIND_LABELS"
@@ -6633,6 +6638,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case crmMergeFields = "CRM_MERGE_FIELDS"
     case crmReportPeriodLabels = "CRM_REPORT_PERIOD_LABELS"
     case crmTaskKindLabels = "CRM_TASK_KIND_LABELS"
+    case crmViewMaxColumns = "CRM_VIEW_MAX_COLUMNS"
+    case crmViewMaxFilters = "CRM_VIEW_MAX_FILTERS"
+    case crmViewNameMax = "CRM_VIEW_NAME_MAX"
     case crossMaxDepth = "CROSS_MAX_DEPTH"
     case datasetAuthorableFieldTypes = "DATASET_AUTHORABLE_FIELD_TYPES"
     case datasetFieldTypeLabels = "DATASET_FIELD_TYPE_LABELS"

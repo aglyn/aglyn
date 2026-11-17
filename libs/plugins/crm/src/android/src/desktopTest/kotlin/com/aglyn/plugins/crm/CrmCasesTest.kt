@@ -84,6 +84,54 @@ class CrmCasesTest {
   }
 
   @Test
+  fun aSavedViewIsReadAsTheConsoleReadsIt() {
+    cases("normalizeCrmViewState").forEach { (args, result) ->
+      val want = map(result)!!
+      val got = normalizeCrmViewState(map(args[0]))
+      @Suppress("UNCHECKED_CAST")
+      val clauses = (want["filters"] as List<Map<String, Any?>>).map {
+        CrmViewClause(it["field"] as String, it["op"] as String, it["value"] as String, it["label"] as? String)
+      }
+      assertEquals(clauses, got.filters, args.toString())
+      assertEquals(want["columns"], got.columns, args.toString())
+      assertEquals((want["sort"] as? Map<*, *>)?.let { CrmViewSort(it["field"] as String, it["direction"] as String) }, got.sort, args.toString())
+    }
+    cases("crmViewIsListed").forEach { (args, result) ->
+      val view = map(args[0])!!
+      assertEquals(plain(result), crmViewIsListed(view["shared"] == true, view["ownerUid"] as? String ?: "", plain(args[1]) as? String), args.toString())
+    }
+  }
+
+  @Test
+  fun theDefaultViewIsTheReadersAsTheConsoleKeepsIt() {
+    cases("crmDefaultViewId").forEach { (args, result) ->
+      assertEquals(plain(result), crmDefaultViewId(map(args[0]), plain(args[1]) as? String, plain(args[2]) as String), args.toString())
+    }
+    cases("crmDefaultViewPatch").forEach { (args, result) ->
+      assertEquals(plain(result), crmDefaultViewPatch(plain(args[0]) as String, plain(args[1]) as String, plain(args[2]) as? String), args.toString())
+    }
+  }
+
+  @Test
+  fun aViewOpensAsOneOfTheListsFilters() {
+    val view = CrmSavedView(
+      "v1", "Won by name", "u1", "u1", true,
+      CrmViewState(listOf(CrmViewClause("status", "equals", "won")), listOf("name"), CrmViewSort("name", "asc")),
+    )
+    val filter = crmViewFilter(view, CrmKind.DEAL)
+    assertEquals("view:v1", filter.key)
+    assertEquals("Won by name", filter.label)
+    assertEquals(listOf(ListFilterRequest("status", "equals", "won")), filter.clauses)
+    assertEquals(listOf(mapOf("field" to "status", "op" to "equals", "value" to "won")), crmViewClauses(filter))
+    // A sort the list does not declare keeps the list's own order, as `crmViewQuerySort` falls back.
+    assertEquals(null, crmViewQuerySort(CrmKind.COMPANY.declaration.sorts, CrmViewSort("industry", "asc")))
+    assertEquals("nameLower", crmViewQuerySort(CrmKind.COMPANY.declaration.sorts, CrmViewSort("name", "asc"))?.path)
+    assertEquals("Shared · your default", crmViewMenuDetail(view, "u1", "v1"))
+    assertEquals(null, crmViewMenuDetail(view, "u2", null))
+    assertEquals("Your default", crmViewMenuDetail(view, "u2", "v1"))
+  }
+
+  @Test
   fun crmTelHrefCases() = cases("crmTelHref").forEach { (args, result) ->
     assertEquals(plain(result), crmTelHref(plain(args[0]) as? String), args.toString())
   }

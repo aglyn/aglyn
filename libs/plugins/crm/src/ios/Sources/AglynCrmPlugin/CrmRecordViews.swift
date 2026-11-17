@@ -39,8 +39,28 @@ struct RecordsSection: View {
   @State private var confirming: CrmBulkAction?
   @State private var bulkBusy = false
   @State private var bulkResult: CrmBulkResult?
+  /// The section's saved views and the reader's default (`useCrmSavedView`).
+  @State private var views = CrmViewsModel()
+  /// Whether the reader picked a filter or a view, which the default view then leaves alone.
+  @State private var picking = false
+  @State private var defaultApplied = false
 
   private var filters: [CrmFilter] { (contactEmailFilter(openEmail).map { [$0] } ?? []) + crmFilters(kind, scope) }
+
+  /// The saved views as filters: the reader's own and the shared ones.
+  private var viewFilters: [CrmFilter] {
+    let listed = views.views(uid: scope.uid)
+    return (listed.mine + listed.shared).map { crmViewFilter($0, kind: kind) }
+  }
+
+  /// What the list shows: the chip or view picked, the first chip until then (or while a view is still loading).
+  private var activeFilter: CrmFilter {
+    (filters + viewFilters).first { $0.id == filterID } ?? filters.first { $0.id == filterID } ?? filters[0]
+  }
+
+  private var defaultViewKey: String {
+    "\(views.profile.ready)|\(views.list.ready)|\(views.defaultID(orgID: scope.orgID, section: kind.viewSection) ?? "")"
+  }
 
   /// The one row the address filter found, once the list has settled on it.
   private var oneMatch: String? {
@@ -109,25 +129,55 @@ struct RecordsSection: View {
     } message: { _ in
       Text(confirmation?.message ?? "")
     }
-    .task(id: "\(filterID)|\(search)") {
+    .task(id: CrmListKey(filter: activeFilter, search: search)) {
       picked = []
       if filterID.isEmpty { filterID = filters.first?.id ?? "" }
       if selection == nil { selection = initial }
-      let filter = filters.first { $0.id == filterID } ?? filters[0]
+      let filter = activeFilter
       let model = list ?? LiveQueryList(pageSize: 25) { crmRow(kind, $0, scope) }
       list = model
       let search = search
       model.show(context.firestore) { crmListQuery(kind, scope, filter, search: search, limit: $0) }
     }
-    .onDisappear { list?.stop() }
+    .task(id: scope) { views.start(context.firestore, scope, section: kind.viewSection) }
+    .onChange(of: defaultViewKey, initial: true) { _, _ in openDefaultView() }
+    .onDisappear {
+      list?.stop()
+      views.stop()
+    }
+  }
+
+  /// The reader's default view opens first, once, unless they already picked or the list was opened for an address.
+  private func openDefaultView() {
+    guard !defaultApplied, views.profile.ready, views.list.ready else { return }
+    defaultApplied = true
+    guard !picking, contactEmailFilter(openEmail) == nil,
+      let id = views.defaultID(orgID: scope.orgID, section: kind.viewSection),
+      viewFilters.contains(where: { $0.id == crmViewFilterPrefix + id })
+    else { return }
+    filterID = crmViewFilterPrefix + id
   }
 
   private var chips: some View {
     HStack(spacing: 0) {
+      if !scope.uid.isEmpty {
+        CrmViewsMenu(
+          kind: kind, scope: scope, api: api, model: views, current: activeFilter,
+          open: { id in
+            picking = true
+            filterID = crmViewFilterPrefix + id
+          },
+          openAll: { filterID = filters.first?.id ?? "" }
+        )
+        .aglynContentEdges()
+      }
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: AglynSpace.one) {
           ForEach(filters) { filter in
-            AglynChoiceChip(filter.label, selected: filterID == filter.id) { filterID = filter.id }
+            AglynChoiceChip(filter.label, selected: filterID == filter.id) {
+              picking = true
+              filterID = filter.id
+            }
           }
         }
         .aglynContentEdges()

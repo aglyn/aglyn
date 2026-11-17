@@ -83,6 +83,8 @@ struct CrmFilter: Identifiable, Equatable {
   let id: String
   let label: String
   var clauses: [ListFilterRequest] = []
+  /// A saved view's order, when the list declares it; nil keeps the list's own.
+  var sort: ListQuerySort? = nil
 }
 
 /// The query param the Contacts list opens one person by (`CONTACTS_LIST_EMAIL_PARAM`).
@@ -155,10 +157,10 @@ func crmListPlan(_ kind: CrmKind, _ scope: CrmScope, _ filter: CrmFilter, search
     kind == .contact && clause.field == "facetKeys" && clause.value.hasPrefix("\(scope.groupID):")
   }
   if scope.orgWide && filter.clauses.contains(where: impliesScope) {
-    let trial = planListQuery(declaration, ListQueryRequest(clauses: filter.clauses, search: asked))
+    let trial = planListQuery(declaration, ListQueryRequest(clauses: filter.clauses, search: asked, sort: filter.sort))
     if trial.served.contains(where: impliesScope) { return trial }
   }
-  return planListQuery(declaration, ListQueryRequest(base: scopeBase(scope), clauses: filter.clauses, search: asked))
+  return planListQuery(declaration, ListQueryRequest(base: scopeBase(scope), clauses: filter.clauses, search: asked, sort: filter.sort))
 }
 
 func crmListQuery(_ kind: CrmKind, _ scope: CrmScope, _ filter: CrmFilter, search: String, limit: Int) -> FirestoreQuery {
