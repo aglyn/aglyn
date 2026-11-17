@@ -115,7 +115,8 @@ const mockApplyMerge = (
   return next
 }
 
-const mockDocHandle = (path: string) => ({
+const mockDocHandle = (path: string): any => ({
+  path,
   get: async () => {
     if (path.startsWith('hosts/') && path.split('/').length === 2) {
       mockHostReads += 1
@@ -123,6 +124,7 @@ const mockDocHandle = (path: string) => ({
     const data = mockStore[path]
     return {
       exists: data !== undefined,
+      ref: mockDocHandle(path),
       data: () => data,
       get: (field: string) => data?.[field],
     }
@@ -234,6 +236,21 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       app: () => ({
         firestore: () => ({
           collection: (name: string) => mockCollectionHandle(name),
+          // The engage writer's transaction (AGL-4232), over this store.
+          runTransaction: async (body: (tx: any) => Promise<unknown>) => {
+            const pending: Array<Promise<unknown>> = []
+            const result = await body({
+              get: (ref: any) => ref.get(),
+              set: (ref: any, value: unknown, options?: unknown) => {
+                pending.push(ref.set(value, options))
+              },
+              update: (ref: any, value: unknown) => {
+                pending.push(ref.update(value))
+              },
+            })
+            await Promise.all(pending)
+            return result
+          },
         }),
       }),
       // The documentId() sentinel the ceiling's month query uses. Opaque —
@@ -701,6 +718,31 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
     expect(dayDoc().total).toBe(1)
   })
 
+  it('a surge past the CEILING during the one-time grace still pauses, and the owner is told (AGL-4232)', async () => {
+    // A legacy site with NO `orgId` field: the org's site query misses it, and
+    // the beacon seeds its own site, so it still gets its grace.
+    mockStore[`hosts/${HOST_ID}`] = { subdomain: 'site', displayName: 'Acme' }
+    mockOrgForHost = { $id: 'org-1', plan: 'free', name: 'Acme Co' }
+    plantMonthViews(105_000)
+    await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
+    // The grace was granted, to this very site…
+    expect(mockStore['orgs/org-1']?.['bandwidthCap']?.graceUntil).toBeGreaterThan(Date.now())
+    expect(mockStore[`hosts/${HOST_ID}`]?.['bandwidthGraceUsedAt']).toBeGreaterThan(0)
+    // …and the ceiling, the cost bound, still degraded the site,
+    expect(flag()).toMatchObject({ degraded: true })
+    // with the owner told both: the grace and its deadline, then that the
+    // site is paused by unusual traffic, by notification and email.
+    expect(mockManagerNotices.map((n) => n['type'])).toEqual([
+      'system.bandwidthCapEngaged',
+      'system.bandwidthCeilingTripped',
+    ])
+    expect(String(mockManagerNotices[0]['title'])).toMatch(/^Upgrade or \{site\} pauses on /)
+    expect(String(mockManagerNotices[0]['body'])).toContain(
+      'An unusually large surge of traffic can still pause it before then.',
+    )
+    expect(mockManagerNotices[1]['title']).toBe('{site} paused — unusual traffic volume')
+  })
+
   it('a FREE host past the ceiling is flagged, degraded and escalated', async () => {
     mockStore[`hosts/${HOST_ID}`] = { subdomain: 'site', displayName: 'Acme' }
     mockOrgForHost = { $id: 'org-1', plan: 'free', name: 'Acme Co' }
@@ -936,6 +978,12 @@ describe('the free-plan bandwidth cap engages at the beacon (AGL-2413)', () => {
     // answered false on the marker this route just wrote, the site would
     // still be serving and every assertion above would still be green.
     plantMonthViews(OVER)
+    // A site that had its one-time grace in an earlier month (AGL-4232), so
+    // the cap refuses at once.
+    mockStore[`hosts/${HOST_ID}`] = {
+      ...(mockStore[`hosts/${HOST_ID}`] ?? {}),
+      bandwidthGraceUsedAt: Date.now() - 40 * 86_400_000,
+    }
     expect(bandwidthCapEngaged(mockStore['orgs/org-1'])).toBe(false)
     await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
     expect(bandwidthCapEngaged(mockStore['orgs/org-1'])).toBe(true)

@@ -29,7 +29,10 @@ import {
 import { firebaseAdmin } from './firebase-admin'
 import { notifyHostManagers } from './notifications'
 import { engageBandwidthCap } from './bandwidth-cap-engage'
-import { bandwidthGraceOwnerNotice } from '@aglyn/aglyn/app-utils/bandwidth-cap'
+import {
+  bandwidthGraceOwnerNotice,
+  bandwidthPausedOwnerNotice,
+} from '@aglyn/aglyn/app-utils/bandwidth-cap'
 
 /**
  * The Free cap, engaged by the media CDN (AGL-3474).
@@ -139,6 +142,12 @@ function monthRolloverLabel(month: string): string {
 export async function engageMediaBandwidthCap(
   orgId: string,
   now: Date = new Date(),
+  /**
+   * The site the delivery served, when the scope names one: seeded into the
+   * org's site list so a legacy site with no `orgId` field still gets the
+   * one-time grace rather than pausing at once (AGL-4232).
+   */
+  hostId: string | null = null,
 ): Promise<boolean> {
   const month = bandwidthCapMonthKey(now)
   if (!orgId || engagedOrgs.get(orgId) === month) return false
@@ -166,8 +175,7 @@ export async function engageMediaBandwidthCap(
     const hosts = await firestore
       .collection('hosts')
       .where('orgId', '==', orgId)
-      // The one field the cap's grace reads (AGL-4232), and nothing else.
-      .select('bandwidthGraceUsedAt')
+      .select()
       .limit(MEDIA_BANDWIDTH_MAX_HOSTS)
       .get()
     const months = await Promise.all([
@@ -185,12 +193,19 @@ export async function engageMediaBandwidthCap(
     ) {
       return false
     }
-    // The one engage write (AGL-4232): a transaction that re-reads the
-    // marker, so two instances crossing the band together stamp it, grant
-    // the one-time grace and tell the owner, once.
+    // The workspace's sites, the delivering one seeded in (AGL-4232).
+    const siteRefs = [
+      ...hosts.docs.map((host) => host.ref),
+      ...(hostId ? [firestore.collection('hosts').doc(hostId)] : []),
+    ]
+    const siteIds = [...new Set(siteRefs.map((ref) => ref.id))]
+    // The one engage write (AGL-4232): a transaction that re-reads the marker
+    // and the grace stamps, so two instances crossing the band together stamp
+    // it, grant the one-time grace and tell the owner, once.
     const engaged = await engageBandwidthCap({
+      firestore,
       orgRef,
-      hosts: hosts.docs,
+      hostRefs: siteRefs,
       month,
       nowMs: now.getTime(),
       pageViews: reading.meteredPageViews,
@@ -201,46 +216,29 @@ export async function engageMediaBandwidthCap(
     const included = includedBandwidthGb.toLocaleString('en-US', {
       maximumFractionDigits: 2,
     })
-    if (engaged.graceUntil !== null) {
-      // A running grace carried forward was announced when it was granted.
-      if (!engaged.graceIsNew) return true
-      const notice = bandwidthGraceOwnerNotice({
-        graceUntil: engaged.graceUntil,
-        used:
-          `the ${included} GB of traffic its plan includes (video, audio and ` +
-          `files from your media library count ${ORIGIN_MEDIA_BANDWIDTH_WEIGHT}× toward it)`,
-        month,
-        resumesOn: monthRolloverLabel(month),
-      })
-      await Promise.all(
-        hosts.docs.map((host) =>
-          notifyHostManagers(host.id, {
-            type: 'system.bandwidthCapEngaged',
-            title: notice.title,
-            body: notice.body,
-            link: `/${host.id}`,
-          }),
-        ),
-      )
-      return true
-    }
+    const used =
+      `the ${included} GB of traffic its plan includes (video, audio and ` +
+      `files from your media library count ${ORIGIN_MEDIA_BANDWIDTH_WEIGHT}× toward it)`
     // Every site's managers, because the cap pauses every site in the org.
-    // `{site}` is filled by `notifyHostManagers` from the host it reads.
+    // `{site}` is filled by `notifyHostManagers` from the host it reads. A
+    // grace carried into a new month is this month's news, so it is said too.
+    const notice =
+      engaged.graceUntil !== null
+        ? bandwidthGraceOwnerNotice({
+            graceUntil: engaged.graceUntil,
+            used,
+            month,
+            resumesOn: monthRolloverLabel(month),
+            carried: !engaged.graceIsNew,
+          })
+        : bandwidthPausedOwnerNotice({ used, resumesOn: monthRolloverLabel(month) })
     await Promise.all(
-      hosts.docs.map((host) =>
-        notifyHostManagers(host.id, {
+      siteIds.map((id) =>
+        notifyHostManagers(id, {
           type: 'system.bandwidthCapEngaged',
-          title: '{site} paused — monthly traffic limit reached',
-          body:
-            `{site} has used the ${included} GB of traffic its plan includes ` +
-            'this month. Video, audio and files served from your media library ' +
-            `count ${ORIGIN_MEDIA_BANDWIDTH_WEIGHT}× toward it, as well as page ` +
-            'views, so visitors see a temporary notice instead of its pages, ' +
-            'and its video and files do not load, ' +
-            `until ${monthRolloverLabel(month)}. Nothing is charged for the ` +
-            'extra traffic. The site comes back on its own then, or as soon as ' +
-            'you upgrade in Billing.',
-          link: `/${host.id}`,
+          title: notice.title,
+          body: notice.body,
+          link: `/${id}`,
         }),
       ),
     )

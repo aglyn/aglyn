@@ -1106,6 +1106,12 @@ export interface OrgBandwidthCap {
    * (`AglynHost.bandwidthGraceUsedAt`). Read through `bandwidthCapEngaged`.
    */
   graceUntil?: number
+  /**
+   * When the owner was told the grace above had ended and the sites are
+   * paused (AGL-4232). Written once by the daily sweep, which is where a
+   * grace's end is noticed, so the news goes out once.
+   */
+  pauseNotifiedAt?: number
 }
 
 /**
@@ -1273,6 +1279,14 @@ export interface AglynOrgBilling extends AglynDocument {
    * mid-month start serving again without waiting for a cron to clear it.
    */
   bandwidthCap?: OrgBandwidthCap
+  /**
+   * When this workspace's sites were first given the free plan's ONE-TIME
+   * bandwidth grace (AGL-4232), epoch ms, written once by the cap's engage
+   * writer and never cleared. Beside each site's own stamp so deleting the
+   * site and making a new one does not give the workspace a second grace.
+   * Admin-SDK only; denied in the rules.
+   */
+  bandwidthGraceUsedAt?: number
   /**
    * The org's assist hard-cap switch (AGL-2653) — see `OrgAssistOverage`.
    * Admin-SDK-only, denied in the rules beside `storageOverage`; read

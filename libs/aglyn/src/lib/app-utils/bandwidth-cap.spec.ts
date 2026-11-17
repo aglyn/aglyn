@@ -44,8 +44,11 @@ import {
   bandwidthGraceForEngagement,
   bandwidthGraceOutlastsMonth,
   bandwidthGraceOwnerNotice,
+  bandwidthPausedOwnerNotice,
+  BANDWIDTH_GRACE_SURGE_SENTENCE,
   formatBandwidthGraceDeadline,
 } from './bandwidth-cap'
+import { bandwidthCeilingNotice } from './plan-entitlements'
 import { PLAN_ENTITLEMENTS } from './plan-entitlements'
 
 const NOW = new Date('2026-08-19T12:00:00.000Z')
@@ -253,6 +256,16 @@ describe('the visitor notice', () => {
 
 })
 
+describe('the ABUSE CEILING\'s visitor notice (AGL-4232)', () => {
+  it('is the pause\'s own neutral sentence, with nothing about traffic or plans', () => {
+    const notice = bandwidthCeilingNotice()
+    expect(notice).toEqual(bandwidthCapNotice())
+    for (const leak of ['traffic', 'plan', 'upgrade', 'month', 'owner']) {
+      expect(`${notice.title} ${notice.body}`.toLowerCase()).not.toContain(leak)
+    }
+  })
+})
+
 /**
  * THE ONE-TIME GRACE (AGL-4232): the first time a site goes over, ever, it
  * stays online for 72 hours; then it pauses as before. In a later month it
@@ -319,6 +332,22 @@ describe('the one-time grace', () => {
     ).toBe(false)
   })
 
+  it('the WORKSPACE stamp blocks a new grant: a deleted site re-made gets none (AGL-4232)', () => {
+    const lastMonth = nowMs - 40 * 24 * 3_600_000
+    expect(bandwidthGraceForEngagement([{}], nowMs, { bandwidthGraceUsedAt: lastMonth })).toEqual({
+      graceUntil: null,
+      grants: false,
+    })
+    // …and a running one is still carried from either stamp.
+    const grantedAt = nowMs - 3_600_000
+    expect(bandwidthGraceForEngagement([{}], nowMs, { bandwidthGraceUsedAt: grantedAt })).toEqual({
+      graceUntil: grantedAt + BANDWIDTH_CAP_GRACE_MS,
+      grants: false,
+    })
+    // Both absent: granted.
+    expect(bandwidthGraceForEngagement([{}], nowMs, {}).grants).toBe(true)
+  })
+
   it('a re-engage from a stale org doc carries a RUNNING grace forward, never cuts it short', () => {
     const grantedAt = nowMs - 3_600_000
     expect(bandwidthGraceForEngagement([{ bandwidthGraceUsedAt: grantedAt }], nowMs)).toEqual({
@@ -352,7 +381,38 @@ describe('the one-time grace', () => {
     expect(notice.body).toMatch(/stays online until Thursday, November 19 at 3:04 PM UTC/)
     expect(notice.body).toMatch(/Upgrade in Billing before then/)
     expect(notice.body).toMatch(/until December 1/)
-    expect(notice.body).toMatch(/once per site/)
+    // Given once (per workspace's sites), never "per site" (AGL-4232).
+    expect(notice.body).toMatch(/This extra time is given once,/)
+    expect(notice.body).not.toMatch(/once per site/)
+    // The ceiling stays the cost bound during the grace, and that is said.
+    expect(notice.body).toContain(BANDWIDTH_GRACE_SURGE_SENTENCE)
+    expect(BANDWIDTH_GRACE_SURGE_SENTENCE).toBe(
+      'An unusually large surge of traffic can still pause it before then.',
+    )
+  })
+
+  it('a grace CARRIED into a new month says the extra time was already given', () => {
+    const notice = bandwidthGraceOwnerNotice({
+      graceUntil: Date.UTC(2026, 11, 2, 9, 0),
+      month: '2026-12',
+      used: 'the 2,070 page views its plan includes',
+      resumesOn: 'January 1',
+      carried: true,
+    })
+    expect(notice.title).toBe('Upgrade or {site} pauses on Wednesday, December 2 at 9:00 AM UTC')
+    expect(notice.body).toMatch(/when the extra time it was already given ends/)
+    expect(notice.body).toMatch(/until January 1/)
+  })
+
+  it('a pause is told plainly: when it lifts, that nothing is charged, and the way back', () => {
+    const notice = bandwidthPausedOwnerNotice({
+      used: 'the 2 GB of traffic its plan includes',
+      resumesOn: 'December 1',
+    })
+    expect(notice.title).toBe('{site} paused — monthly traffic limit reached')
+    expect(notice.body).toMatch(/"temporarily unavailable" notice instead of its pages until December 1/)
+    expect(notice.body).toMatch(/Nothing is charged/)
+    expect(notice.body).toMatch(/as soon as you upgrade in Billing/)
   })
 
   it('a grace that outlasts the month names no pause date, because none comes', () => {

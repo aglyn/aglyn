@@ -409,13 +409,29 @@ describe('THE CEILING at the edge releases on an upgrade too (AGL-3432)', () => 
   it('the verdict is contained while the org is on Free', async () => {
     setHost(trippedHost)
     expect(await verdict()).toMatchObject({ contained: true })
-    expect(await noticeHtml()).toContain(bandwidthCeilingNotice().body)
+    expect(await noticeHtml()).toContain(`<p>${bandwidthCeilingNotice().body}</p>`)
+  })
+
+  it('DURING the one-time grace a tripped ceiling still contains, with the NEUTRAL notice (AGL-4232)', async () => {
+    setHost(trippedHost)
+    setOrg({
+      ...cappedFreeOrg,
+      bandwidthCap: { ...CAP, graceUntil: Date.now() + 3_600_000 },
+    })
+    // The cap is not refusing (the grace runs); the ceiling, the cost bound, is.
+    expect(await verdict()).toMatchObject({ overQuota: false, contained: true })
+    const html = await noticeHtml()
+    expect(html).toContain('<p>This site is temporarily unavailable.</p>')
+    const body = html.toLowerCase().replace(/<head>[\s\S]*<\/head>/, '')
+    for (const leak of ['traffic', 'plan', 'upgrade', 'month', 'owner']) {
+      expect(body).not.toContain(leak)
+    }
   })
 
   it('the verdict clears once the org is on a metered plan', async () => {
     setHost(trippedHost)
     setOrg({ $id: 'org-1', plan: 'starter', subscription: { status: 'active' } })
     expect(await verdict()).toMatchObject({ contained: false })
-    expect(await noticeHtml()).not.toContain(bandwidthCeilingNotice().body)
+    expect(await noticeHtml()).not.toContain(`<p>${bandwidthCeilingNotice().body}</p>`)
   })
 })

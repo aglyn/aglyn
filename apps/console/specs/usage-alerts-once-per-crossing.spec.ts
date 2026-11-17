@@ -167,8 +167,10 @@ function fakeHostDoc(host: SeededHost) {
         name === 'analytics'
           ? analyticsCollection(host.pageViews ?? 0)
           : emptyCollection(),
-      // The one-time grace stamp (AGL-4232) lands on the site.
-      set: async () => undefined,
+      path: `hosts/${host.id}`,
+      // Read and stamped inside the engage writer's transaction (AGL-4232).
+      get: async () => ({ exists: true, ref: fakeHostDoc(host).ref, data: () => ({}) }),
+      update: async () => undefined,
     },
   }
 }
@@ -182,6 +184,8 @@ function fakeOrgDoc(orgId: string) {
     get: (field: string) => data[field],
     ref: {
       id: orgId,
+      path: `orgs/${orgId}`,
+      get: async () => ({ exists: true, data: () => JSON.parse(JSON.stringify(data)) }),
       set: async (
         value: Record<string, unknown>,
         options?: { merge?: boolean },
@@ -197,6 +201,22 @@ function fakeOrgDoc(orgId: string) {
 }
 
 const fakeFirestore = {
+  // The engage writer's transaction (AGL-4232), over these same refs: reads
+  // through `get`, writes applied when the body returns.
+  runTransaction: async (body: (tx: any) => Promise<unknown>) => {
+    const pending: Array<Promise<unknown>> = []
+    const result = await body({
+      get: (ref: any) => ref.get(),
+      set: (ref: any, value: unknown, options?: unknown) => {
+        pending.push(ref.set(value, options))
+      },
+      update: (ref: any, value: unknown) => {
+        pending.push(ref.update(value))
+      },
+    })
+    await Promise.all(pending)
+    return result
+  },
   collection: (name: string) => {
     if (name === 'orgs') {
       const build = (limit: number | null, startAfter: string | null): any => {
@@ -266,8 +286,14 @@ jest.mock('firebase-admin/firestore', () => ({
   },
 }))
 
+const mockHostNotices: Array<{ hostId: string; title: string; body: string }> = []
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  // The crossing's one notice, per site (AGL-4232).
+  notifyHostManagers: async (hostId: string, payload: { title: string; body: string }) => {
+    mockHostNotices.push({ hostId, title: payload.title, body: payload.body })
+  },
   // The one engage write every cap writer shares (AGL-4232), for real.
   engageBandwidthCap: (options: unknown) =>
     jest
@@ -434,6 +460,7 @@ const pageEmails = () =>
   mockEmails.filter((entry) => entry.subject.includes('pages on a site'))
 
 beforeEach(() => {
+  mockHostNotices.length = 0
   jest.useFakeTimers({
     // Only the clock: the route awaits real promises throughout.
     doNotFake: [
@@ -691,18 +718,27 @@ describe('a monthly meter still announces the same threshold in a new month', ()
   it('re-announces bandwidth past the band next month, once', async () => {
     acmeBuilders()
     mockHosts[0].pageViews = OVER_BANDWIDTH
-    const bandwidthNotices = () =>
+    // On Free a crossing is announced ONCE, by the cap's engage notice to the
+    // site's managers (AGL-4232); the 100% usage alert stays silent for it.
+    const usageNotices = () =>
       mockNotifications.filter((entry) => /bandwidth/i.test(entry.title))
 
     await run(DAY_ONE)
-    expect(bandwidthNotices()).toHaveLength(1)
+    expect(mockHostNotices.map((entry) => entry.title)).toEqual([
+      expect.stringMatching(/^Upgrade or \{site\} pauses on /),
+    ])
+    expect(usageNotices()).toHaveLength(0)
 
+    // Still inside the grace the next day: nothing new.
     await run(DAY_TWO)
-    expect(bandwidthNotices()).toHaveLength(1)
+    expect(mockHostNotices).toHaveLength(1)
 
-    // The meter reset on the 1st and was crossed again: a new crossing.
+    // The meter reset on the 1st and was crossed again: a new crossing, and
+    // the grace was given once, so this one pauses at once.
     await run(NEXT_MONTH)
-    expect(bandwidthNotices()).toHaveLength(2)
+    expect(mockHostNotices).toHaveLength(2)
+    expect(mockHostNotices[1].title).toBe('{site} paused — monthly traffic limit reached')
+    expect(usageNotices()).toHaveLength(0)
     expect(guardsOf('builders')['bandwidth']).toEqual({
       month: '2026-11',
       threshold: 100,

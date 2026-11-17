@@ -38,7 +38,11 @@ import {
   bandwidthCapGraceUntil,
   bandwidthCapMonthKey,
   bandwidthCapShouldEngage,
+  bandwidthCapEngaged,
+  bandwidthCapMonthEndMs,
   bandwidthGraceOutlastsMonth,
+  bandwidthGraceOwnerNotice,
+  bandwidthPausedOwnerNotice,
   formatBandwidthGraceDeadline,
   type OrgBandwidthCap,
   checkDataStorageQuota,
@@ -85,6 +89,7 @@ import { usageNotificationLevel } from '@aglyn/aglyn/app-utils/notifications'
 import {
   engageBandwidthCap,
   firebaseAdmin,
+  notifyHostManagers,
   notifyOrgAdmins,
   notifyRiskEvent,
   notifyStaff,
@@ -237,6 +242,58 @@ export async function hostsForOrg(
     }
     cursor = page.docs[page.docs.length - 1].id
   }
+}
+
+/** "December 1": the day a month's count starts again, as the owner reads it. */
+function monthRolloverText(month: string): string {
+  return new Date(bandwidthCapMonthEndMs(month)).toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'UTC',
+  })
+}
+
+/**
+ * The notice the cap's engagement owes the owner (AGL-4232): its grace and
+ * deadline (granted now, or carried into this month), or the pause. The same
+ * words the beacon and the media CDN send.
+ */
+function bandwidthCapEngagedOwnerNotice(options: {
+  graceUntil: number | null
+  graceIsNew: boolean
+  month: string
+  includedBandwidthGb: number
+}): { title: string; body: string } {
+  const used = `the ${formatBandwidthGb(options.includedBandwidthGb)} of traffic its plan includes`
+  const resumesOn = monthRolloverText(options.month)
+  return options.graceUntil !== null
+    ? bandwidthGraceOwnerNotice({
+        graceUntil: options.graceUntil,
+        month: options.month,
+        used,
+        resumesOn,
+        carried: !options.graceIsNew,
+      })
+    : bandwidthPausedOwnerNotice({ used, resumesOn })
+}
+
+/** Every site's managers, because the cap pauses every site in the org. */
+async function notifyEachSite(
+  hosts: ReadonlyArray<{ id: string }>,
+  notice: { title: string; body: string },
+): Promise<void> {
+  await Promise.all(
+    hosts.map((host) =>
+      notifyHostManagers(host.id, {
+        type: 'system.bandwidthCapEngaged',
+        title: notice.title,
+        body: notice.body,
+        link: `/${host.id}`,
+      }).catch((error: unknown) => {
+        console.error('[usage-alerts] bandwidth notice failed', host.id, error)
+      }),
+    ),
+  )
 }
 
 /** One quota the sweep warns a workspace about, core's own or a plugin's. */
@@ -970,6 +1027,9 @@ async function handler(request: Request): Promise<Response> {
        *=========================================*/
       const existingCap = orgData['bandwidthCap'] as OrgBandwidthCap | undefined
       let bandwidthGraceUntil = bandwidthCapGraceUntil(orgData as never)
+      // Whether this month's crossing was already announced by its engage
+      // notice (here or by another writer), which the 100% alert defers to.
+      let bandwidthCrossingAnnounced = !metersInfra && existingCap?.month === month
       if (
         bandwidthCapShouldEngage({
           org: orgData as never,
@@ -978,16 +1038,57 @@ async function handler(request: Request): Promise<Response> {
         }) &&
         existingCap?.month !== month
       ) {
+        // `month` is frozen at the start of the sweep; the writer engages
+        // only the CURRENT month, so an org reached after midnight UTC on the
+        // 1st does not spend its grace on the month that has ended.
         const engaged = await engageBandwidthCap({
+          firestore,
           orgRef: org.ref,
-          hosts: hosts.docs,
+          hostRefs: hosts.docs.map((host) => host.ref),
           month,
           nowMs: Date.now(),
           pageViews,
           includedPageViews: pageViewsFromBandwidthGb(entitlements.bandwidthGb),
         })
-        capped.push({ orgId: org.id, month, graceUntil: engaged.graceUntil })
-        bandwidthGraceUntil = engaged.graceUntil
+        if (engaged.stamped) {
+          capped.push({ orgId: org.id, month, graceUntil: engaged.graceUntil })
+          bandwidthGraceUntil = engaged.graceUntil
+          bandwidthCrossingAnnounced = true
+          // THE CROSSING'S ONE NOTICE (AGL-4232), from whichever writer
+          // engaged it — here, as the beacon and the media CDN send it: per
+          // site, at once, whatever this org's alert guards say. The 100%
+          // bandwidth alert below then stays silent for this crossing, so the
+          // owner is not told the same news twice in two different units.
+          const notice = bandwidthCapEngagedOwnerNotice({
+            graceUntil: engaged.graceUntil,
+            graceIsNew: engaged.graceIsNew,
+            month,
+            includedBandwidthGb: entitlements.bandwidthGb,
+          })
+          await notifyEachSite(hosts.docs, notice)
+        }
+      }
+      /*
+       * THE GRACE TURNING INTO A PAUSE (AGL-4232). Nothing writes when a grace
+       * ends — every reader re-derives it from the clock — so this sweep is
+       * where the owner hears that it did: once, guarded on the marker. Covers
+       * a grace carried into a new month as well as one that ran out in it.
+       */
+      const capNow = orgData['bandwidthCap'] as OrgBandwidthCap | undefined
+      if (
+        capNow?.month === month &&
+        typeof capNow.graceUntil === 'number' &&
+        typeof capNow.pauseNotifiedAt !== 'number' &&
+        bandwidthCapEngaged(orgData as never)
+      ) {
+        await notifyEachSite(
+          hosts.docs,
+          bandwidthPausedOwnerNotice({
+            used: `the ${formatBandwidthGb(entitlements.bandwidthGb)} of traffic its plan includes`,
+            resumesOn: monthRolloverText(month),
+          }),
+        )
+        await org.ref.set({ bandwidthCap: { pauseNotifiedAt: Date.now() } }, { merge: true })
       }
       // A grace that outlasts the month brings no pause (the count starts
       // again on the 1st), so it names no deadline (AGL-4232).
@@ -1460,17 +1561,18 @@ async function handler(request: Request): Promise<Response> {
             : bandwidthGraceOutlasts
               ? 'Your sites stay online: the month ends before their extra time ' +
                 'would, and the count starts again on the 1st. Nothing is charged ' +
-                'for the extra traffic. That extra time is given once per site and ' +
-                'has now been used, so in a later month a site past its limit ' +
-                'pauses straight away. Upgrade in Billing to keep them online ' +
+                'for the extra traffic. This extra time is given once and has now ' +
+                'been used, so the next time your sites pass their limit they ' +
+                'pause straight away. Upgrade in Billing to keep them online ' +
                 'whatever their traffic.'
               : bandwidthGraceDeadline
               ? `Your sites stay online until ${bandwidthGraceDeadline}. ` +
                 'Upgrade in Billing before then to keep them online; if you ' +
                 "don't, visitors see a \"temporarily unavailable\" notice from " +
-                'then until next month. Nothing is charged for the extra ' +
-                'traffic. This extra time is given once per site, so in a later ' +
-                'month a site past its limit pauses straight away.'
+                'then until next month. An unusually large surge of traffic can ' +
+                'still pause them before then. Nothing is charged for the extra ' +
+                'traffic. This extra time is given once, so the next time your ' +
+                'sites pass their limit they pause straight away.'
               : bandwidthPauses
                 ? 'Past the included amount, your sites show visitors a ' +
                   'temporary notice until next month — nothing is charged. ' +
@@ -1548,6 +1650,9 @@ async function handler(request: Request): Promise<Response> {
         // deduped from here on without ever having been mailed about a state
         // it was already in.
         if (!recordAlert(check.key, threshold)) continue
+        // ONE notice per crossing (AGL-4232): on a plan that pauses, the
+        // engage notice already said it, per site, in the units it measured.
+        if (check.key === 'bandwidth' && threshold >= 100 && bandwidthCrossingAnnounced) continue
         // THE ALERT IS THE PROTECTION. Metered storage bills by default
         // rather than being refused, and the condition attached to that is
         // that no customer gets a surprise bill — so this notification is the

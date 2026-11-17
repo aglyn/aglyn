@@ -23,83 +23,97 @@
  *
  * ## The one-time grace
  *
- * The first time an org's sites go over, EVER, they stay online for
+ * The first time a workspace's sites go over, EVER, they stay online for
  * `BANDWIDTH_CAP_GRACE_MS` (72 hours) so the owner can upgrade before visitors
  * are turned away; after that the cap refuses as before until the month turns.
- * Once per SITE: the grant is recorded on every one of the org's host
- * documents (`bandwidthGraceUsedAt`), never cleared, and an org is granted it
- * only when NONE of its sites has had it. On the site rather than the org
- * because the grace is the site's, and a site can move between
- * organizations; durable because a month rollover, a plan change down and back
- * up, or a process restart re-reads the same documents and finds the stamp.
+ * Given once: the grant is recorded on the workspace
+ * (`orgs/{id}.bandwidthGraceUsedAt`) AND on every one of its sites
+ * (`hosts/{id}.bandwidthGraceUsedAt`), never cleared, and granted only when
+ * NONE of them carries it. Both, so neither a site moved to another workspace
+ * nor a site deleted and made again brings it back; durable because a month
+ * rollover, a plan change down and back, or a restart re-reads the same
+ * documents.
  *
- * Each writer checks the month on the org doc it already holds before it
- * calls this, so a month already engaged writes nothing. Two writers crossing
- * the band in the same instant can both stamp it; they stamp the same month,
- * and a grace both granted ends within the same seconds, so the race costs
- * nothing a reader can see.
+ * ## One transaction
+ *
+ * The marker, the workspace's stamp and every site's stamp are re-read INSIDE
+ * it, so two writers crossing the band together engage the month, grant the
+ * grace and tell the owner once: the second finds the month engaged and
+ * writes nothing. A site's stamp is written with `update`, and only to a site
+ * read as existing, so a site deleted meanwhile is not recreated as an empty
+ * document (its deletion retries the transaction, which reads it as gone).
+ *
+ * It engages only the CURRENT month: a writer that fixed its month before
+ * midnight UTC on the 1st and reaches an org after it must not spend the
+ * grace on a month that has ended.
  */
 
 import {
   bandwidthCapMarker,
+  bandwidthCapMonthKey,
   bandwidthGraceForEngagement,
 } from '@aglyn/aglyn/app-utils/bandwidth-cap'
 
 export interface BandwidthCapEngaged {
-  /** Whether THIS call engaged the cap. */
+  /** Whether THIS call engaged the cap (false: already engaged, or not this month). */
   stamped: boolean
   /** When the grace this engagement carries ends; null when it pauses now. */
   graceUntil: number | null
-  /**
-   * Whether this engagement GRANTED the grace. False on a re-stamp that
-   * carried a running one forward, which was already announced.
-   */
+  /** Whether this engagement GRANTED the grace (false: one carried forward). */
   graceIsNew: boolean
 }
 
-/** A site of the org, as the caller already read it. */
-export interface BandwidthCapHostDoc {
-  ref: FirebaseFirestore.DocumentReference
-  data?(): { bandwidthGraceUsedAt?: unknown } | undefined
-}
+const NOT_STAMPED: BandwidthCapEngaged = { stamped: false, graceUntil: null, graceIsNew: false }
 
-/**
- * Engage the cap for this month. The CALLER has already decided the org is
- * past its band and that this month is not engaged yet (each writer holds the
- * org doc it read that from), and hands in the org's sites as it read them:
- * the sweep and the media CDN have them already; the beacon reads them.
- */
 export async function engageBandwidthCap(options: {
+  firestore: FirebaseFirestore.Firestore
   orgRef: FirebaseFirestore.DocumentReference
-  hosts: readonly BandwidthCapHostDoc[]
+  /** The workspace's sites, as references; read inside the transaction. */
+  hostRefs: readonly FirebaseFirestore.DocumentReference[]
   month: string
   nowMs: number
   pageViews: number
   includedPageViews: number
 }): Promise<BandwidthCapEngaged> {
-  const { orgRef, hosts, month, nowMs, pageViews, includedPageViews } = options
-  const grace = bandwidthGraceForEngagement(
-    hosts.map((host) => (typeof host.data === 'function' ? host.data() : undefined) ?? {}),
-    nowMs,
-  )
-  const grantsGrace = grace.grants
-  const marker = bandwidthCapMarker({
-    month,
-    nowMs,
-    pageViews,
-    includedPageViews,
-    graceUntil: grace.graceUntil,
-  })
-  // The SITES first: a grace recorded and then not granted (the marker write
-  // failing) costs the site its grace; a grace granted and not recorded would
-  // be granted again next month, which is the one thing it must never be.
-  if (grantsGrace) {
-    await Promise.all(
-      hosts.map((host) => host.ref.set({ bandwidthGraceUsedAt: nowMs }, { merge: true })),
+  const { firestore, orgRef, month, nowMs, pageViews, includedPageViews } = options
+  if (bandwidthCapMonthKey(new Date(nowMs)) !== month) return NOT_STAMPED
+  // One reference per site: a caller that seeds the list with its own site
+  // (a legacy site with no `orgId` is missing from the query) may repeat one.
+  const hostRefs = [...new Map(options.hostRefs.map((ref) => [ref.path, ref])).values()]
+  return firestore.runTransaction(async (transaction) => {
+    const org = await transaction.get(orgRef)
+    const orgData = (org.data() ?? {}) as {
+      bandwidthCap?: { month?: string }
+      bandwidthGraceUsedAt?: unknown
+    }
+    if (orgData.bandwidthCap?.month === month) return NOT_STAMPED
+    const hosts = (await Promise.all(hostRefs.map((ref) => transaction.get(ref)))).filter(
+      (host) => host.exists,
     )
-  }
-  // `merge: true`: one field on a document that carries the plan, the
-  // subscription and the sites. A set without it would delete the org.
-  await orgRef.set({ bandwidthCap: marker }, { merge: true })
-  return { stamped: true, graceUntil: marker.graceUntil ?? null, graceIsNew: grantsGrace }
+    const grace = bandwidthGraceForEngagement(
+      hosts.map((host) => (host.data() ?? {}) as { bandwidthGraceUsedAt?: unknown }),
+      nowMs,
+      orgData,
+    )
+    const marker = bandwidthCapMarker({
+      month,
+      nowMs,
+      pageViews,
+      includedPageViews,
+      graceUntil: grace.graceUntil,
+    })
+    // `merge: true`: two fields on a document that carries the plan, the
+    // subscription and the sites. A set without it would delete the org.
+    transaction.set(
+      orgRef,
+      { bandwidthCap: marker, ...(grace.grants ? { bandwidthGraceUsedAt: nowMs } : {}) },
+      { merge: true },
+    )
+    if (grace.grants) {
+      for (const host of hosts) {
+        transaction.update(host.ref, { bandwidthGraceUsedAt: nowMs })
+      }
+    }
+    return { stamped: true, graceUntil: grace.graceUntil, graceIsNew: grace.grants }
+  })
 }

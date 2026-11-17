@@ -219,8 +219,11 @@ function fakeHostDoc(host: SeededHost) {
         name === 'analytics'
           ? analyticsCollection(host.pageViews, host.mediaBytes)
           : emptyCollection(),
+      path: `hosts/${host.id}`,
+      // Read inside the engage writer's transaction (AGL-4232).
+      get: async () => ({ exists: true, ref: fakeHostDoc(host).ref, data: () => ({}) }),
       // The one-time grace stamp (AGL-4232) lands on the site.
-      set: async (value: Record<string, unknown>) => {
+      update: async (value: Record<string, unknown>) => {
         mockHostWrites.push({ hostId: host.id, data: value })
       },
     },
@@ -243,6 +246,8 @@ function fakeOrgDoc(orgId: string) {
     get: (field: string) => data[field],
     ref: {
       id: orgId,
+      path: `orgs/${orgId}`,
+      get: async () => ({ exists: true, data: () => JSON.parse(JSON.stringify(data)) }),
       set: async (
         value: Record<string, unknown>,
         options?: { merge?: boolean },
@@ -293,6 +298,22 @@ function fakeOrgDoc(orgId: string) {
 }
 
 const fakeFirestore = {
+  // The engage writer's transaction (AGL-4232), over these same refs: reads
+  // through `get`, writes applied when the body returns.
+  runTransaction: async (body: (tx: any) => Promise<unknown>) => {
+    const pending: Array<Promise<unknown>> = []
+    const result = await body({
+      get: (ref: any) => ref.get(),
+      set: (ref: any, value: unknown, options?: unknown) => {
+        pending.push(ref.set(value, options))
+      },
+      update: (ref: any, value: unknown) => {
+        pending.push(ref.update(value))
+      },
+    })
+    await Promise.all(pending)
+    return result
+  },
   collection: (name: string) => {
     if (name === 'orgs') {
       const build = (limit: number | null, startAfter: string | null): any => {
@@ -355,8 +376,14 @@ const fakeFirestore = {
   },
 }
 
+const mockHostNotices: Array<{ hostId: string; title: string; body: string }> = []
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  // The crossing's one notice, per site (AGL-4232).
+  notifyHostManagers: async (hostId: string, payload: { title: string; body: string }) => {
+    mockHostNotices.push({ hostId, title: payload.title, body: payload.body })
+  },
   // The one engage write every cap writer shares (AGL-4232), for real, over
   // this suite's own store.
   engageBandwidthCap: (options: unknown) =>
@@ -483,6 +510,7 @@ const guardsOf = (orgId: string) =>
   >
 
 beforeEach(() => {
+  mockHostNotices.length = 0
   process.env.CRON_SECRET = CRON_SECRET
   delete process.env.AUTO_LOCK_BILLING_FROM
   jest.clearAllMocks()
@@ -559,10 +587,14 @@ describe('the first pass BACKFILLS instead of firing (AGL-2420)', () => {
     await run()
 
     // EXACTLY ONE. `hosts` was seeded at 100 and has not moved, so it is
-    // deduped; `bandwidth` went 80 -> 100 and is announced, on both channels.
-    expect(mockOrgNotifications).toHaveLength(1)
-    expect(mockOrgNotifications[0].title).toMatch(/bandwidth/i)
-    expect(mockOrgEmails).toHaveLength(1)
+    // deduped; `bandwidth` went 80 -> 100 and is announced ONCE (AGL-4232):
+    // by the cap's engage notice to the site's managers, its one-time grace
+    // and deadline, while the 100% usage alert records its guard and stays
+    // silent rather than repeat it in other units.
+    expect(mockHostNotices).toHaveLength(1)
+    expect(mockHostNotices[0].title).toMatch(/^Upgrade or \{site\} pauses on /)
+    expect(mockOrgNotifications).toHaveLength(0)
+    expect(mockOrgEmails).toHaveLength(0)
     expect(mockStaffNotifications).toHaveLength(0)
     expect(guardsOf('org-organic')['bandwidth']).toEqual({
       month: MONTH,
@@ -647,9 +679,11 @@ describe('the seed marker (AGL-2420)', () => {
     mockHosts = [{ id: 'site-a', orgId: 'org-organic', pageViews: OVER }]
     await run()
 
-    // `hosts` (1 of 1) and `bandwidth` (past the band), both newly crossed.
-    expect(mockOrgNotifications).toHaveLength(2)
-    expect(mockOrgEmails).toHaveLength(2)
+    // `hosts` (1 of 1) and `bandwidth` (past the band), both newly crossed;
+    // bandwidth arrives as the cap's one engage notice (AGL-4232).
+    expect(mockOrgNotifications).toHaveLength(1)
+    expect(mockOrgEmails).toHaveLength(1)
+    expect(mockHostNotices).toHaveLength(1)
   })
 })
 

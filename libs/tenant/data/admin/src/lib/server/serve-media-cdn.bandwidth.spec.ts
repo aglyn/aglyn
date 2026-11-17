@@ -162,6 +162,12 @@ jest.mock('./firebase-admin', () => {
         get: async (ref: any) => snapshotOf(ref.path),
         set: (ref: any, data: Data, options?: { merge?: boolean }) =>
           write(ref.path, data, options),
+        // A real `update` refuses a missing document; the grace stamp relies
+        // on that never to recreate a deleted site (AGL-4232).
+        update: (ref: any, data: Data) => {
+          if (mockStore[ref.path] === undefined) throw new Error(`no document at ${ref.path}`)
+          write(ref.path, data, { merge: true })
+        },
       }),
   }
   const file = (path: string) => ({

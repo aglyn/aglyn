@@ -1279,16 +1279,17 @@ export function BillingUsageComponent(props: BillingUsageProps) {
       {bandwidthGraceOutlasts ? (
         <Alert severity="warning" sx={{ mb: 2 }} data-testid="bandwidth-grace-alert">
           {"Your sites are past this month's included bandwidth and stay online: the " +
-            'month ends before their extra time would. That extra time is now used, so ' +
-            'next time they pause at the limit. Upgrade to keep them online whatever ' +
-            'their traffic.'}
+            'month ends before their extra time would. This extra time is given once and ' +
+            'is now used, so next time they pause at the limit. Upgrade to keep them ' +
+            'online whatever their traffic.'}
         </Alert>
       ) : bandwidthGraceUntil !== null ? (
         <Alert severity="warning" sx={{ mb: 2 }} data-testid="bandwidth-grace-alert">
           {`Upgrade or your sites pause on ${formatBandwidthGraceDeadline(bandwidthGraceUntil)}. ` +
             'They are past this month\'s included bandwidth and stay online until then; ' +
             'after that, visitors see a "temporarily unavailable" notice until the 1st. ' +
-            'This extra time is given once per site.'}
+            'An unusually large surge of traffic can still pause them before then. ' +
+            'This extra time is given once.'}
         </Alert>
       ) : bandwidthPaused ? (
         <Alert severity="error" sx={{ mb: 2 }} data-testid="bandwidth-paused-alert">

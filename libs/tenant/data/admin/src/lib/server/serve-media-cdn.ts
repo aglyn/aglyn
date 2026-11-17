@@ -1172,7 +1172,11 @@ async function mediaCdnBandwidthEvaluation(
   const verdict = await mediaCdnScopeVerdict(scope)
   if (!verdict.capApplies || verdict.bandwidthPaused || !verdict.orgId) return
   if (!mediaBandwidthEvaluationDue(verdict.orgId, bytes)) return
-  await engageMediaBandwidthCap(verdict.orgId)
+  await engageMediaBandwidthCap(
+    verdict.orgId,
+    new Date(),
+    scope.isOrg ? (scope.contextHostId ?? null) : scope.scopeId,
+  )
 }
 
 /**
