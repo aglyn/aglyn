@@ -126,7 +126,7 @@ struct SetupDetail: View {
       }
       switch section {
       case .details: DetailsSection(context: context, hostID: hostID, host: doc.data, api: api, canEdit: canEdit)
-      case .business: BusinessSection(context: context, hostID: hostID, host: doc.data, canEdit: canEdit)
+      case .business: BusinessSection(context: context, hostID: hostID, host: doc.data, api: api, canEdit: canEdit)
       case .seo: SeoSection(context: context, hostID: hostID, host: doc.data, api: api, canEdit: canEdit)
       case .tracking: TrackingSection(host: doc.data, api: api, canEdit: canEdit)
       case .theme: ThemeSection(context: context, hostID: hostID, doc: doc, api: api, canEdit: canEdit)
@@ -236,104 +236,8 @@ private struct DetailsSection: View {
         MediaImageField(context: context, label: label, value: field(path), enabled: canEdit)
       }
     }
-    BusinessDetailsCard(host: host, api: api, canEdit: canEdit)
     BuiltInLayoutCard(context: context, hostID: hostID, host: host, api: api, canEdit: canEdit)
     LanguagesCard(host: host, api: api, canEdit: canEdit)
-  }
-}
-
-private struct BusinessDetailsCard: View {
-  let host: [String: Any]
-  let api: HostSettingsAPI
-  let canEdit: Bool
-  @State private var email = ""
-  @State private var address = ""
-  @State private var links: [SocialLink] = []
-  @State private var seeded: (email: String, address: String, links: [SocialLink])?
-  @State private var runner = newRunner()
-
-  private var storedEmail: String { textAt(host, "business.supportEmail") }
-  private var storedAddress: String { textAt(host, "business.address") }
-  private var storedLinks: [SocialLink] { socialLinks(of: host) }
-
-  var body: some View {
-    AglynFormCard(
-      "Business details", message: "The support email, address and social links your pages and footers show.",
-      dirty: email != storedEmail || address != storedAddress || links != storedLinks, canSave: canEdit,
-      busy: runner.busy, error: runner.error, notice: runner.notice,
-      onDiscard: reset,
-      onSave: {
-        let (email, address, links) = (email, address, links)
-        runner.run("Saved.") {
-          try await api.save([
-            "business": [
-              "supportEmail": email.trimmed,
-              "address": address.trimmed,
-              "socialLinks": links.filter { !$0.url.trimmed.isEmpty }.map { ["label": $0.label.trimmed, "url": $0.url.trimmed] },
-            ] as [String: Any]
-          ])
-        }
-      }
-    ) {
-      AglynCountedField("Support email", text: $email, keyboard: .email, enabled: canEdit)
-      AglynCountedField("Postal address", text: $address, multiline: true, enabled: canEdit)
-      Text("Social links").font(AglynFont.strongSubheadline)
-      ForEach($links) { $link in
-        SocialLinkRow(link: $link, enabled: canEdit) { links.removeAll { $0.id == link.id } }
-      }
-      Button {
-        links.append(SocialLink(label: "", url: ""))
-      } label: {
-        Label("Add a link", systemImage: "plus")
-      }
-      .buttonStyle(.borderless)
-      .disabled(!canEdit || links.count >= socialLinksMax)
-      .accessibilityIdentifier("add-social-link")
-    }
-    .onChange(of: storedEmail + "\n" + storedAddress + "\n" + storedLinks.map { $0.label + "\t" + $0.url }.joined(separator: "\n"), initial: true) { _, _ in
-      // A newer copy of the site keeps what was typed and moves every other field to it (AGL-4047).
-      guard let seeded else { return reset() }
-      email = rebased(email, previous: seeded.email, next: storedEmail)
-      address = rebased(address, previous: seeded.address, next: storedAddress)
-      links = rebased(links, previous: seeded.links, next: storedLinks)
-      self.seeded = (storedEmail, storedAddress, storedLinks)
-    }
-  }
-
-  private func reset() {
-    email = storedEmail
-    address = storedAddress
-    links = storedLinks
-    seeded = (storedEmail, storedAddress, storedLinks)
-    runner.clear()
-  }
-}
-
-private struct SocialLinkRow: View {
-  @Binding var link: SocialLink
-  let enabled: Bool
-  let remove: () -> Void
-
-  var body: some View {
-    HStack(spacing: AglynSpace.one) {
-      TextField("Label", text: $link.label).frame(maxWidth: 140)
-      urlField
-      Button(role: .destructive, action: remove) {
-        Image(systemName: "trash")
-      }
-      .buttonStyle(.borderless)
-      .accessibilityLabel("Remove \(link.label.isEmpty ? "this link" : link.label)")
-    }
-    .disabled(!enabled)
-  }
-
-  private var urlField: some View {
-    TextField("URL", text: $link.url)
-      .autocorrectionDisabled()
-      #if os(iOS)
-        .textInputAutocapitalization(.never)
-        .keyboardType(.URL)
-      #endif
   }
 }
 
@@ -436,8 +340,10 @@ private struct SeoSection: View {
   let api: HostSettingsAPI
   let canEdit: Bool
   private let contracts = ContractValues.shared
-  @State private var draft = FormDraft()
   @State private var checkedKeywords = ""
+
+  /// The site's draft: what the zone proposes for a field the Business details card owns waits there for it (AGL-4136).
+  private var draft: FormDraft { FormDraft.forSite(hostID) }
 
   var body: some View {
     // What is wrong with the site's pages and metadata comes first, as the console's SEO section lists it.
@@ -473,32 +379,22 @@ private struct SeoSection: View {
         "Image description", text: f("seo.imageAlt"), max: SeoLimits.imageAlt,
         supporting: "What the social image shows, for screen readers", enabled: canEdit)
     }
+    // The name, phone, email and address left this card for Setup → Business profile's Business details (AGL-4136).
     HostTextCard(
-      title: "Business profile", host: host,
-      paths: [
-        "seo.entity.type", "seo.entity.name", "seo.entity.description", "seo.entity.url", "seo.entity.email",
-        "seo.entity.telephone", "seo.entity.contactType", "seo.entity.logo",
-      ], api: api, canEdit: canEdit, message: "Who runs the site, as search engines read it.", draft: draft
+      title: "Entity", host: host,
+      paths: ["seo.entity.type", "seo.entity.description", "seo.entity.url", "seo.entity.contactType", "seo.entity.logo"], api: api,
+      canEdit: canEdit, message: "Your business name, phone, email and address are published here from Setup → Business profile.",
+      draft: draft
     ) { f in
       Picker("This site is run by", selection: f("seo.entity.type")) {
         Text("Not set").tag("")
         ForEach(entityTypes, id: \.value) { Text($0.label).tag($0.value) }
       }
       .disabled(!canEdit)
-      AglynCountedField("Name", text: f("seo.entity.name"), enabled: canEdit)
       AglynCountedField("Description", text: f("seo.entity.description"), max: SeoLimits.entityDescription, multiline: true, enabled: canEdit)
       AglynCountedField("Website", text: f("seo.entity.url"), keyboard: .url, enabled: canEdit)
-      AglynCountedField("Email", text: f("seo.entity.email"), keyboard: .email, enabled: canEdit)
-      AglynCountedField("Telephone", text: f("seo.entity.telephone"), keyboard: .phone, enabled: canEdit)
       AglynCountedField("Contact type", text: f("seo.entity.contactType"), placeholder: "customer service", enabled: canEdit)
       MediaImageField(context: context, label: "Logo", value: f("seo.entity.logo"), enabled: canEdit)
-    }
-    HostTextCard(
-      title: "Business address", host: host, paths: Self.addressFields.map { "seo.entity.address.\($0.0)" }, api: api, canEdit: canEdit
-    ) { f in
-      ForEach(Self.addressFields, id: \.0) { key, label in
-        AglynCountedField(label, text: f("seo.entity.address.\(key)"), enabled: canEdit)
-      }
     }
     LocalBusinessCard(host: host, api: api, canEdit: canEdit)
     HostTextCard(
@@ -519,11 +415,6 @@ private struct SeoSection: View {
       .accessibilityIdentifier("seo-discourage")
     }
   }
-
-  private static let addressFields = [
-    ("streetAddress", "Street"), ("addressLocality", "City"), ("addressRegion", "Region"), ("postalCode", "Postal code"),
-    ("addressCountry", "Country"),
-  ]
 }
 
 private struct LocalBusinessCard: View {

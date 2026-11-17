@@ -573,7 +573,7 @@ const SITE_SETTINGS: NativeNavList = {
       label: 'Setup',
       foldable: false,
       rows: ordered([
-        setupRow('details', 'Basic details', ICONS.details, 'Logo, business details, layout and languages'),
+        setupRow('details', 'Basic details', ICONS.details, 'Logo, layout and languages'),
         setupRow('business', 'Business profile', ICONS.business, 'What the business is, for everything that writes about it'),
         setupRow('seo', 'SEO', ICONS.seo, 'Search title, social image, business profile and verification', ['search']),
         setupRow('tracking', 'Tracking', ICONS.tracking, 'Analytics, ad tags and the consent banner', ['cookies', 'pixels']),

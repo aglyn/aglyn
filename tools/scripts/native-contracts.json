@@ -765,6 +765,13 @@
         "BUSINESS_PROFILE_FIELD_ORDER"
       ]
     },
+    "libs/aglyn/src/lib/app-utils/business-details.ts": {
+      "values": [
+        "SITE_SLOGAN_MAX_LENGTH",
+        "BUSINESS_SOCIAL_LINKS_MAX",
+        "BUSINESS_DETAILS_CLEARABLE_PATH_LIST"
+      ]
+    },
     "libs/aglyn/src/lib/app-utils/content-authors.ts": {
       "values": [
         "AUTHOR_SAME_AS_MAX"
@@ -19624,6 +19631,326 @@
               },
               "logoUrl": "  ",
               "displayName": " x "
+            }
+          }
+        ]
+      ]
+    },
+    "businessDetailsWrite": {
+      "module": "libs/aglyn/src/lib/app-utils/business-details.ts",
+      "args": [
+        [
+          {
+            "seo": {
+              "entity": {
+                "name": " Paws ",
+                "slogan": " Happy dogs ",
+                "telephone": " +1 512-555-0100 ",
+                "email": " hi@paws.example ",
+                "address": {
+                  "streetAddress": " 1 Main St ",
+                  "addressLocality": "Austin",
+                  "addressRegion": "TX",
+                  "postalCode": "78701",
+                  "addressCountry": "US"
+                }
+              }
+            },
+            "business": {
+              "socialLinks": [
+                {
+                  "label": " Instagram ",
+                  "url": " https://instagram.com/paws "
+                },
+                {
+                  "label": "Empty",
+                  "url": "  "
+                }
+              ]
+            }
+          },
+          null
+        ],
+        [
+          {
+            "seo": {
+              "entity": {
+                "name": "Paws"
+              }
+            }
+          },
+          {
+            "seo": {
+              "entity": {
+                "email": "a@paws.example"
+              }
+            },
+            "business": {
+              "supportEmail": "a@paws.example"
+            }
+          }
+        ],
+        [
+          {
+            "seo": {
+              "entity": {
+                "name": "Paws"
+              }
+            }
+          },
+          {
+            "seo": {
+              "entity": {
+                "name": "Paws"
+              }
+            }
+          }
+        ],
+        [
+          {
+            "seo": {
+              "entity": {
+                "email": "a@paws.example"
+              }
+            }
+          },
+          {
+            "business": {
+              "address": "4 Shore Rd\nMadison, WI 53703"
+            }
+          }
+        ],
+        [
+          {
+            "seo": {
+              "entity": {
+                "address": {
+                  "streetAddress": "9 Lake Dr",
+                  "addressLocality": "Madison"
+                }
+              }
+            }
+          },
+          {
+            "seo": {
+              "entity": {
+                "address": {
+                  "streetAddress": "4 Shore Rd",
+                  "addressLocality": "Madison"
+                }
+              }
+            },
+            "business": {
+              "address": "4 Shore Rd, Madison"
+            }
+          }
+        ],
+        [
+          {
+            "seo": {
+              "entity": {}
+            }
+          },
+          {
+            "seo": {
+              "entity": {
+                "address": {
+                  "streetAddress": "4 Shore Rd"
+                }
+              }
+            },
+            "business": {
+              "address": "4 Shore Rd"
+            }
+          }
+        ],
+        [
+          {
+            "seo": {
+              "entity": {
+                "address": {
+                  "streetAddress": "4 Shore Rd"
+                }
+              }
+            },
+            "business": {
+              "address": "kept"
+            }
+          },
+          {
+            "seo": {
+              "entity": {
+                "address": {
+                  "streetAddress": "4 Shore Rd"
+                }
+              }
+            },
+            "business": {
+              "address": "kept"
+            }
+          }
+        ],
+        [
+          {
+            "business": {
+              "socialLinks": [
+                {
+                  "label": " L0 ",
+                  "url": " https://example.com/0 "
+                },
+                {
+                  "label": " L1 ",
+                  "url": " https://example.com/1 "
+                },
+                {
+                  "label": " L2 ",
+                  "url": " https://example.com/2 "
+                },
+                {
+                  "label": " L3 ",
+                  "url": " https://example.com/3 "
+                },
+                {
+                  "label": " L4 ",
+                  "url": " https://example.com/4 "
+                },
+                {
+                  "label": " L5 ",
+                  "url": " https://example.com/5 "
+                },
+                {
+                  "label": " L6 ",
+                  "url": " https://example.com/6 "
+                },
+                {
+                  "label": " L7 ",
+                  "url": " https://example.com/7 "
+                },
+                {
+                  "label": " L8 ",
+                  "url": " https://example.com/8 "
+                },
+                {
+                  "label": " L9 ",
+                  "url": " https://example.com/9 "
+                }
+              ]
+            }
+          },
+          null
+        ],
+        [
+          {},
+          null
+        ]
+      ]
+    },
+    "hostTokenPreview": {
+      "module": "libs/aglyn/src/lib/app-utils/host-tokens.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "displayName": "Paws",
+            "subdomain": "paws"
+          }
+        ],
+        [
+          {
+            "displayName": "Paws",
+            "subdomain": "paws",
+            "cname": "https://paws.example",
+            "logoUrl": "https://cdn.example/logo.png",
+            "seo": {
+              "entity": {
+                "name": " Paws Grooming ",
+                "slogan": "Calm hands",
+                "telephone": "+1 (512) 555-0100",
+                "email": "hi@paws.example",
+                "address": {
+                  "streetAddress": "1 Main St",
+                  "addressLocality": "Austin",
+                  "addressRegion": "TX",
+                  "postalCode": "78701",
+                  "addressCountry": "US"
+                },
+                "areaServed": [
+                  "San Antonio, TX",
+                  "Austin"
+                ],
+                "sameAs": [
+                  "https://www.facebook.com/paws"
+                ]
+              }
+            },
+            "business": {
+              "supportEmail": "old@paws.example",
+              "address": "old block",
+              "socialLinks": [
+                {
+                  "label": "Instagram",
+                  "url": "https://instagram.com/paws"
+                },
+                {
+                  "label": "",
+                  "url": "https://x.com/paws"
+                },
+                {
+                  "label": "Bad",
+                  "url": "not a url"
+                }
+              ]
+            }
+          }
+        ],
+        [
+          {
+            "subdomain": "paws",
+            "seo": {
+              "entity": {
+                "telephone": "555 0100"
+              }
+            },
+            "business": {
+              "supportEmail": "old@paws.example",
+              "address": "4 Shore Rd\nMadison"
+            }
+          }
+        ]
+      ]
+    },
+    "businessDetailsSeed": {
+      "module": "libs/aglyn/src/lib/app-utils/business-details.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "business": {
+              "supportEmail": " old@paws.example "
+            }
+          }
+        ],
+        [
+          {
+            "seo": {
+              "entity": {
+                "email": "new@paws.example"
+              }
+            },
+            "business": {
+              "supportEmail": "old@paws.example"
+            }
+          }
+        ],
+        [
+          {
+            "displayName": "Paws",
+            "seo": {
+              "title": "Paws"
             }
           }
         ]
