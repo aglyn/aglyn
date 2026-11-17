@@ -141,7 +141,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "marketing",
-            contributes = mapOf("screens" to listOf("marketing.campaigns", "marketing.conversions", "marketing.experiments", "marketing.overlays", "marketing.overview"), "widgets" to listOf("marketing.last-campaign"), "quickActions" to listOf("marketing.open"), "deepLinks" to listOf("marketing.campaign-page", "marketing.campaigns-page", "marketing.conversions-page", "marketing.experiments-page", "marketing.inbox-campaigns-page", "marketing.overlays-page", "marketing.overview-page", "marketing.page")),
+            contributes = mapOf("screens" to listOf("marketing.campaigns", "marketing.conversions", "marketing.experiments", "marketing.overlays", "marketing.overview", "marketing.staffOrgEmail", "marketing.staffOrgEmailSend"), "widgets" to listOf("marketing.last-campaign"), "quickActions" to listOf("marketing.open"), "deepLinks" to listOf("marketing.campaign-page", "marketing.campaigns-page", "marketing.conversions-page", "marketing.experiments-page", "marketing.inbox-campaigns-page", "marketing.overlays-page", "marketing.overview-page", "marketing.page")),
             register = ::registerMarketingNative,
         ),
         NativePluginManifestEntry(
@@ -211,7 +211,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "workflows",
-            contributes = mapOf("screens" to listOf("workflows.action", "workflows.automation", "workflows.org-automation", "workflows.runs", "workflows.webhook", "workflows.workflow"), "quickActions" to listOf("workflows.open"), "deepLinks" to listOf("workflows.page")),
+            contributes = mapOf("screens" to listOf("workflows.action", "workflows.automation", "workflows.org-automation", "workflows.runs", "workflows.staffAutomation", "workflows.staffOrgAutomations", "workflows.staffSiteAutomations", "workflows.webhook", "workflows.workflow"), "quickActions" to listOf("workflows.open"), "deepLinks" to listOf("workflows.page")),
             register = ::registerWorkflowsNative,
         ),
         NativePluginManifestEntry(

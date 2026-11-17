@@ -1,0 +1,288 @@
+{
+  "$comment": "The Automation plugin's staff screens (AGL-3379): the staff site page's Automations and the staff organization page's Organization automations, read-only, each opening an automation's trigger and steps, natively from this spec (the console's staff-automations-card.component.tsx). Kept in its Apple package (Resources) and linked from its Kotlin module (src/android/screens).",
+  "screens": [
+    {
+      "id": "workflows.staffSiteAutomations",
+      "title": "Automations",
+      "label": "Automations",
+      "subtitle": "The site's automations, the organization automations that run on it, and its workflows — read-only, each opening its trigger and steps.",
+      "icon": "bolt|bolt",
+      "scope": "staff",
+      "requires": "staff.is",
+      "zones": [
+        "staffSite"
+      ],
+      "order": 40,
+      "load": {
+        "actions": {
+          "query": {
+            "collection": "hosts/{params.hostId}/actions",
+            "orderBy": "__name__",
+            "limit": 50
+          },
+          "optional": true,
+          "more": 50
+        },
+        "orgAutomations": {
+          "when": "params.orgId",
+          "query": {
+            "collection": "orgs/{params.orgId}/automations",
+            "where": [
+              [
+                "visibleTo",
+                "array-contains-any",
+                [
+                  "org",
+                  "host:{params.hostId}"
+                ]
+              ]
+            ],
+            "orderBy": "__name__",
+            "limit": 50
+          },
+          "optional": true,
+          "more": 50
+        },
+        "workflows": {
+          "query": {
+            "collection": "hosts/{params.hostId}/workflows",
+            "orderBy": "__name__",
+            "limit": 50
+          },
+          "optional": true,
+          "more": 50
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "title": "Site automations",
+          "items": "data.actions.items",
+          "primary": "{item.name|item.displayName|item.$id}",
+          "secondary": "Updated {item.updatedAt:datetime}",
+          "icon": "bolt|bolt",
+          "empty": "No automations on this site",
+          "badges": [
+            {
+              "text": "{item.trigger.event|'manual'}"
+            },
+            {
+              "text": "off",
+              "when": "item.enabled == false",
+              "tone": "warning"
+            },
+            {
+              "text": "on",
+              "when": "item.enabled != false",
+              "tone": "success"
+            },
+            {
+              "text": "paused here",
+              "when": "item.pausedHostIds ~= @params.hostId",
+              "tone": "warning"
+            },
+            {
+              "text": "deleted",
+              "when": "item.deletedAt",
+              "tone": "error"
+            }
+          ],
+          "open": {
+            "screen": "workflows.staffAutomation",
+            "params": {
+              "path": "hosts/{params.hostId}/actions/{item.$id}"
+            }
+          }
+        },
+        {
+          "type": "list",
+          "title": "Organization automations that run here",
+          "items": "data.orgAutomations.items",
+          "primary": "{item.name|item.displayName|item.$id}",
+          "secondary": "Updated {item.updatedAt:datetime}",
+          "icon": "bolt|bolt",
+          "empty": "No organization automation runs on this site",
+          "badges": [
+            {
+              "text": "{item.trigger.event|'manual'}"
+            },
+            {
+              "text": "off",
+              "when": "item.enabled == false",
+              "tone": "warning"
+            },
+            {
+              "text": "on",
+              "when": "item.enabled != false",
+              "tone": "success"
+            },
+            {
+              "text": "paused here",
+              "when": "item.pausedHostIds ~= @params.hostId",
+              "tone": "warning"
+            },
+            {
+              "text": "deleted",
+              "when": "item.deletedAt",
+              "tone": "error"
+            }
+          ],
+          "open": {
+            "screen": "workflows.staffAutomation",
+            "params": {
+              "path": "orgs/{params.orgId}/automations/{item.$id}"
+            }
+          }
+        },
+        {
+          "type": "list",
+          "title": "Workflows",
+          "items": "data.workflows.items",
+          "primary": "{item.name|item.displayName|item.$id}",
+          "secondary": "Updated {item.updatedAt:datetime}",
+          "icon": "bolt|bolt",
+          "empty": "No workflows on this site",
+          "badges": [
+            {
+              "text": "{item.trigger.event|'manual'}"
+            },
+            {
+              "text": "off",
+              "when": "item.enabled == false",
+              "tone": "warning"
+            },
+            {
+              "text": "on",
+              "when": "item.enabled != false",
+              "tone": "success"
+            },
+            {
+              "text": "paused on {item.pausedHostIds:count}",
+              "when": "item.pausedHostIds",
+              "tone": "warning"
+            },
+            {
+              "text": "deleted",
+              "when": "item.deletedAt",
+              "tone": "error"
+            }
+          ],
+          "open": {
+            "screen": "workflows.staffAutomation",
+            "params": {
+              "path": "hosts/{params.hostId}/workflows/{item.$id}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "workflows.staffOrgAutomations",
+      "title": "Organization automations",
+      "label": "Organization automations",
+      "subtitle": "The organization's automations, read-only, each opening its trigger and steps.",
+      "icon": "bolt|bolt",
+      "scope": "staff",
+      "requires": "staff.is",
+      "zones": [
+        "staffOrg"
+      ],
+      "order": 40,
+      "load": {
+        "automations": {
+          "query": {
+            "collection": "orgs/{params.orgId}/automations",
+            "orderBy": "__name__",
+            "limit": 50
+          },
+          "optional": true,
+          "more": 50
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "title": "Automations",
+          "items": "data.automations.items",
+          "primary": "{item.name|item.displayName|item.$id}",
+          "secondary": "Updated {item.updatedAt:datetime}",
+          "icon": "bolt|bolt",
+          "empty": "This organization has no automations",
+          "badges": [
+            {
+              "text": "{item.trigger.event|'manual'}"
+            },
+            {
+              "text": "off",
+              "when": "item.enabled == false",
+              "tone": "warning"
+            },
+            {
+              "text": "on",
+              "when": "item.enabled != false",
+              "tone": "success"
+            },
+            {
+              "text": "paused on {item.pausedHostIds:count}",
+              "when": "item.pausedHostIds",
+              "tone": "warning"
+            },
+            {
+              "text": "deleted",
+              "when": "item.deletedAt",
+              "tone": "error"
+            }
+          ],
+          "open": {
+            "screen": "workflows.staffAutomation",
+            "params": {
+              "path": "orgs/{params.orgId}/automations/{item.$id}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "workflows.staffAutomation",
+      "title": "{data.doc.name|data.doc.displayName|'Automation'}",
+      "label": "Automation",
+      "icon": "bolt|bolt",
+      "scope": "staff",
+      "requires": "staff.is",
+      "load": {
+        "doc": {
+          "doc": "{params.path}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "title": "Trigger",
+          "object": "data.doc",
+          "rows": [
+            {
+              "label": "Trigger",
+              "value": "{item.trigger.event|'Manual — runs only when called'}"
+            },
+            {
+              "label": "When",
+              "value": "when {item.trigger.filter}",
+              "when": "item.trigger.filter"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "title": "Steps ({data.doc.steps:count})",
+          "object": "data.doc",
+          "rows": [
+            {
+              "label": "Steps",
+              "value": "{item.steps:json}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

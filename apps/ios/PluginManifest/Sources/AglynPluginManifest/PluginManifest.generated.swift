@@ -139,7 +139,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "marketing",
-      contributes: ["screens": ["marketing.campaigns", "marketing.conversions", "marketing.experiments", "marketing.overlays", "marketing.overview"], "widgets": ["marketing.last-campaign"], "quickActions": ["marketing.open"], "deepLinks": ["marketing.campaign-page", "marketing.campaigns-page", "marketing.conversions-page", "marketing.experiments-page", "marketing.inbox-campaigns-page", "marketing.overlays-page", "marketing.overview-page", "marketing.page"]],
+      contributes: ["screens": ["marketing.campaigns", "marketing.conversions", "marketing.experiments", "marketing.overlays", "marketing.overview", "marketing.staffOrgEmail", "marketing.staffOrgEmailSend"], "widgets": ["marketing.last-campaign"], "quickActions": ["marketing.open"], "deepLinks": ["marketing.campaign-page", "marketing.campaigns-page", "marketing.conversions-page", "marketing.experiments-page", "marketing.inbox-campaigns-page", "marketing.overlays-page", "marketing.overview-page", "marketing.page"]],
       register: AglynMarketingPlugin.registerMarketingNative
     ),
     NativePluginManifestEntry(
@@ -209,7 +209,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "workflows",
-      contributes: ["screens": ["workflows.action", "workflows.automation", "workflows.org-automation", "workflows.runs", "workflows.webhook", "workflows.workflow"], "quickActions": ["workflows.open"], "deepLinks": ["workflows.page"]],
+      contributes: ["screens": ["workflows.action", "workflows.automation", "workflows.org-automation", "workflows.runs", "workflows.staffAutomation", "workflows.staffOrgAutomations", "workflows.staffSiteAutomations", "workflows.webhook", "workflows.workflow"], "quickActions": ["workflows.open"], "deepLinks": ["workflows.page"]],
       register: AglynWorkflowsPlugin.registerWorkflowsNative
     ),
     NativePluginManifestEntry(
