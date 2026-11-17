@@ -210,6 +210,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 })
 
 const sentEmails: any[] = []
+// A sending limit refusing every email (AGL-4227): the send resolves, unsent.
+let mockRefuseEmails = false
 
 /** The hardware recorder the webhook hands a seller-store order to (AGL-4038). */
 const mockRecordHardware = jest.fn<Promise<undefined>, [{ hostId: string; orderId: string }]>(async () => undefined)
@@ -221,7 +223,11 @@ jest.mock('./pos-hardware-sale-fields', () => ({
 jest.mock('@aglyn/shared-util-email', () => ({
   isEmailConfigured: () => false,
   sendEmail: async (options: any) => {
+    if (mockRefuseEmails) {
+      return { sent: false, reason: 'rate-limited', retryAtMs: 0, detail: 'Daily transactional email ceiling reached (200/day).' }
+    }
     sentEmails.push(options)
+    return { sent: true, id: 'email_test' }
   },
 }))
 
@@ -276,6 +282,7 @@ beforeAll(() => {
 })
 
 beforeEach(() => {
+  mockRefuseEmails = false
   docs.clear()
   sentEmails.length = 0
   autoIdCounter = 0
@@ -406,6 +413,15 @@ describe('a paid cart order reaches its dropship suppliers (AGL-3773)', () => {
     expect(queued()).toHaveLength(0)
     expect(sentEmails.some((mail) => mail.to === 'hello@wrap.example')).toBe(true)
     expect(routed()).toHaveLength(1)
+  })
+
+  it('a supplier email a sending limit refused is not stamped as sent (AGL-4227)', async () => {
+    mockRefuseEmails = true
+    await deliver()
+    // Only the supplier its webhook reached is on the timeline as told.
+    expect(routed().map((event) => event.detail)).toEqual([
+      'Sent 1 line to supplier Northwind Fulfillment',
+    ])
   })
 
   it('routes nothing on an order with no supplier lines', async () => {

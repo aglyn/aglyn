@@ -564,7 +564,7 @@ async function sendReturnEmail(
     const firestore = firebaseAdmin.app().firestore()
     const designed = await renderHostEmailWithTokens(firestore, hostId, key, tokens)
     const org = await getOrgForHost(hostId).catch(() => null)
-    await sendEmail({
+    const emailOutcome = await sendEmail({
       to,
       subject: designed?.subject ?? fallback.subject,
       text: designed?.text || fallback.text,
@@ -576,7 +576,8 @@ async function sendReturnEmail(
       // Owed to the recipient by their own order (AGL-3356).
       owedFor: 'order',
     })
-    await meterHostEmail(hostId)
+    // Only a sent email is metered (AGL-4227).
+    if (emailOutcome?.sent) await meterHostEmail(hostId)
   } catch (error) {
     // A return that is recorded is not undone because its email failed.
     console.error(`[returns] ${key} not sent`, hostId, error)

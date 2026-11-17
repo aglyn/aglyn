@@ -95,6 +95,19 @@ export interface ApiV1ResourceDescription {
 
 // ── Field schemas ──────────────────────────────────────────────────────────
 
+/**
+ * The `siteId` path parameter every site-scoped operation takes (AGL-4225).
+ *
+ * One wording, so a model choosing a tool reads the same instruction on every
+ * one of them: the id is required and comes from `listSites`. Before this it
+ * read "Site id." alone, and the first real MCP session called the site-scoped
+ * lists with no site at all.
+ */
+export const SITE_ID_PATH_PARAM: { readonly name: 'siteId'; readonly description: string } = Object.freeze({
+  name: 'siteId',
+  description: 'Required. The site’s id — the `id` of a site from `listSites`. This resource belongs to one site.',
+})
+
 export const isoField = (description: string): ApiV1Schema => ({
   type: 'string',
   format: 'date-time',

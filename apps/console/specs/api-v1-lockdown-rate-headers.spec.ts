@@ -85,7 +85,7 @@ jest.mock(
   },
 )
 
-const ORG = { plan: 'business' }
+const ORG = { plan: 'business', billingStatus: 'active' }
 /** A locked org, exactly as `getLockdownVerdict` would resolve it. */
 const VERDICT = {
   scope: 'org' as const,

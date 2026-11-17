@@ -70,6 +70,8 @@ export interface StaffSiteRow {
   homeScreenId: string | null
   suspended: boolean
   maintenance: boolean
+  /** The staff usage level (AGL-4228); absent on a row read before it. */
+  usageLevel?: string | null
   createdAt: { seconds: number } | null
   /** The host document's `updatedAt`: the Sites list's Last updated column. */
   updatedAt?: { seconds: number } | null
