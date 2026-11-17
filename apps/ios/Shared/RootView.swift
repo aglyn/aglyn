@@ -147,8 +147,13 @@ struct RootView<Shell: View>: View {
       // Every console route refuses an unconfirmed address, so it is confirmed first (`/verify-email`).
       VerifyEmailView().environment(\.authReveal, reveal)
     case .shell:
-      if let auth = model.auth {
+      if let lockdown = model.lockdown {
+        // The platform is locked for this person: the console's gate in place of the app, with its way out.
+        LockdownGateView(notice: lockdown) { Task { await model.signOut() } }
+          .task(id: model.auth?.user?.uid) { await model.checkLockdown() }
+      } else if let auth = model.auth {
         shell(navigation)
+          .task(id: auth.user?.uid) { await model.checkLockdown() }
           .environment(navigation)
           .focusedSceneValue(\.shellNavigation, navigation)
           // A support session says so on every screen, with its way back to the staff member's own session.
