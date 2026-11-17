@@ -352,6 +352,12 @@ private fun PageDetail(
       settings = buildList {
         add(com.aglyn.ui.RecordAction("rename", if (page.isGroup) "Rename group" else "Rename", "edit", enabled = canEdit) { open(PageDialog.Rename(page)) })
         if (!page.isGroup) add(com.aglyn.ui.RecordAction("move", "Move", "drive_file_move", enabled = canPublish) { open(PageDialog.Move(page)) })
+        // Order within its level (the console's drag to reorder, AGL-2501): one place up or down among its siblings.
+        if (!page.isGroup) {
+          val place = pageSiblingPlace(page.id, loader.pages)
+          add(com.aglyn.ui.RecordAction("move-up", "Move up", "arrow_upward", enabled = canPublish && place?.upIndex != null) { reorderPage(page, up = true, loader, api, runner) })
+          add(com.aglyn.ui.RecordAction("move-down", "Move down", "arrow_downward", enabled = canPublish && place?.downIndex != null) { reorderPage(page, up = false, loader, api, runner) })
+        }
       },
     )
     page.description?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -617,3 +623,15 @@ internal fun pageDeleteBody(livePath: String?, hasChildren: Boolean): String =
   listOfNotNull(livePath?.let { "It is live at $it and stops answering there." }, "Pages inside it keep their addresses.".takeIf { hasChildren })
     .joinToString(" ")
     .ifEmpty { "It is not published, so no address stops working." }
+
+/** Every sibling is read first, so the place counted is the level's whole order; then the move route rewrites it. */
+private fun reorderPage(page: PageNode, up: Boolean, loader: PagesTreeLoader, api: PagesApi, runner: ActionRunner) {
+  runner.run(if (up) "Moved up." else "Moved down.") {
+    loader.loadAll()
+    val place = pageSiblingPlace(page.id, loader.pages) ?: return@run
+    val index = (if (up) place.upIndex else place.downIndex) ?: return@run
+    api.move(page.id, place.parentId, index)
+    val level = loader.pages.values.filter { pageSiblingPlace(it.id, loader.pages)?.parentId == place.parentId }.map { it.id }
+    loader.patch(*level.toTypedArray())
+  }
+}

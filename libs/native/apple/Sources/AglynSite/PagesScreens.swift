@@ -450,6 +450,19 @@ struct PageDetail: View {
     }
   }
 
+  /// Every sibling is read first, so the place counted is the level's whole order, then the move route rewrites it.
+  private func reorder(_ page: PageNode, up: Bool) {
+    runner.run(up ? "Moved up." : "Moved down.") {
+      await model.loadAll()
+      guard let tree = model.tree, let place = pageSiblingPlace(page.id, in: tree.nodes),
+        let index = up ? place.upIndex : place.downIndex
+      else { return }
+      try await api.move(page.id, parentID: place.parentID, index: index)
+      let level = tree.nodes.values.filter { pageSiblingPlace($0.id, in: tree.nodes)?.parentID == place.parentID }.map(\.id)
+      await model.reread(level)
+    }
+  }
+
   private var confirmTitle: String {
     switch confirm {
     case .unpublish(let page)?: "Unpublish \(page.name)?"
@@ -515,6 +528,16 @@ struct PageDetail: View {
           open(.saveTemplate(page))
         })
       more.append(AglynRecordAction("page-move", "Move", systemImage: "folder", enabled: canPublish) { open(.move(page)) })
+      // Order within its level (the console's drag to reorder, AGL-2501): one place up or down among its siblings.
+      let place = model.tree.flatMap { pageSiblingPlace(page.id, in: $0.nodes) }
+      more.append(
+        AglynRecordAction("page-move-up", "Move up", systemImage: "arrow.up", enabled: canPublish && place?.upIndex != nil) {
+          reorder(page, up: true)
+        })
+      more.append(
+        AglynRecordAction("page-move-down", "Move down", systemImage: "arrow.down", enabled: canPublish && place?.downIndex != nil) {
+          reorder(page, up: false)
+        })
       if row.livePath != nil {
         more.append(
           AglynRecordAction("page-unpublish", "Unpublish", systemImage: "eye.slash", enabled: canPublish) {
