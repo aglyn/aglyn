@@ -20,6 +20,22 @@ public let aiSeoSiteFields: [(field: String, label: String)] = [
   ("seo.agent.whenToUse", "When to use this site"), ("seo.agent.howToUse", "How an agent should call you"),
 ]
 
+/// The proposed fields that live on Setup → Business profile's Business details card rather than on the SEO section
+/// (`AI_SEO_BUSINESS_DETAILS_FIELDS`, AGL-4136): "Put in the form" stages them there.
+public let aiSeoBusinessDetailsFields: Set<String> = ["seo.entity.name", "seo.entity.email", "seo.entity.telephone"]
+
+/// What "Put in the form" says once it staged `fields`: where each went, in the console's words.
+public func aiSeoStagedNote(_ fields: [String]) -> String {
+  let here = fields.contains { !aiSeoBusinessDetailsFields.contains($0) }
+  let onBusiness = fields.contains { aiSeoBusinessDetailsFields.contains($0) }
+  var parts: [String] = []
+  if here { parts.append("In the SEO forms below as unsaved changes. Review them, then press Save.") }
+  if onBusiness {
+    parts.append("The name, email and phone are in Business details on Setup → Business profile as unsaved changes. Review them there, then press Save.")
+  }
+  return parts.joined(separator: " ")
+}
+
 /// The entity type's stored code, in words.
 public let aiSeoEntityTypeWords = ["1": "An organization", "2": "A person"]
 

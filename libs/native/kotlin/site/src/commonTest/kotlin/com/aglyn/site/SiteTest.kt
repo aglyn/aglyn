@@ -27,6 +27,7 @@ import com.aglyn.pluginhost.DeepLinks
 import com.aglyn.pluginhost.NativeLinkTarget
 import com.aglyn.pluginhost.NativePluginRegistry
 import com.aglyn.site.media.ChosenMedia
+import com.aglyn.site.setup.at
 import com.aglyn.site.media.FolderPick
 import com.aglyn.site.media.MediaFilters
 import com.aglyn.site.media.MediaItem
@@ -813,5 +814,76 @@ class SiteTest {
     assertEquals("h1", seen[0].second["hostId"]?.jsonPrimitive?.content)
     assertEquals("https://cdn.example.com/icon.png", seen[0].second["favicon"]?.jsonPrimitive?.content)
     assertEquals("", seen[1].second["favicon"]?.jsonPrimitive?.content)
+  }
+
+  /**
+   * Business details (AGL-4136): the card writes what the console's save writes. The canonical `seo.entity.*` paths and the
+   * slogan, the email and the formatted address kept in step in the `business` copies, a cleared field deleted with its
+   * copy, an untouched address leaving the one-block copy alone, and no empty map merged over what the site holds.
+   */
+  @Test
+  fun businessDetailsSaveWritesTheConsolesFields() {
+    val form = com.aglyn.site.setup.businessDetailsForm(mapOf("displayName" to "Paws")).toMutableMap()
+    assertEquals(com.aglyn.site.setup.BUSINESS_DETAILS_TEXT_PATHS.toSet(), form.keys)
+    form["seo.entity.name"] = " Paws Grooming "
+    form["seo.entity.slogan"] = " Calm hands "
+    form["seo.entity.telephone"] = "+1 512-555-0100"
+    form["seo.entity.email"] = " hi@paws.example "
+    form["seo.entity.address.streetAddress"] = "1 Main St"
+    form["seo.entity.address.addressLocality"] = "Austin"
+    val links = listOf(com.aglyn.site.setup.SocialLink(" IG ", " https://instagram.com/paws "), com.aglyn.site.setup.SocialLink("x", " "))
+    val first = com.aglyn.site.setup.businessDetailsPayload(form, links, mapOf("displayName" to "Paws"))
+    assertEquals("Paws Grooming", first.at("seo.entity.name"))
+    assertEquals("Calm hands", first.at("seo.entity.slogan"))
+    assertEquals("+1 512-555-0100", first.at("seo.entity.telephone"))
+    assertEquals("hi@paws.example", first.at("seo.entity.email"))
+    assertEquals("1 Main St", first.at("seo.entity.address.streetAddress"))
+    assertEquals(null, first.at("seo.entity.address.postalCode"))
+    assertEquals("hi@paws.example", first.at("business.supportEmail"))
+    assertEquals("1 Main St, Austin", first.at("business.address"))
+    assertEquals(listOf(mapOf("label" to "IG", "url" to "https://instagram.com/paws")), first.at("business.socialLinks"))
+
+    // A site whose email so far lived only in the one-block copy shows it in Email; clearing it deletes both.
+    val older = mapOf(
+      "seo" to mapOf("entity" to mapOf("type" to 1L, "name" to "Paws", "slogan" to "Calm hands")),
+      "business" to mapOf("supportEmail" to "old@paws.example", "address" to "4 Shore Rd\nMadison, WI 53703"),
+    )
+    val cleared = com.aglyn.site.setup.businessDetailsForm(older).toMutableMap()
+    assertEquals("old@paws.example", cleared["seo.entity.email"])
+    assertEquals("4 Shore Rd, Madison, WI 53703", com.aglyn.site.setup.businessDetailsLegacyAddress(cleared, older))
+    cleared["seo.entity.email"] = ""
+    cleared["seo.entity.slogan"] = ""
+    val second = com.aglyn.site.setup.businessDetailsPayload(cleared, emptyList(), older)
+    assertEquals(com.aglyn.core.FirestoreDelete, second.at("business.supportEmail"))
+    assertEquals(com.aglyn.core.FirestoreDelete, second.at("seo.entity.slogan"))
+    assertEquals(null, second.at("seo.entity.email"), "nothing stored there, so nothing to delete")
+    assertEquals("Paws", second.at("seo.entity.name"))
+    assertEquals("4 Shore Rd\nMadison, WI 53703", second.at("business.address"), "an untouched address keeps the one-block copy")
+    assertEquals(null, second.at("seo.entity.type"), "fields other cards own are not written")
+    assertEquals(null, second.at("business.socialLinks"))
+
+    // Nothing typed on an empty site writes no empty map over `seo.entity`.
+    val nothing = com.aglyn.site.setup.businessDetailsPayload(com.aglyn.site.setup.businessDetailsForm(emptyMap()), emptyList(), mapOf("seo" to mapOf("entity" to mapOf("type" to 1L))))
+    assertEquals(emptyMap(), nothing)
+
+    assertEquals(null, com.aglyn.site.setup.businessDetailsEmailError(""))
+    assertEquals(null, com.aglyn.site.setup.businessDetailsEmailError(" a@b.co "))
+    assertEquals("Please enter an email address, like you@example.com", com.aglyn.site.setup.businessDetailsEmailError("not an email"))
+    assertEquals(8, com.aglyn.site.setup.SOCIAL_LINKS_MAX)
+  }
+
+  /** "What your pages can use" reads what is typed: a new slogan shows at once, a cleared email falls back to the stored copy, no images. */
+  @Test
+  fun theTokenListReadsWhatIsTyped() {
+    val host = mapOf("subdomain" to "paws", "logoUrl" to "https://cdn.example/logo.png", "business" to mapOf("supportEmail" to "old@paws.example"))
+    val form = com.aglyn.site.setup.businessDetailsForm(host).toMutableMap()
+    form["seo.entity.slogan"] = "Calm hands"
+    form["seo.entity.email"] = ""
+    val rows = com.aglyn.site.setup.businessDetailsTokenRows(form, listOf(com.aglyn.site.setup.SocialLink("IG", "https://instagram.com/paws")), host)
+    assertEquals("Calm hands", rows.first { it.key == "slogan" }.value)
+    assertEquals("old@paws.example", rows.first { it.key == "supportEmail" }.value)
+    assertEquals("https://instagram.com/paws", rows.first { it.key == "instagramUrl" }.value)
+    assertTrue(rows.none { it.type == "image" })
+    assertEquals(false, rows.first { it.key == "phone" }.set)
   }
 }

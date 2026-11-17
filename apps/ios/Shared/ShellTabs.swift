@@ -205,6 +205,25 @@ final class TabStrip {
     navigation.apply(seed, model: model)
   }
 
+  /// A link from outside the app (AGL-4059): a new tab in front, on the workspace and site the link names and the whole
+  /// path to its place, as the console's link opens a new browser tab. The tab it leaves keeps its own workspace and
+  /// site.
+  func openLink(_ link: String, model: AppModel) {
+    let navigation = ShellNavigation()
+    navigation.inSite = current.inSite
+    send(current, back: true, model: model)
+    tabs.append(navigation)
+    selected = tabs.count - 1
+    model.open(link, in: navigation)
+    // Where the link put the app is the new tab's own, so the window coming to the front keeps it there.
+    if let pick = model.workspace?.effective { navigation.remember(orgID: pick.orgID, hostID: pick.hostID) }
+  }
+
+  /// Whether the window is as it opened: one tab, on Home, nothing pushed.
+  var untouched: Bool {
+    tabs.count == 1 && current.section == .home && current.paths.values.allSatisfy(\.isEmpty)
+  }
+
   /// A tab going behind keeps reading its own workspace and site; one coming in front reads the app's again once they
   /// are its own (`settle`).
   private func send(_ tab: ShellNavigation, back: Bool, model: AppModel) {

@@ -190,10 +190,15 @@ public func siteProfileUrls(_ host: [String: Any]?) -> [String] {
   return Array(urls.prefix(Int(ContractValues.shared.authorSameAsMax)))
 }
 
+/// The structured postal address as the one line every reader prints (`structuredAddressLine`): the parts that are set, in
+/// order, each tidied, joined by commas. Empty when none is.
+public func structuredAddressLine(_ parts: [String: Any]?) -> String {
+  ["streetAddress", "addressLocality", "addressRegion", "postalCode", "addressCountry"].map { profileText(parts?[$0], 200) }
+    .filter { !$0.isEmpty }.joined(separator: ", ")
+}
+
 private func addressLine(_ host: [String: Any]?) -> String {
-  let parts = child(child(child(host, "seo"), "entity"), "address")
-  let line = ["streetAddress", "addressLocality", "addressRegion", "postalCode", "addressCountry"].map { profileText(parts?[$0], 200) }.filter { !$0.isEmpty }
-    .joined(separator: ", ")
+  let line = structuredAddressLine(child(child(child(host, "seo"), "entity"), "address"))
   return line.isEmpty ? profileText(child(host, "business")?["address"], 400) : line
 }
 

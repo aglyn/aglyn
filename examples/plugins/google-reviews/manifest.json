@@ -1,7 +1,7 @@
 {
   "id": "google-reviews",
   "name": "Google reviews",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "entry": "plugin.bundle.mjs",
   "hostAbi": 1,
   "description": "Show your Google rating and reviews on your site, kept up to date from your Google Business Profile.",
@@ -107,7 +107,8 @@
       "components": [
         "aglyn.google-reviews.reviews",
         "aglyn.google-reviews.stars",
-        "aglyn.google-reviews.reviewer-image"
+        "aglyn.google-reviews.reviewer-image",
+        "aglyn.google-reviews.review-text"
       ]
     }
   }

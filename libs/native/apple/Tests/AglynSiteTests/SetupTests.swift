@@ -322,6 +322,74 @@ final class SetupTests: XCTestCase {
     XCTAssertEqual(listed.map(\.kind), ["custom", "custom", "installed"])
   }
 
+  /// Business details (AGL-4136): the card writes what the console's save writes. The canonical `seo.entity.*` paths and the
+  /// slogan, the email and the formatted address kept in step in the `business` copies, a cleared field deleted with its copy,
+  /// an untouched address leaving the one-block copy alone, and no empty map merged over what the site holds.
+  func testBusinessDetailsSaveWritesTheConsolesFields() {
+    var form = businessDetailsForm(["displayName": "Paws"])
+    XCTAssertEqual(Set(form.keys), Set(businessDetailsTextPaths))
+    form["seo.entity.name"] = " Paws Grooming "
+    form["seo.entity.slogan"] = " Calm hands "
+    form["seo.entity.telephone"] = "+1 512-555-0100"
+    form["seo.entity.email"] = " hi@paws.example "
+    form["seo.entity.address.streetAddress"] = "1 Main St"
+    form["seo.entity.address.addressLocality"] = "Austin"
+    let first = businessDetailsPayload(form, links: [SocialLink(label: " IG ", url: " https://instagram.com/paws "), SocialLink(label: "x", url: " ")], stored: ["displayName": "Paws"])
+    XCTAssertEqual(valueAt(first, "seo.entity.name") as? String, "Paws Grooming")
+    XCTAssertEqual(valueAt(first, "seo.entity.slogan") as? String, "Calm hands")
+    XCTAssertEqual(valueAt(first, "seo.entity.telephone") as? String, "+1 512-555-0100")
+    XCTAssertEqual(valueAt(first, "seo.entity.email") as? String, "hi@paws.example")
+    XCTAssertEqual(valueAt(first, "seo.entity.address.streetAddress") as? String, "1 Main St")
+    XCTAssertNil(valueAt(first, "seo.entity.address.postalCode"))
+    XCTAssertEqual(valueAt(first, "business.supportEmail") as? String, "hi@paws.example")
+    XCTAssertEqual(valueAt(first, "business.address") as? String, "1 Main St, Austin")
+    XCTAssertEqual((valueAt(first, "business.socialLinks") as? [[String: Any]])?.count, 1)
+    XCTAssertEqual((valueAt(first, "business.socialLinks") as? [[String: Any]])?.first?["url"] as? String, "https://instagram.com/paws")
+
+    // A site whose email so far lived only in the one-block copy shows it in Email; clearing it deletes both.
+    let older: [String: Any] = [
+      "seo": ["entity": ["type": 1, "name": "Paws", "slogan": "Calm hands"]],
+      "business": ["supportEmail": "old@paws.example", "address": "4 Shore Rd\nMadison, WI 53703"],
+    ]
+    var cleared = businessDetailsForm(older)
+    XCTAssertEqual(cleared["seo.entity.email"], "old@paws.example")
+    XCTAssertEqual(businessDetailsLegacyAddress(cleared, host: older), "4 Shore Rd, Madison, WI 53703")
+    cleared["seo.entity.email"] = ""
+    cleared["seo.entity.slogan"] = ""
+    let second = businessDetailsPayload(cleared, links: [], stored: older)
+    XCTAssertEqual(valueAt(second, "business.supportEmail") as? FirestoreSentinel, .delete)
+    XCTAssertEqual(valueAt(second, "seo.entity.slogan") as? FirestoreSentinel, .delete)
+    XCTAssertNil(valueAt(second, "seo.entity.email"), "nothing stored there, so nothing to delete")
+    XCTAssertEqual(valueAt(second, "seo.entity.name") as? String, "Paws")
+    XCTAssertEqual(valueAt(second, "business.address") as? String, "4 Shore Rd\nMadison, WI 53703", "an untouched address keeps the one-block copy")
+    XCTAssertNil(valueAt(second, "seo.entity.type"), "fields other cards own are not written")
+    XCTAssertNil(valueAt(second, "business.socialLinks"))
+
+    // Nothing typed on an empty site writes no empty map over `seo.entity`.
+    let nothing = businessDetailsPayload(businessDetailsForm([:]), links: [], stored: ["seo": ["entity": ["type": 1]]])
+    XCTAssertTrue(nothing.isEmpty, "\(nothing)")
+
+    XCTAssertNil(businessDetailsEmailError(""))
+    XCTAssertNil(businessDetailsEmailError(" a@b.co "))
+    XCTAssertEqual(businessDetailsEmailError("not an email"), "Please enter an email address, like you@example.com")
+    XCTAssertEqual(socialLinksMax, 8)
+  }
+
+  /// "What your pages can use" reads what is typed: a new slogan shows at once, a cleared email falls back to the stored copy
+  /// as the console's form does, and the images are left out.
+  func testTheTokenListReadsWhatIsTyped() {
+    let host: [String: Any] = ["subdomain": "paws", "logoUrl": "https://cdn.example/logo.png", "business": ["supportEmail": "old@paws.example"]]
+    var form = businessDetailsForm(host)
+    form["seo.entity.slogan"] = "Calm hands"
+    form["seo.entity.email"] = ""
+    let rows = businessDetailsTokenRows(form, links: [SocialLink(label: "IG", url: "https://instagram.com/paws")], host: host)
+    XCTAssertEqual(rows.first { $0.key == "slogan" }?.value, "Calm hands")
+    XCTAssertEqual(rows.first { $0.key == "supportEmail" }?.value, "old@paws.example")
+    XCTAssertEqual(rows.first { $0.key == "instagramUrl" }?.value, "https://instagram.com/paws")
+    XCTAssertNil(rows.first { $0.type == "image" })
+    XCTAssertEqual(rows.first { $0.key == "phone" }?.set, false)
+  }
+
   /// The favicon saves through the console's route (`saveMirroredHostFields`), which re-fans it into every member's site
   /// list row: never a direct write of `seo.favicon`.
   func testTheFaviconSavesThroughTheMembershipsRoute() async throws {

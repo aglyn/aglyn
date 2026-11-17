@@ -20,7 +20,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -30,7 +29,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -88,7 +86,6 @@ import com.aglyn.ui.StatusChip
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.SwitchRow
 import com.aglyn.ui.TextButton
-import com.aglyn.ui.WithTooltip
 import com.aglyn.ui.space
 import kotlinx.coroutines.CancellationException
 
@@ -158,7 +155,7 @@ fun SetupScreen(context: NativePluginContext, initialSection: String? = null) {
               if (!canEdit) NoticeBanner("You can view this site's setup. Changing it needs the author, editor or admin role.", StatusTone.INFO)
               when (section) {
                 SetupSection.DETAILS -> DetailsSection(context, hostId, doc.data, api, canEdit)
-                SetupSection.BUSINESS -> BusinessSection(context, hostId, doc.data, canEdit)
+                SetupSection.BUSINESS -> BusinessSection(context, hostId, doc.data, api, canEdit)
                 SetupSection.SEO -> SeoSection(context, hostId, doc.data, api, canEdit)
                 SetupSection.TRACKING -> TrackingSection(doc.data, api, canEdit)
                 SetupSection.THEME -> ThemeSection(context, hostId, doc.data, api, canEdit)
@@ -264,63 +261,8 @@ private fun DetailsSection(context: NativePluginContext, hostId: String, host: M
       MediaImageField(context, label, fields[path].orEmpty(), { fields[path] = it }, enabled = canEdit)
     }
   }
-  BusinessDetailsCard(host, api, canEdit)
   BuiltInLayoutCard(context, hostId, host, api, canEdit)
   LanguagesCard(host, api, canEdit)
-}
-
-@Composable
-private fun BusinessDetailsCard(host: Map<String, Any?>, api: HostSettingsApi, canEdit: Boolean) {
-  val storedLinks = remember(host) { socialLinksOf(host) }
-  val stored = remember(host) { mapOf("supportEmail" to host.text("business.supportEmail"), "address" to host.text("business.address")) }
-  val fields = rememberFields(stored)
-  val links = remember { mutableStateListOf<SocialLink>().apply { addAll(storedLinks) } }
-  val seededLinks = remember { mutableStateOf(storedLinks) }
-  if (seededLinks.value != storedLinks) {
-    val next = com.aglyn.core.rebased(links.toList(), seededLinks.value, storedLinks)
-    links.clear()
-    links.addAll(next)
-    seededLinks.value = storedLinks
-  }
-  val runner = rememberRunner()
-  FormCard(
-    title = "Business details",
-    description = "The support email, address and social links your pages and footers show.",
-    dirty = fields.dirty(stored) || links.toList() != storedLinks,
-    canSave = canEdit,
-    busy = runner.busy,
-    error = runner.error,
-    notice = runner.notice,
-    onDiscard = { fields.putAll(stored); links.clear(); links.addAll(storedLinks); runner.clear() },
-    onSave = {
-      runner.run("Saved.") {
-        api.replace(
-          mapOf(
-            "business" to mapOf(
-              "supportEmail" to fields["supportEmail"].orEmpty().trim(),
-              "address" to fields["address"].orEmpty().trim(),
-              "socialLinks" to links.filter { it.url.isNotBlank() }.map { mapOf("label" to it.label.trim(), "url" to it.url.trim()) },
-            ),
-          ),
-        )
-      }
-    },
-  ) {
-    CountedTextField("Support email", fields["supportEmail"].orEmpty(), { fields["supportEmail"] = it }, enabled = canEdit, keyboardType = KeyboardType.Email)
-    CountedTextField("Postal address", fields["address"].orEmpty(), { fields["address"] = it }, enabled = canEdit, multiline = true)
-    Text("Social links", style = MaterialTheme.typography.labelLarge)
-    links.forEachIndexed { index, link ->
-      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-        OutlinedTextField(link.label, { links[index] = link.copy(label = it) }, label = { Text("Label") }, singleLine = true, enabled = canEdit, modifier = Modifier.weight(0.4f))
-        OutlinedTextField(link.url, { links[index] = link.copy(url = it) }, label = { Text("URL") }, singleLine = true, enabled = canEdit, modifier = Modifier.weight(0.6f))
-        WithTooltip("Remove ${link.label.ifBlank { "this link" }}") { IconButton(onClick = { links.removeAt(index) }, enabled = canEdit) { Icon(AglynIcons.named("delete"), contentDescription = "Remove ${link.label.ifBlank { "this link" }}") } }
-      }
-    }
-    TextButton(onClick = { links.add(SocialLink("", "")) }, enabled = canEdit && links.size < SOCIAL_LINKS_MAX, modifier = Modifier.testTag("add-social-link")) {
-      Icon(AglynIcons.named("add"), contentDescription = null)
-      Text("Add a link", Modifier.padding(start = space(1f)))
-    }
-  }
 }
 
 @Composable
@@ -385,7 +327,8 @@ private fun SeoSection(context: NativePluginContext, hostId: String, host: Map<S
   var checkedKeywords by remember { mutableStateOf("") }
   SeoCheckCard(context, hostId, host, onChecked = { checkedKeywords = it })
   // The `hostSeo` zone: what a plugin adds under the check, and may propose values for the forms below.
-  val draft = remember { FormDraft() }
+  // The site's draft: what the zone proposes for a field the Business details card owns waits there for it (AGL-4136).
+  val draft = remember(hostId) { FormDraft.forSite(hostId) }
   @Suppress("UNCHECKED_CAST")
   val zone = remember(host, draft, checkedKeywords) { SeoZone(host.at("seo") as? Map<String, Any?>, checkedKeywords, draft::propose) }
   CompositionLocalProvider(LocalSeoZone provides zone) { SlotCards(context, "hostSeo") }
@@ -427,23 +370,22 @@ private fun SeoSection(context: NativePluginContext, hostId: String, host: Map<S
     }
     CountedTextField("Image description", f["seo.imageAlt"].orEmpty(), { f["seo.imageAlt"] = it }, max = SeoLimits.IMAGE_ALT, enabled = canEdit, supporting = "What the social image shows, for screen readers")
   }
-  val entityPaths = listOf("seo.entity.type", "seo.entity.name", "seo.entity.description", "seo.entity.url", "seo.entity.email", "seo.entity.telephone", "seo.entity.contactType", "seo.entity.logo")
-  HostTextCard("Business profile", host, entityPaths, api, canEdit, description = "Who runs the site, as search engines read it.", draft = draft) { f ->
+  // The name, phone, email and address left this card for Setup → Business profile's Business details (AGL-4136).
+  val entityPaths = listOf("seo.entity.type", "seo.entity.description", "seo.entity.url", "seo.entity.contactType", "seo.entity.logo")
+  HostTextCard(
+    "Entity",
+    host,
+    entityPaths,
+    api,
+    canEdit,
+    description = "Your business name, phone, email and address are published here from Setup → Business profile.",
+    draft = draft,
+  ) { f ->
     SelectField("This site is run by", ENTITY_TYPES.map { SelectOption(it.first, it.second) }, f["seo.entity.type"]?.ifEmpty { null }, { f["seo.entity.type"] = it.orEmpty() }, enabled = canEdit, noneLabel = "Not set")
-    CountedTextField("Name", f["seo.entity.name"].orEmpty(), { f["seo.entity.name"] = it }, enabled = canEdit)
     CountedTextField("Description", f["seo.entity.description"].orEmpty(), { f["seo.entity.description"] = it }, max = SeoLimits.ENTITY_DESCRIPTION, multiline = true, enabled = canEdit)
     CountedTextField("Website", f["seo.entity.url"].orEmpty(), { f["seo.entity.url"] = it }, enabled = canEdit, keyboardType = KeyboardType.Uri)
-    CountedTextField("Email", f["seo.entity.email"].orEmpty(), { f["seo.entity.email"] = it }, enabled = canEdit, keyboardType = KeyboardType.Email)
-    CountedTextField("Telephone", f["seo.entity.telephone"].orEmpty(), { f["seo.entity.telephone"] = it }, enabled = canEdit, keyboardType = KeyboardType.Phone)
     CountedTextField("Contact type", f["seo.entity.contactType"].orEmpty(), { f["seo.entity.contactType"] = it }, enabled = canEdit, placeholder = "customer service")
     MediaImageField(context, "Logo", f["seo.entity.logo"].orEmpty(), { f["seo.entity.logo"] = it }, enabled = canEdit)
-  }
-  val addressPaths = listOf("streetAddress" to "Street", "addressLocality" to "City", "addressRegion" to "Region", "postalCode" to "Postal code", "addressCountry" to "Country")
-  HostTextCard("Business address", host, addressPaths.map { "seo.entity.address.${it.first}" }, api, canEdit) { f ->
-    for ((key, label) in addressPaths) {
-      val path = "seo.entity.address.$key"
-      CountedTextField(label, f[path].orEmpty(), { f[path] = it }, enabled = canEdit)
-    }
   }
   LocalBusinessCard(host, api, canEdit)
   HostTextCard(
