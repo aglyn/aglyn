@@ -89,7 +89,7 @@ copy that goes stale.
 | Plan | What it is for |
 |---|---|
 | Free | One site to build and publish — no selling, no custom domain |
-| Starter | One site with your own domain, a store, bookings and the CRM, with the highest transaction fee |
+| Starter | One site with your own domain, a store, bookings, the CRM and the API, with the highest transaction fee |
 | Pro | The full platform: unlimited pages, products, forms, workflows and dataset records, POS, video, recurring billing, members-only content, gift cards, A/B testing, multilingual sites, scheduled publishing, the API and webhooks |
 | Custom | Everything in Pro, plus white-label, single sign-on, a dedicated support commitment, no transaction fee, and limits set by agreement |
 
@@ -248,8 +248,26 @@ Enforcement is switched on by us, at your request.
   paused when bandwidth is.
 - The monthly email allowance caps **campaign sends**. Transactional mail — password
   resets, invites, order confirmations, booking reminders and workflow notifications — is
-  counted toward your usage but is never blocked by the cap, at any plan. Going over shows
+  counted toward your usage but is never blocked by the cap on a paid plan. Going over shows
   up as an overage on the usage rollup rather than as mail your customers never receive.
+  Starter sends no campaigns, and instead includes **1,000 emails a month of everything it
+  sends** — receipts, notices, workflow mail and one-to-one CRM email together; each
+  1,000 past that is billed at the rate on [aglyn.com/pricing](https://aglyn.com/pricing),
+  counted from **November 2026**. Earlier months are counted and shown, never charged.
+- Free sends up to **300 emails a month** — form confirmations, notices and everything
+  else your sites send. Sign-in links, email verification, invitations, password resets
+  and security notices are never counted and always go out. Past 300, your sites' emails
+  are not sent for the rest of the month and are not sent later; sending starts again on
+  the 1st (UTC). **Billing → Usage** shows the count against the 300 and how many emails
+  were not sent, and the owner is told as the month nears the limit and when it reaches
+  it. Upgrading lifts the limit at once.
+- Every plan also has a daily limit on the emails its sites send, as a guard against
+  abuse (Free 200 a day, Starter 1,000). An email refused by it is not sent, the order,
+  booking or form it belonged to never shows it as sent, and **Billing → Usage** counts
+  it.
+- On Starter, CRM records past the included amount are billed up to Pro's included
+  amount; past that, new contacts, companies and deals are refused with a prompt to move
+  to Pro, and every record you already have is kept. Pro has no such ceiling.
 - Usage is rolled up with a **cost-plus estimate** for metered features.
 
 ### The Usage card {#usage-card}
@@ -512,12 +530,17 @@ logged activities, pipelines and custom fields are not counted.
   records are **metered overage** on your monthly invoice, at a per-1,000 rate that is
   lower on Pro — see [pricing](https://aglyn.com/pricing) for the current rate on your
   plan, per extra 1,000 records per month.
-- On **Free**, which includes no CRM, the band is a hard limit on capture: past 100
-  records a site adds no new person — a new visitor keeps their member account and
-  orders, but no contact is kept — and the count of missed captures is recorded. On
-  **Billing → Usage** the band reads **Stored records (organization)**, captioned *At
-  this limit your sites stop adding new people. Working with them is part of the CRM,
-  included from Starter.* The Free plan card names no CRM records.
+- On **Free**, which includes no CRM, the band is a hard limit on capture: your sites
+  keep up to **100 people** — contacts and the leads a form files, together — ready for
+  the CRM when you upgrade. Past 100 a site adds no new person: the form entry is still
+  saved under **Forms** and the visitor sees the normal confirmation, a new visitor keeps
+  their member account and orders, and someone already kept is still updated, but no new
+  contact or lead is made, and none is made later from the entries saved meanwhile.
+  Everyone already kept stays. On **Billing → Usage** the band reads **Stored records
+  (organization)**, and at the limit it says new people are not being added, that form
+  entries are still saved under Forms, and that upgrading keeps adding people; the owner
+  is also told as the count nears and reaches 100. The Free plan card names no CRM
+  records.
 - **The billed count is the size of your CRM at the end of the month**, not its size
   on any other day. The three collections are a running total rather than a monthly
   tally, so a month has to be charged on one moment in it, and that moment is the
@@ -552,8 +575,8 @@ Two things do not depend on the plan:
 - **Capture.** Every form submission, sign-up, order or booking that carries an email
   address updates the person in Contacts, and a form files a lead only when its lead
   routing is on — the same on Free as on a paid plan. Those records are kept and count
-  against the [band](#crm-records); on Free the CRM that shows them is locked, and they
-  are there when the plan includes it.
+  against the [band](#crm-records); on Free the CRM that shows them is locked, they stop
+  growing at 100 people (leads included), and they are there when the plan includes it.
 - **Privacy requests.** Members holding **Privacy requests**, which workspace owners and
   admins hold by default, export every contact and every lead the workspace holds, and
   erase a person by email address, from **Settings → Privacy**
@@ -592,21 +615,30 @@ message. On plans that have the cap, the billing page shows
 
 ## API access
 
-The **customer REST API** is included on **Pro and Custom** — mint scoped API keys
-and call the versioned `/v1` endpoints from anywhere. Requests are **metered per
-organization**:
+The **customer REST API** is included on **Starter, Pro and Custom** — mint scoped API
+keys and call the versioned `/v1` endpoints from anywhere. Requests are **metered per
+organization**, and the plans differ in how much they allow:
 
-| Plan | Included requests / month | Overage |
-|---|---|---|
-| Pro | 1,500 | Metered per additional 1,000 |
-| Custom | Set by your agreement | — |
+| | Starter | Pro | Custom |
+|---|---|---|---|
+| Included requests / month | 500 | 1,500 | Set by your agreement |
+| Past the included requests | Metered per additional 1,000 | Metered per additional 1,000 | — |
+| Monthly ceiling | 20,000 requests, then refused until the month turns | None | Set by your agreement |
+| Requests per minute, whole workspace | 120 | 600 | Set by your agreement |
+| Requests per minute, per key | 120 | 120 | 120 |
+| Webhooks and Zapier hooks | Not included | Included | Included |
 
 - Requests past the included quota **keep working** and bill as metered overage on your
-  monthly invoice — never a hard wall mid-integration.
+  monthly invoice. On Starter they stop at the monthly ceiling: the API answers `429`
+  until the next calendar month (UTC). Pro has no ceiling.
+- The workspace limit counts every key together, so adding keys doesn't add capacity
+  past it. See [Rate limits & usage](/api/rate-limits).
+- On any plan, a workspace that can't be billed for overage — no active subscription,
+  or a 100% discount on the whole bill — stops at its included requests.
 - The billing page shows an **API requests** meter, and the usage-cap banner warns at 80%
   and 100% of the included quota.
-- Only requests that pass authentication and the rate limit are counted — rejected calls
-  (bad key, wrong plan, rate-limited) are never billed.
+- Only requests that pass authentication and the rate limits are counted — rejected calls
+  (bad key, wrong plan, rate-limited, past the ceiling) are never billed.
 
 ### Connected apps {#connected-apps}
 

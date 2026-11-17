@@ -21,8 +21,14 @@
  * console session chokepoint). This file owns the pipeline (auth, entitlement,
  * rate limit, error envelope); resource handlers are wired in AGL-618.
  */
-import { ApiErrors } from '@aglyn/tenant-data-admin'
-import { authenticateApiV1 } from '../../../../utils/api-v1'
+import { ApiErrors, withResponseHeaders } from '@aglyn/tenant-data-admin'
+import {
+  API_BILLING_UNITS_HEADER,
+  apiRequestBodyBytes,
+  apiResponseBodyBytes,
+  authenticateApiV1,
+  chargeApiRequestSize,
+} from '../../../../utils/api-v1'
 import {
   isApiDescriptionPath,
   serveApiDescription,
@@ -53,7 +59,20 @@ async function dispatch(
 
   const authenticated = await authenticateApiV1(request)
   if (authenticated instanceof Response) return authenticated
-  return serveApiV1(request, authenticated.context, segments)
+  const { context } = authenticated
+
+  // Measured BEFORE a handler reads the body (AGL-4227), so the size charged
+  // is the size that arrived.
+  const requestBytes = await apiRequestBodyBytes(request)
+  // Everything an authenticated `/v1` request can reach, service paths
+  // included, is answered by the one function MCP's tools call too (AGL-4225).
+  const response = await serveApiV1(request, context, segments)
+  const units = chargeApiRequestSize(
+    context,
+    requestBytes,
+    await apiResponseBodyBytes(response),
+  )
+  return withResponseHeaders(response, { [API_BILLING_UNITS_HEADER]: String(units) })
 }
 
 /**

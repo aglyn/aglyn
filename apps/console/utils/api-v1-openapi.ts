@@ -403,7 +403,10 @@ export function buildCustomerApiOpenApi(
         '400': errorResponse('Validation failed. No data was read.'),
         '401': errorResponse('Missing, malformed, revoked or expired key.'),
         '404': errorResponse('No such record — or no such endpoint.'),
-        '429': errorResponse('Rate limit exceeded. `Retry-After` says how long.'),
+        '429': errorResponse(
+          'A limit refused it; `code` says which — `key_rate_limit`, `workspace_rate_limit`, ' +
+            '`monthly_request_ceiling` or `monthly_request_quota` — and `Retry-After` says how long.',
+        ),
       }
       if (op.entitlement) {
         responses['403'] = errorResponse(
@@ -632,6 +635,11 @@ export function buildCustomerApiOpenApi(
     'X-RateLimit-Limit': { $ref: '#/components/headers/XRateLimitLimit' },
     'X-RateLimit-Remaining': { $ref: '#/components/headers/XRateLimitRemaining' },
     'X-RateLimit-Reset': { $ref: '#/components/headers/XRateLimitReset' },
+    'X-RateLimit-Scope': { $ref: '#/components/headers/XRateLimitScope' },
+    'X-Workspace-RateLimit-Limit': { $ref: '#/components/headers/XWorkspaceRateLimitLimit' },
+    'X-Workspace-RateLimit-Remaining': { $ref: '#/components/headers/XWorkspaceRateLimitRemaining' },
+    'X-Workspace-RateLimit-Reset': { $ref: '#/components/headers/XWorkspaceRateLimitReset' },
+    'X-Api-Billing-Units': { $ref: '#/components/headers/XApiBillingUnits' },
   }
   for (const [pathName, pathItem] of Object.entries(paths)) {
     if (pathName === '/v1/openapi.json') continue
@@ -694,6 +702,11 @@ export function buildCustomerApiOpenApi(
         'disagree. The RFC `Reset` is SECONDS REMAINING; the legacy one is a ' +
         'Unix timestamp. On a `401` they describe the per-address lookup ' +
         'budget rather than a key\'s, because the key was never identified.\n\n' +
+        'Two per-minute limits apply: the KEY\'s, and the WORKSPACE\'s across ' +
+        'all of its keys, sized by plan. `X-RateLimit-Scope` says which one ' +
+        'the `RateLimit-*` headers describe — the key\'s on every response but ' +
+        'a workspace refusal — and `X-Workspace-RateLimit-*` always report ' +
+        'the workspace\'s.\n\n' +
         `Full documentation: ${options.documentationUrl}`,
       contact: { name: options.brandName, url: options.documentationUrl },
     },
@@ -755,6 +768,11 @@ export function buildCustomerApiOpenApi(
         XRateLimitRemaining: { description: 'Same number as `RateLimit-Remaining`.', schema: { type: 'integer' } },
         XRateLimitReset: { description: 'When the window resets, as a Unix TIMESTAMP in seconds — not a duration. Not interchangeable with `RateLimit-Reset`.', schema: { type: 'integer' } },
         RetryAfter: { description: 'Seconds to wait. Sent with a 429.', schema: { type: 'integer' } },
+        XRateLimitScope: { description: 'Which budget the `RateLimit-*` headers describe: `key`, or `workspace` on a refusal by the workspace limit.', schema: { type: 'string', enum: ['key', 'workspace'] } },
+        XWorkspaceRateLimitLimit: { description: 'Requests the whole workspace may make per minute, across every key. Absent where the plan sets no workspace limit.', schema: { type: 'integer' } },
+        XWorkspaceRateLimitRemaining: { description: 'Requests the workspace has left in the current minute.', schema: { type: 'integer' } },
+        XApiBillingUnits: { description: 'Billed units this request was charged on the monthly quota: one per started 256 KB (262,144 bytes) of the larger of its request and response body, never fewer than one.', schema: { type: 'integer', minimum: 1 } },
+        XWorkspaceRateLimitReset: { description: 'When the workspace window resets, as a Unix timestamp in seconds.', schema: { type: 'integer' } },
       },
       schemas,
     },

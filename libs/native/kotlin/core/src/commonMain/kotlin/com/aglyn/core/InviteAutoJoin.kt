@@ -25,6 +25,13 @@ data class InviteJoinState(val invites: List<PendingInvite> = emptyList(), val s
 
   /** The invitations whose join the server has not let finish ("Your access to Acme is almost ready"). */
   val waiting: List<PendingInvite> get() = invites.filter { statuses[it.id] == InviteJoinStatus.WAITING }
+
+  /**
+   * A join this session is in flight or has succeeded (the console's `joining`, AGL-4047). An accepted invitation leaves the
+   * server's list before its membership reaches the workspace list, and first-run provisioning reads this so that gap never looks
+   * like an account with no invitation and no workspace.
+   */
+  val joinedOrJoining: Boolean get() = statuses.values.any { it != InviteJoinStatus.WAITING }
 }
 
 /**
@@ -49,8 +56,15 @@ class InviteAutoJoin(
   private var forUid: String? = null
 
   /**
-   * Reads [uid]'s invitations and accepts each one not tried yet this session; answers the workspaces joined, so the caller
-   * can open one. Does nothing during a support session.
+   * The workspace the last run opens: the newest invitation's, when that run joined it (AGL-4047). Of several invitations, a
+   * person is opened into the one they were invited to most recently; the rest join where they stand.
+   */
+  var opens: String? = null
+    private set
+
+  /**
+   * Reads [uid]'s invitations and accepts each one not tried yet this session, newest first; answers the workspaces joined,
+   * newest first, and sets [opens]. Does nothing during a support session.
    */
   suspend fun run(uid: String, impersonating: Boolean): List<String> {
     if (impersonating) return emptyList()
@@ -60,7 +74,8 @@ class InviteAutoJoin(
         attempted.clear()
         mutable.value = InviteJoinState()
       }
-      val found = list()
+      opens = null
+      val found = newestInvitesFirst(list())
       mutable.value = InviteJoinState(found, mutable.value.statuses)
       val joined = mutableListOf<String>()
       for (invite in found) {
@@ -69,6 +84,7 @@ class InviteAutoJoin(
         val status = try {
           accept(invite)
           joined += invite.orgId
+          if (invite.id == found.first().id) opens = invite.orgId
           InviteJoinStatus.JOINED
         } catch (error: CancellationException) {
           throw error
