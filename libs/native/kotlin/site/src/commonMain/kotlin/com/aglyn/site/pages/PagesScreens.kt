@@ -365,6 +365,8 @@ private fun PageDetail(
       // What the page is doing, then who touched it (the console's page view, AGL-4011): its traffic above its activity.
       com.aglyn.site.analytics.PageTrafficCard(context.firestore, context.api, hostId, page.id, upgrade = { context.navigate("core.billing.plans") })
       com.aglyn.site.analytics.SiteActivityCard(context.firestore, context.api, hostId, targetId = page.id, title = "Page Activity")
+      // The stored document (the console's Raw JSON card), read only once it is opened.
+      com.aglyn.site.LiveRawJsonCard(context.firestore, "hosts/$hostId/screens/${page.id}")
     }
   }
 }
