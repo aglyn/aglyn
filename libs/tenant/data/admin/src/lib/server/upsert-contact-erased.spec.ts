@@ -125,8 +125,7 @@ jest.mock('./crm-records', () => ({
   capturePeopleCount: async (_org: unknown, orgRef: any, contacts: any) =>
     (await (jest.requireMock('./crm-records') as any).countCrmRecords(orgRef, contacts)).crmRecordsCount,
   captureAdmitsPerson: async (org: unknown, orgRef: any, contacts: any) =>
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    require('@aglyn/aglyn/server').checkCrmRecordsQuota(
+    (jest.requireMock('@aglyn/aglyn/server') as any).checkCrmRecordsQuota(
       org,
       (await (jest.requireMock('./crm-records') as any).countCrmRecords(orgRef, contacts)).crmRecordsCount,
     ).allowed,

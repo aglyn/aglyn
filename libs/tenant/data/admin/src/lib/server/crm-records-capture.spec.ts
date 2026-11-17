@@ -22,7 +22,7 @@
  * Paid plans get the by-hand verdict unchanged.
  */
 
-import { crmCaptureAdmitted } from './crm-records'
+import { captureAdmitsPerson } from './crm-records'
 
 function orgRefWith(counts: Record<string, number>) {
   const collection = (name: string) => ({
@@ -36,23 +36,23 @@ const STARTER = { plan: 'starter', billingStatus: 'active' } as never
 
 describe('one band for every person a capture keeps (AGL-4227)', () => {
   it('Free admits a new person while contacts and leads together are under 100', async () => {
-    await expect(crmCaptureAdmitted(FREE, orgRefWith({ contacts: 40, leads: 59 }))).resolves.toBe(true)
+    await expect(captureAdmitsPerson(FREE, orgRefWith({ contacts: 40, leads: 59 }))).resolves.toBe(true)
   })
 
   it('Free refuses the 101st person when leads fill the band, though contacts alone would not', async () => {
-    await expect(crmCaptureAdmitted(FREE, orgRefWith({ contacts: 40, leads: 60 }))).resolves.toBe(false)
+    await expect(captureAdmitsPerson(FREE, orgRefWith({ contacts: 40, leads: 60 }))).resolves.toBe(false)
   })
 
   it('Free refuses past the band on records alone, as the by-hand path does', async () => {
-    await expect(crmCaptureAdmitted(FREE, orgRefWith({ contacts: 60, companies: 30, deals: 10 }))).resolves.toBe(false)
+    await expect(captureAdmitsPerson(FREE, orgRefWith({ contacts: 60, companies: 30, deals: 10 }))).resolves.toBe(false)
   })
 
   it('a workspace already above the band keeps what it has and simply gains no one', async () => {
-    await expect(crmCaptureAdmitted(FREE, orgRefWith({ contacts: 20, leads: 4_000 }))).resolves.toBe(false)
+    await expect(captureAdmitsPerson(FREE, orgRefWith({ contacts: 20, leads: 4_000 }))).resolves.toBe(false)
   })
 
   it('a paid plan meters past its band and leads never count: Starter only stops at its ceiling', async () => {
-    await expect(crmCaptureAdmitted(STARTER, orgRefWith({ contacts: 5_000, leads: 50_000 }))).resolves.toBe(true)
-    await expect(crmCaptureAdmitted(STARTER, orgRefWith({ contacts: 10_000 }))).resolves.toBe(false)
+    await expect(captureAdmitsPerson(STARTER, orgRefWith({ contacts: 5_000, leads: 50_000 }))).resolves.toBe(true)
+    await expect(captureAdmitsPerson(STARTER, orgRefWith({ contacts: 10_000 }))).resolves.toBe(false)
   })
 })
