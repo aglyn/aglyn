@@ -38,6 +38,7 @@ import {
   bandwidthCapGraceUntil,
   bandwidthCapMonthKey,
   bandwidthCapShouldEngage,
+  bandwidthGraceOutlastsMonth,
   formatBandwidthGraceDeadline,
   type OrgBandwidthCap,
   checkDataStorageQuota,
@@ -988,8 +989,14 @@ async function handler(request: Request): Promise<Response> {
         capped.push({ orgId: org.id, month, graceUntil: engaged.graceUntil })
         bandwidthGraceUntil = engaged.graceUntil
       }
+      // A grace that outlasts the month brings no pause (the count starts
+      // again on the 1st), so it names no deadline (AGL-4232).
+      const bandwidthGraceOutlasts =
+        bandwidthGraceUntil !== null && bandwidthGraceOutlastsMonth(bandwidthGraceUntil, month)
       const bandwidthGraceDeadline =
-        bandwidthGraceUntil === null ? null : formatBandwidthGraceDeadline(bandwidthGraceUntil)
+        bandwidthGraceUntil === null || bandwidthGraceOutlasts
+          ? null
+          : formatBandwidthGraceDeadline(bandwidthGraceUntil)
 
       /**
        * A band a plugin declares, as the sweep words and sends it: the lead
@@ -1431,7 +1438,9 @@ async function handler(request: Request): Promise<Response> {
           // The one-time grace (AGL-4232): the deadline is the news.
           ...(bandwidthGraceDeadline && !metersInfra
             ? { reachedTitle: `Bandwidth limit reached: upgrade or your sites pause on ${bandwidthGraceDeadline}` }
-            : {}),
+            : bandwidthGraceOutlasts && !metersInfra
+              ? { reachedTitle: "Bandwidth limit reached: your sites stay online this month" }
+              : {}),
           lead: () =>
             `${workspace.possessive} sites have used about ` +
             usagePhrase({
@@ -1448,7 +1457,14 @@ async function handler(request: Request): Promise<Response> {
               'is billed on your monthly invoice — upgrade in Billing for a ' +
               'bigger allowance, or set a monthly cap there if you would ' +
               'rather it stopped.'
-            : bandwidthGraceDeadline
+            : bandwidthGraceOutlasts
+              ? 'Your sites stay online: the month ends before their extra time ' +
+                'would, and the count starts again on the 1st. Nothing is charged ' +
+                'for the extra traffic. That extra time is given once per site and ' +
+                'has now been used, so in a later month a site past its limit ' +
+                'pauses straight away. Upgrade in Billing to keep them online ' +
+                'whatever their traffic.'
+              : bandwidthGraceDeadline
               ? `Your sites stay online until ${bandwidthGraceDeadline}. ` +
                 'Upgrade in Billing before then to keep them online; if you ' +
                 "don't, visitors see a \"temporarily unavailable\" notice from " +

@@ -247,6 +247,21 @@ export function bandwidthGraceAvailable(
   )
 }
 
+/** When a `YYYY-MM` month ends: midnight UTC on the 1st of the next. */
+export function bandwidthCapMonthEndMs(month: string): number {
+  const [year, monthIndex] = month.split('-').map(Number)
+  return Date.UTC(year, monthIndex, 1)
+}
+
+/**
+ * Whether a grace ends only after the month it was granted in (AGL-4232).
+ * Then no pause comes: the new month's count starts at zero, and the site
+ * pauses only when it next passes the band, with no grace left.
+ */
+export function bandwidthGraceOutlastsMonth(graceUntil: number, month: string): boolean {
+  return graceUntil >= bandwidthCapMonthEndMs(month)
+}
+
 /**
  * The grace deadline as the owner reads it: an unambiguous UTC date and
  * time, e.g. "Thursday, November 19 at 3:04 PM UTC".
@@ -319,9 +334,25 @@ export function bandwidthCapApplies(
  */
 export function bandwidthGraceOwnerNotice(options: {
   graceUntil: number
+  /** The `YYYY-MM` the cap engaged for, which decides whether a pause comes. */
+  month: string
   used: string
   resumesOn: string
 }): BandwidthCapNotice {
+  // A grace begun in a month's last 72 hours outlasts it: the count starts
+  // again on the 1st, so no pause comes, and saying a date would be false.
+  if (bandwidthGraceOutlastsMonth(options.graceUntil, options.month)) {
+    return {
+      title: '{site} is past its monthly traffic limit and stays online',
+      body:
+        `{site} has used ${options.used} this month. It stays online: the ` +
+        `month ends before its extra time would, and its count starts again ` +
+        `on ${options.resumesOn}. Nothing is charged for the extra traffic. ` +
+        'That extra time is given once per site and has now been used, so in a ' +
+        'later month a site past its limit pauses straight away. Upgrade in ' +
+        'Billing to keep it online whatever its traffic.',
+    }
+  }
   const deadline = formatBandwidthGraceDeadline(options.graceUntil)
   return {
     title: `Upgrade or {site} pauses on ${deadline}`,

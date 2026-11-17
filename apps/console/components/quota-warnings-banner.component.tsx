@@ -34,6 +34,7 @@ import { Alert, Button } from '@mui/material'
 import {
   bandwidthCapEngaged,
   bandwidthCapGraceUntil,
+  bandwidthGraceOutlastsMonth,
   formatBandwidthGraceDeadline,
 } from '@aglyn/aglyn/app-utils/bandwidth-cap'
 import { collection, getCountFromServer } from 'firebase/firestore'
@@ -704,6 +705,13 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
    * temporarily unavailable; this is where the reason and the upgrade are.
    */
   const bandwidthGraceUntil = bandwidthCapGraceUntil(org as never)
+  // A grace that outlasts the month brings no pause, so no date is named.
+  const graceOutlastsMonth =
+    bandwidthGraceUntil !== null &&
+    bandwidthGraceOutlastsMonth(
+      bandwidthGraceUntil,
+      String((org as { bandwidthCap?: { month?: string } } | undefined)?.bandwidthCap?.month ?? ''),
+    )
   if (bandwidthGraceUntil !== null || bandwidthCapEngaged(org as never)) {
     const upgrade = orgWideViewer ? (
       <AppLink
@@ -722,7 +730,13 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
         action={upgrade}
         data-testid="bandwidth-pause-banner"
       >
-        {bandwidthGraceUntil !== null
+        {graceOutlastsMonth
+          ? "Your sites are past this month's included bandwidth and stay online: the " +
+            'month ends before their extra time would. That extra time is now used, so ' +
+            `next time they pause at the limit. ${
+              orgWideViewer ? 'Upgrade' : 'A workspace admin can upgrade'
+            } to keep them online whatever their traffic.`
+          : bandwidthGraceUntil !== null
           ? `${orgWideViewer ? 'Upgrade' : 'A workspace admin needs to upgrade'} or ` +
             `your sites pause on ${formatBandwidthGraceDeadline(bandwidthGraceUntil)}. ` +
             "They have used this month's included bandwidth and stay online until " +

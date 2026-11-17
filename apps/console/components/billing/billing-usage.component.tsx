@@ -49,6 +49,7 @@ import { Alert, Link, LinearProgress, Stack, Typography } from '@mui/material'
 import {
   bandwidthCapEngaged,
   bandwidthCapGraceUntil,
+  bandwidthGraceOutlastsMonth,
   formatBandwidthGraceDeadline,
 } from '@aglyn/aglyn/app-utils/bandwidth-cap'
 import {
@@ -862,6 +863,9 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   // the sites are paused now.
   const bandwidthGraceUntil = bandwidthCapGraceUntil(org)
   const bandwidthPaused = bandwidthCapEngaged(org)
+  const bandwidthGraceOutlasts =
+    bandwidthGraceUntil !== null &&
+    bandwidthGraceOutlastsMonth(bandwidthGraceUntil, String(org?.bandwidthCap?.month ?? ''))
   /*
    * API requests past the plan's included band, priced.
    *
@@ -1272,7 +1276,14 @@ export function BillingUsageComponent(props: BillingUsageProps) {
       {/* THE FREE PLAN'S PAUSE, said to the owner (AGL-4232): the one-time
           grace's deadline while it runs, or that the sites are paused. The
           visitor's notice says neither; this is where the upgrade is. */}
-      {bandwidthGraceUntil !== null ? (
+      {bandwidthGraceOutlasts ? (
+        <Alert severity="warning" sx={{ mb: 2 }} data-testid="bandwidth-grace-alert">
+          {"Your sites are past this month's included bandwidth and stay online: the " +
+            'month ends before their extra time would. That extra time is now used, so ' +
+            'next time they pause at the limit. Upgrade to keep them online whatever ' +
+            'their traffic.'}
+        </Alert>
+      ) : bandwidthGraceUntil !== null ? (
         <Alert severity="warning" sx={{ mb: 2 }} data-testid="bandwidth-grace-alert">
           {`Upgrade or your sites pause on ${formatBandwidthGraceDeadline(bandwidthGraceUntil)}. ` +
             'They are past this month\'s included bandwidth and stay online until then; ' +

@@ -96,6 +96,10 @@ console and by email — so you can upgrade before your visitors are turned away
 upgrade before then, nothing pauses. If you don't, the site pauses at that time, as above,
 until the month turns over.
 
+If a site first goes over in the last three days of a month, its 72 hours would end after
+the month does. Then nothing pauses: the count starts again on the 1st, and you are told
+the site stays online and that its extra time has been used.
+
 This happens **once per site, ever**. In any later month, a site that goes over pauses as
 soon as it passes its band. A new month, changing plans and changing back, or anything else
 does not give the same site a second grace.

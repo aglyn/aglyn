@@ -42,6 +42,7 @@ import {
   bandwidthCapNotice,
   bandwidthCapShouldEngage,
   bandwidthGraceForEngagement,
+  bandwidthGraceOutlastsMonth,
   bandwidthGraceOwnerNotice,
   formatBandwidthGraceDeadline,
 } from './bandwidth-cap'
@@ -340,6 +341,7 @@ describe('the one-time grace', () => {
   it('tells the OWNER the deadline in plain words, with the way past it', () => {
     const notice = bandwidthGraceOwnerNotice({
       graceUntil: Date.UTC(2026, 10, 19, 15, 4),
+      month: '2026-11',
       used: 'the 2,070 page views its plan includes',
       resumesOn: 'December 1',
     })
@@ -351,6 +353,27 @@ describe('the one-time grace', () => {
     expect(notice.body).toMatch(/Upgrade in Billing before then/)
     expect(notice.body).toMatch(/until December 1/)
     expect(notice.body).toMatch(/once per site/)
+  })
+
+  it('a grace that outlasts the month names no pause date, because none comes', () => {
+    // Granted on November 29: 72 hours ends December 2, after the 1st resets
+    // the count, so the site never pauses on that date.
+    const graceUntil = Date.UTC(2026, 11, 2, 9, 0)
+    expect(bandwidthGraceOutlastsMonth(graceUntil, '2026-11')).toBe(true)
+    expect(bandwidthGraceOutlastsMonth(Date.UTC(2026, 10, 30, 23, 59), '2026-11')).toBe(false)
+    // The boundary itself: ending AT the reset is no pause either.
+    expect(bandwidthGraceOutlastsMonth(Date.UTC(2026, 11, 1), '2026-11')).toBe(true)
+    const notice = bandwidthGraceOwnerNotice({
+      graceUntil,
+      month: '2026-11',
+      used: 'the 2,070 page views its plan includes',
+      resumesOn: 'December 1',
+    })
+    expect(notice.title).toBe('{site} is past its monthly traffic limit and stays online')
+    expect(`${notice.title} ${notice.body}`).not.toMatch(/pauses on|until \w+day/)
+    expect(notice.body).toMatch(/stays online/)
+    expect(notice.body).toMatch(/starts again on December 1/)
+    expect(notice.body).toMatch(/has now been used/)
   })
 })
 

@@ -209,6 +209,7 @@ export async function engageMediaBandwidthCap(
         used:
           `the ${included} GB of traffic its plan includes (video, audio and ` +
           `files from your media library count ${ORIGIN_MEDIA_BANDWIDTH_WEIGHT}× toward it)`,
+        month,
         resumesOn: monthRolloverLabel(month),
       })
       await Promise.all(

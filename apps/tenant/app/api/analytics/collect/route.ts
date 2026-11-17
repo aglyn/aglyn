@@ -522,6 +522,7 @@ async function engageFreePlanBandwidthCap(options: {
       const notice = Aglyn.bandwidthGraceOwnerNotice({
         graceUntil: engaged.graceUntil,
         used: `the ${includedViews} page views its plan includes`,
+        month,
         resumesOn: monthRolloverLabel(month),
       })
       await notifyHostManagers(hostId, {

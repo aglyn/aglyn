@@ -512,6 +512,21 @@ describe('the alert says which of the two actually happens (AGL-2070)', () => {
     ])
   })
 
+  it('a grace that OUTLASTS the month tells the owner no pause date (AGL-4232)', async () => {
+    const month = new Date().toISOString().slice(0, 7)
+    const [year, monthIndex] = month.split('-').map(Number)
+    const graceUntil = Date.UTC(year, monthIndex, 1, 1)
+    mockOrgs = [
+      { id: 'org-1', plan: 'free', bandwidthCap: { month, engagedAt: 1, graceUntil } as never },
+    ]
+    mockHosts = [{ id: 'site-a', orgId: 'org-1', pageViews: VIRAL, bandwidthGraceUsedAt: 1 }]
+    await run()
+    const alert = bandwidthAlert()
+    expect(alert?.title).toBe('Bandwidth limit reached: your sites stay online this month')
+    expect(alert?.body).toMatch(/stay online: the month ends before their extra time would/)
+    expect(`${alert?.title} ${alert?.body}`).not.toMatch(/pause on|until \w+day/)
+  })
+
   it('FREE at 100% after its site already had the grace is paused at once', async () => {
     // The wall wording was already what this branch produced; what changed is
     // that it stopped being a lie. Before the cap the customer read "you've

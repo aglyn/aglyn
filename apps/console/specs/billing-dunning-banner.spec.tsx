@@ -245,12 +245,39 @@ describe('the bandwidth pause banner (AGL-4232)', () => {
   })
 
   it('names the deadline while the grace runs, with the upgrade path', () => {
-    const graceUntil = Date.UTC(2099, 0, 1, 15, 4)
+    // A deadline inside this month: a minute from now.
+    const graceUntil = Date.now() + 60_000
     renderBanner({ slug: 'acme', bandwidthCap: { month, engagedAt: 1, graceUntil } })
     expect(
       screen.getByText(/^Upgrade or your sites pause on \w+day, \w+ \d+ at \d+:\d\d [AP]M UTC\./),
     ).toBeTruthy()
     expect(screen.getByText('Upgrade')).toBeTruthy()
+  })
+
+  it('a non-admin is told an admin must upgrade, with no button they cannot use', () => {
+    mockOrg.value = { slug: 'acme', bandwidthCap: { month, engagedAt: 1, graceUntil: Date.now() + 60_000 } }
+    mockScope.orgWide = false
+    mockScope.loaded = true
+    render(<QuotaWarningsBanner />)
+    expect(screen.getByText(/^A workspace admin needs to upgrade or your sites pause on /)).toBeTruthy()
+    expect(screen.queryByText('Upgrade')).toBeNull()
+  })
+
+  it('a non-admin is told an admin can upgrade a paused site', () => {
+    mockOrg.value = { slug: 'acme', bandwidthCap: { month, engagedAt: 1 } }
+    mockScope.orgWide = false
+    mockScope.loaded = true
+    render(<QuotaWarningsBanner />)
+    expect(screen.getByText(/A workspace admin can upgrade to bring them back/)).toBeTruthy()
+  })
+
+  it('a grace that outlasts the month names no pause date', () => {
+    const [year, monthIndex] = month.split('-').map(Number)
+    // Ends an hour after this month does: the count resets first.
+    const graceUntil = Date.UTC(year, monthIndex, 1, 1)
+    renderBanner({ slug: 'acme', bandwidthCap: { month, engagedAt: 1, graceUntil } })
+    expect(screen.getByText(/stay online: the month ends before their extra time would/)).toBeTruthy()
+    expect(screen.queryByText(/pause on/)).toBeNull()
   })
 
   it('says the sites are paused once the grace is over, or when there was none', () => {
