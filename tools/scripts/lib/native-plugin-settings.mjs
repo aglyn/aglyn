@@ -37,11 +37,31 @@ function helpFor(field) {
 }
 
 /**
+ * The schema's pre-save refusals the apps can state (the console's `validate`), as `{ when, text }` over the form:
+ * each `needs` entry is a field the schema's switch requires before it can be turned on. The words are the console's
+ * own: `validate` is asked with the switch on and the field empty, and a rule it no longer refuses fails the
+ * generator rather than drifting.
+ */
+export function refusals(schema, needs = [], { site = false } = {}) {
+  return needs.flatMap(({ on, field }) => {
+    const text = schema.validate?.({ ...schema.defaults, [on]: true, [field]: '' })
+    if (!text) throw new Error(`${schema.pluginId}: validate no longer refuses ${on} without ${field}`)
+    if (!site) return [{ when: `form.${on} && !form.${field}`, text }]
+    // On a site, the values it will RUN with: its own override where it has one, else the workspace's.
+    return [
+      { when: `form.ov_${on} && form.${on} && form.ov_${field} && !form.${field}`, text },
+      { when: `form.ov_${on} && form.${on} && !form.ov_${field} && !data.org.${field}`, text },
+      { when: `!form.ov_${on} && data.org.${on} && form.ov_${field} && !form.${field}`, text },
+    ]
+  })
+}
+
+/**
  * One schema as a native screen spec. `checking` names what the form's Save holds on while the device cache alone has
  * answered ("Checking your plugin settings with the server…"); the spec file passes it, and a marketplace plugin's
  * run-time screen (`manifestSettingsScreen`) is this screen without it.
  */
-export function pluginSettingsScreen({ schema, label, checking }) {
+export function pluginSettingsScreen({ schema, label, checking, needs }) {
   const id = schema.pluginId
   const fields = schema.fields.map((field) => {
     const out = {
@@ -76,6 +96,7 @@ export function pluginSettingsScreen({ schema, label, checking }) {
         object: 'data.settings',
         footer: 'A site can override these on its own plugin page.',
         fields,
+        ...(needs?.length ? { refuse: refusals(schema, needs) } : {}),
         submit: {
           label: 'Save settings',
           write: { doc: `orgs/{org.id}/pluginSettings/${id}`, fields: { ...written, updatedBy: '{user.uid}' } },
@@ -92,7 +113,7 @@ export function pluginSettingsScreen({ schema, label, checking }) {
  * own document holds the key); a save writes the overridden fields and removes the rest, and the site's
  * pages are republished when the schema says its fields shape them.
  */
-export function sitePluginSettingsScreen({ schema, label }) {
+export function sitePluginSettingsScreen({ schema, label, needs }) {
   const id = schema.pluginId
   const fields = []
   const written = { updatedBy: '{user.uid}' }
@@ -139,6 +160,7 @@ export function sitePluginSettingsScreen({ schema, label }) {
         id: 'settings',
         footer: 'A field you do not override follows the workspace value.',
         fields,
+        ...(needs?.length ? { refuse: refusals(schema, needs, { site: true }) } : {}),
         submit: {
           label: 'Save settings',
           write: { doc: `hosts/{site.id}/pluginSettings/${id}`, fields: written },

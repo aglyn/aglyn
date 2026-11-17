@@ -3612,6 +3612,12 @@
               ]
             }
           ],
+          "refuse": [
+            {
+              "when": "form.enabled && !form.apiKey",
+              "text": "Add your Weglot API key before turning translation on."
+            }
+          ],
           "submit": {
             "label": "Save settings",
             "write": {
@@ -3775,6 +3781,20 @@
                   "label": "Bottom left"
                 }
               ]
+            }
+          ],
+          "refuse": [
+            {
+              "when": "form.ov_enabled && form.enabled && form.ov_apiKey && !form.apiKey",
+              "text": "Add your Weglot API key before turning translation on."
+            },
+            {
+              "when": "form.ov_enabled && form.enabled && !form.ov_apiKey && !data.org.apiKey",
+              "text": "Add your Weglot API key before turning translation on."
+            },
+            {
+              "when": "!form.ov_enabled && data.org.enabled && form.ov_apiKey && !form.apiKey",
+              "text": "Add your Weglot API key before turning translation on."
             }
           ],
           "submit": {

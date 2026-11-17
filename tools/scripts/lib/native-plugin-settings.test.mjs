@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { pluginSettingsScreen, sitePluginSettingsScreen } from './native-plugin-settings.mjs'
+import { pluginSettingsScreen, refusals, sitePluginSettingsScreen } from './native-plugin-settings.mjs'
 
 const schema = {
   pluginId: 'demo',
@@ -61,4 +61,18 @@ test('a manifest of the same fields draws the screen a built-in plugin gets', as
     assert.equal(drawn.id, `marketplace.pluginSettings.${candidate.pluginId}`)
   }
   assert.equal(manifestSettingsScreen('demo', 'Demo', {}), null)
+})
+
+test('a switch that needs a field refuses in the console\'s own words, and fails the generator once it no longer does', () => {
+  const needing = {
+    pluginId: 'demo',
+    fields: [],
+    defaults: { enabled: false, apiKey: '' },
+    validate: (values) => (values.enabled === true && !values.apiKey ? 'Add the key first.' : null),
+  }
+  const needs = [{ on: 'enabled', field: 'apiKey' }]
+  assert.deepEqual(refusals(needing, needs), [{ when: 'form.enabled && !form.apiKey', text: 'Add the key first.' }])
+  assert.equal(refusals(needing, needs, { site: true }).length, 3)
+  assert.deepEqual(pluginSettingsScreen({ schema: needing, label: 'Demo', needs }).blocks.at(-1).refuse[0].text, 'Add the key first.')
+  assert.throws(() => refusals({ ...needing, validate: () => null }, needs), /no longer refuses/)
 })

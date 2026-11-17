@@ -74,7 +74,13 @@ const PLUGIN_SETTINGS = [
   { module: 'libs/plugins/commerce/src/lib/plugin-config.ts', name: 'COMMERCE_CONFIG_SCHEMA', label: 'Commerce' },
   { module: 'libs/plugins/bookings/src/lib/plugin-config.ts', name: 'BOOKINGS_CONFIG_SCHEMA', label: 'Bookings' },
   { module: 'libs/plugins/waivers/src/lib/constants/settings.ts', name: 'WAIVERS_CONFIG_SCHEMA', label: 'Waivers' },
-  { module: 'libs/plugins/weglot/src/lib/model/weglot-settings.ts', name: 'WEGLOT_CONFIG_SCHEMA', label: 'Weglot' },
+  // Turning Weglot on needs its API key (the console's validateWeglotConfig), refused before the save as there.
+  {
+    module: 'libs/plugins/weglot/src/lib/model/weglot-settings.ts',
+    name: 'WEGLOT_CONFIG_SCHEMA',
+    label: 'Weglot',
+    needs: [{ on: 'enabled', field: 'apiKey' }],
+  },
 ]
 
 // The planner bounds a day in local time; the cases are recorded in UTC and
@@ -184,7 +190,7 @@ async function main() {
   const functions = functionCases(config.functionCases ?? {}, (module) => modules[module], plainValue, values)
 
   const settings = []
-  for (const { module, name, label } of PLUGIN_SETTINGS) settings.push({ schema: (await load(module))[name], label })
+  for (const { module, name, label, needs } of PLUGIN_SETTINGS) settings.push({ schema: (await load(module))[name], label, needs })
 
   // The plugins' transferResources, listed in the hub and on a site (AGL-3671).
   const entitlements = await load(PLAN_ENTITLEMENTS)

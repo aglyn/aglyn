@@ -763,6 +763,13 @@ struct FormBlock: View {
     }
   }
 
+  /// The form's first `refuse` entry whose condition holds over what is typed (`{ when, text }`): the console's pre-save
+  /// check (a plugin's `validate`), said beside Save, which it holds back.
+  private var refused: String? {
+    block["refuse"].array.first { ScreenValues.condition($0["when"]?.stringValue, in: filled) }
+      .map { ScreenValues.render($0["text"]?.stringValue ?? "", in: filled) }
+  }
+
   /// A load this form is seeded from is only the cache's answer yet.
   private var held: Bool {
     !FormEdits.heldBy(object: block["object"]?.stringValue, initials: fields.compactMap(\.initial), checking: context["checking"]).isEmpty
@@ -782,7 +789,10 @@ struct FormBlock: View {
       if let action = block["submit"].flatMap(ActionSpec.init), ScreenValues.condition(action.when, in: scope) {
         // One Save per form at the standard control size, trailing (spec 8): never a full-width bar per form.
         HStack(spacing: AglynSpace.one) {
-          if let refusal = heldPress.refusal, dirty {
+          if let refused {
+            Text(refused).font(AglynFont.caption).foregroundStyle(AglynColor.warning)
+              .accessibilityIdentifier("refused-\(block.id)")
+          } else if let refusal = heldPress.refusal, dirty {
             Text(refusal).font(AglynFont.caption).foregroundStyle(AglynColor.warning)
               .accessibilityIdentifier("unconfirmed-\(block.id)")
           } else if held && dirty {
@@ -797,12 +807,12 @@ struct FormBlock: View {
           }
           .buttonStyle(.aglynProminent)
           .controlSize(.regular)
-          .disabled(busy || heldPress.waiting || missing || action.disabledWhen.map { ScreenValues.condition($0, in: scope) } == true)
+          .disabled(busy || heldPress.waiting || missing || refused != nil || action.disabledWhen.map { ScreenValues.condition($0, in: scope) } == true)
           .accessibilityIdentifier("submit-\(block.id)")
         }
         .aglynHeldPress($heldPress, checking: held, refusal: FormEdits.unconfirmedText(block["checking"]?.stringValue)) {
           // The save of the form as it is now: the edits replayed onto the server's copy, if they still pass.
-          if !missing, action.disabledWhen.map({ ScreenValues.condition($0, in: scope) }) != true { save(action) }
+          if !missing, refused == nil, action.disabledWhen.map({ ScreenValues.condition($0, in: scope) }) != true { save(action) }
         }
       }
     }

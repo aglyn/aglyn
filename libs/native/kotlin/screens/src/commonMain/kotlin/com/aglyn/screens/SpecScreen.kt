@@ -1364,6 +1364,10 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
   fun current(field: FieldSpec) = values[field.key] ?: seed[field.key] ?: initialValue(field, scope)
   val filled = ScreenContext.with(scope, "form", formObject(fields) { current(it) })
   val missing = fields.any { ScreenValues.condition(it.whenCondition, filled) && it.unmet(fieldJson(it, current(it)), scope) }
+  // The form's first `refuse` entry whose condition holds over what is typed (`{ when, text }`): the console's pre-save
+  // check (a plugin's `validate`), said beside Save, which it holds back.
+  val refused = block.raw.arr("refuse").firstOrNull { ScreenValues.condition(it.str("when"), filled) }
+    ?.let { ScreenValues.render(it.str("text").orEmpty(), filled) }
   // A load this form is seeded from is only the cache's answer yet: Save is held, with the reason beside it.
   val held = FormEdits.heldBy(block.string("object"), fields.mapNotNull { it.initial }, context.obj("checking")).isNotEmpty()
   fun save(action: ActionSpec) {
@@ -1373,7 +1377,7 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
   // A Save pressed while held is kept, and runs over the edits replayed onto the server's copy (AGL-4047).
   val heldPress = com.aglyn.ui.rememberHeldPress(held, FormEdits.unconfirmedText(block.string("checking"))) {
     val action = ActionSpec.parse(block["submit"]) ?: return@rememberHeldPress
-    if (!missing && action.disabledWhen?.let { ScreenValues.condition(it, scope) } != true) save(action)
+    if (!missing && refused == null && action.disabledWhen?.let { ScreenValues.condition(it, scope) } != true) save(action)
   }
   Column(Modifier.fillMaxWidth().padding(space(2f)), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
     for (field in fields.filter { ScreenValues.condition(it.whenCondition, filled) }) {
@@ -1387,7 +1391,14 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
       ?.takeIf { changed || fields.isEmpty() || !ScreenValues.render(it.label, scope).startsWith("Save") }
       ?.let { action ->
       val refusal = heldPress.refusal
-      if (refusal != null && changed) {
+      if (refused != null) {
+        Text(
+          refused,
+          Modifier.align(Alignment.End).testTag("refused-${block.id}"),
+          style = MaterialTheme.typography.bodySmall,
+          color = com.aglyn.ui.LocalAglynPalette.current.warning.text,
+        )
+      } else if (refusal != null && changed) {
         Text(
           refusal,
           Modifier.align(Alignment.End).testTag("unconfirmed-${block.id}"),
@@ -1405,7 +1416,7 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
       FilledTonalButton(
         colors = com.aglyn.ui.aglynTonalButtonColors(),
         onClick = { if (heldPress.pressed(held)) save(action) },
-        enabled = !busy && !heldPress.waiting && !missing && action.disabledWhen?.let { ScreenValues.condition(it, scope) } != true,
+        enabled = !busy && !heldPress.waiting && !missing && refused == null && action.disabledWhen?.let { ScreenValues.condition(it, scope) } != true,
         modifier = Modifier.align(Alignment.End).testTag("submit-${block.id}"),
       ) {
         if (busy || heldPress.waiting) CircularProgressIndicator(Modifier.size(16.dp).padding(end = space(1f)), strokeWidth = 2.dp)
