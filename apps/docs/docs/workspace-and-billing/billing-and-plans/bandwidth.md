@@ -49,14 +49,12 @@ those messages say depends on your plan, and the difference is the point:
 - **On a paid plan** the 100% message reads *"You're past your included monthly bandwidth
   — extra usage is now billed"*, and tells you the overage appears on your monthly
   invoice.
-- **On Free** it points you at Billing to upgrade — because on Free there is no overage
-  to bill, only a stop. The first time your sites go over it reads *"Bandwidth limit
-  reached: upgrade or your sites pause on …"* with the date and time in UTC; after that it
-  reads *"You've reached your monthly bandwidth limit"*.
-
-When a Free site goes over, its managers also get a notification and an email at that
-moment, which names the site and either its deadline or that it is paused, and a banner
-across the top of the console says the same until you upgrade or the month turns.
+- **On Free** there is no overage to bill, only a stop, so passing 100% is told once, at
+  the moment it happens: each site's managers get a notification and an email naming the
+  site and either its deadline — *"Upgrade or {site} pauses on …"*, the date and time in
+  UTC, the first time — or that it is paused. The 100% usage message is not sent again
+  on top of it. A banner across the top of the console says the same until you upgrade or
+  the month turns.
 
 ## What a paused Free site looks like {#paused}
 
@@ -100,9 +98,18 @@ If a site first goes over in the last three days of a month, its 72 hours would 
 the month does. Then nothing pauses: the count starts again on the 1st, and you are told
 the site stays online and that its extra time has been used.
 
-This happens **once per site, ever**. In any later month, a site that goes over pauses as
-soon as it passes its band. A new month, changing plans and changing back, or anything else
-does not give the same site a second grace.
+This extra time is **given once**. It is recorded on your workspace and on every site it
+has when it is given, so the next time your sites go over — in any later month — they
+pause as soon as they pass the band. A new month, changing plans and changing back,
+deleting a site and making a new one, or a site added later, does not bring it back.
+
+**A surge can still pause a site during those 72 hours.** Every plan has an abuse
+ceiling far above its band (for Free, 100,000 page views in a month — see
+[The two mechanisms](#the-two-mechanisms)). If traffic during the 72 hours is unusually
+large and reaches it, the site pauses then, visitors see the same "temporarily
+unavailable" notice, and you are told by notification and email, as for any pause.
+
+If the extra time ends and the site pauses, you are told that too, within a day.
 
 ## Why a site can go over before it is paused {#timing}
 
