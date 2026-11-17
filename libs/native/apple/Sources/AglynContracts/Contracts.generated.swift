@@ -6193,6 +6193,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let bookingStateLabels: [String: String]
   public let bookingWeekdays: [String]
   public let browseSorts: [String: ListQuerySort]
+  public let businessDetailsClearablePathList: [String]
   public let businessProfileFieldOrder: [String]
   public let businessProfileMaxChars: [String: Double]
   public let businessProfileMaxServices: Int
@@ -6200,6 +6201,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let businessProfileSiteDoc: String
   public let businessProfileSubcollection: String
   public let businessProfileWorkspaceDoc: String
+  public let businessSocialLinksMax: Int
   public let businessToneLabels: [String: String]
   public let businessToneOrder: [String]
   public let campaignEmailsQuery: ListQueryDeclaration
@@ -6479,6 +6481,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let siteJourneyKeyMax: Int
   public let siteListDeclaration: ListQueryDeclaration
   public let siteMemberListQuery: ListQueryDeclaration
+  public let siteSloganMaxLength: Int
   public let starColors: [StarColor]
   public let starredField: String
   public let starredMax: Int
@@ -6554,6 +6557,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case bookingStateLabels = "BOOKING_STATE_LABELS"
     case bookingWeekdays = "BOOKING_WEEKDAYS"
     case browseSorts = "BROWSE_SORTS"
+    case businessDetailsClearablePathList = "BUSINESS_DETAILS_CLEARABLE_PATH_LIST"
     case businessProfileFieldOrder = "BUSINESS_PROFILE_FIELD_ORDER"
     case businessProfileMaxChars = "BUSINESS_PROFILE_MAX_CHARS"
     case businessProfileMaxServices = "BUSINESS_PROFILE_MAX_SERVICES"
@@ -6561,6 +6565,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case businessProfileSiteDoc = "BUSINESS_PROFILE_SITE_DOC"
     case businessProfileSubcollection = "BUSINESS_PROFILE_SUBCOLLECTION"
     case businessProfileWorkspaceDoc = "BUSINESS_PROFILE_WORKSPACE_DOC"
+    case businessSocialLinksMax = "BUSINESS_SOCIAL_LINKS_MAX"
     case businessToneLabels = "BUSINESS_TONE_LABELS"
     case businessToneOrder = "BUSINESS_TONE_ORDER"
     case campaignEmailsQuery = "CAMPAIGN_EMAILS_QUERY"
@@ -6840,6 +6845,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case siteJourneyKeyMax = "SITE_JOURNEY_KEY_MAX"
     case siteListDeclaration = "SITE_LIST_DECLARATION"
     case siteMemberListQuery = "SITE_MEMBER_LIST_QUERY"
+    case siteSloganMaxLength = "SITE_SLOGAN_MAX_LENGTH"
     case starColors = "STAR_COLORS"
     case starredField = "STARRED_FIELD"
     case starredMax = "STARRED_MAX"
