@@ -9,6 +9,54 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.26.0 — 2026-11-17
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.25.0...v1.26.0)
+
+### Added
+
+- **api:** the server card and initialize name the server as its MCP Registry entry does ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **api:** every MCP tool has a human title, plain description, docs link and all four hints ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **native:** filter and sort Billing invoices as the console does ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667))
+- **native:** the one-time product-updates ask over the Sites list ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667), [AGL-3185](https://linear.app/aglyn/issue/AGL-3185))
+- **native:** filter the workspace Activity log by Who, Where and When ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667))
+- **billing:** the owner is told the grace deadline or the pause in the console and by email, with the way to upgrade ([AGL-4232](https://linear.app/aglyn/issue/AGL-4232))
+- **bandwidth:** a Free site's first time over its band gets a one-time 72-hour grace, and visitors see a neutral notice ([AGL-4232](https://linear.app/aglyn/issue/AGL-4232))
+- **native:** Sign-in records on Security, as the console's account page has them ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667), [AGL-2119](https://linear.app/aglyn/issue/AGL-2119))
+- **native:** sites readout and Start in preview on Create site ([AGL-4086](https://linear.app/aglyn/issue/AGL-4086))
+- **native:** pin sites in the apps as the console does, and filter Sites by Created ([AGL-4005](https://linear.app/aglyn/issue/AGL-4005), [AGL-4165](https://linear.app/aglyn/issue/AGL-4165))
+- **native:** the workspace's Domains page in the apps, piece 1 ([AGL-4040](https://linear.app/aglyn/issue/AGL-4040))
+- **native:** Site Care's Request a change on a site's Home ([AGL-3959](https://linear.app/aglyn/issue/AGL-3959))
+- **native:** maintenance switch, Visit site as the team, approved image hosts
+
+### Fixed
+
+- **api:** the form entries list does not claim an order it does not have ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **docs:** the bandwidth page's example message uses plain words, so the docs build does not read it as code ([AGL-4232](https://linear.app/aglyn/issue/AGL-4232))
+- **legal:** the member session cookie's inventory entry names the builder that now holds it
+- **site-preview:** the team link reaches the site the way the minting console does ([AGL-4086](https://linear.app/aglyn/issue/AGL-4086))
+- **console:** the bandwidth pause banner shows beside the dunning notice and the quota rows, not instead of them ([AGL-4232](https://linear.app/aglyn/issue/AGL-4232))
+- **bandwidth:** review of the one-time grace — a real engage transaction, once per workspace, neutral ceiling notice, one notice per crossing, pause told when a grace ends ([AGL-4232](https://linear.app/aglyn/issue/AGL-4232))
+- **native:** Request a change loads on iOS (an empty Group never ran its task)
+- **site:** a member signed in before the sign-in hint existed sees "Account" ([AGL-4231](https://linear.app/aglyn/issue/AGL-4231))
+- **bandwidth:** a grace that outlasts the month names no pause date, since none comes; the banner's non-admin wording is pinned ([AGL-4232](https://linear.app/aglyn/issue/AGL-4232))
+- **native:** declare the Domains screens' deep links
+
+### Documentation
+
+- **bandwidth:** given once per workspace, a surge can still pause during the grace, one notice per crossing ([AGL-4232](https://linear.app/aglyn/issue/AGL-4232))
+- **claude:** the assistant guide is listed now that sign-in is live, and says it starts on Starter ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **bandwidth:** the one-time grace, the alerts a Free owner gets, and the neutral visitor notice ([AGL-4232](https://linear.app/aglyn/issue/AGL-4232))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **marketing:** pricing copy re-extracted from Figma now that the frames match live /pricing ([AGL-4226](https://linear.app/aglyn/issue/AGL-4226), [AGL-4227](https://linear.app/aglyn/issue/AGL-4227))
+
+</details>
+
+13 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.25.0 — 2026-11-17
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.24.0...v1.25.0)
