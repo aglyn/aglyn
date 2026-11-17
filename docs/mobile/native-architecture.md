@@ -107,7 +107,9 @@ document reuses it:
    (`canWriteHostContent`, `hostWritesFrozen`).
 
    A read-only check the console runs before a client write works the same
-   way: `POST /api/redirects/check` runs the Redirects page's save checks.
+   way: `POST /api/redirects/check` runs the Redirects page's save checks,
+   and `POST /api/redirects/test` its "Test a path" (the pattern matcher is
+   the server's, with no app copy).
 5. **Linear moves with the work.** A commit cites a real `AGL-nnnn` (3651
    iOS, 3652 Android, 3653 desktop).
 
