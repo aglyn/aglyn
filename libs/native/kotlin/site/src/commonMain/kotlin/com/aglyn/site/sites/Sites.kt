@@ -308,24 +308,70 @@ fun canCreateSiteFromStarter(name: String, subdomain: String, pick: SiteStarterS
  * land on, which would leave an empty site. `style` is the one the person
  * chose: the site starts in its look, and the route records it on the site.
  */
-fun createSiteBody(orgId: String, name: String, subdomain: String, style: String): JsonObject =
-  jsonBody("displayName" to name.trim(), "subdomain" to subdomain.trim().lowercase(), "orgId" to orgId, "start" to "starter", "style" to style)
+fun createSiteBody(orgId: String, name: String, subdomain: String, style: String, preview: Boolean = false): JsonObject =
+  jsonBody(
+    "displayName" to name.trim(), "subdomain" to subdomain.trim().lowercase(), "orgId" to orgId, "start" to "starter", "style" to style,
+    "preview" to preview,
+  )
 
 /**
  * What Create site sends for a starter from the marketplace, as the console's own "Choose your starter" does: the listing,
  * with no style, since the starter brings its own look.
  */
-fun createSiteBody(orgId: String, name: String, subdomain: String, starter: SiteStart.Starter): JsonObject =
+fun createSiteBody(orgId: String, name: String, subdomain: String, starter: SiteStart.Starter, preview: Boolean = false): JsonObject =
   jsonBody(
     "displayName" to name.trim(), "subdomain" to subdomain.trim().lowercase(), "orgId" to orgId, "start" to "starter",
-    "starter" to mapOf("listingId" to starter.listingId),
+    "starter" to mapOf("listingId" to starter.listingId), "preview" to preview,
   )
 
+/**
+ * "Start in preview" (AGL-4086)'s default for how a site starts, as the console's `sitePreviewStartsOn`: on for a site
+ * brought in from somewhere else, off for everything else.
+ */
+fun sitePreviewStartsOn(start: String?): Boolean = start == "import"
+
+/** What "Start in preview" says under it (the console's `StartInPreviewSwitch`). */
+fun startInPreviewCaption(on: Boolean): String =
+  if (on) "Only you and your team can see the site until you make it public in Admin → Error pages. Visitors see \"Coming soon\"."
+  else "Visitors can see the site as soon as it has a page."
+
+/**
+ * `6 of 10 sites · Pro plan` beside Create site (the console's `describeSiteAllowance`, AGL-2166): null while the plan or
+ * the sites are still being read, so a placeholder count never reads as a measurement. [limit] null is no known cap
+ * ("6 sites"); an infinite or negative one is Unlimited.
+ */
+fun describeSiteAllowance(used: Int, limit: Double?, planLabel: String?, ready: Boolean): String? {
+  if (!ready || planLabel.isNullOrEmpty()) return null
+  val cap = limit?.let { if (!it.isFinite() || it < 0) "Unlimited" else it.toLong().toString() }
+  val sites = if (cap == null) "$used site${if (used == 1) "" else "s"}" else "$used of $cap site${if (cap == "1") "" else "s"}"
+  return "$sites · $planLabel plan"
+}
+
+/**
+ * The plan and its site cap, as `/api/orgs/entitlements` answers for a workspace: the effective plan's label, and
+ * `quotas.hostLimit` (a null there is the route's JSON for an unlimited cap).
+ */
+data class SiteAllowancePlan(val planLabel: String, val hostLimit: Double?) {
+  companion object {
+    fun of(body: JsonObject): SiteAllowancePlan? {
+      val plan = (body["plan"] as? JsonPrimitive)?.contentOrNull ?: return null
+      val quotas = body["quotas"] as? JsonObject
+      val raw = quotas?.get("hostLimit")
+      val limit = when {
+        raw == null -> null
+        raw is kotlinx.serialization.json.JsonNull -> Double.POSITIVE_INFINITY
+        else -> (raw as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()
+      }
+      return SiteAllowancePlan(com.aglyn.core.BundleWords.planLabels[plan] ?: plan.replaceFirstChar { it.uppercase() }, limit)
+    }
+  }
+}
+
 /** `POST /api/hosts/create`, the console's own Create site. */
-suspend fun createSite(api: ConsoleApiClient, orgId: String, name: String, subdomain: String, start: SiteStart): CreateSiteResult = try {
+suspend fun createSite(api: ConsoleApiClient, orgId: String, name: String, subdomain: String, start: SiteStart, preview: Boolean = false): CreateSiteResult = try {
   val body = when (start) {
-    is SiteStart.Style -> createSiteBody(orgId, name, subdomain, start.id)
-    is SiteStart.Starter -> createSiteBody(orgId, name, subdomain, start)
+    is SiteStart.Style -> createSiteBody(orgId, name, subdomain, start.id, preview)
+    is SiteStart.Starter -> createSiteBody(orgId, name, subdomain, start, preview)
   }
   val answer = api.request("/api/hosts/create", ApiMethod.POST, body)
   CreateSiteResult.Created(answer.field("hostId").orEmpty(), answer.field("subdomain") ?: subdomain)
