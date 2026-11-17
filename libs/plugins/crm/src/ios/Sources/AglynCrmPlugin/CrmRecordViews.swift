@@ -433,8 +433,10 @@ struct RecordDetail: View {
         proposedStage = RecordStage(id: stage.id, name: stage.name)
       }
     }
+    // The route's site, as the console's page hands its own `hostId`: none on the workspace's CRM, whatever site the record
+    // is held by, so a summary asked here is found here again.
     return RecordInsightsZone(
-      hostID: scope.hostID.isEmpty ? nil : scope.hostID, orgID: scope.orgID, recordKind: kind.rawValue, recordID: id, name: row.title,
+      hostID: listScope.hostID.isEmpty ? nil : listScope.hostID, orgID: scope.orgID, recordKind: kind.rawValue, recordID: id, name: row.title,
       stages: stages, stageID: openDeal ? currentStage : nil, proposeTask: proposeTask, proposeStage: proposeStage)
   }
 

@@ -289,8 +289,10 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
             val pipeline = reference.pipeline(doc.string("pipelineId"))
             val openDeal = kind == CrmKind.DEAL && (doc.string("status") ?: "open") == "open"
             val open = pipeline.stages.filter { it.kind == "open" }
+            // The route's site, as the console's page hands its own `hostId`: none on the workspace's CRM, whatever site the
+            // record is held by, so a summary asked here is found here again.
             val zone = com.aglyn.pluginhost.RecordInsightsZone(
-              hostId = scope.hostId?.ifEmpty { null },
+              hostId = listScope.hostId?.ifEmpty { null },
               orgId = scope.orgId,
               recordKind = kind.name.lowercase(),
               recordId = id,
