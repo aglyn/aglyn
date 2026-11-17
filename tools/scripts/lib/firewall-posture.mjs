@@ -1179,6 +1179,11 @@ export const EXPECTED_POSTURE = Object.freeze([
         // `applinks:app.aglyn.com`. A PREFIX ending in a slash admits only the
         // `/.well-known/` namespace; the middleware answers each file there or
         // a 404, and nothing under it is authenticated.
+        //
+        // The same prefix is what lets OpenAI's plugin directory read its
+        // domain proof, `/.well-known/openai-apps-challenge` (AGL-4225): that
+        // fetcher cannot solve a challenge either, and the file needs no rule
+        // of its own while this one stands.
         conditions: Object.freeze([
           Object.freeze({ type: 'path', op: 'pre', value: '/.well-known/' }),
         ]),
