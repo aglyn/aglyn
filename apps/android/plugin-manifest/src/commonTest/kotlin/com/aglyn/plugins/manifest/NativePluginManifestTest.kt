@@ -48,8 +48,14 @@ class NativePluginManifestTest {
     assertEquals("commerce.returns" to site, screenOf("/acme/hosts/shop/products/returns"))
     // The Products hub's Reservations section is the native Reservations screen (AGL-4059).
     assertEquals("commerce.reservations" to site, screenOf("/acme/hosts/shop/products/reservations"))
-    assertEquals("commerce.shipping" to site, screenOf("/acme/hosts/shop/products/shipping"))
-    assertEquals("commerce.notifications" to site, screenOf("/acme/hosts/shop/products/notifications"))
+    // The console's Settings pages open their native page hubs.
+    assertEquals("commerce.settingsShipping" to site, screenOf("/acme/hosts/shop/products/shipping"))
+    assertEquals("commerce.settingsNotifications" to site, screenOf("/acme/hosts/shop/products/notifications"))
+    assertEquals("commerce.settingsPayments" to site, screenOf("/acme/hosts/shop/products/payments"))
+    assertEquals("commerce.settingsCheckout" to site, screenOf("/acme/hosts/shop/products/checkout"))
+    assertEquals("commerce.settingsTaxes" to site, screenOf("/acme/hosts/shop/products/taxes"))
+    assertEquals("commerce.settingsChannels" to site, screenOf("/acme/hosts/shop/products/channels"))
+    assertEquals("commerce.settings" to site, screenOf("/acme/hosts/shop/products/integrations"))
     assertEquals(null, screenOf("/acme/hosts/shop/products/subscriptions?subscription=s1"))
     assertEquals(null, screenOf("/acme/hosts/shop/products/pos"))
     val org = mapOf("orgSlug" to "acme")

@@ -233,6 +233,11 @@ final class CommerceRegistrationTests: XCTestCase {
       ("/acme/hosts/shop/products/reservations", .screen("commerce.reservations", site), #line),
       ("/acme/hosts/shop/products/shipping", .screen("commerce.settingsShipping", site), #line),
       ("/acme/hosts/shop/products/notifications", .screen("commerce.settingsNotifications", site), #line),
+      ("/acme/hosts/shop/products/payments", .screen("commerce.settingsPayments", site), #line),
+      ("/acme/hosts/shop/products/checkout", .screen("commerce.settingsCheckout", site), #line),
+      ("/acme/hosts/shop/products/taxes", .screen("commerce.settingsTaxes", site), #line),
+      ("/acme/hosts/shop/products/channels", .screen("commerce.settingsChannels", site), #line),
+      ("/acme/hosts/shop/products/integrations", .screen("commerce.settings", site), #line),
       ("/acme/hosts/shop/products/subscriptions?subscription=s1", .unavailable("/acme/hosts/shop/products/subscriptions?subscription=s1"), #line),
       ("/acme/hosts/shop/products/pos", .unavailable("/acme/hosts/shop/products/pos"), #line),
     ]
