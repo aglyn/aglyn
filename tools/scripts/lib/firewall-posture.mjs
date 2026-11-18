@@ -1214,6 +1214,20 @@ export const EXPECTED_POSTURE = Object.freeze([
         ]),
       }),
       Object.freeze({
+        name: 'Console favicon bypass',
+        why: "directories and favicon services fetch the console's tab icon from a non-browser HTTP stack and cannot solve a challenge, so a connector listing drew a placeholder where the icon belongs",
+        // Live since 2026-11-18 (AGL-4225). Measured first as a stranger:
+        // `/favicon.ico` was 429. After: 200 `image/vnd.microsoft.icon`, and
+        // `/favicon.icox`, `/` and `/_static/images/brand/icon-256x256.png`
+        // still 429.
+        //
+        // ONE exact path, anchored at both ends: a public static file that
+        // carries no data and that the middleware matcher already skips.
+        conditions: Object.freeze([
+          Object.freeze({ type: 'path', op: 're', value: '^/favicon\\.ico$' }),
+        ]),
+      }),
+      Object.freeze({
         name: 'Native app API bypass',
         why: "the iOS, Android and desktop apps call console routes from URLSession/OkHttp, which cannot solve a challenge, so sign-up, SSO, passkeys, invites, the desktop hand-off and every signed-in call answered 429 HTML to the apps",
         // Live since 2026-10-15 (AGL-3800). Found while the round-3 store
