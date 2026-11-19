@@ -16,7 +16,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { WAIVERS_PUBLIC_PAGE_PATH, WAIVERS_SITE_SIGN_PATH } from './constants/bundle-common'
+import { WAIVERS_API_ROUTES, WAIVERS_PUBLIC_PAGE_PATH, WAIVERS_SITE_SIGN_PATH } from './constants/bundle-common'
 import { WAIVER_ADULT_AGE_RANGE, WAIVER_LIMITS, WAIVER_STATUS_LABELS } from './model/waiver'
 import { WAIVER_METHOD_LABELS } from './model/waiver-signature'
 
@@ -45,6 +45,25 @@ describe('native waivers screens', () => {
     const text = JSON.stringify(screens['waivers.share'])
     expect(text).toContain(`{data.list.signPageOrigin}/${WAIVERS_SITE_SIGN_PATH}?waiver=`)
     expect(text).toContain(`{app.origin}/kiosk/waivers${WAIVERS_PUBLIC_PAGE_PATH}?host={site.id}&waiver=`)
+  })
+
+  it('sign at the window and record a paper waiver through the console routes, within its limits', () => {
+    const form = (screen: string, block: string) => screens[screen].blocks.find((one: { id: string }) => one.id === block)
+    const sign = form('waivers.sign', 'sign')
+    const paper = form('waivers.paper', 'record')
+    expect(sign.submit.url).toBe(`/api/${WAIVERS_API_ROUTES.signAtWindow}`)
+    expect(paper.submit.url).toBe(`/api/${WAIVERS_API_ROUTES.paper}`)
+    expect(screens['waivers.sign'].load.w.url).toContain(`/api/${WAIVERS_API_ROUTES.publicWaiver}?`)
+    const minors = (fields: Array<{ key: string; max?: number }>) => fields.find((one) => one.key === 'minors')
+    expect(minors(sign.fields)?.max).toBe(WAIVER_LIMITS.minors)
+    expect(minors(paper.fields)?.max).toBe(WAIVER_LIMITS.minors)
+    // The body carries every key the console's signing form sends.
+    expect(Object.keys(sign.submit.body).sort()).toEqual(
+      ['attemptKey', 'checked', 'consent', 'guardianRelationship', 'hostId', 'minors', 'signature', 'signatureImage', 'signer', 'version', 'waiverId', 'website'].sort(),
+    )
+    expect(Object.keys(paper.submit.body).sort()).toEqual(
+      ['attemptKey', 'guardianRelationship', 'hostId', 'minors', 'photo', 'signedOnDayKey', 'signer', 'waiverId'].sort(),
+    )
   })
 
   it('bound the editor as the console does', () => {

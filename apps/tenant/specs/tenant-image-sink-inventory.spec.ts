@@ -297,6 +297,26 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     guard: 'platform',
     why: "The starter site's SEO (AGL-3497): the `image:` marker is `defaultSiteSeo`'s sharing image, `DEFAULT_SITE_IMAGES.hero.src` — a same-origin `/_static/starter/` path to a photo shipped in the tenant app's own public folder. provision-host.ts stores it as a new site's `seo.image`; from then on it is the owner's stored value, rendered through resolveSocialImage like any other. No author string reaches this file and no third-party host is named.",
   },
+  'libs/aglyn/src/lib/app-utils/screen-seo-update.ts': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "Not a sink, and never on a tenant render: `buildScreenSeoUpdate`, the pure rebuild of a page's stored `seo` map from an edit (AGL-1437), moved here from apps/console/constants/screen-seo.ts (which now only re-exports it, and is outside this sweep's roots) so the public API can save a page's search listing on the server (AGL-4235). Its callers are the besigner's Screen Properties SEO panel, the SEO card on the console's page view and the API's page-seo-write.ts. The marker is the `image: string` member of `ScreenSocialImageDraft`, the media reference a member picked in the console, carried into the map as stored. Nothing here renders or fetches it: the tenant head reads the stored `seo.image` through resolveSocialImage, which calls absoluteMediaSrc.",
+  },
+  'libs/tenant/data/admin/src/lib/server/api-v1-site-settings.ts': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "Not a sink, and never on a tenant render: `pageView`, a page as the public REST API returns it (AGL-4235), served only by the console app's /api/v1 route (and its /api/mcp tools) to an authenticated API caller with `pages:read` or `seo:write`. The marker is the page's `seo.image` returned as JSON exactly as stored; the API fetches nothing and no visitor's browser receives this response. On a published page that same stored value is resolved by resolveSocialImage (absoluteMediaSrc) in the tenant's page head before any browser requests it.",
+  },
+  'libs/tenant/data/admin/src/lib/server/api-v1-site-settings-description.ts': {
+    markers: 2,
+    guard: 'platform',
+    why: "Not a sink: both `image:` markers are OpenAPI SCHEMA entries in `/openapi.json` (AGL-4235), the `image` member of the SiteSeo schema and of a Page's `seo` object, each a `nullableField(stringField(…))` whose only output is our own description text. Like agent-openapi.ts, no author string is read here and no URL is produced here.",
+  },
+  'libs/tenant/data/admin/src/lib/server/site-seo-write.ts': {
+    markers: 1,
+    guard: 'off-tenant',
+    why: "Not a sink, and never on a tenant render: `siteSeoView`, a site's search listing as the public REST API returns it (AGL-4235), served only by the console app's /api/v1 route (and its /api/mcp tools) to an authenticated API caller with `seo:read` or `seo:write`. The marker is the site's `seo.image` returned as JSON exactly as stored and read-only here (the write never touches it); no visitor's browser receives this response. On a published page the stored value is resolved by resolveSocialImage (absoluteMediaSrc) in the tenant's page head before any browser requests it.",
+  },
   'libs/plugins/domains/src/lib/server/domain-connect/return-page.ts': {
     markers: 1,
     guard: 'off-tenant',

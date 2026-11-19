@@ -174,15 +174,19 @@ class CommerceQueuesSpecsTest : SpecTestBase() {
     // A one-unit resource's row says nothing of units (the look-ahead holds none for it).
     assertEquals("Cabin · \$120/night", rowLine(model.block("resources")["primary"], model.row("data.resources.items")))
     val add = model.action("add", "addResource")
-    assertEquals(listOf("name", "units", "capacity", "fewLeftAt", "nightlyRateUsd", "weekendMultiplier", "minNights", "depositPct", "cancellationHours"), add.prompt.map { it.key })
+    assertEquals(listOf("name", "units", "capacity", "fewLeftAt", "checkIn", "nightlyRateUsd", "weekendMultiplier", "minNights", "depositPct", "cancellationHours"), add.prompt.map { it.key })
     assertEquals(listOf("100", "1", "30"), listOf("nightlyRateUsd", "minNights", "depositPct").map { key -> add.prompt.first { it.key == key }.initial })
     runBlocking { model.run(add, ScreenContext.with(model.context, "form", json("""{"name":"Lakeside cabin","nightlyRateUsd":150,"minNights":2,"depositPct":30}"""))) }
-    assertEquals("add hosts/h1/resources {depositPct=30,fewLeftAt=3.0,minNights=2,name=Lakeside cabin,nightlyRateUsd=150}", writer.calls.single().replace(", ", ","))
+    assertEquals("add hosts/h1/resources {checkInPerGuest=false,depositPct=30,fewLeftAt=3.0,minNights=2,name=Lakeside cabin,nightlyRateUsd=150}", writer.calls.single().replace(", ", ","))
     writer.calls.clear()
     val edit = model.rowActions("resources").first { it.id == "edit" }
-    runBlocking { model.run(edit, ScreenContext.with(model.row("data.resources.items"), "form", json("""{"name":"Cabin 2","nightlyRateUsd":130}"""))) }
+    runBlocking { model.run(edit, ScreenContext.with(model.row("data.resources.items"), "form", json("""{"name":"Cabin 2","nightlyRateUsd":130,"checkIn":"guest"}"""))) }
     // An edit with the units and "Only N left" fields left empty writes one unit and the default it reads as, as the console does.
-    assertEquals("merge hosts/h1/resources/r1 {fewLeftAt=3.0,name=Cabin 2,nightlyRateUsd=130,units=1.0}", writer.calls.single().replace(", ", ","))
+    assertEquals("merge hosts/h1/resources/r1 {checkInPerGuest=true,fewLeftAt=3.0,name=Cabin 2,nightlyRateUsd=130,units=1.0}", writer.calls.single().replace(", ", ","))
+    // "At check-in" starts at what the resource holds, as the console's select does (AGL-4043).
+    val checkIn = edit.prompt.first { it.key == "checkIn" }
+    assertEquals("stay", ScreenValues.text(ScreenValues.resolve(checkIn.initial!!, model.row("data.resources.items"))))
+    assertEquals("guest", ScreenValues.text(ScreenValues.resolve(checkIn.initial!!, ScreenContext.with(model.context, "item", json("""{"checkInPerGuest":true}""")))))
     writer.calls.clear()
     runBlocking { model.run(model.rowActions("resources").first { it.id == "remove" }, model.row("data.resources.items")) }
     assertEquals(listOf("delete hosts/h1/resources/r1"), writer.calls)
