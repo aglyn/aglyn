@@ -49,6 +49,61 @@ class MarketplaceCasesTest {
   }
 
   @Test
+  fun updateReviewOfACopy() {
+    cases("resolveProvenance").forEach { (args, result) ->
+      @Suppress("UNCHECKED_CAST")
+      val doc = plainJson(args[0]) as Map<String, Any?>?
+      val got = resolveProvenance(doc, args.getOrNull(1)?.let { str(it) })
+      val want = result.jsonObject
+      assertEquals(str(want["state"]), got.state, args.toString())
+      assertEquals(str(want["listingId"]), got.listingId, args.toString())
+      assertEquals(str(want["version"]), got.version, args.toString())
+      assertEquals(str(want["sha256"]), got.sha256, args.toString())
+      assertEquals(str(want["artifactType"]), got.artifactType, args.toString())
+      assertEquals(str(want["publisherOrgId"]), got.publisherOrgId, args.toString())
+      assertEquals(want.getValue("updatable").jsonPrimitive.content.toBoolean(), got.updatable, args.toString())
+    }
+    cases("describeChange").forEach { (args, result) ->
+      val change = args[0].jsonObject
+      assertEquals(result.jsonPrimitive.content, describeChange(str(change["path"]).orEmpty(), change["added"]?.jsonPrimitive?.content == "true", change["removed"]?.jsonPrimitive?.content == "true"), args.toString())
+    }
+    cases("summarizeValue").forEach { (args, result) -> assertEquals(result.jsonPrimitive.content, summarizeValue(args[0]), args.toString()) }
+    assertEquals("—", summarizeValue(null))
+    assertEquals("update-available", copyUpdateState(mapOf("marketplace" to mapOf("listingId" to "l1", "version" to "1.0.0")), "1.2.0", "component").first)
+    assertEquals("current", copyUpdateState(mapOf("marketplace" to mapOf("listingId" to "l1", "version" to "1.2.0")), "1.2.0", "component").first)
+    assertEquals("unknown", copyUpdateState(mapOf("marketplace" to mapOf("listingId" to "l1")), "1.2.0", "component").first)
+    assertEquals("Installed (v1.2.0)", copyInstallLabel("current", "1.2.0", "1.2.0"))
+    assertEquals("Review update to v1.2.0", copyInstallLabel("update-available", "1.0.0", "1.2.0"))
+    assertEquals("Review this version", copyInstallLabel("unknown", null, "1.2.0"))
+    val preview = ArtifactUpdatePreview.from(
+      Json.parseToJsonElement(
+        """{"installedVersion":"1.0.0","availableVersion":"1.2.0","mergeable":true,"identical":false,"unchanged":4,
+          "safe":[{"path":"a","current":1,"incoming":2}],"kept":[],"conflicts":[{"path":"b","current":null,"incoming":"x"},{"path":"c","added":true}],
+          "schema":{"added":["f"],"removed":["g"],"retyped":[],"additiveOnly":false,"recordCount":12}}""",
+      ),
+    )
+    assertEquals("You have v1.0.0; v1.2.0 is available.", preview.versionLine)
+    assertEquals(listOf("b", "c"), preview.conflicts.map { it.path })
+    assertEquals("null", summarizeValue(preview.conflicts[0].current))
+    assertEquals("—", summarizeValue(preview.conflicts[1].current))
+    assertEquals(true, preview.destructive)
+    assertEquals(12, preview.schema?.recordCount)
+    assertEquals("Apply safe changes", preview.applyLabel(0))
+    assertEquals("Apply (2 taken from publisher)", preview.applyLabel(2))
+    assertEquals("Take v3 (no content changes)", ArtifactUpdatePreview.from(Json.parseToJsonElement("""{"identical":true,"availableVersion":"3"}""")).applyLabel(1))
+    assertEquals("v3 is available.", ArtifactUpdatePreview.from(Json.parseToJsonElement("""{"availableVersion":3}""")).versionLine)
+    assertEquals(
+      "Updated to v1.2.0 — 3 change(s) applied, 1 of yours kept, 1 conflict(s) left as yours.",
+      artifactUpdateSummary("merge", Json.parseToJsonElement("""{"version":"1.2.0","applied":3,"keptLocal":1,"skipped":["b"]}""")),
+    )
+    assertEquals("Now on v1.2.0 — this version changes nothing in your copy.", artifactUpdateSummary("merge", Json.parseToJsonElement("""{"version":"1.2.0"}""")))
+    assertEquals(
+      "Installed v2 as a new copy — your customized version is kept, no longer linked to the listing.",
+      artifactUpdateSummary("copy", Json.parseToJsonElement("""{"version":2}""")),
+    )
+  }
+
+  @Test
   fun verificationRequestBlockCases() {
     cases("verificationRequestBlock").forEach { (args, result) ->
       @Suppress("UNCHECKED_CAST")

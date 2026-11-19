@@ -13114,6 +13114,74 @@
         }
       ]
     },
+    "describeChange": {
+      "module": "libs/plugins/marketplace/src/lib/model/artifact-merge.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "path": "nodes.a.props.title",
+              "kind": "edit",
+              "base": "a",
+              "current": "b",
+              "incoming": "c"
+            }
+          ],
+          "result": "nodes.a.props.title"
+        },
+        {
+          "args": [
+            {
+              "path": "",
+              "kind": "edit",
+              "base": "a",
+              "current": "b",
+              "incoming": "c"
+            }
+          ],
+          "result": "the whole artifact"
+        },
+        {
+          "args": [
+            {
+              "path": "nodes.a.props.title",
+              "kind": "edit",
+              "base": "a",
+              "current": "b",
+              "incoming": "c",
+              "added": true
+            }
+          ],
+          "result": "nodes.a.props.title — added by the publisher"
+        },
+        {
+          "args": [
+            {
+              "path": "nodes.a.props.title",
+              "kind": "edit",
+              "base": "a",
+              "current": "b",
+              "incoming": "c",
+              "removed": true
+            }
+          ],
+          "result": "nodes.a.props.title — removed by the publisher"
+        },
+        {
+          "args": [
+            {
+              "path": "",
+              "kind": "edit",
+              "base": "a",
+              "current": "b",
+              "incoming": "c",
+              "removed": true
+            }
+          ],
+          "result": "the whole artifact — removed by the publisher"
+        }
+      ]
+    },
     "describeFulfillmentLines": {
       "module": "libs/plugins/commerce/src/lib/model/order-fulfillment.ts",
       "cases": [
@@ -72575,6 +72643,201 @@
         }
       ]
     },
+    "resolveProvenance": {
+      "module": "libs/aglyn/src/lib/app-utils/artifact-provenance.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": {
+            "artifactType": null,
+            "listingId": null,
+            "publisherOrgId": null,
+            "sha256": null,
+            "state": "unknown",
+            "updatable": false,
+            "version": null
+          }
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": {
+            "artifactType": null,
+            "listingId": null,
+            "publisherOrgId": null,
+            "sha256": null,
+            "state": "unknown",
+            "updatable": false,
+            "version": null
+          }
+        },
+        {
+          "args": [
+            {
+              "installedFrom": {
+                "listingId": "l1",
+                "version": "1.2.0",
+                "sha256": "abc",
+                "artifactType": "component",
+                "publisherOrgId": "p1"
+              }
+            }
+          ],
+          "result": {
+            "artifactType": "component",
+            "listingId": "l1",
+            "publisherOrgId": "p1",
+            "sha256": "abc",
+            "state": "recorded",
+            "updatable": true,
+            "version": "1.2.0"
+          }
+        },
+        {
+          "args": [
+            {
+              "installedFrom": {
+                "listingId": "l1",
+                "version": "1.0.0"
+              }
+            },
+            "emailTemplate"
+          ],
+          "result": {
+            "artifactType": "emailTemplate",
+            "listingId": "l1",
+            "publisherOrgId": null,
+            "sha256": null,
+            "state": "inferred",
+            "updatable": false,
+            "version": "1.0.0"
+          }
+        },
+        {
+          "args": [
+            {
+              "marketplace": {
+                "listingId": "l1",
+                "version": 3,
+                "profileId": "p1"
+              }
+            },
+            "component"
+          ],
+          "result": {
+            "artifactType": "component",
+            "listingId": "l1",
+            "publisherOrgId": "p1",
+            "sha256": null,
+            "state": "inferred",
+            "updatable": false,
+            "version": "3"
+          }
+        },
+        {
+          "args": [
+            {
+              "source": {
+                "type": "marketplace",
+                "listingId": "l1",
+                "version": "2.1.0"
+              }
+            },
+            "template"
+          ],
+          "result": {
+            "artifactType": "template",
+            "listingId": "l1",
+            "publisherOrgId": null,
+            "sha256": null,
+            "state": "inferred",
+            "updatable": false,
+            "version": "2.1.0"
+          }
+        },
+        {
+          "args": [
+            {
+              "source": {
+                "listingId": "l1",
+                "version": ""
+              }
+            },
+            "layout"
+          ],
+          "result": {
+            "artifactType": "layout",
+            "listingId": "l1",
+            "publisherOrgId": null,
+            "sha256": null,
+            "state": "inferred",
+            "updatable": false,
+            "version": null
+          }
+        },
+        {
+          "args": [
+            {
+              "listingId": "l1",
+              "version": "1.0.0",
+              "pluginId": "x",
+              "sha256": "s"
+            }
+          ],
+          "result": {
+            "artifactType": "plugin",
+            "listingId": "l1",
+            "publisherOrgId": null,
+            "sha256": "s",
+            "state": "recorded",
+            "updatable": true,
+            "version": "1.0.0"
+          }
+        },
+        {
+          "args": [
+            {
+              "listingId": "l1",
+              "version": "1.0.0"
+            },
+            "theme"
+          ],
+          "result": {
+            "artifactType": "theme",
+            "listingId": "l1",
+            "publisherOrgId": null,
+            "sha256": null,
+            "state": "inferred",
+            "updatable": false,
+            "version": "1.0.0"
+          }
+        },
+        {
+          "args": [
+            {
+              "installedFrom": {
+                "listingId": "l1",
+                "version": "1.0.0",
+                "sha256": "abc"
+              }
+            },
+            "theme"
+          ],
+          "result": {
+            "artifactType": "theme",
+            "listingId": "l1",
+            "publisherOrgId": null,
+            "sha256": null,
+            "state": "inferred",
+            "updatable": false,
+            "version": "1.0.0"
+          }
+        }
+      ]
+    },
     "resolveStaffRoleGate": {
       "module": "libs/aglyn/src/lib/app-utils/staff-role-gate.ts",
       "cases": [
@@ -84559,6 +84822,90 @@
             "shipsNowhere": true,
             "unserved": []
           }
+        }
+      ]
+    },
+    "summarizeValue": {
+      "module": "libs/plugins/marketplace/src/lib/model/artifact-merge.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": "null"
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": "(empty)"
+        },
+        {
+          "args": [
+            "short"
+          ],
+          "result": "short"
+        },
+        {
+          "args": [
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          "result": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…"
+        },
+        {
+          "args": [
+            [
+              1
+            ]
+          ],
+          "result": "1 item"
+        },
+        {
+          "args": [
+            [
+              1,
+              2,
+              3
+            ]
+          ],
+          "result": "3 items"
+        },
+        {
+          "args": [
+            {
+              "a": 1
+            }
+          ],
+          "result": "{ a }"
+        },
+        {
+          "args": [
+            {
+              "a": 1,
+              "b": 2,
+              "c": 3,
+              "d": 4
+            }
+          ],
+          "result": "{ a, b, c, … }"
+        },
+        {
+          "args": [
+            3
+          ],
+          "result": "3"
+        },
+        {
+          "args": [
+            true
+          ],
+          "result": "true"
+        },
+        {
+          "args": [
+            0
+          ],
+          "result": "0"
         }
       ]
     },

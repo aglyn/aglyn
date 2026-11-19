@@ -37884,6 +37884,195 @@
         ]
       ]
     },
+    "resolveProvenance": {
+      "module": "libs/aglyn/src/lib/app-utils/artifact-provenance.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "installedFrom": {
+              "listingId": "l1",
+              "version": "1.2.0",
+              "sha256": "abc",
+              "artifactType": "component",
+              "publisherOrgId": "p1"
+            }
+          }
+        ],
+        [
+          {
+            "installedFrom": {
+              "listingId": "l1",
+              "version": "1.0.0"
+            }
+          },
+          "emailTemplate"
+        ],
+        [
+          {
+            "marketplace": {
+              "listingId": "l1",
+              "version": 3,
+              "profileId": "p1"
+            }
+          },
+          "component"
+        ],
+        [
+          {
+            "source": {
+              "type": "marketplace",
+              "listingId": "l1",
+              "version": "2.1.0"
+            }
+          },
+          "template"
+        ],
+        [
+          {
+            "source": {
+              "listingId": "l1",
+              "version": ""
+            }
+          },
+          "layout"
+        ],
+        [
+          {
+            "listingId": "l1",
+            "version": "1.0.0",
+            "pluginId": "x",
+            "sha256": "s"
+          }
+        ],
+        [
+          {
+            "listingId": "l1",
+            "version": "1.0.0"
+          },
+          "theme"
+        ],
+        [
+          {
+            "installedFrom": {
+              "listingId": "l1",
+              "version": "1.0.0",
+              "sha256": "abc"
+            }
+          },
+          "theme"
+        ]
+      ]
+    },
+    "describeChange": {
+      "module": "libs/plugins/marketplace/src/lib/model/artifact-merge.ts",
+      "args": [
+        [
+          {
+            "path": "nodes.a.props.title",
+            "kind": "edit",
+            "base": "a",
+            "current": "b",
+            "incoming": "c"
+          }
+        ],
+        [
+          {
+            "path": "",
+            "kind": "edit",
+            "base": "a",
+            "current": "b",
+            "incoming": "c"
+          }
+        ],
+        [
+          {
+            "path": "nodes.a.props.title",
+            "kind": "edit",
+            "base": "a",
+            "current": "b",
+            "incoming": "c",
+            "added": true
+          }
+        ],
+        [
+          {
+            "path": "nodes.a.props.title",
+            "kind": "edit",
+            "base": "a",
+            "current": "b",
+            "incoming": "c",
+            "removed": true
+          }
+        ],
+        [
+          {
+            "path": "",
+            "kind": "edit",
+            "base": "a",
+            "current": "b",
+            "incoming": "c",
+            "removed": true
+          }
+        ]
+      ]
+    },
+    "summarizeValue": {
+      "module": "libs/plugins/marketplace/src/lib/model/artifact-merge.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          ""
+        ],
+        [
+          "short"
+        ],
+        [
+          "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        ],
+        [
+          [
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            2,
+            3
+          ]
+        ],
+        [
+          {
+            "a": 1
+          }
+        ],
+        [
+          {
+            "a": 1,
+            "b": 2,
+            "c": 3,
+            "d": 4
+          }
+        ],
+        [
+          3
+        ],
+        [
+          true
+        ],
+        [
+          0
+        ]
+      ]
+    },
     "outreachSequenceReport": {
       "module": "libs/plugins/outreach/src/lib/model/sequence-report.ts",
       "args": [

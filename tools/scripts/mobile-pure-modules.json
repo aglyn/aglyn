@@ -1136,6 +1136,14 @@
     {
       "path": "libs/plugins/commerce/src/lib/model/site-member-purchases.ts",
       "why": "A site account's lifetime purchase total (computeLifetimePurchaseCents), the console drawer's Purchases figure: the native account screen's compute load replays it."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/artifact-provenance.ts",
+      "why": "Where an installed copy came from (resolveProvenance), read by the native listing page to decide whether a copy is behind the listing and offer the update review (AGL-3668); no imports."
+    },
+    {
+      "path": "libs/plugins/marketplace/src/lib/model/artifact-merge.ts",
+      "why": "The words an update review uses for each change (describeChange, summarizeValue), replayed by the native update review of a copied listing (AGL-3668); imports only the pure artifact-provenance."
     }
   ]
 }
