@@ -413,6 +413,9 @@ struct PageDetail: View {
   @State private var confirm: PageConfirm?
   /// The page's own document, live: its access and its schedule (the tree reads a page once).
   @State private var screen = LiveDocument()
+  /// The site's own document, read here as well as by the list: pushed on a phone, the list's task stops with the list
+  /// out of sight, so its copy would not show what this page's switches just wrote (Preview stayed off once saved).
+  @State private var siteHost = LiveDocument()
   @State private var plan = SchedulingPlan()
 
   private var settingsAPI: PageSettingsAPI {
@@ -569,7 +572,7 @@ struct PageDetail: View {
             context: context, page: page, live: row.livePath != nil, settings: settings, plan: plan, api: settingsAPI,
             runner: runner, canPublish: canPublish, open: open)
           PageAccessSection(
-            page: page, livePath: row.livePath, settings: settings, host: model.host.state.value??.data, api: settingsAPI,
+            page: page, livePath: row.livePath, settings: settings, host: (siteHost.state.value ?? model.host.state.value)??.data, api: settingsAPI,
             runner: runner, canEdit: canEdit, canPublish: canPublish)
           PageSeoSection(
             context: context, hostID: hostID, page: page, livePath: row.livePath, screen: screen.state.value??.data,
@@ -592,6 +595,7 @@ struct PageDetail: View {
     }
     .formStyle(.aglynGrouped)
     .task(id: pageID) { await screen.bind(context.firestore, ["hosts", hostID, "screens", pageID]) }
+    .task(id: hostID) { await siteHost.bind(context.firestore, ["hosts", hostID]) }
     .task(id: context.orgID) { if let orgID = context.orgID { await plan.org.bind(context.firestore, ["orgs", orgID]) } }
     // Back from the Besigner: the tree reads a page once, so what its publish changed (Published, Updated, the
     // live version) is read again now rather than shown stale until the list is reopened.
