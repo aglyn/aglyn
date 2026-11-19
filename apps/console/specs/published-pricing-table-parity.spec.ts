@@ -110,6 +110,10 @@ import {
   SITE_CARE_ADDON_MONTHLY_USD,
   UNLIMITED,
 } from '@aglyn/aglyn'
+import {
+  EMAIL_SENDS_MONTHLY_CAP_BY_PLAN,
+  INCLUDED_EMAIL_SENDS_BY_PLAN,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { OrgPlan } from '@aglyn/aglyn'
 
 /**
@@ -502,6 +506,26 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       })
     })
 
+    /**
+     * CODE AHEAD OF THE PAGE (AGL-4227): every email a plan's sites send in a
+     * month — Free's hard 300, Starter's billed 1,000, Pro's 2,500. The
+     * generator emits the row (declared missing from the frame until the page
+     * session publishes it); this pins the catalog figures the page will
+     * carry, so the page's transcription replaces the expectation when it
+     * lands.
+     */
+    it('Emails included / mo — 300 · 1,000 · 2,500 (code ahead of the page)', () => {
+      const CODE_AHEAD = [300, 1000, 2500]
+      expect(
+        PUBLISHED_COLUMNS.map(
+          (plan) =>
+            EMAIL_SENDS_MONTHLY_CAP_BY_PLAN[plan] ??
+            INCLUDED_EMAIL_SENDS_BY_PLAN[plan] ??
+            PLAN_ENTITLEMENTS[plan].emailSendsPerMonth,
+        ),
+      ).toEqual(CODE_AHEAD)
+    })
+
     it('One-to-one emails / day — — · 35 · 150', () => {
       // Starter re-transcribed 2026-10-02 from version `qE5PwfZM-K` (AGL-3469).
       expect(quotaColumn('crmEmailsPerDay')).toEqual([NONE, 35, 150] satisfies Row)
@@ -684,12 +708,28 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       ['Site export & backup', 'siteExport', 2],
       // From Pro since pricing v4 moved them in from Business (AGL-4126).
       ['Webhooks', 'webhooks', 2],
-      ['API access', 'apiAccess', 2],
     ])('%s — first ✓ at column %#', (_label, flag, firstTick) => {
       const published = PUBLISHED_COLUMNS.map(
         (_plan, index) => index >= (firstTick as number),
       )
       expect(flagColumn(flag as string)).toEqual(published)
+    })
+
+    /**
+     * CODE AHEAD OF THE PAGE (AGL-4226). Starter carries the API from its
+     * release; the page publishes the tick after billing for it is live (a
+     * band going up publishes after billing — `docs/PRICING_SURFACES.md`).
+     * The page reads first ✓ at column 2 (Pro) until then. Asserted as the
+     * one cell that differs, so no other drift on the row can hide here; when
+     * the page republishes, fold this back into the table above at column 1.
+     */
+    it('API access — first ✓ at column 1 in code; the page still reads column 2', () => {
+      const PUBLISHED = PUBLISHED_COLUMNS.map((_plan, index) => index >= 2)
+      const CODE_AHEAD = PUBLISHED_COLUMNS.map((_plan, index) => index >= 1)
+      expect(flagColumn('apiAccess')).toEqual(CODE_AHEAD)
+      expect(
+        PUBLISHED_COLUMNS.filter((_plan, index) => PUBLISHED[index] !== CODE_AHEAD[index]),
+      ).toEqual(['starter'])
     })
 
     /**
@@ -702,9 +742,13 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      */
     // Pro carries Business's 1.5k since pricing v4 moved the API in (AGL-4126);
     // the v4 frames read "1.5k / mo" in Pro's column.
-    it('API access — — · — · 1.5k per month', () => {
+    // CODE AHEAD OF THE PAGE (AGL-4226): Starter's 500 publishes after
+    // billing is live; the page reads "—" in Starter's column until then.
+    it('API access — — · 500 · 1.5k per month in code; the page still reads — · — · 1.5k', () => {
       const PUBLISHED: Row = [NONE, NONE, 1500]
-      expect(quotaColumn('apiRequestsPerMonth')).toEqual(PUBLISHED)
+      const CODE_AHEAD: Row = [NONE, 500, 1500]
+      expect(quotaColumn('apiRequestsPerMonth')).toEqual(CODE_AHEAD)
+      expect([PUBLISHED[0], PUBLISHED[2]]).toEqual([CODE_AHEAD[0], CODE_AHEAD[2]])
     })
 
     /**
@@ -875,8 +919,14 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      * than the next plan at every count, so the rate sits above the steepest
      * step on both billing intervals (2026-09-20).
      */
-    it('Extra site, per month — $20 · $20', () => {
-      expect(PAID.map((p) => PLAN_PRICING[p].extraHostMonthlyUsd)).toEqual([20, 20])
+    // CODE AHEAD OF THE PAGE (AGL-4227): Starter's extra site is $25 in the
+    // catalog, a price going UP, which publishes on the page first; the
+    // console charges and quotes $20 until the $25 Stripe price exists.
+    it('Extra site, per month — $25 · $20 in code; the page still reads $20 · $20', () => {
+      const PUBLISHED = [20, 20]
+      const CODE_AHEAD = [25, 20]
+      expect(PAID.map((p) => PLAN_PRICING[p].extraHostMonthlyUsd)).toEqual(CODE_AHEAD)
+      expect(PUBLISHED[1]).toBe(CODE_AHEAD[1])
     })
 
     it('Extra team seat, per month — $5 · $4', () => {
@@ -921,11 +971,13 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
      */
     // Pro carries Business's $0.50 since pricing v4 moved the API and its
     // band in (AGL-4126).
-    it('API requests per 1,000 over limit — — · $0.50', () => {
+    // CODE AHEAD OF THE PAGE (AGL-4226): Starter bills overage from its
+    // release; the page states the rate after billing is live.
+    it('API requests per 1,000 over limit — $3.00 · $0.50 in code; the page still reads — · $0.50', () => {
       const PUBLISHED = [null, 0.5]
-      expect(PAID.map((p) => PLAN_PRICING[p].extraApiRequestsUsdPer1k)).toEqual(
-        PUBLISHED,
-      )
+      const CODE_AHEAD = [3, 0.5]
+      expect(PAID.map((p) => PLAN_PRICING[p].extraApiRequestsUsdPer1k)).toEqual(CODE_AHEAD)
+      expect(PUBLISHED[1]).toBe(CODE_AHEAD[1])
     })
 
     /**

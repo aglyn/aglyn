@@ -110,6 +110,43 @@ export async function crmRecordsQuotaForOrg(
   return { ...checkCrmRecordsQuota(org, counts.crmRecordsCount), ...counts }
 }
 
+/**
+ * Whether a CAPTURE may add one more person to the org's CRM (AGL-4227) —
+ * the question the contact door and the lead door both ask before a create,
+ * so the two cannot disagree. Never asked for a returning person: an update
+ * grows nothing.
+ *
+ * The verdict is `checkCrmRecordsQuota`'s, the by-hand path's rule. On a plan
+ * that SELLS records past its band (Starter to its ceiling, Pro up) it is
+ * exactly that verdict, so paid plans meter as before. On a plan that sells
+ * none (Free, a comp, a lapsed plan) the band is a hard wall, and it counts
+ * the leads a capture filed beside the contacts, companies and deals: those
+ * are the people waiting for the owner, so they share the one band rather
+ * than piling up uncounted (to 200,000 a site) next to it.
+ */
+export async function captureAdmitsPerson(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  orgRef: FirebaseFirestore.DocumentReference,
+  contacts?: FirebaseFirestore.CollectionReference,
+): Promise<boolean> {
+  return checkCrmRecordsQuota(org, await capturePeopleCount(org, orgRef, contacts)).allowed
+}
+
+/**
+ * The count a capture is judged against (AGL-4227): the band's records, plus
+ * the org's filed leads on a plan that sells nothing past the band. A batch
+ * starts its tally here, so it admits exactly what one-at-a-time would.
+ */
+export async function capturePeopleCount(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  orgRef: FirebaseFirestore.DocumentReference,
+  contacts?: FirebaseFirestore.CollectionReference,
+): Promise<number> {
+  const { crmRecordsCount } = await countCrmRecords(orgRef, contacts)
+  if (checkCrmRecordsQuota(org, crmRecordsCount).overageRateUsd !== null) return crmRecordsCount
+  return crmRecordsCount + aggregateCount(await orgRef.collection('leads').count().get())
+}
+
 /** `count()` answers through `.data().count`; a missing figure is zero, never NaN. */
 function aggregateCount(snapshot: { data(): { count?: unknown } }): number {
   const value = Number(snapshot.data()?.count ?? 0)

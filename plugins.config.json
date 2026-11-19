@@ -2408,7 +2408,7 @@
         "ios": { "module": "AglynMarketingPlugin", "register": "registerMarketingNative" },
         "android": { "package": "com.aglyn.plugins.marketing", "register": "registerMarketingNative" },
         "contributes": {
-          "screens": ["marketing.overview", "marketing.campaigns", "marketing.conversions", "marketing.overlays", "marketing.experiments"],
+          "screens": ["marketing.overview", "marketing.campaigns", "marketing.conversions", "marketing.overlays", "marketing.experiments", "marketing.staffOrgEmail", "marketing.staffOrgEmailSend"],
           "widgets": ["marketing.last-campaign"],
           "quickActions": ["marketing.open"],
           "deepLinks": ["marketing.page", "marketing.overview-page", "marketing.campaigns-page", "marketing.conversions-page", "marketing.overlays-page", "marketing.experiments-page", "marketing.campaign-page", "marketing.inbox-campaigns-page"]
@@ -2710,7 +2710,10 @@
             "workflows.action",
             "workflows.webhook",
             "workflows.runs",
-            "workflows.org-automation"
+            "workflows.org-automation",
+            "workflows.staffSiteAutomations",
+            "workflows.staffOrgAutomations",
+            "workflows.staffAutomation"
           ],
           "quickActions": [
             "workflows.open"
@@ -2961,6 +2964,9 @@
             "ai.requests",
             "ai.request",
             "ai.orgsSpendColumn",
+            "ai.usageAssistColumn",
+            "ai.usageCreditsColumn",
+            "ai.usageOverageColumn",
             "ai.hostMember",
             "ai.allotment",
             "ai.import.productCopy",
@@ -4578,6 +4584,24 @@
     },
     {
       "id": "domains",
+      "mobile": {
+        "$comment": "Gap sweep Domains row 9, piece 1: the workspace's Domains page natively (every domain the workspace holds, its site, status, renewal and price, and a page per name), from the spec in src/android/screens/domains.screens.json. Buying, transfers, renewal and connect actions, the registrant contact and DNS records are later pieces.",
+        "ios": {
+          "module": "AglynDomainsPlugin",
+          "register": "registerDomainsNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.domains",
+          "register": "registerDomainsNative"
+        },
+        "contributes": {
+          "screens": [
+            "domains.list",
+            "domains.domain"
+          ],
+          "deepLinks": ["domains.list.link", "domains.domain.link"]
+        }
+      },
       "package": "@aglyn/plugins-domains",
       "register": {
         "console": "registerDomainsConsole",

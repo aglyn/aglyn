@@ -39,6 +39,11 @@
     { "path": "/team/roles", "screen": "core.team.roles" },
     { "path": "/ai-jobs", "screen": "ai.jobs" },
     { "path": "/ai-jobs/:jobId", "screen": "ai.job" },
+    { "path": "/admin", "screen": "core.site.general" },
+    { "path": "/admin/general", "screen": "core.site.general" },
+    { "path": "/admin/plugins", "screen": "core.site.plugins" },
+    { "path": "/admin/plugins/:pluginId", "screen": "core.site.plugin" },
+    { "path": "/admin", "screen": "core.staff.overview" },
     { "path": "/admin/orgs", "screen": "core.staff.orgs" },
     { "path": "/admin/orgs/:orgId", "screen": "core.staff.org" }
   ],
@@ -264,6 +269,47 @@
       "entries": [
         { "via": "link", "link": "/manage/notifications/settings" },
         { "via": "universal", "link": "https://console.example.com/manage/notifications/settings" }
+      ]
+    },
+    {
+      "name": "a site's plugin (the link clicked in another app on the Mac): Site settings, Plugins, then the plugin",
+      "scope": "site",
+      "expect": { "mode": "siteSettings", "area": { "row": "plugins", "screen": "core.site.plugins", "params": {} }, "pushed": [{ "screen": "core.site.plugin", "params": { "pluginId": "pIbeqgnNLn" } }], "opensSection": false, "starredRowStays": false },
+      "entries": [
+        { "via": "link", "link": "/acme/hosts/shop/admin/plugins/pIbeqgnNLn" },
+        { "via": "universal", "link": "https://console.example.com/acme/hosts/shop/admin/plugins/pIbeqgnNLn" },
+        { "via": "aglyn", "link": "aglyn://acme/hosts/shop/admin/plugins/pIbeqgnNLn" },
+        { "via": "notification", "link": "/h1/admin/plugins/pIbeqgnNLn", "orgSlug": "acme", "hostId": "h1", "hostSubdomain": "shop" },
+        { "via": "search", "link": "/acme/hosts/shop/admin/plugins/pIbeqgnNLn" },
+        { "via": "recent", "item": { "kind": "record", "id": "screen:core.site.plugin?pluginId=pIbeqgnNLn", "orgId": "org-acme", "hostId": "h1", "label": "Plugin", "screen": "core.site.plugin", "params": { "pluginId": "pIbeqgnNLn" } } }
+      ]
+    },
+    {
+      "name": "a site's Plugins: Site settings, Plugins",
+      "scope": "site",
+      "expect": { "mode": "siteSettings", "area": { "row": "plugins", "screen": "core.site.plugins", "params": {} }, "pushed": [], "opensSection": false, "starredRowStays": false },
+      "entries": [
+        { "via": "link", "link": "/acme/hosts/shop/admin/plugins" },
+        { "via": "universal", "link": "https://console.example.com/acme/hosts/shop/admin/plugins" },
+        { "via": "aglyn", "link": "aglyn://acme/hosts/shop/admin/plugins" }
+      ]
+    },
+    {
+      "name": "a site's Admin: Site settings, General (the site's own, never the staff overview at the same path)",
+      "scope": "site",
+      "expect": { "mode": "siteSettings", "area": { "row": "general", "screen": "core.site.general", "params": {} }, "pushed": [], "opensSection": false, "starredRowStays": false },
+      "entries": [
+        { "via": "link", "link": "/acme/hosts/shop/admin" },
+        { "via": "universal", "link": "https://console.example.com/acme/hosts/shop/admin" }
+      ]
+    },
+    {
+      "name": "a page under a site's plugin the app has no screen for: Plugins, the plugin, then says so (never the site's Home)",
+      "scope": "site",
+      "expect": { "mode": "siteSettings", "area": { "row": "plugins", "screen": "core.site.plugins", "params": {} }, "pushed": [{ "screen": "core.site.plugin", "params": { "pluginId": "pIbeqgnNLn" } }, { "unavailable": "/acme/hosts/shop/admin/plugins/pIbeqgnNLn/settings" }], "opensSection": false, "starredRowStays": false },
+      "entries": [
+        { "via": "link", "link": "/acme/hosts/shop/admin/plugins/pIbeqgnNLn/settings" },
+        { "via": "universal", "link": "https://console.example.com/acme/hosts/shop/admin/plugins/pIbeqgnNLn/settings" }
       ]
     },
     {

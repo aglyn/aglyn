@@ -119,7 +119,12 @@ let dryRunMissing = 0
 // Stripe price is immutable — the `aglyn_pro_v2` pair stays as history and is
 // never re-minted. Both v4 prices already exist live.
 const PLANS = [
-  { plan: 'starter', name: 'Aglyn Starter', version: 'v2', usd: 25, yearlyUsd: 16 * 12, extraHostUsd: 20, extraSeatUsd: 5, extraMemberUsd: 3, extraDatasetUsd: 2 },
+  // Starter's extra site is $25 since AGL-4227, under NEW lookup keys
+  // (`aglyn_starter_extra_host_v2[_yearly]`) and env names
+  // (`STRIPE_PRICE_STARTER_EXTRA_HOST_V2[_YEARLY]`): the $20 pair stays as the
+  // price existing subscriptions carry, and the console charges it until the
+  // v2 env is set (`REPRICED_ADDONS` in billing-addons.ts).
+  { plan: 'starter', name: 'Aglyn Starter', version: 'v2', usd: 25, yearlyUsd: 16 * 12, extraHostUsd: 25, extraHostVersion: 'v2', extraSeatUsd: 5, extraMemberUsd: 3, extraDatasetUsd: 2 },
   { plan: 'pro', name: 'Aglyn Pro', version: 'v4', usd: 69, yearlyUsd: 49 * 12, extraHostUsd: 20, extraSeatUsd: 4, extraMemberUsd: 2, extraDatasetUsd: 2 },
 ]
 
@@ -221,7 +226,7 @@ async function ensureAddonPair({ lookupBase, productName, usd, planMetadata, uni
 const env = {}
 for (const {
   plan, name, version, usd, yearlyUsd,
-  extraHostUsd, extraSeatUsd, extraMemberUsd, extraDatasetUsd,
+  extraHostUsd, extraHostVersion, extraSeatUsd, extraMemberUsd, extraDatasetUsd,
 } of PLANS) {
   const base = await ensurePrice({
     lookupKey: `aglyn_${plan}_${version}`,
@@ -242,7 +247,9 @@ for (const {
   // Per-plan add-ons (AGL-68/112/132): env names match
   // apps/console/utils/server/billing-addons.ts.
   const addons = [
-    ['extra_host', 'extra host', extraHostUsd, 'EXTRA_HOST'],
+    extraHostVersion
+      ? [`extra_host_${extraHostVersion}`, 'extra host', extraHostUsd, `EXTRA_HOST_${extraHostVersion.toUpperCase()}`]
+      : ['extra_host', 'extra host', extraHostUsd, 'EXTRA_HOST'],
     ['extra_seat', 'extra manager seat', extraSeatUsd, 'EXTRA_SEAT'],
     ['extra_member', 'extra member seat', extraMemberUsd, 'EXTRA_MEMBER'],
     ['extra_dataset', 'extra dataset', extraDatasetUsd, 'EXTRA_DATASET'],

@@ -148,10 +148,37 @@ describe('POST /v1/sites/{siteId}/hooks (AGL-3643)', () => {
       'POST',
       '/v1/sites/h1/hooks',
       { targetUrl: TARGET, events: ['order.paid'] },
-      ctx({ org: { plan: 'free' } as never }),
+      // Webhooks granted, commerce not: the event's own feature is what refuses.
+      ctx({ org: { plan: 'free', entitlements: { features: { webhooks: true } } } as never }),
     )
     expect(response.status).toBe(403)
     expect((await response.json()).error).toMatchObject({ type: 'plan_required', code: 'commerce' })
+  })
+
+  it('refuses a hook on a plan with the API and without webhooks (AGL-4226)', async () => {
+    const { call, hooks } = setup()
+    const response = await call(
+      'POST',
+      '/v1/sites/h1/hooks',
+      { targetUrl: TARGET, events: ['form.submitted'] },
+      ctx({
+        org: { plan: 'business', entitlements: { features: { webhooks: false } } } as never,
+      }),
+    )
+    expect(response.status).toBe(403)
+    expect((await response.json()).error).toMatchObject({ type: 'plan_required', code: 'webhooks' })
+    expect(hooks.size).toBe(0)
+  })
+
+  it('Starter has the API and not webhooks, so it is refused hooks', () => {
+    const { PLAN_ENTITLEMENTS } = jest.requireActual('@aglyn/aglyn/app-utils/plan-entitlements')
+    expect(PLAN_ENTITLEMENTS.starter.features.webhooks).toBe(false)
+    // Every plan that carries the API carries webhooks too, except Starter —
+    // so the gate refuses no plan that could subscribe before AGL-4226.
+    const withApiNoWebhooks = Object.entries(PLAN_ENTITLEMENTS)
+      .filter(([, row]: [string, any]) => row.features.apiAccess && !row.features.webhooks)
+      .map(([plan]) => plan)
+    expect(withApiNoWebhooks.filter((plan) => plan !== 'starter')).toEqual([])
   })
 
   it('posts nowhere but Zapier, over https', async () => {

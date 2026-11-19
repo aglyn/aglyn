@@ -123,10 +123,22 @@ fun RecordsSection(
   val list = remember(kind, scope, context.firestore) {
     LiveQueryList(context.firestore, coroutines, 25) { doc -> crmRow(kind, doc, scope) }
   }
+  val bulk = remember(kind, scope) { CrmBulkState() }
+  val movesStages = rememberMovesStages(context, scope)
   LaunchedEffect(list, filterKey, asked) {
+    bulk.picked = emptySet()
     val filter = filters.firstOrNull { it.key == filterKey } ?: filters.first()
     list.show { limit -> crmListQuery(kind, scope, filter, asked, limit) }
   }
+  val listed = (list.rows as? Live.Ready)?.value.orEmpty()
+  val pickedRows = listed.filter { it.id in bulk.picked }.map { crmBulkRow(it, scope) }
+  fun runBulk(action: CrmBulkAction, value: CrmBulkValue) {
+    val rows = pickedRows
+    bulk.run(coroutines, keepPicked = action.destructive) { api.bulk(action, kind, rows, value, reference).also { list.retry() } }
+  }
+  fun bulkEnabled(action: CrmBulkAction): Boolean = scope.canWrite &&
+    !((action == CrmBulkAction.STAGE || action == CrmBulkAction.LOST) && !movesStages) &&
+    !(kind == CrmKind.CONTACT && !scope.suite && action in setOf(CrmBulkAction.OWNER, CrmBulkAction.STAGE, CrmBulkAction.COMPANY))
   var picked by rememberSaveable(kind) { mutableStateOf(initial) }
   // Asked to open the one contact with an address (`contactsListSeed`): on exactly one match the record opens; no
   // match leaves the filtered list on screen.
@@ -148,7 +160,15 @@ fun RecordsSection(
         }
         Column(Modifier.padding(horizontal = space(2f), vertical = space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
           SearchField(search, { search = it; if (it.isBlank()) asked = "" }, placeholder = "Search ${kind.plural.lowercase()}", onSearch = { asked = search })
-          ChoiceChipRow(filters.map { ChipOption(it.key, it.label) }, filterKey, { filterKey = it })
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) { ChoiceChipRow(filters.map { ChipOption(it.key, it.label) }, filterKey, { filterKey = it }) }
+            if (scope.canWrite) CrmSelectToggle(bulk.selecting) { bulk.selecting = it; if (!it) bulk.picked = emptySet() }
+          }
+          // Counted over the rows the list still shows: an act that moves rows out of the view leaves none of them picked.
+          if (bulk.selecting && pickedRows.isNotEmpty()) {
+            CrmBulkBar(pickedRows.size, crmBulkActions(kind, scope.workspaceWide), bulk.running, ::bulkEnabled, { action -> bulk.pick(action) { runBulk(it, CrmBulkValue()) } }) { bulk.picked = emptySet() }
+          }
+          CrmBulkNotices(bulk.result) { bulk.result = null }
         }
         LiveListPane(
           list,
@@ -162,15 +182,27 @@ fun RecordsSection(
             )
           },
         ) { row ->
-          AglynListItem(
-            title = row.title,
-            supporting = row.listSubtitle(reference).ifBlank { null },
-            icon = AglynIcons.named(kind.icon),
-            selected = row.id == selected,
-            trailing = row.chip?.let { { StatusChip(it, chipTone(kind, row)) } },
-            onClick = { picked = row.id; onSelect(row.id) },
-            modifier = Modifier.testTag("crm-row-${row.id}"),
-          )
+          if (bulk.selecting) {
+            CrmPickRow(row.id in bulk.picked, row.title, { bulk.toggle(row.id) }) { modifier ->
+              AglynListItem(
+                title = row.title,
+                supporting = row.listSubtitle(reference).ifBlank { null },
+                trailing = row.chip?.let { { StatusChip(it, chipTone(kind, row)) } },
+                onClick = { bulk.toggle(row.id) },
+                modifier = modifier.testTag("crm-row-${row.id}"),
+              )
+            }
+          } else {
+            AglynListItem(
+              title = row.title,
+              supporting = row.listSubtitle(reference).ifBlank { null },
+              icon = AglynIcons.named(kind.icon),
+              selected = row.id == selected,
+              trailing = row.chip?.let { { StatusChip(it, chipTone(kind, row)) } },
+              onClick = { picked = row.id; onSelect(row.id) },
+              modifier = Modifier.testTag("crm-row-${row.id}"),
+            )
+          }
         }
       }
     },
@@ -182,6 +214,19 @@ fun RecordsSection(
       }
     },
   )
+  bulk.action?.let { action ->
+    val rows = pickedRows
+    val pipeline = crmBulkPipeline(rows)
+    CrmBulkDialog(
+      action, kind, rows.size, reference, if (kind == CrmKind.DEAL && pipeline.one) reference.pipeline(pipeline.id) else null, null, bulk.busy,
+      onDismiss = { bulk.action = null },
+    ) { value -> runBulk(action, value) }
+  }
+  bulk.confirming?.let { action ->
+    crmBulkConfirm(action, CrmBulkNoun.of(kind), pickedRows.size)?.let { confirm ->
+      CrmBulkConfirmDialog(confirm, bulk.running, onDismiss = { bulk.confirming = null }) { runBulk(action, CrmBulkValue()) }
+    }
+  }
   if (creating) {
     CreateRecordDialog(context, kind, scope, api, reference, onDismiss = { creating = false }) { id -> creating = false; picked = id }
   }
@@ -213,7 +258,7 @@ internal fun chipTone(kind: CrmKind, row: CrmRow): StatusTone = when (kind) {
 }
 
 /** What a record's screen offers, by object and by the member's role. */
-private enum class RecordDialog { EDIT, DELETE, LOG, EMAIL, TASK, STATUS, UNQUALIFY, CONVERT, STAGE, MOVE, WON, LOST }
+private enum class RecordDialog { EDIT, DELETE, LOG, LOG_CALL, EMAIL, TASK, STATUS, UNQUALIFY, CONVERT, STAGE, MOVE, WON, LOST }
 
 /**
  * One record: its header and actions, its properties (standard and custom),
@@ -251,7 +296,10 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
         ) {
           notice?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = { notice = null }) { Text("Dismiss") } }) }
           // One filled button, the next step for this record; the rest in ⋯.
-          val (primary, more) = if (scope.canWrite) recordActions(kind, row, movesStages) { dialog = it } else (null to emptyList())
+          val uri = androidx.compose.ui.platform.LocalUriHandler.current
+          // Dialling writes nothing, so Call stands for a reader too (`CrmCallButton`).
+          val call = callAction(kind, row) { runCatching { uri.openUri(it) } }
+          val (primary, more) = if (scope.canWrite) recordActions(kind, row, movesStages, call) { dialog = it } else (null to listOfNotNull(call))
           val hasStage = kind == CrmKind.CONTACT || (kind == CrmKind.DEAL && (row.data["status"] == "open" || row.data["status"] == null))
           if (scope.canWrite && hasStage && !movesStages) {
             NoticeBanner(com.aglyn.contracts.permissionRefusalText(CRM_MOVE_STAGES_KEY), StatusTone.INFO, Modifier.testTag("crm-stage-refusal"))
@@ -288,7 +336,20 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
               }
               display?.takeIf { it.isNotBlank() }?.let { field to it }
             }
-            shown.forEach { (field, display) -> PropertyRow(field.spec.label, display, Modifier.testTag("property-${field.spec.key}")) }
+            shown.forEach { (field, display) ->
+              val tel = if (field.spec.kind == FieldKind.PHONE) crmTelHref(display) else null
+              if (tel != null) {
+                // A number a dialler can take is a `tel:` link (`CrmPhoneLink`), flagged when they asked not to be phoned.
+                PropertyRow(field.spec.label, display, Modifier.testTag("property-${field.spec.key}")) {
+                  Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (row.data["doNotCall"] == true) Text("(do not call)", style = MaterialTheme.typography.labelSmall, color = com.aglyn.ui.LocalAglynPalette.current.warning.text)
+                    TextButton(onClick = { runCatching { uri.openUri(tel) } }, modifier = Modifier.testTag("crm-phone-${field.spec.key}")) { Text("Call") }
+                  }
+                }
+              } else {
+                PropertyRow(field.spec.label, display, Modifier.testTag("property-${field.spec.key}"))
+              }
+            }
             if (shown.size < fields.size) {
               Text("${fields.size - shown.size} more fields are empty. Edit to fill them in.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -309,12 +370,15 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
  * What a record's header offers: the next step for its state as the one filled button (Convert a qualified lead, Email a
  * contact, Move an open deal's stage), and every other act in ⋯, Remove or Delete last.
  */
-private fun recordActions(kind: CrmKind, row: CrmRow, movesStages: Boolean, open: (RecordDialog) -> Unit): Pair<com.aglyn.ui.RecordAction?, List<com.aglyn.ui.RecordAction>> {
+private fun recordActions(kind: CrmKind, row: CrmRow, movesStages: Boolean, call: com.aglyn.ui.RecordAction?, open: (RecordDialog) -> Unit): Pair<com.aglyn.ui.RecordAction?, List<com.aglyn.ui.RecordAction>> {
   fun act(label: String, icon: String, dialog: RecordDialog) =
     com.aglyn.ui.RecordAction("crm-action-${dialog.name.lowercase()}", label, icon, destructive = dialog == RecordDialog.DELETE, enabled = movesStages || dialog !in setOf(RecordDialog.STAGE, RecordDialog.MOVE, RecordDialog.WON, RecordDialog.LOST)) { open(dialog) }
   val all = buildList {
     add(act("Edit", "edit", RecordDialog.EDIT))
     add(act("Log activity", "sticky_note", RecordDialog.LOG))
+    // Call sits beside Log a call (`CrmCallButton`).
+    call?.let { add(it) }
+    if (kind != CrmKind.DEAL) add(act("Log a call", "call", RecordDialog.LOG_CALL))
     if (kind != CrmKind.COMPANY && crmHasEmail(row.data) || kind == CrmKind.DEAL) add(act("Email", "mail", RecordDialog.EMAIL))
     add(act("New task", "task", RecordDialog.TASK))
     when (kind) {
@@ -341,6 +405,17 @@ private fun recordActions(kind: CrmKind, row: CrmRow, movesStages: Boolean, open
   }
   val primary = all.firstOrNull { it.id == "crm-action-${next.name.lowercase()}" }
   return primary to all.filter { it != primary }
+}
+
+/**
+ * **Call** (`CrmCallButton`): dials the record's number, switched off when there is none a dialler can take, and worded as a
+ * warning for a person who asked not to be phoned. None on a deal.
+ */
+private fun callAction(kind: CrmKind, row: CrmRow, dial: (String) -> Unit): com.aglyn.ui.RecordAction? {
+  if (kind == CrmKind.DEAL) return null
+  val href = crmTelHref(crmCallNumber(kind, row.data))
+  val doNotCall = kind != CrmKind.COMPANY && row.data["doNotCall"] == true
+  return com.aglyn.ui.RecordAction("crm-action-call", crmCallLabel(doNotCall), "call", enabled = href != null) { href?.let(dial) }
 }
 
 /** A deal's stages as a path: done, current, ahead. */
@@ -581,7 +656,7 @@ private fun RecordDialogs(
         }
       },
     )
-    RecordDialog.LOG -> LogActivityDialog(
+    RecordDialog.LOG, RecordDialog.LOG_CALL -> LogActivityDialog(
       context,
       scope,
       reference,
@@ -590,13 +665,19 @@ private fun RecordDialogs(
       known = activityKnownLabels(kind, id, row),
       busy = busy,
       onDismiss = onClose,
+      initialKind = if (dialog == RecordDialog.LOG_CALL) "call" else "note",
     ) { activityKind, body, outcome, minutes, direction, picks ->
       busy.run(coroutines, { onClose(); onNotice("Logged.") }) {
         val links = picks?.let { crmActivityLinkFromPicks(it) } ?: mapOf(kind.linkField to id)
         api.logActivity(activityKind, body, links, byName = null, outcome = outcome, durationMinutes = minutes, direction = direction)
       }
     }
-    RecordDialog.EMAIL -> EmailDialog(row, busy, onClose) { subject, message ->
+    RecordDialog.EMAIL -> CrmEmailDialog(
+      context, scope, api, row,
+      // The records a letter from here reads its merge fields from: a deal's own and its Primary, else the record itself.
+      mapOf(kind.linkField to id) + if (kind == CrmKind.DEAL) listOfNotNull((row.data["contactId"] as? String)?.takeIf { it.isNotEmpty() }?.let { "contactId" to it }) else emptyList(),
+      busy, onClose,
+    ) { subject, message ->
       busy.run(coroutines, { onClose(); onNotice("Email sent.") }) { api.sendEmail(subject, message, mapOf(kind.linkField to id)) }
     }
     RecordDialog.TASK -> TaskDialog(
@@ -879,9 +960,11 @@ private fun LogActivityDialog(
   known: Map<String, String>,
   busy: Busy,
   onDismiss: () -> Unit,
+  /** The kind the dialog opens on: a note, or a call from **Log a call**. */
+  initialKind: String = "note",
   onLog: (kind: String, body: String, outcome: String?, minutes: Long?, direction: String?, picks: CrmActivityPicks?) -> Unit,
 ) {
-  var kind by remember { mutableStateOf("note") }
+  var kind by remember { mutableStateOf(initialKind) }
   var body by remember { mutableStateOf("") }
   var outcome by remember { mutableStateOf("") }
   var minutes by remember { mutableStateOf("") }
@@ -937,26 +1020,6 @@ private fun LogActivityDialog(
         modifier = Modifier.testTag("activity-related"),
       ) { picks = current.copy(related = CrmRelated.ofKey(it)) }
     }
-  }
-}
-
-@Composable
-private fun EmailDialog(row: CrmRow, busy: Busy, onDismiss: () -> Unit, onSend: (String, String) -> Unit) {
-  var subject by remember { mutableStateOf("") }
-  var message by remember { mutableStateOf("") }
-  ActionDialog(
-    title = "Email ${row.title}",
-    body = (row.data["email"] as? String)?.let { "To $it. The email is logged on the record." },
-    icon = "mail",
-    confirmLabel = "Send",
-    confirmEnabled = subject.isNotBlank() && message.isNotBlank(),
-    busy = busy.busy,
-    error = busy.error,
-    onDismiss = onDismiss,
-    onConfirm = { onSend(subject, message) },
-  ) {
-    OutlinedTextField(subject, { subject = it.take(Contracts.crmEmailSubjectMax.toInt()) }, label = { Text("Subject") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-    OutlinedTextField(message, { message = it.take(Contracts.crmEmailBodyMax.toInt()) }, label = { Text("Message") }, minLines = 5, modifier = Modifier.fillMaxWidth())
   }
 }
 

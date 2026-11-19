@@ -152,3 +152,67 @@ describe('/api/site-preview/enter (AGL-4086)', () => {
     expect(plantedCookie(response)).not.toContain('Secure')
   })
 })
+
+/**
+ * The console's local and preview links land on a SHARED origin that serves
+ * every site, naming the site with `?tenantHost=` (as `siteLiveUrlForSlug`
+ * builds them). `/api` is outside the middleware, so the route reads the name
+ * itself there, and only there.
+ */
+describe('/api/site-preview/enter on a shared origin', () => {
+  function onShared(options: {
+    host: string
+    tenantHost?: string
+    cookie?: string
+    returnTo?: string
+    blob?: string
+  }): Request {
+    const url = new URL(`http://${options.host}/api/site-preview/enter`)
+    url.searchParams.set('blob', options.blob ?? freshBlob())
+    if (options.tenantHost) url.searchParams.set('tenantHost', options.tenantHost)
+    if (options.returnTo) url.searchParams.set('return', options.returnTo)
+    const headers: Record<string, string> = { host: options.host }
+    if (options.cookie) headers['cookie'] = options.cookie
+    return new Request(url, { headers })
+  }
+
+  const vercel = process.env['VERCEL']
+  afterEach(() => {
+    if (vercel === undefined) delete process.env['VERCEL']
+    else process.env['VERCEL'] = vercel
+  })
+
+  it('local tenant: enters the site the link names and keeps naming it on the page', async () => {
+    const response = await GET(onShared({ host: 'localhost:4500', tenantHost: 'acme', returnTo: '/menu?x=1' }))
+    expect(mockGetHost).toHaveBeenCalledWith({ host: 'acme' })
+    expect(plantedCookie(response)).toBeTruthy()
+    expect(response.headers.get('Location')).toBe('/menu?x=1&tenantHost=acme')
+  })
+
+  it('local tenant: falls back to the site the middleware remembered in its cookie', async () => {
+    const response = await GET(onShared({ host: 'localhost:4500', cookie: 'aglyn-tenant-host=acme' }))
+    expect(plantedCookie(response)).toBeTruthy()
+    expect(response.headers.get('Location')).toBe('/')
+  })
+
+  it('tenant preview deployment: enters the named site on Vercel', async () => {
+    process.env['VERCEL'] = '1'
+    const response = await GET(
+      onShared({ host: 'aglyn-tenant-git-main-aglyn.vercel.app', tenantHost: 'acme' }),
+    )
+    expect(plantedCookie(response)).toBeTruthy()
+    expect(response.headers.get('Location')).toBe('/?tenantHost=acme')
+  })
+
+  it('still plants nothing when the named site is not the one the blob is for', async () => {
+    const response = await GET(onShared({ host: 'localhost:4500', tenantHost: 'acme', blob: freshBlob('host-2') }))
+    expect(plantedCookie(response)).toBeUndefined()
+  })
+
+  it('IGNORES the name on a site’s own address: a production link cannot be pointed elsewhere', async () => {
+    const response = await GET(onShared({ host: 'other.example', tenantHost: 'acme' }))
+    expect(mockGetHost).toHaveBeenCalledWith({ host: 'cname--other.example' })
+    expect(plantedCookie(response)).toBeUndefined()
+    expect(response.headers.get('Location')).toBe('/')
+  })
+})
