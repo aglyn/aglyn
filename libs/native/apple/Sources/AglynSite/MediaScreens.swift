@@ -1216,6 +1216,36 @@ struct MediaDetail: View {
 }
 
 /// A field in the details (Figma Media inspector: the label over a bordered box).
+extension MediaDetailBody {
+  /// The console drawer's Custom metadata: Key / Value rows, Remove field, Add field, saved with the details.
+  @ViewBuilder
+  var customMetadataRows: some View {
+    VStack(alignment: .leading, spacing: AglynSpace.one) {
+      Text("Custom metadata").font(.system(size: AglynMediaMetrics.fieldLabel, weight: .medium))
+        .foregroundStyle(AglynColor.secondaryText)
+      ForEach($meta) { $row in
+        HStack(alignment: .bottom, spacing: AglynSpace.one) {
+          MediaDetailField(label: "Key", text: $row.key, enabled: canEdit, identifier: "media-meta-key")
+            .autocorrectionDisabled()
+          MediaDetailField(label: "Value", text: $row.value, enabled: canEdit, identifier: "media-meta-value")
+          Button {
+            meta.removeAll { $0.id == row.id }
+          } label: {
+            Label("Remove field", systemImage: "minus.circle").labelStyle(.iconOnly)
+          }
+          .buttonStyle(.borderless)
+          .disabled(!canEdit)
+          .padding(.bottom, AglynMediaMetrics.fieldPadding.bottom)
+        }
+      }
+      Button("Add field", systemImage: "plus") { meta.append(MetaRow(key: "", value: "")) }
+        .buttonStyle(.borderless)
+        .disabled(!canEdit)
+        .accessibilityIdentifier("media-meta-add")
+    }
+  }
+}
+
 private struct MediaDetailField: View {
   let label: String
   @Binding var text: String
@@ -1262,6 +1292,19 @@ struct MediaDetailBody: View {
   @State private var alt = ""
   @State private var details = ""
   @State private var tags = ""
+  /// The custom metadata rows as edited (the console drawer's Key / Value rows).
+  @State private var meta: [MetaRow] = []
+
+  struct MetaRow: Identifiable, Equatable {
+    let id = UUID()
+    var key: String
+    var value: String
+  }
+
+  /// The rows as the save sends them: trimmed keys, blank ones dropped (the console's `nextMeta`).
+  private var editedMeta: [String: String] {
+    Dictionary(meta.map { ($0.key.trimmed, $0.value) }.filter { !$0.0.isEmpty }) { first, _ in first }
+  }
   @State private var moving = false
   @State private var moveTarget: String?
   @State private var deleting = false
@@ -1278,10 +1321,12 @@ struct MediaDetailBody: View {
   private var parsedTags: [String] {
     tags.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
   }
-  private var dirty: Bool {
+  private var detailsDirty: Bool {
     fileName.trimmed != item.fileName || alt.trimmed != item.alt || details.trimmed != item.description
       || parsedTags.map { $0.lowercased() } != item.tags
   }
+  private var metaDirty: Bool { editedMeta != item.customMetadata }
+  private var dirty: Bool { detailsDirty || metaDirty }
   /// Privacy is a workspace-wide setting: an owner or admin sets it on a workspace file.
   private var orgWideEditor: Bool { !scope.isOrg || ["owner", "admin"].contains(context.orgRole ?? "") }
   /// The details' side margin: the inspector's 24, or the column's content edge where they are pushed.
@@ -1301,6 +1346,7 @@ struct MediaDetailBody: View {
     alt = item.alt
     details = item.description
     tags = item.tags.joined(separator: ", ")
+    meta = item.customMetadata.sorted { $0.key < $1.key }.map { MetaRow(key: $0.key, value: $0.value) }
   }
 
   private var facts: String {
@@ -1436,6 +1482,7 @@ struct MediaDetailBody: View {
         MediaDetailField(label: "Description", text: $details, multiline: true, enabled: canEdit)
         MediaDetailField(label: "Tags, separated by commas", text: $tags, enabled: canEdit, identifier: "media-tags")
           .autocorrectionDisabled()
+        customMetadataRows
         Button {
           moveTarget = item.folderID
           runner.error = nil
@@ -1457,8 +1504,10 @@ struct MediaDetailBody: View {
         HStack(spacing: AglynSpace.one) {
           Button("Save") {
             let (name, alt, details, tags) = (fileName.trimmed, alt.trimmed, details.trimmed, parsedTags)
+            let (saveDetails, nextMeta) = (detailsDirty, metaDirty ? editedMeta : nil)
             runner.run("Details saved.") {
-              try await api.saveDetails(item.id, fileName: name, alt: alt, description: details, tags: tags)
+              if saveDetails { try await api.saveDetails(item.id, fileName: name, alt: alt, description: details, tags: tags) }
+              if let nextMeta { try await api.setCustomMetadata(item.id, nextMeta) }
             }
           }
           .buttonStyle(.aglynProminent)
