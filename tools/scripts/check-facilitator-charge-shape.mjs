@@ -227,9 +227,11 @@ const CONNECTED_ACCOUNT_READS = new Map([
   [
     'libs/plugins/accounting/src/lib/server/payouts.ts',
     'Lists the payouts that reached a merchant\'s bank (`GET /v1/payouts`) so ' +
-      'the accounting plugin can post each as a transfer (AGL-3614). Stripe ' +
-      'keeps payouts on the connected account, and this read is the only way ' +
-      'a platform sees them.',
+      'the accounting plugin can post each as a transfer (AGL-3614), and the ' +
+      'balance transactions in each (`GET /v1/balance_transactions`) to post ' +
+      'the fees Stripe took. Stripe keeps payouts and balance transactions on ' +
+      'the connected account, and this read is the only way a platform sees ' +
+      'them.',
   ],
 ])
 
@@ -315,10 +317,16 @@ const DIRECT_CHARGE_SITES = new Map([
   ],
 ])
 
-/** Whether a file's code is only reads: no write method and no money parameter. */
+/**
+ * Whether a file's code is only reads: no write method and no money parameter.
+ * The bare string `'application_fee'` is a value Stripe answers with (a fee
+ * detail's or a transaction's `type`), which a read compares against; the
+ * parameters that set a fee (`application_fee_amount`, `[application_fee…]`)
+ * still count.
+ */
 export function readsOnly(code) {
   return !/['"](POST|PUT|PATCH|DELETE)['"]/.test(code) &&
-    !/transfer_data|application_fee|on_behalf_of|amount\]/.test(code)
+    !/transfer_data|application_fee(?!['"])|on_behalf_of|amount\]/.test(code)
 }
 
 /**
@@ -639,6 +647,24 @@ function runSelfTest() {
     'a listed file that POSTs with Stripe-Account IS a violation',
     only("await post(url, { method: 'POST', headers: { 'Stripe-Account': acct } })\n", 1, READS)
       .length === 1,
+  )
+  ok(
+    'a listed read that compares a fee detail\'s type to \'application_fee\' is not a violation',
+    only(
+      "const r = await get(url, { method: 'GET', headers: { 'Stripe-Account': acct } })\n" +
+        "if (detail.type === 'application_fee') skip()\n",
+      1,
+      READS,
+    ).length === 0,
+  )
+  ok(
+    'a listed file that sets application_fee_amount with Stripe-Account IS a violation',
+    only(
+      "await get(url, { method: 'GET', headers: { 'Stripe-Account': acct } })\n" +
+        "params.set('application_fee_amount', '10')\n",
+      1,
+      READS,
+    ).length === 1,
   )
   ok(
     'an unlisted file reading with Stripe-Account IS a violation',
