@@ -1,6 +1,6 @@
 ---
 name: aglyn-console
-description: Use the Aglyn console in a browser for work the Aglyn connector's tools do not cover - designing and editing pages in the Besigner editor, themes and site looks, navigation, site setup (business details, SEO, domains, integrations), team members, billing and plan changes. Use when the user asks for one of these and a browser tool is available.
+description: Use the Aglyn console in a browser for work the Aglyn connector's tools do not cover - designing and editing pages in the Besigner editor, themes and site looks, navigation, site setup the tools do not reach (domains, integrations, the search-indexing switch and social image), team members, billing and plan changes. Use when the user asks for one of these and a browser tool is available.
 ---
 
 # Working in the Aglyn console

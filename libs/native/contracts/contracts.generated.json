@@ -2095,6 +2095,17 @@
     168
   ],
   "DROP_OFF_WATCHES_MAX": 12,
+  "DUPLICABLE_RESOURCE_NOUNS": {
+    "campaign": "campaign",
+    "component": "component",
+    "emailDesign": "email design",
+    "emailTemplate": "email template",
+    "form": "form",
+    "layout": "layout",
+    "screen": "page",
+    "template": "template",
+    "workflow": "workflow"
+  },
   "DUPLICATE_ACTIVITY_ACTION_LABELS": {
     "campaign.duplicated": "Duplicated a campaign",
     "component.duplicated": "Duplicated a component",
@@ -2106,6 +2117,47 @@
     "template.duplicated": "Duplicated a template",
     "workflow.duplicated": "Duplicated a workflow"
   },
+  "DUPLICATE_COPIES": {
+    "campaign": [
+      "The subject, message, sender and design",
+      "A new draft — the audience and the send time are cleared"
+    ],
+    "component": [
+      "The definition and its properties",
+      "The latest version as a new draft",
+      "No instances — pages keep pointing at the original"
+    ],
+    "emailDesign": [
+      "The latest version, with its full element tree",
+      "A new draft — not published"
+    ],
+    "emailTemplate": [
+      "The subject and body, with their merge fields"
+    ],
+    "form": [
+      "The design, fields, validation, consent and routing",
+      "A new form of its own — submissions stay with the original"
+    ],
+    "layout": [
+      "The latest version, with its full element tree and properties",
+      "A new draft — no page uses the copy yet"
+    ],
+    "screen": [
+      "The latest version, with its full element tree and layout values",
+      "Description and SEO fields",
+      "A new draft — the copy is not published and has no address yet"
+    ],
+    "template": [
+      "The element tree, placeholders and properties",
+      "Description, slug and SEO fields"
+    ],
+    "workflow": [
+      "Every step and the return value",
+      "The trigger is cleared, so the copy runs nothing until you arm it"
+    ]
+  },
+  "DUPLICATE_NAME_MAX": 200,
+  "DUPLICATE_NAME_PREFIX": "Copy of ",
   "EMAIL_BLOCK_STARTER_TREES_JSON": "{\"header\":{\"$id\":null,\"componentId\":\"emailSection\",\"pluginId\":\"email\",\"props\":{\"align\":\"center\",\"padding\":24,\"emailRole\":\"header\"},\"nodes\":[{\"$id\":null,\"componentId\":\"emailImage\",\"pluginId\":\"email\",\"props\":{\"alt\":\"Your company logo\",\"width\":160,\"align\":\"center\"}},{\"$id\":null,\"componentId\":\"emailText\",\"pluginId\":\"email\",\"props\":{\"children\":\"Your company\",\"variant\":\"subheading\",\"align\":\"center\"}}]},\"footer\":{\"$id\":null,\"componentId\":\"emailSection\",\"pluginId\":\"email\",\"props\":{\"align\":\"center\",\"padding\":24,\"emailRole\":\"footer\"},\"nodes\":[{\"$id\":null,\"componentId\":\"emailDivider\",\"pluginId\":\"email\",\"props\":{}},{\"$id\":null,\"componentId\":\"emailText\",\"pluginId\":\"email\",\"props\":{\"children\":\"Your company · 123 Main St, City\",\"variant\":\"caption\",\"align\":\"center\",\"color\":\"#6b6b6b\"}},{\"$id\":null,\"componentId\":\"emailText\",\"pluginId\":\"email\",\"props\":{\"children\":\"You're receiving this because you're a customer of Your company.\",\"variant\":\"caption\",\"align\":\"center\",\"color\":\"#6b6b6b\"}}]}}",
   "EMAIL_LIST_QUERY": {
     "fields": [
@@ -2161,6 +2213,15 @@
         "path": "kind"
       }
     ]
+  },
+  "EMAIL_STATE_LABELS": {
+    "blocked": "Blocked by their mail gateway",
+    "bounced": "Bounced",
+    "complained": "Marked as spam",
+    "do_not_contact": "Do not contact",
+    "ok": "Email OK",
+    "undeliverable": "Would bounce",
+    "unsubscribed": "Unsubscribed"
   },
   "EMAIL_TEMPLATE_QUERY": {
     "fields": [
@@ -5084,6 +5145,9 @@
                 ],
                 "label": "CRM",
                 "order": 20,
+                "permissions": [
+                  "data.manage"
+                ],
                 "pluginId": "crm",
                 "screen": "crm.contacts",
                 "sections": [
@@ -5231,6 +5295,9 @@
                 "id": "emails",
                 "label": "Emails",
                 "order": 40,
+                "permissions": [
+                  "data.manage"
+                ],
                 "pluginId": "email",
                 "screen": "email.messages",
                 "sections": [
@@ -5396,6 +5463,9 @@
                 "id": "accounting",
                 "label": "Accounting",
                 "order": 70,
+                "permissions": [
+                  "accounting.manage"
+                ],
                 "pluginId": "accounting",
                 "screen": "accounting.books"
               },
@@ -5428,7 +5498,11 @@
                 "id": "sequences",
                 "label": "Sequences",
                 "order": 80,
+                "permissions": [
+                  "outreach.use"
+                ],
                 "pluginId": "outreach",
+                "requiresFeature": "outreach",
                 "screen": "outreach.sequences"
               },
               {
@@ -5878,6 +5952,76 @@
                     "id": "analytics",
                     "label": "Analytics",
                     "screen": "commerce.sales"
+                  },
+                  {
+                    "console": {
+                      "id": "/products/payments",
+                      "surface": "hostPluginSection"
+                    },
+                    "docs": "/commerce-and-bookings/commerce/overview",
+                    "id": "payments",
+                    "label": "Payments",
+                    "screen": "commerce.settingsPayments"
+                  },
+                  {
+                    "console": {
+                      "id": "/products/checkout",
+                      "surface": "hostPluginSection"
+                    },
+                    "docs": "/commerce-and-bookings/commerce/overview",
+                    "id": "checkout",
+                    "label": "Checkout",
+                    "screen": "commerce.settingsCheckout"
+                  },
+                  {
+                    "console": {
+                      "id": "/products/taxes",
+                      "surface": "hostPluginSection"
+                    },
+                    "docs": "/commerce-and-bookings/commerce/overview",
+                    "id": "taxes",
+                    "label": "Taxes",
+                    "screen": "commerce.settingsTaxes"
+                  },
+                  {
+                    "console": {
+                      "id": "/products/shipping",
+                      "surface": "hostPluginSection"
+                    },
+                    "docs": "/commerce-and-bookings/commerce/overview",
+                    "id": "shipping",
+                    "label": "Shipping & delivery",
+                    "screen": "commerce.settingsShipping"
+                  },
+                  {
+                    "console": {
+                      "id": "/products/notifications",
+                      "surface": "hostPluginSection"
+                    },
+                    "docs": "/commerce-and-bookings/commerce/overview",
+                    "id": "notifications",
+                    "label": "Notifications",
+                    "screen": "commerce.settingsNotifications"
+                  },
+                  {
+                    "console": {
+                      "id": "/products/channels",
+                      "surface": "hostPluginSection"
+                    },
+                    "docs": "/commerce-and-bookings/commerce/overview",
+                    "id": "channels",
+                    "label": "Sales channels",
+                    "screen": "commerce.settingsChannels"
+                  },
+                  {
+                    "console": {
+                      "id": "/products/integrations",
+                      "surface": "hostPluginSection"
+                    },
+                    "docs": "/commerce-and-bookings/commerce/overview",
+                    "id": "integrations",
+                    "label": "Integrations",
+                    "screen": "commerce.settings"
                   }
                 ]
               },
@@ -7079,6 +7223,7 @@
     "shell.workspaceSettings",
     "shell.siteSettings"
   ],
+  "NATIVE_NO_IN_APP_BILLING_NOTE": "Plan and billing changes are not available in the app.",
   "NATIVE_SITE_CAMPAIGNS_QUERY": {
     "fields": [
       {
@@ -7195,6 +7340,7 @@
       }
     ]
   },
+  "NATIVE_WEB_BILLING_LINK_LABEL": "Manage billing on the web",
   "NOTHING_MOVED": "Aglyn has not refunded or canceled anything.",
   "NOTIFICATION_SOUND_FIELD": "notificationSound",
   "NOTIFICATION_SOUNDS": [

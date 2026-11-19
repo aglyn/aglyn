@@ -81,6 +81,9 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The REAL lock verdict a named site is admitted by (AGL-4235): the
+  // site's own lock decides by the method, as at the site router.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/lockdown'),
   // The REAL facet helpers, the REAL consent groups and the REAL normalizers:
   // "the profile lands on the holder's facet" is the property under test, and
   // `contactFacetPath` is how the console gets there.
@@ -118,7 +121,7 @@ jest.mock('firebase-admin/firestore', () => {
 
 import { DELETE, GET, PATCH, POST } from '../app/api/v1/[[...route]]/route'
 import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
-import { lastFilters, mockDocs, resetMockFirestore } from './api-v1-crm-double'
+import { lastFilters, mockDocs, resetMockFirestore, seedSites } from './api-v1-crm-double'
 
 const CONTACTS = 'orgs/org-1/contacts'
 const handlers = { GET, POST, PATCH, DELETE }
@@ -172,6 +175,7 @@ beforeEach(() => {
   mockDocs.set('orgs/org-1/members/u-owner', { role: 'admin' })
   mockDocs.set('orgs/org-1/companies/co-acme', { name: 'Acme' })
   mockDocs.set('orgs/org-1/companies/co-bolt', { name: 'Bolt' })
+  seedSites(['host-1', 'host-2', 'host-3'])
 })
 
 describe('POST /v1/contacts with a CRM profile', () => {

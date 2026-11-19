@@ -101,16 +101,28 @@ describe('api-keys (pure helpers)', () => {
       ])
     })
 
+    it('admits products:write, now that the product writes ship (AGL-4235)', () => {
+      // The absentee guard below used to point at `products:write`, with a
+      // note to re-point it if the scope ever shipped. AGL-4235 ships the
+      // product writes, so it moved to `bookings:write` rather than being
+      // deleted.
+      expect(isApiScope('products:write')).toBe(true)
+      expect(normalizeScopes(['products:write', 'products:read'])).toEqual([
+        'products:read',
+        'products:write',
+      ])
+    })
+
     it('still refuses a scope no endpoint enforces (the AGL-899 rule)', () => {
       // The guard AGL-899 installed, kept alive against a real absentee:
-      // products are read-only over /v1, no handler asks for
-      // `products:write`, so nobody may mint it. Re-point this at another
-      // genuine absentee if `products:write` ever ships — do not delete it. A
+      // bookings are read-only over /v1, no handler asks for
+      // `bookings:write`, so nobody may mint it. Re-point this at another
+      // genuine absentee if `bookings:write` ever ships — do not delete it. A
       // mintable scope that grants nothing reads to a customer as a
       // permission they have and cannot use.
-      expect(isApiScope('products:write')).toBe(false)
-      expect(normalizeScopes(['products:read', 'products:write'])).toEqual([
-        'products:read',
+      expect(isApiScope('bookings:write')).toBe(false)
+      expect(normalizeScopes(['bookings:read', 'bookings:write'])).toEqual([
+        'bookings:read',
       ])
     })
   })

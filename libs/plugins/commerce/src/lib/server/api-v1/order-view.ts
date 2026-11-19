@@ -102,11 +102,17 @@ export function orderViewFromData(id: string, data: Record<string, any>) {
       checkoutSessionId: data.checkoutSessionId,
       $id: id,
     }),
-    // Who the tax was charged under (AGL-3614): `stripe-automatic` tax is
-    // Aglyn's to remit as marketplace facilitator and never reaches the
-    // merchant's account, which a ledger posting the sale has to know. An
-    // order from before the regime was recorded says `null`, never a guess.
+    // Who the tax was charged under (AGL-3614): `stripe-automatic` tax on a
+    // sale that is not `direct` is Aglyn's to remit as marketplace facilitator
+    // and never reaches the merchant's account; on a `direct` sale Stripe Tax
+    // ran on the seller's own account and the tax is the seller's. A ledger
+    // posting the sale has to know which. An order from before the regime was
+    // recorded says `null`, never a guess.
     taxMode: typeof data.taxMode === 'string' && data.taxMode ? data.taxMode : null,
+    // Where the sale was charged (AGL-3614): `direct` on the seller's own
+    // Stripe account, so the money, Stripe's fees and any Stripe Tax are the
+    // seller's; `null` through the platform's account, or not recorded.
+    chargeModel: orderChargeModelView(data),
     // The merchant's own tax service (AGL-3631): which one priced the sale, or
     // that it was asked and the store's own rates were charged instead
     // (`status: 'fallback'`). `null` when no service was asked. The regime is
@@ -198,6 +204,24 @@ export function orderCreditsView(data: Record<string, any>): Array<{
 }
 
 const CARD_METHODS: ReadonlySet<OrderPaymentMethod> = new Set(['card_present', 'card_keyed', 'card_link'])
+
+/**
+ * `direct` when the sale was charged on the seller's own Stripe account. An
+ * online sale says so on the order; a register card taken on the store's own
+ * account says so on its payment, so a succeeded card payment that does
+ * counts too.
+ */
+export function orderChargeModelView(data: Record<string, any>): 'direct' | null {
+  if (data?.chargeModel === 'direct') return 'direct'
+  const payments = Array.isArray(data?.payments) ? (data.payments as Array<Record<string, unknown>>) : []
+  const directCard = payments.some(
+    (payment) =>
+      payment?.status === 'succeeded' &&
+      CARD_METHODS.has(payment.method as OrderPaymentMethod) &&
+      payment.chargeModel === 'direct',
+  )
+  return directCard ? 'direct' : null
+}
 
 /**
  * A register sale's settled tenders as the order event names them (AGL-3614).

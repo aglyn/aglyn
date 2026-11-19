@@ -22,6 +22,12 @@
         "ListFilterRequest"
       ]
     },
+    "libs/aglyn/src/lib/app-utils/native-store-billing.ts": {
+      "values": [
+        "NATIVE_WEB_BILLING_LINK_LABEL",
+        "NATIVE_NO_IN_APP_BILLING_NOTE"
+      ]
+    },
     "libs/aglyn/src/lib/app-utils/name-search.ts": {
       "values": [
         "NAME_TOKEN_MAX_PREFIX",
@@ -364,7 +370,11 @@
     },
     "libs/aglyn/src/lib/app-utils/duplicate-resource.ts": {
       "values": [
-        "DUPLICATE_ACTIVITY_ACTION_LABELS"
+        "DUPLICATE_ACTIVITY_ACTION_LABELS",
+        "DUPLICATE_NAME_PREFIX",
+        "DUPLICATE_NAME_MAX",
+        "DUPLICABLE_RESOURCE_NOUNS",
+        "DUPLICATE_COPIES"
       ]
     },
     "libs/aglyn/src/lib/app-utils/crm.ts": {
@@ -1112,6 +1122,11 @@
         "CRM_EMAIL_TEMPLATE_KIND_LABELS",
         "CRM_EMAIL_TEMPLATE_VISIBILITY_LABELS",
         "CRM_MERGE_FIELDS"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/email-state.ts": {
+      "values": [
+        "EMAIL_STATE_LABELS"
       ]
     }
   },
@@ -32690,6 +32705,78 @@
           "workspace",
           [],
           false
+        ],
+        [
+          "workspace",
+          [
+            "crm",
+            "inbox",
+            "email",
+            "outreach",
+            "accounting",
+            "marketplace",
+            "workflows",
+            "marketing"
+          ],
+          false,
+          {
+            "permissions": {
+              "data.manage": true,
+              "outreach.use": false,
+              "accounting.manage": true
+            },
+            "features": {
+              "outreach": true
+            }
+          }
+        ],
+        [
+          "workspace",
+          [
+            "crm",
+            "inbox",
+            "email",
+            "outreach",
+            "accounting",
+            "marketplace",
+            "workflows",
+            "marketing"
+          ],
+          false,
+          {
+            "permissions": {
+              "data.manage": false,
+              "outreach.use": true,
+              "accounting.manage": false
+            },
+            "features": {
+              "outreach": false
+            }
+          }
+        ],
+        [
+          "workspace",
+          [
+            "crm",
+            "inbox",
+            "email",
+            "outreach",
+            "accounting",
+            "marketplace",
+            "workflows",
+            "marketing"
+          ],
+          false,
+          {
+            "permissions": {
+              "data.manage": true,
+              "outreach.use": true,
+              "accounting.manage": true
+            },
+            "features": {
+              "outreach": true
+            }
+          }
         ]
       ]
     },
@@ -37797,6 +37884,270 @@
         ]
       ]
     },
+    "verificationRequestBlock": {
+      "module": "libs/plugins/marketplace/src/lib/model/listing-verification.ts",
+      "args": [
+        [
+          {
+            "listing": null,
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed"
+            },
+            "viewerOrgId": null,
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed"
+            },
+            "viewerOrgId": "org_b",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "verified"
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "in_review"
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a"
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed"
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "pending"
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "declined"
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "declined",
+                "decidedAt": {
+                  "seconds": 1760794400
+                }
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "declined",
+                "decidedAt": {
+                  "seconds": 1760621600
+                }
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "withdrawn"
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "approved"
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ]
+      ]
+    },
+    "computeLifetimePurchaseCents": {
+      "module": "libs/plugins/commerce/src/lib/model/site-member-purchases.ts",
+      "args": [
+        [
+          []
+        ],
+        [
+          [
+            {
+              "status": "paid",
+              "totals": {
+                "totalCents": 2500
+              }
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "status": "paid",
+              "totals": {
+                "totalCents": 2500
+              },
+              "refundedCents": 500
+            },
+            {
+              "status": "fulfilled",
+              "amountCents": 1200
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "status": "pending",
+              "totals": {
+                "totalCents": 9900
+              }
+            },
+            {
+              "status": "cancelled",
+              "totals": {
+                "totalCents": 4000
+              }
+            },
+            {
+              "status": "refunded",
+              "totals": {
+                "totalCents": 3000
+              },
+              "refundedCents": 3000
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "status": "paid",
+              "totals": {
+                "totalCents": 1000
+              },
+              "refundedCents": 1500
+            },
+            {
+              "totals": {
+                "totalCents": null
+              },
+              "amountCents": "750"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "status": "delivered",
+              "totals": {},
+              "amountCents": 400,
+              "refundedCents": -50
+            },
+            {
+              "status": "partially_fulfilled",
+              "totals": {
+                "totalCents": "abc"
+              }
+            },
+            {
+              "status": null,
+              "totals": {
+                "totalCents": 1250.5
+              }
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "status": "paid",
+              "totals": {
+                "totalCents": 2000
+              },
+              "refundedCents": null,
+              "dispute": {
+                "reversedCents": 2000
+              }
+            }
+          ]
+        ]
+      ]
+    },
     "crmTelHref": {
       "module": "libs/aglyn/src/lib/app-utils/crm.ts",
       "args": [
@@ -38722,6 +39073,518 @@
             "op": "equals",
             "value": "x"
           }
+        ]
+      ]
+    },
+    "readEmailState": {
+      "module": "libs/aglyn/src/lib/app-utils/email-state.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "emailState": "bounced"
+          }
+        ],
+        [
+          {
+            "emailState": {
+              "status": "nope"
+            }
+          }
+        ],
+        [
+          {
+            "emailState": {
+              "status": "bounced",
+              "atMs": 1700000000000,
+              "source": "sequence",
+              "detail": "550 no such user",
+              "enrollmentId": "e1"
+            }
+          }
+        ],
+        [
+          {
+            "emailState": {
+              "status": "blocked",
+              "atMs": -4,
+              "source": "other",
+              "detail": ""
+            }
+          }
+        ],
+        [
+          {
+            "emailState": {
+              "status": "ok"
+            }
+          }
+        ]
+      ]
+    },
+    "emailStateRefusal": {
+      "module": "libs/aglyn/src/lib/app-utils/email-state.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "status": "ok",
+            "atMs": 0,
+            "source": "member",
+            "detail": null
+          }
+        ],
+        [
+          {
+            "status": "undeliverable",
+            "atMs": 0,
+            "source": "campaign",
+            "detail": null
+          }
+        ],
+        [
+          {
+            "status": "bounced",
+            "atMs": 0,
+            "source": "campaign",
+            "detail": null
+          }
+        ],
+        [
+          {
+            "status": "blocked",
+            "atMs": 0,
+            "source": "campaign",
+            "detail": null
+          }
+        ],
+        [
+          {
+            "status": "unsubscribed",
+            "atMs": 0,
+            "source": "campaign",
+            "detail": null
+          }
+        ],
+        [
+          {
+            "status": "complained",
+            "atMs": 0,
+            "source": "campaign",
+            "detail": null
+          }
+        ],
+        [
+          {
+            "status": "do_not_contact",
+            "atMs": 0,
+            "source": "campaign",
+            "detail": null
+          }
+        ],
+        [
+          {
+            "status": "bounced",
+            "atMs": 0,
+            "source": "campaign",
+            "detail": "550 no such user."
+          }
+        ],
+        [
+          {
+            "status": "undeliverable",
+            "atMs": 1700000000000,
+            "source": "check",
+            "detail": null
+          }
+        ],
+        [
+          {
+            "status": "unsubscribed",
+            "atMs": 1700000000000,
+            "source": "campaign",
+            "detail": "Via the footer link."
+          }
+        ]
+      ]
+    },
+    "emailStateForbidsEmail": {
+      "module": "libs/aglyn/src/lib/app-utils/email-state.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "status": "ok",
+            "atMs": 0,
+            "source": "member",
+            "detail": null
+          }
+        ],
+        [
+          {
+            "status": "unsubscribed",
+            "atMs": 0,
+            "source": "member",
+            "detail": null
+          }
+        ]
+      ]
+    },
+    "resolveCrmMergeFields": {
+      "module": "libs/aglyn/src/lib/app-utils/crm-email-templates.ts",
+      "args": [
+        [
+          "Hi {{contact.firstName}} {{contact.lastName}} ({{ contact.name }}) at {{contact.company}}, {{contact.title}} — {{contact.email}}",
+          {
+            "contact": {
+              "name": "Pat Lee",
+              "email": " Pat.Lee@Example.com ",
+              "facets": {
+                "g1": {
+                  "name": "Patricia Lee",
+                  "companyName": "Harbor Market",
+                  "jobTitle": "Owner"
+                },
+                "g2": {
+                  "firstName": "Mary Ann",
+                  "lastName": "van Dyke",
+                  "name": "Mary Ann van Dyke"
+                }
+              }
+            },
+            "contactGroupId": "g1",
+            "deal": {
+              "title": "Spring order",
+              "amountCents": 125050,
+              "currency": "usd"
+            },
+            "lead": {
+              "name": "Sam Ortiz Diaz",
+              "email": "sam@x",
+              "company": "Ortiz Co",
+              "jobTitle": "Buyer"
+            },
+            "sender": {
+              "name": "Dana Smith",
+              "email": "Dana@Shop.test"
+            },
+            "site": {
+              "name": " Juniper Bakery "
+            }
+          }
+        ],
+        [
+          "Hi {{contact.firstName}} {{contact.lastName}}",
+          {
+            "contact": {
+              "name": "Pat Lee",
+              "email": " Pat.Lee@Example.com ",
+              "facets": {
+                "g1": {
+                  "name": "Patricia Lee",
+                  "companyName": "Harbor Market",
+                  "jobTitle": "Owner"
+                },
+                "g2": {
+                  "firstName": "Mary Ann",
+                  "lastName": "van Dyke",
+                  "name": "Mary Ann van Dyke"
+                }
+              }
+            },
+            "contactGroupId": "g2",
+            "deal": {
+              "title": "Spring order",
+              "amountCents": 125050,
+              "currency": "usd"
+            },
+            "lead": {
+              "name": "Sam Ortiz Diaz",
+              "email": "sam@x",
+              "company": "Ortiz Co",
+              "jobTitle": "Buyer"
+            },
+            "sender": {
+              "name": "Dana Smith",
+              "email": "Dana@Shop.test"
+            },
+            "site": {
+              "name": " Juniper Bakery "
+            }
+          }
+        ],
+        [
+          "Hi {{contact.name}} / {{contact.firstName}}",
+          {
+            "contact": {
+              "name": "Pat Lee",
+              "email": " Pat.Lee@Example.com ",
+              "facets": {
+                "g1": {
+                  "name": "Patricia Lee",
+                  "companyName": "Harbor Market",
+                  "jobTitle": "Owner"
+                },
+                "g2": {
+                  "firstName": "Mary Ann",
+                  "lastName": "van Dyke",
+                  "name": "Mary Ann van Dyke"
+                }
+              }
+            },
+            "contactGroupId": null,
+            "deal": {
+              "title": "Spring order",
+              "amountCents": 125050,
+              "currency": "usd"
+            },
+            "lead": {
+              "name": "Sam Ortiz Diaz",
+              "email": "sam@x",
+              "company": "Ortiz Co",
+              "jobTitle": "Buyer"
+            },
+            "sender": {
+              "name": "Dana Smith",
+              "email": "Dana@Shop.test"
+            },
+            "site": {
+              "name": " Juniper Bakery "
+            }
+          }
+        ],
+        [
+          "{{lead.firstName}}|{{lead.lastName}}|{{lead.name}}|{{lead.email}}|{{lead.company}}|{{lead.title}}",
+          {
+            "contact": {
+              "name": "Pat Lee",
+              "email": " Pat.Lee@Example.com ",
+              "facets": {
+                "g1": {
+                  "name": "Patricia Lee",
+                  "companyName": "Harbor Market",
+                  "jobTitle": "Owner"
+                },
+                "g2": {
+                  "firstName": "Mary Ann",
+                  "lastName": "van Dyke",
+                  "name": "Mary Ann van Dyke"
+                }
+              }
+            },
+            "contactGroupId": "g1",
+            "deal": {
+              "title": "Spring order",
+              "amountCents": 125050,
+              "currency": "usd"
+            },
+            "lead": {
+              "name": "Sam Ortiz Diaz",
+              "email": "sam@x",
+              "company": "Ortiz Co",
+              "jobTitle": "Buyer"
+            },
+            "sender": {
+              "name": "Dana Smith",
+              "email": "Dana@Shop.test"
+            },
+            "site": {
+              "name": " Juniper Bakery "
+            }
+          }
+        ],
+        [
+          "{{deal.name}} for {{deal.amount}}",
+          {
+            "contact": {
+              "name": "Pat Lee",
+              "email": " Pat.Lee@Example.com ",
+              "facets": {
+                "g1": {
+                  "name": "Patricia Lee",
+                  "companyName": "Harbor Market",
+                  "jobTitle": "Owner"
+                },
+                "g2": {
+                  "firstName": "Mary Ann",
+                  "lastName": "van Dyke",
+                  "name": "Mary Ann van Dyke"
+                }
+              }
+            },
+            "contactGroupId": "g1",
+            "deal": {
+              "title": "Spring order",
+              "amountCents": 125050,
+              "currency": "usd"
+            },
+            "lead": {
+              "name": "Sam Ortiz Diaz",
+              "email": "sam@x",
+              "company": "Ortiz Co",
+              "jobTitle": "Buyer"
+            },
+            "sender": {
+              "name": "Dana Smith",
+              "email": "Dana@Shop.test"
+            },
+            "site": {
+              "name": " Juniper Bakery "
+            }
+          }
+        ],
+        [
+          "{{deal.amount}}",
+          {
+            "deal": {
+              "amountCents": "12",
+              "currency": "eur"
+            }
+          }
+        ],
+        [
+          "{{deal.amount}}",
+          {
+            "deal": {
+              "amountCents": 99
+            }
+          }
+        ],
+        [
+          "From {{sender.firstName}} ({{sender.name}}, {{sender.email}}) at {{site.name}}",
+          {
+            "contact": {
+              "name": "Pat Lee",
+              "email": " Pat.Lee@Example.com ",
+              "facets": {
+                "g1": {
+                  "name": "Patricia Lee",
+                  "companyName": "Harbor Market",
+                  "jobTitle": "Owner"
+                },
+                "g2": {
+                  "firstName": "Mary Ann",
+                  "lastName": "van Dyke",
+                  "name": "Mary Ann van Dyke"
+                }
+              }
+            },
+            "contactGroupId": "g1",
+            "deal": {
+              "title": "Spring order",
+              "amountCents": 125050,
+              "currency": "usd"
+            },
+            "lead": {
+              "name": "Sam Ortiz Diaz",
+              "email": "sam@x",
+              "company": "Ortiz Co",
+              "jobTitle": "Buyer"
+            },
+            "sender": {
+              "name": "Dana Smith",
+              "email": "Dana@Shop.test"
+            },
+            "site": {
+              "name": " Juniper Bakery "
+            }
+          }
+        ],
+        [
+          "Hi {{contact.firstName|there}}, {{contact.nope}} {{other.field}} {{contact.firstName}}",
+          {}
+        ],
+        [
+          "Hi {{contact.firstName | friend }}! {single} {{bare}} {{ site.name }}",
+          null
+        ],
+        [
+          "",
+          {
+            "contact": {
+              "name": "Pat Lee",
+              "email": " Pat.Lee@Example.com ",
+              "facets": {
+                "g1": {
+                  "name": "Patricia Lee",
+                  "companyName": "Harbor Market",
+                  "jobTitle": "Owner"
+                },
+                "g2": {
+                  "firstName": "Mary Ann",
+                  "lastName": "van Dyke",
+                  "name": "Mary Ann van Dyke"
+                }
+              }
+            },
+            "contactGroupId": "g1",
+            "deal": {
+              "title": "Spring order",
+              "amountCents": 125050,
+              "currency": "usd"
+            },
+            "lead": {
+              "name": "Sam Ortiz Diaz",
+              "email": "sam@x",
+              "company": "Ortiz Co",
+              "jobTitle": "Buyer"
+            },
+            "sender": {
+              "name": "Dana Smith",
+              "email": "Dana@Shop.test"
+            },
+            "site": {
+              "name": " Juniper Bakery "
+            }
+          }
+        ]
+      ]
+    },
+    "crmMergeUnresolvedMessage": {
+      "module": "libs/aglyn/src/lib/app-utils/crm-email-templates.ts",
+      "args": [
+        [
+          []
+        ],
+        [
+          [
+            "contact.firstName"
+          ]
+        ],
+        [
+          [
+            "contact.firstName",
+            "deal.amount"
+          ]
+        ]
+      ]
+    },
+    "duplicateDisplayName": {
+      "module": "libs/aglyn/src/lib/app-utils/duplicate-resource.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          ""
+        ],
+        [
+          "  Welcome  "
+        ],
+        [
+          "Copy of Welcome"
+        ],
+        [
+          "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
         ]
       ]
     }

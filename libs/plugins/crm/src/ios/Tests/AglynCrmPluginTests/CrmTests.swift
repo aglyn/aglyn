@@ -728,4 +728,63 @@ final class CrmContactByEmailTests: XCTestCase {
     // Off a site it follows "Manage data" until something sets it.
     XCTAssertFalse(CrmScope(orgID: "o1", hostID: "", uid: "u1", org: [:], member: ["role": "editor", "resolvedPermissions": ["data.manage": false]], orgLevel: true).canWrite)
   }
+
+  func testAnEmailStateIsReadAndRefusedAsTheConsoleDoes() throws {
+    for (index, item) in try functionCases("readEmailState").enumerated() {
+      let state = crmReadEmailState(item.args[0] as? [String: Any])
+      let want = item.result as? [String: Any]
+      XCTAssertEqual(state?.status, want?["status"] as? String, "case \(index)")
+      XCTAssertEqual(state?.atMs, (want?["atMs"] as? NSNumber)?.int64Value, "case \(index)")
+      XCTAssertEqual(state?.source, want?["source"] as? String, "case \(index)")
+      XCTAssertEqual(state?.detail, want?["detail"] as? String, "case \(index)")
+      XCTAssertEqual(state?.enrollmentID, want?["enrollmentId"] as? String, "case \(index)")
+    }
+    let utc = try XCTUnwrap(TimeZone(identifier: "UTC"))
+    for (index, item) in try functionCases("emailStateRefusal").enumerated() {
+      let state = (item.args[0] as? [String: Any]).flatMap { crmReadEmailState(["emailState": $0]) }
+      XCTAssertEqual(crmEmailStateRefusal(state, timeZone: utc), item.result as? String, "case \(index)")
+    }
+    for (index, item) in try functionCases("emailStateForbidsEmail").enumerated() {
+      let state = (item.args[0] as? [String: Any]).flatMap { crmReadEmailState(["emailState": $0]) }
+      XCTAssertEqual(crmEmailStateForbidsEmail(state), item.result as? Bool, "case \(index)")
+    }
+    XCTAssertEqual(crmEmailStateTone("bounced"), .error)
+    XCTAssertEqual(crmEmailStateTone("unsubscribed"), .neutral)
+    XCTAssertEqual(crmEmailStateTone("undeliverable"), .warning)
+  }
+
+  func testTheEmailCheckSaysWhatTheConsoleSays() {
+    let held = crmEmailCheck(
+      .object([
+        "checked": .bool(true), "code": .string("gateway_held"), "message": .string("Their gateway refused 2 sends."),
+        "gateway": .string("Barracuda"), "chip": .object(["label": .string("Barracuda · 2 of 2 sends refused this week"), "tone": .string("refused")]),
+        "accountLock": .null,
+      ]))
+    XCTAssertEqual(crmEmailCheckWarning(held), "Their gateway refused 2 sends. A one-to-one email still goes, but it is likely to be refused too.")
+    XCTAssertEqual(crmGatewayChip(held, state: nil)?.tone, .error)
+    XCTAssertNil(crmAccountLockChip(held))
+    let noMX = crmEmailCheck(.object(["checked": .bool(true), "code": .string("no_mx"), "message": .string("example.test has no mail server."), "chip": .object(["label": .string("No mail server"), "tone": .string("blocked")])]))
+    XCTAssertEqual(crmEmailCheckWarning(noMX), "example.test has no mail server. Sending will not reach them.")
+    // A "Would bounce" on the record already says what the blocked chip would.
+    XCTAssertNil(crmGatewayChip(noMX, state: CrmEmailState(status: "undeliverable", atMs: 0, source: "check", detail: nil)))
+    XCTAssertNil(crmEmailCheckWarning(crmEmailCheck(.object(["checked": .bool(true), "code": .string("other"), "message": .string("x")]))))
+    XCTAssertEqual(crmAccountLockChip(crmEmailCheck(.object(["accountLock": .string("banned")])))?.label, "Account banned")
+  }
+
+  func testThePreviewFillsMergeFieldsAsTheConsoleDoes() throws {
+    for (index, item) in try functionCases("resolveCrmMergeFields").enumerated() {
+      let want = item.result as? [String: Any]
+      let got = crmResolveMergeFields(item.args[0] as? String ?? "", crmMergeContext(item.args[1] as? [String: Any]))
+      XCTAssertEqual(got.text, want?["text"] as? String, "case \(index)")
+      XCTAssertEqual(got.unresolved, want?["unresolved"] as? [String], "case \(index)")
+    }
+    for (index, item) in try functionCases("crmMergeUnresolvedMessage").enumerated() {
+      XCTAssertEqual(crmMergeUnresolvedMessage(item.args[0] as? [String] ?? []), item.result as? String, "case \(index)")
+    }
+    for (index, item) in try functionCases("duplicateDisplayName").enumerated() {
+      XCTAssertEqual(crmDuplicateDisplayName(item.args[0] as? String), item.result as? String, "case \(index)")
+    }
+    XCTAssertTrue(crmHasMergeFields("Hi {{ contact.firstName }}"))
+    XCTAssertFalse(crmHasMergeFields("Hi {contact.firstName} {{bare}}"))
+  }
 }

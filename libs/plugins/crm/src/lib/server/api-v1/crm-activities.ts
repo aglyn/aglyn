@@ -198,7 +198,7 @@ async function createActivity(request: Request, ctx: ApiV1Context): Promise<Resp
   const body = await readJsonBody(request)
   const parsed = readActivityInput(body)
   if ('errors' in parsed) return crmValidationFailed(ctx, 'activity', parsed.errors)
-  const site = readCrmSite(ctx, 'activity', body)
+  const site = await readCrmSite(ctx, request, 'activity', body)
   if ('response' in site) return site.response
   const [by, refs] = await Promise.all([
     memberError(ctx, 'byUid', parsed.values.byUid),

@@ -530,4 +530,61 @@ class CrmCasesTest {
     assertTrue(memberScope(mapOf("role" to "editor")).movesStages(null))
     assertFalse(memberScope(mapOf("role" to "editor", "resolvedPermissions" to mapOf("crm.moveStages" to false))).movesStages(null))
   }
+
+  @Test
+  fun anEmailStateIsReadAndRefusedAsTheConsoleDoes() {
+    cases("readEmailState").forEach { (args, result) ->
+      val state = crmReadEmailState(map(args[0]))
+      val want = map(result)
+      assertEquals(want?.get("status"), state?.status, args.toString())
+      assertEquals((want?.get("atMs") as? Number)?.toLong(), state?.atMs, args.toString())
+      assertEquals(want?.get("source"), state?.source, args.toString())
+      assertEquals(want?.get("detail"), state?.detail, args.toString())
+      assertEquals(want?.get("enrollmentId"), state?.enrollmentId, args.toString())
+    }
+    cases("emailStateRefusal").forEach { (args, result) ->
+      val state = map(args[0])?.let { crmReadEmailState(mapOf("emailState" to it)) }
+      assertEquals(plain(result), crmEmailStateRefusal(state, "UTC"), args.toString())
+    }
+    cases("emailStateForbidsEmail").forEach { (args, result) ->
+      val state = map(args[0])?.let { crmReadEmailState(mapOf("emailState" to it)) }
+      assertEquals(plain(result), crmEmailStateForbidsEmail(state), args.toString())
+    }
+    assertEquals(com.aglyn.ui.StatusTone.ERROR, crmEmailStateTone("bounced"))
+    assertEquals(com.aglyn.ui.StatusTone.NEUTRAL, crmEmailStateTone("unsubscribed"))
+    assertEquals(com.aglyn.ui.StatusTone.WARNING, crmEmailStateTone("undeliverable"))
+  }
+
+  @Test
+  fun theEmailCheckSaysWhatTheConsoleSays() {
+    val held = crmEmailCheck(Json.parseToJsonElement("""{"checked":true,"code":"gateway_held","message":"Their gateway refused 2 sends.","gateway":"Barracuda","chip":{"label":"Barracuda · 2 of 2 sends refused this week","tone":"refused"},"accountLock":null}"""))
+    assertEquals("Their gateway refused 2 sends. A one-to-one email still goes, but it is likely to be refused too.", crmEmailCheckWarning(held))
+    assertEquals(com.aglyn.ui.StatusTone.ERROR, crmGatewayChip(held, null)?.second)
+    assertEquals(null, crmAccountLockChip(held))
+    val noMx = crmEmailCheck(Json.parseToJsonElement("""{"checked":true,"code":"no_mx","message":"example.test has no mail server.","chip":{"label":"No mail server","tone":"blocked"}}"""))
+    assertEquals("example.test has no mail server. Sending will not reach them.", crmEmailCheckWarning(noMx))
+    // A "Would bounce" on the record already says what the blocked chip would.
+    assertEquals(null, crmGatewayChip(noMx, CrmEmailState("undeliverable", 0, "check", null)))
+    assertEquals(null, crmEmailCheckWarning(crmEmailCheck(Json.parseToJsonElement("""{"checked":true,"code":"other","message":"x"}"""))))
+    assertEquals("Account banned", crmAccountLockChip(crmEmailCheck(Json.parseToJsonElement("""{"accountLock":"banned"}""")))?.label)
+  }
+
+  @Test
+  fun thePreviewFillsMergeFieldsAsTheConsoleDoes() {
+    cases("resolveCrmMergeFields").forEach { (args, result) ->
+      val want = map(result)
+      val got = crmResolveMergeFields(plain(args[0]) as? String ?: "", crmMergeContext(map(args[1])))
+      assertEquals(want?.get("text"), got.text, args.toString())
+      assertEquals(want?.get("unresolved"), got.unresolved, args.toString())
+    }
+    cases("crmMergeUnresolvedMessage").forEach { (args, result) ->
+      @Suppress("UNCHECKED_CAST")
+      assertEquals(plain(result), crmMergeUnresolvedMessage(plain(args[0]) as List<String>), args.toString())
+    }
+    cases("duplicateDisplayName").forEach { (args, result) ->
+      assertEquals(plain(result), crmDuplicateDisplayName(plain(args[0]) as? String), args.toString())
+    }
+    assertTrue(crmHasMergeFields("Hi {{ contact.firstName }}"))
+    assertFalse(crmHasMergeFields("Hi {contact.firstName} {{bare}}"))
+  }
 }

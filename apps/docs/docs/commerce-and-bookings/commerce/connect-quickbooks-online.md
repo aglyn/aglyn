@@ -54,7 +54,7 @@ Under **Accounts and tax**, pick:
 | **Sales income** | Where item sales are recorded. |
 | **Shipping income** | Where shipping you charge is recorded. Leave it empty to use sales income. |
 | **Stripe clearing account** | Every sale is paid into it and every payout leaves it, so it returns to zero with each payout. |
-| **Aglyn fee expense** | Where the Aglyn fee on each sale is recorded. |
+| **Aglyn fee expense** | Where the Aglyn fee on each sale and the fees Stripe takes are recorded. |
 | **Payout bank account** | The bank account Stripe pays out to. |
 | **Tips** | Where tips taken at the register are recorded. Leave it empty to use sales income; tips your staff are owed belong in a liability account. |
 | **Cash and other payments** | A bank account for money that does not go through Stripe: cash at the register, room charges, and sales on a marketplace. Needed once one of those sales arrives. |
@@ -77,6 +77,7 @@ cards** the same way.
 | A paid order | A **sales receipt**: one line per item, shipping, any discount and the sales tax, deposited to the Stripe clearing account. |
 | A refund | A **refund receipt** paid out of the Stripe clearing account, with the tax given back in proportion. |
 | The Aglyn fee on a sale | An **expense** from the Stripe clearing account to the fee expense account. |
+| Stripe's fees on a payout | An **expense** from the Stripe clearing account to the fee expense account, posted with each payout. |
 | A Stripe payout | A **transfer** from the Stripe clearing account to the payout bank account. |
 | A sale paid in cash, by room charge or on a marketplace | Its sales receipt, then a **transfer** of that share from the Stripe clearing account to the cash and other payments account. |
 
@@ -89,7 +90,10 @@ Every sale is deposited to the Stripe clearing account, so receipts read the
 same whatever paid them. What did not come through Stripe then moves on:
 
 - **Card**, online or at the register: stays in clearing until Stripe pays it
-  out. Only the Aglyn fee Stripe took is posted as an expense.
+  out. The Aglyn fee is posted as an expense with the sale. The fees Stripe
+  itself took (card processing, and Stripe Tax's own fee if you use it) are
+  posted as one expense with each payout, so once a payout has posted, the
+  clearing account matches what Stripe is still holding for you.
 - **Cash** and **room charges** at the register, and a **marketplace's** sale:
   a transfer moves that share to the cash and other payments account. A
   marketplace collects and remits its own sales tax, so its sales post without
@@ -103,22 +107,29 @@ same whatever paid them. What did not come through Stripe then moves on:
 A refund comes back the same way, in proportion to how the sale was paid. A
 sale made with Stripe in **test mode** is never posted.
 
-### Sales tax collected by Aglyn
+### Automatic sales tax
 
-On a store that uses **Stripe Tax**, Aglyn posts those sales without the tax,
-and refunds only your share of what went back to the buyer. On a
-platform-managed (Express) account, set up before stores got their own Stripe
-account, that tax is collected and remitted by Aglyn as the marketplace
-facilitator and never reaches your Stripe account. Sales taxed at your own rate
-post their tax as usual.
+How a sale taxed by **Stripe Tax** is posted depends on your Stripe account.
+
+- **Your own Stripe account:** Stripe Tax runs on your account, the tax reaches
+  your Stripe balance, and it is yours to remit. These sales post with their
+  tax like any other taxed sale, and a refund posts in full. This needs sales
+  tax set up in QuickBooks, as for any taxed sale.
+- **A platform-managed (Express) account**, set up before stores got their own
+  Stripe account: Aglyn collects and remits that tax as the marketplace
+  facilitator, and it never reaches your Stripe account. These sales post
+  without the tax, and a refund posts only your share of what went back to the
+  buyer.
+
+Sales taxed at your own rate post their tax as usual.
 
 ### One summary a day instead
 
 Choose **One summary journal entry per day** to post one **journal entry** per
 day instead of a receipt per order. It carries the day's sales, shipping,
 refunds, sales tax and fees in totals, and needs one more account: **Sales tax
-liability**. A day is posted after it ends in the time zone you set. Payouts are
-still posted one by one.
+liability**. A day is posted after it ends in the time zone you set. Payouts, and
+Stripe's fees on each, are still posted one by one.
 
 ### Currency
 
