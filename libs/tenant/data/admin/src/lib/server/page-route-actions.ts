@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
-import { connectedAppActorLabel, type HostActivityActor } from '@aglyn/aglyn/app-utils/activity-presenter'
+import type { HostActivityActor } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { PUBLISH_OUTBOX_COLLECTION } from '@aglyn/aglyn/app-utils/publish-outbox'
 import {
@@ -38,6 +37,7 @@ import {
 import { planScreenRouteWrite, type ScreenRouteState } from '@aglyn/aglyn/app-utils/screen-route-plan'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import { FieldValue, Timestamp, type DocumentSnapshot, type Firestore } from 'firebase-admin/firestore'
+import { hostActivityEntry } from './host-activity-entry'
 
 /*
  * A PAGE'S ROUTING WRITES, ON THE SERVER (AGL-3668, lifted for AGL-4235).
@@ -146,28 +146,6 @@ function assertEntriesFree(entries: Record<string, string | null>, state: Screen
     if (owner && owner !== id && !(owner in entries)) {
       throw new Refusal(`Another page is already published at ${screenRoutePathToUrl(path as string)}`)
     }
-  }
-}
-
-/** The activity row, as the native route has always written it, plus the key or app's name when one wrote it. */
-function activityRow(actor: HostActivityActor, action: string, target: Record<string, unknown>): Record<string, unknown> {
-  const actorEmail = actor.email ?? null
-  return {
-    actorId: actor.uid,
-    actorEmail,
-    ...(actor.apiKeyName ? { apiKeyName: actor.apiKeyName } : {}),
-    ...(actor.connectedAppName
-      ? { connectedAppName: actor.connectedAppName, connectedAppLabel: connectedAppActorLabel(actor.connectedAppName) }
-      : {}),
-    action,
-    target,
-    searchTokens: activitySearchTokens({
-      actorEmail,
-      apiKeyName: actor.apiKeyName,
-      connectedAppName: actor.connectedAppName,
-      target: target as never,
-    }),
-    createdAt: Timestamp.now(),
   }
 }
 
@@ -337,7 +315,10 @@ export async function applyPageRouteAction(
       id: screenId,
       ...(screen.displayName ? { name: screen.displayName } : {}),
     }
-    batch.set(hostRef.collection('activity').doc(createResourceUid()), activityRow(input.actor, activity, target))
+    batch.set(
+      hostRef.collection('activity').doc(createResourceUid()),
+      hostActivityEntry(input.actor, activity, target, Timestamp.now()),
+    )
   }
   await batch.commit()
 
