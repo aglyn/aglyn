@@ -26,6 +26,7 @@ content on the marketing site and is written separately.
 ### Fixed
 
 - **erase:** deleting a site takes its own import jobs ([AGL-4236](https://linear.app/aglyn/issue/AGL-4236))
+- **privacy:** the org export names the import jobs the site erasure now takes ([AGL-4236](https://linear.app/aglyn/issue/AGL-4236))
 - **api:** name search listings and business details in the consent words that grant them ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
 - **api:** save a product created without a price unpriced, not at the editor's placeholder ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
 - **crm:** honor a site's lock and a connected app's site membership where leads, CRM creates and contacts name a site ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
