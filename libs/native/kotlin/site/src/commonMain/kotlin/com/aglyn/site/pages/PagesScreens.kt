@@ -118,6 +118,8 @@ private sealed interface PageDialog {
   data object Gallery : PageDialog
   data class UseTemplate(val row: ArtifactRow) : PageDialog
   data class SaveTemplate(val page: PageNode) : PageDialog
+  /** Schedule publication (a version, [versionId] preset from its row) or unpublish (AGL-113). */
+  data class Schedule(val page: PageNode, val unpublish: Boolean, val versionId: String? = null) : PageDialog
 }
 
 /**
@@ -279,7 +281,7 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null, sta
     },
   )
 
-  PageDialogs(context, hostId, dialog, live, api, runner, onSelectNew = { id -> context.navigate(SITE_PAGES_SCREEN, mapOf("page" to id)) }, onOpen = { dialog = it }) { dialog = null }
+  PageDialogs(context, hostId, dialog, live, api, runner, canPublish, onSelectNew = { id -> context.navigate(SITE_PAGES_SCREEN, mapOf("page" to id)) }, onOpen = { dialog = it }) { dialog = null }
 }
 
 @Composable
@@ -421,7 +423,19 @@ private fun PageDetail(
         DetailRow("Published", page.publishedAt?.let { relativeTime(it.epochMillis, now) }, placeholder = "Not published")
         DetailRow("Updated", page.updatedAt?.let { relativeTime(it.epochMillis, now) })
       }
-      PageVersions(context, hostId, page, api, runner, canPublish, loader)
+      val schedulingCarried = rememberSchedulingCarried(context)
+      PageVersions(context, hostId, page, api, runner, canPublish, loader, schedulingLocked = schedulingCarried != true, open = open)
+      if (page.kind != SCREEN_KIND_TEMPLATE) {
+        // The page's own document, live: its access and its schedule (the tree reads a page once).
+        val screen by remember(hostId, page.id, context.firestore) { context.firestore.observeDoc("hosts/$hostId/screens/${page.id}") }.collectAsState(Live.Loading)
+        val host by remember(hostId, context.firestore) { context.firestore.observeDoc("hosts/$hostId") }.collectAsState(Live.Loading)
+        val settings = PageSettings.from((screen as? Live.Ready)?.value)
+        val settingsApi = remember(hostId, context.api, context.writer) { PageSettingsApi(context.api, context.writer, hostId) }
+        PageScheduleSection(context, page, row.livePath != null, settings, schedulingCarried, settingsApi, runner, canPublish) { unpublish ->
+          open(PageDialog.Schedule(page, unpublish))
+        }
+        PageAccessSection(page, row.livePath, settings, (host as? Live.Ready)?.value, settingsApi, runner, canEdit, canPublish)
+      }
       // What breaks if this page goes (AGL-703), on demand: the scan reads every page, layout and component.
       PageUsedBySection(context, hostId, page.id)
       // What the page is doing, then who touched it (the console's page view, AGL-4011): its traffic above its activity.
@@ -434,7 +448,17 @@ private fun PageDetail(
 }
 
 @Composable
-private fun PageVersions(context: NativePluginContext, hostId: String, page: PageNode, api: PagesApi, runner: ActionRunner, canPublish: Boolean, loader: PagesTreeLoader) {
+private fun PageVersions(
+  context: NativePluginContext,
+  hostId: String,
+  page: PageNode,
+  api: PagesApi,
+  runner: ActionRunner,
+  canPublish: Boolean,
+  loader: PagesTreeLoader,
+  schedulingLocked: Boolean = true,
+  open: (PageDialog) -> Unit = {},
+) {
   val versions by remember(hostId, page.id, context.firestore) {
     context.firestore.observe(FirestoreQuery("hosts/$hostId/screens/${page.id}/versions", orderBy = listOf(FirestoreOrder("createdAt", descending = true)), limit = 20))
   }.collectAsState(Live.Loading)
@@ -454,10 +478,10 @@ private fun PageVersions(context: NativePluginContext, hostId: String, page: Pag
             supporting = version.createdAt?.let { "Saved " + relativeTime(it.epochMillis, now) },
             icon = AglynIcons.named("history"),
             trailing = {
-              if (current) {
-                StatusChip("Current", StatusTone.SUCCESS)
-              } else {
-                Row {
+              Row(verticalAlignment = Alignment.CenterVertically) {
+                if (current) {
+                  StatusChip("Current", StatusTone.SUCCESS)
+                } else {
                   TextButton(onClick = { context.openBesigner(BesignerPaths.screen(page.id, version.id), ConsoleScope.SITE) }) { Text("Open") }
                   TextButton(
                     onClick = { runner.run("This version is now the page's working version.") {
@@ -467,6 +491,20 @@ private fun PageVersions(context: NativePluginContext, hostId: String, page: Pag
                     enabled = canPublish && !runner.busy,
                   ) { Text("Use") }
                 }
+                // The console's version row: Preview it (the page as it would look, with Publish / Open in Besigner),
+                // and Schedule it to go live (AGL-113).
+                OverflowMenu(
+                  listOf(
+                    MenuAction("page-version-preview", "Preview", "visibility") {
+                      context.openBesigner(BesignerPaths.screen(page.id, version.id, preview = true), ConsoleScope.SITE)
+                    },
+                    MenuAction("page-version-schedule", "Schedule…", "schedule", enabled = !current && !schedulingLocked && canPublish) {
+                      open(PageDialog.Schedule(page, unpublish = false, versionId = version.id))
+                    },
+                  ),
+                  modifier = Modifier.testTag("page-version-more-${version.id}"),
+                  contentDescription = "More for this version",
+                )
               }
             },
             modifier = Modifier.testTag("page-version-${version.id}"),
@@ -478,10 +516,12 @@ private fun PageVersions(context: NativePluginContext, hostId: String, page: Pag
 }
 
 @Composable
-private fun PageDialogs(context: NativePluginContext, hostId: String, dialog: PageDialog?, live: PagesLive, api: PagesApi, runner: ActionRunner, onSelectNew: (String) -> Unit, onOpen: (PageDialog) -> Unit, close: () -> Unit) {
+private fun PageDialogs(context: NativePluginContext, hostId: String, dialog: PageDialog?, live: PagesLive, api: PagesApi, runner: ActionRunner, canPublish: Boolean, onSelectNew: (String) -> Unit, onOpen: (PageDialog) -> Unit, close: () -> Unit) {
   val done = { close() }
+  val settingsApi = remember(hostId, context.api, context.writer) { PageSettingsApi(context.api, context.writer, hostId) }
   when (dialog) {
     null -> Unit
+    is PageDialog.Schedule -> PageScheduleDialog(context, hostId, dialog.page, dialog.unpublish, dialog.versionId, settingsApi, runner, close)
     PageDialog.Gallery -> TemplateGalleryDialog(
       context, hostId, "page", onChoose = { onOpen(PageDialog.UseTemplate(it)) }, onDismiss = close,
       onInstalled = { message ->
@@ -505,6 +545,8 @@ private fun PageDialogs(context: NativePluginContext, hostId: String, dialog: Pa
     PageDialog.NewPage -> {
       var name by remember { mutableStateOf("") }
       var description by remember { mutableStateOf("") }
+      // Once published, only the site's team sees it until it is made public (AGL-4086).
+      var startInPreview by remember { mutableStateOf(false) }
       ActionDialog(
         title = "New page",
         body = "It starts as a draft; publish it at an address when it is ready.",
@@ -514,10 +556,34 @@ private fun PageDialogs(context: NativePluginContext, hostId: String, dialog: Pa
         busy = runner.busy,
         error = runner.error,
         onDismiss = close,
-        onConfirm = { runner.run("${name.trim()} was added as a draft.", onDone = done) { live.loader.patch(api.createPage(name, description).first) } },
+        onConfirm = {
+          val preview = startInPreview && canPublish
+          val message = if (preview) {
+            "${name.trim()} was added as a draft. Once you publish it, only your team sees it until you make it public."
+          } else {
+            "${name.trim()} was added as a draft."
+          }
+          runner.run(message, onDone = done) {
+            val id = api.createPage(name, description).first
+            if (preview) settingsApi.setPreview(id, true)
+            live.loader.patch(id)
+          }
+        },
       ) {
         OutlinedTextField(name, { name = it.take(PAGE_NAME_MAX) }, label = { Text("Name") }, singleLine = true, supportingText = { Text("${name.length}/$PAGE_NAME_MAX") }, modifier = Modifier.fillMaxWidth().testTag("page-name"))
         OutlinedTextField(description, { description = it.take(PAGE_DESCRIPTION_MAX) }, label = { Text("Description (optional)") }, supportingText = { Text("${description.length}/$PAGE_DESCRIPTION_MAX") }, modifier = Modifier.fillMaxWidth())
+        com.aglyn.ui.SwitchRow(
+          "Start in preview",
+          checked = startInPreview,
+          onCheckedChange = { startInPreview = it },
+          supporting = if (canPublish) {
+            "Once you publish it, only you and your team can see the page until you make it public in its Page access section."
+          } else {
+            "Your role on this site can edit content but not publish it, so it cannot choose who sees the page."
+          },
+          enabled = canPublish,
+          modifier = Modifier.testTag("page-start-in-preview"),
+        )
       }
     }
     PageDialog.NewGroup -> {

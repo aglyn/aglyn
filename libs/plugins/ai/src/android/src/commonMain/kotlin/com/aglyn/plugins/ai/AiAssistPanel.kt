@@ -71,6 +71,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiError
@@ -98,8 +99,81 @@ const val ASSIST_PANEL_SLOT = "assistPanel"
 /** How many turns of the thread ride with each question, as the console's panel sends them. */
 private const val ASSIST_HISTORY_TURNS = 12
 
-/** One turn of the thread. */
-private data class AssistTurn(val role: String, val text: String, val docs: List<Pair<String, String>> = emptyList(), val proposal: Pair<String, String>? = null)
+/**
+ * One turn of the thread. An answer keeps the exchange the route recorded it under (the chat's `done` event's
+ * `exchangeId`), which is what a rating names, and how the person rated it, once they have.
+ */
+internal data class AssistTurn(
+  val role: String,
+  val text: String,
+  val docs: List<Pair<String, String>> = emptyList(),
+  val proposal: Pair<String, String>? = null,
+  val exchangeId: String? = null,
+  val feedback: AssistFeedback? = null,
+)
+
+/** The answer as the chat's `done` event completes it: its documents, its proposal and the exchange it was recorded under. */
+internal fun AssistTurn.done(event: JsonObject): AssistTurn {
+  val docs = (event["docs"] as? JsonArray).orEmpty().mapNotNull { doc ->
+    (doc as? JsonObject)?.let { d -> (d.str("title") ?: d.str("label") ?: return@let null) to (d.str("url") ?: d.str("href") ?: return@let null) }
+  }
+  val proposal = (event["proposal"] as? JsonObject)?.let { p -> (p.str("label") ?: "Open it") to (p.str("href") ?: return@let null) }
+  return copy(docs = docs, proposal = proposal, exchangeId = event.str("exchangeId")?.takeIf { it.isNotEmpty() })
+}
+
+/** A rating of an answer, the two values `/api/assist/feedback` takes. */
+internal enum class AssistFeedback(val wire: String, val label: String) {
+  UP("up", "Helpful answer"),
+  DOWN("down", "Unhelpful answer"),
+}
+
+/** What a rated answer's controls say, the console's tooltip once the answer is rated. */
+internal const val ASSIST_ALREADY_RATED = "Thanks — you already rated this answer"
+
+/** What the panel says when a rating could not be sent (the console's snackbar). */
+internal const val ASSIST_FEEDBACK_FAILED = "Feedback could not be recorded"
+
+/** The body `/api/assist/feedback` takes, as the console's panel sends it. */
+internal fun assistFeedbackBody(orgId: String, exchangeId: String, feedback: AssistFeedback): JsonObject = buildJsonObject {
+  put("orgId", orgId)
+  put("exchangeId", exchangeId)
+  put("feedback", feedback.wire)
+}
+
+/**
+ * Sends a rating and says what to tell the person: nothing once the route has answered, whatever it answered (the
+ * console's panel reads no reply, and its rating stands either way), and "Feedback could not be recorded" when the
+ * request never reached the route.
+ */
+internal suspend fun sendAssistFeedback(
+  feedback: AssistFeedback,
+  exchangeId: String,
+  orgId: String,
+  post: suspend (JsonObject) -> Unit,
+): String? = try {
+  post(assistFeedbackBody(orgId, exchangeId, feedback))
+  null
+} catch (failure: Throwable) {
+  if (failure is CancellationException) throw failure
+  if (failure is ConsoleApiError && failure.status != 0) null else ASSIST_FEEDBACK_FAILED
+}
+
+/**
+ * Debug builds only: the settled question and answer the app was launched on (`--es assistSettledAnswer <exchangeId>`,
+ * copied into [com.aglyn.pluginhost.DebugLaunch] under `BuildConfig.DEBUG`), so an answer's controls can be driven
+ * without starting a run. Empty in a release build, where nothing sets it.
+ */
+internal fun assistDebugSettledTurns(exchangeId: String? = com.aglyn.pluginhost.DebugLaunch.assistSettledAnswer): List<AssistTurn> =
+  exchangeId?.takeIf { it.isNotEmpty() }?.let {
+    listOf(
+      AssistTurn("user", "How do I invite my team?"),
+      AssistTurn(
+        "assistant",
+        "Open **Settings › Team**, choose **Invite**, and enter their email. They get a link to join this workspace.",
+        exchangeId = it,
+      ),
+    )
+  }.orEmpty()
 
 /** The day's or month's message standing (`quota` on the chat's answer). */
 private data class AssistQuota(val period: String, val used: Long, val limit: Long, val remaining: Long)
@@ -130,11 +204,12 @@ fun AssistPanel(context: NativePluginContext) {
   val params = LocalSlotParams.current
   val route = params["route"].orEmpty()
   val looking = params["title"]
-  val turns = remember(orgId) { mutableStateListOf<AssistTurn>() }
+  val turns = remember(orgId) { mutableStateListOf<AssistTurn>().apply { addAll(assistDebugSettledTurns()) } }
   var question by remember { mutableStateOf("") }
   var busy by remember { mutableStateOf(false) }
   var quota by remember(orgId) { mutableStateOf<AssistQuota?>(null) }
   var credits by remember(orgId) { mutableStateOf<String?>(null) }
+  var notice by remember { mutableStateOf<String?>(null) }
   val scope = rememberCoroutineScope()
   val listState = rememberLazyListState()
   LaunchedEffect(orgId) {
@@ -172,11 +247,7 @@ fun AssistPanel(context: NativePluginContext) {
           when (event.str("type")) {
             "delta" -> event.str("text")?.let { delta -> turns[index] = turns[index].copy(text = turns[index].text + delta) }
             "done" -> {
-              val docs = (event["docs"] as? JsonArray).orEmpty().mapNotNull { doc ->
-                (doc as? JsonObject)?.let { d -> (d.str("title") ?: d.str("label") ?: return@let null) to (d.str("url") ?: d.str("href") ?: return@let null) }
-              }
-              val proposal = (event["proposal"] as? JsonObject)?.let { p -> (p.str("label") ?: "Open it") to (p.str("href") ?: return@let null) }
-              turns[index] = turns[index].copy(docs = docs, proposal = proposal)
+              turns[index] = turns[index].done(event)
               (event["quota"] as? JsonObject)?.let { q ->
                 quota = AssistQuota(q.str("period") ?: "day", (q["used"] as? JsonPrimitive)?.longOrNull ?: 0, (q["limit"] as? JsonPrimitive)?.longOrNull ?: 0, (q["remaining"] as? JsonPrimitive)?.longOrNull ?: 0)
               }
@@ -195,6 +266,20 @@ fun AssistPanel(context: NativePluginContext) {
       }
     }
   }
+
+  // Rates an answer: the thumbs are spent at once, and the rating goes to the console's route.
+  fun rate(index: Int, value: AssistFeedback) {
+    val turn = turns.getOrNull(index) ?: return
+    val exchange = turn.exchangeId ?: return
+    if (turn.feedback != null) return
+    turns[index] = turn.copy(feedback = value)
+    scope.launch {
+      sendAssistFeedback(value, exchange, orgId) { body -> context.api.request("/api/assist/feedback", ApiMethod.POST, body = body) }
+        ?.let { notice = it }
+    }
+  }
+  // The console's snackbar leaves on its own.
+  LaunchedEffect(notice) { if (notice != null) { kotlinx.coroutines.delay(4_500); notice = null } }
 
   val m = if (shellMetrics.compact) CompactAssist else TouchAssist
   val canSend = question.isNotBlank() && !busy
@@ -217,7 +302,7 @@ fun AssistPanel(context: NativePluginContext) {
       verticalArrangement = Arrangement.spacedBy(space(1.75f)),
     ) {
       itemsIndexed(turns) { i, turn ->
-        TurnView(m, turn, typing = busy && i == turns.lastIndex, tag = "assist-turn-$i") { href -> follow(href) }
+        TurnView(m, turn, typing = busy && i == turns.lastIndex, tag = "assist-turn-$i", rate = { value -> rate(i, value) }) { href -> follow(href) }
       }
     }
     if (turns.isEmpty() || m.suggestionsStay) {
@@ -233,6 +318,9 @@ fun AssistPanel(context: NativePluginContext) {
         )
         for (suggestion in assistSuggestions(route)) Suggestion(m, suggestion, enabled = !busy) { ask(suggestion) }
       }
+    }
+    notice?.let {
+      com.aglyn.ui.NoticeBanner(it, StatusTone.WARNING, Modifier.padding(start = m.edge, end = m.edge, top = space(0.75f)).testTag("assist-feedback-notice"))
     }
     quota?.let { q ->
       Text(
@@ -332,6 +420,9 @@ private class AssistMetrics(
   val action: TextUnit,
   val actionHeight: Dp,
   val actionRadius: Dp,
+  /** An answer's thumbs: the glyph and the square it is pressed in (a small icon button on the desktop, a touch target on a phone). */
+  val ratingIcon: Dp,
+  val ratingTarget: Dp,
   /** The desktop keeps its suggestions under the thread (18:485); a phone gives the thread the room once it starts. */
   val suggestionsStay: Boolean,
 ) {
@@ -350,7 +441,7 @@ private val TouchAssist = AssistMetrics(
   body = 15.sp, suggestion = 15.sp, suggestionIcon = space(2f), suggestionHeight = space(5.75f), suggestionPadding = space(1.75f), suggestionRadius = radius(3f),
   suggestionGap = space(0.75f), suggestionIconGap = space(1.25f), caption = 13.sp, captionWeight = FontWeight.Normal, composer = space(6.5f), composerRadius = radius(3f),
   composerLeading = space(1.75f), send = space(5f), sendRadius = radius(2f), sendIcon = space(2f), bubbleRadius = radius(3f), action = 15.sp, actionHeight = space(4.5f),
-  actionRadius = radius(2f), suggestionsStay = false,
+  actionRadius = radius(2f), ratingIcon = space(2f), ratingTarget = space(6f), suggestionsStay = false,
 )
 
 /** Compact, on the desktop: Figma AI panel 18:485. */
@@ -359,7 +450,7 @@ private val CompactAssist = AssistMetrics(
   body = 14.sp, suggestion = 13.sp, suggestionIcon = space(1.75f), suggestionHeight = space(4.5f), suggestionPadding = space(1.25f), suggestionRadius = radius(1.5f),
   suggestionGap = space(1.75f), suggestionIconGap = space(1f), caption = 12.sp, captionWeight = FontWeight.SemiBold, composer = space(5.5f), composerRadius = radius(2.5f),
   composerLeading = space(1.5f), send = space(4f), sendRadius = radius(1.5f), sendIcon = space(1.75f), bubbleRadius = radius(2.5f), action = 13.sp, actionHeight = space(3.5f),
-  actionRadius = radius(1.5f), suggestionsStay = true,
+  actionRadius = radius(1.5f), ratingIcon = space(2f), ratingTarget = space(3.5f), suggestionsStay = true,
 )
 
 /** Captions and the field's placeholder: the theme's tertiary text. */
@@ -424,7 +515,7 @@ private fun Suggestion(m: AssistMetrics, text: String, enabled: Boolean, onClick
 /** One turn: your question on the sunken fill, the answer as text with its links, then what it points to as outlined buttons. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TurnView(m: AssistMetrics, turn: AssistTurn, typing: Boolean, tag: String, open: (String) -> Unit) {
+private fun TurnView(m: AssistMetrics, turn: AssistTurn, typing: Boolean, tag: String, rate: (AssistFeedback) -> Unit, open: (String) -> Unit) {
   val mine = turn.role == "user"
   Column(
     Modifier.fillMaxWidth()
@@ -444,6 +535,32 @@ private fun TurnView(m: AssistMetrics, turn: AssistTurn, typing: Boolean, tag: S
         turn.docs.forEach { (title, url) -> AssistAction(m, title, "article", "assist-doc") { open(url) } }
       }
     }
+    // Helpful / Unhelpful, under an answer the route recorded (the console's thumbs).
+    if (!mine && turn.exchangeId != null) {
+      Row(horizontalArrangement = Arrangement.spacedBy(space(0.5f))) {
+        AssistFeedback.entries.forEach { value -> RatingButton(m, value, rated = turn.feedback != null) { rate(value) } }
+      }
+    }
+  }
+}
+
+/** A thumb: once the answer is rated both are spent, and say so. */
+@Composable
+private fun RatingButton(m: AssistMetrics, value: AssistFeedback, rated: Boolean, onClick: () -> Unit) {
+  Box(
+    Modifier.size(m.ratingTarget).clip(CircleShape)
+      .clickable(enabled = !rated, role = Role.Button, onClick = onClick)
+      .semantics {
+        contentDescription = value.label
+        if (rated) stateDescription = ASSIST_ALREADY_RATED
+      }
+      .testTag(if (value == AssistFeedback.UP) "assist-helpful" else "assist-unhelpful"),
+    contentAlignment = Alignment.Center,
+  ) {
+    Icon(
+      AglynIcons.named(if (value == AssistFeedback.UP) "thumb_up" else "thumb_down"), null, Modifier.size(m.ratingIcon),
+      tint = if (rated) assistTertiaryText() else MaterialTheme.colorScheme.onSurfaceVariant,
+    )
   }
 }
 

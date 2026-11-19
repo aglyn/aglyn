@@ -735,7 +735,19 @@
               "key": "pagesRead",
               "label": "Pages — read",
               "kind": "toggle",
-              "help": "List a site’s pages: each one’s name, address, whether it is published and its search listing. Never reads what a page is built from."
+              "help": "List a site’s pages and read each one: its name, address, whether it is published, its search listing and what is on it."
+            },
+            {
+              "key": "pagesWrite",
+              "label": "Pages — write",
+              "kind": "toggle",
+              "help": "Add, rename, move, reorder and delete a site’s pages and edit what is on them. Edits to a page are saved as a draft and show on the live site only once it is published. New pages start unpublished."
+            },
+            {
+              "key": "componentsRead",
+              "label": "Templates — read",
+              "kind": "toggle",
+              "help": "List a site’s page templates, the starting points a new page can be built from."
             },
             {
               "key": "seoRead",
@@ -787,6 +799,8 @@
                 "crm:read": "{form.crmRead}",
                 "crm:write": "{form.crmWrite}",
                 "pages:read": "{form.pagesRead}",
+                "pages:write": "{form.pagesWrite}",
+                "components:read": "{form.componentsRead}",
                 "seo:read": "{form.seoRead}",
                 "seo:write": "{form.seoWrite}",
                 "business:read": "{form.businessRead}",

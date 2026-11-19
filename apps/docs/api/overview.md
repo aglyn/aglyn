@@ -2,7 +2,7 @@
 sidebar_position: 1
 slug: /
 title: Aglyn REST API
-description: A REST API and MCP server for your organization's datasets, contacts, CRM, sites and their pages, search listings and business details, form submissions, store orders, products and media — authenticated with API keys or by signing in.
+description: A REST API and MCP server for your organization's datasets, contacts, CRM, sites and their pages, page content, templates, search listings and business details, form submissions, store orders, products and media — authenticated with API keys or by signing in.
 ---
 
 # Aglyn REST API
@@ -14,14 +14,16 @@ the CRM around them — [companies](resources/companies.md),
 [tasks](resources/tasks.md), [activities](resources/activities.md),
 [email templates](resources/email-templates.md) and each site's
 [leads](resources/leads.md) — [sites](resources/sites.md) and their
-[pages](resources/pages.md), [search listing](resources/seo.md),
+[pages](resources/pages.md) and what is on them, [page templates](resources/templates.md),
+[search listing](resources/seo.md),
 [business details](resources/business-details.md) and
 [form submissions](resources/form-submissions.md), your store's
 [orders](resources/orders.md) and [products](resources/products.md), and your
 [media library](resources/media.md). Use it to sync content from another system, push
 orders into accounting, record shipments from a 3PL or warehouse system, keep a
 catalog and its stock in step with a PIM or warehouse, feed a catalog to a marketplace, sync a CRM's contacts and deals in either direction, log
-calls from a dialer, back up records, or build an integration.
+calls from a dialer, draft page changes for a person to review and publish, back up
+records, or build an integration.
 
 :::info Plan availability
 The REST API is included on **Starter**, **Pro** and **Custom**. Create keys from
@@ -183,7 +185,8 @@ What this API is and what it serves.
 }
 ```
 
-This lists only **top-level** resources. Form submissions, [orders](resources/orders.md)
+This lists only **top-level** resources. Form submissions, [pages](resources/pages.md),
+[templates](resources/templates.md), [orders](resources/orders.md)
 and [products](resources/products.md) all live under a site
 (`/v1/sites/{siteId}/…`) and are deliberately absent, so a client that walks this list
 never builds a path that 404s. `media` is here because
@@ -240,8 +243,9 @@ each CRM collection, for sizing a sync. See [Usage](usage.md).
 | [Activities](resources/activities.md) | What happened — a write-once log of calls, meetings and notes. |
 | [Leads](resources/leads.md) | A site's work queue — everyone it has captured, with status, owner and notes — and the conversion of a lead into a contact, a company and a deal. |
 | [Email templates](resources/email-templates.md) | The letters a team sends from a record — templates and snippets, with merge fields. |
-| [Sites](resources/sites.md) | List sites, read their details, create a site, and publish one. |
-| [Pages](resources/pages.md) | A site's pages — names, public addresses, whether each is published — and each page's search listing. Not their content. |
+| [Sites](resources/sites.md) | List sites, read their details, create a site, and publish one — including making chosen pages' drafts live. |
+| [Pages](resources/pages.md) | A site's pages and folders — create, rename, re-address, move and delete them — what is on each page, edited as a draft until it is published, and each page's search listing. |
+| [Templates](resources/templates.md) | The page templates a new page can start from: the site's own and the built-in starter pages. |
 | [Search listing](resources/seo.md) | Read and change the title and description a site shows in search results, and how its page titles are built. |
 | [Business details](resources/business-details.md) | Read and change a site's business name, slogan, phone, email, address and social links. |
 | [Form submissions](resources/form-submissions.md) | Read a site's form submissions, mark them read as you process them, and delete them after export. |

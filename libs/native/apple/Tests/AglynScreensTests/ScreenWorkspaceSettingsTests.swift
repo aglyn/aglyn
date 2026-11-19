@@ -31,7 +31,7 @@ final class ScreenWorkspaceSettingsTests: XCTestCase {
     let apiKeys = try spec("core.settings.apiKeys")
     let create = try XCTUnwrap(apiKeys.raw["actions"].array.compactMap(ActionSpec.init).first { $0.id == "create" })
     // Every scope the console offers is a switch, and the first is on for a new key as it is in the console.
-    XCTAssertEqual(create.prompt.filter { $0.kind == "toggle" }.count, 23)
+    XCTAssertEqual(create.prompt.filter { $0.kind == "toggle" }.count, 25)
     XCTAssertEqual(create.prompt.filter { $0.initial == "true" }.map(\.key), ["datasetsRead"])
     let model = ScreenModel(spec: apiKeys, context: ["org": ["id": "o1"]], api: api)
     let scope: JSONValue = [
