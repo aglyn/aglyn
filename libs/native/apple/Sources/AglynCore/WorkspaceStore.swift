@@ -51,6 +51,13 @@ public struct WorkspaceSite: Equatable, Hashable, Identifiable, Sendable {
   public func shownAddress(hostCname: String?) -> String {
     hostCname.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 } ?? shownAddress
   }
+
+  /// Visit site's address: the site's home as the console at `consoleOrigin` reaches it (`SiteLiveURL`), with the
+  /// host's own custom domain first, then the mirror's. A local console opens the local tenant, never production.
+  public func visitURL(hostCname: String?, consoleOrigin: String?) -> URL? {
+    let custom = hostCname.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 } ?? cname
+    return SiteLiveURL.home(subdomain: subdomain, cname: custom, consoleOrigin: consoleOrigin)
+  }
 }
 
 /// What a workspace's own document says about how it looks: its logos (`logoUrl`, `logoDarkUrl`), its brand color
