@@ -293,6 +293,8 @@ internal fun SignedInShell(
   }
 
   val staffFirst = staffGroups.firstOrNull()?.rows?.firstOrNull()?.key
+  var privacyChoices by remember { mutableStateOf(false) }
+  if (privacyChoices) PrivacyChoicesDialog(services.prefs) { privacyChoices = false }
   val actions = remember(navigator, chrome, services, screenSession.claims.isStaff, wide, staffFirst) {
     ShellActions(
       openScreen = { screen, params ->
@@ -314,6 +316,7 @@ internal fun SignedInShell(
       editProfile = { chrome.closeMenus(); navigator.select(NavKeys.of("core.account.profile", emptyMap())) },
       notificationSettings = { chrome.settingsMode = null; navigator.select(ShellNavigator.SETTINGS); navigator.push(Route.NotificationSettings) },
       staffConsole = staffConsoleAction(screenSession.claims.isStaff) { openStaffConsole(chrome, navigator, wide, staffFirst) },
+      privacyChoices = { chrome.closeMenus(); privacyChoices = true },
     )
   }
 
@@ -480,6 +483,8 @@ internal fun SignedInShell(
     val openRef: (com.aglyn.contracts.AccountItemRef) -> Unit = { item -> context.openPlace(item) }
     val banner: @Composable () -> Unit = {
       impersonation?.let { ImpersonationBanner(it, onExit = { exitScope.launch { services.auth.endImpersonation() } }) }
+      // The Terms moved (or there is no record): asked over every screen, never a wall (AGL-2316).
+      LegalReacceptanceBanner(services, uid)
     }
     // The ☆ for the place on screen: a screen's title row draws it (the shared list scaffold); else the breadcrumbs do.
     val starSlot = remember(here) { here?.let { item -> com.aglyn.ui.PageStarSlot { StarButton(services, item, prefs) } } }
@@ -629,6 +634,7 @@ internal fun SignedInShell(
             )
           },
         ) {
+          OfflineIndicator(services)
           HelpButton(help)
           if (assistTitle != null) TitleBarButton(if (chrome.aiPanel) "Close the AI panel" else assistTitle, "auto_awesome", "ai-panel-toggle") { chrome.toggleAiPanel() }
         }

@@ -443,6 +443,24 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertNil(ListColumns.routeValue(ListOrder(column: "plan", descending: false), columns: columns))
   }
 
+  /// The Team roster's sorts (the console's MEMBER_SORTS): Role by rank, owner first, a role the ranks lack after them; Member by
+  /// what the row reads as (its name, else its address).
+  func testARankedColumnOrdersByRankAndATemplateByWhatItReads() throws {
+    let role = try XCTUnwrap(ListColumn(["id": "role", "sort": ["page": "item.role", "ranks": ["owner", "admin", "editor", "viewer"]]]))
+    let rows: [JSONValue] = [
+      ["id": "a", "role": "viewer"], ["id": "b", "role": "owner"], ["id": "c", "role": "editor"], ["id": "d", "role": "guest"],
+      ["id": "e", "role": "admin"],
+    ]
+    func ids(_ column: ListColumn, _ rows: [JSONValue], descending: Bool) -> [String] {
+      ListColumns.sorted(rows, by: column, descending: descending, in: [:]).map { ScreenValues.text($0["id"] ?? .null) }
+    }
+    XCTAssertEqual(ids(role, rows, descending: false), ["b", "e", "c", "a", "d"])
+    XCTAssertEqual(ids(role, rows, descending: true), ["d", "a", "c", "e", "b"])
+    let member = try XCTUnwrap(ListColumn(["id": "member", "sort": ["page": "{item.displayName|item.email}"]]))
+    let people: [JSONValue] = [["id": "x", "email": "zed@example.test"], ["id": "y", "displayName": "Amy"]]
+    XCTAssertEqual(ids(member, people, descending: false), ["y", "x"])
+  }
+
   /// A page column orders the rows on the screen: numbers as numbers, text without regard to case, dates as moments; a row
   /// without the value goes last whichever way it is read, and equal rows keep the order they came in.
   @MainActor

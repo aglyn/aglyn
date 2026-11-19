@@ -226,6 +226,10 @@
       "why": "Reached by host-events: each plugin's declared host events, generated data with no imports."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/privacy-choices.ts",
+      "why": "\"Your Privacy Choices\": the regulated title (CCPA regs §7015) and the native apps' panel words, read through the contracts so no app types a second copy (Console chrome row 3); no imports at all."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/published-legal-pages.ts",
       "why": "Which legal documents have a published page and the origin they are served from (LEGAL_ORIGIN): the hardware terms of sale the receipts print name its Terms address (AGL-4038); no imports, one public env read like platform-brand.ts."
     },
@@ -1058,6 +1062,10 @@
       "why": "A send's stats shape, rates and link report (sendRate, sendLinkReport), replayed by the apps (AGL-3669)."
     },
     {
+      "path": "libs/plugins/outreach/src/lib/model/sequence-report.ts",
+      "why": "A sequence's Results (figures, rates, caveats and link table), replayed by the native sequence page (AGL-3668); imports send-report.ts and types."
+    },
+    {
       "path": "libs/shared/ui/jsx/src/lib/const/list-query-plan.ts",
       "why": "The console's list-plan entry the Commerce app's list page imports; it re-exports the pure list-query grammar (AGL-3622)."
     },
@@ -1128,6 +1136,38 @@
     {
       "path": "libs/plugins/commerce/src/lib/model/site-member-purchases.ts",
       "why": "A site account's lifetime purchase total (computeLifetimePurchaseCents), the console drawer's Purchases figure: the native account screen's compute load replays it."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/artifact-provenance.ts",
+      "why": "Where an installed copy came from (resolveProvenance), read by the native listing page to decide whether a copy is behind the listing and offer the update review (AGL-3668); no imports."
+    },
+    {
+      "path": "libs/plugins/marketplace/src/lib/model/artifact-merge.ts",
+      "why": "The words an update review uses for each change (describeChange, summarizeValue), replayed by the native update review of a copied listing (AGL-3668); imports only the pure artifact-provenance."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/picker/font-preview-url.ts",
+      "why": "Where a font preview's stylesheet and files come from (Google's CSS2 API for a preview's letters), replayed by the native apps' shared font loaders (AGL-3668); no imports."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/picker/font-choice.ts",
+      "why": "The font picker's labels, weight choices and catalog search, replayed by the native font picker (AGL-3668); type-only imports."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/picker/font-pairings.ts",
+      "why": "The font picker's suggested pairings, replayed by the native font picker (AGL-3668); type-only imports."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/catalog/google-fonts-catalog.ts",
+      "why": "How a Google Fonts catalog row reads (expandCatalogRow), replayed by the native font picker over the catalog route's answer (AGL-3668); type-only imports and the catalog JSON."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/catalog/google-fonts.catalog.json",
+      "why": "The generated Google Fonts catalog (data only), which google-fonts-catalog.ts loads and the fonts catalog route serves to the native apps (AGL-3668)."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/picker/site-sample-text.ts",
+      "why": "The words a font preview is drawn in (the site's name, search title and description), replayed by the native font picker (AGL-3668); no imports."
     }
   ]
 }

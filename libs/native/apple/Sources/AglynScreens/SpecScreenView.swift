@@ -911,9 +911,11 @@ struct SearchModifier: ViewModifier {
 
   func body(content: Content) -> some View {
     if enabled {
+      // The kit's search takes the submit itself: on the Mac, the iPad and in a phone area's title row it is
+      // `AglynListToolbar`'s text field, whose Return an outer `.onSubmit(of: .search)` never hears, so the route was
+      // never asked; the system search bar elsewhere hands it on the same way.
       content
-        .aglynSearchable(text: $text, prompt: "Search")
-        .onSubmit(of: .search, submit)
+        .aglynSearchable(text: $text, prompt: "Search", onSubmit: submit)
         .onChange(of: text) { _, now in if now.isEmpty { submit() } }
     } else {
       content
