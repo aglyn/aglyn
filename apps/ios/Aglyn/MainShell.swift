@@ -498,6 +498,7 @@ struct ShellFrame<Content: View>: View {
       .sheet(item: $navigation.pinFull) { PinnedFullSheet(pending: $0).environment(model) }
       .sheet(item: $navigation.colorFor) { WorkspaceColorSheet(target: $0).environment(model) }
       .sheet(isPresented: $navigation.showAddAccount) { AddAccountView().environment(model) }
+      .sheet(isPresented: $navigation.showPrivacyChoices) { PrivacyChoicesView() }
       .sheet(isPresented: $navigation.showAccount) { AccountSheet().environment(model).environment(navigation) }
       .sheet(isPresented: keepPinsShown) { KeepPinsSheet().environment(model) }
       #if os(iOS)
@@ -1797,6 +1798,14 @@ struct AccountSheet: View {
           if model.registry.screen(AccountPlaces.reportScreen) != nil {
             row("Report an issue", "flag") { navigation.push(.screen(AccountPlaces.reportScreen, [:])) }
           }
+          // The console's user menu row of the same title (Console chrome row 3), opened once this sheet has gone.
+          row(ContractValues.shared.consentOptOutTitle, PrivacyChoicesView.systemImage) {
+            Task { @MainActor in
+              try? await Task.sleep(nanoseconds: 350_000_000)
+              navigation.showPrivacyChoices = true
+            }
+          }
+          .accessibilityIdentifier("account-privacy-choices")
         }
         if let auth = model.auth {
           Section("Accounts") {

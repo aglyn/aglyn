@@ -6267,6 +6267,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let companyListDeclaration: ListQueryDeclaration
   public let componentListQuery: ListQueryDeclaration
   public let componentPropTokenPrefix: String
+  public let consentOptOutTitle: String
   public let contactLifecycleStageLabels: [String: String]
   public let contactListDeclaration: ListQueryDeclaration
   public let contentSchemaTypeDefault: ContentSchemaType
@@ -6414,6 +6415,10 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let nativeNavManifest: NativeNavManifest
   public let nativeNavShellScreens: [String]
   public let nativeNoInAppBillingNote: String
+  public let nativePrivacyChoicesAnalyticsDetail: String
+  public let nativePrivacyChoicesAnalyticsLabel: String
+  public let nativePrivacyChoicesIntro: String
+  public let nativePrivacyChoicesStrictlyNecessary: String
   public let nativeSiteCampaignsQuery: ListQueryDeclaration
   public let nativeSiteEmailsQuery: ListQueryDeclaration
   public let nativeWebBillingLinkLabel: String
@@ -6653,6 +6658,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case companyListDeclaration = "COMPANY_LIST_DECLARATION"
     case componentListQuery = "COMPONENT_LIST_QUERY"
     case componentPropTokenPrefix = "COMPONENT_PROP_TOKEN_PREFIX"
+    case consentOptOutTitle = "CONSENT_OPT_OUT_TITLE"
     case contactLifecycleStageLabels = "CONTACT_LIFECYCLE_STAGE_LABELS"
     case contactListDeclaration = "CONTACT_LIST_DECLARATION"
     case contentSchemaTypeDefault = "CONTENT_SCHEMA_TYPE_DEFAULT"
@@ -6800,6 +6806,10 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case nativeNavManifest = "NATIVE_NAV_MANIFEST"
     case nativeNavShellScreens = "NATIVE_NAV_SHELL_SCREENS"
     case nativeNoInAppBillingNote = "NATIVE_NO_IN_APP_BILLING_NOTE"
+    case nativePrivacyChoicesAnalyticsDetail = "NATIVE_PRIVACY_CHOICES_ANALYTICS_DETAIL"
+    case nativePrivacyChoicesAnalyticsLabel = "NATIVE_PRIVACY_CHOICES_ANALYTICS_LABEL"
+    case nativePrivacyChoicesIntro = "NATIVE_PRIVACY_CHOICES_INTRO"
+    case nativePrivacyChoicesStrictlyNecessary = "NATIVE_PRIVACY_CHOICES_STRICTLY_NECESSARY"
     case nativeSiteCampaignsQuery = "NATIVE_SITE_CAMPAIGNS_QUERY"
     case nativeSiteEmailsQuery = "NATIVE_SITE_EMAILS_QUERY"
     case nativeWebBillingLinkLabel = "NATIVE_WEB_BILLING_LINK_LABEL"

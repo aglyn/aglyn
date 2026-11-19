@@ -60,13 +60,15 @@ public enum AglynFirebase {
 
   /// Crashlytics and Analytics (AGL-4067). Info.plist keeps both off (`FirebaseCrashlyticsCollectionEnabled`,
   /// `FIREBASE_ANALYTICS_COLLECTION_ENABLED`), so nothing is sent before this decides; the choice is set on every launch,
-  /// so a build that stops collecting stops at once.
+  /// so a build that stops collecting stops at once. Analytics also needs the person's "Your Privacy Choices" switch on
+  /// this device (`PrivacyChoices`), read here, before anything starts; crash reports follow the build alone.
   @MainActor private static func startTelemetry(_ config: AglynConfig) {
     let collecting = collects(config)
+    let analytics = PrivacyChoices.analyticsAllowed()
     Crashlytics.crashlytics().setCrashlyticsCollectionEnabled(collecting)
-    Analytics.setAnalyticsCollectionEnabled(collecting)
+    Analytics.setAnalyticsCollectionEnabled(collecting && analytics)
     if !collecting { Crashlytics.crashlytics().deleteUnsentReports() }
-    Telemetry.start(collecting: collecting, sink: FirebaseTelemetrySink(), app: config.app)
+    Telemetry.start(collecting: collecting, sink: FirebaseTelemetrySink(), app: config.app, analytics: analytics)
   }
 
   private static func split(_ hostPort: String) -> (String, Int)? {
@@ -347,5 +349,9 @@ final class FirebaseTelemetrySink: TelemetrySink, @unchecked Sendable {
 
   func log(_ event: String, parameters: [String: String]) {
     Analytics.logEvent(event, parameters: parameters.isEmpty ? nil : parameters)
+  }
+
+  func setAnalyticsCollection(_ on: Bool) {
+    Analytics.setAnalyticsCollectionEnabled(on)
   }
 }

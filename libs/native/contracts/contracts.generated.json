@@ -1435,6 +1435,7 @@
     ]
   },
   "COMPONENT_PROP_TOKEN_PREFIX": "prop.",
+  "CONSENT_OPT_OUT_TITLE": "Your Privacy Choices",
   "CONTACT_LIFECYCLE_STAGE_LABELS": {
     "customer": "Customer",
     "evangelist": "Evangelist",
@@ -7224,6 +7225,10 @@
     "shell.siteSettings"
   ],
   "NATIVE_NO_IN_APP_BILLING_NOTE": "Plan and billing changes are not available in the app.",
+  "NATIVE_PRIVACY_CHOICES_ANALYTICS_DETAIL": "Google Analytics — which pages are used and where things go wrong.",
+  "NATIVE_PRIVACY_CHOICES_ANALYTICS_LABEL": "Analytics",
+  "NATIVE_PRIVACY_CHOICES_INTRO": "Choose what this app may use.",
+  "NATIVE_PRIVACY_CHOICES_STRICTLY_NECESSARY": "Strictly necessary features — signing in, keeping you signed in, and remembering this choice — are always on because the app cannot work without them.",
   "NATIVE_SITE_CAMPAIGNS_QUERY": {
     "fields": [
       {
