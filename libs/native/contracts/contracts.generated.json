@@ -5765,6 +5765,16 @@
                   },
                   {
                     "console": {
+                      "id": "/products/subscriptions",
+                      "surface": "hostPluginSection"
+                    },
+                    "docs": "/commerce-and-bookings/commerce/overview",
+                    "id": "subscriptions",
+                    "label": "Subscriptions",
+                    "screen": "commerce.subscriptions"
+                  },
+                  {
+                    "console": {
                       "id": "/products/returns",
                       "surface": "hostPluginSection"
                     },
