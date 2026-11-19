@@ -27,11 +27,11 @@ import { ORDER_HISTORY_CONTRACT, type OrderHistoryEntry, type OrderHistoryPageRe
 import type { AccountingOrderSnapshot } from '../model/accounting-sources'
 import { backfillRefund, runBackfillStep, snapshotFromHistoryEntry, startBackfill } from './backfill'
 import { newConnectionRecord, readConnection, toConnectionView, toStoredConnection } from './connection-store'
-import { listPaidPayouts } from './payouts'
+import { AccountingProviderError, MAX_BALANCE_TRANSACTION_PAGES, listPaidPayouts, payoutStripeFeeCents } from './payouts'
 import type { AccountingProvider } from './providers/provider'
 import { enqueueOrderPaid } from './sync-engine'
 import { PAYOUT_POLL_INTERVAL_MS, pollPayouts, runAccountingSyncJob, type AccountingJobDeps } from './sync-job'
-import { payoutItemId, saleItemId } from './sync-store'
+import { payoutFeeItemId, payoutItemId, saleItemId } from './sync-store'
 
 const NOW = Date.UTC(2026, 9, 6, 18)
 const key = createSecretBoxKey(randomBytes(32))
@@ -84,17 +84,58 @@ function setup(options: { fetch?: typeof fetch; locked?: boolean } = {}) {
   return { store, deps, provider }
 }
 
+/**
+ * Balance transactions as a seller's own Stripe account lists them, in the
+ * shapes a test-mode account answered with.
+ */
+const directCharge = {
+  id: 'txn_charge',
+  type: 'charge',
+  amount: 595,
+  fee: 24,
+  net: 571,
+  fee_details: [
+    { type: 'stripe_fee', amount: 21, description: 'Stripe processing fees' },
+    { type: 'application_fee', amount: 3, description: 'Aglyn application fee' },
+  ],
+}
+const destinationPayment = {
+  id: 'txn_payment',
+  type: 'payment',
+  amount: 253,
+  fee: 48,
+  fee_details: [{ type: 'application_fee', amount: 48 }],
+}
+const refundTxn = { id: 'txn_refund', type: 'refund', amount: -298, fee: 0, fee_details: [] }
+const applicationFeeReturned = {
+  id: 'txn_adjustment',
+  type: 'adjustment',
+  amount: 1,
+  fee: 0,
+  reporting_category: 'fee',
+  description: 'Application fee refund for ch_123',
+  fee_details: [],
+}
+const stripeTaxFee = { id: 'txn_tax_fee', type: 'stripe_fee', amount: -50, fee: 0, fee_details: [] }
+
+const stripePayoutsBody = {
+  has_more: false,
+  data: [
+    { id: 'po_2', amount: 5000, currency: 'usd', status: 'paid', arrival_date: Math.floor((NOW - 86_400_000) / 1000) },
+    { id: 'po_1', amount: 2500, currency: 'usd', status: 'paid', arrival_date: Math.floor((NOW - 2 * 86_400_000) / 1000) },
+  ],
+}
+
 const stripePayouts = mockFetch([
   {
-    match: 'api.stripe.com/v1/payouts',
-    body: {
-      has_more: false,
-      data: [
-        { id: 'po_2', amount: 5000, currency: 'usd', status: 'paid', arrival_date: Math.floor((NOW - 86_400_000) / 1000) },
-        { id: 'po_1', amount: 2500, currency: 'usd', status: 'paid', arrival_date: Math.floor((NOW - 2 * 86_400_000) / 1000) },
-      ],
-    },
+    match: 'balance_transactions?payout=po_2',
+    body: { has_more: false, data: [directCharge, refundTxn] },
   },
+  {
+    match: 'balance_transactions?payout=po_1',
+    body: { has_more: false, data: [destinationPayment] },
+  },
+  { match: 'api.stripe.com/v1/payouts', body: stripePayoutsBody },
 ])
 
 describe('payouts', () => {
@@ -107,6 +148,7 @@ describe('payouts', () => {
       fetch: stripePayouts.fetch,
     })
     expect(payouts.map((payout) => payout.payoutId)).toEqual(['po_1', 'po_2'])
+    expect(payouts.map((payout) => payout.stripeFeeCents)).toEqual([0, 21])
     const call = stripePayouts.calls[0]
     expect(call.headers['stripe-account']).toBe('acct_123')
     expect(new URL(call.url).searchParams.get('status')).toBe('paid')
@@ -115,12 +157,20 @@ describe('payouts', () => {
   it('queues each payout once and moves the cursor past it', async () => {
     const { deps, store } = setup({ fetch: stripePayouts.fetch })
     const connection = readConnection(store.read('orgs/org-1/accountingConnections/quickbooks'), keyring)!
-    expect(await pollPayouts(deps, connection)).toBe(2)
+    // Both transfers, and the Stripe fees in po_2; po_1 held none.
+    expect(await pollPayouts(deps, connection)).toBe(3)
     expect(store.read(`orgs/org-1/accountingSyncItems/${payoutItemId({ payoutId: 'po_1' })}`)).toMatchObject({
       kind: 'payout',
       status: 'pending',
       amountCents: 2500,
     })
+    expect(store.read(`orgs/org-1/accountingSyncItems/${payoutFeeItemId({ payoutId: 'po_2' })}`)).toMatchObject({
+      kind: 'fee',
+      status: 'pending',
+      amountCents: 21,
+      payout: { payoutId: 'po_2', stripeFeeCents: 21 },
+    })
+    expect(store.read(`orgs/org-1/accountingSyncItems/${payoutFeeItemId({ payoutId: 'po_1' })}`)).toBeUndefined()
     const after = readConnection(store.read('orgs/org-1/accountingConnections/quickbooks'), keyring)!
     expect(after.payoutCursorMs).toBe(Math.floor((NOW - 86_400_000) / 1000) * 1000)
     expect(await pollPayouts(deps, after)).toBe(0)
@@ -135,7 +185,81 @@ describe('payouts', () => {
     expect(store.read(`orgs/org-1/accountingSyncItems/${payoutItemId({ payoutId: 'po_2' })}`)).toMatchObject({
       status: 'needs_attention',
       errorCode: 'shared-stripe-account',
+      lastError: expect.stringContaining('This payout is from a Stripe account'),
     })
+    expect(store.read(`orgs/org-1/accountingSyncItems/${payoutFeeItemId({ payoutId: 'po_2' })}`)).toMatchObject({
+      status: 'needs_attention',
+      errorCode: 'shared-stripe-account',
+      lastError: expect.stringContaining('These are the Stripe fees in a payout'),
+    })
+  })
+
+  it('queues neither a payout nor its fees before the start date', async () => {
+    const { deps, store } = setup({ fetch: stripePayouts.fetch })
+    const path = 'orgs/org-1/accountingConnections/quickbooks'
+    const stored = store.read(path) as Record<string, any>
+    store.seed(path, { ...stored, mapping: { ...stored['mapping'], startDate: '2026-10-06' } } as never)
+    const connection = readConnection(store.read(path), keyring)!
+    // po_2 arrived on the 5th, po_1 on the 4th.
+    expect(await pollPayouts(deps, connection)).toBe(0)
+    expect(store.read(`orgs/org-1/accountingSyncItems/${payoutFeeItemId({ payoutId: 'po_2' })}`)).toBeUndefined()
+  })
+})
+
+describe('Stripe’s own fees in a payout', () => {
+  const read = (fetchImpl: typeof fetch) =>
+    payoutStripeFeeCents({ stripeKey: 'sk_test_123', accountId: 'acct_123', payoutId: 'po_9', fetch: fetchImpl })
+  const listing = (data: unknown[], hasMore = false) => ({ match: 'balance_transactions', body: { has_more: hasMore, data } })
+
+  it('counts Stripe’s part of each fee and never Aglyn’s application fee, a refund or a returned application fee', async () => {
+    const stripe = mockFetch([listing([directCharge, destinationPayment, refundTxn, applicationFeeReturned])])
+    await expect(read(stripe.fetch)).resolves.toBe(21)
+    const url = new URL(stripe.calls[0].url)
+    expect(url.pathname).toBe('/v1/balance_transactions')
+    expect(url.searchParams.get('payout')).toBe('po_9')
+    expect(url.searchParams.get('limit')).toBe('100')
+    expect(stripe.calls[0].headers['stripe-account']).toBe('acct_123')
+    expect(stripe.calls[0].headers['authorization']).toBe('Bearer sk_test_123')
+  })
+
+  it('counts a transaction that is itself a Stripe fee, such as Stripe Tax’s, negated', async () => {
+    await expect(read(mockFetch([listing([directCharge, stripeTaxFee])]).fetch)).resolves.toBe(71)
+    // A fee Stripe gave back comes in as a positive amount, and counts against the total.
+    await expect(read(mockFetch([listing([{ ...stripeTaxFee, amount: 80 }])]).fetch)).resolves.toBe(-80)
+  })
+
+  it('reads every page before it answers', async () => {
+    const stripe = mockFetch([
+      { match: 'starting_after=txn_charge', body: { has_more: false, data: [stripeTaxFee] } },
+      listing([destinationPayment, directCharge], true),
+    ])
+    await expect(read(stripe.fetch)).resolves.toBe(71)
+    expect(stripe.calls).toHaveLength(2)
+    expect(new URL(stripe.calls[1].url).searchParams.get('starting_after')).toBe('txn_charge')
+  })
+
+  it('throws on a read Stripe refuses, and so fails the payout read', async () => {
+    const refused = mockFetch([{ match: 'balance_transactions', status: 400, body: { error: { message: 'No such payout: po_9' } } }])
+    await expect(read(refused.fetch)).rejects.toThrow(AccountingProviderError)
+    await expect(read(refused.fetch)).rejects.toThrow('No such payout: po_9')
+    const failing = mockFetch([
+      { match: 'balance_transactions', status: 400, body: { error: { message: 'No such payout' } } },
+      { match: 'api.stripe.com/v1/payouts', body: stripePayoutsBody },
+    ])
+    await expect(
+      listPaidPayouts({ stripeKey: 'sk', accountId: 'acct_123', orgId: 'org-1', sinceMs: 0, fetch: failing.fetch }),
+    ).rejects.toThrow(AccountingProviderError)
+  })
+
+  it('throws rather than answer part of a payout too long to read', async () => {
+    let next = 0
+    const endless = (async () =>
+      new Response(JSON.stringify({ has_more: true, data: [{ ...directCharge, id: `txn_${++next}` }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as unknown as typeof fetch
+    await expect(read(endless)).rejects.toThrow(AccountingProviderError)
+    expect(next).toBe(MAX_BALANCE_TRANSACTION_PAGES)
   })
 })
 
@@ -149,8 +273,9 @@ describe('the tick', () => {
     })
     const open = setup({ fetch: stripePayouts.fetch })
     const report = await runAccountingSyncJob(open.deps, { nowMs: NOW, deadlineMs: NOW + 60_000 })
-    expect(report).toMatchObject({ connections: 1, payoutsQueued: 2, posted: 2 })
+    expect(report).toMatchObject({ connections: 1, payoutsQueued: 3, posted: 3 })
     expect(open.provider.createDeposit).toHaveBeenCalledTimes(2)
+    expect(open.provider.createExpense).toHaveBeenCalledTimes(1)
   })
 
   describe('when one step fails', () => {
@@ -232,7 +357,7 @@ describe('the tick', () => {
       const nextRead = NOW + PAYOUT_POLL_INTERVAL_MS
       const recovered = { ...deps, now: () => nextRead, fetch: stripePayouts.fetch }
       await expect(runAccountingSyncJob(recovered, { nowMs: nextRead, deadlineMs: nextRead + 60_000 })).resolves.toMatchObject({
-        payoutsQueued: 2,
+        payoutsQueued: 3,
         failed: 0,
       })
       expect(connectionDoc(store)).toMatchObject({ payoutError: null, payoutPolledAtMs: nextRead })
@@ -255,8 +380,8 @@ describe('the tick', () => {
         await startBackfill(asFirestore(store), connection, NOW - 30 * 86_400_000)
         await enqueueOrderPaid(deps, paidOrder('o-1'))
         const report = await runAccountingSyncJob(deps, { nowMs: NOW, deadlineMs: NOW + 60_000 })
-        // The sale, its fee and both payouts.
-        expect(report).toMatchObject({ backfillQueued: 0, payoutsQueued: 2, posted: 4, failed: 1 })
+        // The sale, its fee, both payouts and the Stripe fees in one of them.
+        expect(report).toMatchObject({ backfillQueued: 0, payoutsQueued: 3, posted: 5, failed: 1 })
         expect(provider.createSalesReceipt).toHaveBeenCalledTimes(1)
         expect(logged).toHaveBeenCalledWith('[accounting] backfill failed for org org-1', expect.any(Error))
       } finally {
