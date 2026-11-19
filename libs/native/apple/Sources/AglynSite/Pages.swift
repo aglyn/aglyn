@@ -179,12 +179,15 @@ public func movableParents(_ pages: [PageNode], pageID: String) -> [PageNode] {
     .sorted { $0.name.lowercased() < $1.name.lowercased() }
 }
 
-/// A page's live address on the site's own domain, as the hub's "Open live page" builds it.
-public func livePageURL(_ routing: SiteRouting, livePath: String, apex: String = HostStatus.defaultTenantApex)
-  -> String?
-{
-  guard let domain = routing.cname ?? routing.subdomain.map({ "\($0).\(apex)" }) else { return nil }
-  return "https://\(domain)\(livePath)"
+/// A page's live address as the hub's "Open live page" builds it (`siteLiveUrlForSlug`, `SiteLiveURL`): on the site's
+/// own domain from a deployed console (`consoleOrigin` nil reads as one), on the local tenant or the tenant preview
+/// deployment from a local or preview console.
+public func livePageURL(
+  _ routing: SiteRouting, livePath: String, consoleOrigin: String? = nil, apex: String = HostStatus.defaultTenantApex
+) -> String? {
+  SiteLiveURL.forSlug(
+    subdomain: routing.subdomain, cname: routing.cname, slug: livePath,
+    consoleHostname: SiteLiveURL.consoleHostname(consoleOrigin), apex: apex)
 }
 
 /// One saved version of a page.

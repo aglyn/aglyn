@@ -201,6 +201,40 @@ describe('the event intake', () => {
     expect(merchantShareOfRefund(manual, 1620)).toBe(1620)
   })
 
+  it('posts a Stripe Tax sale on the seller’s own account with its tax, which is the seller’s, and refunds it whole', async () => {
+    const { deps, item } = setup()
+    const direct = { ...orderView, taxMode: 'stripe-automatic', chargeModel: 'direct' as const }
+    const snapshot = snapshotFromOrderEvent(direct, { orgId: 'org-1', hostId: 'host-1', occurredAtMs: 7 })
+    expect(snapshot).toMatchObject({ totals: { taxCents: 240, totalCents: 3240, feeCents: 97 } })
+    expect(snapshot).not.toHaveProperty('marketplaceTaxCents')
+    expect(merchantShareOfRefund(snapshot, 1620)).toBe(1620)
+    await onOrderPaid(deps, envelope({ order: direct }))
+    expect(item(saleItemId({ hostId: 'host-1', orderId: 'order-1' }))).toMatchObject({ amountCents: 3240 })
+    // The buyer gets 3240 back, all of it out of the seller's own balance.
+    const refund = { id: 're_direct', amountCents: 3240, lineItemIds: [], full: true }
+    await onOrderRefunded(deps, envelope({ order: { ...direct, refundedCents: 3240 }, refund }, 'evt-5'))
+    const ref = { order: { hostId: 'host-1', orderId: 'order-1' }, refundId: 're_direct' } as never
+    expect(item(refundItemId(ref))).toMatchObject({ amountCents: 3240 })
+    expect(item(feeRefundItemId(ref))).toMatchObject({ amountCents: 97 })
+  })
+
+  it('takes the tax out only where someone else holds it: platform Stripe Tax and marketplaces, never a direct or manual sale', () => {
+    const context = { orgId: 'o', hostId: 'h', occurredAtMs: 0 }
+    const platform = snapshotFromOrderEvent({ ...orderView, taxMode: 'stripe-automatic', chargeModel: null }, context)
+    expect(platform).toMatchObject({ totals: { taxCents: 0, totalCents: 3000 }, marketplaceTaxCents: 240 })
+    expect(merchantShareOfRefund(platform, 1620)).toBe(1500)
+    // A marketplace's sale is the marketplace's tax, on the seller's own account or not.
+    const marketplace = snapshotFromOrderEvent(
+      { ...orderView, channel: 'marketplace', taxMode: 'manual', chargeModel: 'direct' },
+      context,
+    )
+    expect(marketplace).toMatchObject({ totals: { taxCents: 0, totalCents: 3000 }, marketplaceTaxCents: 240, settledOutsideStripe: true })
+    const manualDirect = snapshotFromOrderEvent({ ...orderView, taxMode: 'manual', chargeModel: 'direct' }, context)
+    expect(manualDirect).toMatchObject({ totals: { taxCents: 240, totalCents: 3240 } })
+    expect(manualDirect).not.toHaveProperty('marketplaceTaxCents')
+    expect(merchantShareOfRefund(manualDirect, 1620)).toBe(1620)
+  })
+
   it('names a refund with no Stripe id by its envelope, so a redelivery is the same refund', async () => {
     const { deps, item } = setup()
     await onOrderPaid(deps, envelope({ order: orderView }))

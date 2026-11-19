@@ -51,7 +51,11 @@ import com.aglyn.core.ConsoleApiError
 import com.aglyn.core.Live
 import com.aglyn.core.PlanFeatureDefaults
 import com.aglyn.core.nowMillis
+import com.aglyn.pluginhost.FUNNEL_INSIGHT_DAYS
+import com.aglyn.pluginhost.FUNNEL_INSIGHT_NAME
+import com.aglyn.pluginhost.FUNNEL_INSIGHT_ZONE
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.pluginhost.SlotWidgets
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
@@ -168,7 +172,7 @@ fun FunnelsScreen(context: NativePluginContext) {
       if (row == null) {
         SelectionPlaceholder("Pick a funnel to see its results", icon = AglynIcons.named("filter_alt"))
       } else {
-        FunnelDetail(row, api, editor, access)
+        FunnelDetail(context, row, api, editor, access)
       }
     },
   )
@@ -176,7 +180,7 @@ fun FunnelsScreen(context: NativePluginContext) {
 }
 
 @Composable
-private fun FunnelDetail(row: FunnelRow, api: FunnelsApi, editor: FunnelsEditor, access: FunnelsAccess) {
+private fun FunnelDetail(context: NativePluginContext, row: FunnelRow, api: FunnelsApi, editor: FunnelsEditor, access: FunnelsAccess) {
   var days by rememberSaveable { mutableStateOf(30) }
   Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space(2f)), verticalArrangement = Arrangement.spacedBy(space(2f))) {
     SectionCard(null, Modifier.fillMaxWidth().testTag("funnel-detail")) {
@@ -206,7 +210,7 @@ private fun FunnelDetail(row: FunnelRow, api: FunnelsApi, editor: FunnelsEditor,
     if (row.draft) {
       DraftReview(row, editor, access.canManage)
     } else {
-      FunnelResultsPane(row, days, api, editor, access.canManage)
+      FunnelResultsPane(context, row, days, api, editor, access.canManage)
     }
     Text(
       "A visit is one browser tab, recorded only when the visitor’s consent allows analytics.",
@@ -240,7 +244,7 @@ private sealed interface ResultState {
 }
 
 @Composable
-private fun FunnelResultsPane(row: FunnelRow, days: Int, api: FunnelsApi, editor: FunnelsEditor, canManage: Boolean) {
+private fun FunnelResultsPane(context: NativePluginContext, row: FunnelRow, days: Int, api: FunnelsApi, editor: FunnelsEditor, canManage: Boolean) {
   val refreshKey = editor.refreshKey
   var state by remember(row.id, row.version, days, refreshKey) { mutableStateOf<ResultState>(ResultState.Loading) }
   LaunchedEffect(row.id, row.version, days, refreshKey) {
@@ -256,20 +260,25 @@ private fun FunnelResultsPane(row: FunnelRow, days: Int, api: FunnelsApi, editor
   when (val value = state) {
     ResultState.Loading -> LinearProgressIndicator(Modifier.fillMaxWidth())
     is ResultState.Failed -> NoticeBanner(value.message, StatusTone.ERROR, Modifier.testTag("funnel-result-error"))
-    is ResultState.Ready -> FunnelResultView(
-      value.result,
-      row,
-      onActOnDropOff = if (canManage) { reached ->
-        editor.askDropOff(
-          DropOffRequest(
-            row.id,
-            reached,
-            row.steps.getOrNull(reached - 1)?.let(::funnelStepTitle).orEmpty(),
-            row.steps.getOrNull(reached)?.let(::funnelStepTitle).orEmpty(),
-          ),
-        )
-      } else null,
-    )
+    is ResultState.Ready -> {
+      FunnelResultView(
+        value.result,
+        row,
+        onActOnDropOff = if (canManage) { reached ->
+          editor.askDropOff(
+            DropOffRequest(
+              row.id,
+              reached,
+              row.steps.getOrNull(reached - 1)?.let(::funnelStepTitle).orEmpty(),
+              row.steps.getOrNull(reached)?.let(::funnelStepTitle).orEmpty(),
+            ),
+          )
+        } else null,
+      )
+      // What another plugin reads about these results, such as "Ask AI about this funnel" (the console's `funnelInsight`
+      // zone): the funnel and the range shown, under a saved funnel's results only.
+      SlotWidgets(context, FUNNEL_INSIGHT_ZONE, props = mapOf(FUNNEL_INSIGHT_NAME to row.name, FUNNEL_INSIGHT_DAYS to days.toString()))
+    }
   }
 }
 

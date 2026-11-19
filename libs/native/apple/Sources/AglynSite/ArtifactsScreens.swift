@@ -48,6 +48,8 @@ struct ArtifactsScreen: View {
   let kind: ArtifactKind
   var initialID: String?
   @State private var model = ArtifactListModel()
+  /// Who is in each layout, component or template right now (AGL-2486), read every 30 seconds while the list shows.
+  @State private var presence = PresenceSummary()
   @State private var quota = ArtifactQuotaModel()
   @State private var runner = ActionRunner()
   @State private var dialog: ArtifactDialog?
@@ -89,6 +91,12 @@ struct ArtifactsScreen: View {
           }
         }
         .task(id: hostID) { model.start(context.firestore, kind: kind, hostID: hostID) }
+        .task(id: "presence:\(hostID)") {
+          while !Task.isCancelled {
+            presence = await fetchPresenceSummary(api: context.api, hostID: hostID)
+            try? await Task.sleep(nanoseconds: presenceSummaryPollSeconds * 1_000_000_000)
+          }
+        }
         .task(id: hostID) { await quota.loadPlan(api: context.api, kind: kind, hostID: hostID) }
         .task(id: rowsSignature) { await quota.recount(context.firestore, kind: kind, hostID: hostID) }
         .sheet(item: $dialog) { dialog in
@@ -233,7 +241,7 @@ struct ArtifactsScreen: View {
       if selectable {
         List {
           ForEach(rows) { row in
-            ArtifactListRow(kind: kind, row: row).aglynSelectableRow(row.id, selection: $selection)
+            ArtifactListRow(kind: kind, row: row, people: presence.people(kind.rawValue, row.id)).aglynSelectableRow(row.id, selection: $selection)
               .accessibilityIdentifier("\(kind.singular)-\(row.id)")
           }
           if model.hasMore { AglynLoadMoreRow("Show more \(kind.title.lowercased())") { model.loadMore() } }
@@ -249,7 +257,7 @@ struct ArtifactsScreen: View {
             Button {
               selection = row.id
             } label: {
-              ArtifactListRow(kind: kind, row: row)
+              ArtifactListRow(kind: kind, row: row, people: presence.people(kind.rawValue, row.id))
             }
             .buttonStyle(.aglynRow)
             .aglynListRow()
@@ -279,9 +287,12 @@ private func rowSupporting(_ kind: ArtifactKind, _ row: ArtifactRow) -> String {
 private struct ArtifactListRow: View {
   let kind: ArtifactKind
   let row: ArtifactRow
+  /// Who is in it right now, across its versions (AGL-2486).
+  var people: [PresentPerson] = []
 
   var body: some View {
     AglynRow(row.isStarterBundle ? row.starterName ?? row.name : row.name, subtitle: rowSupporting(kind, row), systemImage: kind.systemImage) {
+      DocumentPresenceChips(people: people)
       if kind == .template {
         StatusChip(row.isStarterBundle ? "Starter bundle" : templateSourceLabel(row.sourceType))
       } else if row.versionID == nil {

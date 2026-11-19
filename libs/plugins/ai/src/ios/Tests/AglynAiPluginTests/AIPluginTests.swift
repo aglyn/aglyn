@@ -21,6 +21,7 @@ final class AIPluginTests: XCTestCase {
       widgets: [
         "ai.seo-audit", "ai.seo-start", "ai.site-memory", "ai.create-page", "ai.create-template", "ai.create-layout",
         "ai.create-form", "ai.create-component", "ai.needs-you", "ai.assist-panel", "ai.insight-ask", "ai.org-insight-ask",
+        "ai.explain-funnel",
         "ai.crm-record",
       ],
       quickActions: ["ai.open"],
@@ -37,6 +38,11 @@ final class AIPluginTests: XCTestCase {
     // Home's "Needs you" lines and the shell's AI panel are slots of their own (AGL-3945).
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: "homeNeedsYou").map(\.id), ["ai.needs-you"])
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: assistPanelSlot).map(\.id), ["ai.assist-panel"])
+    // "Ask AI about this funnel" is under a saved funnel's results, the funnels plugin's `funnelInsight` zone (AGL-3605).
+    XCTAssertEqual(registry.widgets(for: .aglyn, slot: FunnelInsightZone.name).map(\.id), ["ai.explain-funnel"])
+    XCTAssertEqual(
+      aiFunnelQuestion("Pricing to contact", days: 30),
+      "In my funnel \"Pricing to contact\" over the last 30 days, where do visitors drop off most, and what might explain it?")
     // The AI summary is in a CRM record page's `recordInsights` zone (AGL-2917).
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: recordInsightsZoneName).map(\.id), ["ai.crm-record"])
     // Create with AI is in each list's create zone, under the console's zone names.

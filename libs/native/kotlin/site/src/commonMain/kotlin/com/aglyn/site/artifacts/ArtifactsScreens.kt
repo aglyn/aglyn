@@ -118,6 +118,14 @@ fun ArtifactsScreen(context: NativePluginContext, kind: ArtifactKind, initialId:
   LaunchedEffect(quota, rowsKey) { quota.recount() }
   val runner = remember(hostId, kind) { ActionRunner(scope) }
   val api = remember(hostId, kind, context.api, context.writer) { ArtifactsApi(context.api, context.writer, hostId, kind) }
+  // Who is in each layout, component or template right now (AGL-2486), read every 30 seconds while the list shows.
+  var presence by remember(hostId) { mutableStateOf(com.aglyn.site.pages.PresenceSummary()) }
+  LaunchedEffect(hostId, context.api) {
+    while (true) {
+      presence = com.aglyn.site.pages.fetchPresenceSummary(context.api, hostId)
+      kotlinx.coroutines.delay(com.aglyn.site.pages.PRESENCE_SUMMARY_POLL_MS)
+    }
+  }
   var dialog by remember { mutableStateOf<ArtifactDialog?>(null) }
   val canEdit = com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.edit")
 
@@ -174,7 +182,7 @@ fun ArtifactsScreen(context: NativePluginContext, kind: ArtifactKind, initialId:
               )
             } else {
               LazyColumn(Modifier.fillMaxSize().testTag("${kind.collection}-list"), state = listState) {
-                items(rows, key = { it.id }) { row -> ArtifactListRow(kind, row, row.id == selected) { onSelect(row.id) } }
+                items(rows, key = { it.id }) { row -> ArtifactListRow(kind, row, presence.people(kind.singular, row.id), row.id == selected) { onSelect(row.id) } }
                 if (model.hasMore) item { SkeletonList(rows = 2) }
               }
             }
@@ -243,17 +251,21 @@ private fun rowSupporting(kind: ArtifactKind, row: ArtifactRow): String = listOf
 ).joinToString(" · ").ifEmpty { "No description" }
 
 @Composable
-private fun ArtifactListRow(kind: ArtifactKind, row: ArtifactRow, selected: Boolean, onClick: () -> Unit) {
+private fun ArtifactListRow(kind: ArtifactKind, row: ArtifactRow, people: List<com.aglyn.site.pages.PresentPerson>, selected: Boolean, onClick: () -> Unit) {
   AglynListItem(
     title = if (row.isStarterBundle) row.starterName ?: row.name else row.name,
     supporting = rowSupporting(kind, row),
     icon = AglynIcons.named(kind.icon),
     selected = selected,
     trailing = {
+      Row(horizontalArrangement = Arrangement.spacedBy(space(0.5f)), verticalAlignment = Alignment.CenterVertically) {
+      // Who is in it right now, across its versions (AGL-2486).
+      com.aglyn.site.pages.DocumentPresenceChips(people)
       when {
         kind == ArtifactKind.TEMPLATE -> StatusChip(if (row.isStarterBundle) "Starter bundle" else templateSourceLabel(row.sourceType), StatusTone.NEUTRAL)
         row.versionId == null -> StatusChip("No version yet", StatusTone.NEUTRAL)
         else -> Unit
+      }
       }
     },
     onClick = onClick,
