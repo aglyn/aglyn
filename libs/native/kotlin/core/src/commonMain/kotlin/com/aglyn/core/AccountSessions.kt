@@ -238,6 +238,7 @@ class AccountSessions(
   override suspend fun verifyPasswordResetCode(code: String): String = current.verifyPasswordResetCode(code)
   override suspend fun confirmPasswordReset(code: String, newPassword: String) = current.confirmPasswordReset(code, newPassword)
   override suspend fun providerIds(): List<String> = current.providerIds()
+  override suspend fun reconfirm(credential: ReconfirmCredential) = current.reconfirm(credential)
   override suspend fun changePassword(current: String, new: String) = this.current.changePassword(current, new)
   override suspend fun unlinkProvider(providerId: String) = current.unlinkProvider(providerId)
   override suspend fun linkGoogle(googleIdToken: String) = current.linkGoogle(googleIdToken)

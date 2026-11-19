@@ -30,6 +30,7 @@ import {
 } from 'react'
 import useCurrentOrg from '../hooks/use-current-org'
 import {
+  DASHBOARD_WIDGETS_FIELD,
   EMPTY_DASHBOARD_WIDGET_PREFS,
   moveDashboardWidget,
   readDashboardWidgetPrefs,
@@ -68,7 +69,7 @@ import {
  * this console keeps server-side (`notificationPrefs`) already lives, and
  * needs no rules change to hold one more field.
  */
-export const DASHBOARD_WIDGETS_FIELD = 'dashboardWidgets'
+export { DASHBOARD_WIDGETS_FIELD }
 
 export interface DashboardWidgetPrefsValue {
   prefs: DashboardWidgetPrefs

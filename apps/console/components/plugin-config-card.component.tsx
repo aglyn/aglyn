@@ -448,6 +448,11 @@ function SchemaForm({
             helperText={field.description}
             value={String(value ?? '')}
             disabled={disabled || busy}
+            slotProps={
+              field.verbatim
+                ? { htmlInput: { autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false } }
+                : undefined
+            }
             onChange={(event) => setField(field.key, event.target.value)}
           />
         )

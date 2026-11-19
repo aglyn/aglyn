@@ -107,18 +107,18 @@ export const SITE_SEO_DESCRIPTION: ApiV1ResourceDescription = {
 export const SITE_PAGES_DESCRIPTION: ApiV1ResourceDescription = {
   tag: 'Pages',
   docsPage: 'pages',
-  description: 'The pages of a site: their names, where they sit, their public addresses and their search listings.',
+  description: 'The pages of a site and the folders they sit in: their names, where they sit, their public addresses and their search listings.',
   schemaName: 'Page',
   required: ['id', 'object', 'name', 'kind', 'parentId', 'order', 'path', 'published', 'seo'],
   fields: {
     id: stringField('The page’s id.'),
     object: objectKindField('page'),
     name: nullableField(stringField('The page’s name in the console.')),
-    kind: stringField('`page` for an ordinary page.'),
+    kind: stringField('`page` for an ordinary page; `group` for a folder, which holds pages and has no address or content of its own.'),
     parentId: nullableField(stringField('The id of the page or folder it sits under, or null at the top.')),
     order: nullableField(integerField('Its place among the pages beside it.')),
-    path: nullableField(stringField('Its public address on the site, such as `/about`, or null when it is not published.')),
-    published: booleanField('Whether the page has a public address.'),
+    path: nullableField(stringField('Its public address on the site, such as `/about`, or null when it is not published. Always null for a folder.')),
+    published: booleanField('Whether the page has a public address. Always false for a folder.'),
     seo: {
       type: 'object',
       description: 'The page’s own search listing. A member that is null falls back to the site’s.',
@@ -143,12 +143,12 @@ export const SITE_PAGES_DESCRIPTION: ApiV1ResourceDescription = {
   ops: [
     {
       path: '/v1/sites/{siteId}/pages', method: 'get', operationId: 'listPages', summary: 'List a site’s pages', list: true, returns: 'Page',
-      description: 'Lists the site’s pages with each one’s name, public address, whether it is published, and its search listing. A page’s `id` is the `pageId` other tools ask for. Needs `siteId` from List sites.',
+      description: 'Lists the site’s pages and folders with each one’s name, where it sits, its public address, whether it is published, and its search listing. A folder is listed with `kind` `group`; it has no address and is never published. A page’s `id` is the `pageId` other tools ask for, and a page or folder’s `id` is a `parentId` a page can be moved under. Needs `siteId` from List sites.',
       pathParams: [SITE_ID_PATH_PARAM],
     },
     {
       path: '/v1/sites/{siteId}/pages/{pageId}', method: 'get', operationId: 'getPage', summary: 'Get a page', returns: 'Page',
-      description: 'Returns one page: its name, public address, whether it is published, and its search listing. Needs `siteId` from List sites and `pageId` from List a site’s pages.',
+      description: 'Returns one page or folder: its name, where it sits, its public address, whether it is published, and its search listing. A folder has `kind` `group` and no address. Needs `siteId` from List sites and `pageId` from List a site’s pages.',
       pathParams: [SITE_ID_PATH_PARAM, PAGE_ID_PATH_PARAM],
     },
     // destructive and idempotent by its method. openWorld: a published
@@ -157,7 +157,7 @@ export const SITE_PAGES_DESCRIPTION: ApiV1ResourceDescription = {
     {
       path: '/v1/sites/{siteId}/pages/{pageId}/seo', method: 'patch', operationId: 'updatePageSeo', summary: 'Update a page’s search listing',
       accepts: 'PageSeoWrite', returns: 'Page',
-      description: `Changes one page’s search title, description or breadcrumb label; members left out keep their values. Needs \`siteId\` from List sites and \`pageId\` from List a site’s pages. Returns the page. ${LIVE}`,
+      description: `Changes one page’s search title, description or breadcrumb label; members left out keep their values. A folder has no search listing. Needs \`siteId\` from List sites and \`pageId\` from List a site’s pages. Returns the page. ${LIVE}`,
       pathParams: [SITE_ID_PATH_PARAM, PAGE_ID_PATH_PARAM], openWorld: true,
     },
   ],

@@ -381,8 +381,10 @@
     private static let rememberedReader = "aglyn.pos.reader.id"
 
     private init() {
-      // Tap to Pay is on iPhone only; an iPad takes cards on a Bluetooth reader.
-      kinds = UIDevice.current.userInterfaceIdiom == .phone ? [.tapToPay, .bluetooth] : [.bluetooth]
+      // Tap to Pay is on iPhone only; an iPad takes cards on a Bluetooth reader. And only in a build signed with Apple's
+      // Tap to Pay entitlement (development-only so far): a store build without it shows no option that can only fail.
+      kinds =
+        TapToPayIPhone.offered(onPhone: UIDevice.current.userInterfaceIdiom == .phone) ? [.tapToPay, .bluetooth] : [.bluetooth]
       events.collector = self
     }
 

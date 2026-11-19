@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynScreens
 import AglynUI
 import SwiftUI
 
@@ -50,6 +51,8 @@ struct AglynApp: App {
         NavigationStack { SettingsView() }
           .frame(width: 460, height: 420)
           .environment(model)
+          // The account's screens open inside this window (Close account among them), and read who is signed in.
+          .environment(\.aglynScreenSession, model.screenSession)
           .tint(AglynColorTint.value)
       }
     #endif

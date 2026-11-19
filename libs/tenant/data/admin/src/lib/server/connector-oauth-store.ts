@@ -695,7 +695,15 @@ export async function refreshConnectorTokens(
     | { kind: 'replayed'; graced: boolean }
     | { kind: 'refused'; error: 'invalid_grant' | 'invalid_scope'; description: string }
   const outcome: Outcome = await db().runTransaction(async (tx): Promise<Outcome> => {
-    const [snap, grantSnap, clientSnap] = await Promise.all([tx.get(ref), tx.get(grantRef), tx.get(clientRef)])
+    // ONE read, never three. Separate `tx.get`s are separate RPCs: the first
+    // opens the transaction and the others name it by id. Two refreshes of one
+    // token deadlock on purpose (each holds the token, one commits the grant),
+    // and when the store aborts a loser's read for that, a sibling read still
+    // in flight is answered "Transaction is invalid or closed" — which is not
+    // retryable, so the loser threw instead of retrying into `replayed`.
+    // `getAll` takes all three locks in the request that opens the
+    // transaction, so contention can only surface as a retryable abort.
+    const [snap, grantSnap, clientSnap] = await tx.getAll(ref, grantRef, clientRef)
     if (!snap.exists) return { kind: 'refused', error: 'invalid_grant', description: 'The refresh token is not valid' }
     const data = snap.data() ?? {}
     if (data.rotatedAt) return { kind: 'replayed', graced: withinReuseGrace(data.rotatedAt, now) }

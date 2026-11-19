@@ -58,7 +58,10 @@ import {
   ICON_VARIANT_SYMBOL_SECURE,
   ICON_VARIANT_TEXT,
 } from '@aglyn/shared-data-enums'
-import { artifactRenameListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
+import {
+  SCREEN_DETAILS_ACTIVITY,
+  buildScreenDetailsUpdate,
+} from '@aglyn/aglyn/app-utils/screen-details-update'
 import { mdiChevronDown, mdiChevronUp } from '@aglyn/shared-data-mdi'
 import {
   AppLink,
@@ -573,21 +576,22 @@ function ScreenDetails() {
         listen: screenListen,
       },
       async () => {
-        await updateDoc(screenRef, {
-          displayName: detailsDraft.displayName.trim(),
-          // Keep the name keys in sync on rename (AGL-835, AGL-3321) so the
-          // switcher's prefix query and the screen lists' search find the
-          // screen under its new name.
-          ...artifactRenameListKeys('screens', detailsDraft.displayName.trim()),
-          description: detailsDraft.description.trim(),
-          updatedAt: Timestamp.now(),
+        // The trimmed name with the name keys kept in sync (AGL-835,
+        // AGL-3321), so the switcher's prefix query and the screen lists'
+        // search find the screen under its new name, and the trimmed
+        // description: one builder, shared with the public API's page update
+        // (AGL-4235).
+        const details = buildScreenDetailsUpdate({
+          displayName: detailsDraft.displayName,
+          description: detailsDraft.description,
         })
+        await updateDoc(screenRef, { ...details, updatedAt: Timestamp.now() })
           .then(() => {
             enqueueSnackbar('Page updated', {
               variant: 'success',
               persist: false,
             })
-            logActivity('Updated screen details', {
+            logActivity(SCREEN_DETAILS_ACTIVITY, {
               type: 'screen',
               id: screenId,
               name: detailsDraft.displayName.trim(),

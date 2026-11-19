@@ -96,6 +96,7 @@ jest.mock('./firebase-admin', () => {
       type R = ReturnType<typeof ref>
       const tx = {
         get: (target: R) => target.get(),
+        getAll: (...targets: R[]) => Promise.all(targets.map((target) => target.get())),
         create: (target: R, data: Data) => void writes.push(() => target.create(data)),
         update: (target: R, data: Data) => void writes.push(() => target.update(data)),
         set: (target: R, data: Data) => void writes.push(() => target.set(data)),

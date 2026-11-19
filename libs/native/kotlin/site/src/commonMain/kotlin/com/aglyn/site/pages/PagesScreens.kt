@@ -523,7 +523,13 @@ private fun PageDialogs(context: NativePluginContext, hostId: String, dialog: Pa
   when (dialog) {
     null -> Unit
     is PageDialog.Schedule -> PageScheduleDialog(context, hostId, dialog.page, dialog.unpublish, dialog.versionId, settingsApi, runner, close)
-    PageDialog.Gallery -> TemplateGalleryDialog(context, hostId, "page", onChoose = { onOpen(PageDialog.UseTemplate(it)) }, onDismiss = close)
+    PageDialog.Gallery -> TemplateGalleryDialog(
+      context, hostId, "page", onChoose = { onOpen(PageDialog.UseTemplate(it)) }, onDismiss = close,
+      onInstalled = { message ->
+        close()
+        runner.notice = message
+      },
+    )
     is PageDialog.UseTemplate -> UseTemplateDialog(context, hostId, dialog.row, onDone = { _, id -> close(); onSelectNew(id) }, onDismiss = close)
     is PageDialog.SaveTemplate -> SaveAsTemplateDialog(
       context,

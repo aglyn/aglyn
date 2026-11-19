@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 import * as Aglyn from '@aglyn/aglyn'
-import { resolveNamedTokens } from '@aglyn/aglyn'
+import { resolveTemplateNodes } from '@aglyn/aglyn/app-utils/page-template-use'
 import {
   resolveTemplateSlug,
   templateScreenAddressRefusal,
@@ -105,10 +105,7 @@ export async function createPageFromTemplate(
    * the route is published, and the author is looking at a blank screen with
    * no indication that anything went wrong.
    */
-  const resolved = resolveNamedTokens(
-    (Aglyn.decodeStoredNodes<Record<string, unknown>>(nodes) ?? {}) as any,
-    placeholderValues ?? null,
-  )
+  const resolved = resolveTemplateNodes(nodes, placeholderValues ?? null)
   const { slug, requestedSlug } = resolveTemplateSlug({
     slug: input.slug,
     displayName,

@@ -37,11 +37,36 @@ function helpFor(field) {
 }
 
 /**
+ * The schema's pre-save check (the console's `validate`) as the apps replay it: a form's `refuse` entry naming a check
+ * both kits implement (`PluginSettingsChecks`), asked over the values the form will save, or on a site over the values
+ * it will RUN with (its own override where it has one, else the workspace's, else the default). The console's own
+ * answers to `checkInputs` are recorded beside the spec (`checkCases`), and both kits replay them, so a rule or a word
+ * the console changes fails the apps' tests rather than drifting.
+ */
+export function checkRefusal(check, { site = false } = {}) {
+  return site ? [{ check, site: true }] : [{ check }]
+}
+
+/** The console's answers to each `check`'s inputs: `{ [check]: [{ values, result }] }`. */
+export function checkCases(entries) {
+  const out = {}
+  for (const { schema, check, checkInputs = [] } of entries) {
+    if (!check) continue
+    if (!schema.validate) throw new Error(`${schema.pluginId}: names check ${check} but its schema has no validate`)
+    if (!checkInputs.length) throw new Error(`${schema.pluginId}: check ${check} has no inputs to record`)
+    const cases = checkInputs.map((values) => ({ values, result: schema.validate(values) ?? null }))
+    if (!cases.some(({ result }) => result)) throw new Error(`${schema.pluginId}: validate refuses none of its inputs`)
+    out[check] = cases
+  }
+  return out
+}
+
+/**
  * One schema as a native screen spec. `checking` names what the form's Save holds on while the device cache alone has
  * answered ("Checking your plugin settings with the server…"); the spec file passes it, and a marketplace plugin's
  * run-time screen (`manifestSettingsScreen`) is this screen without it.
  */
-export function pluginSettingsScreen({ schema, label, checking }) {
+export function pluginSettingsScreen({ schema, label, checking, check }) {
   const id = schema.pluginId
   const fields = schema.fields.map((field) => {
     const out = {
@@ -52,6 +77,8 @@ export function pluginSettingsScreen({ schema, label, checking }) {
       initial: `{item.${field.key} ?? const.defaults.${field.key}}`,
     }
     if (field.type === 'select') out.options = (field.options ?? []).map(({ value, label: text }) => ({ value, label: text }))
+    // A key or code is kept as typed: the apps' keyboards neither capitalize nor correct it, as the console's input.
+    if (field.verbatim) out.verbatim = true
     const help = helpFor(field)
     if (help) out.help = help
     return out
@@ -67,6 +94,8 @@ export function pluginSettingsScreen({ schema, label, checking }) {
     constants: { defaults: schema.defaults },
     load: { settings: { doc: `orgs/{org.id}/pluginSettings/${id}`, optional: true } },
     blocks: [
+      // The schema's notice, as the console's card draws it above the fields (an info alert).
+      ...noticeBlocks(schema),
       {
         type: 'form',
         ...(checking ? { checking } : {}),
@@ -74,6 +103,7 @@ export function pluginSettingsScreen({ schema, label, checking }) {
         object: 'data.settings',
         footer: 'A site can override these on its own plugin page.',
         fields,
+        ...(check ? { refuse: checkRefusal(check) } : {}),
         submit: {
           label: 'Save settings',
           write: { doc: `orgs/{org.id}/pluginSettings/${id}`, fields: { ...written, updatedBy: '{user.uid}' } },
@@ -90,7 +120,7 @@ export function pluginSettingsScreen({ schema, label, checking }) {
  * own document holds the key); a save writes the overridden fields and removes the rest, and the site's
  * pages are republished when the schema says its fields shape them.
  */
-export function sitePluginSettingsScreen({ schema, label }) {
+export function sitePluginSettingsScreen({ schema, label, check }) {
   const id = schema.pluginId
   const fields = []
   const written = { updatedBy: '{user.uid}' }
@@ -109,6 +139,7 @@ export function sitePluginSettingsScreen({ schema, label }) {
       when: `form.ov_${field.key}`,
     }
     if (field.type === 'select') control.options = (field.options ?? []).map(({ value, label: text }) => ({ value, label: text }))
+    if (field.verbatim) control.verbatim = true
     const help = helpFor(field)
     if (help) control.help = help
     fields.push(control)
@@ -129,12 +160,15 @@ export function sitePluginSettingsScreen({ schema, label }) {
       site: { doc: `hosts/{site.id}/pluginSettings/${id}`, optional: true },
     },
     blocks: [
+      // The schema's notice, as the console's card draws it above the fields (an info alert).
+      ...noticeBlocks(schema),
       {
         type: 'form',
         checking: 'site plugin settings',
         id: 'settings',
         footer: 'A field you do not override follows the workspace value.',
         fields,
+        ...(check ? { refuse: checkRefusal(check, { site: true }) } : {}),
         submit: {
           label: 'Save settings',
           write: { doc: `hosts/{site.id}/pluginSettings/${id}`, fields: written },
@@ -144,6 +178,11 @@ export function sitePluginSettingsScreen({ schema, label }) {
       },
     ],
   }
+}
+
+/** The schema's `notice` as an info notice block, or none. */
+function noticeBlocks(schema) {
+  return schema.notice ? [{ type: 'notice', tone: 'info', text: schema.notice }] : []
 }
 
 /** The spec file: a workspace screen and a site screen per schema, in plugin order. */

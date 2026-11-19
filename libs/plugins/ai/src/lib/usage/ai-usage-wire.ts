@@ -63,6 +63,13 @@ export interface OrgAiUsageTableWire {
   /** The workspace's own credits for the month — the pool the shares are of. */
   orgCredits: number
   rows: OrgAiUsageRowWire[]
+  /**
+   * `view=prepared` with a site and `uids`: each asked person's credits on
+   * that site this month, 0 for someone with none — the figure the site's
+   * collaborators table prints per row ("AI credits (site, month)"), so an app
+   * reads one cell per row without walking the table.
+   */
+  hostCells?: Record<string, number>
 }
 
 /** One person's month, as the member card reads it. */
@@ -106,6 +113,27 @@ export function toAiUsageWireRow(
   }
   if (hostId) wire.hostCredits = row.byHost[hostId] ?? 0
   return wire
+}
+
+/** The most people one `view=prepared` request answers for. */
+export const AI_USAGE_HOST_CELLS_MAX = 200
+
+/**
+ * Each asked uid's credits on the site (`hostCredits`), 0 where the month
+ * holds nothing for them — what `AiCollaboratorCreditsCell` reads from
+ * `hostCreditsByUid` (`?? 0`). Blank uids are skipped and the list is capped.
+ */
+export function aiUsageHostCells(
+  rows: readonly Pick<OrgAiUsageRowWire, 'uid' | 'hostCredits'>[],
+  uids: readonly string[],
+): Record<string, number> {
+  const byUid = new Map(rows.map((row) => [row.uid, row.hostCredits ?? 0]))
+  const cells: Record<string, number> = {}
+  for (const raw of uids.slice(0, AI_USAGE_HOST_CELLS_MAX)) {
+    const uid = raw.trim()
+    if (uid) cells[uid] = byUid.get(uid) ?? 0
+  }
+  return cells
 }
 
 /** The CSV's columns, in order. */

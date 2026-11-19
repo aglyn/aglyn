@@ -803,7 +803,12 @@ struct PageSheetRouter: View {
   var body: some View {
     switch sheet {
     case .fromTemplate:
-      TemplateGallerySheet(context: context, hostID: hostID, kind: "page", onChoose: { open(.useTemplate($0)) }, close: close)
+      TemplateGallerySheet(
+        context: context, hostID: hostID, kind: "page", onChoose: { open(.useTemplate($0)) }, close: close,
+        onInstalled: { message in
+          close()
+          runner.notice = message
+        })
     case .useTemplate(let row):
       UseTemplateSheet(context: context, hostID: hostID, row: row, onDone: { _, id in
         close()

@@ -700,7 +700,16 @@ const SCOPE_WORDS: Record<ApiScope, { area: string; words: string }> = {
     words:
       'Add, edit and delete companies, deals, tasks and email templates; log and delete activities; add, edit and convert leads',
   },
-  'pages:read': { area: 'Pages', words: 'See your pages: their names, addresses and whether they are published' },
+  'pages:read': {
+    area: 'Pages',
+    words: 'See your pages: their names, addresses, whether they are published and what is on them',
+  },
+  'pages:write': {
+    area: 'Pages',
+    words:
+      'Add, rename, move and delete pages and edit what is on them; edits to a page are saved as a draft until it is published',
+  },
+  'components:read': { area: 'Templates', words: 'See your page templates' },
   'seo:read': { area: 'Search listing', words: 'See your search listings: how your site and pages are described to search engines' },
   'seo:write': {
     area: 'Search listing',

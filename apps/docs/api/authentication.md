@@ -65,7 +65,7 @@ lacks returns `403` `insufficient_scope`. Grant the least a key needs.
 | `contacts:read` | List and read contacts. |
 | `contacts:write` | Add contacts, edit their name, tags and notes, and delete them. Never changes the email a contact is identified by, or where it came from. |
 | `sites:read` | List sites and read their details. |
-| `sites:publish` | Refresh a site's live pages so writes made over the API appear immediately. Changes no content. |
+| `sites:publish` | Refresh a site's live pages so writes made over the API appear immediately, and [publish chosen pages](resources/sites.md#publish-pages), which makes their drafts live. Also needed beside `pages:write` for any change to an already-published page. |
 | `sites:write` | Create new sites in the organization. Counts against your site allowance. Cannot rename or delete a site. |
 | `forms:read` | Read a site's form submissions. |
 | `forms:write` | Mark a site's form submissions read or unread, and delete them. Never edits what a visitor typed. |
@@ -78,7 +78,9 @@ lacks returns `403` `insufficient_scope`. Grant the least a key needs.
 | `media:write` | Upload files to the organization library and to a site's media. Cannot replace, edit or delete an existing file. |
 | `crm:read` | List and read [companies](resources/companies.md), [pipelines](resources/pipelines.md), [deals](resources/deals.md), [tasks](resources/tasks.md), [activities](resources/activities.md) and [email templates](resources/email-templates.md), across the organization. |
 | `crm:write` | Add, edit and delete companies, deals, tasks and email templates, and log or delete activities, each on behalf of a named site. Cannot edit a pipeline's stages, and cannot edit an activity once logged. |
-| `pages:read` | List and read a site's [pages](resources/pages.md): their names, public addresses, whether they are published, and their search listings. Never their content. |
+| `pages:read` | List and read a site's [pages](resources/pages.md) and folders: their names, public addresses, whether they are published, and their search listings; and [read what is on a page](resources/pages.md#get-content), from its waiting draft or its saved version. |
+| `pages:write` | [Create](resources/pages.md#create), [rename, re-address, move](resources/pages.md#update) and [delete](resources/pages.md#delete) a site's pages, and [edit what is on a page](resources/pages.md#edit-content). A content edit is saved as the page's draft and goes live only when the page is published, which takes `sites:publish`; a new page starts unpublished. Any change to a page that is already published, and deleting one, also needs `sites:publish`. Cannot change the theme, layouts, reusable components or templates. |
+| `components:read` | List a site's [page templates](resources/templates.md), the starting points a new page can be created from. Cannot create or change a template. |
 | `seo:read` | Read a site's [search listing](resources/seo.md) and each page's. |
 | `seo:write` | Change a site's search title, description, separator and title pattern, and a page's search title, description and breadcrumb label. Live when saved. Cannot change the search-indexing switch, verification codes or the social image. |
 | `business:read` | Read a site's [business details](resources/business-details.md): name, slogan, phone, email, address and social links. |
@@ -114,8 +116,10 @@ rather than an oversight:
 - **Renaming and deleting a site.** `sites:write` creates; it deliberately stops
   there. A delete would erase a whole site — pages, versions, products, uploaded
   files — immediately, from one field in a request body, with no hold and no undo.
-- **A page's content and design.** `pages:read` and `seo:write` reach a page's name,
-  address and search listing, never what is on it; that is edited in the console.
+- **A site's theme, layouts, reusable components and templates.** `pages:write` edits
+  what is on a page, element by element, and `components:read` lists templates; the
+  theme, the layouts pages sit in, the components they reuse, and the templates
+  themselves are edited in the console.
 
 ```json
 {
@@ -160,9 +164,12 @@ the workspace refuses a connection for as long as it lasts without ending it, as
 does an API key.
 
 On a site, a connection can reach only what its person can: a site they are not a
-member of answers `404`, and writing a site's products, search listing or business
-details, uploading to its media, or publishing it needs their **Edit site content**
-permission on it — see [Conventions → Sites a connected app can reach](conventions.md#site-access).
+member of answers `404`; writing a site's products, search listing or business
+details, uploading to its media, creating a page, changing a page's name or
+description, editing what is on a page, or publishing the site needs their **Edit site
+content** permission on it; and changing a page's address or place, deleting a page,
+or publishing named pages needs their **Publish site content** permission — see
+[Conventions → Sites a connected app can reach](conventions.md#site-access).
 
 A connection is a person's, unlike a key. Connecting takes the **Manage API keys**
 permission in the workspace, and the connection stops working the moment that

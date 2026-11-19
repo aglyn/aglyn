@@ -108,7 +108,7 @@ internal fun PhoneHome(
 @Composable
 internal fun PhoneHomeHeader(services: ShellServices, context: ShellPluginContext, workspace: WorkspaceState, onVisit: (String) -> Unit) {
   workspace.site?.let { site ->
-    PhoneSiteLine(services, site, onVisit)
+    PhoneSiteLine(services, context, site, onVisit)
     // Site Care's Request a change (the console's site dashboard, AGL-3959): off with the reason without Site Care.
     workspace.org?.id?.let { orgId ->
       androidx.compose.runtime.key(orgId, site.id) {
@@ -126,7 +126,9 @@ internal fun PhoneHomeHeader(services: ShellServices, context: ShellPluginContex
  * site's status, its address and Visit site, which opens the site in the in-app browser.
  */
 @Composable
-private fun PhoneSiteLine(services: ShellServices, site: com.aglyn.core.WorkspaceSite, onVisit: (String) -> Unit) {
+private fun PhoneSiteLine(services: ShellServices, context: ShellPluginContext, site: com.aglyn.core.WorkspaceSite, onVisit: (String) -> Unit) {
+  var customizing by remember { androidx.compose.runtime.mutableStateOf(false) }
+  if (customizing) HomeDashboardCustomize(services, context, onDismiss = { customizing = false })
   val host = hostDoc(services, site.id)
   val data = (host as? Live.Ready)?.value?.data
   val status = data?.let { com.aglyn.core.HostStatus.describe(it, com.aglyn.core.nowMillis()) }
@@ -158,6 +160,10 @@ private fun PhoneSiteLine(services: ShellServices, site: com.aglyn.core.Workspac
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
     )
+    // The console's Customize dashboard, first in the site's header actions.
+    androidx.compose.material3.IconButton(onClick = { customizing = true }, modifier = Modifier.testTag("home-customize-dashboard")) {
+      androidx.compose.material3.Icon(com.aglyn.ui.AglynIcons.named("dashboard_customize"), contentDescription = "Customize dashboard")
+    }
     if (address != null && visit != null) {
       TextButton(
         onClick = {

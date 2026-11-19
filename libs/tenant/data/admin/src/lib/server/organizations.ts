@@ -67,7 +67,7 @@ import {
   ACCOUNT_ACQUISITION_FIELD,
   organizationAcquisition,
 } from '@aglyn/aglyn/app-utils/account-acquisition'
-import { connectedAppActorLabel, type HostActivityActor } from '@aglyn/aglyn/app-utils/activity-presenter'
+import type { HostActivityActor } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
 import { DEFAULT_USAGE_LEVEL, USAGE_LEVEL_FIELD } from '@aglyn/aglyn/app-utils/usage-level'
 import {
@@ -108,6 +108,7 @@ import {
 } from './org-member-list-fields'
 import { isStaffAccount } from './staff-seat'
 import { updateExisting } from './update-existing'
+import { hostActivityEntry } from './host-activity-entry'
 import { attachWorkspaceDomain } from './workspace-domains'
 
 const firestore = () => firebaseAdmin.app().firestore()
@@ -1548,38 +1549,7 @@ export async function logHostActivity(
     .collection('hosts')
     .doc(hostId)
     .collection('activity')
-    .add({
-      actorId: actor.uid,
-      actorEmail: actor.email ?? null,
-      // A key's entry names the key (AGL-2632); a person's carries no such
-      // field, so the two are told apart by its presence.
-      ...(actor.apiKeyName ? { apiKeyName: actor.apiKeyName } : {}),
-      // A connected app's entry names the app instead (AGL-4225).
-      ...(actor.connectedAppName
-        ? {
-            connectedAppName: actor.connectedAppName,
-            // The label as the native activity lists print it, which read a
-            // stored field rather than build one (AGL-4225).
-            connectedAppLabel: connectedAppActorLabel(actor.connectedAppName),
-          }
-        : {}),
-      action,
-      target: {
-        type: target.type,
-        ...(target.id ? { id: target.id } : {}),
-        ...(target.name ? { name: target.name } : {}),
-        ...(target.versionId ? { versionId: target.versionId } : {}),
-      },
-      // What the log's search box finds the entry by (AGL-3321): the key's
-      // name stands in for an address an integration does not have.
-      searchTokens: activitySearchTokens({
-        actorEmail: actor.email,
-        apiKeyName: actor.apiKeyName,
-        connectedAppName: actor.connectedAppName,
-        target,
-      }),
-      createdAt: FieldValue.serverTimestamp(),
-    })
+    .add(hostActivityEntry(actor, action, target, FieldValue.serverTimestamp()))
     .catch(() => undefined)
 }
 

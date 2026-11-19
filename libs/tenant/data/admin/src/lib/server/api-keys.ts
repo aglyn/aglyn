@@ -182,12 +182,27 @@ export const API_SCOPES = [
   'crm:read',
   'crm:write',
   // AGL-4235. A site's pages: each one's name, address, whether it is
-  // published, and its search listing fields. No page content — the layout a
-  // page is built from is the Besigner's, and reading it is a different
-  // power from knowing which pages exist. Its own scope because `sites:read`
-  // grants the site's name and addresses and nothing it is made of, and a
-  // key that lists sites for a dashboard should not thereby list every page.
+  // published, its search listing fields, and what is on it — the elements a
+  // page is built from, read as the Besigner holds them (the waiting draft
+  // when there is one, otherwise the saved version). Its own scope because
+  // `sites:read` grants the site's name and addresses and nothing it is made
+  // of, and a key that lists sites for a dashboard should not thereby list
+  // every page or read what is on it.
   'pages:read',
+  // AGL-4235. Add, rename, move, reorder and delete a site's pages, and edit
+  // what is on a page. A content edit is saved to the page's draft, exactly
+  // where an edit in the Besigner waits, and goes live only through a publish
+  // (`sites:publish`), so this scope alone never changes what a visitor sees
+  // on a page's content. A page created here starts unpublished. Its own
+  // scope, apart from `pages:read`, because building pages is a power an
+  // owner grants on purpose, and apart from `sites:publish`, so an app can
+  // draft changes for a person to review before anything goes live.
+  'pages:write',
+  // AGL-4235. A site's templates: the page templates a new page can start
+  // from. A later step adds reusable components and layouts under the same
+  // pair. Read-only for now; a page is created from a template through
+  // `pages:write`.
+  'components:read',
   // AGL-4235. How the site and each page are described to search engines:
   // the title, description and sharing image a result shows, at site level
   // and per page. A pair of its own, apart from `pages:read`, because an SEO
