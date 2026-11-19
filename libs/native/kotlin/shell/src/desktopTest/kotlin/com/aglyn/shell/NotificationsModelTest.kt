@@ -23,6 +23,20 @@ class NotificationsModelTest {
     assertEquals(listOf(FirestoreFilter("type", FilterOp.IN, listOf("a", "b")), FirestoreFilter("read", FilterOp.EQ, true)), many.filters)
   }
 
+  /** The console's header sorts (NOTIFICATION_SORTS): any order with no filter on; with one on, newest first and the reason. */
+  @Test
+  fun theFeedSortsAsTheConsoleHeadersDo() {
+    val oldest = notificationFeedQuery("u1", NotificationFilter(), 25, NotificationSort.OLDEST)
+    assertEquals(listOf(com.aglyn.core.FirestoreOrder("createdAt", descending = false)), oldest.orderBy)
+    assertEquals(listOf(com.aglyn.core.FirestoreOrder("read", descending = false)), notificationFeedQuery("u1", NotificationFilter(), 25, NotificationSort.NEW_FIRST).orderBy)
+    assertEquals(listOf(com.aglyn.core.FirestoreOrder("title", descending = true)), notificationFeedQuery("u1", NotificationFilter(), 25, NotificationSort.TITLE_DESC).orderBy)
+    assertEquals(null, notificationSortNotice(NotificationFilter(), NotificationSort.TYPE_ASC))
+    val filtered = NotificationFilter(NotificationStatusFilter.NEW)
+    assertEquals(listOf(com.aglyn.core.FirestoreOrder("createdAt", descending = true)), notificationFeedQuery("u1", filtered, 25, NotificationSort.TYPE_ASC).orderBy)
+    assertEquals("Sorted by When: Type sorts only with no filter on.", notificationSortNotice(filtered, NotificationSort.TYPE_ASC))
+    assertEquals(null, notificationSortNotice(filtered, NotificationSort.NEWEST))
+  }
+
   @Test
   fun markAllSettlesOnlyTheUnread() {
     val docs = listOf(

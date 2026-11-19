@@ -37,7 +37,7 @@ class WaiversSpecsTest : SpecTestBase() {
     assertEquals(listOf("noContact", "signaturesTools", "signatures", "waivers"), model.shown())
     val rows = (0..2).map { model.row("data.list.waivers", it) }
     assertEquals(listOf("Good for a year", "Good through Dec 31, 2026", "Good for one visit (the day it is signed)"), rows.map { model.line("waivers", "secondary", it) })
-    assertEquals(listOf("share"), model.rowActions("waivers").map { it.id })
+    assertEquals(listOf("share", "signAtWindow"), model.rowActions("waivers").map { it.id })
 
     // Share for signing: the store's own signing page, its QR code and Copy link; a draft says to publish first.
     val share = spec("waivers", "waivers.share")

@@ -114,6 +114,11 @@ struct NotificationFilter: Equatable {
   var isDefault: Bool { self == NotificationFilter() }
 }
 
+extension NotificationSort {
+  /// The query's order for this sort.
+  var order: FirestoreQuery.Order { .init(path, descending: descending) }
+}
+
 enum NotificationFeedQuery {
   /// The console feed's page size.
   static let page = 25
@@ -121,7 +126,7 @@ enum NotificationFeedQuery {
   static let markAllWindow = 200
 
   /// The feed's query for a filter: `limit` rows plus a probe row that says there is more.
-  static func make(uid: String, filter: NotificationFilter, limit: Int) -> FirestoreQuery {
+  static func make(uid: String, filter: NotificationFilter, limit: Int, sort: NotificationSort = .newest) -> FirestoreQuery {
     var equals: [(field: String, value: Any)] = []
     var filters: [ListQueryConstraint] = []
     switch filter.types.count {
@@ -132,7 +137,7 @@ enum NotificationFeedQuery {
     if let read = filter.status.read { equals.append(("read", read)) }
     return FirestoreQuery(
       ["users", uid, "notifications"], equals: equals, filters: filters,
-      order: [.init("createdAt", descending: true)], limit: limit + 1)
+      order: [sort.inForce(filtered: !filter.isDefault).order], limit: limit + 1)
   }
 }
 
@@ -147,10 +152,13 @@ final class NotificationFeed {
   private(set) var hasMore = false
   @ObservationIgnored private var listener: FirestoreListening?
 
-  func start(reader: FirestoreReader?, uid: String?, count: Int, filter: NotificationFilter = NotificationFilter()) {
+  func start(
+    reader: FirestoreReader?, uid: String?, count: Int, filter: NotificationFilter = NotificationFilter(),
+    sort: NotificationSort = .newest
+  ) {
     listener?.remove()
     guard let reader, let uid else { return }
-    listener = reader.listen(NotificationFeedQuery.make(uid: uid, filter: filter, limit: count)) { [weak self] result in
+    listener = reader.listen(NotificationFeedQuery.make(uid: uid, filter: filter, limit: count, sort: sort)) { [weak self] result in
       switch result {
       case .success(let docs):
         self?.failed = false
@@ -220,6 +228,8 @@ struct NotificationsView: View {
   @Environment(ShellNavigation.self) private var navigation
   @State private var feed = NotificationFeed()
   @State private var filter = NotificationFilter()
+  /// The console's sortable headers, as one Sort menu (AGL-3680).
+  @State private var sort = NotificationSort.newest
   @State private var shown = NotificationFeedQuery.page
   @State private var selection: FeedNotification.ID?
   @State private var markingAll = false
@@ -256,10 +266,11 @@ struct NotificationsView: View {
       .help("Choose what reaches you, and the sound it plays")
       .accessibilityIdentifier("notifications-settings")
     }
-    .task(id: "\(model.auth?.user?.uid ?? ""):\(model.refreshToken):\(filter.status.rawValue):\(filter.types.sorted()):\(shown)") {
-      feed.start(reader: model.reader, uid: model.auth?.user?.uid, count: shown, filter: filter)
+    .task(id: "\(model.auth?.user?.uid ?? ""):\(model.refreshToken):\(filter.status.rawValue):\(filter.types.sorted()):\(shown):\(sort.rawValue)") {
+      feed.start(reader: model.reader, uid: model.auth?.user?.uid, count: shown, filter: filter, sort: sort)
     }
     .onChange(of: filter) { shown = NotificationFeedQuery.page }
+    .onChange(of: sort) { shown = NotificationFeedQuery.page }
     .onDisappear { feed.stop() }
     .refreshable { model.refresh() }
     .sheet(isPresented: $pickingTypes) {
@@ -299,6 +310,20 @@ struct NotificationsView: View {
         if !filter.types.isEmpty {
           Button("Clear") { filter.types = [] }.buttonStyle(.borderless)
         }
+        Divider().frame(height: 20)
+        Menu {
+          Picker("Sort", selection: $sort) {
+            ForEach(NotificationSort.allCases) { Text($0.menu).tag($0) }
+          }
+          .pickerStyle(.inline)
+        } label: {
+          AglynChoiceChip(sort.menu, systemImage: "arrow.up.arrow.down", selected: sort != .newest) {}
+            .allowsHitTesting(false)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .accessibilityLabel("Sort")
+        .accessibilityIdentifier("notifications-sort")
       }
       .aglynContentEdges()
       .padding(.vertical, AglynSpace.one)
@@ -317,6 +342,9 @@ struct NotificationsView: View {
   private func list(wide: Bool) -> some View {
     VStack(spacing: 0) {
       filterBar
+      if let sorted = sort.notice(filtered: !filter.isDefault) {
+        AglynNotice(sorted, tone: .info).aglynContentEdges().accessibilityIdentifier("notifications-sort-notice")
+      }
       if let (text, tone) = notice {
         AglynNotice(text, tone: tone) { notice = nil }.aglynContentEdges()
       }

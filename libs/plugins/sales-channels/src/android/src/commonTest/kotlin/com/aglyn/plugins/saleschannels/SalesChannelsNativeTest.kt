@@ -24,6 +24,6 @@ class SalesChannelsNativeTest {
   fun everySpecNamesItsRoutesAndTheCommerceSettingsZone() {
     val specs = SalesChannelsScreenJson.files.flatMap { ScreenSpec.parseFile(it) }
     assertEquals(listOf("sales-channels.service", "sales-channels.channel", "sales-channels.diagnostics", "sales-channels.diagnosticsChannel").sorted(), specs.map { it.id }.sorted())
-    assertTrue(specs.any { "commerceSettings" in it.zones } || specs.all { it.zones.isEmpty() })
+    assertTrue(specs.any { "commerceSettingsChannels" in it.zones } || specs.all { it.zones.isEmpty() })
   }
 }

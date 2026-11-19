@@ -16,7 +16,7 @@
  */
 
 import { registerPluginApiRoute } from '@aglyn/aglyn/app-utils/api-plugins'
-import { FONTS_PREPARE_ROUTE, FONTS_THEME_ROUTE } from './installer/constants'
+import { FONTS_CATALOG_ROUTE, FONTS_PREPARE_ROUTE, FONTS_THEME_ROUTE } from './installer/constants'
 
 /**
  * The fonts plugin's console doors (AGL-3656), named in `plugins.config.json`
@@ -36,6 +36,9 @@ export function registerFontsConsoleApi(): void {
   )
   registerPluginApiRoute(FONTS_PREPARE_ROUTE, {
     web: async (request) => (await import('./server/prepare-route')).prepareFontRoute(request),
+  })
+  registerPluginApiRoute(FONTS_CATALOG_ROUTE, {
+    web: async (request) => (await import('./server/catalog-route')).fontsCatalogRoute(request),
   })
   registerPluginApiRoute(FONTS_THEME_ROUTE, {
     web: async (request) => (await import('./server/theme-route')).fontsThemeRoute(request),

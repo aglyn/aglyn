@@ -335,6 +335,8 @@ fun SiteHeaderCard(
   modifier: Modifier = Modifier,
   onSwitch: () -> Unit,
   onVisit: (() -> Unit)?,
+  /** The console's Customize dashboard; null where the dashboard has nothing to arrange. */
+  onCustomize: (() -> Unit)? = null,
 ) {
   val largeText = LocalDensity.current.fontScale >= 1.5f
   Surface(
@@ -380,6 +382,11 @@ fun SiteHeaderCard(
           Icon(AglynIcons.named("swap_horiz"), null, Modifier.size(18.dp))
           Spacer(Modifier.width(space(1f)))
           Text("Switch site")
+        }
+        if (onCustomize != null) {
+          androidx.compose.material3.IconButton(onClick = onCustomize, modifier = Modifier.testTag("home-customize-dashboard")) {
+            Icon(AglynIcons.named("dashboard_customize"), contentDescription = "Customize dashboard")
+          }
         }
       }
     }

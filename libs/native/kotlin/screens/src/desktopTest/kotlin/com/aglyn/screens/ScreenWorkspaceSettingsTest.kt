@@ -53,7 +53,7 @@ class ScreenWorkspaceSettingsTest {
     val apiKeys = spec("core.settings.apiKeys")
     val create = apiKeys.raw.arr("actions").mapNotNull { ActionSpec.parse(it) }.first { it.id == "create" }
     // Every scope the console offers is a switch, and the first is on for a new key as it is in the console.
-    assertEquals(17, create.prompt.count { it.kind == "toggle" })
+    assertEquals(23, create.prompt.count { it.kind == "toggle" })
     assertEquals(listOf("datasetsRead"), create.prompt.filter { it.initial == "true" }.map { it.key })
     val model = ScreenModel(apiKeys, json("""{"org":{"id":"o1"}}"""), client(200 to """{"token":"k"}""", sent = sent))
     val scope = json("""{"org":{"id":"o1"},"form":{"name":"Warehouse","datasetsRead":true,"ordersWrite":true,"mediaRead":true,"crmWrite":true}}""")

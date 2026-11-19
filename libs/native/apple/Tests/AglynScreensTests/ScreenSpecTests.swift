@@ -93,7 +93,7 @@ final class ScreenSpecTests: XCTestCase {
         XCTAssertTrue(ids.insert(spec.id).inserted, "duplicate screen id \(spec.id)")
         XCTAssertTrue(["org", "site", "account", "staff"].contains(spec.scope), "\(spec.id): scope \(spec.scope)")
         for link in spec.links { XCTAssertTrue(link.hasPrefix("/"), "\(spec.id): link \(link)") }
-        let known = Set(["fields", "meters", "list", "form", "actions", "links", "notice", "zone", "image", "html", "qr"])
+        let known = Set(["fields", "meters", "list", "form", "actions", "links", "notice", "zone", "image", "html", "qr", "text"])
         for block in spec.blocks { XCTAssertTrue(known.contains(block.type), "\(spec.id): block \(block.type)") }
       }
       specs += parsed
@@ -106,6 +106,33 @@ final class ScreenSpecTests: XCTestCase {
       for target in Self.targets(spec.raw) {
         XCTAssertTrue(ids.contains(target) || handWritten.contains(target), "\(spec.id) opens \(target), which no spec declares")
       }
+    }
+  }
+
+  /// Every field a spec asks for is of a kind the renderer draws (`FieldInput`): a kind it does not know would be drawn as a
+  /// plain text box and send what was typed.
+  func testEveryFieldKindIsOneTheRendererDraws() throws {
+    let known: Set<String> = [
+      "text", "email", "url", "number", "stepper", "multiline", "password", "toggle", "select", "country", "date", "hours",
+      "heading", "choice", "multiselect", "lines", "file", "upload", "media", "lookup", "signature", "photo", "group",
+    ]
+    func walk(_ node: JSONValue, _ file: String) {
+      switch node {
+      case .object(let record):
+        for key in ["fields", "prompt"] {
+          for field in Optional(record[key] ?? .null).array {
+            if let kind = field["kind"]?.stringValue { XCTAssertTrue(known.contains(kind), "\(file): field kind \(kind)") }
+          }
+        }
+        for value in record.values { walk(value, file) }
+      case .array(let items):
+        for item in items { walk(item, file) }
+      default:
+        break
+      }
+    }
+    for url in Self.specFiles {
+      walk(try XCTUnwrap(JSONValue.decode(try Data(contentsOf: url))), url.lastPathComponent)
     }
   }
 
@@ -414,6 +441,24 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(ListColumns.next(after: order, tapping: plan), ListOrder(column: "plan", descending: false))
     XCTAssertEqual(ListColumns.routeValue(ListOrder(column: "created", descending: true), columns: columns), "createdAt:desc")
     XCTAssertNil(ListColumns.routeValue(ListOrder(column: "plan", descending: false), columns: columns))
+  }
+
+  /// The Team roster's sorts (the console's MEMBER_SORTS): Role by rank, owner first, a role the ranks lack after them; Member by
+  /// what the row reads as (its name, else its address).
+  func testARankedColumnOrdersByRankAndATemplateByWhatItReads() throws {
+    let role = try XCTUnwrap(ListColumn(["id": "role", "sort": ["page": "item.role", "ranks": ["owner", "admin", "editor", "viewer"]]]))
+    let rows: [JSONValue] = [
+      ["id": "a", "role": "viewer"], ["id": "b", "role": "owner"], ["id": "c", "role": "editor"], ["id": "d", "role": "guest"],
+      ["id": "e", "role": "admin"],
+    ]
+    func ids(_ column: ListColumn, _ rows: [JSONValue], descending: Bool) -> [String] {
+      ListColumns.sorted(rows, by: column, descending: descending, in: [:]).map { ScreenValues.text($0["id"] ?? .null) }
+    }
+    XCTAssertEqual(ids(role, rows, descending: false), ["b", "e", "c", "a", "d"])
+    XCTAssertEqual(ids(role, rows, descending: true), ["d", "a", "c", "e", "b"])
+    let member = try XCTUnwrap(ListColumn(["id": "member", "sort": ["page": "{item.displayName|item.email}"]]))
+    let people: [JSONValue] = [["id": "x", "email": "zed@example.test"], ["id": "y", "displayName": "Amy"]]
+    XCTAssertEqual(ids(member, people, descending: false), ["y", "x"])
   }
 
   /// A page column orders the rows on the screen: numbers as numbers, text without regard to case, dates as moments; a row

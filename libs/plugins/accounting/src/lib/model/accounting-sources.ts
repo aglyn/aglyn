@@ -99,11 +99,15 @@ export interface AccountingOrderSnapshot {
    */
   taxKey: string | null
   /**
-   * Tax the buyer paid that is NOT the merchant's: on a Stripe Tax sale Aglyn
-   * is the marketplace facilitator, the tax settles into Aglyn's balance and
-   * Aglyn remits it, so it never reaches the merchant's Stripe account. It is
-   * already taken out of `totals` (whose `taxCents` is then 0); this records
-   * how much, for the memo and for scaling a refund to the merchant's share.
+   * Tax the buyer paid that is NOT the merchant's. On a Stripe Tax sale
+   * charged through the platform's account Aglyn is the marketplace
+   * facilitator: the tax settles into Aglyn's balance and Aglyn remits it, so
+   * it never reaches the merchant's Stripe account. A marketplace's sale is
+   * the same with the marketplace in Aglyn's place. A Stripe Tax sale charged
+   * on the seller's own account carries none: that tax is the seller's and
+   * stays in `totals`. When present it is already taken out of `totals`
+   * (whose `taxCents` is then 0); this records how much, for the memo and for
+   * scaling a refund to the merchant's share.
    */
   marketplaceTaxCents?: number
   /** The lines the buyer added at checkout. Absent on a snapshot from before they were read. */
@@ -140,4 +144,10 @@ export interface AccountingPayoutSnapshot {
   arrivedAtMs: number
   /** The bank's description of the payout, when Stripe gives one. */
   statementDescriptor: string | null
+  /**
+   * Stripe's own fees inside this payout: card processing, Stripe Tax's fee,
+   * dispute fees, less any Stripe gave back. Never Aglyn's application fee,
+   * which posts with each sale. Absent on a snapshot from before it was read.
+   */
+  stripeFeeCents?: number | null
 }

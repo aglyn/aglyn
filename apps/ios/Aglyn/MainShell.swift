@@ -233,6 +233,7 @@ struct ShellChrome: View {
             .disabled(!navigation.canGoForward)
           RecentPlacesMenu()
           Spacer(minLength: 0)
+          AglynOfflineIndicator(online: model.network.online, detail: NetworkStatus.detail)
           TitleBarButton(
             unread > 0 ? "Notifications, \(unread) unread" : "Notifications", systemImage: unread > 0 ? "bell.badge" : "bell",
             identifier: "titlebar-bell"
@@ -484,13 +485,20 @@ struct ShellFrame<Content: View>: View {
   @State private var shownSite = WorkspaceStore.ShownSiteWatch()
 
   var body: some View {
-    content()
+    // The Terms moved (or there is no record): asked above every screen, never a wall (AGL-2316). Stacked above the
+    // shell rather than inset into it: a phone's own top bar (workspace, search, bell) ignores an inset and was drawn
+    // under the banner's words.
+    VStack(spacing: 0) {
+      LegalReacceptanceBanner()
+      content()
+    }
       .sheet(item: $navigation.picker) { picker in
         ScopePickerSheet(start: picker, twoStep: compact).environment(model).environment(navigation)
       }
       .sheet(item: $navigation.pinFull) { PinnedFullSheet(pending: $0).environment(model) }
       .sheet(item: $navigation.colorFor) { WorkspaceColorSheet(target: $0).environment(model) }
       .sheet(isPresented: $navigation.showAddAccount) { AddAccountView().environment(model) }
+      .sheet(isPresented: $navigation.showPrivacyChoices) { PrivacyChoicesView() }
       .sheet(isPresented: $navigation.showAccount) { AccountSheet().environment(model).environment(navigation) }
       .sheet(isPresented: keepPinsShown) { KeepPinsSheet().environment(model) }
       #if os(iOS)
@@ -1494,6 +1502,7 @@ struct PhoneTopBar: ViewModifier {
         // last of them into a "More" menu, and AI must stay one tap away (Figma Phone/Top bar 273:20194).
         ToolbarItem(placement: .topBarTrailing) {
           HStack(spacing: AglynSpace.one) {
+            AglynOfflineIndicator(online: model.network.online, detail: NetworkStatus.detail)
             Button {
               navigation.showOneBox = true
             } label: {
@@ -1789,6 +1798,14 @@ struct AccountSheet: View {
           if model.registry.screen(AccountPlaces.reportScreen) != nil {
             row("Report an issue", "flag") { navigation.push(.screen(AccountPlaces.reportScreen, [:])) }
           }
+          // The console's user menu row of the same title (Console chrome row 3), opened once this sheet has gone.
+          row(ContractValues.shared.consentOptOutTitle, PrivacyChoicesView.systemImage) {
+            Task { @MainActor in
+              try? await Task.sleep(nanoseconds: 350_000_000)
+              navigation.showPrivacyChoices = true
+            }
+          }
+          .accessibilityIdentifier("account-privacy-choices")
         }
         if let auth = model.auth {
           Section("Accounts") {

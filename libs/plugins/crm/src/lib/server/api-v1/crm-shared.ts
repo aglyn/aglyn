@@ -70,6 +70,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import {
+  admitNamedSite,
   type ApiV1Context,
   orgOwnsHost,
   paginate,
@@ -143,12 +144,19 @@ export async function crmRecordsBandRefusal(
  * null` — belongs to the whole organization. Where the org keeps each site's
  * records apart, the site decides who may see the record, so it stays
  * required.
+ *
+ * A site that is named is then admitted the way the site router admits one
+ * in its path (AGL-4235, `admitNamedSite`): a connected app whose person is
+ * not on it hears `404 No such site`, and the site's own lock refuses the
+ * create. Every CRM create resolves its site here, so none can skip it. A
+ * create that names no site is not asked: there is no site to admit.
  */
-export function readCrmSite(
+export async function readCrmSite(
   ctx: ApiV1Context,
+  request: Request,
   noun: string,
   body: Record<string, unknown>,
-): { siteId: string | null } | { response: Response } {
+): Promise<{ siteId: string | null } | { response: Response }> {
   const refuse = (error: string) => ({
     response: crmValidationFailed(ctx, noun, { consentSiteId: error }),
   })
@@ -161,6 +169,8 @@ export function readCrmSite(
   const siteId = String(body.consentSiteId ?? '').trim()
   if (!siteId) return refuse('Must name a site')
   if (!orgOwnsHost(ctx, siteId)) return refuse('No such site in this organization')
+  const admitted = await admitNamedSite(ctx, request, siteId)
+  if (!('snapshot' in admitted)) return { response: admitted }
   return { siteId }
 }
 

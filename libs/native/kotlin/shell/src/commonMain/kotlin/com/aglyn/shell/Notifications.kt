@@ -103,8 +103,34 @@ data class NotificationFilter(
   val types: Set<String> = emptySet(),
 )
 
+/**
+ * The feed's orders, as the console's headers sort it (`NOTIFICATION_SORTS`, AGL-3680): When newest first (the default), and
+ * oldest first, Notification (`title`), Type and Status (`read`, New first or Read first). Every one but the default is
+ * `alone`: with a filter on, the feed keeps newest first and says why ([notificationSortNotice]).
+ */
+enum class NotificationSort(val key: String, val path: String, val descending: Boolean, val label: String, val menu: String, val alone: Boolean) {
+  NEWEST("newest", "createdAt", true, "When", "Newest first", false),
+  OLDEST("oldest", "createdAt", false, "When, oldest first", "Oldest first", true),
+  TITLE_ASC("title-asc", "title", false, "Notification", "Notification, A to Z", true),
+  TITLE_DESC("title-desc", "title", true, "Notification", "Notification, Z to A", true),
+  TYPE_ASC("type-asc", "type", false, "Type", "Type, A to Z", true),
+  TYPE_DESC("type-desc", "type", true, "Type", "Type, Z to A", true),
+  NEW_FIRST("new-first", "read", false, "Status", "Status, new first", true),
+  READ_FIRST("read-first", "read", true, "Status", "Status, read first", true),
+}
+
+private fun NotificationFilter.on(): Boolean = types.isNotEmpty() || status.read != null
+
+/** The order the feed runs in: the one asked, unless it sorts only with no filter on and a filter is. */
+fun notificationSortInForce(filter: NotificationFilter, sort: NotificationSort): NotificationSort =
+  if (sort.alone && filter.on()) NotificationSort.NEWEST else sort
+
+/** The console's words when an order gives way to a filter: "Sorted by When: Type sorts only with no filter on." */
+fun notificationSortNotice(filter: NotificationFilter, sort: NotificationSort): String? =
+  if (notificationSortInForce(filter, sort) != sort) "Sorted by ${NotificationSort.NEWEST.label}: ${sort.label} sorts only with no filter on." else null
+
 /** The feed's query for [filter], [limit] rows plus one probe row that says there is more. */
-fun notificationFeedQuery(uid: String, filter: NotificationFilter, limit: Int): FirestoreQuery {
+fun notificationFeedQuery(uid: String, filter: NotificationFilter, limit: Int, sort: NotificationSort = NotificationSort.NEWEST): FirestoreQuery {
   val filters = buildList {
     when (filter.types.size) {
       0 -> Unit
@@ -116,7 +142,7 @@ fun notificationFeedQuery(uid: String, filter: NotificationFilter, limit: Int): 
   return FirestoreQuery(
     "users/$uid/notifications",
     filters = filters,
-    orderBy = listOf(FirestoreOrder("createdAt", descending = true)),
+    orderBy = notificationSortInForce(filter, sort).let { listOf(FirestoreOrder(it.path, descending = it.descending)) },
     limit = limit + 1,
   )
 }
@@ -150,9 +176,10 @@ fun unreadIds(docs: List<FirestoreDoc>): List<String> = docs.filter { it.data["r
 @Composable
 internal fun NotificationsScreen(services: ShellServices, uid: String, context: ShellPluginContext, catalog: NotificationCatalog = Notifications) {
   var filter by remember(uid) { mutableStateOf(NotificationFilter()) }
-  var shown by remember(uid, filter) { mutableStateOf(NOTIFICATION_PAGE) }
-  val live by remember(uid, filter, shown) { services.firestore.observe(notificationFeedQuery(uid, filter, shown)) }.collectAsState(Live.Loading)
-  var lastRows by remember(uid, filter) { mutableStateOf<List<FeedNotification>?>(null) }
+  var sort by remember(uid) { mutableStateOf(NotificationSort.NEWEST) }
+  var shown by remember(uid, filter, sort) { mutableStateOf(NOTIFICATION_PAGE) }
+  val live by remember(uid, filter, shown, sort) { services.firestore.observe(notificationFeedQuery(uid, filter, shown, sort)) }.collectAsState(Live.Loading)
+  var lastRows by remember(uid, filter, sort) { mutableStateOf<List<FeedNotification>?>(null) }
   var markingAll by remember { mutableStateOf(false) }
   var notice by remember { mutableStateOf<Pair<String, StatusTone>?>(null) }
   var pickingTypes by remember { mutableStateOf(false) }
@@ -210,7 +237,10 @@ internal fun NotificationsScreen(services: ShellServices, uid: String, context: 
           onPickTypes = { pickingTypes = true },
           onClearTypes = { filter = filter.copy(types = emptySet()) },
           onMarkAll = ::markAll,
+          sort = sort,
+          onSort = { sort = it },
         )
+        notificationSortNotice(filter, sort)?.let { NoticeBanner(it, StatusTone.INFO, Modifier.padding(horizontal = space(2f)).testTag("notifications-sort-notice")) }
         notice?.let { (text, tone) ->
           NoticeBanner(text, tone, Modifier.padding(horizontal = space(2f)), action = { TextButton(onClick = { notice = null }) { Text("Dismiss") } })
         }
@@ -302,6 +332,8 @@ private fun FeedToolbar(
   onPickTypes: () -> Unit,
   onClearTypes: () -> Unit,
   onMarkAll: () -> Unit,
+  sort: NotificationSort = NotificationSort.NEWEST,
+  onSort: (NotificationSort) -> Unit = {},
 ) {
   Column(Modifier.fillMaxWidth().padding(horizontal = space(2f), vertical = space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -325,6 +357,24 @@ private fun FeedToolbar(
         )
       }
       if (filter.types.isNotEmpty()) TextButton(onClick = onClearTypes) { Text("Clear") }
+      // The console's sortable headers, as one Sort menu.
+      Box {
+        var sorting by remember { mutableStateOf(false) }
+        OutlinedButton(shape = com.aglyn.ui.controlShape(), onClick = { sorting = true }, modifier = Modifier.testTag("notifications-sort")) {
+          Icon(AglynIcons.named("sort"), contentDescription = null)
+          Text(sort.menu, Modifier.padding(start = space(1f)))
+        }
+        androidx.compose.material3.DropdownMenu(sorting, onDismissRequest = { sorting = false }) {
+          for (option in NotificationSort.entries) {
+            androidx.compose.material3.DropdownMenuItem(
+              text = { Text(option.menu) },
+              trailingIcon = { if (option == sort) Icon(AglynIcons.named("check"), null) },
+              onClick = { sorting = false; onSort(option) },
+              modifier = Modifier.testTag("notifications-sort-${option.key}"),
+            )
+          }
+        }
+      }
       TextButton(onClick = onMarkAll, enabled = !markingAll, modifier = Modifier.testTag("notifications-mark-all")) {
         Text(if (markingAll) "Marking…" else "Mark all read")
       }

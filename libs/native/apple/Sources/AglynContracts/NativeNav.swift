@@ -18,25 +18,55 @@ public enum NativeNav {
   public static let siteSettings = "shell.siteSettings"
 }
 
+/// The reader's answers a row's `permissions` and `requiresFeature` are read against (`NativeNavAccess`): the
+/// workspace's resolved permissions and plan features, an absent key not held.
+public struct NativeNavAccess: Equatable, Sendable {
+  public var permissions: [String: Bool]
+  public var features: [String: Bool]
+
+  public init(permissions: [String: Bool], features: [String: Bool]) {
+    self.permissions = permissions
+    self.features = features
+  }
+}
+
+/// Every permission and plan feature a manifest's rows ask, so a shell resolves only those.
+public func navRowGateKeys(_ manifest: NativeNavManifest = NativeNav.manifest) -> (permissions: [String], features: [String]) {
+  let rows = manifest.lists.flatMap { $0.groups.flatMap(\.rows) }
+  return (
+    Array(Set(rows.flatMap { $0.permissions ?? [] })).sorted(), Array(Set(rows.compactMap(\.requiresFeature))).sorted()
+  )
+}
+
 /// One list of the app's own manifest as one scope shows it.
-public func resolveNavList(_ listID: NativeNavListId, enabledPluginIds: [String], hostAdmin: Bool) -> ResolvedNavList {
-  resolveNavList(NativeNav.manifest, listID, enabledPluginIds: enabledPluginIds, hostAdmin: hostAdmin)
+public func resolveNavList(
+  _ listID: NativeNavListId, enabledPluginIds: [String], hostAdmin: Bool, access: NativeNavAccess? = nil
+) -> ResolvedNavList {
+  resolveNavList(NativeNav.manifest, listID, enabledPluginIds: enabledPluginIds, hostAdmin: hostAdmin, access: access)
 }
 
 /// One list as one scope shows it: rows of plugins that are off, or admin rows for a non-admin, left out; a section of
-/// another plugin than its row's hides with that plugin; a group left empty is dropped, except the starred group.
+/// another plugin than its row's hides with that plugin; a group left empty is dropped, except the starred group. With
+/// `access`, a row also hides as the console's organization tab strip drops its tab: a permission it asks that the reader
+/// does not hold, or a plan feature it requires that the workspace does not carry.
 public func resolveNavList(
-  _ manifest: NativeNavManifest, _ listID: NativeNavListId, enabledPluginIds: [String], hostAdmin: Bool
+  _ manifest: NativeNavManifest, _ listID: NativeNavListId, enabledPluginIds: [String], hostAdmin: Bool,
+  access: NativeNavAccess? = nil
 ) -> ResolvedNavList {
   guard let list = manifest.lists.first(where: { $0.id == listID }) else {
     return ResolvedNavList(groups: [], id: listID)
   }
   let on = Set(enabledPluginIds)
   func shows(_ pluginID: String?) -> Bool { pluginID.map(on.contains) ?? true }
+  func allowed(_ row: NativeNavRow) -> Bool {
+    guard let access else { return true }
+    return (row.permissions ?? []).allSatisfy { access.permissions[$0] == true }
+      && (row.requiresFeature.map { access.features[$0] == true } ?? true)
+  }
   var groups: [NativeNavGroup] = []
   for group in list.groups {
     let rows = group.rows
-      .filter { shows($0.pluginId) && (hostAdmin || $0.requiresHostAdmin != true) }
+      .filter { shows($0.pluginId) && (hostAdmin || $0.requiresHostAdmin != true) && allowed($0) }
       .map { row -> NativeNavRow in
         guard let sections = row.sections else { return row }
         var next = row
