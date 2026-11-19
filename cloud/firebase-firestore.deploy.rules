@@ -651,13 +651,14 @@ allow update: if (isSuperStaff() &&
 'plan', 'entitlements', 'releaseFlags',
 'seatAddons', 'aiTier', 'registerAllocations', 'collaboratorAllocations',
 'storageOverage', 'assistOverage',
-'bandwidthCap', 'stripeCustomerId', 'subscription',
+'bandwidthCap', 'bandwidthGraceUsedAt', 'stripeCustomerId', 'subscription',
 'billingStatus', 'brandingProfile', 'discount', 'enterprise',
 'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
 'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
 'suspendedEnforcement', 'suspended', 'crmInbound', 'acquisition',
 'consentGroups', 'consentGroupsAwaitConfirmation', 'consentGroupsChange',
-'marketingConsentPolicy', 'upgradeProposal', 'lastActivityAt'])) ||
+'marketingConsentPolicy', 'upgradeProposal', 'lastActivityAt',
+'usageLevel', 'usageLevelAt', 'usageLevelBy'])) ||
 (isBillingStaff() &&
 !request.resource.data.diff(resource.data).affectedKeys().hasAny(
 ['slug', 'ownerUid', 'createdByUid', 'hosts', 'enabledPlugins',
@@ -665,14 +666,15 @@ allow update: if (isSuperStaff() &&
 'plan', 'entitlements', 'releaseFlags',
 'seatAddons', 'aiTier', 'registerAllocations', 'collaboratorAllocations',
 'storageOverage', 'assistOverage',
-'bandwidthCap', 'stripeCustomerId', 'subscription',
+'bandwidthCap', 'bandwidthGraceUsedAt', 'stripeCustomerId', 'subscription',
 'billingStatus', 'brandingProfile', 'discount', 'enterprise',
 'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
 'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
 'suspendedEnforcement', 'suspended',
 'erasureRequestedAt', 'crmInbound', 'acquisition',
 'consentGroups', 'consentGroupsAwaitConfirmation', 'consentGroupsChange',
-'marketingConsentPolicy', 'upgradeProposal', 'lastActivityAt'])) ||
+'marketingConsentPolicy', 'upgradeProposal', 'lastActivityAt',
+'usageLevel', 'usageLevelAt', 'usageLevelBy'])) ||
 
 
 
@@ -685,7 +687,7 @@ mayChangeOrgFields(request.resource.data.diff(resource.data).affectedKeys()) &&
 'entitlements', 'releaseFlags',
 'enabledPlugins', 'seatAddons', 'aiTier', 'registerAllocations',
 'collaboratorAllocations', 'storageOverage', 'assistOverage',
-'bandwidthCap', 'stripeCustomerId', 'subscription',
+'bandwidthCap', 'bandwidthGraceUsedAt', 'stripeCustomerId', 'subscription',
 'billingStatus', 'brandingProfile', 'sso', 'discount',
 'enterprise',
 
@@ -732,6 +734,12 @@ mayChangeOrgFields(request.resource.data.diff(resource.data).affectedKeys()) &&
 
 
 'acquisition',
+
+
+
+
+
+'usageLevel', 'usageLevelAt', 'usageLevelBy',
 
 
 
@@ -3763,6 +3771,14 @@ allow update: if isStaff() ||
 
 
 
+'bandwidthGraceUsedAt',
+
+
+
+'usageLevel', 'usageLevelAt', 'usageLevelBy',
+
+
+
 'starterProvisionedAt',
 
 
@@ -5207,11 +5223,17 @@ allow create: if (isStaff() ||
 (isSignedIn() && request.auth.uid == userId)) &&
 !('acquisition' in request.resource.data) &&
 !('adAudienceOptOut' in request.resource.data) &&
+!request.resource.data.keys().hasAny(
+['usageLevel', 'usageLevelAt', 'usageLevelBy']) &&
 accountPrefsValid();
 allow update: if (isStaff() ||
 (isSignedIn() && request.auth.uid == userId)) &&
 !request.resource.data.diff(resource.data).affectedKeys().hasAny(
-['acquisition', 'adAudienceOptOut']) &&
+['acquisition', 'adAudienceOptOut',
+
+
+
+'usageLevel', 'usageLevelAt', 'usageLevelBy']) &&
 accountPrefsValid();
 
 

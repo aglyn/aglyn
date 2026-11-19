@@ -316,3 +316,25 @@ export function repeatItemToken(
     ? `{{item.${fieldId}.${targetFieldId}}}`
     : `{{item.${fieldId}}}`
 }
+
+/**
+ * The record field type that holds an icon (AGL-4190): `{ iconId, iconPath }`,
+ * the shape a reusable component's Icon property holds. Named here, in core,
+ * because the plugin that keeps the records declares it and the Besigner's
+ * Icon picker binds to it, and neither may import the other. Persisted on
+ * field definitions — never rename.
+ */
+export const RECORD_ICON_FIELD_TYPE = 'icon'
+
+/** The part of a record's icon that is its SVG path (AGL-4190). */
+export const RECORD_ICON_PATH_PART = 'iconPath'
+
+/**
+ * The field id of a token that is nothing but one record field, `{{item.x}}`,
+ * or `null` for anything else (a hop, words around it, another kind of token).
+ */
+export function matchWholeItemToken(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const match = /^\s*\{\{\s*item\.([A-Za-z][A-Za-z0-9_]*)\s*\}\}\s*$/.exec(value)
+  return match ? match[1] : null
+}

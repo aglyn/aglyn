@@ -232,3 +232,78 @@ describe('the dunning banner survives the flip to unpaid (AGL-1877)', () => {
     expect(offending).toMatch(/retry window/i)
   })
 })
+
+/**
+ * THE FREE PLAN'S BANDWIDTH PAUSE, told to the owner (AGL-4232): the one-time
+ * grace's deadline while it runs, then that the sites are paused — on a
+ * never-subscribed Free org with no `plan` field too, and never on a paid one.
+ */
+describe('the bandwidth pause banner (AGL-4232)', () => {
+  const month = new Date().toISOString().slice(0, 7)
+  afterEach(() => {
+    sessionStorage.clear()
+  })
+
+  it('names the deadline while the grace runs, with the upgrade path', () => {
+    // A deadline inside this month: a minute from now.
+    const graceUntil = Date.now() + 60_000
+    renderBanner({ slug: 'acme', bandwidthCap: { month, engagedAt: 1, graceUntil } })
+    expect(
+      screen.getByText(/^Upgrade or your sites pause on \w+day, \w+ \d+ at \d+:\d\d [AP]M UTC\./),
+    ).toBeTruthy()
+    expect(screen.getByText('Upgrade')).toBeTruthy()
+  })
+
+  it('a non-admin is told an admin must upgrade, with no button they cannot use', () => {
+    mockOrg.value = { slug: 'acme', bandwidthCap: { month, engagedAt: 1, graceUntil: Date.now() + 60_000 } }
+    mockScope.orgWide = false
+    mockScope.loaded = true
+    render(<QuotaWarningsBanner />)
+    expect(screen.getByText(/^A workspace admin needs to upgrade or your sites pause on /)).toBeTruthy()
+    expect(screen.queryByText('Upgrade')).toBeNull()
+  })
+
+  it('a non-admin is told an admin can upgrade a paused site', () => {
+    mockOrg.value = { slug: 'acme', bandwidthCap: { month, engagedAt: 1 } }
+    mockScope.orgWide = false
+    mockScope.loaded = true
+    render(<QuotaWarningsBanner />)
+    expect(screen.getByText(/A workspace admin can upgrade to bring them back/)).toBeTruthy()
+  })
+
+  it('a grace that outlasts the month names no pause date', () => {
+    const [year, monthIndex] = month.split('-').map(Number)
+    // Ends an hour after this month does: the count resets first.
+    const graceUntil = Date.UTC(year, monthIndex, 1, 1)
+    renderBanner({ slug: 'acme', bandwidthCap: { month, engagedAt: 1, graceUntil } })
+    expect(screen.getByText(/stay online: the month ends before their extra time would/)).toBeTruthy()
+    expect(screen.queryByText(/pause on/)).toBeNull()
+  })
+
+  it('says the sites are paused once the grace is over, or when there was none', () => {
+    renderBanner({ slug: 'acme', bandwidthCap: { month, engagedAt: 1, graceUntil: 1 } })
+    expect(screen.getByText(/Your sites are paused for visitors until the 1st/)).toBeTruthy()
+  })
+
+  it('says nothing about it on a paid plan, which bills instead', () => {
+    renderBanner({ ...orgAt('active'), bandwidthCap: { month, engagedAt: 1 } })
+    expect(screen.queryByText(/pause/i)).toBeNull()
+  })
+
+  it('a workspace that LAPSED to Free sees its dunning notice AND that its sites pause', () => {
+    renderBanner({ ...orgAt('unpaid'), bandwidthCap: { month, engagedAt: 1 } })
+    expect(screen.getByText(/Your sites are paused for visitors until the 1st/)).toBeTruthy()
+    expect(screen.getByText(/plan has stopped/i)).toBeTruthy()
+  })
+
+  it('says the extra time is given once, and that a surge can still pause it', () => {
+    renderBanner({ slug: 'acme', bandwidthCap: { month, engagedAt: 1, graceUntil: Date.now() + 60_000 } })
+    expect(screen.getByText(/An unusually large surge of traffic can still pause them before then\. This extra time is given once\./)).toBeTruthy()
+    expect(screen.queryByText(/once per site/)).toBeNull()
+  })
+
+  it('says nothing about last month', () => {
+    renderBanner({ slug: 'acme', bandwidthCap: { month: '2020-01', engagedAt: 1 } })
+    expect(screen.queryByText(/pause/i)).toBeNull()
+  })
+})

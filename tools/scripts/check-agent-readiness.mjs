@@ -67,6 +67,7 @@ import { fileURLToPath } from 'node:url'
 
 import {
   advertisedConnectorPaths,
+  cardTextProblems,
   catalogProblems,
   originAgreementProblems,
   readDiscoveryRoutes,
@@ -101,13 +102,7 @@ const CONSOLE_PROJECT = 'aglyn-console'
  * hidden, and the check fails the moment one becomes admitted and is still
  * listed — so the list can only shrink.
  */
-const OWED_CONSOLE_BYPASS = new Set([
-  '/api/mcp',
-  '/api/mcp/server-card',
-  '/api/oauth/register',
-  '/api/oauth/token',
-  '/api/oauth/revoke',
-])
+const OWED_CONSOLE_BYPASS = new Set([])
 
 /**
  * Advertised paths that answer HTML to a person, whose posture is a product
@@ -392,7 +387,18 @@ try {
 } catch {
   mcpProblems.push('integrations/mcp-registry/server.json is not JSON')
 }
-if (registryEntry) mcpProblems.push(...registryEntryProblems(registryEntry, constants))
+if (registryEntry) {
+  mcpProblems.push(
+    ...registryEntryProblems(registryEntry, constants),
+    ...cardTextProblems(
+      {
+        protocolSource: read('apps/console/utils/mcp-protocol.ts'),
+        cardSource: read('apps/console/utils/mcp-server-card.ts'),
+      },
+      registryEntry,
+    ),
+  )
+}
 
 const consoleProject = EXPECTED_POSTURE.find((project) => project.project === CONSOLE_PROJECT)
 if (!consoleProject) fail(`no \`${CONSOLE_PROJECT}\` project in the declared posture`)

@@ -1,10 +1,23 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "com.aglyn.app/mcp",
-  "title": "Aglyn API",
-  "description": "Your workspace data as tools: datasets, contacts, CRM, sites, forms, orders, products, media.",
+  "title": "Aglyn",
+  "description": "Work in your Aglyn workspace: sites, content, contacts and CRM, orders, forms, bookings and media.",
   "version": "1.0.0",
-  "websiteUrl": "https://docs.aglyn.com/api#mcp",
+  "websiteUrl": "https://aglyn.com",
+  "repository": {
+    "url": "https://github.com/aglyn/aglyn",
+    "source": "github"
+  },
+  "icons": [
+    {
+      "src": "https://aglyn.com/api/media/cdn/org:jWmGooWE3L:DXnRbPH4CQ/ylQl8v2_Cn",
+      "mimeType": "image/png",
+      "sizes": [
+        "any"
+      ]
+    }
+  ],
   "remotes": [
     {
       "type": "streamable-http",

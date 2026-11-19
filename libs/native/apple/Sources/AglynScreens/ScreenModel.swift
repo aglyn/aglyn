@@ -165,6 +165,8 @@ public struct ScreenSession: Sendable {
       ],
       "app": [
         "origin": .string(origin), "passkeyRp": passkeyRelyingParty.map(JSONValue.string) ?? .null,
+        // The platform's name, for words the console prints with it ("Aglyn staff · support").
+        "brand": .string(AglynConfig.defaultBrandName),
         "permissionRefusal": .object(Dictionary(uniqueKeysWithValues: ContractValues.shared.orgRoleGrants.permissions.map { ($0.key, JSONValue.string(permissionRefusalText(ContractValues.shared.orgRoleGrants, key: $0.key))) })),
         "permissionCatalog": rows(narrowable: false), "narrowablePermissions": rows(narrowable: true),
       ],

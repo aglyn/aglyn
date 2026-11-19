@@ -30,7 +30,10 @@ let package = Package(
         .product(name: "AglynCore", package: "apple"),
         .product(name: "AglynUI", package: "apple"),
         .product(name: "AglynPluginHost", package: "apple"),
-      ]
+        .product(name: "AglynScreens", package: "apple"),
+      ],
+      // The staff screens the Kotlin module reads too (src/android/screens links the file).
+      resources: [.copy("Resources/marketing.screens.json")]
     ),
     .testTarget(name: "AglynMarketingPluginTests", dependencies: ["AglynMarketingPlugin"]),
   ]

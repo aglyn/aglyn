@@ -46,6 +46,9 @@ import {
   inheritedMediaAlt,
   intrinsicMediaSize,
   linkTargetKind,
+  matchWholeItemToken,
+  RECORD_ICON_FIELD_TYPE,
+  RECORD_ICON_PATH_PART,
   VIDEO_COMPONENT_ID,
   videoMediaProps,
   MISSING_BINDING_LABEL,
@@ -62,6 +65,7 @@ import {
   formPropsOnBind,
   FORM_COMPONENT_ID,
   NODE_HIDE_UNLESS_PROP,
+  NODE_SHOW_TO_PROP,
   normalizeBindingTokens,
   readInstanceIconValue,
   readReusablePropValue,
@@ -77,6 +81,9 @@ import {
   listPropFedTextNodeIds,
   ScreenLinkContext,
   screenLinkTargetOptions,
+  SHOW_TO_EVERYONE,
+  SHOW_TO_SIGNED_IN,
+  SHOW_TO_SIGNED_OUT,
   subscribeKnownPluginInstalls,
   unresolvedScreenOption,
 } from '@aglyn/aglyn'
@@ -183,7 +190,7 @@ import { readAttributeFieldValue } from '../utils/attribute-field-value'
 import { besignerDocsUrl } from '../utils/docs-help'
 import { buildStyleThemeScales } from '../utils/theme-scale-options'
 import { numericTextValue } from '../utils/numeric-text-value'
-import useInsertTokenOptions from '../hooks/use-insert-token-options'
+import useInsertTokenOptions, { itemFieldBindingOptions } from '../hooks/use-insert-token-options'
 import useRepeatSources from '../hooks/use-repeat-sources'
 import {
   InteractionsContext,
@@ -555,6 +562,13 @@ export function iconPathsForSave(
     const pickedId = values[attribute.name]
     if (typeof pickedId !== 'string' || !pickedId) {
       paths[pathProp] = undefined
+      continue
+    }
+    // Bound to a record's icon field (AGL-4190): each copy of the repeat
+    // reads its own record's path, so the path follows the same field.
+    const recordField = matchWholeItemToken(pickedId)
+    if (recordField) {
+      paths[pathProp] = `{{item.${recordField}.${RECORD_ICON_PATH_PART}}}`
       continue
     }
     const unchanged = pickedId === stored?.[attribute.name]
@@ -1422,6 +1436,38 @@ export function buildVisibilityFields(
 }
 
 /**
+ * "Show to" (AGL-4231), offered on every element: everyone, signed-in visitors
+ * or signed-out visitors — "Sign in" in a header for visitors and "Account"
+ * for members, a welcome only members see. Decided in the visitor's browser on
+ * the published site; the canvas shows every element so each can be edited.
+ *
+ * "Everyone" is a real value rather than `''`, for the reason the animation
+ * "None" is (AGL-1451): an empty value cannot persist, so the choice could
+ * never be taken back.
+ */
+export function buildAudienceFields(): Array<Record<string, unknown>> {
+  const description =
+    'Which visitors see this element on the live site. Signed in means ' +
+    "signed in to this site's account. It decides what shows, not what is " +
+    'private: put members-only content on a members-only page. In the ' +
+    'Besigner every element shows, so you can edit it.'
+  return [
+    {
+      name: NODE_SHOW_TO_PROP,
+      label: 'Show to',
+      description,
+      help: { title: 'Show to', excerpt: description },
+      component: FieldComponentType.SELECT,
+      options: [
+        { value: SHOW_TO_EVERYONE, label: 'Everyone' },
+        { value: SHOW_TO_SIGNED_IN, label: 'Signed-in visitors' },
+        { value: SHOW_TO_SIGNED_OUT, label: 'Signed-out visitors' },
+      ],
+    },
+  ]
+}
+
+/**
  * The animation fields every element gets (AGL-2486).
  *
  * Presets rather than a keyframes box, because the audience includes people
@@ -2182,7 +2228,24 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       options: insertOptions,
       labelContext: tokenLabelContext,
       inRepeat,
+      itemFields,
+      itemNoun,
+      entityLabel: repeatEntityLabel,
     } = useInsertTokenOptions(node)
+    /**
+     * Inside a repeat, an Icon picker can follow a record's icon field
+     * (AGL-4190), which each copy then draws with its own record's icon.
+     * Only icon fields are offered: anything else would hand the picker a
+     * value that is no icon.
+     */
+    const recordIconBindings = useMemo(
+      () =>
+        itemFieldBindingOptions(
+          { itemFields, itemNoun, entityLabel: repeatEntityLabel },
+          RECORD_ICON_FIELD_TYPE,
+        ),
+      [itemFields, itemNoun, repeatEntityLabel],
+    )
     // Re-render when the installed-plugin set changes (AGL-1030).
     const knownPluginInstallsVersion = useSyncExternalStore(
       subscribeKnownPluginInstalls,
@@ -2346,6 +2409,10 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             declaredComponent: rawAttributes?.[index]?.component,
             declaredField: rawAttributes?.[index],
             componentProps: editedComponentProps,
+            recordBindings:
+              rawAttributes?.[index]?.component === FieldComponentType.ICON_PICKER
+                ? recordIconBindings
+                : undefined,
             owner: componentPropsOwner,
             control: (
               elementPropsComponentMapper as Record<
@@ -2382,6 +2449,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       editedComponentProps,
       componentPropsOwner,
       fieldContext,
+      recordIconBindings,
     ])
 
     // The placed component's properties (AGL-1247), each drawn with the
@@ -2425,7 +2493,10 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
 
     // Element animation (AGL-2486). Static, so it is built once rather than
     // per render; unlike the visibility directives it is offered everywhere.
-    const animationFields = useMemo(() => buildAnimationFields(), [])
+    const animationFields = useMemo(
+      () => [...buildAudienceFields(), ...buildAnimationFields()],
+      [],
+    )
 
     /**
      * Repeat (AGL-3111), offered on every element and every instance — the

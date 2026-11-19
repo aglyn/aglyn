@@ -168,10 +168,11 @@ describe('orgMonthlyCogsUsd', () => {
     // from $0.0001; AGL-3444 priced its transfer at the dearest region by
     // the decimal GB and its reads at nam5), plus 50 GB × $0.026 = $1.30
     // storage (AGL-1280 corrected that one from $0.03), plus 2M API requests
-    // at $0.000117 — the function each one is — = $234.
-    expect(result.measuredUsd).toBeCloseTo(1995.13755 + 1.3 + 234, 4)
+    // at $0.00012 — the function each one is, with both rate-limit windows
+    // (AGL-4226) — = $240.
+    expect(result.measuredUsd).toBeCloseTo(1995.13755 + 1.3 + 240, 4)
     expect(result.basis).toBe('measured')
-    expect(result.cogsUsd).toBeCloseTo(2230.43755, 4)
+    expect(result.cogsUsd).toBeCloseTo(2236.43755, 4)
   })
 
   it('prices the three meters the old costUsd ignored', () => {
@@ -186,7 +187,7 @@ describe('orgMonthlyCogsUsd', () => {
       ORG_COGS_UNIT_RATES_USD.dataStoragePerGbMonth,
       10,
     )
-    expect(only.breakdown.apiRequests).toBeCloseTo(117, 10)
+    expect(only.breakdown.apiRequests).toBeCloseTo(120, 10)
     expect(only.breakdown.contacts).toBeCloseTo(2, 10)
     expect(only.measuredUsd).toBeGreaterThan(0)
   })

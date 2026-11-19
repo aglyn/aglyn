@@ -21,8 +21,8 @@
 
 import { ComponentCategory, components, FEATURE_FLAG, FieldComponentType, NodeType } from '@aglyn/aglyn'
 import GoogleReviews from './element.js'
-import { ReviewerImage, Stars } from './parts.js'
-import { presets as partPresets, REVIEWER_IMAGE_ID, STARS_ID } from './presets.js'
+import { REVIEW_TEXT_DEFAULTS, ReviewerImage, ReviewText, Stars } from './parts.js'
+import { presets as partPresets, REVIEW_TEXT_ID, REVIEWER_IMAGE_ID, STARS_ID } from './presets.js'
 import { DEFAULT_SETTINGS } from './reviews.js'
 
 /**
@@ -171,6 +171,49 @@ export const reviewerImageSchema = {
 }
 
 /**
+ * Review text: what a reviewer wrote, cut to a few lines with "Continue
+ * reading" only when it runs longer, so the cards in a row stay the same
+ * height. Persisted id; never rename.
+ */
+export const reviewTextSchema = {
+  $id: REVIEW_TEXT_ID,
+  pluginId: BUNDLE_ID,
+  displayName: 'Google review text',
+  description:
+    'What a reviewer wrote, cut to a few lines with an ellipsis. "Continue reading" shows only when it was cut, and opens it in place.',
+  category: ComponentCategory.DATA_DISPLAY,
+  icon: { path: 'M3,3H21V5H3V3M3,7H21V9H3V7M3,11H21V13H3V11M3,15H21V17H3V15M3,19H13V21H3V19Z' },
+  flags: { selfClosing: FEATURE_FLAG.ENABLED },
+  attributes: [
+    {
+      name: 'text',
+      label: 'Text',
+      description: "What the reviewer wrote. Inside a review it is the review's text.",
+      component: FieldComponentType.TEXT_FIELD,
+    },
+    {
+      name: 'lines',
+      label: 'Lines shown',
+      description: `How many lines show before "Continue reading" (1 to 20, ${REVIEW_TEXT_DEFAULTS.lines} to start).`,
+      component: FieldComponentType.TEXT_FIELD,
+      type: 'number',
+    },
+    {
+      name: 'moreLabel',
+      label: 'Continue reading wording',
+      description: 'The link that opens a review that was cut.',
+      component: FieldComponentType.TEXT_FIELD,
+    },
+    {
+      name: 'lessLabel',
+      label: 'Show less wording',
+      description: 'The same link once the review is open.',
+      component: FieldComponentType.TEXT_FIELD,
+    },
+  ],
+}
+
+/**
  * The one-piece element's preset, as v1.0.0 placed it. No longer offered
  * (AGL-4212): the Elements panel offers the composable presets instead, and
  * pages that already place the element keep rendering it.
@@ -216,5 +259,6 @@ export function register() {
   components.registerComponent(GoogleReviews, { ...schema, $id: 'aglyn.google-reviews.reviews' })
   components.registerComponent(Stars, { ...starsSchema, $id: 'aglyn.google-reviews.stars' })
   components.registerComponent(ReviewerImage, { ...reviewerImageSchema, $id: 'aglyn.google-reviews.reviewer-image' })
+  components.registerComponent(ReviewText, { ...reviewTextSchema, $id: 'aglyn.google-reviews.review-text' })
   components.registerPreset(presets)
 }
