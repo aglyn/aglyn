@@ -33,7 +33,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.aglyn.core.Live
+import com.aglyn.core.liveCount
+import com.aglyn.pluginhost.TransferExportDialog
+import com.aglyn.ui.MenuAction
+import com.aglyn.ui.OverflowMenu
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListDetail
@@ -68,6 +75,30 @@ fun RedirectsListScreen(context: NativePluginContext) {
     editor.listFromCache = ready.fromCache
     androidx.compose.runtime.LaunchedEffect(ready) { editor.refresh(ready.value, ready.fromCache) }
   }
+  // The plan's cap and the count the create route counts (every rule less the deleted ones, AGL-3918), re-read as the
+  // list moves: an add spends a slot and a delete frees one.
+  var used by remember(hostId) { mutableStateOf<Long?>(null) }
+  var limit by remember(hostId) { mutableStateOf<Double?>(null) }
+  var planReady by remember(hostId) { mutableStateOf(false) }
+  androidx.compose.runtime.LaunchedEffect(hostId) {
+    try {
+      limit = redirectsPerHostLimit(context.api, hostId)
+      planReady = true
+    } catch (error: Throwable) {
+      if (error is kotlinx.coroutines.CancellationException) throw error
+    }
+  }
+  val listed = (live as? Live.Ready)?.value?.size
+  androidx.compose.runtime.LaunchedEffect(hostId, listed) {
+    try {
+      context.firestore.liveCount("hosts/$hostId/redirects")?.let { used = it }
+    } catch (error: Throwable) {
+      if (error is kotlinx.coroutines.CancellationException) throw error
+    }
+  }
+  val addRedirect = { editor.add(redirectLimitRefusal(planReady, used, limit)) }
+  var exporting by remember { mutableStateOf(false) }
+  val canImport = canImportRedirects(context)
   AglynListDetail(
     detailBanner = { if (editor.draft == null && editor.deleting == null) RedirectBanners(editor) },
     list = { selected, onSelect ->
@@ -77,10 +108,19 @@ fun RedirectsListScreen(context: NativePluginContext) {
           verticalAlignment = Alignment.CenterVertically,
         ) {
           Text("Rules", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          Button(onClick = editor::add, Modifier.testTag("add-redirect")) {
+          Button(onClick = addRedirect, Modifier.testTag("add-redirect")) {
             Icon(AglynIcons.named("add"), contentDescription = null)
             Text("Add redirect", Modifier.padding(start = space(1f)))
           }
+          // The page's Import and Export, in the head's ⋯: Import for "Manage data", Export for whoever reads the rules.
+          OverflowMenu(
+            buildList {
+              if (canImport) add(MenuAction("import-redirects", "Import", "upload") { context.navigate(CORE_DATA_IMPORT_SCREEN, redirectsImportParams(hostId)) })
+              add(MenuAction("export-redirects", "Export", "download") { exporting = true })
+            },
+            Modifier.padding(start = space(1f)).testTag("redirects-more"),
+            boxed = true,
+          )
         }
         if (editor.draft == null && editor.deleting == null) {
           Column(Modifier.padding(horizontal = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) { RedirectBanners(editor) }
@@ -92,7 +132,7 @@ fun RedirectsListScreen(context: NativePluginContext) {
             body = "Check the connection and try again.",
             icon = AglynIcons.named("error"), tone = EmptyTone.ERROR,
           )
-          is Live.Ready -> LazyColumn(Modifier.fillMaxSize().testTag("redirects-list")) {
+          is Live.Ready -> LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("redirects-list")) {
             if (live.value.isEmpty()) {
               item {
                 EmptyState("No redirects yet", body = "Send an old address to a new one, so links and search results keep working.", icon = AglynIcons.named("alt_route"))
@@ -111,6 +151,11 @@ fun RedirectsListScreen(context: NativePluginContext) {
             }
           }
         }
+        // Under the list, as on the page: the plan's readout and "Test a path".
+        if (live is Live.Ready) {
+          HorizontalDivider()
+          RedirectsPageFooter(context, used, limit, planReady)
+        }
       }
     },
     detail = { selected ->
@@ -125,12 +170,28 @@ fun RedirectsListScreen(context: NativePluginContext) {
     },
   )
   RedirectDialogs(editor)
+  if (exporting) {
+    TransferExportDialog(
+      context,
+      resource = REDIRECTS_TRANSFER_RESOURCE,
+      title = REDIRECTS_EXPORT_TITLE,
+      hostId = hostId,
+      scope = REDIRECTS_EXPORT_SCOPE,
+      fileStem = REDIRECTS_TRANSFER_RESOURCE,
+    ) { done ->
+      exporting = false
+      if (done != null) editor.notice = done
+    }
+  }
 }
 
 /** The editor's last refusal and notice, the notice dismissible. */
 @Composable
 private fun RedirectBanners(editor: RedirectsEditor) {
   editor.error?.let { NoticeBanner(it, StatusTone.ERROR) }
+  editor.warning?.let { message ->
+    NoticeBanner(message, StatusTone.WARNING, action = { TextButton(onClick = { editor.warning = null }) { Text("Dismiss") } })
+  }
   editor.notice?.let { message ->
     NoticeBanner(message, StatusTone.SUCCESS, action = { TextButton(onClick = { editor.notice = null }) { Text("Dismiss") } })
   }

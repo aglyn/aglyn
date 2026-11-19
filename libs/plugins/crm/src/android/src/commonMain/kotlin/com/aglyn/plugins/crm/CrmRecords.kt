@@ -5,6 +5,7 @@ import com.aglyn.contracts.ListFilterRequest
 import com.aglyn.contracts.ListQueryDeclaration
 import com.aglyn.contracts.ListQueryFilter
 import com.aglyn.contracts.ListQueryOp
+import com.aglyn.contracts.ListQuerySort
 import com.aglyn.contracts.ListQueryRequest
 import com.aglyn.contracts.currencyFractionDigits
 import com.aglyn.contracts.currencyInputText
@@ -72,7 +73,21 @@ fun scopeBase(scope: CrmScope): List<ListQueryFilter> =
   scope.readTokens?.let { listOf(ListQueryFilter(ListQueryOp.ARRAY_CONTAINS_ANY, "visibleTo", JsonArray(it.map(::JsonPrimitive)))) }.orEmpty()
 
 /** A chip over a list: the clauses it adds to the one query. */
-data class CrmFilter(val key: String, val label: String, val clauses: List<ListFilterRequest> = emptyList(), val base: List<ListQueryFilter> = emptyList())
+data class CrmFilter(
+  val key: String,
+  val label: String,
+  val clauses: List<ListFilterRequest> = emptyList(),
+  val base: List<ListQueryFilter> = emptyList(),
+  /** A saved view's order, when the list declares it; null keeps the list's own. */
+  val sort: ListQuerySort? = null,
+  /**
+   * The clauses as a view stores them, where they differ from what the query asks (a contact's stage is stored as the
+   * stage and asked as the holder's facet key); null when they are the same.
+   */
+  val stored: List<ListFilterRequest>? = null,
+  /** A saved view's clauses the list could not ask, with why. */
+  val refused: List<CrmViewRefusal> = emptyList(),
+)
 
 /** The query param the Contacts list opens one person by (`CONTACTS_LIST_EMAIL_PARAM`). */
 const val CONTACTS_LIST_EMAIL_PARAM = "email"
@@ -90,7 +105,10 @@ fun crmFilters(kind: CrmKind, scope: CrmScope): List<CrmFilter> {
   val mine = ListFilterRequest("ownerUid", "equals", scope.uid)
   return when (kind) {
     CrmKind.LEAD -> listOf(
-      CrmFilter("open", "Open", listOf(ListFilterRequest("status", "isAnyOf", Contracts.nativeCrmLeadOpenStatuses.joinToString(",")))),
+      CrmFilter(
+        "open", "Open", listOf(ListFilterRequest("status", "isAnyOf", Contracts.nativeCrmLeadOpenStatuses.joinToString(","))),
+        stored = listOf(ListFilterRequest("status", "equals", "open")),
+      ),
       CrmFilter("all", "All"),
     ) + Contracts.nativeCrmLeadStatuses.map { status ->
       CrmFilter(status, Contracts.crmLeadStatusLabels[status] ?: status, listOf(ListFilterRequest("status", "equals", status)))
@@ -98,9 +116,15 @@ fun crmFilters(kind: CrmKind, scope: CrmScope): List<CrmFilter> {
     // A contact's owner and stage are a site's own (its consent group's facet); the whole workspace lists them all.
     CrmKind.CONTACT -> if (scope.workspaceWide) listOf(CrmFilter("all", "All")) else listOf(
       CrmFilter("all", "All"),
-      CrmFilter("mine", "Mine", listOf(ListFilterRequest("facetKeys", "contains", "${scope.groupId}:owner=${facetKeyValue(scope.uid)}"))),
+      CrmFilter(
+        "mine", "Mine", listOf(ListFilterRequest("facetKeys", "contains", "${scope.groupId}:owner=${facetKeyValue(scope.uid)}")),
+        stored = listOf(mine),
+      ),
     ) + Contracts.contactLifecycleStageLabels.map { (stage, label) ->
-      CrmFilter(stage, label, listOf(ListFilterRequest("facetKeys", "contains", "${scope.groupId}:stage=${facetKeyValue(stage)}")))
+      CrmFilter(
+        stage, label, listOf(ListFilterRequest("facetKeys", "contains", "${scope.groupId}:stage=${facetKeyValue(stage)}")),
+        stored = listOf(ListFilterRequest("lifecycleStage", "equals", stage)),
+      )
     }
     CrmKind.COMPANY -> listOf(
       CrmFilter("all", "All"),
@@ -134,10 +158,10 @@ fun crmListPlan(kind: CrmKind, scope: CrmScope, filter: CrmFilter, search: Strin
   val extra = filter.base +
     (if (kind == CrmKind.DEAL && pipelineId != null) listOf(ListQueryFilter(ListQueryOp.EQUAL, "pipelineId", JsonPrimitive(pipelineId))) else emptyList())
   val words = search.trim().ifEmpty { null }?.let { listOf(it) }
-  val scoped = ListQueryRequest(base = scopeBase(scope) + extra, clauses = filter.clauses, search = words)
+  val scoped = ListQueryRequest(base = scopeBase(scope) + extra, clauses = filter.clauses, search = words, sort = filter.sort)
   val impliesScope = { clause: ListFilterRequest -> kind == CrmKind.CONTACT && clause.field == "facetKeys" && clause.value.startsWith("${scope.groupId}:") }
   if (scope.orgWide && filter.clauses.any(impliesScope)) {
-    val trial = planListQuery(declaration, ListQueryRequest(base = extra, clauses = filter.clauses, search = words))
+    val trial = planListQuery(declaration, ListQueryRequest(base = extra, clauses = filter.clauses, search = words, sort = filter.sort))
     if (trial.served.any(impliesScope)) return trial
   }
   return planListQuery(declaration, scoped)

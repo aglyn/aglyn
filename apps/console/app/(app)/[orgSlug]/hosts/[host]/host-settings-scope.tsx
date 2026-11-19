@@ -24,10 +24,21 @@ import {
 import { overrideWriteValue } from '@aglyn/aglyn/app-utils/artifact-overrides'
 import {
   BUSINESS_DETAILS_CLEARABLE_PATHS,
+  BUSINESS_EMAIL_PATTERN,
+  BUSINESS_NAME_MAX_LENGTH,
+  BUSINESS_PHONE_MAX_LENGTH,
   SITE_SLOGAN_MAX_LENGTH,
   businessDetailsSeed,
   businessDetailsWrite,
 } from '@aglyn/aglyn/app-utils/business-details'
+import {
+  SEO_DESCRIPTION_MAX_LENGTH,
+  SEO_TITLE_MAX_LENGTH,
+} from '@aglyn/aglyn/app-utils/screen-seo-fields'
+import {
+  SITE_SEO_SEPARATOR_MAX_LENGTH,
+  SITE_SEO_TITLE_PATTERN_MAX_LENGTH,
+} from '@aglyn/aglyn/app-utils/seo-listing-fields'
 import * as Aglyn from '@aglyn/aglyn'
 import type { HostTheme } from '@aglyn/shared-data-types'
 import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
@@ -540,7 +551,7 @@ const seoSchema: FormSchema = {
       isRequired: true,
       resolveProps: (_, { input: { value } }) => {
         const len = value?.length || 0
-        const over = len > 60
+        const over = len > SEO_TITLE_MAX_LENGTH
         return {
           InputProps: {
             endAdornment: (
@@ -548,7 +559,7 @@ const seoSchema: FormSchema = {
                 position="end"
                 sx={{ color: over ? 'error.light' : undefined }}
               >
-                {len}/60
+                {len}/{SEO_TITLE_MAX_LENGTH}
               </InputAdornment>
             ),
           },
@@ -561,7 +572,7 @@ const seoSchema: FormSchema = {
         },
         {
           type: FieldValidatorType.MAX_LENGTH,
-          threshold: 60,
+          threshold: SEO_TITLE_MAX_LENGTH,
           message: 'Please enter a shorter title',
         },
       ],
@@ -582,7 +593,7 @@ const seoSchema: FormSchema = {
       rows: 2,
       resolveProps: (_, { input: { value } }) => {
         const len = value?.length || 0
-        const over = len > 155
+        const over = len > SEO_DESCRIPTION_MAX_LENGTH
         return {
           InputProps: {
             endAdornment: (
@@ -590,7 +601,7 @@ const seoSchema: FormSchema = {
                 position="end"
                 sx={{ color: over ? 'error.light' : undefined }}
               >
-                {len}/155
+                {len}/{SEO_DESCRIPTION_MAX_LENGTH}
               </InputAdornment>
             ),
           },
@@ -603,7 +614,7 @@ const seoSchema: FormSchema = {
         },
         {
           type: FieldValidatorType.MAX_LENGTH,
-          threshold: 155,
+          threshold: SEO_DESCRIPTION_MAX_LENGTH,
           message: 'Please enter a shorter description',
         },
       ],
@@ -630,7 +641,7 @@ const seoSchema: FormSchema = {
         },
         {
           type: FieldValidatorType.MAX_LENGTH,
-          threshold: 3,
+          threshold: SITE_SEO_SEPARATOR_MAX_LENGTH,
           message: 'Please enter a shorter title separator',
         },
       ],
@@ -668,7 +679,7 @@ const seoSchema: FormSchema = {
       validate: [
         {
           type: FieldValidatorType.MAX_LENGTH,
-          threshold: 120,
+          threshold: SITE_SEO_TITLE_PATTERN_MAX_LENGTH,
           message: 'Please enter a shorter title pattern',
         },
       ],
@@ -1131,7 +1142,7 @@ const businessDetailsSchema: FormSchema = {
       validate: [
         {
           type: FieldValidatorType.MAX_LENGTH,
-          threshold: 200,
+          threshold: BUSINESS_NAME_MAX_LENGTH,
           message: 'Please enter a shorter business name',
         },
       ],
@@ -1162,7 +1173,7 @@ const businessDetailsSchema: FormSchema = {
       validate: [
         {
           type: FieldValidatorType.MAX_LENGTH,
-          threshold: 64,
+          threshold: BUSINESS_PHONE_MAX_LENGTH,
           message: 'Please enter a shorter phone number',
         },
       ],
@@ -1177,7 +1188,7 @@ const businessDetailsSchema: FormSchema = {
       validate: [
         {
           type: FieldValidatorType.PATTERN,
-          pattern: '^\\s*[^\\s@]+@[^\\s@]+\\.[^\\s@]+\\s*$',
+          pattern: BUSINESS_EMAIL_PATTERN,
           message: 'Please enter an email address, like you@example.com',
         },
       ],

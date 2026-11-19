@@ -50,6 +50,8 @@
 let mockScopes: string[] = ['crm:read', 'crm:write']
 /** The name the organization gave the key; null models a key the double did not name. */
 let mockKeyName: string | null = null
+/** The person a connected app acts for (AGL-4235); null models an API key. */
+let mockUid: string | null = null
 let mockOrg: Record<string, unknown> = {}
 let mockUidSeq = 0
 /** Whether the capture door plants a contact; off models a band-full drop. */
@@ -134,6 +136,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       keyId: 'key-1',
       scopes: mockScopes,
       ...(mockKeyName ? { name: mockKeyName } : {}),
+      ...(mockUid ? { uid: mockUid } : {}),
     }),
     getOrgDoc: async () => mockOrg,
     lockdownRefusal: async () => null,
@@ -171,6 +174,9 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The REAL lock verdict a named site is admitted by (AGL-4235): the
+  // site's own lock decides by the method, as at the site router.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/lockdown'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/api-idempotency'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/contacts'),
@@ -255,6 +261,7 @@ import {
   mockCollectionRef,
   mockDocs,
   resetMockFirestore,
+  seedSites,
 } from './api-v1-crm-double'
 
 const readSource = (...parts: string[]) =>
@@ -329,9 +336,11 @@ beforeAll(() => registerPluginServerDeclarations())
 
 beforeEach(() => {
   resetMockFirestore()
+  seedSites(['host-1', 'host-2'])
   mockUidSeq = 0
   mockScopes = ['crm:read', 'crm:write']
   mockKeyName = null
+  mockUid = null
   mockOrg = {
     plan: 'business',
     subscription: { status: 'active' },
@@ -445,6 +454,110 @@ describe('the site every request names', () => {
     const bodied = await call('PATCH', 'leads/lead-a', { siteId: HOST, status: 'working' })
     expect(bodied.status).toBe(200)
     expect(mockDocs.get(`${LEADS}/lead-a`)?.status).toBe('working')
+  })
+})
+
+/*
+ * A lead names its site in the query or the body, never in the site path, so
+ * the site router never sees it. Every lead operation admits the site the way
+ * the router does (AGL-4235): the person's membership first, so a site is
+ * never confirmed to an app that may not see it, then the site's own lock,
+ * the method deciding.
+ */
+describe('the named site is admitted as the site router admits one (AGL-4235)', () => {
+  const MEMBER = 'u-member'
+  const everyOperation = [
+    ['GET', `leads?siteId=${HOST}`, undefined],
+    ['GET', `leads/lead-a?siteId=${HOST}`, undefined],
+    ['PATCH', 'leads/lead-a', { siteId: HOST, status: 'working' }],
+    ['POST', 'leads/lead-a/convert', { siteId: HOST }],
+    ['POST', 'leads', { siteId: HOST, email: 'new@acme.com' }],
+  ] as const
+  const lock = (fields: Record<string, unknown>) =>
+    seedSites([HOST], { memberRoles: { [MEMBER]: 'editor' }, suspendedAt: Date.now() - 1000, suspendedReasonCode: 'manual', ...fields })
+
+  it('answers a connected app whose person is not on the site No such site, on every operation', async () => {
+    mockUid = MEMBER
+    seedSites([HOST], { memberRoles: { 'someone-else': 'admin' } })
+    for (const [method, path, body] of everyOperation) {
+      const response = await call(method, path, body)
+      expect(`${method} ${path}: ${response.status}`).toBe(`${method} ${path}: 404`)
+      expect((await json(response)).error.message).toBe('No such site')
+    }
+    expect(mockDocs.get(`${LEADS}/lead-a`)?.status).toBeUndefined()
+    expect(mockDocs.get(`${LEADS}/lead-a`)?.convertedContactId).toBeUndefined()
+    expect(childPaths(LEADS)).toHaveLength(3)
+  })
+
+  it('hides a locked site from a non-member too, rather than saying it is locked', async () => {
+    mockUid = MEMBER
+    lock({ memberRoles: {} })
+    expect((await call('GET', `leads?siteId=${HOST}`)).status).toBe(404)
+  })
+
+  it('lets a member’s app through, a viewer’s read included', async () => {
+    mockUid = MEMBER
+    seedSites([HOST], { memberRoles: { [MEMBER]: 'viewer' } })
+    expect((await call('GET', `leads?siteId=${HOST}`)).status).toBe(200)
+    seedSites([HOST], { memberRoles: { [MEMBER]: 'editor' } })
+    const patched = await call('PATCH', 'leads/lead-a', { siteId: HOST, status: 'working' })
+    expect(patched.status).toBe(200)
+    expect(mockDocs.get(`${LEADS}/lead-a`)?.status).toBe('working')
+  })
+
+  it('does not ask an API key about membership: it is the workspace’s own credential', async () => {
+    seedSites([HOST], { memberRoles: {} })
+    expect((await call('GET', `leads?siteId=${HOST}`)).status).toBe(200)
+    expect((await call('GET', `leads/lead-a?siteId=${HOST}`)).status).toBe(200)
+  })
+
+  it('answers a site the workspace owns but no document exists for as No such site', async () => {
+    mockDocs.delete(`hosts/${HOST}`)
+    const response = await call('GET', `leads?siteId=${HOST}`)
+    expect(response.status).toBe(404)
+    expect((await json(response)).error.message).toBe('No such site')
+  })
+
+  it('keeps a site of another workspace answering exactly as before', async () => {
+    mockUid = MEMBER
+    const foreign = await call('GET', 'leads?siteId=host-9')
+    expect(foreign.status).toBe(400)
+    expect((await json(foreign)).error.fields).toEqual({ siteId: 'No such site in this organization' })
+  })
+
+  it('a read-only site lock passes a lead read and refuses every lead write, with the lock status and the rate-limit headers', async () => {
+    for (const uid of [MEMBER, null]) {
+      mockUid = uid
+      lock({ suspendedMode: 'read-only' })
+      expect((await call('GET', `leads?siteId=${HOST}`)).status).toBe(200)
+      expect((await call('GET', `leads/lead-a?siteId=${HOST}`)).status).toBe(200)
+      for (const [method, path, body] of everyOperation.filter(([method]) => method !== 'GET')) {
+        const response = await call(method, path, body)
+        expect(`${uid} ${method} ${path}: ${response.status}`).toBe(`${uid} ${method} ${path}: 423`)
+        expect(await json(response)).toMatchObject({ error: 'locked', scope: 'host', mode: 'read-only' })
+        expect(response.headers.get('X-RateLimit-Limit')).toBe('120')
+        expect(response.headers.get('X-RateLimit-Remaining')).toBe('119')
+      }
+    }
+    expect(mockDocs.get(`${LEADS}/lead-a`)?.status).toBeUndefined()
+    expect(childPaths(LEADS)).toHaveLength(3)
+  })
+
+  it('a full site lock refuses a read and a write alike', async () => {
+    mockUid = MEMBER
+    lock({})
+    for (const [method, path, body] of everyOperation) {
+      const response = await call(method, path, body)
+      expect(`${method} ${path}: ${response.status}`).toBe(`${method} ${path}: 423`)
+      expect(response.headers.get('X-RateLimit-Limit')).toBe('120')
+    }
+  })
+
+  it('locks only the site that is locked: a sibling site still answers', async () => {
+    mockUid = MEMBER
+    lock({})
+    seedSites(['host-2'], { memberRoles: { [MEMBER]: 'editor' } })
+    expect((await call('GET', 'leads?siteId=host-2')).status).toBe(200)
   })
 })
 
