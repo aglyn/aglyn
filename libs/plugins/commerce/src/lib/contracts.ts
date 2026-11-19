@@ -95,6 +95,13 @@ export interface OrderEventOrder {
   refundedCents: number
   /** The tax regime: `stripe-automatic`, `manual`, `none`, or `null` when not recorded. */
   taxMode: string | null
+  /**
+   * Where the sale was charged (AGL-3614). `direct`: on the seller's own
+   * Stripe account, so the money is the seller's, Stripe's fees are the
+   * seller's, and so is the tax when Stripe Tax calculated it. `null`: through
+   * the platform's account, or not recorded.
+   */
+  chargeModel?: 'direct' | null
   /** Whether real money moved (AGL-3699): `false` for a Stripe test-mode order. */
   livemode?: boolean
   /** The optional lines the buyer added at checkout and whose offer each was (AGL-3635). */
