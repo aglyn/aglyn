@@ -10,7 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 /** Signed in as `u1`; records every sign-in it is asked for. */
-private class SignedInAuth(signedIn: Boolean = true) : AuthSession {
+private class ReconfirmingAuth(signedIn: Boolean = true) : AuthSession {
   val mutable = MutableStateFlow<AuthState>(if (signedIn) AuthState.SignedIn(AuthUser("u1", "u1@example.test", null)) else AuthState.SignedOut)
   override val state: StateFlow<AuthState> = mutable
   val asked = mutableListOf<String>()
@@ -33,20 +33,20 @@ class ReconfirmTest {
   }
 
   @Test fun thePasswordSignsTheSameAddressInAgain() = runTest {
-    val auth = SignedInAuth()
+    val auth = ReconfirmingAuth()
     auth.reconfirm(ReconfirmCredential.Password("pw"))
     assertEquals(listOf("password:u1@example.test"), auth.asked)
   }
 
   @Test fun googleAndAPasskeyConfirmOnlyTheAccountInUse() = runTest {
-    val auth = SignedInAuth()
+    val auth = ReconfirmingAuth()
     auth.reconfirm(ReconfirmCredential.Google(jwt("""{"email":"U1@example.test"}""")))
     auth.reconfirm(ReconfirmCredential.CustomToken(jwt("""{"uid":"u1"}""")))
     assertEquals(listOf("google", "custom"), auth.asked)
   }
 
   @Test fun anotherAccountIsRefusedBeforeItSignsIn() = runTest {
-    val auth = SignedInAuth()
+    val auth = ReconfirmingAuth()
     val google = assertFailsWith<AuthError> { auth.reconfirm(ReconfirmCredential.Google(jwt("""{"email":"other@example.test"}"""))) }
     assertEquals(RECONFIRM_MISMATCH, google.message)
     assertFailsWith<AuthError> { auth.reconfirm(ReconfirmCredential.CustomToken(jwt("""{"uid":"someone-else"}"""))) }
@@ -54,7 +54,7 @@ class ReconfirmTest {
   }
 
   @Test fun nobodySignedInCannotConfirm() = runTest {
-    val auth = SignedInAuth(signedIn = false)
+    val auth = ReconfirmingAuth(signedIn = false)
     assertFailsWith<AuthError> { auth.reconfirm(ReconfirmCredential.Password("pw")) }
     assertEquals(emptyList(), auth.asked)
   }

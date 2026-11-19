@@ -176,7 +176,7 @@ private fun PosSettingsButton(onSettings: () -> Unit) {
  * theme, help and Sign out: the Aglyn app's [SettingsScreen], on a stack of its own, with the session every spec screen
  * reads (who is signed in, "Confirm it is you").
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 internal fun PosSettings(services: ShellServices, uid: String, workspace: WorkspaceState, onClose: () -> Unit) {
   val navigator = remember { ShellNavigator() }
