@@ -480,11 +480,11 @@
           "register": "registerCommerceNative"
         },
         "contributes": {
-          "screens": ["commerce.orders", "commerce.order", "commerce.quotes", "commerce.quote", "commerce.products", "commerce.product", "commerce.productMedia", "commerce.scan", "commerce.sales", "commerce.register", "commerce.card-readers", "commerce.settings", "commerce.returns", "commerce.returnsByStatus", "commerce.return", "commerce.startReturn", "commerce.returnSettings", "commerce.stockMovements", "commerce.stockMovementsReason", "commerce.stockMovementsProduct", "commerce.stockMovementsOrder", "commerce.stockMovementsLocation", "commerce.stockMovementsProducts", "commerce.stockMovementsLocations", "commerce.categories", "commerce.collections", "commerce.collection", "commerce.collectionProducts", "commerce.collectionRules", "commerce.discounts", "commerce.coupons", "commerce.giftCards", "commerce.giftCardsSearch", "commerce.recovery", "commerce.fulfillmentQueue", "commerce.fulfillmentPickup", "commerce.fulfillmentDelivery", "commerce.reservations", "commerce.storeSettings", "commerce.notifications", "commerce.reviewSettings", "commerce.reviews", "commerce.suppliers", "commerce.locations", "commerce.tax", "commerce.payments", "commerce.paymentMethods", "commerce.shipstation", "commerce.shippingeasy", "commerce.orderWebhooks", "commerce.orderWebhookDeliveries", "commerce.memberPosts", "commerce.taxSummary", "commerce.shipping", "commerce.shippingTiers", "commerce.localDelivery", "commerce.manage", "commerce.promotions", "commerce.orderServices", "commerce.transfer", "commerce.ordersBulk", "commerce.productDetails", "commerce.productRelated", "commerce.display", "commerce.kiosk", "commerce.import.giftCards"],
+          "screens": ["commerce.orders", "commerce.order", "commerce.quotes", "commerce.quote", "commerce.products", "commerce.product", "commerce.productMedia", "commerce.scan", "commerce.sales", "commerce.register", "commerce.card-readers", "commerce.settings", "commerce.settingsPayments", "commerce.settingsCheckout", "commerce.settingsTaxes", "commerce.settingsShipping", "commerce.settingsNotifications", "commerce.settingsChannels", "commerce.returns", "commerce.returnsByStatus", "commerce.return", "commerce.siteMemberPurchases", "commerce.subscriptions", "commerce.subscription", "commerce.startReturn", "commerce.returnSettings", "commerce.stockMovements", "commerce.stockMovementsReason", "commerce.stockMovementsProduct", "commerce.stockMovementsOrder", "commerce.stockMovementsLocation", "commerce.stockMovementsProducts", "commerce.stockMovementsLocations", "commerce.categories", "commerce.collections", "commerce.collection", "commerce.collectionProducts", "commerce.collectionRules", "commerce.discounts", "commerce.coupons", "commerce.giftCards", "commerce.giftCardsSearch", "commerce.recovery", "commerce.fulfillmentQueue", "commerce.fulfillmentPickup", "commerce.fulfillmentDelivery", "commerce.reservations", "commerce.storeSettings", "commerce.notifications", "commerce.reviewSettings", "commerce.reviews", "commerce.suppliers", "commerce.locations", "commerce.tax", "commerce.payments", "commerce.paymentMethods", "commerce.shipstation", "commerce.shippingeasy", "commerce.orderWebhooks", "commerce.orderWebhookDeliveries", "commerce.memberPosts", "commerce.taxSummary", "commerce.quoteSettings", "commerce.shipping", "commerce.shippingTiers", "commerce.localDelivery", "commerce.manage", "commerce.promotions", "commerce.orderServices", "commerce.transfer", "commerce.ordersBulk", "commerce.productDetails", "commerce.productRelated", "commerce.display", "commerce.kiosk", "commerce.import.giftCards"],
           "tabs": ["commerce.orders-tab", "commerce.products-tab"],
           "widgets": ["commerce.today", "commerce.sales-trend", "commerce.to-ship", "commerce.glance", "commerce.needs-you", "commerce.newest-site-users", "commerce.quote-from-request", "commerce.quote-from-contact"],
           "quickActions": ["commerce.orders-to-ship", "commerce.new-product", "commerce.scan"],
-          "deepLinks": ["commerce.orders-page", "commerce.products-page", "commerce.order-link", "commerce.quote-link", "commerce.returns-page", "commerce.return-link", "commerce.shipping-page", "commerce.notifications-page", "commerce.reservations.link"]
+          "deepLinks": ["commerce.orders-page", "commerce.products-page", "commerce.order-link", "commerce.quote-link", "commerce.returns-page", "commerce.return-link", "commerce.shipping-page", "commerce.notifications-page", "commerce.reservations.link", "commerce.settingsPayments.link", "commerce.settingsCheckout.link", "commerce.settingsTaxes.link", "commerce.settingsChannels.link", "commerce.settings.link", "commerce.subscriptions.link", "commerce.subscription.link"]
         }
       },
       "requiredPersonEraser": true,
@@ -1153,7 +1153,7 @@
         "contributes": {
           "screens": ["marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing", "marketplace.plugin-settings", "marketplace.sell", "marketplace.publish", "marketplace.publishTemplate", "marketplace.publishStarter", "marketplace.publisherAgreement", "marketplace.publishLayout", "marketplace.publishComponent", "marketplace.publishTheme", "marketplace.publishDatasetSchema", "marketplace.publishEmailTemplate", "marketplace.publishEmailStarter", "marketplace.publishPlugin"],
           "quickActions": ["marketplace.open"],
-          "widgets": ["marketplace.artifact-publish", "marketplace.org-installs", "marketplace.plugin-installation", "marketplace.site-connections", "marketplace.starter-picker"],
+          "widgets": ["marketplace.artifact-publish", "marketplace.org-installs", "marketplace.plugin-installation", "marketplace.site-connections", "marketplace.template-gallery", "marketplace.template-install-status", "marketplace.starter-picker"],
           "deepLinks": ["marketplace.listing-page", "marketplace.page", "marketplace.browse-page", "marketplace.installed-page", "marketplace.licences-page", "marketplace.sell-page"]
         }
       },
@@ -2969,6 +2969,7 @@
             "ai.usageOverageColumn",
             "ai.hostMember",
             "ai.allotment",
+            "ai.collaboratorCreditsColumn",
             "ai.import.productCopy",
             "ai.import.start",
             "ai.create"
@@ -2985,7 +2986,9 @@
             "ai.needs-you",
             "ai.assist-panel",
             "ai.insight-ask",
-            "ai.org-insight-ask"
+            "ai.org-insight-ask",
+            "ai.explain-funnel",
+            "ai.crm-record"
           ],
           "quickActions": [
             "ai.open"
@@ -3430,7 +3433,7 @@
     {
       "id": "waivers",
       "mobile": {
-        "$comment": "AGL-4042/AGL-4043: a rider's waiver at check-in, natively: the status the console's waivers-check-in-status widget shows in commerce's posCheckIn zone (signed, signed for some, needed, not matched), Find by name with a date of birth, Check again, and Sign waiver, which opens the store's own signing page. The Waivers page itself stays in the console.",
+        "$comment": "AGL-4042/AGL-4043: a rider's waiver at check-in, natively: the status the console's waivers-check-in-status widget shows in commerce's posCheckIn zone (signed, signed for some, needed, not matched), Find by name with a date of birth, Check again, and Sign waiver, which opens the store's own signing page. The Waivers page as spec screens (waivers.screens.json): the site's waivers, writing one, publish, unpublish, retire, the share link, and the signatures searched, exported, opened, voided and downloaded as the signed PDF.",
         "ios": {
           "module": "AglynWaiversPlugin",
           "register": "registerWaiversNative"
@@ -3440,8 +3443,22 @@
           "register": "registerWaiversNative"
         },
         "contributes": {
+          "screens": [
+            "waivers.home",
+            "waivers.share",
+            "waivers.signatures",
+            "waivers.signature",
+            "waivers.waiver",
+            "waivers.sign",
+            "waivers.signed",
+            "waivers.paper"
+          ],
           "widgets": [
             "waivers.check-in-status"
+          ],
+          "deepLinks": [
+            "waivers.home.link",
+            "waivers.sign.link"
           ]
         }
       },
@@ -3463,6 +3480,13 @@
         "waivers"
       ],
       "requiredPersonEraser": true,
+      "orgCollections": [
+        {
+          "name": "waivers",
+          "label": "Waiver",
+          "siteField": "hostId"
+        }
+      ],
       "hostCollections": [
         {
           "name": "waiverTitles",
@@ -3535,7 +3559,8 @@
         },
         "contributes": {
           "screens": [
-            "tax-engines.service"
+            "tax-engines.service",
+            "tax-engines.order"
           ]
         }
       },
@@ -3658,6 +3683,24 @@
       "id": "help-desks",
       "package": "@aglyn/plugins-help-desks",
       "uses": ["commerce"],
+      "mobile": {
+        "$comment": "Help desks natively (Gorgias, Re:amaze, Kustomer, Gladly and Richpanel with the merchant's own credentials), from the spec in src/android/screens/help-desks.screens.json. It sits in the site's plugin settings (sitePluginSettings zone) and Setup's Integrations card (hostSettings).",
+        "ios": {
+          "module": "AglynHelpDesksPlugin",
+          "register": "registerHelpDesksNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.helpdesks",
+          "register": "registerHelpDesksNative"
+        },
+        "contributes": {
+          "screens": [
+            "help-desks.service",
+            "help-desks.provider"
+          ],
+          "widgets": ["help-desks.service.card"]
+        }
+      },
       "register": {
         "consoleDeclarations": "registerHelpDesksConsoleDeclarations",
         "console": "registerHelpDesksConsole",

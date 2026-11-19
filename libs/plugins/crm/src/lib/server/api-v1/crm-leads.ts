@@ -119,6 +119,7 @@ import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import {
   apiActorFields,
   type ApiV1Context,
+  admitNamedSite,
   claimWrite,
   orgOwnsHost,
   readJsonBody,
@@ -229,14 +230,26 @@ function leadView(
  * body as the fallback a `POST`/`PATCH` may use. Required, and required to
  * be one of the organization's own sites, for the reason the module header
  * gives.
+ *
+ * Then admitted the way the site router admits a site in its path
+ * (AGL-4235, `admitNamedSite`): a connected app whose person is not on the
+ * site hears `404 No such site`, and the site's own lock decides by the
+ * request's method — a read-only lock lets a lead read through and refuses a
+ * write. Every lead operation resolves its site here, so none can skip it.
+ * `invalid` marks a refusal of the parameter itself, as opposed to the site.
  */
-function readLeadSite(
+async function readLeadSite(
   ctx: ApiV1Context,
+  request: Request,
   url: URL,
   body: Record<string, unknown> = {},
-): { siteId: string } | { response: Response } {
+): Promise<
+  | { siteId: string; snapshot: FirebaseFirestore.DocumentSnapshot }
+  | { response: Response; invalid?: true }
+> {
   const refuse = (error: string) => ({
     response: crmValidationFailed(ctx, 'lead', { siteId: error }),
+    invalid: true as const,
   })
   const raw = url.searchParams.get('siteId') ?? body.siteId
   if (raw === undefined || raw === null) {
@@ -245,7 +258,9 @@ function readLeadSite(
   const siteId = String(raw).trim()
   if (!siteId) return refuse('Must name a site')
   if (!orgOwnsHost(ctx, siteId)) return refuse('No such site in this organization')
-  return { siteId }
+  const admitted = await admitNamedSite(ctx, request, siteId)
+  if (!('snapshot' in admitted)) return { response: admitted }
+  return { siteId, snapshot: admitted.snapshot }
 }
 
 /**
@@ -419,7 +434,7 @@ async function updateLead(
     }
     return crmValidationFailed(ctx, 'lead', parsed.errors)
   }
-  const site = readLeadSite(ctx, url, body)
+  const site = await readLeadSite(ctx, request, url, body)
   if ('response' in site) return site.response
   const ref = leadsCollection(ctx, site.siteId).doc(leadId)
   const snap = await ref.get()
@@ -585,9 +600,9 @@ async function createLead(request: Request, ctx: ApiV1Context, url: URL): Promis
   if (body.doNotCall !== undefined && body.doNotCall !== null && typeof body.doNotCall !== 'boolean') {
     errors.doNotCall = 'Must be true or false'
   }
-  const site = readLeadSite(ctx, url, body)
+  const site = await readLeadSite(ctx, request, url, body)
   if ('response' in site) {
-    if (Object.keys(errors).length) {
+    if (site.invalid && Object.keys(errors).length) {
       return crmValidationFailed(ctx, 'lead', {
         ...errors,
         siteId: 'Required — name the site the lead belongs to',
@@ -851,7 +866,7 @@ async function convertLead(
   const body = await readJsonBody(request)
   const parsed = readConvertInput(body)
   if ('errors' in parsed) return crmValidationFailed(ctx, 'conversion', parsed.errors)
-  const site = readLeadSite(ctx, url, body)
+  const site = await readLeadSite(ctx, request, url, body)
   if ('response' in site) return site.response
   const errors: Record<string, string> = {}
   const ownerUid = await readOwner(ctx, body, errors)
@@ -993,8 +1008,8 @@ function decodeLeadCursor(raw: string | undefined): { lastSeenAtMs: number; id: 
 }
 
 /** `GET /v1/leads`. */
-async function listLeads(ctx: ApiV1Context, url: URL): Promise<Response> {
-  const site = readLeadSite(ctx, url)
+async function listLeads(request: Request, ctx: ApiV1Context, url: URL): Promise<Response> {
+  const site = await readLeadSite(ctx, request, url)
   if ('response' in site) return site.response
   const rawStatus = (url.searchParams.get('status') ?? '').trim()
   if (rawStatus && !(CRM_LEAD_STATUSES as readonly string[]).includes(rawStatus)) {
@@ -1047,7 +1062,7 @@ export async function handleLeads(
     if (request.method === 'GET') {
       const denied = requireScope(ctx, 'crm:read')
       if (denied) return denied
-      return listLeads(ctx, url)
+      return listLeads(request, ctx, url)
     }
     if (request.method === 'POST') {
       const denied = requireScope(ctx, 'crm:write')
@@ -1079,7 +1094,7 @@ export async function handleLeads(
   if (request.method === 'GET') {
     const denied = requireScope(ctx, 'crm:read')
     if (denied) return denied
-    const site = readLeadSite(ctx, url)
+    const site = await readLeadSite(ctx, request, url)
     if ('response' in site) return site.response
     const snap = await leadsCollection(ctx, site.siteId).doc(leadId).get()
     if (!snap.exists) {

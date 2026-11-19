@@ -50,6 +50,7 @@ import {
   mcpServerCardName,
 } from '@aglyn/aglyn/app-utils/connector-discovery'
 import { API_SCOPES } from '@aglyn/tenant-data-admin/server/api-keys'
+import { connectorScopeWords, describeConnectorAccess } from '@aglyn/tenant-data-admin/server/connector-oauth'
 import { GET as protectedResource } from '../app/api/oauth/metadata/protected-resource/route'
 import { GET as authorizationServer } from '../app/api/oauth/metadata/authorization-server/route'
 import { GET as serverCard, OPTIONS as serverCardPreflight, POST as serverCardPost } from '../app/api/mcp/server-card/route'
@@ -121,6 +122,26 @@ describe('the MCP discovery documents agree (AGL-4225)', () => {
       ...API_SCOPES,
     ])
     expect(server.code_challenge_methods_supported).toEqual(['S256'])
+  })
+
+  it('declares the product, page, search listing and business scopes, each with words a person can approve (AGL-4235)', async () => {
+    const { resource, server, openapi } = await readAll()
+    const flowScopes = openapi.components.securitySchemes.connector.flows.authorizationCode.scopes as Record<string, string>
+    const added = ['products:write', 'pages:read', 'seo:read', 'seo:write', 'business:read', 'business:write']
+    for (const scope of added) {
+      expect({ scope, resource: resource.scopes_supported.includes(scope) }).toEqual({ scope, resource: true })
+      expect({ scope, server: server.scopes_supported.includes(scope) }).toEqual({ scope, server: true })
+      const words = connectorScopeWords(scope as never)
+      expect({ scope, words: flowScopes[scope] }).toEqual({ scope, words })
+      expect(words.length).toBeGreaterThan(15)
+      expect(words).not.toMatch(/scope|token|oauth/i)
+    }
+    expect(describeConnectorAccess(added).map((area) => area.area)).toEqual([
+      'Products',
+      'Pages',
+      'Search listing',
+      'Business details',
+    ])
   })
 
   it('point a developer at the same sign-in documentation, and name the server alike', async () => {

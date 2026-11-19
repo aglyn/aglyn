@@ -2504,12 +2504,14 @@ public struct NativeNavRow: Codable, Hashable, Sendable {
   public var label: String
   public var order: Double?
   public var params: [String: String]?
+  public var permissions: [String]?
   public var pluginId: String?
+  public var requiresFeature: String?
   public var requiresHostAdmin: Bool?
   public var screen: String
   public var sections: [NativeNavSection]?
 
-  public init(actions: [NativeNavAction]? = nil, console: NativeNavConsoleRef, consoleLabel: String? = nil, description: String? = nil, docs: String? = nil, icon: NativeNavIcon, id: String, keywords: [String]? = nil, label: String, order: Double? = nil, params: [String: String]? = nil, pluginId: String? = nil, requiresHostAdmin: Bool? = nil, screen: String, sections: [NativeNavSection]? = nil) {
+  public init(actions: [NativeNavAction]? = nil, console: NativeNavConsoleRef, consoleLabel: String? = nil, description: String? = nil, docs: String? = nil, icon: NativeNavIcon, id: String, keywords: [String]? = nil, label: String, order: Double? = nil, params: [String: String]? = nil, permissions: [String]? = nil, pluginId: String? = nil, requiresFeature: String? = nil, requiresHostAdmin: Bool? = nil, screen: String, sections: [NativeNavSection]? = nil) {
     self.actions = actions
     self.console = console
     self.consoleLabel = consoleLabel
@@ -2521,7 +2523,9 @@ public struct NativeNavRow: Codable, Hashable, Sendable {
     self.label = label
     self.order = order
     self.params = params
+    self.permissions = permissions
     self.pluginId = pluginId
+    self.requiresFeature = requiresFeature
     self.requiresHostAdmin = requiresHostAdmin
     self.screen = screen
     self.sections = sections
@@ -6263,6 +6267,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let companyListDeclaration: ListQueryDeclaration
   public let componentListQuery: ListQueryDeclaration
   public let componentPropTokenPrefix: String
+  public let consentOptOutTitle: String
   public let contactLifecycleStageLabels: [String: String]
   public let contactListDeclaration: ListQueryDeclaration
   public let contentSchemaTypeDefault: ContentSchemaType
@@ -6272,6 +6277,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let crmActivityDirectionLabels: [String: String]
   public let crmActivityKindLabels: [String: String]
   public let crmActivityKindNouns: [String: String]
+  public let crmDefaultViewsField: String
   public let crmEmailBodyMax: Int
   public let crmEmailSubjectMax: Int
   public let crmEmailTemplateKindLabels: [String: String]
@@ -6284,7 +6290,11 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let crmMergeFields: [CrmMergeFieldDefinition]
   public let crmReportPeriodLabels: [String: String]
   public let crmTaskKindLabels: [String: String]
+  public let crmViewMaxColumns: Int
+  public let crmViewMaxFilters: Int
+  public let crmViewNameMax: Int
   public let crossMaxDepth: Int
+  public let dashboardWidgetsField: String
   public let datasetAuthorableFieldTypes: [DatasetFieldType]
   public let datasetFieldTypeLabels: [String: String]
   public let datasetFieldTypes: [DatasetFieldType]
@@ -6297,9 +6307,14 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let dropOffMaxHours: Double
   public let dropOffWaitHours: [Double]
   public let dropOffWatchesMax: Int
+  public let duplicableResourceNouns: [String: String]
   public let duplicateActivityActionLabels: [String: String]
+  public let duplicateCopies: [String: [String]]
+  public let duplicateNameMax: Int
+  public let duplicateNamePrefix: String
   public let emailBlockStarterTreesJson: String
   public let emailListQuery: ListQueryDeclaration
+  public let emailStateLabels: [String: String]
   public let emailTemplateQuery: ListQueryDeclaration
   public let entryListFilterHeaders: [String: String]
   public let entryListQuery: ListQueryDeclaration
@@ -6333,6 +6348,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let funnelStepTypeLabels: [String: String]
   public let funnelsMaxPerSite: Int
   public let heldLicenceQuery: ListQueryDeclaration
+  public let hostAnalyticsWidgetId: String
   public let hostEvents: [HostEventDeclaration]
   public let hostVariableTypeLabels: [String: String]
   public let imageEditAspectsJson: String
@@ -6391,15 +6407,23 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let nativeCrmFieldTypeLabels: [String: String]
   public let nativeCrmFieldTypes: [String]
   public let nativeCrmLeadOpenStatuses: [String]
+  public let nativeCrmLeadSourceDirections: [String]
   public let nativeCrmLeadStatuses: [String]
   public let nativeCrmPicklists: [NativeCrmPicklist]
   public let nativeCrmReportPeriods: [String]
   public let nativeCrmTaskKinds: [String]
   public let nativeCurrencyFractionDigits: [String: Double]
+  public let nativeEmailStateStatuses: [String]
   public let nativeNavManifest: NativeNavManifest
   public let nativeNavShellScreens: [String]
+  public let nativeNoInAppBillingNote: String
+  public let nativePrivacyChoicesAnalyticsDetail: String
+  public let nativePrivacyChoicesAnalyticsLabel: String
+  public let nativePrivacyChoicesIntro: String
+  public let nativePrivacyChoicesStrictlyNecessary: String
   public let nativeSiteCampaignsQuery: ListQueryDeclaration
   public let nativeSiteEmailsQuery: ListQueryDeclaration
+  public let nativeWebBillingLinkLabel: String
   public let nothingMoved: String
   public let notificationSoundField: String
   public let notificationSounds: [NotificationSound]
@@ -6536,6 +6560,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let siteListDeclaration: ListQueryDeclaration
   public let siteMemberListQuery: ListQueryDeclaration
   public let siteSloganMaxLength: Int
+  public let siteTemplateShelfBase: [ListQueryFilter]
+  public let siteTemplateShelfQuery: ListQueryDeclaration
   public let starColors: [StarColor]
   public let starredField: String
   public let starredMax: Int
@@ -6634,6 +6660,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case companyListDeclaration = "COMPANY_LIST_DECLARATION"
     case componentListQuery = "COMPONENT_LIST_QUERY"
     case componentPropTokenPrefix = "COMPONENT_PROP_TOKEN_PREFIX"
+    case consentOptOutTitle = "CONSENT_OPT_OUT_TITLE"
     case contactLifecycleStageLabels = "CONTACT_LIFECYCLE_STAGE_LABELS"
     case contactListDeclaration = "CONTACT_LIST_DECLARATION"
     case contentSchemaTypeDefault = "CONTENT_SCHEMA_TYPE_DEFAULT"
@@ -6643,6 +6670,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case crmActivityDirectionLabels = "CRM_ACTIVITY_DIRECTION_LABELS"
     case crmActivityKindLabels = "CRM_ACTIVITY_KIND_LABELS"
     case crmActivityKindNouns = "CRM_ACTIVITY_KIND_NOUNS"
+    case crmDefaultViewsField = "CRM_DEFAULT_VIEWS_FIELD"
     case crmEmailBodyMax = "CRM_EMAIL_BODY_MAX"
     case crmEmailSubjectMax = "CRM_EMAIL_SUBJECT_MAX"
     case crmEmailTemplateKindLabels = "CRM_EMAIL_TEMPLATE_KIND_LABELS"
@@ -6655,7 +6683,11 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case crmMergeFields = "CRM_MERGE_FIELDS"
     case crmReportPeriodLabels = "CRM_REPORT_PERIOD_LABELS"
     case crmTaskKindLabels = "CRM_TASK_KIND_LABELS"
+    case crmViewMaxColumns = "CRM_VIEW_MAX_COLUMNS"
+    case crmViewMaxFilters = "CRM_VIEW_MAX_FILTERS"
+    case crmViewNameMax = "CRM_VIEW_NAME_MAX"
     case crossMaxDepth = "CROSS_MAX_DEPTH"
+    case dashboardWidgetsField = "DASHBOARD_WIDGETS_FIELD"
     case datasetAuthorableFieldTypes = "DATASET_AUTHORABLE_FIELD_TYPES"
     case datasetFieldTypeLabels = "DATASET_FIELD_TYPE_LABELS"
     case datasetFieldTypes = "DATASET_FIELD_TYPES"
@@ -6668,9 +6700,14 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case dropOffMaxHours = "DROP_OFF_MAX_HOURS"
     case dropOffWaitHours = "DROP_OFF_WAIT_HOURS"
     case dropOffWatchesMax = "DROP_OFF_WATCHES_MAX"
+    case duplicableResourceNouns = "DUPLICABLE_RESOURCE_NOUNS"
     case duplicateActivityActionLabels = "DUPLICATE_ACTIVITY_ACTION_LABELS"
+    case duplicateCopies = "DUPLICATE_COPIES"
+    case duplicateNameMax = "DUPLICATE_NAME_MAX"
+    case duplicateNamePrefix = "DUPLICATE_NAME_PREFIX"
     case emailBlockStarterTreesJson = "EMAIL_BLOCK_STARTER_TREES_JSON"
     case emailListQuery = "EMAIL_LIST_QUERY"
+    case emailStateLabels = "EMAIL_STATE_LABELS"
     case emailTemplateQuery = "EMAIL_TEMPLATE_QUERY"
     case entryListFilterHeaders = "ENTRY_LIST_FILTER_HEADERS"
     case entryListQuery = "ENTRY_LIST_QUERY"
@@ -6704,6 +6741,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case funnelStepTypeLabels = "FUNNEL_STEP_TYPE_LABELS"
     case funnelsMaxPerSite = "FUNNELS_MAX_PER_SITE"
     case heldLicenceQuery = "HELD_LICENCE_QUERY"
+    case hostAnalyticsWidgetId = "HOST_ANALYTICS_WIDGET_ID"
     case hostEvents = "HOST_EVENTS"
     case hostVariableTypeLabels = "HOST_VARIABLE_TYPE_LABELS"
     case imageEditAspectsJson = "IMAGE_EDIT_ASPECTS_JSON"
@@ -6762,15 +6800,23 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case nativeCrmFieldTypeLabels = "NATIVE_CRM_FIELD_TYPE_LABELS"
     case nativeCrmFieldTypes = "NATIVE_CRM_FIELD_TYPES"
     case nativeCrmLeadOpenStatuses = "NATIVE_CRM_LEAD_OPEN_STATUSES"
+    case nativeCrmLeadSourceDirections = "NATIVE_CRM_LEAD_SOURCE_DIRECTIONS"
     case nativeCrmLeadStatuses = "NATIVE_CRM_LEAD_STATUSES"
     case nativeCrmPicklists = "NATIVE_CRM_PICKLISTS"
     case nativeCrmReportPeriods = "NATIVE_CRM_REPORT_PERIODS"
     case nativeCrmTaskKinds = "NATIVE_CRM_TASK_KINDS"
     case nativeCurrencyFractionDigits = "NATIVE_CURRENCY_FRACTION_DIGITS"
+    case nativeEmailStateStatuses = "NATIVE_EMAIL_STATE_STATUSES"
     case nativeNavManifest = "NATIVE_NAV_MANIFEST"
     case nativeNavShellScreens = "NATIVE_NAV_SHELL_SCREENS"
+    case nativeNoInAppBillingNote = "NATIVE_NO_IN_APP_BILLING_NOTE"
+    case nativePrivacyChoicesAnalyticsDetail = "NATIVE_PRIVACY_CHOICES_ANALYTICS_DETAIL"
+    case nativePrivacyChoicesAnalyticsLabel = "NATIVE_PRIVACY_CHOICES_ANALYTICS_LABEL"
+    case nativePrivacyChoicesIntro = "NATIVE_PRIVACY_CHOICES_INTRO"
+    case nativePrivacyChoicesStrictlyNecessary = "NATIVE_PRIVACY_CHOICES_STRICTLY_NECESSARY"
     case nativeSiteCampaignsQuery = "NATIVE_SITE_CAMPAIGNS_QUERY"
     case nativeSiteEmailsQuery = "NATIVE_SITE_EMAILS_QUERY"
+    case nativeWebBillingLinkLabel = "NATIVE_WEB_BILLING_LINK_LABEL"
     case nothingMoved = "NOTHING_MOVED"
     case notificationSoundField = "NOTIFICATION_SOUND_FIELD"
     case notificationSounds = "NOTIFICATION_SOUNDS"
@@ -6907,6 +6953,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case siteListDeclaration = "SITE_LIST_DECLARATION"
     case siteMemberListQuery = "SITE_MEMBER_LIST_QUERY"
     case siteSloganMaxLength = "SITE_SLOGAN_MAX_LENGTH"
+    case siteTemplateShelfBase = "SITE_TEMPLATE_SHELF_BASE"
+    case siteTemplateShelfQuery = "SITE_TEMPLATE_SHELF_QUERY"
     case starColors = "STAR_COLORS"
     case starredField = "STARRED_FIELD"
     case starredMax = "STARRED_MAX"

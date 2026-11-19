@@ -179,6 +179,16 @@ final class SignUpTests: XCTestCase {
     XCTAssertEqual(taken, SignUpWorkspaceOutcome(slug: nil, orgID: nil, error: "That workspace URL is taken"))
   }
 
+  /// The console's Create an organization sends the Workspace URL the person typed (made from the name until they do).
+  func testCreatesTheWorkspaceAtTheWorkspaceURLTyped() async {
+    let transport = RecordingTransport([(200, #"{"orgId":"o2","slug":"acme-co"}"#)])
+    let signUp = service(transport)
+    _ = await signUp.createWorkspace(name: "Acme", slug: " acme-co ")
+    XCTAssertEqual(transport.json(0) as NSDictionary, ["name": "Acme", "slug": "acme-co"])
+    XCTAssertEqual(WorkspaceName.urlInput("Acme-Co"), "acme-co")
+    XCTAssertEqual(WorkspaceName.slug("Acme Inc."), "acme-inc")
+  }
+
   func testSendsTheVerificationAndReadsEachAnswer() async {
     let transport = RecordingTransport([
       (200, #"{"ok":true}"#), (200, #"{"ok":true,"alreadyVerified":true}"#), (429, #"{"error":"x"}"#),

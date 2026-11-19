@@ -30,6 +30,8 @@ final class AppModel {
   private(set) var workspace: WorkspaceStore?
   /// The signed-in person's pins, recents, stars, workspace colors and theme (`users/{uid}`), synced with the console.
   private(set) var preferences: AccountPreferencesStore?
+  /// Whether the device has a network connection, for the title bar's Offline indicator (AGL-1056).
+  let network = NetworkStatus()
   /// The signed-in person's invitations, joined on their own (AGL-4023): never an Accept step.
   private(set) var invites: InviteAutoJoin?
   /// The workspace and site (by address) of a link opened before anyone was signed in on this launch.
@@ -73,6 +75,8 @@ final class AppModel {
     if let config, problems.isEmpty {
       self.config = config
       AglynFirebase.configure(config)
+      // Whether this build may take a payment to Aglyn: off in a store build (the owner's decision of 2026-11-19).
+      StoreBilling.configure(config)
       // Every REST call to Firebase carries the App Check token production enforces (AGL-3818).
       let firebaseHTTP = AppCheckTransport(appCheck: AglynFirebase.appCheck)
       self.firebaseHTTP = firebaseHTTP

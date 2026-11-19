@@ -79,6 +79,9 @@ android {
       buildConfigField("String", "APP_CHECK", quoted(setting("appCheck", "off")))
       // Crash reports and Analytics: never from a debug build (AGL-4067).
       buildConfigField("String", "TELEMETRY", quoted("off"))
+      // Buying from Aglyn: on in debug, so the console-parity billing screens stay built and testable; `--ez storeBuild
+      // true` on the launch intent draws a store build's screens (StoreBilling).
+      buildConfigField("String", "IN_APP_BILLING", quoted("on"))
       configure<CrashlyticsExtension> { mappingFileUploadEnabled = false }
       // The seeded emulator member (tools/scripts/seed-native-emulator.mjs), for the debug sign-in form only.
       // Empty on the emulator stack; a design drive may set -Paglyn.debugPasskeyRpId / -Paglyn.debugGoogleWebClientId so the
@@ -114,6 +117,10 @@ android {
       // Crash reports, non-fatal errors and Analytics (AGL-4067): on for a release build on production; -Paglyn.telemetry=off
       // turns them off for a build that must not report.
       buildConfigField("String", "TELEMETRY", quoted(setting("telemetry", "on")))
+      // Buying from Aglyn (a plan, an add-on, credits, a paid listing, an invoice, a card): off, by the owner's decision of
+      // 2026-11-19. Play takes payment for subscriptions and business software only through Play Billing, so a store build
+      // leaves every such control out (StoreBilling in the core). Fixed here, not a -P setting, and nothing remote turns it on.
+      buildConfigField("String", "IN_APP_BILLING", quoted("off"))
       // The R8 mapping file goes to Crashlytics only from tools/scripts/native-release.mjs (-Paglyn.crashlyticsMappingUpload=true),
       // never from a local or CI build.
       configure<CrashlyticsExtension> { mappingFileUploadEnabled = setting("crashlyticsMappingUpload", "false").toBoolean() }

@@ -83,6 +83,13 @@ struct CrmFilter: Identifiable, Equatable {
   let id: String
   let label: String
   var clauses: [ListFilterRequest] = []
+  /// A saved view's order, when the list declares it; nil keeps the list's own.
+  var sort: ListQuerySort? = nil
+  /// The clauses as a view stores them, where they differ from what the query asks (a contact's stage is stored as
+  /// the stage and asked as the holder's facet key); nil when they are the same.
+  var stored: [ListFilterRequest]? = nil
+  /// A saved view's clauses the list could not ask, with why.
+  var refused: [CrmViewRefusal] = []
 }
 
 /// The query param the Contacts list opens one person by (`CONTACTS_LIST_EMAIL_PARAM`).
@@ -112,7 +119,8 @@ func crmFilters(_ kind: CrmKind, _ scope: CrmScope) -> [CrmFilter] {
     return [
       CrmFilter(
         id: "open", label: "Open",
-        clauses: [ListFilterRequest(field: "status", op: "isAnyOf", value: ContractValues.shared.nativeCrmLeadOpenStatuses.joined(separator: ","))]),
+        clauses: [ListFilterRequest(field: "status", op: "isAnyOf", value: ContractValues.shared.nativeCrmLeadOpenStatuses.joined(separator: ","))],
+        stored: [ListFilterRequest(field: "status", op: "equals", value: "open")]),
       CrmFilter(id: "all", label: "All"),
     ] + leadStatuses.map { CrmFilter(id: $0, label: leadStatusLabel($0), clauses: [ListFilterRequest(field: "status", op: "equals", value: $0)]) }
       + [CrmFilter(id: "mine", label: "Mine", clauses: [mine])]
@@ -123,11 +131,13 @@ func crmFilters(_ kind: CrmKind, _ scope: CrmScope) -> [CrmFilter] {
       CrmFilter(id: "all", label: "All"),
       CrmFilter(
         id: "mine", label: "Mine",
-        clauses: [ListFilterRequest(field: "facetKeys", op: "contains", value: "\(scope.groupID):owner=\(facetKeyValue(scope.uid))")]),
+        clauses: [ListFilterRequest(field: "facetKeys", op: "contains", value: "\(scope.groupID):owner=\(facetKeyValue(scope.uid))")],
+        stored: [ListFilterRequest(field: "ownerUid", op: "equals", value: scope.uid)]),
     ] + lifecycleStages.map {
       CrmFilter(
         id: $0, label: stageLabel($0) ?? $0,
-        clauses: [ListFilterRequest(field: "facetKeys", op: "contains", value: "\(scope.groupID):stage=\(facetKeyValue($0))")])
+        clauses: [ListFilterRequest(field: "facetKeys", op: "contains", value: "\(scope.groupID):stage=\(facetKeyValue($0))")],
+        stored: [ListFilterRequest(field: "lifecycleStage", op: "equals", value: $0)])
     }
   case .company:
     return [
@@ -155,10 +165,10 @@ func crmListPlan(_ kind: CrmKind, _ scope: CrmScope, _ filter: CrmFilter, search
     kind == .contact && clause.field == "facetKeys" && clause.value.hasPrefix("\(scope.groupID):")
   }
   if scope.orgWide && filter.clauses.contains(where: impliesScope) {
-    let trial = planListQuery(declaration, ListQueryRequest(clauses: filter.clauses, search: asked))
+    let trial = planListQuery(declaration, ListQueryRequest(clauses: filter.clauses, search: asked, sort: filter.sort))
     if trial.served.contains(where: impliesScope) { return trial }
   }
-  return planListQuery(declaration, ListQueryRequest(base: scopeBase(scope), clauses: filter.clauses, search: asked))
+  return planListQuery(declaration, ListQueryRequest(base: scopeBase(scope), clauses: filter.clauses, search: asked, sort: filter.sort))
 }
 
 func crmListQuery(_ kind: CrmKind, _ scope: CrmScope, _ filter: CrmFilter, search: String, limit: Int) -> FirestoreQuery {

@@ -97,6 +97,22 @@ describe('POST /api/fonts/cost (AGL-3656)', () => {
     expect(mockCost).not.toHaveBeenCalled()
   })
 
+  it('prices a native app’s font choice written into the site’s own theme (AGL-3668)', async () => {
+    mockHost.mockReturnValue({ exists: true, data: () => ({ memberRoles: { u1: 'editor' }, subdomain: 'studio' }) })
+    const res = await call({
+      hostId: 'h1',
+      fonts: {
+        body: { family: 'Inter', category: 'sans-serif', weights: [400, 700], source: 'google' },
+        heading: { family: 'Lora', category: 'serif', weights: [700], source: 'google' },
+      },
+    })
+    expect(res.statusCode).toBe(200)
+    const [theme] = mockCost.mock.calls[0]
+    expect(theme.fonts.map((font: { family: string }) => font.family)).toEqual(['Inter', 'Lora'])
+    expect(theme.typography.fontFamily).toContain('Inter')
+    expect((await call({ hostId: 'h1', fonts: { body: { family: '', category: 'serif', source: 'google' } } })).statusCode).toBe(400)
+  })
+
   it('reads only the font fields of a theme, within bounds', () => {
     const read = readCostTheme({
       fonts: [

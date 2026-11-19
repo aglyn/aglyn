@@ -251,6 +251,8 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
   val windowInfo = LocalWindowInfo.current
   var dialog by remember { mutableStateOf<MediaDialog?>(null) }
   var filtersOpen by remember { mutableStateOf(false) }
+  /** Get photos from a phone (AGL-3957): a site library only. */
+  var photoLinksOpen by remember { mutableStateOf(false) }
   val picker = LocalMediaPicker.current
   var uploading by remember { mutableStateOf<Triple<Int, Int, String>?>(null) }
   var undo by remember { mutableStateOf<Pair<List<String>, List<String>>?>(null) }
@@ -424,7 +426,12 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
     }
   } else {
     Column(Modifier.fillMaxSize().testTag("media-screen")) {
-      MediaHead(phone, compact, edge, canEdit && !runner.busy, onNewFolder = { runner.clear(); dialog = MediaDialog.NewFolder(currentFolderId) }, sources = picker?.sources.orEmpty(), onUpload = ::uploadFrom)
+      MediaHead(
+        phone, compact, edge, canEdit && !runner.busy, onNewFolder = { runner.clear(); dialog = MediaDialog.NewFolder(currentFolderId) },
+        sources = picker?.sources.orEmpty(), onUpload = ::uploadFrom,
+        onPhotoLink = if (scope is MediaScope.Site && canEdit) ({ photoLinksOpen = true }) else null,
+      )
+      VideoUploadsPausedChip(context, edge)
       Row(Modifier.weight(1f).fillMaxWidth()) {
         Column(Modifier.weight(1f).fillMaxHeight()) {
           MediaToolbar(model, edge, onMoreFilters = { filtersOpen = true }, filtering = filtering, onClear = { model.type(""); model.pick(null); model.filter(MediaFilters()) })
@@ -526,6 +533,10 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
   }
 
   MediaDialogs(dialog, api, runner, foldersById, onChanged = { model.refresh(); countsVersion++ }) { dialog = null }
+  if (photoLinksOpen && scope is MediaScope.Site) {
+    val photoLinksApi = remember(scope, context.api) { PhotoLinksApi(context.api, scope.hostId) }
+    PhotoLinksDialog(photoLinksApi, onCopy = { clipboard.setText(AnnotatedString(it)) }) { photoLinksOpen = false }
+  }
   if (filtersOpen) {
     MediaFiltersDialog(context, model.filters, scoped = scopeTokens != null, onApply = { model.filter(it); filtersOpen = false }, onDismiss = { filtersOpen = false })
   }
@@ -567,10 +578,40 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
 
 /**
  * The library's head (Figma Media 283:22621 / iPhone 285:7360): the title with its ☆, then New folder and the filled
- * Upload media; on a phone, both as 40 square buttons.
+ * Upload media; on a phone, both as 40 square buttons. [onPhotoLink] adds Get a photo link before New folder, on a site's
+ * own library only (the workspace library takes no phone photos).
+ */
+/**
+ * Video ingress is behind a release flag on every plan (AGL-2830), so the console states it as a fact, once the
+ * workspace has answered so a workspace the flag is on for never sees it flash; tapping it says what it means.
  */
 @Composable
-private fun MediaHead(phone: Boolean, compact: Boolean, edge: Dp, enabled: Boolean, onNewFolder: () -> Unit, sources: List<PickSource>, onUpload: (PickSource) -> Unit) {
+private fun VideoUploadsPausedChip(context: NativePluginContext, edge: Dp) {
+  val orgId = context.orgId ?: return
+  val org by androidx.compose.runtime.remember(orgId, context.firestore) { context.firestore.observeDoc("orgs/$orgId") }
+    .collectAsState(com.aglyn.core.Live.Loading)
+  val ready = org as? com.aglyn.core.Live.Ready ?: return
+  if (com.aglyn.core.releaseFlagOn(VIDEO_UPLOADS_RELEASE_FLAG, ready.value?.data, orgId, staff = false)) return
+  var open by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+  Column(Modifier.padding(horizontal = edge, vertical = space(0.5f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+    androidx.compose.foundation.layout.Box(
+      Modifier.clickable(onClickLabel = VIDEO_UPLOADS_PAUSED_MESSAGE) { open = !open }.testTag("media-video-paused"),
+    ) { StatusChip("Video uploads paused") }
+    if (open) Text(VIDEO_UPLOADS_PAUSED_MESSAGE, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+  }
+}
+
+@Composable
+private fun MediaHead(
+  phone: Boolean,
+  compact: Boolean,
+  edge: Dp,
+  enabled: Boolean,
+  onNewFolder: () -> Unit,
+  sources: List<PickSource>,
+  onUpload: (PickSource) -> Unit,
+  onPhotoLink: (() -> Unit)? = null,
+) {
   val star = LocalPageStar.current
   if (star != null) {
     DisposableEffect(star) {
@@ -600,12 +641,14 @@ private fun MediaHead(phone: Boolean, compact: Boolean, edge: Dp, enabled: Boole
     Box(Modifier.weight(1f))
     val upload = { if (sources.size == 1) onUpload(sources[0]) else sourcesOpen = true }
     if (phone) {
+      onPhotoLink?.let { SquareAction("qr_code", "Get a photo link", filled = false, enabled = enabled, onClick = it, modifier = Modifier.testTag("media-photo-link")) }
       SquareAction("create_new_folder", "New folder", filled = false, enabled = enabled, onClick = onNewFolder, modifier = Modifier.testTag("media-new-folder"))
       Box {
         SquareAction("upload", "Upload media", filled = true, enabled = enabled && sources.isNotEmpty(), onClick = upload, modifier = Modifier.testTag("media-upload"))
         UploadSources(sourcesOpen, sources, { sourcesOpen = false }, onUpload)
       }
     } else {
+      onPhotoLink?.let { CompactButton("Get a photo link", "qr_code", it, Modifier.testTag("media-photo-link"), enabled = enabled, tall = true) }
       CompactButton("New folder", "create_new_folder", onNewFolder, Modifier.testTag("media-new-folder"), enabled = enabled, tall = true)
       Box {
         CompactButton("Upload media", "upload", upload, Modifier.testTag("media-upload"), enabled = enabled && sources.isNotEmpty(), filled = true, tall = true)
@@ -1357,13 +1400,18 @@ private fun MediaDetailBody(
   var alt by remember(item.id, item.alt) { mutableStateOf(item.alt) }
   var description by remember(item.id, item.description) { mutableStateOf(item.description) }
   var tags by remember(item.id, item.tags) { mutableStateOf(item.tags.joinToString(", ")) }
+  // The custom metadata rows as edited (the console drawer's Key / Value rows).
+  var meta by remember(item.id, item.customMetadata) { mutableStateOf(item.customMetadata.entries.sortedBy { it.key }.map { it.key to it.value }) }
+  val editedMeta = meta.map { it.first.trim() to it.second }.filter { it.first.isNotEmpty() }.distinctBy { it.first }.toMap()
+  val metaDirty = editedMeta != item.customMetadata
   var moving by remember(item.id) { mutableStateOf(false) }
   var audioReplacement by remember(item.id) { mutableStateOf<PickedFile?>(null) }
   var deleting by remember(item.id) { mutableStateOf(false) }
   var references by remember(item.id) { mutableStateOf<List<MediaReference>?>(null) }
   val altMax = Contracts.mediaAltMaxLength.toInt()
-  val dirty = fileName.trim() != item.fileName || alt.trim() != item.alt || description.trim() != item.description ||
+  val detailsDirty = fileName.trim() != item.fileName || alt.trim() != item.alt || description.trim() != item.description ||
     tags.split(',').map { it.trim().lowercase() }.filter { it.isNotEmpty() } != item.tags
+  val dirty = detailsDirty || metaDirty
   val now = remember(item.updatedAt) { nowMillis() }
   val orgWideEditor = scope !is MediaScope.Org || context.orgRole in setOf("owner", "admin")
   val disabled by produceState<MediaQuarantineNotice?>(null, api, item.id) { value = api.quarantine(listOf(item.id))[item.id] }
@@ -1515,6 +1563,17 @@ private fun MediaDetailBody(
       OutlinedTextField(alt, { alt = it.take(altMax) }, label = { Text("Alt text") }, supportingText = { Text("Describes the image for screen readers and search. ${alt.length}/$altMax") }, enabled = canEdit, modifier = Modifier.fillMaxWidth().testTag("media-alt"))
       OutlinedTextField(description, { description = it }, label = { Text("Description") }, enabled = canEdit, modifier = Modifier.fillMaxWidth())
       OutlinedTextField(tags, { tags = it }, label = { Text("Tags") }, supportingText = { Text("Separate tags with commas.") }, singleLine = true, enabled = canEdit, modifier = Modifier.fillMaxWidth().testTag("media-tags"))
+      Text("Custom metadata", fontSize = metrics.groupLabel, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      meta.forEachIndexed { index, (key, value) ->
+        Row(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
+          OutlinedTextField(key, { next -> meta = meta.toMutableList().also { it[index] = next to value } }, label = { Text("Key") }, singleLine = true, enabled = canEdit, modifier = Modifier.weight(1f).testTag("media-meta-key"))
+          OutlinedTextField(value, { next -> meta = meta.toMutableList().also { it[index] = key to next } }, label = { Text("Value") }, singleLine = true, enabled = canEdit, modifier = Modifier.weight(1f).testTag("media-meta-value"))
+          androidx.compose.material3.IconButton(onClick = { meta = meta.filterIndexed { i, _ -> i != index } }, enabled = canEdit) {
+            Icon(AglynIcons.named("remove"), contentDescription = "Remove field")
+          }
+        }
+      }
+      TextButton(onClick = { meta = meta + ("" to "") }, enabled = canEdit, modifier = Modifier.testTag("media-meta-add")) { Text("Add field") }
       Row(
         Modifier.fillMaxWidth().clickable(enabled = canEdit) { moving = true }.padding(vertical = space(0.5f)).testTag("media-folder"),
         verticalAlignment = Alignment.CenterVertically,
@@ -1527,16 +1586,30 @@ private fun MediaDetailBody(
       Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
         Button(
           onClick = {
+            val nextMeta = editedMeta.takeIf { metaDirty }
+            val saveDetails = detailsDirty
             runner.run("Details saved.") {
-              api.saveDetails(item.id, fileName.trim(), alt.trim(), description.trim(), tags.split(',').map { it.trim() }.filter { it.isNotEmpty() })
+              if (saveDetails) api.saveDetails(item.id, fileName.trim(), alt.trim(), description.trim(), tags.split(',').map { it.trim() }.filter { it.isNotEmpty() })
+              nextMeta?.let { api.setCustomMetadata(item.id, it) }
             }
           },
           enabled = canEdit && dirty && fileName.isNotBlank() && !runner.busy,
           modifier = Modifier.testTag("media-save"),
         ) { Text("Save") }
-        if (dirty) TextButton(onClick = { fileName = item.fileName; alt = item.alt; description = item.description; tags = item.tags.joinToString(", ") }) { Text("Discard") }
+        if (dirty) {
+          TextButton(onClick = {
+            fileName = item.fileName
+            alt = item.alt
+            description = item.description
+            tags = item.tags.joinToString(", ")
+            meta = item.customMetadata.entries.sortedBy { it.key }.map { it.key to it.value }
+          }) { Text("Discard") }
+        }
       }
     }
+    HorizontalDivider()
+    val embeddedApi = remember(scope, context.api) { MediaEmbeddedApi(context.api, scope) }
+    MediaEmbeddedSection(item, embeddedApi, canEdit)
     HorizontalDivider()
     Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
       Row(verticalAlignment = Alignment.CenterVertically) {

@@ -552,6 +552,8 @@ public struct ThemeValues: Equatable, Sendable {
   public var navHeightSm: Double?
   /// Each Style components field's choice: `themeLookDefault` for the theme's own, `themeLookCustom` for a value no choice names.
   public var componentLooks: [String: String] = [:]
+  /// The fonts plugin's body and heading fonts (`readThemeFonts`).
+  public var fonts = ThemeFontSelection()
 }
 
 private func rangeOf(_ json: JSONValue?) -> ThemeRange {
@@ -604,7 +606,7 @@ public func themeValues(of json: JSONValue?) -> ThemeValues {
     fontFamily: json?["fontFamily"]?.stringValue ?? "__system__",
     borderRadius: json?["borderRadius"]?.numberValue, spacing: json?["spacing"]?.numberValue,
     navHeightXs: json?["navHeight"]?["xs"]?.numberValue, navHeightSm: json?["navHeight"]?["sm"]?.numberValue,
-    componentLooks: looks)
+    componentLooks: looks, fonts: ThemeFontSelection(json?["fonts"]))
 }
 
 /// One edit of the theme editor, as the route reads it (`ThemeEditorEdit`).
@@ -616,6 +618,8 @@ public enum ThemeEdit: Equatable, Sendable {
   case spacing(Double?)
   case navHeight(breakpoint: String, value: Double?)
   case componentLook(field: String, value: String)
+  /// The fonts plugin's picker: the body and heading fonts together.
+  case fonts(ThemeFontSelection)
 
   public var body: [String: Any?] {
     switch self {
@@ -626,6 +630,7 @@ public enum ThemeEdit: Equatable, Sendable {
     case .spacing(let value): ["control": "spacing", "value": value]
     case .navHeight(let breakpoint, let value): ["control": "navHeight", "breakpoint": breakpoint, "value": value]
     case .componentLook(let field, let value): ["control": "componentLook", "field": field, "value": value]
+    case .fonts(let selection): selection.edit
     }
   }
 }
@@ -647,6 +652,7 @@ public func themeEdits(from before: ThemeValues, to after: ThemeValues) -> [Them
   if before.spacing != after.spacing { edits.append(.spacing(after.spacing)) }
   if before.navHeightXs != after.navHeightXs { edits.append(.navHeight(breakpoint: "xs", value: after.navHeightXs)) }
   if before.navHeightSm != after.navHeightSm { edits.append(.navHeight(breakpoint: "sm", value: after.navHeightSm)) }
+  if before.fonts != after.fonts { edits.append(.fonts(after.fonts)) }
   // A look no choice names (Custom) is left alone, as the console's select leaves it.
   for field in after.componentLooks.keys.sorted() {
     let value = after.componentLooks[field] ?? ""
@@ -673,6 +679,7 @@ public func rebasedTheme(_ draft: ThemeValues, previous: ThemeValues, next: Them
   out.navHeightXs = rebased(draft.navHeightXs, previous: previous.navHeightXs, next: next.navHeightXs)
   out.navHeightSm = rebased(draft.navHeightSm, previous: previous.navHeightSm, next: next.navHeightSm)
   out.componentLooks = rebased(draft.componentLooks, previous: previous.componentLooks, next: next.componentLooks)
+  out.fonts = rebased(draft.fonts, previous: previous.fonts, next: next.fonts)
   return out
 }
 

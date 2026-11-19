@@ -187,6 +187,9 @@ public struct ScreenSession: Sendable {
         "origin": .string(origin), "passkeyRp": passkeyRelyingParty.map(JSONValue.string) ?? .null,
         // The platform's name, for words the console prints with it ("Aglyn staff · support").
         "brand": .string(AglynConfig.defaultBrandName),
+        // Whether this build may take or start a payment to Aglyn (off in a store build, the owner's decision of
+        // 2026-11-19), and where it may not, whether it may link to web billing: `app.billing`, `app.billingLink`.
+        "billing": .bool(StoreBilling.buying), "billingLink": .bool(StoreBilling.webBillingLink),
         "permissionRefusal": .object(Dictionary(uniqueKeysWithValues: ContractValues.shared.orgRoleGrants.permissions.map { ($0.key, JSONValue.string(permissionRefusalText(ContractValues.shared.orgRoleGrants, key: $0.key))) })),
         "permissionCatalog": rows(narrowable: false), "narrowablePermissions": rows(narrowable: true),
       ],

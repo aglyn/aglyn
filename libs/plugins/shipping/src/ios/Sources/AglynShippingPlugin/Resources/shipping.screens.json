@@ -10,7 +10,7 @@
       "scope": "site",
       "order": 35,
       "zones": [
-        "commerceSettings"
+        "commerceSettingsShipping"
       ],
       "showWhen": "data.avail.available",
       "load": {

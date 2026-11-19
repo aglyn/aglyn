@@ -20,6 +20,28 @@ final class SitePagesModel {
   var search = ""
 
   var routing: SiteRouting { SiteRouting(host: host.state.value ?? nil) }
+  /// The site's held and flagged pages (AGL-3374); nil until read, and left nil when the read fails (the list shows no
+  /// chips rather than an error over pages that are fine).
+  var holds: PageHoldsAnswer?
+
+  /// The holds shown on one page.
+  func holds(on pageID: String) -> [PageHold] {
+    holdsForTarget(holds?.holds ?? [], HeldPageTarget(type: "screen", id: pageID))
+  }
+
+  func loadHolds(_ api: ConsoleAPIClient, hostID: String) async {
+    holds = try? await fetchPageHolds(api: api, hostID: hostID)
+  }
+
+  /// Who is in each page right now (AGL-2486), read every 30 seconds while the list is on screen.
+  var presence = PresenceSummary()
+
+  func pollPresence(_ api: ConsoleAPIClient, hostID: String) async {
+    while !Task.isCancelled {
+      presence = await fetchPresenceSummary(api: api, hostID: hostID)
+      try? await Task.sleep(nanoseconds: presenceSummaryPollSeconds * 1_000_000_000)
+    }
+  }
 
   /// Every page read so far.
   var pages: [PageNode] { tree.map { Array($0.nodes.values) } ?? [] }
@@ -58,7 +80,8 @@ final class SitePagesModel {
   /// After a change: the pages it touched read again and placed where they now belong.
   func reread(_ ids: [String?]) async {
     guard let tree, let reader else { return }
-    await tree.reread(ids.compactMap { $0 }) { path in try await reader.readOnce(path) }
+    // The server's copy: a route has just changed these pages, and a listener's first answer is the cache's old one.
+    await tree.reread(ids.compactMap { $0 }) { path in try await reader.readFromServer(path) }
   }
 
   /// A page a link names: read if it is not yet, and its parents opened so its row is on screen.
@@ -131,6 +154,7 @@ struct PagesScreen: View {
   @State private var linkedPage: String?
   @State private var linkSeeded = false
   @State private var sheet: PageSheet?
+  @State private var quota = PagesQuotaModel()
   @Environment(\.aglynPhoneAreaHead) private var phoneHead
   @Environment(\.aglynWideChrome) private var wide
 
@@ -165,9 +189,12 @@ struct PagesScreen: View {
         }
         .task(id: hostID) {
           if startNew && canEdit { sheet = .newPage }
+          async let holds: Void = model.loadHolds(context.api, hostID: hostID)
           await model.bind(context.firestore, hostID: hostID)
           if let initialPageID { await model.reveal(initialPageID) }
+          _ = await holds
         }
+        .task(id: "presence:\(hostID)") { await model.pollPresence(context.api, hostID: hostID) }
         .aglynSearchable(text: $model.search, prompt: "Search pages")
         .task(id: model.search) {
           // A search finds any page: the windows still unread are read, only while searching.
@@ -241,73 +268,87 @@ struct PagesScreen: View {
         SlotWidgets(context: context, slot: ListCreateZone.pages)
       }
     case .ready(let rows):
-      Group {
-        if selectable {
-          List {
-            ForEach(rows) { row in
-              PageListRow(row: row, expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
-                Task { await model.toggle(row.id) }
-              })
-              .aglynSelectableRow(row.id, selection: $selection)
-              .accessibilityIdentifier("page-\(row.id)")
-            }
-            moreRow
+      VStack(spacing: 0) {
+        // The plan readout (AGL-2113): the count the create route refuses at, asked again as the list changes.
+        AglynQuotaReadout(ready: quota.ready, used: quota.count ?? rows.count, limit: quota.limit, noun: "page")
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .aglynContentEdges()
+          .padding(.vertical, AglynSpace.half)
+          .accessibilityIdentifier("page-quota")
+          .task(id: rows.map(\.id).joined(separator: ",")) { await quota.load(api: context.api, hostID: hostID) }
+        pagesList(rows, hostID: hostID, api: api, selectable: selectable)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func pagesList(_ rows: [PageTreeRow], hostID: String, api: PagesAPI, selectable: Bool) -> some View {
+    Group {
+      if selectable {
+        List {
+          ForEach(rows) { row in
+            PageListRow(row: row, holds: model.holds(on: row.id), people: model.presence.people("screen", row.id), expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
+              Task { await model.toggle(row.id) }
+            })
+            .aglynSelectableRow(row.id, selection: $selection)
+            .accessibilityIdentifier("page-\(row.id)")
           }
-          .aglynSelectableListStyle()
-          .aglynSelectionKeys(rows.map(\.id), selection: $selection)
-          .onChange(of: rows, initial: true) { _, rows in
-            // The page a link named wins once it is listed, even when the first rows (from the cache) came without
-            // it, as a page a job has just drafted can.
-            if !linkSeeded, let initialPageID, rows.contains(where: { $0.id == initialPageID }) {
-              linkSeeded = true
-              selection = initialPageID
-            } else if selection == nil || !rows.contains(where: { $0.id == selection }) {
-              selection = rows.first { !$0.page.isGroup }?.id
-            }
+          moreRow
+        }
+        .aglynSelectableListStyle()
+        .aglynSelectionKeys(rows.map(\.id), selection: $selection)
+        .onChange(of: rows, initial: true) { _, rows in
+          // The page a link named wins once it is listed, even when the first rows (from the cache) came without
+          // it, as a page a job has just drafted can.
+          if !linkSeeded, let initialPageID, rows.contains(where: { $0.id == initialPageID }) {
+            linkSeeded = true
+            selection = initialPageID
+          } else if selection == nil || !rows.contains(where: { $0.id == selection }) {
+            selection = rows.first { !$0.page.isGroup }?.id
           }
-          .sensoryFeedback(.selection, trigger: selection)
-        } else {
-          List {
-            ForEach(rows) { row in
-              AglynPushLink {
-                PageDetail(
-                  context: context, hostID: hostID, pageID: row.id, model: model, api: api, runner: runner,
-                  canEdit: canEdit, canPublish: canPublish, pushed: true
-                )
-                .navigationTitle(row.page.name)
-                .aglynScreenTitle(row.page.name)
-              } label: {
-                PageListRow(row: row, expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
-                  Task { await model.toggle(row.id) }
-                })
-              }
-              .aglynListRow()
-              .accessibilityIdentifier("page-\(row.id)")
-            }
-            moreRow
-          }
-          // A link to one page (a notification, a job's draft) opens it, as the wide layout selects it.
-          .aglynPushDestination(item: $linkedPage) { id in
-            if let row = rows.first(where: { $0.id == id }) {
+        }
+        .sensoryFeedback(.selection, trigger: selection)
+      } else {
+        List {
+          ForEach(rows) { row in
+            AglynPushLink {
               PageDetail(
-                context: context, hostID: hostID, pageID: id, model: model, api: api, runner: runner,
+                context: context, hostID: hostID, pageID: row.id, model: model, api: api, runner: runner,
                 canEdit: canEdit, canPublish: canPublish, pushed: true
               )
               .navigationTitle(row.page.name)
               .aglynScreenTitle(row.page.name)
+            } label: {
+              PageListRow(row: row, holds: model.holds(on: row.id), people: model.presence.people("screen", row.id), expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
+                Task { await model.toggle(row.id) }
+              })
             }
+            .aglynListRow()
+            .accessibilityIdentifier("page-\(row.id)")
           }
-          .onChange(of: rows, initial: true) { _, rows in
-            guard !linkSeeded, let initialPageID, rows.contains(where: { $0.id == initialPageID }) else { return }
-            linkSeeded = true
-            linkedPage = initialPageID
-          }
-          // The pushed list's look; the selectable one keeps its own (its rows already sit on the content edges).
-          .aglynListBackground()
+          moreRow
         }
+        // A link to one page (a notification, a job's draft) opens it, as the wide layout selects it.
+        .aglynPushDestination(item: $linkedPage) { id in
+          if let row = rows.first(where: { $0.id == id }) {
+            PageDetail(
+              context: context, hostID: hostID, pageID: id, model: model, api: api, runner: runner,
+              canEdit: canEdit, canPublish: canPublish, pushed: true
+            )
+            .navigationTitle(row.page.name)
+            .aglynScreenTitle(row.page.name)
+          }
+        }
+        .onChange(of: rows, initial: true) { _, rows in
+          guard !linkSeeded, let initialPageID, rows.contains(where: { $0.id == initialPageID }) else { return }
+          linkSeeded = true
+          linkedPage = initialPageID
+        }
+        // The pushed list's look; the selectable one keeps its own (its rows already sit on the content edges).
+        .aglynListBackground()
       }
-      .accessibilityIdentifier("pages-list")
     }
+    .accessibilityIdentifier("pages-list")
   }
 
   private var searching: Bool { !model.search.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -324,6 +365,10 @@ struct PagesScreen: View {
 
 struct PageListRow: View {
   let row: PageTreeRow
+  /// Held or flagged by the page review (AGL-3374): a chip per status beside the page's own.
+  var holds: [PageHold] = []
+  /// Who is in this page right now, across its versions (AGL-2486): their faces beside its chips.
+  var people: [PresentPerson] = []
   var expanded = false
   var onToggle: (() -> Void)?
 
@@ -362,9 +407,18 @@ struct PageListRow: View {
         row.page.name, subtitle: subtitle,
         systemImage: row.page.isGroup ? SiteSymbols.group : row.home ? SiteSymbols.home : SiteSymbols.page
       ) {
-        HStack(spacing: AglynSpace.half) {
-          if row.home { StatusChip("Home", tone: .info) }
-          if !row.page.isGroup { StatusChip(status.label, tone: status.live ? .success : .neutral) }
+        // A hold's chip goes above the page's own, each at its own width: beside them on a phone it squeezed the chips
+        // to a letter a line.
+        VStack(alignment: .trailing, spacing: AglynSpace.half) {
+          if !holds.isEmpty {
+            HStack(spacing: AglynSpace.half) { PageHoldChips(holds: holds) }.fixedSize()
+          }
+          HStack(spacing: AglynSpace.half) {
+            DocumentPresenceChips(people: people)
+            if row.home { StatusChip("Home", tone: .info) }
+            if !row.page.isGroup { StatusChip(status.label, tone: status.live ? .success : .neutral) }
+          }
+          .fixedSize()
         }
       }
     }
@@ -450,6 +504,19 @@ struct PageDetail: View {
     }
   }
 
+  /// Every sibling is read first, so the place counted is the level's whole order, then the move route rewrites it.
+  private func reorder(_ page: PageNode, up: Bool) {
+    runner.run(up ? "Moved up." : "Moved down.") {
+      await model.loadAll()
+      guard let tree = model.tree, let place = pageSiblingPlace(page.id, in: tree.nodes),
+        let index = up ? place.upIndex : place.downIndex
+      else { return }
+      try await api.move(page.id, parentID: place.parentID, index: index)
+      let level = tree.nodes.values.filter { pageSiblingPlace($0.id, in: tree.nodes)?.parentID == place.parentID }.map(\.id)
+      await model.reread(level)
+    }
+  }
+
   private var confirmTitle: String {
     switch confirm {
     case .unpublish(let page)?: "Unpublish \(page.name)?"
@@ -497,7 +564,8 @@ struct PageDetail: View {
     if !page.isGroup {
       if primary?.id != edit.id { more.append(edit) }
       if primary?.id != publish.id { more.append(publish) }
-      if let live = row.livePath, let link = livePageURL(model.routing, livePath: live), let url = URL(string: link) {
+      if let live = row.livePath, let link = livePageURL(model.routing, livePath: live, consoleOrigin: context.api.origin),
+        let url = URL(string: link) {
         more.append(AglynRecordAction("page-open-live", "Open live page", systemImage: "arrow.up.right.square") { openURL(url) })
       }
     }
@@ -515,6 +583,16 @@ struct PageDetail: View {
           open(.saveTemplate(page))
         })
       more.append(AglynRecordAction("page-move", "Move", systemImage: "folder", enabled: canPublish) { open(.move(page)) })
+      // Order within its level (the console's drag to reorder, AGL-2501): one place up or down among its siblings.
+      let place = model.tree.flatMap { pageSiblingPlace(page.id, in: $0.nodes) }
+      more.append(
+        AglynRecordAction("page-move-up", "Move up", systemImage: "arrow.up", enabled: canPublish && place?.upIndex != nil) {
+          reorder(page, up: true)
+        })
+      more.append(
+        AglynRecordAction("page-move-down", "Move down", systemImage: "arrow.down", enabled: canPublish && place?.downIndex != nil) {
+          reorder(page, up: false)
+        })
       if row.livePath != nil {
         more.append(
           AglynRecordAction("page-unpublish", "Unpublish", systemImage: "eye.slash", enabled: canPublish) {
@@ -541,6 +619,21 @@ struct PageDetail: View {
         if let description = page.description {
           Text(description).font(AglynFont.subheadline).foregroundStyle(.secondary)
         }
+        // Who is in it right now, in the Besigner (AGL-2486): faces and the console's hedged sentence.
+        let people = model.presence.people("screen", page.id)
+        if !people.isEmpty {
+          HStack(spacing: AglynSpace.one) {
+            DocumentPresenceChips(people: people, size: 24)
+            Text(presenceChipSentence(people.map(\.displayName))).font(AglynFont.caption).foregroundStyle(.secondary)
+          }
+        }
+      }
+      // Held, flagged or not approved by the page review (AGL-3374): what happened, what visitors see, what to do.
+      if !model.holds(on: page.id).isEmpty {
+        Section {
+          PageHoldBanner(context: context, answer: model.holds, target: HeldPageTarget(type: "screen", id: page.id))
+        }
+        .aglynBareFormRow()
       }
       if !page.isGroup {
         Section("Details") {
@@ -552,6 +645,8 @@ struct PageDetail: View {
         }
         PageVersionsSection(
           context: context, hostID: hostID, page: page, model: model, api: api, runner: runner, canPublish: canPublish)
+        // What breaks if this page goes (AGL-703), on demand: the scan reads every page, layout and component.
+        PageUsedBySection(context: context, hostID: hostID, pageID: page.id)
         // What the page is doing, then who touched it (the console's page view, AGL-4011): its traffic above its activity.
         Section {
           PageTrafficCard(reader: context.firestore, api: context.api, hostID: hostID, screenID: page.id) {
@@ -563,6 +658,8 @@ struct PageDetail: View {
           SiteActivityCard(reader: context.firestore, api: context.api, hostID: hostID, targetID: page.id, title: "Page Activity")
         }
         .aglynBareFormRow()
+        // The stored document (the console's Raw JSON card), read only once it is opened.
+        PageRawJSONSection(reader: context.firestore, path: ["hosts", hostID, "screens", page.id])
       }
     }
     .formStyle(.aglynGrouped)
@@ -657,7 +754,12 @@ struct PageSheetRouter: View {
   var body: some View {
     switch sheet {
     case .fromTemplate:
-      TemplateGallerySheet(context: context, hostID: hostID, kind: "page", onChoose: { open(.useTemplate($0)) }, close: close)
+      TemplateGallerySheet(
+        context: context, hostID: hostID, kind: "page", onChoose: { open(.useTemplate($0)) }, close: close,
+        onInstalled: { message in
+          close()
+          runner.notice = message
+        })
     case .useTemplate(let row):
       UseTemplateSheet(context: context, hostID: hostID, row: row, onDone: { _, id in
         close()

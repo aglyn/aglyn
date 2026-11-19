@@ -231,9 +231,16 @@ final class CommerceRegistrationTests: XCTestCase {
       ("/acme/hosts/shop/products/returns", .screen("commerce.returns", site), #line),
       // The Products hub's Reservations section is the native Reservations screen (AGL-4059).
       ("/acme/hosts/shop/products/reservations", .screen("commerce.reservations", site), #line),
-      ("/acme/hosts/shop/products/shipping", .screen("commerce.shipping", site), #line),
-      ("/acme/hosts/shop/products/notifications", .screen("commerce.notifications", site), #line),
-      ("/acme/hosts/shop/products/subscriptions?subscription=s1", .unavailable("/acme/hosts/shop/products/subscriptions?subscription=s1"), #line),
+      ("/acme/hosts/shop/products/shipping", .screen("commerce.settingsShipping", site), #line),
+      ("/acme/hosts/shop/products/notifications", .screen("commerce.settingsNotifications", site), #line),
+      ("/acme/hosts/shop/products/payments", .screen("commerce.settingsPayments", site), #line),
+      ("/acme/hosts/shop/products/checkout", .screen("commerce.settingsCheckout", site), #line),
+      ("/acme/hosts/shop/products/taxes", .screen("commerce.settingsTaxes", site), #line),
+      ("/acme/hosts/shop/products/channels", .screen("commerce.settingsChannels", site), #line),
+      ("/acme/hosts/shop/products/integrations", .screen("commerce.settings", site), #line),
+      // Subscriptions and one subscription, the renewal notification's link (AGL-4191).
+      ("/acme/hosts/shop/products/subscriptions", .screen("commerce.subscriptions", site), #line),
+      ("/acme/hosts/shop/products/subscriptions?subscription=s1", .screen("commerce.subscription", with(["subscription": "s1", "subscriptionId": "s1"])), #line),
       ("/acme/hosts/shop/products/pos", .unavailable("/acme/hosts/shop/products/pos"), #line),
     ]
     for (link, expected, line) in cases { XCTAssertEqual(registry.resolve(link), expected, link, line: line) }
