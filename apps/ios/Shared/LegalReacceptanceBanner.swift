@@ -35,7 +35,9 @@ struct LegalReacceptanceBanner: View {
             .accessibilityIdentifier("legal-reaccept")
         }
         .padding(AglynSpace.oneAndHalf)
+        // The info tint on the page's own ground, so nothing behind the banner shows through it.
         .background(AglynColor.info.opacity(0.1))
+        .background(AglynColor.paper)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("legal-reacceptance")
       }
