@@ -246,6 +246,18 @@ describe('PATCH /v1/sites/{siteId}/pages/{pageId}/seo (AGL-4235)', () => {
     expect(dropCache).toHaveBeenCalledWith(expect.objectContaining({ hostIds: [SITE], paths: { [SITE]: ['/company/about'] } }))
   })
 
+  it('answers with when it was changed as an ISO string, not an empty object', async () => {
+    const before = Date.now()
+    const response = await call(context(), 'pages/about/seo', 'PATCH', { description: 'Who we are' })
+    const after = Date.now()
+    expect(response.status).toBe(200)
+    const { updated } = await response.json()
+    expect(typeof updated).toBe('string')
+    expect(new Date(updated).toISOString()).toBe(updated)
+    expect(Date.parse(updated)).toBeGreaterThanOrEqual(before)
+    expect(Date.parse(updated)).toBeLessThanOrEqual(after)
+  })
+
   it('owes no announce for a page with no public address', async () => {
     expect((await call(context(), 'pages/draft/seo', 'PATCH', { title: 'Draft' })).status).toBe(200)
     expect(double.outbox()).toEqual([])
