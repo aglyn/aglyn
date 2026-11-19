@@ -40,6 +40,7 @@ import {
  */
 export const PRODUCTS_API_V1_DESCRIPTION: ApiV1ResourceDescription = {
   tag: 'Products',
+  docsPage: 'products',
   description: 'A site’s catalog. Read-only over the API.',
   schemaName: 'Product',
   required: ['id', 'object', 'name'],
@@ -61,13 +62,14 @@ export const PRODUCTS_API_V1_DESCRIPTION: ApiV1ResourceDescription = {
     ...STAMPS,
   },
   ops: [
-    { path: '/v1/sites/{siteId}/products', method: 'get', operationId: 'listProducts', summary: 'List products', list: true, returns: 'Product', description: 'Rows deleted since they were written are dropped after the read, so pages can come back short.', pathParams: [SITE_ID_PATH_PARAM] },
-    { path: '/v1/sites/{siteId}/products/{productId}', method: 'get', operationId: 'getProduct', summary: 'Retrieve a product', returns: 'Product', pathParams: [SITE_ID_PATH_PARAM, { name: 'productId', description: 'Product id.' }] },
+    { path: '/v1/sites/{siteId}/products', method: 'get', operationId: 'listProducts', summary: 'List a site’s products', list: true, returns: 'Product', description: 'Lists the products in one site’s store, with prices, stock and variants. Needs `siteId` from List sites. Read only: products are edited in the console.', pathParams: [SITE_ID_PATH_PARAM] },
+    { path: '/v1/sites/{siteId}/products/{productId}', method: 'get', operationId: 'getProduct', summary: 'Get a product', description: 'Returns one product with its variants. Needs `siteId` from List sites and `productId` from List a site’s products.', returns: 'Product', pathParams: [SITE_ID_PATH_PARAM, { name: 'productId', description: 'Product id.' }] },
   ],
 }
 
 export const ORDERS_API_V1_DESCRIPTION: ApiV1ResourceDescription = {
   tag: 'Orders',
+  docsPage: 'orders',
   description: 'A site’s orders. Status moves are constrained.',
   schemaName: 'Order',
   required: ['id', 'object', 'number', 'status'],
@@ -110,8 +112,9 @@ export const ORDERS_API_V1_DESCRIPTION: ApiV1ResourceDescription = {
     created: STAMPS.created,
   },
   ops: [
-    { path: '/v1/sites/{siteId}/orders', method: 'get', operationId: 'listOrders', summary: 'List orders', list: true, returns: 'Order', filters: [q('channel', '`online` is a default rather than a stored value, so filtering on it drops older orders after the read.'), q('status', 'Order status.')], pathParams: [SITE_ID_PATH_PARAM] },
-    { path: '/v1/sites/{siteId}/orders/{orderId}', method: 'get', operationId: 'getOrder', summary: 'Retrieve an order', returns: 'Order', pathParams: [SITE_ID_PATH_PARAM, { name: 'orderId', description: 'Order id.' }] },
-    { path: '/v1/sites/{siteId}/orders/{orderId}', method: 'patch', operationId: 'updateOrder', summary: 'Move an order’s status', accepts: 'OrderWrite', returns: 'Order', description: 'An illegal transition is `409 conflict` (`code: "order_transition"`), and the message names the status it is in.', pathParams: [SITE_ID_PATH_PARAM, { name: 'orderId', description: 'Order id.' }] },
+    { path: '/v1/sites/{siteId}/orders', method: 'get', operationId: 'listOrders', summary: 'List a site’s orders', description: 'Lists the orders placed in one site’s store, with status, items, totals and shipments. Needs `siteId` from List sites. Filter by status or channel.', list: true, returns: 'Order', filters: [q('channel', 'Orders from one sales channel, such as `online`.'), q('status', 'Order status.')], pathParams: [SITE_ID_PATH_PARAM] },
+    { path: '/v1/sites/{siteId}/orders/{orderId}', method: 'get', operationId: 'getOrder', summary: 'Get an order', description: 'Returns one order with its items, totals and shipments. Needs `siteId` from List sites and `orderId` from List a site’s orders.', returns: 'Order', pathParams: [SITE_ID_PATH_PARAM, { name: 'orderId', description: 'Order id.' }] },
+    // openWorld: it emails the buyer about the shipment unless `notify` is false.
+    { path: '/v1/sites/{siteId}/orders/{orderId}', method: 'patch', operationId: 'updateOrder', summary: 'Mark an order shipped or delivered', accepts: 'OrderWrite', returns: 'Order', description: 'Records a shipment: sets `status` to `fulfilled` (shipped) or `delivered`, with optional carrier, tracking number and the items shipped. The buyer is emailed about it unless `notify` is false. An order cannot be cancelled or refunded here; that is done in the console. Needs `siteId` and `orderId`. Returns the order.', pathParams: [SITE_ID_PATH_PARAM, { name: 'orderId', description: 'Order id.' }], openWorld: true },
   ],
 }

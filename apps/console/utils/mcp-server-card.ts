@@ -21,15 +21,12 @@ import {
   mcpServerCardName,
 } from '@aglyn/aglyn/app-utils/connector-discovery'
 import { CUSTOMER_API_VERSION } from './api-v1-openapi'
-import { MCP_SERVER_TITLE, MCP_SUPPORTED_PROTOCOL_VERSIONS } from './mcp-protocol'
-
-/**
- * The card's one-line description. The card schema caps it at 100
- * characters, so it says what the server is and leaves how to sign in to the
- * discovery documents and the docs.
- */
-const DESCRIPTION =
-  'Your workspace data as tools: datasets, contacts, CRM, sites, forms, orders, products, media.'
+import { PLATFORM_HOME_URL } from '@aglyn/aglyn/app-utils/platform-brand'
+import {
+  MCP_SERVER_DESCRIPTION,
+  MCP_SERVER_TITLE,
+  MCP_SUPPORTED_PROTOCOL_VERSIONS,
+} from './mcp-protocol'
 
 /**
  * The MCP Server Card for the endpoint on `origin` (SEP-2127, Final).
@@ -63,8 +60,10 @@ export function buildMcpServerCard(options: {
     name: mcpServerCardName(options.origin),
     version: CUSTOMER_API_VERSION,
     title: MCP_SERVER_TITLE,
-    description: DESCRIPTION,
-    websiteUrl: options.documentationUrl,
+    description: MCP_SERVER_DESCRIPTION,
+    // The product's home, as the MCP Registry entry lists it; a self-hosted
+    // install with no home URL of its own points at its docs instead.
+    websiteUrl: PLATFORM_HOME_URL ?? options.documentationUrl,
     remotes: [
       {
         type: 'streamable-http',

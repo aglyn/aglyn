@@ -338,7 +338,7 @@
           "type": "system.bandwidthCapEngaged",
           "label": "Monthly traffic limit reached",
           "consoleDefault": true,
-          "emailDefault": false,
+          "emailDefault": true,
           "level": "critical"
         },
         {

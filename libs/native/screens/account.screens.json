@@ -449,6 +449,10 @@
       ],
       "load": {
         "devices": "/api/account/devices",
+        "records": {
+          "url": "/api/auth/staff-self-check",
+          "when": "params.records"
+        },
         "passkeys": {
           "query": {
             "collection": "users/{user.uid}/passkeys",
@@ -565,6 +569,44 @@
           "tone": "info",
           "when": "!user.canAddPasskey",
           "text": "This app cannot set up a passkey on this device. Add one from a browser that supports them."
+        },
+        {
+          "type": "actions",
+          "title": "Sign-in records",
+          "footer": "One email address can exist as more than one sign-in — a password account and a single sign-on account, for example. If a sign-in works but the account looks wrong, this shows which records exist for your address and which one you are using now.",
+          "items": [
+            {
+              "id": "records",
+              "label": "Check my sign-in records",
+              "icon": "person.text.rectangle|badge",
+              "navigate": {
+                "screen": "core.account.security",
+                "params": { "records": "1" }
+              }
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Your sign-in records",
+          "when": "data.records",
+          "items": "data.records.identities",
+          "primary": [
+            { "text": "Single sign-on (your organization)", "when": "item.tenantId" },
+            { "text": "Email and password", "when": "!item.tenantId" }
+          ],
+          "icon": "person.badge.key|key",
+          "badges": [
+            { "text": "Signed in now", "when": "item.current", "tone": "info" },
+            { "text": "{app.brand} staff · {item.staffRole}", "when": "item.staff", "tone": "neutral" }
+          ],
+          "empty": "Only the record you are signed in as."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.records.hint",
+          "text": "{data.records.hint}"
         },
         {
           "type": "list",
