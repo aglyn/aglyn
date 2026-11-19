@@ -45,7 +45,7 @@ import {
   SWIFT_CONTRACTS_FILE,
   swiftContractsContent,
 } from './lib/native-contracts.mjs'
-import { pluginSettingsSpec } from './lib/native-plugin-settings.mjs'
+import { checkCases, pluginSettingsSpec } from './lib/native-plugin-settings.mjs'
 import { billingEstimateCases, overageCaptionCases } from './lib/native-billing-estimate.mjs'
 import { transferResourcesSpec } from './lib/native-transfer-resources.mjs'
 import {
@@ -64,6 +64,7 @@ const PLANNER = 'libs/shared/util/tools/src/lib/list-query/list-query-plan.ts'
 const FILTER = 'libs/shared/util/tools/src/lib/list-query/list-filter.ts'
 const NAME_SEARCH = 'libs/aglyn/src/lib/app-utils/name-search.ts'
 const PLUGIN_SETTINGS_FILE = 'libs/native/screens/plugin-settings.screens.json'
+const PLUGIN_SETTINGS_CHECK_CASES_FILE = 'libs/native/contracts/plugin-settings-check-cases.generated.json'
 const TRANSFER_RESOURCES_FILE = 'libs/native/screens/transfer-resources.screens.json'
 const PLAN_ENTITLEMENTS = 'libs/aglyn/src/lib/app-utils/plan-entitlements.ts'
 const USAGE_METERING = 'apps/console/utils/usage-metering.ts'
@@ -74,14 +75,49 @@ const PLUGIN_SETTINGS = [
   { module: 'libs/plugins/commerce/src/lib/plugin-config.ts', name: 'COMMERCE_CONFIG_SCHEMA', label: 'Commerce' },
   { module: 'libs/plugins/bookings/src/lib/plugin-config.ts', name: 'BOOKINGS_CONFIG_SCHEMA', label: 'Bookings' },
   { module: 'libs/plugins/waivers/src/lib/constants/settings.ts', name: 'WAIVERS_CONFIG_SCHEMA', label: 'Waivers' },
-  // Turning Weglot on needs its API key (the console's validateWeglotConfig), refused before the save as there.
+  // Turning Weglot on is checked before the save as the console's card checks it (validateWeglotConfig): the key, the
+  // site's language and the languages to translate into. Both kits replay the console's answers to these inputs.
   {
     module: 'libs/plugins/weglot/src/lib/model/weglot-settings.ts',
     name: 'WEGLOT_CONFIG_SCHEMA',
     label: 'Weglot',
-    needs: [{ on: 'enabled', field: 'apiKey' }],
+    check: 'weglot',
+    checkInputs: weglotCheckInputs(),
   },
 ]
+
+/** Inputs that walk every rule of the console's validateWeglotConfig, in its order. */
+function weglotCheckInputs() {
+  const key = 'wg_0123456789abcdef'
+  const on = { enabled: true, apiKey: key, sourceLanguage: 'en' }
+  const many = Array.from({ length: 31 }, (_, i) => `b${String.fromCharCode(97 + (i % 26))}${i >= 26 ? '-x' + i : ''}`)
+  return [
+    { enabled: false, apiKey: '', sourceLanguage: 'en', targetLanguages: '' },
+    { enabled: 'true', apiKey: '', targetLanguages: '' },
+    { enabled: true, apiKey: '', sourceLanguage: 'en', targetLanguages: 'fr' },
+    { enabled: true, apiKey: '   ', sourceLanguage: 'en', targetLanguages: 'fr' },
+    { enabled: true, apiKey: 42, sourceLanguage: 'en', targetLanguages: 'fr' },
+    { enabled: true, apiKey: 'abc', sourceLanguage: 'en', targetLanguages: 'fr' },
+    { enabled: true, apiKey: 'wg_short', sourceLanguage: 'en', targetLanguages: 'fr' },
+    { enabled: true, apiKey: `wg_${'a'.repeat(65)}`, sourceLanguage: 'en', targetLanguages: 'fr' },
+    { enabled: true, apiKey: 'wg_0123456789abcde!', sourceLanguage: 'en', targetLanguages: 'fr' },
+    { ...on, apiKey: ` ${key} `, targetLanguages: 'fr' },
+    { ...on, sourceLanguage: '', targetLanguages: 'fr' },
+    { ...on, sourceLanguage: 'English', targetLanguages: 'fr' },
+    { ...on, sourceLanguage: null, targetLanguages: 'fr' },
+    { ...on, sourceLanguage: ' EN ', targetLanguages: '' },
+    { ...on, targetLanguages: ',, ;  ' },
+    { ...on, targetLanguages: 'fr, xx_1, english' },
+    { ...on, targetLanguages: 'fr es,de;pt-br' },
+    { ...on, targetLanguages: 'fr, FR, fr' },
+    { ...on, targetLanguages: 'en, fr' },
+    { ...on, sourceLanguage: 'pt-BR', targetLanguages: 'fr pt-br' },
+    { ...on, sourceLanguage: 'zh-hant', targetLanguages: 'zh-tw' },
+    { ...on, targetLanguages: many.slice(0, 30).join(', ') },
+    { ...on, targetLanguages: many.join(', ') },
+    { ...on, targetLanguages: 7 },
+  ]
+}
 
 // The planner bounds a day in local time; the cases are recorded in UTC and
 // say so, and each port replays them in that zone.
@@ -190,7 +226,9 @@ async function main() {
   const functions = functionCases(config.functionCases ?? {}, (module) => modules[module], plainValue, values)
 
   const settings = []
-  for (const { module, name, label, needs } of PLUGIN_SETTINGS) settings.push({ schema: (await load(module))[name], label, needs })
+  for (const { module, name, label, check, checkInputs } of PLUGIN_SETTINGS) {
+    settings.push({ schema: (await load(module))[name], label, check, checkInputs })
+  }
 
   // The plugins' transferResources, listed in the hub and on a site (AGL-3671).
   const entitlements = await load(PLAN_ENTITLEMENTS)
@@ -214,6 +252,18 @@ async function main() {
   const outputs = [
     { file: BILLING_ESTIMATE_CASES_FILE, content: `${JSON.stringify(billingEstimate, null, 2)}\n` },
     { file: PLUGIN_SETTINGS_FILE, content: pluginSettingsSpec(settings) },
+    {
+      file: PLUGIN_SETTINGS_CHECK_CASES_FILE,
+      content: `${JSON.stringify(
+        {
+          $comment:
+            "Generated by tools/scripts/generate-native-contracts.mjs from each plugin schema's validate: the console's answers, which both kits' PluginSettingsChecks replay. Do not edit.",
+          checks: checkCases(settings),
+        },
+        null,
+        2,
+      )}\n`,
+    },
     { file: TRANSFER_RESOURCES_FILE, content: `${JSON.stringify(transferResources, null, 2)}\n` },
     { file: CONTRACTS_JSON_FILE, content: contractsJsonContent(values) },
     { file: SWIFT_CONTRACTS_FILE, content: swiftContractsContent(model) },

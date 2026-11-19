@@ -1364,10 +1364,20 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
   fun current(field: FieldSpec) = values[field.key] ?: seed[field.key] ?: initialValue(field, scope)
   val filled = ScreenContext.with(scope, "form", formObject(fields) { current(it) })
   val missing = fields.any { ScreenValues.condition(it.whenCondition, filled) && it.unmet(fieldJson(it, current(it)), scope) }
-  // The form's first `refuse` entry whose condition holds over what is typed (`{ when, text }`): the console's pre-save
-  // check (a plugin's `validate`), said beside Save, which it holds back.
-  val refused = block.raw.arr("refuse").firstOrNull { ScreenValues.condition(it.str("when"), filled) }
-    ?.let { ScreenValues.render(it.str("text").orEmpty(), filled) }
+  // The form's first `refuse` entry that refuses what is typed: the console's pre-save check (a plugin's `validate`), said
+  // beside Save, which it holds back. An entry is `{ when, text }`, or `{ check, site }` naming a check both kits implement
+  // (`PluginSettingsChecks`), asked over the values the form saves (on a site, the values it will run with).
+  val refused = block.raw.arr("refuse").firstNotNullOfOrNull { entry ->
+    val check = entry.str("check")
+    if (check != null) {
+      val site = ((entry as? JsonObject)?.get("site") as? JsonPrimitive)?.booleanOrNull == true
+      PluginSettingsChecks.refusal(check, PluginSettingsChecks.values(filled, site))
+    } else if (ScreenValues.condition(entry.str("when"), filled)) {
+      ScreenValues.render(entry.str("text").orEmpty(), filled)
+    } else {
+      null
+    }
+  }
   // A load this form is seeded from is only the cache's answer yet: Save is held, with the reason beside it.
   val held = FormEdits.heldBy(block.string("object"), fields.mapNotNull { it.initial }, context.obj("checking")).isNotEmpty()
   fun save(action: ActionSpec) {

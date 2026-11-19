@@ -37,23 +37,28 @@ function helpFor(field) {
 }
 
 /**
- * The schema's pre-save refusals the apps can state (the console's `validate`), as `{ when, text }` over the form:
- * each `needs` entry is a field the schema's switch requires before it can be turned on. The words are the console's
- * own: `validate` is asked with the switch on and the field empty, and a rule it no longer refuses fails the
- * generator rather than drifting.
+ * The schema's pre-save check (the console's `validate`) as the apps replay it: a form's `refuse` entry naming a check
+ * both kits implement (`PluginSettingsChecks`), asked over the values the form will save, or on a site over the values
+ * it will RUN with (its own override where it has one, else the workspace's, else the default). The console's own
+ * answers to `checkInputs` are recorded beside the spec (`checkCases`), and both kits replay them, so a rule or a word
+ * the console changes fails the apps' tests rather than drifting.
  */
-export function refusals(schema, needs = [], { site = false } = {}) {
-  return needs.flatMap(({ on, field }) => {
-    const text = schema.validate?.({ ...schema.defaults, [on]: true, [field]: '' })
-    if (!text) throw new Error(`${schema.pluginId}: validate no longer refuses ${on} without ${field}`)
-    if (!site) return [{ when: `form.${on} && !form.${field}`, text }]
-    // On a site, the values it will RUN with: its own override where it has one, else the workspace's.
-    return [
-      { when: `form.ov_${on} && form.${on} && form.ov_${field} && !form.${field}`, text },
-      { when: `form.ov_${on} && form.${on} && !form.ov_${field} && !data.org.${field}`, text },
-      { when: `!form.ov_${on} && data.org.${on} && form.ov_${field} && !form.${field}`, text },
-    ]
-  })
+export function checkRefusal(check, { site = false } = {}) {
+  return site ? [{ check, site: true }] : [{ check }]
+}
+
+/** The console's answers to each `check`'s inputs: `{ [check]: [{ values, result }] }`. */
+export function checkCases(entries) {
+  const out = {}
+  for (const { schema, check, checkInputs = [] } of entries) {
+    if (!check) continue
+    if (!schema.validate) throw new Error(`${schema.pluginId}: names check ${check} but its schema has no validate`)
+    if (!checkInputs.length) throw new Error(`${schema.pluginId}: check ${check} has no inputs to record`)
+    const cases = checkInputs.map((values) => ({ values, result: schema.validate(values) ?? null }))
+    if (!cases.some(({ result }) => result)) throw new Error(`${schema.pluginId}: validate refuses none of its inputs`)
+    out[check] = cases
+  }
+  return out
 }
 
 /**
@@ -61,7 +66,7 @@ export function refusals(schema, needs = [], { site = false } = {}) {
  * answered ("Checking your plugin settings with the server…"); the spec file passes it, and a marketplace plugin's
  * run-time screen (`manifestSettingsScreen`) is this screen without it.
  */
-export function pluginSettingsScreen({ schema, label, checking, needs }) {
+export function pluginSettingsScreen({ schema, label, checking, check }) {
   const id = schema.pluginId
   const fields = schema.fields.map((field) => {
     const out = {
@@ -96,7 +101,7 @@ export function pluginSettingsScreen({ schema, label, checking, needs }) {
         object: 'data.settings',
         footer: 'A site can override these on its own plugin page.',
         fields,
-        ...(needs?.length ? { refuse: refusals(schema, needs) } : {}),
+        ...(check ? { refuse: checkRefusal(check) } : {}),
         submit: {
           label: 'Save settings',
           write: { doc: `orgs/{org.id}/pluginSettings/${id}`, fields: { ...written, updatedBy: '{user.uid}' } },
@@ -113,7 +118,7 @@ export function pluginSettingsScreen({ schema, label, checking, needs }) {
  * own document holds the key); a save writes the overridden fields and removes the rest, and the site's
  * pages are republished when the schema says its fields shape them.
  */
-export function sitePluginSettingsScreen({ schema, label, needs }) {
+export function sitePluginSettingsScreen({ schema, label, check }) {
   const id = schema.pluginId
   const fields = []
   const written = { updatedBy: '{user.uid}' }
@@ -160,7 +165,7 @@ export function sitePluginSettingsScreen({ schema, label, needs }) {
         id: 'settings',
         footer: 'A field you do not override follows the workspace value.',
         fields,
-        ...(needs?.length ? { refuse: refusals(schema, needs, { site: true }) } : {}),
+        ...(check ? { refuse: checkRefusal(check, { site: true }) } : {}),
         submit: {
           label: 'Save settings',
           write: { doc: `hosts/{site.id}/pluginSettings/${id}`, fields: written },

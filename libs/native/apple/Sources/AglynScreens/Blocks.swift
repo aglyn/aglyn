@@ -763,11 +763,20 @@ struct FormBlock: View {
     }
   }
 
-  /// The form's first `refuse` entry whose condition holds over what is typed (`{ when, text }`): the console's pre-save
-  /// check (a plugin's `validate`), said beside Save, which it holds back.
+  /// The form's first `refuse` entry that refuses what is typed: the console's pre-save check (a plugin's `validate`),
+  /// said beside Save, which it holds back. An entry is `{ when, text }`, or `{ check, site }` naming a check both kits
+  /// implement (`PluginSettingsChecks`), asked over the values the form saves (on a site, the values it will run with).
   private var refused: String? {
-    block["refuse"].array.first { ScreenValues.condition($0["when"]?.stringValue, in: filled) }
-      .map { ScreenValues.render($0["text"]?.stringValue ?? "", in: filled) }
+    let filled = filled
+    for entry in block["refuse"].array {
+      if let check = entry["check"]?.stringValue {
+        let values = PluginSettingsChecks.values(in: filled, site: entry["site"] == .bool(true))
+        if let text = PluginSettingsChecks.refusal(check, values) { return text }
+      } else if ScreenValues.condition(entry["when"]?.stringValue, in: filled) {
+        return ScreenValues.render(entry["text"]?.stringValue ?? "", in: filled)
+      }
+    }
+    return nil
   }
 
   /// A load this form is seeded from is only the cache's answer yet.

@@ -3614,8 +3614,7 @@
           ],
           "refuse": [
             {
-              "when": "form.enabled && !form.apiKey",
-              "text": "Add your Weglot API key before turning translation on."
+              "check": "weglot"
             }
           ],
           "submit": {
@@ -3785,16 +3784,8 @@
           ],
           "refuse": [
             {
-              "when": "form.ov_enabled && form.enabled && form.ov_apiKey && !form.apiKey",
-              "text": "Add your Weglot API key before turning translation on."
-            },
-            {
-              "when": "form.ov_enabled && form.enabled && !form.ov_apiKey && !data.org.apiKey",
-              "text": "Add your Weglot API key before turning translation on."
-            },
-            {
-              "when": "!form.ov_enabled && data.org.enabled && form.ov_apiKey && !form.apiKey",
-              "text": "Add your Weglot API key before turning translation on."
+              "check": "weglot",
+              "site": true
             }
           ],
           "submit": {
