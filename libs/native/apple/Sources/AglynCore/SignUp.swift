@@ -234,7 +234,6 @@ public struct PendingSignUpWorkspace: Equatable, Sendable {
   }
 }
 
-/// What `/api/orgs/create` answered.
 /// The workspace a first site needs (the console's `createFirstSiteWorkspace`, AGL-3761): named for the account, made
 /// before the site, so the site is created inside it once the person picks how it starts.
 public enum FirstSiteWorkspace {
@@ -261,6 +260,7 @@ public enum FirstSiteWorkspace {
   public static let failed = "Your workspace could not be set up. Try again."
 }
 
+/// What `/api/orgs/create` answered.
 public struct SignUpWorkspaceOutcome: Equatable, Sendable {
   public var slug: String?
   public var orgID: String?
