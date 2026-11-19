@@ -1688,6 +1688,7 @@
     "text": "text message",
     "whatsapp": "WhatsApp message"
   },
+  "CRM_DEFAULT_VIEWS_FIELD": "crmDefaultViews",
   "CRM_EMAIL_BODY_MAX": 10000,
   "CRM_EMAIL_SUBJECT_MAX": 200,
   "CRM_EMAIL_TEMPLATE_KIND_LABELS": {
@@ -1821,6 +1822,9 @@
     "meeting": "Meeting",
     "todo": "To-do"
   },
+  "CRM_VIEW_MAX_COLUMNS": 60,
+  "CRM_VIEW_MAX_FILTERS": 20,
+  "CRM_VIEW_NAME_MAX": 60,
   "CROSS_MAX_DEPTH": 3,
   "DATASET_AUTHORABLE_FIELD_TYPES": [
     "text",
@@ -4475,6 +4479,10 @@
     "nurturing",
     "working"
   ],
+  "NATIVE_CRM_LEAD_SOURCE_DIRECTIONS": [
+    "inbound",
+    "outbound"
+  ],
   "NATIVE_CRM_LEAD_STATUSES": [
     "new",
     "nurturing",
@@ -4735,6 +4743,15 @@
     "xpf": 0,
     "yer": 0
   },
+  "NATIVE_EMAIL_STATE_STATUSES": [
+    "ok",
+    "undeliverable",
+    "bounced",
+    "blocked",
+    "unsubscribed",
+    "complained",
+    "do_not_contact"
+  ],
   "NATIVE_NAV_MANIFEST": {
     "create": [
       {
