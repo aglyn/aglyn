@@ -2,6 +2,7 @@ package com.aglyn.screens
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.jsonObject
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -74,5 +75,38 @@ class DomainConnectSpecTest {
       assertFalse(shown("connect", ctx), status)
       assertFalse(shown("move", ctx), status)
     }
+  }
+  /** Who the name is registered to (Domains row 2): shown for an active or expired name, edited only while it is active. */
+  @Test
+  fun theRegistrantContactIsShownAndEditedForTheNextRenewal() {
+    val contact = json(
+      """{"org":{"id":"o1"},"params":{"domain":"bakery.example"},
+          "form":{"firstName":"Avery","lastName":"Lane","companyName":"","email":"owner@bakery.example","phone":"+15125550123",
+                  "address1":"1 Main St","address2":"","city":"Austin","state":"TX","zip":"78701","country":"US"},
+          "data":{"ws":{"rows":[{"domain":"bakery.example","status":"active"}]},
+                  "contact":{"contact":{"firstName":"Avery","lastName":"Lane","email":"owner@bakery.example"},
+                             "pendingSinceMs":1763337600000,"takesEffectAtMs":1792281600000,"autoRenew":true,
+                             "verification":{"verified":false,"verifyByMs":1764547200000,"email":null}}}}""",
+    )
+    val view = spec.blocks.first { it.id == "contact" }
+    assertTrue(ScreenValues.condition(view.whenCondition, contact))
+    assertTrue(ScreenValues.condition(spec.blocks.first { it.id == "contactPendingDated" }.whenCondition, contact))
+    assertFalse(ScreenValues.condition(spec.blocks.first { it.id == "contactPending" }.whenCondition, contact))
+    assertTrue(ScreenValues.condition(spec.blocks.first { it.id == "contactVerify" }.whenCondition, contact))
+    val editBlock = spec.blocks.first { it.id == "contactEdit" }
+    assertTrue(ScreenValues.condition(editBlock.whenCondition, contact))
+    val edit = editBlock.raw.arr("items").mapNotNull { ActionSpec.parse(it) }.single()
+    assertEquals(
+      listOf("firstName", "lastName", "companyName", "email", "phone", "address1", "address2", "city", "state", "zip", "country"),
+      edit.prompt.map { it.key },
+    )
+    assertEquals("/api/registrar/contact", edit.url)
+    val body = ScreenValues.resolveBody(edit.body!!, contact)
+    assertEquals(json("\"Avery\""), body.jsonObject["contact"]!!.jsonObject["firstName"])
+    assertEquals(json("\"US\""), body.jsonObject["contact"]!!.jsonObject["country"])
+    // An expired name shows its contact but cannot be edited.
+    val expired = json(contact.toString().replace("\"status\":\"active\"", "\"status\":\"expired\""))
+    assertTrue(ScreenValues.condition(view.whenCondition, expired))
+    assertFalse(ScreenValues.condition(editBlock.whenCondition, expired))
   }
 }

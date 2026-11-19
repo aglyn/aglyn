@@ -76,4 +76,37 @@ final class DomainConnectSpecTests: XCTestCase {
       XCTAssertFalse(try shown("move", in: ctx), status)
     }
   }
+
+  /// Who the name is registered to (Domains row 2): shown for an active or expired name, edited only while it is active.
+  func testTheRegistrantContactIsShownAndEditedForTheNextRenewal() throws {
+    let spec = try XCTUnwrap(ScreenCatalog.parse(Data(contentsOf: Self.domainSpecs)).first { $0.id == "domains.domain" })
+    func block(_ id: String) throws -> BlockSpec { try XCTUnwrap(spec.blocks.first { $0.id == id }) }
+    let text = """
+      {"org":{"id":"o1"},"params":{"domain":"bakery.example"},
+       "form":{"firstName":"Avery","lastName":"Lane","companyName":"","email":"owner@bakery.example","phone":"+15125550123",
+               "address1":"1 Main St","address2":"","city":"Austin","state":"TX","zip":"78701","country":"US"},
+       "data":{"ws":{"rows":[{"domain":"bakery.example","status":"active"}]},
+               "contact":{"contact":{"firstName":"Avery","lastName":"Lane","email":"owner@bakery.example"},
+                          "pendingSinceMs":1763337600000,"takesEffectAtMs":1792281600000,"autoRenew":true,
+                          "verification":{"verified":false,"verifyByMs":1764547200000,"email":null}}}}
+      """
+    let ctx = try XCTUnwrap(JSONValue.decode(Data(text.utf8)))
+    XCTAssertTrue(ScreenValues.condition(try block("contact").when, in: ctx))
+    XCTAssertTrue(ScreenValues.condition(try block("contactPendingDated").when, in: ctx))
+    XCTAssertFalse(ScreenValues.condition(try block("contactPending").when, in: ctx))
+    XCTAssertTrue(ScreenValues.condition(try block("contactVerify").when, in: ctx))
+    XCTAssertTrue(ScreenValues.condition(try block("contactEdit").when, in: ctx))
+    let edit = try XCTUnwrap(try block("contactEdit")["items"].array.compactMap(ActionSpec.init).first)
+    XCTAssertEqual(
+      edit.prompt.map(\.key),
+      ["firstName", "lastName", "companyName", "email", "phone", "address1", "address2", "city", "state", "zip", "country"])
+    XCTAssertEqual(edit.url, "/api/registrar/contact")
+    let body = ScreenValues.resolveBody(try XCTUnwrap(edit.body), in: ctx)
+    XCTAssertEqual(body["contact"]?["firstName"], "Avery")
+    XCTAssertEqual(body["contact"]?["country"], "US")
+    // An expired name shows its contact but cannot be edited.
+    let expired = try XCTUnwrap(JSONValue.decode(Data(text.replacingOccurrences(of: "\"active\"", with: "\"expired\"").utf8)))
+    XCTAssertTrue(ScreenValues.condition(try block("contact").when, in: expired))
+    XCTAssertFalse(ScreenValues.condition(try block("contactEdit").when, in: expired))
+  }
 }
