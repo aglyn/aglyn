@@ -7,13 +7,15 @@ description: List your organization's sites and read their details.
 # Sites
 
 List the sites in your organization, read their details, and
-[create](#create) new ones. A site's *content* is read-only over the API, and so are
-renaming and deleting — those stay console actions — but you can
-[publish](#publish) a site, which is what makes writes you made elsewhere in the API
-appear on the live pages.
+[create](#create) new ones. Renaming and deleting a site stay console actions, and so
+does editing what is on a page — but you can [publish](#publish) a site, which is what
+makes writes you made elsewhere in the API appear on the live pages.
 
-Their [form submissions](form-submissions.md) are a resource of their own, and that
-one is **not** read-only.
+Several things under a site are resources of their own, with their own scopes:
+[pages](pages.md) and each page's search listing, the site's
+[search listing](seo.md), its [business details](business-details.md), its
+[products](products.md) and [orders](orders.md), its
+[form submissions](form-submissions.md), and its [media](media.md).
 
 ## The site object
 
@@ -119,7 +121,9 @@ automated caller before a soft-delete exists.
 
 A site your organization doesn't own returns `404 not_found` (`"No such site"`) rather
 than `403` — the API doesn't reveal whether an id exists elsewhere. So a `404` here
-means "not yours or not real", not "your key is missing a scope".
+means "not yours or not real", not "your key is missing a scope". A
+[connected app](../conventions.md#site-access) gets the same `404` for a site its person
+is not a member of.
 
 ### Publish {#publish}
 
@@ -184,6 +188,23 @@ Publish **once at the end of a batch**, not after every record. A sync that writ
 records and publishes once is both faster and within budget; one that publishes per
 record is refused after ten and gains nothing over waiting.
 
+A connected app publishes only where its person has **Edit site content** on the site
+— see [Conventions → Sites a connected app can reach](../conventions.md#site-access).
+
+#### Writes that are live without a publish {#live-when-saved}
+
+Some writes refresh the live site themselves, because the console has no draft for
+them either: [products](products.md#live-when-saved), a site's
+[search listing](seo.md#live-when-saved), a page's
+[search listing](pages.md#live-when-saved), and
+[business details](business-details.md#live-when-saved). Each is saved at once and the
+live site refreshes right away — no publish needed, and none of them spends the
+publish budget.
+
+After **30** such changes to one site in **an hour**, later changes are still saved and
+show within a few minutes. The `X-Live-Refresh` response header says which happened:
+`now` or `scheduled`.
+
 ### Form submissions
 
 Moved to their own page: [Form submissions](form-submissions.md). They live under a
@@ -196,6 +217,8 @@ written.
 | Status | `type` | When |
 | --- | --- | --- |
 | `403` | `insufficient_scope` | Key lacks `sites:read`, or `sites:publish` on the publish path. |
+| `403` | `forbidden` | `code: "site_permission_required"` — a [connected app](../conventions.md#site-access) publishing a site its person can't edit. |
 | `404` | `not_found` | Unknown or unowned site; unknown sub-path. |
 | `405` | `method_not_allowed` | Anything other than `GET`, or anything other than `POST` on `/publish`. |
+| `423` | — | The site is [locked](../conventions.md#site-access): every call on it while the lock lasts, or only writes under a read-only lock. |
 | `429` | `rate_limited` | The site's [publish budget](#publish-limit) is spent. Carries `Retry-After`. |
