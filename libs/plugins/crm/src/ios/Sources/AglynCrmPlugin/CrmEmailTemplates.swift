@@ -275,9 +275,47 @@ struct CrmTemplatesSection: View {
         }
         .accessibilityIdentifier("crm-template-\(template.id)")
       }
-      Button("New template", systemImage: "plus") { creating = true }
-        .disabled(atCap)
-        .accessibilityIdentifier("crm-template-new")
+      Group {
+        Button("New template", systemImage: "plus") { creating = true }
+          .disabled(atCap)
+          .accessibilityIdentifier("crm-template-new")
+      }
+        // The section's presentations hang off this one row (outside its at-cap switch, which a sheet would inherit): a
+        // modifier on a Section reaches every row in it, and one presenter per template row left a sheet that would not
+        // close and a New template that would not open.
+        .sheet(isPresented: $creating) {
+          CrmTemplateSheet(editing: nil) { name, kind, visibility, subject, body in
+            try await api.createTemplate(name: name, kind: kind, visibility: visibility, subject: subject, body: body)
+          }
+        }
+        .sheet(item: $duplicating) { template in
+          CrmDuplicateTemplateSheet(template: template) { name, attemptKey in
+            let copy = try await api.duplicateTemplate(template.id, name: name, attemptKey: attemptKey)
+            notice = "Duplicated as “\(copy)”"
+          }
+        }
+        .sheet(item: $editing) { template in
+          CrmTemplateSheet(editing: template) { name, kind, visibility, subject, body in
+            try await api.updateTemplate(template.id, name: name, kind: kind, visibility: visibility, subject: subject, body: body)
+          }
+        }
+        .alert(
+          deleting.map { "Delete \"\($0.name)\"?" } ?? "", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+          presenting: deleting
+        ) { template in
+          Button("Cancel", role: .cancel) { deleting = nil }
+          Button("Delete", role: .destructive) {
+            deleting = nil
+            Task {
+              do { try await api.deleteTemplate(template.id) } catch { self.error = problemText(error) }
+            }
+          }
+        } message: { template in
+          Text(
+            template.kind == "snippet"
+              ? "The snippet is removed for everyone it is listed for. Emails already sent are not changed."
+              : "The template is removed for everyone it is listed for. Emails already sent are not changed.")
+        }
     } header: {
       Text("Email templates")
     } footer: {
@@ -288,39 +326,6 @@ struct CrmTemplatesSection: View {
     }
     .task(id: scope.orgID + scope.hostID) { model.start(context.firestore, scope) }
     .onDisappear { model.stop() }
-    .sheet(isPresented: $creating) {
-      CrmTemplateSheet(editing: nil) { name, kind, visibility, subject, body in
-        try await api.createTemplate(name: name, kind: kind, visibility: visibility, subject: subject, body: body)
-      }
-    }
-    .sheet(item: $duplicating) { template in
-      CrmDuplicateTemplateSheet(template: template) { name, attemptKey in
-        let copy = try await api.duplicateTemplate(template.id, name: name, attemptKey: attemptKey)
-        notice = "Duplicated as “\(copy)”"
-      }
-    }
-    .sheet(item: $editing) { template in
-      CrmTemplateSheet(editing: template) { name, kind, visibility, subject, body in
-        try await api.updateTemplate(template.id, name: name, kind: kind, visibility: visibility, subject: subject, body: body)
-      }
-    }
-    .alert(
-      deleting.map { "Delete \"\($0.name)\"?" } ?? "", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
-      presenting: deleting
-    ) { template in
-      Button("Cancel", role: .cancel) { deleting = nil }
-      Button("Delete", role: .destructive) {
-        deleting = nil
-        Task {
-          do { try await api.deleteTemplate(template.id) } catch { self.error = problemText(error) }
-        }
-      }
-    } message: { template in
-      Text(
-        template.kind == "snippet"
-          ? "The snippet is removed for everyone it is listed for. Emails already sent are not changed."
-          : "The template is removed for everyone it is listed for. Emails already sent are not changed.")
-    }
   }
 }
 
