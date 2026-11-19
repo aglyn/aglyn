@@ -14,7 +14,7 @@ class AiNativeTest {
     "widgets" to listOf(
       "ai.seo-audit", "ai.seo-start", "ai.site-memory",
       "ai.create-page", "ai.create-template", "ai.create-layout", "ai.create-form", "ai.create-component",
-      "ai.needs-you", "ai.assist-panel", "ai.insight-ask", "ai.org-insight-ask",
+      "ai.needs-you", "ai.assist-panel", "ai.insight-ask", "ai.org-insight-ask", "ai.explain-funnel",
     ),
     "quickActions" to listOf("ai.open"),
     "deepLinks" to listOf("ai.jobs.link", "ai.job.link", "ai.signals.link"),
@@ -31,6 +31,12 @@ class AiNativeTest {
     // "Ask AI about these numbers" is Home's and Analytics' glance on a site, and the workspace Home's card.
     assertEquals(listOf("ai.insight-ask"), registry.widgets().map { it.id })
     assertEquals(listOf("ai.org-insight-ask"), registry.widgets(slot = "orgDashboard").map { it.id })
+    // "Ask AI about this funnel" is under a saved funnel's results, the funnels plugin's `funnelInsight` zone (AGL-3605).
+    assertEquals(listOf("ai.explain-funnel"), registry.widgets(slot = com.aglyn.pluginhost.FUNNEL_INSIGHT_ZONE).map { it.id })
+    assertEquals(
+      "In my funnel \"Pricing to contact\" over the last 30 days, where do visitors drop off most, and what might explain it?",
+      aiFunnelQuestion("Pricing to contact", 30),
+    )
     // Create with AI is in each list's create zone, under the console's zone names.
     assertEquals(listOf("ai.create-page"), registry.widgets(slot = "hostScreens").map { it.id })
     assertEquals(listOf("ai.create-template"), registry.widgets(slot = "hostTemplates").map { it.id })

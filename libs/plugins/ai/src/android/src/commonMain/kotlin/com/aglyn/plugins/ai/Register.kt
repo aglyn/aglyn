@@ -42,6 +42,10 @@ fun registerAINative(registrar: NativePluginRegistrar) {
   registrar.widget("ai.org-insight-ask", title = "Ask AI about these numbers", order = 900, size = WidgetSize.HALF, slot = "orgDashboard") { context ->
     AiInsightTile(context, AiInsightSurface.WORKSPACE)
   }
+  // "Ask AI about this funnel" (the console's `funnelInsight` widget): under a saved funnel's results, the funnels plugin's zone.
+  registrar.widget("ai.explain-funnel", title = AI_FUNNEL_ASK, order = 10, requiresSite = true, slot = com.aglyn.pluginhost.FUNNEL_INSIGHT_ZONE) { context ->
+    AiFunnelAskButton(context)
+  }
   AiCreateKind.entries.forEach { kind ->
     registrar.widget(kind.widgetId, title = "Create with AI", order = 10, requiresSite = true, slot = kind.slot) { context ->
       AiCreateButton(context, kind)
