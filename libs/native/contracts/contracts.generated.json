@@ -1688,6 +1688,7 @@
     "text": "text message",
     "whatsapp": "WhatsApp message"
   },
+  "CRM_DEFAULT_VIEWS_FIELD": "crmDefaultViews",
   "CRM_EMAIL_BODY_MAX": 10000,
   "CRM_EMAIL_SUBJECT_MAX": 200,
   "CRM_EMAIL_TEMPLATE_KIND_LABELS": {
@@ -1821,6 +1822,9 @@
     "meeting": "Meeting",
     "todo": "To-do"
   },
+  "CRM_VIEW_MAX_COLUMNS": 60,
+  "CRM_VIEW_MAX_FILTERS": 20,
+  "CRM_VIEW_NAME_MAX": 60,
   "CROSS_MAX_DEPTH": 3,
   "DASHBOARD_WIDGETS_FIELD": "dashboardWidgets",
   "DATASET_AUTHORABLE_FIELD_TYPES": [
@@ -2092,6 +2096,17 @@
     168
   ],
   "DROP_OFF_WATCHES_MAX": 12,
+  "DUPLICABLE_RESOURCE_NOUNS": {
+    "campaign": "campaign",
+    "component": "component",
+    "emailDesign": "email design",
+    "emailTemplate": "email template",
+    "form": "form",
+    "layout": "layout",
+    "screen": "page",
+    "template": "template",
+    "workflow": "workflow"
+  },
   "DUPLICATE_ACTIVITY_ACTION_LABELS": {
     "campaign.duplicated": "Duplicated a campaign",
     "component.duplicated": "Duplicated a component",
@@ -2103,6 +2118,47 @@
     "template.duplicated": "Duplicated a template",
     "workflow.duplicated": "Duplicated a workflow"
   },
+  "DUPLICATE_COPIES": {
+    "campaign": [
+      "The subject, message, sender and design",
+      "A new draft — the audience and the send time are cleared"
+    ],
+    "component": [
+      "The definition and its properties",
+      "The latest version as a new draft",
+      "No instances — pages keep pointing at the original"
+    ],
+    "emailDesign": [
+      "The latest version, with its full element tree",
+      "A new draft — not published"
+    ],
+    "emailTemplate": [
+      "The subject and body, with their merge fields"
+    ],
+    "form": [
+      "The design, fields, validation, consent and routing",
+      "A new form of its own — submissions stay with the original"
+    ],
+    "layout": [
+      "The latest version, with its full element tree and properties",
+      "A new draft — no page uses the copy yet"
+    ],
+    "screen": [
+      "The latest version, with its full element tree and layout values",
+      "Description and SEO fields",
+      "A new draft — the copy is not published and has no address yet"
+    ],
+    "template": [
+      "The element tree, placeholders and properties",
+      "Description, slug and SEO fields"
+    ],
+    "workflow": [
+      "Every step and the return value",
+      "The trigger is cleared, so the copy runs nothing until you arm it"
+    ]
+  },
+  "DUPLICATE_NAME_MAX": 200,
+  "DUPLICATE_NAME_PREFIX": "Copy of ",
   "EMAIL_BLOCK_STARTER_TREES_JSON": "{\"header\":{\"$id\":null,\"componentId\":\"emailSection\",\"pluginId\":\"email\",\"props\":{\"align\":\"center\",\"padding\":24,\"emailRole\":\"header\"},\"nodes\":[{\"$id\":null,\"componentId\":\"emailImage\",\"pluginId\":\"email\",\"props\":{\"alt\":\"Your company logo\",\"width\":160,\"align\":\"center\"}},{\"$id\":null,\"componentId\":\"emailText\",\"pluginId\":\"email\",\"props\":{\"children\":\"Your company\",\"variant\":\"subheading\",\"align\":\"center\"}}]},\"footer\":{\"$id\":null,\"componentId\":\"emailSection\",\"pluginId\":\"email\",\"props\":{\"align\":\"center\",\"padding\":24,\"emailRole\":\"footer\"},\"nodes\":[{\"$id\":null,\"componentId\":\"emailDivider\",\"pluginId\":\"email\",\"props\":{}},{\"$id\":null,\"componentId\":\"emailText\",\"pluginId\":\"email\",\"props\":{\"children\":\"Your company · 123 Main St, City\",\"variant\":\"caption\",\"align\":\"center\",\"color\":\"#6b6b6b\"}},{\"$id\":null,\"componentId\":\"emailText\",\"pluginId\":\"email\",\"props\":{\"children\":\"You're receiving this because you're a customer of Your company.\",\"variant\":\"caption\",\"align\":\"center\",\"color\":\"#6b6b6b\"}}]}}",
   "EMAIL_LIST_QUERY": {
     "fields": [
@@ -2158,6 +2214,15 @@
         "path": "kind"
       }
     ]
+  },
+  "EMAIL_STATE_LABELS": {
+    "blocked": "Blocked by their mail gateway",
+    "bounced": "Bounced",
+    "complained": "Marked as spam",
+    "do_not_contact": "Do not contact",
+    "ok": "Email OK",
+    "undeliverable": "Would bounce",
+    "unsubscribed": "Unsubscribed"
   },
   "EMAIL_TEMPLATE_QUERY": {
     "fields": [
@@ -4477,6 +4542,10 @@
     "nurturing",
     "working"
   ],
+  "NATIVE_CRM_LEAD_SOURCE_DIRECTIONS": [
+    "inbound",
+    "outbound"
+  ],
   "NATIVE_CRM_LEAD_STATUSES": [
     "new",
     "nurturing",
@@ -4737,6 +4806,15 @@
     "xpf": 0,
     "yer": 0
   },
+  "NATIVE_EMAIL_STATE_STATUSES": [
+    "ok",
+    "undeliverable",
+    "bounced",
+    "blocked",
+    "unsubscribed",
+    "complained",
+    "do_not_contact"
+  ],
   "NATIVE_NAV_MANIFEST": {
     "create": [
       {
@@ -4999,13 +5077,6 @@
           "surface": "hostPluginTab"
         },
         "where": "The POS app"
-      },
-      {
-        "console": {
-          "id": "/waivers",
-          "surface": "hostPluginTab"
-        },
-        "where": "The console’s Waivers page; no native screen yet"
       }
     ],
     "lists": [
@@ -5767,6 +5838,16 @@
                   },
                   {
                     "console": {
+                      "id": "/products/subscriptions",
+                      "surface": "hostPluginSection"
+                    },
+                    "docs": "/commerce-and-bookings/commerce/overview",
+                    "id": "subscriptions",
+                    "label": "Subscriptions",
+                    "screen": "commerce.subscriptions"
+                  },
+                  {
+                    "console": {
                       "id": "/products/returns",
                       "surface": "hostPluginSection"
                     },
@@ -5894,6 +5975,22 @@
                 "order": 40,
                 "pluginId": "events-calendar",
                 "screen": "events-calendar.events"
+              },
+              {
+                "console": {
+                  "id": "/waivers",
+                  "surface": "hostPluginTab"
+                },
+                "docs": "/commerce-and-bookings/commerce/waivers",
+                "icon": {
+                  "android": "assignment",
+                  "apple": "signature"
+                },
+                "id": "waivers",
+                "label": "Waivers",
+                "order": 50,
+                "pluginId": "waivers",
+                "screen": "waivers.home"
               }
             ]
           },

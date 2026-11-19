@@ -73,8 +73,20 @@ export function waiversFiles(): WaiversFileStore {
   return inspected(storeOverride ?? bucketFiles())
 }
 
+/**
+ * The private bucket the signature images and paper photos live in. The
+ * admin app is initialized without a default storageBucket, so every bucket
+ * access names it explicitly (same as the media routes and `erase.ts`): a
+ * bare `bucket()` throws "Bucket name not specified or invalid". Falls
+ * through to the admin default if the env is somehow unset.
+ */
+export function waiversStorageBucket() {
+  const name = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+  return firebaseAdmin.app().storage().bucket(name || undefined)
+}
+
 function bucketFiles(): WaiversFileStore {
-  const bucket = firebaseAdmin.app().storage().bucket()
+  const bucket = waiversStorageBucket()
   return {
     async save(path, bytes, contentType) {
       // No `firebaseStorageDownloadTokens` in the metadata: nothing but the
