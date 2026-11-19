@@ -279,7 +279,7 @@ fun PhotoLinksDialog(api: PhotoLinksApi, onCopy: (String) -> Unit, onClose: () -
 private fun PhotoLinkCode(url: String, caption: String, onCopy: (String) -> Unit) {
   var copied by remember(url) { mutableStateOf(false) }
   Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(space(1f))) {
-    QrCodeImage(url, size = 200.dp, label = "Photo link QR code")
+    QrCodeImage(url, size = 200.dp, description = "Photo link QR code")
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
       Text(url, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
       TextButton(onClick = { onCopy(url); copied = true }, modifier = Modifier.testTag("photo-link-copy")) {
