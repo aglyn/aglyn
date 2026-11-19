@@ -111,7 +111,24 @@ function emptyFirestore(): FirebaseFirestore.Firestore {
         if (key === 'getAll') return async () => []
         if (key === 'count') return () => ({ get: async () => ({ data: () => ({ count: 0 }) }) })
         if (key === 'runTransaction') {
-          return async (fn: (tx: unknown) => unknown) => fn(at([]))
+          // A transaction reads what the store holds: `tx.get(ref)` answers
+          // what `ref.get()` answers, the site included, so a writer that
+          // reads the site in its transaction finds it as the router did.
+          type Readable = { get(): Promise<unknown> }
+          const tx = {
+            get: (ref: Readable) => ref.get(),
+            getAll: (...refs: unknown[]) =>
+              Promise.all(
+                refs
+                  .filter((ref): ref is Readable => typeof (ref as Readable)?.get === 'function')
+                  .map((ref) => ref.get()),
+              ),
+            set: () => tx,
+            update: () => tx,
+            create: () => tx,
+            delete: () => tx,
+          }
+          return async (fn: (tx: unknown) => unknown) => fn(tx)
         }
         if (['set', 'update', 'delete', 'create', 'commit', 'add'].includes(String(key))) {
           return async () => at(path)
