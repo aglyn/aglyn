@@ -71,6 +71,7 @@ import {
   RECORD_STAMPS as STAMPS,
   stringField as str,
   stringListField as strList,
+  SITE_ID_PATH_PARAM,
 } from '@aglyn/tenant-data-admin/server/api-v1-description'
 
 /** A JSON Schema / OpenAPI fragment. Same shape the tenant builder uses. */
@@ -121,6 +122,16 @@ const CURSOR_PARAM: Schema = {
 }
 
 /**
+ * Appended to every list operation's description (AGL-4225): how to page, in
+ * the words a caller acts on.
+ */
+const LIST_NOTE =
+  'Returns one page of up to `limit` items (25 by default, 100 at most). ' +
+  'While `has_more` is true, call again with `cursor` set to the ' +
+  '`next_cursor` it returned; a page can hold fewer items than `limit` and ' +
+  'still not be the last.'
+
+/**
  * The platform's own resources. A resource a plugin serves is described by
  * the plugin, through its `/v1` registration, and handed to the builder
  * (`served`) after these.
@@ -128,6 +139,7 @@ const CURSOR_PARAM: Schema = {
 const RESOURCES: readonly ResourceSpec[] = [
   {
     tag: 'Sites',
+    docsPage: 'sites',
     description: 'The sites an organization publishes.',
     schemaName: 'Site',
     required: ['id', 'object', 'displayName'],
@@ -139,18 +151,21 @@ const RESOURCES: readonly ResourceSpec[] = [
       domain: nullable(str('Custom domain, when one is attached.')),
     },
     ops: [
-      { path: '/v1/sites', method: 'get', operationId: 'listSites', summary: 'List sites', list: true, returns: 'Site' },
-      { path: '/v1/sites', method: 'post', operationId: 'createSite', summary: 'Create a site', accepts: 'SiteWrite', returns: 'Site', creates: true, description: 'Limited to 10 per hour per organization, separately from the request budget.' },
-      { path: '/v1/sites/{siteId}', method: 'get', operationId: 'getSite', summary: 'Retrieve a site', returns: 'Site', pathParams: [{ name: 'siteId', description: 'Site id.' }] },
+      { path: '/v1/sites', method: 'get', operationId: 'listSites', summary: 'List sites', description: 'Lists the workspace’s sites with each one’s id, name, subdomain and custom domain. A site’s `id` is the `siteId` other tools ask for.', list: true, returns: 'Site' },
+      // openWorld: it claims a public web address on the platform domain.
+      { path: '/v1/sites', method: 'post', operationId: 'createSite', summary: 'Create a site', accepts: 'SiteWrite', returns: 'Site', creates: true, description: 'Creates a new site with the given `displayName` and claims its `subdomain` on the platform’s domain, where the site can be visited. Returns the new site. A subdomain already in use is refused with suggestions. Limited to 10 an hour per workspace.', openWorld: true },
+      { path: '/v1/sites/{siteId}', method: 'get', operationId: 'getSite', summary: 'Get a site', description: 'Returns one site: its name, subdomain and custom domain. Needs `siteId` from List sites.', returns: 'Site', pathParams: [SITE_ID_PATH_PARAM] },
+      // openWorld: it changes what the public website shows to visitors.
       {
-        path: '/v1/sites/{siteId}/publish', method: 'post', operationId: 'publishSite', summary: 'Publish a site', returns: 'PublishResult',
-        description: 'Limited to 10 per site per hour, on top of — not instead of — the per-key limit. Sized to the work: one publish drops up to 250 cached pages, so minting extra keys does not raise it.',
-        pathParams: [{ name: 'siteId', description: 'Site id.' }],
+        path: '/v1/sites/{siteId}/publish', method: 'post', operationId: 'publishSite', summary: 'Publish a site’s latest changes', returns: 'PublishResult',
+        description: 'Refreshes the site’s live pages so what was saved, including records changed through this API, shows to visitors now instead of when the page cache next expires. Needs `siteId` from List sites. Returns whether it published and how many pages were refreshed. Limited to 10 an hour per site.',
+        pathParams: [SITE_ID_PATH_PARAM], idempotent: true, openWorld: true,
       },
     ],
   },
   {
     tag: 'Media',
+    docsPage: 'media',
     description: 'The organization library, and a site’s own files.',
     schemaName: 'MediaAsset',
     required: ['id', 'object', 'fileName', 'url'],
@@ -206,11 +221,11 @@ const RESOURCES: readonly ResourceSpec[] = [
       created: STAMPS.created,
     },
     ops: [
-      { path: '/v1/media', method: 'get', operationId: 'listOrgMedia', summary: 'List organization media', list: true, returns: 'MediaAsset', description: 'Rows deleted since they were written are dropped after the read, so pages can come back short.' },
-      { path: '/v1/media', method: 'post', operationId: 'uploadOrgMedia', summary: 'Upload to the organization library', accepts: 'MediaUpload', returns: 'MediaAsset', creates: true },
-      { path: '/v1/media/{mediaId}', method: 'get', operationId: 'getOrgMedia', summary: 'Retrieve an asset', returns: 'MediaAsset', pathParams: [{ name: 'mediaId', description: 'Asset id.' }] },
-      { path: '/v1/sites/{siteId}/media', method: 'get', operationId: 'listSiteMedia', summary: 'List a site’s media', list: true, returns: 'MediaAsset', pathParams: [{ name: 'siteId', description: 'Site id.' }] },
-      { path: '/v1/sites/{siteId}/media', method: 'post', operationId: 'uploadSiteMedia', summary: 'Upload to a site', accepts: 'MediaUpload', returns: 'MediaAsset', creates: true, pathParams: [{ name: 'siteId', description: 'Site id.' }] },
+      { path: '/v1/media', method: 'get', operationId: 'listOrgMedia', summary: 'List the workspace media library', list: true, returns: 'MediaAsset', description: 'Lists the files in the workspace’s shared media library: name, type, size, alt text and URLs.' },
+      { path: '/v1/media', method: 'post', operationId: 'uploadOrgMedia', summary: 'Upload a file to the media library', description: 'Adds a file to the workspace’s shared media library. Send the file’s bytes base64-encoded in `data`, with its `contentType`. Returns the stored file and its URLs.', accepts: 'MediaUpload', returns: 'MediaAsset', creates: true },
+      { path: '/v1/media/{mediaId}', method: 'get', operationId: 'getOrgMedia', summary: 'Get a media file', description: 'Returns one file from the workspace media library. Needs `mediaId` from List the workspace media library.', returns: 'MediaAsset', pathParams: [{ name: 'mediaId', description: 'Asset id.' }] },
+      { path: '/v1/sites/{siteId}/media', method: 'get', operationId: 'listSiteMedia', summary: 'List a site’s media', description: 'Lists the files that belong to one site’s own library. Needs `siteId` from List sites.', list: true, returns: 'MediaAsset', pathParams: [SITE_ID_PATH_PARAM] },
+      { path: '/v1/sites/{siteId}/media', method: 'post', operationId: 'uploadSiteMedia', summary: 'Upload a file to a site', description: 'Adds a file to one site’s own library. Needs `siteId` from List sites. Send the file’s bytes base64-encoded in `data`, with its `contentType`. Returns the stored file and its URLs.', accepts: 'MediaUpload', returns: 'MediaAsset', creates: true, pathParams: [SITE_ID_PATH_PARAM] },
     ],
   },
 ]
@@ -336,6 +351,9 @@ export function buildCustomerApiOpenApi(
   const tags: Schema[] = []
   const listItems = new Set<string>()
   const resources = [...RESOURCES, ...served]
+  const documentationUrl = options.documentationUrl.replace(/\/+$/, '')
+  /** Create-only copies of a write schema: name → [base schema, required]. */
+  const createBodies = new Map<string, readonly [string, readonly string[]]>()
 
   for (const resource of resources) {
     tags.push({ name: resource.tag, description: resource.description })
@@ -414,21 +432,42 @@ export function buildCustomerApiOpenApi(
         )
       }
 
+      // A create that needs members its update does not gets its own copy
+      // of the write schema with them required (AGL-4225), built after the
+      // resources' own components below so it copies the final shape.
+      const bodySchema =
+        op.accepts && op.bodyRequires?.length ? `${op.accepts}Create` : op.accepts
+      if (op.accepts && bodySchema !== op.accepts) {
+        createBodies.set(bodySchema as string, [op.accepts, op.bodyRequires ?? []])
+      }
+      // What a caller of a list must know, said once for every list rather
+      // than left to each description.
+      const description = [op.description, op.list ? LIST_NOTE : '']
+        .filter(Boolean)
+        .join(' ')
+
       const item = (paths[op.path] ??= {})
       ;(item as Record<string, unknown>)[op.method] = {
         operationId: op.operationId,
         summary: op.summary,
-        ...(op.description ? { description: op.description } : {}),
+        ...(description ? { description } : {}),
+        // The resource's page in the public docs (AGL-4225), from the same
+        // docs origin as the document's own link.
+        ...(resource.docsPage
+          ? { externalDocs: { url: `${documentationUrl}/resources/${resource.docsPage}` } }
+          : {}),
         ...(op.destructive ? { 'x-destructive': true } : {}),
+        ...(op.idempotent ? { 'x-idempotent': true } : {}),
+        ...(op.openWorld ? { 'x-open-world': true } : {}),
         tags: [resource.tag],
         ...(parameters.length ? { parameters } : {}),
         ...(op.accepts
           ? {
               requestBody: {
-                required: true,
+                required: !op.bodyOptional,
                 content: {
                   'application/json': {
-                    schema: { $ref: `#/components/schemas/${op.accepts}` },
+                    schema: { $ref: `#/components/schemas/${bodySchema}` },
                   },
                 },
               },
@@ -443,16 +482,26 @@ export function buildCustomerApiOpenApi(
   // A resource's own named schemas replace what the loop derived under the
   // same name — a body that is not the record's write shape.
   for (const resource of resources) Object.assign(schemas, resource.components ?? {})
+  for (const [name, [base, required]] of createBodies) {
+    const schema = schemas[base] ?? {}
+    const already = Array.isArray(schema['required']) ? (schema['required'] as string[]) : []
+    schemas[name] = {
+      ...schema,
+      required: [...new Set([...already, ...required])],
+    }
+  }
 
   // The service paths. Not resources: no ids, no collection, no scope.
   paths['/v1'] = {
     get: {
       operationId: 'getApiRoot',
-      summary: 'API root',
+      summary: 'Describe the API',
       description:
-        'Names the API, its version, the documentation URL and the top-level ' +
-        'resources. Sub-resources are deliberately absent — advertising a ' +
-        'path that 404s is worse than not advertising it.',
+        'Returns the API’s name and version, its documentation link, where ' +
+        'its OpenAPI description and MCP server are, and the top-level ' +
+        'resources it serves. Resources that belong to a site, such as ' +
+        'orders, are reached through the site and are not listed.',
+      externalDocs: { url: `${documentationUrl}#get-v1` },
       tags: ['Service'],
       responses: {
         '200': {
@@ -469,8 +518,9 @@ export function buildCustomerApiOpenApi(
   paths['/v1/me'] = {
     get: {
       operationId: 'getKeyIdentity',
-      summary: 'Introspect the calling credential',
-      description: 'Says what the calling credential is — an API key or a connected app — and which organization and scopes it carries. Never returns the secret.',
+      summary: 'See who this connection is',
+      description: 'Returns what is calling: an API key or an app connected by signing in, its name, the workspace it belongs to and the scopes it holds. Never returns a secret.',
+      externalDocs: { url: `${documentationUrl}#get-v1me` },
       tags: ['Service'],
       responses: {
         '200': {
@@ -484,8 +534,9 @@ export function buildCustomerApiOpenApi(
   paths['/v1/usage'] = {
     get: {
       operationId: 'getUsage',
-      summary: 'This month’s billed requests',
-      description: 'Every authenticated call is billed, including one that fails validation.',
+      summary: 'Check this month’s usage',
+      description: 'Returns this billing month’s use of the plan’s allowances: API requests, storage, campaign emails, and the records the workspace’s features count.',
+      externalDocs: { url: `${documentationUrl}#get-v1usage` },
       tags: ['Service'],
       responses: {
         '200': {
@@ -499,11 +550,9 @@ export function buildCustomerApiOpenApi(
   paths[CUSTOMER_API_OPENAPI_PATH.replace('/api', '')] = {
     get: {
       operationId: 'getApiDescription',
-      summary: 'This document',
-      description:
-        'Served WITHOUT a key. A description of how to authenticate that ' +
-        'requires authentication is useless at the only moment it is wanted, ' +
-        'and it carries nothing the public documentation does not.',
+      summary: 'Get the OpenAPI description',
+      description: 'Returns this OpenAPI 3.1 description of the API. Needs no key.',
+      externalDocs: { url: `${documentationUrl}#openapi` },
       tags: ['Service'],
       security: [],
       responses: {
