@@ -240,3 +240,28 @@ public final class PagesTree {
       }
   }
 }
+
+// MARK: - Order within a level
+
+/// Where a page sits among its siblings (the console's drag to reorder, AGL-2501): its level's parent (nil at the top
+/// level, or under a parent the cache does not hold) and its place in the level's order.
+public struct PageSiblingPlace: Equatable, Sendable {
+  public let parentID: String?
+  public let index: Int
+  public let count: Int
+
+  /// The `index` the move route takes to put the page one place earlier: it counts the siblings without the page.
+  public var upIndex: Int? { index > 0 ? index - 1 : nil }
+  /// One place later.
+  public var downIndex: Int? { index < count - 1 ? index + 1 : nil }
+}
+
+/// The page's place among `nodes` siblings, in the hub's order (`order`, then created, then id).
+public func pageSiblingPlace(_ id: String, in nodes: [String: PageNode]) -> PageSiblingPlace? {
+  guard let page = nodes[id] else { return nil }
+  let level: (PageNode) -> String? = { node in node.parentID.flatMap { nodes[$0] == nil ? nil : $0 } }
+  let parent = level(page)
+  let siblings = nodes.values.filter { level($0) == parent }.sorted(by: pageSiblingOrder)
+  guard let index = siblings.firstIndex(where: { $0.id == id }) else { return nil }
+  return PageSiblingPlace(parentID: parent, index: index, count: siblings.count)
+}

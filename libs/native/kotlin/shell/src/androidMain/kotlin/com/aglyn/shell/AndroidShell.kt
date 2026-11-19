@@ -40,6 +40,8 @@ object AndroidShell {
   ): ShellServices {
     val config = AglynConfig.read(env, if (app == NativeApp.POS) AglynAppId.POS else AglynAppId.AGLYN)
     config.problems().forEach { android.util.Log.w("Aglyn", it) }
+    // Whether this build may take a payment to Aglyn: off in a store build (the owner's decision of 2026-11-19).
+    com.aglyn.core.StoreBilling.configure(config)
     val firebase = AndroidFirebase.init(context, config)
     val prefs = SharedPreferencesStore(context)
     // A support session (a staff member signed in as a customer) has a Firebase app of its own: its own sign-in and Firestore.
