@@ -15,7 +15,9 @@ struct LegalReacceptanceBanner: View {
   @State private var accepted = false
 
   var body: some View {
-    Group {
+    // A VStack, not a Group: a Group that draws nothing has no view for its `.task` to run on, so the status would
+    // never be read and the banner never shown (GroupTaskTests).
+    VStack(spacing: 0) {
       if !accepted, let status, let copy = LegalReacceptanceCopy.make(status, brand: model.brandName) {
         let origin = model.config?.legalOrigin ?? AglynConfig.defaultLegalOrigin
         HStack(alignment: .top, spacing: AglynSpace.oneAndHalf) {
