@@ -2162,6 +2162,15 @@
       }
     ]
   },
+  "EMAIL_STATE_LABELS": {
+    "blocked": "Blocked by their mail gateway",
+    "bounced": "Bounced",
+    "complained": "Marked as spam",
+    "do_not_contact": "Do not contact",
+    "ok": "Email OK",
+    "undeliverable": "Would bounce",
+    "unsubscribed": "Unsubscribed"
+  },
   "EMAIL_TEMPLATE_QUERY": {
     "fields": [
       {

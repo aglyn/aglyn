@@ -1113,6 +1113,11 @@
         "CRM_EMAIL_TEMPLATE_VISIBILITY_LABELS",
         "CRM_MERGE_FIELDS"
       ]
+    },
+    "libs/aglyn/src/lib/app-utils/email-state.ts": {
+      "values": [
+        "EMAIL_STATE_LABELS"
+      ]
     }
   },
   "assembled": {
@@ -38721,6 +38726,169 @@
             "field": "name",
             "op": "equals",
             "value": "x"
+          }
+        ]
+      ]
+    },
+    "readEmailState": {
+      "module": "libs/aglyn/src/lib/app-utils/email-state.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "emailState": "bounced"
+          }
+        ],
+        [
+          {
+            "emailState": {
+              "status": "nope"
+            }
+          }
+        ],
+        [
+          {
+            "emailState": {
+              "status": "bounced",
+              "atMs": 1700000000000,
+              "source": "sequence",
+              "detail": "550 no such user",
+              "enrollmentId": "e1"
+            }
+          }
+        ],
+        [
+          {
+            "emailState": {
+              "status": "blocked",
+              "atMs": -4,
+              "source": "other",
+              "detail": ""
+            }
+          }
+        ],
+        [
+          {
+            "emailState": {
+              "status": "ok"
+            }
+          }
+        ]
+      ]
+    },
+    "emailStateRefusal": {
+      "module": "libs/aglyn/src/lib/app-utils/email-state.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "status": "ok",
+            "atMs": 0,
+            "source": "member",
+            "detail": null
+          }
+        ],
+        [
+          {
+            "status": "undeliverable",
+            "atMs": 0,
+            "source": "campaign",
+            "detail": null
+          }
+        ],
+        [
+          {
+            "status": "bounced",
+            "atMs": 0,
+            "source": "campaign",
+            "detail": null
+          }
+        ],
+        [
+          {
+            "status": "blocked",
+            "atMs": 0,
+            "source": "campaign",
+            "detail": null
+          }
+        ],
+        [
+          {
+            "status": "unsubscribed",
+            "atMs": 0,
+            "source": "campaign",
+            "detail": null
+          }
+        ],
+        [
+          {
+            "status": "complained",
+            "atMs": 0,
+            "source": "campaign",
+            "detail": null
+          }
+        ],
+        [
+          {
+            "status": "do_not_contact",
+            "atMs": 0,
+            "source": "campaign",
+            "detail": null
+          }
+        ],
+        [
+          {
+            "status": "bounced",
+            "atMs": 0,
+            "source": "campaign",
+            "detail": "550 no such user."
+          }
+        ],
+        [
+          {
+            "status": "undeliverable",
+            "atMs": 1700000000000,
+            "source": "check",
+            "detail": null
+          }
+        ],
+        [
+          {
+            "status": "unsubscribed",
+            "atMs": 1700000000000,
+            "source": "campaign",
+            "detail": "Via the footer link."
+          }
+        ]
+      ]
+    },
+    "emailStateForbidsEmail": {
+      "module": "libs/aglyn/src/lib/app-utils/email-state.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "status": "ok",
+            "atMs": 0,
+            "source": "member",
+            "detail": null
+          }
+        ],
+        [
+          {
+            "status": "unsubscribed",
+            "atMs": 0,
+            "source": "member",
+            "detail": null
           }
         ]
       ]
