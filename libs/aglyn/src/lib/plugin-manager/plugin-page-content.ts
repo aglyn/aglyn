@@ -50,9 +50,24 @@ export interface PageContentElement {
   parentId: string | null
   /** The elements inside it, in order. */
   children: string[]
+  /** The settings an edit can set on this kind of element, as stored. */
   props: Record<string, unknown>
+  /** The styles an edit can set, as stored. */
   style?: Record<string, unknown>
   hidden?: boolean
+  /**
+   * What the element stores that an edit cannot set, shown so it can be read
+   * and never offered as editable: settings such as rich text (`html`) or a
+   * class name, styles outside the editable keys, how many interactions it
+   * runs, and the names of other fields it carries (overrides, a class name).
+   * Absent when there is none.
+   */
+  readOnly?: {
+    props?: Record<string, unknown>
+    style?: Record<string, unknown>
+    interactions?: number
+    fields?: string[]
+  }
 }
 
 /** One setting a kind of element takes, as far as an editor needs to fill it. */
@@ -99,6 +114,14 @@ export interface PageContentNewElement {
   children?: PageContentNewElement[]
 }
 
+/**
+ * The most edits one batch carries, and the most elements one insert adds:
+ * the limits of the editor that answers (its own constants are held equal to
+ * these by its spec), stated here so the API can describe them.
+ */
+export const PAGE_CONTENT_MAX_EDITS = 20
+export const PAGE_CONTENT_MAX_INSERT_ELEMENTS = 40
+
 /** One change to a page's draft. A batch of edits applies all or none. */
 export type PageContentEdit =
   | { op: 'updateProps'; elementId: string; props: Record<string, unknown> }
@@ -127,8 +150,12 @@ export interface PageContentEditResult {
   revision: string
   /** How many edits were applied. */
   applied: number
-  /** The ids given to inserted elements, by the index of the edit that inserted them. */
-  created: Array<{ index: number; id: string }>
+  /**
+   * The ids given to inserted elements, by the index of the edit that
+   * inserted them: `id` is the inserted element's, and `ids` every element
+   * that insert added, depth first in the order they read, `id` first.
+   */
+  created: Array<{ index: number; id: string; ids: string[] }>
 }
 
 export interface PageContentReadInput {
