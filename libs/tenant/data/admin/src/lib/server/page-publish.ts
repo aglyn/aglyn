@@ -713,3 +713,40 @@ export async function commitPagePublishes(
   }
   return { ok: true, promoted }
 }
+
+// ── The request body ────────────────────────────────────────────────────────
+
+/** The most pages one publish may name. */
+export const PAGE_PUBLISH_LIST_MAX = 25
+
+/**
+ * Reads a site publish's request body. No body, an empty one, or one with no
+ * `pages` member is the publish without a list (`pages: null`), which only
+ * refreshes the live pages. With `pages`, it must be 1 to
+ * {@link PAGE_PUBLISH_LIST_MAX} distinct page ids and nothing else beside it.
+ */
+export function readPagePublishBody(raw: string): { pages: string[] | null } | { errors: Record<string, string> } {
+  if (!raw.trim()) return { pages: null }
+  let body: unknown
+  try {
+    body = JSON.parse(raw)
+  } catch {
+    return { errors: { body: 'Must be a JSON object' } }
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return { errors: { body: 'Must be a JSON object' } }
+  const members = body as Record<string, unknown>
+  if (!('pages' in members)) return { pages: null }
+  const errors: Record<string, string> = {}
+  for (const key of Object.keys(members)) {
+    if (key !== 'pages') errors[key] = 'Not a member of a publish request'
+  }
+  const pages = members['pages']
+  if (!Array.isArray(pages) || !pages.every((id) => typeof id === 'string' && id.trim() && id.length <= 128 && !id.includes('/'))) {
+    errors['pages'] = 'Must be a list of page ids'
+  } else if (pages.length < 1 || pages.length > PAGE_PUBLISH_LIST_MAX) {
+    errors['pages'] = `Must name 1 to ${PAGE_PUBLISH_LIST_MAX} pages`
+  } else if (new Set(pages).size !== pages.length) {
+    errors['pages'] = 'Must not name a page twice'
+  }
+  return Object.keys(errors).length ? { errors } : { pages: pages as string[] }
+}

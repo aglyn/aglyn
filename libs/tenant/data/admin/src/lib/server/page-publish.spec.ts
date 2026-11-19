@@ -24,6 +24,7 @@ import {
   commitPagePublishes,
   precheckPagePublish,
   precheckPagePublishes,
+  readPagePublishBody,
   type PagePublishPlan,
 } from './page-publish'
 
@@ -419,5 +420,24 @@ describe('clearCoeditMirror (AGL-4235)', () => {
     expect(removed).toEqual(['coedit/o/h/screen/s/v/nodes'])
     const failing = () => ({ ref: () => ({ remove: async () => Promise.reject(new Error('down')) }) })
     expect(await clearCoeditMirror({ orgId: 'o', hostId: 'h', docType: 'screen', docId: 's' }, { database: failing })).toBe(false)
+  })
+})
+
+describe('readPagePublishBody (AGL-4235)', () => {
+  it('reads no body, an empty object and a body without pages as the refresh alone', () => {
+    for (const raw of ['', '  ', '{}', '{"note":"x"}']) expect(readPagePublishBody(raw)).toEqual({ pages: null })
+  })
+
+  it('takes 1 to 25 distinct page ids and nothing beside them', () => {
+    expect(readPagePublishBody('{"pages":["a","b"]}')).toEqual({ pages: ['a', 'b'] })
+    expect(readPagePublishBody(JSON.stringify({ pages: Array.from({ length: 25 }, (_, n) => `p${n}`) }))).toEqual({
+      pages: expect.any(Array),
+    })
+    for (const body of [{ pages: [] }, { pages: Array.from({ length: 26 }, (_, n) => `p${n}`) }, { pages: ['a', 'a'] }, { pages: 'a' }, { pages: [''] }, { pages: ['a/b'] }]) {
+      expect({ body, read: readPagePublishBody(JSON.stringify(body)) }).toEqual({ body, read: { errors: { pages: expect.any(String) } } })
+    }
+    expect(readPagePublishBody('{"pages":["a"],"force":true}')).toEqual({ errors: { force: 'Not a member of a publish request' } })
+    expect(readPagePublishBody('{nope')).toEqual({ errors: { body: 'Must be a JSON object' } })
+    expect(readPagePublishBody('[]')).toEqual({ errors: { body: 'Must be a JSON object' } })
   })
 })
