@@ -43,17 +43,28 @@ const TENANT_PREVIEW_HOST =
 const TENANT_LOCAL_ORIGIN =
   process.env.NEXT_PUBLIC_AGLYN_TENANT_LOCAL_ORIGIN || 'http://localhost:4500'
 
-/** True for `localhost` and `*.localhost`, which have a local tenant to use. */
+/**
+ * Loopback addresses a console is reached at on a developer's machine, which
+ * are never a deployment: the IPv4 and IPv6 loopbacks, and `10.0.2.2`, the
+ * address the Android emulator gives the machine it runs on, which is how the
+ * Android app on a local stack reaches the local console.
+ */
+const LOCAL_CONSOLE_ADDRESSES = new Set(['127.0.0.1', '::1', '[::1]', '10.0.2.2'])
+
+/**
+ * True for `localhost`, `*.localhost` and the loopback addresses, which have
+ * a local tenant to use.
+ */
 export function isLocalConsole(hostname: string): boolean {
-  return hostname === 'localhost' || hostname.endsWith('.localhost')
+  return (
+    hostname === 'localhost' ||
+    hostname.endsWith('.localhost') ||
+    LOCAL_CONSOLE_ADDRESSES.has(hostname)
+  )
 }
 
 export function isPreviewConsole(hostname: string): boolean {
-  return (
-    hostname.endsWith('.vercel.app') ||
-    hostname === 'localhost' ||
-    hostname.endsWith('.localhost')
-  )
+  return hostname.endsWith('.vercel.app') || isLocalConsole(hostname)
 }
 
 /** The live URL for a site-relative slug on this host's real origin. */

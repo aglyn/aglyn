@@ -982,6 +982,7 @@
           "type": "list",
           "title": "Usage by month",
           "items": "data.usage.months",
+          "columnsZone": "staffOrgUsageColumn",
           "primary": "{item.view.month}",
           "secondary": "{item.view.views} views · {item.view.storage} · {item.view.cost}",
           "tertiary": "{item.view.metered}",
@@ -22850,6 +22851,13 @@
               "help": "Empty inherits the plan default. 0 is a real limit of none."
             },
             {
+              "key": "quota.maxCrmRecords",
+              "label": "Limit: CRM records, ceiling",
+              "kind": "number",
+              "initial": "{item.entitlements.maxCrmRecords}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
               "key": "quota.emailSendsPerMonth",
               "label": "Limit: Campaign email sends / mo",
               "kind": "number",
@@ -22868,6 +22876,20 @@
               "label": "Limit: API requests / mo",
               "kind": "number",
               "initial": "{item.entitlements.apiRequestsPerMonth}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.apiRequestsPerMinutePerOrg",
+              "label": "Limit: API requests / min (workspace)",
+              "kind": "number",
+              "initial": "{item.entitlements.apiRequestsPerMinutePerOrg}",
+              "help": "Empty inherits the plan default. 0 is a real limit of none."
+            },
+            {
+              "key": "quota.maxApiRequestsPerMonth",
+              "label": "Limit: API requests / mo, ceiling",
+              "kind": "number",
+              "initial": "{item.entitlements.maxApiRequestsPerMonth}",
               "help": "Empty inherits the plan default. 0 is a real limit of none."
             },
             {
@@ -24103,7 +24125,7 @@
                   "label": "Off"
                 }
               ],
-              "help": "Super staff only. Off by default for everyone: yes."
+              "help": "Super staff only. Off by default for everyone: no."
             },
             {
               "key": "release.release_weglot",

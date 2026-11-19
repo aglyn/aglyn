@@ -616,8 +616,25 @@ async function deliverEmail(
     owedFor: 'order',
   })
   await copies.settle(Boolean(result?.sent))
+  // A message that did not leave is NOT sent (AGL-4227): thrown, so the
+  // caller releases the order's marker and reports this channel failed rather
+  // than writing "sent" on the order's timeline — the workspace's email limit,
+  // a suppression or a provider refusal all end here. Nothing is metered for
+  // it either: an email that never left is not a cost.
+  if (!result?.sent) {
+    throw new Error(`Email not sent: ${describeUnsentEmail(result)}`)
+  }
   // Cost meter (AGL-1438), as every transactional store email.
   await meterHostEmail(ref.hostId)
+}
+
+/** Why a store email did not leave, in the words the order's failure records. */
+function describeUnsentEmail(result: unknown): string {
+  const failure = result as { reason?: string; detail?: string } | null | undefined
+  if (failure?.reason === 'rate-limited') {
+    return failure.detail || 'the workspace reached its email limit'
+  }
+  return failure?.detail || failure?.reason || 'delivery failed'
 }
 
 /**

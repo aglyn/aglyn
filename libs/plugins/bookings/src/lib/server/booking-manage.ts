@@ -372,7 +372,7 @@ export async function sendRescheduledNotice(notice: RescheduleNotice): Promise<v
     'booking.ref': notice.bookingId,
   })
   const branding = resolveBrandingProfile((await getOrgForHost(notice.hostId).catch(() => null))?.org as never)
-  await sendEmail({
+  const sent = await sendEmail({
     to: notice.to,
     subject: designed?.subject ?? `New time for ${notice.serviceName}`,
     text: designed?.text || fallbackText,
@@ -383,7 +383,8 @@ export async function sendRescheduledNotice(notice: RescheduleNotice): Promise<v
     context: 'booking rescheduled',
     owedFor: 'booking',
   })
-  await meterHostEmail(notice.hostId)
+  // Metered only when it left (AGL-4227): a refused notice is not a cost.
+  if (sent?.sent) await meterHostEmail(notice.hostId)
 }
 
 /** The production wiring: the Admin SDK, the site lockdown verdict and the real send. */

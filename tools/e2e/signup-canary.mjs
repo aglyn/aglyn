@@ -212,6 +212,17 @@ const REAP_SETTLE_MS = 8_000
  */
 const PROBE_TOKEN = process.env['AGLYN_PROBE_TOKEN'] ?? ''
 
+/**
+ * The operator's marketing site (AGL-4230), whose organization keeps a CRM
+ * contact for every account that signs up. The walk's account is one of
+ * them until the reap below deletes it. Unset on a deployment with no
+ * marketing CRM, where there is nothing to reap.
+ */
+const MARKETING_HOST_ID = process.env['PLATFORM_MARKETING_HOST_ID'] ?? ''
+
+/** How many canary contacts one run deletes at most; the next run takes the rest. */
+const CANARY_CONTACT_REAP_LIMIT = 200
+
 const steps = []
 const t0 = Date.now()
 let step = 'start'
@@ -413,6 +424,77 @@ async function reap(db, auth, { uid, orgId, slug }, { settle = true } = {}) {
 }
 
 /**
+ * Delete the walks' contacts from the operator's own CRM (AGL-4230), the way
+ * the account itself is deleted.
+ *
+ * Sign-up makes every account a contact on the marketing site's
+ * organization. A walk's account is gone seconds later, so its contact is
+ * residue: 422 of them had built up by 2026-11-16, each one a "lead" nobody
+ * could ever reach. Sign-up now skips canary addresses, and this deletes
+ * whatever a run, an older deployment or a race still left.
+ *
+ * Bounded to canary-shaped addresses twice over: the query is a prefix range
+ * on this walk's own base address (`name+signup-canary-`), and each hit must
+ * still carry the canary tag on the same domain before it is touched. The
+ * contact's document goes with everything under it, and so does the email
+ * index entry that points at it. Verified like the rest of the reap: a
+ * contact still there afterwards is reported as missed.
+ */
+async function reapCanaryContacts(db) {
+  if (!MARKETING_HOST_ID || !EMAIL_BASE) return { reaped: 0, missed: [] }
+  // Never thrown: a reap that could not run is reported like one that missed.
+  return reapCanaryContactsOnce(db).catch((error) => ({
+    reaped: 0,
+    missed: [`canary contacts: ${String(error).slice(0, 80)}`],
+  }))
+}
+
+async function reapCanaryContactsOnce(db) {
+  const host = await db.collection('hosts').doc(MARKETING_HOST_ID).get()
+  const orgId = host.exists ? String(host.get('orgId') ?? '') : ''
+  if (!orgId) return { reaped: 0, missed: ['marketing host has no organization'] }
+  const orgRef = db.collection('orgs').doc(orgId)
+  const [local, domain] = EMAIL_BASE.toLowerCase().split('@')
+  const prefix = `${local}-`
+  const isWalkAddress = (email) => {
+    const value = String(email ?? '').toLowerCase()
+    const at = value.lastIndexOf('@')
+    if (at < 1 || value.slice(at + 1) !== domain) return false
+    const tag = value.slice(0, at).split('+')[1] ?? ''
+    return value.startsWith(prefix) && tag.startsWith(CANARY_EMAIL_TAG)
+  }
+  const found = async () =>
+    (
+      await orgRef
+        .collection('contacts')
+        .where('email', '>=', prefix)
+        .where('email', '<', `${prefix}\uf8ff`)
+        .limit(CANARY_CONTACT_REAP_LIMIT)
+        .get()
+    ).docs.filter((doc) => isWalkAddress(doc.get('email')))
+  const missed = []
+  let reaped = 0
+  for (const doc of await found()) {
+    try {
+      const index = await orgRef.collection('emailIndex').where('contactId', '==', doc.id).get()
+      for (const entry of index.docs) await entry.ref.delete()
+      await db.recursiveDelete(doc.ref)
+      reaped += 1
+    } catch (error) {
+      missed.push(`contact ${doc.id}: ${String(error).slice(0, 60)}`)
+    }
+  }
+  if (reaped) {
+    const left = await found()
+    // A full page means more remain for the next run, not that these failed.
+    if (reaped < CANARY_CONTACT_REAP_LIMIT && left.length) {
+      missed.push(`${left.length} canary contact(s) still in the marketing CRM`)
+    }
+  }
+  return { reaped, missed }
+}
+
+/**
  * Clear anything a PREVIOUS run left behind before this one starts.
  *
  * A walk that dies between creating an org and reaping it leaves residue that
@@ -453,6 +535,10 @@ async function sweepOrphans(db, auth, pending = []) {
     swept.push(doc.id)
   }
   swept.push(...(await sweepOrphanDomains(db)))
+  // Contacts in the operator's CRM that earlier walks left (AGL-4230).
+  const contacts = await reapCanaryContacts(db)
+  if (contacts.reaped) swept.push(`${contacts.reaped} canary contact(s)`)
+  swept.push(...contacts.missed.map((miss) => `STILL ${miss}`))
   return swept
 }
 
@@ -1228,9 +1314,24 @@ async function main() {
   }
   await browser.close().catch(() => undefined)
 
+  // This run's own contacts in the operator's CRM (AGL-4230): sign-up skips
+  // canary addresses, so normally there are none, and any there is residue.
+  begin('reap-contacts')
+  const contacts = await reapCanaryContacts(db)
+  done(
+    contacts.missed.length
+      ? `MISSED ${contacts.missed.join(', ')}`
+      : contacts.reaped
+        ? `deleted ${contacts.reaped}`
+        : MARKETING_HOST_ID
+          ? 'clean'
+          : 'skipped: PLATFORM_MARKETING_HOST_ID is not set',
+  )
+
   const failedLeg = results.find((r) => !r.ok) ?? null
   failedStep = failedStep ?? failedLeg?.failedStep ?? null
-  const reapedCleanly = results.every((r) => r.reapedCleanly)
+  const reapedCleanly =
+    results.every((r) => r.reapedCleanly) && contacts.missed.length === 0
   // The desktop leg's, on the hours it walks; the other leg's otherwise.
   const outcome =
     (results.find((r) => r.leg === 'desktop') ?? results[0])?.workspaceOutcome ?? null

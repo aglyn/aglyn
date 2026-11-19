@@ -3688,7 +3688,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 'reservation.ref': String(reservationId),
               },
             )
-            await sendEmail({
+            const emailOutcome = await sendEmail({
               to: guestEmail,
               subject: designed?.subject ?? 'Reservation confirmed',
               text: designed?.text || fallbackText,
@@ -3703,7 +3703,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             })
             // Cost meter (AGL-1438). Transactional: the guest has paid, and a
             // confirmation a quota refused reads as a failed reservation.
-            await meterHostEmail(String(hostId))
+            // Only a sent email is metered (AGL-4227).
+            if (emailOutcome?.sent) await meterHostEmail(String(hostId))
           }
         }
       }
@@ -4217,7 +4218,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               ...receiptExtras.tokens,
             },
           )
-          await sendEmail({
+          const emailOutcome2 = await sendEmail({
             to: buyerEmailForReceipt,
             subject: designed?.subject ?? `Receipt for your order`,
             text: designed?.text || fallbackText,
@@ -4232,7 +4233,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           })
           // Cost meter (AGL-1438). Transactional: a dropped receipt looks to
           // the buyer like an order that did not go through.
-          await meterHostEmail(String(hostId))
+          // Only a sent email is metered (AGL-4227).
+          if (emailOutcome2?.sent) await meterHostEmail(String(hostId))
         }
         // Inventory per line (AGL-281 semantics).
         for (const line of cart.lines) {
@@ -4553,7 +4555,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                   'giftcard.note': '',
                 },
               )
-              await sendEmail({
+              const emailOutcome3 = await sendEmail({
                 to: giftTo,
                 subject: designed?.subject ?? 'Your gift card',
                 text: designed?.text || fallbackText,
@@ -4568,7 +4570,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               })
               // Cost meter (AGL-1438). Transactional: this email IS the
               // purchased goods.
-              await meterHostEmail(String(hostId))
+              // Only a sent email is metered (AGL-4227).
+              if (emailOutcome3?.sent) await meterHostEmail(String(hostId))
             }
           }
         }
@@ -5547,7 +5550,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                     .filter(Boolean)
                     .join(', ')
                 : ''
-              await sendEmail({
+              const emailOutcome4 = await sendEmail({
                 to: supplier.email,
                 subject: `New order to fulfill for ${storeName}: ${payload.productName}`,
                 // The tracking link opens a form for the carrier and the
@@ -5574,7 +5577,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               })
               // Cost meter (AGL-1438). Transactional: without it the order is
               // never fulfilled.
-              await meterHostEmail(String(hostId))
+              // Only a sent email is metered (AGL-4227).
+              if (emailOutcome4?.sent) await meterHostEmail(String(hostId))
             }
           } catch (routingError) {
             console.error('Dropship routing failed', routingError)
@@ -5710,7 +5714,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 ...receiptExtras.tokens,
               },
             )
-            await sendEmail({
+            const emailOutcome5 = await sendEmail({
               to: String(buyerEmail),
               subject: designed?.subject ?? `Receipt: ${productName}`,
               text: designed?.text || fallbackText,
@@ -5724,7 +5728,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               owedFor: 'order',
             })
             // Cost meter (AGL-1438). Transactional, as the cart receipt above.
-            await meterHostEmail(String(hostId))
+            // Only a sent email is metered (AGL-4227).
+            if (emailOutcome5?.sent) await meterHostEmail(String(hostId))
           }
           const hostSnapshot = await hostRef.get()
           const sellerUid = (await getOrgForHost(String(hostId)))?.org
@@ -5767,7 +5772,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                   'orders.url': await hostConsoleUrl(String(hostId), `/${hostId}/products/orders`),
                 },
               )
-              await sendEmail({
+              const emailOutcome6 = await sendEmail({
                 to: seller.email,
                 subject: designed?.subject ?? `New order: ${productName}`,
                 text: designed?.text || fallbackText,
@@ -5782,7 +5787,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               })
               // Cost meter (AGL-1438). Transactional: the seller learns about
               // the order here.
-              await meterHostEmail(String(hostId))
+              // Only a sent email is metered (AGL-4227).
+              if (emailOutcome6?.sent) await meterHostEmail(String(hostId))
             }
           }
         }

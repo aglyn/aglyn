@@ -47,6 +47,44 @@ final class InviteAutoJoinTests: XCTestCase {
     XCTAssertEqual(calls.accepted, ["i1"])
   }
 
+  /// With several invitations, the newest is the one a person is opened into; the rest join where they stand (AGL-4047).
+  func testOnlyTheNewestInvitationOpens() async {
+    let calls = Calls()
+    let older = PendingInvite(id: "i1", orgID: "o1", orgName: "Acme", role: "editor", handoff: false, createdAtMs: 1_000)
+    let newer = PendingInvite(id: "i2", orgID: "o2", orgName: "North", role: "admin", handoff: false, createdAtMs: 2_000)
+    let auto = join([older, newer], calls)
+    let joined = await auto.run(impersonating: false)
+    XCTAssertEqual(joined, ["o2", "o1"], "both join, newest first")
+    XCTAssertEqual(auto.opens, "o2")
+    XCTAssertEqual(auto.invites.map(\.id), ["i2", "i1"])
+  }
+
+  func testARefusedNewestOpensNothing() async {
+    let calls = Calls()
+    calls.refuse = ["i2"]
+    let older = PendingInvite(id: "i1", orgID: "o1", orgName: "Acme", role: "editor", handoff: false, createdAtMs: 1_000)
+    let newer = PendingInvite(id: "i2", orgID: "o2", orgName: "North", role: "admin", handoff: false, createdAtMs: 2_000)
+    let auto = join([older, newer], calls)
+    let joined = await auto.run(impersonating: false)
+    XCTAssertEqual(joined, ["o1"])
+    XCTAssertNil(auto.opens, "an older invitation joins where the person stands")
+  }
+
+  /// First-run provisioning reads this so the gap after a join never looks like no invitation and no workspace.
+  func testJoiningOrJoinedHoldsProvisioningAndARefusalDoesNot() async {
+    let calls = Calls()
+    let auto = join([acme], calls)
+    XCTAssertFalse(auto.joinedOrJoining)
+    _ = await auto.run(impersonating: false)
+    XCTAssertTrue(auto.joinedOrJoining)
+
+    let refused = Calls()
+    refused.refuse = ["i1"]
+    let waiting = join([acme], refused)
+    _ = await waiting.run(impersonating: false)
+    XCTAssertFalse(waiting.joinedOrJoining, "a refused join is no reason to hold the workspace back")
+  }
+
   func testASupportSessionNeverJoinsForTheCustomer() async {
     let calls = Calls()
     let auto = join([acme], calls)

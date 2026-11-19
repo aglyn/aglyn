@@ -215,6 +215,12 @@ as `/supportx` or `/.well-knownx` stay challenged. A new page a store listing
 links to, or a new association file under another path, needs its own entry
 here and in `tools/scripts/lib/firewall-posture.mjs`.
 
+The console's prefix also covers the other files it serves under
+`/.well-known/`: the connector's sign-in discovery documents and
+`/.well-known/openai-apps-challenge`, the domain proof OpenAI's plugin
+directory fetches (AGL-4225). Its fetcher cannot solve a challenge either, so
+that file needs no rule of its own while this prefix stands.
+
 ### The native apps (AGL-3800)
 
 The iOS, Android and desktop apps call the console's `/api/` routes from

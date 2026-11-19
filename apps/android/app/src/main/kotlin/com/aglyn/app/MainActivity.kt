@@ -20,6 +20,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.aglyn.shell.handOver
 import com.aglyn.shell.handOverToIntro
 import androidx.lifecycle.lifecycleScope
+import com.aglyn.shell.handBackWebOnlyLink
 import com.aglyn.shell.handleConsoleHandoffReturn
 import com.aglyn.core.AuthState
 import com.aglyn.shell.AglynMessagingService
@@ -46,6 +47,11 @@ class MainActivity : ComponentActivity() {
     // launcher behind a not-yet-drawn window) shows between the splash leaving and the first frame (P14).
     window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(getColor(R.color.aglyn_splash_ground)))
     enableEdgeToEdge()
+    // A web-only console page (Android before 15 cannot refuse it in the manifest) goes straight back to the browser.
+    if (savedInstanceState == null && handBackWebOnlyLink(intent)) {
+      finish()
+      return
+    }
     val services = (application as AglynApplication).services
     // A first launch hands the splash straight to the launch intro, whose first frame is the splash's own picture (P14); a
     // warm start keeps the splash up until the auth state is known, then exits with the spec's motion (AGL-3934).
@@ -101,6 +107,7 @@ class MainActivity : ComponentActivity() {
 
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
+    if (handBackWebOnlyLink(intent)) return
     val services = (application as AglynApplication).services
     linkOf(intent)?.takeUnless { services.handleConsoleHandoffReturn(it, lifecycleScope) }?.let { openLink(intent, it) }
   }
