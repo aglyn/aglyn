@@ -20,6 +20,18 @@ final class SitePagesModel {
   var search = ""
 
   var routing: SiteRouting { SiteRouting(host: host.state.value ?? nil) }
+  /// The site's held and flagged pages (AGL-3374); nil until read, and left nil when the read fails (the list shows no
+  /// chips rather than an error over pages that are fine).
+  var holds: PageHoldsAnswer?
+
+  /// The holds shown on one page.
+  func holds(on pageID: String) -> [PageHold] {
+    holdsForTarget(holds?.holds ?? [], HeldPageTarget(type: "screen", id: pageID))
+  }
+
+  func loadHolds(_ api: ConsoleAPIClient, hostID: String) async {
+    holds = try? await fetchPageHolds(api: api, hostID: hostID)
+  }
 
   /// Every page read so far.
   var pages: [PageNode] { tree.map { Array($0.nodes.values) } ?? [] }
@@ -167,8 +179,10 @@ struct PagesScreen: View {
         }
         .task(id: hostID) {
           if startNew && canEdit { sheet = .newPage }
+          async let holds: Void = model.loadHolds(context.api, hostID: hostID)
           await model.bind(context.firestore, hostID: hostID)
           if let initialPageID { await model.reveal(initialPageID) }
+          _ = await holds
         }
         .aglynSearchable(text: $model.search, prompt: "Search pages")
         .task(id: model.search) {
@@ -262,7 +276,7 @@ struct PagesScreen: View {
       if selectable {
         List {
           ForEach(rows) { row in
-            PageListRow(row: row, expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
+            PageListRow(row: row, holds: model.holds(on: row.id), expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
               Task { await model.toggle(row.id) }
             })
             .aglynSelectableRow(row.id, selection: $selection)
@@ -294,7 +308,7 @@ struct PagesScreen: View {
               .navigationTitle(row.page.name)
               .aglynScreenTitle(row.page.name)
             } label: {
-              PageListRow(row: row, expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
+              PageListRow(row: row, holds: model.holds(on: row.id), expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
                 Task { await model.toggle(row.id) }
               })
             }
@@ -340,6 +354,8 @@ struct PagesScreen: View {
 
 struct PageListRow: View {
   let row: PageTreeRow
+  /// Held or flagged by the page review (AGL-3374): a chip per status beside the page's own.
+  var holds: [PageHold] = []
   var expanded = false
   var onToggle: (() -> Void)?
 
@@ -378,9 +394,17 @@ struct PageListRow: View {
         row.page.name, subtitle: subtitle,
         systemImage: row.page.isGroup ? SiteSymbols.group : row.home ? SiteSymbols.home : SiteSymbols.page
       ) {
-        HStack(spacing: AglynSpace.half) {
-          if row.home { StatusChip("Home", tone: .info) }
-          if !row.page.isGroup { StatusChip(status.label, tone: status.live ? .success : .neutral) }
+        // A hold's chip goes above the page's own, each at its own width: beside them on a phone it squeezed the chips
+        // to a letter a line.
+        VStack(alignment: .trailing, spacing: AglynSpace.half) {
+          if !holds.isEmpty {
+            HStack(spacing: AglynSpace.half) { PageHoldChips(holds: holds) }.fixedSize()
+          }
+          HStack(spacing: AglynSpace.half) {
+            if row.home { StatusChip("Home", tone: .info) }
+            if !row.page.isGroup { StatusChip(status.label, tone: status.live ? .success : .neutral) }
+          }
+          .fixedSize()
         }
       }
     }
@@ -580,6 +604,13 @@ struct PageDetail: View {
         if let description = page.description {
           Text(description).font(AglynFont.subheadline).foregroundStyle(.secondary)
         }
+      }
+      // Held, flagged or not approved by the page review (AGL-3374): what happened, what visitors see, what to do.
+      if !model.holds(on: page.id).isEmpty {
+        Section {
+          PageHoldBanner(context: context, answer: model.holds, target: HeldPageTarget(type: "screen", id: page.id))
+        }
+        .aglynBareFormRow()
       }
       if !page.isGroup {
         Section("Details") {

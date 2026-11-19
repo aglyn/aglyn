@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -132,6 +133,18 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null, sta
   val scope = rememberCoroutineScope()
   val runner = remember(hostId) { ActionRunner(scope) }
   val api = remember(hostId, context.api, context.writer) { PagesApi(context.api, context.writer, hostId) }
+  // The site's held and flagged pages (AGL-3374); left null when the read fails, so the list shows no chips rather than
+  // an error over pages that are fine.
+  var holds by remember(hostId) { mutableStateOf<PageHoldsAnswer?>(null) }
+  LaunchedEffect(hostId, context.api) {
+    holds = try {
+      fetchPageHolds(context.api, hostId)
+    } catch (error: kotlinx.coroutines.CancellationException) {
+      throw error
+    } catch (error: Exception) {
+      null
+    }
+  }
   // Opened from Create new: the new-page form comes up at once.
   var dialog by remember { mutableStateOf<PageDialog?>(if (startNew) PageDialog.NewPage else null) }
   val canEdit = com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.edit")
@@ -225,6 +238,7 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null, sta
                 val open = row.page.id in expanded
                 PageRowItem(
                   row,
+                  holds = holdsForTarget(holds?.holds.orEmpty(), HeldPageTarget("screen", row.page.id)),
                   selected = row.page.id == selected,
                   expanded = if (query.isBlank() && row.childCount > 0) open else null,
                   onToggle = {
@@ -251,7 +265,7 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null, sta
       if (row == null) {
         SelectionPlaceholder("Pick a page to see it here", icon = AglynIcons.named("description"))
       } else {
-        PageDetail(context, hostId, row, live.routing, api, runner, canEdit, canPublish, live.loader) { dialog = it }
+        PageDetail(context, hostId, row, live.routing, api, runner, canEdit, canPublish, live.loader, holds) { dialog = it }
       }
     },
   )
@@ -260,7 +274,7 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null, sta
 }
 
 @Composable
-private fun PageRowItem(row: PageTreeRow, selected: Boolean, expanded: Boolean?, onToggle: () -> Unit, onClick: () -> Unit) {
+private fun PageRowItem(row: PageTreeRow, holds: List<PageHold>, selected: Boolean, expanded: Boolean?, onToggle: () -> Unit, onClick: () -> Unit) {
   val status = pageStatus(row)
   val count = if (row.childCount == 1) "1 page" else "${row.childCount} pages"
   Row(Modifier.fillMaxWidth().padding(start = (row.depth * 24).dp), verticalAlignment = Alignment.CenterVertically) {
@@ -290,7 +304,14 @@ private fun PageRowItem(row: PageTreeRow, selected: Boolean, expanded: Boolean?,
       icon = AglynIcons.named(if (row.page.isGroup) "folder" else if (row.home) "home" else "description"),
       selected = selected,
       trailing = {
-        Row(horizontalArrangement = Arrangement.spacedBy(space(0.5f))) {
+        // The chips wrap under each other rather than squeezing the page's name to "…" in a narrow list column.
+        FlowRow(
+          Modifier.widthIn(max = 176.dp),
+          horizontalArrangement = Arrangement.spacedBy(space(0.5f), Alignment.End),
+          verticalArrangement = Arrangement.spacedBy(space(0.5f)),
+        ) {
+          // Held or flagged by the page review (AGL-3374): a chip per status beside the page's own.
+          PageHoldChips(holds)
           if (row.home) StatusChip("Home", StatusTone.INFO)
           if (!row.page.isGroup) StatusChip(status.label, if (status.live) StatusTone.SUCCESS else StatusTone.NEUTRAL)
         }
@@ -312,6 +333,7 @@ private fun PageDetail(
   canEdit: Boolean,
   canPublish: Boolean,
   loader: PagesTreeLoader,
+  holds: PageHoldsAnswer?,
   open: (PageDialog) -> Unit,
 ) {
   val page = row.page
@@ -372,6 +394,8 @@ private fun PageDetail(
       },
     )
     page.description?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    // Held, flagged or not approved by the page review (AGL-3374): what happened, what visitors see, what to do.
+    PageHoldBanner(context, holds, HeldPageTarget("screen", page.id))
     if (!page.isGroup) {
       com.aglyn.ui.PlainSection(null) {
         DetailRow("Address", row.livePath ?: page.slug?.let { "/$it (not published)" }, placeholder = "No address yet")
