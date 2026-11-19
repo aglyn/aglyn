@@ -24,6 +24,6 @@ class MarketplacesNativeTest {
   fun everySpecNamesItsRoutesAndTheCommerceSettingsZone() {
     val specs = MarketplacesScreenJson.files.flatMap { ScreenSpec.parseFile(it) }
     assertEquals(listOf("marketplaces.service", "marketplaces.marketplace", "marketplaces.order").sorted(), specs.map { it.id }.sorted())
-    assertTrue(specs.any { "commerceSettings" in it.zones } || specs.all { it.zones.isEmpty() })
+    assertTrue(specs.any { "commerceSettingsChannels" in it.zones } || specs.all { it.zones.isEmpty() })
   }
 }

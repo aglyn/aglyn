@@ -24,6 +24,6 @@ class ReviewPlatformsNativeTest {
   fun everySpecNamesItsRoutesAndTheCommerceSettingsZone() {
     val specs = ReviewPlatformsScreenJson.files.flatMap { ScreenSpec.parseFile(it) }
     assertEquals(listOf("review-platforms.service", "review-platforms.order").sorted(), specs.map { it.id }.sorted())
-    assertTrue(specs.any { "commerceSettings" in it.zones } || specs.all { it.zones.isEmpty() })
+    assertTrue(specs.any { "commercePromotions" in it.zones } || specs.all { it.zones.isEmpty() })
   }
 }

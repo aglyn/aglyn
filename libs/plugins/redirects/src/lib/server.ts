@@ -34,12 +34,17 @@ export function registerRedirectsApi(): void {
 }
 
 /**
- * The redirects plugin's CONSOLE API: `POST /api/redirects/check`, the
- * Redirects page's save checks for the native apps (`server/redirect-check.ts`).
- * The handler loads with its first call, so neither boot pays for it.
+ * The redirects plugin's CONSOLE API, for the native apps:
+ * `POST /api/redirects/check`, the Redirects page's save checks
+ * (`server/redirect-check.ts`), and `POST /api/redirects/test`, its
+ * "Test a path" (`server/redirect-test.ts`). Each handler loads with its
+ * first call, so neither boot pays for it.
  */
 export function registerRedirectsConsoleApi(): void {
   registerPluginApiRoute('redirects/check', async (req, res) =>
     (await import('./server/redirect-check')).redirectCheckHandler(req, res),
+  )
+  registerPluginApiRoute('redirects/test', async (req, res) =>
+    (await import('./server/redirect-test')).redirectTestHandler(req, res),
   )
 }
