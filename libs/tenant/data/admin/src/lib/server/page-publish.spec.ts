@@ -197,6 +197,50 @@ describe('a live page with nothing to publish, or a draft that cannot be (AGL-42
     expect(result).toEqual(expect.objectContaining({ ok: false, status: 409, code: 'publish_from_editor' }))
     expect(double.writes).toEqual([])
   })
+
+  it('refuses it too when the server editor wrote the draft, keeping the stored overrides untouched (AGL-4235)', async () => {
+    // A draft an API or Assist edit wrote from the saved tree, stamped as
+    // `writeAiEdit` stamps it: the editor's Publish from it would clear the
+    // overrides, so neither keeping nor clearing them here is what it does.
+    const overrides = { lay: { n1: { color: 'red' } } }
+    const double = seed({
+      [version('about')]: { nodes: packed(tree('Old')), updatedAt: SAVED, layoutStyleOverrides: overrides },
+      [draft('about')]: { nodes: packed(tree('New')), baseStamp: SAVED_STAMP, updatedByUid: 'api', aiEditJobId: 'edit-1' },
+    })
+    const { result } = await publish(double, 'about')
+    expect(result).toEqual(expect.objectContaining({ ok: false, status: 409, code: 'publish_from_editor' }))
+    expect(double.writes).toEqual([])
+    expect(double.read(version('about'))?.['layoutStyleOverrides']).toEqual(overrides)
+    expect(double.read(draft('about'))).toBeDefined()
+  })
+
+  it('publishes a server-written draft whose root carries the overrides, as one built on an editor draft does', async () => {
+    const overrides = { lay: { n1: { color: 'red' } } }
+    const double = seed({
+      [version('about')]: { nodes: packed(tree('Old')), updatedAt: SAVED, layoutStyleOverrides: overrides },
+      [draft('about')]: {
+        nodes: packed(tree('New', { layoutStyleOverrides: overrides })),
+        baseStamp: SAVED_STAMP,
+        updatedByUid: 'api',
+        aiEditJobId: 'edit-1',
+      },
+    })
+    const { result } = await publish(double, 'about')
+    expect(result).toEqual(expect.objectContaining({ ok: true, status: 'published' }))
+    expect(stored(double.read(version('about'))?.['nodes'])).toEqual(tree('New'))
+    const write = double.writes.find((entry) => entry.path === version('about'))
+    expect(write?.data?.['layoutStyleOverrides']).toEqual(overrides)
+  })
+
+  it('publishes a draft with no overrides over a version that stores none', async () => {
+    const double = seed({
+      [draft('about')]: { nodes: packed(tree('New')), baseStamp: SAVED_STAMP, updatedByUid: 'api', aiEditJobId: 'edit-1' },
+    })
+    const { result } = await publish(double, 'about')
+    expect(result).toEqual(expect.objectContaining({ ok: true, status: 'published' }))
+    const write = double.writes.find((entry) => entry.path === version('about'))
+    expect(write?.data).not.toHaveProperty('layoutStyleOverrides')
+  })
 })
 
 describe('what is not a page that can be published (AGL-4235)', () => {

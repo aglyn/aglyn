@@ -93,10 +93,9 @@ import { pageRoutePath } from './page-seo-write'
  *   is no rendering here, so the widths stored on the nodes stay as they are.
  * - `extractLayoutStyleOverrides` / `replaceUnderMerge`: exactly as
  *   `saveScreenVersion`. A draft whose root carries no overrides over a
- *   version that stores some is REFUSED: the editor would read that as the
- *   author clearing them, but a draft written by something other than a
- *   canvas (an AI edit) never carries them, and nothing here can tell the
- *   two apart. That page is published from the editor.
+ *   version that stores some is REFUSED, stamped by the server editor or
+ *   not: see the reasoning at the check in `prepareTree`. That page is
+ *   published from the editor.
  * - `measureNodeMap` against `NODE_MAP_MAX_BYTES`, and
  *   `formsOffPublishViolation` with the site's enabled plugins, as the
  *   editor's `refuseFormsOff` reads them.
@@ -309,6 +308,28 @@ async function prepareTree(
 
   const extracted = extractLayoutStyleOverrides(tree as Record<string, unknown>)
   const rootCarriedOverrides = extracted.nodes !== tree
+  // A root with no overrides over a version that stores some is refused,
+  // WHOEVER wrote the draft, because what the editor would publish from that
+  // draft is not what visitors see now:
+  // - The editor parks the version's overrides on the canvas root when it
+  //   opens the VERSION (`injectLayoutStyleOverrides` in the page route), so
+  //   a draft the editor saves carries them, and a root without them there
+  //   means the author cleared them (`style-target.ts` sets the root's key to
+  //   `undefined` when the last one goes, so a cleared root and an untouched
+  //   one cannot be told apart here).
+  // - A draft the server editor wrote (`writeAiEdit`: the Assist edit job
+  //   and `editPageContent`, stamped `aiEditJobId`) built on the SAVED tree
+  //   has a root without them, because the stored `nodes` never carry them.
+  //   Open draft replaces the canvas with that tree whole
+  //   (`canvas.applyNodes(draft.nodes)` in `use-besigner-draft.ts`) and
+  //   re-applies nothing, so the editor's Publish from it CLEARS the stored
+  //   overrides (`replaceUnderMerge(stored, undefined)` deletes the field).
+  //   Keeping them here would publish what the editor would not; clearing
+  //   them would change what visitors see without anyone deciding to. And a
+  //   stamped draft built on an editor draft the author cleared looks the
+  //   same as one built on the saved tree, so the stamp cannot decide it.
+  // So the page is published from the editor, where the person sees the
+  // page as it would go live and chooses.
   if (!rootCarriedOverrides && normalizeLayoutStyleOverrides(context.version.get('layoutStyleOverrides'))) {
     throw new Refused(
       409,
