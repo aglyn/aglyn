@@ -1,5 +1,5 @@
 {
-  "$comment": "The workspace's Domains page natively (the domains plugin's orgNavItems /domains, AGL-4040; gap sweep Domains row 9, piece 1): every domain the workspace holds, with its site, status, renewal and price at renewal, and a page per name. Route: /api/registrar/workspace (DOMAINS_API_ROUTES.workspace); site names from the person's users/{uid}/hostMemberships rows. The registrant contact (view, Edit contact: /api/registrar/contact, Domains row 2) and Connect to a site, Move to another site and Disconnect (/api/registrar/connect and /disconnect, Domains row 3) are here; buying, transfers in and out, renewal, and DNS records are later pieces (Domains rows 1-8).",
+  "$comment": "The workspace's Domains page natively (the domains plugin's orgNavItems /domains, AGL-4040; gap sweep Domains row 9, piece 1): every domain the workspace holds, with its site, status, renewal and price at renewal, and a page per name. Route: /api/registrar/workspace (DOMAINS_API_ROUTES.workspace); site names from the person's users/{uid}/hostMemberships rows. The registrant contact (view, Edit contact: /api/registrar/contact, Domains row 2) and Connect to a site, Move to another site and Disconnect (/api/registrar/connect and /disconnect, Domains row 3) and the Auto-renew switch (/api/registrar/auto-renew, part of Domains row 7) are here; buying, renewing now, transfers in and out, and DNS records are later pieces (Domains rows 1-8).",
   "screens": [
     {
       "id": "domains.list",
@@ -333,6 +333,58 @@
           ]
         },
         {
+          "type": "notice",
+          "id": "expired",
+          "tone": "error",
+          "when": "data.ws.rows[domain=params.domain].status == expired",
+          "text": "It expired and the site is back on its free address. For a short while after expiring, a domain can usually still be renewed."
+        },
+        {
+          "type": "notice",
+          "id": "transferredOut",
+          "tone": "info",
+          "when": "data.ws.rows[domain=params.domain].status == transferred-out",
+          "text": "It now belongs to another registrar, where you manage and renew it."
+        },
+        {
+          "type": "list",
+          "id": "autoRenew",
+          "when": "data.ws.rows[domain=params.domain].status == active",
+          "items": "const.autoRenew",
+          "count": false,
+          "primary": "{item.label}",
+          "icon": "arrow.clockwise|autorenew",
+          "toggle": {
+            "value": "{data.ws.rows[domain=params.domain].autoRenew}",
+            "disabled": "!data.ws.billingPermission",
+            "label": "Auto-renew",
+            "on": {
+              "id": "on",
+              "label": "Turn on",
+              "url": "/api/registrar/auto-renew",
+              "body": {
+                "orgId": "{org.id}",
+                "domain": "{params.domain}",
+                "autoRenew": true
+              },
+              "success": "Auto-renew is on",
+              "reload": true
+            },
+            "off": {
+              "id": "off",
+              "label": "Turn off",
+              "url": "/api/registrar/auto-renew",
+              "body": {
+                "orgId": "{org.id}",
+                "domain": "{params.domain}",
+                "autoRenew": false
+              },
+              "success": "Auto-renew is off",
+              "reload": true
+            }
+          }
+        },
+        {
           "type": "actions",
           "id": "connect",
           "when": "data.ws.rows[domain=params.domain].status == active",
@@ -639,7 +691,14 @@
             }
           ]
         }
-      ]
+      ],
+      "constants": {
+        "autoRenew": [
+          {
+            "label": "Auto-renew"
+          }
+        ]
+      }
     }
   ]
 }

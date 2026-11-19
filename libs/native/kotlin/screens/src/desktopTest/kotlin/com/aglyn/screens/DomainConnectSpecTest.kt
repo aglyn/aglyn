@@ -109,4 +109,22 @@ class DomainConnectSpecTest {
     assertTrue(ScreenValues.condition(view.whenCondition, expired))
     assertFalse(ScreenValues.condition(editBlock.whenCondition, expired))
   }
+  /** Part of Domains row 7: the Auto-renew switch, for an active name, and only for someone the route lets manage billing. */
+  @Test
+  fun autoRenewSwitchesThroughItsRoute() {
+    val ctx = json(
+      """{"org":{"id":"o1"},"params":{"domain":"bakery.example"},
+          "data":{"ws":{"billingPermission":false,"rows":[{"domain":"bakery.example","status":"active","autoRenew":true}]}}}""",
+    )
+    val block = spec.blocks.first { it.id == "autoRenew" }
+    assertTrue(ScreenValues.condition(block.whenCondition, ctx))
+    val toggle = block.raw.obj("toggle")!!
+    assertEquals("true", ScreenValues.render(toggle.str("value")!!, ctx))
+    assertTrue(ScreenValues.condition(toggle.str("disabled"), ctx))
+    val off = ActionSpec.parse(toggle.obj("off")!!)!!
+    assertEquals("/api/registrar/auto-renew", off.url)
+    assertEquals(json("""{"orgId":"o1","domain":"bakery.example","autoRenew":false}"""), ScreenValues.resolveBody(off.body!!, ctx))
+    assertEquals("Auto-renew is off", off.success)
+    assertFalse(ScreenValues.condition(spec.blocks.first { it.id == "expired" }.whenCondition, ctx))
+  }
 }

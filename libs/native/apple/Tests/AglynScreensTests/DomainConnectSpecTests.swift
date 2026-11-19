@@ -109,4 +109,24 @@ final class DomainConnectSpecTests: XCTestCase {
     XCTAssertTrue(ScreenValues.condition(try block("contact").when, in: expired))
     XCTAssertFalse(ScreenValues.condition(try block("contactEdit").when, in: expired))
   }
+
+  /// Part of Domains row 7: the Auto-renew switch, for an active name, and only for someone the route lets manage billing.
+  func testAutoRenewSwitchesThroughItsRoute() throws {
+    let spec = try XCTUnwrap(ScreenCatalog.parse(Data(contentsOf: Self.domainSpecs)).first { $0.id == "domains.domain" })
+    let ctx = try XCTUnwrap(
+      JSONValue.decode(
+        Data(
+          #"{"org":{"id":"o1"},"params":{"domain":"bakery.example"},"data":{"ws":{"billingPermission":false,"rows":[{"domain":"bakery.example","status":"active","autoRenew":true}]}}}"#
+            .utf8)))
+    let block = try XCTUnwrap(spec.blocks.first { $0.id == "autoRenew" })
+    XCTAssertTrue(ScreenValues.condition(block.when, in: ctx))
+    let toggle = try XCTUnwrap(block["toggle"])
+    XCTAssertEqual(ScreenValues.render(try XCTUnwrap(toggle["value"]?.stringValue), in: ctx), "true")
+    XCTAssertTrue(ScreenValues.condition(toggle["disabled"]?.stringValue, in: ctx))
+    let off = try XCTUnwrap(toggle["off"].flatMap(ActionSpec.init))
+    XCTAssertEqual(off.url, "/api/registrar/auto-renew")
+    XCTAssertEqual(ScreenValues.resolveBody(try XCTUnwrap(off.body), in: ctx), ["orgId": "o1", "domain": "bakery.example", "autoRenew": false])
+    XCTAssertEqual(off.success, "Auto-renew is off")
+    XCTAssertFalse(ScreenValues.condition(try XCTUnwrap(spec.blocks.first { $0.id == "expired" }).when, in: ctx))
+  }
 }
