@@ -137,8 +137,21 @@ describe('what a client is told about each tool (AGL-4225)', () => {
     const idempotentPosts = ['convertLead', 'createLead', 'mergeContact', 'publishSite']
     // What reaches past the workspace's own records, each for the reason the
     // operation states beside its flag: a public website or address, the
-    // buyer's inbox, a DNS lookup of a new address's mail domain.
-    const openWorld = ['convertLead', 'createContact', 'createLead', 'createSite', 'publishSite', 'updateOrder']
+    // buyer's inbox, a DNS lookup of a new address's mail domain, a public
+    // link to an uploaded file (AGL-4235).
+    const openWorld = [
+      'convertLead',
+      'createContact',
+      'createLead',
+      'createSite',
+      'publishSite',
+      'updateOrder',
+      'uploadOrgMedia',
+      'uploadSiteMedia',
+    ]
+    // POSTs that can overwrite: a merge removes a contact, and adding a lead
+    // whose address the site already holds updates that lead (AGL-4235).
+    const destructivePosts = ['createLead', 'mergeContact']
     const counts: Record<string, number> = {}
     for (const tool of tools) {
       counts[tool.method] = (counts[tool.method] ?? 0) + 1
@@ -146,7 +159,7 @@ describe('what a client is told about each tool (AGL-4225)', () => {
         title: tool.title,
         readOnlyHint: tool.method === 'GET',
         destructiveHint:
-          tool.method === 'PATCH' || tool.method === 'DELETE' || tool.name === 'mergeContact',
+          tool.method === 'PATCH' || tool.method === 'DELETE' || destructivePosts.includes(tool.name),
         idempotentHint: tool.method !== 'POST' || idempotentPosts.includes(tool.name),
         openWorldHint: openWorld.includes(tool.name),
       }
