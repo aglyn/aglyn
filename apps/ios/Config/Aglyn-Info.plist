@@ -45,7 +45,9 @@
 	<key>AGLYN_DEBUG_PASSWORD</key>
 	<string>$(AGLYN_DEBUG_PASSWORD)</string>
 	<key>NSCameraUsageDescription</key>
-	<string>The camera reads product barcodes so you can find and sell items quickly.</string>
+	<string>Aglyn uses the camera to take photos you add to your media and to read product barcodes.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Aglyn uses the microphone only when you record a video to add to your media.</string>
 	<!-- Firebase Auth's app-delegate proxy (iOS) takes the APNs callbacks and calls the app's own only when the
 	     delegate class implements them; SwiftUI's delegate forwards them to PushAppDelegate instead, so with the
 	     proxy on the device token never reaches PushCenter. The apps sign in with credentials only (no phone auth,
