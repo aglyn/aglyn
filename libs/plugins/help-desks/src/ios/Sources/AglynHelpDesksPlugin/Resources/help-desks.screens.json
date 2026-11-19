@@ -1,0 +1,794 @@
+{
+  "$comment": "The Help desks plugin's native screens: a site's connections to the merchant's own Gorgias, Re:amaze, Kustomer, Gladly or Richpanel account, in the site's plugin settings (sitePluginSettings zone, and a hostSettings card), as the console's Help desks card: connect with the help desk's own API credentials, the channel, inbox or orders object, sending buyers and orders, sending contact form messages as tickets, the sync log, Sync now, pause, resume and disconnect. Routes: GET/POST /api/help-desks/connections, PATCH/DELETE /api/help-desks/connection, POST /api/help-desks/sync-now, GET /api/help-desks/log. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "help-desks.service",
+      "title": "Help desks",
+      "label": "Help desks",
+      "subtitle": "Show your support team each buyer's recent orders beside their tickets, and, if you choose, send contact form messages there as new tickets.",
+      "icon": "headphones|support",
+      "scope": "site",
+      "order": 75,
+      "zones": [
+        "sitePluginSettings"
+      ],
+      "cardSlot": "hostSettings",
+      "requires": "params.pluginId == help-desks",
+      "load": {
+        "conn": {
+          "url": "/api/help-desks/connections?hostId={site.id}",
+          "when": "site.can[helpDesks.view]",
+          "optional": true
+        }
+      },
+      "constants": {
+        "providers": [
+          {
+            "id": "gorgias",
+            "label": "Gorgias",
+            "orders": "Each buyer with their recent orders as customer data, beside their tickets.",
+            "ticketNoun": "ticket",
+            "target": null,
+            "fields": [
+              {
+                "key": "account",
+                "label": "Gorgias domain",
+                "help": "The first part of your Gorgias address: acme for acme.gorgias.com.",
+                "secret": false,
+                "email": false,
+                "required": true
+              },
+              {
+                "key": "login",
+                "label": "Gorgias username",
+                "help": "The email address Gorgias lists as the username for its REST API.",
+                "secret": false,
+                "email": true,
+                "required": true
+              },
+              {
+                "key": "token",
+                "label": "Gorgias API key",
+                "help": "Gorgias lists it beside the username in its REST API settings. Stored encrypted; it is never shown again.",
+                "secret": true,
+                "email": false,
+                "required": true
+              }
+            ]
+          },
+          {
+            "id": "reamaze",
+            "label": "Re:amaze",
+            "orders": "Each buyer as a contact, with their recent orders as customer data.",
+            "ticketNoun": "conversation",
+            "target": {
+              "noun": "channel",
+              "label": "Channel",
+              "help": "Contact form messages start conversations in this channel.",
+              "purpose": "tickets"
+            },
+            "fields": [
+              {
+                "key": "account",
+                "label": "Re:amaze brand",
+                "help": "The first part of your Re:amaze address: acme for acme.reamaze.io.",
+                "secret": false,
+                "email": false,
+                "required": true
+              },
+              {
+                "key": "login",
+                "label": "Re:amaze login email",
+                "help": "The email address you sign in to Re:amaze with.",
+                "secret": false,
+                "email": true,
+                "required": true
+              },
+              {
+                "key": "token",
+                "label": "Re:amaze API token",
+                "help": "In Re:amaze: Settings → Developer → API Token. Stored encrypted; it is never shown again.",
+                "secret": true,
+                "email": false,
+                "required": true
+              }
+            ]
+          },
+          {
+            "id": "kustomer",
+            "label": "Kustomer",
+            "orders": "Each buyer as a customer, with each order as a custom object on their timeline.",
+            "ticketNoun": "conversation",
+            "target": {
+              "noun": "custom object",
+              "label": "Orders object",
+              "help": "Each order is added to the customer as one of these custom objects.",
+              "purpose": "orders"
+            },
+            "fields": [
+              {
+                "key": "token",
+                "label": "Kustomer API key",
+                "help": "In Kustomer: Settings → Security → API Keys, with roles to read and write customers, custom objects and messages, and to read Klasses. Stored encrypted; it is never shown again.",
+                "secret": true,
+                "email": false,
+                "required": true
+              }
+            ]
+          },
+          {
+            "id": "gladly",
+            "label": "Gladly",
+            "orders": "Each buyer as a customer, with each order as an activity on their timeline.",
+            "ticketNoun": "task",
+            "target": {
+              "noun": "inbox",
+              "label": "Inbox",
+              "help": "Contact form messages become tasks in this inbox.",
+              "purpose": "tickets"
+            },
+            "fields": [
+              {
+                "key": "account",
+                "label": "Gladly organization",
+                "help": "The first part of your Gladly address: acme for acme.gladly.com.",
+                "secret": false,
+                "email": false,
+                "required": true
+              },
+              {
+                "key": "login",
+                "label": "Gladly user email",
+                "help": "The email address of the Gladly user the API token belongs to.",
+                "secret": false,
+                "email": true,
+                "required": true
+              },
+              {
+                "key": "token",
+                "label": "Gladly API token",
+                "help": "A token created by a Gladly user with the API User permission. Stored encrypted; it is never shown again.",
+                "secret": true,
+                "email": false,
+                "required": true
+              }
+            ]
+          },
+          {
+            "id": "richpanel",
+            "label": "Richpanel",
+            "orders": "Each buyer as a customer, with each order in their order history.",
+            "ticketNoun": "ticket",
+            "target": null,
+            "fields": [
+              {
+                "key": "token",
+                "label": "Richpanel API key",
+                "help": "In Richpanel: Settings → Integrations → API Keys. Stored encrypted; it is never shown again.",
+                "secret": true,
+                "email": false,
+                "required": true
+              },
+              {
+                "key": "appClientId",
+                "label": "Richpanel app client ID",
+                "help": "Your store’s ID, listed under Settings → Connected Apps in Richpanel. Stored encrypted; it is never shown again.",
+                "secret": true,
+                "email": false,
+                "required": true
+              },
+              {
+                "key": "supportEmail",
+                "label": "Support email address",
+                "help": "The address your Richpanel email channel receives mail at. Contact form tickets are addressed to it.",
+                "secret": false,
+                "email": true,
+                "required": true
+              }
+            ]
+          }
+        ],
+        "statuses": [
+          {
+            "id": "active",
+            "label": "Syncing",
+            "tone": "success"
+          },
+          {
+            "id": "paused",
+            "label": "Paused",
+            "tone": "neutral"
+          },
+          {
+            "id": "error",
+            "label": "Stopped",
+            "tone": "error"
+          },
+          {
+            "id": "reconnect",
+            "label": "Connect again",
+            "tone": "warning"
+          }
+        ],
+        "log": [
+          {
+            "id": "run",
+            "label": "Synced",
+            "tone": "success"
+          },
+          {
+            "id": "error",
+            "label": "Error",
+            "tone": "error"
+          },
+          {
+            "id": "item-failed",
+            "label": "Not sent",
+            "tone": "warning"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "viewRefusal",
+          "tone": "info",
+          "when": "!site.can[helpDesks.view]",
+          "text": "{app.permissionRefusal[helpDesks.view]}"
+        },
+        {
+          "type": "notice",
+          "id": "manageRefusal",
+          "tone": "info",
+          "when": "site.can[helpDesks.view] && !site.can[helpDesks.manage]",
+          "text": "{app.permissionRefusal[helpDesks.manage]}"
+        },
+        {
+          "type": "notice",
+          "id": "unavailable",
+          "tone": "info",
+          "when": "data.conn && !data.conn.available.0 && !data.conn.connections.0",
+          "text": "Help desks are not available on this deployment yet."
+        },
+        {
+          "type": "list",
+          "id": "providers",
+          "title": "Help desks",
+          "when": "data.conn.available.0 || data.conn.connections.0",
+          "items": "const.providers",
+          "filter": "data.conn.available ~= @item.id || data.conn.connections.*.provider ~= @item.id",
+          "primary": "{item.label}",
+          "secondary": "{item.orders}",
+          "icon": "headphones|support",
+          "badges": [
+            {
+              "text": "{const.statuses[id=data.conn.connections[provider=item.id].status].label}",
+              "when": "data.conn.connections[provider=item.id]",
+              "tones": {
+                "Syncing": "success",
+                "Paused": "neutral",
+                "Stopped": "error",
+                "Connect again": "warning",
+                "*": "neutral"
+              }
+            },
+            {
+              "text": "Not connected",
+              "tone": "neutral",
+              "when": "!data.conn.connections[provider=item.id]"
+            }
+          ],
+          "open": {
+            "screen": "help-desks.provider",
+            "params": {
+              "provider": "{item.id}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "help-desks.provider",
+      "title": "{const.providers[id=params.provider].label|'Help desk'}",
+      "label": "Help desk",
+      "icon": "headphones|support",
+      "scope": "site",
+      "load": {
+        "conn": "/api/help-desks/connections?hostId={site.id}",
+        "log": {
+          "url": "/api/help-desks/log?hostId={site.id}&provider={params.provider}",
+          "when": "data.conn.connections[provider=params.provider]",
+          "optional": true
+        }
+      },
+      "constants": {
+        "providers": [
+          {
+            "id": "gorgias",
+            "label": "Gorgias",
+            "orders": "Each buyer with their recent orders as customer data, beside their tickets.",
+            "ticketNoun": "ticket",
+            "target": null,
+            "fields": [
+              {
+                "key": "account",
+                "label": "Gorgias domain",
+                "help": "The first part of your Gorgias address: acme for acme.gorgias.com.",
+                "secret": false,
+                "email": false,
+                "required": true
+              },
+              {
+                "key": "login",
+                "label": "Gorgias username",
+                "help": "The email address Gorgias lists as the username for its REST API.",
+                "secret": false,
+                "email": true,
+                "required": true
+              },
+              {
+                "key": "token",
+                "label": "Gorgias API key",
+                "help": "Gorgias lists it beside the username in its REST API settings. Stored encrypted; it is never shown again.",
+                "secret": true,
+                "email": false,
+                "required": true
+              }
+            ]
+          },
+          {
+            "id": "reamaze",
+            "label": "Re:amaze",
+            "orders": "Each buyer as a contact, with their recent orders as customer data.",
+            "ticketNoun": "conversation",
+            "target": {
+              "noun": "channel",
+              "label": "Channel",
+              "help": "Contact form messages start conversations in this channel.",
+              "purpose": "tickets"
+            },
+            "fields": [
+              {
+                "key": "account",
+                "label": "Re:amaze brand",
+                "help": "The first part of your Re:amaze address: acme for acme.reamaze.io.",
+                "secret": false,
+                "email": false,
+                "required": true
+              },
+              {
+                "key": "login",
+                "label": "Re:amaze login email",
+                "help": "The email address you sign in to Re:amaze with.",
+                "secret": false,
+                "email": true,
+                "required": true
+              },
+              {
+                "key": "token",
+                "label": "Re:amaze API token",
+                "help": "In Re:amaze: Settings → Developer → API Token. Stored encrypted; it is never shown again.",
+                "secret": true,
+                "email": false,
+                "required": true
+              }
+            ]
+          },
+          {
+            "id": "kustomer",
+            "label": "Kustomer",
+            "orders": "Each buyer as a customer, with each order as a custom object on their timeline.",
+            "ticketNoun": "conversation",
+            "target": {
+              "noun": "custom object",
+              "label": "Orders object",
+              "help": "Each order is added to the customer as one of these custom objects.",
+              "purpose": "orders"
+            },
+            "fields": [
+              {
+                "key": "token",
+                "label": "Kustomer API key",
+                "help": "In Kustomer: Settings → Security → API Keys, with roles to read and write customers, custom objects and messages, and to read Klasses. Stored encrypted; it is never shown again.",
+                "secret": true,
+                "email": false,
+                "required": true
+              }
+            ]
+          },
+          {
+            "id": "gladly",
+            "label": "Gladly",
+            "orders": "Each buyer as a customer, with each order as an activity on their timeline.",
+            "ticketNoun": "task",
+            "target": {
+              "noun": "inbox",
+              "label": "Inbox",
+              "help": "Contact form messages become tasks in this inbox.",
+              "purpose": "tickets"
+            },
+            "fields": [
+              {
+                "key": "account",
+                "label": "Gladly organization",
+                "help": "The first part of your Gladly address: acme for acme.gladly.com.",
+                "secret": false,
+                "email": false,
+                "required": true
+              },
+              {
+                "key": "login",
+                "label": "Gladly user email",
+                "help": "The email address of the Gladly user the API token belongs to.",
+                "secret": false,
+                "email": true,
+                "required": true
+              },
+              {
+                "key": "token",
+                "label": "Gladly API token",
+                "help": "A token created by a Gladly user with the API User permission. Stored encrypted; it is never shown again.",
+                "secret": true,
+                "email": false,
+                "required": true
+              }
+            ]
+          },
+          {
+            "id": "richpanel",
+            "label": "Richpanel",
+            "orders": "Each buyer as a customer, with each order in their order history.",
+            "ticketNoun": "ticket",
+            "target": null,
+            "fields": [
+              {
+                "key": "token",
+                "label": "Richpanel API key",
+                "help": "In Richpanel: Settings → Integrations → API Keys. Stored encrypted; it is never shown again.",
+                "secret": true,
+                "email": false,
+                "required": true
+              },
+              {
+                "key": "appClientId",
+                "label": "Richpanel app client ID",
+                "help": "Your store’s ID, listed under Settings → Connected Apps in Richpanel. Stored encrypted; it is never shown again.",
+                "secret": true,
+                "email": false,
+                "required": true
+              },
+              {
+                "key": "supportEmail",
+                "label": "Support email address",
+                "help": "The address your Richpanel email channel receives mail at. Contact form tickets are addressed to it.",
+                "secret": false,
+                "email": true,
+                "required": true
+              }
+            ]
+          }
+        ],
+        "statuses": [
+          {
+            "id": "active",
+            "label": "Syncing",
+            "tone": "success"
+          },
+          {
+            "id": "paused",
+            "label": "Paused",
+            "tone": "neutral"
+          },
+          {
+            "id": "error",
+            "label": "Stopped",
+            "tone": "error"
+          },
+          {
+            "id": "reconnect",
+            "label": "Connect again",
+            "tone": "warning"
+          }
+        ],
+        "log": [
+          {
+            "id": "run",
+            "label": "Synced",
+            "tone": "success"
+          },
+          {
+            "id": "error",
+            "label": "Error",
+            "tone": "error"
+          },
+          {
+            "id": "item-failed",
+            "label": "Not sent",
+            "tone": "warning"
+          }
+        ]
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "manageRefusal",
+          "tone": "info",
+          "when": "!site.can[helpDesks.manage]",
+          "text": "{app.permissionRefusal[helpDesks.manage]}"
+        },
+        {
+          "type": "notice",
+          "id": "notConnected",
+          "tone": "info",
+          "when": "!data.conn.connections[provider=params.provider]",
+          "text": "Not connected. Connect your own {const.providers[id=params.provider].label} account with its API credentials; Aglyn never asks for your password."
+        },
+        {
+          "type": "notice",
+          "id": "lastError",
+          "tone": "warning",
+          "when": "data.conn.connections[provider=params.provider].lastError && data.conn.connections[provider=params.provider].status == active",
+          "text": "{data.conn.connections[provider=params.provider].lastError}"
+        },
+        {
+          "type": "notice",
+          "id": "lastErrorStopped",
+          "tone": "error",
+          "when": "data.conn.connections[provider=params.provider].lastError && data.conn.connections[provider=params.provider].status != active",
+          "text": "{data.conn.connections[provider=params.provider].lastError}"
+        },
+        {
+          "type": "fields",
+          "id": "status",
+          "when": "data.conn.connections[provider=params.provider]",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "{const.statuses[id=data.conn.connections[provider=params.provider].status].label}",
+              "chip": true,
+              "tones": {
+                "Syncing": "success",
+                "Paused": "neutral",
+                "Stopped": "error",
+                "Connect again": "warning",
+                "*": "neutral"
+              }
+            },
+            {
+              "label": "Account",
+              "value": "{data.conn.connections[provider=params.provider].accountName}",
+              "when": "data.conn.connections[provider=params.provider].accountName"
+            },
+            {
+              "label": "Last synced",
+              "value": "{data.conn.connections[provider=params.provider].lastSuccessAtMs|'Not yet':datetime}"
+            },
+            {
+              "label": "First copy",
+              "value": "Copying your buyers and recent orders for the first time",
+              "when": "data.conn.connections[provider=params.provider].syncCustomers && !data.conn.connections[provider=params.provider].backfillDone"
+            },
+            {
+              "label": "Sent",
+              "value": "{data.conn.connections[provider=params.provider].totals.customersPushed} customers sent · {data.conn.connections[provider=params.provider].totals.ordersPushed} orders sent · {data.conn.connections[provider=params.provider].totals.ticketsCreated} {const.providers[id=params.provider].ticketNoun}s opened"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "manage",
+          "when": "site.can[helpDesks.manage]",
+          "items": [
+            {
+              "label": "Connect",
+              "icon": "link|link",
+              "url": "/api/help-desks/connections",
+              "promptTitle": "Connect {const.providers[id=params.provider].label}",
+              "submitLabel": "Check and connect",
+              "prompt": [
+                {
+                  "fieldsFrom": {
+                    "items": "const.providers[id=params.provider].fields",
+                    "key": "{item.key}",
+                    "label": "{item.label}",
+                    "help": "{item.help}",
+                    "required": "required",
+                    "kinds": {
+                      "secret": "password",
+                      "email": "email"
+                    }
+                  }
+                }
+              ],
+              "body": {
+                "$merge": [
+                  {
+                    "hostId": "{site.id}",
+                    "provider": "{params.provider}"
+                  },
+                  "{form}"
+                ]
+              },
+              "success": "{const.providers[id=params.provider].label} is connected. The first sync starts within 15 minutes.",
+              "reload": true,
+              "id": "connect",
+              "when": "!data.conn.connections[provider=params.provider] && data.conn.available ~= @params.provider"
+            },
+            {
+              "label": "Connect again",
+              "icon": "link|link",
+              "url": "/api/help-desks/connections",
+              "promptTitle": "Connect {const.providers[id=params.provider].label}",
+              "submitLabel": "Check and connect",
+              "prompt": [
+                {
+                  "fieldsFrom": {
+                    "items": "const.providers[id=params.provider].fields",
+                    "key": "{item.key}",
+                    "label": "{item.label}",
+                    "help": "{item.help}",
+                    "required": "required",
+                    "kinds": {
+                      "secret": "password",
+                      "email": "email"
+                    }
+                  }
+                }
+              ],
+              "body": {
+                "$merge": [
+                  {
+                    "hostId": "{site.id}",
+                    "provider": "{params.provider}"
+                  },
+                  "{form}"
+                ]
+              },
+              "success": "{const.providers[id=params.provider].label} is connected. The first sync starts within 15 minutes.",
+              "reload": true,
+              "id": "reconnect",
+              "when": "data.conn.connections[provider=params.provider].status == reconnect && data.conn.available ~= @params.provider"
+            },
+            {
+              "id": "syncNow",
+              "label": "Sync now",
+              "icon": "arrow.clockwise|sync",
+              "when": "data.conn.connections[provider=params.provider].status == active,error",
+              "url": "/api/help-desks/sync-now",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}"
+              },
+              "success": "Synced. Anything left continues in the background.",
+              "reload": true
+            },
+            {
+              "id": "pause",
+              "label": "Pause",
+              "icon": "pause|pause",
+              "when": "data.conn.connections[provider=params.provider].status == active",
+              "method": "PATCH",
+              "url": "/api/help-desks/connection",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}",
+                "paused": true
+              },
+              "reload": true
+            },
+            {
+              "id": "resume",
+              "label": "Resume",
+              "icon": "play|play_arrow",
+              "when": "data.conn.connections[provider=params.provider].status == paused",
+              "method": "PATCH",
+              "url": "/api/help-desks/connection",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}",
+                "paused": false
+              },
+              "reload": true
+            },
+            {
+              "id": "disconnect",
+              "label": "Disconnect",
+              "icon": "xmark.circle|link_off",
+              "destructive": true,
+              "when": "data.conn.connections[provider=params.provider]",
+              "method": "DELETE",
+              "confirm": "Disconnect {const.providers[id=params.provider].label}?",
+              "confirmLabel": "Disconnect",
+              "confirmMessage": "Nothing more is sent to it, and the stored credential, the sync log and any orders or messages not yet sent are deleted. Customers, orders and tickets already in {const.providers[id=params.provider].label} stay there.",
+              "url": "/api/help-desks/connection",
+              "body": {
+                "hostId": "{site.id}",
+                "provider": "{params.provider}"
+              },
+              "success": "{const.providers[id=params.provider].label} is disconnected.",
+              "reload": true
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "settings",
+          "when": "data.conn.connections[provider=params.provider] && site.can[helpDesks.manage]",
+          "fields": [
+            {
+              "key": "targetId",
+              "label": "{const.providers[id=params.provider].target.label}",
+              "kind": "select",
+              "when": "const.providers[id=params.provider].target",
+              "initial": "{data.conn.connections[provider=params.provider].targetId}",
+              "help": "{const.providers[id=params.provider].target.help}",
+              "optionsFrom": {
+                "items": "data.conn.connections[provider=params.provider].targets",
+                "value": "{item.id}",
+                "label": "{item.name}"
+              }
+            },
+            {
+              "key": "syncCustomers",
+              "label": "Send buyers and their orders",
+              "kind": "toggle",
+              "initial": "{data.conn.connections[provider=params.provider].syncCustomers}"
+            },
+            {
+              "key": "sendTickets",
+              "label": "Send contact form messages to {const.providers[id=params.provider].label}",
+              "kind": "toggle",
+              "initial": "{data.conn.connections[provider=params.provider].sendTickets}",
+              "help": "Each message submitted through this site's forms opens a new {const.providers[id=params.provider].ticketNoun} from its sender. Messages still arrive in your Inbox."
+            }
+          ],
+          "submit": {
+            "id": "save",
+            "label": "Save",
+            "icon": "checkmark|check",
+            "method": "PATCH",
+            "url": "/api/help-desks/connection",
+            "body": {
+              "hostId": "{site.id}",
+              "provider": "{params.provider}",
+              "targetId?": "{form.targetId}",
+              "syncCustomers": "{form.syncCustomers}",
+              "sendTickets": "{form.sendTickets}"
+            },
+            "success": "Saved.",
+            "reload": true
+          }
+        },
+        {
+          "type": "notice",
+          "id": "noTargets",
+          "tone": "info",
+          "when": "data.conn.connections[provider=params.provider] && const.providers[id=params.provider].target && !data.conn.connections[provider=params.provider].targets.0",
+          "text": "{const.providers[id=params.provider].label} listed no {const.providers[id=params.provider].target.noun} to choose. Add one there, then connect again."
+        },
+        {
+          "type": "list",
+          "id": "log",
+          "title": "Sync log",
+          "when": "data.conn.connections[provider=params.provider]",
+          "items": "data.log.entries",
+          "page": 25,
+          "primary": "{item.message}",
+          "secondary": "{item.atMs|'Not yet':datetime}",
+          "badges": [
+            {
+              "text": "{const.log[id=item.kind].label}",
+              "tones": {
+                "Synced": "success",
+                "Error": "error",
+                "Not sent": "warning",
+                "*": "neutral"
+              }
+            }
+          ],
+          "empty": "Nothing has run yet."
+        }
+      ]
+    }
+  ]
+}
