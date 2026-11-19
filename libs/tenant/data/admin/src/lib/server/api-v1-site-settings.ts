@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { screenRoutePathToUrl } from '@aglyn/aglyn/app-utils/screen-route'
+import { isScreenGroup, screenRoutePathToUrl } from '@aglyn/aglyn/app-utils/screen-route'
 import type { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import { ApiErrors, apiJson, listResponse } from './api-http'
 import {
@@ -155,6 +155,16 @@ const PAGE_WRITE_METHODS: ReadonlySet<string> = new Set(['PATCH', 'DELETE'])
 const text = (value: unknown): string | null => (typeof value === 'string' && value !== '' ? value : null)
 
 /**
+ * What the pages list and the page read return: every page of the site, and
+ * every folder (`kind: 'group'`) a page can sit in or be moved into — not
+ * deleted, and never an email design, an error page or an entry template.
+ * A folder has no address, so it reads `published: false` and `path: null`.
+ */
+export function isApiV1PageOrFolder(data: Record<string, unknown> | null | undefined): boolean {
+  return isApiV1Page(data) || (isScreenGroup(data) && data?.['deletedAt'] == null)
+}
+
+/**
  * One page as the API publishes it: what it is called, where it sits, its
  * public address, and its search listing. Never its content.
  */
@@ -185,6 +195,8 @@ export function pageView(pageId: string, data: Record<string, unknown>, routingM
 /**
  * `GET /v1/sites/{siteId}/pages`, `GET …/pages/{pageId}` and
  * `PATCH …/pages/{pageId}/seo`. `segments` is the whole path under `/v1`.
+ * The list and the read include folders; a page's search listing is a
+ * page's only, so a folder's is `No such page`.
  *
  * The rest of `/pages` is dispatched from here (AGL-4235): what is on a page
  * (`…/pages/{pageId}/content`, `…/content/edits`) to `handlePageContent`, and
@@ -242,7 +254,7 @@ export async function handleSitePages(
   if (pageId) {
     const snapshot = await pages.doc(pageId).get()
     const data = snapshot.data() as Record<string, unknown> | undefined
-    if (!snapshot.exists || !data || !isApiV1Page(data)) {
+    if (!snapshot.exists || !data || !isApiV1PageOrFolder(data)) {
       return ApiErrors.notFound({ message: 'No such page', headers: ctx.headers })
     }
     return apiJson(pageView(pageId, data, routingMap), { headers: ctx.headers })
@@ -250,7 +262,7 @@ export async function handleSitePages(
 
   const { docs, nextCursor } = await paginate(pages, url)
   const data = docs
-    .filter((doc) => isApiV1Page(doc.data()))
+    .filter((doc) => isApiV1PageOrFolder(doc.data()))
     .map((doc) => pageView(doc.id, doc.data(), routingMap))
   return listResponse(data, nextCursor, ctx.headers)
 }
