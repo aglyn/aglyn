@@ -2052,6 +2052,27 @@
       ]
     },
     {
+      "id": "ai.collaboratorCreditsColumn",
+      "title": "AI credits (site, month)",
+      "label": "AI credits (site, month)",
+      "subtitle": "A column on a site's Collaborators (the console's hostMembers column ai-collaborator-credits): the AI credits each collaborator drew on this site this month. A reader without billing.view, and an invited collaborator, read a dash, as on the console.",
+      "scope": "site",
+      "zones": [
+        "hostMembersColumn"
+      ],
+      "order": 10,
+      "column": {
+        "id": "aiSiteCredits",
+        "label": "AI credits (site, month)",
+        "value": "{column.aiSiteCredits.hostCells[@item.uid] ?? '—':number}",
+        "load": {
+          "url": "/api/ai/usage?orgId={org.id}&hostId={site.id}&view=prepared&uids={ids}",
+          "ids": "{item.uid}",
+          "max": 200
+        }
+      }
+    },
+    {
       "id": "ai.import.start",
       "title": "Bring my site",
       "subtitle": "Bring the website you have now in: its pages, words and photos. First, prove it is yours.",
