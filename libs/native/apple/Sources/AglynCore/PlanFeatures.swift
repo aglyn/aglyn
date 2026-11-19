@@ -42,8 +42,13 @@ public func marketplaceFeePct(_ org: [String: Any]?) -> Double {
 
 /// What a workspace reads where a feature its plan leaves out would be, as the console's `upgradeNoticeMessage` words it
 /// (apps/console/utils/extension-entitlement.ts): an add-on's own sentence, else `blockedExtensionNotice`, which names
-/// the plan that includes it, or says no plan does.
-public func upgradeNoticeMessage(title: String, feature: String) -> String {
+/// the plan that includes it, or says no plan does. A store build (`buying` false, the owner's decision of 2026-11-19)
+/// says only what the plan leaves out: no price, and no "from Billing", where nothing can be bought.
+public func upgradeNoticeMessage(title: String, feature: String, buying: Bool = StoreBilling.buying) -> String {
+  if !buying {
+    if let plan = PlanFeatureDefaults.grantedFrom[feature] { return "\(title) is not included in your current plan. Included from \(plan)." }
+    return "\(title) isn't included in any plan — it's a paid add-on."
+  }
   if let own = PlanFeatureDefaults.addOnNotices[feature] { return own }
   if let plan = PlanFeatureDefaults.grantedFrom[feature] {
     return "\(title) is not included in your current plan. Manage your plan and add-ons from Billing. Included from \(plan)."

@@ -110,11 +110,13 @@ internal fun HomeSiteStats(services: ShellServices, context: NativePluginContext
 
 /**
  * The console's `OrgUpgradeProposalCard`: the plan the workspace's team proposed, only for the people who may buy it
- * (`billing.manage`, custom roles included), only while the proposal stands.
+ * (`billing.manage`, custom roles included), only while the proposal stands. Never in a store build, which takes no payment
+ * to Aglyn (the owner's decision of 2026-11-19): the card is a plan to buy and nothing else.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun HomeUpgradeProposal(services: ShellServices, context: NativePluginContext, org: Map<String, Any?>?, orgName: String?, orgSlug: String?, productName: String) {
+  if (!com.aglyn.core.StoreBilling.buying) return
   val proposal = UpgradeProposal.standing(org) ?: return
   val workspace = services.workspace.state.collectAsState().value
   // `billing.manage` as the console resolves it: the role's grants, the custom role, the member's own overrides.

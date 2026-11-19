@@ -1468,6 +1468,11 @@ configuration, the Android release build type), by the owner's decision of 2026-
 charge holds `app.billing` in its `when`, beside the plan and permission clauses (`app.billing && org.can[billing.manage]`),
 so a store build leaves it out rather than greying it. `app.billingLink` is whether, where buying is off, the screen may
 link to the console's billing page: the App Store's United States storefront only, never on Google Play for now. A
+block `{ "type": "billingOnWeb", "when": "!app.billing" }` is that screen's one line where it left a buying control
+out, once per screen: "Manage billing on the web", opening the workspace's billing page in the device's browser, where a
+link is allowed, else the plain sentence (both from the contracts' `NATIVE_WEB_BILLING_LINK_LABEL` and
+`NATIVE_NO_IN_APP_BILLING_NOTE`); the kits' own upgrade notices, add-on cards and plan-refused states draw the same line
+in place of their buy button (`AglynStoreBillingLine`, `StoreBillingLine`). A
 path `rows.*.field` is that field of every row, as a
 list. `{a + b - c}` sums numbers (paths, literals, or a list, which adds up);
 a term that is missing makes the sum missing, and `x?` counts as zero where it

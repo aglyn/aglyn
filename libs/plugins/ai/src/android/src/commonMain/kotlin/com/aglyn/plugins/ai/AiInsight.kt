@@ -91,9 +91,13 @@ private fun JsonElement?.num(): Double? = (this as? JsonPrimitive)?.doubleOrNull
 private fun JsonElement?.list(): List<JsonElement> = (this as? JsonArray).orEmpty()
 
 /** The tile: what it answers and "Ask a question"; gated on the workspace's `aiGenerative` and `release_ai_generative`. */
+/**
+ * Whether the workspace's plan and release let it ask (the slot's `aiGenerative` feature and `release_ai_generative`):
+ * true asks, false offers the add-on, null draws nothing (still read, or not released).
+ */
 @Composable
-fun AiInsightTile(context: NativePluginContext, surface: AiInsightSurface) {
-  val orgId = context.orgId ?: return
+internal fun rememberAiInsightEntitled(context: NativePluginContext): Boolean? {
+  val orgId = context.orgId ?: return null
   var entitled by remember(orgId, context.hostId) { mutableStateOf<Boolean?>(null) }
   LaunchedEffect(orgId, context.hostId) {
     runCatching {
@@ -103,42 +107,90 @@ fun AiInsightTile(context: NativePluginContext, surface: AiInsightSurface) {
     }.onSuccess { entitled = it }
   }
   val org by remember(orgId) { context.firestore.observeDoc("orgs/$orgId") }.collectAsState(Live.Loading)
-  val orgData = (org as? Live.Ready)?.value?.data ?: return
-  if (entitled == null || !releaseFlagOn("release_ai_generative", orgData, orgId, staff = false)) return
+  val orgData = (org as? Live.Ready)?.value?.data ?: return null
+  if (!releaseFlagOn("release_ai_generative", orgData, orgId, staff = false)) return null
+  return entitled
+}
+
+@Composable
+fun AiInsightTile(context: NativePluginContext, surface: AiInsightSurface) {
+  val entitled = rememberAiInsightEntitled(context) ?: return
   var asking by remember { mutableStateOf(false) }
   var upsell by remember { mutableStateOf(false) }
   val copy = Contracts.aiInsightCardCopy
   StatsCard(Modifier.testTag("ai-insight-tile")) {
     Text(copy.title, style = MaterialTheme.typography.titleMedium)
     Text(if (surface == AiInsightSurface.WORKSPACE) copy.workspace else copy.site, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    OutlinedButton(onClick = { if (entitled == true) asking = true else upsell = true }, modifier = Modifier.testTag("ai-insight-ask")) {
+    OutlinedButton(onClick = { if (entitled) asking = true else upsell = true }, modifier = Modifier.testTag("ai-insight-ask")) {
       Icon(AglynIcons.named("auto_awesome"), contentDescription = null)
       Text(copy.action, Modifier.padding(start = space(1f)))
     }
   }
   if (asking) AiInsightDialog(context, surface) { asking = false }
-  if (upsell) {
-    val canManage = com.aglyn.pluginhost.rememberMemberPermissions(context).can("billing.manage")
-    AlertDialog(
-      onDismissRequest = { upsell = false },
-      title = { Text(copy.title) },
-      text = {
-        Column(verticalArrangement = Arrangement.spacedBy(space(2f))) {
-          Text(AiInsightUpsell.DOES)
-          Text(AiInsightUpsell.offer(canManage), color = MaterialTheme.colorScheme.onSurfaceVariant)
+  if (upsell) AiInsightUpsellDialog(context) { upsell = false }
+}
+
+/** The add-on's offer, on a plan without it: what asking does, and the way to add it for whoever manages billing. */
+@Composable
+internal fun AiInsightUpsellDialog(
+  context: NativePluginContext,
+  /** Whether it offers the way to add it; false says the offer without a buy control (it waits for the store-build payment switch). */
+  canOfferAdd: Boolean = true,
+  onClose: () -> Unit,
+) {
+  val copy = Contracts.aiInsightCardCopy
+  val canManage = com.aglyn.pluginhost.rememberMemberPermissions(context).can("billing.manage")
+  AlertDialog(
+    onDismissRequest = onClose,
+    title = { Text(copy.title) },
+    text = {
+      Column(verticalArrangement = Arrangement.spacedBy(space(2f))) {
+        Text(AiInsightUpsell.DOES)
+        // A store build (the owner's decision of 2026-11-19): no offer and no Add, the store line instead.
+        if (com.aglyn.core.StoreBilling.buying) Text(AiInsightUpsell.offer(canManage), color = MaterialTheme.colorScheme.onSurfaceVariant) else com.aglyn.ui.StoreBillingLine()
+      }
+    },
+    confirmButton = {
+      if (canManage && canOfferAdd && com.aglyn.core.StoreBilling.buying) {
+        Button(onClick = { onClose(); context.navigate("core.billing.addons") }, modifier = Modifier.testTag("ai-insight-upsell-add")) {
+          Text("Add ${Contracts.platformBrandName} AI")
         }
-      },
-      confirmButton = {
-        if (canManage) {
-          Button(onClick = { upsell = false; context.navigate("core.billing.addons") }, modifier = Modifier.testTag("ai-insight-upsell-add")) {
-            Text("Add ${Contracts.platformBrandName} AI")
-          }
-        }
-      },
-      dismissButton = { TextButton(onClick = { upsell = false }) { Text(if (canManage) "Not now" else "Close") } },
-      modifier = Modifier.testTag("ai-insight-upsell"),
-    )
+      }
+    },
+    dismissButton = { TextButton(onClick = onClose) { Text(if (canManage) "Not now" else "Close") } },
+    modifier = Modifier.testTag("ai-insight-upsell"),
+  )
+}
+
+/** "Ask AI about this funnel" (the console's `AI_FUNNEL_COPY.ask`). */
+const val AI_FUNNEL_ASK = "Ask AI about this funnel"
+
+/** The question "Ask AI about this funnel" opens with (the console's `aiFunnelQuestion`). */
+fun aiFunnelQuestion(funnelName: String, days: Int): String =
+  "In my funnel \"$funnelName\" over the last $days days, where do visitors drop off most, and what might explain it?"
+
+/**
+ * "Ask AI about this funnel" (the console's `ai-explain-funnel` widget, AGL-3605), under a saved funnel's results in the
+ * funnels plugin's `funnelInsight` zone: the Analytics question dialog, opened on a question about the funnel and the range
+ * shown. Asking needs `ai.generate`; on a plan without the AI add-on the same button opens the add-on's offer.
+ */
+@Composable
+fun AiFunnelAskButton(context: NativePluginContext) {
+  val props = com.aglyn.pluginhost.LocalSlotProps.current
+  val name = props[com.aglyn.pluginhost.FUNNEL_INSIGHT_NAME] ?: return
+  val days = props[com.aglyn.pluginhost.FUNNEL_INSIGHT_DAYS]?.toIntOrNull() ?: return
+  val permissions = com.aglyn.pluginhost.rememberMemberPermissions(context)
+  val entitled = rememberAiInsightEntitled(context) ?: return
+  if (entitled && !permissions.can("ai.generate")) return
+  var asking by remember { mutableStateOf(false) }
+  var upsell by remember { mutableStateOf(false) }
+  OutlinedButton(onClick = { if (entitled) asking = true else upsell = true }, modifier = Modifier.testTag("ai-funnel-ask")) {
+    Icon(AglynIcons.named("auto_awesome"), contentDescription = null)
+    Text(AI_FUNNEL_ASK, Modifier.padding(start = space(1f)))
   }
+  if (asking) AiInsightDialog(context, AiInsightSurface.ANALYTICS, startFrom = aiFunnelQuestion(name, days)) { asking = false }
+  // The offer is said without its "Add" control: a buy control waits for the store-build payment switch.
+  if (upsell) AiInsightUpsellDialog(context, canOfferAdd = false) { upsell = false }
 }
 
 /** A table an insight job read, as `/api/ai/insights/{jobId}` returns it. */
@@ -223,12 +275,18 @@ private val TERMINAL = setOf("done", "failed", "canceled")
 
 /** "Ask about your numbers": the question and its window, the job's progress, then the answer with its figures. */
 @Composable
-internal fun AiInsightDialog(context: NativePluginContext, surface: AiInsightSurface, onClose: () -> Unit) {
+internal fun AiInsightDialog(
+  context: NativePluginContext,
+  surface: AiInsightSurface,
+  /** A question to start from, put in the box when the dialog opens (the console's `question`). */
+  startFrom: String? = null,
+  onClose: () -> Unit,
+) {
   val copy = Contracts.aiInsightDialogCopy
   val orgId = context.orgId ?: return onClose()
   val scope = rememberCoroutineScope()
   var phase by remember { mutableStateOf(InsightPhase.ASK) }
-  var question by remember { mutableStateOf("") }
+  var question by remember { mutableStateOf(startFrom.orEmpty()) }
   var days by remember { mutableStateOf(Contracts.aiInsightDefaultDays.toInt()) }
   var notice by remember { mutableStateOf<String?>(null) }
   var stillWriting by remember { mutableStateOf<String?>(null) }

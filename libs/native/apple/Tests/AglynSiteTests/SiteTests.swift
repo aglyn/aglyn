@@ -48,11 +48,14 @@ final class SiteTests: XCTestCase {
   /// Create site says first what stops it, in the console's own words (`create-host-dialog`).
   func testCreateSiteSaysWhatStopsItAsTheConsole() {
     XCTAssertEqual(
-      CreateSiteBlock.limit(3).message,
+      CreateSiteBlock.limit(3).message(buying: true),
       "Your plan includes 3 sites, and this workspace is using all of them. Upgrade or add extra sites from Billing.")
     XCTAssertEqual(
-      CreateSiteBlock.limit(1).message,
+      CreateSiteBlock.limit(1).message(buying: true),
       "Your plan includes one site, and this workspace is using all of them. Upgrade or add extra sites from Billing.")
+    // A store build (the owner's decision of 2026-11-19) does not send the reader to Billing to buy more.
+    XCTAssertEqual(
+      CreateSiteBlock.limit(3).message(buying: false), "Your plan includes 3 sites, and this workspace is using all of them.")
     XCTAssertEqual(
       CreateSiteBlock.role.message,
       "Your role does not include \"Create sites\" — ask an organization admin")
@@ -270,16 +273,20 @@ final class SiteTests: XCTestCase {
     XCTAssertNil(siteStarterPickNote(SiteStarterSummary(listingID: "l1", displayName: "Bakery")))
     let paid = SiteStarterSummary(listingID: "l2", displayName: "Studio", priceUsd: 12)
     XCTAssertEqual(
-      siteStarterPickNote(paid),
+      siteStarterPickNote(paid, buying: true),
       SiteStarterPickNote(message: "Studio costs $12. Buy it on the web, then create your site from it.", webAction: "Buy on the web"))
     XCTAssertEqual(
-      siteStarterPickNote(paid.owned(true)),
+      siteStarterPickNote(paid.owned(true), buying: true),
       SiteStarterPickNote(message: "You own this starter. Create your site from it whenever you are ready.", webAction: nil))
     XCTAssertEqual(
-      siteStarterPickNote(SiteStarterSummary(listingID: "l3", displayName: "AI", mode: .ai))?.webAction, "Continue on the web")
+      siteStarterPickNote(SiteStarterSummary(listingID: "l3", displayName: "AI", mode: .ai), buying: true)?.webAction, "Continue on the web")
     // A paid AI starter is bought before its questions.
     XCTAssertEqual(
-      siteStarterPickNote(SiteStarterSummary(listingID: "l4", displayName: "AI", priceUsd: 9, mode: .ai))?.webAction, "Buy on the web")
+      siteStarterPickNote(SiteStarterSummary(listingID: "l4", displayName: "AI", priceUsd: 9, mode: .ai), buying: true)?.webAction, "Buy on the web")
+    // A store build (the owner's decision of 2026-11-19): a paid pick is said to be paid, with no price and no web action.
+    XCTAssertEqual(
+      siteStarterPickNote(paid, buying: false), SiteStarterPickNote(message: "Studio is a paid starter.", webAction: nil, storeLine: true))
+    XCTAssertEqual(siteStarterPickNote(paid.owned(true), buying: false)?.storeLine, false)
   }
 
   func testAPaidPickOpensTheConsolesCreateSiteOnThatPick() {

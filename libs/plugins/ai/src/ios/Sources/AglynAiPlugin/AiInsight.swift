@@ -104,9 +104,61 @@ struct AiInsightTile: View {
   }
 }
 
+/// "Ask AI about this funnel" (the console's `AI_FUNNEL_COPY.ask`).
+let aiFunnelAsk = "Ask AI about this funnel"
+
+/// The question "Ask AI about this funnel" opens with (the console's `aiFunnelQuestion`).
+func aiFunnelQuestion(_ funnelName: String, days: Int) -> String {
+  "In my funnel \"\(funnelName)\" over the last \(days) days, where do visitors drop off most, and what might explain it?"
+}
+
+/// "Ask AI about this funnel" (the console's `ai-explain-funnel` widget, AGL-3605), under a saved funnel's results in the
+/// funnels plugin's `funnelInsight` zone: the Analytics question sheet, opened on a question about the funnel and the range
+/// shown. Asking needs `ai.generate`; on a plan without the AI add-on the same button opens the add-on's offer.
+struct AiFunnelAskButton: View {
+  let context: NativePluginContext
+  @Environment(\.slotProps) private var props
+  @State private var gate = AiInsightGate()
+  @State private var asking = false
+  @State private var upsell = false
+
+  private var question: String? {
+    guard let name = props[FunnelInsightZone.funnelName], let days = props[FunnelInsightZone.days].flatMap({ Int($0) })
+    else { return nil }
+    return aiFunnelQuestion(name, days: days)
+  }
+
+  private var shown: Bool {
+    guard question != nil, let entitled = gate.entitled, gate.releasedFor(context) else { return false }
+    return !entitled || context.can("ai.generate")
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      if shown {
+        Button {
+          if gate.entitled == true { asking = true } else { upsell = true }
+        } label: {
+          Label(aiFunnelAsk, systemImage: "sparkles")
+        }
+        .buttonStyle(.aglynSecondary)
+        .accessibilityIdentifier("ai-funnel-ask")
+      }
+    }
+    .task(id: "\(context.orgID ?? ""):\(context.hostID ?? "")") { await gate.start(context) }
+    .onDisappear { gate.stop() }
+    .sheet(isPresented: $asking) { AiInsightSheet(context: context, surface: .analytics, startFrom: question) }
+    // The offer is said without its "Add" control: a buy control waits for the store-build payment switch.
+    .sheet(isPresented: $upsell) { AiInsightUpsellSheet(context: context, canOfferAdd: false) }
+  }
+}
+
 /// The add-on's offer on a plan without it.
 struct AiInsightUpsellSheet: View {
   let context: NativePluginContext
+  /// Whether it offers the way to add it; false says the offer without a buy control (it waits for the store-build
+  /// payment switch).
+  var canOfferAdd = true
   @Environment(\.dismiss) private var dismiss
 
   private var canManageBilling: Bool { context.can("billing.manage") }
@@ -115,7 +167,12 @@ struct AiInsightUpsellSheet: View {
     NavigationStack {
       VStack(alignment: .leading, spacing: AglynSpace.two) {
         Text(AiInsightUpsell.does).font(AglynFont.body)
-        Text(AiInsightUpsell.offer(canManageBilling: canManageBilling)).font(AglynFont.subheadline).foregroundStyle(.secondary)
+        // A store build (the owner's decision of 2026-11-19): no offer and no Add, the store line instead.
+        if StoreBilling.buying {
+          Text(AiInsightUpsell.offer(canManageBilling: canManageBilling)).font(AglynFont.subheadline).foregroundStyle(.secondary)
+        } else {
+          AglynStoreBillingLine()
+        }
         Spacer(minLength: 0)
       }
       .padding(AglynSpace.three)
@@ -125,7 +182,7 @@ struct AiInsightUpsellSheet: View {
         ToolbarItem(placement: .cancellationAction) {
           Button(canManageBilling ? "Not now" : "Close") { dismiss() }
         }
-        if canManageBilling {
+        if canManageBilling, canOfferAdd, StoreBilling.buying {
           ToolbarItem(placement: .confirmationAction) {
             Button("Add \(ContractValues.shared.platformBrandName) AI") {
               dismiss()
@@ -252,6 +309,8 @@ struct AiInsightAnswer {
 struct AiInsightSheet: View {
   let context: NativePluginContext
   let surface: AiInsightSurface
+  /// A question to start from, put in the box when the sheet opens (the console's `question`).
+  var startFrom: String?
 
   private enum Phase { case ask, working, answer }
 
@@ -328,6 +387,7 @@ struct AiInsightSheet: View {
       }
     }
     .accessibilityIdentifier("ai-insight-dialog")
+    .onAppear { if question.isEmpty, let startFrom { question = String(startFrom.prefix(maxChars)) } }
     .task { await readDigest() }
     .onDisappear { watching?.cancel() }
   }

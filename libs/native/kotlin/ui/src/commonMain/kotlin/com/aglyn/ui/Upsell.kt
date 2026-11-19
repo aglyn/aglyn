@@ -75,7 +75,10 @@ fun UpgradeNotice(message: String, kind: UpgradeKind = UpgradeKind.PLAN, modifie
   ) {
     val icon = @Composable { Icon(AglynIcons.named(kind.icon), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
     val button = @Composable {
-      if (action != null) {
+      // A store build takes no payment to Aglyn (the owner's decision of 2026-11-19): the store line where View plans would be.
+      if (!com.aglyn.core.StoreBilling.buying) {
+        StoreBillingLine()
+      } else if (action != null) {
         OutlinedButton(onClick = action, shape = controlShape(), modifier = Modifier.testTag("upgrade-notice-action")) { Text(kind.actionTitle) }
       }
     }
@@ -140,10 +143,12 @@ fun AddOnPromoCard(
         Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
       }
       Text(does, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
-      Text(offer, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      // A store build (the owner's decision of 2026-11-19) draws no offer and no add action: the store line instead.
+      val buying = com.aglyn.core.StoreBilling.buying
+      if (buying) Text(offer, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) else StoreBillingLine()
       Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
         TextButton(onClick = onDismiss, modifier = Modifier.testTag("addon-promo-dismiss")) { Text(dismissTitle) }
-        if (actionTitle != null) Button(onClick = onAction, shape = controlShape(), modifier = Modifier.testTag("addon-promo-add")) { Text(actionTitle) }
+        if (actionTitle != null && buying) Button(onClick = onAction, shape = controlShape(), modifier = Modifier.testTag("addon-promo-add")) { Text(actionTitle) }
       }
     }
   }

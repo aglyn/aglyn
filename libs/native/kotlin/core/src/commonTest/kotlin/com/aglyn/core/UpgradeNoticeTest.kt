@@ -9,12 +9,15 @@ class UpgradeNoticeTest {
   fun namesThePlanThatIncludesTheFeatureOrSaysNoneDoes() {
     assertEquals(
       "CRM is not included in your current plan. Manage your plan and add-ons from Billing. Included from Starter.",
-      upgradeNoticeMessage("CRM", "crm"),
+      upgradeNoticeMessage("CRM", "crm", buying = true),
     )
     assertEquals(
       "Nothing isn't included in any plan — it's a paid add-on. Manage your plan and add-ons from Billing.",
-      upgradeNoticeMessage("Nothing", "notAFeature"),
+      upgradeNoticeMessage("Nothing", "notAFeature", buying = true),
     )
+    // A store build (the owner's decision of 2026-11-19): what the plan leaves out, with no "from Billing".
+    assertEquals("CRM is not included in your current plan. Included from Starter.", upgradeNoticeMessage("CRM", "crm", buying = false))
+    assertEquals("Nothing isn't included in any plan — it's a paid add-on.", upgradeNoticeMessage("Nothing", "notAFeature", buying = false))
   }
 
   @Test

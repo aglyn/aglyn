@@ -110,8 +110,9 @@ internal fun WorkspaceMenu(services: ShellServices, workspace: WorkspaceState, c
     }
     MenuRow("Billing and usage", "credit_card", tag = "workspace-menu-billing") { chrome.workspaceMenu = false; actions.openScreen("core.billing", emptyMap()) }
     // The console's "Upgrade plan" (its user menu): once the plan is known, below the top self-serve plan, to someone with "Manage billing".
+    // Never in a store build, which takes no payment to Aglyn (the owner's decision of 2026-11-19).
     val logo = workspace.orgLogo
-    if (logo?.plan != null && logo.plan in com.aglyn.core.OnboardingPlanIntent.UPGRADABLE_PLANS && !logo.enterprise && chrome.managesBilling) {
+    if (com.aglyn.core.StoreBilling.buying && logo?.plan != null && logo.plan in com.aglyn.core.OnboardingPlanIntent.UPGRADABLE_PLANS && !logo.enterprise && chrome.managesBilling) {
       androidx.compose.material3.Button(
         onClick = { chrome.workspaceMenu = false; actions.openScreen("core.billing", emptyMap()) },
         shape = com.aglyn.ui.controlShape(),

@@ -750,8 +750,13 @@ struct CreateSiteSheet: View {
 
   /// What the pick needs next, held at the foot of the sheet so it is beside whichever row was tapped, however long the list.
   private func pickNote(_ note: SiteStarterPickNote) -> some View {
-    AglynNotice(
-      note.message, tone: note.webAction == nil ? .success : .info, actionTitle: note.webAction, action: note.webAction.map { _ in leaveForTheWeb })
+    VStack(alignment: .leading, spacing: AglynSpace.one) {
+      AglynNotice(
+        note.message, tone: note.webAction == nil && !note.storeLine ? .success : .info, actionTitle: note.webAction,
+        action: note.webAction.map { _ in leaveForTheWeb })
+      // A store build's paid pick: the one store line (the owner's decision of 2026-11-19).
+      if note.storeLine { AglynStoreBillingLine() }
+    }
       .padding(AglynSpace.two)
       .background(AglynColor.paper)
       .overlay(alignment: .top) { Divider() }
@@ -874,7 +879,9 @@ struct CreateSiteSheet: View {
 
   /// Why Create site is off, in the console's words (`CreateHostDialog`), until a pick it can create from.
   private var starterStillNeeded: String? {
-    switch (siteStarterPickBlock(pick), starterMode) {
+    // A store build (the owner's decision of 2026-11-19) does not ask anyone to buy the starter.
+    if siteStarterPickBlock(pick) == .purchase, !StoreBilling.buying { return "This starter is paid, so a site cannot be created from it here." }
+    return switch (siteStarterPickBlock(pick), starterMode) {
     case (.some(.none), .base): "Choose a starter to create your site."
     case (.some(.none), .ai): "Choose an AI starter to continue."
     case (.some(.purchase), .base): "Buy this starter to create your site from it."
@@ -942,13 +949,16 @@ enum CreateSiteBlock: Equatable {
   case role
   case limit(Int)
 
-  var message: String {
+  var message: String { message(buying: StoreBilling.buying) }
+
+  /// A store build (the owner's decision of 2026-11-19) does not send the reader to Billing to buy more sites.
+  func message(buying: Bool) -> String {
     switch self {
     case .role:
       permissionRefusalText(ContractValues.shared.orgRoleGrants, key: "hosts.create")
     case .limit(let limit):
-      "Your plan includes \(limit == 1 ? "one site" : "\(limit) sites"), and this workspace is using all of them. "
-        + "Upgrade or add extra sites from Billing."
+      "Your plan includes \(limit == 1 ? "one site" : "\(limit) sites"), and this workspace is using all of them."
+        + (buying ? " Upgrade or add extra sites from Billing." : "")
     }
   }
 }

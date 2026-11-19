@@ -4418,6 +4418,8 @@ internal data class ContractValuesPart8(
     @SerialName("SITE_LIST_DECLARATION") val siteListDeclaration: ListQueryDeclaration,
     @SerialName("SITE_MEMBER_LIST_QUERY") val siteMemberListQuery: ListQueryDeclaration,
     @SerialName("SITE_SLOGAN_MAX_LENGTH") val siteSloganMaxLength: Long,
+    @SerialName("SITE_TEMPLATE_SHELF_BASE") val siteTemplateShelfBase: List<ListQueryFilter>,
+    @SerialName("SITE_TEMPLATE_SHELF_QUERY") val siteTemplateShelfQuery: ListQueryDeclaration,
     @SerialName("STAR_COLORS") val starColors: List<StarColor>,
     @SerialName("STARRED_FIELD") val starredField: String,
     @SerialName("STARRED_MAX") val starredMax: Long,
@@ -4452,12 +4454,12 @@ internal data class ContractValuesPart8(
     @SerialName("THEME_TEXT_CONTRAST") val themeTextContrast: Double,
     @SerialName("TIME_ZONE_CHOICES") val timeZoneChoices: List<String>,
     @SerialName("TIME_ZONE_DEFAULT_LABEL") val timeZoneDefaultLabel: String,
-    @SerialName("WORKFLOW_MAX_STEPS") val workflowMaxSteps: Long,
-    @SerialName("WORKSPACE_COLORS_FIELD") val workspaceColorsField: String,
 )
 
 @Serializable
 internal data class ContractValuesPart9(
+    @SerialName("WORKFLOW_MAX_STEPS") val workflowMaxSteps: Long,
+    @SerialName("WORKSPACE_COLORS_FIELD") val workspaceColorsField: String,
     @SerialName("WORKSPACE_COLORS_MAX") val workspaceColorsMax: Long,
     @SerialName("WORKSPACE_SETTINGS_ROW") val workspaceSettingsRow: NativeNavRow,
     @SerialName("WORKSPACE_STABLE_COLORS") val workspaceStableColors: List<String>,
@@ -4827,6 +4829,8 @@ class ContractValues internal constructor(
     val siteListDeclaration: ListQueryDeclaration get() = part8.siteListDeclaration
     val siteMemberListQuery: ListQueryDeclaration get() = part8.siteMemberListQuery
     val siteSloganMaxLength: Long get() = part8.siteSloganMaxLength
+    val siteTemplateShelfBase: List<ListQueryFilter> get() = part8.siteTemplateShelfBase
+    val siteTemplateShelfQuery: ListQueryDeclaration get() = part8.siteTemplateShelfQuery
     val starColors: List<StarColor> get() = part8.starColors
     val starredField: String get() = part8.starredField
     val starredMax: Long get() = part8.starredMax
@@ -4861,8 +4865,8 @@ class ContractValues internal constructor(
     val themeTextContrast: Double get() = part8.themeTextContrast
     val timeZoneChoices: List<String> get() = part8.timeZoneChoices
     val timeZoneDefaultLabel: String get() = part8.timeZoneDefaultLabel
-    val workflowMaxSteps: Long get() = part8.workflowMaxSteps
-    val workspaceColorsField: String get() = part8.workspaceColorsField
+    val workflowMaxSteps: Long get() = part9.workflowMaxSteps
+    val workspaceColorsField: String get() = part9.workspaceColorsField
     val workspaceColorsMax: Long get() = part9.workspaceColorsMax
     val workspaceSettingsRow: NativeNavRow get() = part9.workspaceSettingsRow
     val workspaceStableColors: List<String> get() = part9.workspaceStableColors

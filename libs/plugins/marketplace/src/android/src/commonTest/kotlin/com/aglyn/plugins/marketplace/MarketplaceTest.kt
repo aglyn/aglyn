@@ -33,7 +33,10 @@ class MarketplaceTest {
     )
     assertEquals("plugin", row.artifactType)
     assertEquals("1.0.0", row.offeredVersion)
-    assertEquals("$12", priceLabel(row.priceUsd))
+    assertEquals("$12", priceLabel(row.priceUsd, buying = true))
+    // A store build (the owner's decision of 2026-11-19) names no price.
+    assertEquals("Paid", priceLabel(row.priceUsd, buying = false))
+    assertEquals("Free", priceLabel(0.0, buying = false))
     assertEquals("4.5 ★ (2)", ratingLabel(row))
     assertEquals(listOf(InstallTarget.ORG, InstallTarget.HOST), installTargets("plugin"))
     assertEquals(listOf(InstallTarget.HOST), installTargets("template"))

@@ -108,7 +108,7 @@ class ScreenSpecTest {
     }
     val ids = specs.map { it.id }
     assertEquals(ids.size, ids.toSet().size, "duplicate screen ids")
-    val known = setOf("fields", "meters", "list", "form", "actions", "links", "notice", "zone", "image", "html", "qr", "text")
+    val known = setOf("fields", "meters", "list", "form", "actions", "links", "notice", "zone", "image", "html", "qr", "text", "billingOnWeb")
     // Screens a plugin draws by hand rather than from a spec, which a spec may still open.
     val handWritten = setOf("commerce.orders", "commerce.order", "commerce.quotes", "commerce.quote", "commerce.products", "commerce.product", "commerce.sales", "marketplace.listing", "marketplace.sell", "site.pages")
     for (spec in specs) {
@@ -1257,7 +1257,7 @@ class ScreenSpecTest {
     val turnOn = actions.first { it.id == "on" }
     val constants = spec.raw.obj("constants").toString()
     fun scope(addons: String, extra: String = "") = Json.parseToJsonElement(
-      """{"org":{"id":"o1","manager":true,"can":{"billing.manage":true}},"const":$constants,"data":{"addons":$addons},"item":{"kind":"aiAddon","label":"Aglyn AI credits","toggle":false}$extra}""",
+      """{"app":{"billing":true},"org":{"id":"o1","manager":true,"can":{"billing.manage":true}},"const":$constants,"data":{"addons":$addons},"item":{"kind":"aiAddon","label":"Aglyn AI credits","toggle":false}$extra}""",
     )
     val held = """{"hasSubscription":true,"plan":"pro","interval":"month","quantities":{"aiAddon":3},""" +
       """"catalog":{"aiAddon":{"unitUsd":10,"max":30,"credits":5000,"configured":true,"upgradeRequired":false}}}"""
@@ -1310,6 +1310,13 @@ class ScreenSpecTest {
     val shown = badges.filter { ScreenValues.condition((it as JsonObject)["when"]?.jsonPrimitive?.content, base) }
       .map { ScreenValues.render((it as JsonObject)["text"]!!.jsonPrimitive.content, base) }
     assertEquals(listOf("3 blocks · 15,000 credits a month"), shown)
+    // A store build (the owner's decision of 2026-11-19): no buying action and no price; what is held still shows.
+    val store = Json.parseToJsonElement(base.toString().replace(""""app":{"billing":true}""", """"app":{"billing":false}"""))
+    assertFalse(ScreenValues.condition(blocks.whenCondition, store))
+    assertEquals(
+      listOf("3 blocks · 15,000 credits a month"),
+      badges.filter { ScreenValues.condition((it as JsonObject)["when"]?.jsonPrimitive?.content, store) }.map { ScreenValues.render((it as JsonObject)["text"]!!.jsonPrimitive.content, store) },
+    )
   }
 
   /** The staff custom-billing picks offer the base plans the console's picker does: Custom, Pro and Starter (AGL-4155). */
@@ -1371,8 +1378,16 @@ class ScreenSpecTest {
     assertTrue("over the Free plan on: 2 sites (Free includes 1)" in text)
     assertTrue("7 team members (Free includes 1)" in text)
     assertTrue("Nothing is deleted and these keep working" in text)
-    val manager = Json.parseToJsonElement("""{"org":{"manager":true,"can":{"billing.manage":true},"plan":"pro"},"data":{"org":{"plan":"pro","subscription":{"status":"active"}}},"item":{"id":"business"}}""")
+    val manager = Json.parseToJsonElement("""{"app":{"billing":true},"org":{"manager":true,"can":{"billing.manage":true},"plan":"pro"},"data":{"org":{"plan":"pro","subscription":{"status":"active"}}},"item":{"id":"business"}}""")
     assertTrue(ScreenValues.condition(switchPlan.whenCondition, manager))
+    // A store build (the owner's decision of 2026-11-19) offers no switch and no checkout.
+    val store = Json.parseToJsonElement(manager.toString().replace(""""app":{"billing":true}""", """"app":{"billing":false}"""))
+    assertFalse(ScreenValues.condition(switchPlan.whenCondition, store))
+    for (id in listOf("monthly", "yearly")) {
+      val checkout = list.raw.arr("actions").mapNotNull { ActionSpec.parse(it) }.first { it.id == id }
+      assertFalse(ScreenValues.condition(checkout.whenCondition, Json.parseToJsonElement("""{"app":{"billing":false},"org":{"can":{"billing.manage":true}},"data":{"org":{"plan":"free"}},"item":{"id":"pro"}}""")))
+      assertTrue(ScreenValues.condition(checkout.whenCondition, Json.parseToJsonElement("""{"app":{"billing":true},"org":{"can":{"billing.manage":true}},"data":{"org":{"plan":"free"}},"item":{"id":"pro"}}""")))
+    }
     val current = Json.parseToJsonElement("""{"org":{"manager":true},"data":{"org":{"plan":"pro","subscription":{"status":"active"}}},"item":{"id":"pro"}}""")
     assertFalse(ScreenValues.condition(switchPlan.whenCondition, current))
   }

@@ -65,8 +65,14 @@
         {
           "type": "notice",
           "tone": "warning",
-          "when": "data.billing.subscription.status == past_due,unpaid,incomplete",
+          "when": "data.billing.subscription.status == past_due,unpaid,incomplete && app.billing",
           "text": "The last payment did not go through. Update the payment method to keep the plan."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "data.billing.subscription.status == past_due,unpaid,incomplete && !app.billing",
+          "text": "The last payment did not go through."
         },
         {
           "type": "notice",
@@ -196,7 +202,28 @@
         {
           "type": "actions",
           "title": "Manage",
-          "when": "org.can[billing.manage]",
+          "when": "org.can[billing.manage] && !app.billing",
+          "items": [
+            {
+              "id": "cancel",
+              "label": "Cancel my plan",
+              "icon": "xmark.circle|cancel",
+              "destructive": true,
+              "when": "data.billing.subscription && !data.billing.subscription.cancelAtPeriodEnd",
+              "navigate": {
+                "screen": "core.billing.cancel"
+              }
+            }
+          ]
+        },
+        {
+          "type": "billingOnWeb",
+          "when": "org.can[billing.manage] && !app.billing"
+        },
+        {
+          "type": "actions",
+          "title": "Manage",
+          "when": "org.can[billing.manage] && app.billing",
           "footer": "Plans, payment methods and cancellations open on Stripe's secure pages.",
           "items": [
             {
@@ -305,11 +332,16 @@
       "title": "Choose a plan",
       "icon": "sparkles|workspace_premium",
       "scope": "org",
-      "requires": "org.can[billing.manage]",
+      "requires": "org.can[billing.manage] && app.billing",
       "blocks": [
+        {
+          "type": "billingOnWeb",
+          "when": "!app.billing"
+        },
         {
           "type": "notice",
           "tone": "info",
+          "when": "app.billing",
           "text": "A workspace with a plan changes it here: you see what it would cost or credit first, then confirm. A new subscription continues on Stripe's secure checkout, where the price and terms are shown."
         },
         {
@@ -331,7 +363,7 @@
               "id": "switch",
               "label": "Switch to this plan",
               "icon": "arrow.left.arrow.right|swap_horiz",
-              "when": "org.can[billing.manage] && data.org.subscription.status == active,trialing,past_due && item.id != free && item.id != @data.org.plan",
+              "when": "app.billing && org.can[billing.manage] && data.org.subscription.status == active,trialing,past_due && item.id != free && item.id != @data.org.plan",
               "check": {
                 "label": "Preview",
                 "url": "/api/billing/subscription",
@@ -527,7 +559,7 @@
               "id": "monthly",
               "label": "Continue, billed monthly",
               "icon": "calendar|event",
-              "when": "org.can[billing.manage] && data.org.subscription.status != active,trialing,past_due && item.id != free",
+              "when": "app.billing && org.can[billing.manage] && data.org.subscription.status != active,trialing,past_due && item.id != free",
               "url": "/api/billing/checkout",
               "body": {
                 "orgId": "{org.id}",
@@ -541,7 +573,7 @@
               "id": "yearly",
               "label": "Continue, billed yearly",
               "icon": "calendar.badge.clock|event",
-              "when": "org.can[billing.manage] && data.org.subscription.status != active,trialing,past_due && item.id != free",
+              "when": "app.billing && org.can[billing.manage] && data.org.subscription.status != active,trialing,past_due && item.id != free",
               "url": "/api/billing/checkout",
               "body": {
                 "orgId": "{org.id}",
@@ -725,6 +757,10 @@
       ],
       "blocks": [
         {
+          "type": "billingOnWeb",
+          "when": "!app.billing && data.invoices.invoices.*.status == open"
+        },
+        {
           "type": "list",
           "load": "invoices",
           "items": "data.invoices.invoices",
@@ -755,14 +791,14 @@
               "id": "pay",
               "label": "Pay on Stripe",
               "icon": "creditcard|credit_card",
-              "when": "item.status == open && item.hostedInvoiceUrl",
+              "when": "app.billing && item.status == open && item.hostedInvoiceUrl",
               "link": "{item.hostedInvoiceUrl}"
             },
             {
               "id": "view",
               "label": "View invoice",
               "icon": "doc.richtext|description",
-              "when": "item.hostedInvoiceUrl",
+              "when": "item.hostedInvoiceUrl && app.billing || item.hostedInvoiceUrl && item.status != open",
               "link": "{item.hostedInvoiceUrl}"
             },
             {
@@ -1060,8 +1096,14 @@
         {
           "type": "notice",
           "tone": "info",
-          "when": "data.band && !data.band.unlimited && data.storage && !data.storage.metered",
+          "when": "data.band && !data.band.unlimited && data.storage && !data.storage.metered && app.billing",
           "text": "Uploads stop when your workspace reaches it. Free up space or upgrade to add more."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "data.band && !data.band.unlimited && data.storage && !data.storage.metered && !app.billing",
+          "text": "Uploads stop when your workspace reaches it. Free up space to add more."
         },
         {
           "type": "notice",
@@ -1460,7 +1502,7 @@
               "id": "default",
               "label": "Make default",
               "icon": "checkmark.circle|check_circle",
-              "when": "!item.isDefault",
+              "when": "app.billing && !item.isDefault",
               "url": "/api/billing/profile",
               "body": {
                 "orgId": "{org.id}",
@@ -1488,7 +1530,12 @@
           "empty": "No payment method on file."
         },
         {
+          "type": "billingOnWeb",
+          "when": "!app.billing"
+        },
+        {
           "type": "actions",
+          "when": "app.billing",
           "items": [
             {
               "id": "addCard",
@@ -1778,6 +1825,10 @@
       },
       "blocks": [
         {
+          "type": "billingOnWeb",
+          "when": "!app.billing && data.addons && org.can[billing.manage]"
+        },
+        {
           "type": "notice",
           "tone": "info",
           "when": "!data.addons",
@@ -1786,7 +1837,7 @@
         {
           "type": "notice",
           "tone": "info",
-          "when": "data.addons && !data.addons.hasSubscription",
+          "when": "data.addons && !data.addons.hasSubscription && app.billing",
           "text": "Add-ons bill onto an active plan subscription. This workspace does not have one (its plan is managed by Aglyn, or checkout has not been completed), so these are shown for reference and cannot be changed here. Contact support to adjust them."
         },
         {
@@ -1799,7 +1850,7 @@
           "badges": [
             {
               "text": "{data.addons.catalog[@item.kind].unitUsd:dollars}/mo",
-              "when": "data.addons.catalog[@item.kind].unitUsd && item.kind != aiAddon",
+              "when": "app.billing && data.addons.catalog[@item.kind].unitUsd && item.kind != aiAddon",
               "tone": "neutral"
             },
             {
@@ -1829,22 +1880,22 @@
             },
             {
               "text": "Upgrade your plan to add Aglyn AI",
-              "when": "item.kind == aiAddon && data.addons.catalog[@item.kind].upgradeRequired && data.addons.plan != enterprise",
+              "when": "app.billing && item.kind == aiAddon && data.addons.catalog[@item.kind].upgradeRequired && data.addons.plan != enterprise",
               "tone": "warning"
             },
             {
               "text": "Upgrade your plan to add these",
-              "when": "data.addons.catalog[@item.kind].upgradeRequired && item.kind != aiAddon && data.addons.plan != enterprise",
+              "when": "app.billing && data.addons.catalog[@item.kind].upgradeRequired && item.kind != aiAddon && data.addons.plan != enterprise",
               "tone": "warning"
             },
             {
               "text": "Upgrade your plan to add these",
-              "when": "data.addons.catalog[@item.kind].upgradeRequired && item.kind != aiAddon && data.addons.plan == enterprise",
+              "when": "app.billing && data.addons.catalog[@item.kind].upgradeRequired && item.kind != aiAddon && data.addons.plan == enterprise",
               "tone": "warning"
             },
             {
               "text": "Needs an active subscription",
-              "when": "!data.addons.hasSubscription && !data.addons.catalog[@item.kind].upgradeRequired",
+              "when": "app.billing && !data.addons.hasSubscription && !data.addons.catalog[@item.kind].upgradeRequired",
               "tone": "neutral"
             },
             {
@@ -1858,7 +1909,7 @@
               "id": "set",
               "label": "Change quantity",
               "icon": "slider.horizontal.3|tune",
-              "when": "!item.toggle && org.can[billing.manage] && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired && item.kind != aiAddon",
+              "when": "app.billing && !item.toggle && org.can[billing.manage] && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired && item.kind != aiAddon",
               "prompt": [
                 {
                   "key": "quantity",
@@ -1960,7 +2011,7 @@
               "id": "on",
               "label": "Turn on",
               "icon": "power|power_settings_new",
-              "when": "item.toggle && org.can[billing.manage] && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired && !data.addons.quantities[@item.kind]",
+              "when": "app.billing && item.toggle && org.can[billing.manage] && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired && !data.addons.quantities[@item.kind]",
               "check": {
                 "label": "Preview",
                 "url": "/api/billing/addons",
@@ -2127,7 +2178,7 @@
               "id": "blocks",
               "label": "Change blocks",
               "icon": "sparkles|auto_awesome",
-              "when": "item.kind == aiAddon && org.can[billing.manage] && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired",
+              "when": "app.billing && item.kind == aiAddon && org.can[billing.manage] && data.addons.hasSubscription && data.addons.catalog[@item.kind].configured && !data.addons.catalog[@item.kind].upgradeRequired",
               "prompt": [
                 {
                   "key": "blocks",
@@ -2608,7 +2659,7 @@
         {
           "type": "actions",
           "title": "Would a smaller plan work better?",
-          "when": "params.downsellPlan && data.org.subscription.status == active,trialing,past_due",
+          "when": "app.billing && params.downsellPlan && data.org.subscription.status == active,trialing,past_due",
           "footer": "{params.downsellPlan:title} costs less and keeps your sites, data and team exactly where they are. Moving down takes effect at the end of your current billing period; you keep everything you have already paid for until then.",
           "items": [
             {

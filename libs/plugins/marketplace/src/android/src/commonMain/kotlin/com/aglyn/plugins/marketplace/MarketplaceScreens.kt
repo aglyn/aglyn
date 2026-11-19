@@ -38,6 +38,7 @@ import kotlinx.coroutines.launch
 import com.aglyn.contracts.Contracts
 import com.aglyn.contracts.InstallTarget
 import com.aglyn.core.FirestoreOrder
+import com.aglyn.core.ConsoleApiError
 import com.aglyn.core.FirestoreQuery
 import com.aglyn.core.Live
 import com.aglyn.core.mediaPreviewUrl
@@ -110,6 +111,8 @@ private sealed interface ListingDialog {
   data object Report : ListingDialog
   /** Reporting someone else's review: its reviewer's uid and name. */
   data class ReportReview(val uid: String, val name: String) : ListingDialog
+  /** The update review of a copied listing (AGL-1018), before anything is written. */
+  data object UpdateReview : ListingDialog
 }
 
 /** The marketplace's sections, as the console's hub tabs them. */
@@ -260,6 +263,16 @@ private fun ListingDetail(context: NativePluginContext, listingId: String, start
         },
       )
       val mine = listing.profileId != null && listing.profileId == orgId
+      // This site's copy of a component or layout listing, and the site itself for a theme, whose copy is the site's theme.
+      val copies by remember(hostId, listingId, context.firestore) {
+        if (hostId != null && (listing.artifactType == "component" || listing.artifactType == "layout")) {
+          context.firestore.observe(FirestoreQuery("hosts/$hostId/components", filters = listOf(com.aglyn.core.FirestoreFilter("marketplace.listingId", com.aglyn.core.FilterOp.EQ, listingId)), limit = 10))
+        } else kotlinx.coroutines.flow.flowOf(Live.Ready(emptyList()))
+      }.collectAsState(Live.Loading)
+      val site by remember(hostId, context.firestore) {
+        if (hostId != null) context.firestore.observeDoc("hosts/$hostId") else kotlinx.coroutines.flow.flowOf(Live.Ready(null))
+      }.collectAsState(Live.Loading)
+      val copy = copyInstall(listing, (copies as? Live.Ready)?.value, (site as? Live.Ready)?.value?.data)
       val held = rememberMemberPermissions(context)
       LaunchedEffect(startInstall, listing.id, pinsPhase) {
         if (!startInstall || pinsPhase == "loading") return@LaunchedEffect
@@ -269,8 +282,8 @@ private fun ListingDetail(context: NativePluginContext, listingId: String, start
           dialog = ListingDialog.Install(if (InstallTarget.HOST in targets) InstallTarget.HOST else targets.firstOrNull())
         }
       }
-      ListingBody(context, listing, value.value?.data, plugin, state, pinsPhase, mine, runner, api) { dialog = it }
-      ListingDialogs(context, listing, dialog, state, api, runner) { dialog = null }
+      ListingBody(context, listing, value.value?.data, plugin, state, pinsPhase, mine, runner, api, copy) { dialog = it }
+      ListingDialogs(context, listing, dialog, state, api, runner, reopen = { dialog = it }) { dialog = null }
     }
   }
 }
@@ -288,6 +301,8 @@ private fun ListingBody(
   mine: Boolean,
   runner: ActionRunner,
   api: MarketplaceApi,
+  /** This site's copy of a component, layout or theme listing, and how it stands against the listing (AGL-1018). */
+  copy: Pair<String, String?>?,
   open: (ListingDialog) -> Unit,
 ) {
   var versions by remember(listing.id) { mutableStateOf<List<ListingVersion>?>(null) }
@@ -424,6 +439,9 @@ private fun ListingBody(
               Text(if (state.scope == InstallTarget.ORG) "Remove from the workspace" else "Remove from this site")
             }
           }
+          // A store build takes no payment to Aglyn (the owner's decision of 2026-11-19): a paid listing says it is paid
+          // (its chip) and shows the store line where Buy would be.
+          buying && !com.aglyn.core.StoreBilling.buying -> com.aglyn.ui.StoreBillingLine()
           buying -> {
             Button(
               onClick = {
@@ -436,6 +454,14 @@ private fun ListingBody(
               Icon(AglynIcons.named("shopping_bag"), contentDescription = null)
               Text(buyLabel(listing.priceUsd, heldElsewhere), Modifier.padding(start = space(1f)))
             }
+          }
+          copy != null -> {
+            // A copy the site may have edited is never re-installed over: pressing this reviews the update and writes nothing.
+            Button(
+              onClick = { open(ListingDialog.UpdateReview) },
+              enabled = installable && !runner.busy && copy.first != "current",
+              modifier = Modifier.testTag("listing-update-review"),
+            ) { Text(copyInstallLabel(copy.first, copy.second, offered)) }
           }
           else -> {
             Button(
@@ -454,7 +480,7 @@ private fun ListingBody(
           }
         }
       }
-      if (pinsPhase == "ready" && buying) {
+      if (pinsPhase == "ready" && buying && com.aglyn.core.StoreBilling.buying) {
         when {
           buyBlocked -> NoticeBanner(publisherMemberBuyReason((publisher as? Live.Ready)?.value?.string("displayName") ?: handle), StatusTone.NEUTRAL)
           !canBuy -> NoticeBanner(if (context.orgId == null) "Open one of your workspaces to buy this." else permissionRefusalText(buyKey), StatusTone.NEUTRAL)
@@ -533,11 +559,14 @@ private fun ListingDialogs(
   state: PluginInstallState,
   api: MarketplaceApi,
   runner: ActionRunner,
+  /** Opens another dialog in this one's place: the update review, when the install route refuses an edited copy. */
+  reopen: (ListingDialog) -> Unit,
   close: () -> Unit,
 ) {
   val hostId = context.hostId
   when (dialog) {
     null -> Unit
+    ListingDialog.UpdateReview -> ArtifactUpdateDialog(context, listing, runner, installCopy = { reopen(ListingDialog.Install(InstallTarget.HOST)) }, close = close)
     is ListingDialog.Install -> {
       // "Install to" (AGL-4047): a workspace plugin install runs on every site, or on every site but some, as the console's
       // listing offers it. A site added later gets it either way.
@@ -569,9 +598,16 @@ private fun ListingDialogs(
         onDismiss = { runner.error = null; close() },
         onConfirm = {
           if (hostId == null) return@ActionDialog
-          runner.run(onDone = close) {
-            val outcome = api.install(listing, hostId, dialog.scope, if (choosing) except else emptyList())
-            runner.notice = outcome.message + (outcome.warning?.let { " $it" } ?: "")
+          runner.run {
+            try {
+              val outcome = api.install(listing, hostId, dialog.scope, if (choosing) except else emptyList())
+              runner.notice = outcome.message + (outcome.warning?.let { " $it" } ?: "")
+              close()
+            } catch (error: ConsoleApiError) {
+              // The site's copy was edited: hand it to the review rather than re-installing over it (AGL-1034).
+              if ((error.body as? kotlinx.serialization.json.JsonObject)?.get("diverged")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } == "true") reopen(ListingDialog.UpdateReview)
+              else throw error
+            }
           }
         },
         content = if (choosing) ({
@@ -824,4 +860,21 @@ private fun ReportDialog(label: String, noun: String, reviewUid: String?, listin
   ) {
     OutlinedTextField(reason, { reason = it.take(MAX_REPORT_REASON_LENGTH) }, label = { Text("Reason") }, minLines = 3, modifier = Modifier.fillMaxWidth().testTag("report-reason"))
   }
+}
+
+/**
+ * A copied listing's install on this site, as the console's listing page reads it: the component or layout copy stamped with
+ * the listing, or the site's theme when the site runs this listing's theme; null for anything else, or none.
+ */
+internal fun copyInstall(listing: ListingRow, copies: List<com.aglyn.core.FirestoreDoc>?, site: Map<String, Any?>?): Pair<String, String?>? {
+  val installed: Map<String, Any?> = when (listing.artifactType) {
+    "component", "layout" -> copies?.firstOrNull { it.data["deletedAt"] == null }?.data ?: return null
+    "theme" -> {
+      val stamp = site?.get("themeInstalledFrom") as? Map<*, *> ?: return null
+      if (stamp["listingId"] != listing.id) return null
+      mapOf("installedFrom" to stamp)
+    }
+    else -> return null
+  }
+  return copyUpdateState(installed, listing.latestVersion, listing.artifactType)
 }
