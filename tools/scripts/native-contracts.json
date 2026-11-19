@@ -384,7 +384,11 @@
         "CRM_ACTIVITIES_PER_RECORD_CEILING",
         "CRM_EMAIL_SUBJECT_MAX",
         "CRM_EMAIL_BODY_MAX",
-        "CRM_LEAD_CLOSED_STATUSES"
+        "CRM_LEAD_CLOSED_STATUSES",
+        "CRM_VIEW_NAME_MAX",
+        "CRM_VIEW_MAX_FILTERS",
+        "CRM_VIEW_MAX_COLUMNS",
+        "CRM_DEFAULT_VIEWS_FIELD"
       ]
     },
     "libs/plugins/crm/src/lib/constants/contact-filters.ts": {
@@ -436,7 +440,9 @@
         "NATIVE_CRM_FIELD_TYPE_LABELS",
         "NATIVE_CRM_FIELD_CURRENCIES",
         "NATIVE_CRM_FIELD_DEFAULT_CURRENCY",
-        "NATIVE_CURRENCY_FRACTION_DIGITS"
+        "NATIVE_CURRENCY_FRACTION_DIGITS",
+        "NATIVE_EMAIL_STATE_STATUSES",
+        "NATIVE_CRM_LEAD_SOURCE_DIRECTIONS"
       ]
     },
     "libs/plugins/marketing/src/lib/model/native-vocabulary.ts": {
@@ -38130,6 +38136,701 @@
               "status": "failed"
             }
           ]
+        ]
+      ]
+    },
+    "normalizeCrmViewState": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "filters": [
+              {
+                "field": "ownerUid",
+                "op": "equals",
+                "value": "u1",
+                "label": "Dana"
+              },
+              {
+                "field": "",
+                "op": "equals",
+                "value": "x"
+              },
+              {
+                "field": "tags",
+                "op": "",
+                "value": "x"
+              },
+              {
+                "field": "tags",
+                "op": "contains",
+                "value": ""
+              },
+              {
+                "field": "nextTaskAtMs",
+                "op": "isEmpty",
+                "value": ""
+              },
+              {
+                "field": " status ",
+                "op": " isAnyOf ",
+                "value": " open,won "
+              }
+            ],
+            "columns": [
+              "name",
+              " email ",
+              "name",
+              "",
+              7
+            ],
+            "sort": {
+              "field": "name",
+              "direction": "desc"
+            }
+          }
+        ],
+        [
+          {
+            "filters": "nope",
+            "columns": {
+              "a": 1
+            },
+            "sort": {
+              "field": "updatedAt",
+              "direction": "sideways"
+            }
+          }
+        ],
+        [
+          {
+            "filters": [
+              {
+                "field": "a",
+                "op": "equals",
+                "value": "1"
+              },
+              {
+                "field": "b",
+                "op": "equals",
+                "value": "2"
+              },
+              {
+                "field": "c",
+                "op": "equals",
+                "value": "3"
+              },
+              {
+                "field": "d",
+                "op": "equals",
+                "value": "4"
+              },
+              {
+                "field": "e",
+                "op": "equals",
+                "value": "5"
+              },
+              {
+                "field": "f",
+                "op": "equals",
+                "value": "6"
+              },
+              {
+                "field": "g",
+                "op": "equals",
+                "value": "7"
+              },
+              {
+                "field": "h",
+                "op": "equals",
+                "value": "8"
+              },
+              {
+                "field": "i",
+                "op": "equals",
+                "value": "9"
+              },
+              {
+                "field": "j",
+                "op": "equals",
+                "value": "10"
+              },
+              {
+                "field": "k",
+                "op": "equals",
+                "value": "11"
+              },
+              {
+                "field": "l",
+                "op": "equals",
+                "value": "12"
+              },
+              {
+                "field": "m",
+                "op": "equals",
+                "value": "13"
+              },
+              {
+                "field": "n",
+                "op": "equals",
+                "value": "14"
+              },
+              {
+                "field": "o",
+                "op": "equals",
+                "value": "15"
+              },
+              {
+                "field": "p",
+                "op": "equals",
+                "value": "16"
+              },
+              {
+                "field": "q",
+                "op": "equals",
+                "value": "17"
+              },
+              {
+                "field": "r",
+                "op": "equals",
+                "value": "18"
+              },
+              {
+                "field": "s",
+                "op": "equals",
+                "value": "19"
+              },
+              {
+                "field": "t",
+                "op": "equals",
+                "value": "20"
+              },
+              {
+                "field": "u",
+                "op": "equals",
+                "value": "21"
+              }
+            ],
+            "sort": {
+              "field": "  "
+            }
+          }
+        ]
+      ]
+    },
+    "crmViewIsListed": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          {
+            "shared": true,
+            "ownerUid": "u2"
+          },
+          "u1"
+        ],
+        [
+          {
+            "shared": false,
+            "ownerUid": "u1"
+          },
+          "u1"
+        ],
+        [
+          {
+            "shared": false,
+            "ownerUid": "u2"
+          },
+          "u1"
+        ],
+        [
+          {
+            "shared": false,
+            "ownerUid": ""
+          },
+          ""
+        ],
+        [
+          {
+            "shared": false,
+            "ownerUid": "u1"
+          },
+          null
+        ]
+      ]
+    },
+    "crmDefaultViewId": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          null,
+          "o1",
+          "contacts"
+        ],
+        [
+          {
+            "crmDefaultViews": {
+              "o1": {
+                "contacts": "v1",
+                "deals": "  "
+              }
+            }
+          },
+          "o1",
+          "contacts"
+        ],
+        [
+          {
+            "crmDefaultViews": {
+              "o1": {
+                "contacts": "v1",
+                "deals": "  "
+              }
+            }
+          },
+          "o1",
+          "deals"
+        ],
+        [
+          {
+            "crmDefaultViews": {
+              "o1": {
+                "contacts": "v1"
+              }
+            }
+          },
+          "o2",
+          "contacts"
+        ],
+        [
+          {
+            "crmDefaultViews": [
+              "v1"
+            ]
+          },
+          "o1",
+          "contacts"
+        ],
+        [
+          {
+            "crmDefaultViews": {
+              "o1": {
+                "contacts": "v1"
+              }
+            }
+          },
+          null,
+          "contacts"
+        ]
+      ]
+    },
+    "crmDefaultViewPatch": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          "o1",
+          "leads",
+          "v9"
+        ],
+        [
+          "o1",
+          "tasks",
+          null
+        ]
+      ]
+    },
+    "contactQueryClause": {
+      "module": "libs/plugins/crm/src/lib/constants/contact-filters.ts",
+      "args": [
+        [
+          {
+            "field": "email",
+            "op": "startsWith",
+            "value": "pat"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "formIds",
+            "op": "contains",
+            "value": "f1"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": false
+          }
+        ],
+        [
+          {
+            "field": "formIds",
+            "op": "contains",
+            "value": "f1"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "emailState",
+            "op": "isEmpty",
+            "value": ""
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "emailState",
+            "op": "isNotEmpty",
+            "value": ""
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "emailState",
+            "op": "isAnyOf",
+            "value": "ok,bounced"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "emailState",
+            "op": "equals",
+            "value": "nope"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "lifecycleStage",
+            "op": "equals",
+            "value": "customer"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "lifecycleStage",
+            "op": "isAnyOf",
+            "value": "customer,lead"
+          },
+          {
+            "groupId": null,
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "ownerUid",
+            "op": "equals",
+            "value": "u1"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": false
+          }
+        ],
+        [
+          {
+            "field": "tags",
+            "op": "contains",
+            "value": "VIP Guest"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "source",
+            "op": "isNotEmpty",
+            "value": ""
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "custom_plan",
+            "op": "equals",
+            "value": "Enterprise"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "leadSource",
+            "op": "equals",
+            "value": "Trade show"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "ordersCount",
+            "op": "=",
+            "value": "3"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "companyId",
+            "op": "equals",
+            "value": "  "
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "industry",
+            "op": "equals",
+            "value": "x"
+          },
+          {
+            "groupId": "g1",
+            "foldsScope": true
+          }
+        ]
+      ]
+    },
+    "dealQueryClause": {
+      "module": "libs/plugins/crm/src/lib/constants/deal-filters.ts",
+      "args": [
+        [
+          {
+            "field": "status",
+            "op": "equals",
+            "value": "won"
+          }
+        ],
+        [
+          {
+            "field": "type",
+            "op": "equals",
+            "value": "New Business"
+          }
+        ],
+        [
+          {
+            "field": "type",
+            "op": "isAnyOf",
+            "value": "New Business,Renewal"
+          }
+        ],
+        [
+          {
+            "field": "leadSource",
+            "op": "equals",
+            "value": "\u0000none"
+          }
+        ],
+        [
+          {
+            "field": "leadSource",
+            "op": "isEmpty",
+            "value": ""
+          }
+        ],
+        [
+          {
+            "field": "type",
+            "op": "isAnyOf",
+            "value": "\u0000none,Renewal"
+          }
+        ],
+        [
+          {
+            "field": "nextTaskAtMs",
+            "op": "isEmpty",
+            "value": ""
+          }
+        ]
+      ]
+    },
+    "leadQueryClause": {
+      "module": "libs/plugins/crm/src/lib/model/lead-filters.ts",
+      "args": [
+        [
+          {
+            "field": "status",
+            "op": "equals",
+            "value": "open"
+          }
+        ],
+        [
+          {
+            "field": "status",
+            "op": "isAnyOf",
+            "value": "new,qualified"
+          }
+        ],
+        [
+          {
+            "field": "status",
+            "op": "equals",
+            "value": "bogus"
+          }
+        ],
+        [
+          {
+            "field": "emailState",
+            "op": "isAnyOf",
+            "value": "problem,none"
+          }
+        ],
+        [
+          {
+            "field": "emailState",
+            "op": "equals",
+            "value": "bogus"
+          }
+        ],
+        [
+          {
+            "field": "leadSource",
+            "op": "equals",
+            "value": "\u0000none"
+          }
+        ],
+        [
+          {
+            "field": "leadSource",
+            "op": "isAnyOf",
+            "value": "\u0000none,Web"
+          }
+        ],
+        [
+          {
+            "field": "leadSource",
+            "op": "isAnyOf",
+            "value": "Web,Trade Show"
+          }
+        ],
+        [
+          {
+            "field": "leadSourceDirection",
+            "op": "equals",
+            "value": "inbound"
+          }
+        ],
+        [
+          {
+            "field": "leadSourceDirection",
+            "op": "equals",
+            "value": "sideways"
+          }
+        ],
+        [
+          {
+            "field": "ownerUid",
+            "op": "isAnyOf",
+            "value": "u1,u2"
+          }
+        ],
+        [
+          {
+            "field": "industry",
+            "op": "equals",
+            "value": "Food & Drink"
+          }
+        ],
+        [
+          {
+            "field": "rating",
+            "op": "equals",
+            "value": "Hot"
+          }
+        ],
+        [
+          {
+            "field": "campaignIds",
+            "op": "isAnyOf",
+            "value": "c1,c2"
+          }
+        ],
+        [
+          {
+            "field": "campaignIds",
+            "op": "equals",
+            "value": "c1"
+          }
+        ],
+        [
+          {
+            "field": "campaignIds",
+            "op": "equals",
+            "value": "c1"
+          },
+          {
+            "scopeTokens": [
+              "host:s1",
+              "group:g1"
+            ],
+            "foldsScope": true
+          }
+        ],
+        [
+          {
+            "field": "campaignIds",
+            "op": "equals",
+            "value": "c1"
+          },
+          {
+            "scopeTokens": [
+              "host:s1"
+            ],
+            "foldsScope": false
+          }
+        ],
+        [
+          {
+            "field": "name",
+            "op": "equals",
+            "value": "x"
+          }
         ]
       ]
     }
