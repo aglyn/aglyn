@@ -20,7 +20,7 @@
 
 import { createSecretBoxKey, type SecretBoxKeyring } from '@aglyn/shared-util-tools/secret-box'
 import { randomBytes } from 'node:crypto'
-import type { AccountingOrderSnapshot } from '../model/accounting-sources'
+import type { AccountingOrderSnapshot, AccountingPayoutSnapshot } from '../model/accounting-sources'
 import type { AccountingMapping, AccountingProviderId } from '../model/accounting.types'
 import { asFirestore, memoryFirestore, type MemoryFirestore } from '../testing/memory-firestore'
 import {
@@ -38,15 +38,26 @@ import { AccountingPacer, AccountingProviderError } from './providers/http'
 import type { AccountingProvider } from './providers/provider'
 import { createXeroProvider } from './providers/xero'
 import {
+  documentFor,
   enqueueOrderPaid,
   enqueueOrderRefunded,
+  enqueuePayout,
   foreignCurrencyRefusal,
   gatherSummaries,
   idempotencyKey,
   runSyncPass,
   type AccountingEngineDeps,
 } from './sync-engine'
-import { SYNC_MAX_ATTEMPTS, backoffMs, feeItemId, refundItemId, saleItemId } from './sync-store'
+import {
+  SYNC_MAX_ATTEMPTS,
+  backoffMs,
+  feeItemId,
+  itemsForPayout,
+  payoutFeeItemId,
+  payoutItemId,
+  refundItemId,
+  saleItemId,
+} from './sync-store'
 
 const NOW = Date.UTC(2026, 9, 6, 18)
 const key = createSecretBoxKey(randomBytes(32))
@@ -370,6 +381,102 @@ describe('posting', () => {
     await enqueueOrderPaid(deps, order())
     await expect(runSyncPass(deps, connection(), { deadlineMs: NOW + 60_000 })).resolves.toMatchObject({ stopped: 'unmapped' })
     expect(provider.createSalesReceipt).not.toHaveBeenCalled()
+  })
+})
+
+describe('Stripe’s own fees on a payout', () => {
+  const payout = (overrides: Partial<AccountingPayoutSnapshot> = {}): AccountingPayoutSnapshot => ({
+    orgId: 'org-1',
+    payoutId: 'po_77',
+    amountCents: 9500,
+    currency: 'usd',
+    arrivedAtMs: NOW - 60_000,
+    statementDescriptor: null,
+    stripeFeeCents: 321,
+    ...overrides,
+  })
+
+  it('makes a payout its transfer and one fee item, which posts on its own in either mode', () => {
+    const [transfer, fee] = itemsForPayout(payout(), NOW)
+    expect(transfer).toMatchObject({ id: payoutItemId(payout()), kind: 'payout', amountCents: 9500 })
+    expect(fee).toMatchObject({
+      id: payoutFeeItemId(payout()),
+      kind: 'fee',
+      mode: 'per-order',
+      sourceId: 'po_77',
+      externalId: 'PO-77-F',
+      label: 'Stripe fees on payout of $95.00',
+      amountCents: 321,
+      occurredAtMs: NOW - 60_000,
+      nextAttemptAtMs: NOW,
+      payout: payout(),
+    })
+    expect(fee).not.toHaveProperty('order')
+    // Its id is not the shape of an order's fee item (site, order).
+    expect(payoutFeeItemId(payout())).not.toBe(feeItemId({ hostId: 'payout', orderId: 'po_77' }))
+    expect(itemsForPayout(payout({ stripeFeeCents: -20 }), NOW)[1]).toMatchObject({
+      amountCents: 20,
+      label: 'Stripe fees returned on payout of $95.00',
+    })
+    expect(itemsForPayout(payout({ stripeFeeCents: 0 }), NOW)).toHaveLength(1)
+    expect(itemsForPayout(payout({ stripeFeeCents: undefined }), NOW)).toHaveLength(1)
+  })
+
+  it('queues both items together, once, and neither before the start date', async () => {
+    const { deps, item } = setup({ mapping: { ...mapping, syncMode: 'daily-summary' } })
+    expect(await enqueuePayout(deps, payout())).toBe(2)
+    expect(await enqueuePayout(deps, payout())).toBe(0)
+    expect(item(payoutFeeItemId(payout()))).toMatchObject({ kind: 'fee', mode: 'per-order', status: 'pending' })
+    const dated = setup({ mapping: { ...mapping, startDate: '2026-10-07' } })
+    await expect(enqueuePayout(dated.deps, payout())).resolves.toBe(0)
+    expect(dated.item(payoutFeeItemId(payout()))).toBeUndefined()
+  })
+
+  it('builds the fee item’s document from the payout, and an order’s fee from the order', () => {
+    const { connection } = setup()
+    const [, fee] = itemsForPayout(payout(), NOW)
+    expect(documentFor(fee, connection())).toMatchObject({
+      kind: 'fee',
+      externalId: 'PO-77-F',
+      amountCents: 321,
+      expenseAccountId: 'fee',
+      bankAccountId: 'clr',
+      credit: false,
+      payeeName: 'Stripe',
+    })
+    const [, credit] = itemsForPayout(payout({ stripeFeeCents: -20 }), NOW)
+    expect(documentFor(credit, connection())).toMatchObject({ kind: 'fee-refund', amountCents: 20, credit: true })
+    expect(documentFor({ ...fee, payout: undefined, order: order() }, connection())).toMatchObject({
+      payeeName: 'Aglyn',
+      amountCents: 30,
+    })
+  })
+
+  it('pays Xero’s Stripe fees to a contact named Stripe, kept apart from Aglyn’s, and QuickBooks to none', async () => {
+    const upsertCustomer = jest.fn(async (_session: unknown, customer: { name: string }) => ({ id: `c-${customer.name}` }))
+    const xero = fakeProvider({ id: 'xero', upsertCustomer: upsertCustomer as never })
+    const { deps, connection, store, connectionPath } = setup({ provider: xero })
+    await enqueueOrderPaid(deps, order())
+    await enqueuePayout(deps, payout())
+    await runSyncPass(deps, connection(), { deadlineMs: NOW + 60_000 })
+    const payees = (xero.createExpense as jest.Mock).mock.calls.map(([, doc, context]) => [doc.payeeName, context.customerId])
+    expect(payees).toEqual([
+      ['Aglyn', 'c-Aglyn'],
+      ['Stripe', 'c-Stripe'],
+    ])
+    expect(store.read(connectionPath)).toMatchObject({ feePayeeId: 'c-Aglyn', stripeFeePayeeId: 'c-Stripe' })
+    // Remembered: a second payout's fees make no second contact.
+    await enqueuePayout(deps, payout({ payoutId: 'po_78' }))
+    await runSyncPass(deps, connection(), { deadlineMs: NOW + 60_000 })
+    expect(upsertCustomer.mock.calls.filter(([, customer]) => customer.name === 'Stripe')).toHaveLength(1)
+
+    const quickbooks = setup()
+    await enqueuePayout(quickbooks.deps, payout())
+    await runSyncPass(quickbooks.deps, quickbooks.connection(), { deadlineMs: NOW + 60_000 })
+    const [, doc, context] = (quickbooks.provider.createExpense as jest.Mock).mock.calls[0]
+    expect(doc).toMatchObject({ payeeName: 'Stripe', externalId: 'PO-77-F' })
+    expect(context.customerId).toBeNull()
+    expect(quickbooks.item(payoutFeeItemId(payout()))).toMatchObject({ status: 'synced', providerDocType: 'Purchase' })
   })
 })
 

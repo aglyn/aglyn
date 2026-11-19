@@ -108,7 +108,7 @@ class ScreenSpecTest {
     }
     val ids = specs.map { it.id }
     assertEquals(ids.size, ids.toSet().size, "duplicate screen ids")
-    val known = setOf("fields", "meters", "list", "form", "actions", "links", "notice", "zone", "image", "html", "qr")
+    val known = setOf("fields", "meters", "list", "form", "actions", "links", "notice", "zone", "image", "html", "qr", "text")
     // Screens a plugin draws by hand rather than from a spec, which a spec may still open.
     val handWritten = setOf("commerce.orders", "commerce.order", "commerce.quotes", "commerce.quote", "commerce.products", "commerce.product", "commerce.sales", "marketplace.listing", "marketplace.sell", "site.pages")
     for (spec in specs) {
@@ -117,6 +117,31 @@ class ScreenSpecTest {
       for (target in targets(spec.raw)) assertTrue(target in ids || target in handWritten, "${spec.id} opens $target, which no spec declares")
       for (icon in icons(spec.raw)) assertTrue(AglynIcons.has(icon), "${spec.id}: Material icon \"$icon\" is not in AglynIcons")
     }
+  }
+
+  /** Every field a spec asks for is of a kind the renderer draws (`FieldInput`): an unknown kind would be a plain text box. */
+  @Test
+  fun everyFieldKindIsOneTheRendererDraws() {
+    val known = setOf(
+      "text", "email", "url", "number", "stepper", "multiline", "password", "toggle", "select", "country", "date", "hours",
+      "heading", "choice", "multiselect", "lines", "file", "upload", "media", "lookup", "signature", "photo", "group",
+    )
+    fun walk(node: JsonElement, file: String) {
+      when (node) {
+        is JsonObject -> {
+          for (key in listOf("fields", "prompt")) {
+            for (field in (node[key] as? JsonArray).orEmpty()) {
+              val kind = ((field as? JsonObject)?.get("kind") as? JsonPrimitive)?.content ?: continue
+              assertTrue(kind in known, "$file: field kind $kind")
+            }
+          }
+          node.values.forEach { walk(it, file) }
+        }
+        is JsonArray -> node.forEach { walk(it, file) }
+        else -> Unit
+      }
+    }
+    for (file in specFiles()) walk(Json.parseToJsonElement(file.readText()), file.name)
   }
 
   private fun targets(json: JsonElement): List<String> = when (json) {
@@ -446,6 +471,22 @@ class ScreenSpecTest {
     assertEquals(ListOrder("plan", false), ListColumns.next(order, plan))
     assertEquals("createdAt:desc", ListColumns.routeValue(ListOrder("created", true), columns))
     assertNull(ListColumns.routeValue(ListOrder("plan", false), columns))
+  }
+
+  /** The Team roster's sorts (the console's MEMBER_SORTS): Role by rank, owner first, an unranked role after; Member by what the row reads as. */
+  @Test
+  fun aRankedColumnOrdersByRankAndATemplateByWhatItReads() {
+    val role = ListColumn(Json.parseToJsonElement("""{"id":"role","sort":{"page":"item.role","ranks":["owner","admin","editor","viewer"]}}"""))
+    val rows = Json.parseToJsonElement(
+      """[{"id":"a","role":"viewer"},{"id":"b","role":"owner"},{"id":"c","role":"editor"},{"id":"d","role":"guest"},{"id":"e","role":"admin"}]""",
+    ) as JsonArray
+    fun ids(column: ListColumn, rows: JsonArray, descending: Boolean) =
+      ListColumns.sorted(rows, column, descending, JsonObject(emptyMap())).map { it.str("id") }
+    assertEquals(listOf("b", "e", "c", "a", "d"), ids(role, rows, false))
+    assertEquals(listOf("d", "a", "c", "e", "b"), ids(role, rows, true))
+    val member = ListColumn(Json.parseToJsonElement("""{"id":"member","sort":{"page":"{item.displayName|item.email}"}}"""))
+    val people = Json.parseToJsonElement("""[{"id":"x","email":"zed@example.test"},{"id":"y","displayName":"Amy"}]""") as JsonArray
+    assertEquals(listOf("y", "x"), ids(member, people, false))
   }
 
   /** A page column orders the rows on the screen: numbers as numbers, text without regard to case; a row without the value goes last either way, and ties keep their order. */

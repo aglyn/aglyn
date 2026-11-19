@@ -506,6 +506,12 @@ func fieldJSON(_ field: FieldSpec, _ value: FieldValue?) -> JSONValue {
   case ("upload", .text(let text)?):
     // What the upload step reads out of the chosen file or pasted rows, kept as JSON text while it is edited.
     return JSONValue.decode(Data(text.utf8)) ?? .null
+  case ("signature", .text(let text)?):
+    // A drawn signature: `{ strokes, png }`, or null while nothing is drawn.
+    return SignatureInk.json(text)
+  case ("group", .text(let text)?):
+    // A set of fields asked for each of several (the minors on a waiver): the sets, each field as it sends itself.
+    return FieldGroups.json(field, text)
   case ("lines", .text(let text)?):
     // One entry per line while edited; the list is what is sent (nothing typed is an empty list).
     return .array(text.split(separator: "\n").map { String($0).trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.map(JSONValue.string))
@@ -525,6 +531,7 @@ func initialValue(_ field: FieldSpec, in context: JSONValue) -> FieldValue {
   if field.kind == "toggle" { return .flag(ScreenValues.truthy(resolved)) }
   if field.kind == "multiselect" { return .text(Optional(resolved).array.map { ScreenValues.text($0) }.joined(separator: "\n")) }
   if field.kind == "lines" { return .text(Optional(resolved).array.map { ScreenValues.text($0) }.joined(separator: "\n")) }
+  if field.kind == "group" { return .text(FieldGroups.initial(field, resolved)) }
   if field.kind == "date", let millis = ScreenValues.epochMillis(resolved) {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withFullDate]
@@ -638,6 +645,12 @@ struct FieldInput: View {
         UploadFieldView(field: field, context: context, value: $value)
       case "media":
         MediaFieldView(field: field, value: $value)
+      case "signature":
+        SignatureFieldView(field: field, label: label, help: field.help.map { ScreenValues.render($0, in: context) }, value: $value)
+      case "photo":
+        PhotoFieldView(field: field, label: label, value: $value)
+      case "group":
+        GroupFieldView(field: field, context: context, label: label, value: $value)
       case "multiline", "lines":
         PlainFormRow(label) {
           TextField(label, text: text, prompt: field.placeholder.map { Text($0) }, axis: .vertical)
@@ -655,9 +668,9 @@ struct FieldInput: View {
           TextField(label, text: text, prompt: Text(field.placeholder ?? label))
             #if os(iOS)
               .keyboardType(keyboard)
-              .textInputAutocapitalization(field.kind == "text" ? .sentences : .never)
+              .textInputAutocapitalization(field.kind == "text" && !field.verbatim ? .sentences : .never)
             #endif
-            .autocorrectionDisabled(field.kind != "text")
+            .autocorrectionDisabled(field.kind != "text" || field.verbatim)
         }
         .aglynFieldLabel(label, value: text.wrappedValue, prompt: field.placeholder)
       }
@@ -668,7 +681,7 @@ struct FieldInput: View {
       }
       if let mismatch = field.mismatch, !text.wrappedValue.isEmpty, field.refuses(.string(text.wrappedValue), in: context) {
         Text(ScreenValues.render(mismatch, in: context)).font(AglynFont.caption).foregroundStyle(AglynColor.error)
-      } else if let help = field.help {
+      } else if let help = field.help, field.kind != "signature" {
         Text(ScreenValues.render(help, in: context)).font(AglynFont.caption).foregroundStyle(.secondary)
       }
     }
@@ -763,6 +776,22 @@ struct FormBlock: View {
     }
   }
 
+  /// The form's first `refuse` entry that refuses what is typed: the console's pre-save check (a plugin's `validate`),
+  /// said beside Save, which it holds back. An entry is `{ when, text }`, or `{ check, site }` naming a check both kits
+  /// implement (`PluginSettingsChecks`), asked over the values the form saves (on a site, the values it will run with).
+  private var refused: String? {
+    let filled = filled
+    for entry in block["refuse"].array {
+      if let check = entry["check"]?.stringValue {
+        let values = PluginSettingsChecks.values(in: filled, site: entry["site"] == .bool(true))
+        if let text = PluginSettingsChecks.refusal(check, values) { return text }
+      } else if ScreenValues.condition(entry["when"]?.stringValue, in: filled) {
+        return ScreenValues.render(entry["text"]?.stringValue ?? "", in: filled)
+      }
+    }
+    return nil
+  }
+
   /// A load this form is seeded from is only the cache's answer yet.
   private var held: Bool {
     !FormEdits.heldBy(object: block["object"]?.stringValue, initials: fields.compactMap(\.initial), checking: context["checking"]).isEmpty
@@ -782,7 +811,10 @@ struct FormBlock: View {
       if let action = block["submit"].flatMap(ActionSpec.init), ScreenValues.condition(action.when, in: scope) {
         // One Save per form at the standard control size, trailing (spec 8): never a full-width bar per form.
         HStack(spacing: AglynSpace.one) {
-          if let refusal = heldPress.refusal, dirty {
+          if let refused {
+            Text(refused).font(AglynFont.caption).foregroundStyle(AglynColor.warning)
+              .accessibilityIdentifier("refused-\(block.id)")
+          } else if let refusal = heldPress.refusal, dirty {
             Text(refusal).font(AglynFont.caption).foregroundStyle(AglynColor.warning)
               .accessibilityIdentifier("unconfirmed-\(block.id)")
           } else if held && dirty {
@@ -797,12 +829,12 @@ struct FormBlock: View {
           }
           .buttonStyle(.aglynProminent)
           .controlSize(.regular)
-          .disabled(busy || heldPress.waiting || missing || action.disabledWhen.map { ScreenValues.condition($0, in: scope) } == true)
+          .disabled(busy || heldPress.waiting || missing || refused != nil || action.disabledWhen.map { ScreenValues.condition($0, in: filled) } == true)
           .accessibilityIdentifier("submit-\(block.id)")
         }
         .aglynHeldPress($heldPress, checking: held, refusal: FormEdits.unconfirmedText(block["checking"]?.stringValue)) {
           // The save of the form as it is now: the edits replayed onto the server's copy, if they still pass.
-          if !missing, action.disabledWhen.map({ ScreenValues.condition($0, in: scope) }) != true { save(action) }
+          if !missing, refused == nil, action.disabledWhen.map({ ScreenValues.condition($0, in: filled) }) != true { save(action) }
         }
       }
     }

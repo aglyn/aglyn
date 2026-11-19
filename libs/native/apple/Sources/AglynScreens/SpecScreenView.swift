@@ -660,6 +660,22 @@ struct SpecScreenBody: View {
             .textSelection(.enabled)
         }
       }
+    case "text":
+      // `{ "type": "text", "source": "{…}" }`: words a person reads through, as written (a waiver's own text): line breaks
+      // kept, **strong**, *emphasis* and links drawn, inline only (the Kotlin kit's `InlineMarkdown`); nothing shows while
+      // the source is empty.
+      let source = ScreenValues.render(block["source"]?.stringValue ?? "", in: context)
+      if !source.isEmpty {
+        section(title, footer) {
+          Text(
+            (try? AttributedString(markdown: source, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+              ?? AttributedString(source)
+          )
+          .font(AglynFont.body)
+          .textSelection(.enabled)
+          .accessibilityIdentifier("text-\(block.id)")
+        }
+      }
     case "notice":
       Section {
         AglynNotice(ScreenValues.render(block["text"]?.stringValue ?? "", in: context), tone: tone(block["tone"]?.stringValue))
@@ -881,9 +897,11 @@ struct SearchModifier: ViewModifier {
 
   func body(content: Content) -> some View {
     if enabled {
+      // The kit's search takes the submit itself: on the Mac, the iPad and in a phone area's title row it is
+      // `AglynListToolbar`'s text field, whose Return an outer `.onSubmit(of: .search)` never hears, so the route was
+      // never asked; the system search bar elsewhere hands it on the same way.
       content
-        .aglynSearchable(text: $text, prompt: "Search")
-        .onSubmit(of: .search, submit)
+        .aglynSearchable(text: $text, prompt: "Search", onSubmit: submit)
         .onChange(of: text) { _, now in if now.isEmpty { submit() } }
     } else {
       content

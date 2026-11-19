@@ -194,6 +194,16 @@ class SignUpTest {
     assertEquals(SignUpWorkspaceOutcome(null, null, "That workspace URL is taken"), signUp.createWorkspace("Acme"))
   }
 
+  /** The console's Create an organization sends the Workspace URL the person typed (made from the name until they do). */
+  @Test
+  fun theWorkspaceIsCreatedAtTheWorkspaceUrlTyped() = runTest {
+    val calls = mutableListOf<Call>()
+    val signUp = service(mutableListOf(HttpStatusCode.OK to """{"orgId":"o2","slug":"acme-co"}"""), calls)
+    signUp.createWorkspace("Acme", " acme-co ")
+    assertEquals(Json.parseToJsonElement("""{"name":"Acme","slug":"acme-co"}"""), Json.parseToJsonElement(calls[0].body))
+    assertEquals("acme-co", WorkspaceName.urlInput("Acme-Co"))
+  }
+
   @Test
   fun theVerificationSendReadsEachAnswer() = runTest {
     val calls = mutableListOf<Call>()

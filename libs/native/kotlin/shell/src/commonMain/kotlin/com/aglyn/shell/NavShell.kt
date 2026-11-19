@@ -244,8 +244,13 @@ internal fun SignedInShell(
   val shellHeld = com.aglyn.pluginhost.rememberMemberPermissions(services.firestore, workspace.org?.id, workspace.site?.id, uid, workspace.org?.role)
   val hostAdmin = shellHeld.can("site.manage")
   chrome.managesBilling = shellHeld.workspace["billing.manage"] == true
+  // A workspace row hides as the console's org tab strip drops its tab: a permission the role lacks, a feature no plan sells.
+  val orgId = workspace.org?.id
+  val orgDoc by remember(orgId) { orgId?.let { services.firestore.observeDoc("orgs/$it") } ?: kotlinx.coroutines.flow.flowOf(com.aglyn.core.Live.Loading) }
+    .collectAsState(com.aglyn.core.Live.Loading)
+  val access = navAccess(shellHeld.workspace, (orgDoc as? com.aglyn.core.Live.Ready)?.value?.data)
   val scopeList = if (inSite) NativeNavListId.SITE else NativeNavListId.WORKSPACE
-  val scopeGroups = remember(version, enabled, hostAdmin, inSite) { navGroups(scopeList, enabled, hostAdmin, services.registry, inSite) }
+  val scopeGroups = remember(version, enabled, hostAdmin, inSite, access) { navGroups(scopeList, enabled, hostAdmin, services.registry, inSite, access) }
   val staffGroups = remember(version, claims.isStaff) { if (claims.isStaff) staffNavGroups() else emptyList() }
   context.staffRows = staffGroups.flatMap { it.rows }
   val settingsGroups = when (val mode = chrome.settingsMode) {
@@ -288,6 +293,8 @@ internal fun SignedInShell(
   }
 
   val staffFirst = staffGroups.firstOrNull()?.rows?.firstOrNull()?.key
+  var privacyChoices by remember { mutableStateOf(false) }
+  if (privacyChoices) PrivacyChoicesDialog(services.prefs) { privacyChoices = false }
   val actions = remember(navigator, chrome, services, screenSession.claims.isStaff, wide, staffFirst) {
     ShellActions(
       openScreen = { screen, params ->
@@ -309,6 +316,7 @@ internal fun SignedInShell(
       editProfile = { chrome.closeMenus(); navigator.select(NavKeys.of("core.account.profile", emptyMap())) },
       notificationSettings = { chrome.settingsMode = null; navigator.select(ShellNavigator.SETTINGS); navigator.push(Route.NotificationSettings) },
       staffConsole = staffConsoleAction(screenSession.claims.isStaff) { openStaffConsole(chrome, navigator, wide, staffFirst) },
+      privacyChoices = { chrome.closeMenus(); privacyChoices = true },
     )
   }
 
@@ -471,6 +479,8 @@ internal fun SignedInShell(
     val openRef: (com.aglyn.contracts.AccountItemRef) -> Unit = { item -> context.openPlace(item) }
     val banner: @Composable () -> Unit = {
       impersonation?.let { ImpersonationBanner(it, onExit = { exitScope.launch { services.auth.endImpersonation() } }) }
+      // The Terms moved (or there is no record): asked over every screen, never a wall (AGL-2316).
+      LegalReacceptanceBanner(services, uid)
     }
     // The ☆ for the place on screen: a screen's title row draws it (the shared list scaffold); else the breadcrumbs do.
     val starSlot = remember(here) { here?.let { item -> com.aglyn.ui.PageStarSlot { StarButton(services, item, prefs) } } }
@@ -618,6 +628,7 @@ internal fun SignedInShell(
             )
           },
         ) {
+          OfflineIndicator(services)
           HelpButton(help)
           if (assistTitle != null) TitleBarButton(if (chrome.aiPanel) "Close the AI panel" else assistTitle, "auto_awesome", "ai-panel-toggle") { chrome.toggleAiPanel() }
         }

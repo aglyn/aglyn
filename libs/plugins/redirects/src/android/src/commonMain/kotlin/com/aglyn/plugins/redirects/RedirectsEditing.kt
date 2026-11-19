@@ -203,6 +203,9 @@ class RedirectsEditor(private val api: RedirectsWriteApi, private val uid: Strin
   /** What just happened, or a warning that did not stop the save. */
   var notice by mutableStateOf<String?>(null)
 
+  /** Why Add redirect did not open its form: the plan's cap, in the page's words. */
+  var warning by mutableStateOf<String?>(null)
+
   /** The open rule is only the device cache's copy yet: Save waits for the server's (AGL-4047). A new rule is never held. */
   var held by mutableStateOf(false)
     private set
@@ -210,7 +213,14 @@ class RedirectsEditor(private val api: RedirectsWriteApi, private val uid: Strin
   /** The stored rule the open draft is laid over: a newer copy keeps what was typed and moves the rest. */
   private var opened: RedirectDraft? = null
 
-  fun add() = open(RedirectDraft())
+  /** Add redirect, refused at the plan's cap as the page refuses it ([limitRefusal]), before the form opens. */
+  fun add(limitRefusal: String? = null) {
+    if (limitRefusal != null) {
+      warning = limitRefusal
+      return
+    }
+    open(RedirectDraft())
+  }
 
   /** Whether the site's list is only the device cache's copy, which an opened rule is then held on; the screen keeps it. */
   var listFromCache = false
@@ -250,6 +260,7 @@ class RedirectsEditor(private val api: RedirectsWriteApi, private val uid: Strin
 
   private fun open(next: RedirectDraft) {
     error = null
+    warning = null
     draft = next
     opened = null
     held = false

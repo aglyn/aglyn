@@ -35,6 +35,10 @@ class FirebaseTelemetrySink(context: Context) : TelemetrySink {
     analytics.logEvent(event, Bundle().apply { parameters.forEach { (name, value) -> putString(name, value) } })
   }
 
+  override fun setAnalyticsCollection(on: Boolean) {
+    analytics.setAnalyticsCollectionEnabled(on)
+  }
+
   override fun kind(error: Throwable): String =
     if (error is FirebaseFirestoreException) "FirebaseFirestoreException:${error.code}" else super.kind(error)
 
@@ -55,10 +59,13 @@ class FirebaseTelemetrySink(context: Context) : TelemetrySink {
       val crashlytics = FirebaseCrashlytics.getInstance()
       crashlytics.setCrashlyticsCollectionEnabled(collecting)
       if (!collecting) crashlytics.deleteUnsentReports()
-      FirebaseAnalytics.getInstance(context.applicationContext).setAnalyticsCollectionEnabled(collecting)
+      // Analytics also needs the person's "Your Privacy Choices" switch on this device, read here before anything starts;
+      // crash reports follow the build alone.
+      val analytics = PrivacyChoices.analyticsAllowed(SharedPreferencesStore(context))
+      FirebaseAnalytics.getInstance(context.applicationContext).setAnalyticsCollectionEnabled(collecting && analytics)
       val info = runCatching { context.packageManager.getPackageInfo(context.packageName, 0) }.getOrNull()
       val build = info?.let { if (Build.VERSION.SDK_INT >= 28) it.longVersionCode.toString() else @Suppress("DEPRECATION") it.versionCode.toString() }
-      Telemetry.start(collecting, FirebaseTelemetrySink(context), config.app, info?.versionName, build)
+      Telemetry.start(collecting, FirebaseTelemetrySink(context), config.app, info?.versionName, build, analytics)
     }
   }
 }

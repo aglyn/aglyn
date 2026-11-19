@@ -108,9 +108,22 @@ describe('the tool list as a public listing (AGL-4225)', () => {
     }
   })
 
-  it('counts 36 tools that only read and 34 that write', () => {
+  it('marks the hints a directory scan found missing, each for a reason the handler shows (AGL-4235)', () => {
+    const hints = (name: string) => (tools.find((tool) => tool.name === name) as McpTool).annotations
+    // Adding an address the site already holds updates that lead.
+    expect(hints('createLead')).toMatchObject({ destructiveHint: true, openWorldHint: true })
+    // Unless `private` is true, an upload gets a public link anyone can open.
+    for (const name of ['uploadOrgMedia', 'uploadSiteMedia']) {
+      expect({ name, ...hints(name) }).toMatchObject({ name, openWorldHint: true, destructiveHint: false })
+      expect(prose(tools.find((tool) => tool.name === name) as McpTool)).toContain(
+        'Unless `private` is true, the file gets a public link that anyone can open.',
+      )
+    }
+  })
+
+  it('counts 40 tools that only read and 41 that write', () => {
     const reads = tools.filter((tool) => tool.annotations.readOnlyHint).length
-    expect({ reads, writes: tools.length - reads }).toEqual({ reads: 36, writes: 34 })
+    expect({ reads, writes: tools.length - reads }).toEqual({ reads: 40, writes: 41 })
   })
 
   it('describes every tool in at least a full sentence of its own', () => {

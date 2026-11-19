@@ -108,12 +108,24 @@ const PLUMBING = new Set(['users', 'orgs', 'hosts', 'adminAudit'])
  * walked by `readSubtree` for the person (the `users` note names it). A site
  * erasure reaches it by `collectionGroup` to take that site's notices out of
  * every member's inbox — the site removing its own rows, not a new source.
+ *
+ * `transferJobs` (AGL-4236) is the `members` shape: `orgs/{orgId}/transferJobs`,
+ * a subcollection of the workspace's own document. `exportOrgData` walks
+ * `orgs/{orgId}` with `readSubtree`, so each import job comes out whole for
+ * the ORG — the member who ran it (`createdBy`), the file name, columns,
+ * mapping and summary, and its `chunks`, `results` and `undo` rows with the
+ * imported values in them — and the `orgs` note names it. The site erasure
+ * reaches it by a `hostId` query only because the site's tree does not, to
+ * take that site's own jobs; the rows it deletes are rows the export has
+ * already disclosed. Like `activity` and `assistExchanges` beside it, it is a
+ * workspace record and not part of a PERSON's export.
  */
 const REACHED_UNDER: Record<string, string> = {
   members: 'orgs',
   messages: 'supportTickets',
   hostMemberships: 'users',
   notifications: 'users',
+  transferJobs: 'orgs',
 }
 
 /**

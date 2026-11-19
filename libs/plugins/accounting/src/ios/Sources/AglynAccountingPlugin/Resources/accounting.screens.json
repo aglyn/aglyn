@@ -361,7 +361,7 @@
                 "value": "{item.id}",
                 "label": "{item.name}"
               },
-              "help": "Where the Aglyn fee on each sale is recorded as an expense."
+              "help": "Where the Aglyn fee on each sale and the fees Stripe takes are recorded as an expense."
             },
             {
               "key": "payoutBank",

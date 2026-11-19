@@ -126,6 +126,26 @@ fun templateSourceLabel(type: String?): String = when (type) {
   else -> type.replaceFirstChar { it.uppercase() }
 }
 
+/** The `templateInstallStatus` zone (AGL-3080): what the plugin that installed a template says about the site's copy. */
+const val TEMPLATE_INSTALL_STATUS_SLOT = "templateInstallStatus"
+
+/** A template some plugin installed (`isInstalledTemplateSource`): neither saved here nor a starter. */
+fun isInstalledTemplateSource(type: String?): Boolean = !type.isNullOrEmpty() && type != "authored" && type != "starter"
+
+/**
+ * What the `templateInstallStatus` zone hands each widget for a template row (`ConsoleTemplateInstallStatusZoneProps`): the
+ * site, the template, and its server-managed source stamp and edit mark.
+ */
+fun templateInstallStatusProps(row: ArtifactRow, hostId: String): Map<String, String> = buildMap {
+  put("hostId", hostId)
+  put("templateId", row.id)
+  put("displayName", row.name)
+  put("sourceType", row.sourceType.orEmpty())
+  row.sourceListingId?.let { put("listingId", it) }
+  row.sourceVersion?.let { put("version", it) }
+  if (row.edited) put("edited", "true")
+}
+
 /** One row of a list, and the detail pane's subject. */
 data class ArtifactRow(
   val id: String,
@@ -137,6 +157,11 @@ data class ArtifactRow(
   /** A layout's parent layout (`layoutId`, "Renders inside"). */
   val parentLayoutId: String?,
   val sourceType: String?,
+  /** The listing and version a plugin-installed template came from (`source.listingId`, `source.version`). */
+  val sourceListingId: String? = null,
+  val sourceVersion: String? = null,
+  /** The site edited its copy since installing it (`editedAt`). */
+  val edited: Boolean = false,
   val starterId: String?,
   val starterName: String?,
   val starterOrder: Long?,
@@ -162,6 +187,13 @@ data class ArtifactRow(
         versionId = doc.string("versionId")?.ifBlank { null },
         parentLayoutId = doc.string("layoutId")?.ifBlank { null },
         sourceType = source?.get("type") as? String,
+        sourceListingId = (source?.get("listingId") as? String)?.ifBlank { null },
+        sourceVersion = when (val version = source?.get("version")) {
+          is String -> version.ifBlank { null }
+          is Number -> com.aglyn.pluginhost.jsNumber(version.toDouble())
+          else -> null
+        },
+        edited = doc.data["editedAt"] != null,
         starterId = (source?.get("starterId") as? String)?.ifBlank { null },
         starterName = (source?.get("starterName") as? String)?.ifBlank { null },
         starterOrder = (source?.get("starterOrder") as? Number)?.toLong(),

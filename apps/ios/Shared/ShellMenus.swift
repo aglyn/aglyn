@@ -169,6 +169,11 @@ struct AccountMenuContent: View {
         })
         .accessibilityIdentifier("account-report")
       }
+      // The console's user menu row of the same title (Console chrome row 3): the regulated words, from the contracts.
+      AglynMenuRow(ContractValues.shared.consentOptOutTitle, systemImage: PrivacyChoicesView.systemImage, action: {
+        go { navigation.showPrivacyChoices = true }
+      })
+      .accessibilityIdentifier("account-privacy-choices")
       if let auth = model.auth {
         AglynMenuDivider()
         AglynMenuCaption("Accounts")

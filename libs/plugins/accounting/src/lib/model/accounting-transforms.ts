@@ -27,7 +27,8 @@
  *
  * A sale is paid into the CLEARING account — the "Stripe clearing" bank
  * account — for its full total. Aglyn's platform fee leaves clearing as an
- * expense. A refund leaves clearing. A payout moves what is left from
+ * expense with the sale, and the fees Stripe itself took leave it as one
+ * expense with each payout. A refund leaves clearing. A payout moves what is left from
  * clearing to the bank. Followed through, clearing returns to zero with every
  * payout, which is how a bookkeeper proves nothing was missed.
  *
@@ -134,7 +135,7 @@ export interface AccountingExpenseDoc {
   expenseAccountId: string
   bankAccountId: string
   credit: boolean
-  /** Who was paid: the platform the fee went to. */
+  /** Who was paid: Aglyn for its platform fee, Stripe for its own fees. */
   payeeName: string
 }
 
@@ -183,8 +184,11 @@ export type AccountingDoc =
   | AccountingTransferDoc
   | AccountingJournalDoc
 
-/** Who a fee is paid to, in every ledger. */
+/** Who Aglyn's platform fee is paid to, in every ledger. */
 export const ACCOUNTING_FEE_PAYEE = PLATFORM_BRAND_NAME
+
+/** Who Stripe's own fees on a payout are paid to, in every ledger. */
+export const ACCOUNTING_STRIPE_FEE_PAYEE = 'Stripe'
 
 /** The customer a sale with no name or address is filed under. */
 export const ACCOUNTING_WALK_IN_CUSTOMER = 'Online customer'
@@ -233,6 +237,9 @@ export const refundSettlementExternalId = (refund: AccountingRefundSnapshot) =>
 
 export const payoutExternalId = (payout: Pick<AccountingPayoutSnapshot, 'payoutId'>) =>
   `PO-${String(payout.payoutId).replace(/^po_/, '').slice(-12)}`
+
+/** `PO-…-F`: Stripe's own fees on a payout, beside the payout's `PO-…`. */
+export const payoutFeeExternalId = (payout: Pick<AccountingPayoutSnapshot, 'payoutId'>) => `${payoutExternalId(payout)}-F`
 
 export const summaryExternalId = (date: string, currency: string) =>
   `AGD-${date.replace(/-/g, '')}-${normalizeCurrency(currency)}`
@@ -728,6 +735,34 @@ export function buildPayoutDoc(payout: AccountingPayoutSnapshot, mapping: Accoun
     amountCents: amount,
     fromAccountId: accountFor(mapping, 'clearing'),
     toAccountId: accountFor(mapping, 'payoutBank'),
+  }
+}
+
+/**
+ * Stripe's own fees inside a payout, out of clearing into the fee expense
+ * account, dated the day the payout arrived. Stripe took them from the
+ * balance the payout came out of, so posting them with the payout leaves
+ * clearing holding what Stripe still holds. A payout on which Stripe gave
+ * more back than it took is a credit of the difference, the way a returned
+ * fee is ({@link buildFeeRefundDoc}). `null` when there are none, or the
+ * snapshot is from before they were read.
+ */
+export function buildPayoutFeeDoc(payout: AccountingPayoutSnapshot, mapping: AccountingMapping): AccountingExpenseDoc | null {
+  const fee = toCents(payout?.stripeFeeCents ?? 0)
+  if (!fee) return null
+  if (!payout?.payoutId) throw new AccountingTransformError('invalid', 'The payout is incomplete.')
+  const credit = fee < 0
+  return {
+    kind: credit ? 'fee-refund' : 'fee',
+    externalId: payoutFeeExternalId(payout),
+    date: dateInZone(payout.arrivedAtMs, mapping.timeZone),
+    currency: normalizeCurrency(payout.currency),
+    memo: credit ? `Stripe fees returned in payout ${payout.payoutId}` : `Stripe fees in payout ${payout.payoutId}`,
+    amountCents: Math.abs(fee),
+    expenseAccountId: accountFor(mapping, 'feeExpense'),
+    bankAccountId: accountFor(mapping, 'clearing'),
+    credit,
+    payeeName: ACCOUNTING_STRIPE_FEE_PAYEE,
   }
 }
 

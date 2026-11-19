@@ -9,6 +9,63 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.27.0 — 2026-11-19
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.26.6...v1.27.0)
+
+### Added
+
+- **commerce:** order view says when a sale was charged on the seller's own account ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
+- **api:** read and change a site's search listing, its pages' listings and its business details over /v1 ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** server saves for a site's search listing, a page's search listing and business details ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** one server writer for site settings, shared with the AI settings step ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** create, update and delete a site's products and update a variant over /v1, through the editor's own save ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** admit a site named outside the site path as the site router does ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** carry the person and the site on the v1 context, with site permission and site lock helpers ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** add products:write, pages, seo and business scopes with their consent words ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+
+### Fixed
+
+- **accounting:** post own-account sales with their tax and Stripe's fees per payout ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
+- **waivers:** deleting a site takes its waiver definitions ([AGL-4237](https://linear.app/aglyn/issue/AGL-4237))
+- **erase:** deleting a site takes its own import jobs ([AGL-4236](https://linear.app/aglyn/issue/AGL-4236))
+- **privacy:** the org export names the import jobs the site erasure now takes ([AGL-4236](https://linear.app/aglyn/issue/AGL-4236))
+- **api:** name search listings and business details in the consent words that grant them ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** save a product created without a price unpriced, not at the editor's placeholder ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **crm:** honor a site's lock and a connected app's site membership where leads, CRM creates and contacts name a site ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** mark createLead destructive and media uploads open-world in the tool hints ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** honor a site's lock and a connected app's site membership at the site router ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+
+### Changed
+
+- **api:** the site router admits a site through admitNamedSite, the one implementation ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** name the product create's idempotency kind in the kit ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **commerce:** one product save and delete for the app routes and the API, with the editor's grid rebuild in the model ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **seo:** move buildScreenSeoUpdate into the shared app utilities ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **seo:** one definition of the search listing and business details limits ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+
+### Documentation
+
+- **accounting:** help pages for own-account tax and Stripe fees ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
+- **api:** say when a product write shows in the store, in the tool descriptions ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** live writes refresh the site right away every time, with no budget or header ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** what an assistant can now do with products, search listings, pages and business details, in the guide and the skills ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** product writes, search listing, pages and business details, and which sites a connected app can reach ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+
+<details>
+<summary>Also in this release: 6 test</summary>
+
+- **api:** declare the search listing views, their schema and the moved page SEO rebuild in the image-sink inventory, and the page SEO write as no screen create ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **native:** the key screen offers 23 permission switches, the six new ones included ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** pin 40 reading and 41 writing tools, and the new writes' open-world hints ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** the routing spec's transaction reads what its store holds, the site included ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** seed the site document the site router reads in the commerce and media reads spec ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** pin the six new scopes in the discovery documents and the consent words ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+
+</details>
+
+22 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.26.6 — 2026-11-19
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/f783fa58c...v1.26.6)

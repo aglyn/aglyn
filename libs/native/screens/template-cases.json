@@ -1,6 +1,10 @@
 {
   "$comment": "Cases both renderers replay (AglynScreensTests, com.aglyn.screens ScreenValuesTest), so a spec reads the same on Apple and Kotlin. Dates print in UTC here.",
   "context": {
+    "app": {
+      "billing": false,
+      "billingLink": true
+    },
     "org": {
       "id": "org1",
       "name": "Acme",
@@ -1610,6 +1614,26 @@
     {
       "when": "",
       "expect": true
+    },
+    {
+      "when": "app.billing",
+      "expect": false
+    },
+    {
+      "when": "!app.billing",
+      "expect": true
+    },
+    {
+      "when": "app.billing && org.can[data.manage]",
+      "expect": false
+    },
+    {
+      "when": "!app.billing && app.billingLink",
+      "expect": true
+    },
+    {
+      "when": "!app.billing && !app.billingLink",
+      "expect": false
     },
     {
       "when": "org.manager",

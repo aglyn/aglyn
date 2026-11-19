@@ -10,7 +10,7 @@
       "scope": "site",
       "order": 40,
       "zones": [
-        "commerceSettings"
+        "commerceSettingsShipping"
       ],
       "showWhen": "data.nets.offered || data.nets.connections",
       "links": [],
