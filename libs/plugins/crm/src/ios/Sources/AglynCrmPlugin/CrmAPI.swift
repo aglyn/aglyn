@@ -26,6 +26,8 @@ enum CrmRoutes {
   static let listFields = "/api/crm/list-fields"
   static let sharing = "/api/crm/sharing"
   static let emailSend = "/api/crm/email-send"
+  static let emailCheck = "/api/crm/email-check"
+  static let emailTemplateDuplicate = "/api/crm/email-template-duplicate"
   static let members = "/api/orgs/members"
   static let orgActivity = "/api/crm/org-activity"
 }
@@ -42,6 +44,13 @@ struct TaskDraft: Equatable {
   var dealID: String?
   /// A new task's site, at the workspace's level; nil files it with the organization.
   var sourceSite: String?
+}
+
+/// When a proposed task is due: that many days from today, at 5 pm on the device's calendar (`crmProposedDueAtMs`).
+func crmProposedDueAtMs(_ dueInDays: Int, now: Date = Date(), calendar: Calendar = .current) -> Int64 {
+  let day = calendar.date(byAdding: .day, value: max(0, dueInDays), to: now) ?? now
+  let due = calendar.date(bySettingHour: 17, minute: 0, second: 0, of: day) ?? day
+  return Int64((due.timeIntervalSince1970 * 1000).rounded())
 }
 
 struct ConvertDraft {
@@ -78,6 +87,8 @@ struct CrmAPI {
   private func path(_ kind: CrmKind, _ id: String) -> [String] { crmPath(scope.orgID, kind.collection) + [id] }
   private func body(_ fields: [String: Any?]) -> JSONValue { routeBody(scope.routeScope, fields) }
   private func taskBody(_ fields: [String: Any?]) -> JSONValue { routeBody(scope.taskScope, fields) }
+  /// `crm/email-check`'s body: the scope and the address (`{ hostId, email }`, or `{ orgId, hostId?, email }`).
+  func emailCheckBody(_ email: String) -> JSONValue { body(["email": email]) }
   /// A record's own provenance: its site, or JSON null for a record from no site.
   private var stampedHost: Any { scope.createHostID.map { $0 as Any } ?? NSNull() }
 
@@ -363,6 +374,14 @@ struct CrmAPI {
 
   func deleteActivity(_ id: String) async throws {
     try await reader.deleteDocument(crmPath(scope.orgID, "crmActivities") + [id])
+  }
+
+  /// Duplicate… on a template (`email-template-duplicate`): the copy is filed under this person in the original's scope;
+  /// answers the copy's name, which the route numbers when another template has it.
+  func duplicateTemplate(_ id: String, name: String, attemptKey: String) async throws -> String {
+    let answer = try await api.request(
+      CrmRoutes.emailTemplateDuplicate, method: .post, body: body(["templateId": id, "name": name, "attemptKey": attemptKey]))
+    return answer?["name"]?.stringValue ?? name
   }
 
   func sendEmail(subject: String, message: String, links: [String: String]) async throws {

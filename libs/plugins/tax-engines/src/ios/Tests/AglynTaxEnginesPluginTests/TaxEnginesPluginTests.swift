@@ -12,7 +12,7 @@ final class TaxEnginesPluginTests: XCTestCase {
   @MainActor
   func testRegistersItsDeclaredScreens() {
     let registry = NativePluginRegistry()
-    let declared = NativeContributionDeclaration(screens: ["tax-engines.service"], deepLinks: [])
+    let declared = NativeContributionDeclaration(screens: ["tax-engines.service", "tax-engines.order"], deepLinks: [])
     let result = NativePluginLoader.load(
       [NativePluginManifestEntry(id: "tax-engines", contributes: declared, register: registerTaxEnginesNative)], into: registry)
     XCTAssertEqual(result.failed, [])

@@ -90,6 +90,18 @@ export const ApiErrors = {
     }),
   forbidden: (init?: ApiResponseInit) =>
     errorResponse(403, 'forbidden', 'Not permitted', init),
+  /**
+   * The person a connected app acts for lacks a permission on this site
+   * (AGL-4235). `message` is the console's own sentence for the permission
+   * (`siteKeyRefusal`), so an app shows the person what the console would;
+   * the code is stable for a client to branch on.
+   */
+  sitePermissionRequired: (message: string, headers?: Record<string, string>) =>
+    errorResponse(403, 'forbidden', 'Not permitted', {
+      message,
+      code: 'site_permission_required',
+      headers,
+    }),
   notFound: (init?: ApiResponseInit) =>
     errorResponse(404, 'not_found', 'Not found', init),
   badRequest: (init?: ApiResponseInit) =>

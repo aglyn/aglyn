@@ -60,6 +60,12 @@
               "subtitle": "Fulfill, refund and print"
             },
             {
+              "title": "Subscriptions",
+              "icon": "arrow.triangle.2.circlepath|autorenew",
+              "screen": "commerce.subscriptions",
+              "subtitle": "Every subscription and its recurring revenue"
+            },
+            {
               "title": "Quotes",
               "icon": "doc.text|request_quote",
               "screen": "commerce.quotes",
@@ -110,10 +116,46 @@
           "title": "Settings",
           "items": [
             {
-              "title": "Commerce settings",
-              "icon": "settings|settings",
+              "title": "Payments",
+              "icon": "payments|payments",
+              "screen": "commerce.settingsPayments",
+              "subtitle": "Where the money lands and what shoppers may pay with"
+            },
+            {
+              "title": "Checkout",
+              "icon": "cart|shopping_basket",
+              "screen": "commerce.settingsCheckout",
+              "subtitle": "Checkout, receipts, returns and quotes"
+            },
+            {
+              "title": "Taxes",
+              "icon": "percent|percent",
+              "screen": "commerce.settingsTaxes",
+              "subtitle": "Sales tax rates and the tax service"
+            },
+            {
+              "title": "Shipping & delivery",
+              "icon": "shippingbox|local_shipping",
+              "screen": "commerce.settingsShipping",
+              "subtitle": "Rates, locations, delivery, suppliers and carriers"
+            },
+            {
+              "title": "Notifications",
+              "icon": "envelope|mail",
+              "screen": "commerce.settingsNotifications",
+              "subtitle": "The emails customers get, and order webhooks"
+            },
+            {
+              "title": "Sales channels",
+              "icon": "storefront|storefront",
+              "screen": "commerce.settingsChannels",
+              "subtitle": "Marketplaces and shopping channels"
+            },
+            {
+              "title": "Integrations",
+              "icon": "puzzlepiece|extension",
               "screen": "commerce.settings",
-              "subtitle": "Payments, taxes, shipping and connected services"
+              "subtitle": "The services your store connects to"
             }
           ]
         },
@@ -187,6 +229,12 @@
               "icon": "star|star",
               "screen": "commerce.reviews",
               "subtitle": "Approve, hide and reply to reviews"
+            },
+            {
+              "title": "Reviews",
+              "icon": "star|star",
+              "screen": "commerce.reviewSettings",
+              "subtitle": "Who may review, and the request email"
             }
           ]
         },
@@ -194,8 +242,8 @@
           "type": "zone",
           "id": "zone",
           "name": "commercePromotions",
-          "title": "Rewards",
-          "footer": "Rewards programs and other money-off tools that plugins add."
+          "title": "Rewards and reviews",
+          "footer": "Rewards programs, review platforms and the other money-off tools that plugins add."
         }
       ]
     },
@@ -578,19 +626,19 @@
       ]
     },
     {
-      "id": "commerce.settings",
-      "title": "Commerce settings",
-      "label": "Commerce settings",
-      "subtitle": "The services your store connects to",
-      "icon": "storefront|storefront",
+      "id": "commerce.settingsPayments",
+      "title": "Payments",
+      "label": "Payments",
+      "subtitle": "Where the money lands and what shoppers may pay with",
+      "icon": "payments|payments",
       "scope": "site",
-      "group": "site",
-      "order": 40,
+      "links": [
+        "/products/payments"
+      ],
       "blocks": [
         {
           "type": "links",
-          "id": "store",
-          "title": "Store",
+          "id": "settings",
           "items": [
             {
               "title": "Payments",
@@ -603,7 +651,32 @@
               "icon": "credit_card|credit_card",
               "screen": "commerce.paymentMethods",
               "subtitle": "What shoppers may pay with"
-            },
+            }
+          ]
+        },
+        {
+          "type": "zone",
+          "id": "zone",
+          "name": "commerceSettingsPayments",
+          "title": "Connected services"
+        }
+      ]
+    },
+    {
+      "id": "commerce.settingsCheckout",
+      "title": "Checkout",
+      "label": "Checkout",
+      "subtitle": "Checkout, receipts, returns and quotes",
+      "icon": "cart|shopping_basket",
+      "scope": "site",
+      "links": [
+        "/products/checkout"
+      ],
+      "blocks": [
+        {
+          "type": "links",
+          "id": "settings",
+          "items": [
             {
               "title": "Store settings",
               "icon": "storefront|storefront",
@@ -617,34 +690,75 @@
               "subtitle": "Online requests, the window and which products"
             },
             {
-              "title": "Customer notifications",
-              "icon": "mail|mail",
-              "screen": "commerce.notifications",
-              "subtitle": "The emails customers get about their orders"
-            },
-            {
-              "title": "Reviews",
-              "icon": "star|star",
-              "screen": "commerce.reviewSettings",
-              "subtitle": "Who may review, and the request email"
-            },
+              "title": "Quotes",
+              "icon": "doc.text|request_quote",
+              "screen": "commerce.quoteSettings",
+              "subtitle": "What every new quote starts with, and what customers confirm before they approve a proof"
+            }
+          ]
+        },
+        {
+          "type": "zone",
+          "id": "zone",
+          "name": "commerceSettingsCheckout",
+          "title": "Connected services"
+        }
+      ]
+    },
+    {
+      "id": "commerce.settingsTaxes",
+      "title": "Taxes",
+      "label": "Taxes",
+      "subtitle": "Sales tax rates and the tax service",
+      "icon": "percent|percent",
+      "scope": "site",
+      "links": [
+        "/products/taxes"
+      ],
+      "blocks": [
+        {
+          "type": "links",
+          "id": "settings",
+          "items": [
             {
               "title": "Taxes",
               "icon": "percent|percent",
               "screen": "commerce.tax",
               "subtitle": "Sales tax rates, lodging and service tax"
+            }
+          ]
+        },
+        {
+          "type": "zone",
+          "id": "zone",
+          "name": "commerceSettingsTaxes",
+          "title": "Tax services"
+        }
+      ]
+    },
+    {
+      "id": "commerce.settingsShipping",
+      "title": "Shipping & delivery",
+      "label": "Shipping & delivery",
+      "subtitle": "Rates, locations, delivery, suppliers and carriers",
+      "icon": "shippingbox|local_shipping",
+      "scope": "site",
+      "blocks": [
+        {
+          "type": "links",
+          "id": "settings",
+          "items": [
+            {
+              "title": "Shipping",
+              "icon": "local_shipping|local_shipping",
+              "screen": "commerce.shipping",
+              "subtitle": "Zones, rates and local pickup"
             },
             {
               "title": "Inventory locations",
               "icon": "location_on|location_on",
               "screen": "commerce.locations",
               "subtitle": "Stock per warehouse or storefront, and pickup"
-            },
-            {
-              "title": "Shipping",
-              "icon": "local_shipping|local_shipping",
-              "screen": "commerce.shipping",
-              "subtitle": "Zones, rates and local pickup"
             },
             {
               "title": "Local delivery",
@@ -669,6 +783,34 @@
               "icon": "local_shipping|local_shipping",
               "screen": "commerce.shippingeasy",
               "subtitle": "Send orders and take shipments back"
+            }
+          ]
+        },
+        {
+          "type": "zone",
+          "id": "zone",
+          "name": "commerceSettingsShipping",
+          "title": "Carriers and fulfillment"
+        }
+      ]
+    },
+    {
+      "id": "commerce.settingsNotifications",
+      "title": "Notifications",
+      "label": "Notifications",
+      "subtitle": "The emails customers get, and order webhooks",
+      "icon": "envelope|mail",
+      "scope": "site",
+      "blocks": [
+        {
+          "type": "links",
+          "id": "settings",
+          "items": [
+            {
+              "title": "Customer notifications",
+              "icon": "mail|mail",
+              "screen": "commerce.notifications",
+              "subtitle": "The emails customers get about their orders"
             },
             {
               "title": "Order webhooks",
@@ -681,9 +823,48 @@
         {
           "type": "zone",
           "id": "zone",
+          "name": "commerceSettingsNotifications",
+          "title": "Connected services"
+        }
+      ]
+    },
+    {
+      "id": "commerce.settingsChannels",
+      "title": "Sales channels",
+      "label": "Sales channels",
+      "subtitle": "Marketplaces and shopping channels",
+      "icon": "storefront|storefront",
+      "scope": "site",
+      "links": [
+        "/products/channels"
+      ],
+      "blocks": [
+        {
+          "type": "zone",
+          "id": "zone",
+          "name": "commerceSettingsChannels",
+          "title": "Sales channels",
+          "empty": "No sales channel runs on this site yet. Marketplaces and shopping channels show their settings here once their plugin is on."
+        }
+      ]
+    },
+    {
+      "id": "commerce.settings",
+      "title": "Integrations",
+      "label": "Integrations",
+      "subtitle": "The services your store connects to",
+      "icon": "puzzlepiece|extension",
+      "scope": "site",
+      "links": [
+        "/products/integrations"
+      ],
+      "blocks": [
+        {
+          "type": "zone",
+          "id": "zone",
           "name": "commerceSettings",
-          "title": "Connected services",
-          "footer": "Tax services, shipping, fulfillment, accounting and the other services your store connects to."
+          "title": "Integrations",
+          "empty": "No store integration runs on this site yet. Delivery apps, inventory sync and print on demand show their settings here once their plugin is on."
         }
       ]
     },
