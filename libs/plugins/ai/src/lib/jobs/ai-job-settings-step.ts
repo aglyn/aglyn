@@ -24,6 +24,8 @@ import { mediaNodeSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { SCREEN_ROOT_PATH } from '@aglyn/aglyn/app-utils/screen-route'
 import { siteLanguageCode } from '@aglyn/aglyn/app-utils/seo-locale'
+import { SEO_DESCRIPTION_MAX_LENGTH, SEO_TITLE_MAX_LENGTH } from '@aglyn/aglyn/app-utils/screen-seo-fields'
+import { SITE_SEO_SEPARATOR_MAX_LENGTH, SITE_SEO_TITLE_PATTERN_MAX_LENGTH } from '@aglyn/aglyn/app-utils/seo-listing-fields'
 import { isSeoTitleVariable } from '@aglyn/aglyn/app-utils/seo-title-variables'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import type { PluginAiCapabilityArgsSchema } from '@aglyn/aglyn/plugin-manager/plugin-ai-capabilities'
@@ -119,13 +121,13 @@ export const AI_SETTINGS_LIMITS = {
   /** Admin → General, Display name. */
   name: 30,
   /** Setup → SEO, Title. */
-  seoTitle: 60,
+  seoTitle: SEO_TITLE_MAX_LENGTH,
   /** Setup → SEO, Description. */
-  seoDescription: 155,
+  seoDescription: SEO_DESCRIPTION_MAX_LENGTH,
   /** Setup → SEO, Separator. */
-  separator: 3,
+  separator: SITE_SEO_SEPARATOR_MAX_LENGTH,
   /** Setup → SEO, Title pattern. */
-  titlePattern: 120,
+  titlePattern: SITE_SEO_TITLE_PATTERN_MAX_LENGTH,
   /** Setup → SEO, the publisher's description. */
   businessDescription: 300,
   businessName: 100,
