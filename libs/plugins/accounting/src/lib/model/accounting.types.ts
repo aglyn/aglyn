@@ -81,7 +81,8 @@ export type AccountingSyncMode = (typeof ACCOUNTING_SYNC_MODES)[number]
  * - `clearing` — the "Stripe clearing" bank account sales are paid into and
  *   payouts leave from. It must be a bank-type account: both ledgers only
  *   take a payment into one.
- * - `feeExpense` — where Aglyn's platform fee on each sale is expensed.
+ * - `feeExpense` — where Aglyn's platform fee on each sale is expensed, and
+ *   the fees Stripe itself takes, posted with each payout.
  * - `payoutBank` — the bank account a payout lands in.
  * - `taxLiability` — where collected sales tax is credited by a daily summary
  *   journal. A per-order sale leaves tax to the ledger's own tax codes.
