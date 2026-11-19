@@ -26,11 +26,12 @@ import {
   paginate,
   readJsonBody,
   requireScope,
-  serialize,
+  requireSitePermission,
 } from '@aglyn/tenant-data-admin/server/api-v1-kit'
 import { BUNDLE_ID } from '../../constants/bundle-common'
 import { type OrderFulfilmentTarget, recordOrderShipment } from '../fulfill-order'
 import { orderViewFromData } from './order-view'
+import { productView } from './product-view'
 import { isUnpaidQuote } from '../../model/commerce-quotes'
 
 /**
@@ -350,66 +351,22 @@ async function updateOrder(
 }
 
 /**
- * Price and stock live on VARIANTS, never on the product — a product-level
- * `inventory` exists only as a denormalized sum the console rewrites on every
- * decrement, and a product-level `priceUsd` is the legacy single-variant
- * shape. Publishing either as the product's price would be wrong the moment a
- * product has two variants, so the variant array is the contract and the
- * product carries only the roll-up, clearly named.
- *
- * `inventory: null` on a variant means UNTRACKED and `0` means SOLD OUT.
- * Collapsing them (the `?? 0` an integrator writes on the first day) turns
- * every untracked product into an out-of-stock one, so the distinction is
- * carried through verbatim rather than defaulted.
+ * The product writes' gates (AGL-4235), each load-bearing, in `updateOrder`'s
+ * order: `products:write` on the credential, the `commerce` PLAN entitlement,
+ * this plugin switched on for this site, and — for an app a person connected
+ * — that person's "Edit site content" on the site, the permission the
+ * console's product editor and the native apps' save route ask. The router
+ * has already applied the site's lock and the person's membership.
  */
-function variantView(variant: Record<string, unknown>) {
-  const inventory = variant.inventory
-  return {
-    id: variant.id ?? null,
-    sku: variant.sku ?? null,
-    barcode: variant.barcode ?? null,
-    options: variant.options ?? {},
-    priceUsd: typeof variant.priceUsd === 'number' ? variant.priceUsd : null,
-    compareAtPriceUsd:
-      typeof variant.compareAtPriceUsd === 'number'
-        ? variant.compareAtPriceUsd
-        : null,
-    weightGrams:
-      typeof variant.weightGrams === 'number' ? variant.weightGrams : null,
-    inventory: typeof inventory === 'number' ? inventory : null,
-    inventoryTracked: typeof inventory === 'number',
+function productWriteRefusal(ctx: ApiV1Context, hostId: string, hostDoc: FirebaseFirestore.DocumentSnapshot): Response | null {
+  const denied = requireScope(ctx, 'products:write')
+  if (denied) return denied
+  const unentitled = requireCommerce(ctx)
+  if (unentitled) return unentitled
+  if (!isHostPluginEnabled(ctx.org, hostDoc.data(), BUNDLE_ID)) {
+    return ApiErrors.notFound({ message: 'No such site', headers: ctx.headers })
   }
-}
-
-function productView(doc: FirebaseFirestore.DocumentSnapshot) {
-  const data = doc.data() ?? {}
-  const variants = Array.isArray(data.variants)
-    ? (data.variants as Array<Record<string, unknown>>)
-    : []
-  const tracked = variants.filter((v) => typeof v.inventory === 'number')
-  return {
-    id: doc.id,
-    object: 'product',
-    name: data.name ?? null,
-    slug: data.slug ?? null,
-    description: data.description ?? null,
-    type: data.type ?? null,
-    status: data.status ?? null,
-    tags: data.tags ?? [],
-    categoryIds: data.categoryIds ?? [],
-    mediaUrls: data.mediaUrls ?? [],
-    options: data.options ?? [],
-    variants: variants.map(variantView),
-    // The sum across TRACKED variants only, and `null` when none of them is
-    // tracked — so an untracked catalogue reads as "we don't count this"
-    // rather than as a store with nothing left to sell.
-    inventory: tracked.length
-      ? tracked.reduce((sum, v) => sum + Number(v.inventory ?? 0), 0)
-      : null,
-    subscription: serialize(data.subscription) ?? null,
-    created: data.createdAtMs ? new Date(Number(data.createdAtMs)).toISOString() : null,
-    updated: data.updatedAtMs ? new Date(Number(data.updatedAtMs)).toISOString() : null,
-  }
+  return requireSitePermission(ctx, hostDoc, 'site.edit')
 }
 
 export async function handleProducts(
@@ -418,13 +375,34 @@ export async function handleProducts(
   segments: string[],
   url: URL,
 ): Promise<Response> {
-  const [, hostId, , productId] = segments
+  const [, hostId, , productId, sub, variantId] = segments
+  if (sub !== undefined && (sub !== 'variants' || !variantId || segments.length > 6)) {
+    return ApiErrors.notFound({ message: 'Unknown endpoint', headers: ctx.headers })
+  }
+  const writing =
+    (request.method === 'POST' && !productId) ||
+    ((request.method === 'PATCH' || request.method === 'DELETE') && productId && !variantId) ||
+    (request.method === 'PATCH' && variantId)
+  // `products:write` is asked BEFORE `products:read`, as the order writes ask
+  // theirs (AGL-900): a key that only writes the catalog holds no read scope.
+  if (writing) {
+    const hostDoc = ctx.site?.snapshot ?? (await hostRef(ctx, hostId).get())
+    const refused = productWriteRefusal(ctx, hostId, hostDoc)
+    if (refused) return refused
+    const writes = await import('./product-writes')
+    if (variantId) return writes.updateProductVariant(request, ctx, hostId, productId, variantId)
+    if (!productId) return writes.createProduct(request, ctx, hostId)
+    if (request.method === 'PATCH') return writes.updateProduct(request, ctx, hostId, productId)
+    return writes.deleteProductOverApi(ctx, hostId, productId)
+  }
   const denied = requireScope(ctx, 'products:read')
   if (denied) return denied
   const unentitled = requireCommerce(ctx)
   if (unentitled) return unentitled
-  if (request.method !== 'GET') {
-    return ApiErrors.methodNotAllowed({ headers: ctx.headers })
+  if (request.method !== 'GET' || variantId) {
+    return ApiErrors.methodNotAllowed({
+      headers: { ...ctx.headers, Allow: variantId ? 'PATCH' : productId ? 'GET, PATCH, DELETE' : 'GET, POST' },
+    })
   }
   const collection = hostRef(ctx, hostId).collection('products')
 
@@ -446,4 +424,3 @@ export async function handleProducts(
   const data = docs.filter((doc) => !doc.get('deletedAt')).map(productView)
   return listResponse(data, nextCursor, ctx.headers)
 }
-

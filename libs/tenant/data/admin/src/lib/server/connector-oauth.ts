@@ -683,6 +683,11 @@ const SCOPE_WORDS: Record<ApiScope, { area: string; words: string }> = {
   'orders:read': { area: 'Orders', words: 'See your store orders' },
   'orders:write': { area: 'Orders', words: 'Mark orders shipped and add tracking numbers' },
   'products:read': { area: 'Products', words: 'See your products, prices and stock' },
+  'products:write': {
+    area: 'Products',
+    words:
+      'Add, edit and delete products and their variants; a change to a product that is on sale shows on the live site right away',
+  },
   'bookings:read': { area: 'Bookings', words: 'See your bookings' },
   'media:read': { area: 'Media', words: 'See your media files' },
   'media:write': { area: 'Media', words: 'Upload media files' },
@@ -694,6 +699,18 @@ const SCOPE_WORDS: Record<ApiScope, { area: string; words: string }> = {
     area: 'CRM',
     words:
       'Add, edit and delete companies, deals, tasks and email templates; log and delete activities; add, edit and convert leads',
+  },
+  'pages:read': { area: 'Pages', words: 'See your pages: their names, addresses and whether they are published' },
+  'seo:read': { area: 'Search listing', words: 'See your search listings: how your site and pages are described to search engines' },
+  'seo:write': {
+    area: 'Search listing',
+    words: 'Change your search listings, how your site and pages appear in search results; changes show on the live site right away',
+  },
+  'business:read': { area: 'Business details', words: 'See your business details' },
+  'business:write': {
+    area: 'Business details',
+    words:
+      'Change your business details: name, slogan, phone, email, address and social links; changes show on the live site right away',
   },
 }
 
