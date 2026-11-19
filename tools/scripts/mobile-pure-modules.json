@@ -1144,6 +1144,30 @@
     {
       "path": "libs/plugins/marketplace/src/lib/model/artifact-merge.ts",
       "why": "The words an update review uses for each change (describeChange, summarizeValue), replayed by the native update review of a copied listing (AGL-3668); imports only the pure artifact-provenance."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/picker/font-preview-url.ts",
+      "why": "Where a font preview's stylesheet and files come from (Google's CSS2 API for a preview's letters), replayed by the native apps' shared font loaders (AGL-3668); no imports."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/picker/font-choice.ts",
+      "why": "The font picker's labels, weight choices and catalog search, replayed by the native font picker (AGL-3668); type-only imports."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/picker/font-pairings.ts",
+      "why": "The font picker's suggested pairings, replayed by the native font picker (AGL-3668); type-only imports."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/catalog/google-fonts-catalog.ts",
+      "why": "How a Google Fonts catalog row reads (expandCatalogRow), replayed by the native font picker over the catalog route's answer (AGL-3668); type-only imports and the catalog JSON."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/catalog/google-fonts.catalog.json",
+      "why": "The generated Google Fonts catalog (data only), which google-fonts-catalog.ts loads and the fonts catalog route serves to the native apps (AGL-3668)."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/picker/site-sample-text.ts",
+      "why": "The words a font preview is drawn in (the site's name, search title and description), replayed by the native font picker (AGL-3668); no imports."
     }
   ]
 }

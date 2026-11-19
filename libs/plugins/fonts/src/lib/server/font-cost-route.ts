@@ -25,7 +25,11 @@ import type {
   HostThemeFontCategory,
   HostThemeTypographyVariant,
 } from '@aglyn/shared-data-types'
+import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/site-theme'
 import { siteBaseFonts, siteBaseTypography } from '@aglyn/shared-ui-theme/site-base-fonts'
+import { hostBrandKey } from '@aglyn/shared-ui-theme/tenant.theme'
+import { readThemeEditorEdit } from '@aglyn/shared-ui-theme/util/theme-editor-edits'
+import { writeThemeFonts } from '@aglyn/shared-ui-theme/util/theme-editor-fields'
 import {
   EmailNotVerifiedError,
   firebaseAdmin,
@@ -64,8 +68,21 @@ export const fontCostHandler: PluginApiHandler = async (req, res) => {
   if (decoded['staff'] !== true && !roles[decoded.uid]) {
     return res.status(403).json({ error: 'You are not a member of this site' })
   }
-  const theme = readCostTheme(req.body?.theme)
-  const siteKey = typeof req.body?.siteKey === 'string' ? req.body.siteKey.slice(0, 253) : undefined
+  // A native app has no theme document in hand (AGL-3668): it sends the font
+  // picker's choice, and the site's own theme is priced with that choice
+  // written in, exactly as the console's draft would be.
+  let theme: Pick<HostTheme, 'fonts' | 'typography'>
+  if (req.body?.fonts !== undefined && req.body?.theme === undefined) {
+    const edit = readThemeEditorEdit({ control: 'fonts', value: req.body.fonts })
+    if (typeof edit === 'string' || edit.control !== 'fonts') return res.status(400).json({ error: typeof edit === 'string' ? edit : 'Pick a font from the list.' })
+    theme = readCostTheme(writeThemeFonts((resolveSiteTheme(host.data() as Record<string, unknown>) ?? {}) as HostTheme, edit.value))
+  } else {
+    theme = readCostTheme(req.body?.theme)
+  }
+  const siteKey =
+    typeof req.body?.siteKey === 'string'
+      ? req.body.siteKey.slice(0, 253)
+      : hostBrandKey(host.data() as { cname?: string; subdomain?: string })
   const cost = await themeFontDeliveryCost(theme, {
     hostId,
     baseTypography: siteBaseTypography(siteKey),
