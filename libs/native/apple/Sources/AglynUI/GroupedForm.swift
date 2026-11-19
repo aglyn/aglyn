@@ -285,6 +285,32 @@ private struct AglynFormSectionCard: View {
   }
 }
 
+/// A field as a form row draws it inside a plain or Mac grouped form (`aglynPlainForm`): its label on the leading edge,
+/// the control after it, filling the row; anywhere else the control as it is, which a `Form` labels itself. A `Picker`
+/// outside a `Form` draws only its value on iOS, so a picker in an iPad detail column needs this to keep its name.
+public struct AglynPlainFormRow<Control: View>: View {
+  @Environment(\.aglynPlainForm) private var plain
+  let label: String
+  let control: Control
+
+  public init(_ label: String, @ViewBuilder control: () -> Control) {
+    self.label = label
+    self.control = control()
+  }
+
+  public var body: some View {
+    if plain {
+      HStack(alignment: .firstTextBaseline, spacing: 12) {
+        Text(label).foregroundStyle(AglynColor.textPrimary)
+        Spacer(minLength: 8)
+        control.labelsHidden().textFieldStyle(.roundedBorder).frame(maxWidth: 420, alignment: .trailing)
+      }
+    } else {
+      control
+    }
+  }
+}
+
 /// A switch as a form row draws it: its label on the leading edge, the switch on the trailing one.
 public struct AglynFormToggleStyle: ToggleStyle {
   public init() {}
