@@ -432,6 +432,25 @@ private struct EntryForm: View {
       .buttonStyle(.aglynProminent)
       .disabled(!env.canPublish || env.runner.busy || stored != draft)
       .accessibilityIdentifier("entry-publish")
+      // The other half of View on site (AGL-3205): an entry the site does not serve yet, as the site will render it,
+      // behind a signed two-hour link. Only for a saved entry with an address.
+      if !entry.slug.isEmpty && !collection.slug.isEmpty {
+        Button {
+          let (collectionSlug, entrySlug) = (collection.slug, entry.slug)
+          env.runner.run("Preview opened — link copied, and it works for 2 hours") {
+            guard let url = try await env.api.previewLink(collectionSlug: collectionSlug, entrySlug: entrySlug) else {
+              throw ConsoleAPIError(status: 0, message: "Could not create a preview link")
+            }
+            AglynPasteboard.copy(url.absoluteString)
+            openURL(url)
+          }
+        } label: {
+          Label("Preview on site", systemImage: "eye")
+        }
+        .buttonStyle(.aglynSecondary)
+        .disabled(env.runner.busy)
+        .accessibilityIdentifier("entry-preview-on-site")
+      }
     }
   }
 
