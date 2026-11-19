@@ -714,7 +714,8 @@ private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close:
 /** Why Create site is off, in the console's words (`CreateHostDialog`), until a pick it can create from. */
 private fun starterStillNeeded(pick: SiteStarterSummary?, mode: SiteStarterMode): String? = when (siteStarterPickBlock(pick)) {
   SiteStarterPickBlock.NONE -> if (mode == SiteStarterMode.BASE) "Choose a starter to create your site." else "Choose an AI starter to continue."
-  SiteStarterPickBlock.PURCHASE -> if (mode == SiteStarterMode.BASE) "Buy this starter to create your site from it." else "Buy this starter to continue with it."
+  // A store build (the owner's decision of 2026-11-19) does not ask anyone to buy the starter.
+  SiteStarterPickBlock.PURCHASE -> if (!com.aglyn.core.StoreBilling.buying) "This starter is paid, so a site cannot be created from it here." else if (mode == SiteStarterMode.BASE) "Buy this starter to create your site from it." else "Buy this starter to continue with it."
   null -> if (mode == SiteStarterMode.BASE) null else "Continue on the web to answer this starter's questions."
 }
 

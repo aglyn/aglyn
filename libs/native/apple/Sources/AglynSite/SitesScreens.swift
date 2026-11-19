@@ -879,7 +879,9 @@ struct CreateSiteSheet: View {
 
   /// Why Create site is off, in the console's words (`CreateHostDialog`), until a pick it can create from.
   private var starterStillNeeded: String? {
-    switch (siteStarterPickBlock(pick), starterMode) {
+    // A store build (the owner's decision of 2026-11-19) does not ask anyone to buy the starter.
+    if siteStarterPickBlock(pick) == .purchase, !StoreBilling.buying { return "This starter is paid, so a site cannot be created from it here." }
+    return switch (siteStarterPickBlock(pick), starterMode) {
     case (.some(.none), .base): "Choose a starter to create your site."
     case (.some(.none), .ai): "Choose an AI starter to continue."
     case (.some(.purchase), .base): "Buy this starter to create your site from it."
