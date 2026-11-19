@@ -48,6 +48,10 @@ public func registerAINative(_ registrar: NativePluginRegistrar) {
   registrar.widget(
     "ai.org-insight-ask", title: "Ask AI about these numbers", icon: "sparkles", order: 900, size: .half, slot: "orgDashboard"
   ) { AiInsightTile(context: $0, surface: .workspace) }
+  // "Ask AI about this funnel" (the console's `funnelInsight` widget): under a saved funnel's results, the funnels plugin's zone.
+  registrar.widget("ai.explain-funnel", title: aiFunnelAsk, icon: "sparkles", order: 10, requiresSite: true, slot: FunnelInsightZone.name) {
+    AiFunnelAskButton(context: $0)
+  }
   // The AI summary on a CRM record's page (the console's `recordInsights` widget, AGL-2917): the CRM hosts the zone.
   registrar.widget("ai.crm-record", title: "AI summary", icon: "sparkles", order: 10, slot: recordInsightsZoneName) {
     AiCrmRecordCard(context: $0)
