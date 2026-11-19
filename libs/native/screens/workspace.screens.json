@@ -2355,6 +2355,20 @@
               "icon": "gearshape|settings",
               "screen": "core.pluginSettings.bookings",
               "when": "org.can[org.settings] && params.pluginId == bookings"
+            },
+            {
+              "title": "Waivers settings",
+              "subtitle": "How long a signed waiver is kept",
+              "icon": "gearshape|settings",
+              "screen": "core.pluginSettings.waivers",
+              "when": "org.can[org.settings] && params.pluginId == waivers"
+            },
+            {
+              "title": "Weglot settings",
+              "subtitle": "Your Weglot key, the languages and the switcher",
+              "icon": "gearshape|settings",
+              "screen": "core.pluginSettings.weglot",
+              "when": "org.can[org.settings] && params.pluginId == weglot"
             }
           ]
         },

@@ -67,6 +67,10 @@ struct CreateWorkspaceSheet: View {
   let done: () -> Void
   @State private var busy = false
   @State private var error: String?
+  /// The Workspace URL (the console's field): made from the name until the person types their own.
+  @State private var slug: String?
+
+  private var shownSlug: String { slug ?? WorkspaceName.slug(name) }
 
   var body: some View {
     NavigationStack {
@@ -74,6 +78,25 @@ struct CreateWorkspaceSheet: View {
         Section {
           TextField("Organization name", text: $name)
             .accessibilityIdentifier("first-run-organization")
+          LabeledContent {
+            HStack(spacing: 2) {
+              TextField(
+                "Workspace URL", text: Binding(get: { shownSlug }, set: { slug = WorkspaceName.urlInput($0) }),
+                prompt: Text("acme-inc")
+              )
+              .labelsHidden()
+              .autocorrectionDisabled()
+              #if os(iOS)
+                .textInputAutocapitalization(.never)
+                .keyboardType(.URL)
+              #endif
+              .multilineTextAlignment(.trailing)
+              .accessibilityIdentifier("create-workspace-url")
+              Text(".\(domain)").foregroundStyle(.secondary)
+            }
+          } label: {
+            Text("Workspace URL")
+          }
         } footer: {
           Text(SignUpRules.organization(name).map { name.isEmpty ? WorkspaceName.helper(workspaceDomain: domain) : $0 }
             ?? WorkspaceName.helper(workspaceDomain: domain))
@@ -103,7 +126,7 @@ struct CreateWorkspaceSheet: View {
     busy = true
     error = nil
     Task {
-      if let failure = await model.createWorkspace(named: name) {
+      if let failure = await model.createWorkspace(named: name, slug: shownSlug) {
         error = failure
       } else {
         done()

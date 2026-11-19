@@ -259,8 +259,8 @@ suspend fun ShellServices.settleFirstRun(workspace: WorkspaceState) {
 }
 
 /** "Create an organization" from the empty workspace list, or "Create it now" for the name sign-up could not use. Null on success. */
-suspend fun ShellServices.createWorkspace(name: String): String? {
-  val outcome = signUp.createWorkspace(name)
+suspend fun ShellServices.createWorkspace(name: String, slug: String? = null): String? {
+  val outcome = signUp.createWorkspace(name, slug)
   if (outcome.slug != null) {
     authFlow.firstRun = FirstRunState.Idle
     return null
