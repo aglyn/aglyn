@@ -57,6 +57,14 @@ describe('api-http', () => {
       })
     })
 
+    it('challenges a missing scope the RFC 6750 §3.1 way, keeping the caller headers (AGL-4225)', () => {
+      const res = ApiErrors.insufficientScope('crm:write', { 'RateLimit-Limit': '60' })
+      expect(res.headers.get('WWW-Authenticate')).toBe(
+        'Bearer error="insufficient_scope", scope="crm:write"',
+      )
+      expect(res.headers.get('RateLimit-Limit')).toBe('60')
+    })
+
     it('names the offending fields on a validation failure (AGL-901)', async () => {
       const res = ApiErrors.badRequest({
         message: 'Record failed validation',

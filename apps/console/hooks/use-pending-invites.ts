@@ -35,6 +35,11 @@ export interface PendingInvite {
   orgSlug?: string | null
   role: string | null
   /**
+   * When the invitation was sent, in ms (AGL-4047). Of several waiting, the
+   * automatic join opens the newest. Absent from an older answer.
+   */
+  createdAtMs?: number | null
+  /**
    * Present on an owner handoff (AGL-3466): accepting makes the invitee the
    * workspace's owner, and the current owner stays on as an admin or leaves.
    */

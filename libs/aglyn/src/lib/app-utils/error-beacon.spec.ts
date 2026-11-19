@@ -46,7 +46,9 @@ import {
   isHydrationMismatch,
   isInjectedThirdPartyFrame,
   isRecaptchaTimeout,
+  isStacklessNetworkError,
   isWebDocument,
+  NETWORK_ERROR_KIND,
   pageTranslationSignal,
   watchPageTranslation,
   raiseStackTraceLimit,
@@ -99,6 +101,17 @@ const MOVED_PAGE_INJECTED_STACK = [
 ].join('\n')
 const MOVED_PAGE_NOW = 'https://app.aglyn.com/signin'
 const MOVED_PAGE_SERVED = 'https://app.aglyn.com/'
+
+/**
+ * Chrome's own `NetworkError`, as the 2026-11-18 and 2026-11-19 reports
+ * carried it: the platform's default sentence and no stack. jsdom's
+ * DOMException may grow a stack of its own, so it is set here.
+ */
+function platformNetworkError(stack?: string): DOMException {
+  const error = new DOMException('A network error occurred.', 'NetworkError')
+  Object.defineProperty(error, 'stack', { value: stack, configurable: true })
+  return error
+}
 
 /** One frame in a script we served. */
 const OWN_FRAME =
@@ -492,6 +505,28 @@ describe('recoveredErrorKind (AGL-3423)', () => {
     expect(isRecaptchaTimeout(new Error('reCAPTCHA placeholder failed'))).toBe(false)
   })
 
+  it('labels a NetworkError the browser raised with nothing on the stack', () => {
+    expect(isStacklessNetworkError(platformNetworkError())).toBe(true)
+    expect(recoveredErrorKind(platformNetworkError())).toBe(NETWORK_ERROR_KIND)
+    // A stack that is only the header line has no frame either.
+    expect(
+      isStacklessNetworkError(platformNetworkError('NetworkError: A network error occurred.')),
+    ).toBe(true)
+  })
+
+  it('leaves a NetworkError unlabeled when one of OUR frames raised it', () => {
+    const ours = platformNetworkError(`NetworkError: A network error occurred.\n${OWN_FRAME}`)
+    expect(isStacklessNetworkError(ours)).toBe(false)
+    expect(recoveredErrorKind(ours)).toBeUndefined()
+    // Another name, or the same words on a plain value, is not this.
+    expect(
+      isStacklessNetworkError(new DOMException('A network error occurred.', 'AbortError')),
+    ).toBe(false)
+    expect(isStacklessNetworkError(new TypeError('Failed to fetch'))).toBe(false)
+    expect(isStacklessNetworkError({ message: 'A network error occurred.' })).toBe(false)
+    expect(isStacklessNetworkError(null)).toBe(false)
+  })
+
   it('labels nothing else, so every other auth error still pages', () => {
     expect(recoveredErrorKind({ code: 'auth/user-token-expired' })).toBeUndefined()
     expect(recoveredErrorKind(new Error('Minified React error #185'))).toBeUndefined()
@@ -833,6 +868,31 @@ describe('the installed beacon applies both rules end to end (AGL-2523)', () => 
     expect(beacon).not.toHaveBeenCalled()
   })
 
+  it("REPORTS the browser's stackless NetworkError, named and labeled for a rate", () => {
+    rejectInPage(platformNetworkError())
+    const events = reported()
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      kind: NETWORK_ERROR_KIND,
+      message: 'NetworkError: A network error occurred.',
+    })
+  })
+
+  it('keeps a NetworkError OUR code raised as an unhandledrejection', () => {
+    const ours = new DOMException('our upload was lost', 'NetworkError')
+    Object.defineProperty(ours, 'stack', {
+      value: `NetworkError: our upload was lost\n${OWN_FRAME}`,
+      configurable: true,
+    })
+    rejectInPage(ours)
+    const events = reported()
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      kind: 'unhandledrejection',
+      message: 'NetworkError: our upload was lost',
+    })
+  })
+
   it('still REPORTS a TimeoutError rejection: a missed deadline (AGL-3734)', () => {
     rejectInPage(new DOMException('signal timed out', 'TimeoutError'))
     const events = reported()
@@ -987,6 +1047,14 @@ describe('describeRejectionReason', () => {
     expect(describeRejectionReason(new Error('the save was refused'))).toBe(
       'the save was refused',
     )
+  })
+
+  it('names a DOMException by its type, whose message is only the platform sentence', () => {
+    expect(describeRejectionReason(platformNetworkError())).toBe(
+      'NetworkError: A network error occurred.',
+    )
+    // Any other error keeps its message alone, as its reports always have.
+    expect(describeRejectionReason(new TypeError('Failed to fetch'))).toBe('Failed to fetch')
   })
 
   it('takes a string rejection as itself', () => {

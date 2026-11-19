@@ -24,6 +24,7 @@ export * from './lib/server/connector-oauth'
 export * from './lib/server/connector-oauth-store'
 export * from './lib/server/account-emails'
 export * from './lib/server/auth-pools'
+export * from './lib/server/bandwidth-cap-engage'
 export * from './lib/server/client-error-report'
 // The merchant's payment account, as a contract. Its adapter is not exported:
 // a plugin asks the contract, and the doors that only need the readiness rule

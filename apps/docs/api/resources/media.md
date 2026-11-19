@@ -208,6 +208,9 @@ curl "https://app.aglyn.com/api/v1/sites/host_demo/media" \
 Accepts an [`Idempotency-Key`](../conventions.md#idempotency).
 
 **Body** — JSON, with the file's bytes base64-encoded. There is no multipart form.
+An upload is billed by its size like any request: one
+[billed unit](../rate-limits.md#billed-units) per started 256 KB of the body, so a 1 MB
+file (about 1.3 MB of base64) is 6 units.
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |

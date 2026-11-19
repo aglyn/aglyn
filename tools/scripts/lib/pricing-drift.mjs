@@ -95,8 +95,11 @@ export const basePriceLookupKey = (plan) =>
 export const PRICE_FIELD_MAP = Object.freeze([
   { field: 'basePriceMonthlyUsd', key: (p) => basePriceLookupKey(p), mult: 1 },
   { field: 'basePriceAnnualMonthlyUsd', key: (p) => `${basePriceLookupKey(p)}_yearly`, mult: 12 },
-  { field: 'extraHostMonthlyUsd', key: (p) => `aglyn_${p}_extra_host`, mult: 1 },
-  { field: 'extraHostMonthlyUsd', key: (p) => `aglyn_${p}_extra_host_yearly`, mult: 12 },
+  // Starter's extra site is held against its v2 ($25) price since AGL-4227;
+  // the $20 `aglyn_starter_extra_host` pair is what existing subscriptions
+  // carry and is no longer the catalog's figure.
+  { field: 'extraHostMonthlyUsd', key: (p) => `aglyn_${p}_extra_host${p === 'starter' ? '_v2' : ''}`, mult: 1 },
+  { field: 'extraHostMonthlyUsd', key: (p) => `aglyn_${p}_extra_host${p === 'starter' ? '_v2' : ''}_yearly`, mult: 12 },
   { field: 'extraSeatMonthlyUsd', key: (p) => `aglyn_${p}_extra_seat`, mult: 1 },
   { field: 'extraSeatMonthlyUsd', key: (p) => `aglyn_${p}_extra_seat_yearly`, mult: 12 },
   { field: 'extraCollaboratorMonthlyUsd', key: (p) => `aglyn_${p}_extra_member`, mult: 1 },

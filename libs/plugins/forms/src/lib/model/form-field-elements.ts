@@ -151,6 +151,12 @@ export interface FormFieldElements extends FormFieldElementsLayout {
 const childIds = (node: StoredFormNode | undefined): string[] =>
   Array.isArray(node?.nodes) ? (node?.nodes as string[]) : []
 
+/** An option that only says yes: on a lone box it is the answer, not the question. */
+const BARE_AFFIRMATIVE = /^(yes|y|ok|okay|true|on|agree|i agree)[.!]?$/i
+function isBareAffirmative(option: string): boolean {
+  return BARE_AFFIRMATIVE.test(option.trim())
+}
+
 /**
  * The all-in-one `formField` node `node`, rebuilt as MUI's separate form
  * elements — or `null` when it is not one.
@@ -306,12 +312,20 @@ export function formFieldToElements(
       // A lone box is its own question: the words beside it say it all. A
       // group of boxes keeps the question above them.
       if (options.length !== 1) addLabel()
+      // A lone box whose one option is only a yes-word ("Yes") was asked by
+      // its field label ("Email me news and updates"): those are the words a
+      // visitor needs beside the box, where "Yes" alone says nothing. It
+      // still posts the option, so a consent box reads as ticked as before.
+      const loneWords =
+        options.length === 1 && label && isBareAffirmative(options[0] as string)
+          ? label
+          : undefined
       options.forEach((option, index) => {
         const choice = add(
           mint(`${id}-opt-${index}`),
           id,
           FORM_FIELD_ELEMENT_IDS.choiceLabel,
-          { label: option },
+          { label: loneWords ?? option },
         )
         // `value` is the option text, as the all-in-one element posted it —
         // which is also what makes a single-option marketing consent box

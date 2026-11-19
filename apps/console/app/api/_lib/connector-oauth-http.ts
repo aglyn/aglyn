@@ -39,7 +39,9 @@ import {
   readCappedBody,
 } from '@aglyn/tenant-data-admin'
 import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
+import { buildDocsUrl } from '../../../constants/docs-links'
 import { hostnameOf, WORKSPACE_DOMAIN } from '../../../constants/workspace-domain'
+import { MCP_SERVER_TITLE } from '../../../utils/mcp-protocol'
 
 /**
  * The host a request was addressed to, by the same trusted-proxy rule as
@@ -134,6 +136,20 @@ export function unconfiguredOriginResponse(): Response {
     'temporarily_unavailable',
     'Sign-in is not configured on this server: set NEXT_PUBLIC_CONSOLE_URL to this console’s address',
   )
+}
+
+/**
+ * Where a developer reads how an app signs in, and what the server is called:
+ * the human-facing members of both discovery documents (RFC 9728 §2
+ * `resource_name` / `resource_documentation`, RFC 8414 §2
+ * `service_documentation`). The docs origin is the operator's, from the same
+ * helper every console docs link uses.
+ */
+export function connectorDiscoveryDocs(): { documentationUrl: string; resourceName: string } {
+  return {
+    documentationUrl: buildDocsUrl('/api/authentication#apps-that-sign-in'),
+    resourceName: MCP_SERVER_TITLE,
+  }
 }
 
 /** Cache header for a discovery document: cacheable only when the origin cannot vary. */

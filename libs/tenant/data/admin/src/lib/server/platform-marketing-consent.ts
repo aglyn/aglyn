@@ -99,6 +99,8 @@ import {
   type EmailStreamRejoinOutcome,
   rejoinEmailStream,
 } from '@aglyn/aglyn/plugin-manager/plugin-email-streams'
+import { isSignupCanaryEmail } from '@aglyn/aglyn/app-utils/health-report'
+import { recordCapturedContact } from '@aglyn/aglyn/plugin-manager/record-captured-contact'
 import { attributableAccountForAddress } from './account-addresses'
 import { findPluginPerson } from '@aglyn/aglyn/plugin-manager/plugin-person-records'
 import {
@@ -107,7 +109,11 @@ import {
   HOST_SUPPRESSIONS_SUBCOLLECTION,
 } from './email-suppression'
 import firebaseAdmin from './firebase-admin'
-import { consentGroupForSite, getOrgForHost } from './organizations'
+import {
+  consentGroupForSite,
+  getOrgForHost,
+  resolveOrgIdForHost,
+} from './organizations'
 import { upsertHostContact } from './upsert-contact'
 
 const firestore = () => firebaseAdmin.app().firestore()
@@ -140,6 +146,11 @@ export type PlatformMarketingContactOutcome =
   | { status: 'no-email' }
   /** The capture door refused the row — its band, an erasure, or an error. */
   | { status: 'refused'; reason: string }
+  /**
+   * The sign-up canary's own throwaway account (AGL-4230): deleted seconds
+   * after it is made, so it is nobody's contact and nobody's to follow up.
+   */
+  | { status: 'test-account' }
 
 export interface RecordPlatformMarketingConsentInput {
   uid: string
@@ -314,7 +325,17 @@ export interface RecordPlatformAccountContactInput {
   firestore?: any
   /** Injectable for tests; defaults to {@link platformMarketingHostId}. */
   hostId?: string | null
-  /** Injectable for tests; defaults to the real capture door. */
+  /**
+   * Injectable for tests; defaults to the platform's contact-capture seam,
+   * which hands the row to the plugin that keeps people.
+   */
+  capture?: typeof recordCapturedContact
+  /** Injectable for tests; defaults to {@link resolveOrgIdForHost}. */
+  orgIdForHost?: (hostId: string) => Promise<string | null>
+  /**
+   * Injectable for tests; the direct write used when no plugin keeps
+   * people. Defaults to the core capture door.
+   */
   upsert?: typeof upsertHostContact
 }
 
@@ -328,6 +349,26 @@ export interface RecordPlatformAccountContactInput {
  * {@link recordPlatformMarketingConsent} lands on this same row. Product email
  * does not read this row's consent; the account's notification settings
  * govern it.
+ *
+ * ## Through the capture seam, like every other door (AGL-4230)
+ *
+ * The row goes to the plugin that keeps people through
+ * `recordCapturedContact`, the seam every form, order and booking uses, so
+ * the operator's CRM treats a new account the way it treats any new
+ * contact: it links the person to the company at their business email
+ * domain, assigns an owner by the org's rules or the site's default owner,
+ * and announces `contactCreated`. Written straight through
+ * `upsertHostContact`, as it was, the contact skipped all three, and the
+ * operator's staff found new customers with no company and nobody
+ * following up.
+ *
+ * It is a `relationship` capture, because an account is one: the person
+ * lands on a contact, never only on a lead, and a lead the operator's site
+ * already held for the address is converted onto that contact.
+ *
+ * When no plugin keeps people — a self-hosted install without the CRM, or a
+ * script that boots no plugins — the seam answers `null` and the row is
+ * written directly, as before, so the account is still somebody's contact.
  *
  * Quiet like the consent writer's contact half: a refused row is returned,
  * never thrown, because nothing about creating an account should fail over
@@ -343,12 +384,47 @@ export async function recordPlatformAccountContact(
   if (!hostId) return { status: 'unconfigured' }
   const email = String(input.email ?? '').trim()
   if (!email) return { status: 'no-email' }
+  // The canary walks sign-up every few hours and deletes the account after.
+  // As a contact it is residue in the operator's CRM, and with an owner it
+  // would hand that member a "Contact assigned to you" on every walk.
+  if (isSignupCanaryEmail(email)) return { status: 'test-account' }
 
   const snapshot = await (input.firestore ?? firestore())
     .collection('users')
     .doc(uid)
     .get()
   const name = accountName(snapshot, input.name)
+  const orgId = await (input.orgIdForHost ?? resolveOrgIdForHost)(hostId)
+  if (orgId) {
+    const captured = await (input.capture ?? recordCapturedContact)({
+      orgId,
+      hostId,
+      identity: { email, ...(name ? { name } : {}) },
+      interaction: {
+        source: 'account',
+        atMs: input.createdAtMs,
+        summary: PLATFORM_ACCOUNT_CREATED_SUMMARY,
+      },
+      lifecycleFloor: 'lead',
+      surface: 'relationship',
+    })
+    if (captured) {
+      if (captured.ok === false) {
+        return { status: 'refused', reason: captured.reason }
+      }
+      // A relationship capture always lands on a contact; a lead here would
+      // be the keeper breaking that, and is reported rather than counted.
+      if (captured.record !== 'contact') {
+        return { status: 'refused', reason: 'filed-as-lead' }
+      }
+      return {
+        status: 'recorded',
+        contactId: captured.contactId,
+        created: captured.created,
+      }
+    }
+  }
+  // No plugin keeps people here: the account is still a contact.
   const verdict = await (input.upsert ?? upsertHostContact)({
     hostId,
     email,

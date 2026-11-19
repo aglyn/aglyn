@@ -1,0 +1,43 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.aglyn.app/mcp",
+  "title": "Aglyn",
+  "description": "Work in your Aglyn workspace: sites, content, contacts and CRM, orders, forms, bookings and media.",
+  "version": "1.0.0",
+  "websiteUrl": "https://aglyn.com",
+  "repository": {
+    "url": "https://github.com/aglyn/aglyn",
+    "source": "github"
+  },
+  "icons": [
+    {
+      "src": "https://aglyn.com/api/media/cdn/org:jWmGooWE3L:DXnRbPH4CQ/ylQl8v2_Cn",
+      "mimeType": "image/png",
+      "sizes": [
+        "any"
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://app.aglyn.com/api/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Optional. An API key, instead of signing in. Leave it out and the client is asked to sign in.",
+          "isRequired": false,
+          "isSecret": true,
+          "value": "Bearer {api_key}",
+          "variables": {
+            "api_key": {
+              "description": "An API key from Settings → API keys (aglyn_sk_…).",
+              "isRequired": false,
+              "isSecret": true
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

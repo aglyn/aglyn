@@ -32,8 +32,9 @@ class SpecToolbarAndValuesTest {
 
   @Test
   fun aScreensMainActStaysPrimary() {
-    // Every first toolbar action outside the staff area creates or runs something, so it keeps the filled button.
-    val loud = specs.filter { !it.id.startsWith("core.staff.") && it.actions.isNotEmpty() }
+    // Every first toolbar action outside the staff area creates or runs something, so it keeps the filled button. A
+    // screen whose only actions narrow its own list (Invoices, Activity: "Filter the list") has no main act to keep.
+    val loud = specs.filter { screen -> !screen.id.startsWith("core.staff.") && screen.actions.any { !it.quietOn(screen.id) } }
     assertTrue(loud.isNotEmpty())
     for (screen in loud) assertFalse(screen.actions.first().quietOn(screen.id), "${screen.id}: ${screen.actions.first().label}")
   }
