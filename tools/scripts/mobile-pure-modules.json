@@ -298,6 +298,10 @@
       "why": "The Sites list query declaration (search and filters on the member's hostMemberships rows); the native Sites screens plan the same query (AGL-3668)."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/site-live-url.ts",
+      "why": "Where a site's pages are live as the console reaches them (siteLiveUrlForSlug): the native Visit site and Open live page follow the console's origin rules, so a local or preview console opens its own tenant, never production (AGL-4086). Imports tenant-apex only."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/site-wide-outbox.ts",
       "why": "Reached by the Commerce app's product writes: the site-wide outbox document shape and keys."
     },
