@@ -71,6 +71,10 @@ data class ScreenSession(
   val origin: String = "",
   /** Signs in again with the password, so the next token carries a fresh `auth_time`. */
   val reauthenticate: suspend (password: String) -> Unit = {},
+  /** The ways the account in use can confirm it is them again ([Reconfirm.methods]), read when the step is asked for. */
+  val reconfirmMethods: suspend () -> List<ReconfirmMethod> = { listOf(ReconfirmMethod.PASSWORD) },
+  /** Confirms it with a way other than the password: Google's sheet, single sign-on's console page, a passkey. */
+  val reconfirmWith: suspend (method: ReconfirmMethod) -> Unit = {},
   /** Re-reads the token's claims (after a reauth). */
   val refreshClaims: suspend () -> Unit = {},
   /** Opens a page someone else hosts (Stripe) in the platform's secure in-app browser. */

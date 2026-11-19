@@ -133,9 +133,14 @@ private fun PosSignedIn(services: ShellServices, uid: String) {
   // The first verified session of an account with no workspace creates the one its sign-up asked for.
   androidx.compose.runtime.LaunchedEffect(uid, workspace.ready) { services.settleFirstRun(workspace) }
   var confirmed by remember(uid) { mutableStateOf(services.prefs.get(posStoreKey(uid))) }
+  // The account's Settings (profile, email addresses, security, Close account), as Aglyn POS on iPhone opens from its menu:
+  // both stores ask that an account made in the app can be closed in it.
+  var settings by remember(uid) { mutableStateOf(false) }
   val scope = rememberCoroutineScope()
   val site = workspace.site
 
+  // Over the register rather than in its place, so a basket in progress is still there when Settings closes.
+  Box(Modifier.fillMaxSize()) {
   when {
     !workspace.ready -> Loading()
     site == null || confirmed != site.id -> StorePicker(
@@ -147,10 +152,78 @@ private fun PosSignedIn(services: ShellServices, uid: String) {
         confirmed = chosen.id
       },
       onSignOut = { scope.launch { services.signOut() } },
+      onSettings = { settings = true },
     )
-    else -> Till(services, uid, workspace) {
+    else -> Till(services, uid, workspace, onSettings = { settings = true }) {
       services.prefs.set(posStoreKey(uid), null)
       confirmed = null
+    }
+  }
+  if (settings) PosSettings(services, uid, workspace) { settings = false }
+  }
+}
+
+/** The settings icon in the register's bar and the store picker's, which opens [PosSettings]. */
+@Composable
+private fun PosSettingsButton(onSettings: () -> Unit) {
+  WithTooltip("Settings") { IconButton(onClick = onSettings, modifier = Modifier.testTag("pos-menu-settings")) {
+    Icon(AglynIcons.named("settings"), contentDescription = "Settings")
+  } }
+}
+
+/**
+ * Aglyn POS's Settings: the account's own screens (`account.screens.json`, Close account among them), notifications and
+ * theme, help and Sign out: the Aglyn app's [SettingsScreen], on a stack of its own, with the session every spec screen
+ * reads (who is signed in, "Confirm it is you").
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun PosSettings(services: ShellServices, uid: String, workspace: WorkspaceState, onClose: () -> Unit) {
+  val navigator = remember { ShellNavigator() }
+  val authState by services.auth.state.collectAsState()
+  val user = (authState as? AuthState.SignedIn)?.user
+  var claims by remember(uid) { mutableStateOf(com.aglyn.core.TokenClaims()) }
+  androidx.compose.runtime.LaunchedEffect(uid) {
+    claims = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(false) }.getOrNull())
+  }
+  val session = rememberScreenSession(services, navigator, workspace, user, claims) { claims = it }
+  val context = ShellPluginContext(uid, workspace, services, navigator, emptySet())
+  val route = navigator.current
+  BackHandler(enabled = true) { if (route != null) navigator.back() else onClose() }
+  androidx.compose.runtime.CompositionLocalProvider(com.aglyn.screens.LocalScreenSession provides session) {
+    Scaffold(
+      containerColor = MaterialTheme.colorScheme.background,
+      topBar = {
+        TopAppBar(
+          title = {
+            Text(
+              when (route) {
+                is Route.Screen -> services.registry.screen(route.screenId)?.title ?: "Settings"
+                Route.NotificationSettings -> "Notifications"
+                Route.ThemeSettings -> "Theme"
+                else -> "Settings"
+              },
+              maxLines = 1,
+              overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+          },
+          navigationIcon = {
+            WithTooltip("Back") { IconButton(onClick = { if (route != null) navigator.back() else onClose() }, modifier = Modifier.testTag("pos-settings-back")) {
+              Icon(AglynIcons.named("arrow_back"), contentDescription = "Back")
+            } }
+          },
+          colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+        )
+      },
+    ) { padding ->
+      Box(Modifier.padding(padding).fillMaxSize().testTag("pos-settings")) {
+        when (route) {
+          is Route.Screen -> PluginScreenHost(services, context, route.screenId, route.params, workspace.site != null) { navigator.back() }
+          Route.NotificationSettings -> NotificationSettingsScreen(services, uid)
+          Route.ThemeSettings -> ThemeSettingsScreen(services, workspace) {}
+          else -> SettingsScreen(services, context, onTheme = { navigator.push(Route.ThemeSettings) }) { navigator.push(Route.NotificationSettings) }
+        }
+      }
     }
   }
 }
@@ -162,6 +235,7 @@ internal fun StorePicker(
   workspace: WorkspaceState,
   onChosen: (WorkspaceSite) -> Unit,
   onSignOut: () -> Unit,
+  onSettings: () -> Unit = {},
 ) {
   // Every store they can open; the register asks "Use the point of sale" on the one picked, as the routes do.
   val stores = workspace.sites
@@ -170,6 +244,7 @@ internal fun StorePicker(
     topBar = {
       TopAppBar(
         title = { AglynLogo(Modifier.height(28.dp), contentDescription = "${services.config.brandName} POS") },
+        actions = { PosSettingsButton(onSettings) },
         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
       )
     },
@@ -236,7 +311,7 @@ internal fun StorePicker(
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
-private fun Till(services: ShellServices, uid: String, workspace: WorkspaceState, onSwitchStore: () -> Unit) {
+private fun Till(services: ShellServices, uid: String, workspace: WorkspaceState, onSettings: () -> Unit, onSwitchStore: () -> Unit) {
   val navigator = remember { ShellNavigator() }
   // Crash reports name the person by Firebase uid only (AGL-4067); the register's own screen is its home.
   androidx.compose.runtime.LaunchedEffect(uid) { com.aglyn.core.Telemetry.user(uid) }
@@ -311,6 +386,7 @@ private fun Till(services: ShellServices, uid: String, workspace: WorkspaceState
           WithTooltip("Switch store") { IconButton(onClick = onSwitchStore, modifier = Modifier.testTag("switch-store")) {
             Icon(AglynIcons.named("storefront"), contentDescription = "Switch store")
           } }
+          PosSettingsButton(onSettings)
           WithTooltip("Sign out") { IconButton(onClick = { scope.launch { services.signOut() } }) {
             Icon(AglynIcons.named("logout"), contentDescription = "Sign out")
           } }

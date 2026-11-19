@@ -313,8 +313,7 @@ struct SpecScreenBody: View {
         }
       }
       .sheet(item: $reauthing) { pending in
-        ReauthSheet(email: session.email, message: pending.reauthMessage) { password in
-          try await session.reauthenticate(password)
+        ReauthSheet(session: session, message: pending.reauthMessage, api: plugin.api) {
           reauthing = nil
           await session.refreshClaims()
           await execute(pending.action, scope: pending.scope)

@@ -179,9 +179,19 @@ final class AppModel {
       email: auth?.user?.email, displayName: auth?.user?.displayName, orgName: workspace?.org?.name,
       orgRole: workspace?.org?.role, siteName: workspace?.site?.name, claims: claims,
       origin: config?.consoleOrigin ?? "",
+      // The account in use signs in again its own way (AGL-1140); a confirmation is never a sign-in of someone else.
       reauthenticate: { [weak self] password in
-        guard let email = await self?.auth?.user?.email else { throw ConsoleAPIError(status: 401, message: "Sign in again.") }
-        try await self?.auth?.signIn(email: email, password: password)
+        guard let auth = await self?.auth else { throw ConsoleAPIError(status: 401, message: "Sign in again.") }
+        try await auth.reconfirm(.password(password))
+      },
+      reconfirmMethods: { [weak self] in await self?.reconfirmMethods() ?? [] },
+      reconfirm: { [weak self] credential in
+        guard let auth = await self?.auth else { throw ConsoleAPIError(status: 401, message: "Sign in again.") }
+        try await auth.reconfirm(credential)
+      },
+      reconfirmInBrowser: { [weak self] method, authenticate in
+        guard let self else { throw ConsoleAPIError(status: 401, message: "Sign in again.") }
+        try await self.reconfirmInBrowser(method, authenticate: authenticate)
       },
       refreshClaims: { [weak self] in await self?.refreshClaims(force: true) },
       impersonate: { [weak self] token, tenantId in

@@ -57,6 +57,15 @@ public struct ScreenSession: Sendable {
   /// Signs in again with the password, so the next token carries a fresh
   /// `auth_time` (routes that guard a dangerous step ask for one).
   public var reauthenticate: @Sendable (_ password: String) async throws -> Void
+  /// The ways the account in use can confirm it is them again (`Reconfirm.methods`), read when the step is asked for.
+  public var reconfirmMethods: @Sendable () async -> [ReconfirmMethod]
+  /// Confirms it with a credential the sheet obtained (Apple's sheet, a passkey's custom token).
+  public var reconfirm: @Sendable (_ credential: ReconfirmCredential) async throws -> Void
+  /// Confirms it with a way that runs in the platform's auth session: Google's sheet, single sign-on's console page.
+  /// `authenticate` opens the URL and returns the URL it came back to.
+  public var reconfirmInBrowser:
+    @Sendable (_ method: ReconfirmMethod, _ authenticate: @escaping @Sendable (URL, String) async throws -> URL) async throws
+      -> Void
   /// Re-reads the token's claims (after a reauth, or when a screen asks).
   public var refreshClaims: @Sendable () async -> Void
   /// Signs in as a customer with the custom token a staff route minted (`/api/admin/impersonate`), in the identity
@@ -80,6 +89,10 @@ public struct ScreenSession: Sendable {
     email: String? = nil, displayName: String? = nil, orgName: String? = nil, orgRole: String? = nil,
     siteName: String? = nil, claims: TokenClaims = TokenClaims(), origin: String = "",
     reauthenticate: @escaping @Sendable (String) async throws -> Void = { _ in },
+    reconfirmMethods: @escaping @Sendable () async -> [ReconfirmMethod] = { [.password] },
+    reconfirm: @escaping @Sendable (ReconfirmCredential) async throws -> Void = { _ in },
+    reconfirmInBrowser: @escaping @Sendable (ReconfirmMethod, @escaping @Sendable (URL, String) async throws -> URL) async throws
+      -> Void = { _, _ in },
     refreshClaims: @escaping @Sendable () async -> Void = {},
     impersonate: @escaping @Sendable (String, String?) async throws -> Void = { _, _ in },
     account: AccountOperations = AccountOperations(), googleConfigured: Bool = false,
@@ -98,6 +111,9 @@ public struct ScreenSession: Sendable {
     self.claims = claims
     self.origin = origin
     self.reauthenticate = reauthenticate
+    self.reconfirmMethods = reconfirmMethods
+    self.reconfirm = reconfirm
+    self.reconfirmInBrowser = reconfirmInBrowser
     self.refreshClaims = refreshClaims
     self.impersonate = impersonate
     self.account = account
