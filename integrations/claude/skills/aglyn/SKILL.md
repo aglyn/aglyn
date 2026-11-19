@@ -38,8 +38,11 @@ describe a tool or a field that is not in the tool list.
   `publishSite` with `pages` (1 to 25 page ids) also makes those pages' drafts
   live, and publishes a page that has no address yet at its own address. Every
   page is checked first; if one is refused, nothing is published and the
-  error says why. Some pages can only be published from the editor: when
-  that is the refusal, send the person to the editor. Layouts, components,
+  error says why. `publish_from_editor` means the saved page has layout style
+  overrides that its draft lacks (someone cleared them in the editor, or the
+  draft was saved by the tools before they kept them; a draft from
+  `editPageContent` now carries them): send the person to the editor to
+  publish that page. Layouts, components,
   email designs and templates are never published by it.
 - **Pages:** `listPages` and `getPage` give each page's and folder's name,
   public address, whether it is published, and its search listing.

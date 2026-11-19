@@ -352,7 +352,7 @@ Each element:
 | `props` | Its settings that an edit can set, as stored. |
 | `style` | Its styles that an edit can set, as stored. A value may be an object by screen size (`xs`, `sm`, `md`, `lg`, `xl`). |
 | `hidden` | `true` when the element is hidden. |
-| `readOnly` | What the element stores that an edit **cannot** set, shown so you can read it: `props` (such as rich text in `html`, or a class name), `style` (keys outside the editable set), `interactions` (how many it runs) and `fields` (other things only the editor changes, such as `className` or `styleOverrides`). Present only when there is some. |
+| `readOnly` | What the element stores that an edit **cannot** set, shown so you can read it: `props` (such as rich text in `html`, or a class name), `style` (keys outside the editable set), `interactions` (how many it runs) and `fields` (other things only the editor changes, such as `className` or `styleOverrides`). On the root, `fields` lists `layoutStyleOverrides` when the page restyles the layout it sits in; their values are not shown, and an edit cannot change them. Present only when there is some. |
 
 ### Finding an element's text, picture or link {#kinds}
 
@@ -575,7 +575,7 @@ are the exception: they wait as a draft, as [above](#what-visitors-see).
 | `413` | `payload_too_large` | `code: "page_too_large"` — the edited page would be over 900,000 bytes. Also a template whose design is too large for one page. |
 | `422` | `unprocessable_entity` | `code: "edit_refused"` — the edits are well formed, and at least one asks for something the element does not take. `fields` names each problem by edit and member. Nothing is saved. |
 | `423` | — | The site is [locked](../conventions.md#site-access). |
-| `501` | `not_implemented` | Page content cannot be read or edited on this deployment right now. |
+| `501` | `not_implemented` | `"Not available yet"`, on `/content` and `/content/edits` only: reading and editing page content is not available on this deployment. |
 
 ## Related
 

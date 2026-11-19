@@ -265,7 +265,7 @@ or another member beside it — is an ordinary `400` with `code: "validation_fai
 | `409` | `unpublished_ancestor` | The page sits under a page that is not published yet. Publish the parent first. |
 | `409` | `address_taken` | Another published page holds the address, or another page in the same request would take it. |
 | `409` | `address_changed` | The page is live at one address, and publishing it would move it to another. Publish it from the editor. |
-| `409` | `publish_from_editor` | Some pages can only be published from the editor; the message says why. Open the page in the editor and publish it there. |
+| `409` | `publish_from_editor` | The page's saved version has layout style overrides (its own restyles of the layout it sits in), and its draft does not carry them: a draft whose author cleared them in the editor, or a draft an [API edit](pages.md#edit-content) or an AI edit saved before those edits kept them. Publishing could keep them or clear them, and the draft cannot say which, so publish this page from the editor. A draft made by an API edit now carries the overrides, and publishes with them. |
 | `409` | `page_changed` | The page changed while it was being published. Nothing was published; try again. |
 | `413` | `page_too_large` | The page is over 900,000 bytes. |
 
@@ -275,6 +275,55 @@ and `results` with every page's line, so nothing is claimed that did not happen.
 new page's draft was saved but its address was then refused (`code: "route_refused"`),
 its line says `"draftSaved": true`: the page still has no address, so no visitor sees
 it.
+
+##### When a publish fails partway {#publish-failures}
+
+An unexpected error — not a refusal — can stop a publish after some pages went live.
+The answer is then `500` with `type: "internal_error"`, and still says exactly what
+happened:
+
+```json
+{
+  "error": {
+    "type": "internal_error",
+    "message": "Something went wrong while publishing the pages. The pages in `promoted` went live; see `results` for the rest.",
+    "code": "internal_error"
+  },
+  "promoted": [
+    { "page": "scr_about", "status": "published", "path": "/about" }
+  ],
+  "results": [
+    { "page": "scr_about", "status": "published", "path": "/about" },
+    {
+      "page": "scr_catering",
+      "status": "failed",
+      "message": "An unexpected error stopped this page’s publish after its draft was saved into the page; the page has no address yet, so no visitor sees it. Publish it again.",
+      "draftSaved": true
+    },
+    { "page": "scr_menu", "status": "not_attempted" }
+  ]
+}
+```
+
+`promoted` lists the pages that were done before it stopped (`published` or
+`unchanged`). `results` has one line per page you named, in order: those done, then
+the page that failed (`status: "failed"`), then `not_attempted` for every page after it. The failed page's line says only what is known
+to have been written for it:
+
+| The failed line | Means |
+| --- | --- |
+| No `draftSaved` | Nothing was written for the page, or what was written is not known. Its `message` says which; read the page before publishing it again if it says so. |
+| `"draftSaved": true`, no `path` | Its draft was saved into the page, which has no address yet, so no visitor sees it. |
+| `"draftSaved": true` and a `path` | Its draft is live at that address; only republishing the address as the site's home page did not finish. |
+
+Publishing the same pages again is safe: a page whose draft already went live answers
+`unchanged`.
+
+If every named page went live and the **refresh** of the site's live pages afterwards
+fails, the answer is also `500` with `type: "internal_error"`, now with
+`code: "refresh_failed"`, and `promoted` and `results` both list every page's outcome.
+Those pages are published; publish again without `pages` to refresh the live
+copies.
 
 #### It is rate limited per site, not per key {#publish-limit}
 
@@ -333,3 +382,4 @@ written.
 | `423` | — | The site is [locked](../conventions.md#site-access): every call on it while the lock lasts, or only writes under a read-only lock. |
 | `400`, `404`, `409`, `413` | — | A page named in `pages` was refused. See [When a page is refused](#publish-refusals). |
 | `429` | `rate_limited` | The site's [publish budget](#publish-limit) is spent. Carries `Retry-After`. |
+| `500` | `internal_error` | A publish of `pages` stopped partway (`code: "internal_error"`), or the refresh after them failed (`code: "refresh_failed"`). Both still say what went live; see [When a publish fails partway](#publish-failures). |

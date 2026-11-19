@@ -115,8 +115,12 @@ cancel or refund an order, move or cancel a booking, rename or delete a site,
 replace or delete media, or change your team, plan or billing. Do those in the
 console.
 
-Some pages can only be published from the editor. If Claude cannot publish a
-page, it tells you why; open the page in the editor and publish it there.
+Now and then a page has to be published from the editor instead. This can
+happen on a page whose layout has style changes of its own, when its draft does
+not include them: because someone removed them in the editor, or because Claude
+made the draft before Claude's drafts kept them. Claude cannot tell whether you
+want those style changes kept, so it tells you, and you open the page in the
+editor, check it and publish it there.
 
 On a page, Claude cannot set rich text with mixed formatting, or pick an icon:
 it replaces rich text with plain text, and icons are picked in the editor.
