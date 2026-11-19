@@ -37,6 +37,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { resolveNodeHostTokens } from '@aglyn/besigner-ui/hooks/use-node-with-host-tokens'
+import { resolveNodeBindings } from '@aglyn/besigner-ui/hooks/use-node-with-bindings'
 import { render, waitFor } from '@testing-library/react'
 
 const HOST_ID = 'DXnRbPH4CQ'
@@ -106,6 +107,7 @@ function mockDraft() {
         'follow',
         'tagline',
         'cardCall',
+        'readOn',
       ],
     },
     // The Statement section on the home screen, as stored.
@@ -186,8 +188,36 @@ function mockDraft() {
       props: { refId: 'card', propValues: { link: '{{host.phoneLink}}' } },
       nodes: [],
     },
+    // Site variables (AGL-4234): a live one and a deleted one.
+    readOn: {
+      $id: 'readOn',
+      componentId: 'div',
+      parentId: ROOT,
+      props: {
+        children: 'Prices read on {{var:VarDate001}}.',
+        title: 'Gone: {{var:VarGone001}}',
+      },
+      nodes: [],
+    },
   }
 }
+
+/** The live variables, as the canvas's binding picker holds them (AGL-4234). */
+const mockCanvasVariables = {
+  VarDate001: { name: 'read_on', type: 'text', value: 'November 18, 2026' },
+} as never
+
+/** The site's variables as stored: one live, one deleted (AGL-4234). */
+const mockVariableDocs = [
+  {
+    id: 'VarDate001',
+    data: () => ({ name: 'read_on', type: 'text', value: 'November 18, 2026' }),
+  },
+  {
+    id: 'VarGone001',
+    data: () => ({ name: 'old_date', type: 'text', value: 'September 20, 2026', deletedAt: 1 }),
+  },
+]
 
 // ── The tenant's reads, answered from the fixture ──────────────────────────
 jest.mock('@aglyn/tenant-runtime/get-layout-version', () => ({
@@ -200,7 +230,10 @@ jest.mock('@aglyn/tenant-runtime/get-components', () => ({
 }))
 jest.mock('@aglyn/tenant-runtime/get-variables', () => ({
   __esModule: true,
-  default: jest.fn(async () => ({})),
+  // As `readVariables` keeps them: by id, without the deleted one.
+  default: jest.fn(async () => ({
+    VarDate001: { name: 'read_on', type: 'text', value: 'November 18, 2026' },
+  })),
   getFunctions: jest.fn(async () => ({})),
 }))
 jest.mock('@aglyn/aglyn/plugin-manager/repeat-rows', () => ({
@@ -292,7 +325,9 @@ jest.mock('firebase/firestore', () => ({
     docs:
       path === 'hosts/DXnRbPH4CQ/components'
         ? [{ id: 'card', data: () => mockDefinition }]
-        : [],
+        : path === 'hosts/DXnRbPH4CQ/variables'
+          ? mockVariableDocs
+          : [],
   })),
   limit: jest.fn(),
   query: jest.fn((path: string) => path),
@@ -334,6 +369,7 @@ const tokenBearingIds = () => [
   'follow',
   'tagline',
   'cmp__cardCall__cardLine',
+  'readOn',
 ]
 
 /** A node's props as Preview put them in the store it renders. */
@@ -427,10 +463,11 @@ describe('host variables — the published page, Preview and the canvas agree (A
     }
     getDocs.mockClear()
     openPreview()
-    // The definitions and the forms have answered; only the site has not.
+    // The definitions, the forms, the variables and the functions have
+    // answered; only the site has not.
     // Settled by waiting rather than by an async `act`, which never returns
     // against the ceiling timer this component arms.
-    await waitFor(() => expect(getDocs).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(getDocs).toHaveBeenCalledTimes(4))
     await Promise.all(getDocs.mock.results.map((result) => result.value))
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(painted).toEqual([])
@@ -441,6 +478,20 @@ describe('host variables — the published page, Preview and the canvas agree (A
     )
     expect(painted.length).toBeGreaterThan(0)
     for (const paint of painted) expect(paint).not.toContain('{{host.')
+  })
+
+  it('Preview fills site variables as the published page does, and a deleted one as nothing (AGL-4234)', async () => {
+    const page = await published()
+    expect(page['readOn']?.props).toMatchObject({
+      children: 'Prices read on November 18, 2026.',
+      title: 'Gone: ',
+    })
+    openPreview()
+    await waitFor(() =>
+      expect(previewProps('readOn')?.['children']).not.toBeUndefined(),
+    )
+    expect(previewProps('readOn')).toEqual(page['readOn']?.props)
+    expect(JSON.stringify(Aglyn.canvas.toJSON().nodes)).not.toContain('{{var:')
   })
 
   it('the canvas resolves every node exactly as the published page does', async () => {
@@ -454,7 +505,10 @@ describe('host variables — the published page, Preview and the canvas agree (A
     for (const id of tokenBearingIds()) {
       expect({
         id,
-        props: resolveNodeHostTokens(grafted[id], mockSite)?.props,
+        props: resolveNodeHostTokens(
+          resolveNodeBindings(grafted[id], mockCanvasVariables, {}),
+          mockSite,
+        )?.props,
       }).toEqual({ id, props: page[id]?.props })
     }
   })

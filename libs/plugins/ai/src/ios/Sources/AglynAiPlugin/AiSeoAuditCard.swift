@@ -98,7 +98,7 @@ struct AiSeoAuditCard: View {
             .buttonStyle(.aglynSecondary)
             .disabled(siteFields.isEmpty || siteStaged == jobID)
             .accessibilityIdentifier("ai-seo-stage-site")
-          if siteStaged == jobID { AglynNotice("In the SEO form below as unsaved changes. Review them, then press Save.", tone: .success) }
+          if siteStaged == jobID { AglynNotice(aiSeoStagedNote(siteFields.map(\.field)), tone: .success) }
         }
 
         // The pages a fix was proposed for, or is still owed to; the check above lists the rest.

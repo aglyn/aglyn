@@ -10,6 +10,15 @@
   <!-- Scan stock reads barcodes with the camera; a device without one still works. -->
   <uses-permission android:name="android.permission.CAMERA" />
   <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+  <!-- A console page the app has no screen for goes back to the person's browser, which the app has to be able to see
+       (AGL-4059, handBackWebOnlyLink). -->
+  <queries>
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <category android:name="android.intent.category.BROWSABLE" />
+      <data android:scheme="https" />
+    </intent>
+  </queries>
 
   <application
     android:name=".AglynApplication"
@@ -30,19 +39,43 @@
         <category android:name="android.intent.category.BROWSABLE" />
         <data android:scheme="aglyn" />
       </intent-filter>
-      <!-- The console's emailed sign-up, verification and password reset links open the app, which finishes them, and so does
-           a workspace invitation's link (the console's home), whose invitation the app answers. -->
+      <!-- Console links open the app, as the console's own app-link documents claim them (AGL-4059): every workspace, site,
+           account, billing, support and staff page, and the emailed sign-up, verification, reset and recovery pages and a
+           workspace invitation's link (the console's home), which the app finishes itself. The groups below refuse what
+           stays in the browser, the same list as the console's apple-app-site-association (consoleAppLinksComponents in
+           native-app-association.ts; its spec holds this list to it): framework and route-handler paths, /.well-known, the
+           web-only sections and anything under an auth page. Android before 15 ignores the groups; DeepLinks.opensInApp
+           then hands such a link straight back to the browser. -->
       <intent-filter android:autoVerify="true">
         <action android:name="android.intent.action.VIEW" />
         <category android:name="android.intent.category.DEFAULT" />
         <category android:name="android.intent.category.BROWSABLE" />
         <data android:scheme="https" />
         <data android:host="${consoleHost}" />
-        <data android:path="/" />
-        <data android:path="/signup" />
-        <data android:path="/verify-email" />
-        <data android:path="/reset-password" />
-        <data android:path="/account-recovery" />
+        <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/_" /></uri-relative-filter-group>
+        <uri-relative-filter-group android:allow="false"><data android:path="/api" /></uri-relative-filter-group>
+        <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/api/" /></uri-relative-filter-group>
+        <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/.well-known/" /></uri-relative-filter-group>
+        <uri-relative-filter-group android:allow="false"><data android:path="/auth" /></uri-relative-filter-group>
+        <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/auth/" /></uri-relative-filter-group>
+        <uri-relative-filter-group android:allow="false"><data android:path="/edit-access" /></uri-relative-filter-group>
+        <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/edit-access/" /></uri-relative-filter-group>
+        <uri-relative-filter-group android:allow="false"><data android:path="/kiosk" /></uri-relative-filter-group>
+        <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/kiosk/" /></uri-relative-filter-group>
+        <uri-relative-filter-group android:allow="false"><data android:path="/oauth" /></uri-relative-filter-group>
+        <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/oauth/" /></uri-relative-filter-group>
+        <uri-relative-filter-group android:allow="false"><data android:path="/p" /></uri-relative-filter-group>
+        <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/p/" /></uri-relative-filter-group>
+        <uri-relative-filter-group android:allow="false"><data android:path="/signin" /></uri-relative-filter-group>
+        <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/signin/" /></uri-relative-filter-group>
+        <uri-relative-filter-group android:allow="false"><data android:path="/signout" /></uri-relative-filter-group>
+        <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/signout/" /></uri-relative-filter-group>
+        <uri-relative-filter-group android:allow="false"><data android:path="/sso" /></uri-relative-filter-group>
+        <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/sso/" /></uri-relative-filter-group>
+        <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/account-recovery/" /></uri-relative-filter-group>
+        <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/reset-password/" /></uri-relative-filter-group>
+        <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/signup/" /></uri-relative-filter-group>
+        <uri-relative-filter-group android:allow="false"><data android:pathPrefix="/verify-email/" /></uri-relative-filter-group>
       </intent-filter>
     </activity>
     <!-- The home-screen icon (Theme ▸ App icon, LauncherIconSwitcher): one alias of the main activity per icon of the logo

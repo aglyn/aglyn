@@ -71,14 +71,22 @@ export const ApiErrors = {
     errorResponse(
       403,
       'plan_required',
-      // Pro since pricing v4 (AGL-4126), Business before it.
-      'API access requires the Pro plan or above',
+      // Starter since AGL-4226; Pro from pricing v4 (AGL-4126), Business
+      // before it.
+      'API access requires the Starter plan or above',
       init,
     ),
+  // The challenge RFC 6750 §3.1 gives a bearer credential that lacks a scope,
+  // naming the one it lacks, so an app that signed in can ask the person for
+  // it rather than read prose (AGL-4225). Scope tokens are `[a-z:]` only, so
+  // the quoted value needs no escaping.
   insufficientScope: (scope: string, headers?: Record<string, string>) =>
     errorResponse(403, 'insufficient_scope', `Missing the "${scope}" scope`, {
       code: scope,
-      headers,
+      headers: {
+        ...headers,
+        'WWW-Authenticate': `Bearer error="insufficient_scope", scope="${scope}"`,
+      },
     }),
   forbidden: (init?: ApiResponseInit) =>
     errorResponse(403, 'forbidden', 'Not permitted', init),
@@ -120,8 +128,18 @@ export const ApiErrors = {
       'This file has been removed and cannot be uploaded',
       init,
     ),
-  rateLimited: (retryAfterSec: number, headers?: Record<string, string>) =>
+  /**
+   * `init.code` and `init.message` name WHICH limit refused (AGL-4226): the
+   * key's per-minute budget, the workspace's, or the monthly ceiling. Absent,
+   * the envelope is the one this API has always sent.
+   */
+  rateLimited: (
+    retryAfterSec: number,
+    headers?: Record<string, string>,
+    init?: Pick<ApiResponseInit, 'code' | 'message'>,
+  ) =>
     errorResponse(429, 'rate_limited', 'Too many requests', {
+      ...init,
       headers: { 'Retry-After': String(Math.max(1, retryAfterSec)), ...headers },
     }),
   internal: (init?: ApiResponseInit) =>

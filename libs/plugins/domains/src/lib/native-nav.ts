@@ -15,15 +15,33 @@
  * limitations under the License.
  */
 
-import { nativeNavRef, type NativeNavElsewhere } from '@aglyn/aglyn/app-utils/native-nav'
+import {
+  nativeNavIcon,
+  nativeNavRef,
+  type NativeNavContribution,
+} from '@aglyn/aglyn/app-utils/native-nav'
 
 /**
- * Domains in the native apps' navigation (AGL-4040). The console's workspace
- * Domains page has no native screen yet: buying, transfers, contacts and DNS
- * records are managed on that page in the console.
+ * Domains in the native apps' navigation (AGL-4040): the workspace's Domains
+ * page, a row of the workspace list as the console's `orgNavItems` entry is a
+ * workspace tab. Its spec screen lists every domain the workspace holds and
+ * opens a page per name; buying, transfers, contacts and DNS records follow.
  *
  * Imports only the core's plain nav module, so the native contracts read it.
  */
-export const NATIVE_NAV_ELSEWHERE: readonly NativeNavElsewhere[] = [
-  { console: nativeNavRef('orgPluginTab', '/domains'), where: 'The console’s Domains page; no native screen yet' },
+export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
+  {
+    list: 'workspace',
+    group: 'workspace',
+    row: {
+      id: 'domains',
+      label: 'Domains',
+      icon: nativeNavIcon('network', 'dns'),
+      screen: 'domains.list',
+      pluginId: 'domains',
+      order: 75,
+      docs: '/building-sites/custom-domains/manage-domains',
+      console: nativeNavRef('orgPluginTab', '/domains'),
+    },
+  },
 ]

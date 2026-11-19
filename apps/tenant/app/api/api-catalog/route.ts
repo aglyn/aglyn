@@ -22,6 +22,14 @@ import {
   hostPublicOrigin,
   isSiteKeptFromSearch,
 } from '@aglyn/aglyn/server'
+import {
+  connectorAuthorizationServerMetadataUrl,
+  connectorResourceFor,
+  connectorResourceMetadataUrl,
+  MCP_SERVER_CARD_MEDIA_TYPE,
+  mcpServerCardUrl,
+} from '@aglyn/aglyn/app-utils/connector-discovery'
+import { platformConsoleOrigin } from '@aglyn/aglyn/app-utils/platform-brand'
 import { visitorContentRefusal } from '@aglyn/tenant-data-admin'
 import getHost from '../../../utils/get-host'
 import { publicReadApiGate, withPublicReadHeaders } from '../_public-read-api'
@@ -35,11 +43,12 @@ export const dynamic = 'force-dynamic'
   middleware's console redirect, deliberately: a self-hoster who has already
   pointed those at their own deployment does not have to discover a third name
   to keep this document honest. The literals are the fallback for Aglyn's own
-  cloud, where neither variable is set on the tenant project.
+  cloud, where neither variable is set on the tenant project. The console's
+  is read through `platformConsoleOrigin()`, the one helper every other
+  "where is the console" answer uses, so the MCP addresses below are built on
+  the same origin the console's own discovery documents name.
 */
-const CONSOLE_ORIGIN = (
-  process.env.NEXT_PUBLIC_CONSOLE_URL || 'https://app.aglyn.com'
-).replace(/\/+$/, '')
+const CONSOLE_ORIGIN = platformConsoleOrigin()
 const DOCS_ORIGIN = (
   process.env.NEXT_PUBLIC_DOCS_ORIGIN ||
   process.env.NEXT_PUBLIC_AGLYN_DOCS_URL ||
@@ -118,14 +127,30 @@ export async function GET(request: Request): Promise<Response> {
           whichever agent arrived the other way to conclude it does not exist,
           which is the failure this whole catalog was built to end.
 
-          No `specUrl`: the tool list IS the description, and it is served by
-          the protocol itself in answer to `tools/list`. Pointing `service-desc`
-          at the OpenAPI document would name a description of the endpoints for
-          a client that is not calling them.
+          Its `service-desc` is the server card, not the OpenAPI document:
+          pointing at the OpenAPI document would name a description of the
+          endpoints for a client that is not calling them.
         */
-        url: `${CONSOLE_ORIGIN}/api/mcp`,
+        url: connectorResourceFor(CONSOLE_ORIGIN),
         title: `${PLATFORM_BRAND_NAME} MCP server`,
-        docsUrl: `${DOCS_ORIGIN}/api`,
+        /*
+          Its description is the MCP Server Card (SEP-2127), which the server
+          publishes at `<endpoint>/server-card`: transport, protocol revisions,
+          and the optional API-key header. The tool list is still the
+          protocol's own `tools/list`; the card leaves tools out on purpose.
+        */
+        specUrl: mcpServerCardUrl(CONSOLE_ORIGIN),
+        specType: MCP_SERVER_CARD_MEDIA_TYPE,
+        /*
+          How any MCP client signs in without a key (AGL-4225): the OAuth
+          protected-resource document the endpoint's 401 names (RFC 9728),
+          and its authorization server's document (RFC 8414).
+        */
+        metaLinks: [
+          { href: connectorResourceMetadataUrl(CONSOLE_ORIGIN), type: 'application/json' },
+          { href: connectorAuthorizationServerMetadataUrl(CONSOLE_ORIGIN), type: 'application/json' },
+        ],
+        docsUrl: `${DOCS_ORIGIN}/api#mcp`,
       },
     ],
   })

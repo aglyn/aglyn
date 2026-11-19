@@ -154,12 +154,18 @@ fun siteProfileUrls(host: Map<String, Any?>?): List<String> {
     .take(Contracts.authorSameAsMax.toInt())
 }
 
-private fun addressLine(host: Map<String, Any?>?): String {
-  val parts = host.child("seo").child("entity").child("address")
-  val line = listOf("streetAddress", "addressLocality", "addressRegion", "postalCode", "addressCountry")
+/**
+ * The structured postal address as the one line every reader prints (`structuredAddressLine`): the parts that are set, in
+ * order, each tidied, joined by commas. Empty when none is.
+ */
+fun structuredAddressLine(parts: Map<*, *>?): String =
+  listOf("streetAddress", "addressLocality", "addressRegion", "postalCode", "addressCountry")
     .map { profileText(parts?.get(it), 200) }
     .filter { it.isNotEmpty() }
     .joinToString(", ")
+
+private fun addressLine(host: Map<String, Any?>?): String {
+  val line = structuredAddressLine(host.child("seo").child("entity").child("address"))
   return line.ifEmpty { profileText(host.child("business")?.get("address"), 400) }
 }
 
