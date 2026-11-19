@@ -92,3 +92,14 @@ final class MediaBrowserTests: XCTestCase {
     XCTAssertEqual(mediaRestoredMessage(["a", "b", "c"]), "Restored 3 files: \"a\", \"b\" and \"c\"")
   }
 }
+
+final class MediaCustomMetadataTests: XCTestCase {
+  func testReadsAFilesOwnKeyValuePairs() throws {
+    let item = try XCTUnwrap(
+      MediaItem(
+        FirestoreDocument(
+          id: "m1",
+          data: ["fileName": "a.jpg", "contentType": "image/jpeg", "customMetadata": ["photographer": "Sam", "year": 2026, "gone": NSNull()]])))
+    XCTAssertEqual(item.customMetadata, ["photographer": "Sam", "year": "2026"])
+  }
+}
