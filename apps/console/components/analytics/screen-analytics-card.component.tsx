@@ -16,7 +16,8 @@
  */
 'use client'
 
-import { AppLink, CardDisplay, useBuyingHidden } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { useBuyingHidden } from '@aglyn/shared-ui-jsx/contexts/buying-hidden.context'
 import {
   Alert,
   Box,

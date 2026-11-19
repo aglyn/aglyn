@@ -28,7 +28,8 @@ import {
   pluginUsageBands,
   type ResolvedPluginUsageBand,
 } from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
-import { AppLink, useBuyingHidden } from '@aglyn/shared-ui-jsx'
+import { AppLink } from '@aglyn/shared-ui-jsx'
+import { useBuyingHidden } from '@aglyn/shared-ui-jsx/contexts/buying-hidden.context'
 import { USAGE_METER_WARNING_PCT } from '@aglyn/shared-ui-jsx/components/usage-meter.component'
 import { Alert, Button } from '@mui/material'
 import {

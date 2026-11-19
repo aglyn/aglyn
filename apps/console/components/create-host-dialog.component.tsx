@@ -52,7 +52,8 @@ import {
   siteBrandMissedNotice,
   type SiteBrandSlot,
 } from '@aglyn/aglyn/app-utils/site-brand-files'
-import { useBuyingHidden, useLoading } from '@aglyn/shared-ui-jsx'
+import { useLoading } from '@aglyn/shared-ui-jsx'
+import { useBuyingHidden } from '@aglyn/shared-ui-jsx/contexts/buying-hidden.context'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
