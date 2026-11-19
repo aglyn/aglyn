@@ -104,7 +104,7 @@ const ROLE_HELP: Readonly<Record<AccountingAccountRole, string>> = {
   shippingIncome: 'Where shipping you charge is recorded. Sales income when left empty.',
   clearing:
     'A bank account that stands for your Stripe balance. Every sale is paid into it and every payout leaves it, so it returns to zero with each payout.',
-  feeExpense: `Where the ${PLATFORM_BRAND_NAME} fee on each sale is recorded as an expense.`,
+  feeExpense: `Where the ${PLATFORM_BRAND_NAME} fee on each sale and the fees Stripe takes are recorded as an expense.`,
   payoutBank: 'The bank account Stripe pays out to.',
   taxLiability: 'Where sales tax collected is recorded by the daily summary.',
   tips: 'Where tips taken at the register are recorded. Sales income when left empty; tips your staff are owed belong in a liability account.',

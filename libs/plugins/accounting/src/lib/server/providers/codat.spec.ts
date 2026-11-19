@@ -28,6 +28,7 @@ import {
   buildFeeDoc,
   buildFeeRefundDoc,
   buildPayoutDoc,
+  buildPayoutFeeDoc,
   buildRefundDoc,
   buildSaleDoc,
   buildSummaryDoc,
@@ -322,6 +323,32 @@ describe('Codat adapter, call by call', () => {
     })
     expect(calls[1].url).toContain('/push/directIncomes')
     expect(sent(calls[1])).toMatchObject({ totalAmount: 0.3, lineItems: [{ accountRef: { id: 'acc-fee' } }] })
+  })
+
+  it('pays Stripe’s own fees to a supplier named Stripe, found in the books or made there, never Aglyn’s', async () => {
+    const payout = { payoutId: 'po_123', amountCents: 10000, currency: 'usd', arrivedAtMs: Date.UTC(2026, 9, 8), stripeFeeCents: 321 }
+    const doc = buildPayoutFeeDoc(payout as never, mapping)!
+    const found = provider([
+      { match: '/data/suppliers', body: { results: [{ id: 'sup-stripe', supplierName: 'Stripe' }] } },
+      { method: 'POST', match: '/push/directCosts', body: success('directCosts', 'fee-2') },
+    ])
+    await found.adapter.createExpense(session, doc, write)
+    expect(new URL(found.calls[0].url).searchParams.get('query')).toBe('supplierName=Stripe')
+    expect(sent(found.calls[1])).toMatchObject({
+      reference: 'PO-123-F',
+      contactRef: { id: 'sup-stripe', dataType: 'suppliers' },
+      totalAmount: 3.21,
+      lineItems: [{ accountRef: { id: 'acc-fee' } }],
+      paymentAllocations: [{ payment: { accountRef: { id: 'acc-clr' } } }],
+    })
+    const made = provider([
+      { match: '/data/suppliers', body: { results: [] } },
+      { method: 'POST', match: '/push/suppliers', body: success('suppliers', 'sup-new') },
+      { method: 'POST', match: '/push/directCosts', body: success('directCosts', 'fee-3') },
+    ])
+    await made.adapter.createExpense(session, doc, write)
+    expect(sent(made.calls[1])).toEqual({ supplierName: 'Stripe', status: 'Active' })
+    expect(sent(made.calls[2])).toMatchObject({ contactRef: { id: 'sup-new', dataType: 'suppliers' } })
   })
 
   it('posts a payout as a transfer whose description carries its id', async () => {
