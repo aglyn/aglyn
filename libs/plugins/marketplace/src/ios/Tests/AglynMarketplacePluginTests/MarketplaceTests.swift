@@ -423,7 +423,7 @@ final class MarketplaceTests: XCTestCase {
         "marketplace.publishPlugin", "marketplace.publishStarter",
       ],
       widgets: [
-        "marketplace.artifact-publish", "marketplace.org-installs", "marketplace.plugin-installation", "marketplace.site-connections",
+        "marketplace.artifact-publish", "marketplace.org-installs", "marketplace.plugin-installation", "marketplace.site-connections", "marketplace.template-install-status",
         "marketplace.starter-picker",
       ],
       quickActions: ["marketplace.open"],
