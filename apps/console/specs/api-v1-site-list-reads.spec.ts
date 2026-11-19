@@ -52,6 +52,8 @@ interface Batch {
 const mockDocs = new Map<string, Record<string, unknown>>()
 /** Every `getAll` the code under test issued, most recent last. */
 let mockBatches: Batch[] = []
+/** Every single-document host read, most recent last. */
+let mockDocReads: string[] = []
 /** Hand the snapshots back in reverse — order must not be load-bearing. */
 let mockReverseBatchOrder = false
 
@@ -127,10 +129,12 @@ jest.mock('@aglyn/tenant-data-admin', () => {
         get: async () => {
           await mockTick()
           if (name !== 'hosts') return { exists: false, data: () => undefined }
-          // Deliberately unmodelled: this suite exists because the site read
-          // is NOT one document at a time. A handler that fell back to it
-          // fails loudly here rather than quietly costing a round trip.
-          throw new Error(`per-document read of ${name}/${id}`)
+          // Counted, not served silently: this suite exists because the LIST
+          // is NOT read one document at a time, and the list tests assert no
+          // such read happened. The one site a request NAMES is read whole
+          // by the site router (AGL-4235), which is what this models.
+          mockDocReads.push(`${name}/${id}`)
+          return snapshotOf(`${name}/${id}`, undefined)
         },
       }),
     }),
@@ -163,6 +167,12 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     },
   }
 })
+
+// The site router's own lock verdict (AGL-4235) reads the lock module
+// directly; no site here is locked, as the pipeline's double above says.
+jest.mock('../../../libs/tenant/data/admin/src/lib/server/lockdown', () => ({
+  lockdownRefusal: async () => null,
+}))
 
 jest.mock('@aglyn/aglyn/server', () => {
   const entitlements = jest.requireActual(
@@ -225,6 +235,7 @@ function seedSites(n: number) {
 beforeEach(() => {
   mockDocs.clear()
   mockBatches = []
+  mockDocReads = []
   mockReverseBatchOrder = false
   seedSites(25)
 })
@@ -235,6 +246,7 @@ describe('AGL-1302 · GET /v1/sites costs one read, not one per site', () => {
     expect(body.data).toHaveLength(25)
     expect(mockBatches).toHaveLength(1)
     expect(mockBatches[0].paths).toHaveLength(25)
+    expect(mockDocReads).toEqual([])
   })
 
   it('CONTROL: the counter is not stuck at one — an empty org reads nothing', async () => {
@@ -291,9 +303,14 @@ describe('AGL-1302 · GET /v1/sites costs one read, not one per site', () => {
     const body = await (await listSites(`?limit=${MAX_PAGE_LIMIT}`)).json()
     expect(body.data).toHaveLength(MAX_PAGE_LIMIT)
     expect(mockBatches).toHaveLength(1)
+    expect(mockDocReads).toEqual([])
   })
 
-  it('the single-site GET reads the same three fields', async () => {
+  it('the single-site GET is still one read, the site router’s, and answers the same three fields', async () => {
+    // AGL-4235: every request that names a site reads its document once, whole,
+    // at the router — the site's lock and the connected app's membership are
+    // read off it — and the view is built from that read rather than from a
+    // second, projected one. One round trip either way.
     const body = await (await get('/sites/site-03', ['sites', 'site-03'])).json()
     expect(body).toEqual({
       id: 'site-03',
@@ -302,7 +319,7 @@ describe('AGL-1302 · GET /v1/sites costs one read, not one per site', () => {
       subdomain: 'sub-3',
       domain: null,
     })
-    expect(mockBatches).toHaveLength(1)
-    expect(mockBatches[0].fieldMask).toEqual(['displayName', 'subdomain', 'cname'])
+    expect(mockDocReads).toEqual(['hosts/site-03'])
+    expect(mockBatches).toHaveLength(0)
   })
 })

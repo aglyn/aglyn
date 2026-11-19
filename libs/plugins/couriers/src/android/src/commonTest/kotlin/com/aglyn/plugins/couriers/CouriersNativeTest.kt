@@ -24,6 +24,6 @@ class CouriersNativeTest {
   fun everySpecNamesItsRoutesAndTheCommerceSettingsZone() {
     val specs = CouriersScreenJson.files.flatMap { ScreenSpec.parseFile(it) }
     assertEquals(listOf("couriers.service", "couriers.order").sorted(), specs.map { it.id }.sorted())
-    assertTrue(specs.any { "commerceSettings" in it.zones } || specs.all { it.zones.isEmpty() })
+    assertTrue(specs.any { "commerceSettingsShipping" in it.zones } || specs.all { it.zones.isEmpty() })
   }
 }

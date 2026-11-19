@@ -1,0 +1,227 @@
+{
+  "$comment": "The Commerce plugin's part of a site account (the console's siteMember zone, SiteMemberPurchases): the lifetime purchase total, the person's orders and their subscriptions, read from the store's own orders and subscriptions by the account's address, as the console's drawer reads them. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "commerce.siteMemberPurchases",
+      "title": "Purchases",
+      "label": "Purchases",
+      "subtitle": "Lifetime purchases, orders and subscriptions",
+      "icon": "bag|shopping_bag",
+      "scope": "site",
+      "zones": [
+        "siteMember"
+      ],
+      "constants": {
+        "orderWords": [
+          {
+            "id": "pending",
+            "text": "pending"
+          },
+          {
+            "id": "paid",
+            "text": "paid"
+          },
+          {
+            "id": "partially_fulfilled",
+            "text": "partially fulfilled"
+          },
+          {
+            "id": "fulfilled",
+            "text": "fulfilled"
+          },
+          {
+            "id": "delivered",
+            "text": "delivered"
+          },
+          {
+            "id": "cancelled",
+            "text": "cancelled"
+          },
+          {
+            "id": "refunded",
+            "text": "refunded"
+          }
+        ],
+        "orderCeiling": 100,
+        "subscriptionCeiling": 25
+      },
+      "load": {
+        "orders": {
+          "optional": true,
+          "when": "params.email",
+          "query": {
+            "collection": "hosts/{site.id}/orders",
+            "where": [
+              [
+                "customerEmail",
+                "==",
+                "{params.email}"
+              ]
+            ],
+            "limit": 100
+          }
+        },
+        "subs": {
+          "optional": true,
+          "when": "params.email",
+          "query": {
+            "collection": "hosts/{site.id}/subscriptions",
+            "where": [
+              [
+                "customerEmail",
+                "==",
+                "{params.email}"
+              ]
+            ],
+            "limit": 25
+          }
+        },
+        "products": {
+          "optional": true,
+          "late": true,
+          "when": "data.subs.items.0",
+          "query": {
+            "collection": "hosts/{site.id}/products",
+            "limit": 100
+          }
+        },
+        "lifetime": {
+          "compute": "computeLifetimePurchaseCents",
+          "args": [
+            "data.orders.items"
+          ]
+        }
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "id": "lifetime",
+          "title": "Lifetime purchases",
+          "rows": [
+            {
+              "label": "Lifetime purchases",
+              "value": "{data.lifetime:cents}",
+              "when": "data.orders && !data.orders.items.99 || !params.email"
+            },
+            {
+              "label": "Lifetime purchases",
+              "value": "at least {data.lifetime:cents}",
+              "when": "data.orders.items.99"
+            },
+            {
+              "label": "Lifetime purchases",
+              "value": "—",
+              "when": "params.email && !data.orders"
+            }
+          ],
+          "footer": "Charged order totals minus refunds; pending and canceled orders excluded."
+        },
+        {
+          "type": "notice",
+          "id": "ordersMore",
+          "tone": "info",
+          "when": "data.orders.items.99",
+          "text": "Summed over the 100 orders read here; this member has more."
+        },
+        {
+          "type": "notice",
+          "id": "ordersUnreadable",
+          "tone": "info",
+          "when": "params.email && !data.orders",
+          "text": "Order history takes the \"See orders and webhooks\" permission on this site."
+        },
+        {
+          "type": "list",
+          "id": "orders",
+          "title": "Orders",
+          "when": "data.orders || !params.email",
+          "items": "data.orders.items",
+          "sort": "createdAtMs desc",
+          "page": 25,
+          "icon": "bag|shopping_bag",
+          "primary": "#{item.number|item.$id} · {item.totals.totalCents|item.amountCents|'0':cents}",
+          "secondary": [
+            {
+              "text": "{item.createdAtMs:date}",
+              "when": "item.createdAtMs"
+            },
+            {
+              "text": "—",
+              "when": "!item.createdAtMs"
+            },
+            {
+              "text": "refunded {item.refundedCents - min(item.refundedCents, max(0, item.dispute.reversedCents?)):cents}",
+              "when": "item.refundedCents - min(item.refundedCents, max(0, item.dispute.reversedCents?)) > 0"
+            },
+            {
+              "text": "charged back {min(item.refundedCents, max(0, item.dispute.reversedCents?)):cents}",
+              "when": "min(item.refundedCents, max(0, item.dispute.reversedCents?)) > 0"
+            }
+          ],
+          "tertiary": "{item.paymentIntentId}",
+          "badges": [
+            {
+              "text": "{const.orderWords[id=item.status].text|item.status|'paid'}",
+              "tone": "neutral"
+            }
+          ],
+          "empty": "No orders yet."
+        },
+        {
+          "type": "list",
+          "id": "subscriptions",
+          "title": "Subscriptions",
+          "when": "data.subs.items.0",
+          "items": "data.subs.items",
+          "page": 25,
+          "icon": "arrow.triangle.2.circlepath|autorenew",
+          "primary": [
+            "{data.products.items[$id=item.productId].name|item.productId|'Subscription'}",
+            {
+              "text": "{item.totals.totalCents:cents}/{item.interval}",
+              "when": "item.totals.totalCents >= 0 && item.interval"
+            },
+            {
+              "text": "{item.totals.totalCents:cents}",
+              "when": "item.totals.totalCents >= 0 && !item.interval"
+            }
+          ],
+          "secondary": [
+            {
+              "text": "Renews {item.currentPeriodEndMs:date}",
+              "when": "item.currentPeriodEndMs"
+            },
+            {
+              "text": "—",
+              "when": "!item.currentPeriodEndMs"
+            },
+            {
+              "text": "{item.paidCents|'0':cents} paid over 1 invoice",
+              "when": "item.invoicesCount == 1"
+            },
+            {
+              "text": "{item.paidCents|'0':cents} paid over {item.invoicesCount} invoices",
+              "when": "item.invoicesCount > 1"
+            }
+          ],
+          "badges": [
+            {
+              "text": "{item.status|'active'}",
+              "tones": {
+                "active": "success",
+                "*": "neutral"
+              }
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "subsMore",
+          "tone": "info",
+          "when": "data.subs.items.24",
+          "text": "Showing 25 subscriptions; this member has more."
+        }
+      ]
+    }
+  ]
+}

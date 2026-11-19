@@ -461,6 +461,17 @@ class ContentApi(private val api: ConsoleApiClient, private val writer: Firestor
     writer.delete(entryPath(collectionId, id))
   }
 
+  /**
+   * A signed two-hour link to an entry the site does not serve yet, as the site will render it (AGL-3205): minted by
+   * `/api/content/preview-link`, which re-checks that this person may edit the site's content. Null when it answered no link.
+   */
+  suspend fun previewLink(collectionSlug: String, entrySlug: String): String? =
+    (api.request(
+      "/api/content/preview-link",
+      ApiMethod.POST,
+      jsonValue(mapOf("hostId" to hostId, "collectionSlug" to collectionSlug, "entrySlug" to entrySlug)),
+    ) as? kotlinx.serialization.json.JsonObject)?.get("url")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+
   /** Tells the live site a collection's entries changed; never fails the write before it. */
   suspend fun announce(collectionId: String, slugs: List<String>) {
     runCatching {

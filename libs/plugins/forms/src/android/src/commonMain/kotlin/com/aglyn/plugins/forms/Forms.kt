@@ -77,8 +77,24 @@ data class FormRow(
   val lastSubmissionAtMs: Long?,
   val updatedAt: FirestoreTimestamp?,
   val campaignCount: Int,
+  /** "This is a sign-up form": submitting it subscribes the person (`optInOnSubmit`). */
+  val optInOnSubmit: Boolean = false,
+  /** "This form asks for a quote" (`request.kind == 'quote'`, AGL-4098). */
+  val asksForQuote: Boolean = false,
+  /** "Email the person a confirmation" as stored; null follows the request's default. */
+  val confirmationEmail: Boolean? = null,
+  /** The month counters (`stats.periods`), `YYYY-MM` to each counter. */
+  val periods: Map<String, Map<String, Double>> = emptyMap(),
 ) {
   val routesLeads: Boolean get() = routing["lead"] == true
+
+  /** Whether a submission emails the person a confirmation (`formSendsConfirmation`): the stored choice, else on for a quote request. */
+  fun sendsConfirmation(asksForQuote: Boolean = this.asksForQuote): Boolean = confirmationEmail ?: asksForQuote
+
+  /** A field the published design draws can carry an email address (`formFieldsCanYieldAnEmail`). */
+  val hasEmailField: Boolean get() = fields.any { it.type == "email" || it.name.contains("email", ignoreCase = true) }
+
+  val hasFileField: Boolean get() = fields.any { it.type == "file" }
 
   companion object {
     fun from(doc: FirestoreDoc): FormRow {
@@ -110,6 +126,13 @@ data class FormRow(
         lastSubmissionAtMs = stat("lastSubmissionAtMs"),
         updatedAt = doc.data["updatedAt"] as? FirestoreTimestamp,
         campaignCount = (doc.data["campaignIds"] as? List<*>)?.size ?: 0,
+        optInOnSubmit = doc.data["optInOnSubmit"] == true,
+        asksForQuote = (doc.data["request"] as? Map<*, *>)?.get("kind") == "quote",
+        confirmationEmail = doc.data["confirmationEmail"] as? Boolean,
+        periods = (stats?.get("periods") as? Map<*, *>)?.entries?.mapNotNull { (key, value) ->
+          val month = value as? Map<*, *> ?: return@mapNotNull null
+          key.toString() to month.entries.mapNotNull { (k, v) -> (v as? Number)?.let { k.toString() to it.toDouble() } }.toMap()
+        }?.toMap().orEmpty(),
       )
     }
   }
@@ -250,12 +273,32 @@ class FormsApi(private val api: ConsoleApiClient, private val writer: FirestoreW
   }
 
   /** The CRM routing: the lead switch and the consent field together, then the counters recounted. */
-  suspend fun saveRouting(form: FormRow, lead: Boolean, consentFieldName: String?) {
+  suspend fun saveRouting(form: FormRow, lead: Boolean, consentFieldName: String?, optInOnSubmit: Boolean? = null) {
     writer.update(
       path(form.id),
-      mapOf("routing" to form.routing + ("lead" to lead), "consentFieldName" to (consentFieldName ?: "").trim(), "updatedAt" to firestoreNow()),
+      buildMap {
+        put("routing", form.routing + ("lead" to lead))
+        put("consentFieldName", (consentFieldName ?: "").trim())
+        if (optInOnSubmit != null) put("optInOnSubmit", optInOnSubmit)
+        put("updatedAt", firestoreNow())
+      },
     )
     if (lead != form.routesLeads) recount(form.id)
+  }
+
+  /**
+   * What happens after someone sends the form (AGL-4098): whether it asks for a quote, and whether the person is emailed
+   * a confirmation; only what changed is written, as the console's card saves it.
+   */
+  suspend fun saveResponses(form: FormRow, asksForQuote: Boolean?, confirms: Boolean?) {
+    writer.update(
+      path(form.id),
+      buildMap {
+        if (asksForQuote != null) put("request", if (asksForQuote) mapOf("kind" to "quote") else null)
+        if (confirms != null) put("confirmationEmail", confirms)
+        put("updatedAt", firestoreNow())
+      },
+    )
   }
 
   suspend fun recount(formId: String) {
@@ -304,4 +347,84 @@ fun formFirstVersionBody(hostId: String, formId: String, versionId: String) =
   jsonBody("hostId" to hostId, "kind" to "form", "parentId" to formId, "id" to versionId, "seedFromParent" to true)
 
 /** The Besigner page for one version of a form, under the picked site. */
-fun formBesignerPath(formId: String, versionId: String) = "/$FORMS_DOCUMENT_SEGMENT/$formId/versions/$versionId/besigner"
+fun formBesignerPath(formId: String, versionId: String, preview: Boolean = false) =
+  "/$FORMS_DOCUMENT_SEGMENT/$formId/versions/$versionId/${if (preview) "preview" else "besigner"}"
+
+/** One month of a form's history (`FormPeriodPoint`), every counter resolved to a number. */
+data class FormPeriodPoint(val period: String, val views: Double, val starts: Double, val submissions: Double, val leads: Double)
+
+private val FORM_PERIOD_KEY = Regex("^\\d{4}-(0[1-9]|1[0-2])$")
+
+/** The month after `YYYY-MM`, or null for a key that is not one. */
+private fun nextFormPeriod(period: String): String? {
+  val parts = period.split("-")
+  val year = parts.getOrNull(0)?.toIntOrNull() ?: return null
+  val month = parts.getOrNull(1)?.toIntOrNull()?.takeIf { it in 1..12 } ?: return null
+  return if (month == 12) "${year + 1}-01" else "$year-${(month + 1).toString().padStart(2, '0')}"
+}
+
+/**
+ * The form's months from its first recorded one to its last, gaps filled with zeros, the latest [maxPeriods] kept
+ * (`formPeriodSeries`): a month before the counter existed is never drawn as a zero.
+ */
+fun formPeriodSeries(periods: Map<String, Map<String, Double>>, maxPeriods: Int = 12): List<FormPeriodPoint> {
+  val keys = periods.keys.filter { FORM_PERIOD_KEY.matches(it) }.sorted()
+  if (keys.isEmpty()) return emptyList()
+  val series = mutableListOf<FormPeriodPoint>()
+  var cursor: String? = keys.first()
+  var step = 0
+  while (cursor != null && step <= 1200) {
+    val month = periods[cursor].orEmpty()
+    series += FormPeriodPoint(cursor, month["views"] ?: 0.0, month["starts"] ?: 0.0, month["submissions"] ?: 0.0, month["leads"] ?: 0.0)
+    if (cursor == keys.last()) break
+    cursor = nextFormPeriod(cursor)
+    step++
+  }
+  return if (maxPeriods > 0 && series.size > maxPeriods) series.takeLast(maxPeriods) else series
+}
+
+/** The months a rate can be taken over (`formStatsWindow`): only those whose denominator ([over]) was recorded. */
+data class FormStatsWindow(val periods: Int, val over: Double, val of: Double)
+
+fun formStatsWindow(periods: Map<String, Map<String, Double>>, over: String, of: String): FormStatsWindow {
+  var count = 0
+  var total = 0.0
+  var part = 0.0
+  for (month in periods.values) {
+    val denominator = month[over] ?: 0.0
+    if (!denominator.isFinite() || denominator <= 0) continue
+    count++
+    total += denominator
+    val numerator = month[of] ?: 0.0
+    if (numerator.isFinite()) part += numerator
+  }
+  return FormStatsWindow(count, total, part)
+}
+
+/** A rate with what it was taken over (`measuredRate`). */
+data class MeasuredRate(val value: Double, val numerator: Double, val denominator: Double, val denominatorLabel: String) {
+  /** "42.5%" (`percent`). */
+  val percent: String get() = "${kotlin.math.round(value * 1000) / 10}%"
+  /** "17 of 40 views". */
+  val detail: String get() = "${numerator.toLong()} of ${denominator.toLong()} $denominatorLabel"
+}
+
+fun measuredRate(numerator: Double?, denominator: Double?, label: String): MeasuredRate? {
+  if (numerator == null || denominator == null || !numerator.isFinite() || !denominator.isFinite() || denominator <= 0) return null
+  return MeasuredRate(numerator / denominator, numerator, denominator, label)
+}
+
+/** The rates the form's metrics card shows, as the console's `FormMetricsCard` takes them. */
+data class FormRates(val completion: MeasuredRate?, val abandon: MeasuredRate?, val lead: MeasuredRate?) {
+  companion object {
+    fun of(form: FormRow): FormRates {
+      val views = formStatsWindow(form.periods, "views", "submissions")
+      val starts = formStatsWindow(form.periods, "starts", "submissions")
+      return FormRates(
+        completion = if (views.periods > 0) measuredRate(views.of, views.over, "views") else null,
+        abandon = if (starts.periods > 0 && starts.over >= starts.of) measuredRate(starts.over - starts.of, starts.over, "starts") else null,
+        lead = measuredRate(form.leads?.toDouble(), form.submissions?.toDouble(), "submissions"),
+      )
+    }
+  }
+}

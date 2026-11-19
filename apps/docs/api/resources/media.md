@@ -219,7 +219,7 @@ file (about 1.3 MB of base64) is 6 units.
 | `fileName` | string | no | Defaults to `upload`. Truncated at 200 characters. |
 | `folderId` | string | no | Put the file in a folder, by its id. |
 | `alt` | string | no | Alt text. Worth setting — it's the field an accessibility audit reads. |
-| `private` | boolean | no | `true` stores it restricted: no `cdnUrl`, no public link. |
+| `private` | boolean | no | `true` stores it restricted: no `cdnUrl`, no public link. Left out or `false`, the file gets a public link that anyone can open. |
 
 ```bash
 curl -X POST "https://app.aglyn.com/api/v1/media" \
@@ -363,11 +363,12 @@ Prefix the filename with the id: `fileName` is not unique across folders, and a 
 | `400` | `bad_request` | `data` is not valid base64. |
 | `403` | `insufficient_scope` | Key lacks `media:read`, or `media:write` to upload. |
 | `403` | `plan_required` | `code: "storage_quota"` — the upload would cross your storage band. Or the file type needs a higher plan. |
-| `403` | `forbidden` | `code: "video_uploads_paused"` — video uploads are paused on every plan. Nothing is stored. |
+| `403` | `forbidden` | `code: "video_uploads_paused"` — video uploads are paused on every plan. Nothing is stored. `code: "site_permission_required"` — a [connected app](../conventions.md#site-access) uploading to a site's media where its person can't edit the site's content. |
 | `404` | `not_found` | Unknown or unowned site; unknown or deleted file. |
 | `405` | `method_not_allowed` | A method the path doesn't take — `POST` is accepted on the collection, never on `/media/{id}`. |
 | `413` | `payload_too_large` | Past the [ceiling](#upload-limits) for that type. |
 | `415` | `unsupported_media_type` | Content type not on the allowed list. |
+| `423` | — | The site is [locked](../conventions.md#site-access) (site media only). |
 | `451` | `unavailable_for_legal_reasons` | The file matches a taken-down asset. |
 
 Media needs no commerce entitlement — an organization with no store still reads its
