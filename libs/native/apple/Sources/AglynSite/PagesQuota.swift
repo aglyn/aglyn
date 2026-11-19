@@ -33,17 +33,20 @@ public final class PagesQuotaModel {
 
   public init() {}
 
-  /// The plan, once per site, then the count; the count is asked again whenever the list changes.
+  /// The plan, once per site, then the count; the count is asked again whenever the list changes. The site counts as
+  /// read only once its plan has answered: a load the list's next change cancels mid-request must not leave a later
+  /// load thinking the plan is already in hand (on a phone the cached rows give way to the server's at once).
   public func load(api: ConsoleAPIClient, hostID: String) async {
     if planHost != hostID {
-      planHost = hostID
-      ready = false
-      limit = nil
-      if let body = try? await api.request("/api/orgs/entitlements", query: [("hostId", hostID)]) {
+      if planHost != nil {
+        ready = false
+        limit = nil
+        planHost = nil
+      }
+      if let body = try? await api.request("/api/orgs/entitlements", query: [("hostId", hostID)]), !Task.isCancelled {
         limit = pagesQuotaLimit(body)
         ready = true
-      } else {
-        planHost = nil
+        planHost = hostID
       }
     }
     if let body = try? await api.request("/api/hosts/usage", query: [("hostId", hostID)]), !Task.isCancelled {
