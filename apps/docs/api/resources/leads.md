@@ -33,6 +33,9 @@ one per site. So every endpoint here names the site:
   body instead.
 - A missing `siteId`, or one naming a site your organization does not own, is a
   `400 validation_failed` with `fields.siteId`.
+- A [connected app](../conventions.md#site-access) whose person is not a member of
+  the site gets `404` (`"No such site"`), and a locked site answers `423` — a
+  read-only lock lets reads through.
 
 There is no organization-wide list of leads. To read every site's leads, walk your
 [sites](sites.md) and list each one's.

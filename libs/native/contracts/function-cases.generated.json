@@ -7323,6 +7323,136 @@
         }
       ]
     },
+    "computeLifetimePurchaseCents": {
+      "module": "libs/plugins/commerce/src/lib/model/site-member-purchases.ts",
+      "cases": [
+        {
+          "args": [
+            []
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            [
+              {
+                "status": "paid",
+                "totals": {
+                  "totalCents": 2500
+                }
+              }
+            ]
+          ],
+          "result": 2500
+        },
+        {
+          "args": [
+            [
+              {
+                "status": "paid",
+                "totals": {
+                  "totalCents": 2500
+                },
+                "refundedCents": 500
+              },
+              {
+                "status": "fulfilled",
+                "amountCents": 1200
+              }
+            ]
+          ],
+          "result": 3200
+        },
+        {
+          "args": [
+            [
+              {
+                "status": "pending",
+                "totals": {
+                  "totalCents": 9900
+                }
+              },
+              {
+                "status": "cancelled",
+                "totals": {
+                  "totalCents": 4000
+                }
+              },
+              {
+                "status": "refunded",
+                "totals": {
+                  "totalCents": 3000
+                },
+                "refundedCents": 3000
+              }
+            ]
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            [
+              {
+                "status": "paid",
+                "totals": {
+                  "totalCents": 1000
+                },
+                "refundedCents": 1500
+              },
+              {
+                "totals": {
+                  "totalCents": null
+                },
+                "amountCents": "750"
+              }
+            ]
+          ],
+          "result": 750
+        },
+        {
+          "args": [
+            [
+              {
+                "status": "delivered",
+                "totals": {},
+                "amountCents": 400,
+                "refundedCents": -50
+              },
+              {
+                "status": "partially_fulfilled",
+                "totals": {
+                  "totalCents": "abc"
+                }
+              },
+              {
+                "status": null,
+                "totals": {
+                  "totalCents": 1250.5
+                }
+              }
+            ]
+          ],
+          "result": 1650.5
+        },
+        {
+          "args": [
+            [
+              {
+                "status": "paid",
+                "totals": {
+                  "totalCents": 2000
+                },
+                "refundedCents": null,
+                "dispute": {
+                  "reversedCents": 2000
+                }
+              }
+            ]
+          ],
+          "result": 2000
+        }
+      ]
+    },
     "computeQuoteTotals": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-quotes.ts",
       "cases": [
@@ -65212,6 +65342,76 @@
                         "id": "analytics",
                         "label": "Analytics",
                         "screen": "commerce.sales"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/payments",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "payments",
+                        "label": "Payments",
+                        "screen": "commerce.settingsPayments"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/checkout",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "checkout",
+                        "label": "Checkout",
+                        "screen": "commerce.settingsCheckout"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/taxes",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "taxes",
+                        "label": "Taxes",
+                        "screen": "commerce.settingsTaxes"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/shipping",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "shipping",
+                        "label": "Shipping & delivery",
+                        "screen": "commerce.settingsShipping"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/notifications",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "notifications",
+                        "label": "Notifications",
+                        "screen": "commerce.settingsNotifications"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/channels",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "channels",
+                        "label": "Sales channels",
+                        "screen": "commerce.settingsChannels"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/integrations",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "integrations",
+                        "label": "Integrations",
+                        "screen": "commerce.settings"
                       }
                     ]
                   },
@@ -66613,6 +66813,76 @@
                         "id": "analytics",
                         "label": "Analytics",
                         "screen": "commerce.sales"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/payments",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "payments",
+                        "label": "Payments",
+                        "screen": "commerce.settingsPayments"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/checkout",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "checkout",
+                        "label": "Checkout",
+                        "screen": "commerce.settingsCheckout"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/taxes",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "taxes",
+                        "label": "Taxes",
+                        "screen": "commerce.settingsTaxes"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/shipping",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "shipping",
+                        "label": "Shipping & delivery",
+                        "screen": "commerce.settingsShipping"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/notifications",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "notifications",
+                        "label": "Notifications",
+                        "screen": "commerce.settingsNotifications"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/channels",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "channels",
+                        "label": "Sales channels",
+                        "screen": "commerce.settingsChannels"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/integrations",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "integrations",
+                        "label": "Integrations",
+                        "screen": "commerce.settings"
                       }
                     ]
                   },
@@ -67297,6 +67567,76 @@
                         "id": "analytics",
                         "label": "Analytics",
                         "screen": "commerce.sales"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/payments",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "payments",
+                        "label": "Payments",
+                        "screen": "commerce.settingsPayments"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/checkout",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "checkout",
+                        "label": "Checkout",
+                        "screen": "commerce.settingsCheckout"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/taxes",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "taxes",
+                        "label": "Taxes",
+                        "screen": "commerce.settingsTaxes"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/shipping",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "shipping",
+                        "label": "Shipping & delivery",
+                        "screen": "commerce.settingsShipping"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/notifications",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "notifications",
+                        "label": "Notifications",
+                        "screen": "commerce.settingsNotifications"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/channels",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "channels",
+                        "label": "Sales channels",
+                        "screen": "commerce.settingsChannels"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/integrations",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "integrations",
+                        "label": "Integrations",
+                        "screen": "commerce.settings"
                       }
                     ]
                   }

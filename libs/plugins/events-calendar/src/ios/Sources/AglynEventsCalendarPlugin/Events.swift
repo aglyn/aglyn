@@ -169,6 +169,7 @@ struct EventsScreen: View {
   @State private var adding = false
   @State private var notice: (String, AglynTone)?
   @State private var deleting: EventRow?
+  @State private var exporting: TransferExportRequest?
   @Environment(\.horizontalSizeClass) private var sizeClass
 
   private static let newID = "new"
@@ -190,6 +191,31 @@ struct EventsScreen: View {
     .aglynScreenTitle("Events")
     .aglynPrimaryAction(id: "add-event", "Add event", systemImage: "plus") {
       if sizeClass == .compact { adding = true } else { selection = Self.newID }
+    }
+    // The page's Import and Export, in its head: Import for "Manage data", Export for whoever reads the events.
+    .aglynScreenToolbar(id: "events") {
+      AglynSecondaryActions {
+        if canImportEvents(context) {
+          Button {
+            context.navigate(coreDataImportScreen, eventsImportParams(hostID: context.hostID))
+          } label: {
+            Label("Import", systemImage: "square.and.arrow.down")
+          }
+          .accessibilityIdentifier("import-events")
+        }
+        Button {
+          exporting = eventsExportRequest(hostID: context.hostID)
+        } label: {
+          Label("Export", systemImage: "square.and.arrow.up")
+        }
+        .accessibilityIdentifier("export-events")
+      }
+    }
+    .sheet(item: $exporting) { request in
+      TransferExportSheet(context: context, request: request) { done in
+        exporting = nil
+        if let done { notice = (done, .success) }
+      }
     }
     .sheet(isPresented: $adding) { NavigationStack { editor(for: nil) } }
     .onAppear {
@@ -418,6 +444,32 @@ struct EventEditor: View {
     let hour = calendar.dateInterval(of: .hour, for: .now)?.start ?? .now
     return hour.addingTimeInterval(3600)
   }
+}
+
+/// The data transfer hub's import screen (core), which the page's Import opens.
+let coreDataImportScreen = "core.settings.data.import"
+
+/// The transfer resource the page's Import and Export name (`EVENTS_TRANSFER_RESOURCE`).
+let eventsTransferResource = "events"
+
+/// The import screen's parameters for this site's events, as the hub's Events Calendar row names its target.
+func eventsImportParams(hostID: String?) -> NativeParams {
+  var params: NativeParams = ["resource": eventsTransferResource]
+  if let hostID { params["hostId"] = hostID }
+  return params
+}
+
+/// The page's Export: every event of the site (`openExport(target)` names no filter), under the dialog's own title.
+func eventsExportRequest(hostID: String?) -> TransferExportRequest {
+  TransferExportRequest(
+    resource: eventsTransferResource, title: "Export Events", hostID: hostID, scope: ["kind": "all"],
+    fileStem: eventsTransferResource)
+}
+
+/// Who sees Import: "Manage data" on the site (or staff), as the console offers it only to whom the transfer route takes it from.
+@MainActor
+func canImportEvents(_ context: NativePluginContext) -> Bool {
+  context.hostID != nil && (context.can("data.manage") || context.staff != nil)
 }
 
 /// Registers the ids `plugins.config.json` declares under the plugin's

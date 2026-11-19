@@ -48,6 +48,19 @@ export const SITE_SLOGAN_MAX_LENGTH = 120
 /** The most social links a site keeps, as the editor allows them. */
 export const BUSINESS_SOCIAL_LINKS_MAX = 8
 
+/** The longest business name the Business details card accepts (AGL-4235). */
+export const BUSINESS_NAME_MAX_LENGTH = 200
+
+/** The longest phone number the Business details card accepts (AGL-4235). */
+export const BUSINESS_PHONE_MAX_LENGTH = 64
+
+/**
+ * What the Business details card accepts as an email address, as a pattern
+ * source (AGL-4235): something, an `@`, something, a dot, something. Leading
+ * and trailing spaces pass, because the save trims them.
+ */
+export const BUSINESS_EMAIL_PATTERN = '^\\s*[^\\s@]+@[^\\s@]+\\.[^\\s@]+\\s*$'
+
 /**
  * The paths a Setup → Business profile save may take back to EMPTY.
  *
