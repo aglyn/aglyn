@@ -620,6 +620,33 @@ public enum CrmLeadStatus: String, Codable, CaseIterable, Hashable, Sendable {
   }
 }
 
+public struct CrmMergeFieldDefinition: Codable, Hashable, Sendable {
+  public var group: CrmMergeFieldGroup
+  public var key: String
+  public var label: String
+
+  public init(group: CrmMergeFieldGroup, key: String, label: String) {
+    self.group = group
+    self.key = key
+    self.label = label
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum CrmMergeFieldGroup: String, Codable, CaseIterable, Hashable, Sendable {
+  case contact = "Contact"
+  case deal = "Deal"
+  case lead = "Lead"
+  case site = "Site"
+  case you = "You"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct DatasetFieldDefinition: Codable, Hashable, Sendable {
   public var customType: String?
   public var `default`: ContractJSON?
@@ -3660,6 +3687,26 @@ public struct PickupLocationSettings: Codable, Hashable, Sendable {
   }
 }
 
+public struct PinHostResult: Codable, Hashable, Sendable {
+  public var outcome: PinOrgOutcome
+  public var pinnedHosts: [PinnedHost]
+
+  public init(outcome: PinOrgOutcome, pinnedHosts: [PinnedHost]) {
+    self.outcome = outcome
+    self.pinnedHosts = pinnedHosts
+  }
+}
+
+public struct PinnedHost: Codable, Hashable, Sendable {
+  public var hostId: String
+  public var orgId: String
+
+  public init(hostId: String, orgId: String) {
+    self.hostId = hostId
+    self.orgId = orgId
+  }
+}
+
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum PinOrgOutcome: String, Codable, CaseIterable, Hashable, Sendable {
   case alreadyPinned = "alreadyPinned"
@@ -6197,6 +6244,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let bookingStateLabels: [String: String]
   public let bookingWeekdays: [String]
   public let browseSorts: [String: ListQuerySort]
+  public let businessDetailsClearablePathList: [String]
   public let businessProfileFieldOrder: [String]
   public let businessProfileMaxChars: [String: Double]
   public let businessProfileMaxServices: Int
@@ -6204,6 +6252,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let businessProfileSiteDoc: String
   public let businessProfileSubcollection: String
   public let businessProfileWorkspaceDoc: String
+  public let businessSocialLinksMax: Int
   public let businessToneLabels: [String: String]
   public let businessToneOrder: [String]
   public let campaignEmailsQuery: ListQueryDeclaration
@@ -6229,9 +6278,14 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let crmActivityKindNouns: [String: String]
   public let crmEmailBodyMax: Int
   public let crmEmailSubjectMax: Int
+  public let crmEmailTemplateKindLabels: [String: String]
+  public let crmEmailTemplateNameMax: Int
+  public let crmEmailTemplateVisibilityLabels: [String: String]
+  public let crmEmailTemplatesLimit: Int
   public let crmFieldObjectLabels: [String: String]
   public let crmLeadClosedStatuses: [CrmLeadStatus]
   public let crmLeadStatusLabels: [String: String]
+  public let crmMergeFields: [CrmMergeFieldDefinition]
   public let crmReportPeriodLabels: [String: String]
   public let crmTaskKindLabels: [String: String]
   public let crossMaxDepth: Int
@@ -6395,6 +6449,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let phoneHomeSiteGroupLabel: String
   public let phoneHomeTeamLabel: String
   public let phoneHomeWorkspaceGroupLabel: String
+  public let pinnedHostsField: String
+  public let pinnedHostsMax: Int
   public let pinnedOrgsField: String
   public let pinnedOrgsMax: Int
   public let planCardAdvanceMs: Int
@@ -6483,6 +6539,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let siteJourneyKeyMax: Int
   public let siteListDeclaration: ListQueryDeclaration
   public let siteMemberListQuery: ListQueryDeclaration
+  public let siteSloganMaxLength: Int
   public let starColors: [StarColor]
   public let starredField: String
   public let starredMax: Int
@@ -6558,6 +6615,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case bookingStateLabels = "BOOKING_STATE_LABELS"
     case bookingWeekdays = "BOOKING_WEEKDAYS"
     case browseSorts = "BROWSE_SORTS"
+    case businessDetailsClearablePathList = "BUSINESS_DETAILS_CLEARABLE_PATH_LIST"
     case businessProfileFieldOrder = "BUSINESS_PROFILE_FIELD_ORDER"
     case businessProfileMaxChars = "BUSINESS_PROFILE_MAX_CHARS"
     case businessProfileMaxServices = "BUSINESS_PROFILE_MAX_SERVICES"
@@ -6565,6 +6623,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case businessProfileSiteDoc = "BUSINESS_PROFILE_SITE_DOC"
     case businessProfileSubcollection = "BUSINESS_PROFILE_SUBCOLLECTION"
     case businessProfileWorkspaceDoc = "BUSINESS_PROFILE_WORKSPACE_DOC"
+    case businessSocialLinksMax = "BUSINESS_SOCIAL_LINKS_MAX"
     case businessToneLabels = "BUSINESS_TONE_LABELS"
     case businessToneOrder = "BUSINESS_TONE_ORDER"
     case campaignEmailsQuery = "CAMPAIGN_EMAILS_QUERY"
@@ -6590,9 +6649,14 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case crmActivityKindNouns = "CRM_ACTIVITY_KIND_NOUNS"
     case crmEmailBodyMax = "CRM_EMAIL_BODY_MAX"
     case crmEmailSubjectMax = "CRM_EMAIL_SUBJECT_MAX"
+    case crmEmailTemplateKindLabels = "CRM_EMAIL_TEMPLATE_KIND_LABELS"
+    case crmEmailTemplateNameMax = "CRM_EMAIL_TEMPLATE_NAME_MAX"
+    case crmEmailTemplateVisibilityLabels = "CRM_EMAIL_TEMPLATE_VISIBILITY_LABELS"
+    case crmEmailTemplatesLimit = "CRM_EMAIL_TEMPLATES_LIMIT"
     case crmFieldObjectLabels = "CRM_FIELD_OBJECT_LABELS"
     case crmLeadClosedStatuses = "CRM_LEAD_CLOSED_STATUSES"
     case crmLeadStatusLabels = "CRM_LEAD_STATUS_LABELS"
+    case crmMergeFields = "CRM_MERGE_FIELDS"
     case crmReportPeriodLabels = "CRM_REPORT_PERIOD_LABELS"
     case crmTaskKindLabels = "CRM_TASK_KIND_LABELS"
     case crossMaxDepth = "CROSS_MAX_DEPTH"
@@ -6756,6 +6820,8 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case phoneHomeSiteGroupLabel = "PHONE_HOME_SITE_GROUP_LABEL"
     case phoneHomeTeamLabel = "PHONE_HOME_TEAM_LABEL"
     case phoneHomeWorkspaceGroupLabel = "PHONE_HOME_WORKSPACE_GROUP_LABEL"
+    case pinnedHostsField = "PINNED_HOSTS_FIELD"
+    case pinnedHostsMax = "PINNED_HOSTS_MAX"
     case pinnedOrgsField = "PINNED_ORGS_FIELD"
     case pinnedOrgsMax = "PINNED_ORGS_MAX"
     case planCardAdvanceMs = "PLAN_CARD_ADVANCE_MS"
@@ -6844,6 +6910,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case siteJourneyKeyMax = "SITE_JOURNEY_KEY_MAX"
     case siteListDeclaration = "SITE_LIST_DECLARATION"
     case siteMemberListQuery = "SITE_MEMBER_LIST_QUERY"
+    case siteSloganMaxLength = "SITE_SLOGAN_MAX_LENGTH"
     case starColors = "STAR_COLORS"
     case starredField = "STARRED_FIELD"
     case starredMax = "STARRED_MAX"

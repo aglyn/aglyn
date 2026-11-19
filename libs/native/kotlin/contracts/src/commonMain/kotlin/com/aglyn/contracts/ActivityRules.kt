@@ -19,6 +19,8 @@ data class ActivityEntryFields(
   val actorEmailNow: String? = null,
   val apiKeyName: String? = null,
   val staffActorEmail: String? = null,
+  /** A connected app's own name, when a connection wrote the entry (AGL-4225). */
+  val connectedAppName: String? = null,
 ) {
   companion object {
     /** A Firestore activity document's fields. */
@@ -29,6 +31,7 @@ data class ActivityEntryFields(
         type = data["type"] as? String, actorId = data["actorId"] as? String, actorEmail = data["actorEmail"] as? String,
         actorEmailNow = data["actorEmailNow"] as? String, apiKeyName = data["apiKeyName"] as? String,
         staffActorEmail = data["staffActorEmail"] as? String,
+        connectedAppName = data["connectedAppName"] as? String,
       )
     }
   }
@@ -96,6 +99,7 @@ fun activityRowText(entry: ActivityEntryFields): String {
 /** Who did it (`activityActorLabel`): the address recorded, a key, the account, a workflow, or the platform. */
 fun activityActorLabel(entry: ActivityEntryFields): String {
   if (!entry.actorEmail.isNullOrEmpty()) return entry.actorEmail
+  if (!entry.connectedAppName.isNullOrEmpty()) return "Connected app ${entry.connectedAppName}"
   if (!entry.apiKeyName.isNullOrEmpty()) return "API key ${entry.apiKeyName}"
   val actorId = entry.actorId?.trim().orEmpty()
   if (actorId == "api") return "API key"

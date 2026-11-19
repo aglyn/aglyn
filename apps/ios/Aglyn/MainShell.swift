@@ -97,6 +97,8 @@ struct ShellTabs: View {
         WindowReader { window in
           MacWindowControls.attach(window)
           MacWindowFocus.attach(window, strip: strip, model: model)
+          // A link from outside the app opens as a new tab of the window in front (AGL-4059).
+          MacLinkWindows.shared.register(window, strip: strip, model: model)
         })
       // The chrome reaches the window's top edge; the window's own buttons sit in the tab strip. The window has no
       // system toolbar: a screen's actions are in its head, so nothing draws over the chrome.

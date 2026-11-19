@@ -703,3 +703,59 @@ describe('binding every field kind to a property (AGL-2893)', () => {
     updateNodeProps.mockRestore()
   })
 })
+
+/**
+ * An Icon picker inside a repeat can follow a record's icon field (AGL-4190),
+ * outside a component editor too, and says which record field it follows.
+ */
+describe('binding an icon picker to a record field (AGL-4190)', () => {
+  const control = elementPropsComponentMapper[Aglyn.FieldComponentType.ICON_PICKER]
+  const field = {
+    name: 'iconId',
+    label: 'Icon',
+    component: Aglyn.FieldComponentType.ICON_PICKER,
+  }
+  const recordBindings = [
+    { group: 'Dataset item', label: 'Icon', token: '{{item.icon}}' },
+  ]
+
+  it('wraps the picker with the record fields when no component is being edited', () => {
+    const wrapped = withPropertyBinding(field, {
+      declaredComponent: Aglyn.FieldComponentType.ICON_PICKER,
+      componentProps: undefined,
+      recordBindings,
+      control: control as never,
+    }) as Record<string, any>
+    expect(wrapped.component).toBe(PROPERTY_BINDING_FIELD_COMPONENT)
+    expect(wrapped.bindingOptions.map((option: any) => option.token)).toEqual([
+      '{{item.icon}}',
+    ])
+    expect(wrapped.bindingRecordFields).toBe(true)
+  })
+
+  it('leaves the picker alone with neither properties nor record fields', () => {
+    expect(
+      withPropertyBinding(field, {
+        declaredComponent: Aglyn.FieldComponentType.ICON_PICKER,
+        componentProps: undefined,
+        recordBindings: [],
+        control: control as never,
+      }),
+    ).toBe(field)
+  })
+
+  it("describes a record field as each copy's own record", () => {
+    expect(
+      describePropertyBinding({
+        token: '{{item.icon}}',
+        resolved: { label: 'Icon', known: true, group: 'item' } as never,
+      }),
+    ).toEqual({ text: "Each copy shows its own record's Icon.", error: false })
+    expect(
+      describePropertyBinding({
+        token: '{{item.gone}}',
+        resolved: { label: 'gone', known: false, group: 'item' } as never,
+      }).error,
+    ).toBe(true)
+  })
+})

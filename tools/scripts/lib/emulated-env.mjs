@@ -58,11 +58,12 @@ const localKey = (label) => createHash('sha256').update(`aglyn-emulator:${label}
 
 /**
  * The keys an emulated server seals each commerce plugin's connections with,
- * one per plugin, published here on purpose like
- * `LOCAL_PLUGIN_CONNECTIONS_TOKEN_KEY` below. Each plugin answers 404, and its
- * Connected services card stays hidden, until its key is set, so without
- * these no seeded connection (`tools/scripts/seed-native/integrations.mjs`)
- * could be opened on the emulator stack. They seal only emulator data and
+ * and the Email platforms card's (marketing-platforms, which syncs the
+ * store's customers and order events), one per plugin, published here on
+ * purpose like `LOCAL_PLUGIN_CONNECTIONS_TOKEN_KEY` below. Each plugin answers
+ * 404, and its card stays hidden, until its key is set, so without these no
+ * seeded connection (`tools/scripts/seed-native/integrations.mjs`) could be
+ * opened on the emulator stack. They seal only emulator data and
  * reach no service. Beside an emulator they replace whatever an env file or
  * the shell holds; anywhere else the names are set empty.
  */
@@ -72,6 +73,7 @@ export const LOCAL_COMMERCE_TOKEN_KEYS = Object.freeze(
       'COURIERS_TOKEN_KEY',
       'FULFILLMENT_NETWORKS_TOKEN_KEY',
       'INVENTORY_SYNC_TOKEN_KEY',
+      'MARKETING_PLATFORMS_TOKEN_KEY',
       'MARKETPLACES_TOKEN_KEY',
       'POST_PURCHASE_TOKEN_KEY',
       'PRINT_ON_DEMAND_TOKEN_KEY',

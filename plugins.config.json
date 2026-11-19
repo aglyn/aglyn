@@ -1768,10 +1768,10 @@
         "description": "Sales, refunds, fees and payouts posted to QuickBooks Online, Xero, QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books or Wave.",
         "releaseFlag": "release_accounting",
         "releaseFlagDefinition": {
-          "$comment": "OFF by default and the release gate for an env-gated feature: switch it on only for a deployment whose console has an Intuit or Xero app's credentials or a Codat API key, and the accounting token key (the variables are named in libs/plugins/accounting/README.md). The docs guard holds the Connect QuickBooks Online and Connect Xero guides unclaimed while it is off.",
+          "$comment": "Released to every workspace 2026-11-16, once aglyn.com had live Intuit and Xero apps and both ledgers passed a production test of every way a sale is paid. Still the kill switch, globally or for one org by override. A deployment without an Intuit or Xero app's credentials or a Codat API key, or without the accounting token key (named in libs/plugins/accounting/README.md), shows the page with nothing to connect.",
           "label": "Accounting",
-          "description": "QuickBooks Online and Xero sync for commerce, and through Codat QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books and Wave: sales receipts or a daily summary journal, refunds, platform fees and Stripe payouts, with a mapping page and a sync log (AGL-3614, AGL-3636). OFF by default; needs the deployment's Intuit or Xero app credentials or Codat API key, and the accounting token key, on the console.",
-          "defaultEnabled": false,
+          "description": "QuickBooks Online and Xero sync for commerce, and through Codat QuickBooks Desktop, NetSuite, Sage, FreshBooks, Zoho Books and Wave: sales receipts or a daily summary journal, refunds, platform fees and Stripe payouts, with a mapping page and a sync log (AGL-3614, AGL-3636). On for every workspace; needs the deployment's Intuit or Xero app credentials or Codat API key, and the accounting token key, on the console.",
+          "defaultEnabled": true,
           "navTabId": "nav-tab-org-accounting"
         },
         "publishedSiteImpact": "console-only"
@@ -2408,7 +2408,7 @@
         "ios": { "module": "AglynMarketingPlugin", "register": "registerMarketingNative" },
         "android": { "package": "com.aglyn.plugins.marketing", "register": "registerMarketingNative" },
         "contributes": {
-          "screens": ["marketing.overview", "marketing.campaigns", "marketing.conversions", "marketing.overlays", "marketing.experiments"],
+          "screens": ["marketing.overview", "marketing.campaigns", "marketing.conversions", "marketing.overlays", "marketing.experiments", "marketing.staffOrgEmail", "marketing.staffOrgEmailSend"],
           "widgets": ["marketing.last-campaign"],
           "quickActions": ["marketing.open"],
           "deepLinks": ["marketing.page", "marketing.overview-page", "marketing.campaigns-page", "marketing.conversions-page", "marketing.overlays-page", "marketing.experiments-page", "marketing.campaign-page", "marketing.inbox-campaigns-page"]
@@ -2710,7 +2710,10 @@
             "workflows.action",
             "workflows.webhook",
             "workflows.runs",
-            "workflows.org-automation"
+            "workflows.org-automation",
+            "workflows.staffSiteAutomations",
+            "workflows.staffOrgAutomations",
+            "workflows.staffAutomation"
           ],
           "quickActions": [
             "workflows.open"
@@ -2961,6 +2964,9 @@
             "ai.requests",
             "ai.request",
             "ai.orgsSpendColumn",
+            "ai.usageAssistColumn",
+            "ai.usageCreditsColumn",
+            "ai.usageOverageColumn",
             "ai.hostMember",
             "ai.allotment",
             "ai.import.productCopy",
@@ -4578,6 +4584,24 @@
     },
     {
       "id": "domains",
+      "mobile": {
+        "$comment": "Gap sweep Domains row 9, piece 1: the workspace's Domains page natively (every domain the workspace holds, its site, status, renewal and price, and a page per name), from the spec in src/android/screens/domains.screens.json. Buying, transfers, renewal and connect actions, the registrant contact and DNS records are later pieces.",
+        "ios": {
+          "module": "AglynDomainsPlugin",
+          "register": "registerDomainsNative"
+        },
+        "android": {
+          "package": "com.aglyn.plugins.domains",
+          "register": "registerDomainsNative"
+        },
+        "contributes": {
+          "screens": [
+            "domains.list",
+            "domains.domain"
+          ],
+          "deepLinks": ["domains.list.link", "domains.domain.link"]
+        }
+      },
       "package": "@aglyn/plugins-domains",
       "register": {
         "console": "registerDomainsConsole",
@@ -4621,7 +4645,8 @@
           ],
           "slots": [
             "hostDomain",
-            "hostDomainConnect"
+            "hostDomainConnect",
+            "hostVerification"
           ]
         }
       }

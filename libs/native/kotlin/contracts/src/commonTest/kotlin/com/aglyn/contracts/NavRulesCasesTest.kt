@@ -45,6 +45,35 @@ class NavRulesCasesTest {
   private fun nullableString(json: JsonElement): String? = (json as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
 
   @Test
+  fun sitePins() {
+    fun pins(json: JsonElement): List<PinnedHost> = readPinnedHosts(mapOf("pinnedHosts" to plainOf(json)))
+    fun pin(json: JsonElement): PinnedHost {
+      val raw = json.jsonObject
+      return PinnedHost(hostId = (raw["hostId"] as? JsonPrimitive)?.contentOrNull ?: "", orgId = (raw["orgId"] as? JsonPrimitive)?.contentOrNull ?: "")
+    }
+    val list = ListSerializer(PinnedHost.serializer())
+    cases("readPinnedHosts").forEach { (args, result) -> same(result, readPinnedHosts(plainOf(args[0])), list, args.toString()) }
+    cases("workspacePinnedHosts").forEach { (args, result) -> same(result, workspacePinnedHosts(pins(args[0]), text(args[1])), strings, args.toString()) }
+    cases("pinHost").forEach { (args, result) -> same(result, pinHost(pins(args[0]), pin(args[1])), PinHostResult.serializer(), args.toString()) }
+    cases("unpinHost").forEach { (args, result) -> same(result, unpinHost(pins(args[0]), text(args[1])), list, args.toString()) }
+    cases("replacePinnedHost").forEach { (args, result) -> same(result, replacePinnedHost(pins(args[0]), text(args[1]), pin(args[2])), list, args.toString()) }
+  }
+
+  @Test
+  fun sitePinsMakeRoomFromOtherWorkspacesOnly() {
+    val max = Contracts.pinnedHostsMax.toInt()
+    val others = (0 until max).map { PinnedHost(hostId = "o$it", orgId = if (it == 0) "a" else "b") }
+    val made = pinHost(others, PinnedHost(hostId = "new", orgId = "b"))
+    assertEquals(PinOrgOutcome.PINNED, made.outcome)
+    assertEquals(max, made.pinnedHosts.size)
+    assertEquals("o1", made.pinnedHosts.first().hostId)
+    val full = (0 until max).map { PinnedHost(hostId = "h$it", orgId = "a") }
+    val refused = pinHost(full, PinnedHost(hostId = "new", orgId = "a"))
+    assertEquals(PinOrgOutcome.FULL, refused.outcome)
+    assertEquals(full, refused.pinnedHosts)
+  }
+
+  @Test
   fun pins() {
     cases("readPinnedOrgs").forEach { (args, result) -> same(result, readPinnedOrgs(plainOf(args[0])), strings, args.toString()) }
     cases("effectivePinnedOrgs").forEach { (args, result) -> same(result, effectivePinnedOrgs(ids(args[0])), strings, args.toString()) }

@@ -109,6 +109,12 @@ export interface ZapierHookView {
   target: string
   /** The name of the API key that subscribed it: the Zapier connection. */
   keyName: string | null
+  /**
+   * Who subscribed it, in words: `API key Zapier`, or `Connected app Cursor`
+   * for an app a person connected by signing in (AGL-4225). Null on a hook
+   * subscribed before it was recorded, which was always a key.
+   */
+  keyLabel: string | null
   created: string
   lastDeliveryAt: string | null
   lastDeliveryStatus: 'delivered' | 'failed' | null

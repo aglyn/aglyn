@@ -48,6 +48,10 @@ import type { OrgUpgradeProposal } from '@aglyn/aglyn/server'
 import { PLAN_LABELS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 import {
+  inviteSentAtMs,
+  newestInvitesFirst,
+} from '../../../../utils/invite-order'
+import {
   acceptOwnerHandoff,
   buildUpgradeProposal,
   readUpgradeProposalTarget,
@@ -183,6 +187,9 @@ async function handler(request: Request): Promise<Response> {
             orgName: orgSnapshot?.get('name') ?? null,
             orgSlug: orgSnapshot?.get('slug') ?? null,
             role: inviteDoc.get('role') ?? null,
+            // When it was sent (AGL-4047): a person with several waiting is
+            // opened into the newest, so the list answers newest first.
+            createdAtMs: inviteSentAtMs(inviteDoc.get('createdAt')),
             // An owner handoff says so (AGL-3466), so the answer dialog can
             // tell the invitee they are being handed the workspace.
             ...(parseOwnerHandoff(inviteDoc.get('handoff'))
@@ -191,7 +198,10 @@ async function handler(request: Request): Promise<Response> {
           }
         }),
       )
-      return Response.json({ invites }, { status: 200 })
+      return Response.json(
+        { invites: newestInvitesFirst(invites) },
+        { status: 200 },
+      )
     }
     const isStaff = decoded['staff'] === true
     const actor = await resolveOrgMembership(decoded.uid, orgId)

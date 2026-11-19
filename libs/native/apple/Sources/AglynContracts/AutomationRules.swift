@@ -931,7 +931,9 @@ public func runTriggeredByLabel(_ entry: AutomationDocument, brand: String = "Ag
   func value(_ key: String) -> String? { (by?[key] as? String).flatMap { $0.isEmpty ? nil : $0 } }
   switch by?["kind"] as? String {
   case "member": return value("email") ?? value("uid").map { "Account \($0)" } ?? "A member"
-  case "apiKey": return value("apiKeyName").map { "API key \($0)" } ?? "API key"
+  case "apiKey":
+    if let app = value("connectedAppName") { return "Connected app \(app)" }
+    return value("apiKeyName").map { "API key \($0)" } ?? "API key"
   case "visitor": return value("email").map { "Site visitor (\($0))" } ?? "Site visitor"
   case "webhook": return value("name").map { "Inbound webhook \($0)" } ?? "Inbound webhook"
   case "platform": return brand

@@ -111,6 +111,61 @@ async function countOf(query: () => FirebaseFirestore.Query): Promise<number | n
   }
 }
 
+/*
+ * WAITING FOR THE ACQUISITION RECORD.
+ *
+ * The new-account notice is sent from the session mint
+ * (`/api/auth/session`, inside `after()`), which the console fires the moment
+ * Firebase reports the user. The acquisition record is written by a DIFFERENT
+ * request the sign-up page fires at that same moment
+ * (`/api/auth/legal-acceptance` → `recordSignUpAcquisition`), and its
+ * transaction commits a few hundred milliseconds later. Read once, the notice
+ * lost that race for about one Google sign-up in six and told staff "No
+ * acquisition record" for an account whose record landed a moment after —
+ * while the workspace and site notices, sent seconds later, showed it.
+ *
+ * So a missing record is read again on a short backoff before the notice says
+ * there is none. It runs after the response has gone, so nobody waits on it,
+ * and the claim marker already makes the notice once per account. The bound
+ * stays well inside the route's default function lifetime.
+ */
+
+/** How long the new-account notice waits for the sign-up's acquisition write. */
+export const ACQUISITION_WAIT_MS = 8_000
+/** The first re-read's delay; each one doubles, up to the cap. */
+const ACQUISITION_RETRY_FIRST_MS = 250
+const ACQUISITION_RETRY_CAP_MS = 1_000
+
+/** How the wait is paced; the spec passes its own clock. */
+export interface AcquisitionWait {
+  waitMs?: number
+  sleep?: (ms: number) => Promise<void>
+}
+
+const realSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+/**
+ * `users/{uid}`, re-read until it carries an acquisition record or the wait
+ * runs out. Whatever was read last is returned, so a record that never comes
+ * still leaves the name and the rest of the notice intact.
+ */
+async function readUserAwaitingAcquisition(
+  uid: string,
+  { waitMs = ACQUISITION_WAIT_MS, sleep = realSleep }: AcquisitionWait,
+): Promise<Record<string, unknown> | null> {
+  let user = await readDoc('users', uid)
+  let waited = 0
+  let delay = ACQUISITION_RETRY_FIRST_MS
+  while (!user?.[ACCOUNT_ACQUISITION_FIELD] && waited < waitMs) {
+    const step = Math.min(delay, waitMs - waited)
+    await sleep(step)
+    waited += step
+    delay = Math.min(delay * 2, ACQUISITION_RETRY_CAP_MS)
+    user = await readDoc('users', uid)
+  }
+  return user
+}
+
 export interface NewAccountAnnouncement {
   uid: string
   email: string | null
@@ -125,9 +180,12 @@ export interface NewAccountAnnouncement {
  * us: the acquisition record the sign-up wrote on `users/{uid}` (AGL-3289),
  * laid out row by row.
  */
-export async function announceNewAccount(account: NewAccountAnnouncement): Promise<void> {
+export async function announceNewAccount(
+  account: NewAccountAnnouncement,
+  wait: AcquisitionWait = {},
+): Promise<void> {
   try {
-    const user = await readDoc('users', account.uid)
+    const user = await readUserAwaitingAcquisition(account.uid, wait)
     const acquisition = readAccountAcquisition(user?.[ACCOUNT_ACQUISITION_FIELD])
     const name = account.displayName || text(user?.['displayName']) || null
     const details = filled([
@@ -302,6 +360,11 @@ export interface NewSiteAnnouncement {
   /** Who made it: an address for a console session, a label for an API key. */
   createdBy: string | null
   /**
+   * `createdBy` is a NAME a connected app gave itself, not a
+   * person's address, so it is shown as text that no mail client links.
+   */
+  createdByIsName?: boolean
+  /**
    * How it was started: the guided AI start, a starter design, a starter
    * picked from the marketplace (AGL-4049), the API, or a create that was
    * resumed.
@@ -309,6 +372,15 @@ export interface NewSiteAnnouncement {
   start?: 'guided-ai' | 'starter' | 'marketplace-starter' | 'api' | 'resumed'
   /** The style the person chose, by its name (AGL-4049); `null` or absent for none. */
   style?: string | null
+}
+
+/**
+ * `text` with a zero-width space after every `.`, `:`, `/` and `@`, so a mail
+ * client's auto-linker finds no domain, scheme or address in it while a
+ * person reads it unchanged. For a name a third party chose (AGL-4225).
+ */
+export function unlinkable(text: string | null): string | null {
+  return text === null ? null : text.replace(/([.:/@])/g, '$1\u200b')
 }
 
 /**
@@ -323,7 +395,10 @@ export interface NewSiteAnnouncement {
  * platform subdomain. The email's text blocks are linkified when rendered.
  */
 export async function announceNewSite(site: NewSiteAnnouncement): Promise<void> {
-  const { hostId, displayName, subdomain, orgSlug, createdBy, start, style } = site
+  const { hostId, displayName, subdomain, orgSlug, start, style } = site
+  // A name an app or key chose for itself can look like a domain or an
+  // address; staff mail must not turn it into a link (AGL-4225).
+  const createdBy = site.createdByIsName ? unlinkable(site.createdBy) : site.createdBy
   try {
     if (isSignupCanaryOrgSlug(orgSlug) || isSignupCanaryEmail(createdBy)) return
     const liveUrl = `https://${subdomain}.${TENANT_APEX}`

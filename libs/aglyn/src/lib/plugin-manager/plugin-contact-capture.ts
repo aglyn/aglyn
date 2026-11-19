@@ -120,6 +120,8 @@ export interface PluginContactCaptureRequest {
     uid?: string | null
     email?: string | null
     apiKeyName?: string | null
+    /** A connected app's own name, when a connection acted (AGL-4225). */
+    connectedAppName?: string | null
   }
   orgId: string
   /** The site the person was met on: the brand whose form or checkout it was. */

@@ -53,6 +53,13 @@ export interface ApiV1Context {
    * is its name the way an address is a person's.
    */
   keyName: string | null
+  /**
+   * Which kind of credential this is (AGL-4225): an organization's API key,
+   * or an app a person connected by signing in. Absent means an API key, the
+   * only kind there was. What a write is attributed to depends on it — see
+   * {@link apiActorLabel} and {@link apiActorFields}.
+   */
+  credential?: 'api_key' | 'connected_app'
   scopes: ApiScope[]
   org: Partial<AglynOrganization>
   firestore: FirebaseFirestore.Firestore
@@ -65,6 +72,34 @@ export interface ApiV1Context {
    * beyond what is already registered is loaded.
    */
   loadPluginSurfaces?: () => Promise<void>
+}
+
+/** True when the credential is an app a person connected, not an API key. */
+export function isConnectedAppContext(context: Pick<ApiV1Context, 'credential'>): boolean {
+  return context.credential === 'connected_app'
+}
+
+/**
+ * Who a write made with this credential is, in words: `API key Zapier` or
+ * `Connected app Cursor`. The name is the one the organization gave the key,
+ * or the one the app registered under.
+ */
+export function apiActorLabel(context: Pick<ApiV1Context, 'credential' | 'keyName'>): string {
+  const connected = isConnectedAppContext(context)
+  if (!context.keyName) return connected ? 'A connected app' : 'An API key'
+  return connected ? `Connected app ${context.keyName}` : `API key ${context.keyName}`
+}
+
+/**
+ * The field an activity entry names its writer by: `apiKeyName` for a key,
+ * `connectedAppName` for a connection — never one dressed as the other.
+ */
+export function apiActorFields(
+  context: Pick<ApiV1Context, 'credential' | 'keyName'>,
+): { apiKeyName?: string | null; connectedAppName?: string | null } {
+  return isConnectedAppContext(context)
+    ? { connectedAppName: context.keyName }
+    : { apiKeyName: context.keyName }
 }
 
 /** Return a 403 unless the key carries `scope`; otherwise `null` (proceed). */

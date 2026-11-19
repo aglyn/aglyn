@@ -176,7 +176,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#where-the-money-goes': 'Costs on this board are our estimated provider cost at the serving model\'s list rates.',
   },
   billing: {
-    '#api-access': 'The customer REST API is included on Pro and Custom — mint scoped API keys and call the versioned /v1 endpoints from anywhere.',
+    '#api-access': 'The customer REST API is included on Starter, Pro and Custom — mint scoped API keys and call the versioned /v1 endpoints from anywhere.',
     '#billing-address': 'The address Aglyn issues your invoices to, and the address sales tax on your Aglyn subscription is calculated from.',
     '#billing-address-on-profile': 'Settings → Profile shows your billing address read-only, beside the workspace\'s other details; change it on Billing → Settings.',
     '#billing-email': 'Invoices are sent to the billing email, along with receipts and — the one that matters most — the notices we send when a card fails and a subscription is about to lapse.',
@@ -184,6 +184,7 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#billing-link': 'A billing link in an email from Aglyn — a failed-payment notice, say — opens the Billing page of your workspace, asking you to sign in first if you need to.',
     '#billing-page': 'Organization → Billing is where your workspace\'s plan, usage, invoices and billing details live, in four tabs: Plan, Usage, Invoices and Settings.',
     '#campaign-sending-pace': 'Campaign emails (this hour, organization) shows how many campaign emails your workspace has sent this hour against the most it may send in an hour, so a very large send is spread out rather than refused.',
+    '#connected-apps': 'Connected apps lists every app that was connected to the workspace by signing in instead of with an API key, such as an AI assistant.',
     '#crm-records': 'Your CRM — the contacts captured from forms, member sign-ups, buyers and bookings, and the companies and deals your team files beside them — is priced as one CRM records band, not a hard cap.',
     '#current-plan': 'The Current plan card at the top of the Plan tab names your plan, the state of its subscription and its price, with the plan\'s headline limits — sites, team seats and campaign emails a month — beside it.',
     '#if-you-would-rather-uploads-stopped': 'Set a monthly storage cap on the Storage cap card under Billing → Usage when you would rather new uploads stopped than pay for extra storage past a figure you choose.',
@@ -224,6 +225,9 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#review-moderation': 'The Review moderation card, in the products hub\'s Promotions section, lists your reviews so you can publish, hide and reply to them.',
     '#review-settings': 'The Reviews card on Products → Promotions decides who can review your products and when customers are asked for a review.',
     '#subscriptions-list': 'Products → Subscriptions lists every subscription on the site, newest first.',
+  },
+  chatgptVerification: {
+    '#chatgpt': 'ChatGPT lists businesses, and the owner of a business can claim its listing to keep its details right.',
   },
   commerce: {
     '#commerce-analytics': 'The Commerce analytics card, in the Analytics section of the products hub, shows the last 30 days of revenue, orders and average order value, a 14-day revenue trend and your top products.',
@@ -698,6 +702,9 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
     '#success-manager': 'Name the success manager an organization is promised: enter their Name and Email and Save.',
     '#suppressed-numbers': 'Suppressed numbers lists every record, most recently changed first, a page at a time, and its heading counts every number currently suppressed across the whole list, not only the page on screen.',
     '#system-emails': 'The mail Aglyn itself sends: organization invites, the monthly usage summary, the email copy of console notifications, staff alerts, workspace notices, the CRM digest and task reminders, the weekly insights digest,…',
+    '#usage-level-account': 'The Usage level card on an account\'s staff page records how much that person uses Aglyn.',
+    '#usage-level-organization': 'The Usage level card on an organization\'s staff page records how much that workspace uses Aglyn.',
+    '#usage-level-site': 'The Usage level card on a site\'s staff page records how much that site is used.',
     '#user-activity': 'The console actions this account took itself, across every organization and site, newest first — as distinct from the staff actions taken on it.',
     '#user-audit-trail': 'On the detail page, Recent audit trail (what was done by or to the account) and Data access by staff (who only looked at its data) each page through the account\'s whole audit trail, newest first.',
     '#user-data-access': 'Data access by staff lists each time a staff member opened this account\'s private data without changing it — reading a sent email, for one.',

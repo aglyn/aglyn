@@ -31,6 +31,12 @@ struct SitesScreen: View {
   @State private var selection: String?
   @State private var searchText = ""
   @State private var creating = false
+  /// A pin past the account-wide bound, waiting on "Pinned is full. Replace one?".
+  @State private var pinning: PendingSitePin?
+  /// The Created filter's sheet is open.
+  @State private var choosingCreated = false
+  /// The workspace's plan and its site cap (`/api/orgs/entitlements`), for "6 of 10 sites · Pro plan".
+  @State private var allowancePlan: SiteAllowancePlan?
   @Environment(\.aglynWideChrome) private var wide
   @Environment(\.openURL) private var openURL
 
@@ -54,6 +60,30 @@ struct SitesScreen: View {
           if startNew { creating = true }
           model.start(context.firestore, uid: context.uid, orgID: orgID)
         }
+        .task(id: pinned) { model.watchPinned(pinned) }
+        .sheet(item: $pinning) { pending in
+          SitePinnedFullSheet(
+            pending: pending, pins: pinned.map { SitePinChoice(id: $0, name: siteName($0)) },
+            onReplace: { replacing in
+              context.preferences?.replaceHostPin(replacing, with: pending.id, orgID: orgID)
+              pinning = nil
+            },
+            onClose: { pinning = nil })
+        }
+        .sheet(isPresented: $choosingCreated) {
+          SiteCreatedFilterSheet(current: model.created) { picked in
+            model.created = picked
+            choosingCreated = false
+          } onCancel: {
+            choosingCreated = false
+          }
+        }
+        .task(id: orgID) {
+          allowancePlan = nil
+          if let body = try? await context.api.request("/api/orgs/entitlements", query: [("orgId", orgID)]) {
+            allowancePlan = SiteAllowancePlan(body)
+          }
+        }
       } else {
         AglynEmptyState("Pick a workspace first", systemImage: "square.stack.3d.up")
       }
@@ -61,11 +91,17 @@ struct SitesScreen: View {
     .navigationTitle("Sites")
     .aglynScreenTitle("Sites")
     .aglynSearchable(text: $searchText, prompt: "Search sites") {
-      AglynFilterMenu(active: model.domain == .all ? nil : model.domain.label) {
+      AglynFilterMenu(active: activeFilter) {
         Picker("Sites", selection: Binding(get: { model.domain }, set: { model.domain = $0 })) {
           ForEach(SiteDomainFilter.allCases, id: \.self) { Text($0.label).tag($0) }
         }
         .pickerStyle(.inline)
+        // The console's Created range (`SITE_FILTER_FIELDS`): one condition and one day.
+        Button(model.created == nil ? "Created…" : "Change Created…", systemImage: "calendar") { choosingCreated = true }
+          .accessibilityIdentifier("sites-filter-created")
+        if model.created != nil {
+          Button("Clear Created", systemImage: "xmark") { model.created = nil }
+        }
       }
     }
     .task(id: searchText) {
@@ -78,13 +114,73 @@ struct SitesScreen: View {
     .onDisappear { model.stop() }
   }
 
+  /// The workspace's pinned sites, in the order pinned (`users/{uid}.pinnedHosts`).
+  private var pinned: [String] { context.orgID.flatMap { context.preferences?.pinnedHosts(in: $0) } ?? [] }
+
+  /// The Filter control reads as on with the filter's name, or how many are on.
+  private var activeFilter: String? {
+    let on = [model.domain == .all ? nil : model.domain.label, model.created?.label].compactMap { $0 }
+    return on.count > 1 ? "\(on.count) filters" : on.first
+  }
+
+  /// A site's name for the replace question: the list's row, else the workspace's sites, else a site gone from reach.
+  private func siteName(_ id: String) -> String {
+    if case .ready(let rows) = model.rows, let row = rows.first(where: { $0.id == id }) { return row.name }
+    if let row = model.pinnedRows.first(where: { $0.id == id }) { return row.name }
+    return context.sites.first { $0.id == id }?.name ?? "A site you can no longer open"
+  }
+
+  /// Pins or unpins a site (the console's pin on a site card); past the account-wide bound, asks which pin to replace.
+  private func togglePin(_ row: SiteRow) {
+    guard let orgID = context.orgID, let preferences = context.preferences else { return }
+    if preferences.toggleHostPin(row.id, orgID: orgID) == .full { pinning = PendingSitePin(id: row.id, name: row.name) }
+  }
+
+  /// The list has answered, so the count is a measurement and not a placeholder.
+  private var listRead: Bool {
+    if case .ready = model.rows { return true }
+    return false
+  }
+
+  /// `6 of 10 sites · Pro plan` beside Create site (the console's AGL-2166 readout): the sites this person can open in the
+  /// workspace against the plan's cap, once both are read.
+  private var allowance: String? {
+    describeSiteAllowance(
+      used: context.sites.count, limit: allowancePlan?.hostLimit, planLabel: allowancePlan?.planLabel,
+      ready: allowancePlan != nil && listRead)
+  }
+
   private func list(selectable: Bool) -> some View {
     VStack(spacing: 0) {
+      // The one-time product-updates ask (AGL-3185), where the console puts it: over the Sites list.
+      ProductUpdatesAsk(context: context)
+      if let allowance {
+        HStack {
+          Spacer(minLength: 0)
+          Text(allowance).font(AglynFont.subheadline).foregroundStyle(AglynColor.secondaryText)
+            .accessibilityIdentifier("sites-allowance")
+        }
+        .padding(.horizontal, AglynContentInsets.horizontal)
+        .padding(.bottom, AglynSpace.half)
+      }
       // On a phone the filter chips sit over the list; the Mac and iPad keep them in the list toolbar's Filter.
       if !wide {
         AglynChipRow(
           SiteDomainFilter.allCases.map { AglynChipOption($0.rawValue, $0.label) }, selected: model.domain.rawValue
         ) { model.domain = SiteDomainFilter(rawValue: $0) ?? .all }
+      }
+      if let created = model.created {
+        // A filter that is on, as a chip under the toolbar (Calm rule 3); × turns it off.
+        HStack {
+          AglynFilterChip(created.label) { model.created = nil }.accessibilityIdentifier("sites-created-chip")
+          Spacer(minLength: 0)
+        }
+        .padding(.horizontal, AglynContentInsets.horizontal)
+        .padding(.vertical, AglynSpace.half)
+      }
+      ForEach(Array(model.refused.enumerated()), id: \.offset) { _, refusal in
+        AglynNotice("That filter was not applied: \(refusal.reason).", tone: .warning)
+          .padding(.horizontal, AglynContentInsets.horizontal)
       }
       content(selectable: selectable)
     }
@@ -101,14 +197,16 @@ struct SitesScreen: View {
         Button("Try again") { model.refresh() }
       }
     case .ready(let rows) where rows.isEmpty:
-      let filtered = !model.search.isEmpty || model.domain != .all
+      let filtered = model.filtering
       AglynEmptyState(
         filtered ? "No sites match" : "No sites yet", systemImage: SiteSymbols.site,
         message: filtered ? "Try another search or filter." : "Create a site to start building."
       ) {
         if !filtered && canCreate { Button("Create site") { creating = true }.buttonStyle(.aglynProminent) }
       }
-    case .ready(let rows):
+    case .ready(let queried):
+      let pinnedIDs = pinned
+      let rows = sitesShown(queried, pinned: pinnedIDs, pinnedRows: model.pinnedRows, filtering: model.filtering)
       if selectable {
         List {
           ForEach(rows) { row in
@@ -131,21 +229,37 @@ struct SitesScreen: View {
       } else {
         List {
           ForEach(rows) { row in
-            // Clicking a site opens it: the sidebar drills into its scope (no separate "work on this site" step).
-            Button {
-              context.selectSite(row.id)
-            } label: {
-              HStack(spacing: 8) {
-                SiteListRow(context: context, row: row)
-                Image(systemName: "chevron.forward").font(.system(size: 12, weight: .semibold))
-                  .foregroundStyle(AglynColor.textTertiary).frame(width: 16, height: 16)
+            let isPinned = pinnedIDs.contains(row.id)
+            HStack(spacing: 8) {
+              // Clicking a site opens it: the sidebar drills into its scope (no separate "work on this site" step).
+              Button {
+                context.selectSite(row.id)
+              } label: {
+                SiteListRow(context: context, row: row).contentShape(Rectangle())
               }
-              .contentShape(Rectangle())
+              .buttonStyle(.aglynRow)
+              .accessibilityIdentifier("site-\(row.id)")
+              // The pin beside the status, as on the console's site card: a pinned site leads the list.
+              if context.preferences != nil, let orgID = context.orgID {
+                SitePinButton(
+                  name: row.name, pinned: isPinned,
+                  full: context.preferences?.hostPinsFull(in: orgID) == true
+                ) { togglePin(row) }
+                .accessibilityIdentifier("site-pin-\(row.id)")
+              }
+              Image(systemName: "chevron.forward").font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AglynColor.textTertiary).frame(width: 16, height: 16)
+                .contentShape(Rectangle())
+                .onTapGesture { context.selectSite(row.id) }
+                .accessibilityHidden(true)
             }
-            .buttonStyle(.aglynRow)
             // On the content edges, the favicon on E and the chevron on width − E, a hairline between rows (Figma 13:3).
             .aglynContentRow(separator: row.id != rows.last?.id || model.hasMore)
-            .accessibilityIdentifier("site-\(row.id)")
+            .contextMenu {
+              if context.preferences != nil {
+                Button(isPinned ? "Unpin" : "Pin to top", systemImage: isPinned ? "pin.slash" : "pin") { togglePin(row) }
+              }
+            }
           }
           if model.hasMore { AglynLoadMoreRow("Show more sites") { model.loadMore() } }
         }
@@ -157,6 +271,117 @@ struct SitesScreen: View {
         .accessibilityIdentifier("sites-list")
       }
     }
+  }
+}
+
+/// A site waiting on "Pinned is full. Replace one?".
+struct PendingSitePin: Identifiable, Equatable {
+  let id: String
+  let name: String
+}
+
+/// The pin on a site row (the console's pin on a site card, `mdiPin` / `mdiPinOutline`): filled in the accent when the
+/// site is pinned, an outline otherwise.
+struct SitePinButton: View {
+  let name: String
+  let pinned: Bool
+  /// Every pin the account keeps is in this workspace, so a pin asks which to replace.
+  let full: Bool
+  let toggle: () -> Void
+
+  var body: some View {
+    Button(action: toggle) {
+      Image(systemName: pinned ? "pin.fill" : "pin")
+        .font(.system(size: 13, weight: .medium))
+        .foregroundStyle(pinned ? AglynColor.tint : AglynColor.secondaryText)
+        .frame(width: 28, height: 28)
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.borderless)
+    .help(pinned ? "Unpin" : full ? "Pinned is full: pick one to replace" : "Pin to top")
+    .accessibilityLabel(pinned ? "Unpin \(name)" : "Pin \(name)")
+    .accessibilityAddTraits(pinned ? .isSelected : [])
+  }
+}
+
+/// "Pinned is full. Replace one?" for a site (the console's `PinnedFullDialog`, kind site): asked only at the
+/// account-wide bound. Each pin of the workspace has its Replace; Keep my pins changes nothing.
+/// One pin the replace question offers.
+struct SitePinChoice: Identifiable, Equatable {
+  let id: String
+  let name: String
+}
+
+struct SitePinnedFullSheet: View {
+  let pending: PendingSitePin
+  let pins: [SitePinChoice]
+  let onReplace: (String) -> Void
+  let onClose: () -> Void
+
+  var body: some View {
+    NavigationStack {
+      Form {
+        Section {
+          Text(
+            "You can pin up to \(ContractValues.shared.pinnedHostsMax) sites. Pick the one \(pending.name) takes the place of."
+          )
+          .foregroundStyle(.secondary)
+        }
+        Section {
+          ForEach(pins) { pin in
+            HStack {
+              Text(pin.name).frame(maxWidth: .infinity, alignment: .leading)
+              Button("Replace") { onReplace(pin.id) }
+                .buttonStyle(.aglynSecondary)
+                .controlSize(.small)
+                .accessibilityLabel("Replace \(pin.name)")
+                .accessibilityIdentifier("replace-site-pin-\(pin.id)")
+            }
+          }
+        }
+      }
+      .formStyle(.grouped)
+      .navigationTitle("Pinned is full. Replace one?")
+      #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+      #endif
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) { Button("Keep my pins", action: onClose) }
+      }
+    }
+    .aglynSheetMinimumSize(width: 440, height: 420)
+  }
+}
+
+/// The Created filter (the console's Filters panel on the Sites cards): a condition the declaration offers and a day.
+struct SiteCreatedFilterSheet: View {
+  let onApply: (SiteCreatedFilter) -> Void
+  let onCancel: () -> Void
+  @State private var op: String
+  @State private var day: String
+
+  init(current: SiteCreatedFilter?, onApply: @escaping (SiteCreatedFilter) -> Void, onCancel: @escaping () -> Void) {
+    self.onApply = onApply
+    self.onCancel = onCancel
+    _op = State(initialValue: current?.op ?? SiteCreatedFilter.operators.first ?? "is")
+    _day = State(initialValue: current?.day ?? "")
+  }
+
+  var body: some View {
+    AglynActionSheet(
+      ContractValues.shared.siteFilterHeaders["createdAt"] ?? "Created", confirmLabel: "Apply",
+      confirmEnabled: day.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil, busy: false, error: nil,
+      onCancel: onCancel
+    ) {
+      onApply(SiteCreatedFilter(op: op, day: day))
+    } fields: {
+      Picker("Condition", selection: $op) {
+        ForEach(SiteCreatedFilter.operators, id: \.self) { Text(listFilterOperatorLabel($0)).tag($0) }
+      }
+      .accessibilityIdentifier("sites-created-op")
+      FieldEditor(spec: FieldSpec("createdDay", "Date", kind: .date), value: $day)
+    }
+    .presentationDetents([.medium])
   }
 }
 
@@ -292,7 +517,9 @@ struct SiteOverview: View {
         }
         if let domain, let url = URL(string: "https://\(domain)/") {
           Button {
-            openURL(url)
+            // In preview or maintenance the site is entered as the team (the console's `SiteVisitButton`, AGL-4086).
+            let (team, api, open) = (SiteVisit.entersAsTeam(doc.data), context.api, openURL)
+            Task { open(await SiteVisit.url(entersAsTeam: team, hostID: hostID, address: url, api: api)) }
           } label: {
             Label("Visit site", systemImage: "arrow.up.right.square")
           }
@@ -368,6 +595,9 @@ struct CreateSiteSheet: View {
   /// The words the picker asks with, once the typing has settled.
   @State private var settledSearch = ""
   @State private var pick: SiteStarterSummary?
+  /// "Start in preview" (AGL-4086): only the team sees the site until it is made public. Off for a starter site, as the
+  /// console's default (`sitePreviewStartsOn`).
+  @State private var startInPreview = sitePreviewStartsOn("starter")
 
   private var usingStarters: Bool { startersOffered == true && pickerShown != false }
 
@@ -483,6 +713,10 @@ struct CreateSiteSheet: View {
       }
       if !subdomain.isEmpty && !isValidSubdomain(subdomain) {
         Text("3 to 30 letters, numbers or hyphens.").font(AglynFont.caption).foregroundStyle(AglynColor.error)
+      }
+      VStack(alignment: .leading, spacing: AglynSpace.half) {
+        Toggle("Start in preview", isOn: $startInPreview).disabled(runner.busy).accessibilityIdentifier("site-start-in-preview")
+        Text(startInPreviewCaption(startInPreview)).font(AglynFont.caption).foregroundStyle(AglynColor.secondaryText)
       }
       if !suggestions.isEmpty {
         VStack(alignment: .leading, spacing: AglynSpace.one) {
@@ -677,9 +911,9 @@ struct CreateSiteSheet: View {
       guard let style else { return }
       start = .style(style)
     }
-    let (name, subdomain, files) = (name, subdomain, brandFiles)
+    let (name, subdomain, files, preview) = (name, subdomain, brandFiles, startInPreview)
     runner.run {
-      switch try await createSite(context.api, orgID: orgID, name: name, subdomain: subdomain, start: start) {
+      switch try await createSite(context.api, orgID: orgID, name: name, subdomain: subdomain, start: start, preview: preview) {
       case .created(let hostID, _):
         // The logo, dark logo and favicon go in now the site has a library. A file that does not make it never costs
         // the site: it is said once, here, before the site opens.

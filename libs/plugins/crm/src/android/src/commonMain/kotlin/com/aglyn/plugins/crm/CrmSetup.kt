@@ -247,7 +247,7 @@ fun FieldsSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, re
 
 /** The CRM's settings, from the org document's `crm` map. */
 @Composable
-fun SettingsSection(context: NativePluginContext, scope: CrmScope, reference: CrmReference) {
+fun SettingsSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, reference: CrmReference) {
   val coroutines = rememberCoroutineScope()
   val crm = scope.org["crm"] as? Map<*, *> ?: emptyMap<String, Any?>()
   var error by remember { mutableStateOf<String?>(null) }
@@ -303,6 +303,8 @@ fun SettingsSection(context: NativePluginContext, scope: CrmScope, reference: Cr
           )
         }
       }
+      // Templates are every CRM editor's, not a setting of the workspace's (`email-templates-card.tsx`).
+      CrmTemplatesCard(context, scope, api)
     }
   }
 }

@@ -52,4 +52,13 @@ public struct TokenClaims: Equatable, Sendable {
 
   /// Whether the account's email address is confirmed (`email_verified`).
   public var emailVerified: Bool { values["email_verified"] == .bool(true) }
+
+  /// Whose token it is (`user_id`, else `sub`); nil when it names no one.
+  public var subject: String? { values["user_id"]?.stringValue ?? values["sub"]?.stringValue }
+}
+
+/// Whether claims read off a token are `uid`'s: a token that names someone else is not theirs; one that names no one
+/// (unreadable) is not refused.
+public func currentClaimsBelong(_ claims: TokenClaims, to uid: String) -> Bool {
+  claims.subject.map { $0 == uid } ?? true
 }

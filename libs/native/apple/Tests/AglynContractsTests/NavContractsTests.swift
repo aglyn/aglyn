@@ -81,6 +81,49 @@ final class NavContractsTests: XCTestCase {
     }
   }
 
+  /// Site pins (AGL-4005, AGL-4165): as many a workspace as the person likes, one account-wide bound, never dropped quietly.
+  func testSitePinsReadPinAndReplaceAsTheConsoleDoes() throws {
+    func pins(_ value: Any) -> [PinnedHost] { readPinnedHosts(["pinnedHosts": value]) }
+    func pin(_ value: Any) -> PinnedHost {
+      let raw = value as? [String: Any] ?? [:]
+      return PinnedHost(hostId: raw["hostId"] as? String ?? "", orgId: raw["orgId"] as? String ?? "")
+    }
+    for item in cases("readPinnedHosts") {
+      XCTAssertEqual(readPinnedHosts(profile(item.args[0])), try decode([PinnedHost].self, item.result), item.label)
+    }
+    for item in cases("workspacePinnedHosts") {
+      XCTAssertEqual(
+        workspacePinnedHosts(pins(item.args[0]), orgID: item.args[1] as? String ?? ""), strings(item.result), item.label)
+    }
+    for item in cases("pinHost") {
+      XCTAssertEqual(pinHost(pins(item.args[0]), pin(item.args[1])), try decode(PinHostResult.self, item.result), item.label)
+    }
+    for item in cases("unpinHost") {
+      XCTAssertEqual(
+        unpinHost(pins(item.args[0]), item.args[1] as? String ?? ""), try decode([PinnedHost].self, item.result), item.label)
+    }
+    for item in cases("replacePinnedHost") {
+      XCTAssertEqual(
+        replacePinnedHost(pins(item.args[0]), replacing: item.args[1] as? String ?? "", with: pin(item.args[2])),
+        try decode([PinnedHost].self, item.result), item.label)
+    }
+  }
+
+  /// Past the account-wide bound the oldest pins of other workspaces give way; a workspace holding every pin is full.
+  func testSitePinsMakeRoomFromOtherWorkspacesOnly() {
+    let max = ContractValues.shared.pinnedHostsMax
+    let others = (0..<max).map { PinnedHost(hostId: "o\($0)", orgId: $0 == 0 ? "a" : "b") }
+    let made = pinHost(others, PinnedHost(hostId: "new", orgId: "b"))
+    XCTAssertEqual(made.outcome, .pinned)
+    XCTAssertEqual(made.pinnedHosts.count, max)
+    XCTAssertEqual(made.pinnedHosts.first?.hostId, "o1", "workspace a's pin gave way")
+    XCTAssertEqual(made.pinnedHosts.last?.hostId, "new")
+    let full = (0..<max).map { PinnedHost(hostId: "h\($0)", orgId: "a") }
+    let refused = pinHost(full, PinnedHost(hostId: "new", orgId: "a"))
+    XCTAssertEqual(refused.outcome, .full)
+    XCTAssertEqual(refused.pinnedHosts, full)
+  }
+
   /// The phone's tab bar (AGL-4006): pins per scope, the first-opened default, and where Create goes.
   func testThePhoneTabBarPinsAsTheConsoleRulesSay() throws {
     func bars(_ value: Any) -> [TabBarPins] { readTabBars(["tabBars": value]) }

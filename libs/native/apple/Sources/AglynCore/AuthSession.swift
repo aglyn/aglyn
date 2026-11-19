@@ -26,10 +26,15 @@ public struct AglynUser: Equatable, Sendable {
     self.photoURL = photoURL
   }
 
-  /// The same person with what a fresh token says about the address and the picture.
+  /// The same person with what a fresh token says about the address and the picture, and the token's `name` when no
+  /// display name is known yet. A REST sign-in reads the name off the answer, and an answer can come without one (the
+  /// Auth emulator's `signInWithPassword` never sends it) while the account has one, which the console's SDK reads off
+  /// the account. Without this the account menu showed the email where the console shows the name (AGL-4010).
   func fromToken(_ claims: TokenClaims) -> AglynUser {
     AglynUser(
-      uid: uid, email: email, displayName: displayName, emailVerified: claims.emailVerified,
+      uid: uid, email: email,
+      displayName: displayName ?? claims.values["name"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 },
+      emailVerified: claims.emailVerified,
       photoURL: claims.values["picture"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 } ?? photoURL)
   }
 }
@@ -775,11 +780,20 @@ public final class AuthSession {
 
   /// Reads the staff standing from the current ID token's claims.
   public func refreshStanding() async {
-    guard user != nil, let token = try? await idToken(forceRefresh: false) else {
-      staff = nil
-      return
-    }
-    staff = idTokenClaims(token).flatMap(StaffStanding.from(claims:))
+    guard let claims = await currentClaims(forceRefresh: false) else { return }
+    staff = StaffStanding.from(
+      claims: claims.values.compactMapValues { $0.boolValue.map { $0 as Any } ?? $0.stringValue.map { $0 as Any } })
+  }
+
+  /// The claims of the person in use, read off their own ID token as the console's `getIdTokenResult().claims` are
+  /// (AGL-3667); empty when no one is signed in. Nil when the answer is not theirs: the person in use changed while it
+  /// was read (an added account restored at launch, a switch, a sign-in), or the token names someone else. The read the
+  /// change started applies its own, so a late answer for the person before never lands over it.
+  public func currentClaims(forceRefresh: Bool) async -> TokenClaims? {
+    guard let uid = user?.uid else { return TokenClaims() }
+    let claims = TokenClaims(idToken: try? await idToken(forceRefresh: forceRefresh))
+    guard user?.uid == uid, currentClaimsBelong(claims, to: uid) else { return nil }
+    return claims
   }
 
   /// The current ID token; nil when signed out.

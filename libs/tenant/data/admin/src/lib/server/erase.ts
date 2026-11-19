@@ -37,6 +37,7 @@ import {
 } from './account-addresses'
 import { EMAIL_IDENTITY_INDEX_COLLECTION } from './account-emails'
 import { removeOrgMember } from './organizations'
+import { CONNECTOR_ORG_KEYED_COLLECTIONS } from './connector-oauth-store'
 import {
   runPluginUserErasers,
   type PluginUserErasureReport,
@@ -666,6 +667,22 @@ async function eraseOrgApiKeys(orgId: string, dryRun = false): Promise<number> {
 }
 
 /**
+ * Delete every connector credential naming the org (AGL-4225): its
+ * connections, unredeemed codes, and access and refresh tokens. Top-level and
+ * keyed by `orgId` as a field, for the same reason `apiKeys` is, so the
+ * cascade cannot see them. Deleting the connection alone would already stop
+ * every token (each check reads it), but a token row is still a record that
+ * names the workspace and a person, so all of it goes.
+ */
+async function eraseOrgConnectorCredentials(orgId: string, dryRun = false): Promise<number> {
+  let erased = 0
+  for (const name of CONNECTOR_ORG_KEYED_COLLECTIONS) {
+    erased += await deleteDocsByOrgId(name, orgId, dryRun)
+  }
+  return erased
+}
+
+/**
  * Sweep every top-level plugin collection keyed by this org (AGL-3080).
  *
  * The collections are the plugins' own, DECLARED by each owner in
@@ -1196,6 +1213,8 @@ export interface EraseOrgResult {
   members?: number
   /** API credentials destroyed (AGL-1444) — outside the org path. */
   apiKeys?: number
+  /** Connector connections, codes and tokens destroyed (AGL-4225) — outside the org path. */
+  connectorCredentials?: number
   /**
    * What each plugin's workspace eraser did (AGL-2978), keyed by plugin id:
    * counts and flags, such as grants revoked at a provider. The erasers run
@@ -1497,6 +1516,7 @@ export async function eraseOrg(
     // pass the org gate and reach a half-deleted workspace. Revoking first
     // closes that window as well as the permanent one.
     progress.apiKeys = await eraseOrgApiKeys(orgId, dryRun)
+    progress.connectorCredentials = await eraseOrgConnectorCredentials(orgId, dryRun)
     // The plugins' top-level collections keyed by this org (AGL-3080) — a
     // connected mailbox's OAuth grant, a sequence email's tracking links.
     // Declared by the owning plugin and swept HERE, statically, not by its
@@ -2035,6 +2055,16 @@ export async function eraseUser(uid: string): Promise<EraseUserResult> {
   for (const candidate of candidates) {
     await removeOrgMember(candidate.orgId, uid).catch((error) => {
       console.error(`eraseUser: membership cleanup failed for ${candidate.orgId}`, error)
+    })
+  }
+
+  // The apps they connected (AGL-4225). With the memberships gone every one
+  // is already dead — each call checks the person still belongs — but a
+  // connection carries their address and every row names their uid, in
+  // top-level collections no recursive delete on this path reaches.
+  for (const name of CONNECTOR_ORG_KEYED_COLLECTIONS) {
+    await deleteDocsByOrgId(name, uid, false, 'uid').catch((error) => {
+      console.error(`eraseUser: connector cleanup failed for ${name}`, error)
     })
   }
 

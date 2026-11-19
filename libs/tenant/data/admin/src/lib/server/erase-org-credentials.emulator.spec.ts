@@ -104,6 +104,9 @@ jest.mock('firebase-admin/storage', () => ({
 
 const describeEmulated = EMULATED ? describe : describe.skip
 
+/** Connector sign-in's org-keyed collections (AGL-4225), one row each per org. */
+const CONNECTOR_ROWS = ['oauthGrants', 'oauthCodes', 'oauthAccessTokens', 'oauthRefreshTokens']
+
 /**
  * The marketplace's org eraser is REQUIRED (AGL-3080): an erasure refuses to
  * run without it. It is a plugin's, which this library may not load, so this
@@ -204,6 +207,14 @@ describeEmulated('an erased org leaves no live credential (AGL-1444, AGL-2974)',
       })
     }
 
+    // A connector connection and one of its tokens per org (AGL-4225),
+    // written as the store writes them: top-level, `orgId` as a field.
+    for (const orgId of [ORG, OTHER_ORG]) {
+      for (const name of CONNECTOR_ROWS) {
+        await db.collection(name).doc(`${orgId}-${name}`).set({ orgId, uid: 'e2e-erase-credentials-uid' })
+      }
+    }
+
     // A plan first: each plugin eraser is told it is one, and counts.
     const plan = await erase.eraseOrg(ORG, { dryRun: true })
     expect(plan).toMatchObject({
@@ -226,6 +237,7 @@ describeEmulated('an erased org leaves no live credential (AGL-1444, AGL-2974)',
       .get()
     await Promise.all(rows.docs.map((doc) => doc.ref.delete()))
     await db.collection(MAILBOX_CREDENTIALS).doc(BYSTANDER_MAILBOX).delete()
+    for (const name of CONNECTOR_ROWS) await db.collection(name).doc(`${OTHER_ORG}-${name}`).delete()
     await db.recursiveDelete(db.collection('orgs').doc(OTHER_ORG))
     resetPluginOrgErasersForTests()
   }, 60_000)
@@ -296,5 +308,13 @@ describeEmulated('an erased org leaves no live credential (AGL-1444, AGL-2974)',
       .get()
     expect(row.exists).toBe(true)
     expect(row.get('orgId')).toBe(OTHER_ORG)
+  }, 60_000)
+
+  it('THE DEFECT: no connected app, code or token still names the erased org (AGL-4225)', async () => {
+    for (const name of CONNECTOR_ROWS) {
+      expect((await db.collection(name).where('orgId', '==', ORG).get()).size).toBe(0)
+      expect((await db.collection(name).doc(`${OTHER_ORG}-${name}`).get()).exists).toBe(true)
+    }
+    expect(result.connectorCredentials).toBe(CONNECTOR_ROWS.length)
   }, 60_000)
 })

@@ -66,6 +66,8 @@ export interface HostEventActor {
   email?: string | null
   /** The key's name, for an integration. */
   apiKeyName?: string | null
+  /** A connected app's own name, when a connection acted (AGL-4225). */
+  connectedAppName?: string | null
 }
 
 /** What rides beside an event's payload. */

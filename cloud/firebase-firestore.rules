@@ -651,13 +651,14 @@ service cloud.firestore {
              'plan', 'entitlements', 'releaseFlags',
              'seatAddons', 'aiTier', 'registerAllocations', 'collaboratorAllocations',
              'storageOverage', 'assistOverage',
-             'bandwidthCap', 'stripeCustomerId', 'subscription',
+             'bandwidthCap', 'bandwidthGraceUsedAt', 'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
              'suspendedEnforcement', 'suspended', 'crmInbound', 'acquisition',
              'consentGroups', 'consentGroupsAwaitConfirmation', 'consentGroupsChange',
-             'marketingConsentPolicy', 'upgradeProposal', 'lastActivityAt'])) ||
+             'marketingConsentPolicy', 'upgradeProposal', 'lastActivityAt',
+             'usageLevel', 'usageLevelAt', 'usageLevelBy'])) ||
         (isBillingStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'createdByUid', 'hosts', 'enabledPlugins',
@@ -665,14 +666,15 @@ service cloud.firestore {
              'plan', 'entitlements', 'releaseFlags',
              'seatAddons', 'aiTier', 'registerAllocations', 'collaboratorAllocations',
              'storageOverage', 'assistOverage',
-             'bandwidthCap', 'stripeCustomerId', 'subscription',
+             'bandwidthCap', 'bandwidthGraceUsedAt', 'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
              'suspendedEnforcement', 'suspended',
              'erasureRequestedAt', 'crmInbound', 'acquisition',
              'consentGroups', 'consentGroupsAwaitConfirmation', 'consentGroupsChange',
-             'marketingConsentPolicy', 'upgradeProposal', 'lastActivityAt'])) ||
+             'marketingConsentPolicy', 'upgradeProposal', 'lastActivityAt',
+             'usageLevel', 'usageLevelAt', 'usageLevelBy'])) ||
         // The member branch (AGL-4047): an org-wide member holding the key
         // each changed field asks (`mayChangeOrgFields`: `crm` asks "Change
         // CRM settings", every other field "Organization settings"), both
@@ -685,7 +687,7 @@ service cloud.firestore {
              'entitlements', 'releaseFlags',
              'enabledPlugins', 'seatAddons', 'aiTier', 'registerAllocations',
              'collaboratorAllocations', 'storageOverage', 'assistOverage',
-             'bandwidthCap', 'stripeCustomerId', 'subscription',
+             'bandwidthCap', 'bandwidthGraceUsedAt', 'stripeCustomerId', 'subscription',
              'billingStatus', 'brandingProfile', 'sso', 'discount',
              'enterprise',
              // AGL-1881. Server-owned, and they were client-writable because
@@ -732,6 +734,12 @@ service cloud.firestore {
              // copied by `createOrganization` at birth and never written
              // again. On all three lists, because nobody may restate it.
              'acquisition',
+             // AGL-4228. The staff usage level: how much this workspace uses
+             // the platform, as staff judged it. Written only by the audited
+             // `/api/admin/usage-level` route (Admin SDK); on all three lists,
+             // because a workspace that could set its own would be a category
+             // nobody could filter by.
+             'usageLevel', 'usageLevelAt', 'usageLevelBy',
              // AGL-3316. The consent-group declaration and its confirmation
              // switch, and the marketing consent policy. `consentGroupForHost`
              // and `resolveMarketingConsentPolicy` read them in
@@ -2743,6 +2751,28 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Connector sign-in (AGL-4225): app registrations, one-time codes, the
+    // connections a person approved, and the refresh and access tokens they
+    // issue. Codes and tokens are stored only as their SHA-256 (doc id =
+    // hash); a connection names the workspace and the person. Deny ALL client
+    // access — registration, consent, exchange, verification and Disconnect
+    // all go through the Admin SDK, and no client ever reads these.
+    match /oauthClients/{clientId} {
+      allow read, write: if false;
+    }
+    match /oauthCodes/{codeHash} {
+      allow read, write: if false;
+    }
+    match /oauthGrants/{grantId} {
+      allow read, write: if false;
+    }
+    match /oauthAccessTokens/{tokenHash} {
+      allow read, write: if false;
+    }
+    match /oauthRefreshTokens/{tokenHash} {
+      allow read, write: if false;
+    }
+
     // Outreach mailbox credentials (AGL-2974): the OAuth grant behind a rep's
     // connected mailbox, one document per mailbox. The document id is the
     // mailbox id and `orgId` and `mailboxId` ride as fields — none of that is
@@ -3738,6 +3768,14 @@ service cloud.firestore {
                      'suspendedAt', 'suspendedReasonCode', 'suspendedMessage',
                      'suspendedUntilMs', 'suspendedMode', 'suspendedEnforcement',
                      'suspended', 'bandwidthCeiling',
+                     // The one-time bandwidth grace (AGL-4232): written once
+                     // by the cap's engage writer; a client that cleared it
+                     // would give its site a second grace.
+                     'bandwidthGraceUsedAt',
+                     // The staff usage level (AGL-4228): staff's judgment of
+                     // how much the site is used, written only by the audited
+                     // `/api/admin/usage-level` route.
+                     'usageLevel', 'usageLevelAt', 'usageLevelBy',
                      // When the starter site was written (AGL-3594). Decides
                      // whether the guided AI start is still offered, and only
                      // the starter route writes it.
@@ -5185,11 +5223,17 @@ service cloud.firestore {
           (isSignedIn() && request.auth.uid == userId)) &&
         !('acquisition' in request.resource.data) &&
         !('adAudienceOptOut' in request.resource.data) &&
+        !request.resource.data.keys().hasAny(
+          ['usageLevel', 'usageLevelAt', 'usageLevelBy']) &&
         accountPrefsValid();
       allow update: if (isStaff() ||
           (isSignedIn() && request.auth.uid == userId)) &&
         !request.resource.data.diff(resource.data).affectedKeys().hasAny(
-          ['acquisition', 'adAudienceOptOut']) &&
+          ['acquisition', 'adAudienceOptOut',
+           // AGL-4228: the staff usage level, written only by the audited
+           // `/api/admin/usage-level` route — not by the account, not by a
+           // client staff session.
+           'usageLevel', 'usageLevelAt', 'usageLevelBy']) &&
         accountPrefsValid();
 
       // "My organizations" reverse index (AGL-233): API-maintained

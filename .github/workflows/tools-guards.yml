@@ -1007,6 +1007,14 @@ jobs:
       - run: npm run test:mobile-isolation
       - run: npm run check:mobile-isolation
 
+      # Every id a native plugin registers is one its mobile.contributes
+      # declares (AGL-3671). The Swift and Kotlin loaders unload a WHOLE plugin
+      # over one undeclared widget, screen, tab, quick action or deep link, and
+      # generate:plugin-manifests:check never reads the registrar, so a new
+      # registration it does not name passed every check until the apps ran.
+      - run: npm run test:native-contribution-declarations
+      - run: npm run check:native-contribution-declarations
+
       # The AI eval harness (AGL-2937): every golden brief under
       # tools/ai-eval/cases scored offline — the tree validator, the doctrine's
       # rules, the budget, the plan's expected shape and the recorded rubric —
@@ -1531,6 +1539,17 @@ jobs:
       - run: npm run test:json-duplicate-keys
 
       - run: npm run check:json-duplicate-keys
+
+      # AGL-4225. What the platform publishes for agents, measured against the
+      # source: robots.txt's AI agents are the ones the WAF admits, every path
+      # a tenant's /openapi.json names is reachable by a stranger, and the MCP
+      # server's every advertised address composes to a console route, takes
+      # its origin from the one helper, and is named alike by the tenant API
+      # catalog and the MCP Registry entry. Pure node, no network. Until now it
+      # ran in no workflow, so it held only when someone remembered it.
+      - run: npm run test:agent-readiness
+
+      - run: npm run check:agent-readiness
 
       # AGL-2480 — eslint over `tools/` itself. There is no `tools/project.json`,
       # so `tools/` is in NO nx project and `nx affected -t lint` has never

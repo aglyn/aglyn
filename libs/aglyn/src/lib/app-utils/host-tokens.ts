@@ -576,6 +576,40 @@ export function describeHostTokens(
   })
 }
 
+/** One row of {@link describeHostTokens} as plain data: the definition without its resolvers. */
+export interface HostTokenPreviewRow {
+  key: string
+  type: HostTokenType
+  label: string
+  description: string
+  whenEmpty: HostTokenEmptyBehaviour
+  token: string
+  value?: string
+  set: boolean
+}
+
+/**
+ * {@link describeHostTokens} without the resolvers, so it can travel as data:
+ * the native apps' Business details card lists "What your pages can use"
+ * from it, and replays these answers in their tests (AGL-4136).
+ */
+export function hostTokenPreview(
+  host: HostTokenSource | null | undefined,
+): HostTokenPreviewRow[] {
+  return describeHostTokens(host).map(
+    ({ key, type, label, description, whenEmpty, token, value, set }) => ({
+      key,
+      type,
+      label,
+      description,
+      whenEmpty,
+      token,
+      ...(value === undefined ? {} : { value }),
+      set,
+    }),
+  )
+}
+
 /**
  * The `host.*` values as a merge-token map, for surfaces that already have a
  * token substituter of their own.

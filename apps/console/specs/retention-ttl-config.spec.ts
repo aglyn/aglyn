@@ -232,6 +232,17 @@ const POLICIES: Array<{
     writers: ['apps/console/app/api/_lib/site-package-ledger.ts'],
     stamp: 'expiresAt: packageLedgerExpiry(',
   },
+  // AGL-4225: connector sign-in. Codes (5 minutes), access tokens (1 hour),
+  // refresh tokens and connections (90 days, sliding), and client
+  // registrations (91 days, pushed on by every token issued). Every reader
+  // checks `expiresAt` itself; the TTL is housekeeping.
+  ...['oauthClients', 'oauthCodes', 'oauthGrants', 'oauthAccessTokens', 'oauthRefreshTokens'].map(
+    (collectionGroup) => ({
+      collectionGroup,
+      writers: ['libs/tenant/data/admin/src/lib/server/connector-oauth-store.ts'],
+      stamp: 'expiresAt: at(now',
+    }),
+  ),
   // AGL-3549: an email list import's ledger — sample shared-mailbox
   // addresses and who stated permission — kept while its job can write.
   {
