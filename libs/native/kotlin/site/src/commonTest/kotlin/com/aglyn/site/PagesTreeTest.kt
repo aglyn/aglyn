@@ -126,6 +126,17 @@ class PagesTreeTest {
   }
 }
 
+class PagesQuotaTest {
+  @kotlin.test.Test
+  fun readsThePlanCapAndTheBillableCount() {
+    val json = kotlinx.serialization.json.Json
+    kotlin.test.assertEquals(25L, com.aglyn.site.pages.pagesQuotaLimit(json.parseToJsonElement("""{"quotas":{"screensPerHost":25}}""")))
+    kotlin.test.assertEquals(null, com.aglyn.site.pages.pagesQuotaLimit(json.parseToJsonElement("""{"quotas":{"screensPerHost":null}}""")))
+    kotlin.test.assertEquals(7, com.aglyn.site.pages.pagesUsageCount(json.parseToJsonElement("""{"screens":7,"media":2}""")))
+    kotlin.test.assertEquals(null, com.aglyn.site.pages.pagesUsageCount(json.parseToJsonElement("""{}""")))
+  }
+}
+
 class PageUsedByTest {
   @kotlin.test.Test
   fun namesHowEachDependentPointsAtThePage() {
