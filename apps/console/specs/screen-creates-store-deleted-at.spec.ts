@@ -87,8 +87,6 @@ const NOT_SCREEN_CREATES: Readonly<Record<string, string>> = {
   'apps/console/utils/server/tenant-revalidate.ts':
     'reads the routing map to name a site’s pages; creates only publish outbox rows (AGL-4121)',
   'apps/console/constants/screen-publishing.ts': 'merge-sets the publish fields of a screen that exists',
-  'libs/tenant/data/admin/src/lib/server/page-seo-write.ts':
-    'updates the search listing of a screen that exists; creates only a publish outbox row (AGL-4235)',
   'libs/tenant/data/admin/src/lib/server/page-route-actions.ts':
     'merge-sets the publish fields of screens that exist, and moves, trashes or unpublishes them, for the native pages route and the API (AGL-3668, AGL-4235)',
   'apps/console/utils/server/page-security-hold.ts':
