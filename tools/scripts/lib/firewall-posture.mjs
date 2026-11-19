@@ -698,6 +698,17 @@ export const EXPECTED_POSTURE = Object.freeze([
               // rewrite target is named beside it for a direct call.
               '/.well-known/api-catalog',
               '/api/api-catalog',
+              // The origin's tab icon (AGL-4225). Favicon services (Google's
+              // among them) and connector directories fetch it from a
+              // non-browser stack; challenged, they kept a stale copy forever.
+              // `/favicon.ico` answers a 302 to the site's own icon on the
+              // media CDN (already admitted above) or, for a site with none,
+              // to the static fallback, so the fallback is named beside it.
+              // Both are public and edge-cached. Measured as a stranger:
+              // 429 before, 200 after; `/favicon.icox`, `/` and the other
+              // `/_static` files still 429.
+              '/favicon.ico',
+              '/_static/favicon.ico',
             ]),
           }),
         ]),
