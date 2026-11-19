@@ -3431,7 +3431,7 @@
     {
       "id": "waivers",
       "mobile": {
-        "$comment": "AGL-4042/AGL-4043: a rider's waiver at check-in, natively: the status the console's waivers-check-in-status widget shows in commerce's posCheckIn zone (signed, signed for some, needed, not matched), Find by name with a date of birth, Check again, and Sign waiver, which opens the store's own signing page. The Waivers page itself stays in the console.",
+        "$comment": "AGL-4042/AGL-4043: a rider's waiver at check-in, natively: the status the console's waivers-check-in-status widget shows in commerce's posCheckIn zone (signed, signed for some, needed, not matched), Find by name with a date of birth, Check again, and Sign waiver, which opens the store's own signing page. The Waivers page as spec screens (waivers.screens.json): the site's waivers, writing one, publish, unpublish, retire, the share link, and the signatures searched, exported, opened, voided and downloaded as the signed PDF.",
         "ios": {
           "module": "AglynWaiversPlugin",
           "register": "registerWaiversNative"
@@ -3441,8 +3441,18 @@
           "register": "registerWaiversNative"
         },
         "contributes": {
+          "screens": [
+            "waivers.home",
+            "waivers.share",
+            "waivers.signatures",
+            "waivers.signature",
+            "waivers.waiver"
+          ],
           "widgets": [
             "waivers.check-in-status"
+          ],
+          "deepLinks": [
+            "waivers.home.link"
           ]
         }
       },

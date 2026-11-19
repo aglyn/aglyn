@@ -210,7 +210,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "waivers",
-      contributes: ["widgets": ["waivers.check-in-status"]],
+      contributes: ["screens": ["waivers.home", "waivers.share", "waivers.signature", "waivers.signatures", "waivers.waiver"], "widgets": ["waivers.check-in-status"], "deepLinks": ["waivers.home.link"]],
       register: AglynWaiversPlugin.registerWaiversNative
     ),
     NativePluginManifestEntry(
