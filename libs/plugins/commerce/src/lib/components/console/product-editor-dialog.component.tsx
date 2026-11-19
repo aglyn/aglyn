@@ -148,31 +148,9 @@ const PRODUCT_SEO_LISTING_FIELDS: readonly Extract<SeoListingFieldKey, 'title' |
   'description',
 ]
 
-/**
- * A product nobody has saved yet, as the editor starts one: at the default
- * price (AGL-3676), for the owner to change or clear.
- */
-function blankProduct(): CommerceModel.HostProduct {
-  return {
-    name: '',
-    slug: '',
-    type: 'physical',
-    status: 'draft',
-    variants: [{ id: 'default', priceUsd: CommerceModel.COMMERCE_DEFAULT_PRICE_USD }],
-  }
-}
-
 /** What the editor says while a variant has no price (AGL-3676): savable, not sellable. */
 export const PRODUCT_PRICE_EMPTY_NOTICE =
   'Visitors will see “Price coming soon” and can’t buy this yet. Set a price to start selling it.'
-
-/** Stable key for matching variants across matrix regenerations. */
-function comboKey(options: Record<string, string> | undefined): string {
-  return Object.entries(options ?? {})
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([name, value]) => `${name}:${value}`)
-    .join('|')
-}
 
 function comboLabel(options: Record<string, string> | undefined): string {
   const values = Object.values(options ?? {})
@@ -1327,7 +1305,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
    * touched, and Save is held until it has (`checking`). Lazy-init per open;
    * the parent remounts via `key` on product change.
    */
-  const seed = useMemo(() => lifted ?? blankProduct(), [lifted])
+  const seed = useMemo(() => lifted ?? CommerceModel.blankProductDraft(), [lifted])
   const form = useSeedEdits<CommerceModel.HostProduct>(seed)
   const current = form.values
   const { edit } = form
@@ -1608,33 +1586,9 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
         // removed — when the matrix is rebuilt from them as below.
         if (CommerceModel.variantMatrixProblem(options)) return { options }
         // Regenerate the matrix, carrying data over by option-combo key so
-        // edits to prices/SKUs survive option tweaks.
-        const previous = new Map(
-          at.variants.map((variant) => [comboKey(variant.options), variant]),
-        )
-        const fallback = at.variants[0]
-        const variants = CommerceModel.expandVariantMatrix(options).map(
-          (combo, comboIndex) => {
-            const existing = previous.get(comboKey(combo))
-            return (
-              existing ??
-              // An unpriced variant is stored with no `priceUsd` (AGL-3676),
-              // as a proposed product's are; the type names the priced shape.
-              ({
-                id: `v${Date.now().toString(36)}${comboIndex}`,
-                options: combo,
-                // The first variant's price, or none where it has none;
-                // the default only on a product with no variant yet.
-                ...(fallback
-                  ? CommerceModel.variantHasPrice(fallback)
-                    ? { priceUsd: fallback.priceUsd }
-                    : {}
-                  : { priceUsd: CommerceModel.COMMERCE_DEFAULT_PRICE_USD }),
-                inventory: fallback?.inventory ?? null,
-              } as CommerceModel.ProductVariant)
-            )
-          },
-        )
+        // edits to prices/SKUs survive option tweaks. The same rebuild the
+        // public API's product writes make (AGL-4235).
+        const variants = CommerceModel.variantsForOptions(at, options, Date.now())
         return { options, variants }
       }),
     [update],

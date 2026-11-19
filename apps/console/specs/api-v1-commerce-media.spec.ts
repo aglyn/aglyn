@@ -168,6 +168,12 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
+// The site router's own lock verdict (AGL-4235) reads the lock module
+// directly; no site here is locked, as the pipeline's double above says.
+jest.mock('../../../libs/tenant/data/admin/src/lib/server/lockdown', () => ({
+  lockdownRefusal: async () => null,
+}))
+
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/api-idempotency'),
@@ -218,6 +224,9 @@ async function get(path: string) {
 
 beforeEach(() => {
   mockDocs.clear()
+  // The site document the site router reads before any sub-resource
+  // (AGL-4235); the organization owns it and nothing locks it.
+  mockDocs.set('hosts/host_1', { displayName: 'Bakery', subdomain: 'bakery' })
   mockScopes = ['orders:read', 'products:read', 'media:read']
   mockEntitlements = { apiAccess: true, commerce: true }
 })

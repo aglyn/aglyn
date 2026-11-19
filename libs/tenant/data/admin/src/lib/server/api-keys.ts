@@ -127,6 +127,17 @@ export const API_SCOPES = [
   // takes, so the API can never write a status the console forbids.
   'orders:write',
   'products:read',
+  // AGL-4235. A catalogue synced from a PIM, a supplier feed or an assistant
+  // working the store could read a site's products and never change one, so
+  // every price change and new line was a trip to the console. Create, edit
+  // and delete a site's products and their variants.
+  //
+  // Its own scope rather than an extension of `orders:write`, which records a
+  // shipment and moves neither stock nor money: a product change does move
+  // what a visitor can buy and for how much, and a product that is on sale
+  // shows it on the live site at once. A fulfilment integration that marks
+  // orders shipped should not thereby be able to reprice the shop.
+  'products:write',
   // AGL-3643. A site's bookings were the one record an integration could not
   // read at all — not a booking app's sync, not a Zapier trigger's sample —
   // though a booking is as much a customer's record as an order. Read-only
@@ -170,6 +181,28 @@ export const API_SCOPES = [
   // lands exactly where a console-created one would, and never wider.
   'crm:read',
   'crm:write',
+  // AGL-4235. A site's pages: each one's name, address, whether it is
+  // published, and its search listing fields. No page content — the layout a
+  // page is built from is the Besigner's, and reading it is a different
+  // power from knowing which pages exist. Its own scope because `sites:read`
+  // grants the site's name and addresses and nothing it is made of, and a
+  // key that lists sites for a dashboard should not thereby list every page.
+  'pages:read',
+  // AGL-4235. How the site and each page are described to search engines:
+  // the title, description and sharing image a result shows, at site level
+  // and per page. A pair of its own, apart from `pages:read`, because an SEO
+  // tool needs exactly these fields and nothing else about the site, and a
+  // write here changes what the live site tells every crawler at once.
+  'seo:read',
+  'seo:write',
+  // AGL-4235. The site's business details — the console's Setup → Business
+  // card: name, slogan, phone, email, address and social links, which the
+  // live site shows in its header, footer and contact sections. One home in
+  // the product, so one pair here, and apart from `sites:write` (which only
+  // creates a site) because changing what a business publishes about itself
+  // is a grant an owner makes on purpose.
+  'business:read',
+  'business:write',
 ] as const
 
 export type ApiScope = (typeof API_SCOPES)[number]

@@ -178,6 +178,10 @@
       "why": "Name-search token normalizers, so an app list search matches the console's search index (AGL-3621)."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/native-store-billing.ts",
+      "why": "The line a native store build shows where a buying control is left out (the owner's decision of 2026-11-19): the web billing link's label and the no-link sentence, one wording for both apps; no imports at all."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/native-nav.ts",
       "why": "The native apps' navigation as data: the lists and groups, the core's own rows and the assembly that places each plugin's rows (AGL-3943); no imports at all."
     },
@@ -934,6 +938,10 @@
       "why": "Whether a listing is browsable and its artifact type, read by the native marketplace screens (AGL-3668); type-only imports."
     },
     {
+      "path": "libs/plugins/marketplace/src/lib/model/listing-verification.ts",
+      "why": "Whether a publisher may ask for the Verified badge (verificationRequestBlock), replayed by the native listing page's Verified publisher card (AGL-1217); no imports."
+    },
+    {
       "path": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
       "why": "Artifact type labels, install targets, categories, a plugin's install state and each type's install route and message; the native marketplace screens install from it (AGL-3668); type-only imports."
     },
@@ -1116,6 +1124,10 @@
     {
       "path": "libs/shared/util/tools/src/lib/list-query/list-query-refusals.ts",
       "why": "Reached by the CRM list declarations: the planner's refusal wording."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/site-member-purchases.ts",
+      "why": "A site account's lifetime purchase total (computeLifetimePurchaseCents), the console drawer's Purchases figure: the native account screen's compute load replays it."
     }
   ]
 }

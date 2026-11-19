@@ -72,11 +72,17 @@ lacks returns `403` `insufficient_scope`. Grant the least a key needs.
 | `orders:read` | Read a site's store orders. |
 | `orders:write` | [Record a shipment](resources/orders.md#record-a-shipment): mark an order fulfilled or delivered and attach a carrier and tracking number. Cannot cancel or refund an order, and never moves stock or money. |
 | `products:read` | Read a site's products, variants, prices and stock. |
+| `products:write` | [Add, edit and delete](resources/products.md#create-a-product) a site's products, and change a variant's price, SKU, barcode, weight and stock. Variants follow the product's options; a single variant cannot be added or removed on its own, and a digital product is made in the console. A change to a product on sale is live in the store when saved. |
 | `bookings:read` | Read a site's [bookings](resources/bookings.md): the service, the time, the guest and what they paid. Cannot move or cancel a booking. |
 | `media:read` | List files in the organization library and in a site's media. |
 | `media:write` | Upload files to the organization library and to a site's media. Cannot replace, edit or delete an existing file. |
 | `crm:read` | List and read [companies](resources/companies.md), [pipelines](resources/pipelines.md), [deals](resources/deals.md), [tasks](resources/tasks.md), [activities](resources/activities.md) and [email templates](resources/email-templates.md), across the organization. |
 | `crm:write` | Add, edit and delete companies, deals, tasks and email templates, and log or delete activities, each on behalf of a named site. Cannot edit a pipeline's stages, and cannot edit an activity once logged. |
+| `pages:read` | List and read a site's [pages](resources/pages.md): their names, public addresses, whether they are published, and their search listings. Never their content. |
+| `seo:read` | Read a site's [search listing](resources/seo.md) and each page's. |
+| `seo:write` | Change a site's search title, description, separator and title pattern, and a page's search title, description and breadcrumb label. Live when saved. Cannot change the search-indexing switch, verification codes or the social image. |
+| `business:read` | Read a site's [business details](resources/business-details.md): name, slogan, phone, email, address and social links. |
+| `business:write` | Change a site's business details. Live when saved. |
 
 `crm:read` and `crm:write` are one pair for five resources rather than five pairs,
 because a key that needs any of them needs the set: a deal names a company and a
@@ -96,19 +102,20 @@ contacts, and cannot touch the two fields that would make the list untrustworthy
 `email` a contact is unified on, and the `sources` recording where the person came
 from. See [contacts](resources/contacts.md#read-only-fields).
 
-Several resources are **read-only** over the API, and the missing write scope is
-deliberate in each case rather than an oversight:
+Some changes have no write scope at all, and the omission is deliberate in each case
+rather than an oversight:
 
-- **Canceling and refunding an order**, and **products**, move money and stock.
-  `orders:write` stops precisely at the line where they begin: it records shipments,
-  which change no money and no stock. A cancel returns held inventory and a refund
-  returns money, each under its own transaction with its own decisions, so both stay
-  in the console. A write scope for the rest belongs to the change that ships the
-  endpoint, not ahead of it — a scope you can grant that grants nothing is a broken
-  permission.
+- **Canceling and refunding an order.** `orders:write` stops precisely at the line
+  where money moves: it records shipments, which change no money and no stock. A
+  cancel returns held inventory and a refund returns money, each under its own
+  transaction with its own decisions, so both stay in the console. A write scope for
+  them belongs to the change that ships the endpoint, not ahead of it — a scope you
+  can grant that grants nothing is a broken permission.
 - **Renaming and deleting a site.** `sites:write` creates; it deliberately stops
   there. A delete would erase a whole site — pages, versions, products, uploaded
   files — immediately, from one field in a request body, with no hold and no undo.
+- **A page's content and design.** `pages:read` and `seo:write` reach a page's name,
+  address and search listing, never what is on it; that is edited in the console.
 
 ```json
 {
@@ -151,6 +158,11 @@ A connection's writes appear in activity as *Connected app* followed by its name
 [`GET /v1/me`](overview.md#get-v1me) answers `"object": "connected_app"` for it. A lock on
 the workspace refuses a connection for as long as it lasts without ending it, as it
 does an API key.
+
+On a site, a connection can reach only what its person can: a site they are not a
+member of answers `404`, and writing a site's products, search listing or business
+details, uploading to its media, or publishing it needs their **Edit site content**
+permission on it — see [Conventions → Sites a connected app can reach](conventions.md#site-access).
 
 A connection is a person's, unlike a key. Connecting takes the **Manage API keys**
 permission in the workspace, and the connection stops working the moment that
