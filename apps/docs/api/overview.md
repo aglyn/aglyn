@@ -2,7 +2,7 @@
 sidebar_position: 1
 slug: /
 title: Aglyn REST API
-description: A REST API and MCP server for your organization's datasets, contacts, CRM, sites, form submissions, store orders, products and media — authenticated with API keys or by signing in.
+description: A REST API and MCP server for your organization's datasets, contacts, CRM, sites and their pages, search listings and business details, form submissions, store orders, products and media — authenticated with API keys or by signing in.
 ---
 
 # Aglyn REST API
@@ -14,11 +14,13 @@ the CRM around them — [companies](resources/companies.md),
 [tasks](resources/tasks.md), [activities](resources/activities.md),
 [email templates](resources/email-templates.md) and each site's
 [leads](resources/leads.md) — [sites](resources/sites.md) and their
+[pages](resources/pages.md), [search listing](resources/seo.md),
+[business details](resources/business-details.md) and
 [form submissions](resources/form-submissions.md), your store's
 [orders](resources/orders.md) and [products](resources/products.md), and your
 [media library](resources/media.md). Use it to sync content from another system, push
-orders into accounting, record shipments from a 3PL or warehouse system, feed a
-catalog to a marketplace, sync a CRM's contacts and deals in either direction, log
+orders into accounting, record shipments from a 3PL or warehouse system, keep a
+catalog and its stock in step with a PIM or warehouse, feed a catalog to a marketplace, sync a CRM's contacts and deals in either direction, log
 calls from a dialer, back up records, or build an integration.
 
 :::info Plan availability
@@ -238,11 +240,14 @@ each CRM collection, for sizing a sync. See [Usage](usage.md).
 | [Activities](resources/activities.md) | What happened — a write-once log of calls, meetings and notes. |
 | [Leads](resources/leads.md) | A site's work queue — everyone it has captured, with status, owner and notes — and the conversion of a lead into a contact, a company and a deal. |
 | [Email templates](resources/email-templates.md) | The letters a team sends from a record — templates and snippets, with merge fields. |
-| [Sites](resources/sites.md) | List sites and read their details. |
+| [Sites](resources/sites.md) | List sites, read their details, create a site, and publish one. |
+| [Pages](resources/pages.md) | A site's pages — names, public addresses, whether each is published — and each page's search listing. Not their content. |
+| [Search listing](resources/seo.md) | Read and change the title and description a site shows in search results, and how its page titles are built. |
+| [Business details](resources/business-details.md) | Read and change a site's business name, slogan, phone, email, address and social links. |
 | [Form submissions](resources/form-submissions.md) | Read a site's form submissions, mark them read as you process them, and delete them after export. |
 | [Orders](resources/orders.md) | Read a site's store orders — line items, totals, refunds, disputes — and record shipments against them. |
-| [Products](resources/products.md) | Read a site's catalog — variants, prices, stock levels. |
-| [Media](resources/media.md) | List files in the organization library and in each site's media. |
+| [Products](resources/products.md) | Read and write a site's catalog — add, edit and delete products, and change variants' prices and stock. |
+| [Media](resources/media.md) | List and upload files in the organization library and in each site's media. |
 
 Orders and products need a plan that includes **commerce**, in addition to their
 scope — see each page's plan note. Companies, pipelines, deals, tasks, activities,

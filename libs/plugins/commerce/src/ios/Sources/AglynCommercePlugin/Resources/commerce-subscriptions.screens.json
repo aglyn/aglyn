@@ -1,0 +1,700 @@
+{
+  "$comment": "The Commerce plugin's subscriptions (AGL-4191), natively: what the store's live subscriptions bring in a month, how many pay, trial and are past due (server tallies, as the console's aggregation queries count them), every subscription newest first or by status, and one subscription with its invoices. Reads the store's own subscriptions as the console's Subscriptions card does. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "commerce.subscriptions",
+      "title": "Subscriptions",
+      "label": "Subscriptions",
+      "subtitle": "Every subscription and its recurring revenue",
+      "icon": "arrow.triangle.2.circlepath|autorenew",
+      "scope": "site",
+      "order": 43,
+      "links": [
+        "/products/subscriptions"
+      ],
+      "constants": {
+        "statuses": [
+          {
+            "id": "active",
+            "label": "Active"
+          },
+          {
+            "id": "trialing",
+            "label": "Trial"
+          },
+          {
+            "id": "past_due",
+            "label": "Past due"
+          },
+          {
+            "id": "unpaid",
+            "label": "Unpaid"
+          },
+          {
+            "id": "incomplete",
+            "label": "Incomplete"
+          },
+          {
+            "id": "incomplete_expired",
+            "label": "Expired"
+          },
+          {
+            "id": "canceled",
+            "label": "Canceled"
+          },
+          {
+            "id": "paused",
+            "label": "Paused"
+          }
+        ],
+        "filters": [
+          {
+            "id": "active",
+            "label": "Active",
+            "empty": "No active subscriptions."
+          },
+          {
+            "id": "trialing",
+            "label": "Trial",
+            "empty": "No trial subscriptions."
+          },
+          {
+            "id": "past_due",
+            "label": "Past due",
+            "empty": "No past due subscriptions."
+          },
+          {
+            "id": "unpaid",
+            "label": "Unpaid",
+            "empty": "No unpaid subscriptions."
+          },
+          {
+            "id": "incomplete",
+            "label": "Incomplete",
+            "empty": "No incomplete subscriptions."
+          },
+          {
+            "id": "canceled",
+            "label": "Canceled",
+            "empty": "No canceled subscriptions."
+          }
+        ],
+        "intervals": [
+          {
+            "id": "month",
+            "suffix": "/month"
+          },
+          {
+            "id": "year",
+            "suffix": "/year"
+          }
+        ]
+      },
+      "load": {
+        "store": {
+          "doc": "hosts/{site.id}/settings/store",
+          "optional": true
+        },
+        "monthly": {
+          "optional": true,
+          "query": {
+            "collection": "hosts/{site.id}/subscriptions",
+            "aggregate": {
+              "count": true,
+              "sum": "totals.totalCents"
+            },
+            "where": [
+              [
+                "status",
+                "in",
+                [
+                  "active",
+                  "past_due"
+                ]
+              ],
+              [
+                "interval",
+                "==",
+                "month"
+              ],
+              [
+                "livemode",
+                "==",
+                true
+              ]
+            ]
+          }
+        },
+        "monthlyTax": {
+          "optional": true,
+          "query": {
+            "collection": "hosts/{site.id}/subscriptions",
+            "aggregate": {
+              "sum": "totals.taxCents"
+            },
+            "where": [
+              [
+                "status",
+                "in",
+                [
+                  "active",
+                  "past_due"
+                ]
+              ],
+              [
+                "interval",
+                "==",
+                "month"
+              ],
+              [
+                "livemode",
+                "==",
+                true
+              ]
+            ]
+          }
+        },
+        "yearly": {
+          "optional": true,
+          "query": {
+            "collection": "hosts/{site.id}/subscriptions",
+            "aggregate": {
+              "count": true,
+              "sum": "totals.totalCents"
+            },
+            "where": [
+              [
+                "status",
+                "in",
+                [
+                  "active",
+                  "past_due"
+                ]
+              ],
+              [
+                "interval",
+                "==",
+                "year"
+              ],
+              [
+                "livemode",
+                "==",
+                true
+              ]
+            ]
+          }
+        },
+        "yearlyTax": {
+          "optional": true,
+          "query": {
+            "collection": "hosts/{site.id}/subscriptions",
+            "aggregate": {
+              "sum": "totals.taxCents"
+            },
+            "where": [
+              [
+                "status",
+                "in",
+                [
+                  "active",
+                  "past_due"
+                ]
+              ],
+              [
+                "interval",
+                "==",
+                "year"
+              ],
+              [
+                "livemode",
+                "==",
+                true
+              ]
+            ]
+          }
+        },
+        "trials": {
+          "optional": true,
+          "query": {
+            "collection": "hosts/{site.id}/subscriptions",
+            "aggregate": {
+              "count": true
+            },
+            "where": [
+              [
+                "status",
+                "==",
+                "trialing"
+              ],
+              [
+                "livemode",
+                "==",
+                true
+              ]
+            ]
+          }
+        },
+        "pastDue": {
+          "optional": true,
+          "query": {
+            "collection": "hosts/{site.id}/subscriptions",
+            "aggregate": {
+              "count": true
+            },
+            "where": [
+              [
+                "status",
+                "==",
+                "past_due"
+              ],
+              [
+                "livemode",
+                "==",
+                true
+              ]
+            ]
+          }
+        },
+        "subscriptions": {
+          "optional": true,
+          "query": {
+            "collection": "hosts/{site.id}/subscriptions",
+            "limit": 50,
+            "orderBy": "createdAtMs desc",
+            "where": [
+              [
+                "status",
+                "==",
+                "{params.status}",
+                "params.status && params.status != all"
+              ]
+            ]
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "id": "summary",
+          "title": "Recurring revenue",
+          "rows": [
+            {
+              "label": "Monthly recurring revenue",
+              "value": "{max(0, data.monthly.sum - data.monthlyTax.sum) + round(max(0, data.yearly.sum - data.yearlyTax.sum) / 12):cents/data.store.currency}"
+            },
+            {
+              "label": "Paying subscribers",
+              "value": "{data.monthly.count + data.yearly.count}"
+            },
+            {
+              "label": "In a free trial",
+              "value": "{data.trials.count}"
+            },
+            {
+              "label": "Past due",
+              "value": "{data.pastDue.count}"
+            }
+          ],
+          "footer": "Monthly recurring revenue counts active and past-due subscriptions paid in live mode, with a yearly plan counted as a twelfth and tax left out."
+        },
+        {
+          "type": "notice",
+          "id": "summaryFailed",
+          "tone": "warning",
+          "when": "!data.monthly || !data.monthlyTax || !data.yearly || !data.yearlyTax || !data.trials || !data.pastDue",
+          "text": "These figures could not be loaded. The list below is unaffected."
+        },
+        {
+          "type": "actions",
+          "id": "filter",
+          "items": [
+            {
+              "id": "show",
+              "label": "Status: {const.filters[id=params.status].label|'All'}",
+              "icon": "line.3.horizontal.decrease|filter_list",
+              "prompt": [
+                {
+                  "key": "status",
+                  "label": "Status",
+                  "kind": "select",
+                  "initial": "{params.status|'all'}",
+                  "options": [
+                    {
+                      "value": "all",
+                      "label": "All"
+                    },
+                    {
+                      "value": "active",
+                      "label": "Active"
+                    },
+                    {
+                      "value": "trialing",
+                      "label": "Trial"
+                    },
+                    {
+                      "value": "past_due",
+                      "label": "Past due"
+                    },
+                    {
+                      "value": "unpaid",
+                      "label": "Unpaid"
+                    },
+                    {
+                      "value": "incomplete",
+                      "label": "Incomplete"
+                    },
+                    {
+                      "value": "canceled",
+                      "label": "Canceled"
+                    }
+                  ]
+                }
+              ],
+              "navigate": {
+                "screen": "commerce.subscriptions",
+                "params": {
+                  "status": "{form.status}"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "denied",
+          "tone": "info",
+          "when": "!data.subscriptions",
+          "text": "Subscriptions take the \"See orders and webhooks\" permission on this site."
+        },
+        {
+          "type": "list",
+          "id": "subscriptions",
+          "when": "data.subscriptions",
+          "title": "{const.filters[id=params.status].label|'All'} subscriptions",
+          "items": "data.subscriptions.items",
+          "load": "subscriptions",
+          "icon": "arrow.triangle.2.circlepath|autorenew",
+          "primary": [
+            "{item.customerName|item.customerEmail|'Unknown customer'}",
+            {
+              "text": "{item.lineItems.0.quantity}× {item.lineItems.0.name}",
+              "when": "item.lineItems.0.name && item.lineItems.0.quantity > 1"
+            },
+            {
+              "text": "{item.lineItems.0.name}",
+              "when": "item.lineItems.0.name && !item.lineItems.0.quantity || item.lineItems.0.name && item.lineItems.0.quantity <= 1"
+            },
+            {
+              "text": "{item.productId|'Subscription'}",
+              "when": "!item.lineItems.0.name"
+            }
+          ],
+          "secondary": [
+            {
+              "text": "{item.totals.totalCents:cents/data.store.currency}{const.intervals[id=item.interval].suffix}",
+              "when": "item.totals.totalCents >= 0"
+            },
+            {
+              "text": "Renews {item.currentPeriodEndMs|item.paidThroughMs:date}",
+              "when": "item.status == active && item.cancelAtPeriodEnd != true && item.currentPeriodEndMs || item.status == active && item.cancelAtPeriodEnd != true && item.paidThroughMs"
+            },
+            {
+              "text": "Ends {item.currentPeriodEndMs|item.paidThroughMs:date}",
+              "when": "item.status == active,trialing && item.cancelAtPeriodEnd == true && item.currentPeriodEndMs || item.status == active,trialing && item.cancelAtPeriodEnd == true && item.paidThroughMs"
+            },
+            {
+              "text": "Trial ends {item.currentPeriodEndMs|item.paidThroughMs:date}",
+              "when": "item.status == trialing && item.cancelAtPeriodEnd != true && item.currentPeriodEndMs || item.status == trialing && item.cancelAtPeriodEnd != true && item.paidThroughMs"
+            },
+            {
+              "text": "Payment failed",
+              "when": "item.status == past_due,unpaid"
+            },
+            {
+              "text": "Waiting for the first payment",
+              "when": "item.status == incomplete"
+            },
+            {
+              "text": "Ended {item.currentPeriodEndMs|item.paidThroughMs:date}",
+              "when": "item.status == canceled,incomplete_expired && item.currentPeriodEndMs || item.status == canceled,incomplete_expired && item.paidThroughMs"
+            },
+            {
+              "text": "{item.paidCents:cents/data.store.currency} paid so far",
+              "when": "item.paidCents > 0"
+            }
+          ],
+          "badges": [
+            {
+              "text": "Test",
+              "tone": "neutral",
+              "when": "item.livemode == false"
+            },
+            {
+              "text": "{const.statuses[id=item.status].label|item.status|'Unknown'}",
+              "tones": {
+                "Active": "success",
+                "Trial": "info",
+                "Past due": "warning",
+                "Unpaid": "error",
+                "Incomplete": "warning",
+                "*": "neutral"
+              }
+            }
+          ],
+          "empty": "{const.filters[id=params.status].empty|'No subscriptions yet. When someone subscribes to a monthly or yearly product, they appear here.'}",
+          "open": {
+            "screen": "commerce.subscription",
+            "params": {
+              "subscriptionId": "{item.$id}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "commerce.subscription",
+      "title": "{data.sub.lineItems.0.name|data.sub.productId|'Subscription'}",
+      "label": "Subscription",
+      "icon": "arrow.triangle.2.circlepath|autorenew",
+      "scope": "site",
+      "links": [
+        "/products/subscriptions?subscription=:subscriptionId"
+      ],
+      "constants": {
+        "statuses": [
+          {
+            "id": "active",
+            "label": "Active"
+          },
+          {
+            "id": "trialing",
+            "label": "Trial"
+          },
+          {
+            "id": "past_due",
+            "label": "Past due"
+          },
+          {
+            "id": "unpaid",
+            "label": "Unpaid"
+          },
+          {
+            "id": "incomplete",
+            "label": "Incomplete"
+          },
+          {
+            "id": "incomplete_expired",
+            "label": "Expired"
+          },
+          {
+            "id": "canceled",
+            "label": "Canceled"
+          },
+          {
+            "id": "paused",
+            "label": "Paused"
+          }
+        ],
+        "filters": [
+          {
+            "id": "active",
+            "label": "Active",
+            "empty": "No active subscriptions."
+          },
+          {
+            "id": "trialing",
+            "label": "Trial",
+            "empty": "No trial subscriptions."
+          },
+          {
+            "id": "past_due",
+            "label": "Past due",
+            "empty": "No past due subscriptions."
+          },
+          {
+            "id": "unpaid",
+            "label": "Unpaid",
+            "empty": "No unpaid subscriptions."
+          },
+          {
+            "id": "incomplete",
+            "label": "Incomplete",
+            "empty": "No incomplete subscriptions."
+          },
+          {
+            "id": "canceled",
+            "label": "Canceled",
+            "empty": "No canceled subscriptions."
+          }
+        ],
+        "intervals": [
+          {
+            "id": "month",
+            "suffix": "/month"
+          },
+          {
+            "id": "year",
+            "suffix": "/year"
+          }
+        ]
+      },
+      "load": {
+        "sub": {
+          "doc": "hosts/{site.id}/subscriptions/{params.subscriptionId}"
+        },
+        "store": {
+          "doc": "hosts/{site.id}/settings/store",
+          "optional": true
+        },
+        "invoices": {
+          "optional": true,
+          "query": {
+            "collection": "hosts/{site.id}/subscriptions/{params.subscriptionId}/invoices",
+            "limit": 24,
+            "orderBy": "paidAtMs desc"
+          }
+        }
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "id": "summary",
+          "title": "Subscription",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "{const.statuses[id=data.sub.status].label|data.sub.status|'Unknown'}",
+              "chip": true,
+              "tones": {
+                "Active": "success",
+                "Trial": "info",
+                "Past due": "warning",
+                "Unpaid": "error",
+                "Incomplete": "warning",
+                "*": "neutral"
+              }
+            },
+            {
+              "label": "Plan",
+              "value": "{data.sub.lineItems.0.quantity}× {data.sub.lineItems.0.name}",
+              "when": "data.sub.lineItems.0.name && data.sub.lineItems.0.quantity > 1"
+            },
+            {
+              "label": "Customer",
+              "value": "{data.sub.customerName|data.sub.customerEmail|'Unknown customer'}"
+            },
+            {
+              "label": "Email",
+              "value": "{data.sub.customerEmail}",
+              "when": "data.sub.customerName && data.sub.customerEmail"
+            },
+            {
+              "label": "Price",
+              "value": "{data.sub.totals.totalCents:cents/data.store.currency}{const.intervals[id=data.sub.interval].suffix}",
+              "when": "data.sub.totals.totalCents >= 0"
+            },
+            {
+              "label": "Started",
+              "value": "{data.sub.createdAtMs:date}",
+              "when": "data.sub.createdAtMs"
+            },
+            {
+              "label": "Next",
+              "value": "Renews {data.sub.currentPeriodEndMs|data.sub.paidThroughMs:date}",
+              "when": "data.sub.status == active && data.sub.cancelAtPeriodEnd != true && data.sub.currentPeriodEndMs || data.sub.status == active && data.sub.cancelAtPeriodEnd != true && data.sub.paidThroughMs"
+            },
+            {
+              "label": "Next",
+              "value": "Ends {data.sub.currentPeriodEndMs|data.sub.paidThroughMs:date}",
+              "when": "data.sub.status == active,trialing && data.sub.cancelAtPeriodEnd == true && data.sub.currentPeriodEndMs || data.sub.status == active,trialing && data.sub.cancelAtPeriodEnd == true && data.sub.paidThroughMs"
+            },
+            {
+              "label": "Next",
+              "value": "Trial ends {data.sub.currentPeriodEndMs|data.sub.paidThroughMs:date}",
+              "when": "data.sub.status == trialing && data.sub.cancelAtPeriodEnd != true && data.sub.currentPeriodEndMs || data.sub.status == trialing && data.sub.cancelAtPeriodEnd != true && data.sub.paidThroughMs"
+            },
+            {
+              "label": "Next",
+              "value": "Payment failed",
+              "when": "data.sub.status == past_due,unpaid"
+            },
+            {
+              "label": "Next",
+              "value": "Waiting for the first payment",
+              "when": "data.sub.status == incomplete"
+            },
+            {
+              "label": "Next",
+              "value": "Ended {data.sub.currentPeriodEndMs|data.sub.paidThroughMs:date}",
+              "when": "data.sub.status == canceled,incomplete_expired && data.sub.currentPeriodEndMs || data.sub.status == canceled,incomplete_expired && data.sub.paidThroughMs"
+            },
+            {
+              "label": "Paid so far",
+              "value": "{data.sub.paidCents:cents/data.store.currency} over {data.sub.invoicesCount|0} invoice",
+              "when": "data.sub.paidCents > 0 && data.sub.invoicesCount == 1"
+            },
+            {
+              "label": "Paid so far",
+              "value": "{data.sub.paidCents:cents/data.store.currency} over {data.sub.invoicesCount|0} invoices",
+              "when": "data.sub.paidCents > 0 && data.sub.invoicesCount != 1"
+            },
+            {
+              "label": "Paid so far",
+              "value": "Nothing yet",
+              "when": "!data.sub.paidCents || data.sub.paidCents <= 0"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "test",
+          "tone": "info",
+          "when": "data.sub.livemode == false",
+          "text": "A test-mode subscription: no real money moved, and it is not counted in your recurring revenue."
+        },
+        {
+          "type": "list",
+          "id": "invoices",
+          "title": "Invoices",
+          "items": "data.invoices.items",
+          "icon": "doc.text|receipt_long",
+          "primary": [
+            {
+              "text": "{item.paidAtMs:date}",
+              "when": "item.paidAtMs"
+            },
+            {
+              "text": "Date unknown",
+              "when": "!item.paidAtMs"
+            },
+            "{item.number}"
+          ],
+          "secondary": [
+            {
+              "text": "For {item.periodStartMs:date} to {item.periodEndMs:date}",
+              "when": "item.periodStartMs && item.periodEndMs"
+            }
+          ],
+          "trailing": "{item.paidCents|'0':cents/item.currency}",
+          "actions": [
+            {
+              "id": "view",
+              "label": "View",
+              "icon": "arrow.up.right.square|open_in_new",
+              "when": "item.hostedInvoiceUrl",
+              "link": "{item.hostedInvoiceUrl}"
+            }
+          ],
+          "empty": "No invoices recorded yet."
+        },
+        {
+          "type": "notice",
+          "id": "window",
+          "tone": "info",
+          "when": "data.invoices.items.23",
+          "text": "The 24 most recent invoices."
+        }
+      ]
+    }
+  ]
+}
