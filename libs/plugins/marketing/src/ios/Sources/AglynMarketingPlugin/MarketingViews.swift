@@ -351,6 +351,8 @@ struct CampaignDetail: View {
   @Environment(\.dismiss) private var dismiss
   @State private var doc = ObservedDocument()
   @State private var emails = LiveQueryList(pageSize: 25) { $0 }
+  /// The emails the campaign's figures sum: up to the page's ceiling, and one more to know there are more.
+  @State private var reportSends = LiveQueryList(pageSize: campaignEmailCeiling + 1) { $0.data }
   @State private var lists = LiveQueryList(pageSize: 50) { (id: $0.id, name: $0.string("name") ?? $0.id) }
   @State private var editing = false
   @State private var confirmDelete = false
@@ -377,6 +379,11 @@ struct CampaignDetail: View {
             PropertyRow("Ends", row.endAtMs.map { Date(timeIntervalSince1970: Double($0) / 1000).formatted(date: .abbreviated, time: .omitted) })
             PropertyRow("Lists", row.listIDs.map { listNames[$0] ?? $0 }.joined(separator: ", "))
             PropertyRow("Unsubscribe header", row.listUnsubscribe ? "On" : "Off")
+          }
+          if reportSends.ready {
+            CampaignMailSection(
+              rollup: campaignMailRollup(Array(reportSends.rows.prefix(campaignEmailCeiling))),
+              truncated: reportSends.rows.count > campaignEmailCeiling)
           }
           Section("Emails") {
             if emails.rows.isEmpty { Text(emails.ready ? "No emails in this campaign yet." : "Loading…").foregroundStyle(.secondary) }
@@ -447,11 +454,15 @@ struct CampaignDetail: View {
       let orgID = actions.orgID, hostID = actions.hostID
       doc.start(context.firestore, ["orgs", orgID, "emailCampaigns", campaignID])
       emails.show(context.firestore) { campaignEmailsQuery(orgID: orgID, hostID: hostID, campaignID: campaignID, limit: $0) }
+      reportSends.show(context.firestore) { _ in
+        campaignEmailsQuery(orgID: orgID, hostID: hostID, campaignID: campaignID, limit: campaignEmailCeiling + 1)
+      }
       lists.show(context.firestore) { _ in FirestoreQuery(["orgs", orgID, "lists"], limit: 50) }
     }
     .onDisappear {
       doc.stop()
       emails.stop()
+      reportSends.stop()
       lists.stop()
     }
   }

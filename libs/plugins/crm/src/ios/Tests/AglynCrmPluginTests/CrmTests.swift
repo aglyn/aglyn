@@ -35,6 +35,40 @@ final class CrmTests: XCTestCase {
     }
   }
 
+  func testATemplateIsReadAsTheConsoleReadsIt() throws {
+    for (index, item) in try functionCases("normalizeCrmEmailTemplate").enumerated() {
+      let got = crmEmailTemplate(id: "t", item.args[0] as? [String: Any])
+      let want = item.result as! [String: Any]
+      XCTAssertEqual(got.name, want["name"] as? String, "case \(index)")
+      XCTAssertEqual(got.subject, want["subject"] as? String, "case \(index)")
+      XCTAssertEqual(got.body, want["body"] as? String, "case \(index)")
+      XCTAssertEqual(got.kind, want["kind"] as? String, "case \(index)")
+      XCTAssertEqual(got.visibility, want["visibility"] as? String, "case \(index)")
+      XCTAssertEqual(got.ownerUID, want["ownerUid"] as? String, "case \(index)")
+    }
+    for (index, item) in try functionCases("crmEmailTemplateIsListed").enumerated() {
+      let template = item.args[0] as! [String: Any]
+      XCTAssertEqual(
+        crmEmailTemplateIsListed(visibility: template["visibility"] as? String, ownerUID: template["ownerUid"] as? String, uid: item.args[1] as? String),
+        item.result as? Bool, "case \(index)")
+    }
+  }
+
+  func testTheTemplateToolsOfferWhatTheRecordReads() {
+    XCTAssertEqual(crmMergeGroups(["contactId": "c"]), [.contact, .you, .site])
+    XCTAssertEqual(crmMergeGroups(["leadId": "l"]), [.lead, .you, .site])
+    XCTAssertEqual(crmMergeGroups(["dealId": "d", "contactId": "c"]), [.contact, .deal, .you, .site])
+    XCTAssertEqual(crmMergeFieldToken("contact.firstName"), "{{contact.firstName}}")
+    XCTAssertEqual(crmInsert("{{site.name}}", into: "Hi "), "Hi {{site.name}}")
+    let order = crmTemplatePickOrder([
+      CrmEmailTemplate(id: "1", name: "b", subject: "", body: "x", kind: "template", visibility: "personal"),
+      CrmEmailTemplate(id: "2", name: "z", subject: "", body: "x", kind: "template", visibility: "shared"),
+      CrmEmailTemplate(id: "3", name: "a", subject: "", body: "x", kind: "snippet", visibility: "shared"),
+      CrmEmailTemplate(id: "4", name: "a", subject: "", body: "x", kind: "template", visibility: "shared"),
+    ])
+    XCTAssertEqual(order.map(\.id), ["4", "2", "1"])
+  }
+
   func testATelLinkIsTheConsoles() throws {
     for (index, item) in try functionCases("crmTelHref").enumerated() {
       XCTAssertEqual(crmTelHref(item.args[0] as? String), item.result as? String, "case \(index)")

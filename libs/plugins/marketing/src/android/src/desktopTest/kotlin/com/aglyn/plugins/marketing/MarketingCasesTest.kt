@@ -45,6 +45,38 @@ class MarketingCasesTest {
   private fun campaign(element: JsonElement?) = campaignRowOf(com.aglyn.core.FirestoreDoc("c", "orgs/o/emailCampaigns/c", map(element).orEmpty()))
 
   @Test
+  fun campaignRollupCases() = cases("campaignRollup").forEach { (args, result) ->
+    @Suppress("UNCHECKED_CAST")
+    val got = campaignMailRollup((plain(args[0]) as List<Map<String, Any?>>))
+    val want = map(result)!!
+    fun aggregate(g: CampaignAggregate, w: Any?) {
+      val m = w as Map<*, *>
+      assertTrue(close(g.value, (m["value"] as? Number)?.toDouble()), "$args ${m}")
+      assertEquals((m["recorded"] as Number).toInt(), g.recorded, args.toString())
+      assertEquals((m["sends"] as Number).toInt(), g.sends, args.toString())
+    }
+    fun rate(g: CampaignRate?, w: Any?) {
+      val m = w as? Map<*, *>
+      if (m == null) return assertEquals(null, g, args.toString())
+      assertTrue(close(g?.value, (m["value"] as Number).toDouble()), args.toString())
+      assertTrue(close(g?.denominator, (m["denominator"] as Number).toDouble()), args.toString())
+      assertEquals(m["denominatorLabel"], g?.denominatorLabel)
+    }
+    assertEquals(listOf(want["sends"], want["scheduled"], want["sending"], want["drafts"]).map { (it as Number).toInt() }, listOf(got.sends, got.scheduled, got.sending, got.drafts), args.toString())
+    aggregate(got.addressed, want["addressed"]); aggregate(got.sent, want["sent"]); aggregate(got.delivered, want["delivered"])
+    aggregate(got.opens, want["opens"]); aggregate(got.clicks, want["clicks"]); aggregate(got.unsubscribes, want["unsubscribes"])
+    rate(got.openRate, want["openRate"]); rate(got.clickRate, want["clickRate"]); rate(got.unsubscribeRate, want["unsubscribeRate"])
+  }
+
+  @Test
+  fun campaignFiguresReadAsTheConsoles() {
+    assertEquals("across 1 of 2 emails", CampaignAggregate(6.0, 1, 2).note)
+    assertEquals("not recorded", CampaignAggregate(null, 0, 2).note)
+    assertEquals("55.6%", CampaignRate(5.0 / 9, 5.0, 9.0, "delivered").percent)
+    assertEquals("5 of 9 delivered", CampaignRate(5.0 / 9, 5.0, 9.0, "delivered").detail)
+  }
+
+  @Test
   fun campaignPlacementCases() {
     cases("campaignPlacedOnlyOn").forEach { (args, result) ->
       assertEquals((result as JsonPrimitive).booleanOrNull, campaign(args[0]).placedOnlyOn((args[1] as JsonPrimitive).content), args.toString())

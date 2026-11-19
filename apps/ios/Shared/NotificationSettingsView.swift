@@ -370,7 +370,11 @@ struct NotificationSettingsView: View {
     let content = UNMutableNotificationContent()
     content.title = "\(model.brandName) notifications are on"
     content.body = "This is what a notification looks like."
-    content.sound = AglynNotificationSounds.sound(for: pickedSoundID).map { UNNotificationSound(named: UNNotificationSoundName($0.apple)) } ?? .default
+    let sound = AglynNotificationSounds.sound(for: pickedSoundID)
+    content.sound = sound.map { UNNotificationSound(named: UNNotificationSoundName($0.apple)) } ?? .default
+    // The same `aps.sound` a push carries, so the test plays the way a real notification does in front (macOS plays it
+    // from the app).
+    if let sound { content.userInfo = ["aps": ["sound": sound.apple]] }
     let request = UNNotificationRequest(identifier: "aglyn-test", content: content, trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false))
     Task {
       let center = UNUserNotificationCenter.current()
