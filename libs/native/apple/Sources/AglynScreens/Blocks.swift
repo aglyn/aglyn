@@ -506,6 +506,12 @@ func fieldJSON(_ field: FieldSpec, _ value: FieldValue?) -> JSONValue {
   case ("upload", .text(let text)?):
     // What the upload step reads out of the chosen file or pasted rows, kept as JSON text while it is edited.
     return JSONValue.decode(Data(text.utf8)) ?? .null
+  case ("signature", .text(let text)?):
+    // A drawn signature: `{ strokes, png }`, or null while nothing is drawn.
+    return SignatureInk.json(text)
+  case ("group", .text(let text)?):
+    // A set of fields asked for each of several (the minors on a waiver): the sets, each field as it sends itself.
+    return FieldGroups.json(field, text)
   case ("lines", .text(let text)?):
     // One entry per line while edited; the list is what is sent (nothing typed is an empty list).
     return .array(text.split(separator: "\n").map { String($0).trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.map(JSONValue.string))
@@ -525,6 +531,7 @@ func initialValue(_ field: FieldSpec, in context: JSONValue) -> FieldValue {
   if field.kind == "toggle" { return .flag(ScreenValues.truthy(resolved)) }
   if field.kind == "multiselect" { return .text(Optional(resolved).array.map { ScreenValues.text($0) }.joined(separator: "\n")) }
   if field.kind == "lines" { return .text(Optional(resolved).array.map { ScreenValues.text($0) }.joined(separator: "\n")) }
+  if field.kind == "group" { return .text(FieldGroups.initial(field, resolved)) }
   if field.kind == "date", let millis = ScreenValues.epochMillis(resolved) {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withFullDate]
@@ -638,6 +645,12 @@ struct FieldInput: View {
         UploadFieldView(field: field, context: context, value: $value)
       case "media":
         MediaFieldView(field: field, value: $value)
+      case "signature":
+        SignatureFieldView(field: field, label: label, help: field.help.map { ScreenValues.render($0, in: context) }, value: $value)
+      case "photo":
+        PhotoFieldView(field: field, label: label, value: $value)
+      case "group":
+        GroupFieldView(field: field, context: context, label: label, value: $value)
       case "multiline", "lines":
         PlainFormRow(label) {
           TextField(label, text: text, prompt: field.placeholder.map { Text($0) }, axis: .vertical)
@@ -668,7 +681,7 @@ struct FieldInput: View {
       }
       if let mismatch = field.mismatch, !text.wrappedValue.isEmpty, field.refuses(.string(text.wrappedValue), in: context) {
         Text(ScreenValues.render(mismatch, in: context)).font(AglynFont.caption).foregroundStyle(AglynColor.error)
-      } else if let help = field.help {
+      } else if let help = field.help, field.kind != "signature" {
         Text(ScreenValues.render(help, in: context)).font(AglynFont.caption).foregroundStyle(.secondary)
       }
     }

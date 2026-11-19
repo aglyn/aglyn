@@ -71,6 +71,9 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The REAL lock verdict a named site is admitted by (AGL-4235): the
+  // site's own lock decides by the method, as at the site router.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/lockdown'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/api-idempotency'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/contacts'),
@@ -108,7 +111,7 @@ jest.mock('firebase-admin/firestore', () => {
 
 import { DELETE, GET, PATCH, POST } from '../app/api/v1/[[...route]]/route'
 import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
-import { childPaths, mockDocs, resetMockFirestore } from './api-v1-crm-double'
+import { childPaths, mockDocs, resetMockFirestore, seedSites } from './api-v1-crm-double'
 
 const ORG = 'orgs/org-1'
 const CONTACTS = `${ORG}/contacts`
@@ -191,6 +194,7 @@ beforeAll(() => registerPluginServerDeclarations())
 
 beforeEach(() => {
   resetMockFirestore()
+  seedSites(['host-1', 'host-2'])
   mockScopes = ['contacts:read', 'contacts:write']
   mockLogHostActivity.mockClear()
   mockOrg = {

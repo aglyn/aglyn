@@ -31,3 +31,22 @@ final class EventsTests: XCTestCase {
     XCTAssertEqual(newEventID().count, 20)
   }
 }
+
+/// The Events page's Import and Export: the hub's import on this site's events, and an export of every event.
+final class EventsTransferTests: XCTestCase {
+  func testImportOpensTheHubImportOnThisSitesEvents() {
+    XCTAssertEqual(coreDataImportScreen, "core.settings.data.import")
+    XCTAssertEqual(eventsImportParams(hostID: "h1"), ["resource": "events", "hostId": "h1"])
+    XCTAssertEqual(eventsImportParams(hostID: nil), ["resource": "events"])
+  }
+
+  func testExportCoversEveryEventOfTheSite() {
+    let request = eventsExportRequest(hostID: "h1")
+    XCTAssertEqual(request.resource, "events")
+    XCTAssertEqual(request.title, "Export Events")
+    XCTAssertEqual(request.hostID, "h1")
+    XCTAssertEqual(request.scope, ["kind": "all"])
+    XCTAssertEqual(request.fileStem, "events")
+    XCTAssertNil(request.filter)
+  }
+}
