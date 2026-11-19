@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -132,6 +133,18 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null, sta
   val scope = rememberCoroutineScope()
   val runner = remember(hostId) { ActionRunner(scope) }
   val api = remember(hostId, context.api, context.writer) { PagesApi(context.api, context.writer, hostId) }
+  // The site's held and flagged pages (AGL-3374); left null when the read fails, so the list shows no chips rather than
+  // an error over pages that are fine.
+  var holds by remember(hostId) { mutableStateOf<PageHoldsAnswer?>(null) }
+  LaunchedEffect(hostId, context.api) {
+    holds = try {
+      fetchPageHolds(context.api, hostId)
+    } catch (error: kotlinx.coroutines.CancellationException) {
+      throw error
+    } catch (error: Exception) {
+      null
+    }
+  }
   // Who is in each page right now (AGL-2486), read every 30 seconds while the list is on screen.
   var presence by remember(hostId) { mutableStateOf(PresenceSummary()) }
   LaunchedEffect(hostId, context.api) {
@@ -233,6 +246,7 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null, sta
                 val open = row.page.id in expanded
                 PageRowItem(
                   row,
+                  holds = holdsForTarget(holds?.holds.orEmpty(), HeldPageTarget("screen", row.page.id)),
                   people = presence.people("screen", row.page.id),
                   selected = row.page.id == selected,
                   expanded = if (query.isBlank() && row.childCount > 0) open else null,
@@ -260,7 +274,7 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null, sta
       if (row == null) {
         SelectionPlaceholder("Pick a page to see it here", icon = AglynIcons.named("description"))
       } else {
-        PageDetail(context, hostId, row, live.routing, api, runner, canEdit, canPublish, live.loader, presence.people("screen", row.page.id)) { dialog = it }
+        PageDetail(context, hostId, row, live.routing, api, runner, canEdit, canPublish, live.loader, holds, presence.people("screen", row.page.id)) { dialog = it }
       }
     },
   )
@@ -269,7 +283,7 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null, sta
 }
 
 @Composable
-private fun PageRowItem(row: PageTreeRow, people: List<PresentPerson>, selected: Boolean, expanded: Boolean?, onToggle: () -> Unit, onClick: () -> Unit) {
+private fun PageRowItem(row: PageTreeRow, holds: List<PageHold>, people: List<PresentPerson>, selected: Boolean, expanded: Boolean?, onToggle: () -> Unit, onClick: () -> Unit) {
   val status = pageStatus(row)
   val count = if (row.childCount == 1) "1 page" else "${row.childCount} pages"
   Row(Modifier.fillMaxWidth().padding(start = (row.depth * 24).dp), verticalAlignment = Alignment.CenterVertically) {
@@ -299,9 +313,16 @@ private fun PageRowItem(row: PageTreeRow, people: List<PresentPerson>, selected:
       icon = AglynIcons.named(if (row.page.isGroup) "folder" else if (row.home) "home" else "description"),
       selected = selected,
       trailing = {
-        Row(horizontalArrangement = Arrangement.spacedBy(space(0.5f)), verticalAlignment = Alignment.CenterVertically) {
+        // The chips wrap under each other rather than squeezing the page's name to "…" in a narrow list column.
+        FlowRow(
+          Modifier.widthIn(max = 176.dp),
+          horizontalArrangement = Arrangement.spacedBy(space(0.5f), Alignment.End),
+          verticalArrangement = Arrangement.spacedBy(space(0.5f)),
+        ) {
           // Who is in this page right now, across its versions (AGL-2486).
           DocumentPresenceChips(people)
+          // Held or flagged by the page review (AGL-3374): a chip per status beside the page's own.
+          PageHoldChips(holds)
           if (row.home) StatusChip("Home", StatusTone.INFO)
           if (!row.page.isGroup) StatusChip(status.label, if (status.live) StatusTone.SUCCESS else StatusTone.NEUTRAL)
         }
@@ -323,6 +344,7 @@ private fun PageDetail(
   canEdit: Boolean,
   canPublish: Boolean,
   loader: PagesTreeLoader,
+  holds: PageHoldsAnswer?,
   people: List<PresentPerson>,
   open: (PageDialog) -> Unit,
 ) {
@@ -384,6 +406,8 @@ private fun PageDetail(
       },
     )
     page.description?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    // Held, flagged or not approved by the page review (AGL-3374): what happened, what visitors see, what to do.
+    PageHoldBanner(context, holds, HeldPageTarget("screen", page.id))
     // Who is in it right now, in the Besigner (AGL-2486): faces and the console's hedged sentence.
     if (people.isNotEmpty()) {
       Row(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
@@ -398,6 +422,8 @@ private fun PageDetail(
         DetailRow("Updated", page.updatedAt?.let { relativeTime(it.epochMillis, now) })
       }
       PageVersions(context, hostId, page, api, runner, canPublish, loader)
+      // What breaks if this page goes (AGL-703), on demand: the scan reads every page, layout and component.
+      PageUsedBySection(context, hostId, page.id)
       // What the page is doing, then who touched it (the console's page view, AGL-4011): its traffic above its activity.
       com.aglyn.site.analytics.PageTrafficCard(context.firestore, context.api, hostId, page.id, upgrade = { context.navigate("core.billing.plans") })
       com.aglyn.site.analytics.SiteActivityCard(context.firestore, context.api, hostId, targetId = page.id, title = "Page Activity")

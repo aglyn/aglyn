@@ -20,6 +20,19 @@ final class SitePagesModel {
   var search = ""
 
   var routing: SiteRouting { SiteRouting(host: host.state.value ?? nil) }
+  /// The site's held and flagged pages (AGL-3374); nil until read, and left nil when the read fails (the list shows no
+  /// chips rather than an error over pages that are fine).
+  var holds: PageHoldsAnswer?
+
+  /// The holds shown on one page.
+  func holds(on pageID: String) -> [PageHold] {
+    holdsForTarget(holds?.holds ?? [], HeldPageTarget(type: "screen", id: pageID))
+  }
+
+  func loadHolds(_ api: ConsoleAPIClient, hostID: String) async {
+    holds = try? await fetchPageHolds(api: api, hostID: hostID)
+  }
+
   /// Who is in each page right now (AGL-2486), read every 30 seconds while the list is on screen.
   var presence = PresenceSummary()
 
@@ -176,8 +189,10 @@ struct PagesScreen: View {
         }
         .task(id: hostID) {
           if startNew && canEdit { sheet = .newPage }
+          async let holds: Void = model.loadHolds(context.api, hostID: hostID)
           await model.bind(context.firestore, hostID: hostID)
           if let initialPageID { await model.reveal(initialPageID) }
+          _ = await holds
         }
         .task(id: "presence:\(hostID)") { await model.pollPresence(context.api, hostID: hostID) }
         .aglynSearchable(text: $model.search, prompt: "Search pages")
@@ -272,7 +287,7 @@ struct PagesScreen: View {
       if selectable {
         List {
           ForEach(rows) { row in
-            PageListRow(row: row, people: model.presence.people("screen", row.id), expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
+            PageListRow(row: row, holds: model.holds(on: row.id), people: model.presence.people("screen", row.id), expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
               Task { await model.toggle(row.id) }
             })
             .aglynSelectableRow(row.id, selection: $selection)
@@ -304,7 +319,7 @@ struct PagesScreen: View {
               .navigationTitle(row.page.name)
               .aglynScreenTitle(row.page.name)
             } label: {
-              PageListRow(row: row, people: model.presence.people("screen", row.id), expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
+              PageListRow(row: row, holds: model.holds(on: row.id), people: model.presence.people("screen", row.id), expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
                 Task { await model.toggle(row.id) }
               })
             }
@@ -350,6 +365,8 @@ struct PagesScreen: View {
 
 struct PageListRow: View {
   let row: PageTreeRow
+  /// Held or flagged by the page review (AGL-3374): a chip per status beside the page's own.
+  var holds: [PageHold] = []
   /// Who is in this page right now, across its versions (AGL-2486): their faces beside its chips.
   var people: [PresentPerson] = []
   var expanded = false
@@ -390,10 +407,18 @@ struct PageListRow: View {
         row.page.name, subtitle: subtitle,
         systemImage: row.page.isGroup ? SiteSymbols.group : row.home ? SiteSymbols.home : SiteSymbols.page
       ) {
-        HStack(spacing: AglynSpace.half) {
-          DocumentPresenceChips(people: people)
-          if row.home { StatusChip("Home", tone: .info) }
-          if !row.page.isGroup { StatusChip(status.label, tone: status.live ? .success : .neutral) }
+        // A hold's chip goes above the page's own, each at its own width: beside them on a phone it squeezed the chips
+        // to a letter a line.
+        VStack(alignment: .trailing, spacing: AglynSpace.half) {
+          if !holds.isEmpty {
+            HStack(spacing: AglynSpace.half) { PageHoldChips(holds: holds) }.fixedSize()
+          }
+          HStack(spacing: AglynSpace.half) {
+            DocumentPresenceChips(people: people)
+            if row.home { StatusChip("Home", tone: .info) }
+            if !row.page.isGroup { StatusChip(status.label, tone: status.live ? .success : .neutral) }
+          }
+          .fixedSize()
         }
       }
     }
@@ -602,6 +627,13 @@ struct PageDetail: View {
           }
         }
       }
+      // Held, flagged or not approved by the page review (AGL-3374): what happened, what visitors see, what to do.
+      if !model.holds(on: page.id).isEmpty {
+        Section {
+          PageHoldBanner(context: context, answer: model.holds, target: HeldPageTarget(type: "screen", id: page.id))
+        }
+        .aglynBareFormRow()
+      }
       if !page.isGroup {
         Section("Details") {
           AglynDetailRow(
@@ -612,6 +644,8 @@ struct PageDetail: View {
         }
         PageVersionsSection(
           context: context, hostID: hostID, page: page, model: model, api: api, runner: runner, canPublish: canPublish)
+        // What breaks if this page goes (AGL-703), on demand: the scan reads every page, layout and component.
+        PageUsedBySection(context: context, hostID: hostID, pageID: page.id)
         // What the page is doing, then who touched it (the console's page view, AGL-4011): its traffic above its activity.
         Section {
           PageTrafficCard(reader: context.firestore, api: context.api, hostID: hostID, screenID: page.id) {
