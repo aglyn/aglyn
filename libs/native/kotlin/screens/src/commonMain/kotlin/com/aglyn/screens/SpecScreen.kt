@@ -709,7 +709,8 @@ private fun Block(
       if (value.isNotEmpty()) {
         SectionCard(title) {
           Box(Modifier.fillMaxWidth().padding(vertical = space(2f)).testTag("qr-${block.id}"), contentAlignment = Alignment.Center) {
-            QrCodeImage(value, size = 192.dp)
+            // The caption is what a screen reader says (as on Apple); the kit's default names a payment code.
+            QrCodeImage(value, size = 192.dp, description = block.string("caption")?.let { ScreenValues.render(it, context) } ?: "QR code")
           }
           footer?.let { Text(it, Modifier.padding(horizontal = space(2f), vertical = space(1f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
