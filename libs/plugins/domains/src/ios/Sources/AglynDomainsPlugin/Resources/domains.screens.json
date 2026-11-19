@@ -1,5 +1,5 @@
 {
-  "$comment": "The workspace's Domains page natively (the domains plugin's orgNavItems /domains, AGL-4040; gap sweep Domains row 9, piece 1): every domain the workspace holds, with its site, status, renewal and price at renewal, and a page per name. Route: /api/registrar/workspace (DOMAINS_API_ROUTES.workspace); site names from the person's users/{uid}/hostMemberships rows. The registrant contact (view, Edit contact: /api/registrar/contact, Domains row 2) and Connect to a site, Move to another site and Disconnect (/api/registrar/connect and /disconnect, Domains row 3) and the Auto-renew switch (/api/registrar/auto-renew, part of Domains row 7) are here; buying, renewing now, transfers in and out, and DNS records are later pieces (Domains rows 1-8).",
+  "$comment": "The workspace's Domains page natively (the domains plugin's orgNavItems /domains, AGL-4040; gap sweep Domains row 9, piece 1): every domain the workspace holds, with its site, status, renewal and price at renewal, and a page per name. Route: /api/registrar/workspace (DOMAINS_API_ROUTES.workspace); site names from the person's users/{uid}/hostMemberships rows. The registrant contact (view, Edit contact: /api/registrar/contact, Domains row 2) and Connect to a site, Move to another site and Disconnect (/api/registrar/connect and /disconnect, Domains row 3) and the Auto-renew switch (/api/registrar/auto-renew, part of Domains row 7; a store build, where buying is off (`app.billing`), shows the switch only while auto-renew is on, so it can be turned off and never on, since turning it on leads to later charges) are here; buying, renewing now, transfers in and out, and DNS records are later pieces (Domains rows 1-8).",
   "screens": [
     {
       "id": "domains.list",
@@ -349,7 +349,7 @@
         {
           "type": "list",
           "id": "autoRenew",
-          "when": "data.ws.rows[domain=params.domain].status == active",
+          "when": "data.ws.rows[domain=params.domain].status == active && app.billing || data.ws.rows[domain=params.domain].status == active && data.ws.rows[domain=params.domain].autoRenew",
           "items": "const.autoRenew",
           "count": false,
           "primary": "{item.label}",

@@ -129,4 +129,26 @@ final class DomainConnectSpecTests: XCTestCase {
     XCTAssertEqual(off.success, "Auto-renew is off")
     XCTAssertFalse(ScreenValues.condition(try XCTUnwrap(spec.blocks.first { $0.id == "expired" }).when, in: ctx))
   }
+
+  /// Store builds hide buying (`app.billing` false): the Auto-renew switch is there to turn auto-renew OFF while it is
+  /// on, and is absent while it is off, since turning it on leads to later charges. A build that may buy shows it either way.
+  func testAutoRenewCanOnlyBeTurnedOffWhereTheBuildMayNotBuy() throws {
+    let spec = try XCTUnwrap(ScreenCatalog.parse(Data(contentsOf: Self.domainSpecs)).first { $0.id == "domains.domain" })
+    let block = try XCTUnwrap(spec.blocks.first { $0.id == "autoRenew" })
+    func ctx(billing: Bool, autoRenew: Bool, status: String = "active") throws -> JSONValue {
+      try XCTUnwrap(
+        JSONValue.decode(
+          Data(
+            """
+            {"app":{"billing":\(billing)},"org":{"id":"o1"},"params":{"domain":"bakery.example"},
+             "data":{"ws":{"billingPermission":true,"rows":[{"domain":"bakery.example","status":"\(status)","autoRenew":\(autoRenew)}]}}}
+            """.utf8)))
+    }
+    XCTAssertTrue(ScreenValues.condition(block.when, in: try ctx(billing: true, autoRenew: false)))
+    XCTAssertTrue(ScreenValues.condition(block.when, in: try ctx(billing: true, autoRenew: true)))
+    XCTAssertTrue(ScreenValues.condition(block.when, in: try ctx(billing: false, autoRenew: true)))
+    XCTAssertFalse(ScreenValues.condition(block.when, in: try ctx(billing: false, autoRenew: false)))
+    XCTAssertFalse(ScreenValues.condition(block.when, in: try ctx(billing: true, autoRenew: true, status: "expired")))
+    XCTAssertFalse(ScreenValues.condition(block.when, in: try ctx(billing: false, autoRenew: true, status: "expired")))
+  }
 }

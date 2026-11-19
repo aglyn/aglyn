@@ -127,4 +127,23 @@ class DomainConnectSpecTest {
     assertEquals("Auto-renew is off", off.success)
     assertFalse(ScreenValues.condition(spec.blocks.first { it.id == "expired" }.whenCondition, ctx))
   }
+
+  /**
+   * Store builds hide buying (`app.billing` false): the Auto-renew switch is there to turn auto-renew OFF while it is on,
+   * and is absent while it is off, since turning it on leads to later charges. A build that may buy shows it either way.
+   */
+  @Test
+  fun autoRenewCanOnlyBeTurnedOffWhereTheBuildMayNotBuy() {
+    val block = spec.blocks.first { it.id == "autoRenew" }
+    fun ctx(billing: Boolean, autoRenew: Boolean, status: String = "active") = json(
+      """{"app":{"billing":$billing},"org":{"id":"o1"},"params":{"domain":"bakery.example"},
+          "data":{"ws":{"billingPermission":true,"rows":[{"domain":"bakery.example","status":"$status","autoRenew":$autoRenew}]}}}""",
+    )
+    assertTrue(ScreenValues.condition(block.whenCondition, ctx(billing = true, autoRenew = false)))
+    assertTrue(ScreenValues.condition(block.whenCondition, ctx(billing = true, autoRenew = true)))
+    assertTrue(ScreenValues.condition(block.whenCondition, ctx(billing = false, autoRenew = true)))
+    assertFalse(ScreenValues.condition(block.whenCondition, ctx(billing = false, autoRenew = false)))
+    assertFalse(ScreenValues.condition(block.whenCondition, ctx(billing = true, autoRenew = true, status = "expired")))
+    assertFalse(ScreenValues.condition(block.whenCondition, ctx(billing = false, autoRenew = true, status = "expired")))
+  }
 }
