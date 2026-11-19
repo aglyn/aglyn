@@ -1255,7 +1255,8 @@ A file is `{ "screens": [ … ] }`. A screen:
 An action is `{ label, icon, method, url, body, headers, confirm, confirmWhen, confirmMessage, confirmLabel, destructive, prompt,
 promptTitle, submitLabel, reason, success, instead, check, open, navigate, back, reload, when, disabledWhen, link, copy,
 export, overlay, reveal, else, then, write, route }`: `disabledWhen` on a form's submit keeps the button on screen and off
-while it holds, for a setup step the screen says above it (a `when` would hide it); `prompt` asks for inputs first (`form.*`), in a dialog titled
+while it holds, for a setup step the screen says above it (a `when` would hide it), and it reads the form's own values as `form.*`
+(Quotes settings: Save is off with no statement or more than five); `prompt` asks for inputs first (`form.*`), in a dialog titled
 `promptTitle` with a `submitLabel` button where the label alone would say neither (a row's `Edit` opens
 "Edit category" with Save, as the console's dialog does); `reason: true`
 adds the required reason the staff routes record; `open` names the response
@@ -1460,7 +1461,14 @@ The context also carries `now` (UTC): `now.month` (`2026-10`), `now.prevMonth`,
 `now.day` (`2026-10-13`) and `now.year`, the keys the console's monthly
 counters and daily documents are named by, so `data.counter[@now.month]` reads
 this month's figure. `app.brand` is the platform's name, for words the console prints with it
-(`{app.brand} staff · {item.staffRole}`). A path `rows.*.field` is that field of every row, as a
+(`{app.brand} staff · {item.staffRole}`). `app.billing` is whether this build may take or start a payment to Aglyn
+(a plan, an add-on, credits, a paid listing, an invoice, a card): false in a store build (the Apple Release
+configuration, the Android release build type), by the owner's decision of 2026-11-19, and true in a debug build, from
+`StoreBilling` in each kit's core and never from anything remote. Every action, field or block that charges or starts a
+charge holds `app.billing` in its `when`, beside the plan and permission clauses (`app.billing && org.can[billing.manage]`),
+so a store build leaves it out rather than greying it. `app.billingLink` is whether, where buying is off, the screen may
+link to the console's billing page: the App Store's United States storefront only, never on Google Play for now. A
+path `rows.*.field` is that field of every row, as a
 list. `{a + b - c}` sums numbers (paths, literals, or a list, which adds up);
 a term that is missing makes the sum missing, and `x?` counts as zero where it
 is missing. `a ?? 'text'` keeps a real 0 or false.

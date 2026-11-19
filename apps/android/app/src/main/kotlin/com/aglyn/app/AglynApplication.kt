@@ -35,6 +35,7 @@ class AglynApplication : Application() {
         firestoreEmulatorHost = BuildConfig.FIRESTORE_EMULATOR_HOST,
         appCheck = BuildConfig.APP_CHECK,
         telemetry = BuildConfig.TELEMETRY,
+        inAppBilling = BuildConfig.IN_APP_BILLING,
         passkeyRpId = BuildConfig.PASSKEY_RP_ID,
         googleWebClientId = BuildConfig.GOOGLE_WEB_CLIENT_ID,
       ),

@@ -197,6 +197,25 @@ export const MARKETPLACE_BROWSE_QUERY: ListQueryDeclaration = {
   },
 }
 
+/**
+ * The template gallery's marketplace shelf (`TemplateGalleryShelf`,
+ * AGL-3321): no Filters panel, the walk's order (the document name, which the
+ * automatic single-field indexes serve under the one equality and the one
+ * array clause), and the listing's name keys, which every publish stamps.
+ * Here rather than in the shelf so the native gallery plans the same query
+ * (AGL-3668).
+ */
+export const SITE_TEMPLATE_SHELF_QUERY: ListQueryDeclaration = {
+  fields: [],
+  sorts: [{ path: LIST_QUERY_ID_PATH, direction: 'asc' }],
+  search: { tokensPath: LISTING_NAME_TOKENS },
+}
+
+/** The shelf's scope: published site templates. */
+export const SITE_TEMPLATE_SHELF_BASE: ListQueryFilter[] = [
+  { path: 'kind', op: '==', value: 'template' },
+]
+
 /** The base clause's path, for the index enumeration. */
 export const MARKETPLACE_BROWSE_BASE_PATHS = [
   { path: LISTING_BROWSE_AUDIENCE, array: true },

@@ -45,6 +45,8 @@ function row(scope: 'org' | 'host', order: number): NativeNavRow {
     icon: nativeNavIcon('envelope', 'mail'),
     screen: 'email.messages',
     pluginId: 'email',
+    // The org tab strip asks the extension's permission (plugin.ts).
+    ...(scope === 'org' ? { permissions: ['data.manage'] } : {}),
     order,
     sections: [
       nativeNavHubSection(scope, '/emails', 'messages', 'Messages', 'email.messages'),

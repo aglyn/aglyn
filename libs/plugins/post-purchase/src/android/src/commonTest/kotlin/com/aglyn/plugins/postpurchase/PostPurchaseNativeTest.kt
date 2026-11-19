@@ -24,6 +24,6 @@ class PostPurchaseNativeTest {
   fun everySpecNamesItsRoutesAndTheCommerceSettingsZone() {
     val specs = PostPurchaseScreenJson.files.flatMap { ScreenSpec.parseFile(it) }
     assertEquals(listOf("post-purchase.service", "post-purchase.order").sorted(), specs.map { it.id }.sorted())
-    assertTrue(specs.any { "commerceSettings" in it.zones } || specs.all { it.zones.isEmpty() })
+    assertTrue(specs.any { "commerceSettingsShipping" in it.zones } || specs.all { it.zones.isEmpty() })
   }
 }

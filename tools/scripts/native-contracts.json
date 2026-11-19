@@ -22,6 +22,12 @@
         "ListFilterRequest"
       ]
     },
+    "libs/aglyn/src/lib/app-utils/native-store-billing.ts": {
+      "values": [
+        "NATIVE_WEB_BILLING_LINK_LABEL",
+        "NATIVE_NO_IN_APP_BILLING_NOTE"
+      ]
+    },
     "libs/aglyn/src/lib/app-utils/name-search.ts": {
       "values": [
         "NAME_TOKEN_MAX_PREFIX",
@@ -730,7 +736,9 @@
         "MARKETPLACE_BROWSE_QUERY",
         "BROWSE_SORTS",
         "HELD_LICENCE_QUERY",
-        "MINE_LICENCE_QUERY"
+        "MINE_LICENCE_QUERY",
+        "SITE_TEMPLATE_SHELF_QUERY",
+        "SITE_TEMPLATE_SHELF_BASE"
       ]
     },
     "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts": {
@@ -1361,7 +1369,10 @@
     },
     "ENTRY_LIST_QUERY": {},
     "MARKETPLACE_BROWSE_QUERY": {},
-    "MEDIA_LIST_QUERY": {}
+    "MEDIA_LIST_QUERY": {},
+    "SITE_TEMPLATE_SHELF_QUERY": {
+      "base": "SITE_TEMPLATE_SHELF_BASE"
+    }
   },
   "functionCases": {
     "formatOrderNumber": {
@@ -32699,6 +32710,78 @@
           "workspace",
           [],
           false
+        ],
+        [
+          "workspace",
+          [
+            "crm",
+            "inbox",
+            "email",
+            "outreach",
+            "accounting",
+            "marketplace",
+            "workflows",
+            "marketing"
+          ],
+          false,
+          {
+            "permissions": {
+              "data.manage": true,
+              "outreach.use": false,
+              "accounting.manage": true
+            },
+            "features": {
+              "outreach": true
+            }
+          }
+        ],
+        [
+          "workspace",
+          [
+            "crm",
+            "inbox",
+            "email",
+            "outreach",
+            "accounting",
+            "marketplace",
+            "workflows",
+            "marketing"
+          ],
+          false,
+          {
+            "permissions": {
+              "data.manage": false,
+              "outreach.use": true,
+              "accounting.manage": false
+            },
+            "features": {
+              "outreach": false
+            }
+          }
+        ],
+        [
+          "workspace",
+          [
+            "crm",
+            "inbox",
+            "email",
+            "outreach",
+            "accounting",
+            "marketplace",
+            "workflows",
+            "marketing"
+          ],
+          false,
+          {
+            "permissions": {
+              "data.manage": true,
+              "outreach.use": true,
+              "accounting.manage": true
+            },
+            "features": {
+              "outreach": true
+            }
+          }
         ]
       ]
     },
@@ -37803,6 +37886,3170 @@
         ],
         [
           null
+        ]
+      ]
+    },
+    "previewLetters": {
+      "module": "libs/plugins/fonts/src/lib/picker/font-preview-url.ts",
+      "args": [
+        [
+          "Hello  world, hello"
+        ],
+        [
+          "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"
+        ],
+        [
+          ""
+        ],
+        [
+          "Ünïcødé ✓ text"
+        ]
+      ]
+    },
+    "previewSheetUrl": {
+      "module": "libs/plugins/fonts/src/lib/picker/font-preview-url.ts",
+      "args": [
+        [
+          "Playfair Display",
+          700,
+          "normal",
+          "Hello there"
+        ],
+        [
+          "Inter",
+          400,
+          "italic",
+          "Ab c"
+        ],
+        [
+          " Roboto Slab ",
+          300,
+          "normal",
+          "Q&A = 100%"
+        ]
+      ]
+    },
+    "previewFileUrls": {
+      "module": "libs/plugins/fonts/src/lib/picker/font-preview-url.ts",
+      "args": [
+        [
+          "@font-face {\n  font-family: 'Inter';\n  src: url(https://fonts.gstatic.com/l/font?kit=abc&skey=1&v=v18) format('woff2');\n}\n@font-face { src: url('https://fonts.gstatic.com/s/inter/v18/x.woff2') format('woff2'); }\n@font-face { src: url(https://evil.example.com/x.woff2); }"
+        ],
+        [
+          ""
+        ]
+      ]
+    },
+    "weightLabel": {
+      "module": "libs/plugins/fonts/src/lib/picker/font-choice.ts",
+      "args": [
+        [
+          100
+        ],
+        [
+          400
+        ],
+        [
+          650
+        ],
+        [
+          1000
+        ]
+      ]
+    },
+    "categoryLabel": {
+      "module": "libs/plugins/fonts/src/lib/picker/font-choice.ts",
+      "args": [
+        [
+          "serif"
+        ],
+        [
+          "sans-serif"
+        ],
+        [
+          "handwriting"
+        ],
+        [
+          "display"
+        ],
+        [
+          "monospace"
+        ]
+      ]
+    },
+    "nearestWeights": {
+      "module": "libs/plugins/fonts/src/lib/picker/font-choice.ts",
+      "args": [
+        [
+          [
+            400,
+            700
+          ],
+          [
+            300,
+            500,
+            900
+          ]
+        ],
+        [
+          [
+            700
+          ],
+          []
+        ],
+        [
+          [
+            400,
+            700
+          ],
+          [
+            400
+          ]
+        ],
+        [
+          [
+            100,
+            900
+          ],
+          [
+            200,
+            800
+          ]
+        ]
+      ]
+    },
+    "defaultFontChoice": {
+      "module": "libs/plugins/fonts/src/lib/picker/font-choice.ts",
+      "args": [
+        [
+          {
+            "family": "Roboto",
+            "category": "sans-serif",
+            "weights": [
+              100,
+              300,
+              400,
+              500,
+              700,
+              900
+            ],
+            "italics": [
+              400,
+              700
+            ],
+            "axes": [],
+            "subsets": [
+              "latin"
+            ],
+            "popularity": 1
+          },
+          "body"
+        ],
+        [
+          {
+            "family": "Montserrat",
+            "category": "sans-serif",
+            "weights": [
+              400,
+              600,
+              700,
+              900
+            ],
+            "italics": [],
+            "axes": [],
+            "subsets": [
+              "latin"
+            ],
+            "popularity": 4
+          },
+          "body"
+        ],
+        [
+          {
+            "family": "Playfair Display",
+            "category": "serif",
+            "weights": [
+              400,
+              700,
+              900
+            ],
+            "italics": [
+              400
+            ],
+            "axes": [],
+            "subsets": [
+              "latin"
+            ],
+            "popularity": 6
+          },
+          "heading"
+        ],
+        [
+          {
+            "family": "Bebas Neue",
+            "category": "display",
+            "weights": [
+              400
+            ],
+            "italics": [],
+            "axes": [],
+            "subsets": [
+              "latin"
+            ],
+            "popularity": 8
+          },
+          "heading"
+        ]
+      ]
+    },
+    "choiceStylesLabel": {
+      "module": "libs/plugins/fonts/src/lib/picker/font-choice.ts",
+      "args": [
+        [
+          {
+            "family": "Inter",
+            "category": "sans-serif",
+            "weights": [
+              400,
+              700
+            ],
+            "italics": [
+              400
+            ],
+            "source": "google"
+          }
+        ],
+        [
+          {
+            "family": "Bebas Neue",
+            "category": "display",
+            "weights": [
+              400
+            ],
+            "source": "google"
+          }
+        ]
+      ]
+    },
+    "searchFontFamilies": {
+      "module": "libs/plugins/fonts/src/lib/picker/font-choice.ts",
+      "args": [
+        [
+          [
+            {
+              "family": "Roboto",
+              "category": "sans-serif",
+              "weights": [
+                100,
+                300,
+                400,
+                500,
+                700,
+                900
+              ],
+              "italics": [
+                400,
+                700
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 1
+            },
+            {
+              "family": "Open Sans",
+              "category": "sans-serif",
+              "weights": [
+                300,
+                400,
+                600,
+                700,
+                800
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 2
+            },
+            {
+              "family": "Lato",
+              "category": "sans-serif",
+              "weights": [
+                100,
+                300,
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 3
+            },
+            {
+              "family": "Montserrat",
+              "category": "sans-serif",
+              "weights": [
+                400,
+                600,
+                700,
+                900
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 4
+            },
+            {
+              "family": "Merriweather",
+              "category": "serif",
+              "weights": [
+                300,
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 5
+            },
+            {
+              "family": "Playfair Display",
+              "category": "serif",
+              "weights": [
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 6
+            },
+            {
+              "family": "Lora",
+              "category": "serif",
+              "weights": [
+                400,
+                500,
+                600,
+                700
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 7
+            },
+            {
+              "family": "Bebas Neue",
+              "category": "display",
+              "weights": [
+                400
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 8
+            },
+            {
+              "family": "Pacifico",
+              "category": "handwriting",
+              "weights": [
+                400
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 9
+            },
+            {
+              "family": "Fira Code",
+              "category": "monospace",
+              "weights": [
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 10
+            },
+            {
+              "family": "Noto Sans JP",
+              "category": "sans-serif",
+              "weights": [
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "japanese"
+              ],
+              "popularity": 11
+            },
+            {
+              "family": "Oswald",
+              "category": "sans-serif",
+              "weights": [
+                300,
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 12
+            }
+          ],
+          "",
+          ""
+        ],
+        [
+          [
+            {
+              "family": "Roboto",
+              "category": "sans-serif",
+              "weights": [
+                100,
+                300,
+                400,
+                500,
+                700,
+                900
+              ],
+              "italics": [
+                400,
+                700
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 1
+            },
+            {
+              "family": "Open Sans",
+              "category": "sans-serif",
+              "weights": [
+                300,
+                400,
+                600,
+                700,
+                800
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 2
+            },
+            {
+              "family": "Lato",
+              "category": "sans-serif",
+              "weights": [
+                100,
+                300,
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 3
+            },
+            {
+              "family": "Montserrat",
+              "category": "sans-serif",
+              "weights": [
+                400,
+                600,
+                700,
+                900
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 4
+            },
+            {
+              "family": "Merriweather",
+              "category": "serif",
+              "weights": [
+                300,
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 5
+            },
+            {
+              "family": "Playfair Display",
+              "category": "serif",
+              "weights": [
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 6
+            },
+            {
+              "family": "Lora",
+              "category": "serif",
+              "weights": [
+                400,
+                500,
+                600,
+                700
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 7
+            },
+            {
+              "family": "Bebas Neue",
+              "category": "display",
+              "weights": [
+                400
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 8
+            },
+            {
+              "family": "Pacifico",
+              "category": "handwriting",
+              "weights": [
+                400
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 9
+            },
+            {
+              "family": "Fira Code",
+              "category": "monospace",
+              "weights": [
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 10
+            },
+            {
+              "family": "Noto Sans JP",
+              "category": "sans-serif",
+              "weights": [
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "japanese"
+              ],
+              "popularity": 11
+            },
+            {
+              "family": "Oswald",
+              "category": "sans-serif",
+              "weights": [
+                300,
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 12
+            }
+          ],
+          "o",
+          ""
+        ],
+        [
+          [
+            {
+              "family": "Roboto",
+              "category": "sans-serif",
+              "weights": [
+                100,
+                300,
+                400,
+                500,
+                700,
+                900
+              ],
+              "italics": [
+                400,
+                700
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 1
+            },
+            {
+              "family": "Open Sans",
+              "category": "sans-serif",
+              "weights": [
+                300,
+                400,
+                600,
+                700,
+                800
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 2
+            },
+            {
+              "family": "Lato",
+              "category": "sans-serif",
+              "weights": [
+                100,
+                300,
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 3
+            },
+            {
+              "family": "Montserrat",
+              "category": "sans-serif",
+              "weights": [
+                400,
+                600,
+                700,
+                900
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 4
+            },
+            {
+              "family": "Merriweather",
+              "category": "serif",
+              "weights": [
+                300,
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 5
+            },
+            {
+              "family": "Playfair Display",
+              "category": "serif",
+              "weights": [
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 6
+            },
+            {
+              "family": "Lora",
+              "category": "serif",
+              "weights": [
+                400,
+                500,
+                600,
+                700
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 7
+            },
+            {
+              "family": "Bebas Neue",
+              "category": "display",
+              "weights": [
+                400
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 8
+            },
+            {
+              "family": "Pacifico",
+              "category": "handwriting",
+              "weights": [
+                400
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 9
+            },
+            {
+              "family": "Fira Code",
+              "category": "monospace",
+              "weights": [
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 10
+            },
+            {
+              "family": "Noto Sans JP",
+              "category": "sans-serif",
+              "weights": [
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "japanese"
+              ],
+              "popularity": 11
+            },
+            {
+              "family": "Oswald",
+              "category": "sans-serif",
+              "weights": [
+                300,
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 12
+            }
+          ],
+          "lo",
+          ""
+        ],
+        [
+          [
+            {
+              "family": "Roboto",
+              "category": "sans-serif",
+              "weights": [
+                100,
+                300,
+                400,
+                500,
+                700,
+                900
+              ],
+              "italics": [
+                400,
+                700
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 1
+            },
+            {
+              "family": "Open Sans",
+              "category": "sans-serif",
+              "weights": [
+                300,
+                400,
+                600,
+                700,
+                800
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 2
+            },
+            {
+              "family": "Lato",
+              "category": "sans-serif",
+              "weights": [
+                100,
+                300,
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 3
+            },
+            {
+              "family": "Montserrat",
+              "category": "sans-serif",
+              "weights": [
+                400,
+                600,
+                700,
+                900
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 4
+            },
+            {
+              "family": "Merriweather",
+              "category": "serif",
+              "weights": [
+                300,
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 5
+            },
+            {
+              "family": "Playfair Display",
+              "category": "serif",
+              "weights": [
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 6
+            },
+            {
+              "family": "Lora",
+              "category": "serif",
+              "weights": [
+                400,
+                500,
+                600,
+                700
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 7
+            },
+            {
+              "family": "Bebas Neue",
+              "category": "display",
+              "weights": [
+                400
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 8
+            },
+            {
+              "family": "Pacifico",
+              "category": "handwriting",
+              "weights": [
+                400
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 9
+            },
+            {
+              "family": "Fira Code",
+              "category": "monospace",
+              "weights": [
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 10
+            },
+            {
+              "family": "Noto Sans JP",
+              "category": "sans-serif",
+              "weights": [
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "japanese"
+              ],
+              "popularity": 11
+            },
+            {
+              "family": "Oswald",
+              "category": "sans-serif",
+              "weights": [
+                300,
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 12
+            }
+          ],
+          "",
+          "serif"
+        ],
+        [
+          [
+            {
+              "family": "Roboto",
+              "category": "sans-serif",
+              "weights": [
+                100,
+                300,
+                400,
+                500,
+                700,
+                900
+              ],
+              "italics": [
+                400,
+                700
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 1
+            },
+            {
+              "family": "Open Sans",
+              "category": "sans-serif",
+              "weights": [
+                300,
+                400,
+                600,
+                700,
+                800
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 2
+            },
+            {
+              "family": "Lato",
+              "category": "sans-serif",
+              "weights": [
+                100,
+                300,
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 3
+            },
+            {
+              "family": "Montserrat",
+              "category": "sans-serif",
+              "weights": [
+                400,
+                600,
+                700,
+                900
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 4
+            },
+            {
+              "family": "Merriweather",
+              "category": "serif",
+              "weights": [
+                300,
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 5
+            },
+            {
+              "family": "Playfair Display",
+              "category": "serif",
+              "weights": [
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 6
+            },
+            {
+              "family": "Lora",
+              "category": "serif",
+              "weights": [
+                400,
+                500,
+                600,
+                700
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 7
+            },
+            {
+              "family": "Bebas Neue",
+              "category": "display",
+              "weights": [
+                400
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 8
+            },
+            {
+              "family": "Pacifico",
+              "category": "handwriting",
+              "weights": [
+                400
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 9
+            },
+            {
+              "family": "Fira Code",
+              "category": "monospace",
+              "weights": [
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 10
+            },
+            {
+              "family": "Noto Sans JP",
+              "category": "sans-serif",
+              "weights": [
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "japanese"
+              ],
+              "popularity": 11
+            },
+            {
+              "family": "Oswald",
+              "category": "sans-serif",
+              "weights": [
+                300,
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 12
+            }
+          ],
+          "  MONT ",
+          ""
+        ],
+        [
+          [
+            {
+              "family": "Roboto",
+              "category": "sans-serif",
+              "weights": [
+                100,
+                300,
+                400,
+                500,
+                700,
+                900
+              ],
+              "italics": [
+                400,
+                700
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 1
+            },
+            {
+              "family": "Open Sans",
+              "category": "sans-serif",
+              "weights": [
+                300,
+                400,
+                600,
+                700,
+                800
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 2
+            },
+            {
+              "family": "Lato",
+              "category": "sans-serif",
+              "weights": [
+                100,
+                300,
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 3
+            },
+            {
+              "family": "Montserrat",
+              "category": "sans-serif",
+              "weights": [
+                400,
+                600,
+                700,
+                900
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 4
+            },
+            {
+              "family": "Merriweather",
+              "category": "serif",
+              "weights": [
+                300,
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 5
+            },
+            {
+              "family": "Playfair Display",
+              "category": "serif",
+              "weights": [
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 6
+            },
+            {
+              "family": "Lora",
+              "category": "serif",
+              "weights": [
+                400,
+                500,
+                600,
+                700
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 7
+            },
+            {
+              "family": "Bebas Neue",
+              "category": "display",
+              "weights": [
+                400
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 8
+            },
+            {
+              "family": "Pacifico",
+              "category": "handwriting",
+              "weights": [
+                400
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 9
+            },
+            {
+              "family": "Fira Code",
+              "category": "monospace",
+              "weights": [
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 10
+            },
+            {
+              "family": "Noto Sans JP",
+              "category": "sans-serif",
+              "weights": [
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "japanese"
+              ],
+              "popularity": 11
+            },
+            {
+              "family": "Oswald",
+              "category": "sans-serif",
+              "weights": [
+                300,
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 12
+            }
+          ],
+          "zzz",
+          ""
+        ]
+      ]
+    },
+    "suggestFontPairings": {
+      "module": "libs/plugins/fonts/src/lib/picker/font-pairings.ts",
+      "args": [
+        [
+          {
+            "family": "Playfair Display",
+            "category": "serif",
+            "weights": [
+              400,
+              700,
+              900
+            ],
+            "italics": [
+              400
+            ],
+            "axes": [],
+            "subsets": [
+              "latin"
+            ],
+            "popularity": 6
+          },
+          "body",
+          [
+            {
+              "family": "Roboto",
+              "category": "sans-serif",
+              "weights": [
+                100,
+                300,
+                400,
+                500,
+                700,
+                900
+              ],
+              "italics": [
+                400,
+                700
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 1
+            },
+            {
+              "family": "Open Sans",
+              "category": "sans-serif",
+              "weights": [
+                300,
+                400,
+                600,
+                700,
+                800
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 2
+            },
+            {
+              "family": "Lato",
+              "category": "sans-serif",
+              "weights": [
+                100,
+                300,
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 3
+            },
+            {
+              "family": "Montserrat",
+              "category": "sans-serif",
+              "weights": [
+                400,
+                600,
+                700,
+                900
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 4
+            },
+            {
+              "family": "Merriweather",
+              "category": "serif",
+              "weights": [
+                300,
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 5
+            },
+            {
+              "family": "Playfair Display",
+              "category": "serif",
+              "weights": [
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 6
+            },
+            {
+              "family": "Lora",
+              "category": "serif",
+              "weights": [
+                400,
+                500,
+                600,
+                700
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 7
+            },
+            {
+              "family": "Bebas Neue",
+              "category": "display",
+              "weights": [
+                400
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 8
+            },
+            {
+              "family": "Pacifico",
+              "category": "handwriting",
+              "weights": [
+                400
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 9
+            },
+            {
+              "family": "Fira Code",
+              "category": "monospace",
+              "weights": [
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 10
+            },
+            {
+              "family": "Noto Sans JP",
+              "category": "sans-serif",
+              "weights": [
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "japanese"
+              ],
+              "popularity": 11
+            },
+            {
+              "family": "Oswald",
+              "category": "sans-serif",
+              "weights": [
+                300,
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 12
+            }
+          ]
+        ],
+        [
+          {
+            "family": "Lato",
+            "category": "sans-serif",
+            "weights": [
+              100,
+              300,
+              400,
+              700,
+              900
+            ],
+            "italics": [
+              400
+            ],
+            "axes": [],
+            "subsets": [
+              "latin"
+            ],
+            "popularity": 3
+          },
+          "heading",
+          [
+            {
+              "family": "Roboto",
+              "category": "sans-serif",
+              "weights": [
+                100,
+                300,
+                400,
+                500,
+                700,
+                900
+              ],
+              "italics": [
+                400,
+                700
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 1
+            },
+            {
+              "family": "Open Sans",
+              "category": "sans-serif",
+              "weights": [
+                300,
+                400,
+                600,
+                700,
+                800
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 2
+            },
+            {
+              "family": "Lato",
+              "category": "sans-serif",
+              "weights": [
+                100,
+                300,
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 3
+            },
+            {
+              "family": "Montserrat",
+              "category": "sans-serif",
+              "weights": [
+                400,
+                600,
+                700,
+                900
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 4
+            },
+            {
+              "family": "Merriweather",
+              "category": "serif",
+              "weights": [
+                300,
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 5
+            },
+            {
+              "family": "Playfair Display",
+              "category": "serif",
+              "weights": [
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 6
+            },
+            {
+              "family": "Lora",
+              "category": "serif",
+              "weights": [
+                400,
+                500,
+                600,
+                700
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 7
+            },
+            {
+              "family": "Bebas Neue",
+              "category": "display",
+              "weights": [
+                400
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 8
+            },
+            {
+              "family": "Pacifico",
+              "category": "handwriting",
+              "weights": [
+                400
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 9
+            },
+            {
+              "family": "Fira Code",
+              "category": "monospace",
+              "weights": [
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 10
+            },
+            {
+              "family": "Noto Sans JP",
+              "category": "sans-serif",
+              "weights": [
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "japanese"
+              ],
+              "popularity": 11
+            },
+            {
+              "family": "Oswald",
+              "category": "sans-serif",
+              "weights": [
+                300,
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 12
+            }
+          ]
+        ],
+        [
+          {
+            "family": "Merriweather",
+            "category": "serif",
+            "weights": [
+              300,
+              400,
+              700,
+              900
+            ],
+            "italics": [
+              400
+            ],
+            "axes": [],
+            "subsets": [
+              "latin"
+            ],
+            "popularity": 5
+          },
+          "heading",
+          [
+            {
+              "family": "Roboto",
+              "category": "sans-serif",
+              "weights": [
+                100,
+                300,
+                400,
+                500,
+                700,
+                900
+              ],
+              "italics": [
+                400,
+                700
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 1
+            },
+            {
+              "family": "Open Sans",
+              "category": "sans-serif",
+              "weights": [
+                300,
+                400,
+                600,
+                700,
+                800
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 2
+            },
+            {
+              "family": "Lato",
+              "category": "sans-serif",
+              "weights": [
+                100,
+                300,
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 3
+            },
+            {
+              "family": "Montserrat",
+              "category": "sans-serif",
+              "weights": [
+                400,
+                600,
+                700,
+                900
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 4
+            },
+            {
+              "family": "Merriweather",
+              "category": "serif",
+              "weights": [
+                300,
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 5
+            },
+            {
+              "family": "Playfair Display",
+              "category": "serif",
+              "weights": [
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 6
+            },
+            {
+              "family": "Lora",
+              "category": "serif",
+              "weights": [
+                400,
+                500,
+                600,
+                700
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 7
+            },
+            {
+              "family": "Bebas Neue",
+              "category": "display",
+              "weights": [
+                400
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 8
+            },
+            {
+              "family": "Pacifico",
+              "category": "handwriting",
+              "weights": [
+                400
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 9
+            },
+            {
+              "family": "Fira Code",
+              "category": "monospace",
+              "weights": [
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 10
+            },
+            {
+              "family": "Noto Sans JP",
+              "category": "sans-serif",
+              "weights": [
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "japanese"
+              ],
+              "popularity": 11
+            },
+            {
+              "family": "Oswald",
+              "category": "sans-serif",
+              "weights": [
+                300,
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 12
+            }
+          ]
+        ],
+        [
+          {
+            "family": "Bebas Neue",
+            "category": "display",
+            "weights": [
+              400
+            ],
+            "italics": [],
+            "axes": [],
+            "subsets": [
+              "latin"
+            ],
+            "popularity": 8
+          },
+          "body",
+          [
+            {
+              "family": "Roboto",
+              "category": "sans-serif",
+              "weights": [
+                100,
+                300,
+                400,
+                500,
+                700,
+                900
+              ],
+              "italics": [
+                400,
+                700
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 1
+            },
+            {
+              "family": "Open Sans",
+              "category": "sans-serif",
+              "weights": [
+                300,
+                400,
+                600,
+                700,
+                800
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 2
+            },
+            {
+              "family": "Lato",
+              "category": "sans-serif",
+              "weights": [
+                100,
+                300,
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 3
+            },
+            {
+              "family": "Montserrat",
+              "category": "sans-serif",
+              "weights": [
+                400,
+                600,
+                700,
+                900
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 4
+            },
+            {
+              "family": "Merriweather",
+              "category": "serif",
+              "weights": [
+                300,
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 5
+            },
+            {
+              "family": "Playfair Display",
+              "category": "serif",
+              "weights": [
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 6
+            },
+            {
+              "family": "Lora",
+              "category": "serif",
+              "weights": [
+                400,
+                500,
+                600,
+                700
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 7
+            },
+            {
+              "family": "Bebas Neue",
+              "category": "display",
+              "weights": [
+                400
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 8
+            },
+            {
+              "family": "Pacifico",
+              "category": "handwriting",
+              "weights": [
+                400
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 9
+            },
+            {
+              "family": "Fira Code",
+              "category": "monospace",
+              "weights": [
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 10
+            },
+            {
+              "family": "Noto Sans JP",
+              "category": "sans-serif",
+              "weights": [
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "japanese"
+              ],
+              "popularity": 11
+            },
+            {
+              "family": "Oswald",
+              "category": "sans-serif",
+              "weights": [
+                300,
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 12
+            }
+          ],
+          2
+        ],
+        [
+          {
+            "family": "Fira Code",
+            "category": "monospace",
+            "weights": [
+              400,
+              700
+            ],
+            "italics": [],
+            "axes": [],
+            "subsets": [
+              "latin"
+            ],
+            "popularity": 10
+          },
+          "heading",
+          [
+            {
+              "family": "Roboto",
+              "category": "sans-serif",
+              "weights": [
+                100,
+                300,
+                400,
+                500,
+                700,
+                900
+              ],
+              "italics": [
+                400,
+                700
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 1
+            },
+            {
+              "family": "Open Sans",
+              "category": "sans-serif",
+              "weights": [
+                300,
+                400,
+                600,
+                700,
+                800
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 2
+            },
+            {
+              "family": "Lato",
+              "category": "sans-serif",
+              "weights": [
+                100,
+                300,
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 3
+            },
+            {
+              "family": "Montserrat",
+              "category": "sans-serif",
+              "weights": [
+                400,
+                600,
+                700,
+                900
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 4
+            },
+            {
+              "family": "Merriweather",
+              "category": "serif",
+              "weights": [
+                300,
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 5
+            },
+            {
+              "family": "Playfair Display",
+              "category": "serif",
+              "weights": [
+                400,
+                700,
+                900
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 6
+            },
+            {
+              "family": "Lora",
+              "category": "serif",
+              "weights": [
+                400,
+                500,
+                600,
+                700
+              ],
+              "italics": [
+                400
+              ],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 7
+            },
+            {
+              "family": "Bebas Neue",
+              "category": "display",
+              "weights": [
+                400
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 8
+            },
+            {
+              "family": "Pacifico",
+              "category": "handwriting",
+              "weights": [
+                400
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 9
+            },
+            {
+              "family": "Fira Code",
+              "category": "monospace",
+              "weights": [
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 10
+            },
+            {
+              "family": "Noto Sans JP",
+              "category": "sans-serif",
+              "weights": [
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "japanese"
+              ],
+              "popularity": 11
+            },
+            {
+              "family": "Oswald",
+              "category": "sans-serif",
+              "weights": [
+                300,
+                400,
+                700
+              ],
+              "italics": [],
+              "axes": [],
+              "subsets": [
+                "latin"
+              ],
+              "popularity": 12
+            }
+          ]
+        ]
+      ]
+    },
+    "expandCatalogRow": {
+      "module": "libs/plugins/fonts/src/lib/catalog/google-fonts-catalog.ts",
+      "args": [
+        [
+          {
+            "f": "Roboto",
+            "c": "sans-serif",
+            "w": [
+              400,
+              700
+            ],
+            "i": [
+              400
+            ],
+            "a": "wdth:75-100,wght:100-900",
+            "s": [
+              "latin"
+            ],
+            "p": 1,
+            "m": [
+              2048,
+              1900,
+              -500,
+              0,
+              1000
+            ]
+          }
+        ],
+        [
+          {
+            "f": "Bebas Neue",
+            "c": "display",
+            "w": [
+              400
+            ],
+            "s": [
+              "latin",
+              "latin-ext"
+            ],
+            "p": 8
+          }
+        ],
+        [
+          {
+            "f": "X",
+            "c": "serif",
+            "w": [
+              400
+            ],
+            "a": "bad,ital:0-1",
+            "s": [],
+            "p": 3
+          }
+        ]
+      ]
+    },
+    "siteSampleFrom": {
+      "module": "libs/plugins/fonts/src/lib/picker/site-sample-text.ts",
+      "args": [
+        [
+          {
+            "displayName": "Juniper Street Co.",
+            "seo": {
+              "title": "Plants and pottery in Austin",
+              "description": "Houseplants,   hand-thrown pots and workshops on Juniper Street."
+            }
+          }
+        ],
+        [
+          {
+            "name": "Lakeside Studio"
+          }
+        ],
+        [
+          {
+            "displayName": "  ",
+            "name": "Bluebird",
+            "seo": {
+              "title": "Bluebird"
+            }
+          }
+        ],
+        [
+          {
+            "seo": {
+              "title": "Only a search title here"
+            }
+          }
+        ],
+        [
+          {}
+        ],
+        [
+          null
+        ],
+        [
+          {
+            "displayName": "A very long business name that runs well past the forty-eight letter limit",
+            "seo": {
+              "description": "x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x "
+            }
+          }
+        ]
+      ]
+    },
+    "resolveProvenance": {
+      "module": "libs/aglyn/src/lib/app-utils/artifact-provenance.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "installedFrom": {
+              "listingId": "l1",
+              "version": "1.2.0",
+              "sha256": "abc",
+              "artifactType": "component",
+              "publisherOrgId": "p1"
+            }
+          }
+        ],
+        [
+          {
+            "installedFrom": {
+              "listingId": "l1",
+              "version": "1.0.0"
+            }
+          },
+          "emailTemplate"
+        ],
+        [
+          {
+            "marketplace": {
+              "listingId": "l1",
+              "version": 3,
+              "profileId": "p1"
+            }
+          },
+          "component"
+        ],
+        [
+          {
+            "source": {
+              "type": "marketplace",
+              "listingId": "l1",
+              "version": "2.1.0"
+            }
+          },
+          "template"
+        ],
+        [
+          {
+            "source": {
+              "listingId": "l1",
+              "version": ""
+            }
+          },
+          "layout"
+        ],
+        [
+          {
+            "listingId": "l1",
+            "version": "1.0.0",
+            "pluginId": "x",
+            "sha256": "s"
+          }
+        ],
+        [
+          {
+            "listingId": "l1",
+            "version": "1.0.0"
+          },
+          "theme"
+        ],
+        [
+          {
+            "installedFrom": {
+              "listingId": "l1",
+              "version": "1.0.0",
+              "sha256": "abc"
+            }
+          },
+          "theme"
+        ]
+      ]
+    },
+    "describeChange": {
+      "module": "libs/plugins/marketplace/src/lib/model/artifact-merge.ts",
+      "args": [
+        [
+          {
+            "path": "nodes.a.props.title",
+            "kind": "edit",
+            "base": "a",
+            "current": "b",
+            "incoming": "c"
+          }
+        ],
+        [
+          {
+            "path": "",
+            "kind": "edit",
+            "base": "a",
+            "current": "b",
+            "incoming": "c"
+          }
+        ],
+        [
+          {
+            "path": "nodes.a.props.title",
+            "kind": "edit",
+            "base": "a",
+            "current": "b",
+            "incoming": "c",
+            "added": true
+          }
+        ],
+        [
+          {
+            "path": "nodes.a.props.title",
+            "kind": "edit",
+            "base": "a",
+            "current": "b",
+            "incoming": "c",
+            "removed": true
+          }
+        ],
+        [
+          {
+            "path": "",
+            "kind": "edit",
+            "base": "a",
+            "current": "b",
+            "incoming": "c",
+            "removed": true
+          }
+        ]
+      ]
+    },
+    "summarizeValue": {
+      "module": "libs/plugins/marketplace/src/lib/model/artifact-merge.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          ""
+        ],
+        [
+          "short"
+        ],
+        [
+          "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        ],
+        [
+          [
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            2,
+            3
+          ]
+        ],
+        [
+          {
+            "a": 1
+          }
+        ],
+        [
+          {
+            "a": 1,
+            "b": 2,
+            "c": 3,
+            "d": 4
+          }
+        ],
+        [
+          3
+        ],
+        [
+          true
+        ],
+        [
+          0
+        ]
+      ]
+    },
+    "outreachSequenceReport": {
+      "module": "libs/plugins/outreach/src/lib/model/sequence-report.ts",
+      "args": [
+        [
+          null,
+          false
+        ],
+        [
+          null,
+          true
+        ],
+        [
+          {
+            "sent": 0
+          },
+          true,
+          false
+        ],
+        [
+          {
+            "sent": 12,
+            "people": 8
+          },
+          false
+        ],
+        [
+          {
+            "sent": 12,
+            "people": 8
+          },
+          true
+        ],
+        [
+          {
+            "sent": 40,
+            "people": 20,
+            "clicks": 9,
+            "uniqueClicks": 6,
+            "machineClicks": 3,
+            "clickTracked": true,
+            "lastClickAtMs": 1793000000000
+          },
+          true
+        ],
+        [
+          {
+            "sent": 40,
+            "clicks": 2,
+            "uniqueClicks": 2,
+            "clickTracked": true
+          },
+          true
+        ],
+        [
+          {
+            "sent": 30,
+            "people": 15,
+            "openTracked": true,
+            "openPeople": 10,
+            "opens": 14,
+            "uniqueOpens": 5,
+            "machineOpens": 6,
+            "proxyOpens": 9,
+            "lastOpenAtMs": 1793100000000,
+            "clickTracked": true,
+            "uniqueClicks": 1,
+            "clicks": 1
+          },
+          true,
+          true
+        ],
+        [
+          {
+            "sent": 30,
+            "people": 15,
+            "openTracked": true,
+            "openPeople": 10,
+            "uniqueOpens": 0,
+            "machineOpens": 4
+          },
+          true,
+          true
+        ],
+        [
+          {
+            "sent": 30,
+            "people": 15,
+            "openTracked": true,
+            "openPeople": 10,
+            "uniqueOpens": 3
+          },
+          true,
+          false
+        ],
+        [
+          {
+            "sent": 5,
+            "people": 5
+          },
+          false,
+          true
+        ],
+        [
+          {
+            "sent": "7",
+            "people": -2,
+            "clicks": null,
+            "uniqueClicks": "x",
+            "clickTracked": true
+          },
+          true
+        ]
+      ]
+    },
+    "outreachSequenceLinkReport": {
+      "module": "libs/plugins/outreach/src/lib/model/sequence-report.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "links": {
+              "a": {
+                "url": "https://juniper.example/shop",
+                "clicks": 4
+              },
+              "b": {
+                "url": "https://juniper.example/about",
+                "clicks": 4
+              },
+              "c": {
+                "url": "https://juniper.example/class",
+                "clicks": 1
+              }
+            },
+            "overflowClicks": 0,
+            "unattributedClicks": 2
+          }
+        ],
+        [
+          {
+            "links": {
+              "a": {
+                "url": "https://juniper.example/",
+                "clicks": 3
+              }
+            },
+            "overflowClicks": 5
+          }
+        ]
+      ]
+    },
+    "verificationRequestBlock": {
+      "module": "libs/plugins/marketplace/src/lib/model/listing-verification.ts",
+      "args": [
+        [
+          {
+            "listing": null,
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed"
+            },
+            "viewerOrgId": null,
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed"
+            },
+            "viewerOrgId": "org_b",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "verified"
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "in_review"
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a"
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed"
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "pending"
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "declined"
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "declined",
+                "decidedAt": {
+                  "seconds": 1760794400
+                }
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "declined",
+                "decidedAt": {
+                  "seconds": 1760621600
+                }
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "withdrawn"
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "approved"
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
         ]
       ]
     },

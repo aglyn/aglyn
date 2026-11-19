@@ -5145,6 +5145,9 @@
                 ],
                 "label": "CRM",
                 "order": 20,
+                "permissions": [
+                  "data.manage"
+                ],
                 "pluginId": "crm",
                 "screen": "crm.contacts",
                 "sections": [
@@ -5292,6 +5295,9 @@
                 "id": "emails",
                 "label": "Emails",
                 "order": 40,
+                "permissions": [
+                  "data.manage"
+                ],
                 "pluginId": "email",
                 "screen": "email.messages",
                 "sections": [
@@ -5457,6 +5463,9 @@
                 "id": "accounting",
                 "label": "Accounting",
                 "order": 70,
+                "permissions": [
+                  "accounting.manage"
+                ],
                 "pluginId": "accounting",
                 "screen": "accounting.books"
               },
@@ -5489,7 +5498,11 @@
                 "id": "sequences",
                 "label": "Sequences",
                 "order": 80,
+                "permissions": [
+                  "outreach.use"
+                ],
                 "pluginId": "outreach",
+                "requiresFeature": "outreach",
                 "screen": "outreach.sequences"
               },
               {
@@ -5939,6 +5952,76 @@
                     "id": "analytics",
                     "label": "Analytics",
                     "screen": "commerce.sales"
+                  },
+                  {
+                    "console": {
+                      "id": "/products/payments",
+                      "surface": "hostPluginSection"
+                    },
+                    "docs": "/commerce-and-bookings/commerce/overview",
+                    "id": "payments",
+                    "label": "Payments",
+                    "screen": "commerce.settingsPayments"
+                  },
+                  {
+                    "console": {
+                      "id": "/products/checkout",
+                      "surface": "hostPluginSection"
+                    },
+                    "docs": "/commerce-and-bookings/commerce/overview",
+                    "id": "checkout",
+                    "label": "Checkout",
+                    "screen": "commerce.settingsCheckout"
+                  },
+                  {
+                    "console": {
+                      "id": "/products/taxes",
+                      "surface": "hostPluginSection"
+                    },
+                    "docs": "/commerce-and-bookings/commerce/overview",
+                    "id": "taxes",
+                    "label": "Taxes",
+                    "screen": "commerce.settingsTaxes"
+                  },
+                  {
+                    "console": {
+                      "id": "/products/shipping",
+                      "surface": "hostPluginSection"
+                    },
+                    "docs": "/commerce-and-bookings/commerce/overview",
+                    "id": "shipping",
+                    "label": "Shipping & delivery",
+                    "screen": "commerce.settingsShipping"
+                  },
+                  {
+                    "console": {
+                      "id": "/products/notifications",
+                      "surface": "hostPluginSection"
+                    },
+                    "docs": "/commerce-and-bookings/commerce/overview",
+                    "id": "notifications",
+                    "label": "Notifications",
+                    "screen": "commerce.settingsNotifications"
+                  },
+                  {
+                    "console": {
+                      "id": "/products/channels",
+                      "surface": "hostPluginSection"
+                    },
+                    "docs": "/commerce-and-bookings/commerce/overview",
+                    "id": "channels",
+                    "label": "Sales channels",
+                    "screen": "commerce.settingsChannels"
+                  },
+                  {
+                    "console": {
+                      "id": "/products/integrations",
+                      "surface": "hostPluginSection"
+                    },
+                    "docs": "/commerce-and-bookings/commerce/overview",
+                    "id": "integrations",
+                    "label": "Integrations",
+                    "screen": "commerce.settings"
                   }
                 ]
               },
@@ -7140,6 +7223,7 @@
     "shell.workspaceSettings",
     "shell.siteSettings"
   ],
+  "NATIVE_NO_IN_APP_BILLING_NOTE": "Plan and billing changes are not available in the app.",
   "NATIVE_SITE_CAMPAIGNS_QUERY": {
     "fields": [
       {
@@ -7256,6 +7340,7 @@
       }
     ]
   },
+  "NATIVE_WEB_BILLING_LINK_LABEL": "Manage billing on the web",
   "NOTHING_MOVED": "Aglyn has not refunded or canceled anything.",
   "NOTIFICATION_SOUND_FIELD": "notificationSound",
   "NOTIFICATION_SOUNDS": [
@@ -10406,6 +10491,25 @@
     ]
   },
   "SITE_SLOGAN_MAX_LENGTH": 120,
+  "SITE_TEMPLATE_SHELF_BASE": [
+    {
+      "op": "==",
+      "path": "kind",
+      "value": "template"
+    }
+  ],
+  "SITE_TEMPLATE_SHELF_QUERY": {
+    "fields": [],
+    "search": {
+      "tokensPath": "nameTokens"
+    },
+    "sorts": [
+      {
+        "direction": "asc",
+        "path": "__name__"
+      }
+    ]
+  },
   "STAR_COLORS": [
     "blue",
     "purple",
