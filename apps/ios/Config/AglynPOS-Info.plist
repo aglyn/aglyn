@@ -57,7 +57,9 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Card payments need this device's location, as card networks require.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>The camera reads product barcodes so you can find and sell items quickly.</string>
+	<string>Aglyn POS uses the camera to read product barcodes and to take photos you add, such as product pictures.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Aglyn POS uses the microphone only when you record a video to add to your media.</string>
 	<!-- Firebase Auth's app-delegate proxy (iOS) takes the APNs callbacks and calls the app's own only when the
 	     delegate class implements them; SwiftUI's delegate forwards them to PushAppDelegate instead, so with the
 	     proxy on the device token never reaches PushCenter. The apps sign in with credentials only (no phone auth,
