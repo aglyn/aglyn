@@ -4248,8 +4248,10 @@ internal data class ContractValuesPart4(
 
 @Serializable
 internal data class ContractValuesPart5(
+    @SerialName("NATIVE_NO_IN_APP_BILLING_NOTE") val nativeNoInAppBillingNote: String,
     @SerialName("NATIVE_SITE_CAMPAIGNS_QUERY") val nativeSiteCampaignsQuery: ListQueryDeclaration,
     @SerialName("NATIVE_SITE_EMAILS_QUERY") val nativeSiteEmailsQuery: ListQueryDeclaration,
+    @SerialName("NATIVE_WEB_BILLING_LINK_LABEL") val nativeWebBillingLinkLabel: String,
     @SerialName("NOTHING_MOVED") val nothingMoved: String,
     @SerialName("NOTIFICATION_SOUND_FIELD") val notificationSoundField: String,
     @SerialName("NOTIFICATION_SOUNDS") val notificationSounds: List<NotificationSound>,
@@ -4294,12 +4296,12 @@ internal data class ContractValuesPart5(
     @SerialName("PHONE_HOME_GROUP_LABELS") val phoneHomeGroupLabels: Map<String, String>,
     @SerialName("PHONE_HOME_SITE_GROUP_LABEL") val phoneHomeSiteGroupLabel: String,
     @SerialName("PHONE_HOME_TEAM_LABEL") val phoneHomeTeamLabel: String,
-    @SerialName("PHONE_HOME_WORKSPACE_GROUP_LABEL") val phoneHomeWorkspaceGroupLabel: String,
-    @SerialName("PINNED_HOSTS_FIELD") val pinnedHostsField: String,
 )
 
 @Serializable
 internal data class ContractValuesPart6(
+    @SerialName("PHONE_HOME_WORKSPACE_GROUP_LABEL") val phoneHomeWorkspaceGroupLabel: String,
+    @SerialName("PINNED_HOSTS_FIELD") val pinnedHostsField: String,
     @SerialName("PINNED_HOSTS_MAX") val pinnedHostsMax: Long,
     @SerialName("PINNED_ORGS_FIELD") val pinnedOrgsField: String,
     @SerialName("PINNED_ORGS_MAX") val pinnedOrgsMax: Long,
@@ -4346,12 +4348,12 @@ internal data class ContractValuesPart6(
     @SerialName("POS_TENDER_LABELS") val posTenderLabels: Map<String, String>,
     @SerialName("PRICE_RANGE_MAX_LENGTH") val priceRangeMaxLength: Long,
     @SerialName("PRINTER_BRAND_LABELS") val printerBrandLabels: Map<String, String>,
-    @SerialName("PRINTER_BRANDS") val printerBrands: List<PrinterBrand>,
-    @SerialName("PRINTER_MODEL_SUGGESTIONS") val printerModelSuggestions: Map<String, List<String>>,
 )
 
 @Serializable
 internal data class ContractValuesPart7(
+    @SerialName("PRINTER_BRANDS") val printerBrands: List<PrinterBrand>,
+    @SerialName("PRINTER_MODEL_SUGGESTIONS") val printerModelSuggestions: Map<String, List<String>>,
     @SerialName("PRINTER_OFFLINE_AFTER_MS") val printerOfflineAfterMs: Double,
     @SerialName("PRINTER_STATE_LABELS") val printerStateLabels: Map<String, String>,
     @SerialName("PRODUCT_LIST_BASE") val productListBase: List<ListQueryFilter>,
@@ -4398,12 +4400,12 @@ internal data class ContractValuesPart7(
     @SerialName("STARRED_FIELD") val starredField: String,
     @SerialName("STARRED_MAX") val starredMax: Long,
     @SerialName("STAY_CHECK_IN_MODES") val stayCheckInModes: List<StayCheckInMode>,
-    @SerialName("SUBMISSION_FILTER_HEADERS") val submissionFilterHeaders: Map<String, String>,
-    @SerialName("SUBMISSION_LIST_QUERY") val submissionListQuery: ListQueryDeclaration,
 )
 
 @Serializable
 internal data class ContractValuesPart8(
+    @SerialName("SUBMISSION_FILTER_HEADERS") val submissionFilterHeaders: Map<String, String>,
+    @SerialName("SUBMISSION_LIST_QUERY") val submissionListQuery: ListQueryDeclaration,
     @SerialName("SUBMISSION_READ_OPTIONS") val submissionReadOptions: List<ListFilterOption>,
     @SerialName("SUPPRESSION_LIST_QUERY") val suppressionListQuery: ListQueryDeclaration,
     @SerialName("TAB_BAR_AREAS_MAX") val tabBarAreasMax: Long,
@@ -4646,8 +4648,10 @@ class ContractValues internal constructor(
     val nativeCurrencyFractionDigits: Map<String, Double> get() = part4.nativeCurrencyFractionDigits
     val nativeNavManifest: NativeNavManifest get() = part4.nativeNavManifest
     val nativeNavShellScreens: List<String> get() = part4.nativeNavShellScreens
+    val nativeNoInAppBillingNote: String get() = part5.nativeNoInAppBillingNote
     val nativeSiteCampaignsQuery: ListQueryDeclaration get() = part5.nativeSiteCampaignsQuery
     val nativeSiteEmailsQuery: ListQueryDeclaration get() = part5.nativeSiteEmailsQuery
+    val nativeWebBillingLinkLabel: String get() = part5.nativeWebBillingLinkLabel
     val nothingMoved: String get() = part5.nothingMoved
     val notificationSoundField: String get() = part5.notificationSoundField
     val notificationSounds: List<NotificationSound> get() = part5.notificationSounds
@@ -4692,8 +4696,8 @@ class ContractValues internal constructor(
     val phoneHomeGroupLabels: Map<String, String> get() = part5.phoneHomeGroupLabels
     val phoneHomeSiteGroupLabel: String get() = part5.phoneHomeSiteGroupLabel
     val phoneHomeTeamLabel: String get() = part5.phoneHomeTeamLabel
-    val phoneHomeWorkspaceGroupLabel: String get() = part5.phoneHomeWorkspaceGroupLabel
-    val pinnedHostsField: String get() = part5.pinnedHostsField
+    val phoneHomeWorkspaceGroupLabel: String get() = part6.phoneHomeWorkspaceGroupLabel
+    val pinnedHostsField: String get() = part6.pinnedHostsField
     val pinnedHostsMax: Long get() = part6.pinnedHostsMax
     val pinnedOrgsField: String get() = part6.pinnedOrgsField
     val pinnedOrgsMax: Long get() = part6.pinnedOrgsMax
@@ -4740,8 +4744,8 @@ class ContractValues internal constructor(
     val posTenderLabels: Map<String, String> get() = part6.posTenderLabels
     val priceRangeMaxLength: Long get() = part6.priceRangeMaxLength
     val printerBrandLabels: Map<String, String> get() = part6.printerBrandLabels
-    val printerBrands: List<PrinterBrand> get() = part6.printerBrands
-    val printerModelSuggestions: Map<String, List<String>> get() = part6.printerModelSuggestions
+    val printerBrands: List<PrinterBrand> get() = part7.printerBrands
+    val printerModelSuggestions: Map<String, List<String>> get() = part7.printerModelSuggestions
     val printerOfflineAfterMs: Double get() = part7.printerOfflineAfterMs
     val printerStateLabels: Map<String, String> get() = part7.printerStateLabels
     val productListBase: List<ListQueryFilter> get() = part7.productListBase
@@ -4788,8 +4792,8 @@ class ContractValues internal constructor(
     val starredField: String get() = part7.starredField
     val starredMax: Long get() = part7.starredMax
     val stayCheckInModes: List<StayCheckInMode> get() = part7.stayCheckInModes
-    val submissionFilterHeaders: Map<String, String> get() = part7.submissionFilterHeaders
-    val submissionListQuery: ListQueryDeclaration get() = part7.submissionListQuery
+    val submissionFilterHeaders: Map<String, String> get() = part8.submissionFilterHeaders
+    val submissionListQuery: ListQueryDeclaration get() = part8.submissionListQuery
     val submissionReadOptions: List<ListFilterOption> get() = part8.submissionReadOptions
     val suppressionListQuery: ListQueryDeclaration get() = part8.suppressionListQuery
     val tabBarAreasMax: Long get() = part8.tabBarAreasMax
