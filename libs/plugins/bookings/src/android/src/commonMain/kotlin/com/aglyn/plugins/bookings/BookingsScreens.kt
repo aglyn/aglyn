@@ -53,6 +53,7 @@ import com.aglyn.core.Live
 import com.aglyn.hardware.CardCollectorState
 import com.aglyn.pluginhost.NativeParams
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.pluginhost.TransferExportDialog
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListItem
@@ -184,6 +185,7 @@ fun BookingsCalendarScreen(context: NativePluginContext, params: NativeParams) {
   var booker by remember(params["email"]) { mutableStateOf(params["email"]?.takeIf { it.isNotBlank() }) }
   var selected by remember(params["booking"]) { mutableStateOf(params["booking"]) }
   var shown by remember(mode, booker) { mutableStateOf(50) }
+  var exporting by remember { mutableStateOf(false) }
   val now = remember(anchor, mode) { currentMs() }
   val services = liveServices(context)
 
@@ -210,6 +212,7 @@ fun BookingsCalendarScreen(context: NativePluginContext, params: NativeParams) {
         serviceFilter = serviceFilter,
         onService = { serviceFilter = it },
         onServices = { context.navigate(SERVICES_SCREEN) },
+        onExport = { exporting = true },
         showModes = booker == null,
       )
       if (booker != null) {
@@ -261,6 +264,19 @@ fun BookingsCalendarScreen(context: NativePluginContext, params: NativeParams) {
         )
       }
     }
+    if (exporting) {
+      val request = bookingsExport(booker, currentMs())
+      TransferExportDialog(
+        context,
+        resource = "bookings",
+        title = "Export bookings",
+        hostId = hostId,
+        scope = mapOf("kind" to "filter", "filter" to request.filter),
+        fileStem = "bookings",
+        filter = request.filter,
+        filterLabel = request.label,
+      ) { exporting = false }
+    }
     if (wide) {
       VerticalDivider()
       Box(Modifier.weight(0.38f).fillMaxHeight()) {
@@ -284,6 +300,7 @@ private fun BookingsToolbar(
   serviceFilter: String?,
   onService: (String?) -> Unit,
   onServices: () -> Unit,
+  onExport: () -> Unit,
   showModes: Boolean,
 ) {
   Column(Modifier.fillMaxWidth().padding(horizontal = space(2f), vertical = space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
@@ -301,6 +318,11 @@ private fun BookingsToolbar(
       TextButton(onClick = onServices, modifier = Modifier.testTag("open-services")) {
         Icon(AglynIcons.named("design_services"), contentDescription = null)
         Text("Services", Modifier.padding(start = space(0.5f)))
+      }
+      // The console's Export on the list as it stands. No Import: a booking is only ever made on the booking page.
+      TextButton(onClick = onExport, modifier = Modifier.testTag("export-bookings")) {
+        Icon(AglynIcons.named("download"), contentDescription = null)
+        Text("Export", Modifier.padding(start = space(0.5f)))
       }
     }
     if (services.size > 1) {
@@ -703,3 +725,10 @@ fun BookingsNeedsYouWidget(context: NativePluginContext) {
   val text = if (rows.size == 1) "${next?.name ?: "A booking"} at ${next?.let { formatClock(it.startsAtMs) }}" else "${rows.size} bookings today, next at ${next?.let { formatClock(it.startsAtMs) }}"
   com.aglyn.ui.NeedsYouLine("bookings-today", "event", text, "Bookings", onClick = { context.navigate(BOOKINGS_CALENDAR_SCREEN, mapOf("day" to "today")) })
 }
+
+/** What the Bookings list exports (the console's `handleExport`): one booker's bookings when narrowed to them, else the upcoming ones from now. */
+internal data class BookingsExport(val filter: Map<String, Any?>, val label: String)
+
+internal fun bookingsExport(booker: String?, nowMs: Long): BookingsExport =
+  if (booker != null) BookingsExport(mapOf("email" to booker), "Bookings for $booker")
+  else BookingsExport(mapOf("upcoming" to true, "asOfMs" to nowMs), "Upcoming bookings")

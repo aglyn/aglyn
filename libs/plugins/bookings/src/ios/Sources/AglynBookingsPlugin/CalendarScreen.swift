@@ -60,6 +60,7 @@ struct BookingsCalendarScreen: View {
   @State private var bookings = LiveList<BookingRow>()
   @State private var services = LiveList<ServiceRow>()
   @State private var started = false
+  @State private var exporting: TransferExportRequest?
 
   private var effectiveMode: CalendarMode { mode ?? (sizeClass == .compact ? .list : .week) }
 
@@ -125,6 +126,17 @@ struct BookingsCalendarScreen: View {
         Label("Services", systemImage: "list.bullet.rectangle")
       }
       .accessibilityIdentifier("open-services")
+      // The console's Export on the list as it stands: one booker's bookings when narrowed to them, else the upcoming
+      // ones from this moment. No Import: a booking is only ever made on the booking page.
+      Button {
+        exporting = bookingsExportRequest(hostID: context.hostID, booker: booker, nowMs: Date().timeIntervalSince1970 * 1000)
+      } label: {
+        Label("Export", systemImage: "square.and.arrow.up")
+      }
+      .accessibilityIdentifier("export-bookings")
+    }
+    .sheet(item: $exporting) { request in
+      TransferExportSheet(context: context, request: request) { _ in exporting = nil }
     }
     .onAppear {
       guard !started else { return }
@@ -387,4 +399,13 @@ struct BookingsNeedsYouWidget: View {
     }
     .onDisappear { bookings.stop() }
   }
+}
+
+/// The export the Bookings list opens (the console's `handleExport`): one booker's bookings when the list is narrowed to
+/// them, else the upcoming ones from this moment, in the bookings transfer's filter terms.
+func bookingsExportRequest(hostID: String?, booker: String?, nowMs: Double) -> TransferExportRequest {
+  let filter: JSONValue = booker.map { ["email": .string($0)] } ?? ["upcoming": true, "asOfMs": .number(nowMs.rounded(.down))]
+  return TransferExportRequest(
+    resource: "bookings", title: "Export bookings", hostID: hostID, scope: ["kind": "filter", "filter": filter],
+    fileStem: "bookings", filter: filter, filterLabel: booker.map { "Bookings for \($0)" } ?? "Upcoming bookings")
 }
