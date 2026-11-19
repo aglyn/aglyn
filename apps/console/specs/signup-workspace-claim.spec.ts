@@ -347,6 +347,36 @@ describe('AGL-2590 · creating the workspace', () => {
     expect(retry.derived).toBe(true)
   })
 
+  it('AGL-4024 · a DERIVED name with no usable address goes straight to a suffixed one', async () => {
+    // A Cyrillic Google display name keeps no letter a workspace address
+    // allows, so the route would refuse it with a 400 and leave the account
+    // with no workspace (2026-11-17, a connector sign-up).
+    mockAuthorizedFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ orgId: 'o-3', slug: 'workspace-a1b2' }),
+    })
+    expect(
+      await createSignUpWorkspace({} as any, 'Овчинникова Ольга', { derived: true }),
+    ).toEqual({ slug: 'workspace-a1b2', error: null })
+    expect(mockAuthorizedFetch).toHaveBeenCalledTimes(1)
+    const sent = JSON.parse(mockAuthorizedFetch.mock.calls[0][2].body)
+    expect(sent.name).toBe('Овчинникова Ольга')
+    expect(sent.slug).toMatch(/^workspace-[0-9a-z]{4}$/)
+    expect(sent.derived).toBe(true)
+  })
+
+  it('sends no address for a TYPED name the route cannot address: its refusal is what the person reads', async () => {
+    mockAuthorizedFetch.mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: 'Workspace URL must be 3–30 lowercase letters' }),
+    })
+    await createSignUpWorkspace({} as any, 'Овчинникова Ольга')
+    const sent = JSON.parse(mockAuthorizedFetch.mock.calls[0][2].body)
+    expect(sent).not.toHaveProperty('slug')
+  })
+
   it('never calls a chosen name derived (AGL-4117)', async () => {
     mockAuthorizedFetch.mockResolvedValue({
       ok: true,

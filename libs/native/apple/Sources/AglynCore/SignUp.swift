@@ -169,7 +169,7 @@ public enum WorkspaceName {
     "www", "app", "api", "admin", "console", "mail", "demo", "staging", "dev", "test", "docs", "blog", "help",
     "support", "status", "cdn", "assets", "static", "ftp", "smtp", "ns1", "ns2", "aglyn", "billing", "account",
     "login", "signup", "auth", "accounts", "signin", "sso", "secure", "verify", "portal", "webmail", "imap", "mx",
-    "com", "net", "staff", "org", "orgs", "workspace", "kiosk",
+    "com", "net", "staff", "org", "orgs", "workspace", "kiosk", "oauth",
   ]
   /// `BLOCKED_FRAGMENTS`, refused as substrings.
   static let blockedFragments = ["fuck", "shit", "cunt", "nigger", "faggot", "bitch", "porn", "nazi"]
@@ -473,13 +473,16 @@ public struct PendingInvite: Equatable, Identifiable, Sendable {
   public let role: String?
   /// Whether the invitation hands the workspace over to its invitee (AGL-3466).
   public let handoff: Bool
+  /// When the invitation was sent, in ms (`createdAtMs`); nil from an older answer or before the server stamped it.
+  public let createdAtMs: Double?
 
-  public init(id: String, orgID: String, orgName: String?, role: String?, handoff: Bool) {
+  public init(id: String, orgID: String, orgName: String?, role: String?, handoff: Bool, createdAtMs: Double? = nil) {
     self.id = id
     self.orgID = orgID
     self.orgName = orgName
     self.role = role
     self.handoff = handoff
+    self.createdAtMs = createdAtMs
   }
 
   /// "You've been invited to Acme as admin." (the console's `inviteSentence`).
@@ -499,7 +502,8 @@ extension SignUpService {
       guard let id = row["$id"]?.stringValue, let org = row["orgId"]?.stringValue, !org.isEmpty else { return nil }
       let handoff: Bool = { if case .object? = row["handoff"] { return true } else { return false } }()
       return PendingInvite(
-        id: id, orgID: org, orgName: row["orgName"]?.stringValue, role: row["role"]?.stringValue, handoff: handoff)
+        id: id, orgID: org, orgName: row["orgName"]?.stringValue, role: row["role"]?.stringValue, handoff: handoff,
+        createdAtMs: row["createdAtMs"]?.numberValue)
     }
   }
 

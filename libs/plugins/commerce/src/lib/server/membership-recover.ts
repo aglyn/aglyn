@@ -245,7 +245,7 @@ export const membershipRecoverHandler: PluginApiHandler = async (req, res) => {
       { 'site.name': siteName, 'reset.intro': intro, resetUrl, 'reset.note': note },
       siteBase ? { origin: siteBase } : {},
     ).catch(() => null)
-    await sendEmail({
+    const emailOutcome = await sendEmail({
       to: email,
       subject: designed?.subject || `Reset your ${siteName} password`,
       text:
@@ -264,7 +264,8 @@ export const membershipRecoverHandler: PluginApiHandler = async (req, res) => {
     // Cost meter (AGL-1438). Transactional, and the clearest case for why a
     // quota may not refuse one: this email is how the member gets back into
     // their account.
-    await meterHostEmail(hostId)
+    // Only a sent email is metered (AGL-4227).
+    if (emailOutcome?.sent) await meterHostEmail(hostId)
     return res.status(200).json({ ok: true })
   } catch (error) {
     console.error(error)

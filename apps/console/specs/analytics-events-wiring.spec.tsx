@@ -94,6 +94,12 @@ jest.mock('next/navigation', () => ({
 jest.mock('@aglyn/aglyn', () => ({
   PLAN_LABELS: {},
   generateOrgSlug: (value: string) => value.toLowerCase(),
+  // AGL-4024. The sign-up door asks whether the derived name has a usable
+  // address before its first attempt; the REAL rule, so these cases keep
+  // sending the names they always sent.
+  isValidOrgSlug: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/organizations',
+  ).isValidOrgSlug,
   onboardingDestination: (slug: string) => `/${slug}`,
   parseOnboardingPlanIntent: () => null,
   // AGL-1731. The REAL contract, not a stub — the `method` assertions below

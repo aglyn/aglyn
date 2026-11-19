@@ -28,6 +28,7 @@
 import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
 import { MEDIA_CDN_ROUTE } from '@aglyn/aglyn/app-utils/media-ref'
 import {
+  API_BILLING_UNIT_BYTES,
   checkApiRequestQuota,
   checkDataStorageQuota,
   checkEntitlement,
@@ -65,7 +66,7 @@ import {
   readApiV1UsageFigures,
 } from '@aglyn/tenant-data-admin/server/api-v1-resources'
 import type { ApiV1ResourceDescription } from '@aglyn/tenant-data-admin/server/api-v1-description'
-import { usageBand } from '@aglyn/tenant-data-admin/server/api-v1-kit'
+import { apiActorLabel, isConnectedAppContext, usageBand } from '@aglyn/tenant-data-admin/server/api-v1-kit'
 import { createHash, randomUUID } from 'crypto'
 import { Timestamp } from 'firebase-admin/firestore'
 import { type ApiV1Context, apiUsageMonth, requireScope } from './api-v1'
@@ -314,7 +315,12 @@ async function createSite(request: Request, ctx: ApiV1Context): Promise<Response
       displayName,
       subdomain,
       orgSlug: (ctx.org.slug as string | undefined) ?? null,
-      createdBy: ctx.keyName ? `API key ${ctx.keyName}` : 'An API key',
+      // `Connected app Cursor` for a connection, never `API key Cursor`
+      // (AGL-4225); the announcement keeps it from being read as a link.
+      createdBy: apiActorLabel(ctx),
+      // Only an app's self-chosen name is kept from becoming a link; a key's
+      // name was typed by the organization and is shown as typed.
+      createdByIsName: isConnectedAppContext(ctx),
       start: 'api',
     })
     return apiJson(view, { status: 201, headers: ctx.headers })
@@ -1155,12 +1161,22 @@ export async function handleUsage(
     {
       object: 'usage',
       month,
-      apiRequests: usageBand(
-        apiQuota.used,
-        apiQuota.included,
-        apiQuota.remaining,
-        apiQuota.overageRateUsd,
-      ),
+      apiRequests: {
+        ...usageBand(
+          apiQuota.used,
+          apiQuota.included,
+          apiQuota.remaining,
+          apiQuota.overageRateUsd,
+        ),
+        // The month's hard stop, overage included (AGL-4226): Starter's
+        // ceiling, or `null` where there is none (Pro and up). Additive, so a
+        // client reading the band's four fields is unaffected.
+        ceiling: Number.isFinite(apiQuota.ceiling) ? apiQuota.ceiling : null,
+        // What one counted unit is (AGL-4227): a request is one unit per
+        // started 256 KB of the larger of its request and response body, so
+        // `used` counts units, not calls.
+        unitBytes: API_BILLING_UNIT_BYTES,
+      },
       dataStorageMb: usageBand(
         storageQuota.usedMb,
         storageQuota.includedMb,

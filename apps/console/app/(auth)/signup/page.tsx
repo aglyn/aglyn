@@ -103,6 +103,7 @@ import {
 import {
   claimSignUpWorkspace,
   createSignUpWorkspace,
+  hasPendingInvite,
   personalWorkspaceName,
   rememberPendingSignUpWorkspace,
 } from '../../../utils/signup-workspace'
@@ -385,6 +386,11 @@ async function provisionAndLandSignUp(
     ])
     return
   }
+  // An invitee is opened into the workspace they were invited to (AGL-4047).
+  // The auth layout takes this account to the console home, where the
+  // automatic join opens the newest invitation; a workspace made here would
+  // be one they never asked for, and the one they would land in instead.
+  if (await hasPendingInvite(credential.user)) return
   // Claim provisioning first (AGL-4079). Without the stamp, a second console
   // tab reaching the chooser seconds later reads zero workspaces, finds no
   // claim, and its backstop makes a second, suffixed workspace — a Google

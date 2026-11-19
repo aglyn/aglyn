@@ -902,9 +902,56 @@
         "activity": {
           "url": "/api/orgs/activity?orgId={org.id}&scope=org-wide",
           "cursor": "nextCursor",
-          "items": "entries"
+          "items": "entries",
+          "filters": [
+            { "field": "actorId", "op": "equals", "value": "{params.who}" },
+            { "field": "scopeId", "op": "equals", "value": "{params.where}" },
+            { "field": "createdAt", "op": "onOrAfter", "value": "{params.from}" },
+            { "field": "createdAt", "op": "onOrBefore", "value": "{params.to}" }
+          ]
+        },
+        "facets": {
+          "url": "/api/orgs/activity?orgId={org.id}&scope=org-wide&facets=1&pageSize=1",
+          "optional": true
         }
       },
+      "actions": [
+        {
+          "id": "filter",
+          "label": "Filter the list",
+          "icon": "line.3.horizontal.decrease|filter_list",
+          "prompt": [
+            {
+              "key": "who",
+              "label": "Who",
+              "kind": "select",
+              "initial": "{params.who}",
+              "options": [{ "value": "", "label": "Any" }],
+              "optionsFrom": { "items": "data.facets.facets.actors", "value": "{item.value}", "label": "{item.label}" }
+            },
+            {
+              "key": "where",
+              "label": "Where",
+              "kind": "select",
+              "initial": "{params.where}",
+              "options": [{ "value": "", "label": "Any" }],
+              "optionsFrom": { "items": "data.facets.facets.sites", "value": "{item.value}", "label": "{item.label}" }
+            },
+            { "key": "from", "label": "From", "kind": "date", "initial": "{params.from}" },
+            { "key": "to", "label": "To", "kind": "date", "initial": "{params.to}" }
+          ],
+          "navigate": {
+            "screen": "core.team.activity",
+            "params": {
+              "who": "{form.who}",
+              "where": "{form.where}",
+              "from": "{form.from}",
+              "to": "{form.to}",
+              "emptyText": "No activity matches these filters."
+            }
+          }
+        }
+      ],
       "blocks": [
         {
           "type": "list",
@@ -913,9 +960,13 @@
           "items": "data.activity.entries",
           "primary": "{item.actionLabel|item.action:activity}",
           "secondary": "{item.targetLabel|item.target.name|item.target.label|item.target.title|item.target.type:title}",
-          "tertiary": "{item.actorEmail|item.actorEmailNow|item.apiKeyName|'System'} · {item.createdAt:datetime}",
+          "tertiary": "{item.actorEmail|item.actorEmailNow|item.apiKeyName|item.connectedAppLabel|'System'} · {item.createdAt:datetime}",
           "icon": "clock|schedule",
-          "empty": "No activity yet."
+          "columns": [
+            { "id": "action", "label": "Action", "value": "{item.actionLabel|item.action:activity}", "always": true, "sort": { "page": "item.action" } },
+            { "id": "who", "label": "Who (then)", "value": "{item.actorEmail|item.actorEmailNow|item.apiKeyName|item.connectedAppLabel|'System'}", "show": false, "sort": { "page": "item.actorEmail" } }
+          ],
+          "empty": "{params.emptyText|'No activity yet.'}"
         }
       ]
     },

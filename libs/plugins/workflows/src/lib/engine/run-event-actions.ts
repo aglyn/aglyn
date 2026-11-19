@@ -956,7 +956,12 @@ async function runServerStep(
             : refusal === 'held-for-review'
               ? 'this email is held for staff review because it may ' +
                 'impersonate another business'
-              : 'email delivery failed'
+              : refusal === 'rate-limited'
+                ? // An email limit refused it — the workspace's daily or
+                  // monthly limit, or the platform's sending pace (AGL-4227).
+                  // Not retried: an event action runs once.
+                  'an email sending limit was reached, so this email was not sent'
+                : 'email delivery failed'
         : null
       // Cost meter (AGL-1438). A workflow notification is transactional:
       // counted, never capped. `sent` is false when Resend refused or the

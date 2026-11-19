@@ -158,6 +158,10 @@ const REPO_WIDE = new Set([
   // native generators read (AGL-3620, AGL-3651); a commit to any lib can flip
   // it, whichever project it belongs to.
   'check:mobile-isolation',
+  // Reads every native plugin's Swift and Kotlin registrar against
+  // plugins.config.json (AGL-3671): a commit to the root config or to any
+  // plugin's src/ios|src/android can flip it.
+  'check:native-contribution-declarations',
   'check:manifest-versions',
   // Walk every app's routes and every lib they reach; a cost only a bundler
   // or a graph walk can see, which a green typecheck and green tests miss.

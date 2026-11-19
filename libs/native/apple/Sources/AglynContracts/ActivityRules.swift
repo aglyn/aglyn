@@ -19,11 +19,14 @@ public struct ActivityEntryFields: Equatable, Sendable {
   public var actorEmail: String?
   public var actorEmailNow: String?
   public var apiKeyName: String?
+  /// A connected app's own name, when a connection wrote the entry (AGL-4225).
+  public var connectedAppName: String?
   public var staffActorEmail: String?
 
   public init(
     action: String? = nil, targetType: String? = nil, targetName: String? = nil, type: String? = nil, actorId: String? = nil,
-    actorEmail: String? = nil, actorEmailNow: String? = nil, apiKeyName: String? = nil, staffActorEmail: String? = nil
+    actorEmail: String? = nil, actorEmailNow: String? = nil, apiKeyName: String? = nil, staffActorEmail: String? = nil,
+    connectedAppName: String? = nil
   ) {
     self.action = action
     self.targetType = targetType
@@ -33,6 +36,7 @@ public struct ActivityEntryFields: Equatable, Sendable {
     self.actorEmail = actorEmail
     self.actorEmailNow = actorEmailNow
     self.apiKeyName = apiKeyName
+    self.connectedAppName = connectedAppName
     self.staffActorEmail = staffActorEmail
   }
 
@@ -43,7 +47,7 @@ public struct ActivityEntryFields: Equatable, Sendable {
       action: data["action"] as? String, targetType: target?["type"] as? String, targetName: target?["name"] as? String,
       type: data["type"] as? String, actorId: data["actorId"] as? String, actorEmail: data["actorEmail"] as? String,
       actorEmailNow: data["actorEmailNow"] as? String, apiKeyName: data["apiKeyName"] as? String,
-      staffActorEmail: data["staffActorEmail"] as? String)
+      staffActorEmail: data["staffActorEmail"] as? String, connectedAppName: data["connectedAppName"] as? String)
   }
 }
 
@@ -132,6 +136,7 @@ public func activityRowText(_ entry: ActivityEntryFields) -> String {
 /// platform.
 public func activityActorLabel(_ entry: ActivityEntryFields) -> String {
   if let email = entry.actorEmail, !email.isEmpty { return email }
+  if let app = entry.connectedAppName, !app.isEmpty { return "Connected app \(app)" }
   if let key = entry.apiKeyName, !key.isEmpty { return "API key \(key)" }
   let actorID = trimmed(entry.actorId)
   if actorID == "api" { return "API key" }

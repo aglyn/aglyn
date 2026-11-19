@@ -90,7 +90,7 @@
           "items": "data.hooks.hooks",
           "primary": "{const.events[id=item.events.0].label|item.events.0}",
           "secondary": "Last sent {item.lastDeliveryAt:datetime}",
-          "tertiary": "{item.keyName}",
+          "tertiary": "{item.keyLabel|item.keyName}",
           "icon": "bolt|bolt",
           "badges": [
             {

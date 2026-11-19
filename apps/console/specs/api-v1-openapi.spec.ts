@@ -20,6 +20,7 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describeApiV1Resources } from '@aglyn/tenant-data-admin/server/api-v1-resources'
+import { API_SCOPES } from '@aglyn/tenant-data-admin/server/api-keys'
 import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
 import {
   buildCustomerApiOpenApi,
@@ -102,11 +103,20 @@ describe('the customer API description — document shape (AGL-2733)', () => {
   })
 
   it('declares bearer auth once, at the document level', () => {
-    expect(document.security).toEqual([{ apiKey: [] }])
+    expect(document.security).toEqual([{ apiKey: [] }, { connector: [] }])
     expect(document.components.securitySchemes.apiKey).toMatchObject({
       type: 'http',
       scheme: 'bearer',
     })
+    // The connector sign-in (AGL-4225): the same document names where an app
+    // signs in and every scope it can be granted.
+    const connector = document.components.securitySchemes.connector
+    expect(connector.type).toBe('oauth2')
+    expect(connector.flows.authorizationCode).toMatchObject({
+      authorizationUrl: 'https://app.acme.test/oauth/authorize',
+      tokenUrl: 'https://app.acme.test/api/oauth/token',
+    })
+    expect(Object.keys(connector.flows.authorizationCode.scopes)).toEqual([...API_SCOPES])
     // Repeating it per operation is one more place a new endpoint can be
     // added without it.
     for (const { path, op } of operations()) {

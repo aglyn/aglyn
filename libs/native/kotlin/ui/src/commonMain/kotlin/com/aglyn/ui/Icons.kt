@@ -14,6 +14,7 @@ import androidx.compose.material.icons.outlined.AddCircle
 import androidx.compose.material.icons.outlined.DragHandle
 import androidx.compose.material.icons.outlined.ViewSidebar
 import androidx.compose.material.icons.filled.Star as FilledStar
+import androidx.compose.material.icons.filled.PushPin as FilledPushPin
 import androidx.compose.material.icons.outlined.UnfoldMore
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.GridView
@@ -256,6 +257,8 @@ object AglynIcons {
     "grid_view" to Icons.Outlined.GridView,
     "keep" to Icons.Outlined.PushPin,
     "keep_off" to Icons.Outlined.PushPin,
+    /** A pinned site (the console's `mdiPin`, filled); "keep" is the outline. */
+    "push_pin" to Icons.Filled.FilledPushPin,
     "unfold_more" to Icons.Outlined.UnfoldMore,
     "star_filled" to Icons.Filled.FilledStar,
     "view_sidebar" to Icons.Outlined.ViewSidebar,

@@ -44,7 +44,7 @@ import {
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/server'
 import {
-  billsEmailSendOverage,
+  emailOverageBillsForOrg,
   billsOrgLibraryStorage,
   estimateMonthlyUsageCost,
   estimateRunOverage,
@@ -53,6 +53,7 @@ import {
   type HostUsageSnapshot,
   meteredBands,
 } from '../../../../utils/usage-metering'
+import { emailSendsBillingBand } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { measureScreenCaps } from '../../../../utils/screen-cap-reconciliation'
 import type { BillableScreenSource } from '../../hosts/resources/count-billable-screens'
 import { orgCounterTotals } from '../../../../utils/org-counter-totals'
@@ -1014,9 +1015,12 @@ async function handler(request: Request): Promise<Response> {
       // input: what the org costs us is every send on the cost meter, priced
       // by `orgMonthlyCogsUsd`, because the provider charges for the first
       // message of the month as much as the last.
+      // Against the plan's EMAIL BILLING band (AGL-4227): the campaign band
+      // everywhere but Starter, whose campaign band is 0 and which includes
+      // 1,000 emails a month of everything before it bills.
       const emailOverage = emailSendsOverage(
         counterTotals.emailSends,
-        resolveOrgEntitlements(orgData).emailSendsPerMonth,
+        emailSendsBillingBand(orgData),
       )
       // …and what it costs the customer, at the plan's retail per-1,000 rate.
       // NOT the infrastructure pass-through: email is not billed at cost x
@@ -1031,10 +1035,10 @@ async function handler(request: Request): Promise<Response> {
       // allowance — and most of that mail is transactional, which no cap was
       // ever allowed to refuse.
       const emailOveragePrice = priceEmailSendOverage(orgData, emailOverage)
-      const emailOverageBilled = billsEmailSendOverage(
-        month,
-        process.env.BILL_EMAIL_SEND_OVERAGE_FROM,
-      )
+      // The org's own verdict (AGL-4227): the platform switch, and Starter's
+      // own start month, so a Starter month before it prices $0 however late
+      // it is swept.
+      const emailOverageBilled = emailOverageBillsForOrg(orgData, month)
       const emailOverageUsd = emailOverageBilled
         ? emailOveragePrice.overageMonthlyUsd
         : 0

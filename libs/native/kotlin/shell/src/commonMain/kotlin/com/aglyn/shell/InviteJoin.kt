@@ -25,7 +25,8 @@ import com.aglyn.ui.space
 
 /**
  * Joins every invitation waiting for the signed-in person, as the console does on every load (AGL-4023): once their address
- * is confirmed (the server lists none before), never during a support session. A workspace joined while none is open opens.
+ * is confirmed (the server lists none before), never during a support session. While no workspace is open, the newest
+ * invitation's workspace opens once it is joined (AGL-4047); the others join where the person stands.
  */
 @Composable
 internal fun InviteJoinEffect(services: ShellServices) {
@@ -35,9 +36,9 @@ internal fun InviteJoinEffect(services: ShellServices) {
   LaunchedEffect(user?.uid, user?.emailVerified, impersonation) {
     val uid = user?.uid ?: return@LaunchedEffect
     if (!user.emailVerified) return@LaunchedEffect
-    val joined = services.inviteJoin.run(uid, impersonating = impersonation != null)
-    val first = joined.firstOrNull() ?: return@LaunchedEffect
-    if (services.workspace.state.value.org == null) services.workspace.selectOrg(first)
+    services.inviteJoin.run(uid, impersonating = impersonation != null)
+    val newest = services.inviteJoin.opens ?: return@LaunchedEffect
+    if (services.workspace.state.value.org == null) services.workspace.selectOrg(newest)
   }
 }
 

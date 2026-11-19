@@ -86,6 +86,8 @@ export interface AiSiteImportDocument {
   generative?: true
   /** What the site says of itself, the same bytes on every page of an import: a redesign's cached digest (AGL-4152). */
   siteLines?: string[]
+  /** The site's own phones and emails, as its home page gives them: where any page's `phone` and `email` go (AGL-4152). */
+  siteContacts?: { phones: string[]; emails: string[] }
   /** The lines of the wave's other pages, which a redesign's facts may come from (AGL-4152). */
   scope?: string[]
   /** The site's plan, once a wave has one (AGL-4152). */
@@ -272,6 +274,9 @@ export function aiSiteImportDocumentOf(inputs: Readonly<Record<string, unknown>>
     ...(value['generative'] === true ? { generative: true as const } : {}),
     ...(Array.isArray(value['siteLines']) ? { siteLines: strings(value['siteLines']) } : {}),
     ...(Array.isArray(value['scope']) ? { scope: strings(value['scope']) } : {}),
+    ...(value['siteContacts'] && typeof value['siteContacts'] === 'object'
+      ? { siteContacts: { phones: strings((value['siteContacts'] as Record<string, unknown>)['phones']), emails: strings((value['siteContacts'] as Record<string, unknown>)['emails']) } }
+      : {}),
     ...(value['plan'] && typeof value['plan'] === 'object' ? { plan: value['plan'] as AiSiteImportPlan } : {}),
     ...(typeof value['formPage'] === 'string' && value['formPage'] ? { formPage: value['formPage'] } : {}),
     ...(value['theme'] && typeof value['theme'] === 'object' ? { theme: value['theme'] as Record<string, unknown> } : {}),

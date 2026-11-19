@@ -799,8 +799,16 @@ describe('the reserved /.well-known namespace (AGL-3016)', () => {
    */
   it.each([
     '/.well-known/openid-configuration',
-    '/.well-known/oauth-authorization-server',
-    '/.well-known/oauth-protected-resource',
+    // Spelled like the connector discovery documents (AGL-4225), and none of
+    // them: those three are served by exact path, and nothing near them is.
+    '/.well-known/oauth-authorization-server/extra',
+    '/.well-known/oauth-protected-resource/api/v1',
+    '/.well-known/oauth-protected-resource/',
+    // Spelled like the plugin directory's domain proof (AGL-4225), and not it.
+    '/.well-known/openai-apps-challenge/',
+    '/.well-known/openai-apps-challenge.txt',
+    '/.well-known/openai-apps-challenge/extra',
+    '/.well-known/openai-apps',
     '/.well-known/security.txt',
     // Spelled like the two documents served here, and neither of them.
     '/.well-known/apple-app-site-association.json',
@@ -902,6 +910,83 @@ describe('the native apps\' association documents (AGL-3817)', () => {
     const source = new RegExp(`^${pattern}$`)
     expect(source.test('/.well-known/apple-app-site-association')).toBe(true)
     expect(source.test('/.well-known/assetlinks.json')).toBe(true)
+  })
+})
+
+describe('connector sign-in discovery (AGL-4225)', () => {
+  /*
+   * The three documents an MCP client reads to find the console's sign-in,
+   * rewritten to their handlers by EXACT path. The rest of the namespace is
+   * held to 404 by the block above, and the auth origin serves none of them:
+   * it is not the issuer, and its gate (AGL-3090) stays closed.
+   */
+  it.each([
+    ['/.well-known/oauth-protected-resource/api/mcp', '/api/oauth/metadata/protected-resource'],
+    ['/.well-known/oauth-protected-resource', '/api/oauth/metadata/protected-resource'],
+    ['/.well-known/oauth-authorization-server', '/api/oauth/metadata/authorization-server'],
+  ])('rewrites %s to its route handler', async (path, route) => {
+    const response = await middleware(request('app.aglyn.com', path))
+    expect(response.status).toBe(200)
+    expect(new URL(String(response.headers.get('x-middleware-rewrite'))).pathname).toBe(route)
+  })
+
+  it.each([
+    '/.well-known/oauth-protected-resource/api/mcp',
+    '/.well-known/oauth-authorization-server',
+    '/oauth/authorize',
+  ])('answers 404 for %s on the auth origin', async (path) => {
+    expect((await middleware(request('auth.aglyn.com', path))).status).toBe(404)
+  })
+
+  it('spends no verdict lookup serving them', async () => {
+    await middleware(request('zgover.aglyn.com', '/.well-known/oauth-authorization-server'))
+    expect(fetchCalls).toHaveLength(0)
+  })
+
+  // The domain proof a plugin directory fetches: one exact path, rewritten to
+  // its handler, which answers 404 until a token is configured.
+  it('rewrites the plugin directory\'s domain proof to its route handler', async () => {
+    const response = await middleware(request('app.aglyn.com', '/.well-known/openai-apps-challenge'))
+    expect(response.status).toBe(200)
+    expect(new URL(String(response.headers.get('x-middleware-rewrite'))).pathname).toBe(
+      '/api/domain-proof/openai-apps-challenge',
+    )
+    expect(response.headers.get('set-cookie')).toBeNull()
+    expect(response.headers.get('content-security-policy')).toBeNull()
+  })
+
+  it('answers 404 for the domain proof on the auth origin', async () => {
+    expect(
+      (await middleware(request('auth.aglyn.com', '/.well-known/openai-apps-challenge'))).status,
+    ).toBe(404)
+  })
+
+  it('spends no verdict lookup on the domain proof, and the matcher reaches it', async () => {
+    await middleware(request('zgover.aglyn.com', '/.well-known/openai-apps-challenge'))
+    expect(fetchCalls).toHaveLength(0)
+    const [pattern] = config.matcher as string[]
+    expect(new RegExp(`^${pattern}$`).test('/.well-known/openai-apps-challenge')).toBe(true)
+  })
+
+  it('serves the consent page on the console, unscoped by a workspace host', async () => {
+    const apex = await middleware(request('app.aglyn.com', '/oauth/authorize'))
+    expect(apex.status).toBe(200)
+    expect(apex.headers.get('x-middleware-rewrite')).toBeNull()
+    const workspace = await middleware(request('zgover.aglyn.com', '/oauth/authorize'))
+    expect(workspace.headers.get('x-middleware-rewrite')).toBeNull()
+  })
+
+  it('lets nothing frame the consent page, first-party hosts included', async () => {
+    const consent = await middleware(request('app.aglyn.com', '/oauth/authorize'))
+    const policy = String(consent.headers.get('content-security-policy'))
+    expect(policy).toContain("frame-ancestors 'none'")
+    expect(policy).not.toMatch(/frame-ancestors [^;]*https:/)
+    expect(consent.headers.get('x-frame-options')).toBe('DENY')
+
+    // Every other page keeps the first-party allowlist it had.
+    const signin = await middleware(request('app.aglyn.com', '/signin'))
+    expect(String(signin.headers.get('content-security-policy'))).toMatch(/frame-ancestors [^;]*https:/)
+    expect(signin.headers.get('x-frame-options')).toBeNull()
   })
 })
 
@@ -1039,8 +1124,10 @@ describe('no console URL is wrong any more (AGL-3017)', () => {
    * read the 200s as an authorization server we do not run.
    */
   it.each([
-    '/oauth/authorize',
+    // `/oauth/authorize` is a real page since AGL-4225; its siblings are not.
     '/oauth/token',
+    '/oauth/jwks',
+    '/oauth',
     '/authorize',
     '/connect/authorize',
     '/notanorg/notasurface',

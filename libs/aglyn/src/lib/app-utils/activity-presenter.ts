@@ -79,6 +79,8 @@ export interface ActivityEntryLike {
   staffActorEmail?: string | null
   /** The name of the API key that wrote the entry, when a key did (AGL-2632). */
   apiKeyName?: string | null
+  /** The name of the connected app that wrote it, when one did (AGL-4225). */
+  connectedAppName?: string | null
 }
 
 /**
@@ -96,6 +98,8 @@ export interface HostActivityActor {
   email?: string | null
   /** The API key's name, for an entry an integration wrote. */
   apiKeyName?: string | null
+  /** A connected app's own name, for an entry a connection wrote (AGL-4225). */
+  connectedAppName?: string | null
 }
 
 /**
@@ -196,6 +200,15 @@ export function apiKeyActorLabel(name: string): string {
 }
 
 /**
+ * How a connected app is named wherever an actor is: `Connected app Cursor`
+ * (AGL-4225). Its name is the one the app registered under, so it is always
+ * shown behind this label and never on its own.
+ */
+export function connectedAppActorLabel(name: string): string {
+  return `Connected app ${name}`
+}
+
+/**
  * The "who" line for an entry — always someone a reader can narrow down.
  *
  * In order: the address recorded when the entry was written; the key that
@@ -213,6 +226,7 @@ export function apiKeyActorLabel(name: string): string {
  */
 export function activityActorLabel(entry: ActivityEntryLike): string {
   if (entry.actorEmail) return entry.actorEmail
+  if (entry.connectedAppName) return connectedAppActorLabel(entry.connectedAppName)
   if (entry.apiKeyName) return apiKeyActorLabel(entry.apiKeyName)
   const actorId = entry.actorId?.trim()
   if (actorId === 'api') return 'API key'
@@ -240,6 +254,7 @@ export interface RunTriggeredByLike {
   uid?: string
   email?: string
   apiKeyName?: string
+  connectedAppName?: string
   name?: string
 }
 
@@ -257,6 +272,7 @@ export function runTriggeredByLabel(entry: {
     case 'member':
       return by.email || (by.uid ? `Account ${by.uid}` : 'A member')
     case 'apiKey':
+      if (by.connectedAppName) return connectedAppActorLabel(by.connectedAppName)
       return by.apiKeyName ? apiKeyActorLabel(by.apiKeyName) : 'API key'
     case 'visitor':
       return by.email ? `Site visitor (${by.email})` : 'Site visitor'
