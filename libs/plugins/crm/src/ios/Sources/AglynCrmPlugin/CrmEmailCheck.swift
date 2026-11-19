@@ -169,7 +169,7 @@ extension CrmAPI {
     let key = "\(scope.hostID)|\(address)"
     let now = Date().timeIntervalSince1970 * 1000
     if let hit = crmEmailChecksRemembered[key], hit.atMs + 60_000 >= now { return hit.answer }
-    let answer = (try? await api.request(CrmRoutes.emailCheck, method: .post, body: emailCheckBody(address))).map(crmEmailCheck)
+    let answer = (try? await api.request(CrmRoutes.emailCheck, method: .post, body: emailCheckBody(address))).map { crmEmailCheck($0) }
     crmEmailChecksRemembered[key] = (now, answer)
     return answer
   }
