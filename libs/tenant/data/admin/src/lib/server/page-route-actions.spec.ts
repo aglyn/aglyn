@@ -16,7 +16,13 @@
  */
 
 import { SERVER_TIMESTAMP, settingsFirestoreDouble } from '../testing/settings-firestore-double'
-import { applyPageRouteAction, settlePageRouteCache, type PageRouteActionInput } from './page-route-actions'
+import {
+  applyPageRouteAction,
+  applyPageUpdate,
+  settlePageRouteCache,
+  type PageRouteActionInput,
+  type PageUpdateInput,
+} from './page-route-actions'
 
 const HOST = 'hosts/host-1'
 const person = { uid: 'u1', email: 'owner@example.com' }
@@ -198,5 +204,171 @@ describe('settlePageRouteCache (AGL-4235)', () => {
     const dropCache = jest.fn()
     expect(await settlePageRouteCache(settingsFirestoreDouble().firestore, { hostId: 'host-1', livePaths: [], outboxId: null }, { dropCache })).toBe(false)
     expect(dropCache).not.toHaveBeenCalled()
+  })
+})
+
+describe('applyPageUpdate (AGL-4235)', () => {
+  const update = (double: ReturnType<typeof site>, input: Omit<PageUpdateInput, 'hostId' | 'actor'>) =>
+    applyPageUpdate(double.firestore, { hostId: 'host-1', actor: person, ...input })
+  /** A published `company` with a live child and an unpublished child, an unpublished draft, a folder and a held address. */
+  const tree = () =>
+    site(
+      {
+        company: { kind: 'page', displayName: 'Company', slug: 'company', order: 0 },
+        about: { kind: 'page', displayName: 'About', slug: 'about', parentId: 'company', order: 0, publishedAt: 'then' },
+        careers: { kind: 'page', displayName: 'Careers', slug: 'careers', parentId: 'company', order: 1 },
+        draft: { kind: 'page', displayName: 'Draft', slug: 'draft', order: 1 },
+        team: { kind: 'group', displayName: 'Team', order: 2 },
+        pricing: { kind: 'page', displayName: 'Pricing', slug: 'pricing', order: 3 },
+        newsletter: { kind: 'email', displayName: 'Newsletter' },
+        post: { kind: 'template', displayName: 'Post' },
+        missing: { kind: 'error', displayName: 'Not found' },
+      },
+      { screens: { company: 'company', about: 'company/about', pricing: 'pricing' } },
+    )
+
+  it('renames a page as the details card does, with its activity row, announcing a published one at its address', async () => {
+    const double = tree()
+    const result = await update(double, { pageId: 'company', details: { displayName: ' Our company ', description: ' Who ' } })
+    expect(result).toEqual(
+      expect.objectContaining({ ok: true, entries: {}, livePaths: ['/company'], announced: true, impact: { published: true, readdresses: false } }),
+    )
+    expect(double.read(`${HOST}/screens/company`)).toEqual(
+      expect.objectContaining({ displayName: 'Our company', description: 'Who', nameLower: 'our company', updatedAt: expect.anything() }),
+    )
+    expect(double.outbox().map(([, entry]) => entry)).toEqual([
+      { hostId: 'host-1', paths: ['/company'], createdAt: SERVER_TIMESTAMP, attempts: 0 },
+    ])
+    expect(activity(double)).toEqual([
+      expect.objectContaining({ action: 'Updated screen details', target: { type: 'screen', id: 'company', name: 'Our company' } }),
+    ])
+  })
+
+  it('announces nothing for an unpublished page, and renames a folder with no row', async () => {
+    const double = tree()
+    expect(await update(double, { pageId: 'draft', details: { displayName: 'Soon' } })).toEqual(
+      expect.objectContaining({ ok: true, livePaths: [], outboxId: null, announced: false }),
+    )
+    expect(await update(double, { pageId: 'team', details: { displayName: 'People' } })).toEqual(
+      expect.objectContaining({ ok: true, livePaths: [], announced: false }),
+    )
+    expect(double.read(`${HOST}/screens/team`)?.['displayName']).toBe('People')
+    expect(activity(double)).toHaveLength(1)
+    expect(await update(double, { pageId: 'team', details: { description: 'x' } })).toEqual(
+      expect.objectContaining({ ok: false, status: 400, field: 'description' }),
+    )
+  })
+
+  it('stores an unpublished page’s new slug and routes nothing', async () => {
+    const double = tree()
+    const result = await update(double, { pageId: 'draft', slug: 'Coming Soon' })
+    expect(result).toEqual(expect.objectContaining({ ok: true, entries: {}, impact: { published: false, readdresses: false } }))
+    expect(double.read(`${HOST}/screens/draft`)?.['slug']).toBe('coming-soon')
+    expect(double.read(HOST)?.['screens']).toEqual({ company: 'company', about: 'company/about', pricing: 'pricing' })
+  })
+
+  it('re-addresses a published page and its live descendants, leaving publishedAt alone and drafts unrouted', async () => {
+    const double = tree()
+    const result = await update(double, { pageId: 'company', slug: 'about-us' })
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: true,
+        entries: { company: 'about-us', about: 'about-us/about' },
+        livePaths: expect.arrayContaining(['/company', '/about-us', '/company/about', '/about-us/about']),
+        impact: { published: true, readdresses: true },
+      }),
+    )
+    expect(double.read(HOST)?.['screens']).toEqual({ company: 'about-us', about: 'about-us/about', pricing: 'pricing' })
+    expect(double.read(`${HOST}/screens/about`)?.['publishedAt']).toBe('then')
+    expect(double.read(`${HOST}/screens/company`)).not.toHaveProperty('publishedAt')
+    expect(double.read(HOST)?.['screens']).not.toHaveProperty('careers')
+    expect(activity(double)).toEqual([])
+  })
+
+  it('refuses the whole change, writing nothing, when any changed address is taken or reserved', async () => {
+    const taken = tree()
+    expect(await update(taken, { pageId: 'company', slug: 'pricing', details: { displayName: 'X' } })).toEqual(
+      expect.objectContaining({ ok: false, status: 409, code: 'address_taken', field: 'slug' }),
+    )
+    expect(taken.writes).toEqual([])
+
+    // The page's own address is free; its live child's new one is reserved.
+    const reserved = site(
+      {
+        docs: { kind: 'page', slug: 'docs' },
+        search: { kind: 'page', slug: 'search', parentId: 'docs' },
+      },
+      { screens: { docs: 'docs', search: 'docs/search' } },
+    )
+    const refused = await update(reserved, { pageId: 'search', parentId: null })
+    expect(refused).toEqual(expect.objectContaining({ ok: false, status: 400, field: 'parentId' }))
+    expect(reserved.writes).toEqual([])
+
+    for (const [slug, error] of [
+      ['a/b', expect.stringContaining('/')],
+      ['', 'Enter a slug ("/" for the home page)'],
+    ] as const) {
+      const double = tree()
+      expect(await update(double, { pageId: 'draft', slug })).toEqual(expect.objectContaining({ ok: false, status: 400, field: 'slug', error }))
+      expect(double.writes).toEqual([])
+    }
+  })
+
+  it('moves and reorders as the Pages hub does', async () => {
+    const double = tree()
+    // Into a folder at the same level: no address changes.
+    expect(await update(double, { pageId: 'pricing', parentId: 'team' })).toEqual(
+      expect.objectContaining({ ok: true, entries: {}, impact: { published: true, readdresses: false } }),
+    )
+    expect(double.read(`${HOST}/screens/pricing`)).toEqual(expect.objectContaining({ parentId: 'team', order: 0 }))
+    // A reorder where it is.
+    expect(await update(double, { pageId: 'team', index: 0 })).toEqual(expect.objectContaining({ ok: true, entries: {} }))
+    expect(double.read(`${HOST}/screens/team`)?.['order']).toBe(0)
+    expect(double.read(`${HOST}/screens/company`)?.['order']).toBe(1)
+    // Out from under its parent: a live address follows.
+    expect(await update(double, { pageId: 'about', parentId: null, index: 0 })).toEqual(
+      expect.objectContaining({ ok: true, entries: { about: 'about' } }),
+    )
+    expect(double.read(`${HOST}/screens/about`)).not.toHaveProperty('parentId')
+  })
+
+  it('refuses a move into the page’s own descendant, under what is not a page or folder, or that changes a live address within one level', async () => {
+    const double = tree()
+    expect(await update(double, { pageId: 'company', parentId: 'about' })).toEqual(
+      expect.objectContaining({ ok: false, status: 400, field: 'parentId', error: 'A page cannot move inside itself' }),
+    )
+    for (const parentId of ['post', 'missing', 'newsletter', 'nothing', 'company-x']) {
+      expect(await update(double, { pageId: 'draft', parentId })).toEqual(expect.objectContaining({ ok: false, status: 400, field: 'parentId' }))
+    }
+    // A page whose slug and published address disagree, moved into a folder at its own level.
+    const glued = site(
+      { team: { kind: 'group' }, alt: { kind: 'page', slug: 'alternativeswebflow' } },
+      { screens: { alt: 'alternatives' } },
+    )
+    expect(await update(glued, { pageId: 'alt', parentId: 'team' })).toEqual(
+      expect.objectContaining({ ok: false, status: 409, code: 'move_refused' }),
+    )
+    expect(double.writes).toEqual([])
+    expect(glued.writes).toEqual([])
+  })
+
+  it('answers an email design, an entry template, an error page, a deleted page or no page as not found', async () => {
+    const double = tree()
+    for (const pageId of ['newsletter', 'post', 'missing', 'nothing']) {
+      expect(await update(double, { pageId, details: { displayName: 'X' } })).toEqual({ ok: false, status: 404, error: 'That page was not found' })
+    }
+    expect(double.writes).toEqual([])
+  })
+
+  it('holds the write when the caller does not allow its impact, and writes nothing', async () => {
+    const double = tree()
+    const allow = jest.fn(() => false)
+    expect(await update(double, { pageId: 'company', slug: 'us', allow })).toEqual({
+      ok: false,
+      held: true,
+      impact: { published: true, readdresses: true },
+    })
+    expect(allow).toHaveBeenCalledWith({ published: true, readdresses: true })
+    expect(double.writes).toEqual([])
   })
 })
