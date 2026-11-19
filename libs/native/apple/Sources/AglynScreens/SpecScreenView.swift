@@ -630,6 +630,23 @@ struct SpecScreenBody: View {
           if let footer, !footer.isEmpty { Text(footer) }
         }
       }
+    case "qr":
+      // `{ "type": "qr", "value": "{…}", "caption": "…" }`: a QR code of a link the screen shows (a waiver's share link), drawn by
+      // the kit's own encoder, never fetched.
+      let value = ScreenValues.render(block["value"]?.stringValue ?? "", in: context)
+      if !value.isEmpty {
+        Section {
+          AglynQRCode(value, size: 192)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, AglynSpace.two)
+            .accessibilityLabel(block["caption"]?.stringValue.map { ScreenValues.render($0, in: context) } ?? "QR code")
+            .accessibilityIdentifier("qr-\(block.id)")
+        } header: {
+          if let title { Text(title) }
+        } footer: {
+          if let footer, !footer.isEmpty { Text(footer) }
+        }
+      }
     case "html":
       // `{ "type": "html", "source": "{data.message.html}", "empty": "…" }`: a message's HTML, drawn as styled text.
       // Scripts, styles, frames, forms and images never reach the importer, and a link opens in the system handler.
