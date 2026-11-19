@@ -23,6 +23,7 @@ import {
   queryParam as q,
   RECORD_STAMPS as STAMPS,
   stringField as str,
+  SITE_ID_PATH_PARAM,
 } from '@aglyn/tenant-data-admin/server/api-v1-description'
 
 /**
@@ -35,6 +36,7 @@ import {
  */
 export const FORM_SUBMISSIONS_API_V1_DESCRIPTION: ApiV1ResourceDescription = {
   tag: 'Form submissions',
+  docsPage: 'form-submissions',
   description: 'What visitors sent through a site’s forms.',
   schemaName: 'FormSubmission',
   required: ['id', 'object', 'form_id', 'fields'],
@@ -52,9 +54,9 @@ export const FORM_SUBMISSIONS_API_V1_DESCRIPTION: ApiV1ResourceDescription = {
     created: STAMPS.created,
   },
   ops: [
-    { path: '/v1/sites/{siteId}/form-submissions', method: 'get', operationId: 'listFormSubmissions', summary: 'List submissions', list: true, returns: 'FormSubmission', description: 'Combining `form`/`formId` with `read` narrows on the form and checks `read` on the page, so pages can come back short.', filters: [q('form', 'Form name.'), q('formId', 'Form id.'), q('read', 'Either `true` or `false`. Anything else is a 400.', { type: 'string', enum: ['true', 'false'] })], pathParams: [{ name: 'siteId', description: 'Site id.' }] },
-    { path: '/v1/sites/{siteId}/form-submissions/{submissionId}', method: 'get', operationId: 'getFormSubmission', summary: 'Retrieve a submission', returns: 'FormSubmission', pathParams: [{ name: 'siteId', description: 'Site id.' }, { name: 'submissionId', description: 'Submission id.' }] },
-    { path: '/v1/sites/{siteId}/form-submissions/{submissionId}', method: 'patch', operationId: 'updateFormSubmission', summary: 'Mark a submission read', accepts: 'FormSubmissionWrite', returns: 'FormSubmission', pathParams: [{ name: 'siteId', description: 'Site id.' }, { name: 'submissionId', description: 'Submission id.' }] },
-    { path: '/v1/sites/{siteId}/form-submissions/{submissionId}', method: 'delete', operationId: 'deleteFormSubmission', summary: 'Delete a submission', returns: 'Deleted', pathParams: [{ name: 'siteId', description: 'Site id.' }, { name: 'submissionId', description: 'Submission id.' }] },
+    { path: '/v1/sites/{siteId}/form-submissions', method: 'get', operationId: 'listFormSubmissions', summary: 'List a site’s form entries', list: true, returns: 'FormSubmission', description: 'Lists what visitors sent through one site’s forms, with each entry’s fields and whether it has been read. Needs `siteId` from List sites. Filter by form or by read state.', filters: [q('form', 'Form name.'), q('formId', 'Form id.'), q('read', 'Either `true` or `false`. Anything else is a 400.', { type: 'string', enum: ['true', 'false'] })], pathParams: [SITE_ID_PATH_PARAM] },
+    { path: '/v1/sites/{siteId}/form-submissions/{submissionId}', method: 'get', operationId: 'getFormSubmission', summary: 'Get a form entry', description: 'Returns one form entry. Needs `siteId` from List sites and `submissionId` from List a site’s form entries.', returns: 'FormSubmission', pathParams: [SITE_ID_PATH_PARAM, { name: 'submissionId', description: 'Submission id.' }] },
+    { path: '/v1/sites/{siteId}/form-submissions/{submissionId}', method: 'patch', operationId: 'updateFormSubmission', summary: 'Mark a form entry read or unread', description: 'Sets whether a form entry has been read; nothing else about it can change. Needs `siteId` and `submissionId`. Returns the entry.', accepts: 'FormSubmissionWrite', returns: 'FormSubmission', pathParams: [SITE_ID_PATH_PARAM, { name: 'submissionId', description: 'Submission id.' }] },
+    { path: '/v1/sites/{siteId}/form-submissions/{submissionId}', method: 'delete', operationId: 'deleteFormSubmission', summary: 'Delete a form entry', description: 'Deletes a form entry permanently. Needs `siteId` and `submissionId`.', returns: 'Deleted', pathParams: [SITE_ID_PATH_PARAM, { name: 'submissionId', description: 'Submission id.' }] },
   ],
 }

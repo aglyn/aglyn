@@ -31,7 +31,12 @@ private class UserDoc(initial: Map<String, Any?>) : FirestoreReader, FirestoreWr
     doc.collect { emit(Live.Ready(FirestoreDoc("u1", path, it))) }
   }
   override fun observe(query: FirestoreQuery): Flow<Live<List<FirestoreDoc>>> = kotlinx.coroutines.flow.flowOf(Live.Ready(emptyList()))
-  override suspend fun merge(path: String, data: Map<String, Any?>) { merges += data }
+  /** The next merge fails, as a write the rules refuse. */
+  var refuse = false
+  override suspend fun merge(path: String, data: Map<String, Any?>) {
+    merges += data
+    if (refuse) throw IllegalStateException("Missing or insufficient permissions.")
+  }
 }
 
 class AccountsTest {
@@ -118,5 +123,42 @@ class AccountsTest {
     store.setTheme(store.state.value.theme.copy(appearance = AppAppearance.DARK), deviceOnly = true)
     assertEquals(writes, doc.merges.size)
     assertEquals(AppAppearance.DARK, store.state.value.theme.appearance)
+  }
+  /** Site pins (AGL-4005, AGL-4165), as the console's `usePinnedHosts`: shown at once, one entry written, put back when refused. */
+  @Test
+  fun sitePinsWriteOneEntryAndRollBackWhenRefused() = runTest(UnconfinedTestDispatcher()) {
+    val auth = SlotAuth("u1")
+    auth.signInWithEmail("a@example.test", "x")
+    val doc = UserDoc(mapOf("pinnedHosts" to listOf(mapOf("orgId" to "o1", "hostId" to "h1"), mapOf("orgId" to "o2", "hostId" to "h2"))))
+    val store = AccountPreferencesStore(backgroundScope, auth, doc, doc, InMemoryKeyValueStore())
+    assertEquals(listOf("h1"), store.state.value.pinnedHosts("o1"))
+
+    assertEquals(SitePinToggle.PINNED, store.toggleHostPin("h3", "o1"))
+    assertEquals(listOf("h1", "h3"), store.state.value.pinnedHosts("o1"))
+    assertEquals(mapOf("pinnedHosts" to FirestoreArrayChange.union(mapOf("orgId" to "o1", "hostId" to "h3"))), doc.merges.last())
+
+    assertEquals(SitePinToggle.UNPINNED, store.toggleHostPin("h1", "o1"))
+    assertEquals(listOf("h3"), store.state.value.pinnedHosts("o1"))
+    assertEquals(mapOf("pinnedHosts" to FirestoreArrayChange.remove(listOf(mapOf("orgId" to "o1", "hostId" to "h1")))), doc.merges.last())
+
+    // A site that moved workspace moves its pin: the list is written.
+    assertEquals(SitePinToggle.PINNED, store.toggleHostPin("h2", "o1"))
+    assertEquals(listOf("h3", "h2"), store.state.value.pinnedHosts("o1"))
+    assertEquals(listOf("h3", "h2"), (doc.merges.last()["pinnedHosts"] as List<*>).map { (it as Map<*, *>)["hostId"] })
+
+    store.replaceHostPin("h3", "h9", "o1")
+    assertEquals(listOf("h9", "h2"), store.state.value.pinnedHosts("o1"))
+
+    // The rules refuse the next pin: the stored list comes back.
+    doc.refuse = true
+    store.toggleHostPin("h7", "o1")
+    assertEquals(listOf("h1"), store.state.value.pinnedHosts("o1"))
+    assertTrue(store.writeError.value != null)
+
+    // A pin made on another device arrives.
+    doc.refuse = false
+    doc.doc.value = mapOf("pinnedHosts" to listOf(mapOf("orgId" to "o1", "hostId" to "h1"), mapOf("orgId" to "o1", "hostId" to "h8")))
+    assertEquals(listOf("h1", "h8"), store.state.value.pinnedHosts("o1"))
+    assertTrue(!store.state.value.hostPinsFull("o1"))
   }
 }

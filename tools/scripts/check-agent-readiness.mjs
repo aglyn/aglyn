@@ -67,6 +67,7 @@ import { fileURLToPath } from 'node:url'
 
 import {
   advertisedConnectorPaths,
+  cardTextProblems,
   catalogProblems,
   originAgreementProblems,
   readDiscoveryRoutes,
@@ -386,7 +387,18 @@ try {
 } catch {
   mcpProblems.push('integrations/mcp-registry/server.json is not JSON')
 }
-if (registryEntry) mcpProblems.push(...registryEntryProblems(registryEntry, constants))
+if (registryEntry) {
+  mcpProblems.push(
+    ...registryEntryProblems(registryEntry, constants),
+    ...cardTextProblems(
+      {
+        protocolSource: read('apps/console/utils/mcp-protocol.ts'),
+        cardSource: read('apps/console/utils/mcp-server-card.ts'),
+      },
+      registryEntry,
+    ),
+  )
+}
 
 const consoleProject = EXPECTED_POSTURE.find((project) => project.project === CONSOLE_PROJECT)
 if (!consoleProject) fail(`no \`${CONSOLE_PROJECT}\` project in the declared posture`)

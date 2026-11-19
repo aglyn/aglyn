@@ -1362,7 +1362,7 @@ platform's secure generator (the console's password generator). Formats: `pairs`
 `<path>`), `before/-` and `after/-` (either side of the first separator), `date` (a moment on the device's calendar; a plain
 calendar day, `2027-11-15`, is that day in every time zone, as the console's `formatDayKey` reads it), `datetime`,
 `cents` (`cents/<currency path>`), `dollars`, `bytes`, `number`, `percent`,
-`count`, `yesno`, `title`, `upper`, `json`. A `when` is clauses joined by
+`count`, `yesno`, `title`, `upper`, `json`, `fixed/N` (exactly N decimals without grouping, as `toFixed` writes a figure). A `when` is clauses joined by
 `&&` or `||`: `path`, `!path`, `path == a,b`, `path != a`. A body is resolved
 in place; `{"$if": "<when>", "then": X, "else": Y}` is one of two values (or nothing, which leaves the member out; `"$null"` sends null) and
 `{"$afterHours": "{form.hours}"}` is that many hours from `now.ms` in epoch milliseconds (nothing when blank); `{"$pick": {...}}` makes the list of keys whose values are truthy,
@@ -1421,7 +1421,7 @@ epoch milliseconds, UTC unless `local` asks for the device's clock), `{"$slug": 
 (the entries of `{form}` whose names start with `prefix`, as `{ key, value }` rows).
 
 More formats: `amount` (whole cents as `12.50`, what a money field starts with), `code`
-(a coupon code as stored; `code/40` cuts it at 40), `token` (the search token of typed
+(a coupon code as stored; `code/40` cuts it at 40), `dayseconds` (a picked day, `2026-11-01`, as the Unix seconds of its local midnight; `dayseconds/end` the next day's, an inclusive day's exclusive bound, as the invoice list's Date filter asks Stripe), `token` (the search token of typed
 words), `sum` and `sumcents` (a list of numbers added up), `ahead` (how many of a list of
 times are still to come), `percentof/other.path` (this as a percentage of the number at the path, to one decimal, `0` where
 there is nothing to divide by). `{?a == b}` is a condition as true or false, and `a ?? b` takes the
@@ -1457,7 +1457,8 @@ keyed by resource id) from the resources load and the current stays load, as `un
 The context also carries `now` (UTC): `now.month` (`2026-10`), `now.prevMonth`,
 `now.day` (`2026-10-13`) and `now.year`, the keys the console's monthly
 counters and daily documents are named by, so `data.counter[@now.month]` reads
-this month's figure. A path `rows.*.field` is that field of every row, as a
+this month's figure. `app.brand` is the platform's name, for words the console prints with it
+(`{app.brand} staff · {item.staffRole}`). A path `rows.*.field` is that field of every row, as a
 list. `{a + b - c}` sums numbers (paths, literals, or a list, which adds up);
 a term that is missing makes the sum missing, and `x?` counts as zero where it
 is missing. `a ?? 'text'` keeps a real 0 or false.

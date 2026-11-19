@@ -8,8 +8,9 @@ import kotlin.test.assertTrue
 class ConsoleAppLinksTest {
   @Test
   fun everyWorkspaceSiteAndAccountPageOpensTheApp() {
-    // The link the owner clicked on the Mac, and its parents.
-    assertTrue(DeepLinks.opensInApp("https://app.aglyn.com/elevated-concepts/hosts/elevated-concepts/admin/plugins/pIbeqgnNLn"))
+    // A plugin page under a site whose slug equals its workspace slug (the shape of the link
+    // that first failed to open the app), and its parents.
+    assertTrue(DeepLinks.opensInApp("https://app.aglyn.com/acme/hosts/acme/admin/plugins/plugin1"))
     assertTrue(DeepLinks.opensInApp("https://app.aglyn.com/acme/hosts/shop/admin/plugins"))
     assertTrue(DeepLinks.opensInApp("https://app.aglyn.com/acme/hosts/shop/products/orders?order=o1#items"))
     assertTrue(DeepLinks.opensInApp("aglyn://acme/crm/leads/l1"))
