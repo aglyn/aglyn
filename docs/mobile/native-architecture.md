@@ -1255,7 +1255,8 @@ A file is `{ "screens": [ … ] }`. A screen:
 An action is `{ label, icon, method, url, body, headers, confirm, confirmWhen, confirmMessage, confirmLabel, destructive, prompt,
 promptTitle, submitLabel, reason, success, instead, check, open, navigate, back, reload, when, disabledWhen, link, copy,
 export, overlay, reveal, else, then, write, route }`: `disabledWhen` on a form's submit keeps the button on screen and off
-while it holds, for a setup step the screen says above it (a `when` would hide it); `prompt` asks for inputs first (`form.*`), in a dialog titled
+while it holds, for a setup step the screen says above it (a `when` would hide it), and it reads the form's own values as `form.*`
+(Quotes settings: Save is off with no statement or more than five); `prompt` asks for inputs first (`form.*`), in a dialog titled
 `promptTitle` with a `submitLabel` button where the label alone would say neither (a row's `Edit` opens
 "Edit category" with Save, as the console's dialog does); `reason: true`
 adds the required reason the staff routes record; `open` names the response
