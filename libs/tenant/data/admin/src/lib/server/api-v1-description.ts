@@ -62,6 +62,30 @@ export interface ApiV1Operation {
    * (AGL-4225) so a client can ask before running it.
    */
   readonly destructive?: boolean
+  /**
+   * `true` for a POST that lands the same state when repeated with the same
+   * arguments — an upsert, a conversion that returns the existing ids, a
+   * publish. Published as `x-idempotent`, read as MCP `idempotentHint`
+   * (AGL-4225). A GET, PATCH or DELETE is idempotent by its method and needs
+   * no flag.
+   */
+  readonly idempotent?: boolean
+  /**
+   * `true` when the call reaches beyond the workspace's own records: it
+   * changes a public website, claims a public address, messages someone, or
+   * looks something up outside. Published as `x-open-world`, read as MCP
+   * `openWorldHint` (AGL-4225). Every `true` carries its reason beside it.
+   */
+  readonly openWorld?: boolean
+  /**
+   * Body members a CREATE must carry where the update that shares the write
+   * schema does not (AGL-4225). The builder publishes a create-only copy of
+   * the write schema with these required, so a client is told before it
+   * sends.
+   */
+  readonly bodyRequires?: readonly string[]
+  /** `true` when the body may be left out altogether. */
+  readonly bodyOptional?: boolean
 }
 
 export interface ApiV1ResourceDescription {
@@ -91,6 +115,14 @@ export interface ApiV1ResourceDescription {
    * builder would otherwise derive.
    */
   readonly components?: Record<string, ApiV1Schema>
+  /**
+   * The resource's page in the public API docs, as its file name under
+   * `apps/docs/api/resources/` without `.md` — `contacts`, `form-submissions`.
+   * Every operation links to it (OpenAPI `externalDocs`), so a tool's
+   * description can point at the page that documents it (AGL-4225). The
+   * MCP specs fail on a page that does not exist.
+   */
+  readonly docsPage?: string
 }
 
 // ── Field schemas ──────────────────────────────────────────────────────────
@@ -195,3 +227,10 @@ export const queryParam = (
   description,
   schema,
 })
+
+/** A query parameter the handler refuses to go without (AGL-4225). */
+export const requiredQueryParam = (
+  name: string,
+  description: string,
+  schema: ApiV1Schema = { type: 'string' },
+): ApiV1Schema => ({ ...queryParam(name, description, schema), required: true })
