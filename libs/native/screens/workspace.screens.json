@@ -696,6 +696,12 @@
               "help": "Read a site’s products, variants, prices and stock."
             },
             {
+              "key": "productsWrite",
+              "label": "Products — write",
+              "kind": "toggle",
+              "help": "Add, edit and delete a site’s products and their variants. A change to a product that is on sale shows on the live site right away."
+            },
+            {
               "key": "bookingsRead",
               "label": "Bookings — read",
               "kind": "toggle",
@@ -724,6 +730,36 @@
               "label": "CRM — write",
               "kind": "toggle",
               "help": "Add, edit and delete companies, deals and tasks, log activities, and work and convert leads, on behalf of a named site. Cannot edit a pipeline’s stages."
+            },
+            {
+              "key": "pagesRead",
+              "label": "Pages — read",
+              "kind": "toggle",
+              "help": "List a site’s pages: each one’s name, address, whether it is published and its search listing. Never reads what a page is built from."
+            },
+            {
+              "key": "seoRead",
+              "label": "Search listing — read",
+              "kind": "toggle",
+              "help": "Read how a site and its pages are described to search engines: titles, descriptions and sharing images."
+            },
+            {
+              "key": "seoWrite",
+              "label": "Search listing — write",
+              "kind": "toggle",
+              "help": "Change how a site and its pages appear in search results. Changes show on the live site right away."
+            },
+            {
+              "key": "businessRead",
+              "label": "Business details — read",
+              "kind": "toggle",
+              "help": "Read a site’s business details: name, slogan, phone, email, address and social links."
+            },
+            {
+              "key": "businessWrite",
+              "label": "Business details — write",
+              "kind": "toggle",
+              "help": "Change a site’s business name, slogan, phone, email, address and social links. Changes show on the live site right away."
             }
           ],
           "body": {
@@ -744,11 +780,17 @@
                 "orders:read": "{form.ordersRead}",
                 "orders:write": "{form.ordersWrite}",
                 "products:read": "{form.productsRead}",
+                "products:write": "{form.productsWrite}",
                 "bookings:read": "{form.bookingsRead}",
                 "media:read": "{form.mediaRead}",
                 "media:write": "{form.mediaWrite}",
                 "crm:read": "{form.crmRead}",
-                "crm:write": "{form.crmWrite}"
+                "crm:write": "{form.crmWrite}",
+                "pages:read": "{form.pagesRead}",
+                "seo:read": "{form.seoRead}",
+                "seo:write": "{form.seoWrite}",
+                "business:read": "{form.businessRead}",
+                "business:write": "{form.businessWrite}"
               }
             }
           },

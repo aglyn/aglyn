@@ -24,6 +24,6 @@ class FulfillmentNetworksNativeTest {
   fun everySpecNamesItsRoutesAndTheCommerceSettingsZone() {
     val specs = FulfillmentNetworksScreenJson.files.flatMap { ScreenSpec.parseFile(it) }
     assertEquals(listOf("fulfillment-networks.service", "fulfillment-networks.network", "fulfillment-networks.order").sorted(), specs.map { it.id }.sorted())
-    assertTrue(specs.any { "commerceSettings" in it.zones } || specs.all { it.zones.isEmpty() })
+    assertTrue(specs.any { "commerceSettingsShipping" in it.zones } || specs.all { it.zones.isEmpty() })
   }
 }

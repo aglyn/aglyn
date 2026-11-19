@@ -173,7 +173,7 @@ export function outboxEntry(firestore: Firestore, hostId: string) {
   }
 }
 
-export async function settleCache(deps: Required<ProductsWriteDeps>, hostId: string, entry: FirebaseFirestore.DocumentReference, reason: string) {
+export async function settleCache(deps: Pick<Required<ProductsWriteDeps>, 'dropCache'>, hostId: string, entry: FirebaseFirestore.DocumentReference, reason: string) {
   const dropped = await deps.dropCache({ hostIds: [hostId], reason }).catch(() => ({ complete: false }))
   if (dropped.complete) await entry.delete().catch(() => undefined)
 }
@@ -187,6 +187,148 @@ export function resolved(deps: ProductsWriteDeps): Required<ProductsWriteDeps> {
     dropCache: deps.dropCache ?? dropPluginSiteCache,
     now: deps.now ?? (() => Date.now()),
   }
+}
+
+/** Why a product save or delete was refused, for its caller to answer in its own words. */
+export type ProductWriteRefusalCode =
+  /** The product fails the editor's rules (`variantMatrixProblem`, `validateProductForSave`). */
+  | 'invalid'
+  /** The plan does not include commerce. */
+  | 'plan'
+  /** The plan's product allowance is used up. */
+  | 'quota'
+  /** The product does not exist, or was deleted. */
+  | 'missing'
+  /** Another product holds the slug (only asked with `uniqueSlug`). */
+  | 'slug_taken'
+  /** A refusal the caller's own `product` builder made. */
+  | 'refused'
+
+export interface ProductWriteRefusal {
+  ok: false
+  status: number
+  code: ProductWriteRefusalCode
+  error: string
+  /** What a builder's refusal names, for its caller. */
+  detail?: unknown
+}
+
+export type ProductSaveResult = { ok: true; id: string; replayed: boolean } | ProductWriteRefusal
+
+/** A refusal a {@link ProductSaveInput.product} builder answers instead of a product. */
+export interface ProductBuildRefusal {
+  refusal: { status: number; error: string; detail?: unknown }
+}
+
+/**
+ * One product save, already authorized (AGL-4235): the console editor's
+ * write, whoever asks for it. The native apps' save route and the public
+ * API's product writes both call this, so the derived fields, the checks, the
+ * smart-collection membership, the plan and allowance count, the publish
+ * outbox and the cache drop are made once.
+ *
+ * The caller has decided who may write this site. Nothing here asks.
+ */
+export interface ProductSaveInput {
+  firestore: Firestore
+  hostId: string
+  productId: string
+  /** A new product under `productId` (a retry finds its own and answers `replayed`), or an edit of the live one. */
+  create: boolean
+  /**
+   * The product to save, or how to make it from the stored document read in
+   * the save's own transaction, so an edit merged onto it cannot lose a
+   * change made between a read and the write.
+   */
+  product: EditedProduct | ((stored: FirebaseFirestore.DocumentSnapshot) => EditedProduct | ProductBuildRefusal)
+  /** The organization the plan and the allowance are read from. */
+  org: Record<string, unknown>
+  /** Who a create is `createdBy`: a person's uid, or null when no person made it. */
+  createdBy: string | null
+  /** Further fields a create stamps, such as the API credential that made it. */
+  createStamps?: Record<string, unknown>
+  /** Refuse a slug another product of the site holds, live or deleted. */
+  uniqueSlug?: boolean
+  nowMs: number
+  dropCache: Required<ProductsWriteDeps>['dropCache']
+  /** What the cache drop says caused it. */
+  cacheReason: string
+}
+
+const isBuildRefusal = (value: unknown): value is ProductBuildRefusal =>
+  Boolean(value && typeof value === 'object' && 'refusal' in (value as object))
+
+/**
+ * Saves a product as the console editor does: `create` makes a new product
+ * under `productId`; otherwise it replaces the live product, keeping its live
+ * stock holds and the stored timestamps the product does not name.
+ */
+export async function saveProduct(input: ProductSaveInput): Promise<ProductSaveResult> {
+  const { firestore: db, hostId, productId, create, nowMs } = input
+  const hostRef = db.collection('hosts').doc(hostId)
+  const products = hostRef.collection('products')
+  const productRef = products.doc(productId)
+  const smartQuery = hostRef.collection('collections').where('kind', '==', 'catalog').where('mode', '==', 'smart')
+  const outbox = outboxEntry(db, hostId)
+  const answer = await db.runTransaction(async (tx): Promise<ProductSaveResult> => {
+    const [existing, smart] = await Promise.all([tx.get(productRef), tx.get(smartQuery)])
+    const built = typeof input.product === 'function' ? input.product(existing) : input.product
+    if (isBuildRefusal(built)) {
+      return { ok: false, code: 'refused', ...built.refusal }
+    }
+    const product = built
+    const fields = productSaveFields(product, nowMs)
+    // More combinations than a product holds is refused with the count
+    // (AGL-4100), never saved short of the options it names.
+    const problem = variantMatrixProblem(fields.options) ?? validateProductForSave(fields as never)
+    if (problem) return { ok: false, status: 400, code: 'invalid', error: problem }
+    if (input.uniqueSlug) {
+      const holders = await tx.get(products.where('slug', '==', fields.slug).limit(2))
+      if (holders.docs.some((doc) => doc.id !== productId)) {
+        return { ok: false, status: 409, code: 'slug_taken', error: `Another product already uses the slug “${fields.slug}”` }
+      }
+    }
+    const membership = {
+      collectionIds: productCollectionIds(
+        productMembershipInput(fields, product) as never,
+        smart.docs.map((doc) => smartCollectionRulesOf(doc.id, doc.data())),
+      ),
+    }
+    if (create) {
+      if (existing.exists) return { ok: true, id: productId, replayed: true }
+      const early = planRefusal(input.org as never)
+      if (early) return { ok: false, status: early.status, code: 'plan', error: early.error }
+      const used = await countLiveDocuments(products, (aggregate) => tx.get(aggregate))
+      const room = roomRefusal(input.org as never, Number(used) || 0)
+      if (room) return { ok: false, status: room.status, code: 'quota', error: room.error }
+      tx.create(productRef, {
+        ...fields,
+        ...membership,
+        createdAtMs: nowMs,
+        deletedAt: null,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        createdBy: input.createdBy,
+        ...(input.createStamps ?? {}),
+      })
+    } else {
+      if (!existing.exists || existing.get('deletedAt')) {
+        return { ok: false, status: 404, code: 'missing', error: 'This product was deleted' }
+      }
+      tx.set(productRef, {
+        ...storedTimestamps(existing.data() ?? {}, product as unknown as Record<string, unknown>),
+        ...productEditWrite(fields, existing.get('stockHolds')),
+        ...membership,
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+    }
+    tx.set(outbox.ref, outbox.data)
+    return { ok: true, id: productId, replayed: false }
+  })
+  if (answer.ok && !answer.replayed) {
+    await settleCache({ dropCache: input.dropCache }, hostId, outbox.ref, input.cacheReason)
+  }
+  return answer
 }
 
 /**
@@ -210,59 +352,20 @@ export function createProductSaveHandler(options: ProductsWriteDeps = {}): Plugi
     try {
       const door = await gate(req, res, hostId, deps)
       if (!door) return
-      const nowMs = deps.now()
-      const fields = productSaveFields(product, nowMs)
-      // More combinations than a product holds is refused with the count
-      // (AGL-4100), never saved short of the options it names.
-      const problem = variantMatrixProblem(fields.options) ?? validateProductForSave(fields as never)
-      if (problem) return res.status(400).json({ error: problem })
-      const db = deps.firestore()
-      const hostRef = db.collection('hosts').doc(hostId)
-      const products = hostRef.collection('products')
-      const productRef = products.doc(productId)
-      const smartQuery = hostRef.collection('collections').where('kind', '==', 'catalog').where('mode', '==', 'smart')
-      const outbox = outboxEntry(db, hostId)
-      const create = body['create'] === true
-      const answer = await db.runTransaction(async (tx) => {
-        const [existing, smart] = await Promise.all([tx.get(productRef), tx.get(smartQuery)])
-        const membership = {
-          collectionIds: productCollectionIds(
-            productMembershipInput(fields, product) as never,
-            smart.docs.map((doc) => smartCollectionRulesOf(doc.id, doc.data())),
-          ),
-        }
-        if (create) {
-          if (existing.exists) return { status: 200, body: { ok: true, id: productId, replayed: true } }
-          const early = planRefusal(door.org as never)
-          if (early) return { status: early.status, body: { error: early.error } }
-          const used = await countLiveDocuments(products, (aggregate) => tx.get(aggregate))
-          const room = roomRefusal(door.org as never, Number(used) || 0)
-          if (room) return { status: room.status, body: { error: room.error } }
-          tx.create(productRef, {
-            ...fields,
-            ...membership,
-            createdAtMs: nowMs,
-            deletedAt: null,
-            createdAt: FieldValue.serverTimestamp(),
-            updatedAt: FieldValue.serverTimestamp(),
-            createdBy: door.uid,
-          })
-        } else {
-          if (!existing.exists || existing.get('deletedAt')) return { status: 404, body: { error: 'This product was deleted' } }
-          tx.set(productRef, {
-            ...storedTimestamps(existing.data() ?? {}, product as unknown as Record<string, unknown>),
-            ...productEditWrite(fields, existing.get('stockHolds')),
-            ...membership,
-            updatedAt: FieldValue.serverTimestamp(),
-          })
-        }
-        tx.set(outbox.ref, outbox.data)
-        return { status: 200, body: { ok: true, id: productId, replayed: false } }
+      const saved = await saveProduct({
+        firestore: deps.firestore(),
+        hostId,
+        productId,
+        create: body['create'] === true,
+        product,
+        org: door.org,
+        createdBy: door.uid,
+        nowMs: deps.now(),
+        dropCache: deps.dropCache,
+        cacheReason: 'product saved from the app',
       })
-      if (answer.status === 200 && !(answer.body as { replayed?: boolean }).replayed) {
-        await settleCache(deps, hostId, outbox.ref, 'product saved from the app')
-      }
-      return res.status(answer.status).json(answer.body)
+      if (saved.ok === false) return res.status(saved.status).json({ error: saved.error })
+      return res.status(200).json({ ok: true, id: saved.id, replayed: saved.replayed })
     } catch (error) {
       console.error('[commerce/products/save]', error)
       return res.status(500).json({ error: 'The product could not be saved' })
@@ -434,6 +537,36 @@ export function createProductDuplicateHandler(options: ProductsWriteDeps = {}): 
   }
 }
 
+export type ProductDeleteResult = { ok: true; already: boolean } | ProductWriteRefusal
+
+/**
+ * The products list's Delete, already authorized (AGL-4235): `deletedAt` on
+ * the product, which stops it being purchasable, with the publish outbox
+ * entry and the site-wide cache drop. A deleted product answers `already`.
+ * The native apps' delete route and the public API both call this.
+ */
+export async function deleteProduct(input: {
+  firestore: Firestore
+  hostId: string
+  productId: string
+  dropCache: Required<ProductsWriteDeps>['dropCache']
+  cacheReason: string
+}): Promise<ProductDeleteResult> {
+  const { firestore: db, hostId, productId } = input
+  const productRef = db.collection('hosts').doc(hostId).collection('products').doc(productId)
+  const outbox = outboxEntry(db, hostId)
+  const answer = await db.runTransaction(async (tx): Promise<ProductDeleteResult> => {
+    const stored = await tx.get(productRef)
+    if (!stored.exists) return { ok: false, status: 404, code: 'missing', error: 'This product no longer exists' }
+    if (stored.get('deletedAt')) return { ok: true, already: true }
+    tx.update(productRef, { deletedAt: FieldValue.serverTimestamp() })
+    tx.set(outbox.ref, outbox.data)
+    return { ok: true, already: false }
+  })
+  if (answer.ok && !answer.already) await settleCache(input, hostId, outbox.ref, input.cacheReason)
+  return answer
+}
+
 /**
  * `POST /api/commerce/products/delete` (AGL-3841): the products list's Delete
  * for the native apps, the console's write (`deletedAt` on the product, which
@@ -450,21 +583,15 @@ export function createProductDeleteHandler(options: ProductsWriteDeps = {}): Plu
     try {
       const door = await gate(req, res, hostId, deps)
       if (!door) return
-      const db = deps.firestore()
-      const productRef = db.collection('hosts').doc(hostId).collection('products').doc(productId)
-      const outbox = outboxEntry(db, hostId)
-      const answer = await db.runTransaction(async (tx) => {
-        const stored = await tx.get(productRef)
-        if (!stored.exists) return { status: 404, body: { error: 'This product no longer exists' } }
-        if (stored.get('deletedAt')) return { status: 200, body: { ok: true, already: true } }
-        tx.update(productRef, { deletedAt: FieldValue.serverTimestamp() })
-        tx.set(outbox.ref, outbox.data)
-        return { status: 200, body: { ok: true, already: false } }
+      const removed = await deleteProduct({
+        firestore: deps.firestore(),
+        hostId,
+        productId,
+        dropCache: deps.dropCache,
+        cacheReason: 'product deleted from the app',
       })
-      if (answer.status === 200 && !(answer.body as { already?: boolean }).already) {
-        await settleCache(deps, hostId, outbox.ref, 'product deleted from the app')
-      }
-      return res.status(answer.status).json(answer.body)
+      if (removed.ok === false) return res.status(removed.status).json({ error: removed.error })
+      return res.status(200).json({ ok: true, already: removed.already })
     } catch (error) {
       console.error('[commerce/products/delete]', error)
       return res.status(500).json({ error: 'Could not delete product' })
