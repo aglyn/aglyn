@@ -49,6 +49,11 @@ public func registerMarketplaceNative(_ r: NativePluginRegistrar) {
   r.widget("marketplace.artifact-publish", title: "Publish to marketplace", order: 10, slot: "hostArtifactPublish") { _ in EmptyView() }
   // Create site lists the marketplace's starters through this slot (the console's `hostStarterPicker` zone), and never
   // names the plugin that fills it.
+  // An installed template's row in the site's library says when the listing has a newer version (the console's
+  // `templateInstallStatus` zone).
+  r.widget("marketplace.template-install-status", title: "Update available", order: 10, slot: "templateInstallStatus") {
+    TemplateInstallStatusChip(context: $0)
+  }
   r.widget("marketplace.starter-picker", title: "Choose your starter", order: 10, slot: StarterPickerZone.slot) {
     StarterPickerWidget(context: $0)
   }
