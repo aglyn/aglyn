@@ -107,6 +107,16 @@ export const PROBE_TTL_MS = HEALTH_PROBE_TTL_MS
  */
 const CALL_TIMEOUT_MS = 6_000
 
+/**
+ * An Identity Toolkit call is asked at most twice, and the two asks share a
+ * budget that still fits the tightest monitor (GCP's uptime check times out
+ * at 10 s). The first ask gets 5 s; a second ask after a timeout gets 2.5 s,
+ * which is more than ten times what a healthy answer takes (~0.2 s). Worst
+ * case 5 + 0.4 + 2.5 s, against the ~8 s a single 6 s timeout already cost.
+ */
+const TOOLKIT_FIRST_ASK_TIMEOUT_MS = 5_000
+const TOOLKIT_SECOND_ASK_TIMEOUT_MS = 2_500
+
 /** The pause before a 5xx is asked again: long enough to step past a blip. */
 const TRANSIENT_RETRY_DELAY_MS = 400
 
@@ -185,20 +195,37 @@ interface ToolkitReply {
  * browser's SDK call that met the same 503 would be one retry from working
  * too, so a single one is not a shut door. A provider outage answers 5xx to
  * both asks and still reads `provider-unavailable`.
+ *
+ * A call that got NO answer (a timeout or a transport failure) is asked once
+ * more for the same reason. On 2026-11-17 at 17:07Z one `accounts:resetPassword`
+ * call timed out from the function. Identity Platform logged every
+ * ResetPassword that minute in under a second, and GCP's check passed from
+ * all three regions, yet the door read `redeem-unreachable` and went red.
+ * A real outage gets no answer to either ask and stays red.
  */
 async function callIdentityToolkit(
   method: string,
   body: Record<string, unknown>,
 ): Promise<ToolkitReply> {
-  const reply = await callIdentityToolkitOnce(method, body)
-  if (!reply.answered || reply.status < 500) return reply
+  const reply = await callIdentityToolkitOnce(
+    method,
+    body,
+    TOOLKIT_FIRST_ASK_TIMEOUT_MS,
+  )
+  if (reply.answered && reply.status < 500) return reply
+  if (!process.env['NEXT_PUBLIC_FIREBASE_PUBLIC_API_KEY']) return reply
   await new Promise((resolve) => setTimeout(resolve, TRANSIENT_RETRY_DELAY_MS))
-  return callIdentityToolkitOnce(method, body)
+  return callIdentityToolkitOnce(
+    method,
+    body,
+    reply.answered ? TOOLKIT_FIRST_ASK_TIMEOUT_MS : TOOLKIT_SECOND_ASK_TIMEOUT_MS,
+  )
 }
 
 async function callIdentityToolkitOnce(
   method: string,
   body: Record<string, unknown>,
+  timeoutMs: number,
 ): Promise<ToolkitReply> {
   const key = process.env['NEXT_PUBLIC_FIREBASE_PUBLIC_API_KEY'] ?? ''
   const token = await appCheckToken()
@@ -220,7 +247,7 @@ async function callIdentityToolkitOnce(
           ...(token ? { 'X-Firebase-AppCheck': token } : {}),
         },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
       },
     )
     let json: Record<string, unknown> | null = null

@@ -60,6 +60,7 @@ import {
   askTransactionalSendCeiling,
   releaseTransactionalSendCeilingClaim,
   reportTransactionalSendCeilingRefusal,
+  transactionalCeilingMonthResetMs,
   transactionalCeilingResetMs,
   transactionalCeilingSubject,
   type TransactionalSendCeilingClaim,
@@ -1336,6 +1337,7 @@ async function claimTransactionalCeiling(
     hostId: subject.hostId,
     count,
     ceiling: subject.ceiling,
+    ...(Number.isFinite(subject.monthlyCeiling) ? { monthlyCeiling: subject.monthlyCeiling } : {}),
     context: options.context ?? null,
     nowMs,
   }
@@ -1346,6 +1348,25 @@ async function claimTransactionalCeiling(
   // Recorded where staff see it before the refusal is returned: never a
   // silent drop. Outside the claim's time budget, so it cannot undo it.
   await reportTransactionalSendCeilingRefusal(request, verdict, label)
+  if (verdict.period === 'month') {
+    // The hard monthly cap (AGL-4227). Not a retry promise: the message is
+    // refused, and only a resumable sender that defers to `retryAtMs` sends
+    // it again, on the 1st (UTC).
+    const cap = verdict.ceiling ?? subject.monthlyCeiling
+    console.warn(
+      `${label} not sent — the workspace ${subject.orgId} reached its monthly ` +
+        `email limit (${verdict.used ?? '?'}/${cap} this month)`,
+    )
+    return {
+      refusal: {
+        sent: false,
+        reason: 'rate-limited',
+        retryAtMs: verdict.retryAtMs ?? transactionalCeilingMonthResetMs(nowMs),
+        detail: `Monthly email limit reached (${cap} a month on this plan).`,
+      },
+      claim: null,
+    }
+  }
   const limit = verdict.ceiling ?? subject.ceiling
   console.warn(
     `${label} not sent — the workspace ${subject.orgId} reached its daily ` +
@@ -1356,9 +1377,9 @@ async function claimTransactionalCeiling(
       sent: false,
       reason: 'rate-limited',
       retryAtMs: verdict.retryAtMs ?? transactionalCeilingResetMs(nowMs),
-      detail:
-        `Daily transactional email ceiling reached (${limit}/day). ` +
-        'Sends again after 00:00 UTC.',
+      // States the limit only: whether it is sent later depends on the
+      // sender, so this never promises a retry (AGL-4227).
+      detail: `Daily transactional email ceiling reached (${limit}/day).`,
     },
     claim: null,
   }

@@ -24,3 +24,6 @@ internal actual fun nowParts(): List<Int> {
 }
 
 internal actual fun nowMillis(): Long = System.currentTimeMillis()
+
+internal actual fun localDayStartSeconds(year: Int, month: Int, day: Int, plusDays: Int): Long? =
+  runCatching { java.time.LocalDate.of(year, month, day).plusDays(plusDays.toLong()).atStartOfDay(ZoneId.systemDefault()).toEpochSecond() }.getOrNull()

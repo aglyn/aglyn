@@ -56,6 +56,8 @@ import {
   PAGE_VIEW_CDN_REQUEST_COST_USD,
   publishedMeteredPrice,
   SELF_SERVE_PLANS,
+  EMAIL_SENDS_MONTHLY_CAP_BY_PLAN,
+  INCLUDED_EMAIL_SENDS_BY_PLAN,
 } from '../../libs/aglyn/src/lib/app-utils/plan-entitlements.ts'
 import {
   AI_CREDIT_BLOCK_MONTHLY_USD,
@@ -143,7 +145,7 @@ const pct = (v: number): string => `${v}%`
 const band = (included: number, max: number): string => {
   if (included === UNLIMITED) return 'Unlimited'
   if (included === 0 && max === 0) return NO
-  if (max === UNLIMITED) return `${num(included)} · unlimited`
+  if (max === UNLIMITED) return `${num(included)} · no max`
   if (included === max) return included.toLocaleString('en-US')
   return `${included.toLocaleString('en-US')} · max ${max.toLocaleString('en-US')}`
 }
@@ -314,13 +316,9 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
       { label: 'Workflow runs / mo', value: talk((p) => num(E(p).workflowRunsPerMonth)) },
       { label: 'Actions builder', value: (p) => bool(F(p).actions) },
       { label: 'Appointment bookings', value: (p) => bool(F(p).bookings) },
-      /*
-       * `formsPerHost` is a ladder since AGL-3597 (Free 1 to 500), and the
-       * live page carries it as "Saved forms per site" directly above this
-       * row, inserted by `tools/scripts/publish-pricing-saved-forms-row.mjs`.
-       * It is not emitted here yet: the reconciler refuses a row the Figma
-       * frame does not have, so it joins this spec when the frame does.
-       */
+      // `formsPerHost` is a ladder since AGL-3597 (Free 1 to 500). The live page
+      // and the frames carry it directly above form submissions.
+      { label: 'Saved forms per site', value: talk((p) => num(E(p).formsPerHost)) },
       {
         label: 'Form submissions / mo, per site',
         value: talk((p) => num(E(p).formSubmissionsPerMonth)),
@@ -337,6 +335,20 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
       { label: 'CRM: contacts, leads, companies, deals & tasks', value: crm(() => YES) },
       // Free's dash here is the cap itself: `crmEmailsPerDay` is 0 and
       // `checkCrmEmailQuota` refuses every send at it.
+      // EVERY email a plan's sites send in a month (AGL-4227), the one figure
+      // each plan holds it to: Free's hard cap, Starter's billed band of
+      // everything it sends, and from Pro the campaign band the overage
+      // bills past. Read from the catalog in that order, never typed in.
+      {
+        label: 'Emails included / mo',
+        value: talk((p) =>
+          num(
+            EMAIL_SENDS_MONTHLY_CAP_BY_PLAN[p] ??
+              INCLUDED_EMAIL_SENDS_BY_PLAN[p] ??
+              E(p).emailSendsPerMonth,
+          ),
+        ),
+      },
       { label: 'One-to-one emails / day', value: talk((p) => num(E(p).crmEmailsPerDay)) },
       { label: 'Campaign emails / mo', value: talk((p) => num(E(p).emailSendsPerMonth)) },
       // Beside the send band rather than beside "Custom domain & SSL", which
@@ -440,6 +452,25 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
     title: 'Developer & API',
     rows: [
       { label: 'API access', value: talk((p) => perMonth(E(p).apiRequestsPerMonth)) },
+      // The two API limits Starter has and Pro lifts (AGL-4226), read off the
+      // entitlements so the page cannot quote a limit the pipeline does not
+      // enforce. A plan without the API shows a dash, not a limit.
+      {
+        label: 'API monthly ceiling',
+        value: talk((p) => {
+          if (!F(p).apiAccess) return NO
+          const ceiling = Number(E(p).maxApiRequestsPerMonth)
+          return Number.isFinite(ceiling) ? perMonth(ceiling) : 'None'
+        }),
+      },
+      {
+        label: 'API requests per minute, whole workspace',
+        value: talk((p) => {
+          if (!F(p).apiAccess) return NO
+          const perMinute = Number(E(p).apiRequestsPerMinutePerOrg)
+          return Number.isFinite(perMinute) ? `${perMinute.toLocaleString('en-US')} / min` : 'Unlimited'
+        }),
+      },
       { label: 'Webhooks', value: (p) => bool(F(p).webhooks) },
       // The frame lists this capability TWICE — as "Site backup & restore"
       // under Sites & publishing and again here as "Site export & backup".
@@ -493,6 +524,12 @@ interface UsageRow {
    * rates came to be billed against a page that stated neither.
    */
   rate: RateKey
+  /**
+   * A hard stop on how far the rate can be bought, where the plan has one
+   * (Starter's CRM records stop at Pro's included band, AGL-4227). Printed
+   * beside the rate, so the cell says both what it costs and where it ends.
+   */
+  ceiling?: (p: Plan) => number
 }
 
 const USAGE_ROWS: UsageRow[] = [
@@ -523,6 +560,7 @@ const USAGE_ROWS: UsageRow[] = [
   {
     label: 'CRM records, per 1,000 over the included band',
     rate: 'extraContactsUsdPer1k',
+    ceiling: (p) => E(p).maxCrmRecords,
   },
   /*
    * EMAIL SENDS AND AI CREDITS — billed everywhere, published nowhere until
@@ -592,7 +630,11 @@ const USAGE_ROWS: UsageRow[] = [
 ]
 
 /** The rate as the page and every breakpoint print it. */
-const rowValue = (r: UsageRow, p: Plan): string => money(PLAN_PRICING[p][r.rate])
+const rowValue = (r: UsageRow, p: Plan): string => {
+  const rate = money(PLAN_PRICING[p][r.rate])
+  const max = r.ceiling?.(p)
+  return max && max !== UNLIMITED && rate !== NO ? `${rate}, up to ${num(max)}` : rate
+}
 
 /**
  * Rates `PLAN_PRICING` carries that NO row above publishes.
@@ -1094,7 +1136,36 @@ for (const [label, [why]] of injected('--declare-missing-row', 2)) {
 }
 
 /** Rows the FRAME carries that we deliberately do not emit, each with why. */
-const EXPECTED_EXTRA: Record<string, string> = {}
+const EXPECTED_EXTRA: Record<string, string> = {
+  'Checkout on your own pages':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'Wallets & pay later at checkout':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'Pickup & local delivery':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'Returns & partial shipments':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'Rewards, referrals & store credit':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'Sales tax via Avalara or TaxJar':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'Product feeds for shopping channels':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'POS split payments & tips':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'POS customer display':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'POS self-service kiosk':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'POS offline cash sales':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'POS shifts & cash drawer':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'POS printers & barcode scanners':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'Mailchimp, Klaviyo & Omnisend sync':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+}
 
 for (const [label, [why]] of injected('--declare-extra-row', 2)) {
   EXPECTED_EXTRA[label] = why
@@ -1688,9 +1759,13 @@ const USAGE_STALE: Record<string, Divergence> = {}
  * comparison against the page, and the distinction is the whole reason this
  * map states its reason instead of listing a label.
  */
-const USAGE_EXPECTED_ABSENT: Record<string, string> = {
-  'Email sends, per 1,000 over the included band':
-    'the page states an email ALLOWANCE ("Campaign emails / mo" in the compare grid) and no overage rate, while `priceEmailSendOverage` bills `extraEmailSendsUsdPer1k` on every paid tier — and the cap refuses campaigns only, so transactional mail carries an org past its band with nothing able to stop it. Resolves when `/pricing` carries the row',
+const USAGE_EXPECTED_ABSENT: Record<string, string> = {}
+
+// `--declare-absent-rate='<row>|<why>'`, repeatable: the suite's own
+// declaration, so the both-directions check stays covered now that no real
+// rate is missing from the page. Absent the flag this adds nothing.
+for (const [label, [why]] of injected('--declare-absent-rate', 2)) {
+  USAGE_EXPECTED_ABSENT[label] = why
 }
 
 const addOnRates = reconciler(

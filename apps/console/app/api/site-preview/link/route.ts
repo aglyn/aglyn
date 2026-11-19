@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { hostPublicOrigin, pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { siteLiveUrlForSlug } from '@aglyn/aglyn/app-utils/site-live-url'
 import {
   SITE_PREVIEW_ENTER_PATH,
   sitePreviewReturnPath,
@@ -53,6 +54,15 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  *
  * Body: `{ hostId, path? }`. Answers `{ url, expiresAtMs }`.
  */
+/** The hostname the console was reached at, which decides where its links point. */
+function consoleHostname(request: Request): string | undefined {
+  try {
+    return new URL(request.url).hostname
+  } catch {
+    return undefined
+  }
+}
+
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
@@ -90,15 +100,27 @@ async function handler(request: Request): Promise<Response> {
     if (refusal) {
       return Response.json({ error: 'You are not on this site’s team' }, { status: 403 })
     }
-    const origin = hostPublicOrigin({
-      cname: host.get('cname') as string | undefined,
-      subdomain: host.get('subdomain') as string | undefined,
-    })
-    if (!origin) {
+    // The site as THIS console reaches it, by the rule every "view the site"
+    // link follows (`siteLiveUrlForSlug`, as the entry preview link does since
+    // #2749): a deployed console links the site's public origin (the custom
+    // domain first), a local console the local tenant and a preview console
+    // the tenant preview deployment, each naming the site with
+    // `?tenantHost=`. Built from the console host the request reached, never
+    // from the body. This route used `hostPublicOrigin` alone, so a local or
+    // preview console sent its team to the PRODUCTION site.
+    const enterUrl = siteLiveUrlForSlug(
+      {
+        cname: host.get('cname') as string | undefined,
+        subdomain: host.get('subdomain') as string | undefined,
+      },
+      SITE_PREVIEW_ENTER_PATH,
+      consoleHostname(request),
+    )
+    if (!enterUrl) {
       return Response.json({ error: 'Site has no public address yet' }, { status: 409 })
     }
     const { token, expiresAtMs } = mintSitePreviewToken('enter', hostId)
-    const url = new URL(`${origin}${SITE_PREVIEW_ENTER_PATH}`)
+    const url = new URL(enterUrl)
     url.searchParams.set('blob', token)
     url.searchParams.set('return', returnPath)
     return Response.json(

@@ -123,7 +123,7 @@ public enum ReleaseFlagDefaults {
     "release_marketing": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),
     "release_redirects": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),
     "release_workflows": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),
-    "release_accounting": ReleaseFlagValue(enabled: false, rolloutPercent: 0, plans: []),
+    "release_accounting": ReleaseFlagValue(enabled: true, rolloutPercent: 100, plans: []),
     "release_weglot": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),
     "release_addon_store": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),
     "release_native_checkout": ReleaseFlagValue(enabled: true, rolloutPercent: 0, plans: []),

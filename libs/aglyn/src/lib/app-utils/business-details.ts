@@ -70,6 +70,13 @@ export const BUSINESS_DETAILS_CLEARABLE_PATHS = [
   'business.address',
 ] as const
 
+/**
+ * {@link BUSINESS_DETAILS_CLEARABLE_PATHS} as a plain list: the native apps' Business details
+ * cards read it from the contracts, and so clear what the console clears.
+ */
+export const BUSINESS_DETAILS_CLEARABLE_PATH_LIST: readonly string[] =
+  BUSINESS_DETAILS_CLEARABLE_PATHS
+
 /** The host fields the business details read and write. */
 export interface BusinessDetailsHost {
   displayName?: string

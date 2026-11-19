@@ -21,6 +21,7 @@ import {
   type ListQueryDeclaration,
   type ListQuerySort,
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { USAGE_LEVEL_FIELD } from '@aglyn/aglyn/app-utils/usage-level'
 
 /*
  * THE STAFF ORGANIZATION LISTS' QUERIES (AGL-3321).
@@ -161,6 +162,21 @@ export const ORG_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     operators: ['equals'],
   },
   {
+    /*
+     * The staff usage level (AGL-4228,
+     * `@aglyn/aglyn/app-utils/usage-level`): how much the workspace uses the
+     * platform, as staff judged it. An equality (or `in`) on the stored
+     * level, which every organization carries — `createOrganization` writes
+     * `unreviewed` and `tools/scripts/backfill-usage-level.mjs` stamped the
+     * older ones — so Not reviewed finds every workspace nobody has looked at.
+     */
+    column: USAGE_LEVEL_FIELD,
+    kind: 'exact',
+    path: USAGE_LEVEL_FIELD,
+    presence: 'always',
+    operators: ['equals', 'isAnyOf'],
+  },
+  {
     // The one range, which orders the list by itself while it is in force.
     column: 'createdAt',
     kind: 'date',
@@ -180,6 +196,7 @@ export const ORG_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
   plan: 'Stored plan',
   subscription: 'Billing status',
   suspended: 'Suspended',
+  usageLevel: 'Usage level',
   createdAt: 'Created',
   $id: 'Org ID',
   slug: 'Org slug',

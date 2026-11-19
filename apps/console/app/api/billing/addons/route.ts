@@ -39,10 +39,11 @@ import {
 import { runPluginEventHandlers } from '@aglyn/aglyn/server'
 import {
   ADDON_KINDS,
+  addonChargedUnitUsd,
+  addonKindFromPriceId,
   addonPriceId,
   addonQuantitiesFromItems,
   addonMaxForBaseline,
-  addonUnitUsd,
   findPlanItem,
   planAndIntervalFromPriceId,
   type AddonKind,
@@ -456,7 +457,9 @@ async function handler(request: Request): Promise<Response> {
       const quantities = addonQuantitiesFromItems(items)
       const catalog = Object.fromEntries(
         ADDON_KINDS.map((kind) => {
-          const unitUsd = addonUnitUsd(kind, plan)
+          // What the add-on is CHARGED at now (AGL-4227), which can trail a
+          // catalog price whose new Stripe price is not configured yet.
+          const unitUsd = addonChargedUnitUsd(kind, plan, interval)
           const max = addonMax(kind, baseline, plan)
           return [kind, {
             unitUsd,
@@ -541,7 +544,7 @@ async function handler(request: Request): Promise<Response> {
         { status: 400 },
       )
     }
-    const unitUsd = addonUnitUsd(kind, plan)
+    const unitUsd = addonChargedUnitUsd(kind, plan, interval)
     if (unitUsd === null) {
       return Response.json({
         error: 'Your plan does not sell this add-on — upgrade to add it',
@@ -554,7 +557,14 @@ async function handler(request: Request): Promise<Response> {
         error: 'This add-on price is not configured yet',
       }, { status: 501 })
     }
-    const existing = items.find((item) => item?.price?.id === priceId)
+    // The item already selling this KIND (AGL-4227), whatever price it carries:
+    // an item bought at Starter's old $20 extra-site price is changed IN PLACE
+    // rather than joined by a second item at the new price, which would
+    // double-count the sites. There is no grandfathering: the change also
+    // moves it onto the current price (below).
+    const existing =
+      items.find((item) => item?.price?.id === priceId) ??
+      items.find((item) => addonKindFromPriceId(item?.price?.id) === kind)
     /**
      * This add-on's quantity RIGHT NOW: 0 when no item exists, and `null`
      * when an item exists but Stripe reports no quantity on it at all
@@ -640,7 +650,16 @@ async function handler(request: Request): Promise<Response> {
     const itemParams: Array<[string, string]> = existing
       ? quantity === 0
         ? [['id', String(existing.id)], ['deleted', 'true']]
-        : [['id', String(existing.id)], ['quantity', String(quantity)]]
+        : [
+            ['id', String(existing.id)],
+            // An item on a superseded price (Starter's $20 extra site) moves
+            // to the price this add-on sells at now — no one keeps an old
+            // price (AGL-4227).
+            ...(existing?.price?.id && existing.price.id !== priceId
+              ? ([['price', priceId]] as Array<[string, string]>)
+              : []),
+            ['quantity', String(quantity)],
+          ]
       : [['price', priceId], ['quantity', String(quantity)]]
 
     /*

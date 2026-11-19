@@ -64,6 +64,10 @@ import StaffOrgOwnerHandoff from '../../../../../components/org-owner-handoff.co
 import { useStaffClientBuild } from '../../../../../components/staff-bundle-link.component'
 import StaffOrgUpgradeProposal from '../../../../../components/staff-org-upgrade-proposal.component'
 import StaffSiteTransfer from '../../../../../components/staff-site-transfer.component'
+import {
+  StaffUsageLevelField,
+  timestampMs,
+} from '../../../../../components/staff-usage-level.component'
 import StaffSiteContentCard from '../../../../../components/staff-site-content-card.component'
 import {
   type StaffSiteRow,
@@ -540,6 +544,31 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                                 />
                               </SuperStaffOnly>
                             </Stack>
+                          </CardDisplay>
+                        ),
+                      },
+                      {
+                        children: (
+                          /*
+                           * The staff usage level (AGL-4228): how much this
+                           * site is used, as staff judged it. Carries to its
+                           * workspace and that workspace's owner unless
+                           * unticked; a carry never lowers a higher level.
+                           */
+                          <CardDisplay
+                            header={'Usage level'}
+                            help={docsHelp('staffConsole', { anchor: '#usage-level-site' })}
+                            contentGutterX
+                            contentGutterY
+                          >
+                            <StaffUsageLevelField
+                              key={hostId}
+                              target="site"
+                              id={hostId}
+                              level={host?.usageLevel ?? site?.usageLevel}
+                              setAtMs={timestampMs(host?.usageLevelAt)}
+                              carries={['org', 'owner']}
+                            />
                           </CardDisplay>
                         ),
                       },

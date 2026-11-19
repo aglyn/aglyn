@@ -20,6 +20,7 @@ import {
   CONNECTOR_CORS_HEADERS,
 } from '@aglyn/tenant-data-admin'
 import {
+  connectorDiscoveryDocs,
   connectorOrigin,
   connectorPreflight,
   discoveryCacheControl,
@@ -45,7 +46,7 @@ export function GET(request: Request): Response {
   if (refused) return refused
   const origin = connectorOrigin(request)
   if (!origin) return unconfiguredOriginResponse()
-  return Response.json(buildProtectedResourceMetadata(origin.origin), {
+  return Response.json(buildProtectedResourceMetadata(origin.origin, connectorDiscoveryDocs()), {
     headers: { ...CONNECTOR_CORS_HEADERS, 'Cache-Control': discoveryCacheControl(origin) },
   })
 }
