@@ -2078,6 +2078,10 @@
       "load": {
         "org": {
           "doc": "orgs/{org.id}"
+        },
+        "closure": {
+          "url": "/api/closure-notices?subject=workspace&orgId={org.id}",
+          "optional": true
         }
       },
       "blocks": [
@@ -2092,6 +2096,32 @@
           "tone": "warning",
           "when": "data.org.erasureRequestedAt",
           "text": "This organization is scheduled for deletion. After a 7-day hold, all of its sites, files, and data are permanently erased. Cancel now to keep it."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "!data.closure || data.closure.unavailable",
+          "text": "Some details of what this changes could not be checked right now. Try again in a moment before you confirm."
+        },
+        {
+          "type": "list",
+          "when": "data.closure.notices",
+          "items": "data.closure.notices",
+          "primary": "{item.title}",
+          "secondary": "{item.body}",
+          "wrap": true,
+          "icon": "exclamationmark.triangle|warning"
+        },
+        {
+          "type": "list",
+          "when": "data.closure.notices",
+          "items": "data.closure.notices",
+          "flatten": "items",
+          "primary": "{item.primary}",
+          "secondary": "{item.secondary}",
+          "tertiary": "{item.$parent.title}",
+          "trailing": "{item.amount}",
+          "icon": "list.bullet|list"
         },
         {
           "type": "actions",
