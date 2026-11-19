@@ -28,6 +28,12 @@ import {
 } from './model/commerce-returns'
 import { SHIPSTATION_STATUS_NAMES } from './model/shipstation'
 import {
+  SUBSCRIPTION_FILTER_STATUSES,
+  SUBSCRIPTION_PAYING_STATUSES,
+  SUBSCRIPTION_STATUS_LABELS,
+} from './model/subscription-view'
+import { SUBSCRIPTION_INVOICE_WINDOW } from './components/console/subscription-detail-dialog.component'
+import {
   ORDER_WEBHOOK_DELIVERY_STATUS_LABELS,
   ORDER_WEBHOOK_MAX_ENDPOINTS,
 } from './model/order-webhooks'
@@ -83,6 +89,28 @@ describe('native commerce screens', () => {
     expect(rows(screens['commerce.return'].constants.reasons)).toEqual(
       Object.entries(RETURN_REASON_LABELS),
     )
+  })
+
+  it('say a subscription status in the console words and count what the console counts (AGL-4191)', () => {
+    const list = screens['commerce.subscriptions']
+    expect(rows(list.constants.statuses)).toEqual(Object.entries(SUBSCRIPTION_STATUS_LABELS))
+    expect(list.constants.filters).toEqual(
+      SUBSCRIPTION_FILTER_STATUSES.map((status) => ({
+        id: status,
+        label: SUBSCRIPTION_STATUS_LABELS[status],
+        empty: `No ${SUBSCRIPTION_STATUS_LABELS[status].toLowerCase()} subscriptions.`,
+      })),
+    )
+    const show = list.blocks.find((block: { id: string }) => block.id === 'filter').items[0]
+    expect(show.prompt[0].options.map((option: { value: string }) => option.value)).toEqual([
+      'all',
+      ...SUBSCRIPTION_FILTER_STATUSES,
+    ])
+    for (const key of ['monthly', 'monthlyTax', 'yearly', 'yearlyTax']) {
+      expect(list.load[key].query.where[0]).toEqual(['status', 'in', [...SUBSCRIPTION_PAYING_STATUSES]])
+      expect(list.load[key].query.where).toContainEqual(['livemode', '==', true])
+    }
+    expect(screens['commerce.subscription'].load.invoices.query.limit).toBe(SUBSCRIPTION_INVOICE_WINDOW)
   })
 
   it('name the reasons a stock count moves, in the console order', () => {

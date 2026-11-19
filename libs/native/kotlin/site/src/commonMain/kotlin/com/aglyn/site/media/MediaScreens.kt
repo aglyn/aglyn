@@ -425,6 +425,7 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
   } else {
     Column(Modifier.fillMaxSize().testTag("media-screen")) {
       MediaHead(phone, compact, edge, canEdit && !runner.busy, onNewFolder = { runner.clear(); dialog = MediaDialog.NewFolder(currentFolderId) }, sources = picker?.sources.orEmpty(), onUpload = ::uploadFrom)
+      VideoUploadsPausedChip(context, edge)
       Row(Modifier.weight(1f).fillMaxWidth()) {
         Column(Modifier.weight(1f).fillMaxHeight()) {
           MediaToolbar(model, edge, onMoreFilters = { filtersOpen = true }, filtering = filtering, onClear = { model.type(""); model.pick(null); model.filter(MediaFilters()) })
@@ -569,6 +570,26 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
  * The library's head (Figma Media 283:22621 / iPhone 285:7360): the title with its ☆, then New folder and the filled
  * Upload media; on a phone, both as 40 square buttons.
  */
+/**
+ * Video ingress is behind a release flag on every plan (AGL-2830), so the console states it as a fact, once the
+ * workspace has answered so a workspace the flag is on for never sees it flash; tapping it says what it means.
+ */
+@Composable
+private fun VideoUploadsPausedChip(context: NativePluginContext, edge: Dp) {
+  val orgId = context.orgId ?: return
+  val org by androidx.compose.runtime.remember(orgId, context.firestore) { context.firestore.observeDoc("orgs/$orgId") }
+    .collectAsState(com.aglyn.core.Live.Loading)
+  val ready = org as? com.aglyn.core.Live.Ready ?: return
+  if (com.aglyn.core.releaseFlagOn(VIDEO_UPLOADS_RELEASE_FLAG, ready.value?.data, orgId, staff = false)) return
+  var open by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+  Column(Modifier.padding(horizontal = edge, vertical = space(0.5f)), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+    androidx.compose.foundation.layout.Box(
+      Modifier.clickable(onClickLabel = VIDEO_UPLOADS_PAUSED_MESSAGE) { open = !open }.testTag("media-video-paused"),
+    ) { StatusChip("Video uploads paused") }
+    if (open) Text(VIDEO_UPLOADS_PAUSED_MESSAGE, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+  }
+}
+
 @Composable
 private fun MediaHead(phone: Boolean, compact: Boolean, edge: Dp, enabled: Boolean, onNewFolder: () -> Unit, sources: List<PickSource>, onUpload: (PickSource) -> Unit) {
   val star = LocalPageStar.current
@@ -1537,6 +1558,9 @@ private fun MediaDetailBody(
         if (dirty) TextButton(onClick = { fileName = item.fileName; alt = item.alt; description = item.description; tags = item.tags.joinToString(", ") }) { Text("Discard") }
       }
     }
+    HorizontalDivider()
+    val embeddedApi = remember(scope, context.api) { MediaEmbeddedApi(context.api, scope) }
+    MediaEmbeddedSection(item, embeddedApi, canEdit)
     HorizontalDivider()
     Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
       Row(verticalAlignment = Alignment.CenterVertically) {

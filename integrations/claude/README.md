@@ -2,9 +2,9 @@
 
 Connects Claude to your Aglyn workspace and teaches it how to work there.
 
-- **The connector** (`.mcp.json`): Aglyn's tools for sites, datasets,
-  contacts and the CRM, form submissions, orders, products, bookings and
-  media. You sign in to Aglyn and choose the workspace and access level; no
+- **The connector** (`.mcp.json`): Aglyn's tools for sites, their pages,
+  search listings and business details, datasets, contacts and the CRM, form
+  submissions, orders, products, bookings and media. You sign in to Aglyn and choose the workspace and access level; no
   key to copy.
 - **Skills**: `aglyn` (working with the tools), `aglyn-console` (designing
   pages and changing settings in the console through a browser), and

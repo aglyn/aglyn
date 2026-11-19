@@ -76,7 +76,10 @@ func taskViewPlan(_ view: TaskView, nowMs: Int64, uid: String) -> TaskViewPlan {
   }
 }
 
-func tasksQuery(_ scope: CrmScope, _ plan: TaskViewPlan, search: String, limit: Int) -> FirestoreQuery {
+/// The task list's query: the view's plan as the base, a saved view's other clauses and its sort when one is open.
+func tasksQuery(
+  _ scope: CrmScope, _ plan: TaskViewPlan, search: String, limit: Int, clauses: [ListFilterRequest] = [], sort: ListQuerySort? = nil
+) -> FirestoreQuery {
   var base = scopeBase(scope) + [ListQueryFilter(op: .equal, path: "status", value: .string(plan.status))]
   if let uid = plan.assigneeUID { base.append(ListQueryFilter(op: .equal, path: "assigneeUid", value: .string(uid))) }
   if let from = plan.dueFrom { base.append(ListQueryFilter(op: .greaterThanOrEqual, path: "dueAtMs", value: .number(Double(from)))) }
@@ -85,8 +88,8 @@ func tasksQuery(_ scope: CrmScope, _ plan: TaskViewPlan, search: String, limit: 
   var query = planListQuery(
     ContractValues.shared.taskListDeclaration,
     ListQueryRequest(
-      base: base, clauses: [], search: words.isEmpty ? nil : [words],
-      sort: ListQuerySort(direction: plan.descending ? .desc : .asc, path: "dueAtMs"))
+      base: base, clauses: clauses, search: words.isEmpty ? nil : [words],
+      sort: sort ?? ListQuerySort(direction: plan.descending ? .desc : .asc, path: "dueAtMs"))
   ).firestoreQuery(crmPath(scope.orgID, "crmTasks"), limit: limit)
   // Metadata changes too, so a row the server confirms stops reading as the cache's (AGL-4047).
   query.includeMetadataChanges = true
@@ -273,15 +276,52 @@ struct TasksSection: View {
   @State private var confirming: CrmBulkAction?
   @State private var bulkBusy = false
   @State private var bulkResult: CrmBulkResult?
+  /// Saved views of tasks (`useCrmSavedView({ section: 'tasks' })`): the open one sets the task view, its other
+  /// clauses and its sort; picking a task view leaves it.
+  @State private var views = CrmViewsModel()
+  @State private var openViewID: String?
+  @State private var picking = false
+  @State private var defaultApplied = false
 
   private var pickedTasks: [CrmTask] { list.rows.filter { picked.contains($0.id) } }
+
+  private var openView: CrmSavedView? {
+    guard let openViewID else { return nil }
+    let listed = views.views(uid: scope.uid)
+    return (listed.mine + listed.shared).first { $0.id == openViewID }
+  }
+
+  private var shownView: TaskView { openView.map { crmTaskViewOpen($0).view } ?? view }
+
+  private var pickedView: Binding<TaskView> {
+    Binding(get: { shownView }, set: { next in
+      picking = true
+      openViewID = nil
+      view = next
+    })
+  }
+
+  private var defaultViewKey: String {
+    "\(views.profile.ready)|\(views.list.ready)|\(views.defaultID(orgID: scope.orgID, section: crmTaskViewSection) ?? "")"
+  }
 
   var body: some View {
     VStack(spacing: 0) {
       HStack(spacing: AglynSpace.one) {
+        if !scope.uid.isEmpty {
+          CrmViewsMenu(
+            section: crmTaskViewSection, plural: "Tasks", scope: scope, api: api, model: views,
+            current: crmTaskViewFilter(shownView, open: openView),
+            open: { id in
+              picking = true
+              openViewID = id
+            },
+            openAll: { openViewID = nil }
+          )
+        }
         // The views scroll on a phone, where all six are wider than the screen; Select stays in reach beside them.
         ScrollView(.horizontal, showsIndicators: false) {
-          Picker("View", selection: $view) {
+          Picker("View", selection: pickedView) {
             ForEach(TaskView.allCases) { Text($0.label).tag($0) }
           }
           .pickerStyle(.segmented)
@@ -318,7 +358,7 @@ struct TasksSection: View {
       } else if let failure = list.failure {
         AglynEmptyState("Could not load tasks", systemImage: "exclamationmark.triangle", message: failure) { Button("Try again") { list.retry() } }
       } else if list.rows.isEmpty {
-        AglynEmptyState(view == .done ? "Nothing done yet" : "Nothing to do here", systemImage: "checklist", message: "Tasks you and your team add show up here.")
+        AglynEmptyState(shownView == .done ? "Nothing done yet" : "Nothing to do here", systemImage: "checklist", message: "Tasks you and your team add show up here.")
       } else {
         List {
           ForEach(list.rows) { task in
@@ -371,13 +411,26 @@ struct TasksSection: View {
     } message: { action in
       Text(crmBulkConfirm(action, noun: .task, count: pickedTasks.count)?.message ?? "")
     }
-    .task(id: "\(view.rawValue)|\(search)") {
+    .task(id: CrmTaskListKey(view: shownView, open: openView.map(crmTaskViewOpen), search: search)) {
       picked = []
-      let plan = taskViewPlan(view, nowMs: Int64(Date().timeIntervalSince1970 * 1000), uid: scope.uid)
+      let plan = taskViewPlan(shownView, nowMs: Int64(Date().timeIntervalSince1970 * 1000), uid: scope.uid)
       let search = search
-      list.show(context.firestore) { tasksQuery(scope, plan, search: search, limit: $0) }
+      let open = openView.map(crmTaskViewOpen)
+      list.show(context.firestore) { tasksQuery(scope, plan, search: search, limit: $0, clauses: open?.clauses ?? [], sort: open?.sort) }
     }
-    .onDisappear { list.stop() }
+    .task(id: scope) { views.start(context.firestore, scope, section: crmTaskViewSection) }
+    .onChange(of: defaultViewKey, initial: true) { _, _ in
+      // The reader's default view of tasks opens first, once, unless they already picked.
+      guard !defaultApplied, views.profile.ready, views.list.ready else { return }
+      defaultApplied = true
+      guard !picking, let id = views.defaultID(orgID: scope.orgID, section: crmTaskViewSection) else { return }
+      let listed = views.views(uid: scope.uid)
+      if (listed.mine + listed.shared).contains(where: { $0.id == id }) { openViewID = id }
+    }
+    .onDisappear {
+      list.stop()
+      views.stop()
+    }
     .sheet(isPresented: $creating) {
       TaskSheet(
         title: "New task", initial: TaskDraft(assigneeUID: scope.uid), reference: reference,
@@ -404,4 +457,11 @@ struct TasksSection: View {
     if action == .delete || action == .complete { picked = Set(result.keep) }
     list.retry()
   }
+}
+
+/// What re-runs the task list's query: the task view, the open saved view's clauses and sort, and the search.
+struct CrmTaskListKey: Equatable {
+  let view: TaskView
+  let open: CrmTaskViewOpen?
+  let search: String
 }

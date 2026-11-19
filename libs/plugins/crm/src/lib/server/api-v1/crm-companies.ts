@@ -357,7 +357,7 @@ async function createCompany(
   const body = await readJsonBody(request)
   const parsed = readCompanyInput(body, { partial: false })
   if ('errors' in parsed) return crmValidationFailed(ctx, 'company', parsed.errors)
-  const site = readCrmSite(ctx, 'company', body)
+  const site = await readCrmSite(ctx, request, 'company', body)
   if ('response' in site) return site.response
   const owner = await memberError(ctx, 'ownerUid', parsed.values.ownerUid)
   if (Object.keys(owner).length) return crmValidationFailed(ctx, 'company', owner)
