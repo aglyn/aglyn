@@ -306,6 +306,12 @@ final class MarketplaceTests: XCTestCase {
     XCTAssertTrue("\(templateShelfQuery(search: " bakery ", limit: 24).filters)".contains("nameTokens"))
     XCTAssertEqual(templateShelfFacts(screenCount: 5, version: "3", priceUSD: 0), "5 pages · v3 · free")
     XCTAssertEqual(templateShelfFacts(screenCount: nil, version: "1.2.0", priceUSD: 12), "? pages · v1.2.0 · $12")
+    // A store build (StoreBilling.buying off) says a paid template is paid, not its price, and offers no Use on it.
+    XCTAssertEqual(templateShelfFacts(screenCount: 5, version: "3", priceUSD: 12, buying: false), "5 pages · v3 · paid")
+    XCTAssertEqual(templateShelfFacts(screenCount: 5, version: "3", priceUSD: 0, buying: false), "5 pages · v3 · free")
+    XCTAssertTrue(templateShelfOffersUse(priceUSD: 12, buying: true))
+    XCTAssertFalse(templateShelfOffersUse(priceUSD: 12, buying: false))
+    XCTAssertTrue(templateShelfOffersUse(priceUSD: 0, buying: false))
     XCTAssertEqual(
       templateInstalledMessage(added: 1, name: "Bakery"),
       "Saved 1 template from \"Bakery\" to your library — open Templates to create pages from them.")

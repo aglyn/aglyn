@@ -73,11 +73,23 @@ fun templateShelfQuery(search: String, limit: Int): FirestoreQuery = planListQue
 ).toFirestoreQuery(LISTINGS, limit)
 
 /** The facts under a template's name, as the console's card says them: its pages, its version, its price. */
-fun templateShelfFacts(screenCount: Double?, version: String?, priceUsd: Double): String {
+fun templateShelfFacts(screenCount: Double?, version: String?, priceUsd: Double, buying: Boolean = true): String {
   val pages = screenCount?.let { com.aglyn.pluginhost.jsNumber(it) } ?: "?"
-  val price = if (priceUsd > 0) " · \$" + com.aglyn.pluginhost.jsNumber(priceUsd) else " · free"
+  // A build that may not take a payment ([com.aglyn.core.StoreBilling.buying] off: the store builds) says a paid template
+  // is paid, not its price.
+  val price = when {
+    priceUsd <= 0 -> " · free"
+    buying -> " · \$" + com.aglyn.pluginhost.jsNumber(priceUsd)
+    else -> " · paid"
+  }
   return "$pages pages · v${version.orEmpty()}$price"
 }
+
+/**
+ * Whether the card offers "Use template": a paid template starts a purchase, which a build that may not take a payment
+ * never offers (the owner's decision of 2026-11-19, [com.aglyn.core.StoreBilling]).
+ */
+fun templateShelfOffersUse(priceUsd: Double, buying: Boolean): Boolean = priceUsd <= 0 || buying
 
 /** What a successful install says: the bundle went to the library, and nothing was published. */
 fun templateInstalledMessage(added: Int, name: String): String =
@@ -141,25 +153,29 @@ private fun TemplateCard(
     Text(name, style = MaterialTheme.typography.titleMedium)
     doc.string("category")?.let { StatusChip(it, StatusTone.NEUTRAL) }
     doc.string("description")?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    val price = (doc.data["priceUsd"] as? Number)?.toDouble() ?: 0.0
+    val buying = com.aglyn.core.StoreBilling.buying
     Text(
-      templateShelfFacts((doc.data["screenCount"] as? Number)?.toDouble(), version, (doc.data["priceUsd"] as? Number)?.toDouble() ?: 0.0),
+      templateShelfFacts((doc.data["screenCount"] as? Number)?.toDouble(), version, price, buying),
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    Button(
-      onClick = {
-        setInstalling(doc.id)
-        runner.run {
-          try {
-            val answer = context.api.request(INSTALL_TEMPLATE_ROUTE, ApiMethod.POST, jsonBody("listingId" to doc.id, "hostId" to zone.hostId))
-            zone.onInstalled(templateInstalledMessage(answer.numberField("templates")?.toInt() ?: 0, name))
-          } finally {
-            setInstalling(null)
+    if (templateShelfOffersUse(price, buying)) {
+      Button(
+        onClick = {
+          setInstalling(doc.id)
+          runner.run {
+            try {
+              val answer = context.api.request(INSTALL_TEMPLATE_ROUTE, ApiMethod.POST, jsonBody("listingId" to doc.id, "hostId" to zone.hostId))
+              zone.onInstalled(templateInstalledMessage(answer.numberField("templates")?.toInt() ?: 0, name))
+            } finally {
+              setInstalling(null)
+            }
           }
-        }
-      },
-      enabled = installing == null,
-      modifier = Modifier.testTag("marketplace-template-use-${doc.id}"),
-    ) { Text(if (installing == doc.id) "Installing…" else "Use template") }
+        },
+        enabled = installing == null,
+        modifier = Modifier.testTag("marketplace-template-use-${doc.id}"),
+      ) { Text(if (installing == doc.id) "Installing…" else "Use template") }
+    }
   }
 }

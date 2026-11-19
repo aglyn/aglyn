@@ -58,6 +58,10 @@ class MarketplaceCasesTest {
     assertEquals(true, searched.filters.toString().contains("nameTokens"), searched.toString())
     assertEquals("5 pages · v3 · free", templateShelfFacts(5.0, "3", 0.0))
     assertEquals("? pages · v1.2.0 · \$12", templateShelfFacts(null, "1.2.0", 12.0))
+    // A store build (StoreBilling.buying off) says a paid template is paid, not its price, and offers no Use on it.
+    assertEquals("5 pages · v3 · paid", templateShelfFacts(5.0, "3", 12.0, buying = false))
+    assertEquals("5 pages · v3 · free", templateShelfFacts(5.0, "3", 0.0, buying = false))
+    assertEquals(listOf(true, false, true), listOf(templateShelfOffersUse(12.0, true), templateShelfOffersUse(12.0, false), templateShelfOffersUse(0.0, false)))
     assertEquals(
       "Saved 1 template from \"Bakery\" to your library — open Templates to create pages from them.",
       templateInstalledMessage(1, "Bakery"),

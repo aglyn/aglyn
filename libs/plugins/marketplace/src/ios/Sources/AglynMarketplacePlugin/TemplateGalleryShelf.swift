@@ -32,9 +32,16 @@ func templateShelfQuery(search: String, limit: Int) -> FirestoreQuery {
 }
 
 /// The facts under a template's name, as the console's card says them: its pages, its version, its price.
-func templateShelfFacts(screenCount: Double?, version: String?, priceUSD: Double) -> String {
-  "\(screenCount.map { jsNumberString($0) } ?? "?") pages · v\(version ?? "")" + (priceUSD > 0 ? " · $\(jsNumberString(priceUSD))" : " · free")
+/// A build that may not take a payment (`StoreBilling.buying` off: the store builds) says a paid template is paid, not its
+/// price.
+func templateShelfFacts(screenCount: Double?, version: String?, priceUSD: Double, buying: Bool = true) -> String {
+  let price = priceUSD <= 0 ? " · free" : buying ? " · $\(jsNumberString(priceUSD))" : " · paid"
+  return "\(screenCount.map { jsNumberString($0) } ?? "?") pages · v\(version ?? "")" + price
 }
+
+/// Whether the card offers "Use template": a paid template starts a purchase, which a build that may not take a payment
+/// never offers (the owner's decision of 2026-11-19, `StoreBilling`).
+func templateShelfOffersUse(priceUSD: Double, buying: Bool) -> Bool { priceUSD <= 0 || buying }
 
 /// What a successful install says: the bundle went to the library, and nothing was published.
 func templateInstalledMessage(added: Int, name: String) -> String {
@@ -103,12 +110,19 @@ struct TemplateGalleryShelf: View {
       Text(name).font(AglynFont.headline)
       if let category = doc.string("category") { StatusChip(category) }
       if let description = doc.string("description") { Text(description).font(AglynFont.subheadline).foregroundStyle(.secondary) }
-      Text(templateShelfFacts(screenCount: doc.double("screenCount"), version: doc.string("latestVersion") ?? doc.double("latestVersion").map { jsNumberString($0) }, priceUSD: doc.double("priceUsd") ?? 0))
-        .font(AglynFont.caption).foregroundStyle(.secondary)
-      Button(installing == doc.id ? "Installing…" : "Use template") { install(doc.id, name: name, zone: zone) }
-        .buttonStyle(.aglynProminent)
-        .disabled(installing != nil)
-        .accessibilityIdentifier("marketplace-template-use-\(doc.id)")
+      let price = doc.double("priceUsd") ?? 0
+      Text(
+        templateShelfFacts(
+          screenCount: doc.double("screenCount"), version: doc.string("latestVersion") ?? doc.double("latestVersion").map { jsNumberString($0) },
+          priceUSD: price, buying: StoreBilling.buying)
+      )
+      .font(AglynFont.caption).foregroundStyle(.secondary)
+      if templateShelfOffersUse(priceUSD: price, buying: StoreBilling.buying) {
+        Button(installing == doc.id ? "Installing…" : "Use template") { install(doc.id, name: name, zone: zone) }
+          .buttonStyle(.aglynProminent)
+          .disabled(installing != nil)
+          .accessibilityIdentifier("marketplace-template-use-\(doc.id)")
+      }
     }
     .padding(.vertical, AglynSpace.half)
     .accessibilityIdentifier("marketplace-template-\(doc.id)")
