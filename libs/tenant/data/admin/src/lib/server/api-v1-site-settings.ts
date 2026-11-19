@@ -31,6 +31,8 @@ import { businessDetailsView, readBusinessDetailsPatch, writeBusinessDetails } f
 import { isApiV1Page, pageRoutePath, readPageSeoPatch, settlePageSeoCache, writePageSeo } from './page-seo-write'
 import { readSiteSeoPatch, siteSeoView, writeSiteSeo } from './site-seo-write'
 import { settleSiteSettingsCache, type SiteSettingsWrite } from './site-settings-write'
+import { handlePageContent } from './api-v1-page-content'
+import { handlePageWrites } from './api-v1-page-writes'
 
 /**
  * The platform's three settings resources under a site on the customer REST
@@ -146,6 +148,10 @@ export async function handleSiteBusiness(
 
 // ── /v1/sites/{siteId}/pages ────────────────────────────────────────────────
 
+/** The methods `handlePageWrites` answers on `…/pages`, and on `…/pages/{pageId}`. */
+const PAGES_WRITE_METHODS: ReadonlySet<string> = new Set(['POST'])
+const PAGE_WRITE_METHODS: ReadonlySet<string> = new Set(['PATCH', 'DELETE'])
+
 const text = (value: unknown): string | null => (typeof value === 'string' && value !== '' ? value : null)
 
 /**
@@ -179,6 +185,11 @@ export function pageView(pageId: string, data: Record<string, unknown>, routingM
 /**
  * `GET /v1/sites/{siteId}/pages`, `GET …/pages/{pageId}` and
  * `PATCH …/pages/{pageId}/seo`. `segments` is the whole path under `/v1`.
+ *
+ * The rest of `/pages` is dispatched from here (AGL-4235): what is on a page
+ * (`…/pages/{pageId}/content`, `…/content/edits`) to `handlePageContent`, and
+ * adding (`POST …/pages`), changing (`PATCH …/pages/{pageId}`) and deleting
+ * (`DELETE …/pages/{pageId}`) a page to `handlePageWrites`.
  */
 export async function handleSitePages(
   request: Request,
@@ -190,6 +201,10 @@ export async function handleSitePages(
   if (!ctx.site) return noSuchSite(ctx)
   const hostId = ctx.site.id
   const [, , , pageId, sub, ...rest] = segments
+  if (pageId && sub === 'content') return handlePageContent(request, ctx, segments, url, deps)
+  if (!sub && !rest.length && (pageId ? PAGE_WRITE_METHODS : PAGES_WRITE_METHODS).has(request.method)) {
+    return handlePageWrites(request, ctx, segments, url, deps)
+  }
   if (rest.length || (sub && sub !== 'seo')) {
     return ApiErrors.notFound({ message: 'Unknown endpoint', headers: ctx.headers })
   }
@@ -220,7 +235,7 @@ export async function handleSitePages(
     return apiJson(pageView(pageId, written.page, routed), { headers: ctx.headers })
   }
 
-  if (request.method !== 'GET') return notAllowed(ctx, 'GET')
+  if (request.method !== 'GET') return notAllowed(ctx, pageId ? 'GET, PATCH, DELETE' : 'GET, POST')
   const denied = requireScope(ctx, 'pages:read')
   if (denied) return denied
 

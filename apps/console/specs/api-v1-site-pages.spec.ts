@@ -244,6 +244,21 @@ describe('PATCH /v1/sites/{siteId}/pages/{pageId}/seo (AGL-4235)', () => {
 
   it('answers only PATCH on a page’s search listing', async () => {
     expect((await call(context(), 'pages/about/seo')).status).toBe(405)
-    expect((await call(context(), 'pages/about', 'PATCH', {})).status).toBe(405)
+    expect((await call(context(), 'pages/about', 'PUT', {})).status).toBe(405)
+  })
+
+  it('hands a page’s content and the page writes to their own modules, which are not built yet (AGL-4235)', async () => {
+    for (const [path, method] of [
+      ['pages/about/content', 'GET'],
+      ['pages/about/content/edits', 'POST'],
+      ['pages', 'POST'],
+      ['pages/about', 'PATCH'],
+      ['pages/about', 'DELETE'],
+    ] as const) {
+      const response = await call(context(), path, method, method === 'GET' ? undefined : {})
+      expect({ path, method, status: response.status }).toEqual({ path, method, status: 501 })
+      expect((await response.json()).error).toMatchObject({ type: 'not_implemented', message: 'Not available yet' })
+    }
+    expect(double.writes).toEqual([])
   })
 })

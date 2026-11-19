@@ -74,6 +74,9 @@ import {
   SITE_ID_PATH_PARAM,
 } from '@aglyn/tenant-data-admin/server/api-v1-description'
 import { SITE_SETTINGS_DESCRIPTIONS } from '@aglyn/tenant-data-admin/server/api-v1-site-settings-description'
+import { PAGE_CONTENT_DESCRIPTION } from '@aglyn/tenant-data-admin/server/api-v1-page-content-description'
+import { PAGE_WRITES_DESCRIPTION } from '@aglyn/tenant-data-admin/server/api-v1-page-writes-description'
+import { SITE_TEMPLATES_DESCRIPTION } from '@aglyn/tenant-data-admin/server/api-v1-site-templates-description'
 
 /** A JSON Schema / OpenAPI fragment. Same shape the tenant builder uses. */
 type Schema = Record<string, unknown>
@@ -234,6 +237,12 @@ const RESOURCES: readonly ResourceSpec[] = [
   // A site's search listing, its pages and its business details (AGL-4235),
   // described by the data layer beside the handlers and limits they share.
   ...SITE_SETTINGS_DESCRIPTIONS,
+  // What is on a page, adding, changing and removing pages, and a site's
+  // templates (AGL-4235). Each lists its operations only once its handler
+  // works; until then the builder below skips it.
+  PAGE_CONTENT_DESCRIPTION,
+  PAGE_WRITES_DESCRIPTION,
+  SITE_TEMPLATES_DESCRIPTION,
 ]
 
 /**
@@ -362,7 +371,15 @@ export function buildCustomerApiOpenApi(
   const createBodies = new Map<string, readonly [string, readonly string[]]>()
 
   for (const resource of resources) {
-    tags.push({ name: resource.tag, description: resource.description })
+    // A resource that describes no operation yet publishes nothing — no tag,
+    // no schema — so a handler still being built is not advertised (AGL-4235).
+    if (!resource.ops.length) continue
+    // Several resources may file under one tag (a site's pages: reading them,
+    // what is on them, adding and changing them); the tag is listed once, in
+    // the words of the first.
+    if (!tags.some((tag) => tag['name'] === resource.tag)) {
+      tags.push({ name: resource.tag, description: resource.description })
+    }
     schemas[resource.schemaName] = {
       type: 'object',
       description: resource.description,

@@ -157,6 +157,13 @@ export const ApiErrors = {
   internal: (init?: ApiResponseInit) =>
     errorResponse(500, 'internal_error', 'Something went wrong', init),
   /**
+   * 501: an endpoint whose path is routed and whose operation is not built
+   * yet (AGL-4235). Never described in the OpenAPI document, so no tool is
+   * generated for it; a caller that finds the path anyway is told plainly.
+   */
+  notImplemented: (init?: ApiResponseInit) =>
+    errorResponse(501, 'not_implemented', 'Not available yet', init),
+  /**
    * 503: the request could not be judged because a dependency failed, so
    * nothing about the credential or the request is wrong (AGL-4225). Carries
    * `Retry-After`; a client should simply try again.

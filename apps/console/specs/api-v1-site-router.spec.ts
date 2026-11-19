@@ -31,7 +31,7 @@
  */
 
 import { siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
-import { registerApiV1SiteResource } from '@aglyn/tenant-data-admin/server/api-v1-resources'
+import { PLATFORM_API_V1_SITE_RESOURCES, registerApiV1SiteResource } from '@aglyn/tenant-data-admin/server/api-v1-resources'
 import {
   type ApiV1Context,
   holdsSiteMembership,
@@ -157,6 +157,13 @@ describe('the site router reads the site once and hands it on (AGL-4235)', () =>
     expect(probed?.site?.id).toBe(SITE)
     expect(probed?.site?.snapshot.get('subdomain')).toBe('bakery')
     expect(probed?.uid).toBe(MEMBER)
+  })
+
+  it('answers a site’s templates itself, not built yet, and keeps the name from every plugin (AGL-4235)', async () => {
+    const response = await call(context(), `sites/${SITE}/templates`)
+    expect(response.status).toBe(501)
+    expect((await response.json()).error).toMatchObject({ type: 'not_implemented', message: 'Not available yet' })
+    expect(PLATFORM_API_V1_SITE_RESOURCES.has('templates')).toBe(true)
   })
 })
 

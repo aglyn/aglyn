@@ -71,6 +71,7 @@ import {
   handleSitePages,
   handleSiteSeo,
 } from '@aglyn/tenant-data-admin/server/api-v1-site-settings'
+import { handleSiteTemplates } from '@aglyn/tenant-data-admin/server/api-v1-site-templates'
 import {
   admitNamedSite,
   apiActorLabel,
@@ -422,6 +423,9 @@ async function handleSites(
   if (sub === 'seo') return handleSiteSeo(request, siteCtx)
   if (sub === 'business') return handleSiteBusiness(request, siteCtx)
   if (sub === 'pages') return handleSitePages(request, siteCtx, segments, url)
+  // The page templates a new page can start from (AGL-4235), under
+  // `components:read`.
+  if (sub === 'templates') return handleSiteTemplates(request, siteCtx, segments, url)
   /*
    * A resource a plugin models under the site is the plugin's (AGL-3080) — a
    * site's orders and products, its form submissions. Asked only AFTER
