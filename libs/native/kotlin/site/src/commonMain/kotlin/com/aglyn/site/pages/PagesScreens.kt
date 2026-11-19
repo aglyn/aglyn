@@ -321,7 +321,7 @@ private fun PageDetail(
     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space(2f)).testTag("page-detail"),
     verticalArrangement = Arrangement.spacedBy(space(2f)),
   ) {
-    val liveUrl = row.livePath?.let { livePageUrl(routing, it) }
+    val liveUrl = row.livePath?.let { livePageUrl(routing, it, context.api.origin) }
     val canPublishHere = canPublish && page.kind != SCREEN_KIND_TEMPLATE
     val edit = com.aglyn.ui.RecordAction("page-edit-besigner", "Edit in the Besigner", "design_services", enabled = page.versionId != null) {
       page.versionId?.let { context.openBesigner(BesignerPaths.screen(page.id, it), ConsoleScope.SITE) }

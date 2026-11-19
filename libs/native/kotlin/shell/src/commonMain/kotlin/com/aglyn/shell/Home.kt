@@ -274,7 +274,10 @@ private fun SiteHeader(
   }
   val status = (host as? Live.Ready)?.value?.let { HostStatus.describe(it.data, now) }
   // The host's own custom domain first, then the membership row's copy, then the platform address.
-  val address = site.addressWith((host as? Live.Ready)?.value?.data?.get("cname") as? String)
+  val hostCname = (host as? Live.Ready)?.value?.data?.get("cname") as? String
+  val address = site.addressWith(hostCname)
+  // Visit site opens the site as the console the app talks to reaches it: a local console, the local tenant.
+  val visit = site.visitUrl(hostCname, origin)
   SiteHeaderCard(
     workspaceName = workspace.org?.name,
     siteName = site.name,
@@ -290,7 +293,7 @@ private fun SiteHeader(
     // Live needs no sentence: the pages card counts them.
     statusDetail = status?.takeIf { it.kind != HostStatusKind.LIVE }?.detail,
     onSwitch = onSwitch,
-    onVisit = address?.let { { onVisit("https://$it/") } },
+    onVisit = visit?.takeIf { address != null }?.let { { onVisit(it) } },
     onCustomize = onCustomize,
   )
 }

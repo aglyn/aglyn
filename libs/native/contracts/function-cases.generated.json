@@ -23546,6 +23546,77 @@
         }
       ]
     },
+    "isLocalConsole": {
+      "module": "libs/aglyn/src/lib/app-utils/site-live-url.ts",
+      "cases": [
+        {
+          "args": [
+            "localhost"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "127.0.0.1"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "::1"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "[::1]"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "10.0.2.2"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "studio.localhost"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "app.aglyn.com"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "acme.aglyn.com"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "localhost.example.com"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "10.0.2.20"
+          ],
+          "result": false
+        }
+      ]
+    },
     "isLockedOnForSite": {
       "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
       "cases": [
@@ -23692,6 +23763,77 @@
               ],
               "lowStockThreshold": -1
             }
+          ],
+          "result": false
+        }
+      ]
+    },
+    "isPreviewConsole": {
+      "module": "libs/aglyn/src/lib/app-utils/site-live-url.ts",
+      "cases": [
+        {
+          "args": [
+            "localhost"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "127.0.0.1"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "::1"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "[::1]"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "10.0.2.2"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "studio.localhost"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "app.aglyn.com"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "acme.aglyn.com"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "vercel.app.example.com"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "10.0.2.20"
           ],
           "result": false
         }
@@ -79678,6 +79820,3011 @@
             },
             "problem": null
           }
+        }
+      ]
+    },
+    "siteLiveUrlForSlug": {
+      "module": "libs/aglyn/src/lib/app-utils/site-live-url.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "/",
+            "localhost"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "/",
+            "127.0.0.1"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "/",
+            "::1"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "/",
+            "[::1]"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "/",
+            "10.0.2.2"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "/",
+            "studio.localhost"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "/",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": "https://aglyn-tenant-git-main-aglyn.vercel.app/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "/",
+            "app.aglyn.com"
+          ],
+          "result": "https://juniper-street.aglyn.app/"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "/",
+            "acme.aglyn.com"
+          ],
+          "result": "https://juniper-street.aglyn.app/"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "/",
+            null
+          ],
+          "result": "https://juniper-street.aglyn.app/"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "/menu",
+            "localhost"
+          ],
+          "result": "http://localhost:4500/menu?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "/menu",
+            "127.0.0.1"
+          ],
+          "result": "http://localhost:4500/menu?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "/menu",
+            "::1"
+          ],
+          "result": "http://localhost:4500/menu?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "/menu",
+            "[::1]"
+          ],
+          "result": "http://localhost:4500/menu?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "/menu",
+            "10.0.2.2"
+          ],
+          "result": "http://localhost:4500/menu?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "/menu",
+            "studio.localhost"
+          ],
+          "result": "http://localhost:4500/menu?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "/menu",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": "https://aglyn-tenant-git-main-aglyn.vercel.app/menu?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "/menu",
+            "app.aglyn.com"
+          ],
+          "result": "https://juniper-street.aglyn.app/menu"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "/menu",
+            "acme.aglyn.com"
+          ],
+          "result": "https://juniper-street.aglyn.app/menu"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "/menu",
+            null
+          ],
+          "result": "https://juniper-street.aglyn.app/menu"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "//about/team",
+            "localhost"
+          ],
+          "result": "http://localhost:4500/about/team?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "//about/team",
+            "127.0.0.1"
+          ],
+          "result": "http://localhost:4500/about/team?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "//about/team",
+            "::1"
+          ],
+          "result": "http://localhost:4500/about/team?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "//about/team",
+            "[::1]"
+          ],
+          "result": "http://localhost:4500/about/team?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "//about/team",
+            "10.0.2.2"
+          ],
+          "result": "http://localhost:4500/about/team?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "//about/team",
+            "studio.localhost"
+          ],
+          "result": "http://localhost:4500/about/team?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "//about/team",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": "https://aglyn-tenant-git-main-aglyn.vercel.app/about/team?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "//about/team",
+            "app.aglyn.com"
+          ],
+          "result": "https://juniper-street.aglyn.app/about/team"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "//about/team",
+            "acme.aglyn.com"
+          ],
+          "result": "https://juniper-street.aglyn.app/about/team"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "//about/team",
+            null
+          ],
+          "result": "https://juniper-street.aglyn.app/about/team"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "contact",
+            "localhost"
+          ],
+          "result": "http://localhost:4500/contact?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "contact",
+            "127.0.0.1"
+          ],
+          "result": "http://localhost:4500/contact?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "contact",
+            "::1"
+          ],
+          "result": "http://localhost:4500/contact?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "contact",
+            "[::1]"
+          ],
+          "result": "http://localhost:4500/contact?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "contact",
+            "10.0.2.2"
+          ],
+          "result": "http://localhost:4500/contact?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "contact",
+            "studio.localhost"
+          ],
+          "result": "http://localhost:4500/contact?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "contact",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": "https://aglyn-tenant-git-main-aglyn.vercel.app/contact?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "contact",
+            "app.aglyn.com"
+          ],
+          "result": "https://juniper-street.aglyn.app/contact"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "contact",
+            "acme.aglyn.com"
+          ],
+          "result": "https://juniper-street.aglyn.app/contact"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "contact",
+            null
+          ],
+          "result": "https://juniper-street.aglyn.app/contact"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "",
+            "localhost"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "",
+            "127.0.0.1"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "",
+            "::1"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "",
+            "[::1]"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "",
+            "10.0.2.2"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "",
+            "studio.localhost"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": "https://aglyn-tenant-git-main-aglyn.vercel.app/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "",
+            "app.aglyn.com"
+          ],
+          "result": "https://juniper-street.aglyn.app/"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "",
+            "acme.aglyn.com"
+          ],
+          "result": "https://juniper-street.aglyn.app/"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street"
+            },
+            "",
+            null
+          ],
+          "result": "https://juniper-street.aglyn.app/"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "/",
+            "localhost"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "/",
+            "127.0.0.1"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "/",
+            "::1"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "/",
+            "[::1]"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "/",
+            "10.0.2.2"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "/",
+            "studio.localhost"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "/",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": "https://aglyn-tenant-git-main-aglyn.vercel.app/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "/",
+            "app.aglyn.com"
+          ],
+          "result": "https://juniperbakery.example/"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "/",
+            "acme.aglyn.com"
+          ],
+          "result": "https://juniperbakery.example/"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "/",
+            null
+          ],
+          "result": "https://juniperbakery.example/"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "/menu",
+            "localhost"
+          ],
+          "result": "http://localhost:4500/menu?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "/menu",
+            "127.0.0.1"
+          ],
+          "result": "http://localhost:4500/menu?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "/menu",
+            "::1"
+          ],
+          "result": "http://localhost:4500/menu?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "/menu",
+            "[::1]"
+          ],
+          "result": "http://localhost:4500/menu?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "/menu",
+            "10.0.2.2"
+          ],
+          "result": "http://localhost:4500/menu?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "/menu",
+            "studio.localhost"
+          ],
+          "result": "http://localhost:4500/menu?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "/menu",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": "https://aglyn-tenant-git-main-aglyn.vercel.app/menu?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "/menu",
+            "app.aglyn.com"
+          ],
+          "result": "https://juniperbakery.example/menu"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "/menu",
+            "acme.aglyn.com"
+          ],
+          "result": "https://juniperbakery.example/menu"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "/menu",
+            null
+          ],
+          "result": "https://juniperbakery.example/menu"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "//about/team",
+            "localhost"
+          ],
+          "result": "http://localhost:4500/about/team?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "//about/team",
+            "127.0.0.1"
+          ],
+          "result": "http://localhost:4500/about/team?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "//about/team",
+            "::1"
+          ],
+          "result": "http://localhost:4500/about/team?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "//about/team",
+            "[::1]"
+          ],
+          "result": "http://localhost:4500/about/team?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "//about/team",
+            "10.0.2.2"
+          ],
+          "result": "http://localhost:4500/about/team?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "//about/team",
+            "studio.localhost"
+          ],
+          "result": "http://localhost:4500/about/team?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "//about/team",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": "https://aglyn-tenant-git-main-aglyn.vercel.app/about/team?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "//about/team",
+            "app.aglyn.com"
+          ],
+          "result": "https://juniperbakery.example/about/team"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "//about/team",
+            "acme.aglyn.com"
+          ],
+          "result": "https://juniperbakery.example/about/team"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "//about/team",
+            null
+          ],
+          "result": "https://juniperbakery.example/about/team"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "contact",
+            "localhost"
+          ],
+          "result": "http://localhost:4500/contact?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "contact",
+            "127.0.0.1"
+          ],
+          "result": "http://localhost:4500/contact?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "contact",
+            "::1"
+          ],
+          "result": "http://localhost:4500/contact?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "contact",
+            "[::1]"
+          ],
+          "result": "http://localhost:4500/contact?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "contact",
+            "10.0.2.2"
+          ],
+          "result": "http://localhost:4500/contact?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "contact",
+            "studio.localhost"
+          ],
+          "result": "http://localhost:4500/contact?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "contact",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": "https://aglyn-tenant-git-main-aglyn.vercel.app/contact?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "contact",
+            "app.aglyn.com"
+          ],
+          "result": "https://juniperbakery.example/contact"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "contact",
+            "acme.aglyn.com"
+          ],
+          "result": "https://juniperbakery.example/contact"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "contact",
+            null
+          ],
+          "result": "https://juniperbakery.example/contact"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "",
+            "localhost"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "",
+            "127.0.0.1"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "",
+            "::1"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "",
+            "[::1]"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "",
+            "10.0.2.2"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "",
+            "studio.localhost"
+          ],
+          "result": "http://localhost:4500/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": "https://aglyn-tenant-git-main-aglyn.vercel.app/?tenantHost=juniper-street"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "",
+            "app.aglyn.com"
+          ],
+          "result": "https://juniperbakery.example/"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "",
+            "acme.aglyn.com"
+          ],
+          "result": "https://juniperbakery.example/"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "juniper-street",
+              "cname": "juniperbakery.example"
+            },
+            "",
+            null
+          ],
+          "result": "https://juniperbakery.example/"
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "/",
+            "localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "/",
+            "127.0.0.1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "/",
+            "::1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "/",
+            "[::1]"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "/",
+            "10.0.2.2"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "/",
+            "studio.localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "/",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "/",
+            "app.aglyn.com"
+          ],
+          "result": "https://only-custom.example/"
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "/",
+            "acme.aglyn.com"
+          ],
+          "result": "https://only-custom.example/"
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "/",
+            null
+          ],
+          "result": "https://only-custom.example/"
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "/menu",
+            "localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "/menu",
+            "127.0.0.1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "/menu",
+            "::1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "/menu",
+            "[::1]"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "/menu",
+            "10.0.2.2"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "/menu",
+            "studio.localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "/menu",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "/menu",
+            "app.aglyn.com"
+          ],
+          "result": "https://only-custom.example/menu"
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "/menu",
+            "acme.aglyn.com"
+          ],
+          "result": "https://only-custom.example/menu"
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "/menu",
+            null
+          ],
+          "result": "https://only-custom.example/menu"
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "//about/team",
+            "localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "//about/team",
+            "127.0.0.1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "//about/team",
+            "::1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "//about/team",
+            "[::1]"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "//about/team",
+            "10.0.2.2"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "//about/team",
+            "studio.localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "//about/team",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "//about/team",
+            "app.aglyn.com"
+          ],
+          "result": "https://only-custom.example/about/team"
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "//about/team",
+            "acme.aglyn.com"
+          ],
+          "result": "https://only-custom.example/about/team"
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "//about/team",
+            null
+          ],
+          "result": "https://only-custom.example/about/team"
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "contact",
+            "localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "contact",
+            "127.0.0.1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "contact",
+            "::1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "contact",
+            "[::1]"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "contact",
+            "10.0.2.2"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "contact",
+            "studio.localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "contact",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "contact",
+            "app.aglyn.com"
+          ],
+          "result": "https://only-custom.example/contact"
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "contact",
+            "acme.aglyn.com"
+          ],
+          "result": "https://only-custom.example/contact"
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "contact",
+            null
+          ],
+          "result": "https://only-custom.example/contact"
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "",
+            "localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "",
+            "127.0.0.1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "",
+            "::1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "",
+            "[::1]"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "",
+            "10.0.2.2"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "",
+            "studio.localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "",
+            "app.aglyn.com"
+          ],
+          "result": "https://only-custom.example/"
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "",
+            "acme.aglyn.com"
+          ],
+          "result": "https://only-custom.example/"
+        },
+        {
+          "args": [
+            {
+              "cname": "only-custom.example"
+            },
+            "",
+            null
+          ],
+          "result": "https://only-custom.example/"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "/",
+            "localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "/",
+            "127.0.0.1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "/",
+            "::1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "/",
+            "[::1]"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "/",
+            "10.0.2.2"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "/",
+            "studio.localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "/",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "/",
+            "app.aglyn.com"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "/",
+            "acme.aglyn.com"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "/",
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "/menu",
+            "localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "/menu",
+            "127.0.0.1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "/menu",
+            "::1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "/menu",
+            "[::1]"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "/menu",
+            "10.0.2.2"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "/menu",
+            "studio.localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "/menu",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "/menu",
+            "app.aglyn.com"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "/menu",
+            "acme.aglyn.com"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "/menu",
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "//about/team",
+            "localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "//about/team",
+            "127.0.0.1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "//about/team",
+            "::1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "//about/team",
+            "[::1]"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "//about/team",
+            "10.0.2.2"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "//about/team",
+            "studio.localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "//about/team",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "//about/team",
+            "app.aglyn.com"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "//about/team",
+            "acme.aglyn.com"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "//about/team",
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "contact",
+            "localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "contact",
+            "127.0.0.1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "contact",
+            "::1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "contact",
+            "[::1]"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "contact",
+            "10.0.2.2"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "contact",
+            "studio.localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "contact",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "contact",
+            "app.aglyn.com"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "contact",
+            "acme.aglyn.com"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "contact",
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "",
+            "localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "",
+            "127.0.0.1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "",
+            "::1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "",
+            "[::1]"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "",
+            "10.0.2.2"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "",
+            "studio.localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "",
+            "app.aglyn.com"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "",
+            "acme.aglyn.com"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "",
+              "cname": ""
+            },
+            "",
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "/",
+            "localhost"
+          ],
+          "result": "http://localhost:4500/?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "/",
+            "127.0.0.1"
+          ],
+          "result": "http://localhost:4500/?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "/",
+            "::1"
+          ],
+          "result": "http://localhost:4500/?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "/",
+            "[::1]"
+          ],
+          "result": "http://localhost:4500/?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "/",
+            "10.0.2.2"
+          ],
+          "result": "http://localhost:4500/?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "/",
+            "studio.localhost"
+          ],
+          "result": "http://localhost:4500/?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "/",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": "https://aglyn-tenant-git-main-aglyn.vercel.app/?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "/",
+            "app.aglyn.com"
+          ],
+          "result": "https://a b&c.aglyn.app/"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "/",
+            "acme.aglyn.com"
+          ],
+          "result": "https://a b&c.aglyn.app/"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "/",
+            null
+          ],
+          "result": "https://a b&c.aglyn.app/"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "/menu",
+            "localhost"
+          ],
+          "result": "http://localhost:4500/menu?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "/menu",
+            "127.0.0.1"
+          ],
+          "result": "http://localhost:4500/menu?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "/menu",
+            "::1"
+          ],
+          "result": "http://localhost:4500/menu?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "/menu",
+            "[::1]"
+          ],
+          "result": "http://localhost:4500/menu?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "/menu",
+            "10.0.2.2"
+          ],
+          "result": "http://localhost:4500/menu?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "/menu",
+            "studio.localhost"
+          ],
+          "result": "http://localhost:4500/menu?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "/menu",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": "https://aglyn-tenant-git-main-aglyn.vercel.app/menu?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "/menu",
+            "app.aglyn.com"
+          ],
+          "result": "https://a b&c.aglyn.app/menu"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "/menu",
+            "acme.aglyn.com"
+          ],
+          "result": "https://a b&c.aglyn.app/menu"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "/menu",
+            null
+          ],
+          "result": "https://a b&c.aglyn.app/menu"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "//about/team",
+            "localhost"
+          ],
+          "result": "http://localhost:4500/about/team?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "//about/team",
+            "127.0.0.1"
+          ],
+          "result": "http://localhost:4500/about/team?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "//about/team",
+            "::1"
+          ],
+          "result": "http://localhost:4500/about/team?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "//about/team",
+            "[::1]"
+          ],
+          "result": "http://localhost:4500/about/team?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "//about/team",
+            "10.0.2.2"
+          ],
+          "result": "http://localhost:4500/about/team?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "//about/team",
+            "studio.localhost"
+          ],
+          "result": "http://localhost:4500/about/team?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "//about/team",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": "https://aglyn-tenant-git-main-aglyn.vercel.app/about/team?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "//about/team",
+            "app.aglyn.com"
+          ],
+          "result": "https://a b&c.aglyn.app/about/team"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "//about/team",
+            "acme.aglyn.com"
+          ],
+          "result": "https://a b&c.aglyn.app/about/team"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "//about/team",
+            null
+          ],
+          "result": "https://a b&c.aglyn.app/about/team"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "contact",
+            "localhost"
+          ],
+          "result": "http://localhost:4500/contact?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "contact",
+            "127.0.0.1"
+          ],
+          "result": "http://localhost:4500/contact?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "contact",
+            "::1"
+          ],
+          "result": "http://localhost:4500/contact?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "contact",
+            "[::1]"
+          ],
+          "result": "http://localhost:4500/contact?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "contact",
+            "10.0.2.2"
+          ],
+          "result": "http://localhost:4500/contact?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "contact",
+            "studio.localhost"
+          ],
+          "result": "http://localhost:4500/contact?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "contact",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": "https://aglyn-tenant-git-main-aglyn.vercel.app/contact?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "contact",
+            "app.aglyn.com"
+          ],
+          "result": "https://a b&c.aglyn.app/contact"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "contact",
+            "acme.aglyn.com"
+          ],
+          "result": "https://a b&c.aglyn.app/contact"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "contact",
+            null
+          ],
+          "result": "https://a b&c.aglyn.app/contact"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "",
+            "localhost"
+          ],
+          "result": "http://localhost:4500/?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "",
+            "127.0.0.1"
+          ],
+          "result": "http://localhost:4500/?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "",
+            "::1"
+          ],
+          "result": "http://localhost:4500/?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "",
+            "[::1]"
+          ],
+          "result": "http://localhost:4500/?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "",
+            "10.0.2.2"
+          ],
+          "result": "http://localhost:4500/?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "",
+            "studio.localhost"
+          ],
+          "result": "http://localhost:4500/?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": "https://aglyn-tenant-git-main-aglyn.vercel.app/?tenantHost=a%20b%26c"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "",
+            "app.aglyn.com"
+          ],
+          "result": "https://a b&c.aglyn.app/"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "",
+            "acme.aglyn.com"
+          ],
+          "result": "https://a b&c.aglyn.app/"
+        },
+        {
+          "args": [
+            {
+              "subdomain": "a b&c"
+            },
+            "",
+            null
+          ],
+          "result": "https://a b&c.aglyn.app/"
+        },
+        {
+          "args": [
+            null,
+            "/",
+            "localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "/",
+            "127.0.0.1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "/",
+            "::1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "/",
+            "[::1]"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "/",
+            "10.0.2.2"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "/",
+            "studio.localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "/",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "/",
+            "app.aglyn.com"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "/",
+            "acme.aglyn.com"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "/",
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "/menu",
+            "localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "/menu",
+            "127.0.0.1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "/menu",
+            "::1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "/menu",
+            "[::1]"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "/menu",
+            "10.0.2.2"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "/menu",
+            "studio.localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "/menu",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "/menu",
+            "app.aglyn.com"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "/menu",
+            "acme.aglyn.com"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "/menu",
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "//about/team",
+            "localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "//about/team",
+            "127.0.0.1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "//about/team",
+            "::1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "//about/team",
+            "[::1]"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "//about/team",
+            "10.0.2.2"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "//about/team",
+            "studio.localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "//about/team",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "//about/team",
+            "app.aglyn.com"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "//about/team",
+            "acme.aglyn.com"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "//about/team",
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "contact",
+            "localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "contact",
+            "127.0.0.1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "contact",
+            "::1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "contact",
+            "[::1]"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "contact",
+            "10.0.2.2"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "contact",
+            "studio.localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "contact",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "contact",
+            "app.aglyn.com"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "contact",
+            "acme.aglyn.com"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "contact",
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "",
+            "localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "",
+            "127.0.0.1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "",
+            "::1"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "",
+            "[::1]"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "",
+            "10.0.2.2"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "",
+            "studio.localhost"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "",
+            "aglyn-console-git-feature-aglyn.vercel.app"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "",
+            "app.aglyn.com"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "",
+            "acme.aglyn.com"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            null,
+            "",
+            null
+          ],
+          "result": null
         }
       ]
     },

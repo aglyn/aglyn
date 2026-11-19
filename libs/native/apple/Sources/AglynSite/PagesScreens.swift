@@ -512,7 +512,8 @@ struct PageDetail: View {
     if !page.isGroup {
       if primary?.id != edit.id { more.append(edit) }
       if primary?.id != publish.id { more.append(publish) }
-      if let live = row.livePath, let link = livePageURL(model.routing, livePath: live), let url = URL(string: link) {
+      if let live = row.livePath, let link = livePageURL(model.routing, livePath: live, consoleOrigin: context.api.origin),
+        let url = URL(string: link) {
         more.append(AglynRecordAction("page-open-live", "Open live page", systemImage: "arrow.up.right.square") { openURL(url) })
       }
     }
