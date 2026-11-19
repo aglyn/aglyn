@@ -31,7 +31,7 @@ final class SiteCollaboratorCreditsColumnTests: XCTestCase {
     let users = try XCTUnwrap(ScreenCatalog.parse(data).first { $0.id == "core.site.users" })
     let list = try XCTUnwrap(users.blocks.first { $0.type == "list" && $0["title"]?.stringValue == "Collaborators" })
     XCTAssertEqual(list["columnsZone"]?.stringValue, "hostMembersColumn")
-    XCTAssertEqual(try column().raw["zones"]?.array.compactMap(\.stringValue), ["hostMembersColumn"])
+    XCTAssertEqual(try column().raw["zones"].array.compactMap(\.stringValue), ["hostMembersColumn"])
   }
 
   @MainActor
