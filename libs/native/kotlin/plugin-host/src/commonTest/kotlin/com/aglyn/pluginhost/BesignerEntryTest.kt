@@ -69,6 +69,30 @@ class BesignerEntryTest {
     assertEquals("$webView AglynApp/0.1.0 (android)", BesignerEntry.userAgent("$webView AglynApp/0.1.0 (android)", "0.2.0", "android"))
   }
 
+  // A build that cannot buy says so inside the marker's comment; the console's `userAgentHidesBuying` reads it.
+  @Test
+  fun aBuildThatCannotBuyCarriesTheNoBuyingToken() {
+    assertEquals("no-buying", BesignerEntry.USER_AGENT_NO_BUYING_TOKEN)
+    assertEquals("AglynApp/1.4.0 (android; no-buying)", BesignerEntry.userAgentMarker("1.4.0", "android", buying = false))
+    assertEquals("AglynApp/1.4.0 (android)", BesignerEntry.userAgentMarker("1.4.0", "android", buying = true))
+    val webView = "Mozilla/5.0 (Linux; Android 13; wv) AppleWebKit/537.36"
+    assertEquals("$webView AglynApp/0.1.0 (android; no-buying)", BesignerEntry.userAgent(webView, "0.1.0", "android", buying = false))
+    assertEquals("AglynApp/0.1.0 (windows; no-buying)", BesignerEntry.userAgent(null, "0.1.0", "windows", buying = false))
+  }
+
+  // The token follows StoreBilling's decision: a release build without in-app billing, and a debug build started with
+  // `--ez storeBuild true`, both carry it; a build that may buy does not.
+  @Test
+  fun theTokenFollowsTheBuildsBuyingDecision() {
+    val storeBuild = com.aglyn.core.StoreBilling.decide(configured = false, storeBuildOverride = false)
+    val debugOverride = com.aglyn.core.StoreBilling.decide(configured = true, storeBuildOverride = true)
+    val canBuy = com.aglyn.core.StoreBilling.decide(configured = true, storeBuildOverride = false)
+    for (buying in listOf(storeBuild, debugOverride)) {
+      assertEquals("AglynApp/1.4.0 (android; no-buying)", BesignerEntry.userAgent(null, "1.4.0", "android", buying))
+    }
+    assertEquals("AglynApp/1.4.0 (android)", BesignerEntry.userAgent(null, "1.4.0", "android", canBuy))
+  }
+
   // AGL-4056: every editor's own back control returns to the screen the Besigner was opened from.
   @Test
   fun eachEditorsBackControlReturnsToTheApp() {

@@ -26,6 +26,7 @@ import {
 } from '@aglyn/aglyn'
 import { pluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { ABSENT_WHEN_EMPTY } from '@aglyn/shared-ui-jsx/components/grid-items'
+import { useBuyingHidden } from '@aglyn/shared-ui-jsx/contexts/buying-hidden.context'
 import { Stack } from '@mui/material'
 import type { ComponentType } from 'react'
 import { buildRoute, Route } from '../constants/route-links'
@@ -345,8 +346,11 @@ export function useSlotWidgets(slots: readonly string[]): {
   const { ready: flagsReady, isStaff, flags } = useReleaseFlags()
   const addonStoreVisible =
     isStaff || (flags?.release_addon_store?.released ?? false)
+  // An app build for store review mounts no widget as an upsell: there is
+  // nowhere it may send anyone to buy.
+  const buyingHidden = useBuyingHidden()
   const upgrade =
-    orgSlug && addonStoreVisible
+    orgSlug && addonStoreVisible && !buyingHidden
       ? {
           billingHref: `${buildRoute(Route.MANAGE_BILLING, { orgSlug })}#addons`,
           canManageBilling: permissionsLoaded && can('billing.manage') === true,

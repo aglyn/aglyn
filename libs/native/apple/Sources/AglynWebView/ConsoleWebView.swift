@@ -124,10 +124,11 @@ public struct ConsoleWebView {
       configuration.websiteDataStore = .default()
       // A script never opens a window by itself (macOS allows it by default): a new window needs a person's gesture.
       configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
-      // The console leaves its browser-only chrome out of the app (AGL-3894).
+      // The console leaves its browser-only chrome out of the app (AGL-3894), and, in a build that cannot buy, every
+      // control that leads to buying (`no-buying` in the marker, from `StoreBilling.buying`).
       configuration.applicationNameForUserAgent = BesignerEntry.applicationNameForUserAgent(
         base: configuration.applicationNameForUserAgent, version: BesignerEntry.appVersion,
-        platform: BesignerEntry.userAgentPlatform)
+        platform: BesignerEntry.userAgentPlatform, buying: StoreBilling.buying)
       let webView = WKWebView(frame: .zero, configuration: configuration)
       webView.navigationDelegate = self
       webView.uiDelegate = self

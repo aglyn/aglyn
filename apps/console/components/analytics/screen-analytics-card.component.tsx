@@ -17,6 +17,7 @@
 'use client'
 
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { useBuyingHidden } from '@aglyn/shared-ui-jsx/contexts/buying-hidden.context'
 import {
   Alert,
   Box,
@@ -83,6 +84,8 @@ export function ScreenAnalyticsCard(props: {
   const { hostId, screenId } = props
   const firestore = useFirestore()
   const orgSlug = useOrgSlug()
+  // An app build for store review shows the sentence without the Upgrade button.
+  const buyingHidden = useBuyingHidden()
   const { org, ready: orgReady } = useCurrentOrg()
   const entitled = hasEntitlement('screenAnalytics', org)
   const [days, setDays] = useState<DayStat[] | null>(null)
@@ -190,14 +193,16 @@ export function ScreenAnalyticsCard(props: {
         <Alert
           severity="info"
           action={
-            <AppLink
-              componentVariant="button"
-              color="inherit"
-              size="small"
-              href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}
-            >
-              {'Upgrade'}
-            </AppLink>
+            buyingHidden ? undefined : (
+              <AppLink
+                componentVariant="button"
+                color="inherit"
+                size="small"
+                href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}
+              >
+                {'Upgrade'}
+              </AppLink>
+            )
           }
         >
           {'Per-page traffic — the views, devices and referrers of each page — is a ' +

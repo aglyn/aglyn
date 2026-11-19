@@ -29,6 +29,7 @@ import {
   type OptionCardImage,
 } from '@aglyn/shared-ui-jsx/components/option-card-grid.component'
 import { BlockedControl } from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { useBuyingHidden } from '@aglyn/shared-ui-jsx/contexts/buying-hidden.context'
 import {
   Alert,
   Box,
@@ -189,7 +190,6 @@ export function StarterPickerShelf(props: ConsoleHostStarterPickerZoneProps) {
   const purchase = useStarterPurchase(orgId, orgSlug)
   const starterAnswers = useStarterAnswers(orgId)
   const value = selected !== undefined ? (selected?.listingId ?? null) : picked
-  const pickedRow = value ? (found.rows.find((row) => row.listingId === value) ?? null) : null
   const ownedOverride = (row: SiteStarterSummary): boolean | undefined =>
     ownedHere.has(row.listingId)
       ? true
@@ -198,6 +198,13 @@ export function StarterPickerShelf(props: ConsoleHostStarterPickerZoneProps) {
         : selected?.listingId === row.listingId
           ? selected.owned
           : undefined
+  // An app build for store review cannot buy, so a starter that would have to
+  // be bought first is not offered there; free and owned ones are.
+  const buyingHidden = useBuyingHidden()
+  const rows = buyingHidden
+    ? found.rows.filter((row) => row.priceUsd <= 0 || ownedOf(row, ownedOverride(row)))
+    : found.rows
+  const pickedRow = value ? (rows.find((row) => row.listingId === value) ?? null) : null
 
   const refused = found.error !== null && REFUSED.has(found.error.status)
   // `null` until the first answer, which is the only one that may decide
@@ -210,7 +217,7 @@ export function StarterPickerShelf(props: ConsoleHostStarterPickerZoneProps) {
         ? true
         : found.error
           ? false
-          : found.rows.length > 0 || search.trim() !== '' || narrowed(filter ?? {})
+          : rows.length > 0 || search.trim() !== '' || narrowed(filter ?? {})
 
   useEffect(() => {
     if (verdict === true) setShown(true)
@@ -274,7 +281,7 @@ export function StarterPickerShelf(props: ConsoleHostStarterPickerZoneProps) {
     setReadAttempt((count) => count + 1)
   }
 
-  const options = useMemo(() => found.rows.map(cardOf), [found.rows])
+  const options = useMemo(() => rows.map(cardOf), [rows])
 
   const buy = async (row: SiteStarterSummary) => {
     const outcome = await purchase.buy({ listingId: row.listingId, displayName: row.displayName })
@@ -342,7 +349,7 @@ export function StarterPickerShelf(props: ConsoleHostStarterPickerZoneProps) {
           value={value}
           columns={{ xs: 1, sm: 2, md: 3 }}
           onChange={(listingId) => {
-            const row = found.rows.find((candidate) => candidate.listingId === listingId)
+            const row = rows.find((candidate) => candidate.listingId === listingId)
             if (!row) return
             setPicked(listingId)
             const override = ownedOverride(row)
