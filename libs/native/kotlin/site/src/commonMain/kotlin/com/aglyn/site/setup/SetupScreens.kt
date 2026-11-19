@@ -2,11 +2,7 @@ package com.aglyn.site.setup
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -604,7 +600,7 @@ private fun ThemeSection(context: NativePluginContext, hostId: String, host: Map
     }
   }
   ThemeLibraryCard(context, hostId, host, api, (load as? Load.Ready)?.value?.presets.orEmpty(), com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.publish"))
-  ThemeEditorCard(load, onRetry = { attempt++ }, api, canEdit)
+  ThemeEditorCard(load, onRetry = { attempt++ }, api, canEdit, context, hostId, host)
   ThemeChangesCard(load, installed = themeSelectionOf(host).kind == "installed", api, canEdit)
   FontInstallerCard(context, hostId, canEdit)
 }
@@ -816,50 +812,19 @@ private fun ThemeSwatches(colors: List<String>) {
   }
 }
 
-/** The whole font catalog as a searchable list with category chips: pick one, or the theme's own. */
 @Composable
-private fun FontPickerField(catalog: ThemeCatalog, value: String, enabled: Boolean, onValue: (String) -> Unit) {
-  var open by remember { mutableStateOf(false) }
-  OutlinedButton(onClick = { open = true }, enabled = enabled, modifier = Modifier.fillMaxWidth().testTag("font-family-field")) {
-    Icon(AglynIcons.named("text_fields"), contentDescription = null)
-    Text(
-      "Font family: " + if (value == catalog.systemFont) "The theme's own" else value,
-      Modifier.padding(start = space(1f)).weight(1f),
-      maxLines = 1,
-    )
-  }
-  if (open) {
-    var search by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("all") }
-    val fonts = filterFonts(catalog.fonts, search, category.takeIf { it != "all" })
-    ActionDialog(
-      title = "Font family",
-      confirmLabel = "Use the theme's own",
-      dismissLabel = "Close",
-      icon = "text_fields",
-      onConfirm = { onValue(catalog.systemFont); open = false },
-      onDismiss = { open = false },
-    ) {
-      com.aglyn.ui.SearchField(search, { search = it }, "Search fonts")
-      ChoiceChipRow(listOf(ChipOption("all", "All")) + FONT_CATEGORIES.map { ChipOption(it.first, it.second) }, category, { category = it })
-      Text("${fonts.size} ${if (fonts.size == 1) "font" else "fonts"}", style = MaterialTheme.typography.labelLarge)
-      LazyColumn(Modifier.heightIn(max = 320.dp).testTag("font-list")) {
-        items(fonts, key = { it.family }) { font ->
-          AglynListItem(
-            title = font.family,
-            supporting = FONT_CATEGORIES.firstOrNull { it.first == font.category }?.second ?: font.category,
-            selected = font.family == value,
-            trailing = if (font.family == value) ({ Icon(AglynIcons.named("check"), contentDescription = "Selected") }) else null,
-            modifier = Modifier.clickable { onValue(font.family); open = false }.testTag("font-${font.family}"),
-          )
-        }
-      }
-    }
-  }
-}
-
-@Composable
-private fun ThemeEditorCard(load: Load<ThemeEditorLoad>, onRetry: () -> Unit, api: HostSettingsApi, canEdit: Boolean) {
+private fun ThemeEditorCard(
+  load: Load<ThemeEditorLoad>,
+  onRetry: () -> Unit,
+  api: HostSettingsApi,
+  canEdit: Boolean,
+  context: NativePluginContext,
+  hostId: String,
+  /** The site document, for the words the font previews are drawn in. */
+  host: Map<String, Any?>,
+) {
+  val fontPicker = remember(hostId, context.api) { FontPickerApi(context.api, hostId) }
+  val fontsApi = remember(hostId, context.api) { FontsApi(context.api, hostId) }
   LoadContent(load, onRetry = onRetry, failedTitle = "Could not load the theme", modifier = Modifier.fillMaxWidth()) { (catalog, stored) ->
     // The saved theme moving under the editor keeps what was changed here and moves everything else to it (AGL-4047).
     var draft by remember { mutableStateOf(stored) }
@@ -906,7 +871,8 @@ private fun ThemeEditorCard(load: Load<ThemeEditorLoad>, onRetry: () -> Unit, ap
       }
       HorizontalDivider()
       SelectField(catalog.darkSchemeLabel, catalog.darkSchemeOptions.map { SelectOption(it.first, it.second) }, draft.darkScheme, { draft = draft.copy(darkScheme = it ?: "auto") }, enabled = canEdit)
-      FontPickerField(catalog, draft.fontFamily, canEdit) { draft = draft.copy(fontFamily = it) }
+      // The Typography card's font control (the console's `themeEditorFonts` zone, which the always-on fonts plugin fills).
+      ThemeFontsControl(fontPicker, fontsApi, siteSampleFrom(com.aglyn.core.jsonValue(host)), canEdit, draft.fonts) { draft = draft.copy(fonts = it) }
       NumberField(catalog.borderRadius, draft.borderRadius, canEdit) { draft = draft.copy(borderRadius = it) }
       NumberField(catalog.spacing, draft.spacing, canEdit) { draft = draft.copy(spacing = it) }
       NumberField(catalog.navHeightXs, draft.navHeightXs, canEdit) { draft = draft.copy(navHeightXs = it) }

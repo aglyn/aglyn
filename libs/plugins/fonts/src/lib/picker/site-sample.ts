@@ -19,42 +19,9 @@
 import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import { doc } from 'firebase/firestore'
 
-/** The words a font preview is drawn in: the site's own, where it has them. */
-export interface SiteSample {
-  /** The site's name. */
-  title: string
-  /** A headline. */
-  heading: string
-  /** A sentence of running text. */
-  paragraph: string
-}
+import { type SiteSample, siteSampleFrom } from './site-sample-text'
 
-const FALLBACK: SiteSample = {
-  title: 'Your site',
-  heading: 'A headline that sets the tone',
-  paragraph: 'Running text reads like this, sentence after sentence, on every page of your site.',
-}
-
-/** Trims a site's text to a preview's length, on a word. */
-function clip(text: string, max: number): string {
-  const clean = text.replace(/\s+/g, ' ').trim()
-  if (clean.length <= max) return clean
-  return `${clean.slice(0, max).replace(/\s+\S*$/, '')}…`
-}
-
-/** The sample for a site document as it was read. */
-export function siteSampleFrom(host: { displayName?: unknown; name?: unknown; seo?: { title?: unknown; description?: unknown } } | undefined): SiteSample {
-  const named = [host?.displayName, host?.name].find((value) => typeof value === 'string' && value.trim())
-  const name = typeof named === 'string' ? clip(named, 48) : ''
-  const title = typeof host?.seo?.title === 'string' && host.seo.title.trim() ? clip(host.seo.title, 70) : ''
-  const description =
-    typeof host?.seo?.description === 'string' && host.seo.description.trim() ? clip(host.seo.description, 160) : ''
-  return {
-    title: name || title || FALLBACK.title,
-    heading: title && title !== name ? title : name ? `Welcome to ${name}` : FALLBACK.heading,
-    paragraph: description || FALLBACK.paragraph,
-  }
-}
+export { type SiteSample, siteSampleFrom } from './site-sample-text'
 
 /**
  * The site's name, its search title and its description, as the font

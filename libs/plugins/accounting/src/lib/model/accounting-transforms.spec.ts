@@ -22,6 +22,7 @@ import {
   buildFeeDoc,
   buildFeeRefundDoc,
   buildPayoutDoc,
+  buildPayoutFeeDoc,
   buildRefundDoc,
   buildSaleDoc,
   buildSummaryDoc,
@@ -244,6 +245,52 @@ describe('refunds, fees and payouts', () => {
         mapping,
       ),
     ).toMatchObject({ externalId: 'PO-123', fromAccountId: 'clr', toAccountId: 'bank', amountCents: 9900 })
+  })
+
+  describe('Stripe’s own fees on a payout', () => {
+    // 2026-10-07 03:00 UTC is still the 6th in Chicago.
+    const payout = (stripeFeeCents?: number | null) => ({
+      orgId: 'org-1',
+      payoutId: 'po_123',
+      amountCents: 9900,
+      currency: 'usd',
+      arrivedAtMs: Date.UTC(2026, 9, 7, 3),
+      statementDescriptor: null,
+      ...(stripeFeeCents === undefined ? {} : { stripeFeeCents }),
+    })
+
+    it('expenses them out of clearing to the fee expense account, paid to Stripe, on the payout’s day', () => {
+      expect(buildPayoutFeeDoc(payout(321), mapping)).toEqual({
+        kind: 'fee',
+        externalId: 'PO-123-F',
+        date: '2026-10-06',
+        currency: 'USD',
+        memo: 'Stripe fees in payout po_123',
+        amountCents: 321,
+        expenseAccountId: 'fee',
+        bankAccountId: 'clr',
+        credit: false,
+        payeeName: 'Stripe',
+      })
+    })
+
+    it('posts fees Stripe gave back as a credit of what it gave', () => {
+      expect(buildPayoutFeeDoc(payout(-45), mapping)).toMatchObject({
+        kind: 'fee-refund',
+        externalId: 'PO-123-F',
+        amountCents: 45,
+        credit: true,
+        payeeName: 'Stripe',
+        bankAccountId: 'clr',
+        expenseAccountId: 'fee',
+      })
+    })
+
+    it('posts nothing for none, or for a payout read before its fees were', () => {
+      expect(buildPayoutFeeDoc(payout(0), mapping)).toBeNull()
+      expect(buildPayoutFeeDoc(payout(null), mapping)).toBeNull()
+      expect(buildPayoutFeeDoc(payout(), mapping)).toBeNull()
+    })
   })
 })
 
