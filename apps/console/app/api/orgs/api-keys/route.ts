@@ -24,6 +24,7 @@
 import {
   checkEntitlement,
   isOrgWideMember,
+  planLabelGrantingFeature,
   pluginRequestFromWeb,
 } from '@aglyn/aglyn/server'
 import {
@@ -109,8 +110,11 @@ async function handler(request: Request): Promise<Response> {
 
     if (!checkEntitlement(org, 'apiAccess')) {
       return Response.json(
-        // Pro since pricing v4 (AGL-4126), Business before it.
-        { error: 'API access requires the Pro plan or above' },
+        // Read off the plan table (AGL-4226): Starter since then, Pro from
+        // pricing v4 (AGL-4126), Business before it.
+        {
+          error: `API access requires the ${planLabelGrantingFeature('apiAccess') ?? 'Starter'} plan or above`,
+        },
         { status: 403 },
       )
     }

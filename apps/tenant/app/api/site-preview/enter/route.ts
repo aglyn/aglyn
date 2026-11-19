@@ -57,10 +57,44 @@ export const dynamic = 'force-dynamic'
  *   site plants nothing; the browser still lands on the page, where it is
  *   answered as the public is.
  * - A request on a host that resolves to no site plants nothing.
+ * - `?tenantHost=` (and the middleware's `aglyn-tenant-host` cookie) names
+ *   the site only on a shared origin, the local tenant and Aglyn's Vercel
+ *   deployments, where the console's local and preview links land; there the
+ *   302 keeps naming it. On a site's own address it is ignored.
  *
  * The cookie is worthless anywhere else: bound to the site, 12 hours, and
  * verified on every request by the preview route.
  */
+
+/**
+ * The override a shared origin names its site with, as the middleware reads
+ * it: the console's local and preview links (`siteLiveUrlForSlug`) put the
+ * site in `?tenantHost=`, and the middleware keeps it in this cookie for the
+ * next navigation. `/api` is outside the middleware, so this route reads them
+ * itself.
+ */
+const TENANT_HOST_PARAM = 'tenantHost'
+const TENANT_HOST_COOKIE = 'aglyn-tenant-host'
+
+/**
+ * The origins that serve every site and name one by the override, exactly
+ * where the middleware honours it: the local tenant (`localhost`, outside
+ * production) and Aglyn's own Vercel deployments (`*.vercel.app`). A site's
+ * own address never does, so a production link cannot be pointed elsewhere.
+ */
+function isSharedOrigin(hostname: string): boolean {
+  if (process.env.NODE_ENV !== 'production' && hostname === 'localhost') return true
+  return Boolean(process.env.VERCEL) && hostname.endsWith('.vercel.app')
+}
+
+/** One cookie's value from the request's `Cookie` header. */
+function cookieValue(request: Request, name: string): string | null {
+  for (const part of (request.headers.get('cookie') ?? '').split(';')) {
+    const [key, ...rest] = part.trim().split('=')
+    if (key === name) return decodeURIComponent(rest.join('='))
+  }
+  return null
+}
 
 /** The tenant host a request's hostname names, as the middleware spells it. */
 function tenantHostFor(hostname: string): string | null {
@@ -79,7 +113,20 @@ function tenantHostFor(hostname: string): string | null {
 
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url)
-  const destination = sitePreviewReturnPath(url.searchParams.get('return'))
+  const hostname = (request.headers.get('host') ?? '')
+    .split(':')[0]
+    .toLowerCase()
+  // On a shared origin the site is the one the link names, and the page it
+  // lands on has to name it too, or the middleware would serve its default.
+  const named = isSharedOrigin(hostname)
+    ? url.searchParams.get(TENANT_HOST_PARAM) || cookieValue(request, TENANT_HOST_COOKIE)
+    : null
+  let destination = sitePreviewReturnPath(url.searchParams.get('return'))
+  if (named && url.searchParams.get(TENANT_HOST_PARAM)) {
+    const landing = new URL(destination, 'http://landing.invalid')
+    landing.searchParams.set(TENANT_HOST_PARAM, named)
+    destination = `${landing.pathname}${landing.search}${landing.hash}`
+  }
   const headers = new Headers({
     Location: destination,
     'Cache-Control': 'no-store',
@@ -88,10 +135,7 @@ export async function GET(request: Request): Promise<Response> {
     'Referrer-Policy': 'no-referrer',
   })
 
-  const hostname = (request.headers.get('host') ?? '')
-    .split(':')[0]
-    .toLowerCase()
-  const tenantHost = tenantHostFor(hostname)
+  const tenantHost = named || tenantHostFor(hostname)
   const blob = url.searchParams.get('blob')
   if (tenantHost && blob) {
     try {

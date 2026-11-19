@@ -464,6 +464,28 @@ describe('password-reset goes red', () => {
       ok: false,
       code: 'redeem-unreachable',
     })
+    // Silence is asked twice before it counts, so this is two silences.
+    expect(
+      mockRequestedMethods.filter((method) => method === 'accounts:resetPassword'),
+    ).toHaveLength(2)
+  })
+
+  // One call that got no answer is not a shut door: the 17:07Z red on
+  // 2026-11-17 was a single timed-out ask while Identity Platform answered
+  // every ResetPassword that minute in under a second.
+  it('but stays green when only the first ask gets no answer', async () => {
+    const healthy = mockToolkitReplies['accounts:resetPassword']
+    const replies = [undefined, healthy]
+    Object.defineProperty(mockToolkitReplies, 'accounts:resetPassword', {
+      get: () => (replies.length > 1 ? replies.shift() : replies[0]),
+      enumerable: true,
+    })
+    const { status, body } = await invoke()
+    expect(status).toBe(200)
+    expect(doorOf(body, 'passwordReset')).toMatchObject({ ok: true })
+    expect(
+      mockRequestedMethods.filter((method) => method === 'accounts:resetPassword'),
+    ).toHaveLength(2)
   })
 
   // The recovery route logs and answers 200 rather than confirming an address

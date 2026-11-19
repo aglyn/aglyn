@@ -381,11 +381,12 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
     ],
   },
   'libs/plugins/commerce/src/lib/server/membership.ts': {
-    note: 'Signed member session for a site that sells memberships.',
+    note:
+      'Signed member session for a site that sells memberships; the name is built in sign-in-hint-cookie.ts.',
     cookies: [
       {
         name: 'aglyn_member_{siteId}',
-        token: 'aglyn_member_',
+        token: 'memberSessionCookieName',
         surface: 'customer sites with memberships',
         purpose: 'Keeps you signed in as a member of that site',
         duration: '30 days',

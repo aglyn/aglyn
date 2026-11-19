@@ -310,8 +310,8 @@ struct WorkspacePickerList: View {
   }
 }
 
-/// The site step: search, Recent (sites opened lately), every site A to Z, the whole workspace, View all sites and
-/// Create site.
+/// The site step: search, Pinned (the sites the person pinned here, in the order pinned, as the console's site switcher
+/// lists them first), Recent (sites opened lately), every site A to Z, the whole workspace, View all sites and Create site.
 struct SitePickerList: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
@@ -328,9 +328,11 @@ struct SitePickerList: View {
   }
 
   private func content(_ workspace: WorkspaceStore) -> some View {
-    let recentIDs = recentSiteIDs(workspace)
+    let pinnedIDs = model.pinnedSiteIDs(in: workspace)
+    let pinned = pinnedIDs.compactMap { id in workspace.sites.first { $0.id == id } }
+    let recentIDs = recentSiteIDs(workspace).filter { !pinnedIDs.contains($0) }
     let recent = recentIDs.compactMap { id in workspace.sites.first { $0.id == id } }
-    let others = workspace.sites.filter { !recentIDs.contains($0.id) }
+    let others = workspace.sites.filter { !recentIDs.contains($0.id) && !pinnedIDs.contains($0.id) }
     let text = query.trimmingCharacters(in: .whitespaces)
     let matches = text.isEmpty
       ? nil
@@ -345,9 +347,10 @@ struct SitePickerList: View {
         if workspace.ready && workspace.sites.isEmpty {
           Text("This workspace has no \(siteNoun.lowercased())s you can open.").foregroundStyle(.secondary)
         }
+        if !pinned.isEmpty { Section("Pinned") { ForEach(pinned) { row($0) } } }
         if !recent.isEmpty { Section("Recent") { ForEach(recent) { row($0) } } }
         if !others.isEmpty {
-          Section(recent.isEmpty ? "\(siteNoun)s" : "All \(siteNoun.lowercased())s") {
+          Section(recent.isEmpty && pinned.isEmpty ? "\(siteNoun)s" : "All \(siteNoun.lowercased())s") {
             ForEach(Array(others.prefix(shown))) { row($0) }
             if others.count > shown {
               AglynLoadMoreRow("Show more") { shown += pickerPage }
@@ -393,6 +396,10 @@ struct SitePickerList: View {
         site.name, subtitle: site.shownAddress, systemImage: "globe",
         imageURL: model.mediaURL(site.favicon, hostID: site.id)
       ) {
+        if model.pinnedSiteIDs(in: model.workspace).contains(site.id) {
+          Image(systemName: "pin.fill").font(AglynFont.caption).foregroundStyle(AglynColor.secondaryText)
+            .accessibilityLabel("Pinned")
+        }
         if site.id == model.scopedSite(navigation)?.id {
           Image(systemName: "checkmark").foregroundStyle(AglynColor.tint).fontWeight(.semibold).accessibilityHidden(true)
         }
@@ -407,6 +414,12 @@ struct SitePickerList: View {
 }
 
 extension AppModel {
+  /// The sites the person pinned in this workspace, in the order pinned (`users/{uid}.pinnedHosts`, AGL-4005).
+  func pinnedSiteIDs(in workspace: WorkspaceStore?) -> [String] {
+    guard let orgID = workspace?.org?.id else { return [] }
+    return preferences?.pinnedHosts(in: orgID) ?? []
+  }
+
   /// The sites opened most lately, newest first: the one open, then the account's recents (`recents` with a site).
   func recentSiteIDs(in workspace: WorkspaceStore, limit: Int = 3) -> [String] {
     var seen = Set<String>()

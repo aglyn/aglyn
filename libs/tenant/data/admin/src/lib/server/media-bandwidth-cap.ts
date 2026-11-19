@@ -28,6 +28,11 @@ import {
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from './firebase-admin'
 import { notifyHostManagers } from './notifications'
+import { engageBandwidthCap } from './bandwidth-cap-engage'
+import {
+  bandwidthGraceOwnerNotice,
+  bandwidthPausedOwnerNotice,
+} from '@aglyn/aglyn/app-utils/bandwidth-cap'
 
 /**
  * The Free cap, engaged by the media CDN (AGL-3474).
@@ -137,6 +142,12 @@ function monthRolloverLabel(month: string): string {
 export async function engageMediaBandwidthCap(
   orgId: string,
   now: Date = new Date(),
+  /**
+   * The site the delivery served, when the scope names one: seeded into the
+   * org's site list so a legacy site with no `orgId` field still gets the
+   * one-time grace rather than pausing at once (AGL-4232).
+   */
+  hostId: string | null = null,
 ): Promise<boolean> {
   const month = bandwidthCapMonthKey(now)
   if (!orgId || engagedOrgs.get(orgId) === month) return false
@@ -182,51 +193,52 @@ export async function engageMediaBandwidthCap(
     ) {
       return false
     }
-    // Stamped inside a transaction that re-reads the marker, so two instances
-    // crossing the band together stamp it, and tell the owner, once.
-    const stamped = await firestore.runTransaction(async (transaction) => {
-      const current = await transaction.get(orgRef)
-      if (current.get('bandwidthCap')?.month === month) return false
-      // `merge: true`: one field on a document that carries the plan, the
-      // subscription and the sites. A set without it would delete the org.
-      transaction.set(
-        orgRef,
-        {
-          bandwidthCap: {
-            month,
-            engagedAt: now.getTime(),
-            pageViews: Math.round(reading.meteredPageViews),
-            includedPageViews: Math.round(
-              pageViewsFromBandwidthGb(includedBandwidthGb),
-            ),
-          },
-        },
-        { merge: true },
-      )
-      return true
+    // The workspace's sites, the delivering one seeded in (AGL-4232).
+    const siteRefs = [
+      ...hosts.docs.map((host) => host.ref),
+      ...(hostId ? [firestore.collection('hosts').doc(hostId)] : []),
+    ]
+    const siteIds = [...new Set(siteRefs.map((ref) => ref.id))]
+    // The one engage write (AGL-4232): a transaction that re-reads the marker
+    // and the grace stamps, so two instances crossing the band together stamp
+    // it, grant the one-time grace and tell the owner, once.
+    const engaged = await engageBandwidthCap({
+      firestore,
+      orgRef,
+      hostRefs: siteRefs,
+      month,
+      nowMs: now.getTime(),
+      pageViews: reading.meteredPageViews,
+      includedPageViews: pageViewsFromBandwidthGb(includedBandwidthGb),
     })
     rememberEngaged(orgId, month)
-    if (!stamped) return false
+    if (!engaged.stamped) return false
     const included = includedBandwidthGb.toLocaleString('en-US', {
       maximumFractionDigits: 2,
     })
+    const used =
+      `the ${included} GB of traffic its plan includes (video, audio and ` +
+      `files from your media library count ${ORIGIN_MEDIA_BANDWIDTH_WEIGHT}× toward it)`
     // Every site's managers, because the cap pauses every site in the org.
-    // `{site}` is filled by `notifyHostManagers` from the host it reads.
+    // `{site}` is filled by `notifyHostManagers` from the host it reads. A
+    // grace carried into a new month is this month's news, so it is said too.
+    const notice =
+      engaged.graceUntil !== null
+        ? bandwidthGraceOwnerNotice({
+            graceUntil: engaged.graceUntil,
+            used,
+            month,
+            resumesOn: monthRolloverLabel(month),
+            carried: !engaged.graceIsNew,
+          })
+        : bandwidthPausedOwnerNotice({ used, resumesOn: monthRolloverLabel(month) })
     await Promise.all(
-      hosts.docs.map((host) =>
-        notifyHostManagers(host.id, {
+      siteIds.map((id) =>
+        notifyHostManagers(id, {
           type: 'system.bandwidthCapEngaged',
-          title: '{site} paused — monthly traffic limit reached',
-          body:
-            `{site} has used the ${included} GB of traffic its plan includes ` +
-            'this month. Video, audio and files served from your media library ' +
-            `count ${ORIGIN_MEDIA_BANDWIDTH_WEIGHT}× toward it, as well as page ` +
-            'views, so visitors see a temporary notice instead of its pages, ' +
-            'and its video and files do not load, ' +
-            `until ${monthRolloverLabel(month)}. Nothing is charged for the ` +
-            'extra traffic. The site comes back on its own then, or as soon as ' +
-            'you upgrade in Billing.',
-          link: `/${host.id}`,
+          title: notice.title,
+          body: notice.body,
+          link: `/${id}`,
         }),
       ),
     )

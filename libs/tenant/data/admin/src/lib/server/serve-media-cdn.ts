@@ -1172,7 +1172,11 @@ async function mediaCdnBandwidthEvaluation(
   const verdict = await mediaCdnScopeVerdict(scope)
   if (!verdict.capApplies || verdict.bandwidthPaused || !verdict.orgId) return
   if (!mediaBandwidthEvaluationDue(verdict.orgId, bytes)) return
-  await engageMediaBandwidthCap(verdict.orgId)
+  await engageMediaBandwidthCap(
+    verdict.orgId,
+    new Date(),
+    scope.isOrg ? (scope.contextHostId ?? null) : scope.scopeId,
+  )
 }
 
 /**
@@ -1740,7 +1744,7 @@ export async function serveMediaCdn(
     ) {
       res.setHeader('Cache-Control', 'no-store')
       res.setHeader('Retry-After', String(BANDWIDTH_CAP_RETRY_AFTER_SECONDS))
-      res.status(503).json({ error: 'Over the monthly traffic limit' })
+      res.status(503).json({ error: 'Temporarily unavailable' })
       return
     }
     /*
