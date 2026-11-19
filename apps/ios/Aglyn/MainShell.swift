@@ -485,7 +485,13 @@ struct ShellFrame<Content: View>: View {
   @State private var shownSite = WorkspaceStore.ShownSiteWatch()
 
   var body: some View {
-    content()
+    // The Terms moved (or there is no record): asked above every screen, never a wall (AGL-2316). Stacked above the
+    // shell rather than inset into it: a phone's own top bar (workspace, search, bell) ignores an inset and was drawn
+    // under the banner's words.
+    VStack(spacing: 0) {
+      LegalReacceptanceBanner()
+      content()
+    }
       .sheet(item: $navigation.picker) { picker in
         ScopePickerSheet(start: picker, twoStep: compact).environment(model).environment(navigation)
       }
