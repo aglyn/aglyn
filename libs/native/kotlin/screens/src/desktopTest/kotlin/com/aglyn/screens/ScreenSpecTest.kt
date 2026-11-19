@@ -108,7 +108,7 @@ class ScreenSpecTest {
     }
     val ids = specs.map { it.id }
     assertEquals(ids.size, ids.toSet().size, "duplicate screen ids")
-    val known = setOf("fields", "meters", "list", "form", "actions", "links", "notice", "zone", "image", "html")
+    val known = setOf("fields", "meters", "list", "form", "actions", "links", "notice", "zone", "image", "html", "qr")
     // Screens a plugin draws by hand rather than from a spec, which a spec may still open.
     val handWritten = setOf("commerce.orders", "commerce.order", "commerce.quotes", "commerce.quote", "commerce.products", "commerce.product", "commerce.sales", "marketplace.listing", "marketplace.sell", "site.pages")
     for (spec in specs) {
