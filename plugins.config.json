@@ -2986,6 +2986,7 @@
             "ai.assist-panel",
             "ai.insight-ask",
             "ai.org-insight-ask",
+            "ai.explain-funnel",
             "ai.crm-record"
           ],
           "quickActions": [
