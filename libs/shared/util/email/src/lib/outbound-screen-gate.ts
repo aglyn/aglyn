@@ -68,6 +68,12 @@ export interface SendingWorkspace {
    * See `transactional-send-ceiling.ts`.
    */
   transactionalEmailsPerDay?: number | null
+  /**
+   * The organization's HARD monthly email cap (AGL-4227) — Free's — resolved
+   * the same way from the same org document. `Infinity`, absent or `null`
+   * means none.
+   */
+  emailsPerMonth?: number | null
 }
 
 export interface OutboundScreenGateRequest {

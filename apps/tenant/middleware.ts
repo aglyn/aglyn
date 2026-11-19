@@ -62,6 +62,12 @@ import { withVisitorQuery } from '@aglyn/aglyn/app-utils/redirect-query'
 import { nativeAppAssociationRoute } from '@aglyn/aglyn/app-utils/native-app-association'
 // Deep import for the same reason: a leaf with no imports of its own.
 import { boundedAwait } from '@aglyn/shared-util-http/bounded-await'
+// Deep import for the same reason: the sign-in hint's names and its repair
+// (AGL-4231), a module with no imports of its own.
+import {
+  SIGNED_IN_HINT_MAX_AGE_SECONDS,
+  signedInHintCorrections,
+} from '@aglyn/aglyn/app-utils/sign-in-hint-cookie'
 import { resolveSchemeRouteSegment } from '@aglyn/shared-ui-theme/util/scheme-route-segment'
 // Deep import for the same reason: the declared video hosts' player origins,
 // compiled data with no plugin behind it, which `frame-src` must admit.
@@ -1800,6 +1806,25 @@ export const middleware: NextMiddleware = async (req, event) => {
   const overrideParam = req.nextUrl.searchParams.get(TENANT_HOST_PARAM)
   if (overrideParam) {
     response.cookies.set(TENANT_HOST_COOKIE, overrideParam, { path: '/' })
+  }
+  // "Show to" signed-in or signed-out visitors (AGL-4231): the page decides
+  // from a readable hint cookie before its first paint. A member who signed
+  // in before the hint existed, or whose hint went missing, would see "Sign
+  // in" everywhere; a hint that outlived its session would show "Account".
+  // Kept in step with the session cookie here, ahead of the page cache, on
+  // the response the page arrives in, so the page's script already reads the
+  // corrected value. Nothing to do for a request with neither cookie.
+  const hint = signedInHintCorrections(req.cookies.getAll())
+  const hintOptions = {
+    path: '/',
+    sameSite: 'lax' as const,
+    secure: req.nextUrl.protocol === 'https:',
+  }
+  for (const name of hint.set) {
+    response.cookies.set(name, '1', { ...hintOptions, maxAge: SIGNED_IN_HINT_MAX_AGE_SECONDS })
+  }
+  for (const name of hint.clear) {
+    response.cookies.set(name, '', { ...hintOptions, maxAge: 0 })
   }
   return response
 }

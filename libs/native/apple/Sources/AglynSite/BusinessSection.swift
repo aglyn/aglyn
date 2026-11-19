@@ -32,12 +32,12 @@ func businessOriginLine(_ field: String, stored: [String: Any]?, resolved: Resol
   return fallback
 }
 
-/// The form's text for what is stored: the services one per line, a missing value empty.
+/// The form's text for what is stored: the services one per line, a missing value empty. No area served: a site's is
+/// SEO → Local business's Areas served (AGL-4136).
 func businessProfileForm(_ stored: [String: Any]?) -> [String: String] {
   [
     "whatYouDo": stored?["whatYouDo"] as? String ?? "",
     "services": (stored?["services"] as? [String] ?? []).joined(separator: "\n"),
-    "serviceArea": stored?["serviceArea"] as? String ?? "",
     "audience": stored?["audience"] as? String ?? "",
     "tone": stored?["tone"] as? String ?? "",
     "toneNotes": stored?["toneNotes"] as? String ?? "",
@@ -45,12 +45,13 @@ func businessProfileForm(_ stored: [String: Any]?) -> [String: String] {
   ]
 }
 
-/// What the owner's save carries: every field the form shows, as typed; the owner's write sanitizes it.
+/// What the owner's save carries: every field the form shows, as typed; the owner's write sanitizes it. A site's area
+/// served is not one of them: it is SEO → Local business's Areas served (AGL-4136).
 func businessProfileSaveValues(_ fields: [String: String]) -> [String: Any] {
   let tone = fields["tone"] ?? ""
   return [
     "whatYouDo": fields["whatYouDo"] ?? "", "services": (fields["services"] ?? "").components(separatedBy: "\n"),
-    "serviceArea": fields["serviceArea"] ?? "", "audience": fields["audience"] ?? "", "toneNotes": fields["toneNotes"] ?? "",
+    "audience": fields["audience"] ?? "", "toneNotes": fields["toneNotes"] ?? "",
     "founded": fields["founded"] ?? "",
     "tone": ContractValues.shared.businessToneOrder.contains(tone) ? tone : NSNull(),
   ]
@@ -59,14 +60,15 @@ func businessProfileSaveValues(_ fields: [String: String]) -> [String: Any] {
 /// Why the year founded the form holds cannot be saved, in the console's words (AGL-4102), or nil when it can.
 func businessFoundedError(_ fields: [String: String]) -> String? { businessProfileFoundedProblem(fields["founded"] ?? "") }
 
-/// A site's business profile (AGL-3661): the services, audience, area and tone that have no other home, and that every AI job for
-/// the site reads. The save is the OWNER's write, so every field they changed becomes theirs and a field they left as it was keeps
-/// the source it had. Beside it, the facts read from the site's own settings, each with a link to the card that edits it. The
-/// Kotlin site lib's BusinessSection.kt.
+/// Setup → Business profile (AGL-3661, AGL-4136): first the Business details, the one place the site's name and how to
+/// reach it are entered; then the business profile, the services, audience and tone every AI job for the site reads. That
+/// save is the OWNER's write, so every field they changed becomes theirs and a field they left as it was keeps the source
+/// it had. The Kotlin site lib's BusinessSection.kt.
 struct BusinessSection: View {
   let context: NativePluginContext
   let hostID: String
   let host: [String: Any]
+  let api: HostSettingsAPI
   let canEdit: Bool
   @State private var profile = ObservedDocument()
   @State private var workspace = ObservedDocument()
@@ -86,9 +88,11 @@ struct BusinessSection: View {
   var body: some View {
     let maxChars = contracts.businessProfileMaxChars
     let foundedError = businessFoundedError(fields)
+    BusinessDetailsCard(host: host, api: api, canEdit: canEdit, draft: FormDraft.forSite(hostID))
     AglynFormCard(
       "Business profile",
-      message: "What this business does and how it speaks. Aglyn AI reads it on every job for this site, and never replaces what you write here.",
+      message:
+        "What this business does and how it speaks. Aglyn AI reads it on every job for this site, and never replaces what you write here. The area you serve is in SEO → Local business.",
       dirty: fields != seeded, canSave: canEdit && profile.ready && !profile.failed && foundedError == nil, busy: runner.busy, error: runner.error, notice: runner.notice,
       onDiscard: {
         fields = seeded
@@ -106,9 +110,6 @@ struct BusinessSection: View {
       AglynCountedField(
         "Who it is for", text: binding("audience"), max: Int(maxChars["audience"] ?? 160), multiline: true,
         supporting: line("audience", "The customers you want more of"), placeholder: "Dog owners who work long hours", enabled: canEdit)
-      AglynCountedField(
-        "Area served", text: binding("serviceArea"), max: Int(maxChars["serviceArea"] ?? 120),
-        supporting: line("serviceArea", "Cities, regions or “online”"), placeholder: "North Austin, Round Rock and Cedar Park", enabled: canEdit)
       Picker("Tone of voice", selection: binding("tone")) {
         Text("Not set").tag("")
         ForEach(contracts.businessToneOrder, id: \.self) { Text(contracts.businessToneLabels[$0] ?? $0).tag($0) }
@@ -126,22 +127,21 @@ struct BusinessSection: View {
     }
     // Its own document, so its own hold: Save waits while the profile is only the device cache's copy (AGL-4047).
     .environment(\.aglynFormChecking, profile.ready && profile.fromCache ? formHold("business profile") : nil)
-    facts
-      .task(id: hostID) {
-        profile.start(context.firestore, path)
-        if let orgID = context.orgID {
-          workspace.start(context.firestore, ["orgs", orgID, contracts.businessProfileSubcollection, contracts.businessProfileWorkspaceDoc])
-        }
+    .task(id: hostID) {
+      profile.start(context.firestore, path)
+      if let orgID = context.orgID {
+        workspace.start(context.firestore, ["orgs", orgID, contracts.businessProfileSubcollection, contracts.businessProfileWorkspaceDoc])
       }
-      .onChange(of: businessProfileForm(stored), initial: true) { _, next in
-        // A newer copy keeps what was typed and moves every other field to it (AGL-4047).
-        fields = fields.isEmpty ? next : rebased(fields, previous: seeded, next: next)
-        seeded = next
-      }
-      .onDisappear {
-        profile.stop()
-        workspace.stop()
-      }
+    }
+    .onChange(of: businessProfileForm(stored), initial: true) { _, next in
+      // A newer copy keeps what was typed and moves every other field to it (AGL-4047).
+      fields = fields.isEmpty ? next : rebased(fields, previous: seeded, next: next)
+      seeded = next
+    }
+    .onDisappear {
+      profile.stop()
+      workspace.stop()
+    }
     // The `hostBusinessProfile` zone: what a plugin adds to the profile (what Aglyn AI learned from the site's edits).
     SlotCards(context: context, slot: "hostBusinessProfile")
   }
@@ -162,32 +162,5 @@ struct BusinessSection: View {
       next["sources"] = sources
       try await context.writer.merge(path, next)
     }
-  }
-
-  private var facts: some View {
-    let profile = resolved
-    let rows: [(label: String, value: String?, section: SetupSection)] = [
-      ("Business name", profile.name?.value, .seo), ("Business type", profile.businessType, .seo), ("Email", profile.contact.email, .details),
-      ("Phone", profile.contact.phone, .seo), ("Address", profile.contact.address, .details), ("Opening hours", profile.contact.hours, .seo),
-      ("Social profiles", profile.profiles.isEmpty ? nil : profile.profiles.joined(separator: "\n"), .details),
-    ]
-    return Section {
-      ForEach(rows, id: \.label) { row in
-        HStack {
-          VStack(alignment: .leading, spacing: 2) {
-            Text(row.label).font(AglynFont.caption).foregroundStyle(.secondary)
-            if let value = row.value { Text(value).font(AglynFont.body) } else { StatusChip("Not entered") }
-          }
-          Spacer()
-          Button(row.value != nil ? "Edit" : "Add") { context.navigate(siteSetupScreen, ["section": row.section.rawValue]) }
-            .buttonStyle(.borderless)
-        }
-      }
-    } header: {
-      Text("From your site settings")
-    } footer: {
-      Text("Aglyn AI uses these exactly as entered. It never makes up a name, an email, a phone number, an address or opening hours.")
-    }
-    .accessibilityIdentifier("business-facts")
   }
 }

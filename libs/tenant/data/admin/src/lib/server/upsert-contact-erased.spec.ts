@@ -120,6 +120,15 @@ jest.mock('./firebase-admin', () => ({
 }))
 
 jest.mock('./crm-records', () => ({
+  // The capture rule both doors share (AGL-4227), over this file's own count:
+  // the band's records (leads are `crm-records-capture.spec.ts`'s).
+  capturePeopleCount: async (_org: unknown, orgRef: any, contacts: any) =>
+    (await (jest.requireMock('./crm-records') as any).countCrmRecords(orgRef, contacts)).crmRecordsCount,
+  captureAdmitsPerson: async (org: unknown, orgRef: any, contacts: any) =>
+    (jest.requireMock('@aglyn/aglyn/server') as any).checkCrmRecordsQuota(
+      org,
+      (await (jest.requireMock('./crm-records') as any).countCrmRecords(orgRef, contacts)).crmRecordsCount,
+    ).allowed,
   // The list-fields restamp (AGL-3321) is `crm-records`' own; a no-op here.
   restampCrmListFieldsAt: async () => 'current',
   countCrmRecords: async (_orgRef: unknown, contacts: any) => {

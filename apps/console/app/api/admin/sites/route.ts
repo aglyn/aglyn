@@ -37,6 +37,7 @@ import {
   settleLapsedSuspensions,
   suspensionInForce,
 } from '../../../../utils/server/suspended-flag'
+import { readUsageLevel, USAGE_LEVEL_FIELD } from '@aglyn/aglyn/app-utils/usage-level'
 
 /**
  * The staff Sites list (AGL-3378): every site on the platform, one page at a
@@ -181,6 +182,8 @@ async function handler(request: Request): Promise<Response> {
         // the Suspended filter queries is settled against it.
         suspended: suspensionInForce(docSnap.get('suspendedAt'), docSnap.get('suspendedUntilMs')),
         maintenance: Boolean(docSnap.get('maintenance')),
+        // The staff usage level (AGL-4228); the Usage level column shows and sets it.
+        usageLevel: readUsageLevel(docSnap.get(USAGE_LEVEL_FIELD)),
         createdAt: ts(docSnap.get('createdAt')),
         updatedAt: ts(docSnap.get('updatedAt')),
       }
