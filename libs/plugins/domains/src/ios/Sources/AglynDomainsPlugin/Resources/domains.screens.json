@@ -1,5 +1,5 @@
 {
-  "$comment": "The workspace's Domains page natively (the domains plugin's orgNavItems /domains, AGL-4040; gap sweep Domains row 9, piece 1): every domain the workspace holds, with its site, status, renewal and price at renewal, and a page per name. Route: /api/registrar/workspace (DOMAINS_API_ROUTES.workspace); site names from the person's users/{uid}/hostMemberships rows. Buying, transfers in and out, renewal and connect actions, the registrant contact and DNS records are later pieces (Domains rows 1-8).",
+  "$comment": "The workspace's Domains page natively (the domains plugin's orgNavItems /domains, AGL-4040; gap sweep Domains row 9, piece 1): every domain the workspace holds, with its site, status, renewal and price at renewal, and a page per name. Route: /api/registrar/workspace (DOMAINS_API_ROUTES.workspace); site names from the person's users/{uid}/hostMemberships rows. Connect to a site, Move to another site and Disconnect (/api/registrar/connect and /disconnect, Domains row 3) are here; buying, transfers in and out, renewal, the registrant contact and DNS records are later pieces (Domains rows 1-8).",
   "screens": [
     {
       "id": "domains.list",
@@ -325,6 +325,88 @@
               "label": "Registrant email",
               "value": "{item.registrantEmail}",
               "when": "item.registrantEmail"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "connect",
+          "when": "data.ws.rows[domain=params.domain].status == active",
+          "items": [
+            {
+              "id": "connect",
+              "label": "Connect to a site",
+              "icon": "link|link",
+              "when": "!data.ws.rows[domain=params.domain].connected",
+              "prompt": [
+                {
+                  "key": "siteId",
+                  "label": "Site",
+                  "kind": "select",
+                  "required": true,
+                  "options": [],
+                  "optionsFrom": {
+                    "items": "data.sites.items",
+                    "value": "{item.$id}",
+                    "label": "{item.displayName|'A site'}"
+                  },
+                  "help": "{params.domain} will serve the site you pick, with its security certificate set up for you. It usually takes a few minutes. If that site uses another domain now, this one replaces it: the other stops serving the site and stays registered wherever it is registered now."
+                }
+              ],
+              "url": "/api/registrar/connect",
+              "body": {
+                "orgId": "{org.id}",
+                "domain": "{params.domain}",
+                "siteId": "{form.siteId}"
+              },
+              "success": "{params.domain} is connecting to {data.sites.items[$id=form.siteId].displayName|'the site'}",
+              "reload": true
+            },
+            {
+              "id": "move",
+              "label": "Move to another site",
+              "icon": "arrow.right.arrow.left|swap_horiz",
+              "when": "data.ws.rows[domain=params.domain].connected",
+              "prompt": [
+                {
+                  "key": "siteId",
+                  "label": "Site",
+                  "kind": "select",
+                  "required": true,
+                  "options": [],
+                  "optionsFrom": {
+                    "items": "data.sites.items[?item.$id != @data.ws.rows[domain=params.domain].hostId]",
+                    "value": "{item.$id}",
+                    "label": "{item.displayName|'A site'}"
+                  },
+                  "help": "{params.domain} stops serving the site it is connected to now. If the site you pick uses another domain now, this one replaces it: the other stops serving that site and stays registered wherever it is registered now."
+                }
+              ],
+              "url": "/api/registrar/connect",
+              "body": {
+                "orgId": "{org.id}",
+                "domain": "{params.domain}",
+                "siteId": "{form.siteId}"
+              },
+              "success": "{params.domain} is connecting to {data.sites.items[$id=form.siteId].displayName|'the site'}",
+              "reload": true
+            },
+            {
+              "id": "disconnect",
+              "label": "Disconnect",
+              "icon": "link.badge.minus|link_off",
+              "destructive": true,
+              "when": "data.ws.rows[domain=params.domain].connected",
+              "confirm": "Disconnect {params.domain}?",
+              "url": "/api/registrar/disconnect",
+              "body": {
+                "orgId": "{org.id}",
+                "domain": "{params.domain}"
+              },
+              "success": "{params.domain} is disconnected",
+              "reload": true,
+              "confirmMessage": "{data.sites.items[$id=data.ws.rows[domain=params.domain].hostId].displayName|'The site'} goes back to its free address. {params.domain} stays in your workspace, registered to you, and can be connected again at any time.",
+              "confirmLabel": "Disconnect"
             }
           ]
         }

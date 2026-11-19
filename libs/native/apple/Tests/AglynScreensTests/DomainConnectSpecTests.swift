@@ -1,0 +1,79 @@
+// Copyright 2026 Aglyn LLC
+// SPDX-License-Identifier: Apache-2.0
+
+import AglynCore
+import XCTest
+
+@testable import AglynScreens
+
+/// A domain's page on the workspace Domains page connects the name to a site, moves it to another, or disconnects it, as
+/// the console's bought-domain panel does (gap sweep Domains row 3): `/api/registrar/connect` with the picked site and
+/// `/api/registrar/disconnect`, only while the name is active.
+final class DomainConnectSpecTests: XCTestCase {
+  private static let domainSpecs = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+    .appendingPathComponent("../../../../plugins/domains/src/ios/Sources/AglynDomainsPlugin/Resources/domains.screens.json")
+    .standardizedFileURL
+
+  private func block() throws -> BlockSpec {
+    let spec = try XCTUnwrap(ScreenCatalog.parse(Data(contentsOf: Self.domainSpecs)).first { $0.id == "domains.domain" })
+    return try XCTUnwrap(spec.blocks.first { $0.id == "connect" })
+  }
+
+  private func actions() throws -> [ActionSpec] { try block()["items"].array.compactMap(ActionSpec.init) }
+
+  private func context(connected: Bool, status: String = "active") throws -> JSONValue {
+    try XCTUnwrap(
+      JSONValue.decode(
+        Data(
+          """
+          {"org":{"id":"o1"},"params":{"domain":"bakery.example"},"form":{"siteId":"h2"},
+           "data":{"ws":{"rows":[{"domain":"bakery.example","status":"\(status)","connected":\(connected),"hostId":"h1"}]},
+                   "sites":{"items":[{"$id":"h1","displayName":"Bakery"},{"$id":"h2","displayName":"Catering"}]}}}
+          """.utf8)))
+  }
+
+  private func shown(_ id: String, in context: JSONValue) throws -> Bool {
+    let action = try XCTUnwrap(try actions().first { $0.id == id })
+    return ScreenValues.condition(try block().when, in: context) && ScreenValues.condition(action.when, in: context)
+  }
+
+  func testANameOnNoSiteOffersConnectToEverySite() throws {
+    let ctx = try context(connected: false)
+    XCTAssertTrue(try shown("connect", in: ctx))
+    XCTAssertFalse(try shown("move", in: ctx))
+    XCTAssertFalse(try shown("disconnect", in: ctx))
+    let connect = try XCTUnwrap(try actions().first { $0.id == "connect" })
+    XCTAssertEqual(connect.prompt.first?.choices(in: ctx).map(\.value), ["h1", "h2"])
+    XCTAssertEqual(connect.prompt.first?.choices(in: ctx).map(\.label), ["Bakery", "Catering"])
+    XCTAssertEqual(connect.url, "/api/registrar/connect")
+    XCTAssertEqual(
+      ScreenValues.resolveBody(try XCTUnwrap(connect.body), in: ctx),
+      ["orgId": "o1", "domain": "bakery.example", "siteId": "h2"])
+    XCTAssertEqual(ScreenValues.render(try XCTUnwrap(connect.success), in: ctx), "bakery.example is connecting to Catering")
+  }
+
+  func testAConnectedNameMovesToAnotherSiteOrDisconnects() throws {
+    let ctx = try context(connected: true)
+    XCTAssertFalse(try shown("connect", in: ctx))
+    XCTAssertTrue(try shown("move", in: ctx))
+    XCTAssertTrue(try shown("disconnect", in: ctx))
+    // The site it serves now is not offered.
+    let move = try XCTUnwrap(try actions().first { $0.id == "move" })
+    XCTAssertEqual(move.prompt.first?.choices(in: ctx).map(\.value), ["h2"])
+    let disconnect = try XCTUnwrap(try actions().first { $0.id == "disconnect" })
+    XCTAssertTrue(disconnect.destructive)
+    XCTAssertEqual(disconnect.url, "/api/registrar/disconnect")
+    XCTAssertEqual(
+      ScreenValues.render(try XCTUnwrap(disconnect.confirmMessage), in: ctx),
+      "Bakery goes back to its free address. bakery.example stays in your workspace, registered to you, and can be connected again at any time.")
+    XCTAssertEqual(ScreenValues.resolveBody(try XCTUnwrap(disconnect.body), in: ctx), ["orgId": "o1", "domain": "bakery.example"])
+  }
+
+  func testNothingIsOfferedForANameThatIsNotActive() throws {
+    for status in ["registering", "expired", "transferred-out"] {
+      let ctx = try context(connected: false, status: status)
+      XCTAssertFalse(try shown("connect", in: ctx), status)
+      XCTAssertFalse(try shown("move", in: ctx), status)
+    }
+  }
+}
