@@ -134,6 +134,20 @@ export interface NativeNavRow {
   pluginId?: string
   /** Only a site admin sees the row, as only they see the console's Admin tab. */
   requiresHostAdmin?: boolean
+  /**
+   * The workspace permissions the console's organization tab strip asks of
+   * the reader before it draws the tab (`requiredExtensionPermissions`: the
+   * extension's and the nav item's): a member whose role does not hold one
+   * never sees the row (`orgPluginNavTabItems`).
+   */
+  permissions?: string[]
+  /**
+   * A plan feature the console's organization tab strip needs before it draws
+   * the tab, because its refusal would sell nothing (no plan carries it and no
+   * billing card offers it, `orgPluginRefusalSellsSomething`): a workspace
+   * without it never sees the row. Sequences is granted per workspace.
+   */
+  requiresFeature?: string
   /** A settings row's one line, in the words the screens already use. */
   description?: string
   /** Search words besides the label, so typing "billing" finds Plan. */
@@ -767,27 +781,47 @@ export interface ResolvedNavList {
 }
 
 /**
+ * The reader's answers a row's `permissions` and `requiresFeature` are read
+ * against: the workspace's resolved permissions and plan features, an absent
+ * key not held (the same maps `resolveCreateList` takes).
+ */
+export interface NativeNavAccess {
+  permissions: Readonly<Record<string, boolean>>
+  features: Readonly<Record<string, boolean>>
+}
+
+/**
  * One list for the workspace or site in hand, from the assembled manifest
  * (`ContractValues.nativeNavManifest`). `enabledPluginIds` is the site's
  * effective set (`resolveHostEnabledPlugins`) in site scope and the
  * workspace's (`resolveEnabledPlugins`) otherwise. A section of another
  * plugin than its row's hides with that plugin. A group left with no rows is
  * dropped, except the starred group, which the shell fills.
+ *
+ * With `access`, a row also hides as the console's organization tab strip
+ * drops its tab: a permission it asks that the reader does not hold, or a
+ * plan feature it requires that the workspace does not carry. Without it (a
+ * deep link's path, which the screen itself refuses) neither holds a row back.
  */
 export function resolveNavList(
   manifest: NativeNavManifest,
   listId: NativeNavListId,
   enabledPluginIds: readonly string[],
   hostAdmin: boolean,
+  access?: NativeNavAccess,
 ): ResolvedNavList {
   const list = manifest.lists.find((entry) => entry.id === listId)
   if (!list) return { id: listId, groups: [] }
   const on = new Set(enabledPluginIds)
   const shows = (pluginId?: string) => !pluginId || on.has(pluginId)
+  const allowed = (row: NativeNavRow) =>
+    !access ||
+    ((row.permissions ?? []).every((key) => access.permissions[key] === true) &&
+      (!row.requiresFeature || access.features[row.requiresFeature] === true))
   const groups: NativeNavGroup[] = []
   for (const group of list.groups) {
     const rows = group.rows
-      .filter((row) => shows(row.pluginId) && (hostAdmin || !row.requiresHostAdmin))
+      .filter((row) => shows(row.pluginId) && (hostAdmin || !row.requiresHostAdmin) && allowed(row))
       .map((row) =>
         row.sections
           ? { ...row, sections: row.sections.filter((section) => shows(section.pluginId)) }

@@ -154,6 +154,10 @@ data class ScreenSession(
         put("passkeyRp", passkeyRelyingParty)
         // The platform's name, for words the console prints with it ("Aglyn staff · support").
         put("brand", com.aglyn.core.AglynConfig.DEFAULT_BRAND_NAME)
+        // Whether this build may take or start a payment to Aglyn (off in a store build, the owner's decision of 2026-11-19),
+        // and where it may not, whether it may link to web billing: `app.billing`, `app.billingLink`.
+        put("billing", com.aglyn.core.StoreBilling.buying)
+        put("billingLink", com.aglyn.core.StoreBilling.webBillingLink)
         put("permissionRefusal", buildJsonObject { com.aglyn.contracts.Contracts.orgRoleGrants.permissions.forEach { put(it.key, com.aglyn.contracts.permissionRefusalText(it.key)) } })
         put("permissionCatalog", rows(false))
         put("narrowablePermissions", rows(true))

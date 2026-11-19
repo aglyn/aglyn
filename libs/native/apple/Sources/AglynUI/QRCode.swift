@@ -29,10 +29,13 @@ public func aglynQRCodeImage(_ text: String, pointsPerModule: CGFloat = 8) -> CG
 public struct AglynQRCode: View {
   let text: String
   let size: CGFloat
+  /// What VoiceOver calls the code ("Payment QR code" where it was first drawn, at the counter).
+  let label: String
 
-  public init(_ text: String, size: CGFloat = 256) {
+  public init(_ text: String, size: CGFloat = 256, label: String = "Payment QR code") {
     self.text = text
     self.size = size
+    self.label = label
   }
 
   public var body: some View {
@@ -46,7 +49,7 @@ public struct AglynQRCode: View {
           .padding(16)
           .background(Color.white, in: RoundedRectangle(cornerRadius: 12))
           .accessibilityElement()
-          .accessibilityLabel("Payment QR code")
+          .accessibilityLabel(label)
       } else {
         Text("This payment page is too long to draw as a QR code.").foregroundStyle(.secondary)
       }

@@ -17,6 +17,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { previewFileUrls, previewLetters, previewSheetUrl } from './font-preview-url'
+
+export { previewFileUrls, previewLetters, previewSheetUrl } from './font-preview-url'
 
 /**
  * A family's preview in the font picker (AGL-3656): only the letters the
@@ -34,36 +37,7 @@ import { useEffect, useState } from 'react'
 
 const PREVIEW_PREFIX = 'Font Preview'
 
-/** The letters one preview may ask for; Google refuses a very long `text=`. */
-const MAX_PREVIEW_LETTERS = 160
-
 const previews = new Map<string, Promise<string | null>>()
-
-/** The distinct letters of a text, in order, capped. */
-export function previewLetters(text: string): string {
-  return [...new Set([...text.replace(/\s+/g, ' ')])].join('').slice(0, MAX_PREVIEW_LETTERS)
-}
-
-/** Google's stylesheet URL for some letters of one face of a family. */
-export function previewSheetUrl(
-  family: string,
-  weight: number,
-  style: 'normal' | 'italic',
-  text: string,
-): string {
-  const axis = style === 'italic' ? `ital,wght@1,${weight}` : `wght@${weight}`
-  return (
-    `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family.trim()).replace(/%20/g, '+')}:${axis}` +
-    `&text=${encodeURIComponent(previewLetters(text))}&display=swap`
-  )
-}
-
-/** The file URLs a CSS2 stylesheet names, in order. */
-export function previewFileUrls(css: string): string[] {
-  return [...css.matchAll(/src:\s*url\((['"]?)(https:\/\/fonts\.gstatic\.com\/[^)'"]+)\1\)/g)].map(
-    (match) => match[2],
-  )
-}
 
 function hash(text: string): string {
   let value = 0
