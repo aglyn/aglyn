@@ -34,7 +34,7 @@ just be a second copy to keep in step.
 | Manager seats | Workspace manager seats beyond the included count | Per seat, per month — cheaper on Pro |
 | Collaborator seats | Per-site collaborator (teammate) seats beyond the included count | Per seat, per month — cheaper on Pro |
 | Extra datasets | Additional shared datasets across the workspace | Per dataset, per month |
-| Extra sites | Publish more sites than your plan includes | Per site, per month — the same on every paid plan |
+| Extra sites | Publish more sites than your plan includes | Per site, per month — Starter's rate is higher than Pro's; [aglyn.com/pricing](https://aglyn.com/pricing) has each |
 | POS registers | One extra point-of-sale register, assigned to one site | Flat per register, per month — the same on every plan |
 | Event Calendar | The event manager + calendar elements, workspace-wide | Flat per month — the same on every plan |
 | AI credits | Blocks of 5,000 AI credits a month added to your plan's own, workspace-wide, up to 30 blocks | Per block, per month — the same on every paid plan |
