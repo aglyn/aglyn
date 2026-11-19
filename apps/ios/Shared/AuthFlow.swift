@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynCore
+import AglynScreens
 import Foundation
 import Observation
 
@@ -199,6 +200,46 @@ extension AppModel {
     let code = try ConsoleHandoff.code(from: callback, pending: pending)
     let grant = try await ConsoleHandoff.redeem(api: api, code: code, pending: pending)
     try await auth.signIn(customToken: grant.token, tenantId: grant.tenantID)
+  }
+
+  /// The ways the account in use can confirm it is them again before a guarded step (`Reconfirm.methods`): its own
+  /// sign-in methods (`providerData`) that this build can run, as the sign-in screen offers them.
+  func reconfirmMethods() async -> [ReconfirmMethod] {
+    guard let auth else { return [] }
+    let providers = await auth.providerIDs()
+    return Reconfirm.methods(
+      providers: providers,
+      offers: Reconfirm.Offers(
+        apple: config?.appleSignIn == true, google: config?.google != nil, singleSignOn: api != nil,
+        passkey: config?.passkeyRelyingParty != nil && api != nil))
+  }
+
+  /// Confirms it is the account in use with a way that runs in the platform's auth session: Google's sheet (its account
+  /// chooser, the account's address as the hint, as the console's `reauthProvider`), or single sign-on's console page
+  /// for the account's own workspace provider. Either signs the same account in again; anyone else is refused.
+  func reconfirmInBrowser(
+    _ method: ReconfirmMethod, authenticate: @escaping @Sendable (_ url: URL, _ callbackScheme: String) async throws -> URL
+  ) async throws {
+    guard let auth, let config else { throw ConsoleAPIError(status: 0, message: "This build is not configured.") }
+    switch method {
+    case .google:
+      guard let client = config.google else {
+        throw ConsoleAPIError(status: 0, message: "Google sign-in is not set up in this build.")
+      }
+      let token = try await GoogleLink.idToken(
+        iosClientID: client.iosClientID, loginHint: auth.user?.email, transport: firebaseHTTP, authenticate: authenticate)
+      try await auth.reconfirm(.google(idToken: token))
+    case .singleSignOn:
+      guard let api else { throw ConsoleAPIError(status: 0, message: "This build is not configured.") }
+      let pending = ConsoleHandoff.begin(
+        origin: config.consoleOrigin, app: config.app, start: .singleSignOn, loginHint: auth.user?.email)
+      let callback = try await authenticate(pending.url, pending.callbackScheme)
+      let code = try ConsoleHandoff.code(from: callback, pending: pending)
+      let grant = try await ConsoleHandoff.redeem(api: api, code: code, pending: pending)
+      try await auth.reconfirm(.customToken(grant.token, tenantID: grant.tenantID))
+    case .password, .apple, .passkey:
+      throw ConsoleAPIError(status: 0, message: "Confirm it is you another way.")
+    }
   }
 
   /// Sign in with Apple's credential, from the sign-in or sign-up screen, with the same outcome rules as Google.

@@ -97,6 +97,31 @@ interface AuthSession {
   /** The sign-in providers the account holds (`password`, `google.com`, …), as the console reads `user.providerData`. */
   suspend fun providerIds(): List<String> = emptyList()
 
+  /**
+   * Signs the account in use in again, so its next token carries a fresh `auth_time`: the step a route that guards an
+   * irreversible action asks for (`/api/account/close` wants one under five minutes old). The console's
+   * `reauthenticateWithCredential` / `reauthenticateWithPopup` (close-account card, AGL-1140): the account's own method, and
+   * an answer for anyone else is refused before it can replace the account in use. A support session cannot do it.
+   * Twin of the Apple `AuthSession.reconfirm`.
+   */
+  suspend fun reconfirm(credential: ReconfirmCredential) {
+    val current = (state.value as? AuthState.SignedIn)?.user
+    if (current == null || impersonation.value != null) throw AuthError("Sign in again to continue.")
+    when (credential) {
+      // The same address signs in to the same account.
+      is ReconfirmCredential.Password -> signInWithEmail(current.email.orEmpty(), credential.password)
+      is ReconfirmCredential.Google -> {
+        val email = (TokenClaims.fromIdToken(credential.idToken).values["email"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+        if (email == null || !email.equals(current.email, ignoreCase = true)) throw AuthError(RECONFIRM_MISMATCH, code = "USER_MISMATCH")
+        signInWithGoogle(credential.idToken)
+      }
+      is ReconfirmCredential.CustomToken -> {
+        requireReconfirmed(current.uid, credential.token)
+        signInWithCustomToken(credential.token, credential.tenantId)
+      }
+    }
+  }
+
   suspend fun signOut()
 
   /** Proves [current], then sets [new]. Throws [AuthError] with words for the form. */
@@ -116,6 +141,24 @@ interface AuthSession {
 }
 
 /** A failed auth call, in words for the form; [code] is the Identity Toolkit code it carried, when one did. */
+/** A sign-in that only confirms it is the account in use again ([AuthSession.reconfirm]): the account's own method. */
+sealed interface ReconfirmCredential {
+  data class Password(val password: String) : ReconfirmCredential
+  /** Google's ID token (a [GoogleCredentialSource]'s). */
+  data class Google(val idToken: String) : ReconfirmCredential
+  /** A custom token the server minted for this account: a passkey sign-in's, or single sign-on's console hand-off. */
+  data class CustomToken(val token: String, val tenantId: String? = null) : ReconfirmCredential
+}
+
+/** A confirmation that signed in as someone other than the account in use. */
+const val RECONFIRM_MISMATCH = "That is a different account. Confirm it is you with the account signed in here."
+
+/** Refuses a custom token minted for anyone but [uid] (its `uid` claim), before it signs in. */
+fun requireReconfirmed(uid: String, customToken: String) {
+  val minted = (TokenClaims.fromIdToken(customToken).values["uid"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+  if (minted != uid) throw AuthError(RECONFIRM_MISMATCH, code = "USER_MISMATCH")
+}
+
 class AuthError(override val message: String, cause: Throwable? = null, val code: String? = null) : Exception(message, cause)
 
 /** The sign-in form's words for an Identity Toolkit / Firebase Auth error code. */

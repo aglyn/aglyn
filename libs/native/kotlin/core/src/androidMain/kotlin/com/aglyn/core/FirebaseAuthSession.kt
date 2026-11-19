@@ -139,6 +139,28 @@ class FirebaseAuthSession(private val auth: FirebaseAuth, support: SupportBacken
 
   override suspend fun providerIds(): List<String> = auth.currentUser?.providerData?.map { it.providerId }.orEmpty()
 
+  /** The SDK's own reauthentication, which refuses another account (`ERROR_USER_MISMATCH`); a custom token is checked first. */
+  override suspend fun reconfirm(credential: ReconfirmCredential) {
+    val user = auth.currentUser
+    if (user == null || supportSessions.active) throw AuthError(authErrorMessage(null))
+    try {
+      when (credential) {
+        is ReconfirmCredential.Password ->
+          user.reauthenticate(EmailAuthProvider.getCredential(user.email.orEmpty(), credential.password)).await()
+        is ReconfirmCredential.Google -> user.reauthenticate(GoogleAuthProvider.getCredential(credential.idToken, null)).await()
+        is ReconfirmCredential.CustomToken -> {
+          requireReconfirmed(user.uid, credential.token)
+          signInWithCustomToken(credential.token, credential.tenantId)
+          return
+        }
+      }
+      // The next token is the fresh one the route reads.
+      user.getIdToken(true).await()
+    } catch (error: FirebaseAuthException) {
+      throw AuthError(if (error.errorCode == "ERROR_USER_MISMATCH") RECONFIRM_MISMATCH else authErrorMessage(error.errorCode), error, error.errorCode)
+    }
+  }
+
   override suspend fun signInWithCustomToken(token: String) {
     try {
       auth.signInWithCustomToken(token).await()
