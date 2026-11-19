@@ -17,7 +17,6 @@
 
 import {
   AUTHORED_TEMPLATE_SOURCE,
-  INSTALLED_TEMPLATE_SOURCE_TYPES,
   PLUGIN_TEMPLATE_SOURCES,
   STARTER_TEMPLATE_SOURCE,
   installedTemplateSource,
@@ -88,11 +87,8 @@ export const TEMPLATE_SOURCE_OPTIONS: readonly ListFilterOption[] = [
 ]
 
 /**
- * A site's own library, as the gallery's "Your templates" shelf asks for it:
- * saved here or installed, never a starter's pages, which the Starters shelf
- * presents as the bundles they are.
+ * A site's own library, as the gallery's "Your templates" shelf asks for it.
+ * Lives in the core package (AGL-4235), where the public API's template list
+ * reads the same set.
  */
-export const LIBRARY_TEMPLATE_SOURCE_TYPES: readonly string[] = [
-  AUTHORED_TEMPLATE_SOURCE,
-  ...INSTALLED_TEMPLATE_SOURCE_TYPES,
-]
+export { LIBRARY_TEMPLATE_SOURCE_TYPES } from '@aglyn/aglyn/app-utils/page-template-use'
