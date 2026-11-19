@@ -3388,6 +3388,467 @@
           }
         }
       ]
+    },
+    {
+      "id": "core.pluginSettings.waivers",
+      "title": "Waivers settings",
+      "subtitle": "How Waivers behaves for this workspace",
+      "icon": "gearshape|settings",
+      "scope": "org",
+      "requires": "org.can[org.settings]",
+      "constants": {
+        "defaults": {
+          "retentionYears": 7
+        }
+      },
+      "load": {
+        "settings": {
+          "doc": "orgs/{org.id}/pluginSettings/waivers",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Every signed waiver is kept as your record of what was agreed to for the years you set here, then deleted. A signer who asks to be erased does not shorten it. Ask your own lawyer how long yours should be kept."
+        },
+        {
+          "type": "form",
+          "checking": "plugin settings",
+          "id": "settings",
+          "object": "data.settings",
+          "footer": "A site can override these on its own plugin page.",
+          "fields": [
+            {
+              "key": "retentionYears",
+              "label": "Years to keep a signed waiver",
+              "kind": "number",
+              "initial": "{item.retentionYears ?? const.defaults.retentionYears}",
+              "help": "Counted from the last day the waiver covers. For a waiver signed for minors, it is counted from the day the youngest of them reaches the waiver’s adult age, if that is later. Between 1 and 30."
+            }
+          ],
+          "submit": {
+            "label": "Save settings",
+            "write": {
+              "doc": "orgs/{org.id}/pluginSettings/waivers",
+              "fields": {
+                "retentionYears": "{form.retentionYears}",
+                "updatedBy": "{user.uid}"
+              }
+            },
+            "success": "Settings saved"
+          }
+        }
+      ]
+    },
+    {
+      "id": "core.sitePluginSettings.waivers",
+      "title": "Waivers settings for this site",
+      "label": "Settings for this site",
+      "subtitle": "Override a workspace value on this site",
+      "icon": "gearshape|settings",
+      "scope": "site",
+      "zones": [
+        "sitePluginSettings"
+      ],
+      "requires": "site.can[site.manage] && params.pluginId == waivers",
+      "constants": {
+        "defaults": {
+          "retentionYears": 7
+        }
+      },
+      "load": {
+        "org": {
+          "doc": "orgs/{org.id}/pluginSettings/waivers",
+          "optional": true
+        },
+        "site": {
+          "doc": "hosts/{site.id}/pluginSettings/waivers",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Every signed waiver is kept as your record of what was agreed to for the years you set here, then deleted. A signer who asks to be erased does not shorten it. Ask your own lawyer how long yours should be kept."
+        },
+        {
+          "type": "form",
+          "checking": "site plugin settings",
+          "id": "settings",
+          "footer": "A field you do not override follows the workspace value.",
+          "fields": [
+            {
+              "key": "ov_retentionYears",
+              "label": "Override Years to keep a signed waiver for this site",
+              "kind": "toggle",
+              "initial": "{data.site.retentionYears:present}"
+            },
+            {
+              "key": "retentionYears",
+              "label": "Years to keep a signed waiver",
+              "kind": "number",
+              "initial": "{data.site.retentionYears ?? data.org.retentionYears ?? const.defaults.retentionYears}",
+              "when": "form.ov_retentionYears",
+              "help": "Counted from the last day the waiver covers. For a waiver signed for minors, it is counted from the day the youngest of them reaches the waiver’s adult age, if that is later. Between 1 and 30."
+            }
+          ],
+          "submit": {
+            "label": "Save settings",
+            "write": {
+              "doc": "hosts/{site.id}/pluginSettings/waivers",
+              "fields": {
+                "updatedBy": "{user.uid}",
+                "retentionYears": {
+                  "$if": "form.ov_retentionYears",
+                  "then": "{form.retentionYears}",
+                  "else": {
+                    "$delete": true
+                  }
+                }
+              }
+            },
+            "success": "Settings saved"
+          }
+        }
+      ]
+    },
+    {
+      "id": "core.pluginSettings.weglot",
+      "title": "Weglot settings",
+      "subtitle": "How Weglot behaves for this workspace",
+      "icon": "gearshape|settings",
+      "scope": "org",
+      "requires": "org.can[org.settings]",
+      "constants": {
+        "defaults": {
+          "enabled": false,
+          "apiKey": "",
+          "sourceLanguage": "en",
+          "targetLanguages": "",
+          "switcher": "aglyn",
+          "switcherPosition": "bottom-right"
+        }
+      },
+      "load": {
+        "settings": {
+          "doc": "orgs/{org.id}/pluginSettings/weglot",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Weglot translates your pages in the visitor’s browser, using your own Weglot account and its plan. Translated pages are for visitors: search engines index your site in its original language, and the translations may not rank in other languages. Translating a site needs the Pro plan or above; on other plans nothing is added to your pages. Saving on a site’s own plugin page updates its published pages at once."
+        },
+        {
+          "type": "form",
+          "checking": "plugin settings",
+          "id": "settings",
+          "object": "data.settings",
+          "footer": "A site can override these on its own plugin page.",
+          "fields": [
+            {
+              "key": "enabled",
+              "label": "Translate this site with Weglot",
+              "kind": "toggle",
+              "initial": "{item.enabled ?? const.defaults.enabled}",
+              "help": "Adds Weglot’s script and a language switcher to every published page."
+            },
+            {
+              "key": "apiKey",
+              "label": "Weglot API key",
+              "kind": "text",
+              "initial": "{item.apiKey ?? const.defaults.apiKey}",
+              "verbatim": true,
+              "help": "Your Weglot project’s public key, starting with wg_. It is public by design and appears in your pages’ source."
+            },
+            {
+              "key": "sourceLanguage",
+              "label": "Language your site is written in",
+              "kind": "text",
+              "initial": "{item.sourceLanguage ?? const.defaults.sourceLanguage}",
+              "verbatim": true,
+              "help": "A language code such as en. It must match the original language of your Weglot project."
+            },
+            {
+              "key": "targetLanguages",
+              "label": "Languages to translate into",
+              "kind": "text",
+              "initial": "{item.targetLanguages ?? const.defaults.targetLanguages}",
+              "verbatim": true,
+              "help": "Codes separated by commas, such as fr, es, de. Add the same languages to your Weglot project; the switcher offers only languages Weglot serves."
+            },
+            {
+              "key": "switcher",
+              "label": "Language switcher",
+              "kind": "select",
+              "initial": "{item.switcher ?? const.defaults.switcher}",
+              "options": [
+                {
+                  "value": "aglyn",
+                  "label": "Matches your site’s theme"
+                },
+                {
+                  "value": "weglot",
+                  "label": "Weglot’s own switcher"
+                }
+              ]
+            },
+            {
+              "key": "switcherPosition",
+              "label": "Switcher position",
+              "kind": "select",
+              "initial": "{item.switcherPosition ?? const.defaults.switcherPosition}",
+              "options": [
+                {
+                  "value": "bottom-right",
+                  "label": "Bottom right"
+                },
+                {
+                  "value": "bottom-left",
+                  "label": "Bottom left"
+                }
+              ]
+            }
+          ],
+          "refuse": [
+            {
+              "check": "weglot"
+            }
+          ],
+          "submit": {
+            "label": "Save settings",
+            "write": {
+              "doc": "orgs/{org.id}/pluginSettings/weglot",
+              "fields": {
+                "enabled": "{form.enabled}",
+                "apiKey": "{form.apiKey}",
+                "sourceLanguage": "{form.sourceLanguage}",
+                "targetLanguages": "{form.targetLanguages}",
+                "switcher": "{form.switcher}",
+                "switcherPosition": "{form.switcherPosition}",
+                "updatedBy": "{user.uid}"
+              }
+            },
+            "success": "Settings saved"
+          }
+        }
+      ]
+    },
+    {
+      "id": "core.sitePluginSettings.weglot",
+      "title": "Weglot settings for this site",
+      "label": "Settings for this site",
+      "subtitle": "Override a workspace value on this site",
+      "icon": "gearshape|settings",
+      "scope": "site",
+      "zones": [
+        "sitePluginSettings"
+      ],
+      "requires": "site.can[site.manage] && params.pluginId == weglot",
+      "constants": {
+        "defaults": {
+          "enabled": false,
+          "apiKey": "",
+          "sourceLanguage": "en",
+          "targetLanguages": "",
+          "switcher": "aglyn",
+          "switcherPosition": "bottom-right"
+        }
+      },
+      "load": {
+        "org": {
+          "doc": "orgs/{org.id}/pluginSettings/weglot",
+          "optional": true
+        },
+        "site": {
+          "doc": "hosts/{site.id}/pluginSettings/weglot",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "tone": "info",
+          "text": "Weglot translates your pages in the visitor’s browser, using your own Weglot account and its plan. Translated pages are for visitors: search engines index your site in its original language, and the translations may not rank in other languages. Translating a site needs the Pro plan or above; on other plans nothing is added to your pages. Saving on a site’s own plugin page updates its published pages at once."
+        },
+        {
+          "type": "form",
+          "checking": "site plugin settings",
+          "id": "settings",
+          "footer": "A field you do not override follows the workspace value.",
+          "fields": [
+            {
+              "key": "ov_enabled",
+              "label": "Override Translate this site with Weglot for this site",
+              "kind": "toggle",
+              "initial": "{data.site.enabled:present}"
+            },
+            {
+              "key": "enabled",
+              "label": "Translate this site with Weglot",
+              "kind": "toggle",
+              "initial": "{data.site.enabled ?? data.org.enabled ?? const.defaults.enabled}",
+              "when": "form.ov_enabled",
+              "help": "Adds Weglot’s script and a language switcher to every published page."
+            },
+            {
+              "key": "ov_apiKey",
+              "label": "Override Weglot API key for this site",
+              "kind": "toggle",
+              "initial": "{data.site.apiKey:present}"
+            },
+            {
+              "key": "apiKey",
+              "label": "Weglot API key",
+              "kind": "text",
+              "initial": "{data.site.apiKey ?? data.org.apiKey ?? const.defaults.apiKey}",
+              "when": "form.ov_apiKey",
+              "verbatim": true,
+              "help": "Your Weglot project’s public key, starting with wg_. It is public by design and appears in your pages’ source."
+            },
+            {
+              "key": "ov_sourceLanguage",
+              "label": "Override Language your site is written in for this site",
+              "kind": "toggle",
+              "initial": "{data.site.sourceLanguage:present}"
+            },
+            {
+              "key": "sourceLanguage",
+              "label": "Language your site is written in",
+              "kind": "text",
+              "initial": "{data.site.sourceLanguage ?? data.org.sourceLanguage ?? const.defaults.sourceLanguage}",
+              "when": "form.ov_sourceLanguage",
+              "verbatim": true,
+              "help": "A language code such as en. It must match the original language of your Weglot project."
+            },
+            {
+              "key": "ov_targetLanguages",
+              "label": "Override Languages to translate into for this site",
+              "kind": "toggle",
+              "initial": "{data.site.targetLanguages:present}"
+            },
+            {
+              "key": "targetLanguages",
+              "label": "Languages to translate into",
+              "kind": "text",
+              "initial": "{data.site.targetLanguages ?? data.org.targetLanguages ?? const.defaults.targetLanguages}",
+              "when": "form.ov_targetLanguages",
+              "verbatim": true,
+              "help": "Codes separated by commas, such as fr, es, de. Add the same languages to your Weglot project; the switcher offers only languages Weglot serves."
+            },
+            {
+              "key": "ov_switcher",
+              "label": "Override Language switcher for this site",
+              "kind": "toggle",
+              "initial": "{data.site.switcher:present}"
+            },
+            {
+              "key": "switcher",
+              "label": "Language switcher",
+              "kind": "select",
+              "initial": "{data.site.switcher ?? data.org.switcher ?? const.defaults.switcher}",
+              "when": "form.ov_switcher",
+              "options": [
+                {
+                  "value": "aglyn",
+                  "label": "Matches your site’s theme"
+                },
+                {
+                  "value": "weglot",
+                  "label": "Weglot’s own switcher"
+                }
+              ]
+            },
+            {
+              "key": "ov_switcherPosition",
+              "label": "Override Switcher position for this site",
+              "kind": "toggle",
+              "initial": "{data.site.switcherPosition:present}"
+            },
+            {
+              "key": "switcherPosition",
+              "label": "Switcher position",
+              "kind": "select",
+              "initial": "{data.site.switcherPosition ?? data.org.switcherPosition ?? const.defaults.switcherPosition}",
+              "when": "form.ov_switcherPosition",
+              "options": [
+                {
+                  "value": "bottom-right",
+                  "label": "Bottom right"
+                },
+                {
+                  "value": "bottom-left",
+                  "label": "Bottom left"
+                }
+              ]
+            }
+          ],
+          "refuse": [
+            {
+              "check": "weglot",
+              "site": true
+            }
+          ],
+          "submit": {
+            "label": "Save settings",
+            "write": {
+              "doc": "hosts/{site.id}/pluginSettings/weglot",
+              "fields": {
+                "updatedBy": "{user.uid}",
+                "enabled": {
+                  "$if": "form.ov_enabled",
+                  "then": "{form.enabled}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "apiKey": {
+                  "$if": "form.ov_apiKey",
+                  "then": "{form.apiKey}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "sourceLanguage": {
+                  "$if": "form.ov_sourceLanguage",
+                  "then": "{form.sourceLanguage}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "targetLanguages": {
+                  "$if": "form.ov_targetLanguages",
+                  "then": "{form.targetLanguages}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "switcher": {
+                  "$if": "form.ov_switcher",
+                  "then": "{form.switcher}",
+                  "else": {
+                    "$delete": true
+                  }
+                },
+                "switcherPosition": {
+                  "$if": "form.ov_switcherPosition",
+                  "then": "{form.switcherPosition}",
+                  "else": {
+                    "$delete": true
+                  }
+                }
+              }
+            },
+            "siteWide": true,
+            "success": "Settings saved"
+          }
+        }
+      ]
     }
   ]
 }
