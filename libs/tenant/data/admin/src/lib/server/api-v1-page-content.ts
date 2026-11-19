@@ -218,19 +218,7 @@ function refusalResponse(ctx: ApiV1Context, refusal: PageContentRefusal): Respon
       return ApiErrors.payloadTooLarge(init)
     default:
       // 422: the request is well formed and the editor refused what it asks.
-      // `api-http` has no 422 helper, so the envelope is written here in its
-      // shape: `{ error: { type, message, code, fields } }`.
-      return Response.json(
-        {
-          error: {
-            type: 'unprocessable_entity',
-            message: refusal.message,
-            code: refusal.code,
-            ...(refusal.fields ? { fields: refusal.fields } : {}),
-          },
-        },
-        { status: 422, headers: ctx.headers },
-      )
+      return ApiErrors.unprocessable(init)
   }
 }
 
