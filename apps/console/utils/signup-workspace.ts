@@ -16,6 +16,7 @@
  */
 
 import { doc, runTransaction, setDoc, type Firestore } from 'firebase/firestore'
+import { generateOrgSlug, isValidOrgSlug } from '@aglyn/aglyn'
 import {
   authorizedFetch,
   type MaybeTokenSource,
@@ -413,7 +414,14 @@ export async function createSignUpWorkspace(
           ...firstTouchField(),
         }),
       })
-    let response = await attempt()
+    // A derived name with no usable address of its own (a display name in
+    // Cyrillic, Arabic, Chinese… keeps no letter the slug allows) would be
+    // refused with a 400 and leave the account with no workspace. It goes
+    // straight to the suffixed address, as the first-site door already does.
+    const unaddressable = derived && !isValidOrgSlug(generateOrgSlug(name.trim()))
+    let response = await attempt(
+      unaddressable ? firstSiteWorkspaceFallbackSlug(name.trim()) : undefined,
+    )
     if (derived && response.status === 409) {
       response = await attempt(firstSiteWorkspaceFallbackSlug(name.trim()))
     }

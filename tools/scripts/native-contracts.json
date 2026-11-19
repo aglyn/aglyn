@@ -917,6 +917,8 @@
         "AppSidebarStyle",
         "PinOrgResult",
         "PinOrgOutcome",
+        "PinnedHost",
+        "PinHostResult",
         "RailWorkspaces",
         "StarResult",
         "StarOutcome",
@@ -930,6 +932,8 @@
       "values": [
         "PINNED_ORGS_FIELD",
         "PINNED_ORGS_MAX",
+        "PINNED_HOSTS_FIELD",
+        "PINNED_HOSTS_MAX",
         "RECENT_ORGS_FIELD",
         "RECENT_ORGS_MAX",
         "RAIL_RECENT_ORGS",
@@ -30615,6 +30619,369 @@
         ]
       ]
     },
+    "readPinnedHosts": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          {
+            "pinnedHosts": [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pinnedHosts": [
+              {
+                "orgId": "",
+                "hostId": "h"
+              },
+              7,
+              null,
+              {
+                "orgId": "o",
+                "hostId": ""
+              },
+              {
+                "orgId": "o",
+                "hostId": 5
+              },
+              {
+                "orgId": "o",
+                "hostId": "h3"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pinnedHosts": "x"
+          }
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "workspacePinnedHosts": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "o1"
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "o3"
+        ],
+        [
+          [],
+          "o1"
+        ]
+      ]
+    },
+    "pinHost": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [],
+          {
+            "orgId": "o1",
+            "hostId": "h1"
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          {
+            "orgId": "o1",
+            "hostId": "h1"
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          {
+            "orgId": "o2",
+            "hostId": "h1"
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          {
+            "orgId": "",
+            "hostId": "h9"
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          {
+            "orgId": "o1",
+            "hostId": ""
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          {
+            "orgId": "o2",
+            "hostId": "h9"
+          }
+        ]
+      ]
+    },
+    "unpinHost": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "h1"
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "nope"
+        ],
+        [
+          [],
+          "h1"
+        ]
+      ]
+    },
+    "replacePinnedHost": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "h1",
+          {
+            "orgId": "o1",
+            "hostId": "h9"
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "h2",
+          {
+            "orgId": "o1",
+            "hostId": "h9"
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "h1",
+          {
+            "orgId": "o1",
+            "hostId": "h3"
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "h1",
+          {
+            "orgId": "o1",
+            "hostId": ""
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "h3",
+          {
+            "orgId": "o1",
+            "hostId": "h2"
+          }
+        ]
+      ]
+    },
     "readRecentOrgs": {
       "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
       "args": [
@@ -37547,6 +37914,113 @@
             "ownerUid": "u1"
           },
           null
+        ]
+      ]
+    },
+    "campaignRollup": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
+      "args": [
+        [
+          []
+        ],
+        [
+          [
+            {
+              "status": "draft"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "status": "sent",
+              "stats": {
+                "recipients": 10,
+                "sent": 10,
+                "delivered": 9,
+                "opens": 7,
+                "uniqueOpens": 5,
+                "clicks": 3,
+                "uniqueClicks": 2,
+                "unsubscribes": 1,
+                "bounced": 1
+              }
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "status": "sent",
+              "stats": {
+                "recipients": 10,
+                "sent": 10,
+                "delivered": 8,
+                "uniqueOpens": 4,
+                "uniqueClicks": 1,
+                "unsubscribes": 0,
+                "opens": 4,
+                "clicks": 1
+              }
+            },
+            {
+              "status": "sent",
+              "stats": {
+                "recipients": 5,
+                "sent": 5,
+                "opens": 2
+              }
+            },
+            {
+              "status": "scheduled",
+              "stats": {
+                "sent": 0
+              }
+            },
+            {
+              "status": "draft"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "status": "sending",
+              "stats": {
+                "sent": 40,
+                "audienceSize": 100,
+                "delivered": 38,
+                "uniqueOpens": 10
+              },
+              "resume": {
+                "remaining": 60,
+                "batch": 1,
+                "nextAtMs": 1700000000000
+              }
+            },
+            {
+              "status": "canceled",
+              "stats": {
+                "sent": 0
+              }
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "status": "canceled",
+              "stats": {
+                "sent": 3,
+                "delivered": 3,
+                "uniqueOpens": 0,
+                "unsubscribes": 0
+              }
+            },
+            {
+              "status": "failed"
+            }
+          ]
         ]
       ]
     }

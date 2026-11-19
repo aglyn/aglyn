@@ -89,6 +89,19 @@ public enum FirestoreSentinel: Sendable {
   case delete
 }
 
+/// An array field changed by its elements alone, without reading the list first: the web SDK's `arrayUnion` (adds each
+/// element the array lacks) and `arrayRemove` (removes every equal element). Two devices changing different elements
+/// never overwrite each other's list.
+public struct FirestoreArrayChange: @unchecked Sendable {
+  public enum Kind: Sendable { case union, remove }
+  public let kind: Kind
+  /// Plain values (String, NSNumber, maps of them).
+  public let elements: [Any]
+
+  public static func union(_ elements: [Any]) -> FirestoreArrayChange { .init(kind: .union, elements: elements) }
+  public static func remove(_ elements: [Any]) -> FirestoreArrayChange { .init(kind: .remove, elements: elements) }
+}
+
 /// Writes the console makes straight to Firestore (no route), made the same
 /// way under the same security rules, as the signed-in person (the Kotlin
 /// kit's `FirestoreWriter`). `merge` is the web SDK's

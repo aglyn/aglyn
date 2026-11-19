@@ -40,7 +40,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -133,8 +135,33 @@ fun SitesScreen(context: NativePluginContext, initialSiteId: String? = null, sta
   val model = remember(orgId, context.uid) { SitesListModel(context.uid, orgId, context.firestore, scope) }
   LaunchedEffect(model) { model.reload() }
   val canCreate = com.aglyn.pluginhost.rememberMemberPermissions(context).can("hosts.create")
+  // `6 of 10 sites · Pro plan` beside Create site (the console's AGL-2166 readout): the plan and its cap from the
+  // entitlements route, the count from the workspace's sites once the list has answered.
+  val allowancePlan by produceState<SiteAllowancePlan?>(null, orgId) {
+    value = runCatching { context.api.request("/api/orgs/entitlements", query = mapOf("orgId" to orgId)) as? kotlinx.serialization.json.JsonObject }
+      .getOrNull()?.let(SiteAllowancePlan::of)
+  }
+  val workspaceSites = com.aglyn.pluginhost.rememberWorkspaceSites(context)
+  val allowance = describeSiteAllowance(
+    used = (workspaceSites as? Live.Ready)?.value?.size ?: 0,
+    limit = allowancePlan?.hostLimit,
+    planLabel = allowancePlan?.planLabel,
+    ready = allowancePlan != null && workspaceSites is Live.Ready,
+  )
   // Opened from Create new: the new-site form comes up at once (for those who may make one).
   var creating by remember { mutableStateOf(startNew && canCreate) }
+  // The workspace's pinned sites, in the order pinned (`users/{uid}.pinnedHosts`, AGL-4005), live from the account.
+  val prefs = context.accountPrefs
+  val prefState = prefs?.state?.collectAsState()
+  val pinned = prefState?.value?.pinnedHosts(orgId).orEmpty()
+  val pinsFull = prefState?.value?.hostPinsFull(orgId) == true
+  LaunchedEffect(model, pinned) { model.watchPinned(pinned) }
+  // A pin past the account-wide bound, waiting on "Pinned is full. Replace one?".
+  var pinning by remember { mutableStateOf<SiteRow?>(null) }
+  var choosingCreated by remember { mutableStateOf(false) }
+  val togglePin: (SiteRow) -> Unit = { row ->
+    if (prefs?.toggleHostPin(row.id, orgId) == com.aglyn.core.SitePinToggle.FULL) pinning = row
+  }
 
   // One list, as Figma's Sites (Mac 13:3): the title with ☆ and Create site, search and one Filter, the sites; a site
   // opens on its own, with the way back to the list.
@@ -161,19 +188,47 @@ fun SitesScreen(context: NativePluginContext, initialSiteId: String? = null, sta
       filters = SiteDomainFilter.entries.map { com.aglyn.ui.FilterChoice("Domain", it.name, it.label) },
       picked = mapOf("Domain" to model.domain.name),
       onPick = { model.pick(SiteDomainFilter.valueOf(it.key)) },
+      // The console's Created range (`SITE_FILTER_FIELDS`): one condition and one day.
+      extras = listOf(
+        com.aglyn.ui.FilterExtra(
+          com.aglyn.ui.MenuAction("created", if (model.created == null) "Created…" else "Change Created…", icon = "event") { choosingCreated = true },
+          active = model.created?.label,
+          clear = { model.pickCreated(null) },
+        ),
+      ),
     ) {
+      // The one-time product-updates ask (AGL-3185), where the console puts it: over the Sites list.
+      ProductUpdatesAsk(context)
+      for (refusal in model.refused) {
+        NoticeBanner("That filter was not applied: ${refusal.reason}.", tone = StatusTone.WARNING, modifier = Modifier.padding(horizontal = space(2f)))
+      }
+      allowance?.let {
+        Text(
+          it,
+          Modifier.fillMaxWidth().padding(horizontal = space(2f)).padding(bottom = space(0.5f)).testTag("sites-allowance"),
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          textAlign = androidx.compose.ui.text.style.TextAlign.End,
+        )
+      }
       RefreshableBox(model.refreshing, model::refresh) {
-        LoadContent(model.rows, onRetry = { model.reload() }, failedTitle = "Could not load sites") { rows ->
+        LoadContent(model.rows, onRetry = { model.reload() }, failedTitle = "Could not load sites") { queried ->
+          val rows = sitesShown(queried, pinned, model.pinnedRows, model.filtering)
           if (rows.isEmpty()) {
             EmptyState(
-              if (model.search.isBlank() && model.domain == SiteDomainFilter.ALL) "No sites yet" else "No sites match",
-              body = if (model.search.isBlank()) "Create a site to start building." else "Try another search.",
+              if (!model.filtering) "No sites yet" else "No sites match",
+              body = if (!model.filtering) "Create a site to start building." else "Try another search or filter.",
               icon = AglynIcons.named("public"),
             )
           } else {
             LazyColumn(Modifier.fillMaxSize().padding(horizontal = space(1f)).testTag("sites-list"), state = listState) {
               // Opening a site drills into it (the sidebar slides to the site), landing on its Home (P4).
-              items(rows, key = { it.id }) { row -> SiteListRow(context, row, false) { context.selectSite(row.id); context.navigate("shell.home") } }
+              items(rows, key = { it.id }) { row ->
+                SiteListRow(
+                  context, row, false,
+                  pin = if (prefs == null) null else SitePin(row.id in pinned, pinsFull) { togglePin(row) },
+                ) { context.selectSite(row.id); context.navigate("shell.home") }
+              }
               if (model.hasMore) item { SkeletonList(rows = 2) }
             }
           }
@@ -183,10 +238,91 @@ fun SitesScreen(context: NativePluginContext, initialSiteId: String? = null, sta
   }
 
   if (creating) CreateSiteDialog(context, orgId) { creating = false }
+  pinning?.let { pending ->
+    SitePinnedFullDialog(
+      pending = pending,
+      pins = pinned.map { id -> id to siteName(id, model, pending) },
+      onReplace = { replacing ->
+        prefs?.replaceHostPin(replacing, pending.id, orgId)
+        pinning = null
+      },
+      onDismiss = { pinning = null },
+    )
+  }
+  if (choosingCreated) {
+    SiteCreatedFilterDialog(model.created, onApply = { model.pickCreated(it); choosingCreated = false }, onDismiss = { choosingCreated = false })
+  }
+}
+
+/** A site's name for the replace question: the list's row, else its own row, else a site gone from reach. */
+private fun siteName(id: String, model: SitesListModel, pending: SiteRow): String =
+  ((model.rows as? com.aglyn.ui.Load.Ready)?.value.orEmpty() + model.pinnedRows + pending).firstOrNull { it.id == id }?.name
+    ?: "A site you can no longer open"
+
+/** The pin on a site row (the console's pin on a site card): whether it is pinned, whether pins are full, and the toggle. */
+internal class SitePin(val pinned: Boolean, val full: Boolean, val toggle: () -> Unit)
+
+/**
+ * "Pinned is full. Replace one?" for a site (the console's `PinnedFullDialog`, kind site): asked only at the account-wide
+ * bound. Each pin of the workspace has its Replace; Keep my pins changes nothing.
+ */
+@Composable
+private fun SitePinnedFullDialog(pending: SiteRow, pins: List<Pair<String, String>>, onReplace: (String) -> Unit, onDismiss: () -> Unit) {
+  androidx.compose.material3.AlertDialog(
+    onDismissRequest = onDismiss,
+    modifier = Modifier.testTag("site-pins-full"),
+    title = { Text("Pinned is full. Replace one?") },
+    text = {
+      Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
+        Text(
+          "You can pin up to ${com.aglyn.contracts.Contracts.pinnedHostsMax} sites. Pick the one ${pending.name} takes the place of.",
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+          for ((id, name) in pins) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Text(name, Modifier.weight(1f), maxLines = 1)
+              com.aglyn.ui.TextButton(onClick = { onReplace(id) }, modifier = Modifier.testTag("replace-site-pin-$id").semantics { contentDescription = "Replace $name" }) {
+                Text("Replace")
+              }
+            }
+          }
+        }
+      }
+    },
+    confirmButton = { com.aglyn.ui.TextButton(onClick = onDismiss, modifier = Modifier.testTag("site-pins-keep")) { Text("Keep my pins") } },
+  )
+}
+
+/** The Created filter (the console's Filters panel on the Sites cards): a condition the declaration offers and a day. */
+@Composable
+private fun SiteCreatedFilterDialog(current: SiteCreatedFilter?, onApply: (SiteCreatedFilter) -> Unit, onDismiss: () -> Unit) {
+  var op by remember { mutableStateOf(current?.op ?: SiteCreatedFilter.operators.firstOrNull() ?: "is") }
+  var day by remember { mutableStateOf(current?.day.orEmpty()) }
+  ActionDialog(
+    title = com.aglyn.contracts.Contracts.siteFilterHeaders["createdAt"] ?: "Created",
+    confirmLabel = "Apply",
+    onConfirm = { onApply(SiteCreatedFilter(op, day)) },
+    onDismiss = onDismiss,
+    confirmEnabled = Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(day),
+    modifier = Modifier.testTag("sites-created-dialog"),
+  ) {
+    Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
+      com.aglyn.ui.SelectField(
+        "Condition",
+        SiteCreatedFilter.operators.map { com.aglyn.ui.SelectOption(it, com.aglyn.pluginhost.listFilterOperatorLabel(it)) },
+        op,
+        { picked -> picked?.let { op = it } },
+        modifier = Modifier.testTag("sites-created-op"),
+      )
+      com.aglyn.ui.FieldEditor(com.aglyn.ui.FieldSpec("createdDay", "Date", com.aglyn.ui.FieldKind.DATE), day, { day = it })
+    }
+  }
 }
 
 @Composable
-private fun SiteListRow(context: NativePluginContext, row: SiteRow, selected: Boolean, onClick: () -> Unit) {
+private fun SiteListRow(context: NativePluginContext, row: SiteRow, selected: Boolean, pin: SitePin? = null, onClick: () -> Unit) {
   val host = hostDoc(context, row.id)
   val status = (host as? Live.Ready)?.value?.let { HostStatus.describe(it.data, nowMillis()) }
   // The site's favicon, as the console's Sites list shows it (`HostIcon`): the host's own `seo.favicon`, else the
@@ -201,14 +337,34 @@ private fun SiteListRow(context: NativePluginContext, row: SiteRow, selected: Bo
     selected = selected,
     leading = { com.aglyn.ui.ScaffoldRowTile("public", mediaPreviewUrl(favicon, context.api.origin, row.id, 160)) },
     status = {
-      Row(horizontalArrangement = Arrangement.spacedBy(space(0.5f))) {
+      Row(horizontalArrangement = Arrangement.spacedBy(space(0.5f)), verticalAlignment = Alignment.CenterVertically) {
         if (row.id == context.hostId) StatusChip("Current", StatusTone.INFO)
         status?.let { StatusChip(it.label, hostStatusTone(it.kind)) }
+        // The pin beside the status, as on the console's site card (`mdiPin` / `mdiPinOutline`): a pinned site leads.
+        pin?.let { SitePinButton(row.name, it, Modifier.testTag("site-pin-${row.id}")) }
       }
     },
     onClick = onClick,
     modifier = Modifier.testTag("site-${row.id}"),
   )
+}
+
+@Composable
+private fun SitePinButton(name: String, pin: SitePin, modifier: Modifier = Modifier) {
+  androidx.compose.material3.IconButton(
+    onClick = pin.toggle,
+    modifier = modifier.size(32.dp).semantics {
+      contentDescription = if (pin.pinned) "Unpin $name" else "Pin $name"
+      stateDescription = if (pin.pinned) "Pinned" else if (pin.full) "Pinned is full: pick one to replace" else "Not pinned"
+    },
+  ) {
+    Icon(
+      AglynIcons.named(if (pin.pinned) "push_pin" else "keep"),
+      contentDescription = null,
+      modifier = Modifier.size(18.dp),
+      tint = if (pin.pinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+  }
 }
 
 /** A host document's favicon (`seo.favicon`), as the console stores it: a reference, a CDN path or an address. */
@@ -338,6 +494,9 @@ private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close:
   var starterSearch by remember { mutableStateOf("") }
   var settledSearch by remember { mutableStateOf("") }
   var pick by remember { mutableStateOf<SiteStarterSummary?>(null) }
+  // "Start in preview" (AGL-4086): only the team sees the site until it is made public; off for a starter site, as the
+  // console's default (`sitePreviewStartsOn`).
+  var startInPreview by remember { mutableStateOf(sitePreviewStartsOn("starter")) }
   val usingStarters = offered == true && pickerShown != false
   val usingStyles = offered == false || pickerShown == false
   LaunchedEffect(starterSearch) {
@@ -385,7 +544,7 @@ private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close:
           val start = if (usingStarters) pick?.let { SiteStart.Starter(it.listingId) } else style?.let { SiteStart.Style(it) }
           if (start == null) return@Button
           runner.run {
-            when (val result = createSite(context.api, orgId, name, subdomain, start)) {
+            when (val result = createSite(context.api, orgId, name, subdomain, start, startInPreview)) {
               is CreateSiteResult.Created -> {
                 // The logo, dark logo and favicon go in now the site has a library. A file that does not make it never
                 // costs the site: it is said once, here, before the site opens.
@@ -436,6 +595,10 @@ private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close:
         modifier = Modifier.fillMaxWidth().testTag("site-subdomain"),
       )
       Text("You can connect your own domain later.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      com.aglyn.ui.SwitchRow(
+        "Start in preview", startInPreview, { startInPreview = it },
+        supporting = startInPreviewCaption(startInPreview), enabled = !runner.busy, modifier = Modifier.testTag("site-start-in-preview"),
+      )
       if (suggestions.isNotEmpty()) {
         Text("Try one of these:", style = MaterialTheme.typography.labelLarge)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
