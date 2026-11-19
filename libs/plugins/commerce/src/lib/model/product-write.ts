@@ -17,8 +17,12 @@
 
 import {
   adjustVariantInventory,
+  COMMERCE_DEFAULT_PRICE_USD,
   commerceSlug,
+  expandVariantMatrix,
   type HostProduct,
+  type ProductOption,
+  type ProductVariant,
   type InventoryAdjustment,
   type InventoryAdjustmentReason,
   productSearchFields,
@@ -37,6 +41,9 @@ import {
  * phone carries exactly the search keys, stock verdict, price, image and
  * smart-collection membership the console would have written.
  */
+
+/** The longest product name a save keeps: {@link productSaveFields} cuts a longer one here. */
+export const PRODUCT_NAME_MAX_LENGTH = 120
 
 /** A product as the editor holds it: the stored fields plus keys the listener or a seed may carry. */
 export type EditedProduct = HostProduct & {
@@ -72,7 +79,7 @@ export function productSaveFields(current: EditedProduct, nowMs: number) {
   return {
     ...currentFields,
     ...productSearchFields({
-      name: current.name.trim().slice(0, 120),
+      name: current.name.trim().slice(0, PRODUCT_NAME_MAX_LENGTH),
       variants: current.variants,
     }),
     slug: current.slug || commerceSlug(current.name),
@@ -88,6 +95,64 @@ export function productSaveFields(current: EditedProduct, nowMs: number) {
     imageUrl: current.mediaUrls?.[0] ?? current.imageUrl ?? null,
     updatedAtMs: nowMs,
   }
+}
+
+/**
+ * A product nobody has saved yet, as the editor starts one: a draft, at the
+ * default price (AGL-3676), for the owner to change or clear.
+ */
+export function blankProductDraft(): HostProduct {
+  return {
+    name: '',
+    slug: '',
+    type: 'physical',
+    status: 'draft',
+    variants: [{ id: 'default', priceUsd: COMMERCE_DEFAULT_PRICE_USD }],
+  }
+}
+
+/** Stable key for matching variants across matrix regenerations. */
+export function variantComboKey(options: Record<string, string> | undefined): string {
+  return Object.entries(options ?? {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, value]) => `${name}:${value}`)
+    .join('|')
+}
+
+/**
+ * The variants a change of option VALUES makes, as the editor rebuilds them:
+ * one per combination of `options`, each an existing variant with the same
+ * selections where there is one (so its id, price, SKU and stock survive the
+ * change), and otherwise a new variant at the first variant's price (none
+ * where it has none, the default on a product with no variant yet) and stock.
+ *
+ * Ask {@link variantMatrixProblem} first: past the ceiling the editor keeps
+ * the variants as they are and refuses the save (AGL-4100). A rename is not
+ * a change of values; it goes through `renameProductOptions` (AGL-3066).
+ */
+export function variantsForOptions(
+  at: Pick<HostProduct, 'variants'>,
+  options: ProductOption[],
+  nowMs: number,
+): ProductVariant[] {
+  const previous = new Map(at.variants.map((variant) => [variantComboKey(variant.options), variant]))
+  const fallback = at.variants[0]
+  return expandVariantMatrix(options).map(
+    (combo, comboIndex) =>
+      previous.get(variantComboKey(combo)) ??
+      // An unpriced variant is stored with no `priceUsd` (AGL-3676), as a
+      // proposed product's are; the type names the priced shape.
+      ({
+        id: `v${nowMs.toString(36)}${comboIndex}`,
+        options: combo,
+        ...(fallback
+          ? variantHasPrice(fallback)
+            ? { priceUsd: fallback.priceUsd }
+            : {}
+          : { priceUsd: COMMERCE_DEFAULT_PRICE_USD }),
+        inventory: fallback?.inventory ?? null,
+      } as ProductVariant),
+  )
 }
 
 /** What the smart-collection rules are matched against: the saved name with the product's own facts. */

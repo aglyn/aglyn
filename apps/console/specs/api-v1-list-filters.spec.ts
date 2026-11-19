@@ -187,6 +187,12 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
+// The site router's own lock verdict (AGL-4235) reads the lock module
+// directly; no site here is locked, as the pipeline's double above says.
+jest.mock('../../../libs/tenant/data/admin/src/lib/server/lockdown', () => ({
+  lockdownRefusal: async () => null,
+}))
+
 jest.mock('@aglyn/aglyn/server', () => {
   const entitlements = jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
@@ -291,6 +297,8 @@ beforeAll(() => registerPluginServerDeclarations())
 
 beforeEach(() => {
   mockDocs.clear()
+  // The site the requests name, which the site router reads first (AGL-4235).
+  mockDocs.set('hosts/host-1', { displayName: 'Demo', subdomain: 'demo' })
   issued = []
   mockScopes = ['contacts:read', 'forms:read', 'orders:read']
 

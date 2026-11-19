@@ -1118,6 +1118,10 @@
       "why": "Reached by the CRM list declarations: the planner's refusal wording."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/site-member-purchases.ts",
+      "why": "A site account's lifetime purchase total (computeLifetimePurchaseCents), the console drawer's Purchases figure: the native account screen's compute load replays it."
+    },
+    {
       "path": "libs/plugins/fonts/src/lib/picker/font-preview-url.ts",
       "why": "Where a font preview's stylesheet and files come from (Google's CSS2 API for a preview's letters), replayed by the native apps' shared font loaders (AGL-3668); no imports."
     },
