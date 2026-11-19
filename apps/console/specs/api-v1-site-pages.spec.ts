@@ -266,14 +266,15 @@ describe('PATCH /v1/sites/{siteId}/pages/{pageId}/seo (AGL-4235)', () => {
     expect((await call(context(), 'pages/about', 'PUT', {})).status).toBe(405)
   })
 
-  it('hands a page’s content to its own module, which is not built yet (AGL-4235)', async () => {
-    for (const [path, method] of [
-      ['pages/about/content', 'GET'],
-      ['pages/about/content/edits', 'POST'],
+  it('hands a page’s content to its own module, which asks its own scope (AGL-4235)', async () => {
+    for (const [path, method, scope] of [
+      ['pages/about/content', 'GET', 'pages:read'],
+      ['pages/about/content/edits', 'POST', 'pages:write'],
     ] as const) {
-      const response = await call(context(), path, method, method === 'GET' ? undefined : {})
-      expect({ path, method, status: response.status }).toEqual({ path, method, status: 501 })
-      expect((await response.json()).error).toMatchObject({ type: 'not_implemented', message: 'Not available yet' })
+      const ctx = context({ scopes: ['seo:write'] })
+      const response = await call(ctx, path, method, method === 'GET' ? undefined : {})
+      expect({ path, method, status: response.status }).toEqual({ path, method, status: 403 })
+      expect((await response.json()).error).toMatchObject({ type: 'insufficient_scope', code: scope })
     }
     expect(double.writes).toEqual([])
   })
