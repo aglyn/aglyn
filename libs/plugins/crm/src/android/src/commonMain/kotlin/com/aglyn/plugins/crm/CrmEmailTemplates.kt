@@ -234,6 +234,9 @@ internal fun CrmEmailDialog(context: NativePluginContext, scope: CrmScope, api: 
   var inserting by remember { mutableStateOf(false) }
   var savingTemplate by remember { mutableStateOf(false) }
   val saveBusy = remember(savingTemplate) { Busy() }
+  // What `crm/email-check` says about the address before the send (`useCrmEmailCheck`).
+  val address = row.data["email"] as? String
+  val check by androidx.compose.runtime.produceState<CrmEmailCheck?>(null, address) { value = api.emailCheck(address) }
   fun apply(template: CrmEmailTemplate) {
     if (template.subject.isNotEmpty()) subject = template.subject
     message = template.body
@@ -250,6 +253,7 @@ internal fun CrmEmailDialog(context: NativePluginContext, scope: CrmScope, api: 
     onDismiss = onDismiss,
     onConfirm = { onSend(subject, message) },
   ) {
+    crmEmailCheckWarning(check)?.let { NoticeBanner(it, com.aglyn.ui.StatusTone.WARNING, Modifier.fillMaxWidth().testTag("crm-email-check-warning")) }
     if (pickable.isNotEmpty()) {
       SelectField(
         "Template",
