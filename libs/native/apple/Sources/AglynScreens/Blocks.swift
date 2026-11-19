@@ -668,9 +668,9 @@ struct FieldInput: View {
           TextField(label, text: text, prompt: Text(field.placeholder ?? label))
             #if os(iOS)
               .keyboardType(keyboard)
-              .textInputAutocapitalization(field.kind == "text" ? .sentences : .never)
+              .textInputAutocapitalization(field.kind == "text" && !field.verbatim ? .sentences : .never)
             #endif
-            .autocorrectionDisabled(field.kind != "text")
+            .autocorrectionDisabled(field.kind != "text" || field.verbatim)
         }
         .aglynFieldLabel(label, value: text.wrappedValue, prompt: field.placeholder)
       }
@@ -776,6 +776,22 @@ struct FormBlock: View {
     }
   }
 
+  /// The form's first `refuse` entry that refuses what is typed: the console's pre-save check (a plugin's `validate`),
+  /// said beside Save, which it holds back. An entry is `{ when, text }`, or `{ check, site }` naming a check both kits
+  /// implement (`PluginSettingsChecks`), asked over the values the form saves (on a site, the values it will run with).
+  private var refused: String? {
+    let filled = filled
+    for entry in block["refuse"].array {
+      if let check = entry["check"]?.stringValue {
+        let values = PluginSettingsChecks.values(in: filled, site: entry["site"] == .bool(true))
+        if let text = PluginSettingsChecks.refusal(check, values) { return text }
+      } else if ScreenValues.condition(entry["when"]?.stringValue, in: filled) {
+        return ScreenValues.render(entry["text"]?.stringValue ?? "", in: filled)
+      }
+    }
+    return nil
+  }
+
   /// A load this form is seeded from is only the cache's answer yet.
   private var held: Bool {
     !FormEdits.heldBy(object: block["object"]?.stringValue, initials: fields.compactMap(\.initial), checking: context["checking"]).isEmpty
@@ -795,7 +811,10 @@ struct FormBlock: View {
       if let action = block["submit"].flatMap(ActionSpec.init), ScreenValues.condition(action.when, in: scope) {
         // One Save per form at the standard control size, trailing (spec 8): never a full-width bar per form.
         HStack(spacing: AglynSpace.one) {
-          if let refusal = heldPress.refusal, dirty {
+          if let refused {
+            Text(refused).font(AglynFont.caption).foregroundStyle(AglynColor.warning)
+              .accessibilityIdentifier("refused-\(block.id)")
+          } else if let refusal = heldPress.refusal, dirty {
             Text(refusal).font(AglynFont.caption).foregroundStyle(AglynColor.warning)
               .accessibilityIdentifier("unconfirmed-\(block.id)")
           } else if held && dirty {
@@ -810,12 +829,12 @@ struct FormBlock: View {
           }
           .buttonStyle(.aglynProminent)
           .controlSize(.regular)
-          .disabled(busy || heldPress.waiting || missing || action.disabledWhen.map { ScreenValues.condition($0, in: filled) } == true)
+          .disabled(busy || heldPress.waiting || missing || refused != nil || action.disabledWhen.map { ScreenValues.condition($0, in: filled) } == true)
           .accessibilityIdentifier("submit-\(block.id)")
         }
         .aglynHeldPress($heldPress, checking: held, refusal: FormEdits.unconfirmedText(block["checking"]?.stringValue)) {
           // The save of the form as it is now: the edits replayed onto the server's copy, if they still pass.
-          if !missing, action.disabledWhen.map({ ScreenValues.condition($0, in: filled) }) != true { save(action) }
+          if !missing, refused == nil, action.disabledWhen.map({ ScreenValues.condition($0, in: filled) }) != true { save(action) }
         }
       }
     }

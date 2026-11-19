@@ -1128,6 +1128,15 @@
       "values": [
         "EMAIL_STATE_LABELS"
       ]
+    },
+    "libs/aglyn/src/lib/app-utils/privacy-choices.ts": {
+      "values": [
+        "CONSENT_OPT_OUT_TITLE",
+        "NATIVE_PRIVACY_CHOICES_INTRO",
+        "NATIVE_PRIVACY_CHOICES_STRICTLY_NECESSARY",
+        "NATIVE_PRIVACY_CHOICES_ANALYTICS_LABEL",
+        "NATIVE_PRIVACY_CHOICES_ANALYTICS_DETAIL"
+      ]
     }
   },
   "assembled": {

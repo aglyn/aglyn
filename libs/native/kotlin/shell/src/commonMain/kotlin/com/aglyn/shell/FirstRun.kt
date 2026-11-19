@@ -38,6 +38,7 @@ internal fun FirstRunContent(services: ShellServices) {
   val flow = services.authFlow
   var creating by remember { mutableStateOf(false) }
   var name by remember { mutableStateOf("") }
+  var slug by remember { mutableStateOf<String?>(null) }
   var busy by remember { mutableStateOf(false) }
   var error by remember { mutableStateOf<String?>(null) }
   val scope = rememberCoroutineScope()
@@ -80,7 +81,7 @@ internal fun FirstRunContent(services: ShellServices) {
         busy = true
         error = null
         scope.launch {
-          val failure = services.createWorkspace(name)
+          val failure = services.createWorkspace(name, slug ?: WorkspaceName.slug(name))
           busy = false
           if (failure == null) creating = false else error = failure
         }
@@ -96,6 +97,8 @@ internal fun FirstRunContent(services: ShellServices) {
         error = if (name.isNotBlank()) SignUpRules.organization(name) else null,
         supporting = WorkspaceName.helper(services.config.workspaceDomain),
       )
+      // The Workspace URL (the console's field): made from the name until the person types their own.
+      WorkspaceUrlField(slug ?: WorkspaceName.slug(name), services.config.workspaceDomain) { slug = WorkspaceName.urlInput(it) }
     }
   }
 }
@@ -107,5 +110,19 @@ private fun Empty(services: ShellServices, onCreate: () -> Unit) {
     body = "A workspace is your organization: its sites, team, billing and plan live together.",
     icon = AglynIcons.named("workspaces"),
     action = { Button(shape = com.aglyn.ui.controlShape(), onClick = onCreate, modifier = Modifier.testTag("first-run-create")) { Text("Create an organization") } },
+  )
+}
+
+/** The console's Workspace URL field: the address, with the workspace domain after it, lower case as it is typed. */
+@Composable
+internal fun WorkspaceUrlField(value: String, workspaceDomain: String, onChange: (String) -> Unit) {
+  androidx.compose.material3.OutlinedTextField(
+    value,
+    onChange,
+    label = { Text("Workspace URL") },
+    suffix = { Text(".$workspaceDomain") },
+    singleLine = true,
+    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri, autoCorrectEnabled = false),
+    modifier = Modifier.fillMaxWidth().testTag("create-workspace-url"),
   )
 }

@@ -226,6 +226,10 @@
       "why": "Reached by host-events: each plugin's declared host events, generated data with no imports."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/privacy-choices.ts",
+      "why": "\"Your Privacy Choices\": the regulated title (CCPA regs §7015) and the native apps' panel words, read through the contracts so no app types a second copy (Console chrome row 3); no imports at all."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/published-legal-pages.ts",
       "why": "Which legal documents have a published page and the origin they are served from (LEGAL_ORIGIN): the hardware terms of sale the receipts print name its Terms address (AGL-4038); no imports, one public env read like platform-brand.ts."
     },
