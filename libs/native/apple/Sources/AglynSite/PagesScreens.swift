@@ -33,6 +33,16 @@ final class SitePagesModel {
     holds = try? await fetchPageHolds(api: api, hostID: hostID)
   }
 
+  /// Who is in each page right now (AGL-2486), read every 30 seconds while the list is on screen.
+  var presence = PresenceSummary()
+
+  func pollPresence(_ api: ConsoleAPIClient, hostID: String) async {
+    while !Task.isCancelled {
+      presence = await fetchPresenceSummary(api: api, hostID: hostID)
+      try? await Task.sleep(nanoseconds: presenceSummaryPollSeconds * 1_000_000_000)
+    }
+  }
+
   /// Every page read so far.
   var pages: [PageNode] { tree.map { Array($0.nodes.values) } ?? [] }
 
@@ -184,6 +194,7 @@ struct PagesScreen: View {
           if let initialPageID { await model.reveal(initialPageID) }
           _ = await holds
         }
+        .task(id: "presence:\(hostID)") { await model.pollPresence(context.api, hostID: hostID) }
         .aglynSearchable(text: $model.search, prompt: "Search pages")
         .task(id: model.search) {
           // A search finds any page: the windows still unread are read, only while searching.
@@ -276,7 +287,7 @@ struct PagesScreen: View {
       if selectable {
         List {
           ForEach(rows) { row in
-            PageListRow(row: row, holds: model.holds(on: row.id), expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
+            PageListRow(row: row, holds: model.holds(on: row.id), people: model.presence.people("screen", row.id), expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
               Task { await model.toggle(row.id) }
             })
             .aglynSelectableRow(row.id, selection: $selection)
@@ -308,7 +319,7 @@ struct PagesScreen: View {
               .navigationTitle(row.page.name)
               .aglynScreenTitle(row.page.name)
             } label: {
-              PageListRow(row: row, holds: model.holds(on: row.id), expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
+              PageListRow(row: row, holds: model.holds(on: row.id), people: model.presence.people("screen", row.id), expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
                 Task { await model.toggle(row.id) }
               })
             }
@@ -356,6 +367,8 @@ struct PageListRow: View {
   let row: PageTreeRow
   /// Held or flagged by the page review (AGL-3374): a chip per status beside the page's own.
   var holds: [PageHold] = []
+  /// Who is in this page right now, across its versions (AGL-2486): their faces beside its chips.
+  var people: [PresentPerson] = []
   var expanded = false
   var onToggle: (() -> Void)?
 
@@ -401,6 +414,7 @@ struct PageListRow: View {
             HStack(spacing: AglynSpace.half) { PageHoldChips(holds: holds) }.fixedSize()
           }
           HStack(spacing: AglynSpace.half) {
+            DocumentPresenceChips(people: people)
             if row.home { StatusChip("Home", tone: .info) }
             if !row.page.isGroup { StatusChip(status.label, tone: status.live ? .success : .neutral) }
           }
@@ -603,6 +617,14 @@ struct PageDetail: View {
           status: (status.label, status.live ? .success : .neutral), primary: acts.primary, more: acts.more)
         if let description = page.description {
           Text(description).font(AglynFont.subheadline).foregroundStyle(.secondary)
+        }
+        // Who is in it right now, in the Besigner (AGL-2486): faces and the console's hedged sentence.
+        let people = model.presence.people("screen", page.id)
+        if !people.isEmpty {
+          HStack(spacing: AglynSpace.one) {
+            DocumentPresenceChips(people: people, size: 24)
+            Text(presenceChipSentence(people.map(\.displayName))).font(AglynFont.caption).foregroundStyle(.secondary)
+          }
         }
       }
       // Held, flagged or not approved by the page review (AGL-3374): what happened, what visitors see, what to do.

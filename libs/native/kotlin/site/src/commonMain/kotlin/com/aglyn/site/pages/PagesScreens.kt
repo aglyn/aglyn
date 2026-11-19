@@ -145,6 +145,14 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null, sta
       null
     }
   }
+  // Who is in each page right now (AGL-2486), read every 30 seconds while the list is on screen.
+  var presence by remember(hostId) { mutableStateOf(PresenceSummary()) }
+  LaunchedEffect(hostId, context.api) {
+    while (true) {
+      presence = fetchPresenceSummary(context.api, hostId)
+      kotlinx.coroutines.delay(PRESENCE_SUMMARY_POLL_MS)
+    }
+  }
   // Opened from Create new: the new-page form comes up at once.
   var dialog by remember { mutableStateOf<PageDialog?>(if (startNew) PageDialog.NewPage else null) }
   val canEdit = com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.edit")
@@ -239,6 +247,7 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null, sta
                 PageRowItem(
                   row,
                   holds = holdsForTarget(holds?.holds.orEmpty(), HeldPageTarget("screen", row.page.id)),
+                  people = presence.people("screen", row.page.id),
                   selected = row.page.id == selected,
                   expanded = if (query.isBlank() && row.childCount > 0) open else null,
                   onToggle = {
@@ -265,7 +274,7 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null, sta
       if (row == null) {
         SelectionPlaceholder("Pick a page to see it here", icon = AglynIcons.named("description"))
       } else {
-        PageDetail(context, hostId, row, live.routing, api, runner, canEdit, canPublish, live.loader, holds) { dialog = it }
+        PageDetail(context, hostId, row, live.routing, api, runner, canEdit, canPublish, live.loader, holds, presence.people("screen", row.page.id)) { dialog = it }
       }
     },
   )
@@ -274,7 +283,7 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null, sta
 }
 
 @Composable
-private fun PageRowItem(row: PageTreeRow, holds: List<PageHold>, selected: Boolean, expanded: Boolean?, onToggle: () -> Unit, onClick: () -> Unit) {
+private fun PageRowItem(row: PageTreeRow, holds: List<PageHold>, people: List<PresentPerson>, selected: Boolean, expanded: Boolean?, onToggle: () -> Unit, onClick: () -> Unit) {
   val status = pageStatus(row)
   val count = if (row.childCount == 1) "1 page" else "${row.childCount} pages"
   Row(Modifier.fillMaxWidth().padding(start = (row.depth * 24).dp), verticalAlignment = Alignment.CenterVertically) {
@@ -310,6 +319,8 @@ private fun PageRowItem(row: PageTreeRow, holds: List<PageHold>, selected: Boole
           horizontalArrangement = Arrangement.spacedBy(space(0.5f), Alignment.End),
           verticalArrangement = Arrangement.spacedBy(space(0.5f)),
         ) {
+          // Who is in this page right now, across its versions (AGL-2486).
+          DocumentPresenceChips(people)
           // Held or flagged by the page review (AGL-3374): a chip per status beside the page's own.
           PageHoldChips(holds)
           if (row.home) StatusChip("Home", StatusTone.INFO)
@@ -334,6 +345,7 @@ private fun PageDetail(
   canPublish: Boolean,
   loader: PagesTreeLoader,
   holds: PageHoldsAnswer?,
+  people: List<PresentPerson>,
   open: (PageDialog) -> Unit,
 ) {
   val page = row.page
@@ -396,6 +408,13 @@ private fun PageDetail(
     page.description?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     // Held, flagged or not approved by the page review (AGL-3374): what happened, what visitors see, what to do.
     PageHoldBanner(context, holds, HeldPageTarget("screen", page.id))
+    // Who is in it right now, in the Besigner (AGL-2486): faces and the console's hedged sentence.
+    if (people.isNotEmpty()) {
+      Row(horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
+        DocumentPresenceChips(people, 24.dp)
+        Text(presenceChipSentence(people.map { it.displayName }), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      }
+    }
     if (!page.isGroup) {
       com.aglyn.ui.PlainSection(null) {
         DetailRow("Address", row.livePath ?: page.slug?.let { "/$it (not published)" }, placeholder = "No address yet")
