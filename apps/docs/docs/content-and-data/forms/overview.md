@@ -389,6 +389,11 @@ stays with the form however you arrange the fields.
 - **Leads** — only when the form's **CRM routing** card has the lead switch on. See
   [What makes a lead](../crm/leads.md#what-makes-a-lead).
 
+On **Free**, which keeps up to 100 people for the CRM, a submission past that is still
+saved in the inbox and the visitor sees the normal confirmation, but no new contact or
+lead is made from it, now or later — see
+[CRM records](../../workspace-and-billing/billing-and-plans/overview.md#crm-records).
+
 ### The inbox
 
 The site's **Inbox** page collects everything visitors send, in three tabs —

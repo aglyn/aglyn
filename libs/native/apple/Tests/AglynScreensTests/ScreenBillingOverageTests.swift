@@ -111,6 +111,8 @@ final class ScreenBillingOverageTests: XCTestCase {
         "contacts": ["count": parts?["contacts"] ?? 0], "companies": ["count": parts?["companies"] ?? 0], "deals": ["count": parts?["deals"] ?? 0],
         "api": ["count": one["apiRequests"] ?? 0],
         "emails": ["2026-10": one["emails"] ?? 0],
+        // Both console switches on, so Starter's email band is quoted (AGL-4227).
+        "config": ["includedEmailBilledFrom": "2026-10"],
       ]
       let model = try seeded(data, month: "2026-10")
       let context = model.context
@@ -127,7 +129,7 @@ final class ScreenBillingOverageTests: XCTestCase {
           "API overage: \(count(over)) requests over the included band at \(dollars(rate))/1,000 — ≈\(dollars(expect["apiUsd"]?.numberValue ?? 0)) on this month's invoice.")
       }
       if let rate = expect["emailRate"]?.numberValue, let over = expect["emailOverage"]?.numberValue, over > 0,
-        let included = one["quotas"]?["emailSendsPerMonth"]?.numberValue, included > 0
+        let included = one["emailBand"]?.numberValue, included > 0
       {
         expected.append(
           "\(count(over)) emails over your included \(count(included)) this month at \(dollars(rate))/1,000 — ≈\(dollars(expect["emailUsd"]?.numberValue ?? 0)) on this month's invoice. Transactional mail — receipts, invites, password resets — is never refused at the cap, so it is what takes an organization past the band."

@@ -55,6 +55,7 @@ import com.aglyn.ui.FieldSpec
 import com.aglyn.ui.LiveListPane
 import com.aglyn.ui.LiveQueryList
 import com.aglyn.ui.StatusChip
+import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.StatusTone
 import com.aglyn.ui.isoDayMillis
 import com.aglyn.ui.isoDayOf
@@ -220,11 +221,14 @@ fun TaskDialog(
     confirmEnabled = draft.title.isNotBlank() && (sites == null || site.isNotEmpty()),
     hold = if (held) com.aglyn.ui.FormHold.of("task") else null,
     busy = busy.busy,
-    error = busy.error,
+    // The route's refusal, in its own words: the console says it beside Save; here it heads the form, because under a form
+    // this long the dialog's own banner sat below the fold and a refused save looked like a press that did nothing.
+    error = null,
     onDismiss = onDismiss,
     dismissLabel = "Cancel",
     onConfirm = { onSave(draft.copy(sourceSite = site.takeIf { sites != null && it.isNotEmpty() && it != CRM_ORGANIZATION_CHOICE })) },
   ) {
+    busy.error?.let { NoticeBanner(it, StatusTone.ERROR, Modifier.testTag("task-error")) }
     if (sites != null) {
       FieldEditor(
         FieldSpec(
@@ -276,9 +280,18 @@ fun TasksSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, ref
   var editing by remember { mutableStateOf<CrmTask?>(null) }
   var creating by remember { mutableStateOf(false) }
   val list = remember(scope, context.firestore) { LiveQueryList(context.firestore, coroutines, 25, ::taskOf) }
+  val bulk = remember(scope) { CrmBulkState() }
   LaunchedEffect(list, view, asked) {
+    bulk.picked = emptySet()
     val plan = taskViewPlan(view, nowMillis(), scope.uid)
     list.show { limit -> tasksQuery(scope, plan, asked, limit) }
+  }
+  val pickedTasks = (list.rows as? Live.Ready)?.value.orEmpty().filter { it.id in bulk.picked }
+  fun runBulk(action: CrmBulkAction, value: CrmBulkValue) {
+    val tasks = pickedTasks
+    bulk.run(coroutines, keepPicked = action == CrmBulkAction.DELETE || action == CrmBulkAction.COMPLETE) {
+      api.bulkTasks(action, tasks, value, reference).also { list.retry() }
+    }
   }
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(Modifier.widthIn(max = 920.dp).fillMaxSize()) {
@@ -292,7 +305,14 @@ fun TasksSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, ref
             }
           }
         }
-        ChoiceChipRow(TaskView.entries.map { ChipOption(it.key, it.label) }, view.key, { key -> view = TaskView.entries.first { it.key == key } })
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Box(Modifier.weight(1f)) { ChoiceChipRow(TaskView.entries.map { ChipOption(it.key, it.label) }, view.key, { key -> view = TaskView.entries.first { it.key == key } }) }
+          if (scope.canWrite) CrmSelectToggle(bulk.selecting) { bulk.selecting = it; if (!it) bulk.picked = emptySet() }
+        }
+        if (bulk.selecting && pickedTasks.isNotEmpty()) {
+          CrmBulkBar(pickedTasks.size, CRM_BULK_TASK_ACTIONS, bulk.running, { scope.canWrite }, { action -> bulk.pick(action) { runBulk(it, CrmBulkValue()) } }) { bulk.picked = emptySet() }
+        }
+        CrmBulkNotices(bulk.result) { bulk.result = null }
       }
       LiveListPane(
         list,
@@ -300,7 +320,11 @@ fun TasksSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, ref
         failed = "Could not load tasks",
         empty = { EmptyState(if (view == TaskView.DONE) "Nothing done yet" else "Nothing to do here", body = "Tasks you and your team add show up here.", icon = AglynIcons.named("task")) },
       ) { task ->
-        TaskRow(
+        if (bulk.selecting) {
+          CrmPickRow(task.id in bulk.picked, task.title, { bulk.toggle(task.id) }) { modifier ->
+            Box(modifier) { TaskRow(task, reference, onToggle = null, onClick = { bulk.toggle(task.id) }) }
+          }
+        } else TaskRow(
           task,
           reference,
           onToggle = if (scope.canWrite) ({
@@ -309,6 +333,15 @@ fun TasksSection(context: NativePluginContext, scope: CrmScope, api: CrmApi, ref
           onClick = if (scope.canWrite) ({ editing = task }) else null,
         )
       }
+    }
+  }
+  bulk.action?.let { action ->
+    val tasks = pickedTasks
+    CrmBulkDialog(action, null, tasks.size, reference, null, tasks.firstOrNull()?.dueAtMs, bulk.busy, onDismiss = { bulk.action = null }) { value -> runBulk(action, value) }
+  }
+  bulk.confirming?.let { action ->
+    crmBulkConfirm(action, CrmBulkNoun.TASK, pickedTasks.size)?.let { confirm ->
+      CrmBulkConfirmDialog(confirm, bulk.running, onDismiss = { bulk.confirming = null }) { runBulk(action, CrmBulkValue()) }
     }
   }
   val busy = remember(editing, creating) { Busy() }

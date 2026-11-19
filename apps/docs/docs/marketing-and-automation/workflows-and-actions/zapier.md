@@ -27,9 +27,11 @@ exactly what it can read and do.
 2. In Zapier, start a Zap and choose **Aglyn**.
 3. When Zapier asks you to connect an account, paste the key.
 
-API keys are part of plans that include API access. Each trigger and action also needs
-what the matching part of Aglyn needs on your plan: commerce for orders, bookings for
-bookings, the CRM for contacts.
+API keys are part of plans that include API access. **Triggers also need webhooks on
+your plan** — Pro and Custom — because a trigger is Aglyn sending events out; on
+Starter, Zapier can run the actions below but cannot subscribe to triggers. Each
+trigger and action also needs what the matching part of Aglyn needs on your plan:
+commerce for orders, bookings for bookings, the CRM for contacts.
 
 ## Triggers
 

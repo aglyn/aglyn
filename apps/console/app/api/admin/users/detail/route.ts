@@ -15,6 +15,11 @@
  * limitations under the License.
  */
 
+import {
+  readUsageLevel,
+  USAGE_LEVEL_AT_FIELD,
+  USAGE_LEVEL_FIELD,
+} from '@aglyn/aglyn/app-utils/usage-level'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
@@ -390,6 +395,10 @@ async function handler(request: Request): Promise<Response> {
       user: {
         uid: record.uid,
         email: record.email ?? null,
+        // The staff usage level (AGL-4228), from the profile document; an
+        // account nobody has reviewed has none and reads as not reviewed.
+        usageLevel: readUsageLevel(profile.get(USAGE_LEVEL_FIELD)),
+        usageLevelAt: timestampSeconds(profile.get(USAGE_LEVEL_AT_FIELD)),
         displayName: identity.displayName,
         photoUrl: identity.photoUrl,
         displayNameSource: identity.displayNameSource,
@@ -498,3 +507,9 @@ async function handler(request: Request): Promise<Response> {
 
 export const dynamic = 'force-dynamic'
 export { handler as GET }
+
+/** A stored timestamp as `{ seconds }`, the shape the staff pages read. */
+function timestampSeconds(value: unknown): { seconds: number } | null {
+  const seconds = (value as { seconds?: unknown } | null)?.seconds
+  return typeof seconds === 'number' ? { seconds } : null
+}

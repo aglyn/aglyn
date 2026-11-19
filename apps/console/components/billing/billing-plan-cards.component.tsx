@@ -1610,6 +1610,20 @@ function PlanCardBody({
               : '')
           : 'No API access'}
       </Typography>
+      {/* The two API limits that differ by plan (AGL-4226), read off the
+          entitlements: Starter stops at a monthly ceiling and Pro does not,
+          and the whole workspace's per-minute limit steps up with the tier.
+          Shown only where the plan has the API at all. */}
+      {entitlements.apiRequestsPerMonth > 0 ? (
+        <Typography variant="body2">
+          {(Number.isFinite(entitlements.maxApiRequestsPerMonth ?? Infinity)
+            ? `Stops at ${quotaCount(entitlements.maxApiRequestsPerMonth as number)} API requests/mo`
+            : 'No monthly API ceiling') +
+            (Number.isFinite(entitlements.apiRequestsPerMinutePerOrg ?? Infinity)
+              ? ` · ${quotaCount(entitlements.apiRequestsPerMinutePerOrg as number)}/min per workspace`
+              : '')}
+        </Typography>
+      ) : null}
       {/* Declining platform-fee ladder (AGL-892): charged at
           checkout as the Stripe Connect application fee. "Plus
           card processing at cost" is AGL-2152: a storefront sale

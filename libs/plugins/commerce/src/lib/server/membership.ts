@@ -23,7 +23,7 @@ import {
   timingSafeEqual,
 } from 'crypto'
 import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
-import { signedInHintCookieName } from '@aglyn/aglyn/app-utils/sign-in-visibility'
+import { memberSessionCookieName, signedInHintCookieName } from '@aglyn/aglyn/app-utils/sign-in-hint-cookie'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 
 /**
@@ -195,7 +195,9 @@ export function verifyPasswordResetToken(
 }
 
 export function memberCookieName(hostId: string): string {
-  return `aglyn_member_${hostId.replace(/[^A-Za-z0-9_-]/g, '')}`
+  // Named where the readable sign-in hint is (AGL-4231), so the tenant
+  // middleware that keeps the two in step reads the same name.
+  return memberSessionCookieName(hostId)
 }
 
 export function setMemberCookie(

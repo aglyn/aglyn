@@ -21,6 +21,10 @@ import {
   type ListQueryDeclaration,
   type ListQuerySort,
 } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import {
+  USAGE_LEVEL_FIELD,
+  USAGE_LEVEL_FILTER_OPTIONS,
+} from '@aglyn/aglyn/app-utils/usage-level'
 
 /*
  * THE STAFF SITES LIST'S QUERY (AGL-3378).
@@ -110,6 +114,16 @@ export const STAFF_SITE_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
   // A staff takedown in force — see "Suspended" above.
   { column: 'suspended', kind: 'boolean', path: 'suspended', operators: ['equals'] },
   {
+    // The staff usage level (AGL-4228): `provisionHost` writes `unreviewed`
+    // and `tools/scripts/backfill-usage-level.mjs` stamped the older sites,
+    // so an equality on it reaches every site.
+    column: USAGE_LEVEL_FIELD,
+    kind: 'exact',
+    path: USAGE_LEVEL_FIELD,
+    presence: 'always',
+    operators: ['equals', 'isAnyOf'],
+  },
+  {
     column: 'orgId',
     kind: 'exact',
     path: 'orgId',
@@ -133,6 +147,7 @@ export const STAFF_SITE_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = 
   cname: 'Custom domain address',
   hasCustomDomain: 'Custom domain',
   suspended: 'Suspended',
+  usageLevel: 'Usage level',
   orgId: 'Org ID',
   $id: 'Site ID',
   createdAt: 'Created',
@@ -148,6 +163,7 @@ export const STAFF_SITE_LIST_FILTER_OPTIONS = {
     { value: 'true', label: 'Suspended' },
     { value: 'false', label: 'Not suspended' },
   ],
+  usageLevel: USAGE_LEVEL_FILTER_OPTIONS,
 }
 
 /*

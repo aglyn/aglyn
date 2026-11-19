@@ -40,6 +40,31 @@ object DeepLinks {
     return ConsoleScopeSplit(orgSlug, rest = "/" + segments.drop(1).joinToString("/"))
   }
 
+  /**
+   * The console's sections the apps have no screen for, so a link to one stays in the browser (AGL-4059): the same list
+   * the console's `apple-app-site-association` excludes (`NATIVE_WEB_ONLY_TOP_LEVEL_SEGMENTS`, `native-app-association.ts`),
+   * and the Android manifest's App Link filter refuses on Android 15 and later.
+   */
+  val WEB_ONLY_TOP_LEVEL = listOf("auth", "edit-access", "kiosk", "oauth", "p", "signin", "signout", "sso")
+
+  /** The pre-sign-in pages the apps finish themselves; only the page itself, never anything under it (`NATIVE_AUTH_LINK_SEGMENTS`). */
+  val AUTH_LINK_TOP_LEVEL = listOf("account-recovery", "reset-password", "signup", "verify-email")
+
+  /**
+   * Whether a console page link (its path, the query ignored) is one the app opens, as the console's app-link documents
+   * claim it: every page but the framework's (`/_…`), the route handlers (`/api`), `/.well-known`, the web-only sections
+   * and anything under an auth page. Android before 15 cannot refuse a path in the manifest, so one of these can still
+   * reach the app, which hands it back to the browser.
+   */
+  fun opensInApp(link: String?): Boolean {
+    val path = consolePathOf(link)?.substringBefore('?')?.substringBefore('#') ?: return false
+    if (path.startsWith("/_") || path == "/api" || path.startsWith("/api/") || path.startsWith("/.well-known/")) return false
+    val segments = path.split('/').filter { it.isNotEmpty() }
+    val first = segments.firstOrNull() ?: return true
+    if (first in WEB_ONLY_TOP_LEVEL) return false
+    return !(first in AUTH_LINK_TOP_LEVEL && segments.size > 1)
+  }
+
   /** The path part of a console URL, an `aglyn://` URL, or a bare path. */
   fun consolePathOf(link: String?): String? {
     val value = (link ?: "").trim()

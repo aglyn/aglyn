@@ -58,6 +58,7 @@ import {
   readContactCustomInput,
   readContactFacet,
   soloConsentGroup,
+  crmRecordsRefusalMessage,
 } from '@aglyn/aglyn/server'
 import {
   ApiErrors,
@@ -1152,9 +1153,8 @@ async function createContact(
       // and integrators match on it; the band behind it widened, the code
       // did not. Companies and deals answer `crm_records_quota`.
       return ApiErrors.planRequired({
-        message:
-          `CRM records limit reached (${quota.included} records across ` +
-          'contacts, companies and deals). Upgrade the plan to add more.',
+        // Names Starter's ceiling and the plan without one (AGL-4227).
+        message: crmRecordsRefusalMessage(ctx.org as never, quota),
         code: 'contact_quota',
         headers: ctx.headers,
       })
