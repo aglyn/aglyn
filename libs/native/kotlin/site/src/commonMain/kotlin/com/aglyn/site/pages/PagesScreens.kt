@@ -435,6 +435,7 @@ private fun PageDetail(
           open(PageDialog.Schedule(page, unpublish))
         }
         PageAccessSection(page, row.livePath, settings, (host as? Live.Ready)?.value, settingsApi, runner, canEdit, canPublish)
+        PageSeoSection(context, hostId, page, row.livePath, (screen as? Live.Ready)?.value?.data, (host as? Live.Ready)?.value?.data, settingsApi, runner, canEdit)
       }
       // What breaks if this page goes (AGL-703), on demand: the scan reads every page, layout and component.
       PageUsedBySection(context, hostId, page.id)

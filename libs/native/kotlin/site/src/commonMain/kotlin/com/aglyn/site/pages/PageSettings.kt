@@ -181,6 +181,12 @@ class PageSettingsApi(private val api: ConsoleApiClient, private val writer: Fir
     writer.update(path(id), mapOf("publishSchedule" to FirestoreDelete))
   }
 
+  /** Saves the page's `seo` map (null deletes it), then drops the live page's cached copy. */
+  suspend fun saveSeo(id: String, seo: Map<String, Any?>?, livePath: String?) {
+    writer.update(path(id), mapOf("seo" to (seo ?: FirestoreDelete), "updatedAt" to firestoreNow()))
+    announce(id, livePath)
+  }
+
   /** One page in preview: once published, only the site's team sees it. */
   suspend fun setPreview(id: String, enabled: Boolean) {
     writer.merge("hosts/$hostId", mapOf("previewScreens" to mapOf(id to if (enabled) true else FirestoreDelete)))

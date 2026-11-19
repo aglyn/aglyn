@@ -667,6 +667,11 @@ struct PageDetail: View {
           PageAccessSection(
             page: page, livePath: row.livePath, settings: settings, host: (siteHost.state.value ?? model.host.state.value)??.data, api: settingsAPI,
             runner: runner, canEdit: canEdit, canPublish: canPublish)
+          PageSeoSection(
+            context: context, hostID: hostID, page: page, livePath: row.livePath, screen: screen.state.value??.data,
+            host: model.host.state.value??.data, api: settingsAPI, runner: runner, canEdit: canEdit
+          )
+          .id(page.id)
         }
         // What breaks if this page goes (AGL-703), on demand: the scan reads every page, layout and component.
         PageUsedBySection(context: context, hostID: hostID, pageID: page.id)
