@@ -202,6 +202,10 @@ const SURFACE_EXCLUSIONS: Record<string, string> = {
   maxMembersPerHost: 'add-on purchase ceiling; shown as "(max N)" on the plan grid',
   maxDatasetsPerOrg:
     'add-on purchase ceiling; surfaces in the downgrade-impact summary',
+  // AGL-4227. Starter's CRM-record ceiling (Pro's included amount): a stop on
+  // the records meter that already has its odometer, named where it bites.
+  maxCrmRecords:
+    'a ceiling over the CRM records band, whose meter is the CRM records row; named in the refusal (`crmRecordsRefusalMessage`) and the billing docs',
 }
 
 /**
@@ -231,6 +235,15 @@ const USAGE_EXCLUSIONS: Record<string, string> = {
     'a rate, not a counter — shown on the plan grid and the payments settings card',
   marketplaceFeePct:
     'a rate, not a counter — shown on the plan grid and the marketplace publish panel',
+  // AGL-4226. A per-minute limit, not a monthly counter: its odometer is the
+  // `X-Workspace-RateLimit-*` headers on every API response, and the plan
+  // grid prints the figure.
+  apiRequestsPerMinutePerOrg:
+    'a per-minute rate limit — counted on every API response (`X-Workspace-RateLimit-*`) and printed on the plan grid',
+  // AGL-4226. A ceiling over the API request counter, which already has its
+  // meter; the Billing usage page captions the ceiling under that meter.
+  maxApiRequestsPerMonth:
+    'a ceiling over `apiRequests`, whose meter is the API requests row; captioned beneath it on the usage page',
 }
 
 const QUOTA_KEYS = Object.keys(PLAN_ENTITLEMENTS.free).filter(

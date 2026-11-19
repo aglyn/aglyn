@@ -34,6 +34,7 @@ import {
  */
 export const DATASETS_API_V1_DESCRIPTION: ApiV1ResourceDescription = {
   tag: 'Datasets',
+  docsPage: 'datasets',
   description: 'Structured collections and the records inside them.',
   schemaName: 'Dataset',
   required: ['id', 'object', 'name', 'fields'],
@@ -47,20 +48,20 @@ export const DATASETS_API_V1_DESCRIPTION: ApiV1ResourceDescription = {
     created: nullable(ISO('When the dataset was created.')),
   },
   ops: [
-    { path: '/v1/datasets', method: 'get', operationId: 'listDatasets', summary: 'List datasets', list: true, returns: 'Dataset' },
-    { path: '/v1/datasets', method: 'post', operationId: 'createDataset', summary: 'Create a dataset', accepts: 'DatasetWrite', returns: 'Dataset', creates: true },
-    { path: '/v1/datasets/{datasetId}', method: 'get', operationId: 'getDataset', summary: 'Retrieve a dataset', returns: 'Dataset', pathParams: [{ name: 'datasetId', description: 'Dataset id.' }] },
-    { path: '/v1/datasets/{datasetId}', method: 'patch', operationId: 'updateDataset', summary: 'Update a dataset', accepts: 'DatasetWrite', returns: 'Dataset', pathParams: [{ name: 'datasetId', description: 'Dataset id.' }] },
+    { path: '/v1/datasets', method: 'get', operationId: 'listDatasets', summary: 'List datasets', description: 'Lists the workspace’s datasets: the structured content, such as services, menus or team members, that site pages show. Each has an id, a name and its fields.', list: true, returns: 'Dataset' },
+    { path: '/v1/datasets', method: 'post', operationId: 'createDataset', summary: 'Create a dataset', description: 'Creates a dataset with a `name` and its `fields` (the names of its columns). Returns the new dataset.', accepts: 'DatasetWrite', returns: 'Dataset', creates: true, bodyRequires: ['name', 'fields'] },
+    { path: '/v1/datasets/{datasetId}', method: 'get', operationId: 'getDataset', summary: 'Get a dataset', description: 'Returns one dataset with its fields. Needs `datasetId` from List datasets.', returns: 'Dataset', pathParams: [{ name: 'datasetId', description: 'Dataset id.' }] },
+    { path: '/v1/datasets/{datasetId}', method: 'patch', operationId: 'updateDataset', summary: 'Update a dataset', description: 'Changes a dataset’s name or fields. Needs `datasetId` from List datasets. Returns the updated dataset.', accepts: 'DatasetWrite', returns: 'Dataset', pathParams: [{ name: 'datasetId', description: 'Dataset id.' }] },
     {
       path: '/v1/datasets/{datasetId}', method: 'delete', operationId: 'deleteDataset', summary: 'Delete a dataset', returns: 'Deleted',
-      description: 'Refuses with `409 conflict` (`code: "dataset_not_empty"`) while the dataset still holds records.',
+      description: 'Deletes an empty dataset permanently. Needs `datasetId` from List datasets. A dataset that still holds records is refused; delete its records first.',
       pathParams: [{ name: 'datasetId', description: 'Dataset id.' }],
     },
-    { path: '/v1/datasets/{datasetId}/records', method: 'get', operationId: 'listDatasetRecords', summary: 'List records', list: true, returns: 'DatasetRecord', pathParams: [{ name: 'datasetId', description: 'Dataset id.' }] },
-    { path: '/v1/datasets/{datasetId}/records', method: 'post', operationId: 'createDatasetRecord', summary: 'Create a record', accepts: 'DatasetRecordWrite', returns: 'DatasetRecord', creates: true, pathParams: [{ name: 'datasetId', description: 'Dataset id.' }] },
-    { path: '/v1/datasets/{datasetId}/records/{recordId}', method: 'get', operationId: 'getDatasetRecord', summary: 'Retrieve a record', returns: 'DatasetRecord', pathParams: [{ name: 'datasetId', description: 'Dataset id.' }, { name: 'recordId', description: 'Record id.' }] },
-    { path: '/v1/datasets/{datasetId}/records/{recordId}', method: 'patch', operationId: 'updateDatasetRecord', summary: 'Update a record', accepts: 'DatasetRecordWrite', returns: 'DatasetRecord', pathParams: [{ name: 'datasetId', description: 'Dataset id.' }, { name: 'recordId', description: 'Record id.' }] },
-    { path: '/v1/datasets/{datasetId}/records/{recordId}', method: 'delete', operationId: 'deleteDatasetRecord', summary: 'Delete a record', returns: 'Deleted', pathParams: [{ name: 'datasetId', description: 'Dataset id.' }, { name: 'recordId', description: 'Record id.' }] },
+    { path: '/v1/datasets/{datasetId}/records', method: 'get', operationId: 'listDatasetRecords', summary: 'List a dataset’s records', description: 'Lists the records in one dataset, each with its values by field. Needs `datasetId` from List datasets.', list: true, returns: 'DatasetRecord', pathParams: [{ name: 'datasetId', description: 'Dataset id.' }] },
+    { path: '/v1/datasets/{datasetId}/records', method: 'post', operationId: 'createDatasetRecord', summary: 'Add a record to a dataset', description: 'Adds a record to a dataset. Needs `datasetId` from List datasets; `values` maps the dataset’s field ids to values. Returns the new record. A page that shows the dataset picks it up after the site is published.', accepts: 'DatasetRecordWrite', returns: 'DatasetRecord', creates: true, pathParams: [{ name: 'datasetId', description: 'Dataset id.' }] },
+    { path: '/v1/datasets/{datasetId}/records/{recordId}', method: 'get', operationId: 'getDatasetRecord', summary: 'Get a dataset record', description: 'Returns one record with its values. Needs `datasetId` from List datasets and `recordId` from List a dataset’s records.', returns: 'DatasetRecord', pathParams: [{ name: 'datasetId', description: 'Dataset id.' }, { name: 'recordId', description: 'Record id.' }] },
+    { path: '/v1/datasets/{datasetId}/records/{recordId}', method: 'patch', operationId: 'updateDatasetRecord', summary: 'Update a dataset record', description: 'Changes some of a record’s values; values not sent stay as they are. Needs `datasetId` and `recordId`. Returns the updated record.', accepts: 'DatasetRecordWrite', returns: 'DatasetRecord', pathParams: [{ name: 'datasetId', description: 'Dataset id.' }, { name: 'recordId', description: 'Record id.' }] },
+    { path: '/v1/datasets/{datasetId}/records/{recordId}', method: 'delete', operationId: 'deleteDatasetRecord', summary: 'Delete a dataset record', description: 'Deletes a record permanently. Needs `datasetId` and `recordId`.', returns: 'Deleted', pathParams: [{ name: 'datasetId', description: 'Dataset id.' }, { name: 'recordId', description: 'Record id.' }] },
   ],
   components: {
     DatasetRecord: {

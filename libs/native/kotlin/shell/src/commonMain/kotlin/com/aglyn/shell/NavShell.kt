@@ -114,7 +114,10 @@ val LocalWindowDoubleClick = androidx.compose.runtime.staticCompositionLocalOf<(
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: String, pendingLink: String?, onLinkOpened: () -> Unit) {
+internal fun SignedInShell(
+  services: ShellServices, root: ShellNavigator, uid: String, pendingLink: String?, onLinkOpened: () -> Unit,
+  linksInNewTab: Boolean = false,
+) {
   // The window's tabs (wide windows): the root navigator is the pinned Home tab, and every other tab holds its own place.
   val tabs = remember(uid) { ShellTabs(root) }
   val navigator = tabs.active.navigator
@@ -174,6 +177,8 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
 
   // A link or a Starred or Recent item that switched workspace or site opens once that workspace is on screen.
   LaunchedEffect(navigator.deferredLink, navigator.deferredPlace, workspace) { context.settleDeferredLink() }
+  /** A link from outside waiting for the new tab it opens in (the tab's navigator is on screen from the next frame). */
+  var tabLink by remember { mutableStateOf<String?>(null) }
   LaunchedEffect(pendingLink, workspace.ready) {
     if (pendingLink != null && workspace.ready && !AuthFlow.isAuthLink(pendingLink)) {
       // A link to a workspace another signed-in account holds opens in that account.
@@ -183,9 +188,22 @@ internal fun SignedInShell(services: ShellServices, root: ShellNavigator, uid: S
         services.accounts?.switchTo(other.slot)
         return@LaunchedEffect
       }
-      context.openLink(pendingLink)
+      // A link from outside the desktop app opens as a new tab of the window, as the console's opens a new browser tab
+      // (AGL-4059); the new tab's own context opens it, below.
+      if (linksInNewTab && wide) {
+        chrome.closeMenus()
+        tabs.open(services.workspace, workspace.org?.id, workspace.site?.id)
+        tabLink = pendingLink
+      } else {
+        context.openLink(pendingLink)
+      }
       onLinkOpened()
     }
+  }
+  LaunchedEffect(tabLink, navigator) {
+    val link = tabLink ?: return@LaunchedEffect
+    tabLink = null
+    context.openLink(link)
   }
   // The first verified session of an account with no workspace creates the one its sign-up asked for; a new workspace with a
   // plan lands on billing with it.

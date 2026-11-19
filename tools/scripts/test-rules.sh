@@ -50,6 +50,7 @@ npx firebase emulators:exec --only firestore,database --project demo-rules-check
         cloud/rules-ai-jobs.spec.mjs \
         cloud/rules-outreach.spec.mjs \
         cloud/rules-business-profile.spec.mjs \
+        cloud/rules-bandwidth-grace.spec.mjs \
         cloud/rules-accounting.spec.mjs \
         cloud/rules-site-care.spec.mjs \
         cloud/rules-pos-hardware.spec.mjs \

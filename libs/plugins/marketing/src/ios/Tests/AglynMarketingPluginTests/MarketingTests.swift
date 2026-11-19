@@ -23,6 +23,43 @@ private func variants(_ raw: Any?) -> [VariantRow] {
 }
 
 final class MarketingTests: XCTestCase {
+  func testTheCampaignsMailIsSummedAsTheConsoleSumsIt() throws {
+    func aggregate(_ got: CampaignAggregate, _ want: Any?, _ label: String) {
+      let w = want as! [String: Any]
+      XCTAssertEqual(got.value, (w["value"] as? NSNumber)?.doubleValue, label)
+      XCTAssertEqual(got.recorded, (w["recorded"] as? NSNumber)?.intValue, label)
+      XCTAssertEqual(got.sends, (w["sends"] as? NSNumber)?.intValue, label)
+    }
+    func rate(_ got: CampaignRate?, _ want: Any?, _ label: String) {
+      guard let w = want as? [String: Any] else { return XCTAssertNil(got, label) }
+      XCTAssertEqual(got?.value ?? -1, (w["value"] as! NSNumber).doubleValue, accuracy: 1e-9, label)
+      XCTAssertEqual(got?.numerator, (w["numerator"] as? NSNumber)?.doubleValue, label)
+      XCTAssertEqual(got?.denominator, (w["denominator"] as? NSNumber)?.doubleValue, label)
+      XCTAssertEqual(got?.denominatorLabel, w["denominatorLabel"] as? String, label)
+    }
+    for (index, item) in try functionCases("campaignRollup").enumerated() {
+      let got = campaignMailRollup(item.args[0] as? [[String: Any]] ?? [])
+      let want = item.result as! [String: Any]
+      let label = "case \(index)"
+      XCTAssertEqual(got.sends, (want["sends"] as? NSNumber)?.intValue, label)
+      XCTAssertEqual(got.scheduled, (want["scheduled"] as? NSNumber)?.intValue, label)
+      XCTAssertEqual(got.sending, (want["sending"] as? NSNumber)?.intValue, label)
+      XCTAssertEqual(got.drafts, (want["drafts"] as? NSNumber)?.intValue, label)
+      aggregate(got.addressed, want["addressed"], label)
+      aggregate(got.sent, want["sent"], label)
+      aggregate(got.delivered, want["delivered"], label)
+      aggregate(got.opens, want["opens"], label)
+      aggregate(got.clicks, want["clicks"], label)
+      aggregate(got.unsubscribes, want["unsubscribes"], label)
+      rate(got.openRate, want["openRate"], label)
+      rate(got.clickRate, want["clickRate"], label)
+      rate(got.unsubscribeRate, want["unsubscribeRate"], label)
+    }
+    XCTAssertEqual(CampaignAggregate(value: 6, recorded: 1, sends: 2).note, "across 1 of 2 emails")
+    XCTAssertEqual(CampaignAggregate(value: nil, recorded: 0, sends: 2).note, "not recorded")
+    XCTAssertEqual(CampaignRate(value: 5.0 / 9, numerator: 5, denominator: 9, denominatorLabel: "delivered").percent, "55.6%")
+  }
+
   func testCampaignPlacementIsTheConsoles() throws {
     func campaign(_ raw: Any) -> CampaignRow {
       campaignRow(FirestoreDocument(id: "c", data: raw as? [String: Any] ?? [:]))

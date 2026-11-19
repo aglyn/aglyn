@@ -320,9 +320,18 @@ struct SiteSwitcherPopover: View {
     } else if workspace.sites.isEmpty {
       note("No sites yet.")
     } else {
-      let recentIDs = model.recentSiteIDs(in: workspace)
+      // The sites pinned here lead, in the order pinned (the console's site switcher lists them first).
+      let pinnedIDs = model.pinnedSiteIDs(in: workspace)
+      let pinned = pinnedIDs.compactMap { id in workspace.sites.first { $0.id == id } }
+      let recentIDs = model.recentSiteIDs(in: workspace).filter { !pinnedIDs.contains($0) }
       let recent = recentIDs.compactMap { id in workspace.sites.first { $0.id == id } }
-      let rest = workspace.sites.filter { !recentIDs.contains($0.id) }
+      let rest = workspace.sites.filter { !recentIDs.contains($0.id) && !pinnedIDs.contains($0.id) }
+      if !pinned.isEmpty {
+        Text("Pinned").font(.system(size: 12, weight: .semibold)).foregroundStyle(AglynColor.secondaryText)
+          .padding(EdgeInsets(top: 8, leading: 10, bottom: 4, trailing: 10))
+          .accessibilityAddTraits(.isHeader)
+      }
+      ForEach(pinned) { row($0) }
       if !recent.isEmpty {
         Text("Recent").font(.system(size: 12, weight: .semibold)).foregroundStyle(AglynColor.secondaryText)
           .padding(EdgeInsets(top: 8, leading: 10, bottom: 4, trailing: 10))
@@ -362,6 +371,10 @@ struct SiteSwitcherPopover: View {
           .foregroundStyle(AglynColor.secondaryText).lineLimit(1)
       }
       Spacer(minLength: 0)
+      if model.pinnedSiteIDs(in: model.workspace).contains(site.id) {
+        Image(systemName: "pin.fill").font(.system(size: 11)).foregroundStyle(AglynColor.secondaryText)
+          .frame(width: 14, height: 14).accessibilityLabel("Pinned")
+      }
       if current {
         Image(systemName: "checkmark").font(.system(size: 11, weight: .semibold)).foregroundStyle(AglynColor.tint)
           .frame(width: 14, height: 14).accessibilityHidden(true)

@@ -16,7 +16,7 @@ Everything here uses `curl`, which is already installed on macOS and Linux and s
 with Windows 10 and later. There's a JavaScript version of each step underneath.
 
 :::info What you need
-- An organization on a plan that **includes API access** — Pro or Custom.
+- An organization on a plan that **includes API access** — Starter, Pro or Custom.
 - The **Manage API keys** permission, which owners and admins hold by default.
 - A terminal.
 :::
@@ -268,7 +268,7 @@ Every error has the same shape, and `type` is the field to branch on:
 | `401 unauthorized` | Key missing, mistyped, or revoked. | Check the header is `Authorization: Bearer aglyn_sk_…`. A common cause is a shell variable that didn't expand — `echo $AGLYN_API_KEY`. |
 | `403 insufficient_scope` | The key is fine; it lacks a permission. `code` names the exact scope. | Create a key with that scope. You can't add a scope to an existing key. |
 | `403 plan_required` | The organization's plan doesn't include API access — or, on commerce endpoints, doesn't include commerce (`code: "commerce"`). | Not transient. **Don't retry** — alert a human. |
-| `429 rate_limited` | Over 120 requests/minute for this key. | Back off. `Retry-After` says for how long, and every response carries the remaining budget in its headers. |
+| `429 rate_limited` | A limit refused it — 120 requests/minute for this key, the workspace's per-minute limit across all its keys, or (on Starter) the monthly ceiling. `code` says which; see [Rate limits](/api/rate-limits). | Back off. `Retry-After` says for how long, and every response carries the remaining budget in its headers. |
 
 Retry `429` and `500`. Never retry `401`, `403`, or `400` — nothing about them will
 change on the second attempt, and a loop that retries them turns a config mistake into

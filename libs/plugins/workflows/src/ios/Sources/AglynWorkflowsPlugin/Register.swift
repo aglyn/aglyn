@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynPluginHost
+import AglynScreens
 import SwiftUI
 
 public let automationScreen = "workflows.automation"
@@ -18,6 +19,8 @@ public let orgAutomationScreen = "workflows.org-automation"
 /// registrar is the same list.
 @MainActor
 public func registerWorkflowsNative(_ r: NativePluginRegistrar) {
+  // The staff screens (spec): the staff pages' read-only Automations cards.
+  SpecScreens.register(workflowsScreenSpecs(), into: r)
   r.screen(automationScreen, title: "Automation", icon: "bolt") { ctx, params in
     AglynFeatureGate(context: ctx, feature: "workflows", title: "Automation") {
       AutomationHubScreen(context: ctx, params: params)
@@ -41,3 +44,6 @@ public func registerWorkflowsNative(_ r: NativePluginRegistrar) {
   r.quickAction("workflows.open", title: "Automation", icon: "bolt", order: 400, screen: automationScreen)
   r.deepLink("workflows.page", path: "/automation", screen: automationScreen)
 }
+
+/// The plugin's spec screens (Resources/workflows.screens.json): the staff pages' read-only cards.
+func workflowsScreenSpecs() -> [ScreenSpec] { ScreenCatalog.load(from: .module) }

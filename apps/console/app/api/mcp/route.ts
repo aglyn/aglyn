@@ -20,16 +20,20 @@ import { connectorResourceMetadataUrl } from '@aglyn/aglyn/app-utils/connector-d
 import { ApiErrors, apiJson, readCappedBody, withResponseHeaders } from '@aglyn/tenant-data-admin'
 import { connectorOrigin, refuseOnAuthOrigin, unconfiguredOriginResponse } from '../_lib/connector-oauth-http'
 import { buildDocsUrl } from '../../../constants/docs-links'
-import { authenticateApiV1, chargeApiV1Call } from '../../../utils/api-v1'
+import {
+  API_BILLING_UNITS_HEADER,
+  apiRequestBodyBytes,
+  authenticateApiV1,
+  chargeApiRequestSize,
+  chargeApiV1Call,
+} from '../../../utils/api-v1'
 import {
   buildCustomerApiOpenApi,
   CUSTOMER_API_MOUNT,
   CUSTOMER_API_VERSION,
 } from '../../../utils/api-v1-openapi'
-import {
-  describePluginApiV1Resources,
-  dispatchResource,
-} from '../../../utils/api-v1-resources'
+import { describePluginApiV1Resources } from '../../../utils/api-v1-resources'
+import { serveApiV1 } from '../../../utils/api-v1-service'
 import {
   handleMcpMessage,
   JSON_RPC_ERRORS,
@@ -38,14 +42,14 @@ import {
   negotiateProtocolVersion,
   type JsonRpcResponse,
 } from '../../../utils/mcp-protocol'
-import { buildMcpTools, buildToolRequest } from '../../../utils/mcp-tools'
+import { buildMcpTools, buildToolRequest, missingPathArguments } from '../../../utils/mcp-tools'
 
 /**
  * THE MCP ENDPOINT (AGL-3091).
  *
  * A second transport over `/api/v1`, never a second implementation of it. A
  * tool call is turned back into the request the resource dispatcher would have
- * received over HTTP and handed to `dispatchResource`, so auth, entitlement,
+ * received over HTTP and handed to `serveApiV1`, so auth, entitlement,
  * plan refusals, scope refusals, rate limiting and the error envelope are the
  * ones the REST API already has. The tools themselves are read out of the
  * published OpenAPI document, so the surface cannot drift from what `/api/v1`
@@ -63,7 +67,7 @@ import { buildMcpTools, buildToolRequest } from '../../../utils/mcp-tools'
  * which server to ask. `/api/v1` answers its 401 unchanged.
  */
 // lockdown-423: via apps/console/utils/api-v1.ts — every tool call is
-// authenticated there before it reaches `dispatchResource`, so the verdict runs
+// authenticated there before it reaches `serveApiV1`, so the verdict runs
 // beside the org-doc read exactly as it does for `/v1`. This route adds no
 // second door into the same handlers.
 
@@ -128,7 +132,7 @@ const MCP_CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
   'Access-Control-Allow-Headers': 'Authorization, Content-Type, MCP-Protocol-Version, Mcp-Session-Id',
   'Access-Control-Expose-Headers':
-    'WWW-Authenticate, MCP-Protocol-Version, Mcp-Session-Id, Retry-After, RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset',
+    'WWW-Authenticate, MCP-Protocol-Version, Mcp-Session-Id, Retry-After, RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset, X-RateLimit-Scope, X-Workspace-RateLimit-Limit, X-Workspace-RateLimit-Remaining, X-Workspace-RateLimit-Reset, X-Api-Billing-Units',
   'Access-Control-Max-Age': '600',
 }
 
@@ -177,6 +181,14 @@ async function answer(request: Request): Promise<Response> {
 
   let callsMade = 0
   let latestHeaders: Record<string, string> = context.headers
+  // Billed units across this POST (AGL-4227). The POST was counted once by
+  // `authenticateApiV1`, and protocol messages (`initialize`, `tools/list`,
+  // `ping`, notifications) are never size-weighted. A `tools/call` is
+  // weighed by the request it dispatches and the response it gets, like the
+  // REST call it is: its first unit is the one already charged for it — the
+  // POST's for the first call, `chargeApiV1Call`'s for each after it
+  // (AGL-4225) — and the units past that are added by size.
+  let billedUnits = 1
   const deps = {
     tools,
     serverName: SERVER_NAME,
@@ -198,12 +210,36 @@ async function answer(request: Request): Promise<Response> {
         latestHeaders = charged.headers
         if (charged.refusal) return readOutcome(charged.refusal)
       }
+      // A missing path argument would misroute rather than fail; refuse it by
+      // name, in the API's own envelope, before anything is dispatched.
+      const missing = missingPathArguments(tool, args)
+      if (missing.length > 0) {
+        return readOutcome(
+          ApiErrors.badRequest({
+            message: `Missing required argument${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}`,
+            headers: context.headers,
+          }),
+        )
+      }
       const { request: toolRequest, segments } = buildToolRequest(
         tool,
         args,
         `${origin}${CUSTOMER_API_MOUNT}`,
       )
-      return readOutcome(await dispatchResource(toolRequest, context, segments))
+      const requestBytes = await apiRequestBodyBytes(toolRequest)
+      // The same function the `/api/v1` route answers with, service paths
+      // included (AGL-4225): a tool is a path that route serves.
+      const outcome = await readOutcome(await serveApiV1(toolRequest, context, segments))
+      const units = chargeApiRequestSize(
+        context,
+        requestBytes,
+        new TextEncoder().encode(outcome.text).byteLength,
+        1,
+      )
+      // The POST's own unit stands for the first call's; every later call's
+      // first unit was charged above, so each adds its whole size.
+      billedUnits += callsMade === 1 ? units - 1 : units
+      return outcome
     },
   }
 
@@ -219,13 +255,15 @@ async function answer(request: Request): Promise<Response> {
     if (response) responses.push(response)
   }
 
+  const unitsHeader = { [API_BILLING_UNITS_HEADER]: String(billedUnits) }
   if (responses.length === 0) {
-    return new Response(null, { status: 202, headers: latestHeaders })
+    return new Response(null, { status: 202, headers: { ...latestHeaders, ...unitsHeader } })
   }
 
   return apiJson(Array.isArray(payload) ? responses : responses[0], {
     headers: {
       ...latestHeaders,
+      ...unitsHeader,
       'MCP-Protocol-Version': answeredVersion(messages, request),
     },
   })
