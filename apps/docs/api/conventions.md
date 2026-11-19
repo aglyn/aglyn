@@ -156,11 +156,50 @@ errors add a `code` with the specific detail.
 | `401` | `unauthorized` | Missing, malformed, revoked, or expired key. |
 | `403` | `plan_required` | The organization's plan doesn't include what the call needs. `code` says which thing — see [below](#plan-required). |
 | `403` | `insufficient_scope` | The key lacks the required scope (`code` is the scope). |
+| `403` | `forbidden` | Not permitted for another reason, named by `code`. `code: "site_permission_required"` — a [connected app](#site-access) whose person lacks the site permission the call needs; the message names it. |
 | `404` | `not_found` | No such resource — or no such endpoint. |
 | `405` | `method_not_allowed` | Method not supported on that path; the `Allow` header lists what is. |
 | `409` | `conflict` | The request conflicts with current state. `code: "idempotency_in_progress"` — an earlier request with the same [`Idempotency-Key`](#idempotency) is still running. `code: "dataset_not_empty"` — the dataset you asked us to delete still holds records. `code: "contact_exists"` — that email is already a [contact](resources/contacts.md#contact-exists), and the message names its id. `code: "company_exists"` — that domain is already a [company](resources/companies.md#company-exists), likewise naming its id. `code: "order_transition"` — the [order](resources/orders.md#which-moves-are-allowed) cannot move to the status you asked for from the one it is in, and the message names that status. |
+| `423` | — | The workspace or the [site](#site-access) is locked. A different body — see below. |
 | `429` | `rate_limited` | [Rate limit](rate-limits.md) exceeded. |
 | `500` | `internal_error` | Something went wrong on our side. Safe to retry. |
+
+### Sites a connected app can reach {#site-access}
+
+Every operation that names a site — in its path, or as a `siteId` or `consentSiteId`
+in the query or body — first checks that site, the same way for every resource:
+
+1. **The site must be the workspace's.** Otherwise `404 not_found` (`"No such site"`).
+2. **For a [connected app](authentication.md#apps-that-sign-in), its person must be a
+   member of the site.** A site they are not on answers the same `404`, so an app
+   cannot learn that a site exists by naming it. An API key is the workspace's own
+   key, with no person behind it, and is not asked.
+3. **The site must not be locked.** A locked site answers `423` on every call that
+   names it. A read-only lock still lets reads through and refuses writes.
+
+Then a connected app's **writes** to a site's products, search listing, business
+details or media, and a publish, also need its person's **Edit site content**
+permission on that site — the permission the same change needs in the console.
+Without it the answer is `403 forbidden` with `code: "site_permission_required"`.
+An API key is not asked.
+
+The lock answer is the one body outside the usual envelope:
+
+```json
+{
+  "error": "locked",
+  "scope": "host",
+  "mode": "read-only",
+  "reason": "security",
+  "title": "…",
+  "message": "…"
+}
+```
+
+`scope` says what is locked (`host` is a site, `org` the workspace), and `title` and
+`message` say why in words a person can read. A lock with an end time carries
+`untilMs`, and the response may carry `Retry-After`; one without lasts until it is
+lifted, so don't retry it in a loop.
 
 ### Validation errors
 
@@ -199,6 +238,7 @@ apart:
 | `"crm"` | The API works, but the plan doesn't include the **CRM suite**, so [companies](resources/companies.md), [pipelines](resources/pipelines.md), [deals](resources/deals.md), [tasks](resources/tasks.md) and [activities](resources/activities.md) are closed. Contacts keep working. | Move to a plan with the CRM suite. |
 | `"contact_quota"` | The **CRM records band** — contacts, companies and deals together — is full on a plan that doesn't meter the overage, and the record refused was a contact. See [contacts](resources/contacts.md#plan-gates) — on plans that do meter it, this never happens and the extra records bill instead. | Upgrade. |
 | `"crm_records_quota"` | The same band, full, and the record refused was a [company](resources/companies.md) or a [deal](resources/deals.md). | Upgrade. |
+| `"product_quota"` | Commerce is included and the site holds **every product the plan includes**, so [creating a product](resources/products.md#create-a-product) is refused. The message names the limit. | Delete products, or upgrade. |
 
 Branch on `code`, not on the message. An integration that retries a plan failure
 forever is the failure mode here — none of them is transient, so back off and alert
@@ -212,7 +252,7 @@ site id for an hour; naming the plan is the answer they can act on.
 
 ## Idempotency
 
-Twenty operations accept an **`Idempotency-Key`** header:
+Twenty-one operations accept an **`Idempotency-Key`** header:
 
 | Operation | Key scoped to |
 | --- | --- |
@@ -226,6 +266,7 @@ Twenty operations accept an **`Idempotency-Key`** header:
 | `DELETE /v1/contacts/{contactId}` | the organization |
 | `POST /v1/media` | the organization |
 | `POST /v1/sites/{siteId}/media` | that site |
+| `POST /v1/sites/{siteId}/products` | that site |
 | `POST /v1/companies`, `DELETE /v1/companies/{companyId}` | the organization |
 | `POST /v1/deals`, `DELETE /v1/deals/{dealId}` | the organization |
 | `POST /v1/tasks`, `DELETE /v1/tasks/{taskId}` | the organization |

@@ -702,7 +702,7 @@ async function createDeal(request: Request, ctx: ApiV1Context): Promise<Response
   const body = await readJsonBody(request)
   const parsed = readDealInput(body, { partial: false })
   if ('errors' in parsed) return crmValidationFailed(ctx, 'deal', parsed.errors)
-  const site = readCrmSite(ctx, 'deal', body)
+  const site = await readCrmSite(ctx, request, 'deal', body)
   if ('response' in site) return site.response
   const refErrors = await dealRefErrors(ctx, parsed.values)
   if (Object.keys(refErrors).length) return crmValidationFailed(ctx, 'deal', refErrors)

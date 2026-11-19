@@ -151,6 +151,10 @@ data class MediaItem(
   val videoSeconds: Long? = null,
   /** Whether the film's document records a captured poster frame (only then is its poster URL a picture, not a 404). */
   val hasPoster: Boolean = false,
+  /** The stored bytes' digest, which a write into the file names so it cannot overwrite a replace it never saw. */
+  val contentSha256: String? = null,
+  /** What the file carries inside itself (`embeddedMetadata`, AGL-3331), as the server last read it; null until read. */
+  val embedded: MediaEmbeddedRecord? = null,
 ) {
   /** Where the file is served from: its CDN path on the console origin, else its stored URL. */
   fun src(origin: String): String? = cdnPath?.let { origin.trimEnd('/') + it } ?: url
@@ -204,6 +208,8 @@ data class MediaItem(
         scopeExcept = (doc.data["scopeExcept"] as? List<*>)?.filterIsInstance<String>(),
         videoSeconds = libraryVideoSeconds(doc.data["video"]),
         hasPoster = doc.data["poster"] is Map<*, *>,
+        contentSha256 = doc.string("contentSha256")?.ifBlank { null },
+        embedded = MediaEmbeddedRecord.from(doc.data["embeddedMetadata"]),
       )
     }
   }
@@ -833,3 +839,10 @@ fun videoProbeFields(result: VideoProbeResult): Map<String, Any?> = buildMap {
   }
 }
 
+
+/** The release flag video uploads are behind (`VIDEO_UPLOADS_RELEASE_FLAG`, AGL-2830). */
+const val VIDEO_UPLOADS_RELEASE_FLAG = "release_video_uploads"
+
+/** What the library says while video uploads are paused (`VIDEO_UPLOADS_PAUSED_MESSAGE`). */
+const val VIDEO_UPLOADS_PAUSED_MESSAGE =
+  "Video uploads are paused. Videos already in your media library keep playing, and images and documents upload as usual."

@@ -6273,6 +6273,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let crmActivityDirectionLabels: [String: String]
   public let crmActivityKindLabels: [String: String]
   public let crmActivityKindNouns: [String: String]
+  public let crmDefaultViewsField: String
   public let crmEmailBodyMax: Int
   public let crmEmailSubjectMax: Int
   public let crmEmailTemplateKindLabels: [String: String]
@@ -6285,6 +6286,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let crmMergeFields: [CrmMergeFieldDefinition]
   public let crmReportPeriodLabels: [String: String]
   public let crmTaskKindLabels: [String: String]
+  public let crmViewMaxColumns: Int
+  public let crmViewMaxFilters: Int
+  public let crmViewNameMax: Int
   public let crossMaxDepth: Int
   public let datasetAuthorableFieldTypes: [DatasetFieldType]
   public let datasetFieldTypeLabels: [String: String]
@@ -6298,9 +6302,14 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let dropOffMaxHours: Double
   public let dropOffWaitHours: [Double]
   public let dropOffWatchesMax: Int
+  public let duplicableResourceNouns: [String: String]
   public let duplicateActivityActionLabels: [String: String]
+  public let duplicateCopies: [String: [String]]
+  public let duplicateNameMax: Int
+  public let duplicateNamePrefix: String
   public let emailBlockStarterTreesJson: String
   public let emailListQuery: ListQueryDeclaration
+  public let emailStateLabels: [String: String]
   public let emailTemplateQuery: ListQueryDeclaration
   public let entryListFilterHeaders: [String: String]
   public let entryListQuery: ListQueryDeclaration
@@ -6392,11 +6401,13 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let nativeCrmFieldTypeLabels: [String: String]
   public let nativeCrmFieldTypes: [String]
   public let nativeCrmLeadOpenStatuses: [String]
+  public let nativeCrmLeadSourceDirections: [String]
   public let nativeCrmLeadStatuses: [String]
   public let nativeCrmPicklists: [NativeCrmPicklist]
   public let nativeCrmReportPeriods: [String]
   public let nativeCrmTaskKinds: [String]
   public let nativeCurrencyFractionDigits: [String: Double]
+  public let nativeEmailStateStatuses: [String]
   public let nativeNavManifest: NativeNavManifest
   public let nativeNavShellScreens: [String]
   public let nativePrivacyChoicesAnalyticsDetail: String
@@ -6649,6 +6660,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case crmActivityDirectionLabels = "CRM_ACTIVITY_DIRECTION_LABELS"
     case crmActivityKindLabels = "CRM_ACTIVITY_KIND_LABELS"
     case crmActivityKindNouns = "CRM_ACTIVITY_KIND_NOUNS"
+    case crmDefaultViewsField = "CRM_DEFAULT_VIEWS_FIELD"
     case crmEmailBodyMax = "CRM_EMAIL_BODY_MAX"
     case crmEmailSubjectMax = "CRM_EMAIL_SUBJECT_MAX"
     case crmEmailTemplateKindLabels = "CRM_EMAIL_TEMPLATE_KIND_LABELS"
@@ -6661,6 +6673,9 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case crmMergeFields = "CRM_MERGE_FIELDS"
     case crmReportPeriodLabels = "CRM_REPORT_PERIOD_LABELS"
     case crmTaskKindLabels = "CRM_TASK_KIND_LABELS"
+    case crmViewMaxColumns = "CRM_VIEW_MAX_COLUMNS"
+    case crmViewMaxFilters = "CRM_VIEW_MAX_FILTERS"
+    case crmViewNameMax = "CRM_VIEW_NAME_MAX"
     case crossMaxDepth = "CROSS_MAX_DEPTH"
     case datasetAuthorableFieldTypes = "DATASET_AUTHORABLE_FIELD_TYPES"
     case datasetFieldTypeLabels = "DATASET_FIELD_TYPE_LABELS"
@@ -6674,9 +6689,14 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case dropOffMaxHours = "DROP_OFF_MAX_HOURS"
     case dropOffWaitHours = "DROP_OFF_WAIT_HOURS"
     case dropOffWatchesMax = "DROP_OFF_WATCHES_MAX"
+    case duplicableResourceNouns = "DUPLICABLE_RESOURCE_NOUNS"
     case duplicateActivityActionLabels = "DUPLICATE_ACTIVITY_ACTION_LABELS"
+    case duplicateCopies = "DUPLICATE_COPIES"
+    case duplicateNameMax = "DUPLICATE_NAME_MAX"
+    case duplicateNamePrefix = "DUPLICATE_NAME_PREFIX"
     case emailBlockStarterTreesJson = "EMAIL_BLOCK_STARTER_TREES_JSON"
     case emailListQuery = "EMAIL_LIST_QUERY"
+    case emailStateLabels = "EMAIL_STATE_LABELS"
     case emailTemplateQuery = "EMAIL_TEMPLATE_QUERY"
     case entryListFilterHeaders = "ENTRY_LIST_FILTER_HEADERS"
     case entryListQuery = "ENTRY_LIST_QUERY"
@@ -6768,11 +6788,13 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case nativeCrmFieldTypeLabels = "NATIVE_CRM_FIELD_TYPE_LABELS"
     case nativeCrmFieldTypes = "NATIVE_CRM_FIELD_TYPES"
     case nativeCrmLeadOpenStatuses = "NATIVE_CRM_LEAD_OPEN_STATUSES"
+    case nativeCrmLeadSourceDirections = "NATIVE_CRM_LEAD_SOURCE_DIRECTIONS"
     case nativeCrmLeadStatuses = "NATIVE_CRM_LEAD_STATUSES"
     case nativeCrmPicklists = "NATIVE_CRM_PICKLISTS"
     case nativeCrmReportPeriods = "NATIVE_CRM_REPORT_PERIODS"
     case nativeCrmTaskKinds = "NATIVE_CRM_TASK_KINDS"
     case nativeCurrencyFractionDigits = "NATIVE_CURRENCY_FRACTION_DIGITS"
+    case nativeEmailStateStatuses = "NATIVE_EMAIL_STATE_STATUSES"
     case nativeNavManifest = "NATIVE_NAV_MANIFEST"
     case nativeNavShellScreens = "NATIVE_NAV_SHELL_SCREENS"
     case nativePrivacyChoicesAnalyticsDetail = "NATIVE_PRIVACY_CHOICES_ANALYTICS_DETAIL"
