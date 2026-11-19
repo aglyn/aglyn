@@ -13,18 +13,86 @@ public let assistPanelSlot = "assistPanel"
 private let assistHistoryTurns = 12
 
 /// One turn of the thread.
-private struct AssistTurn: Identifiable, Equatable {
+struct AssistTurn: Identifiable, Equatable {
   let id = UUID()
   let role: String
   var text: String
   var docs: [Pair] = []
   var proposal: Pair?
+  /// The exchange the route recorded the answer under (the chat's `done` event's `exchangeId`): what a rating names.
+  var exchangeID: String?
+  /// How the person rated the answer, once they have (the console's `feedback`).
+  var feedback: AssistFeedback?
 
   struct Pair: Equatable, Hashable {
     let label: String
     let href: String
   }
+
+  /// The answer as the chat's `done` event completes it: its documents, its proposal and the exchange it was recorded under.
+  func done(_ event: JSONValue) -> AssistTurn {
+    var turn = self
+    turn.docs = (event["docs"]?.arrayValue ?? []).compactMap { doc in
+      guard let label = doc["title"]?.stringValue ?? doc["label"]?.stringValue,
+        let href = doc["url"]?.stringValue ?? doc["href"]?.stringValue
+      else { return nil }
+      return Pair(label: label, href: href)
+    }
+    if let proposal = event["proposal"], let href = proposal["href"]?.stringValue {
+      turn.proposal = Pair(label: proposal["label"]?.stringValue ?? "Open it", href: href)
+    }
+    turn.exchangeID = event["exchangeId"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 }
+    return turn
+  }
 }
+
+/// A rating of an answer, the two values `/api/assist/feedback` takes.
+enum AssistFeedback: String, Equatable, CaseIterable {
+  case up, down
+
+  /// The control's name, the console's `aria-label` and tooltip.
+  var label: String { self == .up ? "Helpful answer" : "Unhelpful answer" }
+}
+
+/// What a rated answer's controls say, the console's tooltip once the answer is rated.
+let assistAlreadyRated = "Thanks — you already rated this answer"
+
+/// What the panel says when a rating could not be sent (the console's snackbar).
+let assistFeedbackFailed = "Feedback could not be recorded"
+
+/// The body `/api/assist/feedback` takes, as the console's panel sends it.
+func assistFeedbackBody(orgID: String, exchangeID: String, feedback: AssistFeedback) -> JSONValue {
+  .object(["orgId": .string(orgID), "exchangeId": .string(exchangeID), "feedback": .string(feedback.rawValue)])
+}
+
+/// Sends a rating and says what to tell the person: nothing once the route has answered, whatever it answered (the
+/// console's panel reads no reply, and its rating stands either way), and "Feedback could not be recorded" when the
+/// request never reached the route.
+func sendAssistFeedback(
+  _ feedback: AssistFeedback, exchangeID: String, orgID: String, post: (JSONValue) async throws -> Void
+) async -> String? {
+  do {
+    try await post(assistFeedbackBody(orgID: orgID, exchangeID: exchangeID, feedback: feedback))
+    return nil
+  } catch let answered as ConsoleAPIError where answered.status != 0 {
+    return nil
+  } catch {
+    return assistFeedbackFailed
+  }
+}
+
+#if DEBUG
+  /// Debug builds only: `-AglynAssistSettledAnswer <exchangeId>` opens the panel on one settled question and answer
+  /// recorded under that exchange, so an answer's controls can be driven without starting a run.
+  func assistDebugSettledTurns() -> [AssistTurn] {
+    guard let exchange = UserDefaults.standard.string(forKey: "AglynAssistSettledAnswer"), !exchange.isEmpty else { return [] }
+    var answer = AssistTurn(
+      role: "assistant",
+      text: "Open **Settings › Team**, choose **Invite**, and enter their email. They get a link to join this workspace.")
+    answer.exchangeID = exchange
+    return [AssistTurn(role: "user", text: "How do I invite my team?"), answer]
+  }
+#endif
 
 /// The day's or month's message standing (`quota` on the chat's answer).
 private struct AssistQuota: Equatable {
@@ -81,6 +149,10 @@ private struct AssistMetrics {
   let action: CGFloat
   let actionHeight: CGFloat
   let actionRadius: CGFloat
+  /// An answer's thumbs: the glyph and the square it is pressed in (the console's small icon button on the Mac, a touch
+  /// target on a phone).
+  let ratingIcon: CGFloat
+  let ratingTarget: CGFloat
   /// The Mac keeps its suggestions under the thread (18:485); a phone gives the thread the room once it starts.
   let suggestionsStay: Bool
 
@@ -95,7 +167,8 @@ private struct AssistMetrics {
         suggestionIconGap: AglynSpace.one, caption: 12, captionWeight: .semibold, composer: AglynSpace.of(5.5),
         composerRadius: AglynTokens.radius * 2.5, composerLeading: AglynSpace.oneAndHalf, send: AglynSpace.four,
         sendRadius: AglynTokens.radius * 1.5, sendIcon: AglynSpace.of(1.75), bubbleRadius: AglynTokens.radius * 2.5,
-        action: 13, actionHeight: AglynSpace.of(3.5), actionRadius: AglynTokens.radius * 1.5, suggestionsStay: true)
+        action: 13, actionHeight: AglynSpace.of(3.5), actionRadius: AglynTokens.radius * 1.5,
+        ratingIcon: AglynSpace.two, ratingTarget: AglynSpace.of(3.5), suggestionsStay: true)
     #else
       AssistMetrics(
         chipText: 13, chipWeight: .regular,
@@ -106,7 +179,8 @@ private struct AssistMetrics {
         suggestionIconGap: AglynSpace.of(1.25), caption: 13, captionWeight: .regular, composer: AglynSpace.of(6.5),
         composerRadius: AglynTokens.radius * 3, composerLeading: AglynSpace.of(1.75), send: AglynSpace.of(5),
         sendRadius: AglynTokens.radius * 2, sendIcon: AglynSpace.two, bubbleRadius: AglynTokens.radius * 3,
-        action: 15, actionHeight: AglynSpace.of(4.5), actionRadius: AglynTokens.radius * 2, suggestionsStay: false)
+        action: 15, actionHeight: AglynSpace.of(4.5), actionRadius: AglynTokens.radius * 2,
+        ratingIcon: AglynSpace.two, ratingTarget: AglynSpace.of(5.5), suggestionsStay: false)
     #endif
   }
 
@@ -129,6 +203,7 @@ struct AiAssistPanel: View {
   @State private var quota: AssistQuota?
   @State private var credits: String?
   @State private var task: Task<Void, Never>?
+  @State private var toast: AglynToast?
 
   private let m = AssistMetrics.current
   private var route: String { params["route"] ?? "" }
@@ -150,7 +225,7 @@ struct AiAssistPanel: View {
         ScrollView {
           VStack(alignment: .leading, spacing: AglynSpace.of(1.75)) {
             ForEach(Array(turns.enumerated()), id: \.element.id) { index, turn in
-              turnView(turn, last: index == turns.count - 1).id(turn.id)
+              turnView(turn, index: index, last: index == turns.count - 1).id(turn.id)
             }
           }
           .padding(.horizontal, m.edge)
@@ -175,7 +250,13 @@ struct AiAssistPanel: View {
     // A container, so the chip, suggestions, field and Send keep their own identifiers under the panel's.
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("assist-panel")
-    .task(id: context.orgID) { await loadCredits() }
+    .aglynToast($toast)
+    .task(id: context.orgID) {
+      #if DEBUG
+        if turns.isEmpty { turns = assistDebugSettledTurns() }
+      #endif
+      await loadCredits()
+    }
     .onDisappear { task?.cancel() }
   }
 
@@ -304,7 +385,7 @@ struct AiAssistPanel: View {
   }
 
   @ViewBuilder
-  private func turnView(_ turn: AssistTurn, last: Bool) -> some View {
+  private func turnView(_ turn: AssistTurn, index: Int, last: Bool) -> some View {
     let mine = turn.role == "user"
     let shown = turn.text.isEmpty && busy && last ? "…" : turn.text
     VStack(alignment: .leading, spacing: AglynSpace.one) {
@@ -333,6 +414,12 @@ struct AiAssistPanel: View {
         }
         .buttonStyle(AssistActionStyle(m: m))
       }
+      // Helpful / Unhelpful, under an answer the route recorded (the console's thumbs).
+      if !mine, turn.exchangeID != nil {
+        HStack(spacing: AglynSpace.half) {
+          ForEach(AssistFeedback.allCases, id: \.self) { value in ratingButton(value, turn: turn, index: index) }
+        }
+      }
     }
     // Your question on the sunken fill; the answer as plain text on the panel (18:505, 18:507).
     .padding(mine ? EdgeInsets(top: AglynSpace.of(1.25), leading: AglynSpace.oneAndHalf, bottom: AglynSpace.of(1.25), trailing: AglynSpace.oneAndHalf) : EdgeInsets())
@@ -340,6 +427,42 @@ struct AiAssistPanel: View {
       if mine { RoundedRectangle(cornerRadius: m.bubbleRadius, style: .continuous).fill(AglynColor.sunken) }
     }
     .accessibilityIdentifier(mine ? "assist-question" : "assist-answer")
+  }
+
+  /// A thumb: once the answer is rated both are spent, and say so.
+  private func ratingButton(_ value: AssistFeedback, turn: AssistTurn, index: Int) -> some View {
+    let rated = turn.feedback != nil
+    return Button {
+      rate(index, value)
+    } label: {
+      Image(systemName: value == .up ? "hand.thumbsup" : "hand.thumbsdown")
+        .font(.system(size: m.ratingIcon))
+        .foregroundStyle(rated ? AglynColor.textTertiary : AglynColor.secondaryText)
+        .frame(width: m.ratingTarget, height: m.ratingTarget)
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .disabled(rated)
+    .help(rated ? assistAlreadyRated : value.label)
+    .accessibilityLabel(value.label)
+    .accessibilityHint(rated ? assistAlreadyRated : "")
+    .accessibilityIdentifier(value == .up ? "assist-helpful" : "assist-unhelpful")
+  }
+
+  /// Rates an answer: the thumbs are spent at once, and the rating goes to the console's route.
+  private func rate(_ index: Int, _ value: AssistFeedback) {
+    guard turns.indices.contains(index), turns[index].feedback == nil, let exchange = turns[index].exchangeID,
+      let orgID = context.orgID
+    else { return }
+    turns[index].feedback = value
+    let api = context.api
+    Task { @MainActor in
+      if let said = await sendAssistFeedback(value, exchangeID: exchange, orgID: orgID, post: {
+        _ = try await api.request("/api/assist/feedback", method: .post, body: $0)
+      }) {
+        toast = AglynToast(said, tone: .warning)
+      }
+    }
   }
 
   private func loadCredits() async {
@@ -379,15 +502,7 @@ struct AiAssistPanel: View {
           switch event["type"]?.stringValue {
           case "delta": turns[index].text += event["text"]?.stringValue ?? ""
           case "done":
-            turns[index].docs = (event["docs"]?.arrayValue ?? []).compactMap { doc in
-              guard let label = doc["title"]?.stringValue ?? doc["label"]?.stringValue,
-                let href = doc["url"]?.stringValue ?? doc["href"]?.stringValue
-              else { return nil }
-              return AssistTurn.Pair(label: label, href: href)
-            }
-            if let proposal = event["proposal"], let href = proposal["href"]?.stringValue {
-              turns[index].proposal = AssistTurn.Pair(label: proposal["label"]?.stringValue ?? "Open it", href: href)
-            }
+            turns[index] = turns[index].done(event)
             if let q = event["quota"] {
               quota = AssistQuota(
                 period: q["period"]?.stringValue ?? "day", limit: Int(q["limit"]?.numberValue ?? 0),

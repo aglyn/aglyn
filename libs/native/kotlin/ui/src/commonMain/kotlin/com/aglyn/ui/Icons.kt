@@ -97,6 +97,8 @@ import androidx.compose.material.icons.outlined.SupervisorAccount
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Tab
 import androidx.compose.material.icons.outlined.Tag
+import androidx.compose.material.icons.outlined.ThumbDown
+import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material.icons.outlined.ToggleOn
 import androidx.compose.material.icons.outlined.TravelExplore
 import androidx.compose.material.icons.outlined.Unsubscribe
@@ -391,6 +393,9 @@ object AglynIcons {
     "mark_unread" to Icons.Outlined.MarkEmailUnread,
     "mark_read" to Icons.Outlined.Drafts,
     "send" to Icons.AutoMirrored.Outlined.Send,
+    // An Assist answer's Helpful / Unhelpful.
+    "thumb_up" to Icons.Outlined.ThumbUp,
+    "thumb_down" to Icons.Outlined.ThumbDown,
     "list" to Icons.AutoMirrored.Outlined.List,
     "label" to Icons.AutoMirrored.Outlined.Label,
     "timeline" to Icons.Outlined.Timeline,
