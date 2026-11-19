@@ -45,6 +45,11 @@ fun registerMarketplaceNative(r: NativePluginRegistrar) {
   // A site's component and layout pages offer Publish to marketplace only where a plugin fills this slot (the console's
   // `hostArtifactPublish` zone); the publish itself is this plugin's spec screens, so the widget draws nothing of its own.
   r.widget("marketplace.artifact-publish", title = "Publish to marketplace", order = 10, slot = "hostArtifactPublish") { _ -> }
+  // An installed template's row in the site's library says when the listing has a newer version (the console's
+  // `templateInstallStatus` zone).
+  r.widget("marketplace.template-install-status", title = "Update available", order = 10, slot = "templateInstallStatus") { context ->
+    TemplateInstallStatusChip(context)
+  }
   // Create site lists the marketplace's starters through this slot (the console's `hostStarterPicker` zone), and never names
   // the plugin that fills it.
   r.widget("marketplace.starter-picker", title = "Choose your starter", order = 10, slot = StarterPickerZone.SLOT) { context ->

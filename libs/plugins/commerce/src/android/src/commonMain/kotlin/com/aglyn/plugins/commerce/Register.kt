@@ -124,8 +124,8 @@ fun registerCommerceNative(r: NativePluginRegistrar) {
   r.deepLink("commerce.quote-link", path = "/products/orders?quote=:quote", screen = COMMERCE_QUOTE_SCREEN)
   r.deepLink("commerce.returns-page", path = "/products/returns", screen = "commerce.returns")
   r.deepLink("commerce.return-link", path = "/products/returns?return=:returnId", screen = "commerce.return")
-  r.deepLink("commerce.shipping-page", path = "/products/shipping", screen = "commerce.shipping")
-  r.deepLink("commerce.notifications-page", path = "/products/notifications", screen = "commerce.notifications")
+  r.deepLink("commerce.shipping-page", path = "/products/shipping", screen = "commerce.settingsShipping")
+  r.deepLink("commerce.notifications-page", path = "/products/notifications", screen = "commerce.settingsNotifications")
 
   r.tab("commerce.orders-tab", title = "Orders", icon = "receipt", screen = COMMERCE_ORDERS_SCREEN, order = 100)
   r.tab("commerce.products-tab", title = "Products", icon = "inventory", screen = COMMERCE_PRODUCTS_SCREEN, order = 110)
