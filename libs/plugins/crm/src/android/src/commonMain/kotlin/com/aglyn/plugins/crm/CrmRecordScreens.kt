@@ -315,6 +315,9 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
       val movesStages = rememberMovesStages(context, scope)
       val stages = reference.pipeline(doc.string("pipelineId")).stages.associate { it.id to it.name }
       val row = crmRow(kind, doc, scope, stages)
+      // What `crm/email-check` says about a contact's or a lead's own address, sent from its site.
+      val checkedAddress = (row.data["email"] as? String)?.trim()?.takeIf { it.isNotEmpty() && (kind == CrmKind.CONTACT || kind == CrmKind.LEAD) }
+      val emailCheck by androidx.compose.runtime.produceState<CrmEmailCheck?>(null, scope.hostId, checkedAddress) { this.value = api.emailCheck(checkedAddress) }
       val fields = reference.fields(kind)
       val values = formValues(fields, row.data)
       Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -343,6 +346,8 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
             primary = primary,
             more = more,
           )
+          // The verdict on the address first, then its mail gateway (`CrmEmailStateChip`, `CrmEmailGatewayChip`).
+          if (kind == CrmKind.CONTACT || kind == CrmKind.LEAD) CrmEmailChips(crmReadEmailState(row.data), emailCheck)
           if (kind == CrmKind.DEAL) DealStagePath(reference.pipeline(doc.string("pipelineId")), doc.string("stageId"), doc.string("status"))
           // What another plugin does with the person, such as start a quote (the console's `crmRecordActions` zone).
           if (kind == CrmKind.CONTACT) {
@@ -451,8 +456,14 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
  * contact, Move an open deal's stage), and every other act in ⋯, Remove or Delete last.
  */
 private fun recordActions(kind: CrmKind, row: CrmRow, movesStages: Boolean, call: com.aglyn.ui.RecordAction?, open: (RecordDialog) -> Unit): Pair<com.aglyn.ui.RecordAction?, List<com.aglyn.ui.RecordAction>> {
+  // The record's own verdict on its address outranks having one (`CrmSendEmailButton`): Send email is off, the reason under
+  // the chips.
+  val emailRefused = crmEmailStateForbidsEmail(crmReadEmailState(row.data))
   fun act(label: String, icon: String, dialog: RecordDialog) =
-    com.aglyn.ui.RecordAction("crm-action-${dialog.name.lowercase()}", label, icon, destructive = dialog == RecordDialog.DELETE, enabled = movesStages || dialog !in setOf(RecordDialog.STAGE, RecordDialog.MOVE, RecordDialog.WON, RecordDialog.LOST)) { open(dialog) }
+    com.aglyn.ui.RecordAction(
+      "crm-action-${dialog.name.lowercase()}", label, icon, destructive = dialog == RecordDialog.DELETE,
+      enabled = (movesStages || dialog !in setOf(RecordDialog.STAGE, RecordDialog.MOVE, RecordDialog.WON, RecordDialog.LOST)) && !(dialog == RecordDialog.EMAIL && emailRefused),
+    ) { open(dialog) }
   val all = buildList {
     add(act("Edit", "edit", RecordDialog.EDIT))
     add(act("Log activity", "sticky_note", RecordDialog.LOG))
@@ -479,7 +490,7 @@ private fun recordActions(kind: CrmKind, row: CrmRow, movesStages: Boolean, call
   }
   val next = when (kind) {
     CrmKind.LEAD -> if (row.data["status"] == "qualified" && row.data["convertedContactId"] == null) RecordDialog.CONVERT else RecordDialog.LOG
-    CrmKind.CONTACT -> if (crmHasEmail(row.data)) RecordDialog.EMAIL else RecordDialog.LOG
+    CrmKind.CONTACT -> if (crmHasEmail(row.data) && !emailRefused) RecordDialog.EMAIL else RecordDialog.LOG
     CrmKind.DEAL -> if ((row.data["status"] == "open" || row.data["status"] == null) && movesStages) RecordDialog.MOVE else RecordDialog.LOG
     CrmKind.COMPANY -> RecordDialog.LOG
   }

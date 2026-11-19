@@ -258,6 +258,9 @@ internal fun CrmEmailDialog(context: NativePluginContext, scope: CrmScope, api: 
   var inserting by remember { mutableStateOf(false) }
   var savingTemplate by remember { mutableStateOf(false) }
   val saveBusy = remember(savingTemplate) { Busy() }
+  // What `crm/email-check` says about the address before the send (`useCrmEmailCheck`).
+  val address = row.data["email"] as? String
+  val check by androidx.compose.runtime.produceState<CrmEmailCheck?>(null, address) { this.value = api.emailCheck(address) }
   // The draft as it will be sent (the dialog's `preview`): the records are read the first time it names a merge field.
   val hasFields = crmHasMergeFields("$subject\n$message")
   var merge by remember { mutableStateOf<CrmMergeContext?>(null) }
@@ -282,6 +285,7 @@ internal fun CrmEmailDialog(context: NativePluginContext, scope: CrmScope, api: 
     onDismiss = onDismiss,
     onConfirm = { onSend(subject, message) },
   ) {
+    crmEmailCheckWarning(check)?.let { NoticeBanner(it, com.aglyn.ui.StatusTone.WARNING, Modifier.fillMaxWidth().testTag("crm-email-check-warning")) }
     if (pickable.isNotEmpty()) {
       SelectField(
         "Template",

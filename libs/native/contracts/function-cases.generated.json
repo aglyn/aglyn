@@ -14736,6 +14736,160 @@
         }
       ]
     },
+    "emailStateForbidsEmail": {
+      "module": "libs/aglyn/src/lib/app-utils/email-state.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "status": "ok",
+              "atMs": 0,
+              "source": "member",
+              "detail": null
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "status": "unsubscribed",
+              "atMs": 0,
+              "source": "member",
+              "detail": null
+            }
+          ],
+          "result": true
+        }
+      ]
+    },
+    "emailStateRefusal": {
+      "module": "libs/aglyn/src/lib/app-utils/email-state.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "status": "ok",
+              "atMs": 0,
+              "source": "member",
+              "detail": null
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "status": "undeliverable",
+              "atMs": 0,
+              "source": "campaign",
+              "detail": null
+            }
+          ],
+          "result": "Email to this address would bounce: its domain has no mail server."
+        },
+        {
+          "args": [
+            {
+              "status": "bounced",
+              "atMs": 0,
+              "source": "campaign",
+              "detail": null
+            }
+          ],
+          "result": "Email to this address bounced: the mailbox does not exist."
+        },
+        {
+          "args": [
+            {
+              "status": "blocked",
+              "atMs": 0,
+              "source": "campaign",
+              "detail": null
+            }
+          ],
+          "result": "Their mail gateway blocked email to this address."
+        },
+        {
+          "args": [
+            {
+              "status": "unsubscribed",
+              "atMs": 0,
+              "source": "campaign",
+              "detail": null
+            }
+          ],
+          "result": "They unsubscribed."
+        },
+        {
+          "args": [
+            {
+              "status": "complained",
+              "atMs": 0,
+              "source": "campaign",
+              "detail": null
+            }
+          ],
+          "result": "They marked an email as spam."
+        },
+        {
+          "args": [
+            {
+              "status": "do_not_contact",
+              "atMs": 0,
+              "source": "campaign",
+              "detail": null
+            }
+          ],
+          "result": "On the do-not-contact list."
+        },
+        {
+          "args": [
+            {
+              "status": "bounced",
+              "atMs": 0,
+              "source": "campaign",
+              "detail": "550 no such user."
+            }
+          ],
+          "result": "Email to this address bounced: the mailbox does not exist. 550 no such user."
+        },
+        {
+          "args": [
+            {
+              "status": "undeliverable",
+              "atMs": 1700000000000,
+              "source": "check",
+              "detail": null
+            }
+          ],
+          "result": "Email to this address would bounce: its domain has no mail server (checked on Nov 14, 2023)."
+        },
+        {
+          "args": [
+            {
+              "status": "unsubscribed",
+              "atMs": 1700000000000,
+              "source": "campaign",
+              "detail": "Via the footer link."
+            }
+          ],
+          "result": "They unsubscribed on Nov 14, 2023. Via the footer link."
+        }
+      ]
+    },
     "encodeBarcode": {
       "module": "libs/plugins/commerce/src/lib/barcode/barcode-encode.ts",
       "cases": [
@@ -44657,6 +44811,94 @@
             "textSize": "system",
             "theme": "aglyn",
             "useWorkspaceBrand": true
+          }
+        }
+      ]
+    },
+    "readEmailState": {
+      "module": "libs/aglyn/src/lib/app-utils/email-state.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "emailState": "bounced"
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "emailState": {
+                "status": "nope"
+              }
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "emailState": {
+                "status": "bounced",
+                "atMs": 1700000000000,
+                "source": "sequence",
+                "detail": "550 no such user",
+                "enrollmentId": "e1"
+              }
+            }
+          ],
+          "result": {
+            "atMs": 1700000000000,
+            "detail": "550 no such user",
+            "enrollmentId": "e1",
+            "source": "sequence",
+            "status": "bounced"
+          }
+        },
+        {
+          "args": [
+            {
+              "emailState": {
+                "status": "blocked",
+                "atMs": -4,
+                "source": "other",
+                "detail": ""
+              }
+            }
+          ],
+          "result": {
+            "atMs": 0,
+            "detail": null,
+            "source": "campaign",
+            "status": "blocked"
+          }
+        },
+        {
+          "args": [
+            {
+              "emailState": {
+                "status": "ok"
+              }
+            }
+          ],
+          "result": {
+            "atMs": 0,
+            "detail": null,
+            "source": "campaign",
+            "status": "ok"
           }
         }
       ]

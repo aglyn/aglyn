@@ -339,15 +339,19 @@ struct CrmEmailComposer: View {
   var loadMerge: (() async -> CrmMergeContext)?
   let send: (String, String) async throws -> Void
   @State private var model = CrmTemplatesModel()
+  /// What `crm/email-check` says about the address before the send (`useCrmEmailCheck`).
+  @State private var check: CrmEmailCheck?
 
   var body: some View {
     EmailSheet(
-      to: to, links: links, templates: model.list.ready ? model.templates(uid: scope.uid) : [], loadMerge: loadMerge,
+      to: to, links: links, templates: model.list.ready ? model.templates(uid: scope.uid) : [], warning: crmEmailCheckWarning(check),
+      loadMerge: loadMerge,
       saveTemplate: { name, visibility, subject, body in
         try await api.createTemplate(name: name, kind: "template", visibility: visibility, subject: subject, body: body)
       }, save: send
     )
     .task { model.start(context.firestore, scope) }
+    .task(id: to ?? "") { check = await api.emailCheck(to) }
     .onDisappear { model.stop() }
   }
 }

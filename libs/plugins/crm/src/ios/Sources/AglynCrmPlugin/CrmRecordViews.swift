@@ -348,6 +348,8 @@ struct RecordDetail: View {
   @State private var notice: String?
   @State private var error: String?
   @State private var site = LiveDoc()
+  /// What `crm/email-check` said about a contact's or a lead's address, sent from its site.
+  @State private var emailCheck: CrmEmailCheck?
   /// A task another plugin proposed (the AI summary's next step), filling the New task sheet.
   @State private var proposedTask: TaskDraft?
   /// A stage another plugin proposed for this deal, asked about before it moves.
@@ -359,6 +361,13 @@ struct RecordDetail: View {
   private var movesStages: Bool { scope.movesStages(on: site.doc?.data) }
   private var hasStage: Bool { kind == .contact || (kind == .deal && (doc.document?.string("status") ?? "open") == "open") }
   private var api: CrmAPI { CrmAPI(api: listAPI.api, reader: listAPI.reader, scope: scope) }
+  /// The address the gateway chip asks about: a contact's or a lead's own (`record.email`).
+  private var checkedAddress: String? {
+    guard kind == .contact || kind == .lead, let document = doc.document else { return nil }
+    // The person as the page shows them: a contact's holder facet over the shared fields.
+    let email = (crmRow(kind, document, scope, stages: [:]).data["email"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+    return email.isEmpty ? nil : email
+  }
 
   var body: some View {
     Group {
@@ -376,6 +385,11 @@ struct RecordDetail: View {
     .task(id: id) { start() }
     .task(id: scope.hostID) {
       if !scope.hostID.isEmpty { site.start(context.firestore, ["hosts", scope.hostID]) }
+    }
+    .task(id: "\(scope.hostID)|\(checkedAddress ?? "")") {
+      emailCheck = nil
+      guard let checkedAddress else { return }
+      emailCheck = await api.emailCheck(checkedAddress)
     }
     .onDisappear {
       doc.stop()
@@ -454,6 +468,8 @@ struct RecordDetail: View {
         AglynRecordHeader(
           row.title, subtitle: row.subtitle, systemImage: kind.symbol, status: row.chip.map { ($0, row.tone) },
           primary: acts.primary, more: acts.more)
+        // The verdict on the address first, then its mail gateway (`CrmEmailStateChip`, `CrmEmailGatewayChip`).
+        if kind == .contact || kind == .lead { CrmEmailChips(state: crmReadEmailState(row.data), check: emailCheck) }
         if kind == .deal { DealStagePath(pipeline: pipeline, stageID: document.string("stageId"), status: document.string("status")) }
         // What another plugin does with the person, such as start a quote (the console's `crmRecordActions` zone).
         if kind == .contact, !context.slotWidgets(crmRecordActionsZone).isEmpty {
@@ -641,6 +657,9 @@ struct RecordDetail: View {
     var acts: [(String, String, RecordAction)] = [("Edit", "pencil", .edit), ("Log activity", "note.text", .log)]
     if kind != .deal { acts.append(("Log a call", "phone.badge.plus", .logCall)) }
     if crmHasEmail(row.data) || kind == .deal { acts.append(("Email", "envelope", .email)) }
+    // The record's own verdict on its address outranks having one (`CrmSendEmailButton`): Send email is off, the reason
+    // under the chips.
+    let emailRefused = crmEmailStateForbidsEmail(crmReadEmailState(row.data))
     acts.append(("New task", "checklist", .task))
     let status = row.data["status"] as? String
     switch kind {
@@ -659,14 +678,14 @@ struct RecordDetail: View {
     let next: RecordAction =
       switch kind {
       case .lead: status == "qualified" && row.data["convertedContactId"] == nil ? .convert : .log
-      case .contact: crmHasEmail(row.data) ? .email : .log
+      case .contact: crmHasEmail(row.data) && !emailRefused ? .email : .log
       case .deal: (status ?? "open") == "open" && movesStages ? .move : .log
       case .company: .log
       }
     let all = acts.map { title, symbol, act in
       AglynRecordAction(
         "crm-action-\(act.rawValue)", title, systemImage: symbol, destructive: act == .delete,
-        enabled: movesStages || ![.stage, .move, .won, .lost].contains(act)
+        enabled: (movesStages || ![.stage, .move, .won, .lost].contains(act)) && !(act == .email && emailRefused)
       ) { action = act }
     }
     let primary = all.first { $0.id == "crm-action-\(next.rawValue)" }
@@ -1187,6 +1206,8 @@ struct EmailSheet: View {
   var links: [String: String] = [:]
   /// The workspace's templates as this reader may list them; nil leaves the template tools out.
   var templates: [CrmEmailTemplate]?
+  /// The deliverability check's warning before the send (`CrmEmailCheckAlert`); nil when there is nothing to say.
+  var warning: String?
   /// Reads the documents the preview fills merge fields from; nil leaves the preview out.
   var loadMerge: (() async -> CrmMergeContext)?
   /// Saves the draft as a template; nil leaves Save as template out.
@@ -1218,6 +1239,7 @@ struct EmailSheet: View {
     ) {
       Section {
         if let to { LabeledContent("To", value: to) }
+        if let warning { AglynNotice(warning, tone: .warning).accessibilityIdentifier("crm-email-check-warning") }
         if !pickable.isEmpty {
           Picker("Template", selection: Binding(get: { applied?.id ?? "" }, set: { id in pick(pickable.first { $0.id == id }) })) {
             Text("None").tag("")

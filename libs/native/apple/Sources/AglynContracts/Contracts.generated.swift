@@ -6308,6 +6308,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let duplicateNamePrefix: String
   public let emailBlockStarterTreesJson: String
   public let emailListQuery: ListQueryDeclaration
+  public let emailStateLabels: [String: String]
   public let emailTemplateQuery: ListQueryDeclaration
   public let entryListFilterHeaders: [String: String]
   public let entryListQuery: ListQueryDeclaration
@@ -6689,6 +6690,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case duplicateNamePrefix = "DUPLICATE_NAME_PREFIX"
     case emailBlockStarterTreesJson = "EMAIL_BLOCK_STARTER_TREES_JSON"
     case emailListQuery = "EMAIL_LIST_QUERY"
+    case emailStateLabels = "EMAIL_STATE_LABELS"
     case emailTemplateQuery = "EMAIL_TEMPLATE_QUERY"
     case entryListFilterHeaders = "ENTRY_LIST_FILTER_HEADERS"
     case entryListQuery = "ENTRY_LIST_QUERY"

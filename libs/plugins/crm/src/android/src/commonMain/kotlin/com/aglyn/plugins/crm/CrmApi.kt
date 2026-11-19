@@ -47,6 +47,7 @@ object CrmRoutes {
   const val LIST_FIELDS = "/api/crm/list-fields"
   const val SHARING = "/api/crm/sharing"
   const val EMAIL_SEND = "/api/crm/email-send"
+  const val EMAIL_CHECK = "/api/crm/email-check"
   const val EMAIL_TEMPLATE_DUPLICATE = "/api/crm/email-template-duplicate"
   const val PICKLIST_VALUES = "/api/crm/picklist-values"
   const val MEMBERS = "/api/orgs/members"
@@ -418,6 +419,26 @@ class CrmApi(private val api: ConsoleApiClient, private val writer: FirestoreWri
     api.request(CrmRoutes.EMAIL_SEND, ApiMethod.POST, body(*(links + mapOf("subject" to subject.trim(), "body" to message.trim())).toList().toTypedArray()))
   }
 
+  /**
+   * `crm/email-check` for [email] from this scope's site, null when it could not be had: a check that fails says nothing
+   * rather than something wrong. Answers are kept for a minute by site and address, as the console keeps them.
+   */
+  suspend fun emailCheck(email: String?): CrmEmailCheck? {
+    val address = email.orEmpty().trim().lowercase()
+    if (address.isEmpty()) return null
+    val key = "${scope.hostId.orEmpty()}|$address"
+    val now = nowMillis()
+    crmEmailChecksRemembered[key]?.let { (atMs, answer) -> if (atMs + 60_000 >= now) return answer }
+    val answer = try {
+      crmEmailCheck(api.request(CrmRoutes.EMAIL_CHECK, ApiMethod.POST, body("email" to address)))
+    } catch (error: Throwable) {
+      if (error is CancellationException) throw error
+      null
+    }
+    crmEmailChecksRemembered[key] = now to answer
+    return answer
+  }
+
   /*---------- email templates ----------*/
 
   /**
@@ -514,6 +535,9 @@ class CrmApi(private val api: ConsoleApiClient, private val writer: FirestoreWri
 }
 
 private fun JsonArray?.orEmpty(): List<kotlinx.serialization.json.JsonElement> = this ?: emptyList()
+
+/** Checks fetched in the last minute, by site and address (the console's `remembered`). */
+private val crmEmailChecksRemembered = mutableMapOf<String, Pair<Long, CrmEmailCheck?>>()
 
 /** When a proposed task is due: that many days from today, at 5 pm on the device's calendar (`crmProposedDueAtMs`). */
 fun crmProposedDueAtMs(dueInDays: Int, nowMs: Long = com.aglyn.core.nowMillis()): Long {

@@ -4150,6 +4150,7 @@ internal data class ContractValuesPart3(
     @SerialName("DUPLICATE_NAME_PREFIX") val duplicateNamePrefix: String,
     @SerialName("EMAIL_BLOCK_STARTER_TREES_JSON") val emailBlockStarterTreesJson: String,
     @SerialName("EMAIL_LIST_QUERY") val emailListQuery: ListQueryDeclaration,
+    @SerialName("EMAIL_STATE_LABELS") val emailStateLabels: Map<String, String>,
     @SerialName("EMAIL_TEMPLATE_QUERY") val emailTemplateQuery: ListQueryDeclaration,
     @SerialName("ENTRY_LIST_FILTER_HEADERS") val entryListFilterHeaders: Map<String, String>,
     @SerialName("ENTRY_LIST_QUERY") val entryListQuery: ListQueryDeclaration,
@@ -4191,11 +4192,11 @@ internal data class ContractValuesPart3(
     @SerialName("INSTALL_TARGETS") val installTargets: Map<String, List<InstallTarget>>,
     @SerialName("LABEL_CODE_MAX_LENGTH") val labelCodeMaxLength: Long,
     @SerialName("LABEL_SIZES") val labelSizes: List<LabelSize>,
-    @SerialName("LAYOUT_LIST_QUERY") val layoutListQuery: ListQueryDeclaration,
 )
 
 @Serializable
 internal data class ContractValuesPart4(
+    @SerialName("LAYOUT_LIST_QUERY") val layoutListQuery: ListQueryDeclaration,
     @SerialName("LEAD_LIST_DECLARATION") val leadListDeclaration: ListQueryDeclaration,
     @SerialName("LEAD_LIST_QUERY") val leadListQuery: ListQueryDeclaration,
     @SerialName("LEAD_SOURCE_OPTIONS") val leadSourceOptions: List<ListFilterOption>,
@@ -4243,11 +4244,11 @@ internal data class ContractValuesPart4(
     @SerialName("NATIVE_CRM_FIELD_DEFAULT_CURRENCY") val nativeCrmFieldDefaultCurrency: String,
     @SerialName("NATIVE_CRM_FIELD_OBJECTS") val nativeCrmFieldObjects: List<String>,
     @SerialName("NATIVE_CRM_FIELD_TYPE_LABELS") val nativeCrmFieldTypeLabels: Map<String, String>,
-    @SerialName("NATIVE_CRM_FIELD_TYPES") val nativeCrmFieldTypes: List<String>,
 )
 
 @Serializable
 internal data class ContractValuesPart5(
+    @SerialName("NATIVE_CRM_FIELD_TYPES") val nativeCrmFieldTypes: List<String>,
     @SerialName("NATIVE_CRM_LEAD_OPEN_STATUSES") val nativeCrmLeadOpenStatuses: List<String>,
     @SerialName("NATIVE_CRM_LEAD_SOURCE_DIRECTIONS") val nativeCrmLeadSourceDirections: List<String>,
     @SerialName("NATIVE_CRM_LEAD_STATUSES") val nativeCrmLeadStatuses: List<String>,
@@ -4295,11 +4296,11 @@ internal data class ContractValuesPart5(
     @SerialName("OUTREACH_MAX_EMAIL_STEPS") val outreachMaxEmailSteps: Long,
     @SerialName("OUTREACH_MAX_STEP_DELAY_BUSINESS_DAYS") val outreachMaxStepDelayBusinessDays: Long,
     @SerialName("OUTREACH_MAX_STEPS") val outreachMaxSteps: Long,
-    @SerialName("OUTREACH_MIN_EMAIL_FOLLOW_UP_BUSINESS_DAYS") val outreachMinEmailFollowUpBusinessDays: Long,
 )
 
 @Serializable
 internal data class ContractValuesPart6(
+    @SerialName("OUTREACH_MIN_EMAIL_FOLLOW_UP_BUSINESS_DAYS") val outreachMinEmailFollowUpBusinessDays: Long,
     @SerialName("OUTREACH_SEQUENCE_LIST_QUERY") val outreachSequenceListQuery: ListQueryDeclaration,
     @SerialName("OUTREACH_SEQUENCE_NAME_MAX") val outreachSequenceNameMax: Long,
     @SerialName("OUTREACH_TASK_TITLE_MAX") val outreachTaskTitleMax: Long,
@@ -4347,11 +4348,11 @@ internal data class ContractValuesPart6(
     @SerialName("POS_OFFLINE_CARD_RECONNECT_WITHIN_MS") val posOfflineCardReconnectWithinMs: Double,
     @SerialName("POS_OFFLINE_CLOCK_SKEW_MS") val posOfflineClockSkewMs: Double,
     @SerialName("POS_OFFLINE_DISABLED_TENDERS") val posOfflineDisabledTenders: Map<String, String>,
-    @SerialName("POS_OFFLINE_FLAG_LABELS") val posOfflineFlagLabels: Map<String, String>,
 )
 
 @Serializable
 internal data class ContractValuesPart7(
+    @SerialName("POS_OFFLINE_FLAG_LABELS") val posOfflineFlagLabels: Map<String, String>,
     @SerialName("POS_OFFLINE_LATE_SYNC_MS") val posOfflineLateSyncMs: Double,
     @SerialName("POS_OFFLINE_MAX_AGE_MS") val posOfflineMaxAgeMs: Double,
     @SerialName("POS_OFFLINE_SALE_MAX_LINES") val posOfflineSaleMaxLines: Long,
@@ -4399,11 +4400,11 @@ internal data class ContractValuesPart7(
     @SerialName("SHIPPING_COST_MAX_CENTS") val shippingCostMaxCents: Long,
     @SerialName("SITE_CARDS_PAGE_SIZE") val siteCardsPageSize: Long,
     @SerialName("SITE_FILTER_HEADERS") val siteFilterHeaders: Map<String, String>,
-    @SerialName("SITE_FILTER_OPTIONS") val siteFilterOptions: SiteFilterOptions,
 )
 
 @Serializable
 internal data class ContractValuesPart8(
+    @SerialName("SITE_FILTER_OPTIONS") val siteFilterOptions: SiteFilterOptions,
     @SerialName("SITE_JOURNEY_KEY_MAX") val siteJourneyKeyMax: Long,
     @SerialName("SITE_LIST_DECLARATION") val siteListDeclaration: ListQueryDeclaration,
     @SerialName("SITE_MEMBER_LIST_QUERY") val siteMemberListQuery: ListQueryDeclaration,
@@ -4566,6 +4567,7 @@ class ContractValues internal constructor(
     val duplicateNamePrefix: String get() = part3.duplicateNamePrefix
     val emailBlockStarterTreesJson: String get() = part3.emailBlockStarterTreesJson
     val emailListQuery: ListQueryDeclaration get() = part3.emailListQuery
+    val emailStateLabels: Map<String, String> get() = part3.emailStateLabels
     val emailTemplateQuery: ListQueryDeclaration get() = part3.emailTemplateQuery
     val entryListFilterHeaders: Map<String, String> get() = part3.entryListFilterHeaders
     val entryListQuery: ListQueryDeclaration get() = part3.entryListQuery
@@ -4607,7 +4609,7 @@ class ContractValues internal constructor(
     val installTargets: Map<String, List<InstallTarget>> get() = part3.installTargets
     val labelCodeMaxLength: Long get() = part3.labelCodeMaxLength
     val labelSizes: List<LabelSize> get() = part3.labelSizes
-    val layoutListQuery: ListQueryDeclaration get() = part3.layoutListQuery
+    val layoutListQuery: ListQueryDeclaration get() = part4.layoutListQuery
     val leadListDeclaration: ListQueryDeclaration get() = part4.leadListDeclaration
     val leadListQuery: ListQueryDeclaration get() = part4.leadListQuery
     val leadSourceOptions: List<ListFilterOption> get() = part4.leadSourceOptions
@@ -4655,7 +4657,7 @@ class ContractValues internal constructor(
     val nativeCrmFieldDefaultCurrency: String get() = part4.nativeCrmFieldDefaultCurrency
     val nativeCrmFieldObjects: List<String> get() = part4.nativeCrmFieldObjects
     val nativeCrmFieldTypeLabels: Map<String, String> get() = part4.nativeCrmFieldTypeLabels
-    val nativeCrmFieldTypes: List<String> get() = part4.nativeCrmFieldTypes
+    val nativeCrmFieldTypes: List<String> get() = part5.nativeCrmFieldTypes
     val nativeCrmLeadOpenStatuses: List<String> get() = part5.nativeCrmLeadOpenStatuses
     val nativeCrmLeadSourceDirections: List<String> get() = part5.nativeCrmLeadSourceDirections
     val nativeCrmLeadStatuses: List<String> get() = part5.nativeCrmLeadStatuses
@@ -4703,7 +4705,7 @@ class ContractValues internal constructor(
     val outreachMaxEmailSteps: Long get() = part5.outreachMaxEmailSteps
     val outreachMaxStepDelayBusinessDays: Long get() = part5.outreachMaxStepDelayBusinessDays
     val outreachMaxSteps: Long get() = part5.outreachMaxSteps
-    val outreachMinEmailFollowUpBusinessDays: Long get() = part5.outreachMinEmailFollowUpBusinessDays
+    val outreachMinEmailFollowUpBusinessDays: Long get() = part6.outreachMinEmailFollowUpBusinessDays
     val outreachSequenceListQuery: ListQueryDeclaration get() = part6.outreachSequenceListQuery
     val outreachSequenceNameMax: Long get() = part6.outreachSequenceNameMax
     val outreachTaskTitleMax: Long get() = part6.outreachTaskTitleMax
@@ -4751,7 +4753,7 @@ class ContractValues internal constructor(
     val posOfflineCardReconnectWithinMs: Double get() = part6.posOfflineCardReconnectWithinMs
     val posOfflineClockSkewMs: Double get() = part6.posOfflineClockSkewMs
     val posOfflineDisabledTenders: Map<String, String> get() = part6.posOfflineDisabledTenders
-    val posOfflineFlagLabels: Map<String, String> get() = part6.posOfflineFlagLabels
+    val posOfflineFlagLabels: Map<String, String> get() = part7.posOfflineFlagLabels
     val posOfflineLateSyncMs: Double get() = part7.posOfflineLateSyncMs
     val posOfflineMaxAgeMs: Double get() = part7.posOfflineMaxAgeMs
     val posOfflineSaleMaxLines: Long get() = part7.posOfflineSaleMaxLines
@@ -4799,7 +4801,7 @@ class ContractValues internal constructor(
     val shippingCostMaxCents: Long get() = part7.shippingCostMaxCents
     val siteCardsPageSize: Long get() = part7.siteCardsPageSize
     val siteFilterHeaders: Map<String, String> get() = part7.siteFilterHeaders
-    val siteFilterOptions: SiteFilterOptions get() = part7.siteFilterOptions
+    val siteFilterOptions: SiteFilterOptions get() = part8.siteFilterOptions
     val siteJourneyKeyMax: Long get() = part8.siteJourneyKeyMax
     val siteListDeclaration: ListQueryDeclaration get() = part8.siteListDeclaration
     val siteMemberListQuery: ListQueryDeclaration get() = part8.siteMemberListQuery
