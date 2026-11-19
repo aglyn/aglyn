@@ -36,8 +36,14 @@ const screens = new Map<string, any>(
   ).map((screen) => [screen.id, screen]),
 )
 
-/** Point of sale waits for its registers and hardware screens. */
-const NOT_YET: readonly CommerceSettingsSectionId[] = ['pos']
+/** Nothing waits any more: Point of sale opens its hardware screen (AGL-4038). */
+const NOT_YET: readonly CommerceSettingsSectionId[] = []
+
+/**
+ * Point of sale opens a code screen, the hardware shop and the readers waiting to be set up (AGL-4038), not a spec
+ * hub: no plugin draws into its zone (`commerceSettingsPos`) yet, and the registers live in the POS app.
+ */
+const CODE_SCREENS: Partial<Record<CommerceSettingsSectionId, string>> = { pos: 'commerce.hardware' }
 
 const products = NATIVE_NAV_ROWS.find((entry) => entry.row.id === 'products')!.row
 
@@ -60,6 +66,10 @@ describe('native commerce settings pages', () => {
     for (const section of products.sections ?? []) {
       const id = section.id as CommerceSettingsSectionId
       if (!(id in COMMERCE_SETTINGS_PAGE_ZONES)) continue
+      if (CODE_SCREENS[id]) {
+        expect(section.screen).toBe(CODE_SCREENS[id])
+        continue
+      }
       const hub = screens.get(section.screen)
       expect(hub?.blocks.at(-1)).toMatchObject({ type: 'zone', name: COMMERCE_SETTINGS_PAGE_ZONES[id] })
       expect(hub.title).toBe(section.label)

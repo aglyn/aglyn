@@ -46,6 +46,14 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
   ) { context, _ in
     CardReadersScreen(context: context)
   }
+  // The console's Hardware card and Card readers to set up (AGL-4038): buying card readers for this store, in both
+  // apps (the POS menu; the Aglyn app's Store › Settings). Physical goods paid on Stripe's page, never in-app purchase.
+  r.screen(
+    commerceHardwareScreen, title: "Hardware", requiresSite: true, apps: [.aglyn, .pos], icon: "shippingbox",
+    placement: .menu
+  ) { context, _ in
+    PosHardwareScreen(context: context)
+  }
 
   // A tablet set up as the screen facing the customer: no one signs in; a register's code pairs it.
   r.screen(
@@ -111,6 +119,8 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
   r.deepLink("commerce.returns-page", path: "/products/returns", screen: "commerce.returns")
   r.deepLink("commerce.return-link", path: "/products/returns?return=:returnId", screen: "commerce.return")
   r.deepLink("commerce.shipping-page", path: "/products/shipping", screen: "commerce.settingsShipping")
+  // Products › Point of sale, and the hardware emails' `#pos-hardware` (AGL-4038): the Hardware screen.
+  r.deepLink("commerce.pos-page", path: "/products/pos", screen: commerceHardwareScreen)
   r.deepLink("commerce.notifications-page", path: "/products/notifications", screen: "commerce.settingsNotifications")
 
   r.tab("commerce.orders-tab", title: "Orders", icon: "bag", screen: commerceOrdersScreen, order: 100)

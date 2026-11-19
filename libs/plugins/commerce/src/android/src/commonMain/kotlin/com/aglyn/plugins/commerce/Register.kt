@@ -31,7 +31,9 @@ import com.aglyn.plugins.commerce.sales.SalesTrendWidget
 import com.aglyn.plugins.commerce.sales.TodaySalesWidget
 import com.aglyn.plugins.commerce.pos.COMMERCE_DISPLAY_SCREEN
 import com.aglyn.plugins.commerce.pos.COMMERCE_KIOSK_SCREEN
+import com.aglyn.plugins.commerce.pos.COMMERCE_HARDWARE_SCREEN
 import com.aglyn.plugins.commerce.pos.CardReadersScreen
+import com.aglyn.plugins.commerce.pos.PosHardwareScreen
 import com.aglyn.plugins.commerce.pos.PosCustomerDisplayScreen
 import com.aglyn.plugins.commerce.pos.PosKioskScreen
 import com.aglyn.plugins.commerce.pos.RegisterScreen
@@ -71,6 +73,16 @@ fun registerCommerceNative(r: NativePluginRegistrar) {
     icon = "credit_card",
     placement = PosPlacement.MENU,
   ) { context, _ -> CardReadersScreen(context) }
+  // The console's Hardware card and Card readers to set up (AGL-4038): buying card readers for this store, in both
+  // apps (the POS menu; the Aglyn app's Store › Settings). Physical goods paid on Stripe's page, never in-app purchase.
+  r.screen(
+    COMMERCE_HARDWARE_SCREEN,
+    title = "Hardware",
+    requiresSite = true,
+    apps = setOf(NativeApp.AGLYN, NativeApp.POS),
+    icon = "local_shipping",
+    placement = PosPlacement.MENU,
+  ) { context, _ -> PosHardwareScreen(context) }
 
   // A tablet set up as the screen facing the customer: no one signs in; a register's code pairs it.
   r.screen(
@@ -125,6 +137,8 @@ fun registerCommerceNative(r: NativePluginRegistrar) {
   r.deepLink("commerce.returns-page", path = "/products/returns", screen = "commerce.returns")
   r.deepLink("commerce.return-link", path = "/products/returns?return=:returnId", screen = "commerce.return")
   r.deepLink("commerce.shipping-page", path = "/products/shipping", screen = "commerce.settingsShipping")
+  // Products › Point of sale, and the hardware emails' `#pos-hardware` (AGL-4038): the Hardware screen.
+  r.deepLink("commerce.pos-page", path = "/products/pos", screen = COMMERCE_HARDWARE_SCREEN)
   r.deepLink("commerce.notifications-page", path = "/products/notifications", screen = "commerce.settingsNotifications")
 
   r.tab("commerce.orders-tab", title = "Orders", icon = "receipt", screen = COMMERCE_ORDERS_SCREEN, order = 100)

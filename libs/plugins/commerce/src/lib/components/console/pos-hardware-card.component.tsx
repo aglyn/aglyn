@@ -52,7 +52,18 @@ import {
   type PosHardwareOrderStatus,
   type PosHardwareShippingMethod,
 } from '../../model/pos-hardware'
-import { POS_HARDWARE_TERMS_SECTIONS, posHardwareTermsUrl } from '../../model/pos-hardware-terms'
+import { posHardwareTermsUrl } from '../../model/pos-hardware-terms'
+import {
+  POS_HARDWARE_RETURN_LABELS as RETURN_LABELS,
+  POS_HARDWARE_SHOP_TEXT as TEXT,
+  posHardwareArrivedNumbers,
+  posHardwareBasket,
+  posHardwareCheckoutState,
+  posHardwareOrderItems,
+  posHardwareReturnOffered,
+  posHardwareReturnReasonReady,
+  posHardwareReturnTitle,
+} from '../../model/pos-hardware-shop'
 import { EntitlementUpsell, useCommerceEntitlement } from './entitlement-gate.component'
 import { newAttemptKey } from './pos/pos-api'
 import {
@@ -81,13 +92,6 @@ export const POS_HARDWARE_STATUS_COLOR: Record<
   refunded: 'default',
 }
 
-/** What the buyer reads of their return request. */
-const RETURN_LABELS: Record<string, string> = {
-  requested: 'Return requested',
-  declined: 'Return declined',
-  refunded: 'Returned',
-}
-
 const QUANTITIES = Array.from({ length: POS_HARDWARE_MAX_PER_LINE + 1 }, (_, index) => index)
 
 const placedOn = (ms: number) =>
@@ -110,13 +114,6 @@ export interface PosHardwareCardProps {
    */
   canBuyHardware?: boolean
 }
-
-/** Why Check out is not offered to someone who works the register. */
-const BUY_KEY_REASON =
-  'Only a member with the "Buy point of sale hardware" permission can place an order. Ask an organization admin.'
-
-/** Why Check out waits on the two boxes below the summary (AGL-4038). */
-const TERMS_REASON = 'Accept the hardware terms of sale and confirm the hardware is for your business first.'
 
 /**
  * The Hardware card (AGL-4038): Stripe card readers and accessories sold by
@@ -199,12 +196,12 @@ export function PosHardwareCard({
     setBusy(true)
     try {
       await posHardwareRequestReturn(user, hostId, returning.id, returnReason.trim())
-      enqueueSnackbar('Return requested. Our team arranges it with you.', { variant: 'success', persist: false })
+      enqueueSnackbar(TEXT.returnSent, { variant: 'success', persist: false })
       setReturning(null)
       setReturnReason('')
       await loadOrders()
     } catch (error) {
-      enqueueSnackbar(error instanceof PosHardwareRequestError ? error.message : 'The request did not go through', {
+      enqueueSnackbar(error instanceof PosHardwareRequestError ? error.message : TEXT.returnFailed, {
         variant: 'warning',
         persist: false,
       })
@@ -239,20 +236,27 @@ export function PosHardwareCard({
     document.getElementById(POS_HARDWARE_ANCHOR)?.scrollIntoView?.({ block: 'start' })
   }, [available])
 
-  const lines = useMemo(
-    () =>
-      Object.entries(quantities)
-        .filter(([, quantity]) => quantity > 0)
-        .map(([sku, quantity]) => ({ sku, quantity })),
-    [quantities],
-  )
   const shipping = catalog?.available ? catalog.shipping.find((option) => option.method === shippingMethod) : undefined
-  const subtotalCents = catalog?.available
-    ? lines.reduce(
-        (sum, line) => sum + (catalog.offers.find((offer) => offer.sku === line.sku)?.unitCents ?? 0) * line.quantity,
-        0,
-      )
-    : 0
+  // The basket and its summary, as the apps work them out (pos-hardware-shop.ts).
+  const basket = useMemo(
+    () =>
+      posHardwareBasket({
+        offers: catalog?.available ? catalog.offers : [],
+        quantities,
+        shippingCents: shipping?.cents ?? null,
+        automaticTax: catalog?.available ? catalog.automaticTax : false,
+      }),
+    [catalog, quantities, shipping],
+  )
+  const lines = basket.lines
+  const subtotalCents = basket.itemsCents
+  const checkoutState = posHardwareCheckoutState({
+    canBuy: canBuyHardware,
+    termsAccepted,
+    businessUse,
+    hasLines: lines.length > 0,
+    hasShipping: Boolean(shipping),
+  })
 
   // One attempt per basket: a second press of the same basket reaches the
   // same Checkout Session, and a changed basket is a new one.
@@ -273,7 +277,7 @@ export function PosHardwareCard({
       openPosHardwareCheckout(url)
     } catch (error) {
       enqueueSnackbar(
-        error instanceof PosHardwareRequestError ? error.message : 'Checkout could not be started',
+        error instanceof PosHardwareRequestError ? error.message : TEXT.checkoutFailed,
         { variant: 'warning', persist: false },
       )
       setBusy(false)
@@ -282,10 +286,10 @@ export function PosHardwareCard({
 
   const columns = useMemo<GridColDef[]>(
     () => [
-      { field: 'number', headerName: 'Order', minWidth: 110 },
+      { field: 'number', headerName: TEXT.columnOrder, minWidth: 110 },
       {
         field: 'createdAtMs',
-        headerName: 'Placed',
+        headerName: TEXT.columnPlaced,
         type: 'number',
         minWidth: 120,
         align: 'left',
@@ -294,22 +298,22 @@ export function PosHardwareCard({
       },
       {
         field: 'items',
-        headerName: 'Items',
+        headerName: TEXT.columnItems,
         flex: 1,
         minWidth: 200,
         valueGetter: (_value: unknown, row: PosHardwareOrderRow) =>
-          row.lines.map((line) => `${line.name} × ${line.quantity}`).join(', '),
+          posHardwareOrderItems(row.lines),
       },
       {
         field: 'totalCents',
-        headerName: 'Total',
+        headerName: TEXT.columnTotal,
         type: 'number',
         minWidth: 100,
         valueFormatter: (value: number) => formatPosHardwareCents(value),
       },
       {
         field: 'status',
-        headerName: 'Status',
+        headerName: TEXT.columnStatus,
         minWidth: 130,
         valueGetter: (_value: unknown, row: PosHardwareOrderRow) => POS_HARDWARE_STATUS_LABELS[row.status],
         renderCell: ({ row }: { row: PosHardwareOrderRow }) => (
@@ -320,13 +324,13 @@ export function PosHardwareCard({
         // A reader bought in person, or an order shipped to you once it has
         // shipped (AGL-4038), can be asked back from here.
         field: 'returnRequest',
-        headerName: 'Return',
+        headerName: TEXT.columnReturn,
         minWidth: 170,
         valueGetter: (_value: unknown, row: PosHardwareOrderRow) => RETURN_LABELS[row.returnRequest?.state ?? ''] ?? '',
         renderCell: ({ row }: { row: PosHardwareOrderRow }) =>
           row.returnRequest ? (
             RETURN_LABELS[row.returnRequest.state]
-          ) : (row.status === 'delivered' || row.status === 'registered' || (row.source !== 'in_person' && row.status === 'shipped')) ? (
+          ) : posHardwareReturnOffered(row) ? (
             <Button
               size="small"
               onClick={(event) => {
@@ -334,7 +338,7 @@ export function PosHardwareCard({
                 setReturning(row)
               }}
             >
-              {'Request a return'}
+              {TEXT.returnAction}
             </Button>
           ) : (
             '—'
@@ -342,7 +346,7 @@ export function PosHardwareCard({
       },
       {
         field: 'tracking',
-        headerName: 'Tracking',
+        headerName: TEXT.columnTracking,
         minWidth: 160,
         valueGetter: (_value: unknown, row: PosHardwareOrderRow) => row.tracking?.number ?? '',
         renderCell: ({ row }: { row: PosHardwareOrderRow }) =>
@@ -364,9 +368,7 @@ export function PosHardwareCard({
    * on the Card readers to set up card instead, so it is not named twice.
    */
   const arrived = posPlan.locked
-    ? (orders ?? [])
-        .filter((order) => (order.source ?? 'online') === 'online' && (order.status === 'delivered' || order.status === 'registered'))
-        .map((order) => order.number)
+    ? posHardwareArrivedNumbers(orders ?? [])
     : []
   const planPrompt = (text: string) => (
     <EntitlementUpsell planLabel={posPlan.planLabel} upgradeHref={posPlan.upgradeHref}>
@@ -376,11 +378,11 @@ export function PosHardwareCard({
 
   const ordersSection = (
     <Stack spacing={1}>
-      <Typography variant="subtitle2">{'Your orders'}</Typography>
+      <Typography variant="subtitle2">{TEXT.ordersTitle}</Typography>
       {arrived.length ? planPrompt(posPlanPrompt({ arrived })) : null}
       {orders && orders.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
-          {'No hardware orders yet.'}
+          {TEXT.noOrders}
         </Typography>
       ) : (
         <ListTable
@@ -392,13 +394,13 @@ export function PosHardwareCard({
         />
       )}
       <Dialog open={Boolean(returning)} onClose={() => setReturning(null)} maxWidth="sm" fullWidth>
-        <DialogTitle>{returning ? `Return ${returning.number}?` : ''}</DialogTitle>
+        <DialogTitle>{returning ? posHardwareReturnTitle(returning.number) : ''}</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" color="text.secondary">
-            {'Tell us why. Our team gets your request and arranges the return with you. Returns follow the hardware terms of sale: the return shipping is yours to pay, the original shipping is not refunded, and any restocking fee charged for the return comes off the refund.'}
+            {TEXT.returnBody}
           </Typography>
           <TextField
-            label="Why are you returning it?"
+            label={TEXT.returnField}
             value={returnReason}
             onChange={(event) => setReturnReason(event.target.value)}
             multiline
@@ -407,9 +409,9 @@ export function PosHardwareCard({
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setReturning(null)}>{'Cancel'}</Button>
-          <Button variant="contained" disabled={busy || returnReason.trim().length < 3} onClick={() => void requestReturn()}>
-            {'Request return'}
+          <Button onClick={() => setReturning(null)}>{TEXT.returnCancel}</Button>
+          <Button variant="contained" disabled={busy || !posHardwareReturnReasonReady(returnReason)} onClick={() => void requestReturn()}>
+            {TEXT.returnSend}
           </Button>
         </DialogActions>
       </Dialog>
@@ -423,8 +425,8 @@ export function PosHardwareCard({
     return (
       <CardDisplay
         id={POS_HARDWARE_ANCHOR}
-        header={'Hardware'}
-        subheader={'Your card reader orders'}
+        header={TEXT.header}
+        subheader={TEXT.historySubheader}
         help={pluginDocsHelp('posHardware', { anchor: '#bought-from-us-in-person' })}
         contentGutterX
         contentGutterY
@@ -437,14 +439,14 @@ export function PosHardwareCard({
   return (
     <CardDisplay
       id={POS_HARDWARE_ANCHOR}
-      header={'Hardware'}
-      subheader={'Card readers and accessories, set up and shipped to you'}
+      header={TEXT.header}
+      subheader={TEXT.subheader}
       help={pluginDocsHelp('posHardware', { anchor: '#buy-a-reader-from-aglyn' })}
       HeaderProps={{
         action: (
           <BlockedControl
-            blocked={!canBuyHardware || !termsAccepted || !businessUse}
-            reason={!canBuyHardware ? BUY_KEY_REASON : TERMS_REASON}
+            blocked={checkoutState.blockedReason !== null}
+            reason={checkoutState.blockedReason ?? ''}
           >
             <Button
               size="small"
@@ -452,7 +454,7 @@ export function PosHardwareCard({
               disabled={busy || !lines.length || !shipping}
               onClick={() => void checkout()}
             >
-              {'Check out'}
+              {TEXT.checkout}
             </Button>
           </BlockedControl>
         ),
@@ -463,16 +465,16 @@ export function PosHardwareCard({
       <Stack spacing={3}>
         {returned === 'placed' ? (
           <Alert severity="success" onClose={() => setReturned(null)}>
-            {'Thanks, your order is in. It shows under Your orders within a minute, and we email you as it ships.'}
+            {TEXT.placed}
           </Alert>
         ) : returned === 'canceled' ? (
           <Alert severity="info" onClose={() => setReturned(null)}>
-            {'Checkout was canceled. Nothing was charged.'}
+            {TEXT.canceled}
           </Alert>
         ) : null}
         {posPlan.locked && !arrived.length ? planPrompt(posPlanPrompt()) : null}
         <Typography variant="body2" color="text.secondary">
-          {'Choose the readers and accessories you need. We set each reader up and ship your order to the address you enter at checkout. The delivery email says how to start taking payments with it.'}
+          {TEXT.intro}
         </Typography>
         <Box
           sx={{
@@ -494,7 +496,7 @@ export function PosHardwareCard({
                     <TextField
                       select
                       size="small"
-                      label="Quantity"
+                      label={TEXT.quantity}
                       value={quantities[offer.sku] ?? 0}
                       onChange={(event) =>
                         setQuantities((prev) => ({ ...prev, [offer.sku]: Number(event.target.value) }))
@@ -517,7 +519,7 @@ export function PosHardwareCard({
           <TextField
             select
             size="small"
-            label="Shipping"
+            label={TEXT.shipping}
             value={shippingMethod}
             onChange={(event) => setShippingMethod(event.target.value as PosHardwareShippingMethod)}
             sx={{ minWidth: { sm: '40%' } }}
@@ -529,35 +531,35 @@ export function PosHardwareCard({
             ))}
           </TextField>
           <Stack spacing={0.5} sx={{ flex: 1 }} aria-label="Order summary">
-            <SummaryRow label="Items" value={formatPosHardwareCents(subtotalCents)} />
-            <SummaryRow label="Shipping" value={shipping ? formatPosHardwareCents(shipping.cents) : '—'} />
-            {catalog.automaticTax ? <SummaryRow label="Tax" value="Calculated at checkout" /> : null}
+            <SummaryRow label={TEXT.items} value={formatPosHardwareCents(subtotalCents)} />
+            <SummaryRow label={TEXT.shipping} value={shipping ? formatPosHardwareCents(shipping.cents) : '—'} />
+            {catalog.automaticTax ? <SummaryRow label={TEXT.tax} value={TEXT.taxAtCheckout} /> : null}
             <SummaryRow
-              label={catalog.automaticTax ? 'Total before tax' : 'Total'}
-              value={formatPosHardwareCents(subtotalCents + (shipping?.cents ?? 0))}
+              label={basket.totalLabel}
+              value={formatPosHardwareCents(basket.totalCents)}
               strong
             />
           </Stack>
         </Stack>
         <Typography variant="caption" color="text.secondary">
-          {'Ships to street addresses in the United States. P.O. boxes and military addresses are not accepted.'}
+          {TEXT.shipsTo}
         </Typography>
         <Stack>
           <FormControlLabel
             control={<Checkbox checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} />}
             label={
               <Typography variant="body2">
-                {'I accept the '}
+                {TEXT.termsBefore}
                 <Link href={posHardwareTermsUrl()} target="_blank" rel="noopener noreferrer">
-                  {`hardware terms of sale (Terms, Sections ${POS_HARDWARE_TERMS_SECTIONS})`}
+                  {TEXT.termsLink}
                 </Link>
-                {'.'}
+                {TEXT.termsAfter}
               </Typography>
             }
           />
           <FormControlLabel
             control={<Checkbox checked={businessUse} onChange={(event) => setBusinessUse(event.target.checked)} />}
-            label={<Typography variant="body2">{'I am buying this hardware for use in my business.'}</Typography>}
+            label={<Typography variant="body2">{TEXT.businessUse}</Typography>}
           />
         </Stack>
         {ordersSection}

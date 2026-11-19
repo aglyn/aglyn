@@ -23,6 +23,11 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { Button, Divider, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
+import {
+  POS_HARDWARE_WAITING_TEXT as TEXT,
+  posHardwareWaitingItems,
+  posHardwareWaitingNote,
+} from '../../model/pos-hardware-shop'
 import { EntitlementUpsell, useCommerceEntitlement } from './entitlement-gate.component'
 import {
   PosHardwareRequestError,
@@ -44,7 +49,7 @@ export interface PosHardwareWaitingCardProps {
   devicesBlockedReason?: string
 }
 
-const items = (order: WaitingReaderOrder) => order.lines.map((line) => `${line.quantity} × ${line.name}`).join(', ')
+const items = (order: WaitingReaderOrder) => posHardwareWaitingItems(order.lines)
 
 /**
  * Card readers this workspace bought in person, waiting to be set up
@@ -90,7 +95,7 @@ function PosHardwareWaitingCard(props: PosHardwareWaitingCardProps) {
       enqueueSnackbar(done, { variant: 'success', persist: false })
       await load()
     } catch (error) {
-      enqueueSnackbar(error instanceof PosHardwareRequestError ? error.message : 'That did not work. Try again.', {
+      enqueueSnackbar(error instanceof PosHardwareRequestError ? error.message : TEXT.failed, {
         variant: 'warning',
         persist: false,
       })
@@ -101,12 +106,12 @@ function PosHardwareWaitingCard(props: PosHardwareWaitingCardProps) {
 
   if (!user || !waiting?.orders.length) return null
   const devicesReason = devicesBlockedReason || undefined
-  const planReason = waiting.posPlan ? undefined : 'Add a plan with the point of sale first.'
+  const planReason = waiting.posPlan ? undefined : TEXT.planReason
 
   return (
     <CardDisplay
-      header={'Card readers to set up'}
-      subheader={'Bought in person, ready for your store'}
+      header={TEXT.header}
+      subheader={TEXT.subheader}
       help={pluginDocsHelp('posHardware', { anchor: '#card-readers-to-set-up' })}
       contentGutterX
       contentGutterY
@@ -114,7 +119,7 @@ function PosHardwareWaitingCard(props: PosHardwareWaitingCardProps) {
       <Stack spacing={2} divider={<Divider flexItem />}>
         {waiting.posPlan ? null : (
           <EntitlementUpsell planLabel={plan.planLabel} upgradeHref={plan.upgradeHref}>
-            {'A card reader takes payments at the register, which comes with the point of sale. Add it, then set the reader up here.'}
+            {TEXT.planPrompt}
           </EntitlementUpsell>
         )}
         {waiting.orders.map((order) => {
@@ -129,15 +134,16 @@ function PosHardwareWaitingCard(props: PosHardwareWaitingCardProps) {
               {store ? (
                 <>
                   <Typography variant="body2">
-                    {order.serialsTaken
-                      ? `For ${store.name}. Add it on the POS devices card with the code it shows, and it is set up: we know its serial number.`
-                      : `For ${store.name}. Add it on the POS devices card with the code it shows, then mark it set up.`}
-                    {store.hasLocation ? '' : ' The first reader asks for the store’s address.'}
+                    {posHardwareWaitingNote({
+                      storeName: store.name,
+                      serialsTaken: order.serialsTaken,
+                      hasLocation: store.hasLocation,
+                    })}
                   </Typography>
                   <Stack direction="row" spacing={1}>
                     <BlockedControl blocked={Boolean(planReason ?? devicesReason)} reason={planReason ?? devicesReason ?? ''}>
                       <Button variant="contained" size="small" href={store.setupUrl}>
-                        {'Open POS devices'}
+                        {TEXT.openDevices}
                       </Button>
                     </BlockedControl>
                     <BlockedControl blocked={Boolean(planReason ?? devicesReason)} reason={planReason ?? devicesReason ?? ''}>
@@ -145,10 +151,10 @@ function PosHardwareWaitingCard(props: PosHardwareWaitingCardProps) {
                         size="small"
                         disabled={busy === order.id}
                         onClick={() =>
-                          void act(order.id, () => posHardwareMarkSetUp(user, order.hostId, order.id), 'Marked set up')
+                          void act(order.id, () => posHardwareMarkSetUp(user, order.hostId, order.id), TEXT.marked)
                         }
                       >
-                        {'Mark set up'}
+                        {TEXT.markSetUp}
                       </Button>
                     </BlockedControl>
                   </Stack>
@@ -158,7 +164,7 @@ function PosHardwareWaitingCard(props: PosHardwareWaitingCardProps) {
                   <TextField
                     select
                     size="small"
-                    label="Which store is it for?"
+                    label={TEXT.whichStore}
                     value={pick}
                     onChange={(event) => setChosen({ ...chosen, [order.id]: event.target.value })}
                     sx={{ minWidth: (theme) => theme.spacing(30) }}
@@ -174,10 +180,10 @@ function PosHardwareWaitingCard(props: PosHardwareWaitingCardProps) {
                       size="small"
                       disabled={!pick || busy === order.id}
                       onClick={() =>
-                        void act(order.id, () => posHardwareChooseStore(user, pick, order.id), 'Store chosen')
+                        void act(order.id, () => posHardwareChooseStore(user, pick, order.id), TEXT.chosen)
                       }
                     >
-                      {'Choose'}
+                      {TEXT.choose}
                     </Button>
                   </BlockedControl>
                 </Stack>
