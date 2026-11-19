@@ -134,6 +134,7 @@ import androidx.compose.material.icons.outlined.AddCard
 import androidx.compose.material.icons.outlined.CreditScore
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.PrivacyTip
+import androidx.compose.material.icons.outlined.BackHand
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.AltRoute
