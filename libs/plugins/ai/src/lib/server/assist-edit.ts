@@ -284,6 +284,9 @@ const MOTION_SETTINGS: Readonly<Record<string, readonly string[] | number | 'swi
   [NODE_ANIMATION_REPEAT_PROP]: 'switch',
 }
 
+/** The motion settings every element takes and what each holds, for a reader that lists them (AGL-4235). */
+export const ASSIST_EDIT_MOTION_SETTINGS: Readonly<Record<string, readonly string[] | number | 'switch'>> = MOTION_SETTINGS
+
 /**
  * The line of the edit protocol that offers motion: a pure function of the
  * vocabulary, so it sits in the cached prefix with the rest of the block.
@@ -876,7 +879,7 @@ function describeCapabilityShape(
  * ------------------------------------------------------------------ */
 
 /** A structurally sound op, before its content has met the validators. */
-type PendingEditOp =
+export type PendingEditOp =
   | {
       op: 'insertSubtree'
       parentId: string
@@ -1076,19 +1079,41 @@ interface ParsedEdit {
   dropped: string[]
 }
 
+/** Why an op may not act on an element it names. */
+export type AssistEditClosedWorldRefusal = 'unknown' | 'root' | 'removed'
+
+/** The words each refusal is given in, after the change's label. */
+export const ASSIST_EDIT_CLOSED_WORLD_REFUSALS: Readonly<Record<AssistEditClosedWorldRefusal, string>> = {
+  unknown: 'names an element that is not on the canvas described',
+  root: 'cannot act on the document root itself',
+  removed: 'acts on an element an earlier change removes',
+}
+
+/** The closed world one edit's ops are held to, as they are read in order. */
+export interface AssistEditClosedWorld {
+  /** Every element described, by id. */
+  byId: ReadonlyMap<string, AssistEditCanvasNode>
+  /** The element an op acts on, or why it may not: not described, the root, or inside one an earlier op removes. */
+  element(nodeId: unknown): AssistEditCanvasNode | AssistEditClosedWorldRefusal
+  /** The element an op adds or moves into — the root included — or null when it is not described or is removed. */
+  parent(parentId: unknown): AssistEditCanvasNode | null
+  /** Whether moving `nodeId` into `parentId` would put it inside itself, as the earlier ops leave the tree. */
+  movesInsideItself(nodeId: string, parentId: string): boolean
+  /** An earlier op removes this element: nothing later may act inside it. */
+  remove(nodeId: string): void
+  /** An earlier op moves this element under a new parent. */
+  move(nodeId: string, parentId: string): void
+}
+
 /**
- * The tool's input, held to the closed world: every element an op names is
- * one the request described, and an op the structure alone refuses is
- * dropped with its reason.
+ * The closed world, for every door that turns a request into ops (AGL-4235):
+ * an op names only an element the request described, never the document root
+ * itself, and never one an earlier op removed. One implementation, for the
+ * model's tool call and for the public API's edits alike, so the two cannot
+ * disagree about what an edit may touch.
  */
-function parseEditInput(
-  input: Record<string, unknown>,
-  context: AssistEditCanvasContext,
-  kind: AssistEditDocumentKind,
-): ParsedEdit {
+export function assistEditClosedWorld(context: AssistEditCanvasContext): AssistEditClosedWorld {
   const byId = new Map(context.nodes.map((node) => [node.id, node]))
-  const dropped: string[] = []
-  const pending: PendingEditOp[] = []
   /** Ids removed by an earlier op; nothing later may act inside them. */
   const removed = new Set<string>()
   /**
@@ -1110,27 +1135,66 @@ function parseEditInput(
     return ids
   }
   const insideRemoved = (nodeId: string): boolean => lineage(nodeId).some((id) => removed.has(id))
+  return {
+    byId,
+    element(nodeId) {
+      if (typeof nodeId !== 'string' || !byId.has(nodeId)) return 'unknown'
+      if (nodeId === CANVAS_ROOT_ELEMENT_ID) return 'root'
+      if (insideRemoved(nodeId)) return 'removed'
+      return byId.get(nodeId) as AssistEditCanvasNode
+    },
+    parent(parentId) {
+      if (typeof parentId !== 'string' || !byId.has(parentId) || insideRemoved(parentId)) return null
+      return byId.get(parentId) as AssistEditCanvasNode
+    },
+    movesInsideItself: (nodeId, parentId) => lineage(parentId).includes(nodeId),
+    remove: (nodeId) => void removed.add(nodeId),
+    move: (nodeId, parentId) => void movedTo.set(nodeId, parentId),
+  }
+}
+
+/** The longest layer name an element takes. */
+export const ASSIST_EDIT_LAYER_NAME_CHARS = LAYER_NAME_CHARS
+
+/**
+ * Why a layer name written by a caller that is not a model is refused, or
+ * null (AGL-4235): the rule the model's rename is held to — no markup, not
+ * empty, at most {@link ASSIST_EDIT_LAYER_NAME_CHARS} characters — where the
+ * model's name is cleaned to fit, this one must already fit.
+ */
+export function assistEditLayerNameRefusal(name: string): string | null {
+  if (!name.trim()) return 'is empty'
+  if (MARKUP.test(name)) return 'carries markup'
+  if (cleanText(name, Number.MAX_SAFE_INTEGER) !== name) return 'carries line breaks, or spaces at its ends or in a row'
+  if (name.length > LAYER_NAME_CHARS) return `is longer than ${LAYER_NAME_CHARS} characters`
+  return null
+}
+
+/**
+ * The tool's input, held to the closed world: every element an op names is
+ * one the request described, and an op the structure alone refuses is
+ * dropped with its reason.
+ */
+function parseEditInput(
+  input: Record<string, unknown>,
+  context: AssistEditCanvasContext,
+  kind: AssistEditDocumentKind,
+): ParsedEdit {
+  const world = assistEditClosedWorld(context)
+  const dropped: string[] = []
+  const pending: PendingEditOp[] = []
   const described = (nodeId: unknown, label: string): AssistEditCanvasNode | null => {
-    if (typeof nodeId !== 'string' || !byId.has(nodeId)) {
-      dropped.push(`${label}: names an element that is not on the canvas described`)
+    const node = world.element(nodeId)
+    if (typeof node === 'string') {
+      dropped.push(`${label}: ${ASSIST_EDIT_CLOSED_WORLD_REFUSALS[node]}`)
       return null
     }
-    if (nodeId === CANVAS_ROOT_ELEMENT_ID) {
-      dropped.push(`${label}: cannot act on the document root itself`)
-      return null
-    }
-    if (insideRemoved(nodeId)) {
-      dropped.push(`${label}: acts on an element an earlier change removes`)
-      return null
-    }
-    return byId.get(nodeId) as AssistEditCanvasNode
+    return node
   }
   const describedParent = (parentId: unknown, label: string, verb: string) => {
-    if (typeof parentId !== 'string' || !byId.has(parentId) || insideRemoved(parentId)) {
-      dropped.push(`${label}: ${verb} an element that is not on the canvas described`)
-      return null
-    }
-    return byId.get(parentId) as AssistEditCanvasNode
+    const parent = world.parent(parentId)
+    if (!parent) dropped.push(`${label}: ${verb} an element that is not on the canvas described`)
+    return parent
   }
 
   const rawOps = Array.isArray(input['ops']) ? input['ops'] : []
@@ -1172,7 +1236,7 @@ function parseEditInput(
       case 'remove': {
         const node = described(raw['nodeId'], label)
         if (!node) return
-        removed.add(node.id)
+        world.remove(node.id)
         pending.push({ op, nodeId: node.id, componentId: node.componentId })
         return
       }
@@ -1192,11 +1256,11 @@ function parseEditInput(
         if (!node) return
         const parent = describedParent(raw['parentId'], label, 'moves into')
         if (!parent) return
-        if (lineage(parent.id).includes(node.id)) {
+        if (world.movesInsideItself(node.id, parent.id)) {
           dropped.push(`${label}: moves an element inside itself`)
           return
         }
-        movedTo.set(node.id, parent.id)
+        world.move(node.id, parent.id)
         pending.push({
           op,
           nodeId: node.id,
@@ -1273,11 +1337,10 @@ function parseEditInput(
       case 'addInteraction': {
         const node = described(raw['nodeId'], label)
         if (!node) return
-        const built = interactionOf(raw, label, (id) =>
-          typeof id === 'string' && byId.has(id) && id !== CANVAS_ROOT_ELEMENT_ID && !insideRemoved(id)
-            ? (byId.get(id) as AssistEditCanvasNode)
-            : null,
-        )
+        const built = interactionOf(raw, label, (id) => {
+          const target = world.element(id)
+          return typeof target === 'string' ? null : target
+        })
         if (typeof built === 'string') {
           dropped.push(built)
           return
@@ -1322,9 +1385,21 @@ function linealActorOf(componentId: string): {
     : null
 }
 
+/** One change validation refused: the op it is in, by its position, and why. */
+export interface AssistEditViolation {
+  position: number
+  message: string
+  /**
+   * A repair the validators would have made — a prop dropped, text cut, a
+   * value normalized — refused because the caller is strict. The message is
+   * the validator's own line, naming the element and the field.
+   */
+  repair?: true
+}
+
 interface ValidatedEdit {
   ops: AssistEditOp[]
-  violations: string[]
+  violations: AssistEditViolation[]
 }
 
 /**
@@ -1408,20 +1483,40 @@ function outlineRepeatsFrom(
 }
 
 /**
+ * What a strict caller grounds an edit's references in (AGL-4235): the pages
+ * a `screen` setting may link to, and the media library scopes a `media:`
+ * reference may name. Absent, any well-formed id or reference passes, as for
+ * the chat door.
+ */
+export interface AssistEditReferences {
+  screenIds?: Iterable<string>
+  mediaScopes?: Iterable<string>
+}
+
+/**
  * Where an edit's content meets the validators: every new subtree through
  * `validateAiNodeTree`, inside the real ancestor chain; every prop and style
  * patch through `validateAiNodePatch`; every move through the palette's
  * lineage rule. A violation drops its op and says why.
+ *
+ * `strict` is a caller that is not a model (AGL-4235): the public API, whose
+ * request says exactly what to write. Every repair the validators would make
+ * for a model — a setting dropped, text cut to its limit, a value coerced or
+ * normalized — is a violation instead, one per repair, and values are held to
+ * their types as written. The same validators and the same rules otherwise.
  */
-function validatePendingEdit(output: {
+export function validatePendingEdit(output: {
   surface: AssistEditDocumentKind
   context: AssistEditCanvasContext
   pending: readonly PendingEditOp[]
   datasets?: AssistEditDatasetScope
+  strict?: boolean
+  references?: AssistEditReferences
 }): ValidatedEdit {
   const byId = new Map(output.context.nodes.map((node) => [node.id, node]))
   const ops: AssistEditOp[] = []
-  const violations: string[] = []
+  const violations: AssistEditViolation[] = []
+  const strict = output.strict === true
   const scope: AssistEditDatasetScope = output.datasets ?? {}
   // The datasets a repeat may name (AGL-3616): the ones the door read, and
   // any the canvas already repeats over, which the site holds by definition.
@@ -1430,12 +1525,25 @@ function validatePendingEdit(output: {
     datasetIds,
     // A record's photo binds whole as an Image's src, from a picture field alone.
     bindingTokens: (scope.datasets ?? []).flatMap((dataset) => (dataset.imageField ? [`{{item.${dataset.imageField}}}`] : [])),
+    ...(output.references?.screenIds ? { screenIds: output.references.screenIds } : {}),
+    ...(output.references?.mediaScopes ? { mediaScopes: output.references.mediaScopes } : {}),
+    ...(strict ? { exact: true } : {}),
   }
+  // A patch is held to the same references as a new element; the chat door
+  // names none, and its patches stay as they were.
+  const patchContext: AiNodeTreeContext | undefined = strict || output.references ? treeContext : undefined
   // Tokens are judged only where the door read the site's datasets: a chat
   // canvas without them may be a record page this check cannot tell apart.
   const judgesTokens = output.datasets?.datasets !== undefined
   output.pending.forEach((pending, position) => {
-    const label = `edit change ${position + 1}`
+    /** The op is refused, with one reason. */
+    const refuse = (message: string) => void violations.push({ position, message })
+    /** A strict caller refuses every repair, each named; true when there was one. */
+    const refusedRepairs = (repairs: readonly string[]): boolean => {
+      if (!strict || !repairs.length) return false
+      for (const repair of repairs) violations.push({ position, message: repair, repair: true })
+      return true
+    }
     switch (pending.op) {
       case 'insertSubtree': {
         // Validated inside the real ancestor chain, so a parent's
@@ -1443,7 +1551,7 @@ function validatePendingEdit(output: {
         // against the element the subtree will actually sit in.
         const chain = chainTo(pending.parentId, byId)
         if (!chain) {
-          violations.push(`${label}: the element it adds into is not fully described`)
+          refuse('the element it adds into is not fully described')
           return
         }
         const wrapped: Record<string, Record<string, unknown>> = { ...pending.tree.nodes }
@@ -1464,9 +1572,10 @@ function validatePendingEdit(output: {
           treeContext,
         )
         if (result.ok === false) {
-          violations.push(`${label}: ${result.error}`)
+          refuse(result.error)
           return
         }
+        if (refusedRepairs(result.repairs)) return
         // The chain is linear, so its minted copy is walked by first child
         // down to the subtree root.
         let rootId = result.rootId
@@ -1479,6 +1588,9 @@ function validatePendingEdit(output: {
           const id = queue.shift() as string
           const node = result.nodes[id]
           if (!node) continue
+          // A layer name the request gave a new element: the validators keep
+          // none, so it is carried from the element it was written on.
+          const name = pending.tree.nodes[result.sourceIds[id]]?.['name']
           nodes[id] = {
             $id: id,
             componentId: node.componentId as string,
@@ -1488,11 +1600,12 @@ function validatePendingEdit(output: {
             props: { ...(node.props as Record<string, unknown>) },
             ...(node.sx ? { sx: node.sx as Record<string, unknown> } : {}),
             ...(node.hidden ? { hidden: true } : {}),
+            ...(typeof name === 'string' && name ? { name } : {}),
           }
           queue.push(...(node.nodes ?? []))
         }
         if (!rootId || !Object.keys(nodes).length) {
-          violations.push(`${label}: nothing survived validation`)
+          refuse('nothing survived validation')
           return
         }
         if (judgesTokens) {
@@ -1508,7 +1621,7 @@ function validatePendingEdit(output: {
             }
             const refusal = itemTokenRefusal(itemFieldsOf(node.props), above ? [...repeats, ...above] : null, scope)
             if (refusal) {
-              violations.push(`${label}: ${refusal}`)
+              refuse(refusal)
               return
             }
           }
@@ -1527,7 +1640,9 @@ function validatePendingEdit(output: {
         // Motion settings are held to the animation vocabulary, the rest to the palette (AGL-3838).
         const { motion, rest, refused } = assistEditMotionPatch(pending.props)
         if (refused.length) {
-          violations.push(`${label}: ${refused.join('; ')}`)
+          // A strict caller is told each setting apart; the card reads one line.
+          if (strict) refused.forEach(refuse)
+          else refuse(refused.join('; '))
           return
         }
         // A repeat's dataset is a reference, which the palette leaves off: it
@@ -1537,21 +1652,22 @@ function validatePendingEdit(output: {
           const named = typeof rest[AI_REPEAT_DATASET_PROP] === 'string' ? String(rest[AI_REPEAT_DATASET_PROP]).trim() : ''
           delete rest[AI_REPEAT_DATASET_PROP]
           if (!named || !datasetIds.has(named)) {
-            violations.push(`${label}: ${AI_REPEAT_DATASET_PROP} names a dataset this site does not have`)
+            refuse(`${AI_REPEAT_DATASET_PROP} names a dataset this site does not have`)
             return
           }
           repeat[AI_REPEAT_DATASET_PROP] = named
         }
         let props: Record<string, unknown> = { ...motion, ...repeat }
         if (Object.keys(rest).length) {
-          const result = validateAiNodePatch(pending.componentId, { props: rest })
+          const result = validateAiNodePatch(pending.componentId, { props: rest }, patchContext)
           if (result.ok === false) {
-            violations.push(`${label}: ${result.error}`)
+            refuse(result.error)
             return
           }
+          if (refusedRepairs(result.repairs)) return
           if (!Object.keys(result.props).length && !Object.keys(repeat).length) {
-            violations.push(
-              `${label}: ${result.repairs.length ? result.repairs.slice(0, 2).join('; ') : 'none of the settings named are ones this element takes'}`,
+            refuse(
+              result.repairs.length ? result.repairs.slice(0, 2).join('; ') : 'none of the settings named are ones this element takes',
             )
             return
           }
@@ -1563,7 +1679,7 @@ function validatePendingEdit(output: {
           const own = repeatOf(props) || repeatOf(node?.props)
           const refusal = itemTokenRefusal(itemFieldsOf(props), above ? [own, ...above] : null, scope)
           if (refusal) {
-            violations.push(`${label}: ${refusal}`)
+            refuse(refusal)
             return
           }
         }
@@ -1571,18 +1687,17 @@ function validatePendingEdit(output: {
         return
       }
       case 'updateSx': {
-        const result = validateAiNodePatch(pending.componentId, { sx: pending.sx })
+        const result = validateAiNodePatch(pending.componentId, { sx: pending.sx }, patchContext)
         if (result.ok === false) {
-          violations.push(`${label}: ${result.error}`)
+          refuse(result.error)
           return
         }
+        if (refusedRepairs(result.repairs)) return
         // The first repairs say why a patch came out empty — a style the
         // element does not take reads differently from one that carried
         // markup, and the reader of `dropped` needs to tell them apart.
         if (!result.sx) {
-          violations.push(
-            `${label}: ${result.repairs.length ? result.repairs.slice(0, 2).join('; ') : 'none of the styles named are allowed'}`,
-          )
+          refuse(result.repairs.length ? result.repairs.slice(0, 2).join('; ') : 'none of the styles named are allowed')
           return
         }
         ops.push({ ...pending, sx: result.sx })
@@ -1595,7 +1710,7 @@ function validatePendingEdit(output: {
         const accepts =
           parent.id === CANVAS_ROOT_ELEMENT_ID || AI_PALETTE[parent.componentId]?.acceptsChildren === true
         if (!child || !into || !accepts || !linealRelationshipPermits(child, into)) {
-          violations.push(`${label}: that element cannot be placed there`)
+          refuse('that element cannot be placed there')
           return
         }
         ops.push(pending)
@@ -1626,7 +1741,10 @@ export function checkAssistEditAnswer(
     pending: parsed.pending,
     datasets: { datasets: scope.datasets, recordDatasetId: scope.recordDatasetId ?? null },
   })
-  const reasons = [...parsed.dropped, ...validated.violations]
+  const reasons = [
+    ...parsed.dropped,
+    ...validated.violations.map(({ position, message }) => `edit change ${position + 1}: ${message}`),
+  ]
   const violations = reasons.map(
     (message): AiDoctrineViolation => ({ rule: null, code: 'edit', message }),
   )
