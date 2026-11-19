@@ -21,6 +21,7 @@ import com.aglyn.plugins.eventscalendar.registerEventsCalendarNative
 import com.aglyn.plugins.forms.registerFormsNative
 import com.aglyn.plugins.fulfillmentnetworks.registerFulfillmentNetworksNative
 import com.aglyn.plugins.funnels.registerFunnelsNative
+import com.aglyn.plugins.helpdesks.registerHelpDesksNative
 import com.aglyn.plugins.inbox.registerInboxNative
 import com.aglyn.plugins.inventorysync.registerInventorySyncNative
 import com.aglyn.plugins.livechat.registerLiveChatNative
@@ -67,7 +68,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "commerce",
-            contributes = mapOf("screens" to listOf("commerce.card-readers", "commerce.categories", "commerce.collection", "commerce.collectionProducts", "commerce.collectionRules", "commerce.collections", "commerce.coupons", "commerce.discounts", "commerce.display", "commerce.fulfillmentDelivery", "commerce.fulfillmentPickup", "commerce.fulfillmentQueue", "commerce.giftCards", "commerce.giftCardsSearch", "commerce.import.giftCards", "commerce.kiosk", "commerce.localDelivery", "commerce.locations", "commerce.manage", "commerce.memberPosts", "commerce.notifications", "commerce.order", "commerce.orderServices", "commerce.orderWebhookDeliveries", "commerce.orderWebhooks", "commerce.orders", "commerce.ordersBulk", "commerce.paymentMethods", "commerce.payments", "commerce.product", "commerce.productDetails", "commerce.productMedia", "commerce.productRelated", "commerce.products", "commerce.promotions", "commerce.quote", "commerce.quotes", "commerce.recovery", "commerce.register", "commerce.reservations", "commerce.return", "commerce.returnSettings", "commerce.returns", "commerce.returnsByStatus", "commerce.reviewSettings", "commerce.reviews", "commerce.sales", "commerce.scan", "commerce.settings", "commerce.shipping", "commerce.shippingTiers", "commerce.shippingeasy", "commerce.shipstation", "commerce.startReturn", "commerce.stockMovements", "commerce.stockMovementsLocation", "commerce.stockMovementsLocations", "commerce.stockMovementsOrder", "commerce.stockMovementsProduct", "commerce.stockMovementsProducts", "commerce.stockMovementsReason", "commerce.storeSettings", "commerce.subscription", "commerce.subscriptions", "commerce.suppliers", "commerce.tax", "commerce.taxSummary", "commerce.transfer"), "tabs" to listOf("commerce.orders-tab", "commerce.products-tab"), "widgets" to listOf("commerce.glance", "commerce.needs-you", "commerce.newest-site-users", "commerce.quote-from-contact", "commerce.quote-from-request", "commerce.sales-trend", "commerce.to-ship", "commerce.today"), "quickActions" to listOf("commerce.new-product", "commerce.orders-to-ship", "commerce.scan"), "deepLinks" to listOf("commerce.notifications-page", "commerce.order-link", "commerce.orders-page", "commerce.products-page", "commerce.quote-link", "commerce.reservations.link", "commerce.return-link", "commerce.returns-page", "commerce.shipping-page", "commerce.subscription.link", "commerce.subscriptions.link")),
+            contributes = mapOf("screens" to listOf("commerce.card-readers", "commerce.categories", "commerce.collection", "commerce.collectionProducts", "commerce.collectionRules", "commerce.collections", "commerce.coupons", "commerce.discounts", "commerce.display", "commerce.fulfillmentDelivery", "commerce.fulfillmentPickup", "commerce.fulfillmentQueue", "commerce.giftCards", "commerce.giftCardsSearch", "commerce.import.giftCards", "commerce.kiosk", "commerce.localDelivery", "commerce.locations", "commerce.manage", "commerce.memberPosts", "commerce.notifications", "commerce.order", "commerce.orderServices", "commerce.orderWebhookDeliveries", "commerce.orderWebhooks", "commerce.orders", "commerce.ordersBulk", "commerce.paymentMethods", "commerce.payments", "commerce.product", "commerce.productDetails", "commerce.productMedia", "commerce.productRelated", "commerce.products", "commerce.promotions", "commerce.quote", "commerce.quotes", "commerce.recovery", "commerce.register", "commerce.reservations", "commerce.return", "commerce.returnSettings", "commerce.returns", "commerce.returnsByStatus", "commerce.reviewSettings", "commerce.reviews", "commerce.sales", "commerce.scan", "commerce.settings", "commerce.shipping", "commerce.shippingTiers", "commerce.shippingeasy", "commerce.shipstation", "commerce.siteMemberPurchases", "commerce.startReturn", "commerce.stockMovements", "commerce.stockMovementsLocation", "commerce.stockMovementsLocations", "commerce.stockMovementsOrder", "commerce.stockMovementsProduct", "commerce.stockMovementsProducts", "commerce.stockMovementsReason", "commerce.storeSettings", "commerce.subscription", "commerce.subscriptions", "commerce.suppliers", "commerce.tax", "commerce.taxSummary", "commerce.transfer"), "tabs" to listOf("commerce.orders-tab", "commerce.products-tab"), "widgets" to listOf("commerce.glance", "commerce.needs-you", "commerce.newest-site-users", "commerce.quote-from-contact", "commerce.quote-from-request", "commerce.sales-trend", "commerce.to-ship", "commerce.today"), "quickActions" to listOf("commerce.new-product", "commerce.orders-to-ship", "commerce.scan"), "deepLinks" to listOf("commerce.notifications-page", "commerce.order-link", "commerce.orders-page", "commerce.products-page", "commerce.quote-link", "commerce.reservations.link", "commerce.return-link", "commerce.returns-page", "commerce.shipping-page", "commerce.subscription.link", "commerce.subscriptions.link")),
             register = ::registerCommerceNative,
         ),
         NativePluginManifestEntry(
@@ -119,6 +120,11 @@ object NativePluginManifest {
             id = "funnels",
             contributes = mapOf("screens" to listOf("funnels.list"), "quickActions" to listOf("funnels.open"), "deepLinks" to listOf("funnels.page")),
             register = ::registerFunnelsNative,
+        ),
+        NativePluginManifestEntry(
+            id = "help-desks",
+            contributes = mapOf("screens" to listOf("help-desks.provider", "help-desks.service"), "widgets" to listOf("help-desks.service.card")),
+            register = ::registerHelpDesksNative,
         ),
         NativePluginManifestEntry(
             id = "inbox",
@@ -212,7 +218,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "waivers",
-            contributes = mapOf("screens" to listOf("waivers.home", "waivers.share", "waivers.signature", "waivers.signatures", "waivers.waiver"), "widgets" to listOf("waivers.check-in-status"), "deepLinks" to listOf("waivers.home.link")),
+            contributes = mapOf("screens" to listOf("waivers.home", "waivers.paper", "waivers.share", "waivers.sign", "waivers.signature", "waivers.signatures", "waivers.signed", "waivers.waiver"), "widgets" to listOf("waivers.check-in-status"), "deepLinks" to listOf("waivers.home.link", "waivers.sign.link")),
             register = ::registerWaiversNative,
         ),
         NativePluginManifestEntry(

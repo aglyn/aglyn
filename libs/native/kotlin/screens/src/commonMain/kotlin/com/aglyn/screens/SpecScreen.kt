@@ -709,7 +709,8 @@ private fun Block(
       if (value.isNotEmpty()) {
         SectionCard(title) {
           Box(Modifier.fillMaxWidth().padding(vertical = space(2f)).testTag("qr-${block.id}"), contentAlignment = Alignment.Center) {
-            QrCodeImage(value, size = 192.dp)
+            // The caption is what a screen reader says (as on Apple); the kit's default names a payment code.
+            QrCodeImage(value, size = 192.dp, description = block.string("caption")?.let { ScreenValues.render(it, context) } ?: "QR code")
           }
           footer?.let { Text(it, Modifier.padding(horizontal = space(2f), vertical = space(1f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
@@ -734,6 +735,22 @@ private fun Block(
           }
         }
         footer?.let { Text(it, Modifier.padding(horizontal = space(2f), vertical = space(1f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+      }
+    }
+    "text" -> {
+      // `{ "type": "text", "source": "{…}" }`: words a person reads through, as written (a waiver's own text): line breaks
+      // kept, **strong**, *emphasis* and links drawn, through the kit's inline reader (the Apple kit's
+      // `AttributedString(markdown:)` inline only); nothing shows while the source is empty.
+      val source = ScreenValues.render(block.string("source").orEmpty(), context)
+      if (source.isNotEmpty()) {
+        val link = MaterialTheme.colorScheme.primary
+        SectionCard(title) {
+          val shown = remember(source, link) { com.aglyn.ui.InlineMarkdown.annotated(source, link) { href -> plugin.openLink(href) } }
+          androidx.compose.foundation.text.selection.SelectionContainer {
+            Text(shown, Modifier.padding(horizontal = space(2f), vertical = space(1f)).testTag("text-${block.id}"), style = MaterialTheme.typography.bodyMedium)
+          }
+          footer?.let { Text(it, Modifier.padding(horizontal = space(2f), vertical = space(1f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
       }
     }
     "zone" -> {
@@ -1178,6 +1195,10 @@ internal fun fieldJson(field: FieldSpec, value: FieldValue?): JsonElement = when
     val text = if (value is FieldValue.File) value.text else (value as FieldValue.Text).value
     if (text.isEmpty()) JsonNull else if (field.parse == "json") runCatching { kotlinx.serialization.json.Json.parseToJsonElement(text) }.getOrDefault(JsonNull) else JsonPrimitive(text)
   }
+  // A drawn signature: `{ strokes, png }`, or null while nothing is drawn.
+  field.kind == "signature" && value is FieldValue.Text -> SignatureInk.json(value.value)
+  // A set of fields asked for each of several (the minors on a waiver): the sets, each field as it sends itself.
+  field.kind == "group" && value is FieldValue.Text -> FieldGroups.json(field, value.value, JsonObject(emptyMap()))
   // One entry per line while edited; the list is what is sent (nothing typed is an empty list).
   field.kind == "lines" && value is FieldValue.Text ->
     JsonArray(value.value.split('\n').map { it.trim() }.filter { it.isNotEmpty() }.map { JsonPrimitive(it) })
@@ -1203,6 +1224,7 @@ internal fun initialValue(field: FieldSpec, context: JsonElement): FieldValue {
   if (field.kind == "toggle") return FieldValue.Flag(ScreenValues.truthy(resolved))
   if (field.kind == "multiselect") return FieldValue.Text(((resolved as? JsonArray) ?: JsonArray(emptyList())).joinToString("\n") { ScreenValues.text(it) })
   if (field.kind == "lines") return FieldValue.Text(((resolved as? JsonArray) ?: JsonArray(emptyList())).joinToString("\n") { ScreenValues.text(it) })
+  if (field.kind == "group") return FieldValue.Text(FieldGroups.initial(field, resolved))
   if (field.kind == "date") ScreenValues.epochMillis(resolved)?.let { millis ->
     val (y, m, d) = localParts(millis, "UTC")
     return FieldValue.Text("$y-${m.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}")
@@ -1250,6 +1272,9 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
       }
       "upload" -> UploadFieldInput(field, context, text) { onChange(FieldValue.Text(it)) }
       "media" -> MediaFieldInput(field, text) { onChange(FieldValue.Text(it)) }
+      "signature" -> SignatureFieldInput(field, label, help, text) { onChange(FieldValue.Text(it)) }
+      "photo" -> PhotoFieldInput(field, label, text) { onChange(FieldValue.Text(it)) }
+      "group" -> GroupFieldInput(field, context, label, text) { onChange(FieldValue.Text(it)) }
       "multiselect" -> {
         // Each choice a switch; the chosen ids are kept one per line. An id the list no longer offers is kept, not dropped.
         val choices = field.choices(context)
@@ -1326,7 +1351,7 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
     val mismatch = field.mismatch?.takeIf { text.isNotEmpty() && field.refuses(JsonPrimitive(text), context) }?.let { ScreenValues.render(it, context) }
     if (mismatch != null) {
       Text(mismatch, Modifier.padding(top = space(0.5f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-    } else if (help != null && field.kind != "toggle") {
+    } else if (help != null && field.kind != "toggle" && field.kind != "signature") {
       Text(help, Modifier.padding(top = space(0.5f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
   }

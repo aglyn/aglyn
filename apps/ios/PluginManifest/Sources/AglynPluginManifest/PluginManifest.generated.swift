@@ -19,6 +19,7 @@ import AglynEventsCalendarPlugin
 import AglynFormsPlugin
 import AglynFulfillmentNetworksPlugin
 import AglynFunnelsPlugin
+import AglynHelpDesksPlugin
 import AglynInboxPlugin
 import AglynInventorySyncPlugin
 import AglynLiveChatPlugin
@@ -65,7 +66,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "commerce",
-      contributes: ["screens": ["commerce.card-readers", "commerce.categories", "commerce.collection", "commerce.collectionProducts", "commerce.collectionRules", "commerce.collections", "commerce.coupons", "commerce.discounts", "commerce.display", "commerce.fulfillmentDelivery", "commerce.fulfillmentPickup", "commerce.fulfillmentQueue", "commerce.giftCards", "commerce.giftCardsSearch", "commerce.import.giftCards", "commerce.kiosk", "commerce.localDelivery", "commerce.locations", "commerce.manage", "commerce.memberPosts", "commerce.notifications", "commerce.order", "commerce.orderServices", "commerce.orderWebhookDeliveries", "commerce.orderWebhooks", "commerce.orders", "commerce.ordersBulk", "commerce.paymentMethods", "commerce.payments", "commerce.product", "commerce.productDetails", "commerce.productMedia", "commerce.productRelated", "commerce.products", "commerce.promotions", "commerce.quote", "commerce.quotes", "commerce.recovery", "commerce.register", "commerce.reservations", "commerce.return", "commerce.returnSettings", "commerce.returns", "commerce.returnsByStatus", "commerce.reviewSettings", "commerce.reviews", "commerce.sales", "commerce.scan", "commerce.settings", "commerce.shipping", "commerce.shippingTiers", "commerce.shippingeasy", "commerce.shipstation", "commerce.startReturn", "commerce.stockMovements", "commerce.stockMovementsLocation", "commerce.stockMovementsLocations", "commerce.stockMovementsOrder", "commerce.stockMovementsProduct", "commerce.stockMovementsProducts", "commerce.stockMovementsReason", "commerce.storeSettings", "commerce.subscription", "commerce.subscriptions", "commerce.suppliers", "commerce.tax", "commerce.taxSummary", "commerce.transfer"], "tabs": ["commerce.orders-tab", "commerce.products-tab"], "widgets": ["commerce.glance", "commerce.needs-you", "commerce.newest-site-users", "commerce.quote-from-contact", "commerce.quote-from-request", "commerce.sales-trend", "commerce.to-ship", "commerce.today"], "quickActions": ["commerce.new-product", "commerce.orders-to-ship", "commerce.scan"], "deepLinks": ["commerce.notifications-page", "commerce.order-link", "commerce.orders-page", "commerce.products-page", "commerce.quote-link", "commerce.reservations.link", "commerce.return-link", "commerce.returns-page", "commerce.shipping-page", "commerce.subscription.link", "commerce.subscriptions.link"]],
+      contributes: ["screens": ["commerce.card-readers", "commerce.categories", "commerce.collection", "commerce.collectionProducts", "commerce.collectionRules", "commerce.collections", "commerce.coupons", "commerce.discounts", "commerce.display", "commerce.fulfillmentDelivery", "commerce.fulfillmentPickup", "commerce.fulfillmentQueue", "commerce.giftCards", "commerce.giftCardsSearch", "commerce.import.giftCards", "commerce.kiosk", "commerce.localDelivery", "commerce.locations", "commerce.manage", "commerce.memberPosts", "commerce.notifications", "commerce.order", "commerce.orderServices", "commerce.orderWebhookDeliveries", "commerce.orderWebhooks", "commerce.orders", "commerce.ordersBulk", "commerce.paymentMethods", "commerce.payments", "commerce.product", "commerce.productDetails", "commerce.productMedia", "commerce.productRelated", "commerce.products", "commerce.promotions", "commerce.quote", "commerce.quotes", "commerce.recovery", "commerce.register", "commerce.reservations", "commerce.return", "commerce.returnSettings", "commerce.returns", "commerce.returnsByStatus", "commerce.reviewSettings", "commerce.reviews", "commerce.sales", "commerce.scan", "commerce.settings", "commerce.shipping", "commerce.shippingTiers", "commerce.shippingeasy", "commerce.shipstation", "commerce.siteMemberPurchases", "commerce.startReturn", "commerce.stockMovements", "commerce.stockMovementsLocation", "commerce.stockMovementsLocations", "commerce.stockMovementsOrder", "commerce.stockMovementsProduct", "commerce.stockMovementsProducts", "commerce.stockMovementsReason", "commerce.storeSettings", "commerce.subscription", "commerce.subscriptions", "commerce.suppliers", "commerce.tax", "commerce.taxSummary", "commerce.transfer"], "tabs": ["commerce.orders-tab", "commerce.products-tab"], "widgets": ["commerce.glance", "commerce.needs-you", "commerce.newest-site-users", "commerce.quote-from-contact", "commerce.quote-from-request", "commerce.sales-trend", "commerce.to-ship", "commerce.today"], "quickActions": ["commerce.new-product", "commerce.orders-to-ship", "commerce.scan"], "deepLinks": ["commerce.notifications-page", "commerce.order-link", "commerce.orders-page", "commerce.products-page", "commerce.quote-link", "commerce.reservations.link", "commerce.return-link", "commerce.returns-page", "commerce.shipping-page", "commerce.subscription.link", "commerce.subscriptions.link"]],
       register: AglynCommercePlugin.registerCommerceNative
     ),
     NativePluginManifestEntry(
@@ -117,6 +118,11 @@ public enum NativePluginManifest {
       id: "funnels",
       contributes: ["screens": ["funnels.list"], "quickActions": ["funnels.open"], "deepLinks": ["funnels.page"]],
       register: AglynFunnelsPlugin.registerFunnelsNative
+    ),
+    NativePluginManifestEntry(
+      id: "help-desks",
+      contributes: ["screens": ["help-desks.provider", "help-desks.service"], "widgets": ["help-desks.service.card"]],
+      register: AglynHelpDesksPlugin.registerHelpDesksNative
     ),
     NativePluginManifestEntry(
       id: "inbox",
@@ -210,7 +216,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "waivers",
-      contributes: ["screens": ["waivers.home", "waivers.share", "waivers.signature", "waivers.signatures", "waivers.waiver"], "widgets": ["waivers.check-in-status"], "deepLinks": ["waivers.home.link"]],
+      contributes: ["screens": ["waivers.home", "waivers.paper", "waivers.share", "waivers.sign", "waivers.signature", "waivers.signatures", "waivers.signed", "waivers.waiver"], "widgets": ["waivers.check-in-status"], "deepLinks": ["waivers.home.link", "waivers.sign.link"]],
       register: AglynWaiversPlugin.registerWaiversNative
     ),
     NativePluginManifestEntry(

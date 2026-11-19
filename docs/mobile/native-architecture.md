@@ -107,7 +107,9 @@ document reuses it:
    (`canWriteHostContent`, `hostWritesFrozen`).
 
    A read-only check the console runs before a client write works the same
-   way: `POST /api/redirects/check` runs the Redirects page's save checks.
+   way: `POST /api/redirects/check` runs the Redirects page's save checks,
+   and `POST /api/redirects/test` its "Test a path" (the pattern matcher is
+   the server's, with no app copy).
 5. **Linear moves with the work.** A commit cites a real `AGL-nnnn` (3651
    iOS, 3652 Android, 3653 desktop).
 
@@ -1247,7 +1249,7 @@ A file is `{ "screens": [ … ] }`. A screen:
 | `cardSlot` | (plugins) a core page's widget slot (`hostSettings`) the screen also puts a one-row card in, named `<screen id>.card` and declared under `widgets`; the card opens the screen with `pluginId` set, so a `requires` of `params.pluginId == <plugin>` holds from either door |
 | `load` | `key: url` or `{ url, method, body, cursor, items, cursorParam, when, optional, accept }` (`accept`: statuses whose body is the answer, a health probe's 503; `filters`: `{ field, op, value }` clauses for a staff list route, each kept when its value template is not empty), or `{ doc }` / `{ query: { collection, where, orderBy, limit, aggregate }, more }` for a Firestore read (below: `aggregate: { count: true }` answers `{ count }`, the server's tally, as the console's `getCountFromServer` does), `late: true` on any load to run it after the others, with their answers under `data` (a read keyed by something another read found), `each: <rows>` to run it once per row of an earlier load, `{ compute, args }` for a pure function over what has loaded, or `{ switchboard: org \| site }` for the plugin switchboard's rows, or `{ entitlement: feature }` for a plan feature's gate, or `{ takeRate: marketplace }` for the take rate on the workspace's marketplace sales (`{ pct, paid }`, as `resolveMarketplaceFeePct` prices it, `paid` the paid plans' rate); each lands at `data.<key>` |
 | `actions` | the screen's toolbar actions |
-| `blocks` | `fields`, `meters`, `list`, `form`, `actions`, `links`, `notice`, `zone`, `image`, `html`, `qr` (a QR code of `value`, a link the screen shows, drawn by the kit's own encoder: a waiver's share link); a `list` row may carry a `toggle: { value, disabled, label, on, off }` whose flip runs the `on` or `off` action, and an `avatar` template (a person's picture, `{item.photoURL}`) that draws the row as that person, their photo or else the initials of its `primary`, in the shared avatar (AGL-4010) |
+| `blocks` | `fields`, `meters`, `list`, `form`, `actions`, `links`, `notice`, `zone`, `image`, `html`, `qr` (a QR code of `value`, a link the screen shows, drawn by the kit's own encoder: a waiver's share link), `text` (`source`, words a person reads through as written, a waiver's own text: line breaks kept and **strong**, *emphasis* and links drawn inline, by `AttributedString(markdown:)` inline only on Apple and the kit's `InlineMarkdown` on Kotlin; a `#` or a list marker stays as written); a `list` row may carry a `toggle: { value, disabled, label, on, off }` whose flip runs the `on` or `off` action, and an `avatar` template (a person's picture, `{item.photoURL}`) that draws the row as that person, their photo or else the initials of its `primary`, in the shared avatar (AGL-4010) |
 | `constants` | fixed rows, read as `const` |
 
 An action is `{ label, icon, method, url, body, headers, confirm, confirmWhen, confirmMessage, confirmLabel, destructive, prompt,
@@ -1550,6 +1552,24 @@ Files and multi-step flows (the Imports and exports hub is the largest user):
   (the console's `ssoEnforcementAccounts`, `sso-enforcement.ts`): one row per account with the address, what enforcing
   would remove, what it keeps, whether it can be break-glass and whether it is. The enforcement screen keeps the
   rehearsal in `stash.ssoPreview` and draws the rows, the lockout alerts and the break-glass choice from it.
+- A field of `kind: "signature"` is a drawn signature, taken as the console's `SignaturePad` takes one (the waivers
+  plugin's sign at the window, AGL-4042): each point a whole number from 0 to 1000 across and down a pad three times as
+  wide as it is tall, rounded half up; a point under 3 (across plus down) from the last one skipped; no more points once
+  3,900 are drawn; Clear starts again, and the field's `help` sits beside it. Its value is `{ strokes: [[[x, y], …], …],
+  png }`, `png` a `data:image/png;base64,` picture of the strokes (black on white, 1200 by 400, one bit a pixel, drawn by
+  hand the same on both kits, so the same strokes make the same bytes), or null while nothing is drawn. The label is the
+  pad's accessible name, as the console's is.
+- A field of `kind: "photo"` is a photo of a page, taken with the camera or picked from the photos (the files only where
+  a device has nothing else): stood upright and shrunk to a JPEG no wider or taller than `maxEdge` (1600) and never made
+  larger, as the console's `shrinkPhoto` does, then shown under the button. `retakeLabel` is the button once a photo is
+  held, `alt` the photo's accessible name. Its value is a `data:image/jpeg;base64,` address (a paper waiver's photo).
+- A field of `kind: "group"` asks its own `fields` (text-like: text, email, a date) again for each one of several, the
+  minors a parent signs for: `min` sets to start with (and to keep), `max` the most, `itemLabel` over each set (`item.n`
+  is its number from 1, which its fields' labels read too), `addLabel` and `removeLabel`. Its value is the list of sets,
+  each `{ key: value }` with what was typed, trimmed, and "" for a field left empty.
+- A form that starts empty again once its action lands (the next signer at the window) carries a field that is never
+  shown (`when` that never holds) whose `initial` reads what the action stashes (`stash: { key: "{response.…}" }`): the
+  form's seed moves when the answer comes, and the edits that press sent are settled away, as any save's are.
 - A field of `kind: "media"` is a file chosen from the workspace's media library, never typed (the console's
   `MediaUrlField` for a logo or a favicon): the Setup pickers' `MediaPickField` over the workspace's library alone
   (`workspaceOnly`), whichever site is picked. Its value is what the console stores, the file's `cdnPath` else its address.
