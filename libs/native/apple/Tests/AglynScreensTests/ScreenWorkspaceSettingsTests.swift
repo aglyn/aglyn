@@ -57,8 +57,13 @@ final class ScreenWorkspaceSettingsTests: XCTestCase {
         ["id": "request-review", "label": "Request a review", "href": "/acme/settings/holds?notice=n1"],
       ],
     ]
-    let scope: JSONValue = ["data": ["notices": ["notices": [notice, ["noticeId": "n2", "actions": []]]]], "params": ["noticeId": "n1"]]
+    let notices: JSONValue = ["notices": ["notices": [notice, ["noticeId": "n2", "actions": []]]]]
+    // Update payment method is a payment control: shown in a build that may buy (app.billing), as here.
+    let scope: JSONValue = ["data": notices, "params": ["noticeId": "n1"], "app": ["billing": true]]
     XCTAssertEqual(shown(next, in: scope), ["review", "view-details", "update-payment-method", "why"])
+    // A store build (app.billing false) leaves it out.
+    let store: JSONValue = ["data": notices, "params": ["noticeId": "n1"], "app": ["billing": false]]
+    XCTAssertEqual(shown(next, in: store), ["review", "view-details", "why"])
     let billing = try XCTUnwrap(next.first { $0.id == "update-payment-method" })
     XCTAssertEqual(ScreenValues.render(try XCTUnwrap(billing.route), in: scope), "/acme/billing/settings")
     // A notice that is not reviewable offers no review, and one that names no action offers none.

@@ -74,9 +74,13 @@ class ScreenWorkspaceSettingsTest {
                        {"id":"view-details","label":"View details","href":"/acme/hosts/shop/orders/o9"},
                        {"id":"request-review","label":"Request a review","href":"/acme/settings/holds?notice=n1"}]},
            {"noticeId":"n2","actions":[]}]}},
-         "params":{"noticeId":"n1"}}""",
+         "params":{"noticeId":"n1"},"app":{"billing":true}}""",
     )
+    // Update payment method is a payment control: shown in a build that may buy (app.billing), as here.
     assertEquals(listOf("review", "view-details", "update-payment-method", "why"), shown(next, scope))
+    // A store build (app.billing false) leaves it out.
+    val store = json(scope.toString().replace("\"billing\":true", "\"billing\":false"))
+    assertEquals(listOf("review", "view-details", "why"), shown(next, store))
     val billing = next.first { it.id == "update-payment-method" }
     assertEquals("/acme/billing/settings", ScreenValues.render(billing.route!!, scope))
     // A notice that is not reviewable offers no review, and one that names no action offers none.
