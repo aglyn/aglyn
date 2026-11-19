@@ -1057,6 +1057,17 @@ object ScreenValues {
     else -> null
   }
 
+  /** `fixed/N`: [value] to exactly [places] decimals, half away from zero, without grouping (`toFixed`). */
+  fun fixedText(value: Double, places: Int): String {
+    var scale = 1.0
+    repeat(places) { scale *= 10 }
+    val scaled = floor(abs(value) * scale + 0.5)
+    val whole = floor(scaled / scale).toLong()
+    val fraction = (scaled - whole * scale).toLong()
+    val digits = if (places > 0) "." + fraction.toString().padStart(places, '0') else ""
+    return (if (value < 0 && scaled > 0) "-" else "") + whole.toString() + digits
+  }
+
   /** Thousands grouped with commas, up to `fraction` decimals, half up. */
   fun grouped(value: Double, fraction: Int = 0): String {
     var scale = 1.0
@@ -1174,6 +1185,8 @@ object ScreenValues {
       "usd" -> number(value)?.let { if (it > 0 && it < 0.005) "<\$0.01" else formatOrderMoney(round(it * 100), "USD") } ?: text(value)
       "bytes" -> number(value)?.let { bytesText(it) } ?: text(value)
       // Bytes as megabytes to one decimal, plain so a meter can read it back (the storage band's figure).
+      // `fixed/N`: exactly N decimals, no grouping, as JavaScript's `toFixed` writes a figure (`$0.0123` an Assist cost).
+      "fixed" -> number(value)?.let { fixedText(it, parts.getOrNull(1)?.toIntOrNull()?.coerceAtLeast(0) ?: 2) } ?: text(value)
       "megabytes" -> number(value)?.let { numberText(Math.round(it / 1_048_576 * 10) / 10.0) } ?: text(value)
       "number" -> number(value)?.let { grouped(it, 2) } ?: text(value)
       "percent" -> number(value)?.let { "${grouped(it * 100, 1)}%" } ?: text(value)

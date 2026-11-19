@@ -39,6 +39,8 @@ jest.mock('../utils/api-v1-resources', () => ({
   dispatchResource: jest.fn(),
 }))
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { ApiErrors } from '@aglyn/tenant-data-admin'
 import {
   connectorDiscoveryRoute,
@@ -170,7 +172,8 @@ describe('GET /api/mcp/server-card (SEP-2127)', () => {
     expect(card.description.length).toBeGreaterThan(0)
     expect(card.description.length).toBeLessThanOrEqual(100)
     expect(card.title.length).toBeLessThanOrEqual(100)
-    expect(card.websiteUrl).toMatch(/\/api#mcp$/)
+    // The product's home, as the registry entry lists it.
+    expect(card.websiteUrl).toBe('https://aglyn.com')
     // No primitives, no capabilities, nothing secret.
     expect(card).not.toHaveProperty('tools')
     expect(card).not.toHaveProperty('capabilities')
@@ -219,6 +222,25 @@ describe('GET /api/mcp/server-card (SEP-2127)', () => {
     const wrong = serverCardPost(new Request(`${ORIGIN}${MCP_SERVER_CARD_PATH}`, { method: 'POST' }))
     expect(wrong.status).toBe(405)
     expect(wrong.headers.get('allow')).toBe('GET, OPTIONS')
+  })
+})
+
+describe('the MCP Registry entry is what the card says (AGL-4225)', () => {
+  it('shares the card’s name, title, description, website and remote, field for field', async () => {
+    // `integrations/mcp-registry/server.json` is a copy of what is published
+    // as com.aglyn.app/mcp; published versions are immutable, so a drift here
+    // is a listing that no longer describes the server.
+    const entry = JSON.parse(
+      readFileSync(join(__dirname, '../../../integrations/mcp-registry/server.json'), 'utf8'),
+    )
+    const card = await json(serverCard(new Request(`${ORIGIN}${MCP_SERVER_CARD_PATH}`)))
+    for (const field of ['name', 'title', 'description', 'websiteUrl']) {
+      expect({ field, value: entry[field] }).toEqual({ field, value: card[field] })
+    }
+    expect(entry.remotes).toEqual([
+      { type: card.remotes[0].type, url: card.remotes[0].url, headers: card.remotes[0].headers },
+    ])
+    expect(entry.title).toBe('Aglyn')
   })
 })
 

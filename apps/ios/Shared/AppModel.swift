@@ -307,6 +307,7 @@ final class AppModel {
     context.sites = (workspace?.sites ?? []).map {
       NativeSiteRef(id: $0.id, name: $0.name, subdomain: $0.subdomain, role: $0.role)
     }
+    context.preferences = preferences
     return context
   }
 
