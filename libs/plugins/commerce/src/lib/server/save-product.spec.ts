@@ -169,7 +169,7 @@ describe('saveProduct', () => {
       base({
         productId: 'p1',
         create: false,
-        product: (stored) => ({ ...(stored.data() as never), name: 'Flat white' }),
+        product: (stored) => ({ ...(stored.data() as Record<string, unknown>), name: 'Flat white' }) as never,
       }),
     )
     expect(saved).toMatchObject({ ok: true })
