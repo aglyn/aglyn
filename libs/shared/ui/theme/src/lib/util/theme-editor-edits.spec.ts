@@ -10,7 +10,13 @@ import {
   readThemeEditorEdits,
   readThemeEditorValues,
 } from './theme-editor-edits'
-import { SYSTEM_FONT_VALUE, writeThemeColor, writeToolbarHeight } from './theme-editor-fields'
+import {
+  SYSTEM_FONT_VALUE,
+  type ThemeFontChoice,
+  writeThemeColor,
+  writeThemeFonts,
+  writeToolbarHeight,
+} from './theme-editor-fields'
 
 describe('theme editor edits', () => {
   it('applies each control with the editor\'s own writer', () => {
@@ -91,5 +97,45 @@ describe('theme editor edits', () => {
     expect(readThemeEditorEdits([{ control: 'borderRadius', value: 99 }])).toBe('Use a number from 0 to 24.')
     expect(readThemeEditorEdits([{ control: 'fontFamily', value: 'Comic Sans' }])).toBe('Pick a font from the list.')
     expect(readThemeEditorEdits([{ control: 'components', value: {} }])).toBe('That is not a theme control.')
+  })
+})
+
+describe('the fonts plugin picker’s edit (AGL-3656)', () => {
+  const inter: ThemeFontChoice = { family: 'Inter', category: 'sans-serif', weights: [700, 400], source: 'google' }
+  const lora: ThemeFontChoice = { family: 'Lora', category: 'serif', weights: [600], italics: [400], source: 'google' }
+
+  it('writes the body and heading fonts as the console picker writes them', () => {
+    const edits = readThemeEditorEdits([{ control: 'fonts', value: { body: inter, heading: lora } }])
+    expect(Array.isArray(edits)).toBe(true)
+    const theme = applyThemeEditorEdits({}, edits as never)
+    expect(theme).toEqual(writeThemeFonts({}, { body: { ...inter, weights: [700, 400] }, heading: lora }))
+    const values = readThemeEditorValues(theme)
+    expect(values.fonts.body?.family).toBe('Inter')
+    expect(values.fonts.body?.weights).toEqual([400, 700])
+    expect(values.fonts.heading?.family).toBe('Lora')
+    expect(values.fonts.heading?.italics).toEqual([400])
+    expect(values.fontFamily).toBe('Inter')
+  })
+
+  it('clears the heading back to the body font, and the body back to the theme default', () => {
+    const both = applyThemeEditorEdits({}, readThemeEditorEdits([{ control: 'fonts', value: { body: inter, heading: lora } }]) as never)
+    const sameAsBody = applyThemeEditorEdits(both, readThemeEditorEdits([{ control: 'fonts', value: { body: inter, heading: null } }]) as never)
+    expect(readThemeEditorValues(sameAsBody).fonts.heading).toBeNull()
+    expect(readThemeEditorValues(sameAsBody).fonts.body?.family).toBe('Inter')
+    const none = applyThemeEditorEdits(sameAsBody, readThemeEditorEdits([{ control: 'fonts', value: { body: null, heading: null } }]) as never)
+    expect(readThemeEditorValues(none).fonts).toEqual({ body: null, heading: null })
+    expect(readThemeEditorValues(none).fontFamily).toBe(SYSTEM_FONT_VALUE)
+  })
+
+  it('refuses a choice it cannot write', () => {
+    const bad = (value: unknown) => readThemeEditorEdits([{ control: 'fonts', value }])
+    expect(bad(null)).toBe('Pick a font from the list.')
+    expect(bad({ body: { ...inter, family: '' } })).toBe('Pick a font from the list.')
+    expect(bad({ body: { ...inter, family: 'Inter"; }' } })).toBe('Pick a font from the list.')
+    expect(bad({ body: { ...inter, category: 'fantasy' } })).toBe('Pick a font from the list.')
+    expect(bad({ body: { ...inter, source: 'system' } })).toBe('Pick a font from the list.')
+    expect(bad({ body: { ...inter, weights: [1200] } })).toBe('Pick the font’s weights again.')
+    expect(bad({ body: { ...inter, italics: 'all' } })).toBe('Pick the font’s weights again.')
+    expect(bad({ body: inter, heading: null })).toEqual([{ control: 'fonts', value: { body: { ...inter, weights: [700, 400] }, heading: null } }])
   })
 })

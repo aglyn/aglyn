@@ -548,7 +548,8 @@
                 "hostId": "{site.id}",
                 "orderId": "{params.orderId}"
               },
-              "reload": true
+              "reload": true,
+              "when": "site.can[taxEngines.orders]"
             }
           ]
         }

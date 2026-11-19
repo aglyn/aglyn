@@ -76,7 +76,7 @@ struct FunnelsScreen: View {
               list(selectable: true)
             } detail: {
               if let row = model.rows.first(where: { $0.id == selection }), let editor {
-                FunnelDetail(row: row, editor: editor, canManage: access.state.canManage).id(row.id)
+                FunnelDetail(context: context, row: row, editor: editor, canManage: access.state.canManage).id(row.id)
               } else {
                 AglynSelectionPlaceholder("No funnel selected", systemImage: FunnelsSymbols.funnel)
               }
@@ -141,7 +141,8 @@ struct FunnelsScreen: View {
   private var sectionColumn: some View {
     if model.ready, !model.failed, let row = funnelShown(model.rows, picked: selection), let editor {
       FunnelDetail(
-        row: row, editor: editor, canManage: access.state.canManage, choices: model.rows, pick: { selection = $0 })
+        context: context, row: row, editor: editor, canManage: access.state.canManage, choices: model.rows,
+        pick: { selection = $0 })
     } else {
       // Loading, a failure or no funnels yet: the same states the list shows.
       list(selectable: false)
@@ -178,7 +179,7 @@ struct FunnelsScreen: View {
     } else {
       List(model.rows) { row in
         AglynPushLink {
-          if let editor { FunnelDetail(row: row, editor: editor, canManage: access.state.canManage) }
+          if let editor { FunnelDetail(context: context, row: row, editor: editor, canManage: access.state.canManage) }
         } label: {
           FunnelListRow(row: row)
         }
@@ -208,6 +209,7 @@ private enum ResultState {
 }
 
 struct FunnelDetail: View {
+  let context: NativePluginContext
   let row: FunnelRow
   let editor: FunnelsEditor
   let canManage: Bool
@@ -333,6 +335,11 @@ struct FunnelDetail: View {
                 stepLabel: row.steps.indices.contains(reached - 1) ? funnelStepTitle(row.steps[reached - 1]) : "",
                 nextStepLabel: row.steps.indices.contains(reached) ? funnelStepTitle(row.steps[reached]) : ""))
           } : nil)
+      // What another plugin reads about these results, such as "Ask AI about this funnel" (the console's `funnelInsight`
+      // zone): the funnel and the range shown, under a saved funnel's results only.
+      SlotWidgets(
+        context: context, slot: FunnelInsightZone.name,
+        props: [FunnelInsightZone.funnelName: row.name, FunnelInsightZone.days: String(days)])
     }
   }
 }

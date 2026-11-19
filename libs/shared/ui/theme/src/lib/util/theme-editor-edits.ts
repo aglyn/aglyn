@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { HostTheme, HostThemeScheme } from '@aglyn/shared-data-types'
+import type { HostTheme, HostThemeFontCategory, HostThemeScheme } from '@aglyn/shared-data-types'
 import {
   BORDER_RADIUS_FIELD,
   DARK_SCHEME_FIELD,
@@ -21,6 +21,7 @@ import {
   readDarkScheme,
   readFontFamily,
   readThemeColor,
+  readThemeFonts,
   readToolbarHeight,
   themeComponentLookField,
   writeBorderRadius,
@@ -29,9 +30,12 @@ import {
   writeFontFamily,
   writeSpacing,
   writeThemeColor,
+  writeThemeFonts,
   writeToolbarHeight,
   type ThemeColorToken,
   type ThemeComponentLookId,
+  type ThemeFontChoice,
+  type ThemeFontSelection,
 } from './theme-editor-fields'
 
 /*
@@ -54,6 +58,12 @@ export type ThemeEditorEdit =
   | { control: 'color'; scheme: HostThemeScheme; token: ThemeColorToken; value: string | null }
   | { control: 'darkScheme'; value: 'auto' | 'off' }
   | { control: 'fontFamily'; value: string }
+  /**
+   * The fonts plugin's picker (AGL-3656): the body font and the heading font
+   * together, as its `writeThemeFonts` writes them; a null role is the
+   * theme default (body) or "same as body text" (heading).
+   */
+  | { control: 'fonts'; value: ThemeFontSelection }
   | { control: 'borderRadius'; value: number | null }
   | { control: 'spacing'; value: number | null }
   | { control: 'navHeight'; breakpoint: 'xs' | 'sm'; value: number | null }
@@ -64,6 +74,49 @@ export type ThemeEditorEdit =
 export const THEME_EDITOR_EDITS_MAX = THEME_COLOR_FIELDS.length * 2 + 8 + THEME_COMPONENT_LOOK_FIELDS.length
 
 const HEX_COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/
+
+/** The categories a font choice may name (`HostThemeFontCategory`). */
+const FONT_CATEGORIES: readonly HostThemeFontCategory[] = ['sans-serif', 'serif', 'monospace', 'display', 'handwriting']
+
+/** The longest family name a font choice may carry, and the most weights in either list. */
+export const THEME_FONT_FAMILY_MAX = 100
+export const THEME_FONT_WEIGHTS_MAX = 20
+
+function readWeights(value: unknown): number[] | string {
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value) || value.length > THEME_FONT_WEIGHTS_MAX) return 'Pick the font’s weights again.'
+  const weights: number[] = []
+  for (const entry of value) {
+    const weight = typeof entry === 'number' ? entry : Number(entry)
+    if (!Number.isInteger(weight) || weight < 1 || weight > 1000) return 'Pick the font’s weights again.'
+    weights.push(weight)
+  }
+  return weights
+}
+
+/** One role's font choice from a request body (null for none), or why it was refused. */
+function readFontChoice(raw: unknown): ThemeFontChoice | null | string {
+  if (raw === null || raw === undefined) return null
+  if (typeof raw !== 'object' || Array.isArray(raw)) return 'That font could not be read.'
+  const choice = raw as Record<string, unknown>
+  const family = typeof choice['family'] === 'string' ? choice['family'].trim() : ''
+  if (!family || family.length > THEME_FONT_FAMILY_MAX || /["\\;{}<>]/.test(family)) return 'Pick a font from the list.'
+  const category = choice['category']
+  if (!FONT_CATEGORIES.includes(category as HostThemeFontCategory)) return 'Pick a font from the list.'
+  const source = choice['source']
+  if (source !== 'google' && source !== 'custom') return 'Pick a font from the list.'
+  const weights = readWeights(choice['weights'])
+  if (typeof weights === 'string') return weights
+  const italics = readWeights(choice['italics'])
+  if (typeof italics === 'string') return italics
+  return {
+    family,
+    category: category as HostThemeFontCategory,
+    weights: weights.length ? weights : [400],
+    ...(italics.length ? { italics } : {}),
+    source,
+  }
+}
 
 function readNumber(
   value: unknown,
@@ -107,6 +160,15 @@ export function readThemeEditorEdit(raw: unknown): ThemeEditorEdit | string {
         return 'Pick a font from the list.'
       }
       return { control: 'fontFamily', value: value as string }
+    }
+    case 'fonts': {
+      const value = edit['value']
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return 'Pick a font from the list.'
+      const body = readFontChoice((value as Record<string, unknown>)['body'])
+      if (typeof body === 'string') return body
+      const heading = readFontChoice((value as Record<string, unknown>)['heading'])
+      if (typeof heading === 'string') return heading
+      return { control: 'fonts', value: { body, heading } }
     }
     case 'borderRadius': {
       const value = readNumber(edit['value'], BORDER_RADIUS_FIELD)
@@ -164,6 +226,9 @@ export function applyThemeEditorEdits(theme: HostTheme, edits: readonly ThemeEdi
       case 'fontFamily':
         next = writeFontFamily(next, edit.value)
         break
+      case 'fonts':
+        next = writeThemeFonts(next, edit.value)
+        break
       case 'borderRadius':
         next = writeBorderRadius(next, edit.value ?? undefined)
         break
@@ -186,6 +251,8 @@ export interface ThemeEditorValues {
   colors: Record<HostThemeScheme, Record<string, string | null>>
   darkScheme: 'auto' | 'off'
   fontFamily: string
+  /** The fonts plugin's body and heading fonts (`readThemeFonts`). */
+  fonts: ThemeFontSelection
   borderRadius: number | null
   spacing: number | null
   navHeight: { xs: number | null; sm: number | null }
@@ -207,6 +274,7 @@ export function readThemeEditorValues(theme: HostTheme | undefined): ThemeEditor
     colors,
     darkScheme: readDarkScheme(safe),
     fontFamily: readFontFamily(safe),
+    fonts: readThemeFonts(safe),
     borderRadius: typeof radius === 'number' && Number.isFinite(radius) ? radius : null,
     spacing: typeof safe.spacing === 'number' ? safe.spacing : null,
     navHeight: {

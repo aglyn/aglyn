@@ -141,7 +141,7 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     keyedBy: 'doc-id',
     subjects: ['org'],
     exported: true,
-    note: 'The org document and every subcollection: members, invites, roles, usage, apiUsage, analytics, datasets/records, contacts, lists, media, installs, activity, assistExchanges, retention.',
+    note: 'The org document and every subcollection: members, invites, roles, usage, apiUsage, analytics, datasets/records, contacts, lists, media, installs, activity, assistExchanges, retention, and transferJobs — each import job with the member who ran it, its file name, columns, mapping and summary, and its chunks, results and undo rows holding the imported values (AGL-4236).',
   },
   {
     collection: 'hosts',
