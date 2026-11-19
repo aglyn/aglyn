@@ -195,3 +195,34 @@ export function registryEntryProblems(entry, constants) {
   }
   return problems
 }
+
+/**
+ * The registry entry's title and description are the card's (AGL-4225): the
+ * card builds them from `MCP_SERVER_TITLE` and `MCP_SERVER_DESCRIPTION` in
+ * `mcp-protocol.ts`, both from the platform's brand name, and the entry is a
+ * copy of what is published. Read from source, with the brand taken as the
+ * entry's own title.
+ */
+export function cardTextProblems({ protocolSource, cardSource }, entry) {
+  const problems = []
+  if (!/export const MCP_SERVER_TITLE = PLATFORM_BRAND_NAME\b/.test(protocolSource)) {
+    problems.push('MCP_SERVER_TITLE is no longer the platform brand name the registry entry lists')
+  }
+  const description = /export const MCP_SERVER_DESCRIPTION = `([^`]*)`/.exec(protocolSource)?.[1]
+  if (!description) {
+    problems.push('could not read MCP_SERVER_DESCRIPTION out of mcp-protocol.ts')
+  } else {
+    const composed = description.replace(/\$\{PLATFORM_BRAND_NAME\}/g, String(entry.title ?? ''))
+    if (composed !== entry.description) {
+      problems.push(`server.json description differs from the card's: "${composed}"`)
+    }
+  }
+  for (const [field, pattern] of [
+    ['title', /title: MCP_SERVER_TITLE\b/],
+    ['description', /description: MCP_SERVER_DESCRIPTION\b/],
+    ['websiteUrl', /websiteUrl: PLATFORM_HOME_URL\b/],
+  ]) {
+    if (!pattern.test(cardSource)) problems.push(`the server card no longer builds ${field} the way the registry entry lists it`)
+  }
+  return problems
+}

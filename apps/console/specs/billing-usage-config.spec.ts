@@ -69,6 +69,8 @@ function request(token?: string, method = 'GET') {
 beforeEach(() => {
   jest.resetAllMocks()
   delete process.env.BILL_ORG_LIBRARY_STORAGE_FROM
+  delete process.env.BILL_EMAIL_SEND_OVERAGE_FROM
+  delete process.env.BILL_STARTER_EMAIL_SENDS_FROM
 })
 
 describe('/api/billing/usage-config', () => {
@@ -109,7 +111,10 @@ describe('/api/billing/usage-config', () => {
     mockVerifyIdToken.mockResolvedValue({ uid: 'u1' })
     const response = await GET(request('valid'))
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ orgLibraryBilledFrom: null })
+    expect(await response.json()).toEqual({
+      orgLibraryBilledFrom: null,
+      includedEmailBilledFrom: null,
+    })
   })
 
   it('returns the configured value VERBATIM, garbage included', async () => {
@@ -120,7 +125,45 @@ describe('/api/billing/usage-config', () => {
     for (const raw of ['2026-09', ' 2026-09 ', 'true']) {
       process.env.BILL_ORG_LIBRARY_STORAGE_FROM = raw
       const response = await GET(request('valid'))
-      expect(await response.json()).toEqual({ orgLibraryBilledFrom: raw })
+      expect(await response.json()).toEqual({
+        orgLibraryBilledFrom: raw,
+        includedEmailBilledFrom: null,
+      })
     }
+  })
+
+  /**
+   * STARTER'S EMAIL BAND (AGL-4227) bills only once BOTH switches are on, so
+   * the native screen is handed the LATER of the two, and null while either
+   * is unset — where the screen then quotes nothing (fails closed).
+   */
+  describe('includedEmailBilledFrom', () => {
+    async function answer(platform?: string, starter?: string) {
+      if (platform !== undefined) process.env.BILL_EMAIL_SEND_OVERAGE_FROM = platform
+      if (starter !== undefined) process.env.BILL_STARTER_EMAIL_SENDS_FROM = starter
+      mockVerifyIdToken.mockResolvedValue({ uid: 'u1' })
+      return ((await (await GET(request('valid'))).json()) as Record<string, unknown>)[
+        'includedEmailBilledFrom'
+      ]
+    }
+
+    it('is null while either switch is unset', async () => {
+      expect(await answer('2026-09')).toBeNull()
+      delete process.env.BILL_EMAIL_SEND_OVERAGE_FROM
+      expect(await answer(undefined, '2026-11')).toBeNull()
+    })
+
+    it('is the later of the two months, in either order', async () => {
+      expect(await answer('2026-09', '2026-11')).toBe('2026-11')
+      expect(await answer('2026-12', '2026-11')).toBe('2026-12')
+    })
+
+    it('passes garbage through unread, compared as text, for the screen to fail closed on', async () => {
+      // `true` sorts after every `20xx-xx`, so it wins and is handed over
+      // as-is; the screen's `<= now.month` then never holds, so nothing is
+      // quoted — the same fail-closed contract the console's switch has.
+      expect(await answer('2026-09', 'true')).toBe('true')
+      expect(await answer(' 2026-09 ', '2026-11')).toBe('2026-11')
+    })
   })
 })

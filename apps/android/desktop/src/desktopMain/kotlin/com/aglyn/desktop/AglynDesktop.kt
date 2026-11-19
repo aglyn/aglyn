@@ -18,6 +18,8 @@ fun main(args: Array<String>) {
   val autoSignIn = System.getProperty("aglyn.autoSignIn") == "true"
   // "Connect Google": the system browser, once the desktop OAuth client is configured.
   val google = DesktopShell.googleSource(services.config)
+  // An aglyn:// link the system opens the app with, or one on the command line, opens as a new tab (AGL-4059).
+  val links = com.aglyn.shell.DesktopLinks().also { it.install(args) }
   application {
     val navigator = remember { ShellNavigator() }
     AglynWindow(
@@ -70,7 +72,12 @@ fun main(args: Array<String>) {
       ) {
         // The Mac's traffic lights sit over the transparent title bar: the rail and the title bar start below them.
         androidx.compose.runtime.CompositionLocalProvider(com.aglyn.shell.LocalTitleBarInset provides if (isMacOs) 28.dp else 0.dp) {
-          AglynShell(services, navigator, autoSignIn = autoSignIn, playIntro = true, onIntroRevealed = onIntroRevealed)
+          // The window comes to the front for a link from another app.
+          androidx.compose.runtime.LaunchedEffect(links.pending) { if (links.pending != null) window.toFront() }
+          AglynShell(
+            services, navigator, autoSignIn = autoSignIn, pendingLink = links.pending, onLinkOpened = links::opened,
+            linksInNewTab = true, playIntro = true, onIntroRevealed = onIntroRevealed,
+          )
         }
       }
     }

@@ -23,9 +23,12 @@ public final class InviteAutoJoin {
     case waiting
   }
 
-  /// The invitations found for the account, in the order the server listed them.
+  /// The invitations found for the account, newest first.
   public private(set) var invites: [PendingInvite] = []
   public private(set) var statuses: [String: Status] = [:]
+  /// The workspace the last run opens: the newest invitation's, when that run joined it (AGL-4047). Of several
+  /// invitations, a person is opened into the one they were invited to most recently; the rest join where they stand.
+  public private(set) var opens: String?
 
   @ObservationIgnored private let list: @Sendable () async -> [PendingInvite]
   @ObservationIgnored private let accept: @Sendable (PendingInvite) async throws -> Void
@@ -49,15 +52,20 @@ public final class InviteAutoJoin {
   public var joining: [PendingInvite] { invites.filter { statuses[$0.id] == .joining } }
   /// The invitations whose join the server has not let finish ("Your access to Acme is almost ready").
   public var waiting: [PendingInvite] { invites.filter { statuses[$0.id] == .waiting } }
+  /// A join this session is in flight or has succeeded (the console's `joining`, AGL-4047). An accepted invitation leaves
+  /// the server's list before its membership reaches the workspace list, and first-run provisioning reads this so that
+  /// gap never looks like an account with no invitation and no workspace.
+  public var joinedOrJoining: Bool { statuses.values.contains { $0 != .waiting } }
 
-  /// Reads the account's invitations and accepts each one not tried yet this session; answers the workspaces joined,
-  /// so the caller can open one. Does nothing during a support session.
+  /// Reads the account's invitations and accepts each one not tried yet this session, newest first; answers the
+  /// workspaces joined, newest first, and sets `opens`. Does nothing during a support session.
   @discardableResult
   public func run(impersonating: Bool) async -> [String] {
     guard !impersonating, !running else { return [] }
     running = true
     defer { running = false }
-    let found = await list()
+    opens = nil
+    let found = newestInvitesFirst(await list())
     invites = found
     var joined: [String] = []
     for invite in found where !attempted.contains(invite.id) {
@@ -67,6 +75,7 @@ public final class InviteAutoJoin {
         try await accept(invite)
         statuses[invite.id] = .joined
         joined.append(invite.orgID)
+        if invite.id == found.first?.id { opens = invite.orgID }
       } catch {
         statuses[invite.id] = .waiting
       }

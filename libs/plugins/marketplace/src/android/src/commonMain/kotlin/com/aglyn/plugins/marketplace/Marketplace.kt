@@ -414,7 +414,7 @@ const val EVERY_WORKSPACE = "every"
  * `licenceBase`), narrowed to the workspace each landed in when one is chosen; [EVERY_WORKSPACE] asks for those that name
  * none, as `mineLicenceClauses` reads it.
  */
-fun boughtByYouQuery(uid: String, licensedTo: String?) = planListQuery(
+fun boughtByYouQuery(uid: String, licensedTo: String?, limit: Int = 100) = planListQuery(
   Contracts.mineLicenceQuery,
   ListQueryRequest(
     base = listOf(
@@ -427,7 +427,7 @@ fun boughtByYouQuery(uid: String, licensedTo: String?) = planListQuery(
       else -> listOf(ListFilterRequest(field = "buyerOrgId", op = "equals", value = licensedTo))
     },
   ),
-).toFirestoreQuery("marketplacePurchases", 100)
+).toFirestoreQuery("marketplacePurchases", limit)
 
 /** Who bought a license the workspace holds, as the console's table says it. */
 fun boughtByLabel(licence: LicenceRow, uid: String): String = if (licence.buyerUid == uid) "You" else "A colleague"

@@ -87,11 +87,24 @@ let mockCollapseInput: any[] | null = null
 let mockCollapseOutput: any[] = []
 const mockDecodedToken: Record<string, unknown> = {}
 
+const mockUsageLevels = new Map<string, string>()
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: {
     app: () => ({
       auth: () => ({ verifyIdToken: async () => mockDecodedToken }),
+      // The staff usage level (AGL-4228): the reviewed accounts, by uid.
+      firestore: () => ({
+        collection: () => ({
+          where: () => ({
+            select: () => ({
+              get: async () => ({
+                docs: [...mockUsageLevels].map(([id, level]) => ({ id, get: () => level })),
+              }),
+            }),
+          }),
+        }),
+      }),
     }),
   },
   isImpersonationSession: () => false,

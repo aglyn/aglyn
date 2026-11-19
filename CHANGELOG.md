@@ -9,12 +9,174 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.26.4 — 2026-11-18
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/a500536bf...v1.26.4)
+
+### Fixed
+
+- **push:** a failed or skipped native push leaves a log line ([AGL-4215](https://linear.app/aglyn/issue/AGL-4215))
+
+4 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
+## v1.26.3 — 2026-11-17
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.26.2...v1.26.3)
+
+### Fixed
+
+- **console:** auth-doors asks a silent identity toolkit call once more before going red
+- **native:** the Mac notification extension starts its service so macOS can reach it ([AGL-4215](https://linear.app/aglyn/issue/AGL-4215))
+
+## v1.26.2 — 2026-11-17
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.26.1...v1.26.2)
+
+### Fixed
+
+- **native:** the Mac plays the picked notification sound in the background and when quit ([AGL-4215](https://linear.app/aglyn/issue/AGL-4215))
+- **native:** the Mac plays the picked notification sound while the app is in front ([AGL-4215](https://linear.app/aglyn/issue/AGL-4215))
+
+## v1.26.1 — 2026-11-17
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.26.0...v1.26.1)
+
+1 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
+## v1.26.0 — 2026-11-17
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.25.0...v1.26.0)
+
+### Added
+
+- **api:** the server card and initialize name the server as its MCP Registry entry does ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **api:** every MCP tool has a human title, plain description, docs link and all four hints ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **native:** filter and sort Billing invoices as the console does ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667))
+- **native:** the one-time product-updates ask over the Sites list ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667), [AGL-3185](https://linear.app/aglyn/issue/AGL-3185))
+- **native:** filter the workspace Activity log by Who, Where and When ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667))
+- **billing:** the owner is told the grace deadline or the pause in the console and by email, with the way to upgrade ([AGL-4232](https://linear.app/aglyn/issue/AGL-4232))
+- **bandwidth:** a Free site's first time over its band gets a one-time 72-hour grace, and visitors see a neutral notice ([AGL-4232](https://linear.app/aglyn/issue/AGL-4232))
+- **native:** Sign-in records on Security, as the console's account page has them ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667), [AGL-2119](https://linear.app/aglyn/issue/AGL-2119))
+- **native:** sites readout and Start in preview on Create site ([AGL-4086](https://linear.app/aglyn/issue/AGL-4086))
+- **native:** pin sites in the apps as the console does, and filter Sites by Created ([AGL-4005](https://linear.app/aglyn/issue/AGL-4005), [AGL-4165](https://linear.app/aglyn/issue/AGL-4165))
+- **native:** the workspace's Domains page in the apps, piece 1 ([AGL-4040](https://linear.app/aglyn/issue/AGL-4040))
+- **native:** Site Care's Request a change on a site's Home ([AGL-3959](https://linear.app/aglyn/issue/AGL-3959))
+- **native:** maintenance switch, Visit site as the team, approved image hosts
+
+### Fixed
+
+- **api:** the form entries list does not claim an order it does not have ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **docs:** the bandwidth page's example message uses plain words, so the docs build does not read it as code ([AGL-4232](https://linear.app/aglyn/issue/AGL-4232))
+- **legal:** the member session cookie's inventory entry names the builder that now holds it
+- **site-preview:** the team link reaches the site the way the minting console does ([AGL-4086](https://linear.app/aglyn/issue/AGL-4086))
+- **console:** the bandwidth pause banner shows beside the dunning notice and the quota rows, not instead of them ([AGL-4232](https://linear.app/aglyn/issue/AGL-4232))
+- **bandwidth:** review of the one-time grace — a real engage transaction, once per workspace, neutral ceiling notice, one notice per crossing, pause told when a grace ends ([AGL-4232](https://linear.app/aglyn/issue/AGL-4232))
+- **native:** Request a change loads on iOS (an empty Group never ran its task)
+- **site:** a member signed in before the sign-in hint existed sees "Account" ([AGL-4231](https://linear.app/aglyn/issue/AGL-4231))
+- **bandwidth:** a grace that outlasts the month names no pause date, since none comes; the banner's non-admin wording is pinned ([AGL-4232](https://linear.app/aglyn/issue/AGL-4232))
+- **native:** declare the Domains screens' deep links
+
+### Documentation
+
+- **bandwidth:** given once per workspace, a surge can still pause during the grace, one notice per crossing ([AGL-4232](https://linear.app/aglyn/issue/AGL-4232))
+- **claude:** the assistant guide is listed now that sign-in is live, and says it starts on Starter ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **bandwidth:** the one-time grace, the alerts a Free owner gets, and the neutral visitor notice ([AGL-4232](https://linear.app/aglyn/issue/AGL-4232))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **marketing:** pricing copy re-extracted from Figma now that the frames match live /pricing ([AGL-4226](https://linear.app/aglyn/issue/AGL-4226), [AGL-4227](https://linear.app/aglyn/issue/AGL-4227))
+
+</details>
+
+13 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
+## v1.25.0 — 2026-11-17
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.24.0...v1.25.0)
+
+### Added
+
+- **native:** Android and the desktop app open console links from other apps ([AGL-4059](https://linear.app/aglyn/issue/AGL-4059))
+- **pricing:** the compare grid's Emails included / mo row, read from the catalog ([AGL-4227](https://linear.app/aglyn/issue/AGL-4227))
+- **crm:** Free keeps 100 people for the CRM, leads included; past it a capture adds no one and the entry stays under Forms ([AGL-4227](https://linear.app/aglyn/issue/AGL-4227))
+- **google-reviews:** review text clamps a long review behind Continue reading, v1.3.0 ([AGL-4212](https://linear.app/aglyn/issue/AGL-4212))
+- **site:** show an element only to signed-in or signed-out visitors ([AGL-4231](https://linear.app/aglyn/issue/AGL-4231))
+- **native:** the Business details card lists what your pages can use ([AGL-4136](https://linear.app/aglyn/issue/AGL-4136))
+- **billing:** Starter email bills from its own start month; the owner sees Free's cap and every refused email ([AGL-4227](https://linear.app/aglyn/issue/AGL-4227))
+- **email:** Free's hard monthly email cap of 300, on the daily ceiling's claim ([AGL-4227](https://linear.app/aglyn/issue/AGL-4227))
+- **staff:** usage level on accounts, workspaces and sites, set and filtered in the staff console ([AGL-4228](https://linear.app/aglyn/issue/AGL-4228))
+- **api,billing:** size-weighted API units, Starter email billing, extra-site reprice fail-safe ([AGL-4227](https://linear.app/aglyn/issue/AGL-4227))
+- **billing:** overage audit corrections in the plan catalog ([AGL-4226](https://linear.app/aglyn/issue/AGL-4226), [AGL-4227](https://linear.app/aglyn/issue/AGL-4227))
+- **console:** Starter's API limits on the plan cards and the usage page; pins re-read ([AGL-4226](https://linear.app/aglyn/issue/AGL-4226))
+- **api:** one per-minute budget per workspace, and refusals that name the limit ([AGL-4226](https://linear.app/aglyn/issue/AGL-4226))
+- **billing:** API access on Starter, bounded by a workspace rate limit and a monthly ceiling ([AGL-4226](https://linear.app/aglyn/issue/AGL-4226))
+
+### Fixed
+
+- **api:** the MCP service tools answer, from the same code as /api/v1 ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **native:** Kotlin links by workspace and site id switch to them; web-only links go to the default browser ([AGL-4059](https://linear.app/aglyn/issue/AGL-4059))
+- **crm:** the capture rule lives with the records band in crm-records; usage-config spec covers includedEmailBilledFrom ([AGL-4227](https://linear.app/aglyn/issue/AGL-4227))
+- **native:** a console link from another app opens as a new tab of the Mac window in front ([AGL-4059](https://linear.app/aglyn/issue/AGL-4059))
+- **email:** email-deliverability imports the disposable list it re-exports ([AGL-4230](https://linear.app/aglyn/issue/AGL-4230))
+- **crm:** the disposable-mailbox list is a pure leaf crm.ts can share with native ([AGL-4230](https://linear.app/aglyn/issue/AGL-4230))
+- **native:** the overage captions quote Starter's API rate and its email past 1,000, once both console switches bill it ([AGL-4227](https://linear.app/aglyn/issue/AGL-4227))
+- **native:** Setup's Basic details no longer promises the business details ([AGL-4136](https://linear.app/aglyn/issue/AGL-4136))
+- **native:** the Accounting row carries the console's help link, and the docs help registry matches the merged docs ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
+- **e2e:** the signup canary deletes its contact in the operator's CRM with its account ([AGL-4230](https://linear.app/aglyn/issue/AGL-4230))
+- **crm:** never make a company from a free, throwaway or school mailbox domain ([AGL-4230](https://linear.app/aglyn/issue/AGL-4230))
+- **staff:** each usage level card opens its own docs section ([AGL-4228](https://linear.app/aglyn/issue/AGL-4228))
+- **native:** an invitee who signs up lands in the invited workspace ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
+- **billing:** no grandfathering on Starter's extra site; an old-price item moves to the current price on its next change ([AGL-4227](https://linear.app/aglyn/issue/AGL-4227))
+- **crm:** the sign-up canary's throwaway account is no contact in the operator's CRM ([AGL-4230](https://linear.app/aglyn/issue/AGL-4230))
+- **crm:** a new account's contact in the operator's CRM gets its company and owner ([AGL-4230](https://linear.app/aglyn/issue/AGL-4230))
+- **staff:** usage level cards link their help section ([AGL-4228](https://linear.app/aglyn/issue/AGL-4228))
+- **email:** a refused email is never metered or reported as sent ([AGL-4227](https://linear.app/aglyn/issue/AGL-4227))
+- **email:** a refused email is never recorded as sent ([AGL-4227](https://linear.app/aglyn/issue/AGL-4227))
+- **native:** the favicon saves through the memberships route; paste an icon URL
+- **native:** the apps' Business details card writes what the console writes ([AGL-4136](https://linear.app/aglyn/issue/AGL-4136))
+- **staff:** usage level copy reads the platform, not a hardcoded brand ([AGL-4228](https://linear.app/aglyn/issue/AGL-4228))
+- **zapier:** REST hooks need the plan's webhooks as well as its API ([AGL-4226](https://linear.app/aglyn/issue/AGL-4226))
+
+### Reverted
+
+- **email:** daily transactional ceilings stay Starter 1,000 and Free 200 ([AGL-4227](https://linear.app/aglyn/issue/AGL-4227))
+
+### Documentation
+
+- **billing:** Starter email is counted from November 2026 (BILL_STARTER_EMAIL_SENDS_FROM=2026-11) ([AGL-4227](https://linear.app/aglyn/issue/AGL-4227))
+- **claude:** the console and the native apps change together ([AGL-3671](https://linear.app/aglyn/issue/AGL-3671))
+- **billing:** Starter email bills from December 2026; Free sends 300 emails a month ([AGL-4227](https://linear.app/aglyn/issue/AGL-4227))
+- an unbillable workspace stops at its included API requests on every plan ([AGL-4226](https://linear.app/aglyn/issue/AGL-4226))
+- billed API units, Starter's API at 20,000, Starter email and CRM ceilings; decision log and pricing surfaces ([AGL-4226](https://linear.app/aglyn/issue/AGL-4226), [AGL-4227](https://linear.app/aglyn/issue/AGL-4227))
+- **api:** Starter, Pro and Custom API limits side by side; the workspace rate limit ([AGL-4226](https://linear.app/aglyn/issue/AGL-4226))
+
+<details>
+<summary>Also in this release: 5 test, 5 chore</summary>
+
+- **native:** the console app-links test uses a made-up workspace, not a real one ([AGL-4059](https://linear.app/aglyn/issue/AGL-4059))
+- **crm:** capture-rule mocks use each spec's own plan rules; the band spec names the renamed export ([AGL-4227](https://linear.app/aglyn/issue/AGL-4227))
+- **docs:** regenerate the Assist docs index for the Free people cap and Starter's email start ([AGL-4227](https://linear.app/aglyn/issue/AGL-4227))
+- **crm:** backfill company and owner for existing account contacts ([AGL-4230](https://linear.app/aglyn/issue/AGL-4230))
+- **pricing-tables:** Starter's email row publishes $2.50 ([AGL-4227](https://linear.app/aglyn/issue/AGL-4227))
+- post-merge specs for size-weighted units, every-plan unbillable stop, and the audit prices ([AGL-4227](https://linear.app/aglyn/issue/AGL-4227))
+- **pricing:** tables, Stripe setup, drift keys and native contracts for the audit corrections ([AGL-4227](https://linear.app/aglyn/issue/AGL-4227))
+- feature matrix shows the API from Starter; Linear id ceiling AGL-4226 ([AGL-4226](https://linear.app/aglyn/issue/AGL-4226))
+- **console:** the API keys upsell names Starter, the cheapest plan with the API ([AGL-4226](https://linear.app/aglyn/issue/AGL-4226))
+- **pricing:** regenerate tables and native contracts for Starter's API ([AGL-4226](https://linear.app/aglyn/issue/AGL-4226))
+
+</details>
+
+6 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.24.0 — 2026-11-16
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.23.1...v1.24.0)
 
 ### Added
 
+- **data:** an Icon field for datasets, bound by an Icon element in a repeat ([AGL-4190](https://linear.app/aglyn/issue/AGL-4190))
+- **accounting:** release_accounting on by default for every workspace ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
 - **api:** an MCP Registry server.json for the remote MCP server, not published ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
 - **api:** the API catalog, the customer OpenAPI and the REST root name the MCP server and how to sign in ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
 - **api:** MCP server card, documentation members in both sign-in documents, and a scope challenge on 403 ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
@@ -30,6 +192,7 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **staff:** new-account notice waits for the sign-up's acquisition record before saying there is none ([AGL-4229](https://linear.app/aglyn/issue/AGL-4229))
 - **console:** a signed-out tab parks its refused listens until somebody signs in ([AGL-2945](https://linear.app/aglyn/issue/AGL-2945))
 - **console:** an invitee who signs up lands in the invited workspace ([AGL-4047](https://linear.app/aglyn/issue/AGL-4047))
 - **api:** declare the MCP schema host as never requested, and drop a dead assignment lint refuses ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))

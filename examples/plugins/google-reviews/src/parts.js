@@ -16,6 +16,9 @@
  *   one image ("Rated 4.6 out of 5 stars").
  * - Reviewer image: the reviewer's Google photo when the author chose photos
  *   and the page may load it, otherwise their initials.
+ * - Review text: what the reviewer wrote, cut to a few lines with an ellipsis
+ *   and a "Continue reading" link only when it was cut, so every card in a
+ *   row is the same height.
  *
  * Both take their values as ordinary attributes, so the presets bind them to
  * `{{item.stars}}`, `{{item.reviewer}}` and the like. Their root takes every
@@ -24,8 +27,9 @@
  * color, size, background, border and spacing all reach them.
  */
 
-import { createElement as h } from 'react'
+import { createElement as h, useEffect, useId, useLayoutEffect, useState } from 'react'
 import Box from '@mui/material/Box'
+import Link from '@mui/material/Link'
 import SvgIcon from '@mui/material/SvgIcon'
 import { initialsOf, photoAllowed, starFill, starsLabel } from './reviews.js'
 
@@ -154,3 +158,127 @@ export function ReviewerImage(props) {
   )
 }
 ReviewerImage.displayName = 'AglynGoogleReviewerImage'
+
+/* ------------------------------------------------------------------ */
+/* Review text                                                         */
+/* ------------------------------------------------------------------ */
+
+export const REVIEW_TEXT_DEFAULTS = Object.freeze({
+  lines: 6,
+  moreLabel: 'Continue reading',
+  lessLabel: 'Show less',
+})
+
+/**
+ * A whole number of lines, 1 to 20, from what the attribute holds (a number,
+ * the text the Besigner stored, or nothing); anything else is the default.
+ */
+export function reviewTextLines(value) {
+  const parsed = typeof value === 'number' ? value : Number(String(value ?? '').trim())
+  if (!Number.isFinite(parsed) || String(value ?? '').trim() === '') return REVIEW_TEXT_DEFAULTS.lines
+  return Math.min(20, Math.max(1, Math.round(parsed)))
+}
+
+/** About how many characters a line of a review card holds. */
+const CHARACTERS_PER_LINE = 45
+
+/**
+ * Whether `text` probably runs past `lines` lines. The page is drawn on the
+ * server, where nothing can be measured, so this guess decides whether the
+ * HTML carries the "Continue reading" link; the browser measures the real
+ * text once it is on screen and corrects it.
+ */
+export function probablyCut(text, lines) {
+  let used = 0
+  for (const paragraph of String(text).split('\n')) {
+    used += Math.max(1, Math.ceil(paragraph.length / CHARACTERS_PER_LINE))
+    if (used > lines) return true
+  }
+  return false
+}
+
+/** A layout effect in the browser, where it runs before paint; none on the server. */
+const useBrowserLayoutEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect
+
+const label = (value, fallback) => (typeof value === 'string' && value.trim() ? value : fallback)
+
+/**
+ * What a reviewer wrote, cut to `lines` lines with an ellipsis. "Continue
+ * reading" shows only when the text was cut and opens it in place; it then
+ * reads "Show less". The whole text is always in the HTML, for visitors'
+ * screen readers and for search engines. Persisted id:
+ * `aglyn.google-reviews.review-text`.
+ */
+export function ReviewText(props) {
+  const [own, rest] = split(props, ['text', 'lines', 'moreLabel', 'lessLabel'])
+  const { sx, ...root } = rest
+  const text = typeof own.text === 'string' ? own.text.trim() : own.text == null ? '' : String(own.text).trim()
+  const lines = reviewTextLines(own.lines)
+  const textId = useId()
+  // The paragraph, once it is on screen (a callback ref, so no ref is read while rendering).
+  const [element, setElement] = useState(null)
+  const [open, setOpen] = useState(false)
+  const [cut, setCut] = useState(() => probablyCut(text, lines))
+
+  // Measure the clamped text whenever it or its width changes. While it is
+  // open there is nothing to measure, and the last answer stands.
+  useBrowserLayoutEffect(() => {
+    if (!element || open) return undefined
+    const measure = () => setCut(element.scrollHeight - element.clientHeight > 1)
+    measure()
+    if (typeof ResizeObserver !== 'function') return undefined
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [element, text, lines, open])
+
+  // A review with nothing written draws nothing, not an empty line.
+  if (!text) return null
+
+  return h(
+    Box,
+    {
+      'data-review-text': open ? 'open' : 'clamped',
+      ...root,
+      sx: withAuthorSx(
+        { typography: 'body2', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5 },
+        sx,
+      ),
+    },
+    h(
+      Box,
+      {
+        component: 'p',
+        id: textId,
+        ref: setElement,
+        sx: {
+          m: 0,
+          width: '100%',
+          whiteSpace: 'pre-line',
+          overflowWrap: 'anywhere',
+          ...(open
+            ? {}
+            : { display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: String(lines), overflow: 'hidden' }),
+        },
+      },
+      text,
+    ),
+    cut || open
+      ? h(
+          Link,
+          {
+            component: 'button',
+            type: 'button',
+            underline: 'hover',
+            color: 'primary',
+            'aria-expanded': open,
+            'aria-controls': textId,
+            onClick: () => setOpen((value) => !value),
+            sx: { font: 'inherit', fontWeight: 600, textAlign: 'left', p: 0 },
+          },
+          open ? label(own.lessLabel, REVIEW_TEXT_DEFAULTS.lessLabel) : label(own.moreLabel, REVIEW_TEXT_DEFAULTS.moreLabel),
+        )
+      : null,
+  )
+}
+ReviewText.displayName = 'AglynGoogleReviewText'

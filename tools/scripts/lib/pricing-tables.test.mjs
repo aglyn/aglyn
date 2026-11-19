@@ -689,49 +689,44 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
    * gets the same both-directions treatment as every other one here.
    *=========================================*/
 
-  /** One wide-table record for a per-1k rate, printed bare as the page prints rates. */
-  const rateRecord = (label, rates) => ({ cells: [label, ...rates] })
+  /** The email overage row's label, as every breakpoint prints it. */
   const EMAIL_LABEL = 'Email sends, per 1,000 over the included band'
-  /**
-   * Starter, Pro, then Custom (pricing v4), exactly as the code renders them.
-   *
-   * Starter's cell is a DASH and not a rate: campaign email begins at Pro, so
-   * Starter's band is 0 and `emailSendsOverage` can never compute an excess
-   * for it. A rate there would advertise a fee that cannot be charged.
-   */
-  const EMAIL_CELLS = ['—', '$2.25', 'Custom']
+
+  // The page has carried the email row on every breakpoint since 2026-11-16,
+  // so no real absence declaration remains; each case injects its own with
+  // `--declare-absent-rate` and shapes the fixtures to the state it tests.
+  const DECLARE_EMAIL_ABSENT = `--declare-absent-rate=${EMAIL_LABEL}|test declaration`
+  /** Removes the email row from the given breakpoints' add-on tables. */
+  const dropEmailRow = (bps) => {
+    for (const bp of bps) {
+      const data = readFrame(bp)
+      const group = bp === 'mobile'
+        ? groupOf(data, 'Usage pricing', 'Add-on rates · selected plan')
+        : groupOf(data, 'Usage pricing', 'Metered table')
+      const before = group.records.length
+      group.records = group.records.filter((r) => r.cells[0] !== EMAIL_LABEL)
+      assert.equal(group.records.length, before - 1, `${bp} carried no ${EMAIL_LABEL} row to drop`)
+      writeFrame(data, bp)
+    }
+  }
 
   it('holds the absence declaration while the page carries the row NOWHERE', () => {
-    // The committed state, asserted rather than assumed: no breakpoint states
-    // an email overage rate, and that is exactly what the declaration says.
-    // Without this the two cases below could both pass against a fixture set
-    // that had quietly gained the row.
     resetFixtures()
+    dropEmailRow(BREAKPOINTS)
     for (const bp of BREAKPOINTS) {
       const text = readFileSync(framePath(bp), 'utf8')
-      assert.ok(!text.includes(EMAIL_LABEL), `${bp} already carries ${EMAIL_LABEL}`)
+      assert.ok(!text.includes(EMAIL_LABEL), `${bp} still carries ${EMAIL_LABEL}`)
     }
-    const run = check()
-    assert.equal(run.status, 0)
+    const run = check([DECLARE_EMAIL_ABSENT])
+    assert.equal(run.status, 0, run.stderr)
     assert.match(run.stdout, /reconciliation clean/)
   })
 
   it('fails when the page CATCHES UP on a row declared absent', () => {
-    // The declaration's expiry. Once every breakpoint states the rate the
-    // cells can be compared for real, and leaving the entry in place would go
-    // on excusing them — the same rule `FRAME_STALE_METERED` is held to,
-    // pointed at a row rather than a cell.
+    // The declaration's expiry: every committed breakpoint now states the
+    // rate, so a declaration that it is absent must fail rather than excuse it.
     resetFixtures()
-    editWide('Usage pricing', 'Metered table', (table) => {
-      table.records.push(rateRecord(EMAIL_LABEL, EMAIL_CELLS))
-    })
-    const mobile = readFrame('mobile')
-    groupOf(mobile, 'Usage pricing', 'Add-on rates · selected plan').records.push(
-      rateRecord(EMAIL_LABEL, ['$2.25']),
-    )
-    writeFrame(mobile, 'mobile')
-
-    const run = check()
+    const run = check([DECLARE_EMAIL_ABSENT])
     assert.equal(run.status, 1)
     assert.match(run.stderr, /declared absent from the frame but no breakpoint reported it/)
     assert.match(run.stderr, /Email sends, per 1,000 over the included band/)
@@ -739,16 +734,11 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
 
   it('keeps the absence declaration alive while ONE breakpoint still lacks it', () => {
     // The counter-case. Declarations are not qualified by breakpoint, so
-    // three exports catching up must NOT resolve one written for all four —
-    // otherwise the fourth rots quietly behind a declaration that no longer
-    // describes it.
+    // three exports carrying the row must NOT resolve one written for all four.
     resetFixtures()
-    editWide('Usage pricing', 'Metered table', (table) => {
-      table.records.push(rateRecord(EMAIL_LABEL, EMAIL_CELLS))
-    })
-
-    const run = check()
-    assert.equal(run.status, 0)
+    dropEmailRow(['mobile'])
+    const run = check([DECLARE_EMAIL_ABSENT])
+    assert.equal(run.status, 0, run.stderr)
     assert.match(run.stdout, /reconciliation clean/)
   })
 
@@ -779,6 +769,24 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     assert.match(run.stderr, /CRM records, per 1,000 over the included band \[mobile\]/)
   })
 
+  it('publishes every email a plan includes a month, from the catalog, before one-to-one email (AGL-4227)', () => {
+    resetFixtures()
+    const tables = JSON.parse(readFileSync(TABLES, 'utf8'))
+    const group = tables.compare.groups.find((g) => g.title === 'Content & data')
+    assert.ok(group, 'the Content & data group is missing')
+    const labels = group.rows.map((r) => r.label)
+    const at = labels.indexOf('Emails included / mo')
+    assert.ok(at >= 0, 'the Emails included row is not published')
+    assert.equal(labels[at + 1], 'One-to-one emails / day')
+    // Free's hard cap, Starter's billed band, Pro's campaign band.
+    assert.deepEqual(group.rows[at].values, {
+      free: '300',
+      starter: '1,000',
+      pro: '2,500',
+      enterprise: 'Talk to us',
+    })
+  })
+
   it('publishes both billed rates, at the values the billing code reads', () => {
     // The rates themselves, pinned in the generated artifact. `--check` diffs
     // the committed `tables.json` byte for byte, so moving either constant
@@ -793,7 +801,7 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     assert.ok(email, 'the email overage row is not published')
     // The plans sold since pricing v4 (AGL-4126), then Custom.
     assert.deepEqual(email.values, {
-      starter: '—',
+      starter: '$2.50',
       pro: '$2.25',
       enterprise: 'Custom',
     })

@@ -18,6 +18,11 @@
 import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
 import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import type { ListPageSort } from '@aglyn/shared-util-tools/list-query/list-column-sort'
+import {
+  readUsageLevel,
+  USAGE_LEVEL_FILTER_OPTIONS,
+  USAGE_LEVELS,
+} from '@aglyn/aglyn/app-utils/usage-level'
 
 /**
  * What each console list can be filtered by (AGL-2501).
@@ -108,6 +113,20 @@ export const USER_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     operators: ['equals', 'is'],
   },
   { column: 'staff', kind: 'boolean', path: 'staff' },
+  {
+    /*
+     * The staff usage level (AGL-4228, `@aglyn/aglyn/app-utils/usage-level`):
+     * how much the person uses the platform, as staff judged it. Kept on
+     * `users/{uid}`, which the route reads for every reviewed account in one
+     * query and joins onto the directory read, so an account nobody has
+     * reviewed reads `unreviewed` and every clause matches over the whole
+     * directory like the rest of this list.
+     */
+    column: 'usageLevel',
+    kind: 'exact',
+    path: 'usageLevel',
+    operators: ['equals', 'isAnyOf'],
+  },
   {
     /*
      * The claim as stored. A staff account with no role claim holds `null`
@@ -243,6 +262,7 @@ interface UserSortRow {
   createdAt: string | null
   lastSignInAt: string | null
   lastActiveAt?: string | null
+  usageLevel?: string | null
 }
 
 const day = (value: string | null) => (value ? new Date(value) : null)
@@ -258,6 +278,16 @@ export const USER_LIST_SORT_VALUES: Readonly<Record<string, ListPageSort<UserSor
   lastActiveAt: (row) => day(row.lastActiveAt ?? null),
 }
 
+/**
+ * The Usage level header (AGL-4228) sorts the rows on screen, least use
+ * first as the levels are declared: the native staff Users list mirrors the
+ * route's sorts (`native-list-sorts-match-the-routes`), and it has no such
+ * column yet.
+ */
+export const USER_LIST_PAGE_SORTS: Readonly<Record<string, ListPageSort<UserSortRow>>> = {
+  usageLevel: (row) => USAGE_LEVELS.indexOf(readUsageLevel(row.usageLevel)),
+}
+
 /** How each account field reads — as a hidden column's header, and on a chip. */
 export const USER_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
   email: 'User',
@@ -271,6 +301,7 @@ export const USER_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
   lastSignInAt: 'Last sign-in',
   lastActiveAt: 'Last activity',
   disabled: 'Suspended',
+  usageLevel: 'Usage level',
 }
 
 /** The choices of the account fields that are picked rather than typed. */
@@ -281,6 +312,7 @@ export const USER_LIST_FILTER_OPTIONS = {
     { value: 'true', label: 'Suspended (disabled)' },
     { value: 'false', label: 'Not suspended' },
   ],
+  usageLevel: USAGE_LEVEL_FILTER_OPTIONS,
 }
 
 /*
