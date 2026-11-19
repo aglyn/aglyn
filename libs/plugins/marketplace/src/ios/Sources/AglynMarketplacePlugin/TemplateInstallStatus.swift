@@ -56,7 +56,10 @@ struct TemplateInstallStatusChip: View {
   }
 
   var body: some View {
-    Group {
+    // A stack with a zero-size view in it, never nothing: SwiftUI does not start the task of a view that draws nothing,
+    // and the listing is read from that task.
+    ZStack {
+      Color.clear.frame(width: 0, height: 0).accessibilityHidden(true)
       if let status, status.state == "update-available" {
         Button(runner.busy ? "Updating…" : "Update available", systemImage: "arrow.down.circle") {
           if props["edited"] == "true" { confirming = true } else { update() }
