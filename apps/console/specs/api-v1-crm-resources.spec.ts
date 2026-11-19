@@ -43,6 +43,8 @@
 let mockScopes: string[] = ['crm:read', 'crm:write']
 let mockOrg: Record<string, unknown> = {}
 let mockUidSeq = 0
+/** The person a connected app acts for (AGL-4235); null models an API key. */
+let mockUid: string | null = null
 
 jest.mock('@aglyn/tenant-data-admin', () => {
   // Spread the REAL http helpers — a closed world, and a fake envelope would
@@ -68,6 +70,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       orgId: 'org-1',
       keyId: 'key-1',
       scopes: mockScopes,
+      ...(mockUid ? { uid: mockUid } : {}),
     }),
     getOrgDoc: async () => mockOrg,
     lockdownRefusal: async () => null,
@@ -87,6 +90,9 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The REAL lock verdict a named site is admitted by (AGL-4235): the
+  // site's own lock decides by the method, as at the site router.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/lockdown'),
   // The REAL model throughout: the claim, the plan table, the scope tokens,
   // the consent groups, the CRM constants and the normalizers. Every stamp
   // assertion below compares against what these compute, so a stub here
@@ -146,6 +152,7 @@ import {
   mockClock,
   mockDocs,
   resetMockFirestore,
+  seedSites,
 } from './api-v1-crm-double'
 
 const readSource = (...parts: string[]) =>
@@ -197,7 +204,9 @@ beforeAll(() => registerPluginServerDeclarations())
 
 beforeEach(() => {
   resetMockFirestore()
+  seedSites(['host-1', 'host-2'])
   mockUidSeq = 0
+  mockUid = null
   mockScopes = ['crm:read', 'crm:write']
   mockOrg = {
     plan: 'business',
@@ -1917,5 +1926,89 @@ describe('custom fields on companies and deals (AGL-2661)', () => {
       await call('PATCH', `deals/${created.id}`, { custom: { region: null } }),
     )
     expect(patched.custom).toEqual({ region: null })
+  })
+})
+
+/*
+ * Every CRM create names its site through `consentSiteId` in the body, never
+ * in the site path, so the site router never sees it. `readCrmSite` admits
+ * the site the way the router does (AGL-4235): the person's membership first,
+ * then the site's own lock. A create that names no site has no site to admit.
+ */
+describe('the site a CRM create names is admitted as the site router admits one (AGL-4235)', () => {
+  const MEMBER = 'u-member'
+  const creates = [
+    ['companies', COMPANIES, { name: 'Acme' }],
+    ['deals', DEALS, { title: 'Beans' }],
+    ['tasks', TASKS, { title: 'Call back', dueAt: '2026-09-10T15:00:00Z' }],
+    ['activities', ACTIVITIES, { kind: 'note', body: 'Spoke', contactId: 'c-1' }],
+    ['email-templates', TEMPLATES, { name: 'Follow-up', subject: 'Hi', body: 'Hello' }],
+  ] as const
+  const seat = (fields: Record<string, unknown> = {}) =>
+    seedSites(['host-1'], { memberRoles: { [MEMBER]: 'editor' }, ...fields })
+
+  it('answers a connected app whose person is not on the site No such site, and writes nothing', async () => {
+    mockUid = MEMBER
+    seat({ memberRoles: { 'someone-else': 'admin' } })
+    for (const [resource, collection, body] of creates) {
+      const response = await call('POST', resource, { ...body, consentSiteId: 'host-1' })
+      expect(`${resource}: ${response.status}`).toBe(`${resource}: 404`)
+      expect((await json(response)).error.message).toBe('No such site')
+      expect(childPaths(collection)).toEqual([])
+    }
+  })
+
+  it('lets a member’s app create on the site', async () => {
+    mockUid = MEMBER
+    seat()
+    for (const [resource, collection, body] of creates) {
+      const response = await call('POST', resource, { ...body, consentSiteId: 'host-1' })
+      expect(`${resource}: ${response.status}`).toBe(`${resource}: 201`)
+      expect(childPaths(collection)).toHaveLength(1)
+    }
+  })
+
+  it('does not ask an API key about membership: it is the workspace’s own credential', async () => {
+    seat({ memberRoles: {} })
+    const response = await call('POST', 'companies', { name: 'Acme', consentSiteId: 'host-1' })
+    expect(response.status).toBe(201)
+  })
+
+  it('keeps a site of another workspace answering exactly as before', async () => {
+    mockUid = MEMBER
+    const foreign = await call('POST', 'companies', { name: 'Acme', consentSiteId: 'somebody-else' })
+    expect(foreign.status).toBe(400)
+    expect((await json(foreign)).error.fields).toEqual({ consentSiteId: 'No such site in this organization' })
+  })
+
+  it('refuses a create on a site under a read-only or a full lock, with the lock status and the rate-limit headers', async () => {
+    for (const uid of [MEMBER, null]) {
+      for (const mode of ['read-only', undefined]) {
+        mockUid = uid
+        seat({
+          suspendedAt: Date.now() - 1000,
+          suspendedReasonCode: 'manual',
+          ...(mode ? { suspendedMode: mode } : {}),
+        })
+        for (const [resource, collection, body] of creates) {
+          const response = await call('POST', resource, { ...body, consentSiteId: 'host-1' })
+          expect(`${uid} ${mode} ${resource}: ${response.status}`).toBe(`${uid} ${mode} ${resource}: 423`)
+          expect(await json(response)).toMatchObject({ error: 'locked', scope: 'host' })
+          expect(response.headers.get('X-RateLimit-Limit')).toBe('120')
+          expect(response.headers.get('X-RateLimit-Remaining')).toBe('119')
+          expect(childPaths(collection)).toEqual([])
+        }
+      }
+    }
+    // A read names no site, so a lock on one leaves the org-wide list alone.
+    expect((await call('GET', 'companies')).status).toBe(200)
+  })
+
+  it('leaves a create that names no site untouched, whatever its sites hold', async () => {
+    mockUid = MEMBER
+    seat({ memberRoles: {}, suspendedAt: Date.now() - 1000, suspendedReasonCode: 'manual' })
+    const response = await call('POST', 'companies', { name: 'Acme' })
+    expect(response.status).toBe(201)
+    expect(mockDocs.get(`${COMPANIES}/${(await json(response)).id}`)!.hostId).toBeNull()
   })
 })

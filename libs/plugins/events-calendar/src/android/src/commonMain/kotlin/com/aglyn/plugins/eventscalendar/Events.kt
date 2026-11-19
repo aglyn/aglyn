@@ -47,6 +47,9 @@ import com.aglyn.core.Live
 import com.aglyn.core.firestoreNow
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.pluginhost.NativePluginRegistrar
+import com.aglyn.pluginhost.TransferExportDialog
+import com.aglyn.ui.MenuAction
+import com.aglyn.ui.OverflowMenu
 import com.aglyn.site.media.MediaPickField
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
@@ -208,6 +211,30 @@ suspend fun deleteEvent(writer: FirestoreWriter, hostId: String, id: String) =
 
 private const val NEW = "new"
 
+/** The data transfer hub's import screen (core), which the page's Import opens. */
+const val CORE_DATA_IMPORT_SCREEN = "core.settings.data.import"
+
+/** The transfer resource the page's Import and Export name (`EVENTS_TRANSFER_RESOURCE`). */
+const val EVENTS_TRANSFER_RESOURCE = "events"
+
+/** The export dialog's own title for the resource ("Export <label>"). */
+const val EVENTS_EXPORT_TITLE = "Export Events"
+
+/** The page's Export: every event of the site (`openExport(target)` names no filter). */
+val EVENTS_EXPORT_SCOPE: Map<String, Any?> = mapOf("kind" to "all")
+
+/** The import screen's parameters for this site's events, as the hub's Events Calendar row names its target. */
+fun eventsImportParams(hostId: String?): Map<String, String> =
+  buildMap {
+    put("resource", EVENTS_TRANSFER_RESOURCE)
+    if (hostId != null) put("hostId", hostId)
+  }
+
+/** Who sees Import: "Manage data" on the site, as the console offers it only to whom the transfer route takes it from. */
+@Composable
+fun canImportEvents(context: NativePluginContext): Boolean =
+  context.hostId != null && com.aglyn.pluginhost.rememberMemberPermissions(context).can("data.manage")
+
 @Composable
 fun EventsScreen(context: NativePluginContext, startNew: Boolean = false) {
   val hostId = context.hostId ?: return
@@ -218,6 +245,8 @@ fun EventsScreen(context: NativePluginContext, startNew: Boolean = false) {
   var notice by remember { mutableStateOf<Pair<String, StatusTone>?>(null) }
   var deleting by remember { mutableStateOf<EventRow?>(null) }
   var busy by remember { mutableStateOf(false) }
+  var exporting by remember { mutableStateOf(false) }
+  val canImport = canImportEvents(context)
 
   fun run(done: String, action: suspend () -> Unit) {
     busy = true
@@ -248,6 +277,15 @@ fun EventsScreen(context: NativePluginContext, startNew: Boolean = false) {
             Icon(AglynIcons.named("add"), contentDescription = null)
             Text("Add event", Modifier.padding(start = space(1f)))
           }
+          // The page's Import and Export, in the head's ⋯: Import for "Manage data", Export for whoever reads the events.
+          OverflowMenu(
+            buildList {
+              if (canImport) add(MenuAction("import-events", "Import", "upload") { context.navigate(CORE_DATA_IMPORT_SCREEN, eventsImportParams(hostId)) })
+              add(MenuAction("export-events", "Export", "download") { exporting = true })
+            },
+            Modifier.padding(start = space(1f)).testTag("events-more"),
+            boxed = true,
+          )
         }
         notice?.let { (message, tone) ->
           NoticeBanner(message, tone, Modifier.padding(horizontal = space(2f)), action = { TextButton(onClick = { notice = null }) { Text("Dismiss") } })
@@ -296,6 +334,19 @@ fun EventsScreen(context: NativePluginContext, startNew: Boolean = false) {
       }
     },
   )
+  if (exporting) {
+    TransferExportDialog(
+      context,
+      resource = EVENTS_TRANSFER_RESOURCE,
+      title = EVENTS_EXPORT_TITLE,
+      hostId = hostId,
+      scope = EVENTS_EXPORT_SCOPE,
+      fileStem = EVENTS_TRANSFER_RESOURCE,
+    ) { done ->
+      exporting = false
+      if (done != null) notice = done to StatusTone.SUCCESS
+    }
+  }
   deleting?.let { row ->
     ActionDialog(
       title = "Delete this event?",

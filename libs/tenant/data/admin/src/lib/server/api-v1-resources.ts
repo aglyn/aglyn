@@ -203,7 +203,8 @@ export function apiV1Resource(
  * (`['sites', '<siteId>', 'orders', '<orderId>']`), asks for its own scopes
  * and answers in the published envelope, as a top-level handler does.
  *
- * The platform's own (`media`, `publish`) are not registrable, a second
+ * The platform's own (`media`, `publish`, `seo`, `pages`, `business`) are
+ * not registrable, a second
  * plugin claiming a resource another serves is refused naming both, and
  * `describe` reaches the OpenAPI document through
  * {@link describeApiV1Resources} like every other description.
@@ -213,8 +214,18 @@ export const API_V1_SITE_RESOURCES = definePluginServiceContract<ApiV1Resource>(
   { multiple: true },
 )
 
-/** The resources under a site the router answers itself, which no plugin may take. */
-export const PLATFORM_API_V1_SITE_RESOURCES: ReadonlySet<string> = new Set(['media', 'publish'])
+/**
+ * The resources under a site the router answers itself, which no plugin may
+ * take: its media and publishing, and its search listing, pages and business
+ * details (AGL-4235).
+ */
+export const PLATFORM_API_V1_SITE_RESOURCES: ReadonlySet<string> = new Set([
+  'media',
+  'publish',
+  'seo',
+  'pages',
+  'business',
+])
 
 /**
  * Serves `/v1/sites/{siteId}/<resource>` from a plugin, on the terms

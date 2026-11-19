@@ -27,7 +27,9 @@ let package = Package(
         .product(name: "AglynCore", package: "apple"),
         .product(name: "AglynPluginHost", package: "apple"),
         .product(name: "AglynUI", package: "apple"),
-      ]
+        .product(name: "AglynScreens", package: "apple"),
+      ],
+      resources: [.copy("Resources/waivers.screens.json")]
     ),
     .testTarget(name: "AglynWaiversPluginTests", dependencies: ["AglynWaiversPlugin"]),
   ]

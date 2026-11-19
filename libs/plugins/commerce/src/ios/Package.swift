@@ -37,7 +37,7 @@ let package = Package(
         .product(name: "AglynScreens", package: "apple"),
         .product(name: "AglynSite", package: "apple"),
       ],
-      resources: [.copy("Resources/commerce-catalog.screens.json"), .copy("Resources/commerce-import.screens.json"), .copy("Resources/commerce-promotions.screens.json"), .copy("Resources/commerce-queues.screens.json"), .copy("Resources/commerce-returns.screens.json"), .copy("Resources/commerce-stock.screens.json"), .copy("Resources/commerce-store.screens.json"), .copy("Resources/commerce-store2.screens.json"), .copy("Resources/commerce.screens.json")]
+      resources: [.copy("Resources/commerce-catalog.screens.json"), .copy("Resources/commerce-import.screens.json"), .copy("Resources/commerce-promotions.screens.json"), .copy("Resources/commerce-queues.screens.json"), .copy("Resources/commerce-returns.screens.json"), .copy("Resources/commerce-site-member.screens.json"), .copy("Resources/commerce-stock.screens.json"), .copy("Resources/commerce-store.screens.json"), .copy("Resources/commerce-store2.screens.json"), .copy("Resources/commerce-subscriptions.screens.json"), .copy("Resources/commerce.screens.json")]
     ),
     .testTarget(name: "AglynCommercePluginTests", dependencies: ["AglynCommercePlugin"]),
   ]
