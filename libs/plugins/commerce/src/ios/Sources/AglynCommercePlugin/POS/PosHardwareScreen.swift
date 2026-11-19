@@ -91,7 +91,7 @@ struct PosHardwareScreen: View {
   private func shopSections(_ answer: PosHardwareCatalogAnswer) -> some View {
     let shipping = answer.shipping.first { $0.method == shippingMethod }
     let basket = posHardwareBasket(
-      offers: answer.offers.map { ($0.sku, $0.unitCents) }, quantities: quantities, shippingCents: shipping?.cents,
+      offers: answer.offers.map { (sku: $0.sku, unitCents: $0.unitCents) }, quantities: quantities, shippingCents: shipping?.cents,
       automaticTax: answer.automaticTax)
     let state = posHardwareCheckoutState(
       canBuy: canBuy, termsAccepted: termsAccepted, businessUse: businessUse, hasLines: !basket.lines.isEmpty,
@@ -179,7 +179,7 @@ struct PosHardwareScreen: View {
   }
 
   private var arrived: [String] {
-    posPlan == false ? posHardwareArrivedNumbers((orders ?? []).map { ($0.number, $0.status, $0.source) }) : []
+    posPlan == false ? posHardwareArrivedNumbers((orders ?? []).map { (number: $0.number, status: $0.status, source: Optional($0.source)) }) : []
   }
 
   // MARK: Your orders
@@ -315,18 +315,13 @@ struct PosHardwareScreen: View {
 
   private func load() async {
     guard mayVisit, !hostID.isEmpty else { return }
-    let api = shop
-    async let catalogCall = try? api.catalog()
-    async let ordersCall = try? api.orders()
-    async let waitingCall = try? api.waiting()
-    async let planCall = productCheckInCarried(context.api, hostID: hostID)
     // A catalog that cannot be read is a closed shop, as the console's card treats it.
-    let answer = await catalogCall ?? .closed
+    let answer = (try? await shop.catalog()) ?? .closed
     catalog = .ready(answer)
     if answer.available, shippingMethod.isEmpty, let first = answer.shipping.first { shippingMethod = first.method }
-    orders = await ordersCall ?? []
-    waiting = await waitingCall ?? .none
-    posPlan = await planCall
+    orders = (try? await shop.orders()) ?? []
+    waiting = (try? await shop.waiting()) ?? .none
+    posPlan = await productCheckInCarried(context.api, hostID: hostID)
   }
 
   private func checkout(basket: PosHardwareBasket) async {

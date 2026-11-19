@@ -280,7 +280,9 @@ struct PosHardwareAPI {
   func catalog() async throws -> PosHardwareCatalogAnswer { PosHardwareCatalogAnswer(try await call("catalog")) }
 
   func orders() async throws -> [PosHardwareOrderRow] {
-    (try await call("orders"))?["orders"]?.arrayValue?.compactMap(PosHardwareOrderRow.init) ?? []
+    let answer = try await call("orders")
+    let rows: [JSONValue] = answer?["orders"]?.arrayValue ?? []
+    return rows.compactMap(PosHardwareOrderRow.init)
   }
 
   /// Starts Stripe Checkout for the basket; the page it answers takes the card and the address.
