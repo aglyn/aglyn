@@ -515,7 +515,9 @@ struct SiteOverview: View {
           Label("You are working on this site", systemImage: "checkmark.circle.fill")
             .foregroundStyle(AglynColor.info)
         }
-        if let domain, let url = URL(string: "https://\(domain)/") {
+        if domain != nil,
+          let url = SiteLiveURL.home(subdomain: subdomain, cname: custom, consoleOrigin: context.api.origin)
+        {
           Button {
             // In preview or maintenance the site is entered as the team (the console's `SiteVisitButton`, AGL-4086).
             let (team, api, open) = (SiteVisit.entersAsTeam(doc.data), context.api, openURL)
