@@ -52,13 +52,30 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 
 const mockRevalidate: Array<{ hostId: string; paths: string[] }> = []
+let mockRevalidateThrows = false
 jest.mock('../utils/server/tenant-revalidate', () => ({
   __esModule: true,
   postTenantRevalidate: async (options: { hostId: string; paths: string[] }) => {
+    if (mockRevalidateThrows) throw new Error('tenant unreachable')
     mockRevalidate.push({ hostId: options.hostId, paths: options.paths })
     return { reason: 'ok', revalidated: options.paths, pathsDropped: 0 }
   },
 }))
+
+// An unexpected failure of a page's address publish, AFTER its draft was
+// stored: the one step past the draft's transaction that can throw.
+let mockRouteThrowsFor: string | null = null
+jest.mock('@aglyn/tenant-data-admin/server/page-route-actions', () => {
+  const actual = jest.requireActual('@aglyn/tenant-data-admin/server/page-route-actions')
+  return {
+    __esModule: true,
+    ...actual,
+    applyPageRouteAction: async (...args: [unknown, { pageId: string }]) => {
+      if (mockRouteThrowsFor === args[1].pageId) throw new Error('route batch failed')
+      return actual.applyPageRouteAction(...args)
+    },
+  }
+})
 
 import { siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permissions'
 import { decodeStoredNodes, encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
@@ -97,6 +114,8 @@ beforeEach(() => {
   mockRateCalls.length = 0
   mockRateRefuse = false
   mockRevalidate.length = 0
+  mockRevalidateThrows = false
+  mockRouteThrowsFor = null
   double = settingsFirestoreDouble({
     [HOST]: {
       displayName: 'Bakery',
@@ -269,5 +288,70 @@ describe('POST /v1/sites/{siteId}/publish with pages: success (AGL-4235)', () =>
       expect(await again.json()).not.toHaveProperty('promoted')
     }
     expect(double.writes).toEqual([])
+  })
+})
+
+describe('POST /v1/sites/{siteId}/publish with pages: an unexpected failure partway (AGL-4235)', () => {
+  const quiet = () => jest.spyOn(console, 'error').mockImplementation(() => undefined)
+
+  it('says which pages went live, which one failed and what was saved for it, and which were never reached', async () => {
+    const log = quiet()
+    mockRouteThrowsFor = 'menu'
+    const response = await publish(context(), { pages: ['about', 'menu', 'home'] })
+    expect(response.status).toBe(500)
+    const body = await response.json()
+    expect(body.error).toMatchObject({ type: 'internal_error', code: 'internal_error' })
+    // `about` went live, and is said to have.
+    expect(body.promoted).toEqual([{ page: 'about', status: 'published', path: '/about' }])
+    expect(storedTree(version('about'))).toEqual(tree('New about'))
+    // `menu`'s draft was stored, and it has no address, so no visitor sees it:
+    // said as exactly that, never as published.
+    expect(body.results).toEqual([
+      { page: 'about', status: 'published', path: '/about' },
+      { page: 'menu', status: 'failed', message: expect.stringContaining('no visitor sees it'), draftSaved: true },
+      { page: 'home', status: 'not_attempted' },
+    ])
+    expect(storedTree(version('menu'))).toEqual(tree('Our menu'))
+    expect((double.read(HOST)?.['screens'] as Record<string, string>)['menu']).toBeUndefined()
+    // What was thrown is logged, not sent.
+    expect(JSON.stringify(body)).not.toContain('route batch failed')
+    expect(log).toHaveBeenCalled()
+    expect(mockRevalidate).toEqual([])
+    log.mockRestore()
+  })
+
+  it('says nothing was written for a page whose draft transaction failed', async () => {
+    const log = quiet()
+    let transactions = 0
+    const firestore = new Proxy(double.firestore, {
+      get(target, key, receiver) {
+        if (key !== 'runTransaction') return Reflect.get(target, key, receiver)
+        return (run: never) => {
+          transactions += 1
+          if (transactions === 2) return Promise.reject(new Error('deadline exceeded'))
+          return target.runTransaction(run)
+        }
+      },
+    })
+    const response = await publish(context({ firestore }), { pages: ['about', 'menu'] })
+    expect(response.status).toBe(500)
+    const body = await response.json()
+    expect(body.promoted).toEqual([{ page: 'about', status: 'published', path: '/about' }])
+    expect(body.results[1]).toEqual({ page: 'menu', status: 'failed', message: expect.stringContaining('before anything was written') })
+    expect(storedTree(version('menu'))).toEqual(tree('Empty menu'))
+    expect(double.read(draft('menu'))).toBeDefined()
+    log.mockRestore()
+  })
+
+  it('still lists what went live when the refresh after it fails', async () => {
+    const log = quiet()
+    mockRevalidateThrows = true
+    const response = await publish(context(), { pages: ['about'] })
+    expect(response.status).toBe(500)
+    const body = await response.json()
+    expect(body.error).toMatchObject({ type: 'internal_error', code: 'refresh_failed' })
+    expect(body.promoted).toEqual([{ page: 'about', status: 'published', path: '/about' }])
+    expect(storedTree(version('about'))).toEqual(tree('New about'))
+    log.mockRestore()
   })
 })

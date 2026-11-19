@@ -496,6 +496,9 @@ export async function commitPagePublish(
   deps: PagePublishDeps = {},
 ): Promise<PagePublishResult> {
   const { hostId, pageId } = input
+  // Set once the transaction that stores the draft has committed, so an
+  // unexpected failure after it can say what was written (AGL-4235).
+  let draftCommitted = false
   try {
     // The address is checked again before anything is written, so a page
     // whose address went to another page meanwhile writes nothing.
@@ -562,6 +565,7 @@ export async function commitPagePublish(
       )
       return { outboxId }
     })
+    draftCommitted = plan.saveDraft
 
     if (plan.saveDraft) {
       const clear = deps.clearMirror ?? clearCoeditMirror
@@ -603,7 +607,34 @@ export async function commitPagePublish(
     return { ok: true, pageId, path: route.answer.path ?? screenRoutePathToUrl(plan.path), status: 'published' }
   } catch (error) {
     if (error instanceof Refused) return refusal(pageId, error)
-    throw error
+    throw new PagePublishInterrupted(pageId, draftCommitted, draftCommitted && plan.case === 'placeholder' ? screenRoutePathToUrl(plan.path) : null, error)
+  }
+}
+
+/**
+ * An unexpected failure (not a refusal) partway through one page's publish,
+ * saying what had been written when it stopped, so a caller reporting a list
+ * never claims a page went live that did not, nor hides one that did.
+ *
+ * The draft is stored in ONE transaction, which either commits or does not;
+ * the only step after it that can fail this way is a page's address publish
+ * (`applyPageRouteAction`), run for a `first` or a `placeholder` page. So:
+ * - `draftSaved` false: nothing was written for this page.
+ * - `draftSaved` true and `livePath` null (`first`): the draft is in the
+ *   page's version, and the page has no address, so no visitor sees it.
+ * - `livePath` set (`placeholder`): the draft is in the version visitors are
+ *   served at that address; only its republish as the owner's failed.
+ */
+export class PagePublishInterrupted extends Error {
+  constructor(
+    readonly pageId: string,
+    readonly draftSaved: boolean,
+    readonly livePath: string | null,
+    /** What was thrown. */
+    readonly thrown: unknown,
+  ) {
+    super(`Publishing page ${pageId} stopped on an unexpected error`)
+    this.name = 'PagePublishInterrupted'
   }
 }
 
@@ -613,6 +644,13 @@ export async function commitPagePublish(
 export type PagePublishEntry =
   | { page: string; status: 'published' | 'unchanged'; path: string }
   | { page: string; status: 'refused'; code: string; message: string; draftSaved?: boolean }
+  /**
+   * An unexpected error stopped this page's publish (AGL-4235). `draftSaved`
+   * and `path` say what was written before it stopped, as
+   * {@link PagePublishInterrupted} reads them: `path` is present only when
+   * visitors are served the saved draft there.
+   */
+  | { page: string; status: 'failed'; message: string; draftSaved?: true; path?: string }
   /** Not written: a page before it was refused, or after one was. */
   | { page: string; status: 'not_attempted' }
 
@@ -675,20 +713,84 @@ export async function precheckPagePublishes(
 }
 
 /**
+ * The answer about a list that an unexpected error (not a refusal) stopped
+ * (AGL-4235): what went live before it, the page it stopped on, and the
+ * pages never reached.
+ */
+export interface PagePublishListFailure {
+  ok: false
+  status: 500
+  code: 'internal_error'
+  message: string
+  promoted: PagePublishEntry[]
+  pages: PagePublishEntry[]
+  /** What was thrown, for the caller's log; never sent to the client. */
+  thrown: unknown
+}
+
+/** The failed page's line, saying only what is known to have been written. */
+function failedEntry(pageId: string, error: unknown): PagePublishEntry {
+  const known = error instanceof PagePublishInterrupted && error.pageId === pageId ? error : null
+  if (known?.livePath) {
+    return {
+      page: pageId,
+      status: 'failed',
+      message: `An unexpected error stopped this page’s publish after its draft went live at ${known.livePath}; publishing its address did not finish. Publish it again.`,
+      draftSaved: true,
+      path: known.livePath,
+    }
+  }
+  if (known?.draftSaved) {
+    return {
+      page: pageId,
+      status: 'failed',
+      message: 'An unexpected error stopped this page’s publish after its draft was saved into the page; the page has no address yet, so no visitor sees it. Publish it again.',
+      draftSaved: true,
+    }
+  }
+  return {
+    page: pageId,
+    status: 'failed',
+    message: known
+      ? 'An unexpected error stopped this page’s publish before anything was written for it. Publish it again.'
+      : 'An unexpected error stopped this page’s publish. Read the page before publishing it again.',
+  }
+}
+
+/**
  * Commits prechecked pages in order, stopping at the first refusal (a race:
- * the page or the site changed after the precheck). Answers what went live,
- * and, on a refusal, every page's line, so nothing is claimed that did not
- * happen.
+ * the page or the site changed after the precheck) or the first unexpected
+ * error. Answers what went live, and, when it stopped, every page's line, so
+ * nothing is claimed that did not happen and nothing that did is hidden.
  */
 export async function commitPagePublishes(
   firestore: Firestore,
   input: Omit<PagePublishCommitInput, 'pageId'>,
   plans: readonly PagePublishPlan[],
   deps: PagePublishDeps = {},
-): Promise<{ ok: true; promoted: PagePublishEntry[] } | (PagePublishListRefusal & { promoted: PagePublishEntry[] })> {
+): Promise<
+  | { ok: true; promoted: PagePublishEntry[] }
+  | (PagePublishListRefusal & { promoted: PagePublishEntry[] })
+  | PagePublishListFailure
+> {
   const promoted: PagePublishEntry[] = []
+  const notReached = (index: number) =>
+    plans.slice(index + 1).map((rest): PagePublishEntry => ({ page: rest.pageId, status: 'not_attempted' }))
   for (const [index, plan] of plans.entries()) {
-    const result = await commitPagePublish(firestore, { ...input, pageId: plan.pageId }, plan, deps)
+    let result: PagePublishResult
+    try {
+      result = await commitPagePublish(firestore, { ...input, pageId: plan.pageId }, plan, deps)
+    } catch (error) {
+      return {
+        ok: false,
+        status: 500,
+        code: 'internal_error',
+        message: 'Something went wrong while publishing the pages. The pages in `promoted` went live; see `results` for the rest.',
+        promoted: [...promoted],
+        pages: [...promoted, failedEntry(plan.pageId, error), ...notReached(index)],
+        thrown: error instanceof PagePublishInterrupted ? error.thrown : error,
+      }
+    }
     if (result.ok === true) {
       promoted.push({ page: result.pageId, status: result.status, path: result.path })
       continue
@@ -699,11 +801,7 @@ export async function commitPagePublishes(
       code: result.code,
       message: result.message,
       promoted,
-      pages: [
-        ...promoted,
-        refusedEntry(result),
-        ...plans.slice(index + 1).map((rest): PagePublishEntry => ({ page: rest.pageId, status: 'not_attempted' })),
-      ],
+      pages: [...promoted, refusedEntry(result), ...notReached(index)],
     }
   }
   return { ok: true, promoted }

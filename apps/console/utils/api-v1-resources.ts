@@ -75,6 +75,7 @@ import { handleSiteTemplates } from '@aglyn/tenant-data-admin/server/api-v1-site
 import {
   commitPagePublishes,
   type PagePublishEntry,
+  type PagePublishListFailure,
   type PagePublishListRefusal,
   precheckPagePublishes,
   readPagePublishBody,
@@ -610,14 +611,46 @@ async function handlePublish(
       plans,
     )
     promoted = committed.promoted
+    if (committed.ok === false && committed.status === 500) {
+      return pagePublishFailure(ctx, committed)
+    }
     if (committed.ok === false) {
       return pagePublishRefusal(ctx, committed, { promoted: committed.promoted, results: committed.pages })
     }
-    // The refresh below reads the routing map as the publishes left it.
-    snap = await hostRef(ctx, hostId).get()
   }
   const promotedView = promoted ? { promoted } : {}
+  if (!promoted) return refreshLivePages(ctx, hostId, snap, subdomain, promotedView)
+  // Pages went live, so a failure of the refresh after them still says which
+  // did (AGL-4235); the refresh is what failed, not their publish.
+  try {
+    // The refresh reads the routing map as the publishes left it.
+    snap = await hostRef(ctx, hostId).get()
+    return await refreshLivePages(ctx, hostId, snap, subdomain, promotedView)
+  } catch (error) {
+    console.error('api/v1 publish: refresh after the pages went live failed', error)
+    return apiJson(
+      {
+        error: {
+          type: 'internal_error',
+          message: 'The pages in `promoted` went live, and refreshing the site’s live pages afterwards failed. Publish again without `pages` to refresh them.',
+          code: 'refresh_failed',
+        },
+        promoted,
+        results: promoted,
+      },
+      { status: 500, headers: ctx.headers },
+    )
+  }
+}
 
+/** The refresh of a site's live pages that every publish ends with. */
+async function refreshLivePages(
+  ctx: ApiV1Context,
+  hostId: string,
+  snap: { get(field: string): unknown },
+  subdomain: string,
+  promotedView: { promoted?: PagePublishEntry[] },
+): Promise<Response> {
   // `screens` is the routing map the console route reads for the same purpose:
   // screen id → route path. A site with none is not an error — an unrouted or
   // empty site has no live page to drop — but it must not report a publish it
@@ -672,6 +705,24 @@ async function handlePublish(
       ...promotedView,
     },
     { headers: ctx.headers },
+  )
+}
+
+/**
+ * A list of pages an unexpected error stopped partway (AGL-4235): a 500 in
+ * the error envelope, with what went live in `promoted` and every page's line
+ * in `results`, the one that failed saying what was written for it. What was
+ * thrown is logged, never sent.
+ */
+function pagePublishFailure(ctx: ApiV1Context, failed: PagePublishListFailure): Response {
+  console.error('api/v1 publish: a page publish failed partway', failed.thrown)
+  return apiJson(
+    {
+      error: { type: 'internal_error', message: failed.message, code: failed.code },
+      promoted: failed.promoted,
+      results: failed.pages,
+    },
+    { status: 500, headers: ctx.headers },
   )
 }
 
