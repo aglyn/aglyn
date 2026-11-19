@@ -225,8 +225,8 @@ internal object FirestoreLoads {
       fun plain(raw: JsonElement): Any? {
         // A number or flag written into the spec is compared as itself, not as its text.
         if (raw is JsonNull) return null
-        // `{ "$date": ISO }`: a timestamp.
-        if (raw is JsonObject) return raw.str("\$date")?.let { isoInstant(it) } ?: ScreenValues.text(raw)
+        // `{ "$date": ISO }`: a timestamp. The text may be a template (`{params.from}`, a picked day: its midnight, UTC).
+        if (raw is JsonObject) return raw.str("\$date")?.let { isoInstant(ScreenValues.render(it, context).trim()) } ?: ScreenValues.text(raw)
         (raw as? JsonPrimitive)?.takeIf { !it.isString }?.let { literal ->
           return if (literal.content == "true" || literal.content == "false") literal.content == "true" else literal.content.toDoubleOrNull()
         }
@@ -245,7 +245,9 @@ internal object FirestoreLoads {
       val listOp = op == FilterOp.IN || op == FilterOp.NOT_IN || op == FilterOp.ARRAY_CONTAINS_ANY
       FirestoreFilter(field, op, if (listOp) (parts[2] as? JsonArray)?.map { plain(it) } ?: listOf(plain(parts[2])) else plain(parts[2]))
     }
-    val order = spec.str("orderBy")?.split(' ')?.let { listOf(FirestoreOrder(it[0], it.getOrNull(1) == "desc")) } ?: emptyList()
+    // The order may be a template (`{params.sort|'createdAt desc'}`): a list whose header order the person picked.
+    val order = spec.str("orderBy")?.let { ScreenValues.render(it, context).trim() }?.takeIf { it.isNotEmpty() }?.split(' ')
+      ?.let { listOf(FirestoreOrder(it[0], it.getOrNull(1) == "desc")) } ?: emptyList()
     val rows = limit ?: queryLimit(spec)
     // `aggregate`: { count: true, sum: "balanceCents" } asks the server for the figures over every matching document
     // and reads no rows: `count` and `sum` are missing from the result where the reader cannot answer, so a screen

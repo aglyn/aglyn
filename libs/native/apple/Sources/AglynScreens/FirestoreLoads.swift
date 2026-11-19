@@ -236,6 +236,9 @@ enum FirestoreLoads {
         if let date = formatter.date(from: iso) { return date }
         formatter.formatOptions = [.withInternetDateTime]
         if let date = formatter.date(from: iso) { return date }
+        // A picked day (`2026-11-16`): its midnight, UTC, as the Kotlin kit reads it.
+        formatter.formatOptions = [.withFullDate]
+        if iso.count == 10, let date = formatter.date(from: iso) { return date }
       }
       return ScreenValues.text(value)
     default: return ScreenValues.text(value)
@@ -259,7 +262,11 @@ enum FirestoreLoads {
       if case .null = raw { return NSNull() }
       if case .number(let number) = raw { return number }
       if case .bool(let flag) = raw { return flag }
-      // `{ "$date": ISO }`: a timestamp.
+      // `{ "$date": ISO }`: a timestamp. The text may be a template (`{params.from}`, a picked day: its midnight, UTC).
+      if case .object(let record) = raw, let template = record["$date"]?.stringValue {
+        let rendered = ScreenValues.render(template, in: context).trimmingCharacters(in: .whitespaces)
+        return Self.plainValue(.object(["$date": .string(rendered)]))
+      }
       if case .object = raw { return Self.plainValue(raw) }
       // `@now.ms-7d`: a time or number computed from the context, the way a condition's right side is.
       if let text = raw.stringValue?.trimmingCharacters(in: .whitespaces), text.hasPrefix("@"),
@@ -286,7 +293,10 @@ enum FirestoreLoads {
       if op == .equal { equals.append((field, value)) } else { filters.append(ListQueryConstraint(path: field, op: op, value: value)) }
     }
     var order: [FirestoreQuery.Order] = []
-    if let raw = spec["orderBy"]?.stringValue {
+    // The order may be a template (`{params.sort|'createdAt desc'}`): a list whose header order the person picked.
+    if let template = spec["orderBy"]?.stringValue,
+      case let raw = ScreenValues.render(template, in: context).trimmingCharacters(in: .whitespaces), !raw.isEmpty
+    {
       let parts = raw.split(separator: " ")
       order = [FirestoreQuery.Order(String(parts[0]), descending: parts.count > 1 && parts[1] == "desc")]
     }
