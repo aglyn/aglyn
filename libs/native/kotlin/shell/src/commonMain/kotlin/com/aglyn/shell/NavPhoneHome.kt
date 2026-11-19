@@ -131,6 +131,8 @@ private fun PhoneSiteLine(services: ShellServices, site: com.aglyn.core.Workspac
   val data = (host as? Live.Ready)?.value?.data
   val status = data?.let { com.aglyn.core.HostStatus.describe(it, com.aglyn.core.nowMillis()) }
   val address = site.addressWith(data?.get("cname") as? String)
+  // Visit site opens the site as the console the app talks to reaches it: a local console, the local tenant.
+  val visit = site.visitUrl(data?.get("cname") as? String, services.api.origin)
   val scope = androidx.compose.runtime.rememberCoroutineScope()
   Row(
     Modifier.fillMaxWidth().testTag("home-site-line"),
@@ -156,12 +158,12 @@ private fun PhoneSiteLine(services: ShellServices, site: com.aglyn.core.Workspac
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
     )
-    if (address != null) {
+    if (address != null && visit != null) {
       TextButton(
         onClick = {
           // In preview or maintenance the site is entered as the team (the console's `SiteVisitButton`, AGL-4086).
-          if (!com.aglyn.core.SiteVisit.entersAsTeam(data)) onVisit("https://$address/")
-          else scope.launch { onVisit(com.aglyn.core.SiteVisit.url(true, site.id, "https://$address/", services.api)) }
+          if (!com.aglyn.core.SiteVisit.entersAsTeam(data)) onVisit(visit)
+          else scope.launch { onVisit(com.aglyn.core.SiteVisit.url(true, site.id, visit, services.api)) }
         },
         modifier = Modifier.testTag("home-visit-site"),
       ) {
