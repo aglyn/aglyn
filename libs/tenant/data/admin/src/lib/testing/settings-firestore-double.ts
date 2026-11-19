@@ -89,6 +89,21 @@ export function settingsFirestoreDouble(seed: Record<string, Record<string, unkn
       writes.push({ op: 'delete', path })
       docs.delete(path)
     },
+    // A reference's own writes, outside a transaction or batch: what an
+    // idempotency claim makes (`create`, then a merge-`set` or a `delete`).
+    create: async (data: Record<string, unknown>) => {
+      if (docs.has(path)) throw Object.assign(new Error(`document exists at ${path}`), { code: 6 })
+      const next: Record<string, unknown> = {}
+      applyUpdate(next, data)
+      docs.set(path, next)
+      writes.push({ op: 'set', path, data })
+    },
+    set: async (data: Record<string, unknown>, options?: { merge?: boolean }) => {
+      const next: Record<string, unknown> = options?.merge ? (docs.get(path) ?? {}) : {}
+      applyUpdate(next, data)
+      docs.set(path, next)
+      writes.push({ op: 'set', path, data })
+    },
   })
 
   const collection = (path: string, state: { limit?: number; after?: string } = {}): Record<string, unknown> => ({
