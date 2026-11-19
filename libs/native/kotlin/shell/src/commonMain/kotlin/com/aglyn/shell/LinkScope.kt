@@ -28,18 +28,24 @@ internal fun linkScopeOf(link: String, workspace: WorkspaceState): LinkScope? {
   val path = DeepLinks.consolePathOf(link)?.let(DeepLinks::withoutFragment)?.substringBefore('?') ?: return null
   val split = DeepLinks.splitConsoleScope(path)
   val first = split.orgSlug ?: return null
-  workspace.orgs.firstOrNull { it.slug == first }?.let { org ->
-    val site = split.hostSlug?.let { host -> workspace.sites.firstOrNull { it.orgId == org.id && it.subdomain == host } }
-    return LinkScope(org.id, site?.id, split.hostSlug, whole = split.hostSlug == null)
-  }
+  // A workspace and a site are named by address or by id, as the Apple apps' store matches them (AGL-4059: a link by ids
+  // opened over the site on screen).
+  workspace.orgs.firstOrNull { it.slug == first }?.let { org -> return scopeIn(org.id, split.hostSlug, workspace) }
+  workspace.orgs.firstOrNull { it.id == first }?.let { org -> return scopeIn(org.id, split.hostSlug, workspace) }
   // A stored link (`normalizeNotificationLink`'s input) leads with the site's document id.
   workspace.sites.firstOrNull { it.id == first }?.let { return LinkScope(it.orgId, it.id, it.subdomain.ifEmpty { null }) }
   return null
 }
 
-/** The site of [scope] among the workspace's loaded sites, by id or by subdomain. */
+private fun scopeIn(orgId: String, host: String?, workspace: WorkspaceState): LinkScope {
+  val site = host?.let { workspace.sites.firstOrNull { site -> site.orgId == orgId && (site.subdomain == host || site.id == host) } }
+  return LinkScope(orgId, site?.id, host, whole = host == null)
+}
+
+/** The site of [scope] among the workspace's loaded sites, by id, or by the link's subdomain (or id in its place). */
 private fun siteOf(scope: LinkScope, workspace: WorkspaceState) = workspace.sites.firstOrNull { site ->
-  site.orgId == scope.orgId && ((scope.hostId != null && site.id == scope.hostId) || (scope.hostSubdomain != null && site.subdomain == scope.hostSubdomain))
+  site.orgId == scope.orgId && ((scope.hostId != null && site.id == scope.hostId) ||
+    (scope.hostSubdomain != null && (site.subdomain == scope.hostSubdomain || site.id == scope.hostSubdomain)))
 }
 
 /** Whether the workspace's sites on screen are [scope]'s workspace's, fully loaded. */
@@ -55,7 +61,7 @@ internal fun linkScopeSettled(scope: LinkScope, workspace: WorkspaceState): Bool
   if (scope.whole) return workspace.site == null
   if (scope.hostId == null && scope.hostSubdomain == null) return true
   val current = workspace.site
-  if (current != null && (current.id == scope.hostId || (scope.hostSubdomain != null && current.subdomain == scope.hostSubdomain))) return true
+  if (current != null && (current.id == scope.hostId || (scope.hostSubdomain != null && (current.subdomain == scope.hostSubdomain || current.id == scope.hostSubdomain)))) return true
   return sitesLoadedFor(scope, workspace) && siteOf(scope, workspace) == null
 }
 
