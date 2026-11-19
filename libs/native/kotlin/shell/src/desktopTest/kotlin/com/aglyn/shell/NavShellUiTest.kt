@@ -558,7 +558,7 @@ class NavShellUiTest {
     // The Tab bar sheet, from the account sheet: Media moves up, then Done.
     onNodeWithTag("phone-account").performClick()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("account-tab-bar") > 0 }
-    onNodeWithTag("account-tab-bar").performClick()
+    onNodeWithTag("account-tab-bar").performScrollTo().performClick()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-bar-sheet") > 0 }
     onNodeWithTag("tab-bar-pinned-media").performCustomAccessibilityActionWithLabel("Move up")
     onNodeWithTag("tab-bar-add-overview").performScrollTo().performClick()
