@@ -24,6 +24,7 @@ object ScreenFunctions {
     )
     "aiProductsImportJob" -> aiProductsImportJob(args.getOrNull(0))
     "timeZoneChoices" -> timeZoneChoices()
+    "computeLifetimePurchaseCents" -> lifetimePurchaseCents(args.getOrNull(0))
     "ssoEnforcementAccounts" -> ssoEnforcementAccounts(args.getOrNull(0), (args.getOrNull(1) as? JsonPrimitive)?.takeIf { it.isString }?.content, args.getOrNull(2))
     else -> null
   }
@@ -265,5 +266,25 @@ object ScreenFunctions {
         "inputs" to JsonObject(mapOf("target" to JsonPrimitive("bulk"), "productIds" to JsonPrimitive(readable.joinToString(",")))),
       ),
     )
+  }
+
+  /**
+   * What a site account has spent (the console's `computeLifetimePurchaseCents`, its drawer's Purchases): each order's
+   * charged total (`totals.totalCents`, else the legacy `amountCents`) less what was refunded, never below zero, with
+   * pending and cancelled orders left out.
+   */
+  internal fun lifetimePurchaseCents(orders: JsonElement?): JsonElement {
+    var total = 0.0
+    for (order in (orders as? JsonArray).orEmpty()) {
+      val fields = order as? JsonObject ?: continue
+      val status = fields["status"]?.takeIf { it !is JsonNull }?.let { ScreenValues.text(it) }.orEmpty()
+      if (status == "pending" || status == "cancelled") continue
+      val amount = ((fields["totals"] as? JsonObject)?.get("totalCents")?.takeIf { it !is JsonNull })
+        ?: fields["amountCents"]?.takeIf { it !is JsonNull }
+      val charged = ScreenValues.number(amount)?.takeIf { !it.isNaN() } ?: 0.0
+      val refunded = maxOf(0.0, ScreenValues.number(fields["refundedCents"])?.takeIf { !it.isNaN() } ?: 0.0)
+      total += maxOf(0.0, charged - refunded)
+    }
+    return if (total == kotlin.math.floor(total)) JsonPrimitive(total.toLong()) else JsonPrimitive(total)
   }
 }
