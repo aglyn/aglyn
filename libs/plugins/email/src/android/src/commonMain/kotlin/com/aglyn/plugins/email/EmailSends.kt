@@ -22,6 +22,9 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.longOrNull
 import kotlin.math.floor
+import com.aglyn.core.SendRate
+import com.aglyn.core.sendRate
+import com.aglyn.core.grouped
 
 /*
  * A SITE'S EMAILS (the console's Email → Messages): every send under
@@ -61,7 +64,6 @@ private fun count(raw: Any?): Long {
 }
 
 /** A whole number as `toLocaleString` writes it in English: `1,200`. */
-fun grouped(value: Long): String = value.toString().reversed().chunked(3).joinToString(",").reversed().replace("-,", "-")
 
 @Suppress("UNCHECKED_CAST")
 fun campaignSendProgress(send: Map<String, Any?>?): SendProgress {
@@ -106,16 +108,7 @@ fun campaignSendDisplay(send: Map<String, Any?>?): SendDisplay {
   }
 }
 
-/*---------- campaignReport / sendRate / sendLinkReport ----------*/
-
-data class SendRate(val value: Double, val numerator: Double, val denominator: Double, val denominatorLabel: String)
-
-fun sendRate(numerator: Number?, denominator: Number?, label: String): SendRate? {
-  val top = numerator?.toDouble() ?: 0.0
-  val bottom = denominator?.toDouble() ?: 0.0
-  if (!top.isFinite() || !bottom.isFinite() || bottom <= 0) return null
-  return SendRate(top / bottom, top, bottom, label)
-}
+/*---------- campaignReport (`sendRate`, `sendLinkReport` and `percent` are native-core's SendReport.kt) ----------*/
 
 data class Population(val id: String, val label: String, val count: Long, val ofLabel: String, val of: Long)
 
@@ -177,27 +170,6 @@ fun campaignReport(stats: Map<String, Any?>?): CampaignReport {
   }
   return CampaignReport(sent, recipients, delivered, n("opens"), n("clicks"), uniqueOpens, uniqueClicks, n("bounced"), n("complained"), n("unsubscribes"), rates, populations, caveats)
 }
-
-data class LinkRow(val url: String, val clicks: Long, val share: SendRate?)
-
-data class LinkReport(val rows: List<LinkRow>, val attributedClicks: Long, val overflowClicks: Long, val unattributedClicks: Long, val truncated: Boolean)
-
-@Suppress("UNCHECKED_CAST")
-fun sendLinkReport(rollup: Map<String, Any?>?): LinkReport {
-  val entries = (rollup?.get("links") as? Map<String, Any?>).orEmpty().values.mapNotNull { raw ->
-    val entry = raw as? Map<String, Any?> ?: return@mapNotNull null
-    val url = entry["url"] as? String ?: ""
-    val clicks = (entry["clicks"] as? Number)?.toLong() ?: 0L
-    if (url.isEmpty()) null else url to clicks
-  }
-  val attributed = entries.sumOf { it.second }
-  val rows = entries.sortedWith(compareByDescending<Pair<String, Long>> { it.second }.thenBy { it.first })
-    .map { (url, clicks) -> LinkRow(url, clicks, sendRate(clicks, attributed, "link clicks counted")) }
-  val overflow = (rollup?.get("overflowClicks") as? Number)?.toLong() ?: 0L
-  return LinkReport(rows, attributed, overflow, (rollup?.get("unattributedClicks") as? Number)?.toLong() ?: 0L, entries.size >= 50 || overflow > 0)
-}
-
-fun percent(rate: SendRate?): String = rate?.let { r -> "${(kotlin.math.round(r.value * 1000) / 10.0)}%" } ?: "—"
 
 /*---------- rows ----------*/
 

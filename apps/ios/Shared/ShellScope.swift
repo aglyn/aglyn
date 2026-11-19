@@ -47,10 +47,19 @@ struct ShellScope {
   /// Whether the person sees the site's Admin rows, as the console shows its Admin tab: "Manage site settings".
   var hostAdmin: Bool { model.orgAccess.holds("site.manage", onSite: site?.id) }
 
+  /// The person's answers to what the rows ask (`navRowGateKeys`): a workspace row hides as the console's organization
+  /// tab strip drops its tab, for a permission their role does not hold or a feature no plan sells that the workspace
+  /// was not granted (Sequences).
+  var navAccess: NativeNavAccess {
+    let keys = navRowGateKeys()
+    return NativeNavAccess(
+      permissions: model.orgAccess.permissions(keys.permissions), features: model.orgAccess.features(keys.features))
+  }
+
   /// One list as this scope shows it, its rows trimmed to the screens this build has.
   func list(_ id: NativeNavListId) -> ResolvedNavList {
     let plugins = id == .site || id == .siteSettings ? sitePlugins : workspacePlugins
-    var resolved = resolveNavList(id, enabledPluginIds: plugins, hostAdmin: hostAdmin)
+    var resolved = resolveNavList(id, enabledPluginIds: plugins, hostAdmin: hostAdmin, access: navAccess)
     let wholeWorkspace = id == .workspace || id == .workspaceSettings
     resolved.groups = resolved.groups.compactMap { group in
       var next = group
