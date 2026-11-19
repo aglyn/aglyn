@@ -215,6 +215,10 @@ public struct MediaItem: Identifiable, Equatable, Sendable {
   public let videoSeconds: Int?
   /// Whether the film's document records a captured poster frame (only then is its poster URL a picture, not a 404).
   public let hasPoster: Bool
+  /// The stored bytes' digest, which a write into the file names so it cannot overwrite a replace it never saw.
+  public let contentSha256: String?
+  /// What the file carries inside itself (`embeddedMetadata`, AGL-3331), as the server last read it; nil until read.
+  public let embedded: MediaEmbeddedRecord?
 
   /// Nil for a deleted file.
   public init?(_ doc: FirestoreDocument) {
@@ -244,6 +248,8 @@ public struct MediaItem: Identifiable, Equatable, Sendable {
     scopeExcept = (doc.data["scopeExcept"] as? [Any])?.compactMap { $0 as? String }
     videoSeconds = libraryVideoSeconds(doc.data["video"])
     hasPoster = doc.data["poster"] is [String: Any]
+    contentSha256 = blank(doc.string("contentSha256"))
+    embedded = MediaEmbeddedRecord(doc.data["embeddedMetadata"])
   }
 
   private static func trimmedOrigin(_ origin: String) -> String {
@@ -895,3 +901,10 @@ public func parseMediaQuarantine(_ answer: JSONValue?) -> [String: MediaQuaranti
   }
   return notices
 }
+
+/// The release flag video uploads are behind (`VIDEO_UPLOADS_RELEASE_FLAG`, AGL-2830).
+public let videoUploadsReleaseFlag = "release_video_uploads"
+
+/// What the library says while video uploads are paused (`VIDEO_UPLOADS_PAUSED_MESSAGE`).
+public let videoUploadsPausedMessage =
+  "Video uploads are paused. Videos already in your media library keep playing, and images and documents upload as usual."
