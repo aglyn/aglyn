@@ -104,7 +104,7 @@ internal fun PageScheduleSection(
       ) { Text("Schedule unpublish") }
     }
     when {
-      locked -> UpgradeNotice(schedulingUpsell(), action = { context.navigate("core.billing.plans") })
+      locked -> UpgradeNotice(schedulingUpsell(), action = com.aglyn.site.planUpgradeAction { context.navigate("core.billing.plans") })
       !canPublish -> Text("Your role on this site can edit content but not publish it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
   }
