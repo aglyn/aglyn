@@ -104,6 +104,12 @@ public struct AglynConfig: Equatable, Sendable {
   /// build pointed at production, off by default whenever an emulator or a local console is configured, so a debug build
   /// on the emulator stack never reports. `AglynFirebase.configure` also keeps it off in any DEBUG build.
   public var telemetry: Bool = true
+  /// Whether this build may take or start a payment to Aglyn (`AGLYN_IN_APP_BILLING`): a plan, an add-on, credits, a paid
+  /// listing, an invoice or a card. Off in the Release configuration (TestFlight and the App Store), by the owner's decision
+  /// of 2026-11-19: the stores take payment for digital things only through their own billing, so store builds hide buying.
+  /// On in Debug. A build-time value only: nothing remote (Remote Config, Firestore, a route's answer) may turn it on.
+  /// Read it through `StoreBilling`, which also applies the debug override.
+  public var inAppBilling: Bool = false
 
   public static let keys = [
     "AGLYN_CONSOLE_URL", "AGLYN_FIREBASE_API_KEY", "AGLYN_FIREBASE_AUTH_DOMAIN",
@@ -111,7 +117,7 @@ public struct AglynConfig: Equatable, Sendable {
     "AGLYN_FIREBASE_MESSAGING_SENDER_ID", "AGLYN_AUTH_EMULATOR_HOST",
     "AGLYN_FIRESTORE_EMULATOR_HOST", "AGLYN_GOOGLE_IOS_CLIENT_ID", "AGLYN_GOOGLE_WEB_CLIENT_ID",
     "AGLYN_BRAND_NAME", "AGLYN_PASSKEY_RP_ID", "AGLYN_APP_CHECK", "AGLYN_LEGAL_ORIGIN", "AGLYN_APPLE_SIGN_IN",
-    "AGLYN_DOCS_ORIGIN", "AGLYN_TELEMETRY",
+    "AGLYN_DOCS_ORIGIN", "AGLYN_TELEMETRY", "AGLYN_IN_APP_BILLING",
   ]
 
   /// True for the hosts a local development stack runs on.
@@ -150,6 +156,12 @@ public struct AglynConfig: Equatable, Sendable {
     case "on", "true", "yes", "1": return !localStack
     default: return false
     }
+  }
+
+  /// `AGLYN_IN_APP_BILLING`: on only when the build says so; unset or anything else is off, so a typo or a missing key
+  /// never turns buying on.
+  static func inAppBillingSetting(_ value: String?) -> Bool {
+    ["on", "true", "yes", "1"].contains(clean(value).lowercased())
   }
 
   /// `host:port`, or nil for anything else.
@@ -207,7 +219,8 @@ public struct AglynConfig: Equatable, Sendable {
       legalOrigin: legalOriginSetting(env["AGLYN_LEGAL_ORIGIN"]),
       docsOrigin: originSetting(env["AGLYN_DOCS_ORIGIN"], default: defaultDocsOrigin),
       appleSignIn: ["yes", "on", "true", "1"].contains(clean(env["AGLYN_APPLE_SIGN_IN"]).lowercased()),
-      telemetry: telemetrySetting(env["AGLYN_TELEMETRY"], localStack: localStack)
+      telemetry: telemetrySetting(env["AGLYN_TELEMETRY"], localStack: localStack),
+      inAppBilling: inAppBillingSetting(env["AGLYN_IN_APP_BILLING"])
     )
   }
 
