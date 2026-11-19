@@ -676,7 +676,7 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
           const branding = resolveBrandingProfile(
             (await getOrgForHost(String(hostId)).catch(() => null))?.org as never,
           )
-          await sendEmail({
+          const emailOutcome = await sendEmail({
             to: String(booking['email']),
             subject:
               designed?.subject ??
@@ -693,7 +693,8 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
           })
           // Cost meter (AGL-1438), matching the free-booking path.
           // Transactional: the guest has already paid.
-          await meterHostEmail(String(hostId))
+          // Only a sent email is metered (AGL-4227).
+          if (emailOutcome?.sent) await meterHostEmail(String(hostId))
         }
       }
     }

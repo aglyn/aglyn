@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import {
   analyticsDayExpiresAt,
   checkRateLimit,
+  engageBandwidthCap,
   firebaseAdmin,
   getOrgForHost,
   getSiteLockdown,
@@ -492,47 +493,54 @@ async function engageFreePlanBandwidthCap(options: {
     // this one are the same guard reading the same field.
     const existing = org?.['bandwidthCap'] as { month?: string } | undefined
     if (existing?.month === month) return
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('orgs')
-      .doc(orgId)
-      .set(
-        {
-          // Byte-identical to what `usage-alerts` writes. `merge: true`
-          // because this is one field on a document that carries `plan`,
-          // `subscription`, `entitlements` and `hosts` — a non-merging `set`
-          // here would delete the org.
-          bandwidthCap: {
+    // The one engage write every writer shares (AGL-4232): the same marker
+    // `usage-alerts` and the media CDN stamp, in a transaction that re-reads
+    // it, and the one-time grace when the org's sites have never had it.
+    const firestore = firebaseAdmin.app().firestore()
+    // The org's sites, for the one-time grace (AGL-4232), with THIS site
+    // seeded in: a legacy site with no `orgId` field is missing from the
+    // query, and must still get its grace rather than pause at once. Read
+    // only on the engage itself, once a month at most, never on a render.
+    const hosts = await firestore
+      .collection('hosts')
+      .where('orgId', '==', orgId)
+      .select()
+      .limit(100)
+      .get()
+    const engaged = await engageBandwidthCap({
+      firestore,
+      orgRef: firestore.collection('orgs').doc(orgId),
+      hostRefs: [...hosts.docs.map((host) => host.ref), firestore.collection('hosts').doc(hostId)],
+      month,
+      nowMs: Date.now(),
+      pageViews,
+      includedPageViews: Aglyn.pageViewsFromBandwidthGb(entitlements.bandwidthGb),
+    })
+    if (!engaged.stamped) return
+    const used = `the ${Math.round(
+      Aglyn.pageViewsFromBandwidthGb(entitlements.bandwidthGb),
+    ).toLocaleString()} page views its plan includes`
+    // The owner has to hear it from us, at the moment it happens: a grace
+    // (granted now, or carried into this month) with its deadline, or the
+    // pause. `{site}` is the site's name, filled by `notifyHostManagers` from
+    // the host doc it already reads (AGL-3432). "Nothing is charged" is the
+    // plan's own rule — the cap engages only on a plan that does not meter
+    // overage — and an upgrade releases it because `bandwidthCapEngaged`
+    // re-derives from the current plan on every read.
+    const notice =
+      engaged.graceUntil !== null
+        ? Aglyn.bandwidthGraceOwnerNotice({
+            graceUntil: engaged.graceUntil,
+            used,
             month,
-            engagedAt: Date.now(),
-            pageViews: Math.round(pageViews),
-            includedPageViews: Math.round(
-              Aglyn.pageViewsFromBandwidthGb(entitlements.bandwidthGb),
-            ),
-          },
-        },
-        { merge: true },
-      )
-    // The owner has to hear it from us. The sweep pairs its cap with a 100%
-    // bandwidth alert email — but the sweep is exactly what never ran for
-    // these orgs, so without this the first a never-subscribed owner would
-    // know of their site being paused is a visitor telling them.
-    //
-    // `{site}` is the site's name, filled by `notifyHostManagers` from the
-    // host doc it already reads (AGL-3432): a manager of several sites must
-    // learn from the body alone which one is down. "Nothing is charged" is
-    // the plan's own rule — the cap engages only on a plan that does not
-    // meter overage — and an upgrade releases it because
-    // `bandwidthCapEngaged` re-derives from the current plan on every read.
+            resumesOn: monthRolloverLabel(month),
+            carried: !engaged.graceIsNew,
+          })
+        : Aglyn.bandwidthPausedOwnerNotice({ used, resumesOn: monthRolloverLabel(month) })
     await notifyHostManagers(hostId, {
       type: 'system.bandwidthCapEngaged',
-      title: '{site} paused — monthly traffic limit reached',
-      body: `{site} has used the ${Math.round(
-        Aglyn.pageViewsFromBandwidthGb(entitlements.bandwidthGb),
-      ).toLocaleString()} page views its plan includes this month, so visitors see a temporary notice instead of its pages until ${monthRolloverLabel(
-        month,
-      )}. Nothing is charged for the extra traffic. The site comes back on its own then, or as soon as you upgrade in Billing.`,
+      title: notice.title,
+      body: notice.body,
       link: `/${hostId}`,
     })
   } catch (error) {

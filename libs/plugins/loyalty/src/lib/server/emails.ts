@@ -58,7 +58,7 @@ export async function sendLoyaltyEmail(email: LoyaltyEmail): Promise<boolean> {
   if (!email.to || !isEmailConfigured()) return false
   try {
     const designed = await renderHostEmailWithTokens(loyaltyDb() as never, email.hostId, email.key, email.tokens)
-    await sendEmail({
+    const emailOutcome = await sendEmail({
       to: email.to,
       subject: designed?.subject ?? email.fallback.subject,
       text: designed?.text || email.fallback.text,
@@ -69,6 +69,8 @@ export async function sendLoyaltyEmail(email: LoyaltyEmail): Promise<boolean> {
       context: 'loyalty',
       owedFor: 'order',
     })
+    // A refused send is not a sent email (AGL-4227).
+    if (!emailOutcome?.sent) return false
     await meterHostEmail(email.hostId)
     return true
   } catch (error) {

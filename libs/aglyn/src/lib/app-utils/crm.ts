@@ -45,6 +45,7 @@
  * would otherwise write for itself. No Firestore, no React.
  */
 
+import { isDisposableEmailDomain } from '@aglyn/shared-util-email/disposable-email-domains'
 import {
   type AglynPostalAddress,
   normalizeAddress,
@@ -2292,6 +2293,103 @@ export const PUBLIC_MAILBOX_DOMAINS: ReadonlySet<string> = new Set([
   't-online.de',
   'libero.it',
   'bigpond.com',
+  // More of the free providers people sign up with (AGL-4230): Russia and
+  // the CIS, central and eastern Europe, the rest of western Europe, Latin
+  // America, and Asia.
+  'mail.ru',
+  'inbox.ru',
+  'list.ru',
+  'bk.ru',
+  'internet.ru',
+  'ya.ru',
+  'yandex.ua',
+  'yandex.by',
+  'yandex.kz',
+  'rambler.ru',
+  'ukr.net',
+  'i.ua',
+  'abv.bg',
+  'seznam.cz',
+  'centrum.cz',
+  'wp.pl',
+  'o2.pl',
+  'onet.pl',
+  'interia.pl',
+  'inbox.lv',
+  'gmx.at',
+  'gmx.ch',
+  'gmx.fr',
+  'gmx.es',
+  'freenet.de',
+  'posteo.de',
+  'mailbox.org',
+  'tutanota.de',
+  'tutamail.com',
+  'virgilio.it',
+  'alice.it',
+  'tiscali.it',
+  'sfr.fr',
+  'wanadoo.fr',
+  'bluewin.ch',
+  'telenet.be',
+  'skynet.be',
+  'ziggo.nl',
+  'kpnmail.nl',
+  'home.nl',
+  'planet.nl',
+  'hotmail.es',
+  'hotmail.com.br',
+  'outlook.es',
+  'outlook.fr',
+  'outlook.de',
+  'outlook.it',
+  'outlook.com.br',
+  'live.fr',
+  'live.nl',
+  'live.it',
+  'yahoo.es',
+  'yahoo.it',
+  'yahoo.com.br',
+  'yahoo.com.mx',
+  'yahoo.com.ar',
+  'yahoo.co.jp',
+  'yahoo.co.id',
+  'yahoo.com.ph',
+  'yahoo.com.sg',
+  'yahoo.in',
+  'aol.co.uk',
+  'uol.com.br',
+  'bol.com.br',
+  'terra.com.br',
+  'ig.com.br',
+  'sohu.com',
+  'aliyun.com',
+  'foxmail.com',
+  'yeah.net',
+  '139.com',
+  'daum.net',
+  'nate.com',
+  // Generic mailboxes from the mail.com family and the like.
+  'email.com',
+  'usa.com',
+  'myself.com',
+  'inbox.com',
+  // Subscriber mailboxes at more US, Canadian, Australian and New Zealand
+  // internet providers.
+  'roadrunner.com',
+  'twc.com',
+  'mediacombb.net',
+  'suddenlink.net',
+  'embarqmail.com',
+  'q.com',
+  'cableone.net',
+  'rogers.com',
+  'telus.net',
+  'videotron.ca',
+  'cogeco.ca',
+  'bigpond.net.au',
+  'optusnet.com.au',
+  'xtra.co.nz',
 ])
 
 /**
@@ -2307,7 +2405,9 @@ export function isPublicMailboxDomain(domainOrEmail: unknown): boolean {
 
 /**
  * The company domain an email address implies, or `null` when it implies
- * none — a malformed address, or one at a public mailbox provider.
+ * none — a malformed address, one at a public mailbox provider, or one at a
+ * disposable-mailbox service (AGL-4230): an inbox that expires in ten
+ * minutes belongs to nobody, let alone a business.
  */
 export function companyDomainForEmail(email: unknown): string | null {
   const value = String(email ?? '')
@@ -2318,7 +2418,49 @@ export function companyDomainForEmail(email: unknown): string | null {
   if (/[\s@]/.test(value.slice(0, at))) return null
   const domain = normalizeCompanyDomain(value.slice(at + 1))
   if (!domain || PUBLIC_MAILBOX_DOMAINS.has(domain)) return null
+  if (isDisposableEmailDomain(domain)) return null
   return domain
+}
+
+/**
+ * Labels that mark a school's or a university's mailbox: `k12`, `edu` and
+ * the academic `ac` (as in `ac.uk`), and the words a student mailbox's host
+ * is built from.
+ */
+const SCHOOL_DOMAIN_LABELS: ReadonlySet<string> = new Set([
+  'k12',
+  'edu',
+  'ac',
+  'student',
+  'students',
+  'aluno',
+  'alunos',
+  'alumno',
+  'alumnos',
+  'estudiante',
+  'estudiantes',
+])
+
+/**
+ * Whether a company may be CREATED from this domain on its own (AGL-4230),
+ * as opposed to linked to one that already exists.
+ *
+ * {@link companyDomainForEmail} has already turned away public and
+ * disposable mailboxes. What it lets through and this does not is a school
+ * or a university: a student's address at `k12.ipsd.org` or
+ * `aluno.educa.go.gov.br` is a real organisation's domain, but the person
+ * signing up is not that organisation's buyer, and minting "K12" or "Aluno"
+ * from every pupil who tries the product fills the company list with
+ * schools. So a school domain still LINKS to a company somebody created on
+ * purpose, and is never minted into one by the capture door.
+ */
+export function companyDomainMintable(domain: unknown): boolean {
+  const value = normalizeCompanyDomain(domain)
+  if (!value) return false
+  if (PUBLIC_MAILBOX_DOMAINS.has(value) || isDisposableEmailDomain(value)) return false
+  return !value
+    .split('.')
+    .some((label) => SCHOOL_DOMAIN_LABELS.has(label) || /schools?/.test(label))
 }
 
 /**

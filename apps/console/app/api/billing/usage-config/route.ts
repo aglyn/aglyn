@@ -42,6 +42,12 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  * fails HIGH (it includes the library in the estimate) — so refusing an
  * unverified session here would only make its estimate overstate.
  */
+/** The later of two `YYYY-MM` switch values, or null when either is unset. */
+function laterMonth(a: string | undefined, b: string | undefined): string | null {
+  if (!a || !b) return null
+  return a > b ? a : b
+}
+
 async function handler(request: Request): Promise<Response> {
   const { method, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
@@ -61,6 +67,13 @@ async function handler(request: Request): Promise<Response> {
       {
         orgLibraryBilledFrom:
           process.env.BILL_ORG_LIBRARY_STORAGE_FROM ?? null,
+        // Starter's email band (AGL-4227) bills only once BOTH switches are
+        // on, so the native screen reads the later of the two; either unset
+        // is null, and the screen then quotes nothing (fails closed).
+        includedEmailBilledFrom: laterMonth(
+          process.env.BILL_EMAIL_SEND_OVERAGE_FROM,
+          process.env.BILL_STARTER_EMAIL_SENDS_FROM,
+        ),
       },
       { status: 200 },
     )

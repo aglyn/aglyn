@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import type { McpTool } from './mcp-tools'
 
 /**
@@ -36,6 +37,22 @@ import type { McpTool } from './mcp-tools'
  * every one of them is asserted against the wire shape in
  * `specs/mcp-protocol.spec.ts`.
  */
+
+/**
+ * What `initialize` reports as `serverInfo.name` and what a client shows the
+ * person approving it. The server card publishes it as `title` and the RFC
+ * 9728 document as `resource_name`, so all three name the server alike
+ * (AGL-4225). The product's own name, as the MCP Registry entry and the
+ * connector directories list it: the server is the workspace, not one API of
+ * it. A self-hosted install answers with its own brand.
+ */
+export const MCP_SERVER_TITLE = PLATFORM_BRAND_NAME
+
+/**
+ * The one-line description the server card and the MCP Registry entry share
+ * (AGL-4225). Both schemas cap it at 100 characters.
+ */
+export const MCP_SERVER_DESCRIPTION = `Work in your ${PLATFORM_BRAND_NAME} workspace: sites, content, contacts and CRM, orders, forms, bookings and media.`
 
 /** The protocol revision this server implements. */
 export const MCP_PROTOCOL_VERSION = '2025-06-18'

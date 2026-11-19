@@ -155,6 +155,8 @@ function defaultHostDoc(routed: boolean, homeId: string) {
     starterChoice: choice({ start: routed ? 'starter' : 'ai' }),
     enabledPlugins: [...NEW_SITE_ENABLED_PLUGINS],
     suspended: false,
+    // Not reviewed by staff yet (AGL-4228).
+    usageLevel: 'unreviewed',
     createdAt: 'ts',
     updatedAt: 'ts',
   }

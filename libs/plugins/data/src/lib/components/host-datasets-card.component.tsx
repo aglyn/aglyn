@@ -100,6 +100,8 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { DatasetSchemaDialog } from './dataset-schema-dialog.component'
 import { DatasetRecordDialog, DatasetRecordFieldList } from './dataset-record-dialog.component'
 import { DatasetRecordSiteContext } from './dataset-field-inputs.component'
+import { DatasetIconPreview } from './dataset-icon-field-input.component'
+import { DATASET_ICON_FIELD_TYPE, readDatasetIconValue } from '../model/dataset-icon-field'
 import {
   datasetRecordFilter,
   planRecordQuery,
@@ -1479,12 +1481,18 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         [
           ...fields.map((fieldId, column) => {
             const field = model.fields[fieldId]
+            const isIcon = field?.customType === DATASET_ICON_FIELD_TYPE
             const shown = (row: any) =>
               field?.type === 'reference'
                 ? referenceLabel(fieldId, row.values?.[fieldId]) || '--'
-                : field
-                  ? formatDatasetValue(field, row.values?.[fieldId]) || '--'
-                  : '--'
+                : isIcon
+                  ? // A record's icon (AGL-4190) is drawn, with its name, never its stored map.
+                    readDatasetIconValue(row.values?.[fieldId])
+                    ? <DatasetIconPreview value={row.values?.[fieldId]} />
+                    : '--'
+                  : field
+                    ? formatDatasetValue(field, row.values?.[fieldId]) || '--'
+                    : '--'
             return {
               field: recordColumn(fieldId),
               headerName: field?.name ?? fieldId,

@@ -271,13 +271,12 @@ const PLUGIN_TOPICS = {
   // (AGL-2978, AGL-2980).
   plugins: '/developers/plugins/overview',
   pos: '/commerce-and-bookings/commerce/pos-and-reservations',
-  // The Accounting page's connection and activity cards (AGL-3614). Both
-  // guides are unlisted while `release_accounting` is off; see
-  // PLUGIN_UNLISTED_TOPICS.
+  // The Accounting page's connection and activity cards (AGL-3614), listed
+  // since `release_accounting` turned on for every workspace (2026-11-16).
   connectQuickbooksOnline: '/commerce-and-bookings/commerce/connect-quickbooks-online',
   connectXero: '/commerce-and-bookings/commerce/connect-xero',
-  // A Codat connection's Accounting cards (AGL-3776), unlisted with the other
-  // two ledger guides.
+  // A Codat connection's Accounting cards (AGL-3776). Unlisted: no Codat key
+  // is set on aglyn.com, so the option is not offered; see PLUGIN_UNLISTED_TOPICS.
   connectOtherAccounting: '/commerce-and-bookings/commerce/connect-other-accounting-software',
   // The shipping settings card under the store's Settings (AGL-3612).
   shipping: '/commerce-and-bookings/commerce/shipping',
@@ -353,10 +352,8 @@ const PLUGIN_UNLISTED_TOPICS = new Set([
   // The Ad conversions card draws nothing until the console holds
   // AD_CONVERSIONS_TOKEN_KEY, the gate the guide waits on (AGL-3694).
   'adConversions',
-  // Accounting's console page is gated by `release_accounting`, the flag the
-  // two guides wait on (AGL-3614).
-  'connectQuickbooksOnline',
-  'connectXero',
+  // A Codat connection's cards draw nothing until the console holds
+  // CODAT_API_KEY, the gate the guide waits on (AGL-3776).
   'connectOtherAccounting',
   // The Couriers card, the order's Courier section and the queue's "Send a
   // courier" draw nothing until the console holds COURIERS_TOKEN_KEY, the gate

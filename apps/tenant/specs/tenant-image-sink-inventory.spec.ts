@@ -233,9 +233,9 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     why: 'The legacy collection renderer, split out of catch-all-client so its markdown parser is not on every page (AGL-2706): the entry cover and the markdown body images, both through resolveMediaSrc, exactly as they were. The body image is additionally scheme-checked at parse time by markdown-lite\'s safeImageUrl (AGL-1713); the cover is not.',
   },
   'apps/tenant/app/[host]/[scheme]/[[...slug]]/page.tsx': {
-    markers: 13,
+    markers: 14,
     guard: 'raw',
-    why: 'og:image/twitter:image and Article.image go through resolveSocialImage → absoluteMediaSrc. The author page adds three more of the same (AGL-2518/AGL-2689): the ProfilePage.mainEntity portrait through absoluteMediaSrc, and the head\'s own two sources — an author-supplied share card and the portrait it falls back to — through resolveSocialImage, all from an author record the customer wrote. The Product JSON-LD emits seededProduct.mediaUrls with no resolver at all, and a crawler fetches it with no browser and no CSP, so no img-src can ever cover it.',
+    why: 'og:image/twitter:image and Article.image go through resolveSocialImage → absoluteMediaSrc. The author page adds three more of the same (AGL-2518/AGL-2689): the ProfilePage.mainEntity portrait through absoluteMediaSrc, and the head\'s own two sources — an author-supplied share card and the portrait it falls back to — through resolveSocialImage, all from an author record the customer wrote. The Product JSON-LD emits seededProduct.mediaUrls with no resolver at all, and a crawler fetches it with no browser and no CSP, so no img-src can ever cover it. The fourteenth marker is the sign-in visibility <style> (AGL-4231): SIGN_IN_VISIBILITY_STYLE, a constant in libs/aglyn/src/lib/app-utils/sign-in-visibility.ts built only from our own attribute names, so no author text and no image reaches it.',
   },
   'apps/tenant/app/[host]/admin-bar/admin-bar.tsx': {
     markers: 2,
