@@ -99,6 +99,14 @@ internal fun TemplateInstallStatusChip(context: NativePluginContext) {
   }
   val message = said ?: runner.error
   if (message != null) {
-    ActionDialog(title = name, body = message, confirmLabel = "OK", dismissLabel = "Close", onDismiss = { said = null; runner.error = null }, onConfirm = { said = null; runner.error = null })
+    // The update replaced this row's template: once its message is read, the library reads its list again.
+    val changed = com.aglyn.pluginhost.LocalSlotChanged.current
+    val close = {
+      val updated = said != null
+      said = null
+      runner.error = null
+      if (updated) changed()
+    }
+    ActionDialog(title = name, body = message, confirmLabel = "OK", dismissLabel = "Close", onDismiss = close, onConfirm = close)
   }
 }
