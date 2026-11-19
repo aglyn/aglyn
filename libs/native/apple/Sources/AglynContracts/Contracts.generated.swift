@@ -4146,6 +4146,88 @@ public struct PosDisplayStateTip: Codable, Hashable, Sendable {
   }
 }
 
+public struct PosHardwareShopText: Codable, Hashable, Sendable {
+  public var businessUse: String
+  public var buyKeyReason: String
+  public var canceled: String
+  public var checkout: String
+  public var checkoutFailed: String
+  public var columnItems: String
+  public var columnOrder: String
+  public var columnPlaced: String
+  public var columnReturn: String
+  public var columnStatus: String
+  public var columnTotal: String
+  public var columnTracking: String
+  public var header: String
+  public var historySubheader: String
+  public var intro: String
+  public var items: String
+  public var noOrders: String
+  public var ordersTitle: String
+  public var placed: String
+  public var quantity: String
+  public var returnAction: String
+  public var returnBody: String
+  public var returnCancel: String
+  public var returnFailed: String
+  public var returnField: String
+  public var returnSend: String
+  public var returnSent: String
+  public var shipping: String
+  public var shipsTo: String
+  public var subheader: String
+  public var tax: String
+  public var taxAtCheckout: String
+  public var termsAfter: String
+  public var termsBefore: String
+  public var termsLink: String
+  public var termsReason: String
+  public var total: String
+  public var totalBeforeTax: String
+
+  public init(businessUse: String, buyKeyReason: String, canceled: String, checkout: String, checkoutFailed: String, columnItems: String, columnOrder: String, columnPlaced: String, columnReturn: String, columnStatus: String, columnTotal: String, columnTracking: String, header: String, historySubheader: String, intro: String, items: String, noOrders: String, ordersTitle: String, placed: String, quantity: String, returnAction: String, returnBody: String, returnCancel: String, returnFailed: String, returnField: String, returnSend: String, returnSent: String, shipping: String, shipsTo: String, subheader: String, tax: String, taxAtCheckout: String, termsAfter: String, termsBefore: String, termsLink: String, termsReason: String, total: String, totalBeforeTax: String) {
+    self.businessUse = businessUse
+    self.buyKeyReason = buyKeyReason
+    self.canceled = canceled
+    self.checkout = checkout
+    self.checkoutFailed = checkoutFailed
+    self.columnItems = columnItems
+    self.columnOrder = columnOrder
+    self.columnPlaced = columnPlaced
+    self.columnReturn = columnReturn
+    self.columnStatus = columnStatus
+    self.columnTotal = columnTotal
+    self.columnTracking = columnTracking
+    self.header = header
+    self.historySubheader = historySubheader
+    self.intro = intro
+    self.items = items
+    self.noOrders = noOrders
+    self.ordersTitle = ordersTitle
+    self.placed = placed
+    self.quantity = quantity
+    self.returnAction = returnAction
+    self.returnBody = returnBody
+    self.returnCancel = returnCancel
+    self.returnFailed = returnFailed
+    self.returnField = returnField
+    self.returnSend = returnSend
+    self.returnSent = returnSent
+    self.shipping = shipping
+    self.shipsTo = shipsTo
+    self.subheader = subheader
+    self.tax = tax
+    self.taxAtCheckout = taxAtCheckout
+    self.termsAfter = termsAfter
+    self.termsBefore = termsBefore
+    self.termsLink = termsLink
+    self.termsReason = termsReason
+    self.total = total
+    self.totalBeforeTax = totalBeforeTax
+  }
+}
+
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum PosHardwareTermsMethod: String, Codable, CaseIterable, Hashable, Sendable {
   case display = "display"
@@ -4157,6 +4239,34 @@ public enum PosHardwareTermsMethod: String, Codable, CaseIterable, Hashable, Sen
   public init(from decoder: Decoder) throws {
     let raw = try decoder.singleValueContainer().decode(String.self)
     self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+public struct PosHardwareWaitingText: Codable, Hashable, Sendable {
+  public var choose: String
+  public var chosen: String
+  public var failed: String
+  public var header: String
+  public var marked: String
+  public var markSetUp: String
+  public var openDevices: String
+  public var planPrompt: String
+  public var planReason: String
+  public var subheader: String
+  public var whichStore: String
+
+  public init(choose: String, chosen: String, failed: String, header: String, marked: String, markSetUp: String, openDevices: String, planPrompt: String, planReason: String, subheader: String, whichStore: String) {
+    self.choose = choose
+    self.chosen = chosen
+    self.failed = failed
+    self.header = header
+    self.marked = marked
+    self.markSetUp = markSetUp
+    self.openDevices = openDevices
+    self.planPrompt = planPrompt
+    self.planReason = planReason
+    self.subheader = subheader
+    self.whichStore = whichStore
   }
 }
 
@@ -6484,6 +6594,12 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let posDisplayMaxLines: Int
   public let posDisplayPairingTtlMs: Double
   public let posDisplayThanksMs: Int
+  public let posHardwareAnchor: String
+  public let posHardwareMaxPerLine: Int
+  public let posHardwareReturnLabels: [String: String]
+  public let posHardwareShopText: PosHardwareShopText
+  public let posHardwareStatusLabels: [String: String]
+  public let posHardwareWaitingText: PosHardwareWaitingText
   public let posKioskCatalogLimit: Int
   public let posKioskDoneSeconds: Int
   public let posKioskIdleSecondsDefault: Int
@@ -6506,6 +6622,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let posOfflineSaleMaxLines: Int
   public let posOfflineSyncBatchMax: Int
   public let posOfflineSyncRoute: String
+  public let posPlanAdds: String
   public let posTenderLabels: [String: String]
   public let priceRangeMaxLength: Int
   public let printerBrandLabels: [String: String]
@@ -6868,6 +6985,12 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case posDisplayMaxLines = "POS_DISPLAY_MAX_LINES"
     case posDisplayPairingTtlMs = "POS_DISPLAY_PAIRING_TTL_MS"
     case posDisplayThanksMs = "POS_DISPLAY_THANKS_MS"
+    case posHardwareAnchor = "POS_HARDWARE_ANCHOR"
+    case posHardwareMaxPerLine = "POS_HARDWARE_MAX_PER_LINE"
+    case posHardwareReturnLabels = "POS_HARDWARE_RETURN_LABELS"
+    case posHardwareShopText = "POS_HARDWARE_SHOP_TEXT"
+    case posHardwareStatusLabels = "POS_HARDWARE_STATUS_LABELS"
+    case posHardwareWaitingText = "POS_HARDWARE_WAITING_TEXT"
     case posKioskCatalogLimit = "POS_KIOSK_CATALOG_LIMIT"
     case posKioskDoneSeconds = "POS_KIOSK_DONE_SECONDS"
     case posKioskIdleSecondsDefault = "POS_KIOSK_IDLE_SECONDS_DEFAULT"
@@ -6890,6 +7013,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case posOfflineSaleMaxLines = "POS_OFFLINE_SALE_MAX_LINES"
     case posOfflineSyncBatchMax = "POS_OFFLINE_SYNC_BATCH_MAX"
     case posOfflineSyncRoute = "POS_OFFLINE_SYNC_ROUTE"
+    case posPlanAdds = "POS_PLAN_ADDS"
     case posTenderLabels = "POS_TENDER_LABELS"
     case priceRangeMaxLength = "PRICE_RANGE_MAX_LENGTH"
     case printerBrandLabels = "PRINTER_BRAND_LABELS"

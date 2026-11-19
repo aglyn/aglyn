@@ -1128,6 +1128,21 @@
       "values": [
         "EMAIL_STATE_LABELS"
       ]
+    },
+    "libs/plugins/commerce/src/lib/model/pos-hardware.ts": {
+      "values": [
+        "POS_HARDWARE_STATUS_LABELS",
+        "POS_HARDWARE_MAX_PER_LINE",
+        "POS_HARDWARE_ANCHOR",
+        "POS_PLAN_ADDS"
+      ]
+    },
+    "libs/plugins/commerce/src/lib/model/pos-hardware-shop.ts": {
+      "values": [
+        "POS_HARDWARE_RETURN_LABELS",
+        "POS_HARDWARE_SHOP_TEXT",
+        "POS_HARDWARE_WAITING_TEXT"
+      ]
     }
   },
   "assembled": {
@@ -39585,6 +39600,680 @@
         ],
         [
           "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        ]
+      ]
+    },
+    "posPlanPrompt": {
+      "module": "libs/plugins/commerce/src/lib/model/pos-hardware.ts",
+      "args": [
+        [
+          {}
+        ],
+        [
+          {
+            "arrived": [
+              "HW-1A2B3C"
+            ]
+          }
+        ],
+        [
+          {
+            "arrived": [
+              "HW-1A2B3C",
+              "HW-9F8E7D"
+            ]
+          }
+        ]
+      ]
+    },
+    "formatPosHardwareCents": {
+      "module": "libs/plugins/commerce/src/lib/model/pos-hardware.ts",
+      "args": [
+        [
+          0
+        ],
+        [
+          5
+        ],
+        [
+          7670
+        ],
+        [
+          45370
+        ],
+        [
+          123456789
+        ],
+        [
+          -250
+        ]
+      ]
+    },
+    "posHardwareReturnOffered": {
+      "module": "libs/plugins/commerce/src/lib/model/pos-hardware-shop.ts",
+      "args": [
+        [
+          {
+            "status": "paid"
+          }
+        ],
+        [
+          {
+            "status": "ordered"
+          }
+        ],
+        [
+          {
+            "status": "received"
+          }
+        ],
+        [
+          {
+            "status": "shipped"
+          }
+        ],
+        [
+          {
+            "status": "delivered"
+          }
+        ],
+        [
+          {
+            "status": "registered"
+          }
+        ],
+        [
+          {
+            "status": "canceled"
+          }
+        ],
+        [
+          {
+            "status": "refunded"
+          }
+        ],
+        [
+          {
+            "status": "shipped",
+            "source": "in_person"
+          }
+        ],
+        [
+          {
+            "status": "delivered",
+            "source": "in_person"
+          }
+        ],
+        [
+          {
+            "status": "registered",
+            "source": "in_person"
+          }
+        ],
+        [
+          {
+            "status": "shipped",
+            "source": "storefront"
+          }
+        ],
+        [
+          {
+            "status": "delivered",
+            "returnRequest": {
+              "state": "requested"
+            }
+          }
+        ],
+        [
+          {
+            "status": "registered",
+            "returnRequest": {
+              "state": "declined"
+            }
+          }
+        ]
+      ]
+    },
+    "posHardwareArrivedNumbers": {
+      "module": "libs/plugins/commerce/src/lib/model/pos-hardware-shop.ts",
+      "args": [
+        [
+          []
+        ],
+        [
+          [
+            {
+              "number": "HW-1",
+              "status": "delivered"
+            },
+            {
+              "number": "HW-2",
+              "status": "registered",
+              "source": "online"
+            },
+            {
+              "number": "HW-3",
+              "status": "delivered",
+              "source": "in_person"
+            },
+            {
+              "number": "HW-4",
+              "status": "delivered",
+              "source": "storefront"
+            },
+            {
+              "number": "HW-5",
+              "status": "shipped"
+            }
+          ]
+        ]
+      ]
+    },
+    "posHardwareOrderItems": {
+      "module": "libs/plugins/commerce/src/lib/model/pos-hardware-shop.ts",
+      "args": [
+        [
+          []
+        ],
+        [
+          [
+            {
+              "name": "Pocket reader (M2)",
+              "quantity": 2
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "name": "Touchscreen reader (S700)",
+              "quantity": 1
+            },
+            {
+              "name": "Case for the S700 and S710",
+              "quantity": 3
+            }
+          ]
+        ]
+      ]
+    },
+    "posHardwareWaitingItems": {
+      "module": "libs/plugins/commerce/src/lib/model/pos-hardware-shop.ts",
+      "args": [
+        [
+          []
+        ],
+        [
+          [
+            {
+              "name": "Pocket reader (M2)",
+              "quantity": 2
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "name": "Touchscreen reader (S700)",
+              "quantity": 1
+            },
+            {
+              "name": "Case for the S700 and S710",
+              "quantity": 3
+            }
+          ]
+        ]
+      ]
+    },
+    "posHardwareWaitingNote": {
+      "module": "libs/plugins/commerce/src/lib/model/pos-hardware-shop.ts",
+      "args": [
+        [
+          {
+            "storeName": "Main Street",
+            "serialsTaken": 0,
+            "hasLocation": true
+          }
+        ],
+        [
+          {
+            "storeName": "Main Street",
+            "serialsTaken": 0,
+            "hasLocation": false
+          }
+        ],
+        [
+          {
+            "storeName": "Main Street",
+            "serialsTaken": 2,
+            "hasLocation": true
+          }
+        ],
+        [
+          {
+            "storeName": "Main Street",
+            "serialsTaken": 2,
+            "hasLocation": false
+          }
+        ]
+      ]
+    },
+    "posHardwareReturnTitle": {
+      "module": "libs/plugins/commerce/src/lib/model/pos-hardware-shop.ts",
+      "args": [
+        [
+          "HW-1A2B3C"
+        ]
+      ]
+    },
+    "posHardwareReturnReasonReady": {
+      "module": "libs/plugins/commerce/src/lib/model/pos-hardware-shop.ts",
+      "args": [
+        [
+          ""
+        ],
+        [
+          "ab"
+        ],
+        [
+          "  ab  "
+        ],
+        [
+          "abc"
+        ],
+        [
+          "Wrong model"
+        ]
+      ]
+    },
+    "posHardwareBasket": {
+      "module": "libs/plugins/commerce/src/lib/model/pos-hardware-shop.ts",
+      "args": [
+        [
+          {
+            "offers": [
+              {
+                "sku": "stripe-reader-s700",
+                "unitCents": 45370
+              },
+              {
+                "sku": "stripe-reader-m2",
+                "unitCents": 7670
+              },
+              {
+                "sku": "stripe-reader-s700-dock",
+                "unitCents": 10270
+              }
+            ],
+            "quantities": {},
+            "shippingCents": 1500,
+            "automaticTax": false
+          }
+        ],
+        [
+          {
+            "offers": [
+              {
+                "sku": "stripe-reader-s700",
+                "unitCents": 45370
+              },
+              {
+                "sku": "stripe-reader-m2",
+                "unitCents": 7670
+              },
+              {
+                "sku": "stripe-reader-s700-dock",
+                "unitCents": 10270
+              }
+            ],
+            "quantities": {
+              "stripe-reader-m2": 2,
+              "stripe-reader-s700": 1
+            },
+            "shippingCents": 1500,
+            "automaticTax": false
+          }
+        ],
+        [
+          {
+            "offers": [
+              {
+                "sku": "stripe-reader-s700",
+                "unitCents": 45370
+              },
+              {
+                "sku": "stripe-reader-m2",
+                "unitCents": 7670
+              },
+              {
+                "sku": "stripe-reader-s700-dock",
+                "unitCents": 10270
+              }
+            ],
+            "quantities": {
+              "stripe-reader-s700-dock": 10,
+              "stripe-reader-m2": 0
+            },
+            "shippingCents": null,
+            "automaticTax": true
+          }
+        ],
+        [
+          {
+            "offers": [
+              {
+                "sku": "stripe-reader-s700",
+                "unitCents": 45370
+              },
+              {
+                "sku": "stripe-reader-m2",
+                "unitCents": 7670
+              },
+              {
+                "sku": "stripe-reader-s700-dock",
+                "unitCents": 10270
+              }
+            ],
+            "quantities": {
+              "unknown": 3,
+              "stripe-reader-m2": 1
+            },
+            "shippingCents": 3000,
+            "automaticTax": true
+          }
+        ]
+      ]
+    },
+    "posHardwareCheckoutState": {
+      "module": "libs/plugins/commerce/src/lib/model/pos-hardware-shop.ts",
+      "args": [
+        [
+          {
+            "canBuy": true,
+            "termsAccepted": true,
+            "businessUse": true,
+            "hasLines": true,
+            "hasShipping": true
+          }
+        ],
+        [
+          {
+            "canBuy": true,
+            "termsAccepted": true,
+            "businessUse": true,
+            "hasLines": true,
+            "hasShipping": false
+          }
+        ],
+        [
+          {
+            "canBuy": true,
+            "termsAccepted": true,
+            "businessUse": true,
+            "hasLines": false,
+            "hasShipping": true
+          }
+        ],
+        [
+          {
+            "canBuy": true,
+            "termsAccepted": true,
+            "businessUse": true,
+            "hasLines": false,
+            "hasShipping": false
+          }
+        ],
+        [
+          {
+            "canBuy": true,
+            "termsAccepted": true,
+            "businessUse": false,
+            "hasLines": true,
+            "hasShipping": true
+          }
+        ],
+        [
+          {
+            "canBuy": true,
+            "termsAccepted": true,
+            "businessUse": false,
+            "hasLines": true,
+            "hasShipping": false
+          }
+        ],
+        [
+          {
+            "canBuy": true,
+            "termsAccepted": true,
+            "businessUse": false,
+            "hasLines": false,
+            "hasShipping": true
+          }
+        ],
+        [
+          {
+            "canBuy": true,
+            "termsAccepted": true,
+            "businessUse": false,
+            "hasLines": false,
+            "hasShipping": false
+          }
+        ],
+        [
+          {
+            "canBuy": true,
+            "termsAccepted": false,
+            "businessUse": true,
+            "hasLines": true,
+            "hasShipping": true
+          }
+        ],
+        [
+          {
+            "canBuy": true,
+            "termsAccepted": false,
+            "businessUse": true,
+            "hasLines": true,
+            "hasShipping": false
+          }
+        ],
+        [
+          {
+            "canBuy": true,
+            "termsAccepted": false,
+            "businessUse": true,
+            "hasLines": false,
+            "hasShipping": true
+          }
+        ],
+        [
+          {
+            "canBuy": true,
+            "termsAccepted": false,
+            "businessUse": true,
+            "hasLines": false,
+            "hasShipping": false
+          }
+        ],
+        [
+          {
+            "canBuy": true,
+            "termsAccepted": false,
+            "businessUse": false,
+            "hasLines": true,
+            "hasShipping": true
+          }
+        ],
+        [
+          {
+            "canBuy": true,
+            "termsAccepted": false,
+            "businessUse": false,
+            "hasLines": true,
+            "hasShipping": false
+          }
+        ],
+        [
+          {
+            "canBuy": true,
+            "termsAccepted": false,
+            "businessUse": false,
+            "hasLines": false,
+            "hasShipping": true
+          }
+        ],
+        [
+          {
+            "canBuy": true,
+            "termsAccepted": false,
+            "businessUse": false,
+            "hasLines": false,
+            "hasShipping": false
+          }
+        ],
+        [
+          {
+            "canBuy": false,
+            "termsAccepted": true,
+            "businessUse": true,
+            "hasLines": true,
+            "hasShipping": true
+          }
+        ],
+        [
+          {
+            "canBuy": false,
+            "termsAccepted": true,
+            "businessUse": true,
+            "hasLines": true,
+            "hasShipping": false
+          }
+        ],
+        [
+          {
+            "canBuy": false,
+            "termsAccepted": true,
+            "businessUse": true,
+            "hasLines": false,
+            "hasShipping": true
+          }
+        ],
+        [
+          {
+            "canBuy": false,
+            "termsAccepted": true,
+            "businessUse": true,
+            "hasLines": false,
+            "hasShipping": false
+          }
+        ],
+        [
+          {
+            "canBuy": false,
+            "termsAccepted": true,
+            "businessUse": false,
+            "hasLines": true,
+            "hasShipping": true
+          }
+        ],
+        [
+          {
+            "canBuy": false,
+            "termsAccepted": true,
+            "businessUse": false,
+            "hasLines": true,
+            "hasShipping": false
+          }
+        ],
+        [
+          {
+            "canBuy": false,
+            "termsAccepted": true,
+            "businessUse": false,
+            "hasLines": false,
+            "hasShipping": true
+          }
+        ],
+        [
+          {
+            "canBuy": false,
+            "termsAccepted": true,
+            "businessUse": false,
+            "hasLines": false,
+            "hasShipping": false
+          }
+        ],
+        [
+          {
+            "canBuy": false,
+            "termsAccepted": false,
+            "businessUse": true,
+            "hasLines": true,
+            "hasShipping": true
+          }
+        ],
+        [
+          {
+            "canBuy": false,
+            "termsAccepted": false,
+            "businessUse": true,
+            "hasLines": true,
+            "hasShipping": false
+          }
+        ],
+        [
+          {
+            "canBuy": false,
+            "termsAccepted": false,
+            "businessUse": true,
+            "hasLines": false,
+            "hasShipping": true
+          }
+        ],
+        [
+          {
+            "canBuy": false,
+            "termsAccepted": false,
+            "businessUse": true,
+            "hasLines": false,
+            "hasShipping": false
+          }
+        ],
+        [
+          {
+            "canBuy": false,
+            "termsAccepted": false,
+            "businessUse": false,
+            "hasLines": true,
+            "hasShipping": true
+          }
+        ],
+        [
+          {
+            "canBuy": false,
+            "termsAccepted": false,
+            "businessUse": false,
+            "hasLines": true,
+            "hasShipping": false
+          }
+        ],
+        [
+          {
+            "canBuy": false,
+            "termsAccepted": false,
+            "businessUse": false,
+            "hasLines": false,
+            "hasShipping": true
+          }
+        ],
+        [
+          {
+            "canBuy": false,
+            "termsAccepted": false,
+            "businessUse": false,
+            "hasLines": false,
+            "hasShipping": false
+          }
         ]
       ]
     }

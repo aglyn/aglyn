@@ -486,6 +486,14 @@
       "why": "The self-service kiosk's catalog, cart, sale and context shapes and their pure checks (AGL-3623); imports only commerce-pos and product-modifiers. The native POS app reads the kiosk route through these."
     },
     {
+      "path": "libs/plugins/commerce/src/lib/model/pos-hardware.ts",
+      "why": "The card reader shop's model (AGL-4038): the order statuses and the words a merchant reads of them, the most of one item a line takes, the point of sale prompt and the money format, so the apps' Hardware screen says what the console's Hardware card does; imports only platform-brand and a type of pos-hardware-terms."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/pos-hardware-shop.ts",
+      "why": "The Hardware card's and the Card readers to set up card's words and small rules (AGL-4038): the basket, Check out's reason, when a return is offered, a waiting reader's note; imports only pos-hardware-terms. The apps' Hardware screen reads them through the native contracts."
+    },
+    {
       "path": "libs/plugins/commerce/src/lib/model/pos-hardware-terms.ts",
       "why": "The booth terms of sale for hardware (AGL-4038): the Terms version and sections, the acceptance record, and the receipt line commerce-receipt.ts and commerce-pos-ops.ts print on a register sale of hardware; imports only published-legal-pages.ts."
     },

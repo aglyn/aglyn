@@ -2705,6 +2705,48 @@ data class PosDisplayStateTip(
     val percentages: List<Double>,
 )
 
+@Serializable
+data class PosHardwareShopText(
+    val businessUse: String,
+    val buyKeyReason: String,
+    val canceled: String,
+    val checkout: String,
+    val checkoutFailed: String,
+    val columnItems: String,
+    val columnOrder: String,
+    val columnPlaced: String,
+    val columnReturn: String,
+    val columnStatus: String,
+    val columnTotal: String,
+    val columnTracking: String,
+    val header: String,
+    val historySubheader: String,
+    val intro: String,
+    val items: String,
+    val noOrders: String,
+    val ordersTitle: String,
+    val placed: String,
+    val quantity: String,
+    val returnAction: String,
+    val returnBody: String,
+    val returnCancel: String,
+    val returnFailed: String,
+    val returnField: String,
+    val returnSend: String,
+    val returnSent: String,
+    val shipping: String,
+    val shipsTo: String,
+    val subheader: String,
+    val tax: String,
+    val taxAtCheckout: String,
+    val termsAfter: String,
+    val termsBefore: String,
+    val termsLink: String,
+    val termsReason: String,
+    val total: String,
+    val totalBeforeTax: String,
+)
+
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = PosHardwareTermsMethodSerializer::class)
 enum class PosHardwareTermsMethod(val raw: String) {
@@ -2717,6 +2759,21 @@ enum class PosHardwareTermsMethod(val raw: String) {
 
 internal object PosHardwareTermsMethodSerializer :
     RawEnumSerializer<PosHardwareTermsMethod>("com.aglyn.contracts.PosHardwareTermsMethod", PosHardwareTermsMethod.entries, PosHardwareTermsMethod.UNKNOWN, { it.raw })
+
+@Serializable
+data class PosHardwareWaitingText(
+    val choose: String,
+    val chosen: String,
+    val failed: String,
+    val header: String,
+    val marked: String,
+    val markSetUp: String,
+    val openDevices: String,
+    val planPrompt: String,
+    val planReason: String,
+    val subheader: String,
+    val whichStore: String,
+)
 
 @Serializable
 data class PosKioskCatalog(
@@ -4336,6 +4393,12 @@ internal data class ContractValuesPart6(
     @SerialName("POS_DISPLAY_MAX_LINES") val posDisplayMaxLines: Long,
     @SerialName("POS_DISPLAY_PAIRING_TTL_MS") val posDisplayPairingTtlMs: Double,
     @SerialName("POS_DISPLAY_THANKS_MS") val posDisplayThanksMs: Long,
+    @SerialName("POS_HARDWARE_ANCHOR") val posHardwareAnchor: String,
+    @SerialName("POS_HARDWARE_MAX_PER_LINE") val posHardwareMaxPerLine: Long,
+    @SerialName("POS_HARDWARE_RETURN_LABELS") val posHardwareReturnLabels: Map<String, String>,
+    @SerialName("POS_HARDWARE_SHOP_TEXT") val posHardwareShopText: PosHardwareShopText,
+    @SerialName("POS_HARDWARE_STATUS_LABELS") val posHardwareStatusLabels: Map<String, String>,
+    @SerialName("POS_HARDWARE_WAITING_TEXT") val posHardwareWaitingText: PosHardwareWaitingText,
     @SerialName("POS_KIOSK_CATALOG_LIMIT") val posKioskCatalogLimit: Long,
     @SerialName("POS_KIOSK_DONE_SECONDS") val posKioskDoneSeconds: Long,
     @SerialName("POS_KIOSK_IDLE_SECONDS_DEFAULT") val posKioskIdleSecondsDefault: Long,
@@ -4344,16 +4407,16 @@ internal data class ContractValuesPart6(
     @SerialName("POS_KIOSK_IDLE_WARNING_SECONDS") val posKioskIdleWarningSeconds: Long,
     @SerialName("POS_KIOSK_MAX_LINES") val posKioskMaxLines: Long,
     @SerialName("POS_KIOSK_MAX_QUANTITY") val posKioskMaxQuantity: Long,
+)
+
+@Serializable
+internal data class ContractValuesPart7(
     @SerialName("POS_KIOSK_UNLOCK_LOCKOUT_MS") val posKioskUnlockLockoutMs: Double,
     @SerialName("POS_KIOSK_UNLOCK_MAX_ATTEMPTS") val posKioskUnlockMaxAttempts: Long,
     @SerialName("POS_KIOSK_UNLOCK_TTL_MS") val posKioskUnlockTtlMs: Double,
     @SerialName("POS_OFFLINE_CARD_INTENT_KIND") val posOfflineCardIntentKind: String,
     @SerialName("POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT") val posOfflineCardMaxSaleCentsLimit: Long,
     @SerialName("POS_OFFLINE_CARD_RECONNECT_WITHIN_MS") val posOfflineCardReconnectWithinMs: Double,
-)
-
-@Serializable
-internal data class ContractValuesPart7(
     @SerialName("POS_OFFLINE_CLOCK_SKEW_MS") val posOfflineClockSkewMs: Double,
     @SerialName("POS_OFFLINE_DISABLED_TENDERS") val posOfflineDisabledTenders: Map<String, String>,
     @SerialName("POS_OFFLINE_FLAG_LABELS") val posOfflineFlagLabels: Map<String, String>,
@@ -4362,6 +4425,7 @@ internal data class ContractValuesPart7(
     @SerialName("POS_OFFLINE_SALE_MAX_LINES") val posOfflineSaleMaxLines: Long,
     @SerialName("POS_OFFLINE_SYNC_BATCH_MAX") val posOfflineSyncBatchMax: Long,
     @SerialName("POS_OFFLINE_SYNC_ROUTE") val posOfflineSyncRoute: String,
+    @SerialName("POS_PLAN_ADDS") val posPlanAdds: String,
     @SerialName("POS_TENDER_LABELS") val posTenderLabels: Map<String, String>,
     @SerialName("PRICE_RANGE_MAX_LENGTH") val priceRangeMaxLength: Long,
     @SerialName("PRINTER_BRAND_LABELS") val printerBrandLabels: Map<String, String>,
@@ -4395,6 +4459,10 @@ internal data class ContractValuesPart7(
     @SerialName("RETURN_REASONS") val returnReasons: List<ReturnReason>,
     @SerialName("SCOPED_SEARCH_JOIN") val scopedSearchJoin: String,
     @SerialName("SCREEN_ROOT_PATH") val screenRootPath: String,
+)
+
+@Serializable
+internal data class ContractValuesPart8(
     @SerialName("SCREEN_SLUG_PATH_SEPARATOR_MESSAGE") val screenSlugPathSeparatorMessage: String,
     @SerialName("SEARCH_ENGINE_VERIFICATION_LABELS") val searchEngineVerificationLabels: Map<String, String>,
     @SerialName("SEARCH_ENGINE_VERIFICATION_META_NAMES") val searchEngineVerificationMetaNames: Map<String, String>,
@@ -4402,10 +4470,6 @@ internal data class ContractValuesPart7(
     @SerialName("SEO_KEYWORD_LINES_MAX_CHARS") val seoKeywordLinesMaxChars: Long,
     @SerialName("SEO_MAX_KEYWORDS") val seoMaxKeywords: Long,
     @SerialName("SHIPPING_COST_MAX_CENTS") val shippingCostMaxCents: Long,
-)
-
-@Serializable
-internal data class ContractValuesPart8(
     @SerialName("SITE_CARDS_PAGE_SIZE") val siteCardsPageSize: Long,
     @SerialName("SITE_FILTER_HEADERS") val siteFilterHeaders: Map<String, String>,
     @SerialName("SITE_FILTER_OPTIONS") val siteFilterOptions: SiteFilterOptions,
@@ -4447,6 +4511,10 @@ internal data class ContractValuesPart8(
     @SerialName("THEME_TEXT_CONTRAST") val themeTextContrast: Double,
     @SerialName("TIME_ZONE_CHOICES") val timeZoneChoices: List<String>,
     @SerialName("TIME_ZONE_DEFAULT_LABEL") val timeZoneDefaultLabel: String,
+)
+
+@Serializable
+internal data class ContractValuesPart9(
     @SerialName("WORKFLOW_MAX_STEPS") val workflowMaxSteps: Long,
     @SerialName("WORKSPACE_COLORS_FIELD") val workspaceColorsField: String,
     @SerialName("WORKSPACE_COLORS_MAX") val workspaceColorsMax: Long,
@@ -4468,6 +4536,7 @@ class ContractValues internal constructor(
     private val part6: ContractValuesPart6,
     private val part7: ContractValuesPart7,
     private val part8: ContractValuesPart8,
+    private val part9: ContractValuesPart9,
 ) {
     val accountColorPattern: String get() = part1.accountColorPattern
     val accountItemLabelMax: Long get() = part1.accountItemLabelMax
@@ -4743,6 +4812,12 @@ class ContractValues internal constructor(
     val posDisplayMaxLines: Long get() = part6.posDisplayMaxLines
     val posDisplayPairingTtlMs: Double get() = part6.posDisplayPairingTtlMs
     val posDisplayThanksMs: Long get() = part6.posDisplayThanksMs
+    val posHardwareAnchor: String get() = part6.posHardwareAnchor
+    val posHardwareMaxPerLine: Long get() = part6.posHardwareMaxPerLine
+    val posHardwareReturnLabels: Map<String, String> get() = part6.posHardwareReturnLabels
+    val posHardwareShopText: PosHardwareShopText get() = part6.posHardwareShopText
+    val posHardwareStatusLabels: Map<String, String> get() = part6.posHardwareStatusLabels
+    val posHardwareWaitingText: PosHardwareWaitingText get() = part6.posHardwareWaitingText
     val posKioskCatalogLimit: Long get() = part6.posKioskCatalogLimit
     val posKioskDoneSeconds: Long get() = part6.posKioskDoneSeconds
     val posKioskIdleSecondsDefault: Long get() = part6.posKioskIdleSecondsDefault
@@ -4751,12 +4826,12 @@ class ContractValues internal constructor(
     val posKioskIdleWarningSeconds: Long get() = part6.posKioskIdleWarningSeconds
     val posKioskMaxLines: Long get() = part6.posKioskMaxLines
     val posKioskMaxQuantity: Long get() = part6.posKioskMaxQuantity
-    val posKioskUnlockLockoutMs: Double get() = part6.posKioskUnlockLockoutMs
-    val posKioskUnlockMaxAttempts: Long get() = part6.posKioskUnlockMaxAttempts
-    val posKioskUnlockTtlMs: Double get() = part6.posKioskUnlockTtlMs
-    val posOfflineCardIntentKind: String get() = part6.posOfflineCardIntentKind
-    val posOfflineCardMaxSaleCentsLimit: Long get() = part6.posOfflineCardMaxSaleCentsLimit
-    val posOfflineCardReconnectWithinMs: Double get() = part6.posOfflineCardReconnectWithinMs
+    val posKioskUnlockLockoutMs: Double get() = part7.posKioskUnlockLockoutMs
+    val posKioskUnlockMaxAttempts: Long get() = part7.posKioskUnlockMaxAttempts
+    val posKioskUnlockTtlMs: Double get() = part7.posKioskUnlockTtlMs
+    val posOfflineCardIntentKind: String get() = part7.posOfflineCardIntentKind
+    val posOfflineCardMaxSaleCentsLimit: Long get() = part7.posOfflineCardMaxSaleCentsLimit
+    val posOfflineCardReconnectWithinMs: Double get() = part7.posOfflineCardReconnectWithinMs
     val posOfflineClockSkewMs: Double get() = part7.posOfflineClockSkewMs
     val posOfflineDisabledTenders: Map<String, String> get() = part7.posOfflineDisabledTenders
     val posOfflineFlagLabels: Map<String, String> get() = part7.posOfflineFlagLabels
@@ -4765,6 +4840,7 @@ class ContractValues internal constructor(
     val posOfflineSaleMaxLines: Long get() = part7.posOfflineSaleMaxLines
     val posOfflineSyncBatchMax: Long get() = part7.posOfflineSyncBatchMax
     val posOfflineSyncRoute: String get() = part7.posOfflineSyncRoute
+    val posPlanAdds: String get() = part7.posPlanAdds
     val posTenderLabels: Map<String, String> get() = part7.posTenderLabels
     val priceRangeMaxLength: Long get() = part7.priceRangeMaxLength
     val printerBrandLabels: Map<String, String> get() = part7.printerBrandLabels
@@ -4798,13 +4874,13 @@ class ContractValues internal constructor(
     val returnReasons: List<ReturnReason> get() = part7.returnReasons
     val scopedSearchJoin: String get() = part7.scopedSearchJoin
     val screenRootPath: String get() = part7.screenRootPath
-    val screenSlugPathSeparatorMessage: String get() = part7.screenSlugPathSeparatorMessage
-    val searchEngineVerificationLabels: Map<String, String> get() = part7.searchEngineVerificationLabels
-    val searchEngineVerificationMetaNames: Map<String, String> get() = part7.searchEngineVerificationMetaNames
-    val seoFindingLabels: Map<String, String> get() = part7.seoFindingLabels
-    val seoKeywordLinesMaxChars: Long get() = part7.seoKeywordLinesMaxChars
-    val seoMaxKeywords: Long get() = part7.seoMaxKeywords
-    val shippingCostMaxCents: Long get() = part7.shippingCostMaxCents
+    val screenSlugPathSeparatorMessage: String get() = part8.screenSlugPathSeparatorMessage
+    val searchEngineVerificationLabels: Map<String, String> get() = part8.searchEngineVerificationLabels
+    val searchEngineVerificationMetaNames: Map<String, String> get() = part8.searchEngineVerificationMetaNames
+    val seoFindingLabels: Map<String, String> get() = part8.seoFindingLabels
+    val seoKeywordLinesMaxChars: Long get() = part8.seoKeywordLinesMaxChars
+    val seoMaxKeywords: Long get() = part8.seoMaxKeywords
+    val shippingCostMaxCents: Long get() = part8.shippingCostMaxCents
     val siteCardsPageSize: Long get() = part8.siteCardsPageSize
     val siteFilterHeaders: Map<String, String> get() = part8.siteFilterHeaders
     val siteFilterOptions: SiteFilterOptions get() = part8.siteFilterOptions
@@ -4846,15 +4922,15 @@ class ContractValues internal constructor(
     val themeTextContrast: Double get() = part8.themeTextContrast
     val timeZoneChoices: List<String> get() = part8.timeZoneChoices
     val timeZoneDefaultLabel: String get() = part8.timeZoneDefaultLabel
-    val workflowMaxSteps: Long get() = part8.workflowMaxSteps
-    val workspaceColorsField: String get() = part8.workspaceColorsField
-    val workspaceColorsMax: Long get() = part8.workspaceColorsMax
-    val workspaceSettingsRow: NativeNavRow get() = part8.workspaceSettingsRow
-    val workspaceStableColors: List<String> get() = part8.workspaceStableColors
+    val workflowMaxSteps: Long get() = part9.workflowMaxSteps
+    val workspaceColorsField: String get() = part9.workspaceColorsField
+    val workspaceColorsMax: Long get() = part9.workspaceColorsMax
+    val workspaceSettingsRow: NativeNavRow get() = part9.workspaceSettingsRow
+    val workspaceStableColors: List<String> get() = part9.workspaceStableColors
 
-    override fun equals(other: Any?): Boolean = this === other || (other is ContractValues && part1 == other.part1 && part2 == other.part2 && part3 == other.part3 && part4 == other.part4 && part5 == other.part5 && part6 == other.part6 && part7 == other.part7 && part8 == other.part8)
+    override fun equals(other: Any?): Boolean = this === other || (other is ContractValues && part1 == other.part1 && part2 == other.part2 && part3 == other.part3 && part4 == other.part4 && part5 == other.part5 && part6 == other.part6 && part7 == other.part7 && part8 == other.part8 && part9 == other.part9)
 
-    override fun hashCode(): Int = listOf<Any>(part1, part2, part3, part4, part5, part6, part7, part8).hashCode()
+    override fun hashCode(): Int = listOf<Any>(part1, part2, part3, part4, part5, part6, part7, part8, part9).hashCode()
 
     companion object {
         /** Decodes every part from one JSON text; the format must ignore unknown keys. */
@@ -4869,6 +4945,7 @@ class ContractValues internal constructor(
                 json.decodeFromJsonElement(ContractValuesPart6.serializer(), tree),
                 json.decodeFromJsonElement(ContractValuesPart7.serializer(), tree),
                 json.decodeFromJsonElement(ContractValuesPart8.serializer(), tree),
+                json.decodeFromJsonElement(ContractValuesPart9.serializer(), tree),
             )
         }
     }
