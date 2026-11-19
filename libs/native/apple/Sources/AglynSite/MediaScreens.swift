@@ -1432,6 +1432,8 @@ struct MediaDetailBody: View {
           .font(.system(size: AglynMediaMetrics.note)).foregroundStyle(AglynColor.textTertiary)
           .fixedSize(horizontal: false, vertical: true)
         AglynHairline()
+        MediaEmbeddedSection(item: item, api: api, canEdit: canEdit)
+        AglynHairline()
         HStack {
           Text("Used on").font(.system(size: AglynMediaMetrics.groupLabel, weight: .semibold)).foregroundStyle(AglynColor.secondaryText)
           Spacer()
