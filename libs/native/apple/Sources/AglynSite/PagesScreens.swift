@@ -175,8 +175,7 @@ struct PagesScreen: View {
             } detail: {
               if let row = model.row(selection) {
                 PageDetail(
-                  context: context, hostID: hostID, pageID: row.id, model: model, api: api, runner: runner,
-                  canEdit: canEdit, canPublish: canPublish)
+                  context: context, hostID: hostID, pageID: row.id, model: model, api: api, runner: runner)
               } else {
                 AglynSelectionPlaceholder("No page selected", systemImage: SiteSymbols.page)
               }
@@ -316,8 +315,7 @@ struct PagesScreen: View {
           ForEach(rows) { row in
             AglynPushLink {
               PageDetail(
-                context: context, hostID: hostID, pageID: row.id, model: model, api: api, runner: runner,
-                canEdit: canEdit, canPublish: canPublish, pushed: true
+                context: context, hostID: hostID, pageID: row.id, model: model, api: api, runner: runner, pushed: true
               )
               .navigationTitle(row.page.name)
               .aglynScreenTitle(row.page.name)
@@ -335,8 +333,7 @@ struct PagesScreen: View {
         .aglynPushDestination(item: $linkedPage) { id in
           if let row = rows.first(where: { $0.id == id }) {
             PageDetail(
-              context: context, hostID: hostID, pageID: id, model: model, api: api, runner: runner,
-              canEdit: canEdit, canPublish: canPublish, pushed: true
+              context: context, hostID: hostID, pageID: id, model: model, api: api, runner: runner, pushed: true
             )
             .navigationTitle(row.page.name)
             .aglynScreenTitle(row.page.name)
@@ -457,8 +454,10 @@ struct PageDetail: View {
   let model: SitePagesModel
   let api: PagesAPI
   let runner: ActionRunner
-  let canEdit: Bool
-  let canPublish: Bool
+  /// Read when the body asks, never kept: a page pushed on a phone holds this view's value, and a permission that
+  /// arrives after the push (a cold start from a link) enables its controls at once.
+  var canEdit: Bool { context.can("site.edit") }
+  var canPublish: Bool { context.can("site.publish") }
   /// Pushed over the list on a phone: it shows the actions' banner itself, and a deleted page leaves.
   var pushed = false
   @Environment(\.openURL) private var openURL

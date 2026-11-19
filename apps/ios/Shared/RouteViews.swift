@@ -69,16 +69,16 @@ struct PluginScreenView: View {
   }
 }
 
-/// A console link the app has no native screen for yet. Console areas are
-/// native screens; the app never opens the console page instead.
+/// A console link the app has no native screen for. Console areas are
+/// native screens; the app never opens the console page instead, so it only
+/// says where the page is.
 struct NotInAppView: View {
-  @Environment(AppModel.self) private var model
   let path: String
 
   var body: some View {
     AglynEmptyState(
-      "This page is not in the app yet", systemImage: "questionmark.square.dashed",
-      message: "\(model.appName) opens it here once its screen is built.")
+      "This page is not in the app", systemImage: "questionmark.square.dashed",
+      message: "You can open it in Aglyn on the web.")
     .navigationTitle("Not in the app")
     .aglynScreenTitle("Not in the app")
     .accessibilityIdentifier("not-in-app")
