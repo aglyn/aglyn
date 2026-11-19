@@ -41,6 +41,13 @@ data class WorkspaceSite(
    * copy, then the platform address, the order every site address follows in both apps.
    */
   fun addressWith(hostCname: String?): String? = siteListAddress(hostCname?.trim()?.ifEmpty { null } ?: cname, subdomain)
+
+  /**
+   * Visit site's address: the site's home as the console at [consoleOrigin] reaches it ([SiteLiveUrl]), with the host's
+   * own custom domain first, then the mirror's. A local console opens the local tenant, never production.
+   */
+  fun visitUrl(hostCname: String?, consoleOrigin: String?): String? =
+    SiteLiveUrl.home(subdomain, hostCname?.trim()?.ifEmpty { null } ?: cname, consoleOrigin)
 }
 
 /**
