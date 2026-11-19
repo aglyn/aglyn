@@ -30,6 +30,7 @@ import {
   CRM_ACTIVITY_KINDS,
   CRM_FIELD_OBJECTS,
   CRM_LEAD_OPEN_STATUSES,
+  CRM_LEAD_SOURCE_DIRECTIONS,
   CRM_LEAD_STATUSES,
   CRM_PICKLIST_DEFINITIONS,
   CRM_TASK_KINDS,
@@ -40,6 +41,7 @@ import {
   CONTACT_FIELD_TYPES,
   currencyFractionDigits,
 } from '@aglyn/aglyn/app-utils/contact-custom-fields'
+import { EMAIL_STATE_STATUSES } from '@aglyn/aglyn/app-utils/email-state'
 import { CRM_REPORT_PERIODS } from './crm-reports'
 import { DEAL_CURRENCIES } from './deal-board-model'
 
@@ -48,6 +50,10 @@ export const NATIVE_CRM_LEAD_STATUSES: string[] = [...CRM_LEAD_STATUSES]
 
 /** The statuses a lead still needs working in. */
 export const NATIVE_CRM_LEAD_OPEN_STATUSES: string[] = [...CRM_LEAD_OPEN_STATUSES]
+/** The email verdicts a saved view's Email clause may name (`leadQueryClause`, `contactQueryClause`). */
+export const NATIVE_EMAIL_STATE_STATUSES: string[] = [...EMAIL_STATE_STATUSES]
+/** A lead source's directions, which a saved view's Direction clause may name. */
+export const NATIVE_CRM_LEAD_SOURCE_DIRECTIONS: string[] = [...CRM_LEAD_SOURCE_DIRECTIONS]
 
 /** Every contact lifecycle stage, in order. */
 export const NATIVE_CONTACT_LIFECYCLE_STAGES: string[] = [...CONTACT_LIFECYCLE_STAGES]

@@ -86,6 +86,14 @@ struct FormRow: Identifiable, Hashable {
   let lastSubmissionAt: Date?
   let updatedAt: Date?
   let campaignCount: Int
+  /// "This is a sign-up form": submitting it subscribes the person (`optInOnSubmit`).
+  let optInOnSubmit: Bool
+  /// "This form asks for a quote" (`request.kind == 'quote'`, AGL-4098).
+  let asksForQuote: Bool
+  /// "Email the person a confirmation" as stored; nil follows the request's default.
+  let confirmationEmail: Bool?
+  /// The month counters (`stats.periods`), `YYYY-MM` to each counter.
+  let periods: [String: [String: Double]]
 
   init(_ doc: FirestoreDocument) {
     let stats = doc.data["stats"] as? [String: Any]
@@ -110,7 +118,29 @@ struct FormRow: Identifiable, Hashable {
     lastSubmissionAt = number(stats?["lastSubmissionAtMs"]).map { Date(timeIntervalSince1970: $0 / 1000) }
     updatedAt = firestoreDate(doc.data["updatedAt"])
     campaignCount = (doc.data["campaignIds"] as? [Any])?.count ?? 0
+    optInOnSubmit = doc.bool("optInOnSubmit") == true
+    asksForQuote = (doc.data["request"] as? [String: Any])?["kind"] as? String == "quote"
+    confirmationEmail = doc.bool("confirmationEmail")
+    var periods: [String: [String: Double]] = [:]
+    for (key, value) in stats?["periods"] as? [String: Any] ?? [:] {
+      guard let month = value as? [String: Any] else { continue }
+      periods[key] = month.compactMapValues { number($0) }
+    }
+    self.periods = periods
   }
+
+  /// Whether a submission emails the person a confirmation (`formSendsConfirmation`): the stored choice, else on for a
+  /// form that asks for a quote.
+  func sendsConfirmation(asksForQuote: Bool? = nil) -> Bool {
+    confirmationEmail ?? (asksForQuote ?? self.asksForQuote)
+  }
+
+  /// A field the published design draws can carry an email address (`formFieldsCanYieldAnEmail`).
+  var hasEmailField: Bool {
+    fields.contains { $0.type == "email" || $0.name.range(of: "email", options: .caseInsensitive) != nil }
+  }
+
+  var hasFileField: Bool { fields.contains { $0.type == "file" } }
 
   /// The list's second line.
   func summary(now: Date = Date()) -> String {
@@ -193,9 +223,96 @@ func normalizeFormSlug(_ input: String) -> String {
   return slug
 }
 
-/// The Besigner page for one version of a form, under the picked site.
-func formBesignerPath(formID: String, versionID: String) -> String {
-  "/\(formsDocumentSegment)/\(formID)/versions/\(versionID)/besigner"
+/// The Besigner page for one version of a form, under the picked site, or its preview (`PLUGIN_DOCUMENT_PREVIEW`).
+func formBesignerPath(formID: String, versionID: String, preview: Bool = false) -> String {
+  "/\(formsDocumentSegment)/\(formID)/versions/\(versionID)/\(preview ? "preview" : "besigner")"
+}
+
+/// One month of a form's history (`FormPeriodPoint`), every counter resolved to a number.
+struct FormPeriodPoint: Equatable {
+  let period: String
+  let views: Double
+  let starts: Double
+  let submissions: Double
+  let leads: Double
+}
+
+/// The month after `YYYY-MM`, or nil for a key that is not one.
+private func nextFormPeriod(_ period: String) -> String? {
+  let parts = period.split(separator: "-")
+  guard parts.count == 2, let year = Int(parts[0]), let month = Int(parts[1]), (1...12).contains(month) else { return nil }
+  return month == 12 ? "\(year + 1)-01" : String(format: "%d-%02d", year, month + 1)
+}
+
+/// The form's months from its first recorded one to its last, gaps filled with zeros, the latest `maxPeriods` kept
+/// (`formPeriodSeries`): a month before the counter existed is never drawn as a zero.
+func formPeriodSeries(_ periods: [String: [String: Double]], maxPeriods: Int = 12) -> [FormPeriodPoint] {
+  let keys = periods.keys.filter { $0.range(of: "^\\d{4}-(0[1-9]|1[0-2])$", options: .regularExpression) != nil }.sorted()
+  guard let first = keys.first, let last = keys.last else { return [] }
+  var series: [FormPeriodPoint] = []
+  var cursor: String? = first
+  var step = 0
+  while let current = cursor, step <= 1200 {
+    let month = periods[current] ?? [:]
+    series.append(
+      FormPeriodPoint(
+        period: current, views: month["views"] ?? 0, starts: month["starts"] ?? 0, submissions: month["submissions"] ?? 0,
+        leads: month["leads"] ?? 0))
+    if current == last { break }
+    cursor = nextFormPeriod(current)
+    step += 1
+  }
+  return maxPeriods > 0 && series.count > maxPeriods ? Array(series.suffix(maxPeriods)) : series
+}
+
+/// The months a rate can be taken over (`formStatsWindow`): only those whose denominator (`over`) was recorded.
+func formStatsWindow(_ periods: [String: [String: Double]], over: String, of: String) -> (periods: Int, over: Double, of: Double) {
+  var window = (periods: 0, over: 0.0, of: 0.0)
+  for month in periods.values {
+    let denominator = month[over] ?? 0
+    guard denominator.isFinite, denominator > 0 else { continue }
+    window.periods += 1
+    window.over += denominator
+    let numerator = month[of] ?? 0
+    if numerator.isFinite { window.of += numerator }
+  }
+  return window
+}
+
+/// A rate with what it was taken over (`measuredRate`); nil when there is nothing to take it over.
+struct MeasuredRate: Equatable {
+  let value: Double
+  let numerator: Double
+  let denominator: Double
+  let denominatorLabel: String
+
+  /// "42.5%" (`percent`).
+  var percent: String { String(format: "%.1f%%", value * 100) }
+  /// "17 of 40 views".
+  var detail: String { "\(Int(numerator).formatted()) of \(Int(denominator).formatted()) \(denominatorLabel)" }
+}
+
+func measuredRate(_ numerator: Double?, _ denominator: Double?, _ label: String) -> MeasuredRate? {
+  guard let top = numerator, let bottom = denominator, top.isFinite, bottom.isFinite, bottom > 0 else { return nil }
+  return MeasuredRate(value: top / bottom, numerator: top, denominator: bottom, denominatorLabel: label)
+}
+
+/// The rates the form's metrics card shows, as the console's `FormMetricsCard` takes them.
+struct FormRates: Equatable {
+  /// Views that became a submission, over the months views were counted.
+  let completion: MeasuredRate?
+  /// Started and never submitted, over the months starts were counted.
+  let abandon: MeasuredRate?
+  /// Submissions that became a lead.
+  let lead: MeasuredRate?
+
+  init(_ form: FormRow) {
+    lead = measuredRate(form.leads.map(Double.init), form.submissions.map(Double.init), "submissions")
+    let views = formStatsWindow(form.periods, over: "views", of: "submissions")
+    let starts = formStatsWindow(form.periods, over: "starts", of: "submissions")
+    completion = views.periods > 0 ? measuredRate(views.of, views.over, "views") : nil
+    abandon = starts.periods > 0 && starts.over >= starts.of ? measuredRate(starts.over - starts.of, starts.over, "starts") : nil
+  }
 }
 
 /// The site's forms, live: the plan's query, a page at a time plus one probe
@@ -412,15 +529,24 @@ struct FormsAPI {
     try await writer.merge(path(id), retireFields(retired))
   }
 
-  /// The CRM routing: the lead switch and the consent field together, then the counters recounted.
-  func saveRouting(_ form: FormRow, lead: Bool, consentFieldName: String?) async throws {
-    try await writer.merge(
-      path(form.id),
-      [
-        "routing": ["lead": lead], "consentFieldName": (consentFieldName ?? "").trimmingCharacters(in: .whitespaces),
-        "updatedAt": Date(),
-      ])
+  /// The CRM routing: the lead switch, the consent field and the sign-up switch together, then the counters recounted.
+  func saveRouting(_ form: FormRow, lead: Bool, consentFieldName: String?, optInOnSubmit: Bool? = nil) async throws {
+    var fields: [String: Any] = [
+      "routing": ["lead": lead], "consentFieldName": (consentFieldName ?? "").trimmingCharacters(in: .whitespaces),
+      "updatedAt": Date(),
+    ]
+    if let optInOnSubmit { fields["optInOnSubmit"] = optInOnSubmit }
+    try await writer.merge(path(form.id), fields)
     if lead != form.routesLeads { await recount(form.id) }
+  }
+
+  /// What happens after someone sends the form (AGL-4098): whether it asks for a quote, and whether the person is
+  /// emailed a confirmation; only what changed is written, as the console's card saves it.
+  func saveResponses(_ form: FormRow, asksForQuote: Bool?, confirms: Bool?) async throws {
+    var fields: [String: Any] = ["updatedAt": Date()]
+    if let asksForQuote { fields["request"] = asksForQuote ? ["kind": "quote"] as [String: Any] : NSNull() }
+    if let confirms { fields["confirmationEmail"] = confirms }
+    try await writer.update(path(form.id), fields)
   }
 
   func recount(_ formID: String) async {
