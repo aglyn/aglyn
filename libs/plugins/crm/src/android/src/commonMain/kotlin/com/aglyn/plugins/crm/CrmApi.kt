@@ -1,5 +1,6 @@
 package com.aglyn.plugins.crm
 
+import com.aglyn.contracts.Contracts
 import com.aglyn.core.ApiMethod
 import com.aglyn.core.ConsoleApiClient
 import com.aglyn.core.FirestoreReader
@@ -469,6 +470,44 @@ class CrmApi(private val api: ConsoleApiClient, private val writer: FirestoreWri
 
   suspend fun deleteTemplate(id: String) {
     writer.delete("$templatesPath/$id")
+  }
+
+  /*---------- saved views ----------*/
+
+  private val viewsPath get() = crmPath(scope.orgId, CRM_VIEWS_COLLECTION)
+
+  /** Save as view: the open filter's clauses and sort under a name, the creator's own (`saveAs`). */
+  suspend fun createView(section: String, name: String, shared: Boolean, filters: List<Map<String, Any?>>, columns: List<String>, sort: CrmViewSort?): String {
+    val id = newRecordId()
+    val site = scope.hostId
+    writer.merge(
+      "$viewsPath/$id",
+      mapOf(
+        "section" to section, "name" to name.trim().take(Contracts.crmViewNameMax.toInt()), "filters" to filters, "columns" to columns,
+        "sort" to sort?.let { mapOf("field" to it.field, "direction" to it.direction) },
+        "ownerUid" to scope.uid, "createdByUid" to scope.uid, "shared" to shared, "hostId" to site,
+        "visibleTo" to if (site == null) listOf(ORG_SCOPE_TOKEN) else scope.createTokens,
+        "createdAt" to firestoreNow(), "updatedAt" to firestoreNow(),
+      ),
+    )
+    return id
+  }
+
+  suspend fun renameView(id: String, name: String) {
+    writer.merge("$viewsPath/$id", mapOf("name" to name.trim().take(Contracts.crmViewNameMax.toInt()), "updatedAt" to firestoreNow()))
+  }
+
+  suspend fun shareView(id: String, shared: Boolean) {
+    writer.merge("$viewsPath/$id", mapOf("shared" to shared, "updatedAt" to firestoreNow()))
+  }
+
+  suspend fun deleteView(id: String) {
+    writer.delete("$viewsPath/$id")
+  }
+
+  /** The reader's default for a section, on their own profile beside their other preferences. */
+  suspend fun setDefaultView(section: String, viewId: String?) {
+    writer.merge("users/${scope.uid}", crmDefaultViewPatch(scope.orgId, section, viewId))
   }
 
   /*---------- the team ----------*/

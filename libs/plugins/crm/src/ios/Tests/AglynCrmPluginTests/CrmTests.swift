@@ -69,6 +69,113 @@ final class CrmTests: XCTestCase {
     XCTAssertEqual(order.map(\.id), ["4", "2", "1"])
   }
 
+  func testASavedViewIsReadAsTheConsoleReadsIt() throws {
+    for (index, item) in try functionCases("normalizeCrmViewState").enumerated() {
+      let got = normalizeCrmViewState(item.args[0] as? [String: Any])
+      let want = item.result as! [String: Any]
+      let clauses = (want["filters"] as! [[String: Any]]).map {
+        CrmViewClause(field: $0["field"] as! String, op: $0["op"] as! String, value: $0["value"] as! String, label: $0["label"] as? String)
+      }
+      XCTAssertEqual(got.filters, clauses, "case \(index)")
+      XCTAssertEqual(got.columns, want["columns"] as? [String], "case \(index)")
+      let sort = want["sort"] as? [String: Any]
+      XCTAssertEqual(got.sort, sort.map { CrmViewSort(field: $0["field"] as! String, direction: $0["direction"] as! String) }, "case \(index)")
+    }
+    for (index, item) in try functionCases("crmViewIsListed").enumerated() {
+      let view = item.args[0] as! [String: Any]
+      XCTAssertEqual(
+        crmViewIsListed(shared: view["shared"] as? Bool == true, ownerUID: view["ownerUid"] as? String ?? "", uid: item.args[1] as? String),
+        item.result as? Bool, "case \(index)")
+    }
+  }
+
+  func testTheDefaultViewIsTheReadersAsTheConsoleKeepsIt() throws {
+    for (index, item) in try functionCases("crmDefaultViewId").enumerated() {
+      XCTAssertEqual(
+        crmDefaultViewID(item.args[0] as? [String: Any], orgID: item.args[1] as? String, section: item.args[2] as! String),
+        item.result as? String, "case \(index)")
+    }
+    for (index, item) in try functionCases("crmDefaultViewPatch").enumerated() {
+      let got = crmDefaultViewPatch(orgID: item.args[0] as! String, section: item.args[1] as! String, viewID: item.args[2] as? String)
+      XCTAssertEqual(NSDictionary(dictionary: got), NSDictionary(dictionary: item.result as! [String: Any]), "case \(index)")
+    }
+  }
+
+  func testAViewOpensAsOneOfTheListsFilters() {
+    let state = CrmViewState(
+      filters: [CrmViewClause(field: "status", op: "equals", value: "won", label: nil)], columns: ["name"],
+      sort: CrmViewSort(field: "name", direction: "asc"))
+    let view = CrmSavedView(id: "v1", name: "Won by name", ownerUID: "u1", createdByUID: "u1", shared: true, state: state)
+    let filter = crmViewFilter(view, kind: .deal)
+    XCTAssertEqual(filter.id, "view:v1")
+    XCTAssertEqual(filter.label, "Won by name")
+    XCTAssertEqual(filter.clauses, [ListFilterRequest(field: "status", op: "equals", value: "won")])
+    XCTAssertEqual(crmViewClauses(filter) as NSArray, [["field": "status", "op": "equals", "value": "won"]] as NSArray)
+    // A sort the list does not declare keeps the list's own order, as `crmViewQuerySort` falls back.
+    XCTAssertNil(crmViewQuerySort(CrmKind.company.declaration.sorts, CrmViewSort(field: "industry", direction: "asc")))
+    XCTAssertEqual(crmViewQuerySort(CrmKind.company.declaration.sorts, CrmViewSort(field: "name", direction: "asc"))?.path, "nameLower")
+    XCTAssertEqual(crmViewMenuDetail(view, uid: "u1", defaultID: "v1"), "Shared · your default")
+    XCTAssertEqual(crmViewMenuDetail(view, uid: "u2", defaultID: nil), nil)
+    XCTAssertEqual(crmViewMenuDetail(view, uid: "u2", defaultID: "v1"), "Your default")
+  }
+
+  func testATaskViewOpensOnItsTaskViewAndClauses() {
+    let saved = CrmSavedView(
+      id: "t1", name: "Overdue calls", ownerUID: "u1", createdByUID: "u1", shared: false,
+      state: CrmViewState(
+        filters: [CrmViewClause(field: "view", op: "equals", value: "overdue"), CrmViewClause(field: "kind", op: "equals", value: "call")]))
+    let open = crmTaskViewOpen(saved)
+    XCTAssertEqual(open.view, .overdue)
+    XCTAssertEqual(open.clauses, [ListFilterRequest(field: "kind", op: "equals", value: "call")])
+    XCTAssertNil(open.sort)
+    // No `view` clause reads as "My tasks", as the console's TASK_VIEW_DEFAULT does.
+    XCTAssertEqual(crmTaskViewOpen(CrmSavedView(id: "t2", name: "x", ownerUID: "", createdByUID: "", shared: false, state: CrmViewState())).view, .mine)
+    XCTAssertEqual(crmTaskViewFilter(.mine, open: nil).clauses, [])
+    XCTAssertEqual(crmTaskViewFilter(.done, open: nil).clauses, [ListFilterRequest(field: "view", op: "equals", value: "done")])
+    XCTAssertEqual(crmTaskViewFilter(.overdue, open: saved).id, "view:t1")
+    XCTAssertEqual(crmTaskViewFilter(.overdue, open: saved).clauses.count, 2)
+  }
+
+  func testAViewsClausesAreAskedAsEachListAsksThem() throws {
+    func clause(_ value: Any) -> ListFilterRequest {
+      let o = value as! [String: Any]
+      return ListFilterRequest(field: o["field"] as! String, op: o["op"] as! String, value: o["value"] as! String)
+    }
+    func want(_ value: Any) -> CrmClauseAsked {
+      let o = value as! [String: Any]
+      if let why = o["refused"] as? String { return .refused(why) }
+      return .asked(clause(o))
+    }
+    for (index, item) in try functionCases("contactQueryClause").enumerated() {
+      let reader = item.args[1] as! [String: Any]
+      XCTAssertEqual(
+        contactQueryClause(clause(item.args[0]), groupID: reader["groupId"] as? String, foldsScope: reader["foldsScope"] as! Bool),
+        want(item.result), "case \(index)")
+    }
+    for (index, item) in try functionCases("dealQueryClause").enumerated() {
+      XCTAssertEqual(dealQueryClause(clause(item.args[0])), want(item.result), "case \(index)")
+    }
+    for (index, item) in try functionCases("leadQueryClause").enumerated() {
+      let reader = item.args.count > 1 ? item.args[1] as? [String: Any] : nil
+      XCTAssertEqual(
+        leadQueryClause(clause(item.args[0]), scopeTokens: reader?["scopeTokens"] as? [String], foldsScope: reader?["foldsScope"] as? Bool ?? true),
+        want(item.result), "case \(index)")
+    }
+  }
+
+  func testAViewsRefusedClauseIsSaidNotDropped() {
+    let view = CrmSavedView(
+      id: "v2", name: "Mixed", ownerUID: "u1", createdByUID: "u1", shared: false,
+      state: CrmViewState(filters: [
+        CrmViewClause(field: "type", op: "equals", value: "Renewal"), CrmViewClause(field: "type", op: "isAnyOf", value: "\u{0000}none,Renewal"),
+      ]))
+    let filter = crmViewFilter(view, kind: .deal, ask: dealQueryClause)
+    XCTAssertEqual(filter.clauses, [ListFilterRequest(field: "typeKey", op: "equals", value: "renewal")])
+    XCTAssertEqual(filter.refused.map(\.reason), ["\"None\" cannot be picked beside a value"])
+    // Saved again, the reader's own clauses are kept, never the translation.
+    XCTAssertEqual((crmViewClauses(filter).first?["field"] as? String), "type")
+  }
+
   func testATelLinkIsTheConsoles() throws {
     for (index, item) in try functionCases("crmTelHref").enumerated() {
       XCTAssertEqual(crmTelHref(item.args[0] as? String), item.result as? String, "case \(index)")
