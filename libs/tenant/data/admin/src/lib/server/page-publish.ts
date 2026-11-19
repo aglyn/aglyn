@@ -16,6 +16,7 @@
  */
 
 import type { HostActivityActor } from '@aglyn/aglyn/app-utils/activity-presenter'
+import { bindingLookupsFromDocs } from '@aglyn/aglyn/app-utils/binding-lookups'
 import {
   bindingTokenNeedsDeep,
   rewriteBindingTokensDeep,
@@ -234,19 +235,11 @@ function refs(firestore: Firestore, hostId: string, pageId: string, versionId?: 
 }
 
 /**
- * The binding lookups the editor converts typed names against, from the two
- * lists it reads: deleted and unnamed documents left out, keyed by name and
- * then by id, so an id key wins a collision (`bindingLookupsFromDocs`).
+ * A variables or functions list as the documents the editor's lookups key,
+ * each with its id in `$id`, as `useHostBindingDocs` reads them.
  */
-function bindingLookups(snapshot: QuerySnapshot): Record<string, BindingDocRef> {
-  const live = snapshot.docs
-    .map((doc) => ({ ...(doc.data() as Record<string, unknown>), $id: doc.id }))
-    .filter((doc) => !doc['deletedAt'] && typeof doc['name'] === 'string' && doc['name'])
-  const map: Record<string, BindingDocRef> = {}
-  for (const doc of live) map[doc['name'] as string] = doc as BindingDocRef
-  for (const doc of live) map[doc.$id] = doc as BindingDocRef
-  return map
-}
+const bindingDocs = (snapshot: QuerySnapshot) =>
+  snapshot.docs.map((doc) => ({ ...(doc.data() as Record<string, unknown>), $id: doc.id }))
 
 /** The draft as the editor would offer it, or why it would not. */
 type DraftState = { kind: 'none' } | { kind: 'stale' } | { kind: 'usable'; nodes: Nodes }
@@ -388,7 +381,9 @@ async function readPage(
           org: input.org,
           lookups: async () => {
             const [variables, functions] = await Promise.all([getQuery(base.variables), getQuery(base.functions)])
-            return { variables: bindingLookups(variables), functions: bindingLookups(functions) }
+            // The editor's own keying (deleted and unnamed left out, by name
+            // then by id), with no connection variables: see the header.
+            return bindingLookupsFromDocs(bindingDocs(variables), bindingDocs(functions))
           },
         })
       : null
