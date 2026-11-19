@@ -76,6 +76,12 @@ private fun readConsentGroups(org: Map<String, Any?>?): Map<String, StoredGroup>
   return usable.filterValues { group -> group.hostIds.none { it in contested } }
 }
 
+/** A declared group by its id; null for a site's own id or one the org does not declare. */
+fun consentGroupNamed(org: Map<String, Any?>?, groupId: String): ConsentGroup? {
+  val group = readConsentGroups(org)[groupId] ?: return null
+  return ConsentGroup(group.hostIds.firstOrNull() ?: return null, groupId, group.name, group.hostIds, true)
+}
+
 /** The consent group a site belongs to: a declared one that names it, else the site alone. */
 fun consentGroupForHost(org: Map<String, Any?>?, hostId: String): ConsentGroup {
   for ((groupId, group) in readConsentGroups(org)) {

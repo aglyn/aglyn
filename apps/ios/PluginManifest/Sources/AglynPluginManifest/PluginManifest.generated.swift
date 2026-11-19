@@ -13,6 +13,7 @@ import AglynCouriersPlugin
 import AglynCrmPlugin
 import AglynDataPlugin
 import AglynDeliveryAppsPlugin
+import AglynDomainsPlugin
 import AglynEmailPlugin
 import AglynEventsCalendarPlugin
 import AglynFormsPlugin
@@ -54,7 +55,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "ai",
-      contributes: ["screens": ["ai.allotment", "ai.create", "ai.credits", "ai.hostMember", "ai.import.productCopy", "ai.import.start", "ai.job", "ai.jobs", "ai.member", "ai.orgsSpendColumn", "ai.request", "ai.requests", "ai.signals", "ai.staffOrg", "ai.staffRequests", "ai.staffUser"], "widgets": ["ai.assist-panel", "ai.create-component", "ai.create-form", "ai.create-layout", "ai.create-page", "ai.create-template", "ai.crm-record", "ai.insight-ask", "ai.needs-you", "ai.org-insight-ask", "ai.seo-audit", "ai.seo-start", "ai.site-memory"], "quickActions": ["ai.open"], "deepLinks": ["ai.job.link", "ai.jobs.link", "ai.signals.link"]],
+      contributes: ["screens": ["ai.allotment", "ai.create", "ai.credits", "ai.hostMember", "ai.import.productCopy", "ai.import.start", "ai.job", "ai.jobs", "ai.member", "ai.orgsSpendColumn", "ai.request", "ai.requests", "ai.signals", "ai.staffOrg", "ai.staffRequests", "ai.staffUser", "ai.usageAssistColumn", "ai.usageCreditsColumn", "ai.usageOverageColumn"], "widgets": ["ai.assist-panel", "ai.create-component", "ai.create-form", "ai.create-layout", "ai.create-page", "ai.create-template", "ai.crm-record", "ai.insight-ask", "ai.needs-you", "ai.org-insight-ask", "ai.seo-audit", "ai.seo-start", "ai.site-memory"], "quickActions": ["ai.open"], "deepLinks": ["ai.job.link", "ai.jobs.link", "ai.signals.link"]],
       register: AglynAiPlugin.registerAINative
     ),
     NativePluginManifestEntry(
@@ -86,6 +87,11 @@ public enum NativePluginManifest {
       id: "delivery-apps",
       contributes: ["screens": ["delivery-apps.match", "delivery-apps.service", "delivery-apps.store"], "widgets": ["delivery-apps.pos-orders"]],
       register: AglynDeliveryAppsPlugin.registerDeliveryAppsNative
+    ),
+    NativePluginManifestEntry(
+      id: "domains",
+      contributes: ["screens": ["domains.domain", "domains.list"], "deepLinks": ["domains.domain.link", "domains.list.link"]],
+      register: AglynDomainsPlugin.registerDomainsNative
     ),
     NativePluginManifestEntry(
       id: "email",
@@ -139,7 +145,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "marketing",
-      contributes: ["screens": ["marketing.campaigns", "marketing.conversions", "marketing.experiments", "marketing.overlays", "marketing.overview"], "widgets": ["marketing.last-campaign"], "quickActions": ["marketing.open"], "deepLinks": ["marketing.campaign-page", "marketing.campaigns-page", "marketing.conversions-page", "marketing.experiments-page", "marketing.inbox-campaigns-page", "marketing.overlays-page", "marketing.overview-page", "marketing.page"]],
+      contributes: ["screens": ["marketing.campaigns", "marketing.conversions", "marketing.experiments", "marketing.overlays", "marketing.overview", "marketing.staffOrgEmail", "marketing.staffOrgEmailSend"], "widgets": ["marketing.last-campaign"], "quickActions": ["marketing.open"], "deepLinks": ["marketing.campaign-page", "marketing.campaigns-page", "marketing.conversions-page", "marketing.experiments-page", "marketing.inbox-campaigns-page", "marketing.overlays-page", "marketing.overview-page", "marketing.page"]],
       register: AglynMarketingPlugin.registerMarketingNative
     ),
     NativePluginManifestEntry(
@@ -209,7 +215,7 @@ public enum NativePluginManifest {
     ),
     NativePluginManifestEntry(
       id: "workflows",
-      contributes: ["screens": ["workflows.action", "workflows.automation", "workflows.org-automation", "workflows.runs", "workflows.webhook", "workflows.workflow"], "quickActions": ["workflows.open"], "deepLinks": ["workflows.page"]],
+      contributes: ["screens": ["workflows.action", "workflows.automation", "workflows.org-automation", "workflows.runs", "workflows.staffAutomation", "workflows.staffOrgAutomations", "workflows.staffSiteAutomations", "workflows.webhook", "workflows.workflow"], "quickActions": ["workflows.open"], "deepLinks": ["workflows.page"]],
       register: AglynWorkflowsPlugin.registerWorkflowsNative
     ),
     NativePluginManifestEntry(

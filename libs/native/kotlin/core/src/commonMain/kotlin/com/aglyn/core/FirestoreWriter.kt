@@ -40,6 +40,18 @@ fun newDocumentId(): String = buildString { repeat(20) { append(ID_ALPHABET[kotl
  */
 data object FirestoreDelete
 
+/**
+ * A merge value that changes an array field by its elements alone, without reading the list first: the web SDK's
+ * `arrayUnion` ([union], adds each element the array lacks) and `arrayRemove` (removes every equal element). Two devices
+ * changing different elements never overwrite each other's list.
+ */
+data class FirestoreArrayChange(val union: Boolean, val elements: List<Any?>) {
+  companion object {
+    fun union(vararg elements: Any?) = FirestoreArrayChange(true, elements.toList())
+    fun remove(elements: List<Any?>) = FirestoreArrayChange(false, elements)
+  }
+}
+
 /** Now, as a Firestore timestamp a merge writes. */
 fun firestoreNow(): FirestoreTimestamp = nowMillis().let { FirestoreTimestamp(it.floorDiv(1000L), (it.mod(1000L) * 1_000_000).toInt()) }
 

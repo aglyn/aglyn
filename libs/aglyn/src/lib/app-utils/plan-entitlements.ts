@@ -6383,8 +6383,10 @@ export function bandwidthCeilingMonthKey(now: Date = new Date()): string {
  */
 export function bandwidthCeilingNotice(): { title: string; body: string } {
   return {
-    title: 'This site is temporarily unavailable',
-    body: 'It has served more traffic this month than its plan includes. It will be back at the start of next month, or sooner if the owner upgrades.',
+    // NEUTRAL (AGL-4232), the pause's own words: nothing about traffic, plans
+    // or upgrades — those are the owner's, in the console.
+    title: 'Temporarily unavailable',
+    body: 'This site is temporarily unavailable.',
   }
 }
 

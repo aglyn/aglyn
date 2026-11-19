@@ -15,6 +15,7 @@ import com.aglyn.plugins.couriers.registerCouriersNative
 import com.aglyn.plugins.crm.registerCrmNative
 import com.aglyn.plugins.data.registerDataNative
 import com.aglyn.plugins.deliveryapps.registerDeliveryAppsNative
+import com.aglyn.plugins.domains.registerDomainsNative
 import com.aglyn.plugins.email.registerEmailNative
 import com.aglyn.plugins.eventscalendar.registerEventsCalendarNative
 import com.aglyn.plugins.forms.registerFormsNative
@@ -56,7 +57,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "ai",
-            contributes = mapOf("screens" to listOf("ai.allotment", "ai.create", "ai.credits", "ai.hostMember", "ai.import.productCopy", "ai.import.start", "ai.job", "ai.jobs", "ai.member", "ai.orgsSpendColumn", "ai.request", "ai.requests", "ai.signals", "ai.staffOrg", "ai.staffRequests", "ai.staffUser"), "widgets" to listOf("ai.assist-panel", "ai.create-component", "ai.create-form", "ai.create-layout", "ai.create-page", "ai.create-template", "ai.crm-record", "ai.insight-ask", "ai.needs-you", "ai.org-insight-ask", "ai.seo-audit", "ai.seo-start", "ai.site-memory"), "quickActions" to listOf("ai.open"), "deepLinks" to listOf("ai.job.link", "ai.jobs.link", "ai.signals.link")),
+            contributes = mapOf("screens" to listOf("ai.allotment", "ai.create", "ai.credits", "ai.hostMember", "ai.import.productCopy", "ai.import.start", "ai.job", "ai.jobs", "ai.member", "ai.orgsSpendColumn", "ai.request", "ai.requests", "ai.signals", "ai.staffOrg", "ai.staffRequests", "ai.staffUser", "ai.usageAssistColumn", "ai.usageCreditsColumn", "ai.usageOverageColumn"), "widgets" to listOf("ai.assist-panel", "ai.create-component", "ai.create-form", "ai.create-layout", "ai.create-page", "ai.create-template", "ai.crm-record", "ai.insight-ask", "ai.needs-you", "ai.org-insight-ask", "ai.seo-audit", "ai.seo-start", "ai.site-memory"), "quickActions" to listOf("ai.open"), "deepLinks" to listOf("ai.job.link", "ai.jobs.link", "ai.signals.link")),
             register = ::registerAINative,
         ),
         NativePluginManifestEntry(
@@ -88,6 +89,11 @@ object NativePluginManifest {
             id = "delivery-apps",
             contributes = mapOf("screens" to listOf("delivery-apps.match", "delivery-apps.service", "delivery-apps.store"), "widgets" to listOf("delivery-apps.pos-orders")),
             register = ::registerDeliveryAppsNative,
+        ),
+        NativePluginManifestEntry(
+            id = "domains",
+            contributes = mapOf("screens" to listOf("domains.domain", "domains.list"), "deepLinks" to listOf("domains.domain.link", "domains.list.link")),
+            register = ::registerDomainsNative,
         ),
         NativePluginManifestEntry(
             id = "email",
@@ -141,7 +147,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "marketing",
-            contributes = mapOf("screens" to listOf("marketing.campaigns", "marketing.conversions", "marketing.experiments", "marketing.overlays", "marketing.overview"), "widgets" to listOf("marketing.last-campaign"), "quickActions" to listOf("marketing.open"), "deepLinks" to listOf("marketing.campaign-page", "marketing.campaigns-page", "marketing.conversions-page", "marketing.experiments-page", "marketing.inbox-campaigns-page", "marketing.overlays-page", "marketing.overview-page", "marketing.page")),
+            contributes = mapOf("screens" to listOf("marketing.campaigns", "marketing.conversions", "marketing.experiments", "marketing.overlays", "marketing.overview", "marketing.staffOrgEmail", "marketing.staffOrgEmailSend"), "widgets" to listOf("marketing.last-campaign"), "quickActions" to listOf("marketing.open"), "deepLinks" to listOf("marketing.campaign-page", "marketing.campaigns-page", "marketing.conversions-page", "marketing.experiments-page", "marketing.inbox-campaigns-page", "marketing.overlays-page", "marketing.overview-page", "marketing.page")),
             register = ::registerMarketingNative,
         ),
         NativePluginManifestEntry(
@@ -211,7 +217,7 @@ object NativePluginManifest {
         ),
         NativePluginManifestEntry(
             id = "workflows",
-            contributes = mapOf("screens" to listOf("workflows.action", "workflows.automation", "workflows.org-automation", "workflows.runs", "workflows.webhook", "workflows.workflow"), "quickActions" to listOf("workflows.open"), "deepLinks" to listOf("workflows.page")),
+            contributes = mapOf("screens" to listOf("workflows.action", "workflows.automation", "workflows.org-automation", "workflows.runs", "workflows.staffAutomation", "workflows.staffOrgAutomations", "workflows.staffSiteAutomations", "workflows.webhook", "workflows.workflow"), "quickActions" to listOf("workflows.open"), "deepLinks" to listOf("workflows.page")),
             register = ::registerWorkflowsNative,
         ),
         NativePluginManifestEntry(

@@ -1,6 +1,8 @@
 package com.aglyn.plugins.marketing
 
 import com.aglyn.pluginhost.NativePluginRegistrar
+import com.aglyn.screens.ScreenSpec
+import com.aglyn.screens.SpecScreens
 
 /**
  * The Marketing plugin's native registration: the same ids its
@@ -10,6 +12,8 @@ import com.aglyn.pluginhost.NativePluginRegistrar
  * Marketing links (and the Inbox's Campaigns section) open the same screens.
  */
 fun registerMarketingNative(r: NativePluginRegistrar) {
+  // The staff screens (spec): the staff pages' read-only Email campaigns cards.
+  SpecScreens.register(MarketingScreenJson.files.flatMap { ScreenSpec.parseFile(it) }, r)
   for (section in MarketingSection.entries) {
     r.screen(section.screen, title = if (section == MarketingSection.OVERVIEW) "Marketing" else section.label, requiresSite = false, icon = section.icon) { context, params ->
       val campaign = params["campaign"]

@@ -145,7 +145,7 @@ const pct = (v: number): string => `${v}%`
 const band = (included: number, max: number): string => {
   if (included === UNLIMITED) return 'Unlimited'
   if (included === 0 && max === 0) return NO
-  if (max === UNLIMITED) return `${num(included)} · unlimited`
+  if (max === UNLIMITED) return `${num(included)} · no max`
   if (included === max) return included.toLocaleString('en-US')
   return `${included.toLocaleString('en-US')} · max ${max.toLocaleString('en-US')}`
 }
@@ -316,13 +316,9 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
       { label: 'Workflow runs / mo', value: talk((p) => num(E(p).workflowRunsPerMonth)) },
       { label: 'Actions builder', value: (p) => bool(F(p).actions) },
       { label: 'Appointment bookings', value: (p) => bool(F(p).bookings) },
-      /*
-       * `formsPerHost` is a ladder since AGL-3597 (Free 1 to 500), and the
-       * live page carries it as "Saved forms per site" directly above this
-       * row, inserted by `tools/scripts/publish-pricing-saved-forms-row.mjs`.
-       * It is not emitted here yet: the reconciler refuses a row the Figma
-       * frame does not have, so it joins this spec when the frame does.
-       */
+      // `formsPerHost` is a ladder since AGL-3597 (Free 1 to 500). The live page
+      // and the frames carry it directly above form submissions.
+      { label: 'Saved forms per site', value: talk((p) => num(E(p).formsPerHost)) },
       {
         label: 'Form submissions / mo, per site',
         value: talk((p) => num(E(p).formSubmissionsPerMonth)),
@@ -528,6 +524,12 @@ interface UsageRow {
    * rates came to be billed against a page that stated neither.
    */
   rate: RateKey
+  /**
+   * A hard stop on how far the rate can be bought, where the plan has one
+   * (Starter's CRM records stop at Pro's included band, AGL-4227). Printed
+   * beside the rate, so the cell says both what it costs and where it ends.
+   */
+  ceiling?: (p: Plan) => number
 }
 
 const USAGE_ROWS: UsageRow[] = [
@@ -558,6 +560,7 @@ const USAGE_ROWS: UsageRow[] = [
   {
     label: 'CRM records, per 1,000 over the included band',
     rate: 'extraContactsUsdPer1k',
+    ceiling: (p) => E(p).maxCrmRecords,
   },
   /*
    * EMAIL SENDS AND AI CREDITS — billed everywhere, published nowhere until
@@ -627,7 +630,11 @@ const USAGE_ROWS: UsageRow[] = [
 ]
 
 /** The rate as the page and every breakpoint print it. */
-const rowValue = (r: UsageRow, p: Plan): string => money(PLAN_PRICING[p][r.rate])
+const rowValue = (r: UsageRow, p: Plan): string => {
+  const rate = money(PLAN_PRICING[p][r.rate])
+  const max = r.ceiling?.(p)
+  return max && max !== UNLIMITED && rate !== NO ? `${rate}, up to ${num(max)}` : rate
+}
 
 /**
  * Rates `PLAN_PRICING` carries that NO row above publishes.
@@ -1122,21 +1129,43 @@ if (!frameTable) {
  * stale" has to be an argument someone made once, not a shrug the reconciler
  * repeats forever. An entry here that stops diverging fails too.
  */
-const EXPECTED_MISSING: Record<string, string> = {
-  'API monthly ceiling':
-    'AGL-4226: Starter\'s 20,000-request monthly stop, enforced by `checkApiRequestQuota`. The page and the frame gain the row with the Starter API launch, which publishes after billing is live (a band going up publishes after billing)',
-  'API requests per minute, whole workspace':
-    'AGL-4226: the workspace rate limit, enforced by `authenticateApiV1`. Published with the Starter API launch, as above',
-  'Emails included / mo':
-    'AGL-4227: every email a plan holds its sites to in a month (Free\'s 300 hard cap, Starter\'s billed 1,000, Pro\'s 2,500). The page session publishes the row; Free\'s cap is a band going down, so the page goes first',
-}
+const EXPECTED_MISSING: Record<string, string> = {}
 
 for (const [label, [why]] of injected('--declare-missing-row', 2)) {
   EXPECTED_MISSING[label] = why
 }
 
 /** Rows the FRAME carries that we deliberately do not emit, each with why. */
-const EXPECTED_EXTRA: Record<string, string> = {}
+const EXPECTED_EXTRA: Record<string, string> = {
+  'Checkout on your own pages':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'Wallets & pay later at checkout':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'Pickup & local delivery':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'Returns & partial shipments':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'Rewards, referrals & store credit':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'Sales tax via Avalara or TaxJar':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'Product feeds for shopping channels':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'POS split payments & tips':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'POS customer display':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'POS self-service kiosk':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'POS offline cash sales':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'POS shifts & cash drawer':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'POS printers & barcode scanners':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+  'Mailchimp, Klaviyo & Omnisend sync':
+    'on the live /pricing compare table since 2026-11-04 and in every frame since 2026-11-16; written on the page, not generated from a single catalog flag, so the frame carries it and this spec does not yet',
+}
 
 for (const [label, [why]] of injected('--declare-extra-row', 2)) {
   EXPECTED_EXTRA[label] = why
@@ -1170,12 +1199,7 @@ for (const [label, [why]] of injected('--declare-extra-row', 2)) {
  * matching and is reported as resolved, so it cannot outlive its reason. An
  * exemption that outlives its reason is just an untested cell.
  */
-const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {
-  'API access · Starter': {
-    frame: NO,
-    why: 'AGL-4226 opens the API on Starter (500 requests a month). A band going up publishes once billing for it is live, so the page and the frame move after the release, with the owner\'s approval of the rows',
-  },
-}
+const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {}
 
 /*
  * `--declare-stale-cell='<row> · <plan>|<frame value>'`, repeatable.
@@ -1714,16 +1738,7 @@ tierStrip.finish()
  * bound achieves nothing. The pair is only ever right together, and this is
  * what reads the half of it that lives on the page.
  *=========================================*/
-const USAGE_STALE: Record<string, Divergence> = {
-  'Extra site, per month · Starter': {
-    frame: '$20',
-    why: 'AGL-4227: Starter\'s extra site rises to $25 so three Starter sites cost more than Pro on both intervals. A price going up publishes on the page before billing moves; the console keeps charging and quoting $20 until the $25 Stripe price is configured',
-  },
-  'API requests, per 1,000 over limit · Starter': {
-    frame: NO,
-    why: 'AGL-4226: Starter is billed API overage from its release; the page and the frame state the rate when the Starter API launch publishes, after billing is live',
-  },
-}
+const USAGE_STALE: Record<string, Divergence> = {}
 
 /**
  * The rate the product BILLS and the page has never stated.
@@ -1744,9 +1759,13 @@ const USAGE_STALE: Record<string, Divergence> = {
  * comparison against the page, and the distinction is the whole reason this
  * map states its reason instead of listing a label.
  */
-const USAGE_EXPECTED_ABSENT: Record<string, string> = {
-  'Email sends, per 1,000 over the included band':
-    'the page states an email ALLOWANCE ("Campaign emails / mo" in the compare grid) and no overage rate, while `priceEmailSendOverage` bills `extraEmailSendsUsdPer1k` on every paid tier — and the cap refuses campaigns only, so transactional mail carries an org past its band with nothing able to stop it. Resolves when `/pricing` carries the row',
+const USAGE_EXPECTED_ABSENT: Record<string, string> = {}
+
+// `--declare-absent-rate='<row>|<why>'`, repeatable: the suite's own
+// declaration, so the both-directions check stays covered now that no real
+// rate is missing from the page. Absent the flag this adds nothing.
+for (const [label, [why]] of injected('--declare-absent-rate', 2)) {
+  USAGE_EXPECTED_ABSENT[label] = why
 }
 
 const addOnRates = reconciler(
