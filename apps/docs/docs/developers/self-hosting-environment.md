@@ -1563,6 +1563,13 @@ Message counting happens in a transaction **before** the model is called, so a
 refused request spends nothing. A workspace at the ceiling is refused rather than
 quietly downgraded to a cheaper model.
 
+An assistant's plugin directory may ask you to prove you control the console's
+domain before it lists your console's MCP server. OpenAI's does it with a file:
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `OPENAI_APPS_CHALLENGE` | Optional *(console)* | Runtime | The challenge token OpenAI's plugin directory shows when you verify a domain: 8 to 512 characters from `A-Z a-z 0-9 . _ ~ -`. The console serves it as plain text, with nothing else in the body, at `/.well-known/openai-apps-challenge` on its own host. Unset, empty or any other shape, that address answers 404. Read at request time, so no rebuild is needed. The token is not a secret, but keep it out of source so each install proves its own domain. If a firewall or bot protection sits in front of the console, let that address through unchallenged: the directory's fetcher cannot solve a challenge. |
+
 ---
 
 ## Video delivery {#video-delivery}

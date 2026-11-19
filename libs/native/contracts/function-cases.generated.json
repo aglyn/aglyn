@@ -4540,6 +4540,545 @@
         }
       ]
     },
+    "campaignRollup": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
+      "cases": [
+        {
+          "args": [
+            []
+          ],
+          "result": {
+            "addressed": {
+              "recorded": 0,
+              "sends": 0,
+              "value": null
+            },
+            "bounced": {
+              "recorded": 0,
+              "sends": 0,
+              "value": null
+            },
+            "clickRate": null,
+            "clicks": {
+              "recorded": 0,
+              "sends": 0,
+              "value": null
+            },
+            "complained": {
+              "recorded": 0,
+              "sends": 0,
+              "value": null
+            },
+            "delivered": {
+              "recorded": 0,
+              "sends": 0,
+              "value": null
+            },
+            "drafts": 0,
+            "lastSentAtMs": null,
+            "openRate": null,
+            "opens": {
+              "recorded": 0,
+              "sends": 0,
+              "value": null
+            },
+            "scheduled": 0,
+            "sending": 0,
+            "sends": 0,
+            "sent": {
+              "recorded": 0,
+              "sends": 0,
+              "value": null
+            },
+            "uniqueClicks": {
+              "recorded": 0,
+              "sends": 0,
+              "value": null
+            },
+            "uniqueOpens": {
+              "recorded": 0,
+              "sends": 0,
+              "value": null
+            },
+            "unsubscribeRate": null,
+            "unsubscribes": {
+              "recorded": 0,
+              "sends": 0,
+              "value": null
+            }
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "status": "draft"
+              }
+            ]
+          ],
+          "result": {
+            "addressed": {
+              "recorded": 0,
+              "sends": 0,
+              "value": null
+            },
+            "bounced": {
+              "recorded": 0,
+              "sends": 0,
+              "value": null
+            },
+            "clickRate": null,
+            "clicks": {
+              "recorded": 0,
+              "sends": 0,
+              "value": null
+            },
+            "complained": {
+              "recorded": 0,
+              "sends": 0,
+              "value": null
+            },
+            "delivered": {
+              "recorded": 0,
+              "sends": 0,
+              "value": null
+            },
+            "drafts": 1,
+            "lastSentAtMs": null,
+            "openRate": null,
+            "opens": {
+              "recorded": 0,
+              "sends": 0,
+              "value": null
+            },
+            "scheduled": 0,
+            "sending": 0,
+            "sends": 0,
+            "sent": {
+              "recorded": 0,
+              "sends": 0,
+              "value": null
+            },
+            "uniqueClicks": {
+              "recorded": 0,
+              "sends": 0,
+              "value": null
+            },
+            "uniqueOpens": {
+              "recorded": 0,
+              "sends": 0,
+              "value": null
+            },
+            "unsubscribeRate": null,
+            "unsubscribes": {
+              "recorded": 0,
+              "sends": 0,
+              "value": null
+            }
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "status": "sent",
+                "stats": {
+                  "recipients": 10,
+                  "sent": 10,
+                  "delivered": 9,
+                  "opens": 7,
+                  "uniqueOpens": 5,
+                  "clicks": 3,
+                  "uniqueClicks": 2,
+                  "unsubscribes": 1,
+                  "bounced": 1
+                }
+              }
+            ]
+          ],
+          "result": {
+            "addressed": {
+              "recorded": 1,
+              "sends": 1,
+              "value": 10
+            },
+            "bounced": {
+              "recorded": 1,
+              "sends": 1,
+              "value": 1
+            },
+            "clickRate": {
+              "denominator": 9,
+              "denominatorLabel": "delivered",
+              "numerator": 2,
+              "value": 0.2222222222222222
+            },
+            "clicks": {
+              "recorded": 1,
+              "sends": 1,
+              "value": 3
+            },
+            "complained": {
+              "recorded": 0,
+              "sends": 1,
+              "value": null
+            },
+            "delivered": {
+              "recorded": 1,
+              "sends": 1,
+              "value": 9
+            },
+            "drafts": 0,
+            "lastSentAtMs": null,
+            "openRate": {
+              "denominator": 9,
+              "denominatorLabel": "delivered",
+              "numerator": 5,
+              "value": 0.5555555555555556
+            },
+            "opens": {
+              "recorded": 1,
+              "sends": 1,
+              "value": 7
+            },
+            "scheduled": 0,
+            "sending": 0,
+            "sends": 1,
+            "sent": {
+              "recorded": 1,
+              "sends": 1,
+              "value": 10
+            },
+            "uniqueClicks": {
+              "recorded": 1,
+              "sends": 1,
+              "value": 2
+            },
+            "uniqueOpens": {
+              "recorded": 1,
+              "sends": 1,
+              "value": 5
+            },
+            "unsubscribeRate": {
+              "denominator": 9,
+              "denominatorLabel": "delivered",
+              "numerator": 1,
+              "value": 0.1111111111111111
+            },
+            "unsubscribes": {
+              "recorded": 1,
+              "sends": 1,
+              "value": 1
+            }
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "status": "sent",
+                "stats": {
+                  "recipients": 10,
+                  "sent": 10,
+                  "delivered": 8,
+                  "uniqueOpens": 4,
+                  "uniqueClicks": 1,
+                  "unsubscribes": 0,
+                  "opens": 4,
+                  "clicks": 1
+                }
+              },
+              {
+                "status": "sent",
+                "stats": {
+                  "recipients": 5,
+                  "sent": 5,
+                  "opens": 2
+                }
+              },
+              {
+                "status": "scheduled",
+                "stats": {
+                  "sent": 0
+                }
+              },
+              {
+                "status": "draft"
+              }
+            ]
+          ],
+          "result": {
+            "addressed": {
+              "recorded": 2,
+              "sends": 2,
+              "value": 15
+            },
+            "bounced": {
+              "recorded": 0,
+              "sends": 2,
+              "value": null
+            },
+            "clickRate": {
+              "denominator": 8,
+              "denominatorLabel": "delivered",
+              "numerator": 1,
+              "value": 0.125
+            },
+            "clicks": {
+              "recorded": 1,
+              "sends": 2,
+              "value": 1
+            },
+            "complained": {
+              "recorded": 0,
+              "sends": 2,
+              "value": null
+            },
+            "delivered": {
+              "recorded": 1,
+              "sends": 2,
+              "value": 8
+            },
+            "drafts": 1,
+            "lastSentAtMs": null,
+            "openRate": {
+              "denominator": 8,
+              "denominatorLabel": "delivered",
+              "numerator": 4,
+              "value": 0.5
+            },
+            "opens": {
+              "recorded": 2,
+              "sends": 2,
+              "value": 6
+            },
+            "scheduled": 1,
+            "sending": 0,
+            "sends": 2,
+            "sent": {
+              "recorded": 2,
+              "sends": 2,
+              "value": 15
+            },
+            "uniqueClicks": {
+              "recorded": 1,
+              "sends": 2,
+              "value": 1
+            },
+            "uniqueOpens": {
+              "recorded": 1,
+              "sends": 2,
+              "value": 4
+            },
+            "unsubscribeRate": {
+              "denominator": 8,
+              "denominatorLabel": "delivered",
+              "numerator": 0,
+              "value": 0
+            },
+            "unsubscribes": {
+              "recorded": 1,
+              "sends": 2,
+              "value": 0
+            }
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "status": "sending",
+                "stats": {
+                  "sent": 40,
+                  "audienceSize": 100,
+                  "delivered": 38,
+                  "uniqueOpens": 10
+                },
+                "resume": {
+                  "remaining": 60,
+                  "batch": 1,
+                  "nextAtMs": 1700000000000
+                }
+              },
+              {
+                "status": "canceled",
+                "stats": {
+                  "sent": 0
+                }
+              }
+            ]
+          ],
+          "result": {
+            "addressed": {
+              "recorded": 0,
+              "sends": 2,
+              "value": null
+            },
+            "bounced": {
+              "recorded": 0,
+              "sends": 2,
+              "value": null
+            },
+            "clickRate": {
+              "denominator": 38,
+              "denominatorLabel": "delivered",
+              "numerator": 0,
+              "value": 0
+            },
+            "clicks": {
+              "recorded": 0,
+              "sends": 2,
+              "value": null
+            },
+            "complained": {
+              "recorded": 0,
+              "sends": 2,
+              "value": null
+            },
+            "delivered": {
+              "recorded": 1,
+              "sends": 2,
+              "value": 38
+            },
+            "drafts": 0,
+            "lastSentAtMs": null,
+            "openRate": {
+              "denominator": 38,
+              "denominatorLabel": "delivered",
+              "numerator": 10,
+              "value": 0.2631578947368421
+            },
+            "opens": {
+              "recorded": 0,
+              "sends": 2,
+              "value": null
+            },
+            "scheduled": 0,
+            "sending": 1,
+            "sends": 1,
+            "sent": {
+              "recorded": 2,
+              "sends": 2,
+              "value": 40
+            },
+            "uniqueClicks": {
+              "recorded": 0,
+              "sends": 2,
+              "value": null
+            },
+            "uniqueOpens": {
+              "recorded": 1,
+              "sends": 2,
+              "value": 10
+            },
+            "unsubscribeRate": {
+              "denominator": 38,
+              "denominatorLabel": "delivered",
+              "numerator": 0,
+              "value": 0
+            },
+            "unsubscribes": {
+              "recorded": 0,
+              "sends": 2,
+              "value": null
+            }
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "status": "canceled",
+                "stats": {
+                  "sent": 3,
+                  "delivered": 3,
+                  "uniqueOpens": 0,
+                  "unsubscribes": 0
+                }
+              },
+              {
+                "status": "failed"
+              }
+            ]
+          ],
+          "result": {
+            "addressed": {
+              "recorded": 0,
+              "sends": 2,
+              "value": null
+            },
+            "bounced": {
+              "recorded": 0,
+              "sends": 2,
+              "value": null
+            },
+            "clickRate": {
+              "denominator": 3,
+              "denominatorLabel": "delivered",
+              "numerator": 0,
+              "value": 0
+            },
+            "clicks": {
+              "recorded": 0,
+              "sends": 2,
+              "value": null
+            },
+            "complained": {
+              "recorded": 0,
+              "sends": 2,
+              "value": null
+            },
+            "delivered": {
+              "recorded": 1,
+              "sends": 2,
+              "value": 3
+            },
+            "drafts": 0,
+            "lastSentAtMs": null,
+            "openRate": {
+              "denominator": 3,
+              "denominatorLabel": "delivered",
+              "numerator": 0,
+              "value": 0
+            },
+            "opens": {
+              "recorded": 0,
+              "sends": 2,
+              "value": null
+            },
+            "scheduled": 0,
+            "sending": 0,
+            "sends": 1,
+            "sent": {
+              "recorded": 1,
+              "sends": 2,
+              "value": 3
+            },
+            "uniqueClicks": {
+              "recorded": 0,
+              "sends": 2,
+              "value": null
+            },
+            "uniqueOpens": {
+              "recorded": 1,
+              "sends": 2,
+              "value": 0
+            },
+            "unsubscribeRate": {
+              "denominator": 3,
+              "denominatorLabel": "delivered",
+              "numerator": 0,
+              "value": 0
+            },
+            "unsubscribes": {
+              "recorded": 1,
+              "sends": 2,
+              "value": 0
+            }
+          }
+        }
+      ]
+    },
     "campaignSendDisplay": {
       "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
       "cases": [
@@ -8246,6 +8785,59 @@
             }
           ],
           "result": "host"
+        }
+      ]
+    },
+    "crmEmailTemplateIsListed": {
+      "module": "libs/aglyn/src/lib/app-utils/crm-email-templates.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "visibility": "shared"
+            },
+            null
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "visibility": "personal",
+              "ownerUid": "u1"
+            },
+            "u1"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "visibility": "personal",
+              "ownerUid": "u1"
+            },
+            "u2"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibility": "personal"
+            },
+            null
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "visibility": "personal",
+              "ownerUid": "u1"
+            },
+            null
+          ],
+          "result": false
         }
       ]
     },
@@ -26097,6 +26689,123 @@
         }
       ]
     },
+    "normalizeCrmEmailTemplate": {
+      "module": "libs/aglyn/src/lib/app-utils/crm-email-templates.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": {
+            "body": "",
+            "createdAtMs": 0,
+            "createdByUid": "",
+            "hostId": null,
+            "kind": "template",
+            "name": "",
+            "subject": "",
+            "updatedAtMs": 0,
+            "visibility": "shared",
+            "visibleTo": []
+          }
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": {
+            "body": "",
+            "createdAtMs": 0,
+            "createdByUid": "",
+            "hostId": null,
+            "kind": "template",
+            "name": "",
+            "subject": "",
+            "updatedAtMs": 0,
+            "visibility": "shared",
+            "visibleTo": []
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "  Intro  ",
+              "subject": "Hi {{contact.firstName}}",
+              "body": "Hello",
+              "kind": "snippet",
+              "visibility": "personal",
+              "ownerUid": "u1",
+              "createdByUid": "u1",
+              "createdAtMs": 5,
+              "updatedAtMs": 6,
+              "hostId": "h1",
+              "visibleTo": [
+                "host:h1"
+              ]
+            }
+          ],
+          "result": {
+            "body": "Hello",
+            "createdAtMs": 5,
+            "createdByUid": "u1",
+            "hostId": "h1",
+            "kind": "snippet",
+            "name": "Intro",
+            "ownerUid": "u1",
+            "subject": "Hi {{contact.firstName}}",
+            "updatedAtMs": 6,
+            "visibility": "personal",
+            "visibleTo": [
+              "host:h1"
+            ]
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "Shared one",
+              "kind": "bogus",
+              "visibility": "bogus",
+              "ownerUid": "u2",
+              "hostId": null
+            }
+          ],
+          "result": {
+            "body": "",
+            "createdAtMs": 0,
+            "createdByUid": "",
+            "hostId": null,
+            "kind": "template",
+            "name": "Shared one",
+            "subject": "",
+            "updatedAtMs": 0,
+            "visibility": "shared",
+            "visibleTo": []
+          }
+        },
+        {
+          "args": [
+            {
+              "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "visibility": "shared",
+              "ownerUid": "u3"
+            }
+          ],
+          "result": {
+            "body": "",
+            "createdAtMs": 0,
+            "createdByUid": "",
+            "hostId": null,
+            "kind": "template",
+            "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "subject": "",
+            "updatedAtMs": 0,
+            "visibility": "shared",
+            "visibleTo": []
+          }
+        }
+      ]
+    },
     "normalizeFunnelDefinition": {
       "module": "libs/plugins/funnels/src/lib/model/funnel-definition.ts",
       "cases": [
@@ -33401,6 +34110,228 @@
               ]
             }
           ]
+        }
+      ]
+    },
+    "pinHost": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [],
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            }
+          ],
+          "result": {
+            "outcome": "pinned",
+            "pinnedHosts": [
+              {
+                "hostId": "h1",
+                "orgId": "o1"
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            }
+          ],
+          "result": {
+            "outcome": "alreadyPinned",
+            "pinnedHosts": [
+              {
+                "hostId": "h1",
+                "orgId": "o1"
+              },
+              {
+                "hostId": "h2",
+                "orgId": "o2"
+              },
+              {
+                "hostId": "h3",
+                "orgId": "o1"
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            {
+              "orgId": "o2",
+              "hostId": "h1"
+            }
+          ],
+          "result": {
+            "outcome": "pinned",
+            "pinnedHosts": [
+              {
+                "hostId": "h2",
+                "orgId": "o2"
+              },
+              {
+                "hostId": "h3",
+                "orgId": "o1"
+              },
+              {
+                "hostId": "h1",
+                "orgId": "o2"
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            {
+              "orgId": "",
+              "hostId": "h9"
+            }
+          ],
+          "result": {
+            "outcome": "alreadyPinned",
+            "pinnedHosts": [
+              {
+                "hostId": "h1",
+                "orgId": "o1"
+              },
+              {
+                "hostId": "h2",
+                "orgId": "o2"
+              },
+              {
+                "hostId": "h3",
+                "orgId": "o1"
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            {
+              "orgId": "o1",
+              "hostId": ""
+            }
+          ],
+          "result": {
+            "outcome": "alreadyPinned",
+            "pinnedHosts": [
+              {
+                "hostId": "h1",
+                "orgId": "o1"
+              },
+              {
+                "hostId": "h2",
+                "orgId": "o2"
+              },
+              {
+                "hostId": "h3",
+                "orgId": "o1"
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            {
+              "orgId": "o2",
+              "hostId": "h9"
+            }
+          ],
+          "result": {
+            "outcome": "pinned",
+            "pinnedHosts": [
+              {
+                "hostId": "h1",
+                "orgId": "o1"
+              },
+              {
+                "hostId": "h2",
+                "orgId": "o2"
+              },
+              {
+                "hostId": "h3",
+                "orgId": "o1"
+              },
+              {
+                "hostId": "h9",
+                "orgId": "o2"
+              }
+            ]
+          }
         }
       ]
     },
@@ -42602,6 +43533,87 @@
         }
       ]
     },
+    "readPinnedHosts": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "pinnedHosts": [
+                {
+                  "orgId": "o1",
+                  "hostId": "h1"
+                },
+                {
+                  "orgId": "o1",
+                  "hostId": "h1"
+                },
+                {
+                  "orgId": "o2",
+                  "hostId": "h2"
+                }
+              ]
+            }
+          ],
+          "result": [
+            {
+              "hostId": "h1",
+              "orgId": "o1"
+            },
+            {
+              "hostId": "h2",
+              "orgId": "o2"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "pinnedHosts": [
+                {
+                  "orgId": "",
+                  "hostId": "h"
+                },
+                7,
+                null,
+                {
+                  "orgId": "o",
+                  "hostId": ""
+                },
+                {
+                  "orgId": "o",
+                  "hostId": 5
+                },
+                {
+                  "orgId": "o",
+                  "hostId": "h3"
+                }
+              ]
+            }
+          ],
+          "result": [
+            {
+              "hostId": "h3",
+              "orgId": "o"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "pinnedHosts": "x"
+            }
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": []
+        }
+      ]
+    },
     "readPinnedOrgs": {
       "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
       "cases": [
@@ -45294,6 +46306,192 @@
               }
             ]
           }
+        }
+      ]
+    },
+    "replacePinnedHost": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            "h1",
+            {
+              "orgId": "o1",
+              "hostId": "h9"
+            }
+          ],
+          "result": [
+            {
+              "hostId": "h9",
+              "orgId": "o1"
+            },
+            {
+              "hostId": "h2",
+              "orgId": "o2"
+            },
+            {
+              "hostId": "h3",
+              "orgId": "o1"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            "h2",
+            {
+              "orgId": "o1",
+              "hostId": "h9"
+            }
+          ],
+          "result": [
+            {
+              "hostId": "h1",
+              "orgId": "o1"
+            },
+            {
+              "hostId": "h2",
+              "orgId": "o2"
+            },
+            {
+              "hostId": "h3",
+              "orgId": "o1"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            "h1",
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "result": [
+            {
+              "hostId": "h1",
+              "orgId": "o1"
+            },
+            {
+              "hostId": "h2",
+              "orgId": "o2"
+            },
+            {
+              "hostId": "h3",
+              "orgId": "o1"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            "h1",
+            {
+              "orgId": "o1",
+              "hostId": ""
+            }
+          ],
+          "result": [
+            {
+              "hostId": "h1",
+              "orgId": "o1"
+            },
+            {
+              "hostId": "h2",
+              "orgId": "o2"
+            },
+            {
+              "hostId": "h3",
+              "orgId": "o1"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            "h3",
+            {
+              "orgId": "o1",
+              "hostId": "h2"
+            }
+          ],
+          "result": [
+            {
+              "hostId": "h1",
+              "orgId": "o1"
+            },
+            {
+              "hostId": "h2",
+              "orgId": "o1"
+            }
+          ]
         }
       ]
     },
@@ -63039,6 +64237,22 @@
                   },
                   {
                     "console": {
+                      "id": "/domains",
+                      "surface": "orgPluginTab"
+                    },
+                    "docs": "/building-sites/custom-domains/manage-domains",
+                    "icon": {
+                      "android": "dns",
+                      "apple": "network"
+                    },
+                    "id": "domains",
+                    "label": "Domains",
+                    "order": 75,
+                    "pluginId": "domains",
+                    "screen": "domains.list"
+                  },
+                  {
+                    "console": {
                       "id": "/outreach",
                       "surface": "orgPluginTab"
                     },
@@ -79940,6 +81154,80 @@
         }
       ]
     },
+    "unpinHost": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            "h1"
+          ],
+          "result": [
+            {
+              "hostId": "h2",
+              "orgId": "o2"
+            },
+            {
+              "hostId": "h3",
+              "orgId": "o1"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            "nope"
+          ],
+          "result": [
+            {
+              "hostId": "h1",
+              "orgId": "o1"
+            },
+            {
+              "hostId": "h2",
+              "orgId": "o2"
+            },
+            {
+              "hostId": "h3",
+              "orgId": "o1"
+            }
+          ]
+        },
+        {
+          "args": [
+            [],
+            "h1"
+          ],
+          "result": []
+        }
+      ]
+    },
     "unpinOrg": {
       "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
       "cases": [
@@ -82904,6 +84192,61 @@
             "—"
           ],
           "result": "?"
+        }
+      ]
+    },
+    "workspacePinnedHosts": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            "o1"
+          ],
+          "result": [
+            "h1",
+            "h3"
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            "o3"
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            [],
+            "o1"
+          ],
+          "result": []
         }
       ]
     },

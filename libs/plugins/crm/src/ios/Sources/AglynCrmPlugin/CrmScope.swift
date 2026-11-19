@@ -69,6 +69,12 @@ private func readConsentGroups(_ org: [String: Any]?) -> [String: (name: String,
   return usable.filter { !$0.value.hostIDs.contains(where: contested.contains) }
 }
 
+/// A declared group by its id, nil for a site's own id or one the org does not declare.
+func consentGroupNamed(_ org: [String: Any]?, _ groupID: String) -> ConsentGroup? {
+  guard let group = readConsentGroups(org)[groupID], let first = group.hostIDs.first else { return nil }
+  return ConsentGroup(hostID: first, groupID: groupID, name: group.name, hostIDs: group.hostIDs, declared: true)
+}
+
 func consentGroupForHost(_ org: [String: Any]?, _ hostID: String) -> ConsentGroup {
   for (groupID, group) in readConsentGroups(org).sorted(by: { $0.key < $1.key }) where group.hostIDs.contains(hostID) {
     return ConsentGroup(hostID: hostID, groupID: groupID, name: group.name, hostIDs: group.hostIDs, declared: true)

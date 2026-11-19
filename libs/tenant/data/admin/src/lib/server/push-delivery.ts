@@ -256,6 +256,12 @@ export async function deliverNativePush(
   } catch (error) {
     console.error('push delivery failed', error)
   }
+  // Anything short of sent leaves a line (AGL-4215): a skipped transport or a failed send was otherwise silent.
+  if (result.failed || result.skipped) {
+    console.warn(
+      `push: ${payload.type ?? 'notification'} sent ${result.sent}, failed ${result.failed}, skipped ${result.skipped}, pruned ${result.pruned}`,
+    )
+  }
   return result
 }
 
