@@ -132,7 +132,12 @@ fun AiInsightTile(context: NativePluginContext, surface: AiInsightSurface) {
 
 /** The add-on's offer, on a plan without it: what asking does, and the way to add it for whoever manages billing. */
 @Composable
-internal fun AiInsightUpsellDialog(context: NativePluginContext, onClose: () -> Unit) {
+internal fun AiInsightUpsellDialog(
+  context: NativePluginContext,
+  /** Whether it offers the way to add it; false says the offer without a buy control (it waits for the store-build payment switch). */
+  canOfferAdd: Boolean = true,
+  onClose: () -> Unit,
+) {
   val copy = Contracts.aiInsightCardCopy
   val canManage = com.aglyn.pluginhost.rememberMemberPermissions(context).can("billing.manage")
   AlertDialog(
@@ -145,7 +150,7 @@ internal fun AiInsightUpsellDialog(context: NativePluginContext, onClose: () -> 
       }
     },
     confirmButton = {
-      if (canManage) {
+      if (canManage && canOfferAdd) {
         Button(onClick = { onClose(); context.navigate("core.billing.addons") }, modifier = Modifier.testTag("ai-insight-upsell-add")) {
           Text("Add ${Contracts.platformBrandName} AI")
         }
@@ -183,7 +188,8 @@ fun AiFunnelAskButton(context: NativePluginContext) {
     Text(AI_FUNNEL_ASK, Modifier.padding(start = space(1f)))
   }
   if (asking) AiInsightDialog(context, AiInsightSurface.ANALYTICS, startFrom = aiFunnelQuestion(name, days)) { asking = false }
-  if (upsell) AiInsightUpsellDialog(context) { upsell = false }
+  // The offer is said without its "Add" control: a buy control waits for the store-build payment switch.
+  if (upsell) AiInsightUpsellDialog(context, canOfferAdd = false) { upsell = false }
 }
 
 /** A table an insight job read, as `/api/ai/insights/{jobId}` returns it. */

@@ -148,13 +148,17 @@ struct AiFunnelAskButton: View {
     .task(id: "\(context.orgID ?? ""):\(context.hostID ?? "")") { await gate.start(context) }
     .onDisappear { gate.stop() }
     .sheet(isPresented: $asking) { AiInsightSheet(context: context, surface: .analytics, startFrom: question) }
-    .sheet(isPresented: $upsell) { AiInsightUpsellSheet(context: context) }
+    // The offer is said without its "Add" control: a buy control waits for the store-build payment switch.
+    .sheet(isPresented: $upsell) { AiInsightUpsellSheet(context: context, canOfferAdd: false) }
   }
 }
 
 /// The add-on's offer on a plan without it.
 struct AiInsightUpsellSheet: View {
   let context: NativePluginContext
+  /// Whether it offers the way to add it; false says the offer without a buy control (it waits for the store-build
+  /// payment switch).
+  var canOfferAdd = true
   @Environment(\.dismiss) private var dismiss
 
   private var canManageBilling: Bool { context.can("billing.manage") }
@@ -173,7 +177,7 @@ struct AiInsightUpsellSheet: View {
         ToolbarItem(placement: .cancellationAction) {
           Button(canManageBilling ? "Not now" : "Close") { dismiss() }
         }
-        if canManageBilling {
+        if canManageBilling && canOfferAdd {
           ToolbarItem(placement: .confirmationAction) {
             Button("Add \(ContractValues.shared.platformBrandName) AI") {
               dismiss()
