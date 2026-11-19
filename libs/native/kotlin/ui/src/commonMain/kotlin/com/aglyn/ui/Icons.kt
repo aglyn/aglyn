@@ -411,6 +411,7 @@ object AglynIcons {
     "archive" to Icons.Outlined.Archive,
     "lock" to Icons.Outlined.Lock,
     "privacy_tip" to Icons.Outlined.PrivacyTip,
+    "back_hand" to Icons.Outlined.BackHand,
     "receipt_long" to Icons.Outlined.ReceiptLong,
     "text_fields" to Icons.Outlined.TextFields,
     "lock_open" to Icons.Outlined.LockOpen,

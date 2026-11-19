@@ -288,6 +288,8 @@ internal fun SignedInShell(
   }
 
   val staffFirst = staffGroups.firstOrNull()?.rows?.firstOrNull()?.key
+  var privacyChoices by remember { mutableStateOf(false) }
+  if (privacyChoices) PrivacyChoicesDialog(services.prefs) { privacyChoices = false }
   val actions = remember(navigator, chrome, services, screenSession.claims.isStaff, wide, staffFirst) {
     ShellActions(
       openScreen = { screen, params ->
@@ -309,6 +311,7 @@ internal fun SignedInShell(
       editProfile = { chrome.closeMenus(); navigator.select(NavKeys.of("core.account.profile", emptyMap())) },
       notificationSettings = { chrome.settingsMode = null; navigator.select(ShellNavigator.SETTINGS); navigator.push(Route.NotificationSettings) },
       staffConsole = staffConsoleAction(screenSession.claims.isStaff) { openStaffConsole(chrome, navigator, wide, staffFirst) },
+      privacyChoices = { chrome.closeMenus(); privacyChoices = true },
     )
   }
 
