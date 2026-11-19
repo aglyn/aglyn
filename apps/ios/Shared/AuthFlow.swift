@@ -282,9 +282,9 @@ extension AppModel {
   }
 
   /// "Create an organization" from the empty workspace list, or "Create it now" for the name sign-up could not use.
-  func createWorkspace(named name: String) async -> String? {
+  func createWorkspace(named name: String, slug: String? = nil) async -> String? {
     guard let service = signUpService else { return "This build is not configured." }
-    let outcome = await service.createWorkspace(name: name)
+    let outcome = await service.createWorkspace(name: name, slug: slug)
     if outcome.slug != nil {
       workspace?.reload()
       firstRun = .idle
