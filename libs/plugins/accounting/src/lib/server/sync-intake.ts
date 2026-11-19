@@ -61,7 +61,7 @@ import {
 import {
   beforeStartDate,
   createSyncItems,
-  itemForPayout,
+  itemsForPayout,
   itemsForPaidOrder,
   itemsForRefund,
   saleItemId,
@@ -69,8 +69,19 @@ import {
   syncItemsCollection,
 } from './sync-store'
 
-/** The tax regime under which Aglyn, as marketplace facilitator, holds and remits the tax. */
+/**
+ * The tax regime under which Aglyn, as marketplace facilitator, holds and
+ * remits the tax, on a sale charged through the platform's Stripe account.
+ * On a sale charged on the seller's own account (`chargeModel: 'direct'`)
+ * Stripe Tax runs on that account and the tax is the seller's.
+ */
 export const MARKETPLACE_TAX_MODE = 'stripe-automatic'
+
+/** Whether a sale's tax was held and remitted by someone other than the merchant. */
+export function taxHeldByOthers(order: Pick<OrderEventOrder, 'channel' | 'taxMode' | 'chargeModel'>): boolean {
+  if (order.channel === MARKETPLACE_CHANNEL) return true
+  return order.taxMode === MARKETPLACE_TAX_MODE && order.chargeModel !== 'direct'
+}
 
 /** The envelope fields the intake reads. */
 export type AccountingEventEnvelope<Payload> = Pick<
@@ -120,15 +131,19 @@ export function snapshotFromOrderEvent(
   const totals: Partial<OrderEventOrder['totals']> = order.totals ?? {}
   // Commerce types `lineItems` as `unknown`; the line fields read here are this plugin's own reading.
   const lines = Array.isArray(order.lineItems) ? (order.lineItems as Array<Record<string, unknown>>) : []
-  // A Stripe Tax sale's tax is Aglyn's to remit and never reaches the
-  // merchant's account, so it is neither the merchant's liability nor money
-  // in their clearing account: the sale is posted without it.
   const taxCents = toCents(totals.taxCents)
-  // A marketplace's sale was paid to the marketplace, which also collects
-  // and remits its tax (`taxRemittedByChannel`): the merchant is paid the
-  // rest from there, never through Stripe.
+  // Tax someone else holds and remits is neither the merchant's liability nor
+  // money in their clearing account, so the sale is posted without it. That
+  // is a marketplace's sale, paid to the marketplace, which also collects and
+  // remits its tax (`taxRemittedByChannel`) and pays the merchant the rest
+  // from there, never through Stripe; and a Stripe Tax sale charged through
+  // the platform's account, whose tax Aglyn remits as marketplace facilitator
+  // and which never reaches the merchant's account. A Stripe Tax sale charged
+  // on the seller's own account (`direct`) ran Stripe Tax there: the tax is in
+  // the seller's balance and theirs to remit, so it posts with the sale like
+  // any other tax.
   const marketplace = order.channel === MARKETPLACE_CHANNEL
-  const marketplaceTaxCents = order.taxMode === MARKETPLACE_TAX_MODE || marketplace ? taxCents : 0
+  const marketplaceTaxCents = taxHeldByOthers(order) ? taxCents : 0
   const extras = (Array.isArray(order.extras) ? order.extras : [])
     .map((extra) => ({ label: String(extra?.label ?? '').trim() || 'Extra', amountCents: toCents(extra?.amountCents) }))
     .filter((extra) => extra.amountCents > 0)
@@ -194,10 +209,12 @@ export function isTestModeOrder(order: Pick<OrderEventOrder, 'livemode'> | null 
 
 /**
  * The part of a refund that comes out of the merchant's account. A refund
- * gives the buyer back their tax too; on a Stripe Tax sale that share is
- * Aglyn's, reversed from Aglyn's balance, so the merchant's refund is the
+ * gives the buyer back their tax too. On a sale whose tax someone else held
+ * (`marketplaceTaxCents`: a Stripe Tax sale through the platform's account)
+ * that share is reversed from their balance, so the merchant's refund is the
  * amount in proportion to what the sale paid them (`totals.totalCents`, the
- * tax already taken out).
+ * tax already taken out). Every other sale, a direct Stripe Tax sale among
+ * them, kept its tax, and its refund is the merchant's whole.
  */
 export function merchantShareOfRefund(order: AccountingOrderSnapshot, amountCents: number): number {
   const amount = toCents(amountCents)
@@ -260,13 +277,17 @@ export async function enqueueOrderRefunded(
   return createSyncItems(firestore, refund.order.orgId, itemsForRefund(refund, connection.mapping, deps.now()))
 }
 
-/** A payout that landed: one transfer from clearing to the bank. */
+/**
+ * A payout that landed: one transfer from clearing to the bank, and Stripe's
+ * own fees in it out of clearing, queued together. One before the start date
+ * queues neither.
+ */
 export async function enqueuePayout(deps: AccountingIntakeDeps, payout: AccountingPayoutSnapshot): Promise<number> {
   const firestore = deps.firestore()
   const connection = await readOrgMapping(firestore, payout.orgId)
   if (!connection) return 0
   if (beforeStartDate(payout.arrivedAtMs, connection.mapping)) return 0
-  return createSyncItems(firestore, payout.orgId, [itemForPayout(payout, deps.now())])
+  return createSyncItems(firestore, payout.orgId, itemsForPayout(payout, deps.now()))
 }
 
 // ── The event subscribers ─────────────────────────────────────────────────

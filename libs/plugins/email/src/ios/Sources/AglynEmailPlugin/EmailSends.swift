@@ -153,21 +153,7 @@ func campaignSendDisplay(_ send: [String: Any]?) -> SendDisplay {
   return SendDisplay(state: progress.state, label: progress.label, progress: progress)
 }
 
-// MARK: campaignReport / sendRate / sendLinkReport
-
-struct SendRate: Equatable {
-  let value: Double
-  let numerator: Double
-  let denominator: Double
-  let denominatorLabel: String
-}
-
-func sendRate(_ numerator: Double?, _ denominator: Double?, _ label: String) -> SendRate? {
-  let top = numerator ?? 0
-  let bottom = denominator ?? 0
-  guard top.isFinite, bottom.isFinite, bottom > 0 else { return nil }
-  return SendRate(value: top / bottom, numerator: top, denominator: bottom, denominatorLabel: label)
-}
+// MARK: campaignReport (`sendRate`, `sendLinkReport` and `percent` are AglynCore's SendReport.swift, shared with the sequences report)
 
 struct Population: Equatable {
   let id: String
@@ -271,39 +257,6 @@ func campaignReport(_ stats: [String: Any]?) -> CampaignReport {
       ))
   }
   return report
-}
-
-struct LinkRow: Equatable {
-  let url: String
-  let clicks: Int
-  let share: SendRate?
-}
-
-struct LinkReport: Equatable {
-  var rows: [LinkRow] = []
-  var attributedClicks = 0
-  var overflowClicks = 0
-  var unattributedClicks = 0
-  var truncated = false
-}
-
-func sendLinkReport(_ rollup: [String: Any]?) -> LinkReport {
-  let entries = (rollup?["links"] as? [String: Any] ?? [:]).values.compactMap { raw -> (String, Int)? in
-    guard let entry = raw as? [String: Any], let url = entry["url"] as? String, !url.isEmpty else { return nil }
-    return (url, (entry["clicks"] as? NSNumber)?.intValue ?? 0)
-  }
-  let attributed = entries.reduce(0) { $0 + $1.1 }
-  let rows = entries.sorted { $0.1 != $1.1 ? $0.1 > $1.1 : $0.0 < $1.0 }
-    .map { LinkRow(url: $0.0, clicks: $0.1, share: sendRate(Double($0.1), Double(attributed), "link clicks counted")) }
-  let overflow = (rollup?["overflowClicks"] as? NSNumber)?.intValue ?? 0
-  return LinkReport(
-    rows: rows, attributedClicks: attributed, overflowClicks: overflow,
-    unattributedClicks: (rollup?["unattributedClicks"] as? NSNumber)?.intValue ?? 0, truncated: entries.count >= 50 || overflow > 0)
-}
-
-func percent(_ rate: SendRate?) -> String {
-  guard let rate else { return "—" }
-  return String(format: "%.1f%%", rate.value * 100)
 }
 
 // MARK: Rows

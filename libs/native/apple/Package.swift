@@ -69,7 +69,7 @@ let package = Package(
     .testTarget(name: "AglynPluginHostTests", dependencies: ["AglynPluginHost", "AglynWebView"]),
     .testTarget(name: "AglynHardwareTests", dependencies: ["AglynHardware"]),
     .testTarget(name: "AglynScreensTests", dependencies: ["AglynScreens", "AglynPluginHost", "AglynContracts", "AglynCore", "AglynUI"]),
-    .testTarget(name: "AglynSiteTests", dependencies: ["AglynSite", "AglynCore", "AglynContracts", "AglynPluginHost"]),
+    .testTarget(name: "AglynSiteTests", dependencies: ["AglynSite", "AglynCore", "AglynContracts", "AglynPluginHost", "AglynUI"]),
     .testTarget(name: "AglynUITests", dependencies: ["AglynUI"]),
   ]
 )

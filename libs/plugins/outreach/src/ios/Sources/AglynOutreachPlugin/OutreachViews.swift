@@ -201,6 +201,8 @@ struct SequenceDetail: View {
   let mailboxes: [MailboxRow]
   @Environment(\.dismiss) private var dismiss
   @State private var doc = ObservedDocument()
+  /// The sequence's link rollup (`reports/links`), one document whatever its size; absent until a click is counted.
+  @State private var links = ObservedDocument()
   @State private var enrollments = LiveQueryList(pageSize: 25, map: enrollmentRow)
   @State private var editing = false
   @State private var enrolling = false
@@ -237,6 +239,13 @@ struct SequenceDetail: View {
                 systemImage: step.kind == "email" ? "envelope" : "checklist")
             }
           }
+          let settings = row.data["settings"] as? [String: Any]
+          SequenceResults(
+            report: outreachSequenceReport(
+              row.data["stats"] as? [String: Any], trackClicks: settings?["trackClicks"] as? Bool == true,
+              countOpens: settings?["countOpens"] as? Bool == true),
+            links: sendLinkReport(links.document?.data), linksFailed: links.failed,
+            timeZone: mailboxes.first { $0.id == row.mailboxID }?.timeZone)
           Section("Enrollments") {
             if enrollments.rows.isEmpty { Text(enrollments.ready ? "Nobody is enrolled yet." : "Loading…").foregroundStyle(.secondary) }
             ForEach(enrollments.rows) { enrollment in
@@ -310,10 +319,12 @@ struct SequenceDetail: View {
     .task(id: sequenceID) {
       let orgID = orgID, sequenceID = sequenceID
       doc.start(context.firestore, ["orgs", orgID, "outreachSequences", sequenceID])
+      links.start(context.firestore, ["orgs", orgID, "outreachSequences", sequenceID, "reports", "links"])
       enrollments.show(context.firestore) { enrollmentsQuery(orgID, sequenceID: sequenceID, status: "", search: "", limit: $0) }
     }
     .onDisappear {
       doc.stop()
+      links.stop()
       enrollments.stop()
     }
   }
@@ -322,6 +333,85 @@ struct SequenceDetail: View {
     Task {
       do { try await api.enrollmentAction(enrollmentID, action) } catch { notice = (problemText(error), .error) }
     }
+  }
+}
+
+/// What a sequence measured (`OutreachSequenceReportCard`): its figures, each rate with the people it was taken over, the
+/// sentences saying what each figure is not, and the links followed.
+struct SequenceResults: View {
+  let report: OutreachSequenceReport
+  let links: LinkReport
+  let linksFailed: Bool
+  let timeZone: String?
+
+  var body: some View {
+    Section("Results") {
+      AglynWrapRow(spacing: AglynSpace.three, lineSpacing: AglynSpace.two) {
+        figure("Emails sent", count(report.sent))
+        figure("People emailed", report.people.map(count) ?? "—", hint: report.people == nil ? "Not counted for this sequence" : nil)
+        // Opens, only for a sequence whose emails have carried the tracking image (AGL-3395).
+        if report.openTracked {
+          figure("Opened", count(report.uniqueOpens), hint: report.opens == report.uniqueOpens ? nil : "\(count(report.opens)) opens in all")
+          if report.opensUnmeasured {
+            figure("Open rate", "Unmeasured", hint: "Only machines fetched the image")
+          } else {
+            figure("Open rate", rateValue(report.openRate), hint: rateHint(report.openRate))
+          }
+          if report.machineOpens > 0 {
+            figure(
+              "Machine opens", count(report.machineOpens),
+              hint: report.proxyOpens > 0 ? "Not in the rate · \(count(report.proxyOpens)) by mail proxies" : "Not in the rate")
+          }
+        }
+        figure("Clicked", count(report.uniqueClicks), hint: report.clicks == report.uniqueClicks ? nil : "\(count(report.clicks)) clicks in all")
+        figure("Click rate", rateValue(report.clickRate), hint: rateHint(report.clickRate))
+        if report.machineClicks > 0 { figure("Scanner clicks", count(report.machineClicks), hint: "Not in the rate") }
+      }
+      .padding(.vertical, AglynSpace.half)
+      .accessibilityIdentifier("sequence-results")
+      if let last = report.lastOpenAtMs {
+        Text("Last open \(formatOutreachTime(last, timeZone: timeZone))").font(AglynFont.subheadline).foregroundStyle(.secondary)
+      }
+      if let last = report.lastClickAtMs {
+        Text("Last click \(formatOutreachTime(last, timeZone: timeZone))").font(AglynFont.subheadline).foregroundStyle(.secondary)
+      }
+      ForEach(report.caveats, id: \.id) { AglynNotice($0.message, tone: .info) }
+      if linksFailed {
+        AglynNotice("The link report could not be loaded.", tone: .warning)
+      } else if !links.rows.isEmpty {
+        Text("Links followed").font(AglynFont.strongSubheadline)
+        ForEach(links.rows, id: \.url) { row in
+          LabeledContent {
+            Text(count(Double(row.clicks)))
+          } label: {
+            Text(row.url).font(AglynFont.subheadline).textSelection(.enabled)
+          }
+        }
+        Text(
+          "Two links to the same page are counted as one destination, whatever tracking parameters follow the address."
+            + (links.truncated ? " \(count(Double(links.overflowClicks))) more clicks went to destinations past the ones listed." : "")
+        )
+        .font(AglynFont.caption).foregroundStyle(.secondary)
+      }
+    }
+  }
+
+  private func count(_ value: Double) -> String { Int(value).formatted() }
+
+  /// A rate with the denominator it was taken over beside it, never a bare percentage (`rateText`).
+  private func rateValue(_ rate: SendRate?) -> String { rate.map { String(format: "%.1f%%", $0.value * 100) } ?? "—" }
+
+  private func rateHint(_ rate: SendRate?) -> String? {
+    rate.map { "\(count($0.numerator)) of \(count($0.denominator)) \($0.denominatorLabel)" }
+  }
+
+  private func figure(_ label: String, _ value: String, hint: String? = nil) -> some View {
+    VStack(alignment: .leading, spacing: 0) {
+      Text(value).font(AglynFont.title2)
+      Text(label).font(AglynFont.subheadline)
+      if let hint { Text(hint).font(AglynFont.caption).foregroundStyle(.secondary) }
+    }
+    .accessibilityElement(children: .combine)
   }
 }
 
