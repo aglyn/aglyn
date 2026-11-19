@@ -63,10 +63,12 @@ import type {
 } from '../model/accounting-sources'
 import {
   ACCOUNTING_FEE_PAYEE,
+  ACCOUNTING_STRIPE_FEE_PAYEE,
   AccountingTransformError,
   buildFeeDoc,
   buildFeeRefundDoc,
   buildPayoutDoc,
+  buildPayoutFeeDoc,
   buildRefundDoc,
   buildRefundSettlementDoc,
   buildSaleDoc,
@@ -141,6 +143,8 @@ export function documentFor(item: AccountingSyncItemRecord, connection: Accounti
       if (!item.order) throw new AccountingTransformError('invalid', 'The sale has no order snapshot.')
       return buildSaleDoc(item.order, mapping)
     case 'fee':
+      // Stripe's own fees on a payout carry the payout; Aglyn's fee on a sale, the order.
+      if (item.payout) return buildPayoutFeeDoc(item.payout, mapping)
       if (!item.order) throw new AccountingTransformError('invalid', 'The fee has no order snapshot.')
       return buildFeeDoc(item.order, mapping)
     case 'refund':
@@ -250,7 +254,7 @@ export async function postItem(context: PassContext, item: AccountingSyncItemRec
       }
       case 'fee':
       case 'fee-refund': {
-        const payee = await feePayeeId(context)
+        const payee = doc.payeeName === ACCOUNTING_STRIPE_FEE_PAYEE ? await stripeFeePayeeId(context) : await feePayeeId(context)
         ref = await withSession(context, (session) => provider.createExpense(session, doc, { ...base, customerId: payee }))
         break
       }
@@ -335,7 +339,7 @@ export function foreignCurrencyRefusal(
   return `This is in ${own}, and your books keep only ${home}. Add ${own} in your accounting software, then retry.`
 }
 
-/** The contact a fee is paid to: made once, then remembered on the connection. */
+/** The contact Aglyn's fee is paid to: made once, then remembered on the connection. */
 async function feePayeeId(context: PassContext): Promise<string | null> {
   if (context.provider.id !== 'xero') return null
   if (context.connection.feePayeeId) return context.connection.feePayeeId
@@ -345,6 +349,23 @@ async function feePayeeId(context: PassContext): Promise<string | null> {
   context.connection.feePayeeId = contact.id
   await connectionRef(context.deps.firestore(), context.connection.orgId, context.connection.provider).update({
     feePayeeId: contact.id,
+  })
+  return contact.id
+}
+
+/**
+ * The contact Stripe's own fees are paid to, named `Stripe`: made once, then
+ * remembered on the connection apart from Aglyn's, in a ledger that needs one.
+ */
+async function stripeFeePayeeId(context: PassContext): Promise<string | null> {
+  if (context.provider.id !== 'xero') return null
+  if (context.connection.stripeFeePayeeId) return context.connection.stripeFeePayeeId
+  const contact = await withSession(context, (session) =>
+    context.provider.upsertCustomer(session, { name: ACCOUNTING_STRIPE_FEE_PAYEE, email: null }),
+  )
+  context.connection.stripeFeePayeeId = contact.id
+  await connectionRef(context.deps.firestore(), context.connection.orgId, context.connection.provider).update({
+    stripeFeePayeeId: contact.id,
   })
   return contact.id
 }
