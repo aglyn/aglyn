@@ -63,23 +63,29 @@ struct TemplateGalleryShelf: View {
       let loading = if case .loading = listings.state { true } else { false }
       let hasMore = docs.count >= limit
       let state = templateShelfState(offered: offered, loading: loading, visible: !rows.isEmpty || hasMore)
-      Group {
-        if offered, state == .shown {
-          Section {
-            if let error = runner.error { AglynNotice(error, tone: .error) { runner.error = nil } }
-            ForEach(rows, id: \.id) { doc in card(doc, zone: zone) }
-            if hasMore { AglynLoadMoreRow("Show more templates") { limit += browsePageSize } }
-          } header: {
-            Text("Marketplace templates").accessibilityAddTraits(.isHeader)
-          }
-          .accessibilityIdentifier("marketplace-template-shelf")
+      // SwiftUI never starts the task of a view that draws nothing, so the query hangs off a row that is always in the
+      // gallery's list (no height, no separator); the shelf's own rows follow it once there is something to show.
+      Color.clear
+        .frame(height: 0)
+        .listRowInsets(EdgeInsets())
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .accessibilityHidden(true)
+        .task(id: "\(offered)-\(zone.search)-\(limit)") {
+          guard offered else { return }
+          await listings.bind(context.firestore, templateShelfQuery(search: zone.search, limit: limit))
         }
+        .onChange(of: state, initial: true) { _, next in zone.reportShelf(templateShelfID, next) }
+      if offered, state == .shown {
+        Section {
+          if let error = runner.error { AglynNotice(error, tone: .error) { runner.error = nil } }
+          ForEach(rows, id: \.id) { doc in card(doc, zone: zone) }
+          if hasMore { AglynLoadMoreRow("Show more templates") { limit += browsePageSize } }
+        } header: {
+          Text("Marketplace templates").accessibilityAddTraits(.isHeader)
+        }
+        .accessibilityIdentifier("marketplace-template-shelf")
       }
-      .task(id: "\(offered)-\(zone.search)-\(limit)") {
-        guard offered else { return }
-        await listings.bind(context.firestore, templateShelfQuery(search: zone.search, limit: limit))
-      }
-      .onChange(of: state, initial: true) { _, next in zone.reportShelf(templateShelfID, next) }
     }
   }
 

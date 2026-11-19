@@ -88,6 +88,8 @@ struct TemplateGallerySheet: View {
             SlotWidgets(context: context, slot: TemplateGalleryZone.slot)
               .environment(\.templateGalleryZone, zone)
           }
+          // A shelf with nothing to show keeps a zero-height row in the list (its query runs from it): no minimum height.
+          .environment(\.defaultMinListRowHeight, 0)
           .accessibilityIdentifier("template-gallery-list")
         }
       }
