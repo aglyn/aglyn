@@ -233,6 +233,7 @@ struct ShellChrome: View {
             .disabled(!navigation.canGoForward)
           RecentPlacesMenu()
           Spacer(minLength: 0)
+          AglynOfflineIndicator(online: model.network.online, detail: NetworkStatus.detail)
           TitleBarButton(
             unread > 0 ? "Notifications, \(unread) unread" : "Notifications", systemImage: unread > 0 ? "bell.badge" : "bell",
             identifier: "titlebar-bell"
@@ -1494,6 +1495,7 @@ struct PhoneTopBar: ViewModifier {
         // last of them into a "More" menu, and AI must stay one tap away (Figma Phone/Top bar 273:20194).
         ToolbarItem(placement: .topBarTrailing) {
           HStack(spacing: AglynSpace.one) {
+            AglynOfflineIndicator(online: model.network.online, detail: NetworkStatus.detail)
             Button {
               navigation.showOneBox = true
             } label: {

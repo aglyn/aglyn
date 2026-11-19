@@ -167,6 +167,7 @@ internal fun PhoneShell(
             if (pushed) TitleBarButton("Back", "arrow_back", "title-back") { goBack() }
           },
           actions = {
+            OfflineIndicator(services)
             TitleBarButton("Search or jump to", "search", "phone-search") { chrome.oneBox = true }
             // The bell is Activity on a phone: what needs you, then the notifications. The wide shell's bell popover is
             // provided above every shell, so a phone takes it out here, or the bell opened the popover and never Activity.
