@@ -107,8 +107,10 @@ through its routes, and not over the REST API, whose CRM resources refuse with
 Capture does not wait for the plan. Every form submission, sign-up, order or booking
 that carries an email address updates the person's record — a
 [lead](./leads.md#what-makes-a-lead) from a booking or a form with lead routing on, a
-contact from a sign-up or an order — exactly as on a paid plan. Those records are kept, up to Free's 100-record band, and are there when the
-plan includes the CRM. Members holding **Privacy requests**, which workspace owners and
+contact from a sign-up or an order — exactly as on a paid plan. Those records are kept, up to Free's 100 people (contacts and
+leads together), and are there when the plan includes the CRM. Past 100, a form entry is
+still saved under Forms but no new person is added, and none is added later from those
+entries; someone already kept is still updated. Members holding **Privacy requests**, which workspace owners and
 admins hold by default, can export them, or erase a person,
 from [Settings → Privacy](../../workspace-and-billing/signing-in-and-sessions.md#privacy-requests)
 on every plan.

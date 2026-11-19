@@ -39,4 +39,18 @@ internal class FormDraft {
     values.putAll(proposed)
     version += 1
   }
+
+  /** Hands over, once, the proposed values a form owns: they leave the draft, so a form opened later never stages them again. */
+  fun take(paths: List<String>): Map<String, String> = paths.mapNotNull { path -> values.remove(path)?.let { path to it } }.toMap()
+
+  companion object {
+    private val sites = HashMap<String, FormDraft>()
+
+    /**
+     * The site's one draft (AGL-4136). The SEO zone proposes into it, and a value for a field another section's card owns
+     * (the name, email and phone on Setup → Business profile's Business details) waits here until that card takes it, as
+     * the console stages a proposal in the draft of the card that owns its field.
+     */
+    fun forSite(hostId: String): FormDraft = sites.getOrPut(hostId) { FormDraft() }
+  }
 }

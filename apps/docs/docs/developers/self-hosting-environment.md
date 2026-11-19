@@ -589,6 +589,7 @@ immediately, so enabling it cannot reach backwards and retro-bill. Format is
 | `AUTO_LOCK_BILLING_FROM` | Optional | Runtime | First month the sweep may auto-suspend organizations delinquent past a 30-day grace. Unset, nothing ever auto-locks. |
 | `BILL_ASSIST_TOKENS_FROM` | Optional | Runtime | First month Assist token cost appears on an invoice. Unset, assist usage is measured but never billed. |
 | `BILL_ORG_LIBRARY_STORAGE_FROM` | Optional | Runtime | First month media-library bytes are charged. Unset, storage is metered and cap-enforced but not charged. |
+| `BILL_STARTER_EMAIL_SENDS_FROM` | Optional | Runtime | First month Starter's email past its own band (1,000 emails a month of everything it sends) is charged, as `YYYY-MM`, in addition to `BILL_EMAIL_SEND_OVERAGE_FROM`. Unset, Starter's email overage is measured and never reaches an invoice. Not retroactive: no month before the one named is charged, however late it is swept. Aglyn's own deployment sets `2026-11`. |
 | `BILL_EMAIL_SEND_OVERAGE_FROM` | Optional | Runtime | First month email past the plan's included band is charged, as `YYYY-MM`. Unset, the overage is measured, shown on the billing page and priced into the cost model, but never reaches an invoice. Not retroactive: no month before the one named here is ever charged, however late it is set. |
 | `AI_OVERAGE_INVOICED_FROM` | Optional | Runtime | First month AI credits past a plan's included band are charged to the card on file **as they accrue**, as `YYYY-MM`, instead of being metered onto the renewal invoice. Unset, AI overage bills exactly as every other metered line does and nothing charges mid-period. Setting it also turns on the guards that bound what a workspace may owe — a card requirement, a monthly limit that rises with payment history, a pause on a failed charge, and a refusal once accrued-but-unpaid overage reaches its limit. The two move together on purpose: a workspace refused for unpaid overage needs an invoice it can pay, and before this month there is none. Not retroactive, and one month bills through exactly one channel. |
 | `STRIPE_PRODUCT_AI_OVERAGE` | Optional | Runtime | The Stripe product the AI overage line is billed against; `setup-stripe.mjs` creates it and prints the id. It carries the tax code automatic tax computes the line from. Required once `AI_OVERAGE_INVOICED_FROM` names a month; without it nothing is charged and the reason is logged. |
@@ -1561,6 +1562,13 @@ Config.
 Message counting happens in a transaction **before** the model is called, so a
 refused request spends nothing. A workspace at the ceiling is refused rather than
 quietly downgraded to a cheaper model.
+
+An assistant's plugin directory may ask you to prove you control the console's
+domain before it lists your console's MCP server. OpenAI's does it with a file:
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `OPENAI_APPS_CHALLENGE` | Optional *(console)* | Runtime | The challenge token OpenAI's plugin directory shows when you verify a domain: 8 to 512 characters from `A-Z a-z 0-9 . _ ~ -`. The console serves it as plain text, with nothing else in the body, at `/.well-known/openai-apps-challenge` on its own host. Unset, empty or any other shape, that address answers 404. Read at request time, so no rebuild is needed. The token is not a secret, but keep it out of source so each install proves its own domain. If a firewall or bot protection sits in front of the console, let that address through unchallenged: the directory's fetcher cannot solve a challenge. |
 
 ---
 

@@ -34,11 +34,21 @@
 import {
   BANDWIDTH_CAP_CODE,
   BANDWIDTH_CAP_RETRY_AFTER_SECONDS,
+  BANDWIDTH_CAP_GRACE_MS,
   bandwidthCapEngaged,
+  bandwidthCapGraceUntil,
+  bandwidthCapMarker,
   bandwidthCapMonthKey,
   bandwidthCapNotice,
   bandwidthCapShouldEngage,
+  bandwidthGraceForEngagement,
+  bandwidthGraceOutlastsMonth,
+  bandwidthGraceOwnerNotice,
+  bandwidthPausedOwnerNotice,
+  BANDWIDTH_GRACE_SURGE_SENTENCE,
+  formatBandwidthGraceDeadline,
 } from './bandwidth-cap'
+import { bandwidthCeilingNotice } from './plan-entitlements'
 import { PLAN_ENTITLEMENTS } from './plan-entitlements'
 
 const NOW = new Date('2026-08-19T12:00:00.000Z')
@@ -216,9 +226,9 @@ describe('bandwidthCapMonthKey', () => {
 describe('the visitor notice', () => {
   const notice = bandwidthCapNotice()
 
-  it('says the site is paused and that it comes back', () => {
-    expect(notice.title).toMatch(/traffic limit/i)
-    expect(notice.body).toMatch(/next month/i)
+  it('says only that the site is temporarily unavailable (AGL-4232)', () => {
+    expect(notice.body).toBe('This site is temporarily unavailable.')
+    expect(notice.title).toBe('Temporarily unavailable')
   })
 
   it('discloses NOTHING about the owner’s account', () => {
@@ -235,13 +245,195 @@ describe('the visitor notice', () => {
       'gb',
       '$',
       'aglyn',
+      'limit',
+      'traffic',
+      'bandwidth',
+      'month',
     ]) {
       expect(words).not.toContain(leak)
     }
   })
 
-  it('does not blame the visitor', () => {
-    expect(notice.body).toMatch(/nothing is wrong with your connection/i)
+})
+
+describe('the ABUSE CEILING\'s visitor notice (AGL-4232)', () => {
+  it('is the pause\'s own neutral sentence, with nothing about traffic or plans', () => {
+    const notice = bandwidthCeilingNotice()
+    expect(notice).toEqual(bandwidthCapNotice())
+    for (const leak of ['traffic', 'plan', 'upgrade', 'month', 'owner']) {
+      expect(`${notice.title} ${notice.body}`.toLowerCase()).not.toContain(leak)
+    }
+  })
+})
+
+/**
+ * THE ONE-TIME GRACE (AGL-4232): the first time a site goes over, ever, it
+ * stays online for 72 hours; then it pauses as before. In a later month it
+ * pauses at the limit. Each case is paired with the one that answers the
+ * other way.
+ */
+describe('the one-time grace', () => {
+  const nowMs = NOW.getTime()
+  const inGrace = { month: THIS_MONTH, engagedAt: nowMs, graceUntil: nowMs + BANDWIDTH_CAP_GRACE_MS }
+
+  it('is 72 hours', () => {
+    expect(BANDWIDTH_CAP_GRACE_MS).toBe(72 * 60 * 60 * 1000)
+  })
+
+  it('under the band nothing engages, so there is no grace and no pause', () => {
+    expect(
+      bandwidthCapShouldEngage({ org: freeOrg(), usedBandwidthGb: 1.6, includedBandwidthGb: FREE_BANDWIDTH_GB }),
+    ).toBe(false)
+    expect(bandwidthCapEngaged(freeOrg(), NOW)).toBe(false)
+    expect(bandwidthCapGraceUntil(freeOrg(), NOW)).toBeNull()
+  })
+
+  it('the first time over, the site SERVES during the grace, and the deadline is readable', () => {
+    const org = freeOrg(inGrace)
+    expect(bandwidthCapEngaged(org, NOW)).toBe(false)
+    expect(bandwidthCapEngaged(org, new Date(nowMs + BANDWIDTH_CAP_GRACE_MS - 1))).toBe(false)
+    expect(bandwidthCapGraceUntil(org, NOW)).toBe(inGrace.graceUntil)
+  })
+
+  it('when the grace ends the site PAUSES, with no write', () => {
+    const org = freeOrg(inGrace)
+    const after = new Date(nowMs + BANDWIDTH_CAP_GRACE_MS)
+    expect(bandwidthCapEngaged(org, after)).toBe(true)
+    expect(bandwidthCapGraceUntil(org, after)).toBeNull()
+  })
+
+  it('an engagement with no grace pauses at once', () => {
+    expect(bandwidthCapEngaged(freeOrg(engagedMarker(THIS_MONTH)), NOW)).toBe(true)
+    expect(bandwidthCapGraceUntil(freeOrg(engagedMarker(THIS_MONTH)), NOW)).toBeNull()
+  })
+
+  it('an upgrade during the grace or the pause brings the site back, and warns of nothing', () => {
+    expect(bandwidthCapEngaged(paidOrg(inGrace), new Date(nowMs + BANDWIDTH_CAP_GRACE_MS))).toBe(false)
+    expect(bandwidthCapGraceUntil(paidOrg(inGrace), NOW)).toBeNull()
+  })
+
+  it('is granted only to sites that never had it', () => {
+    expect(bandwidthGraceForEngagement([{}], nowMs)).toEqual({
+      graceUntil: nowMs + BANDWIDTH_CAP_GRACE_MS,
+      grants: true,
+    })
+    expect(bandwidthGraceForEngagement([], nowMs)).toEqual({ graceUntil: null, grants: false })
+  })
+
+  it('a site that had it in an earlier month pauses at once: no month rollover re-arms it', () => {
+    const lastMonth = nowMs - 40 * 24 * 3_600_000
+    expect(bandwidthGraceForEngagement([{ bandwidthGraceUsedAt: lastMonth }], nowMs)).toEqual({
+      graceUntil: null,
+      grants: false,
+    })
+    // An org with one site that had it and one that did not: the org pauses.
+    expect(
+      bandwidthGraceForEngagement([{ bandwidthGraceUsedAt: lastMonth }, {}], nowMs).grants,
+    ).toBe(false)
+  })
+
+  it('the WORKSPACE stamp blocks a new grant: a deleted site re-made gets none (AGL-4232)', () => {
+    const lastMonth = nowMs - 40 * 24 * 3_600_000
+    expect(bandwidthGraceForEngagement([{}], nowMs, { bandwidthGraceUsedAt: lastMonth })).toEqual({
+      graceUntil: null,
+      grants: false,
+    })
+    // …and a running one is still carried from either stamp.
+    const grantedAt = nowMs - 3_600_000
+    expect(bandwidthGraceForEngagement([{}], nowMs, { bandwidthGraceUsedAt: grantedAt })).toEqual({
+      graceUntil: grantedAt + BANDWIDTH_CAP_GRACE_MS,
+      grants: false,
+    })
+    // Both absent: granted.
+    expect(bandwidthGraceForEngagement([{}], nowMs, {}).grants).toBe(true)
+  })
+
+  it('a re-engage from a stale org doc carries a RUNNING grace forward, never cuts it short', () => {
+    const grantedAt = nowMs - 3_600_000
+    expect(bandwidthGraceForEngagement([{ bandwidthGraceUsedAt: grantedAt }], nowMs)).toEqual({
+      graceUntil: grantedAt + BANDWIDTH_CAP_GRACE_MS,
+      grants: false,
+    })
+  })
+
+  it('the marker carries the grace only when there is one', () => {
+    const base = { month: THIS_MONTH, nowMs, pageViews: 10.4, includedPageViews: 9.6 }
+    expect(bandwidthCapMarker({ ...base, graceUntil: null })).toEqual({
+      month: THIS_MONTH,
+      engagedAt: nowMs,
+      pageViews: 10,
+      includedPageViews: 10,
+    })
+    expect(bandwidthCapMarker({ ...base, graceUntil: 5 }).graceUntil).toBe(5)
+  })
+
+  it('tells the OWNER the deadline in plain words, with the way past it', () => {
+    const notice = bandwidthGraceOwnerNotice({
+      graceUntil: Date.UTC(2026, 10, 19, 15, 4),
+      month: '2026-11',
+      used: 'the 2,070 page views its plan includes',
+      resumesOn: 'December 1',
+    })
+    expect(formatBandwidthGraceDeadline(Date.UTC(2026, 10, 19, 15, 4))).toBe(
+      'Thursday, November 19 at 3:04 PM UTC',
+    )
+    expect(notice.title).toBe('Upgrade or {site} pauses on Thursday, November 19 at 3:04 PM UTC')
+    expect(notice.body).toMatch(/stays online until Thursday, November 19 at 3:04 PM UTC/)
+    expect(notice.body).toMatch(/Upgrade in Billing before then/)
+    expect(notice.body).toMatch(/until December 1/)
+    // Given once (per workspace's sites), never "per site" (AGL-4232).
+    expect(notice.body).toMatch(/This extra time is given once,/)
+    expect(notice.body).not.toMatch(/once per site/)
+    // The ceiling stays the cost bound during the grace, and that is said.
+    expect(notice.body).toContain(BANDWIDTH_GRACE_SURGE_SENTENCE)
+    expect(BANDWIDTH_GRACE_SURGE_SENTENCE).toBe(
+      'An unusually large surge of traffic can still pause it before then.',
+    )
+  })
+
+  it('a grace CARRIED into a new month says the extra time was already given', () => {
+    const notice = bandwidthGraceOwnerNotice({
+      graceUntil: Date.UTC(2026, 11, 2, 9, 0),
+      month: '2026-12',
+      used: 'the 2,070 page views its plan includes',
+      resumesOn: 'January 1',
+      carried: true,
+    })
+    expect(notice.title).toBe('Upgrade or {site} pauses on Wednesday, December 2 at 9:00 AM UTC')
+    expect(notice.body).toMatch(/when the extra time it was already given ends/)
+    expect(notice.body).toMatch(/until January 1/)
+  })
+
+  it('a pause is told plainly: when it lifts, that nothing is charged, and the way back', () => {
+    const notice = bandwidthPausedOwnerNotice({
+      used: 'the 2 GB of traffic its plan includes',
+      resumesOn: 'December 1',
+    })
+    expect(notice.title).toBe('{site} paused — monthly traffic limit reached')
+    expect(notice.body).toMatch(/"temporarily unavailable" notice instead of its pages until December 1/)
+    expect(notice.body).toMatch(/Nothing is charged/)
+    expect(notice.body).toMatch(/as soon as you upgrade in Billing/)
+  })
+
+  it('a grace that outlasts the month names no pause date, because none comes', () => {
+    // Granted on November 29: 72 hours ends December 2, after the 1st resets
+    // the count, so the site never pauses on that date.
+    const graceUntil = Date.UTC(2026, 11, 2, 9, 0)
+    expect(bandwidthGraceOutlastsMonth(graceUntil, '2026-11')).toBe(true)
+    expect(bandwidthGraceOutlastsMonth(Date.UTC(2026, 10, 30, 23, 59), '2026-11')).toBe(false)
+    // The boundary itself: ending AT the reset is no pause either.
+    expect(bandwidthGraceOutlastsMonth(Date.UTC(2026, 11, 1), '2026-11')).toBe(true)
+    const notice = bandwidthGraceOwnerNotice({
+      graceUntil,
+      month: '2026-11',
+      used: 'the 2,070 page views its plan includes',
+      resumesOn: 'December 1',
+    })
+    expect(notice.title).toBe('{site} is past its monthly traffic limit and stays online')
+    expect(`${notice.title} ${notice.body}`).not.toMatch(/pauses on|until \w+day/)
+    expect(notice.body).toMatch(/stays online/)
+    expect(notice.body).toMatch(/starts again on December 1/)
+    expect(notice.body).toMatch(/has now been used/)
   })
 })
 

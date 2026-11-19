@@ -2,10 +2,10 @@
   "variant": "widescreen",
   "route": "/pricing",
   "figmaNodeId": "572:1218",
-  "frameName": "Pricing — Widescreen",
+  "frameName": "✅ CURRENT · Pricing — Widescreen",
   "frameSize": {
     "width": 1920,
-    "height": 9027
+    "height": 10500
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
   "sections": [
@@ -83,7 +83,7 @@
       "name": "Plans",
       "order": 1,
       "widthPx": 1920,
-      "heightPx": 755,
+      "heightPx": 757,
       "groups": [
         {
           "figmaNodeId": "572:1230",
@@ -141,7 +141,7 @@
               "figmaNodeId": "572:1273",
               "name": "price",
               "cells": [
-                "$25",
+                "$16",
                 "/mo"
               ]
             },
@@ -149,7 +149,7 @@
               "figmaNodeId": "572:1276",
               "name": null,
               "cells": [
-                "$16/mo billed yearly"
+                "$192 billed yearly"
               ]
             },
             {
@@ -169,7 +169,8 @@
                 "Remove Aglyn branding",
                 "Commerce · 100 products",
                 "Workflows & bookings",
-                "CRM: contacts, leads, companies, deals & tasks"
+                "CRM: contacts, leads, companies, deals & tasks",
+                "API · 500 requests/mo"
               ]
             },
             {
@@ -184,7 +185,7 @@
               "figmaNodeId": "572:1312",
               "name": "price",
               "cells": [
-                "$69",
+                "$49",
                 "/mo"
               ]
             },
@@ -192,7 +193,7 @@
               "figmaNodeId": "572:1315",
               "name": null,
               "cells": [
-                "$49/mo billed yearly"
+                "$588 billed yearly"
               ]
             },
             {
@@ -210,7 +211,7 @@
                 "3 sites, then $20/mo each",
                 "Unlimited pages, products & forms",
                 "Video, POS & marketplace",
-                "API, webhooks & A/B testing",
+                "Webhooks, Zapier & A/B testing",
                 "Memberships, gift cards & multilingual",
                 "Versioning & scheduled publishing",
                 "2,500 campaign emails/mo"
@@ -265,7 +266,7 @@
       "name": "Compare features",
       "order": 2,
       "widthPx": 1920,
-      "heightPx": 3009,
+      "heightPx": 3898,
       "groups": [
         {
           "figmaNodeId": "572:1423",
@@ -463,7 +464,7 @@
                 "Team seats",
                 "1",
                 "2 · max 5",
-                "3 · unlimited",
+                "3 · no max",
                 "Custom"
               ]
             },
@@ -474,7 +475,7 @@
                 "Site collaborators",
                 "1",
                 "2 · max 10",
-                "3 · unlimited",
+                "3 · no max",
                 "Custom"
               ]
             },
@@ -525,7 +526,7 @@
                 "Datasets",
                 "—",
                 "2 · max 10",
-                "5 · unlimited",
+                "5 · no max",
                 "Custom"
               ]
             },
@@ -607,6 +608,17 @@
               ]
             },
             {
+              "figmaNodeId": "2633:70726",
+              "name": "row",
+              "cells": [
+                "Saved forms per site",
+                "1",
+                "5",
+                "Unlimited",
+                "Talk to us"
+              ]
+            },
+            {
               "figmaNodeId": "572:1949",
               "name": "row",
               "cells": [
@@ -637,6 +649,17 @@
                 "✓",
                 "✓",
                 "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "2644:655",
+              "name": "row",
+              "cells": [
+                "Emails included / mo",
+                "300",
+                "1,000",
+                "2,500",
+                "Talk to us"
               ]
             },
             {
@@ -812,6 +835,149 @@
               ]
             },
             {
+              "figmaNodeId": "2633:70737",
+              "name": "row",
+              "cells": [
+                "Checkout on your own pages",
+                "—",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:70748",
+              "name": "row",
+              "cells": [
+                "Wallets & pay later at checkout",
+                "—",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:70759",
+              "name": "row",
+              "cells": [
+                "Pickup & local delivery",
+                "—",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:70770",
+              "name": "row",
+              "cells": [
+                "Returns & partial shipments",
+                "—",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:70781",
+              "name": "row",
+              "cells": [
+                "Rewards, referrals & store credit",
+                "—",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:70792",
+              "name": "row",
+              "cells": [
+                "Sales tax via Avalara or TaxJar",
+                "—",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:70803",
+              "name": "row",
+              "cells": [
+                "Product feeds for shopping channels",
+                "—",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:70814",
+              "name": "row",
+              "cells": [
+                "POS split payments & tips",
+                "—",
+                "—",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:70825",
+              "name": "row",
+              "cells": [
+                "POS customer display",
+                "—",
+                "—",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:70836",
+              "name": "row",
+              "cells": [
+                "POS self-service kiosk",
+                "—",
+                "—",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:70847",
+              "name": "row",
+              "cells": [
+                "POS offline cash sales",
+                "—",
+                "—",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:70858",
+              "name": "row",
+              "cells": [
+                "POS shifts & cash drawer",
+                "—",
+                "—",
+                "✓",
+                "✓"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:70869",
+              "name": "row",
+              "cells": [
+                "POS printers & barcode scanners",
+                "—",
+                "—",
+                "✓",
+                "✓"
+              ]
+            },
+            {
               "figmaNodeId": "572:2236",
               "name": "grp",
               "cells": [
@@ -907,6 +1073,17 @@
               ]
             },
             {
+              "figmaNodeId": "2633:70880",
+              "name": "row",
+              "cells": [
+                "Mailchimp, Klaviyo & Omnisend sync",
+                "—",
+                "✓",
+                "✓",
+                "✓"
+              ]
+            },
+            {
               "figmaNodeId": "572:2352",
               "name": "grp",
               "cells": [
@@ -919,8 +1096,30 @@
               "cells": [
                 "API access",
                 "—",
-                "—",
+                "500 / mo",
                 "1.5k / mo",
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "2646:671",
+              "name": "row",
+              "cells": [
+                "API monthly ceiling",
+                "—",
+                "20k / mo",
+                "None",
+                "Talk to us"
+              ]
+            },
+            {
+              "figmaNodeId": "2646:682",
+              "name": "row",
+              "cells": [
+                "API requests per minute, whole workspace",
+                "—",
+                "120 / min",
+                "600 / min",
                 "Talk to us"
               ]
             },
@@ -947,6 +1146,20 @@
               ]
             }
           ]
+        },
+        {
+          "figmaNodeId": "2633:70891",
+          "name": "Every plan is in this table. Custom is quoted per agreement, and its limits are set in your contract.",
+          "widthPx": 1488,
+          "records": [
+            {
+              "figmaNodeId": "2633:70891",
+              "name": null,
+              "cells": [
+                "Every plan is in this table. Custom is quoted per agreement, and its limits are set in your contract."
+              ]
+            }
+          ]
         }
       ],
       "notes": null
@@ -957,7 +1170,7 @@
       "name": "Usage pricing",
       "order": 3,
       "widthPx": 1920,
-      "heightPx": 2125,
+      "heightPx": 2635,
       "groups": [
         {
           "figmaNodeId": "572:2415",
@@ -995,7 +1208,7 @@
               "name": "row",
               "cells": [
                 "Extra site, per month",
-                "$20",
+                "$25",
                 "$20",
                 "Custom"
               ]
@@ -1045,7 +1258,7 @@
               "name": "row",
               "cells": [
                 "API requests, per 1,000 over limit",
-                "—",
+                "$3",
                 "$0.50",
                 "Custom"
               ]
@@ -1055,8 +1268,18 @@
               "name": "row",
               "cells": [
                 "CRM records, per 1,000 over the included band",
-                "$1",
+                "$1, up to 10,000",
                 "$0.75",
+                "Custom"
+              ]
+            },
+            {
+              "figmaNodeId": "2640:3041",
+              "name": "row",
+              "cells": [
+                "Email sends, per 1,000 over the included band",
+                "$2.50",
+                "$2.25",
                 "Custom"
               ]
             },
@@ -1084,14 +1307,14 @@
         },
         {
           "figmaNodeId": "2608:726",
-          "name": "The Free plan has no paid add-ons. Annual billing does not change these rates.",
+          "name": "The Free plan has no paid add-ons. Annual billing does not change these rates. API requests are counted in 256 KB units: a request or response up to 256 KB is one unit, and each further 256 KB started is one more. Free includes 300 emails a month, Starter 1,000 and Pro 2,500, counting every email the workspace sends. On Starter, CRM records can be added up to 10,000; past that, move to Pro.",
           "widthPx": 1488,
           "records": [
             {
               "figmaNodeId": "2608:726",
               "name": null,
               "cells": [
-                "The Free plan has no paid add-ons. Annual billing does not change these rates."
+                "The Free plan has no paid add-ons. Annual billing does not change these rates. API requests are counted in 256 KB units: a request or response up to 256 KB is one unit, and each further 256 KB started is one more. Free includes 300 emails a month, Starter 1,000 and Pro 2,500, counting every email the workspace sends. On Starter, CRM records can be added up to 10,000; past that, move to Pro."
               ]
             }
           ]
@@ -1146,7 +1369,7 @@
               "figmaNodeId": "572:2605",
               "name": null,
               "cells": [
-                "Free plans are capped rather than billed, and Custom usage is set by your agreement. Dataset storage, API requests, CRM records and workflow runs are separate add-ons, priced in the table above. The CRM is included from Starter, and Free does not include it."
+                "Free plans are capped rather than billed, and Custom usage is set by your agreement. Dataset storage, API requests, email sends, CRM records and workflow runs are separate add-ons, priced in the table above. The CRM is included from Starter, and Free does not include it."
               ]
             }
           ]
@@ -1258,6 +1481,194 @@
               "name": null,
               "cells": [
                 "Learn more →"
+              ]
+            }
+          ]
+        },
+        {
+          "figmaNodeId": "2633:70892",
+          "name": "Site Care project prices",
+          "widthPx": 1488,
+          "records": [
+            {
+              "figmaNodeId": "2633:70893",
+              "name": "h",
+              "cells": [
+                "Site Care project prices",
+                "One flat price per job, agreed before we start. Plan limits still apply."
+              ]
+            },
+            {
+              "figmaNodeId": "2633:70941",
+              "name": "r",
+              "cells": [
+                "Pages"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:70946",
+              "name": "r",
+              "cells": [
+                "Simple page (contact, reviews, an account page)",
+                "$149"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:70951",
+              "name": "r",
+              "cells": [
+                "Standard page (gallery, about, services list)",
+                "$199"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:70956",
+              "name": "r",
+              "cells": [
+                "Landing or service page",
+                "$249"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:70961",
+              "name": "r",
+              "cells": [
+                "Detailed page (comparisons, options)",
+                "$349"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:70966",
+              "name": "r",
+              "cells": [
+                "Home page",
+                "$499"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:70971",
+              "name": "r",
+              "cells": [
+                "Error and legal pages",
+                "$199"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:70976",
+              "name": "r",
+              "cells": [
+                "Redesign",
+                "from $749"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:71002",
+              "name": "r",
+              "cells": [
+                "Store and content"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:71007",
+              "name": "r",
+              "cells": [
+                "Online store setup",
+                "$499"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:71012",
+              "name": "r",
+              "cells": [
+                "Product list setup",
+                "$349"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:71017",
+              "name": "r",
+              "cells": [
+                "Blog setup",
+                "$249"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:71022",
+              "name": "r",
+              "cells": [
+                "Moving an article, images included",
+                "$29 each"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:71027",
+              "name": "r",
+              "cells": [
+                "Point of sale setup",
+                "$149"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:71032",
+              "name": "r",
+              "cells": [
+                "Quotes and proofs setup",
+                "$199"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:71058",
+              "name": "r",
+              "cells": [
+                "Brand and setup"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:71063",
+              "name": "r",
+              "cells": [
+                "Logo or brand kit",
+                "$349"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:71068",
+              "name": "r",
+              "cells": [
+                "Header, footer and menus",
+                "$249"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:71073",
+              "name": "r",
+              "cells": [
+                "Photo prep",
+                "$199"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:71078",
+              "name": "r",
+              "cells": [
+                "Local search setup",
+                "$499"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:71083",
+              "name": "r",
+              "cells": [
+                "Redirects for old links",
+                "$149"
+              ]
+            },
+            {
+              "figmaNodeId": "2633:71088",
+              "name": "r",
+              "cells": [
+                "CRM and email setup",
+                "$249"
               ]
             }
           ]
@@ -1399,7 +1810,7 @@
       "name": "FAQ",
       "order": 5,
       "widthPx": 1920,
-      "heightPx": 1155,
+      "heightPx": 1227,
       "groups": [
         {
           "figmaNodeId": "572:2607",
@@ -1433,7 +1844,7 @@
               "name": "qa",
               "cells": [
                 "What happens if I exceed a plan limit?",
-                "Storage, API calls and, on Pro, workflow runs keep working: usage past your allowance is metered at the rates in the usage table and itemized on your invoice. AI credits past your included band are metered the same way, per 1,000, unless you set a stop or a monthly ceiling in Billing — and on Free they stop at the band. Sites, seats, and datasets stop at your limit until you buy an add-on or upgrade."
+                "Storage, API calls, email sends and, on Pro, workflow runs keep working: usage past your allowance is metered at the rates in the usage table and itemized on your invoice. AI credits past your included band are metered the same way, per 1,000, unless you set a stop or a monthly ceiling in Billing — and on Free they stop at the band. Sites, seats, and datasets stop at your limit until you buy an add-on or upgrade, and on Starter, CRM records stop at 10,000 and API requests at 20,000 a month until you move to Pro. On Free, email stops at 300 a month and starts again on the 1st; sign-in links, verification, invitations, password resets and security notices always go out."
               ]
             },
             {
@@ -1497,7 +1908,7 @@
               "name": "qa",
               "cells": [
                 "Is the free plan a trial?",
-                "No. It does not expire or downgrade. It is capped rather than billed: one site, five pages, 250 MB of storage and 2 GB of bandwidth a month."
+                "No. It does not expire or downgrade. It is capped rather than billed: one site, five pages, 250 MB of storage, 2 GB of bandwidth and 300 emails a month."
               ]
             },
             {

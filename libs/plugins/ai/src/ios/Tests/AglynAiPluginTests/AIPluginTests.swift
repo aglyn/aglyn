@@ -16,7 +16,7 @@ final class AIPluginTests: XCTestCase {
       screens: [
         "ai.allotment", "ai.create", "ai.credits", "ai.hostMember", "ai.import.productCopy", "ai.import.start", "ai.job",
         "ai.jobs", "ai.member", "ai.orgsSpendColumn", "ai.request", "ai.requests", "ai.signals", "ai.staffOrg",
-        "ai.staffRequests", "ai.staffUser",
+        "ai.staffRequests", "ai.staffUser", "ai.usageAssistColumn", "ai.usageCreditsColumn", "ai.usageOverageColumn",
       ],
       widgets: [
         "ai.seo-audit", "ai.seo-start", "ai.site-memory", "ai.create-page", "ai.create-template", "ai.create-layout",
@@ -274,5 +274,14 @@ final class AIPluginTests: XCTestCase {
     XCTAssertEqual(view.open?.detail, "/acme/hosts/roofs/layouts/l1")
     XCTAssertEqual(view.open?.besigner, "/acme/hosts/roofs/layouts/l1/versions/v1/besigner")
   }
-}
 
+  /// "Put in the form" says where each proposal went (AGL-4136): the name, email and phone to Business details.
+  func testSeoStagedNoteNamesWhereEachProposalWent() {
+    XCTAssertEqual(aiSeoStagedNote(["seo.entity.description"]), "In the SEO forms below as unsaved changes. Review them, then press Save.")
+    XCTAssertEqual(
+      aiSeoStagedNote(["seo.entity.email"]),
+      "The name, email and phone are in Business details on Setup → Business profile as unsaved changes. Review them there, then press Save.")
+    XCTAssertTrue(aiSeoStagedNote(["seo.entity.type", "seo.entity.name"]).hasPrefix("In the SEO forms below"))
+    XCTAssertTrue(aiSeoStagedNote(["seo.entity.type", "seo.entity.name"]).hasSuffix("Review them there, then press Save."))
+  }
+}

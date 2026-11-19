@@ -107,6 +107,56 @@ function env(name: string): string | null {
 }
 
 /**
+ * A per-plan add-on whose catalog price has MOVED and whose new Stripe price
+ * may not exist yet (AGL-4227): Starter's extra site, $20 -> $25.
+ *
+ * A Stripe price is immutable, so the new figure is a new price under its own
+ * env name (`STRIPE_PRICE_STARTER_EXTRA_HOST_V2[_YEARLY]`). Until that env is
+ * set the add-on keeps SELLING the existing price and QUOTING what it
+ * charges (`legacyUsd`), so a customer is never shown one figure and charged
+ * another. The moment the env is set, both move together, with no code
+ * change.
+ *
+ * The existing price stays RECOGNISED either way (`addonKindFromPriceId`), so
+ * a subscription that already carries it keeps counting its sites. There is
+ * NO grandfathering: a quantity change moves that same item onto the current
+ * price (`/api/billing/addons`), never a second item beside it.
+ */
+const REPRICED_ADDONS: Partial<
+  Record<`${OrgPlan}:${AddonKind}`, { envSuffix: string; legacyUsd: number }>
+> = {
+  'starter:hosts': { envSuffix: 'EXTRA_HOST_V2', legacyUsd: 20 },
+}
+
+function repricedEnvName(
+  kind: AddonKind,
+  plan: OrgPlan,
+  interval: BillingInterval,
+): string | null {
+  const repriced = REPRICED_ADDONS[`${plan}:${kind}`]
+  if (!repriced) return null
+  return `STRIPE_PRICE_${plan.toUpperCase()}_${repriced.envSuffix}${interval === 'year' ? '_YEARLY' : ''}`
+}
+
+/**
+ * The monthly USD an add-on is CHARGED at right now (AGL-4227): the catalog's
+ * `addonUnitUsd`, except where the catalog has moved ahead of a price that is
+ * not configured yet (`REPRICED_ADDONS`), which charges — and so quotes — the
+ * existing figure. Every surface that quotes a price it is about to charge
+ * reads this rather than the catalog.
+ */
+export function addonChargedUnitUsd(
+  kind: AddonKind,
+  plan: OrgPlan,
+  interval: BillingInterval,
+): number | null {
+  const repriced = REPRICED_ADDONS[`${plan}:${kind}`]
+  const name = repricedEnvName(kind, plan, interval)
+  if (repriced && name && !env(name)) return repriced.legacyUsd
+  return addonUnitUsd(kind, plan)
+}
+
+/**
  * The Stripe price id for an add-on kind on a plan at a billing interval;
  * null when the plan doesn't sell it (free) or the env isn't configured.
  */
@@ -142,7 +192,28 @@ export function addonPriceEnvName(
   // the plans pricing v4 retired (AGL-4126) are sold no longer, so their
   // `STRIPE_PRICE_{PLAN}_EXTRA_*` env is not read.
   if (!suffix || !PAID_PLANS.includes(plan)) return null
+  // The new price where it is configured (AGL-4227); the existing one until.
+  const repriced = repricedEnvName(kind, plan, interval)
+  if (repriced && env(repriced)) return repriced
   return `STRIPE_PRICE_${plan.toUpperCase()}_${suffix}${yearly}`
+}
+
+/**
+ * EVERY price id an add-on kind is sold or was sold under on a plan at an
+ * interval (AGL-4227): the current one, and the existing one a repriced
+ * add-on replaced, so an item already on a subscription is still read back.
+ */
+function addonPriceIdsForRecognition(
+  kind: AddonKind,
+  plan: OrgPlan,
+  interval: BillingInterval,
+): string[] {
+  const ids = [addonPriceId(kind, plan, interval)]
+  const suffix = PER_PLAN_ENV_SUFFIX[kind]
+  if (suffix && PAID_PLANS.includes(plan)) {
+    ids.push(env(`STRIPE_PRICE_${plan.toUpperCase()}_${suffix}${interval === 'year' ? '_YEARLY' : ''}`))
+  }
+  return ids.filter((id): id is string => Boolean(id))
 }
 
 /**
@@ -165,7 +236,7 @@ export function addonKindFromPriceId(
         continue
       }
       for (const plan of PAID_PLANS) {
-        if (addonPriceId(kind, plan, interval) === priceId) return kind
+        if (addonPriceIdsForRecognition(kind, plan, interval).includes(priceId)) return kind
       }
     }
   }
