@@ -53,6 +53,7 @@ import {
   RULES_REFUSED_RETRY_DELAY_MS,
   SESSION_REFUSED_RETRY_DELAY_MS,
   setFirestoreSessionReporters,
+  setFirestoreSessionSignedOut,
 } from './firestore-denial-reporter'
 
 type Handler = {
@@ -190,6 +191,7 @@ describe.each([
   afterEach(() => {
     jest.useRealTimers()
     setFirestoreSessionReporters(null)
+    setFirestoreSessionSignedOut(false)
     resetFirestoreServerReadEvidence()
   })
 
@@ -423,6 +425,56 @@ describe.each([
     const secondHour = churn(HOUR_MS) - firstHour
     expect(secondHour).toBeGreaterThan(0)
     expect(secondHour).toBeLessThanOrEqual(HOUR_MS / REFUSED_ARRIVAL_CEILING_MS + 1)
+  })
+
+  /**
+   * A tab signed out with its page still mounted (the idle sign-out keeps the
+   * tree up behind the re-auth prompt) can only be refused. Told nobody is
+   * signed in, a refused listen reopens once more at most, the reopen that
+   * was already pending, and then nothing: not on the timer and not on focus.
+   */
+  it('a signed-out tab stops reopening, on the timer and on focus', () => {
+    mount()
+    measureOpens(FAST_BUDGET_MS)
+    act(() => setFirestoreSessionSignedOut(true))
+    const opened = mockHandlers.length
+
+    act(() => {
+      denyPending()
+      for (let elapsed = 0; elapsed < HOUR_MS; elapsed += 1000) {
+        focusWindow()
+        jest.advanceTimersByTime(1000)
+        denyPending()
+      }
+    })
+    expect(mockHandlers.length).toBeLessThanOrEqual(opened + 1)
+  })
+
+  /** Somebody signing in is the event the parked listen was waiting for. */
+  it('signing back in reopens a parked listen once, at once', () => {
+    mount()
+    measureOpens(FAST_BUDGET_MS)
+    act(() => setFirestoreSessionSignedOut(true))
+    measureOpens(HOUR_MS)
+    const opened = mockHandlers.length
+
+    act(() => setFirestoreSessionSignedOut(false))
+    expect(mockHandlers).toHaveLength(opened + 1)
+
+    act(() => setFirestoreSessionSignedOut(false))
+    expect(mockHandlers).toHaveLength(opened + 1)
+  })
+
+  /** The re-auth heal does not depend on the signed-out flag clearing first. */
+  it('the heal broadcast reopens a signed-out tab at once', () => {
+    mount()
+    measureOpens(FAST_BUDGET_MS)
+    act(() => setFirestoreSessionSignedOut(true))
+    measureOpens(HOUR_MS)
+    const opened = mockHandlers.length
+
+    act(() => reportFirestoreSessionHeal())
+    expect(mockHandlers).toHaveLength(opened + 1)
   })
 
   /**

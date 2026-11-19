@@ -17,6 +17,10 @@
 
 import { readApiKeyGrant } from '@aglyn/tenant-data-admin/server/api-keys'
 import {
+  isConnectorKeyId,
+  readConnectorGrantAsKey,
+} from '@aglyn/tenant-data-admin/server/connector-oauth-store'
+import {
   describeConfiguredUrlRefusal,
   fetchConfiguredPublicUrl,
 } from '@aglyn/tenant-data-admin/server/configured-url-fetch'
@@ -88,7 +92,10 @@ function deliveryDeps(): ZapierDeliveryDeps {
   return {
     store: zapierStore(),
     post: postToZapier,
-    readGrant: (orgId, keyId) => readApiKeyGrant(orgId, keyId),
+    // A hook subscribed through a connected app (AGL-4225) carries the
+    // connection's id where a key's would be, and stops when it ends.
+    readGrant: (orgId, keyId) =>
+      isConnectorKeyId(keyId) ? readConnectorGrantAsKey(orgId, keyId) : readApiKeyGrant(orgId, keyId),
     readOrg: async (orgId) => (await getOrgDoc(orgId)) as Record<string, unknown> | null,
     now: () => Date.now(),
     maxAttempts: PLUGIN_EVENT_MAX_ATTEMPTS,

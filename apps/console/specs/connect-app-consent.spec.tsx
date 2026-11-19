@@ -1,0 +1,193 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * The consent screen (AGL-4225): what a person is shown, what they may pick,
+ * and the one rule that matters most — the page goes only where the consent
+ * route sends it, never to an address it read from its own query.
+ */
+
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import React from 'react'
+
+const mockFetch = jest.fn()
+jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
+  authorizedFetch: (...args: unknown[]) => mockFetch(...args),
+}))
+jest.mock('@aglyn/tenant-feature-instance', () => ({
+  useUser: () => ({ data: { uid: 'user-1', email: 'owner@example.com' } }),
+}))
+jest.mock('@aglyn/shared-ui-jsx/components/background-image.component', () => ({
+  BackgroundImageComponent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}))
+
+import ConnectAppConsent from '../components/connect-app-consent.component'
+
+const assign = jest.fn()
+const answer = (status: number, body: unknown) => ({ ok: status < 400, status, json: async () => body })
+
+const DESCRIPTION = {
+  app: { name: 'Claude', returnsTo: 'claude.ai', kind: 'web' },
+  workspaces: [
+    { orgId: 'org-1', name: 'Acme', slug: 'acme', entitled: true },
+    { orgId: 'org-2', name: 'Side Project', slug: 'side', entitled: false },
+  ],
+  access: [
+    { level: 'view', areas: [{ area: 'Contacts', abilities: ['See your contacts'] }] },
+    { level: 'change', areas: [{ area: 'Contacts', abilities: ['See your contacts', 'Add, edit and delete contacts'] }] },
+  ],
+}
+
+beforeEach(() => {
+  mockFetch.mockReset()
+  assign.mockReset()
+  window.history.replaceState(null, '', '/oauth/authorize?client_id=c&redirect_uri=https%3A%2F%2Fevil.example%2Fcb&state=s')
+})
+
+const bodyOf = (call: unknown[]) => JSON.parse((call[2] as { body: string }).body)
+
+describe('the consent screen (AGL-4225)', () => {
+  it('names the app and where it goes back to, and offers both levels in plain words', async () => {
+    mockFetch.mockResolvedValueOnce(answer(200, DESCRIPTION))
+    render(<ConnectAppConsent navigate={assign} />)
+    expect(await screen.findByText('Connect an app')).toBeTruthy()
+    expect(screen.getByTestId('connect-destination').textContent).toContain('claude.ai')
+    expect(screen.getByLabelText('View only')).toBeTruthy()
+    expect(screen.getByLabelText('View and make changes')).toBeTruthy()
+    expect(screen.getByText('See your contacts')).toBeTruthy()
+    expect(document.body.textContent).not.toMatch(/oauth|scope|token|grant/i)
+    // The request is forwarded verbatim for the server to judge.
+    expect(bodyOf(mockFetch.mock.calls[0])).toEqual({
+      action: 'describe',
+      query: 'client_id=c&redirect_uri=https%3A%2F%2Fevil.example%2Fcb&state=s',
+    })
+  })
+
+  it('says which account is approving, and to continue only if they started it', async () => {
+    mockFetch.mockResolvedValueOnce(answer(200, DESCRIPTION))
+    render(<ConnectAppConsent navigate={assign} />)
+    expect(await screen.findByText('owner@example.com')).toBeTruthy()
+    expect(screen.getByText(/Signed in as/)).toBeTruthy()
+    expect(screen.getByText(/Only continue if you started connecting this app yourself/)).toBeTruthy()
+  })
+
+  it.each([
+    [
+      { name: 'Inspector', returnsTo: 'this computer', kind: 'loopback' },
+      'An app on this computer',
+      /running on this computer/,
+    ],
+    [
+      { name: 'claude.ai', returnsTo: 'login.bank.example.evil.com:8443', kind: 'web', host: 'login.bank.example.evil.com', port: '8443', path: '/phish?step=2' },
+      'login.bank.example.evil.com:8443',
+      /phish\?step=2/,
+    ],
+  ])('leads with where the connection goes, not what the app calls itself (%#)', async (app, destination, detail) => {
+    mockFetch.mockResolvedValueOnce(answer(200, { ...DESCRIPTION, app }))
+    render(<ConnectAppConsent navigate={assign} />)
+    const box = await screen.findByTestId('connect-destination')
+    expect(box.textContent).toContain(destination)
+    expect(box.textContent).toMatch(detail)
+    // The self-asserted name is its own element, never inside a sentence or quotes.
+    const chip = screen.getByTestId('connect-app-name')
+    expect(chip.textContent).toBe(app.name)
+    expect(box.textContent).not.toMatch(/[“”"]/)
+    if (!app.name.includes('Claude')) expect(document.body.textContent).not.toMatch(/Claude/)
+  })
+
+  it('shows the full host, wrapping only between labels', async () => {
+    const app = { name: 'X', returnsTo: 'a.very-long-label.example.com', kind: 'web', host: 'a.very-long-label.example.com', path: '/cb' }
+    mockFetch.mockResolvedValueOnce(answer(200, { ...DESCRIPTION, app }))
+    render(<ConnectAppConsent navigate={assign} />)
+    const host = await screen.findByTestId('connect-destination-host')
+    expect(host.textContent).toBe('a.very-long-label.example.com')
+    expect(host.querySelectorAll('wbr')).toHaveLength(3)
+  })
+
+  it('starts on View only, and preselects no workspace when there are several to choose from', async () => {
+    const several = {
+      ...DESCRIPTION,
+      workspaces: [
+        { orgId: 'org-1', name: 'Acme', slug: 'acme', entitled: true },
+        { orgId: 'org-3', name: 'Beta', slug: 'beta', entitled: true },
+      ],
+    }
+    mockFetch.mockResolvedValueOnce(answer(200, several))
+    render(<ConnectAppConsent navigate={assign} />)
+    expect(((await screen.findByLabelText('View only')) as HTMLInputElement).checked).toBe(true)
+    expect((screen.getByLabelText('Acme') as HTMLInputElement).checked).toBe(false)
+    expect((screen.getByLabelText('Beta') as HTMLInputElement).checked).toBe(false)
+    expect((screen.getByRole('button', { name: 'Allow' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(screen.getByLabelText('Beta'))
+    expect((screen.getByRole('button', { name: 'Allow' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('never navigates on its own: a pre-consent error is shown, and only Cancel goes back', async () => {
+    mockFetch
+      .mockResolvedValueOnce(
+        answer(400, {
+          error: 'unsupported_response_type',
+          reason: 'request_error',
+          description: 'Only response_type=code is supported',
+          returnsTo: { kind: 'web', returnsTo: 'evil.com', host: 'evil.com', path: '/phish?step=2' },
+        }),
+      )
+      .mockResolvedValueOnce(answer(200, { redirectTo: 'https://evil.com/phish?step=2&error=unsupported_response_type' }))
+    render(<ConnectAppConsent navigate={assign} />)
+    expect(await screen.findByText('This request can’t be used')).toBeTruthy()
+    expect(document.body.textContent).toContain('evil.com')
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(assign).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('https://evil.com/phish?step=2&error=unsupported_response_type'))
+    expect(bodyOf(mockFetch.mock.calls[1])).toMatchObject({ action: 'deny' })
+  })
+
+  it('ignores an address in a describe answer: opening the page never navigates', async () => {
+    mockFetch.mockResolvedValueOnce(answer(200, { redirectTo: 'ms-appinstaller://?source=https://evil.com/x' }))
+    render(<ConnectAppConsent navigate={assign} />)
+    await waitFor(() => expect(screen.getByText('Something went wrong')).toBeTruthy())
+    expect(assign).not.toHaveBeenCalled()
+  })
+
+  it('shows a workspace without the plan, but it cannot be chosen', async () => {
+    mockFetch.mockResolvedValueOnce(answer(200, DESCRIPTION))
+    render(<ConnectAppConsent navigate={assign} />)
+    const side = (await screen.findByLabelText('Side Project')) as HTMLInputElement
+    expect(side.disabled).toBe(true)
+    expect(screen.getByText('See plans').closest('a')?.getAttribute('href')).toBe('/side/billing#plans')
+    expect((screen.getByLabelText('Acme') as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('sends Allow with the chosen workspace and level, and follows only the address returned', async () => {
+    mockFetch
+      .mockResolvedValueOnce(answer(200, DESCRIPTION))
+      .mockResolvedValueOnce(answer(200, { redirectTo: 'https://claude.ai/api/mcp/auth_callback?code=c&state=s' }))
+    render(<ConnectAppConsent navigate={assign} />)
+    fireEvent.click(await screen.findByLabelText('View and make changes'))
+    fireEvent.click(screen.getByRole('button', { name: 'Allow' }))
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('https://claude.ai/api/mcp/auth_callback?code=c&state=s'))
+    expect(bodyOf(mockFetch.mock.calls[1])).toMatchObject({ action: 'allow', orgId: 'org-1', access: 'change' })
+  })
+
+  it('never navigates on a request the server refused to trust', async () => {
+    mockFetch.mockResolvedValueOnce(answer(400, { error: 'invalid_redirect_uri', reason: 'invalid_redirect_uri' }))
+    render(<ConnectAppConsent navigate={assign} />)
+    expect(await screen.findByText('This link can’t connect an app')).toBeTruthy()
+    expect(assign).not.toHaveBeenCalled()
+  })
+})

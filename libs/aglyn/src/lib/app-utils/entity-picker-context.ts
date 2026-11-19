@@ -30,6 +30,12 @@ export interface EntityOption {
    * name rather than the id still matches by the name.
    */
   name?: string
+  /**
+   * For an entity's FIELD (`entityFields`), the named type it holds where it
+   * has one: `icon` for a record's icon (AGL-4190), which only an Icon
+   * picker may bind.
+   */
+  customType?: string
 }
 
 /**

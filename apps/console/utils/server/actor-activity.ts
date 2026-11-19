@@ -81,6 +81,8 @@ export interface ActorActivityEntry {
   staffActorId?: string
   /** The API key that wrote the entry, when an integration did (AGL-2632). */
   apiKeyName?: string
+  /** The connected app that wrote the entry, when one did (AGL-4225). */
+  connectedAppName?: string
   createdAt: { seconds: number } | null
 }
 
@@ -161,6 +163,7 @@ function flattenEntry(
       ? { staffActorId: data['staffActorId'] }
       : {}),
     ...(typeof data['apiKeyName'] === 'string' ? { apiKeyName: data['apiKeyName'] } : {}),
+    ...(typeof data['connectedAppName'] === 'string' ? { connectedAppName: data['connectedAppName'] } : {}),
     createdAt: seconds === null ? null : { seconds },
   }
 }
@@ -470,6 +473,7 @@ export async function readOrgWideActivity(
           'actorEmail',
           'staffActorId',
           'apiKeyName',
+          'connectedAppName',
           'createdAt',
         ),
       },

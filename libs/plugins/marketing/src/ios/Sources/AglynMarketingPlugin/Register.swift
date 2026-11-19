@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynPluginHost
+import AglynScreens
 
 /// Registers the ids `plugins.config.json` declares under the plugin's
 /// `mobile.contributes`: each section of the console's Marketing page
@@ -10,6 +11,8 @@ import AglynPluginHost
 /// Campaigns section.
 @MainActor
 public func registerMarketingNative(_ r: NativePluginRegistrar) {
+  // The staff screens (spec): the staff pages' read-only Email campaigns cards.
+  SpecScreens.register(marketingScreenSpecs(), into: r)
   for section in MarketingSection.allCases {
     r.screen(section.screen, title: section == .overview ? "Marketing" : section.label, requiresSite: true, workspaceView: true, icon: section.symbol) { ctx, params in
       if section == .conversions, let campaign = params["campaign"], let orgID = ctx.orgID, let hostID = ctx.hostID {
@@ -31,3 +34,6 @@ public func registerMarketingNative(_ r: NativePluginRegistrar) {
   r.deepLink("marketing.campaign-page", path: "/marketing/campaigns/:campaign", screen: MarketingSection.campaigns.screen)
   r.deepLink("marketing.inbox-campaigns-page", path: "/inbox/campaigns", screen: MarketingSection.campaigns.screen)
 }
+
+/// The plugin's spec screens (Resources/marketing.screens.json): the staff pages' read-only cards.
+func marketingScreenSpecs() -> [ScreenSpec] { ScreenCatalog.load(from: .module) }

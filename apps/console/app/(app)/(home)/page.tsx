@@ -72,6 +72,7 @@ import {
 import { useWorkspacePage } from '../../../hooks/use-workspace-page'
 import { readOutcome } from '@aglyn/shared-ui-jsx/utils/read-outcome'
 import { usePendingInvites } from '../../../hooks/use-pending-invites'
+import { useInviteAutoAccept } from '../../../hooks/use-invite-auto-accept'
 import {
   consumeOnboardingPlanIntent,
   PLAN_INTENT_DEADLINE_MS,
@@ -256,6 +257,11 @@ function OrgJump() {
   // surface, so it must offer the invite (AGL-851). Without it the invite was
   // reachable only from a hosts page, which needs an org you don't have yet.
   const { invites, loading: invitesLoading } = usePendingInvites()
+  // An invitation this tab has joined, or is joining (AGL-4047). It leaves
+  // `invites` the moment it is accepted, before its membership reaches
+  // `orgs`, and that gap must not read as "no invitation".
+  const { joining: inviteJoining } = useInviteAutoAccept()
+  const invited = invites.length > 0 || inviteJoining
   const router = useRouter()
   const searchParams = useSearchParams()
   const [creatingOrg, setCreatingOrg] = useState(false)
@@ -448,9 +454,27 @@ function OrgJump() {
     // The remembered plan decides where the new workspace LANDS, and it is
     // read once and destructively — starting before it answers would drop it.
     if (storedIntent === undefined) return
-    // A pending invite is why a zero-workspace account is here; the backstop
-    // below must not hand it a workspace of its own before it can see that.
+    // A pending invite is why a zero-workspace account is here, so nothing
+    // is provisioned before the list has answered.
     if (invitesLoading) return
+    /*
+     * AN INVITEE IS OPENED INTO THE WORKSPACE THEY WERE INVITED TO (AGL-4047).
+     *
+     * The sign-up form asks everyone for a workspace name, because it cannot
+     * know about an invitation before the account exists without telling a
+     * stranger which addresses have one. So the decision is made here, on
+     * the verified account: with an invitation waiting (or just joined by
+     * the automatic join), the held name is NOT claimed and nothing is
+     * created. The automatic join opens the newest invited workspace, and
+     * the held name stays untouched, so a person whose invitation is
+     * withdrawn before they join still gets the workspace they named. The
+     * page's own "Create my own site instead" is there for anyone who wants
+     * a workspace of their own as well.
+     *
+     * Not marked provisioned: if the invitation goes away without a join,
+     * this runs again and provisions as it would have.
+     */
+    if (invited) return void setProvisionSettled(true)
     if (provisionedForRef.current === uid) return
     // The editor-hint bounce is already leaving (AGL-3690). The claim clears
     // the held name, so starting it now would lose the name with the page.
@@ -474,7 +498,7 @@ function OrgJump() {
       // workspace and no invite gets the personal one that door would have
       // created, instead of an empty chooser — unless another tab claimed
       // provisioning moments ago and is creating it now (AGL-4079).
-      const backstop = invites.length === 0 && needsBackstopWorkspace(user)
+      const backstop = needsBackstopWorkspace(user)
       const claim = await claimSignUpWorkspaceWithin(firestore, user, {
         backstop,
       })
@@ -550,7 +574,7 @@ function OrgJump() {
     confirmed,
     enterOrg,
     firestore,
-    invites.length,
+    invited,
     invitesLoading,
     loading,
     orgs.length,

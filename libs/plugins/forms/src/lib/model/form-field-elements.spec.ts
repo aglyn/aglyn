@@ -232,6 +232,23 @@ describe('formFieldToElements', () => {
     expect(result?.nodes['t-opt-0-input']?.props).toEqual({ name: 'terms', value: 'I agree', required: true })
   })
 
+  it('shows the field label beside a lone box whose only option is "Yes", still posting "Yes"', () => {
+    const result = formFieldToElements(
+      field('o', { fieldName: 'marketingOptIn', label: 'Email me news and product updates', fieldType: 'checkbox', options: 'Yes' }),
+    )
+    expect(result?.nodes['o']?.nodes).toEqual(['o-opt-0'])
+    expect(result?.nodes['o-label']).toBeUndefined()
+    expect(result?.nodes['o-opt-0']?.props).toEqual({ label: 'Email me news and product updates' })
+    expect(result?.nodes['o-opt-0-input']?.props).toEqual({ name: 'marketingOptIn', value: 'Yes' })
+  })
+
+  it('keeps a lone box\'s own words when its option says more than yes', () => {
+    const result = formFieldToElements(
+      field('t', { fieldName: 'terms', label: 'Terms', fieldType: 'checkbox', options: 'I agree to the terms' }),
+    )
+    expect(result?.nodes['t-opt-0']?.props).toEqual({ label: 'I agree to the terms' })
+  })
+
   it('keeps the marketing consent box posting its option text, under its exact name', () => {
     const result = formFieldToElements(field('mc', { ...MARKETING_CONSENT_FORM_FIELD }))
     expect(result?.nodes['mc-opt-0']?.props).toEqual({ label: MARKETING_CONSENT_FORM_FIELD.options })

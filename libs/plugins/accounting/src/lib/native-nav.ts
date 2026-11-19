@@ -42,6 +42,8 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
       pluginId: 'accounting',
       order: 70,
       console: nativeNavRef('orgPluginTab', '/accounting'),
+      // The console's help for this tab, now that the guide is listed (AGL-3614).
+      docs: '/commerce-and-bookings/commerce/connect-quickbooks-online',
     },
   },
 ]

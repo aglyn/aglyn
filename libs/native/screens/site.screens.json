@@ -618,7 +618,7 @@
 
       "id": "core.site.security",
       "title": "Security",
-      "subtitle": "Approved hosts for media, fonts, forms and embeds",
+      "subtitle": "Approved hosts for images, media, fonts, forms and embeds",
       "icon": "lock.shield|security",
       "scope": "site",
       "group": "site",
@@ -636,6 +636,38 @@
           "type": "notice",
           "tone": "info",
           "text": "The published site only loads from hosts listed here. Every host listed can see the address of anyone who visits."
+        },
+        {
+          "type": "list",
+          "title": "Image hosts",
+          "items": "data.site.approvedImageHosts",
+          "primary": "{item}",
+          "icon": "photo.on.rectangle|image",
+          "actions": [
+            {
+              "id": "remove",
+              "label": "Remove",
+              "icon": "trash|delete",
+              "destructive": true,
+              "when": "site.can[site.manage]",
+              "confirm": "Remove {item}?",
+              "write": {
+                "doc": "hosts/{site.id}",
+                "fields": {
+                  "approvedImageHosts": {
+                    "$without": {
+                      "list": "{data.site.approvedImageHosts}",
+                      "item": "{item}"
+                    }
+                  }
+                }
+              },
+              "siteWide": true,
+              "success": "Removed",
+              "reload": true
+            }
+          ],
+          "empty": "None"
         },
         {
           "type": "list",
@@ -662,6 +694,7 @@
                   }
                 }
               },
+              "siteWide": true,
               "success": "Removed",
               "reload": true
             }
@@ -693,6 +726,7 @@
                   }
                 }
               },
+              "siteWide": true,
               "success": "Removed",
               "reload": true
             }
@@ -724,6 +758,7 @@
                   }
                 }
               },
+              "siteWide": true,
               "success": "Removed",
               "reload": true
             }
@@ -755,6 +790,7 @@
                   }
                 }
               },
+              "siteWide": true,
               "success": "Removed",
               "reload": true
             }
@@ -786,6 +822,7 @@
                   }
                 }
               },
+              "siteWide": true,
               "success": "Removed",
               "reload": true
             }
@@ -796,6 +833,34 @@
           "type": "actions",
           "when": "site.can[site.manage]",
           "items": [
+            {
+              "id": "addImage",
+              "label": "Approve an image host",
+              "icon": "photo.on.rectangle|image",
+              "prompt": [
+                {
+                  "key": "value",
+                  "label": "Host",
+                  "kind": "url",
+                  "required": true,
+                  "placeholder": "cdn.example.com"
+                }
+              ],
+              "write": {
+                "doc": "hosts/{site.id}",
+                "fields": {
+                  "approvedImageHosts": {
+                    "$append": {
+                      "list": "{data.site.approvedImageHosts}",
+                      "item": "{form.value}"
+                    }
+                  }
+                }
+              },
+              "siteWide": true,
+              "success": "Approved {form.value}",
+              "reload": true
+            },
             {
               "id": "addMedia",
               "label": "Approve a media host",
@@ -820,6 +885,7 @@
                   }
                 }
               },
+              "siteWide": true,
               "success": "Approved {form.value}",
               "reload": true
             },
@@ -846,6 +912,7 @@
                   }
                 }
               },
+              "siteWide": true,
               "success": "Approved {form.value}",
               "reload": true
             },
@@ -872,6 +939,7 @@
                   }
                 }
               },
+              "siteWide": true,
               "success": "Approved {form.value}",
               "reload": true
             },
@@ -898,6 +966,7 @@
                   }
                 }
               },
+              "siteWide": true,
               "success": "Approved {form.value}",
               "reload": true
             },
@@ -924,6 +993,7 @@
                   }
                 }
               },
+              "siteWide": true,
               "success": "Approved {form.value}",
               "reload": true
             }
@@ -1105,6 +1175,38 @@
         },
         {
           "type": "form",
+          "id": "maintenance",
+          "title": "Maintenance mode",
+          "footer": "While it is on, visitors see the 503 page at every address. You and your team still see the site from Visit site.",
+          "when": "site.can[site.manage]",
+          "fields": [
+            {
+              "key": "maintenance",
+              "label": "Maintenance mode — show visitors the 503 page at every address",
+              "kind": "toggle",
+              "initial": "{data.site.maintenance|false}"
+            }
+          ],
+          "submit": {
+            "label": "Save",
+            "write": {
+              "doc": "hosts/{site.id}",
+              "fields": {
+                "maintenance": {
+                  "$if": "form.maintenance",
+                  "then": true,
+                  "else": {
+                    "$delete": true
+                  }
+                }
+              }
+            },
+            "siteWide": true,
+            "success": "Saved"
+          }
+        },
+        {
+          "type": "form",
           "id": "preview",
           "title": "Preview",
           "footer": "Only you, your team and Aglyn support can see the site. Visitors see your 503 page, or \"Coming soon\", until you make it public.",
@@ -1156,7 +1258,7 @@
           "items": "data.activity.items",
           "primary": "{item.action:activity}",
           "secondary": "{item.target.name|item.target.label|item.target.title|item.target.type:title}",
-          "tertiary": "{item.actorEmail|item.apiKeyName|'System'} · {item.createdAt:datetime}",
+          "tertiary": "{item.actorEmail|item.apiKeyName|item.connectedAppLabel|'System'} · {item.createdAt:datetime}",
           "icon": "clock|schedule",
           "empty": "No activity yet."
         }

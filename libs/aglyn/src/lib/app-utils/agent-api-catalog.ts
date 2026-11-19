@@ -42,6 +42,21 @@ export interface CatalogApi {
   title: string
   /** Machine-readable description: OpenAPI, published as `service-desc`. */
   specUrl?: string
+  /**
+   * Media type of {@link specUrl}. Defaults to JSON, which is what an OpenAPI
+   * document is served as; an MCP Server Card has a type of its own
+   * (`application/mcp-server-card+json`) and says so.
+   */
+  specType?: string
+  /**
+   * Further machine-readable metadata about the API, published as
+   * `service-meta` (RFC 8631 §4.3, one of the four relations RFC 9727
+   * Appendix A.1 names). For the MCP server: its OAuth protected-resource document
+   * (RFC 9728) and its authorization server's document (RFC 8414) — how a
+   * client signs in. No registered relation is specific to either, and
+   * `service-meta` is the general one RFC 9727 provides for exactly this.
+   */
+  metaLinks?: readonly { href: string; type: string }[]
   /** Human documentation, published as `service-doc`. */
   docsUrl?: string
   /**
@@ -109,13 +124,19 @@ export function buildAgentApiCatalog(options: AgentApiCatalogOptions): Schema {
     const context: Schema = { anchor: api.url }
     if (api.specUrl) {
       context['service-desc'] = [
-        { href: api.specUrl, type: 'application/json' },
+        { href: api.specUrl, type: api.specType ?? 'application/json' },
       ]
     }
     if (api.docsUrl) {
       context['service-doc'] = [
         { href: api.docsUrl, type: api.docsType ?? 'text/html' },
       ]
+    }
+    if (api.metaLinks && api.metaLinks.length > 0) {
+      context['service-meta'] = api.metaLinks.map((link) => ({
+        href: link.href,
+        type: link.type,
+      }))
     }
     if (api.statusUrl) {
       context['status'] = [{ href: api.statusUrl, type: 'application/json' }]
