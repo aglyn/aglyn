@@ -8,8 +8,9 @@ description: Connect Claude or another AI assistant to your Aglyn workspace. Sig
 
 Connect [Claude](https://claude.ai) to your workspace and ask it for things in
 plain words: *"Who filled in the contact form this week?"*, *"Add these five
-services to my site"*, *"Mark order 1042 shipped with this tracking number"*,
-*"Log my call with Dana and remind me on Friday."*
+services to my site"*, *"Change the headline on my About page"*, *"Mark order
+1042 shipped with this tracking number"*, *"Log my call with Dana and remind me
+on Friday."*
 
 You sign in to Aglyn and choose what the assistant may do. There is nothing to
 copy or paste, and you can disconnect it at any time.
@@ -61,7 +62,9 @@ cannot do, your plan, and how to disconnect it.
 | Area | Claude can |
 | --- | --- |
 | **Sites** | List your sites, create a site, and publish a site. |
-| **Pages** | See the list of a site's pages: their names, their addresses, and whether each one is published. |
+| **Pages** | See a site's pages and folders: their names, their addresses, and whether each one is published. Add a page, blank or from a template. Rename a page, change its address, move it to another place in your pages, or delete it. Publish pages you choose. |
+| **What is on a page** | Read what is on a page. Change its text, pictures and links, change spacing, alignment and other styles, and add, move or remove parts of it. These changes are saved as a draft, which you review in the editor before you publish. |
+| **Templates** | See the page templates a new page can start from. |
 | **Search results** | See and change how your site and each of its pages appear in search results: the title and the short description. |
 | **Business details** | See and change your business name, slogan, phone number, email, address and social links. |
 | **Site content** | Read and edit datasets and their records - the content behind listings, service pages, menus and directories. |
@@ -73,33 +76,64 @@ cannot do, your plan, and how to disconnect it.
 | **Media** | List your media and upload new files. |
 
 Each area follows your plan, the same way it does in the console: the CRM
-needs a plan with the CRM, orders and products need commerce, and so on.
+needs a plan with the CRM, orders and products need commerce, a new page counts
+toward your plan's pages, and so on.
 
-On a site, Claude can do only what you can do there yourself. To change a
-site's products, search results, business details or media, or to publish it,
-you need permission to edit that site's content.
+On a site, Claude can do only what you can do there yourself. To add a page,
+change what is on a page, or change a site's products, search results,
+business details or media, you need permission to edit that site's content. To
+publish pages, delete a page, or change a page's address or where it sits, you
+need permission to publish that site's content.
 
-### Changes show on your live site
+### Page changes wait for you; other changes are live at once {#changes-show-on-your-live-site}
 
-Changes to products, to how your site appears in search results, and to your
-business details show on your live site as soon as they are saved. There is no
-draft to check first, and no publish step. Before you approve a change, read
-what Claude proposes to do.
+**Changes to what is on a page wait as a draft.** When Claude changes the text,
+pictures or layout of a page, your visitors see nothing new. Claude gives you a
+link that opens the draft in the editor, so you can look it over and adjust
+it. The changes go live only when the page is published, by you in
+the editor or by Claude when you ask it to.
+
+**A new page is not live either.** It has no address on your site until it is
+published, so nobody can visit it yet.
+
+**Some changes are live as soon as they are saved**, with no draft to check
+first and no publish step:
+
+- products and their prices and stock
+- how your site and pages appear in search results
+- your business details
+- changes to a page that is already published: its name, its description, its
+  address or where it sits, and deleting it
+
+Before you approve one of these, read what Claude proposes to do.
 
 ### What it cannot do
 
-Claude cannot change what is on a page or how it looks, cancel or refund an
-order, move or cancel a booking, rename or delete a site, replace or delete
-media, or change your team, plan or billing. Do those in the console.
+Claude cannot change your site's theme, its layouts, your reusable components
+or your templates themselves, and it cannot redesign a whole site. It cannot
+cancel or refund an order, move or cancel a booking, rename or delete a site,
+replace or delete media, or change your team, plan or billing. Do those in the
+console.
+
+Now and then a page has to be published from the editor instead. This can
+happen on a page whose layout has style changes of its own, when its draft does
+not include them: because someone removed them in the editor, or because Claude
+made the draft before Claude's drafts kept them. Claude cannot tell whether you
+want those style changes kept, so it tells you, and you open the page in the
+editor, check it and publish it there.
+
+On a page, Claude cannot set rich text with mixed formatting, or pick an icon:
+it replaces rich text with plain text, and icons are picked in the editor.
+Pictures come from your media library or a web address.
 
 For products, Claude cannot add or remove a single variant on its own:
 variants follow the product's options, such as sizes and colors, so it changes
 the options instead. It cannot make digital products, gift cards or
 subscriptions.
 
-Designing a page is done in the console, in the editor. If you use
-Claude's browser extension, Claude can work in the console alongside you
-there, in your own signed-in window.
+If you use Claude's browser extension, Claude can also work in the console
+alongside you, in your own signed-in window, for anything above that it cannot
+do on its own.
 
 ## Good habits
 
@@ -107,9 +141,13 @@ there, in your own signed-in window.
   with more access later.
 - **Ask Claude to tell you before it changes anything.** In Claude's connector
   settings you can also choose which actions need your approval each time.
-- **Check before you publish.** Publishing a site makes its changes live for
-  visitors. Product, search result and business detail changes are live as
-  soon as they are saved, so check those before you approve them too.
+- **Look at a page's draft before you publish it.** Open the link Claude gives
+  you, check the page on phone and desktop in the editor, and only then ask
+  Claude to publish it, or publish it yourself.
+- **Check before you publish.** Publishing makes changes live for visitors.
+  Product, search result and business detail changes, and changes to a
+  published page's name, address or place, are live as soon as they are saved,
+  so check those before you approve them too.
 - What Claude reads from your workspace is handled by Claude under your
   agreement with Anthropic. Connect only a Claude account you trust with your
   customers' details.

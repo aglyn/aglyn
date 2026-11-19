@@ -298,6 +298,88 @@ final class MarketplaceTests: XCTestCase {
         installPictureReadPhase(orgPinPending: pin as? String == "pending", orgPin: read, sitePins: input["sitePins"] as? String ?? ""),
         item.result as? String, "\(item.args)")
     }
+    // The template gallery's shelf (the console's TemplateGalleryShelf).
+    let plain = templateShelfQuery(search: "", limit: 24)
+    XCTAssertEqual(plain.collection, [listingsCollection])
+    XCTAssertEqual(plain.limit, 24)
+    XCTAssertTrue("\(plain.filters) \(plain.equals)".contains("kind"))
+    XCTAssertTrue("\(templateShelfQuery(search: " bakery ", limit: 24).filters)".contains("nameTokens"))
+    XCTAssertEqual(templateShelfFacts(screenCount: 5, version: "3", priceUSD: 0), "5 pages · v3 · free")
+    XCTAssertEqual(templateShelfFacts(screenCount: nil, version: "1.2.0", priceUSD: 12), "? pages · v1.2.0 · $12")
+    // A store build (StoreBilling.buying off) says a paid template is paid, not its price, and offers no Use on it.
+    XCTAssertEqual(templateShelfFacts(screenCount: 5, version: "3", priceUSD: 12, buying: false), "5 pages · v3 · paid")
+    XCTAssertEqual(templateShelfFacts(screenCount: 5, version: "3", priceUSD: 0, buying: false), "5 pages · v3 · free")
+    XCTAssertTrue(templateShelfOffersUse(priceUSD: 12, buying: true))
+    XCTAssertFalse(templateShelfOffersUse(priceUSD: 12, buying: false))
+    XCTAssertTrue(templateShelfOffersUse(priceUSD: 0, buying: false))
+    XCTAssertEqual(
+      templateInstalledMessage(added: 1, name: "Bakery"),
+      "Saved 1 template from \"Bakery\" to your library — open Templates to create pages from them.")
+    XCTAssertTrue(templateInstalledMessage(added: 5, name: "Bakery").hasPrefix("Saved 5 templates"))
+    XCTAssertEqual(templateShelfState(offered: false, loading: true, visible: true), .empty)
+    XCTAssertEqual(templateShelfState(offered: true, loading: true, visible: false), .loading)
+    XCTAssertEqual(templateShelfState(offered: true, loading: false, visible: true), .shown)
+    XCTAssertEqual(templateShelfState(offered: true, loading: false, visible: false), .empty)
+    // The update review of a copied listing (AGL-1018): the console's provenance and change words.
+    for item in try functionCases("resolveProvenance") {
+      let doc = item.args.first as? [String: Any]
+      let got = resolveProvenance(doc, fallbackArtifactType: item.args.count > 1 ? string(item.args[1]) : nil)
+      let want = object(item.result)
+      XCTAssertEqual(got.state, want["state"] as? String, "\(item.args)")
+      XCTAssertEqual(got.listingID, string(want["listingId"]), "\(item.args)")
+      XCTAssertEqual(got.version, string(want["version"]), "\(item.args)")
+      XCTAssertEqual(got.sha256, string(want["sha256"]), "\(item.args)")
+      XCTAssertEqual(got.artifactType, string(want["artifactType"]), "\(item.args)")
+      XCTAssertEqual(got.publisherOrgID, string(want["publisherOrgId"]), "\(item.args)")
+      XCTAssertEqual(got.updatable, want["updatable"] as? Bool, "\(item.args)")
+    }
+    for item in try functionCases("describeChange") {
+      let change = object(item.args[0])
+      XCTAssertEqual(
+        describeChange(path: change["path"] as? String ?? "", added: change["added"] as? Bool == true, removed: change["removed"] as? Bool == true),
+        item.result as? String, "\(item.args)")
+    }
+    for item in try functionCases("summarizeValue") {
+      let json = try JSONDecoder().decode(JSONValue.self, from: JSONSerialization.data(withJSONObject: item.args, options: [.fragmentsAllowed]))
+      XCTAssertEqual(summarizeValue(json.arrayValue?.first), item.result as? String, "\(item.args)")
+    }
+    XCTAssertEqual(summarizeValue(nil), "—")
+    XCTAssertEqual(copyUpdateState(installed: ["marketplace": ["listingId": "l1", "version": "1.0.0"]], latestVersion: "1.2.0", artifactType: "component").state, "update-available")
+    XCTAssertEqual(copyUpdateState(installed: ["marketplace": ["listingId": "l1", "version": "1.2.0"]], latestVersion: "1.2.0", artifactType: "component").state, "current")
+    XCTAssertEqual(copyUpdateState(installed: ["marketplace": ["listingId": "l1"]], latestVersion: "1.2.0", artifactType: "component").state, "unknown")
+    XCTAssertEqual(copyInstallLabel(state: "current", installedVersion: "1.2.0", offeredVersion: "1.2.0"), "Installed (v1.2.0)")
+    XCTAssertEqual(copyInstallLabel(state: "update-available", installedVersion: "1.0.0", offeredVersion: "1.2.0"), "Review update to v1.2.0")
+    XCTAssertEqual(copyInstallLabel(state: "unknown", installedVersion: nil, offeredVersion: "1.2.0"), "Review this version")
+    let previewJSON = try JSONDecoder().decode(JSONValue.self, from: Data(#"""
+      {"installedVersion":"1.0.0","availableVersion":"1.2.0","mergeable":true,"identical":false,"unchanged":4,
+       "safe":[{"path":"a","current":1,"incoming":2}],"kept":[],"conflicts":[{"path":"b","current":null,"incoming":"x"},{"path":"c","added":true}],
+       "schema":{"added":["f"],"removed":["g"],"retyped":[],"additiveOnly":false,"recordCount":12}}
+      """#.utf8))
+    let preview = ArtifactUpdatePreview(previewJSON)
+    XCTAssertEqual(preview.versionLine, "You have v1.0.0; v1.2.0 is available.")
+    XCTAssertEqual(preview.conflicts.map(\.path), ["b", "c"])
+    XCTAssertEqual(summarizeValue(preview.conflicts[0].current), "null")
+    XCTAssertEqual(summarizeValue(preview.conflicts[1].current), "—")
+    XCTAssertTrue(preview.destructive)
+    XCTAssertEqual(preview.schema?.recordCount, 12)
+    XCTAssertEqual(preview.applyLabel(taken: 0), "Apply safe changes")
+    XCTAssertEqual(preview.applyLabel(taken: 2), "Apply (2 taken from publisher)")
+    XCTAssertEqual(ArtifactUpdatePreview(.object(["identical": .bool(true), "availableVersion": .string("3")])).applyLabel(taken: 1), "Take v3 (no content changes)")
+    XCTAssertEqual(ArtifactUpdatePreview(.object(["availableVersion": .number(3)])).versionLine, "v3 is available.")
+    XCTAssertEqual(
+      artifactUpdateSummary(mode: "merge", answer: .object(["version": .string("1.2.0"), "applied": .number(3), "keptLocal": .number(1), "skipped": .array([.string("b")])])),
+      "Updated to v1.2.0 — 3 change(s) applied, 1 of yours kept, 1 conflict(s) left as yours.")
+    XCTAssertEqual(artifactUpdateSummary(mode: "merge", answer: .object(["version": .string("1.2.0")])), "Now on v1.2.0 — this version changes nothing in your copy.")
+    XCTAssertEqual(
+      artifactUpdateSummary(mode: "copy", answer: .object(["version": .number(2)])),
+      "Installed v2 as a new copy — your customized version is kept, no longer linked to the listing.")
+    // The template library's "Update available" (the console's TemplateInstallStatus).
+    XCTAssertEqual(templateReplaceQuestion("Bakery").title, "Replace your edited copy?")
+    XCTAssertTrue(templateReplaceQuestion("Bakery").message.hasPrefix("You have edited \"Bakery\" since installing it."))
+    XCTAssertEqual(templateUpdatedMessage(version: "3"), "Updated to v3 — pages you already created are unchanged.")
+    let installedTemplate: [String: Any] = ["source": ["type": "marketplace", "listingId": "l1", "version": "2"]]
+    XCTAssertEqual(copyUpdateState(installed: installedTemplate, latestVersion: "3", artifactType: "template").state, "update-available")
+    XCTAssertEqual(copyUpdateState(installed: installedTemplate, latestVersion: "2", artifactType: "template").state, "current")
     for item in try functionCases("verificationRequestBlock") {
       let input = object(item.args[0])
       XCTAssertEqual(
@@ -380,7 +462,8 @@ final class MarketplaceTests: XCTestCase {
         "marketplace.publishPlugin", "marketplace.publishStarter",
       ],
       widgets: [
-        "marketplace.artifact-publish", "marketplace.org-installs", "marketplace.plugin-installation", "marketplace.site-connections",
+        "marketplace.artifact-publish", "marketplace.org-installs", "marketplace.plugin-installation", "marketplace.site-connections", "marketplace.template-gallery",
+        "marketplace.template-install-status",
         "marketplace.starter-picker",
       ],
       quickActions: ["marketplace.open"],

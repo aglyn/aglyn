@@ -15,6 +15,7 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **commerce:** order view says when a sale was charged on the seller's own account ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
 - **api:** read and change a site's search listing, its pages' listings and its business details over /v1 ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
 - **api:** server saves for a site's search listing, a page's search listing and business details ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
 - **api:** one server writer for site settings, shared with the AI settings step ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
@@ -25,6 +26,8 @@ content on the marketing site and is written separately.
 
 ### Fixed
 
+- **accounting:** post own-account sales with their tax and Stripe's fees per payout ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
+- **waivers:** deleting a site takes its waiver definitions ([AGL-4237](https://linear.app/aglyn/issue/AGL-4237))
 - **erase:** deleting a site takes its own import jobs ([AGL-4236](https://linear.app/aglyn/issue/AGL-4236))
 - **privacy:** the org export names the import jobs the site erasure now takes ([AGL-4236](https://linear.app/aglyn/issue/AGL-4236))
 - **api:** name search listings and business details in the consent words that grant them ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
@@ -43,6 +46,7 @@ content on the marketing site and is written separately.
 
 ### Documentation
 
+- **accounting:** help pages for own-account tax and Stripe fees ([AGL-3614](https://linear.app/aglyn/issue/AGL-3614))
 - **api:** say when a product write shows in the store, in the tool descriptions ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
 - **api:** live writes refresh the site right away every time, with no budget or header ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
 - **api:** what an assistant can now do with products, search listings, pages and business details, in the guide and the skills ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))

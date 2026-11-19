@@ -1153,7 +1153,7 @@
         "contributes": {
           "screens": ["marketplace.browse", "marketplace.installed", "marketplace.licenses", "marketplace.listing", "marketplace.plugin-settings", "marketplace.sell", "marketplace.publish", "marketplace.publishTemplate", "marketplace.publishStarter", "marketplace.publisherAgreement", "marketplace.publishLayout", "marketplace.publishComponent", "marketplace.publishTheme", "marketplace.publishDatasetSchema", "marketplace.publishEmailTemplate", "marketplace.publishEmailStarter", "marketplace.publishPlugin"],
           "quickActions": ["marketplace.open"],
-          "widgets": ["marketplace.artifact-publish", "marketplace.org-installs", "marketplace.plugin-installation", "marketplace.site-connections", "marketplace.starter-picker"],
+          "widgets": ["marketplace.artifact-publish", "marketplace.org-installs", "marketplace.plugin-installation", "marketplace.site-connections", "marketplace.template-gallery", "marketplace.template-install-status", "marketplace.starter-picker"],
           "deepLinks": ["marketplace.listing-page", "marketplace.page", "marketplace.browse-page", "marketplace.installed-page", "marketplace.licences-page", "marketplace.sell-page"]
         }
       },
@@ -2969,6 +2969,7 @@
             "ai.usageOverageColumn",
             "ai.hostMember",
             "ai.allotment",
+            "ai.collaboratorCreditsColumn",
             "ai.import.productCopy",
             "ai.import.start",
             "ai.create"
@@ -2986,6 +2987,7 @@
             "ai.assist-panel",
             "ai.insight-ask",
             "ai.org-insight-ask",
+            "ai.explain-funnel",
             "ai.crm-record"
           ],
           "quickActions": [
@@ -3478,6 +3480,13 @@
         "waivers"
       ],
       "requiredPersonEraser": true,
+      "orgCollections": [
+        {
+          "name": "waivers",
+          "label": "Waiver",
+          "siteField": "hostId"
+        }
+      ],
       "hostCollections": [
         {
           "name": "waiverTitles",

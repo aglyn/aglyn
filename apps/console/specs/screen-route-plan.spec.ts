@@ -63,8 +63,12 @@ describe('the routing writes share the plan', () => {
   })
 
   it('is what the native pages route stages, under "Publish site content" (AGL-4047)', () => {
+    // The route's batch is the server lib's `applyPageRouteAction` (AGL-4235),
+    // shared with the public API's page writes; the gate stays the route's.
     const route = read('app/api/hosts/pages/route.ts')
-    expect(route).toContain('planScreenRouteWrite(state, entries, published)')
+    const actions = read('../../libs/tenant/data/admin/src/lib/server/page-route-actions.ts')
+    expect(route).toContain('applyPageRouteAction(firestore, {')
+    expect(actions).toContain('planScreenRouteWrite(state, entries, published)')
     expect(route).toContain("holdsSiteKey(hostSnapshot, decoded.uid, 'site.publish')")
     expect(route).toContain('getLockdownVerdict')
   })

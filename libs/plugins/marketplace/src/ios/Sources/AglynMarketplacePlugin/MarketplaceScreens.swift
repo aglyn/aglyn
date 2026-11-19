@@ -281,6 +281,8 @@ private enum ListingSheet: Identifiable {
   case report
   /// Reporting someone else's review: its reviewer's uid and name.
   case reportReview(uid: String, name: String)
+  /// The update review of a copied listing (AGL-1018), before anything is written.
+  case updateReview
 
   var id: String {
     switch self {
@@ -289,6 +291,7 @@ private enum ListingSheet: Identifiable {
     case .review: "review"
     case .report: "report"
     case .reportReview(let uid, _): "report-review-\(uid)"
+    case .updateReview: "update-review"
     }
   }
 }
@@ -299,6 +302,10 @@ private struct ListingDetail: View {
   @State private var listing = ObservedDocument()
   @State private var hostPin = ObservedDocument()
   @State private var orgPin = ObservedDocument()
+  /// This site's copy of a component or layout listing (`hosts/{h}/components` stamped with the listing), and the site itself
+  /// for a theme, whose copy is the site's own theme (AGL-1020).
+  @State private var copies = LiveQuery()
+  @State private var site = ObservedDocument()
   @State private var runner = PluginActionRunner()
   @State private var sheet: ListingSheet?
   @State private var editing: SellerListing?
@@ -319,7 +326,7 @@ private struct ListingDetail: View {
       } else if let doc = listing.document.map(ListingRow.init), !doc.deleted, !doc.workspaceLocked {
         ListingBody(
           context: context, listing: doc, document: listing.document?.data, hostPin: hostPin.document, orgPin: orgPin.document,
-          pinsPhase: pinsPhase(doc), runner: runner
+          pinsPhase: pinsPhase(doc), copy: copyState(doc), runner: runner
         ) { sheet = $0 }
       } else {
         AglynEmptyState("This listing does not exist", systemImage: "storefront", message: "It may have been removed.")
@@ -327,7 +334,9 @@ private struct ListingDetail: View {
     }
     .sheet(item: $sheet) { sheet in
       if let doc = listing.document.map(ListingRow.init) {
-        ListingSheets(context: context, listing: doc, sheet: sheet, state: installState(doc), runner: runner) { self.sheet = nil }
+        ListingSheets(
+          context: context, listing: doc, sheet: sheet, state: installState(doc), runner: runner, reopen: { self.sheet = $0 }
+        ) { self.sheet = nil }
       }
     }
     .sheet(item: $editing) { listing in
@@ -361,11 +370,18 @@ private struct ListingDetail: View {
     }
     .task(id: "\(listingID)-\(context.hostID ?? "")-\(context.orgID ?? "")") {
       listing.start(context.firestore, [listingsCollection, listingID])
-      if let hostID = context.hostID { hostPin.start(context.firestore, ["hosts", hostID, "installs", listingID]) }
+      if let hostID = context.hostID {
+        hostPin.start(context.firestore, ["hosts", hostID, "installs", listingID])
+        site.start(context.firestore, ["hosts", hostID])
+        await copies.bind(
+          context.firestore,
+          FirestoreQuery(["hosts", hostID, "components"], equals: [("marketplace.listingId", listingID)], limit: 10))
+      }
       if let orgID = context.orgID { orgPin.start(context.firestore, ["orgs", orgID, "installs", listingID]) }
     }
     .onDisappear {
       listing.stop()
+      site.stop()
       hostPin.stop()
       orgPin.stop()
     }
@@ -384,6 +400,24 @@ private struct ListingDetail: View {
       sitePins = hostPin.document == nil && (!hostPin.ready || hostPin.fromCache) ? "loading" : "answered"
     }
     return installPictureReadPhase(orgPinPending: false, orgPin: context.orgID == nil ? nil : InstallPinRead(orgPin), sitePins: sitePins)
+  }
+
+  /// A copied listing's install on this site, as the console's listing page reads it: the component or layout copy stamped
+  /// with the listing, or the site's theme when the site runs this listing's theme. Nil for anything else, or none.
+  private func copyState(_ listing: ListingRow) -> (state: String, installed: String?)? {
+    let installed: [String: Any]?
+    switch listing.artifactType {
+    case "component", "layout":
+      guard case .ready(let docs) = copies.state else { return nil }
+      installed = docs.first { $0.data["deletedAt"] == nil || $0.data["deletedAt"] is NSNull }?.data
+    case "theme":
+      let stamp = site.document?.data["themeInstalledFrom"] as? [String: Any]
+      installed = stamp?["listingId"] as? String == listing.id ? ["installedFrom": stamp ?? [:]] : nil
+    default:
+      return nil
+    }
+    guard let installed else { return nil }
+    return copyUpdateState(installed: installed, latestVersion: listing.latestVersion, artifactType: listing.artifactType)
   }
 
   private func installState(_ listing: ListingRow) -> PluginInstallState {
@@ -407,6 +441,8 @@ private struct ListingBody: View {
   let orgPin: FirestoreDocument?
   /// "loading", "error" or "ready": whether the pins have answered (AGL-4047).
   let pinsPhase: String
+  /// This site's copy of a component, layout or theme listing, and how it stands against the listing (AGL-1018).
+  var copy: (state: String, installed: String?)? = nil
   let runner: PluginActionRunner
   let open: (ListingSheet) -> Void
   @State private var versions: [ListingVersion]?
@@ -643,6 +679,12 @@ private struct ListingBody: View {
         AglynNotice(context.orgID == nil ? "Open one of your workspaces to buy this." : context.refusal(buyPermissionKey(listing.artifactType)), tone: .neutral)
       }
       if let pay { MarketplacePayPanel(context: context, pay: pay) }
+    } else if let copy {
+      // A copy the site may have edited is never re-installed over: pressing this reviews the update and writes nothing.
+      Button(copyInstallLabel(state: copy.state, installedVersion: copy.installed, offeredVersion: offered)) { open(.updateReview) }
+        .buttonStyle(.aglynProminent)
+        .disabled(!installable || runner.busy || copy.state == "current")
+        .accessibilityIdentifier("listing-update-review")
     } else {
       Button {
         open(.install(targets.contains(.host) ? .host : targets.first))
@@ -704,6 +746,8 @@ private struct ListingSheets: View {
   let sheet: ListingSheet
   let state: PluginInstallState
   let runner: PluginActionRunner
+  /// Opens another sheet in this one's place: the update review, when the install route refuses an edited copy.
+  var reopen: (ListingSheet) -> Void = { _ in }
   let close: () -> Void
   @State private var rating = 0
   @State private var comment = ""
@@ -736,9 +780,15 @@ private struct ListingSheets: View {
         onConfirm: {
           guard let hostID = context.hostID else { return }
           let except = choosing(scope) ? exceptHostIDs : []
-          runner.run(onDone: close) {
-            let outcome = try await api.install(listing, hostID: hostID, scope: scope, exceptHostIDs: except)
-            runner.notice = outcome.message + (outcome.warning.map { " \($0)" } ?? "")
+          runner.run {
+            do {
+              let outcome = try await api.install(listing, hostID: hostID, scope: scope, exceptHostIDs: except)
+              runner.notice = outcome.message + (outcome.warning.map { " \($0)" } ?? "")
+              close()
+            } catch let error as ConsoleAPIError where error.body?["diverged"]?.boolValue == true {
+              // The site's copy was edited: hand it to the review rather than re-installing over it (AGL-1034).
+              reopen(.updateReview)
+            }
           }
         }
       ) {
@@ -771,6 +821,8 @@ private struct ListingSheets: View {
           runner.run(success: "Removed \"\(listing.name)\".", onDone: close) { try await api.uninstall(listingID: listing.id, hostID: hostID, scope: scope) }
         }
       ) { EmptyView() }
+    case .updateReview:
+      ArtifactUpdateSheet(context: context, listing: listing, runner: runner, installCopy: { reopen(.install(.host)) }, close: close)
     case .review:
       AglynActionSheet(
         "Review \(listing.name)", message: "A rating needs an installed copy; a comment alone does not.", confirmLabel: "Post",

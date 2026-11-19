@@ -2,12 +2,14 @@
 
 Connects Claude to your Aglyn workspace and teaches it how to work there.
 
-- **The connector** (`.mcp.json`): Aglyn's tools for sites, their pages,
+- **The connector** (`.mcp.json`): Aglyn's tools for sites, their pages and
+  what is on them (edited as a draft until you publish), page templates,
   search listings and business details, datasets, contacts and the CRM, form
   submissions, orders, products, bookings and media. You sign in to Aglyn and choose the workspace and access level; no
   key to copy.
-- **Skills**: `aglyn` (working with the tools), `aglyn-console` (designing
-  pages and changing settings in the console through a browser), and
+- **Skills**: `aglyn` (working with the tools), `aglyn-console` (themes,
+  layouts, components and settings the tools do not reach, in the console
+  through a browser), and
   `aglyn-read-site` (reading any published Aglyn site as clean text).
 
 ## Claude Code

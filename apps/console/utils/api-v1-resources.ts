@@ -71,8 +71,18 @@ import {
   handleSitePages,
   handleSiteSeo,
 } from '@aglyn/tenant-data-admin/server/api-v1-site-settings'
+import { handleSiteTemplates } from '@aglyn/tenant-data-admin/server/api-v1-site-templates'
+import {
+  commitPagePublishes,
+  type PagePublishEntry,
+  type PagePublishListFailure,
+  type PagePublishListRefusal,
+  precheckPagePublishes,
+  readPagePublishBody,
+} from '@aglyn/tenant-data-admin/server/page-publish'
 import {
   admitNamedSite,
+  apiActorFields,
   apiActorLabel,
   isConnectedAppContext,
   requireSitePermission,
@@ -422,6 +432,9 @@ async function handleSites(
   if (sub === 'seo') return handleSiteSeo(request, siteCtx)
   if (sub === 'business') return handleSiteBusiness(request, siteCtx)
   if (sub === 'pages') return handleSitePages(request, siteCtx, segments, url)
+  // The page templates a new page can start from (AGL-4235), under
+  // `components:read`.
+  if (sub === 'templates') return handleSiteTemplates(request, siteCtx, segments, url)
   /*
    * A resource a plugin models under the site is the plugin's (AGL-3080) — a
    * site's orders and products, its form submissions. Asked only AFTER
@@ -514,6 +527,15 @@ export const PUBLISH_WINDOW_MS = 60 * 60 * 1000
  * No `Idempotency-Key`: publishing twice lands the same state and returns the
  * same answer, exactly as `updateRecord` argues. The budget, not the key, is
  * what makes a retry loop safe.
+ *
+ * ## Given `pages` (AGL-4235)
+ *
+ * `{ "pages": [id, …] }` also makes those pages' drafts live, as the page
+ * editor's Publish does, and gives a page with no address its address
+ * (`page-publish.ts`). Scope, then the PUBLISHING permission for a connected
+ * app, then every page checked with nothing written, then the budget, then
+ * each page committed, then the refresh below. A retry is still safe: a page
+ * whose draft went live has no draft left, and answers `unchanged`.
  */
 async function handlePublish(
   request: Request,
@@ -528,8 +550,21 @@ async function handlePublish(
   const denied = requireScope(ctx, 'sites:publish')
   if (denied) return denied
 
+  // An optional list of pages whose drafts go live (AGL-4235). No body, an
+  // empty one, or one without `pages` is exactly the refresh below.
+  const requested = readPagePublishBody(await request.text().catch(() => ''))
+  if ('errors' in requested) {
+    return ApiErrors.badRequest({
+      message: 'The publish request failed validation',
+      code: 'validation_failed',
+      fields: requested.errors,
+      headers: ctx.headers,
+    })
+  }
+  const pageIds = requested.pages
+
   // The site router's read (AGL-4235); read here only if no router gave one.
-  const snap = ctx.site?.id === hostId ? ctx.site.snapshot : await hostRef(ctx, hostId).get()
+  let snap = ctx.site?.id === hostId ? ctx.site.snapshot : await hostRef(ctx, hostId).get()
   const subdomain = String(snap.get('subdomain') ?? '').trim()
   if (!snap.exists || !subdomain) {
     return ApiErrors.notFound({ message: 'No such site', headers: ctx.headers })
@@ -537,8 +572,18 @@ async function handlePublish(
   // A connected app publishes only where its person may write the site's
   // content (AGL-4235), the roles the console's own publish route admits. An
   // API key is not asked; see the docblock above for what stands in for it.
-  const notPermitted = requireSitePermission(ctx, snap, 'site.edit')
+  // Making a page's draft live is the console's Publish, which the `author`
+  // role may not press, so a list asks for the publishing permission.
+  const notPermitted = requireSitePermission(ctx, snap, pageIds ? 'site.publish' : 'site.edit')
   if (notPermitted) return notPermitted
+
+  // Every page is checked before the budget is spent or anything is written.
+  const pageInput = { hostId, orgId: ctx.orgId, org: ctx.org as { enabledPlugins?: string[] } }
+  const checked = pageIds ? await precheckPagePublishes(ctx.firestore, { ...pageInput, pageIds }) : null
+  if (checked && checked.ok === false) {
+    return pagePublishRefusal(ctx, checked, { results: checked.pages })
+  }
+  const plans = checked && checked.ok === true ? checked.plans : null
 
   // Per-host hourly budget, ABOVE the fan-out and below the authorization.
   const rate = await consumeRateLimit(`apiv1-publish:${hostId}`, {
@@ -555,58 +600,145 @@ async function handlePublish(
     )
   }
 
-  // `screens` is the routing map the console route reads for the same purpose:
-  // screen id → route path. A site with none is not an error — an unrouted or
-  // empty site has no live page to drop — but it must not report a publish it
-  // did not perform, which is the "reported fast, still slow" confusion the
-  // original bug was made of.
-  const screens = (snap.get('screens') ?? {}) as Record<string, unknown>
-  const paths = [
-    ...Object.values(screens)
-      .filter((path) => typeof path === 'string')
-      .map((path) => screenRoutePathToUrl(path as string)),
-    // The pages plugins serve from the site's screens with no routing-map
-    // entry of their own — a record template's (AGL-3475).
-    ...(await pluginLivePaths({ hostId })),
-  ].filter((path, index, all) => all.indexOf(path) === index)
-  if (!paths.length) {
+  // The pages' drafts go live, one at a time, each re-checked as it is
+  // written. A refusal now is a race with another writer: stop, and say
+  // exactly what went live and what did not.
+  let promoted: PagePublishEntry[] | undefined
+  if (plans) {
+    const committed = await commitPagePublishes(
+      ctx.firestore,
+      { ...pageInput, actor: { uid: 'api', email: null, ...apiActorFields(ctx) } },
+      plans,
+    )
+    promoted = committed.promoted
+    if (committed.ok === false && committed.status === 500) {
+      return pagePublishFailure(ctx, committed)
+    }
+    if (committed.ok === false) {
+      return pagePublishRefusal(ctx, committed, { promoted: committed.promoted, results: committed.pages })
+    }
+  }
+  const promotedView = promoted ? { promoted } : {}
+
+  // Pages went live, so a failure of the refresh after them still says which
+  // did (AGL-4235): the refresh is what failed, not their publish.
+  try {
+    // The refresh below reads the routing map as the publishes left it.
+    if (promoted) snap = await hostRef(ctx, hostId).get()
+    // `screens` is the routing map the console route reads for the same purpose:
+    // screen id → route path. A site with none is not an error — an unrouted or
+    // empty site has no live page to drop — but it must not report a publish it
+    // did not perform, which is the "reported fast, still slow" confusion the
+    // original bug was made of.
+    const screens = (snap.get('screens') ?? {}) as Record<string, unknown>
+    const paths = [
+      ...Object.values(screens)
+        .filter((path) => typeof path === 'string')
+        .map((path) => screenRoutePathToUrl(path as string)),
+      // The pages plugins serve from the site's screens with no routing-map
+      // entry of their own — a record template's (AGL-3475).
+      ...(await pluginLivePaths({ hostId })),
+    ].filter((path, index, all) => all.indexOf(path) === index)
+    if (!paths.length) {
+      return apiJson(
+        {
+          object: 'publish',
+          site: hostId,
+          published: false,
+          reason: 'not_routed',
+          pages: 0,
+          ...promotedView,
+        },
+        { headers: ctx.headers },
+      )
+    }
+
+    const result = await postTenantRevalidate({
+      subdomain,
+      hostId,
+      paths,
+      // Same second cache key as the console's own publish route — a site on a
+      // custom domain serves its pages under `cname--{domain}`.
+      cname: String(snap.get('cname') ?? '') || undefined,
+    })
     return apiJson(
       {
         object: 'publish',
         site: hostId,
-        published: false,
-        reason: 'not_routed',
-        pages: 0,
+        published: result.reason === 'ok',
+        // Named rather than swallowed: `not-configured` and a tenant refusal are
+        // the two cases where a caller would otherwise read a success and keep
+        // polling a page that never changed.
+        reason: result.reason === 'ok' ? null : result.reason,
+        pages: result.revalidated.length,
+        // The tenant's own 250-path cap (AGL-1161). A site above it is refreshed
+        // in part, and the remainder catches up when its hour-long ISR window
+        // lapses — worth saying, because the caller is the one deciding whether
+        // to poll.
+        pagesDropped: result.pathsDropped,
+        ...promotedView,
       },
       { headers: ctx.headers },
     )
+  } catch (error) {
+    if (!promoted) throw error
+    console.error('api/v1 publish: refresh after the pages went live failed', error)
+    return apiJson(
+      {
+        error: {
+          type: 'internal_error',
+          message: 'The pages in `promoted` went live, and refreshing the site’s live pages afterwards failed. Publish again without `pages` to refresh them.',
+          code: 'refresh_failed',
+        },
+        promoted,
+        results: promoted,
+      },
+      { status: 500, headers: ctx.headers },
+    )
   }
+}
 
-  const result = await postTenantRevalidate({
-    subdomain,
-    hostId,
-    paths,
-    // Same second cache key as the console's own publish route — a site on a
-    // custom domain serves its pages under `cname--{domain}`.
-    cname: String(snap.get('cname') ?? '') || undefined,
-  })
+/**
+ * A list of pages an unexpected error stopped partway (AGL-4235): a 500 in
+ * the error envelope, with what went live in `promoted` and every page's line
+ * in `results`, the one that failed saying what was written for it. What was
+ * thrown is logged, never sent.
+ */
+function pagePublishFailure(ctx: ApiV1Context, failed: PagePublishListFailure): Response {
+  console.error('api/v1 publish: a page publish failed partway', failed.thrown)
   return apiJson(
     {
-      object: 'publish',
-      site: hostId,
-      published: result.reason === 'ok',
-      // Named rather than swallowed: `not-configured` and a tenant refusal are
-      // the two cases where a caller would otherwise read a success and keep
-      // polling a page that never changed.
-      reason: result.reason === 'ok' ? null : result.reason,
-      pages: result.revalidated.length,
-      // The tenant's own 250-path cap (AGL-1161). A site above it is refreshed
-      // in part, and the remainder catches up when its hour-long ISR window
-      // lapses — worth saying, because the caller is the one deciding whether
-      // to poll.
-      pagesDropped: result.pathsDropped,
+      error: { type: 'internal_error', message: failed.message, code: failed.code },
+      promoted: failed.promoted,
+      results: failed.pages,
     },
-    { headers: ctx.headers },
+    { status: 500, headers: ctx.headers },
+  )
+}
+
+/** The `type` each refusal status answers with, as `ApiErrors` names them. */
+const PAGE_PUBLISH_ERROR_TYPES: Record<PagePublishListRefusal['status'], string> = {
+  400: 'bad_request',
+  404: 'not_found',
+  409: 'conflict',
+  413: 'payload_too_large',
+}
+
+/**
+ * A refused page publish: the first refused page's status and reason in the
+ * error envelope, and beside it every page's line (AGL-4235).
+ */
+function pagePublishRefusal(
+  ctx: ApiV1Context,
+  refused: PagePublishListRefusal,
+  extra: { promoted?: PagePublishEntry[]; results: PagePublishEntry[] },
+): Response {
+  return apiJson(
+    {
+      error: { type: PAGE_PUBLISH_ERROR_TYPES[refused.status], message: refused.message, code: refused.code },
+      ...extra,
+    },
+    { status: refused.status, headers: ctx.headers },
   )
 }
 

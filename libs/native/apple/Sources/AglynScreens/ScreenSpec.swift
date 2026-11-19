@@ -669,6 +669,10 @@ public struct FieldSpec: Sendable, Identifiable {
   public let coversAll: Bool
   /// The field's own JSON, for a kind that reads more than the common keys (`upload`'s limits).
   public let config: JSONValue?
+  /// `"verbatim": true`: a key, code or address, kept exactly as typed: the keyboard neither capitalizes nor corrects it
+  /// (the console marks such inputs `autoCapitalize="none"`, `spellCheck={false}`; a Weglot key typed as "Wg_…" is
+  /// refused).
+  public var verbatim: Bool { config?["verbatim"] == .bool(true) }
 
 
   /// A fresh value for a field that `generate`s one (`length` and `alphabet` are templates, so a spec can name

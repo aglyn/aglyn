@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -36,7 +37,11 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.layout.Row
 import com.aglyn.contracts.normalizeScreenSlug
 import com.aglyn.pluginhost.ActionRunner
+import com.aglyn.pluginhost.LocalTemplateGalleryZone
 import com.aglyn.pluginhost.NativePluginContext
+import com.aglyn.pluginhost.SlotWidgets
+import com.aglyn.pluginhost.TemplateGalleryShelfState
+import com.aglyn.pluginhost.TemplateGalleryZone
 import com.aglyn.site.pages.PagesApi
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.AglynIcons
@@ -72,10 +77,27 @@ fun templateUseDestination(kind: String, id: String): Pair<String, Map<String, S
  * tap to choose. A starter site is one row that makes all its pages.
  */
 @Composable
-fun TemplateGalleryDialog(context: NativePluginContext, hostId: String, kind: String, onChoose: (ArtifactRow) -> Unit, onDismiss: () -> Unit) {
+fun TemplateGalleryDialog(
+  context: NativePluginContext,
+  hostId: String,
+  kind: String,
+  onChoose: (ArtifactRow) -> Unit,
+  onDismiss: () -> Unit,
+  /** A shelf installed a bundle into the library: the gallery closes and the screen says what landed. */
+  onInstalled: ((String) -> Unit)? = null,
+) {
   val scope = rememberCoroutineScope()
   val model = remember(hostId, kind) { ArtifactListModel(ArtifactKind.TEMPLATE, hostId, context.firestore, scope) }
   LaunchedEffect(model) { model.pick(kind) }
+  // How each shelf in the `templateGallery` zone stands, by the name it reports under.
+  val shelves = remember(hostId, kind) { mutableStateMapOf<String, TemplateGalleryShelfState>() }
+  val zone = TemplateGalleryZone(
+    hostId = hostId,
+    kind = kind,
+    search = model.search,
+    onInstalled = { message -> onInstalled?.invoke(message) ?: onDismiss() },
+    reportShelf = { id, state -> if (shelves[id] != state) shelves[id] = state },
+  )
   Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
     Surface(Modifier.widthIn(max = 560.dp).fillMaxWidth(0.96f).heightIn(max = 760.dp).testTag("template-gallery"), shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surface) {
       Column {
@@ -88,14 +110,19 @@ fun TemplateGalleryDialog(context: NativePluginContext, hostId: String, kind: St
         val listState = rememberLazyListState()
         LoadMoreEffect(listState, model.hasMore, onLoadMore = model::loadMore)
         LoadContent(model.rows, onRetry = { model.reload() }, failedTitle = "Could not load templates", skeleton = { SkeletonList(rows = 5, modifier = Modifier.padding(space(2f))) }) { rows ->
-          if (rows.isEmpty()) {
-            EmptyState(
-              if (model.search.isBlank()) "No ${noun(kind)} templates yet" else "No templates match",
-              body = if (model.search.isBlank()) "Save one from an existing ${noun(kind)}, or start blank." else "Try another search.",
-              icon = AglynIcons.named("dashboard_customize"),
-            )
-          } else {
-            LazyColumn(Modifier.fillMaxSize().testTag("template-gallery-list"), state = listState) {
+          LazyColumn(Modifier.fillMaxSize().testTag("template-gallery-list"), state = listState) {
+            // Nothing in the library and no shelf with anything: the gallery's own empty line, as the console's counts every
+            // shelf before it says nothing matches.
+            if (rows.isEmpty() && shelves.values.all { it == TemplateGalleryShelfState.EMPTY }) {
+              item("empty") {
+                EmptyState(
+                  if (model.search.isBlank()) "No ${noun(kind)} templates yet" else "No templates match",
+                  body = if (model.search.isBlank()) "Save one from an existing ${noun(kind)}, or start blank." else "Try another search.",
+                  icon = AglynIcons.named("dashboard_customize"),
+                )
+              }
+            }
+            run {
               items(rows, key = { it.id }) { row ->
                 AglynListItem(
                   title = if (row.isStarterBundle) row.starterName ?: row.name else row.name,
@@ -106,6 +133,10 @@ fun TemplateGalleryDialog(context: NativePluginContext, hostId: String, kind: St
                   modifier = Modifier.testTag("template-${row.id}"),
                 )
               }
+            }
+            // The `templateGallery` zone (AGL-3080): shelves plugins add, the marketplace's site templates among them.
+            item("zone") {
+              CompositionLocalProvider(LocalTemplateGalleryZone provides zone) { SlotWidgets(context, TemplateGalleryZone.SLOT) }
             }
           }
         }

@@ -35,6 +35,7 @@ import { registerPluginUsageMeter } from '@aglyn/aglyn/plugin-manager/plugin-usa
 import { registerOperatorAlerts } from '@aglyn/aglyn/plugin-manager/operator-alerts'
 import { registerStockPhotoPicker } from '@aglyn/aglyn/plugin-manager/stock-photo-provider'
 import { registerPluginSiteStyleLooks } from '@aglyn/aglyn/plugin-manager/plugin-site-style-looks'
+import { registerPluginPageContent } from '@aglyn/aglyn/plugin-manager/plugin-page-content'
 import { listServerThemePresets } from '@aglyn/aglyn/plugin-manager/plugin-theme-presets'
 import { AI_PLUGIN_ID, AI_USAGE_METER_ID } from './constants'
 import { AI_BUILD_PARTLY_FAILED, AI_JOB_FAILED, AI_PROVIDER_UNAVAILABLE } from './operator-alerts'
@@ -209,6 +210,23 @@ export function registerAiServerDeclarations(): void {
         if (!kind) return null
         const presetIds = new Set(listServerThemePresets().map((preset) => preset.id))
         return aiSiteKindDefaultLook(kind, { presetIds }).theme
+      },
+    },
+    { pluginId: AI_PLUGIN_ID },
+  )
+  // Reading and draft-editing a page's elements for the public API
+  // (AGL-4235): the platform's `/v1` door asks the core contract, and the only
+  // server page editor is this plugin's edit rung. Asked on the request, so
+  // the editor loads then; registering again replaces it.
+  registerPluginPageContent(
+    {
+      read: async (input) => {
+        const { aiPageContentService } = await import('./server/ai-page-content')
+        return aiPageContentService.read(input)
+      },
+      editDraft: async (input) => {
+        const { aiPageContentService } = await import('./server/ai-page-content')
+        return aiPageContentService.editDraft(input)
       },
     },
     { pluginId: AI_PLUGIN_ID },
