@@ -289,7 +289,7 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
       val row = crmRow(kind, doc, scope, stages)
       // What `crm/email-check` says about a contact's or a lead's own address, sent from its site.
       val checkedAddress = (row.data["email"] as? String)?.trim()?.takeIf { it.isNotEmpty() && (kind == CrmKind.CONTACT || kind == CrmKind.LEAD) }
-      val emailCheck by androidx.compose.runtime.produceState<CrmEmailCheck?>(null, scope.hostId, checkedAddress) { value = api.emailCheck(checkedAddress) }
+      val emailCheck by androidx.compose.runtime.produceState<CrmEmailCheck?>(null, scope.hostId, checkedAddress) { this.value = api.emailCheck(checkedAddress) }
       val fields = reference.fields(kind)
       val values = formValues(fields, row.data)
       Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {

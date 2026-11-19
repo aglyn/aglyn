@@ -236,7 +236,7 @@ internal fun CrmEmailDialog(context: NativePluginContext, scope: CrmScope, api: 
   val saveBusy = remember(savingTemplate) { Busy() }
   // What `crm/email-check` says about the address before the send (`useCrmEmailCheck`).
   val address = row.data["email"] as? String
-  val check by androidx.compose.runtime.produceState<CrmEmailCheck?>(null, address) { value = api.emailCheck(address) }
+  val check by androidx.compose.runtime.produceState<CrmEmailCheck?>(null, address) { this.value = api.emailCheck(address) }
   fun apply(template: CrmEmailTemplate) {
     if (template.subject.isNotEmpty()) subject = template.subject
     message = template.body
