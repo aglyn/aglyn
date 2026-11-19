@@ -429,7 +429,9 @@ private struct EntryForm: View {
         }
         .disabled(!env.canPublish || env.runner.busy)
         .accessibilityIdentifier("entry-unpublish")
-        if let url = livePageURL(env.routing, livePath: "/\(collection.slug)/\(entry.slug)").flatMap(URL.init(string:)) {
+        if let url = livePageURL(
+          env.routing, livePath: "/\(collection.slug)/\(entry.slug)", consoleOrigin: env.context.api.origin
+        ).flatMap(URL.init(string:)) {
           Button {
             openURL(url)
           } label: {

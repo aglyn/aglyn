@@ -2986,6 +2986,7 @@
             "ai.assist-panel",
             "ai.insight-ask",
             "ai.org-insight-ask",
+            "ai.explain-funnel",
             "ai.crm-record"
           ],
           "quickActions": [
@@ -3478,6 +3479,13 @@
         "waivers"
       ],
       "requiredPersonEraser": true,
+      "orgCollections": [
+        {
+          "name": "waivers",
+          "label": "Waiver",
+          "siteField": "hostId"
+        }
+      ],
       "hostCollections": [
         {
           "name": "waiverTitles",

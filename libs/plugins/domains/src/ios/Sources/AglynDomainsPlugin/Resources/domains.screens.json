@@ -1,5 +1,5 @@
 {
-  "$comment": "The workspace's Domains page natively (the domains plugin's orgNavItems /domains, AGL-4040; gap sweep Domains row 9, piece 1): every domain the workspace holds, with its site, status, renewal and price at renewal, and a page per name. Route: /api/registrar/workspace (DOMAINS_API_ROUTES.workspace); site names from the person's users/{uid}/hostMemberships rows. Buying, transfers in and out, renewal and connect actions, the registrant contact and DNS records are later pieces (Domains rows 1-8).",
+  "$comment": "The workspace's Domains page natively (the domains plugin's orgNavItems /domains, AGL-4040; gap sweep Domains row 9, piece 1): every domain the workspace holds, with its site, status, renewal and price at renewal, and a page per name. Route: /api/registrar/workspace (DOMAINS_API_ROUTES.workspace); site names from the person's users/{uid}/hostMemberships rows. The registrant contact (view, Edit contact: /api/registrar/contact, Domains row 2) and Connect to a site, Move to another site and Disconnect (/api/registrar/connect and /disconnect, Domains row 3) and the Auto-renew switch (/api/registrar/auto-renew, part of Domains row 7; a store build, where buying is off (`app.billing`), shows the switch only while auto-renew is on, so it can be turned off and never on, since turning it on leads to later charges) are here; buying, renewing now, transfers in and out, and DNS records are later pieces (Domains rows 1-8).",
   "screens": [
     {
       "id": "domains.list",
@@ -170,6 +170,10 @@
             "limit": 200
           },
           "optional": true
+        },
+        "contact": {
+          "url": "/api/registrar/contact?orgId={org.id}&domain={params.domain}",
+          "optional": true
         }
       },
       "blocks": [
@@ -327,8 +331,374 @@
               "when": "item.registrantEmail"
             }
           ]
+        },
+        {
+          "type": "notice",
+          "id": "expired",
+          "tone": "error",
+          "when": "data.ws.rows[domain=params.domain].status == expired",
+          "text": "It expired and the site is back on its free address. For a short while after expiring, a domain can usually still be renewed."
+        },
+        {
+          "type": "notice",
+          "id": "transferredOut",
+          "tone": "info",
+          "when": "data.ws.rows[domain=params.domain].status == transferred-out",
+          "text": "It now belongs to another registrar, where you manage and renew it."
+        },
+        {
+          "type": "list",
+          "id": "autoRenew",
+          "when": "data.ws.rows[domain=params.domain].status == active && app.billing || data.ws.rows[domain=params.domain].status == active && data.ws.rows[domain=params.domain].autoRenew",
+          "items": "const.autoRenew",
+          "count": false,
+          "primary": "{item.label}",
+          "icon": "arrow.clockwise|autorenew",
+          "toggle": {
+            "value": "{data.ws.rows[domain=params.domain].autoRenew}",
+            "disabled": "!data.ws.billingPermission",
+            "label": "Auto-renew",
+            "on": {
+              "id": "on",
+              "label": "Turn on",
+              "url": "/api/registrar/auto-renew",
+              "body": {
+                "orgId": "{org.id}",
+                "domain": "{params.domain}",
+                "autoRenew": true
+              },
+              "success": "Auto-renew is on",
+              "reload": true
+            },
+            "off": {
+              "id": "off",
+              "label": "Turn off",
+              "url": "/api/registrar/auto-renew",
+              "body": {
+                "orgId": "{org.id}",
+                "domain": "{params.domain}",
+                "autoRenew": false
+              },
+              "success": "Auto-renew is off",
+              "reload": true
+            }
+          }
+        },
+        {
+          "type": "actions",
+          "id": "connect",
+          "when": "data.ws.rows[domain=params.domain].status == active",
+          "items": [
+            {
+              "id": "connect",
+              "label": "Connect to a site",
+              "icon": "link|link",
+              "when": "!data.ws.rows[domain=params.domain].connected",
+              "prompt": [
+                {
+                  "key": "siteId",
+                  "label": "Site",
+                  "kind": "select",
+                  "required": true,
+                  "options": [],
+                  "optionsFrom": {
+                    "items": "data.sites.items",
+                    "value": "{item.$id}",
+                    "label": "{item.displayName|'A site'}"
+                  },
+                  "help": "{params.domain} will serve the site you pick, with its security certificate set up for you. It usually takes a few minutes. If that site uses another domain now, this one replaces it: the other stops serving the site and stays registered wherever it is registered now."
+                }
+              ],
+              "url": "/api/registrar/connect",
+              "body": {
+                "orgId": "{org.id}",
+                "domain": "{params.domain}",
+                "siteId": "{form.siteId}"
+              },
+              "success": "{params.domain} is connecting to {data.sites.items[$id=form.siteId].displayName|'the site'}",
+              "reload": true
+            },
+            {
+              "id": "move",
+              "label": "Move to another site",
+              "icon": "arrow.right.arrow.left|swap_horiz",
+              "when": "data.ws.rows[domain=params.domain].connected",
+              "prompt": [
+                {
+                  "key": "siteId",
+                  "label": "Site",
+                  "kind": "select",
+                  "required": true,
+                  "options": [],
+                  "optionsFrom": {
+                    "items": "data.sites.items[?item.$id != @data.ws.rows[domain=params.domain].hostId]",
+                    "value": "{item.$id}",
+                    "label": "{item.displayName|'A site'}"
+                  },
+                  "help": "{params.domain} stops serving the site it is connected to now. If the site you pick uses another domain now, this one replaces it: the other stops serving that site and stays registered wherever it is registered now."
+                }
+              ],
+              "url": "/api/registrar/connect",
+              "body": {
+                "orgId": "{org.id}",
+                "domain": "{params.domain}",
+                "siteId": "{form.siteId}"
+              },
+              "success": "{params.domain} is connecting to {data.sites.items[$id=form.siteId].displayName|'the site'}",
+              "reload": true
+            },
+            {
+              "id": "disconnect",
+              "label": "Disconnect",
+              "icon": "link.badge.minus|link_off",
+              "destructive": true,
+              "when": "data.ws.rows[domain=params.domain].connected",
+              "confirm": "Disconnect {params.domain}?",
+              "url": "/api/registrar/disconnect",
+              "body": {
+                "orgId": "{org.id}",
+                "domain": "{params.domain}"
+              },
+              "success": "{params.domain} is disconnected",
+              "reload": true,
+              "confirmMessage": "{data.sites.items[$id=data.ws.rows[domain=params.domain].hostId].displayName|'The site'} goes back to its free address. {params.domain} stays in your workspace, registered to you, and can be connected again at any time.",
+              "confirmLabel": "Disconnect"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "id": "contact",
+          "title": "Registrant contact",
+          "when": "data.contact && data.ws.rows[domain=params.domain].status == active || data.contact && data.ws.rows[domain=params.domain].status == expired",
+          "object": "data.contact.contact",
+          "rows": [
+            {
+              "label": "Name",
+              "value": "{item.firstName} {item.lastName}",
+              "when": "item.firstName || item.lastName"
+            },
+            {
+              "label": "Business",
+              "value": "{item.companyName}",
+              "when": "item.companyName"
+            },
+            {
+              "label": "Email",
+              "value": "{item.email}",
+              "when": "item.email"
+            },
+            {
+              "label": "Phone",
+              "value": "{item.phone}",
+              "when": "item.phone"
+            },
+            {
+              "label": "Street address",
+              "value": "{item.address1}",
+              "when": "item.address1"
+            },
+            {
+              "label": "City",
+              "value": "{item.city}",
+              "when": "item.city"
+            },
+            {
+              "label": "State or region",
+              "value": "{item.state}",
+              "when": "item.state"
+            },
+            {
+              "label": "Postal code",
+              "value": "{item.zip}",
+              "when": "item.zip"
+            },
+            {
+              "label": "Country",
+              "value": "{item.country}",
+              "when": "item.country"
+            },
+            {
+              "label": "ICANN",
+              "value": "Email confirmed with ICANN",
+              "chip": true,
+              "tones": {
+                "Email confirmed with ICANN": "success"
+              },
+              "when": "data.contact.verification.verified"
+            },
+            {
+              "label": "ICANN",
+              "value": "Email not confirmed yet",
+              "chip": true,
+              "tones": {
+                "Email not confirmed yet": "warning"
+              },
+              "when": "data.contact.verification && !data.contact.verification.verified"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "contactVerify",
+          "tone": "warning",
+          "when": "data.contact.verification && !data.contact.verification.verified && data.contact.verification.verifyByMs",
+          "text": "ICANN requires the registrant email to be confirmed by {data.contact.verification.verifyByMs:date}. Open the registrar’s email sent to {data.contact.verification.email|data.contact.contact.email|'the registrant'} and follow its link."
+        },
+        {
+          "type": "notice",
+          "id": "contactVerifyUndated",
+          "tone": "warning",
+          "when": "data.contact.verification && !data.contact.verification.verified && !data.contact.verification.verifyByMs",
+          "text": "ICANN requires the registrant email to be confirmed. Open the registrar’s email sent to {data.contact.verification.email|data.contact.contact.email|'the registrant'} and follow its link."
+        },
+        {
+          "type": "notice",
+          "id": "contactRejected",
+          "tone": "error",
+          "when": "data.contact.rejectedAtMs",
+          "text": "The registrar didn’t accept the last contact change, so it still has the earlier details. Check them and save again."
+        },
+        {
+          "type": "notice",
+          "id": "contactPendingDated",
+          "tone": "info",
+          "when": "!data.contact.rejectedAtMs && data.contact.pendingSinceMs && data.contact.takesEffectAtMs",
+          "text": "Changed on {data.contact.pendingSinceMs:date}. Changes are sent to the registrar with the domain’s next renewal, around {data.contact.takesEffectAtMs:date}. Until then the registrar keeps the current details."
+        },
+        {
+          "type": "notice",
+          "id": "contactPendingAutoRenewOff",
+          "tone": "info",
+          "when": "!data.contact.rejectedAtMs && data.contact.pendingSinceMs && !data.contact.takesEffectAtMs && !data.contact.autoRenew && data.contact.expiresAtMs",
+          "text": "Changed on {data.contact.pendingSinceMs:date}. Changes are sent to the registrar when the domain is next renewed. Auto-renew is off, so that happens only if you renew it before {data.contact.expiresAtMs:date}."
+        },
+        {
+          "type": "notice",
+          "id": "contactPending",
+          "tone": "info",
+          "when": "!data.contact.rejectedAtMs && data.contact.pendingSinceMs && !data.contact.takesEffectAtMs && data.contact.autoRenew || !data.contact.rejectedAtMs && data.contact.pendingSinceMs && !data.contact.takesEffectAtMs && !data.contact.expiresAtMs",
+          "text": "Changed on {data.contact.pendingSinceMs:date}. Changes are sent to the registrar when the domain is next renewed."
+        },
+        {
+          "type": "actions",
+          "id": "contactEdit",
+          "when": "data.contact && data.ws.rows[domain=params.domain].status == active",
+          "items": [
+            {
+              "id": "editContact",
+              "label": "Edit contact",
+              "icon": "person.text.rectangle|contact_mail",
+              "promptTitle": "Registrant contact for {params.domain}",
+              "submitLabel": "Save for the next renewal",
+              "prompt": [
+                {
+                  "key": "firstName",
+                  "label": "First name",
+                  "kind": "text",
+                  "initial": "{data.contact.contact.firstName}",
+                  "required": true
+                },
+                {
+                  "key": "lastName",
+                  "label": "Last name",
+                  "kind": "text",
+                  "initial": "{data.contact.contact.lastName}",
+                  "required": true
+                },
+                {
+                  "key": "companyName",
+                  "label": "Business name (optional)",
+                  "kind": "text",
+                  "initial": "{data.contact.contact.companyName}"
+                },
+                {
+                  "key": "email",
+                  "label": "Email",
+                  "kind": "email",
+                  "initial": "{data.contact.contact.email}",
+                  "required": true
+                },
+                {
+                  "key": "phone",
+                  "label": "Phone",
+                  "kind": "text",
+                  "initial": "{data.contact.contact.phone}",
+                  "required": true
+                },
+                {
+                  "key": "address1",
+                  "label": "Street address",
+                  "kind": "text",
+                  "initial": "{data.contact.contact.address1}",
+                  "required": true
+                },
+                {
+                  "key": "address2",
+                  "label": "Apartment, suite (optional)",
+                  "kind": "text",
+                  "initial": "{data.contact.contact.address2}"
+                },
+                {
+                  "key": "city",
+                  "label": "City",
+                  "kind": "text",
+                  "initial": "{data.contact.contact.city}",
+                  "required": true
+                },
+                {
+                  "key": "state",
+                  "label": "State or region",
+                  "kind": "text",
+                  "initial": "{data.contact.contact.state}",
+                  "required": true
+                },
+                {
+                  "key": "zip",
+                  "label": "Postal code",
+                  "kind": "text",
+                  "initial": "{data.contact.contact.zip}",
+                  "required": true
+                },
+                {
+                  "key": "country",
+                  "label": "Country or region",
+                  "kind": "country",
+                  "initial": "{data.contact.contact.country|'US'}",
+                  "required": true
+                }
+              ],
+              "url": "/api/registrar/contact",
+              "body": {
+                "orgId": "{org.id}",
+                "domain": "{params.domain}",
+                "contact": {
+                  "firstName": "{form.firstName}",
+                  "lastName": "{form.lastName}",
+                  "companyName": "{form.companyName}",
+                  "email": "{form.email}",
+                  "phone": "{form.phone}",
+                  "address1": "{form.address1}",
+                  "address2": "{form.address2}",
+                  "city": "{form.city}",
+                  "state": "{form.state}",
+                  "zip": "{form.zip}",
+                  "country": "{form.country}"
+                }
+              },
+              "success": "Saved. It goes to the registrar with the next renewal.",
+              "reload": true
+            }
+          ]
         }
-      ]
+      ],
+      "constants": {
+        "autoRenew": [
+          {
+            "label": "Auto-renew"
+          }
+        ]
+      }
     }
   ]
 }

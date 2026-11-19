@@ -33,6 +33,14 @@ object ListCreateZone {
 }
 
 /**
+ * The zone a saved funnel's results host, under them (the console's `funnelInsight`), and the props it hands its widgets
+ * (the console's `FunnelInsightZoneProps`): the funnel shown, as the page names it, and the range shown, in whole days.
+ */
+const val FUNNEL_INSIGHT_ZONE = "funnelInsight"
+const val FUNNEL_INSIGHT_NAME = "funnelName"
+const val FUNNEL_INSIGHT_DAYS = "days"
+
+/**
  * What other plugins put in one of a page's zones, in order, each told where it is drawn: the native twin of the
  * console's `PluginWidgetSlot`. Drawn inline, so a header's row lays the widgets out beside its own actions.
  */
