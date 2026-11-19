@@ -72,11 +72,10 @@ import {
   handleSiteSeo,
 } from '@aglyn/tenant-data-admin/server/api-v1-site-settings'
 import {
+  admitNamedSite,
   apiActorLabel,
-  holdsSiteMembership,
   isConnectedAppContext,
   requireSitePermission,
-  siteLockRefusal,
   usageBand,
 } from '@aglyn/tenant-data-admin/server/api-v1-kit'
 import { createHash, randomUUID } from 'crypto'
@@ -382,7 +381,8 @@ async function handleSites(
 
   /*
    * Everything that names a site is decided here, once, before any
-   * sub-resource is dispatched (AGL-4235):
+   * sub-resource is dispatched (AGL-4235), by `admitNamedSite`, the one
+   * implementation every resource that names a site elsewhere calls too:
    *
    * 1. The site document, read once. Read fresh rather than through a cached
    *    host reader, because the lock below is read off it, and a lock or a
@@ -397,12 +397,9 @@ async function handleSites(
    *    The method decides, as it does in the pipeline.
    * 4. The snapshot rides on the context, so no handler reads it again.
    */
-  const snapshot = await hostRef(ctx, hostId).get()
-  if (!snapshot.exists || !holdsSiteMembership(ctx, snapshot)) {
-    return ApiErrors.notFound({ message: 'No such site', headers: ctx.headers })
-  }
-  const locked = await siteLockRefusal(ctx, request, snapshot.data() as never)
-  if (locked) return locked
+  const admitted = await admitNamedSite(ctx, request, hostId)
+  if (!('snapshot' in admitted)) return admitted
+  const { snapshot } = admitted
   const siteCtx: ApiV1Context = { ...ctx, site: { id: hostId, snapshot } }
 
   if (!sub) {
