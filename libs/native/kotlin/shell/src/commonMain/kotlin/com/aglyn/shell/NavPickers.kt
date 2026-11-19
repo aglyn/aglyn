@@ -226,18 +226,36 @@ private fun SiteStep(services: ShellServices, workspace: WorkspaceState, close: 
   val prefs by services.accountPrefs.state.collectAsState()
   var query by remember { mutableStateOf("") }
   val orgId = workspace.org?.id
-  val recentIds = prefs.recents.filter { it.orgId == orgId }.mapNotNull { it.hostId }.distinct()
+  // The sites pinned here lead, in the order pinned (the console's site switcher lists them first, AGL-4005), then Recent.
+  val pinnedIds = orgId?.let { prefs.pinnedHosts(it) }.orEmpty()
+  val recentIds = prefs.recents.filter { it.orgId == orgId }.mapNotNull { it.hostId }.distinct().filter { it !in pinnedIds }
   val sites = workspace.sites
-  val ordered = recentIds.mapNotNull { id -> sites.firstOrNull { it.id == id } } + sites.filter { it.id !in recentIds }
+  val pinnedSites = pinnedIds.mapNotNull { id -> sites.firstOrNull { it.id == id } }
+  val ordered = pinnedSites + recentIds.mapNotNull { id -> sites.firstOrNull { it.id == id } } +
+    sites.filter { it.id !in recentIds && it.id !in pinnedIds }
   val shownSites = if (query.isBlank()) ordered.take(PICKER_PAGE) else {
     sites.mapNotNull { site -> scoreMatch(site.name, listOfNotNull(site.subdomain, site.cname), query)?.let { it to site } }
       .sortedWith { a, b -> com.aglyn.contracts.scoredOrder.compare(a.first to a.second.name, b.first to b.second.name) }.map { it.second }
   }
   SearchField(query, "Find a site", "picker-site-search") { query = it }
   LazyColumn(Modifier.fillMaxWidth()) {
-    item { PickerHeading(if (query.isBlank()) (if (recentIds.isEmpty()) "Sites" else "Recent") else "Matching sites") }
+    val lead = if (query.isBlank()) shownSites.filter { it.id in pinnedIds } else emptyList()
+    if (lead.isNotEmpty()) {
+      item { PickerHeading("Pinned") }
+      items(lead, key = { it.id }) { site -> SiteRow(services, workspace, site, true) { services.workspace.selectSite(site.id); close() } }
+    }
+    item {
+      PickerHeading(
+        when {
+          query.isNotBlank() -> "Matching sites"
+          recentIds.isNotEmpty() -> "Recent"
+          lead.isNotEmpty() -> "All sites"
+          else -> "Sites"
+        },
+      )
+    }
     if (!workspace.ready) item { com.aglyn.ui.SkeletonList(rows = 2) }
-    items(shownSites, key = { it.id }) { site -> SiteRow(services, workspace, site) { services.workspace.selectSite(site.id); close() } }
+    items(shownSites.filter { it !in lead }, key = { it.id }) { site -> SiteRow(services, workspace, site, site.id in pinnedIds) { services.workspace.selectSite(site.id); close() } }
     if (query.isBlank()) {
       item {
         PickerRow(
@@ -260,7 +278,7 @@ private fun SiteStep(services: ShellServices, workspace: WorkspaceState, close: 
 }
 
 @Composable
-private fun SiteRow(services: ShellServices, workspace: WorkspaceState, site: WorkspaceSite, onPick: () -> Unit) {
+private fun SiteRow(services: ShellServices, workspace: WorkspaceState, site: WorkspaceSite, pinned: Boolean = false, onPick: () -> Unit) {
   PickerRow(
     title = site.name,
     detail = site.address,
@@ -271,6 +289,7 @@ private fun SiteRow(services: ShellServices, workspace: WorkspaceState, site: Wo
         WorkspaceTile(site.name, null, null, null, size = 36.dp)
       }
     },
+    trailing = if (pinned) ({ Icon(AglynIcons.named("push_pin"), "Pinned", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }) else null,
     onClick = onPick,
   )
 }

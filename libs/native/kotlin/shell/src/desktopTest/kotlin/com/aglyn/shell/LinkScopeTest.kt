@@ -26,6 +26,17 @@ class LinkScopeTest {
     assertEquals(LinkScope("org-acme", whole = true), linkScopeOf("/acme/crm", onAcme()))
   }
 
+  /** A link may name the workspace and site by id, as the Apple apps read it (AGL-4059: it opened over the site on screen). */
+  @Test
+  fun aLinkByIdsNamesItsWorkspaceAndSite() {
+    assertEquals(LinkScope("org-acme", "host-cafe", "host-cafe"), linkScopeOf("aglyn://org-acme/hosts/host-cafe/admin/plugins/p1", onAcme()))
+    val scope = linkScopeOf("/org-beta/hosts/host-market/admin/plugins", onAcme())!!
+    assertEquals(LinkScope("org-beta", null, "host-market"), scope)
+    val loaded = WorkspaceState(orgs = listOf(acme, beta), sites = listOf(market), org = beta, site = null, ready = true)
+    assertEquals("org-beta" to "host-market", linkScopePick(scope, loaded))
+    assertTrue(linkScopeSettled(scope, loaded.copy(site = market)))
+  }
+
   @Test
   fun aStoredLinkNamesTheSiteByItsDocumentId() {
     assertEquals(LinkScope("org-acme", "host-cafe", "cafe"), linkScopeOf("/host-cafe/ai-jobs/j1", onAcme()))

@@ -231,14 +231,15 @@ extension AppModel {
   }
 
   /// The one landing routine (`provisionAndLandSignUp`): a verified account's workspace is created now and the app lands
-  /// in it; an unverified one's name is held until the address is confirmed.
+  /// in it; an unverified one's name is held until the address is confirmed. A verified invitee gets none: the
+  /// automatic join opens the workspace they were invited to (AGL-4047).
   private func provisionAndLand(_ user: AglynUser, name: String, nameWasTyped: Bool) async {
     guard let service = signUpService else { return }
     if !user.emailVerified {
       await service.holdWorkspace(uid: user.uid, PendingSignUpWorkspace(name: name, nameWasTyped: nameWasTyped))
       return
     }
-    let outcome = await service.createWorkspace(name: name)
+    guard let outcome = await service.provisionVerifiedSignUp(name: name) else { return }
     if outcome.slug != nil { workspace?.reload() }
     if let slug = outcome.slug, let plan = authFlow.plan {
       (push.pendingOrgID, push.pendingHostID) = (nil, nil)
@@ -247,31 +248,37 @@ extension AppModel {
   }
 
   /// The first verified session of an account with no workspace (the console's chooser, AGL-2590): the name the sign-up
-  /// held is claimed once and its workspace created; the plan it remembered then decides where the app lands.
+  /// held is claimed once and its workspace created; the plan it remembered then decides where the app lands. An
+  /// invitee's held name is not claimed and nothing is created (AGL-4047); this runs again on a later session, so a
+  /// person whose invitation is withdrawn before any join still gets the workspace they named.
   func settleFirstRun() async {
     guard let auth, let user = auth.user, user.emailVerified, auth.impersonation == nil,
       let workspace, workspace.ready, workspace.orgs.isEmpty, firstRunSettledFor != user.uid,
       let service = signUpService, let reader
     else { return }
     firstRunSettledFor = user.uid
-    firstRun = .provisioning
     let providers = await auth.providerIDs()
-    guard let pending = await service.claimHeldWorkspace(uid: user.uid, providers: providers, reader: reader) else {
+    let settled = await service.settleFirstRun(
+      uid: user.uid, providers: providers, reader: reader, joiningAnInvite: invites?.joinedOrJoining == true,
+      claiming: { [weak self] in self?.firstRun = .provisioning })
+    switch settled {
+    case .invited:
+      // Not settled: if the invitation goes away without a join, the next look provisions as it would have.
+      firstRunSettledFor = nil
       firstRun = .idle
-      return
-    }
-    let outcome = await service.createWorkspace(name: pending.name)
-    if let slug = outcome.slug {
+    case .nothingHeld:
+      firstRun = .idle
+    case .created(let slug, let plan):
       // The new workspace is shown at once, not at the switcher's next read (AGL-3920).
       workspace.reload()
-      if let plan = await service.consumePlanIntent(uid: user.uid, reader: reader) {
+      if let plan {
         (push.pendingOrgID, push.pendingHostID) = (nil, nil)
         push.pendingLink = plan.destination(orgSlug: slug)
       }
       firstRun = .idle
-      return
+    case .failed(let pending, let error):
+      firstRun = pending.nameWasTyped ? .failed(name: pending.name, error: error) : .idle
     }
-    firstRun = pending.nameWasTyped ? .failed(name: pending.name, error: outcome.error) : .idle
   }
 
   /// "Create site" from the empty workspace list (the console's "Create your first site"): the workspace for the first

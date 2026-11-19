@@ -1,20 +1,10 @@
 package com.aglyn.site.setup
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import com.aglyn.contracts.Contracts
 import com.aglyn.contracts.ResolvedBusinessProfile
@@ -30,21 +20,16 @@ import com.aglyn.pluginhost.ActionRunner
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.CountedTextField
 import com.aglyn.ui.FormCard
-import com.aglyn.ui.SectionCard
 import com.aglyn.ui.SelectField
 import com.aglyn.ui.SelectOption
-import com.aglyn.ui.StatusChip
-import com.aglyn.ui.TextButton
-import com.aglyn.ui.space
 
 /** The services are one per line in a text box; everything else is its own field. */
-private val BOX_FIELDS = listOf("whatYouDo", "services", "audience", "serviceArea", "tone", "toneNotes", "founded")
+private val BOX_FIELDS = listOf("whatYouDo", "services", "audience", "tone", "toneNotes", "founded")
 
-/** The form's text for what is stored: the services one per line, a missing value empty. */
+/** The form's text for what is stored: the services one per line, a missing value empty. No area served: a site's is SEO → Local business's Areas served (AGL-4136). */
 internal fun businessProfileForm(stored: Map<String, Any?>?): Map<String, String> = mapOf(
   "whatYouDo" to (stored?.get("whatYouDo") as? String).orEmpty(),
   "services" to ((stored?.get("services") as? List<*>)?.filterIsInstance<String>().orEmpty()).joinToString("\n"),
-  "serviceArea" to (stored?.get("serviceArea") as? String).orEmpty(),
   "audience" to (stored?.get("audience") as? String).orEmpty(),
   "tone" to (stored?.get("tone") as? String).orEmpty(),
   "toneNotes" to (stored?.get("toneNotes") as? String).orEmpty(),
@@ -55,7 +40,6 @@ internal fun businessProfileForm(stored: Map<String, Any?>?): Map<String, String
 internal fun businessProfileValues(form: Map<String, String>): Map<String, Any?> = mapOf(
   "whatYouDo" to form["whatYouDo"].orEmpty(),
   "services" to form["services"].orEmpty().split('\n'),
-  "serviceArea" to form["serviceArea"].orEmpty(),
   "audience" to form["audience"].orEmpty(),
   "tone" to form["tone"]?.takeIf { it in Contracts.businessToneOrder },
   "toneNotes" to form["toneNotes"].orEmpty(),
@@ -91,12 +75,12 @@ internal fun businessOriginLine(field: String, stored: Map<String, Any?>?, resol
 }
 
 /**
- * A site's business profile (AGL-3661): the services, audience, area and tone that have no other home, and that every AI job
- * for the site reads. The save is the OWNER's write, so every field they changed becomes theirs and a field they left as it
- * was keeps the source it had. Beside it, the facts read from the site's own settings, each with a link to the card that edits it.
+ * Setup → Business profile (AGL-3661, AGL-4136): first the Business details, the one place the site's name and how to reach
+ * it are entered; then the business profile, the services, audience and tone every AI job for the site reads. That save is
+ * the OWNER's write, so every field they changed becomes theirs and a field they left as it was keeps the source it had.
  */
 @Composable
-internal fun BusinessSection(context: NativePluginContext, hostId: String, host: Map<String, Any?>, canEdit: Boolean) {
+internal fun BusinessSection(context: NativePluginContext, hostId: String, host: Map<String, Any?>, api: HostSettingsApi, canEdit: Boolean) {
   val orgId = context.orgId
   val path = "hosts/$hostId/${Contracts.businessProfileSubcollection}/${Contracts.businessProfileSiteDoc}"
   val live by remember(path, context.firestore) { context.firestore.observeDoc(path) }.collectAsState(Live.Loading)
@@ -122,12 +106,14 @@ internal fun BusinessSection(context: NativePluginContext, hostId: String, host:
   fun line(field: String, fallback: String) = businessOriginLine(field, stored?.data, resolved, fallback)
   val foundedError = businessFoundedError(form)
 
+  BusinessDetailsCard(host, api, canEdit, remember(hostId) { FormDraft.forSite(hostId) })
   // Its own document, so its own hold: Save waits while the profile is only the device cache's copy (AGL-4047).
   val profileChecking = if ((live as? Live.Ready)?.fromCache == true) com.aglyn.ui.FormHold.of("business profile") else null
   androidx.compose.runtime.CompositionLocalProvider(com.aglyn.ui.LocalFormChecking provides profileChecking) {
   FormCard(
     title = "Business profile",
-    description = "What this business does and how it speaks. Aglyn AI reads it on every job for this site, and never replaces what you write here.",
+    description = "What this business does and how it speaks. Aglyn AI reads it on every job for this site, and never replaces what you write here. " +
+      "The area you serve is in SEO → Local business.",
     dirty = BOX_FIELDS.any { form[it] != initial[it] },
     canSave = canEdit && readable && foundedError == null,
     busy = runner.busy,
@@ -156,11 +142,6 @@ internal fun BusinessSection(context: NativePluginContext, hostId: String, host:
       max = (Contracts.businessProfileMaxChars["audience"] ?: 160.0).toInt(), multiline = true, minLines = 2, enabled = canEdit,
       placeholder = "Dog owners who work long hours", supporting = line("audience", "The customers you want more of"),
     )
-    CountedTextField(
-      "Area served", form["serviceArea"].orEmpty(), { form["serviceArea"] = it },
-      max = (Contracts.businessProfileMaxChars["serviceArea"] ?: 120.0).toInt(), enabled = canEdit,
-      placeholder = "North Austin, Round Rock and Cedar Park", supporting = line("serviceArea", "Cities, regions or “online”"),
-    )
     SelectField(
       "Tone of voice",
       Contracts.businessToneOrder.map { SelectOption(it, Contracts.businessToneLabels[it] ?: it) },
@@ -182,43 +163,6 @@ internal fun BusinessSection(context: NativePluginContext, hostId: String, host:
     )
   }
   }
-  BusinessFacts(context, resolved)
   // The `hostBusinessProfile` zone: what a plugin adds to the profile (what Aglyn AI learned from the site's edits).
   SlotCards(context, "hostBusinessProfile")
-}
-
-/**
- * The facts Aglyn AI reads from the site's own settings: the name, the business type and every way to reach the business.
- * Read-only here, each with a link to the card that edits it, because those settings already have a home. A contact detail
- * that is not entered reads "Not entered", and the AI writes around it rather than inventing one.
- */
-@Composable
-private fun BusinessFacts(context: NativePluginContext, profile: ResolvedBusinessProfile) {
-  data class Fact(val label: String, val value: String?, val section: String)
-  val rows = listOf(
-    Fact("Business name", profile.name?.value, "seo"),
-    Fact("Business type", profile.businessType, "seo"),
-    Fact("Email", profile.contact.email, "details"),
-    Fact("Phone", profile.contact.phone, "seo"),
-    Fact("Address", profile.contact.address, "details"),
-    Fact("Opening hours", profile.contact.hours, "seo"),
-    Fact("Social profiles", profile.profiles.joinToString("\n").ifEmpty { null }, "details"),
-  )
-  SectionCard("From your site settings", Modifier.testTag("business-facts")) {
-    Text(
-      "Aglyn AI uses these exactly as entered. It never makes up a name, an email, a phone number, an address or opening hours.",
-      style = MaterialTheme.typography.bodySmall,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    rows.forEachIndexed { index, fact ->
-      if (index > 0) HorizontalDivider()
-      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-          Text(fact.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          if (fact.value != null) Text(fact.value, style = MaterialTheme.typography.bodyMedium) else StatusChip("Not entered")
-        }
-        TextButton(onClick = { context.navigate(SITE_SETUP_SCREEN, mapOf("section" to fact.section)) }) { Text(if (fact.value != null) "Edit" else "Add") }
-      }
-    }
-  }
 }

@@ -632,6 +632,59 @@ describe('pay', () => {
     expect(callNamed('/void')).toBeUndefined()
   })
 
+  it('names the invoice page for the bank\'s step, for the apps, and keeps the invoice open', async () => {
+    world.finalized = {
+      ok: true,
+      body: {
+        id: 'in_1',
+        status: 'open',
+        amount_due: 10660,
+        payment_intent: 'pi_1',
+        hosted_invoice_url: 'https://invoice.stripe.com/i/acct_1/test_in_1',
+      },
+    }
+    world.pay = {
+      ok: false,
+      status: 402,
+      body: { error: { code: 'invoice_payment_intent_requires_action' } },
+    }
+    world.invoiceRead = {
+      payment_intent: { status: 'requires_action', client_secret: 'pi_1_secret' },
+    }
+    const res = await send()
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toEqual({
+      requiresAction: true,
+      paymentClientSecret: 'pi_1_secret',
+      invoiceId: 'in_1',
+      hostedInvoiceUrl: 'https://invoice.stripe.com/i/acct_1/test_in_1',
+    })
+    expect(callNamed('/void')).toBeUndefined()
+    // The same attempt replayed hears the same page: the claim recorded it.
+    stripeCalls.length = 0
+    const repeat = await send()
+    expect(repeat.body.hostedInvoiceUrl).toBe('https://invoice.stripe.com/i/acct_1/test_in_1')
+    expect(stripeCalls.filter((call) => call.method === 'POST')).toEqual([])
+  })
+
+  it('names no page that is not Stripe\'s https page', async () => {
+    world.finalized = {
+      ok: true,
+      body: { id: 'in_1', status: 'open', amount_due: 10660, payment_intent: 'pi_1', hosted_invoice_url: 'javascript:alert(1)' },
+    }
+    world.pay = {
+      ok: false,
+      status: 402,
+      body: { error: { code: 'invoice_payment_intent_requires_action' } },
+    }
+    world.invoiceRead = {
+      payment_intent: { status: 'requires_action', client_secret: 'pi_1_secret' },
+    }
+    const res = await send()
+    expect(res.body.requiresAction).toBe(true)
+    expect(res.body).not.toHaveProperty('hostedInvoiceUrl')
+  })
+
   it('a decline voids the invoice and says why, in Stripe\'s words', async () => {
     world.pay = {
       ok: false,

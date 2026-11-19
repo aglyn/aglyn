@@ -62,13 +62,15 @@ import {
   STAFF_SITE_LIST_QUERY,
   STAFF_SITE_LIST_SORT,
 } from '../../../../utils/staff-site-list-query'
+import { StaffUsageLevelSelect } from '../../../../components/staff-usage-level.component'
+import { readUsageLevel, USAGE_LEVELS } from '@aglyn/aglyn/app-utils/usage-level'
 
 /**
  * The filterable fields that get a column of their own. The rest of
  * `STAFF_SITE_LIST_FILTER_FIELDS` still reach the Filters panel, as hidden
  * columns.
  */
-const SITE_FILTER_COLUMNS = ['displayName', 'hasCustomDomain', 'createdAt']
+const SITE_FILTER_COLUMNS = ['displayName', 'usageLevel', 'hasCustomDomain', 'createdAt']
 
 /**
  * The columns the route JOINS or derives — the organization and its owner,
@@ -81,12 +83,15 @@ const SITE_PAGE_SORTS = {
   owner: (row: StaffSiteRow) => row.owner?.email ?? row.owner?.uid ?? null,
   hasCustomDomain: (row: StaffSiteRow) => row.cname ?? null,
   publishedPages: (row: StaffSiteRow) => row.publishedPages,
+  // Least use first, as the levels are declared — not A to Z by label.
+  usageLevel: (row: StaffSiteRow) => USAGE_LEVELS.indexOf(readUsageLevel(row.usageLevel)),
 }
 const SITE_PAGE_SORT_HEADERS = {
   organization: 'Organization',
   owner: 'Owner',
   hasCustomDomain: 'Custom domain',
   publishedPages: 'Status',
+  usageLevel: 'Usage level',
 }
 
 const dateOf = (at: { seconds: number } | null | undefined): Date | null =>
@@ -270,6 +275,21 @@ const AdminSites: NextPageWithLayout<Record<string, never>> = () => {
                   {'—'}
                 </Typography>
               ),
+          },
+          {
+            /*
+             * The staff usage level (AGL-4228): how much the site is used,
+             * as staff judged it. Set right here; filtered by the query.
+             */
+            field: 'usageLevel',
+            headerName: 'Usage level',
+            description: 'How much this site is used, as staff judged it. Pick a level to set it.',
+            flex: 0.9,
+            minWidth: 170,
+            valueGetter: (_value, row: StaffSiteRow) => readUsageLevel(row.usageLevel),
+            renderCell: ({ row }: { row: StaffSiteRow }) => (
+              <StaffUsageLevelSelect target="site" id={row.$id} level={row.usageLevel} />
+            ),
           },
           {
             field: 'hasCustomDomain',

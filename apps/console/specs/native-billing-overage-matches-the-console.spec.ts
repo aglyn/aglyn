@@ -18,6 +18,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   ESTIMATED_PAGE_TRANSFER_BYTES,
+  INCLUDED_EMAIL_SENDS_BY_PLAN,
   ORIGIN_MEDIA_BANDWIDTH_WEIGHT,
   orgSubscriptionState,
   resolvePlanPricing,
@@ -50,6 +51,9 @@ describe('native billing overage', () => {
         extraContactsUsdPer1k: pricing.extraContactsUsdPer1k,
         extraEmailSendsUsdPer1k: pricing.extraEmailSendsUsdPer1k,
         meteredInfraPassThrough: pricing.meteredInfraPassThrough,
+        // The band Starter's email is billed past (AGL-4227); null where the
+        // plan's own campaign band is the one.
+        includedEmailSends: INCLUDED_EMAIL_SENDS_BY_PLAN[plan] ?? null,
       })
     }
   })
@@ -80,6 +84,18 @@ describe('native billing overage', () => {
     for (const [from, month, billed] of cases) expect(billsOrgLibraryStorage(month, from)).toBe(billed)
     // A route that did not answer includes the library: the estimate fails high.
     expect(derived('libraryBilled').startsWith('!data.config')).toBe(true)
+  })
+
+  it('quotes Starter\'s email only once both console switches bill it, and fails closed (AGL-4227)', () => {
+    const when = derived('includedEmailBilled')
+    // A plan with no included band is not gated by it.
+    expect(when.startsWith('!const.pricing[@data.ent.plan].includedEmailSends ||')).toBe(true)
+    // No config (the route did not answer) quotes nothing: no `!data.config` arm.
+    expect(when).not.toContain('!data.config')
+    expect(when).toContain('data.config.includedEmailBilledFrom <= now.month')
+    const route = readFileSync(join(__dirname, '../app/api/billing/usage-config/route.ts'), 'utf8')
+    expect(route).toContain('process.env.BILL_EMAIL_SEND_OVERAGE_FROM')
+    expect(route).toContain('process.env.BILL_STARTER_EMAIL_SENDS_FROM')
   })
 
   it('quotes the same sentences as the console', () => {
