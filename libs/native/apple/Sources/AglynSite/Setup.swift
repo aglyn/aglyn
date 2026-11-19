@@ -40,7 +40,7 @@ public enum SetupSection: String, CaseIterable, Identifiable, Sendable {
 
   public var supporting: String {
     switch self {
-    case .details: "Logo, business details, layout and languages"
+    case .details: "Logo, layout and languages"
     case .business: "What the business is, for everything that writes about it"
     case .seo: "Search title, social image, business profile and verification"
     case .tracking: "Analytics, ad tags and the consent banner"
@@ -242,8 +242,8 @@ public struct SocialLink: Equatable, Sendable, Identifiable {
   public static func == (a: SocialLink, b: SocialLink) -> Bool { a.label == b.label && a.url == b.url }
 }
 
-/// The business details card's list limit (`MAX_LINKS`).
-public let socialLinksMax = 8
+/// The business details card's list limit (`BUSINESS_SOCIAL_LINKS_MAX`).
+public var socialLinksMax: Int { ContractValues.shared.businessSocialLinksMax }
 
 public func socialLinks(of host: [String: Any]?) -> [SocialLink] {
   (valueAt(host, "business.socialLinks") as? [Any])?.compactMap { row in
@@ -251,6 +251,104 @@ public func socialLinks(of host: [String: Any]?) -> [SocialLink] {
     return SocialLink(label: map["label"] as? String ?? "", url: map["url"] as? String ?? "")
   } ?? []
 }
+
+/// The Business details card's text fields (Setup → Business profile, `hostBusinessDetails`, AGL-4136), in the console's
+/// order: the canonical paths every reader takes the site's name, slogan, phone, email and address from.
+public let businessDetailsTextPaths = [
+  "seo.entity.name", "seo.entity.slogan", "seo.entity.telephone", "seo.entity.email", "seo.entity.address.streetAddress",
+  "seo.entity.address.addressLocality", "seo.entity.address.addressRegion", "seo.entity.address.postalCode",
+  "seo.entity.address.addressCountry",
+]
+
+/// The Business details card's text fields over `host`, seeded as the console seeds them (`businessDetailsSeed`): the
+/// site's one email in the Email field.
+public func businessDetailsForm(_ host: [String: Any]?) -> [String: String] {
+  let seeded = businessDetailsSeed(host)
+  return Dictionary(uniqueKeysWithValues: businessDetailsTextPaths.map { ($0, textAt(seeded, $0)) })
+}
+
+/// The one-block address the site prints while its structured address is empty, for the Street field's note; nil once a
+/// part is filled in (the console's Street `resolveProps`).
+public func businessDetailsLegacyAddress(_ fields: [String: String], host: [String: Any]?) -> String? {
+  let block = textAt(host, "business.address").trimmed
+  let hasParts = businessDetailsTextPaths.filter { $0.hasPrefix("seo.entity.address.") }.contains { !(fields[$0] ?? "").trimmed.isEmpty }
+  guard !block.isEmpty, !hasParts else { return nil }
+  return block.replacingOccurrences(of: #"\s*\n\s*"#, with: ", ", options: .regularExpression)
+}
+
+/// Why the Business details card's Email cannot be saved, in the console's words, or nil when it can (an empty one can).
+public func businessDetailsEmailError(_ email: String) -> String? {
+  guard !email.isEmpty else { return nil }
+  return email.range(of: #"^\s*[^\s@]+@[^\s@]+\.[^\s@]+\s*$"#, options: .regularExpression) == nil
+    ? "Please enter an email address, like you@example.com" : nil
+}
+
+/// What the Business details card's Save writes, as the console's save writes it (AGL-4136): the fields the card holds,
+/// a cleared one left out as the form leaves it out, beside the two `business` copies as stored (the console's form
+/// submits the whole document, so an untouched copy is carried, not read as cleared), through `businessDetailsWrite`
+/// (trimmed, the copies kept in step), then every clearable path the save leaves blank and the site still holds deleted.
+/// Merged into the host document; an empty map is dropped, since a merge would store it over what the document holds.
+public func businessDetailsPayload(_ values: [String: String], links: [SocialLink], stored: [String: Any]?) -> [String: Any] {
+  var fields: [String: Any] = [:]
+  for path in ["business.supportEmail", "business.address"] {
+    guard let held = valueAt(stored, path) else { continue }
+    insert(&fields, path.split(separator: ".").map(String.init)[...], held)
+  }
+  for path in businessDetailsTextPaths {
+    guard let value = values[path], !value.isEmpty else { continue }
+    insert(&fields, path.split(separator: ".").map(String.init)[...], value)
+  }
+  if !links.isEmpty || valueAt(stored, "business.socialLinks") != nil {
+    insert(&fields, ["business", "socialLinks"], links.map { ["label": $0.label, "url": $0.url] })
+  }
+  var written = businessDetailsWrite(fields, stored: stored)
+  for path in ContractValues.shared.businessDetailsClearablePathList {
+    let submitted = valueAt(written, path)
+    let blank = submitted.map { "\($0)".trimmed.isEmpty } ?? true
+    guard blank, let held = valueAt(stored, path), "\(held)" != "" else { continue }
+    insert(&written, path.split(separator: ".").map(String.init)[...], FirestoreSentinel.delete)
+  }
+  return withoutEmptyMaps(written)
+}
+
+/// The site as the card's "What your pages can use" reads it (the console's FormSpy values): the stored document with what
+/// is typed laid over it, a cleared field left out as the form leaves it out.
+public func businessDetailsPreviewHost(_ values: [String: String], links: [SocialLink], host: [String: Any]?) -> [String: Any] {
+  var next = host ?? [:]
+  for path in businessDetailsTextPaths {
+    let value = values[path].flatMap { $0.isEmpty ? nil : $0 }
+    place(&next, path.split(separator: ".").map(String.init)[...], value)
+  }
+  place(&next, ["business", "socialLinks"], links.map { ["label": $0.label, "url": $0.url] })
+  return next
+}
+
+/// The variables the card lists: every `host.*` one but the images, as the console's list leaves them out of text.
+public func businessDetailsTokenRows(_ values: [String: String], links: [SocialLink], host: [String: Any]?) -> [HostTokenPreviewRow] {
+  hostTokenPreview(businessDetailsPreviewHost(values, links: links, host: host)).filter { $0.type != "image" }
+}
+
+private func place(_ node: inout [String: Any], _ keys: ArraySlice<String>, _ value: Any?) {
+  guard let key = keys.first else { return }
+  if keys.count == 1 {
+    node[key] = value
+    return
+  }
+  var child = node[key] as? [String: Any] ?? [:]
+  place(&child, keys.dropFirst(), value)
+  node[key] = child
+}
+
+private func withoutEmptyMaps(_ map: [String: Any]) -> [String: Any] {
+  map.compactMapValues { value in
+    guard let child = value as? [String: Any] else { return value }
+    let kept = withoutEmptyMaps(child)
+    return kept.isEmpty ? nil : kept
+  }
+}
+/// What the favicon card says before an icon is chosen (the console's `FAVICON_HINT`).
+public let faviconHint =
+  "Recommended: one square PNG, SVG or JPG, 512×512 or larger — every tab, bookmark and home-screen size is generated for you."
 
 /// The SEO form's limits (`hostSeo`, `hostSeoEntity`, `hostSeoAgent`).
 public enum SeoLimits {
@@ -643,6 +741,12 @@ public struct HostSettingsAPI: Sendable {
     data["updatedAt"] = Date()
     try await writer.merge(path, data)
     await announce()
+  }
+
+  /// The favicon's save (the console's `saveMirroredHostFields`): the route writes `seo.favicon` (`""` clears it) and puts it
+  /// on every member's site list row in the same request.
+  public func saveFavicon(_ favicon: String) async throws {
+    _ = try await api.request("/api/hosts/sync-memberships", method: .post, body: jsonBody(["hostId": hostID, "favicon": favicon]))
   }
 
   private func theme(_ body: [String: Any?]) async throws -> JSONValue? {

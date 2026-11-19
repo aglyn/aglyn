@@ -69,6 +69,8 @@
 import {
   setTransactionalSendCeilingGate,
   transactionalCeilingDayKey,
+  transactionalCeilingMonthKey,
+  transactionalCeilingMonthResetMs,
   transactionalCeilingResetMs,
   type TransactionalSendCeilingClaim,
   type TransactionalSendCeilingRequest,
@@ -114,31 +116,53 @@ export async function claimTransactionalEmailSends(
   const count = Math.max(1, Math.floor(Number(request.count) || 0))
   if (!orgId) return { allowed: true, claim: null }
   const dayKey = transactionalCeilingDayKey(nowMs)
+  // The HARD monthly cap (AGL-4227), Free's: counted on a `YYYY-MM` field of
+  // the same document in the same transaction, so a claim that passes the day
+  // and fails the month writes neither. The field starts empty the month the
+  // cap ships, so it never refuses mail because of what was sent before it.
+  const monthly = Number(request.monthlyCeiling)
+  const monthKey = Number.isFinite(monthly) ? transactionalCeilingMonthKey(nowMs) : null
   try {
     const db = request.firestore ?? firebaseAdmin.app().firestore()
     const ref = orgCounterRef(db, orgId, TRANSACTIONAL_EMAIL_SENDS_COUNTER)
     const verdict = await db.runTransaction(async (tx: any) => {
       const snapshot = await tx.get(ref)
+      if (monthKey) {
+        const usedMonth = readDayField(snapshot, monthKey)
+        const month = checkTransactionalEmailCeiling(usedMonth, count, monthly)
+        if (!month.allowed) return { ...month, period: 'month' as const }
+      }
       const used = readDayField(snapshot, dayKey)
       const decision = checkTransactionalEmailCeiling(used, count, request.ceiling)
       if (decision.allowed) {
-        tx.set(ref, { [dayKey]: used + count }, { merge: true })
+        tx.set(
+          ref,
+          {
+            [dayKey]: used + count,
+            ...(monthKey ? { [monthKey]: readDayField(snapshot, monthKey) + count } : {}),
+          },
+          { merge: true },
+        )
       }
-      return decision
+      return { ...decision, period: 'day' as const }
     })
     if (verdict.allowed) {
       return {
         allowed: true,
         ceiling: verdict.ceiling,
         used: verdict.used,
-        claim: { orgId, dayKey, count },
+        claim: { orgId, dayKey, monthKey, count },
       }
     }
     return {
       allowed: false,
       ceiling: verdict.ceiling,
       used: verdict.used,
-      retryAtMs: transactionalCeilingResetMs(nowMs),
+      period: verdict.period,
+      retryAtMs:
+        verdict.period === 'month'
+          ? transactionalCeilingMonthResetMs(nowMs)
+          : transactionalCeilingResetMs(nowMs),
     }
   } catch (error) {
     console.error('[transactional-ceiling] counter unavailable — allowing', error)
@@ -166,7 +190,15 @@ export async function releaseTransactionalEmailSends(
     await db.runTransaction(async (tx: any) => {
       const snapshot = await tx.get(ref)
       const used = readDayField(snapshot, claim.dayKey)
-      tx.set(ref, { [claim.dayKey]: Math.max(0, used - count) }, { merge: true })
+      const monthKey = claim.monthKey ?? null
+      tx.set(
+        ref,
+        {
+          [claim.dayKey]: Math.max(0, used - count),
+          ...(monthKey ? { [monthKey]: Math.max(0, readDayField(snapshot, monthKey) - count) } : {}),
+        },
+        { merge: true },
+      )
     })
   } catch (error) {
     console.error('[transactional-ceiling] release failed', error)
@@ -190,6 +222,8 @@ export async function recordTransactionalCeilingRefusal(input: {
   ceiling: number
   context: string | null
   nowMs: number
+  /** Which limit refused (AGL-4227): the day's ceiling, or Free's monthly cap. */
+  period?: 'day' | 'month'
   firestore?: any
 }): Promise<void> {
   console.warn(
@@ -205,6 +239,10 @@ export async function recordTransactionalCeilingRefusal(input: {
     await refusedRef.set(
       {
         [input.dayKey]: firebaseAdmin.firestore.FieldValue.increment(input.count),
+        // The month's refusals too (AGL-4227), which the owner's usage page
+        // and the usage alerts read: a dropped email is said, not hidden.
+        [transactionalCeilingMonthKey(input.nowMs)]: firebaseAdmin.firestore.FieldValue.increment(input.count),
+        lastPeriod: input.period ?? 'day',
         // Explicit values only — Firestore rejects `undefined`.
         ceiling: input.ceiling,
         lastRefusedAtMs: input.nowMs,
@@ -261,6 +299,7 @@ export function installTransactionalSendCeiling(): void {
         ceiling: Number(verdict.ceiling ?? request.ceiling),
         context: request.context ?? null,
         nowMs: request.nowMs,
+        period: verdict.period ?? 'day',
       }),
   })
 }

@@ -28,6 +28,10 @@ const mockAuthenticate = jest.fn()
 const mockCharge = jest.fn()
 const mockDispatch = jest.fn()
 jest.mock('../utils/api-v1', () => ({
+  API_BILLING_UNITS_HEADER: 'X-Api-Billing-Units',
+  // Size weighing (AGL-4227) is not under test here: every call is one unit.
+  apiRequestBodyBytes: async () => 0,
+  chargeApiRequestSize: () => 1,
   authenticateApiV1: (...args: unknown[]) => mockAuthenticate(...args),
   chargeApiV1Call: (...args: unknown[]) => mockCharge(...args),
 }))

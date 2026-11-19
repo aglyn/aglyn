@@ -29,6 +29,7 @@ import {
   defaultSiteSeo,
 } from '@aglyn/aglyn/app-utils/default-site'
 import { encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
+import { DEFAULT_USAGE_LEVEL, USAGE_LEVEL_FIELD } from '@aglyn/aglyn/app-utils/usage-level'
 import {
   hostStarterChoice,
   readHostStarterChoice,
@@ -580,6 +581,9 @@ export async function claimHostForOrg(
       // Suspended by equality on it, and a query cannot find a document by a
       // field it lacks. The console's `suspended-flag.ts` names its other writers.
       suspended: false,
+      // Not reviewed by staff yet (AGL-4228). Stored, never left out, for the
+      // same reason: the staff list filters the usage level by equality.
+      [USAGE_LEVEL_FIELD]: DEFAULT_USAGE_LEVEL,
       createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     })

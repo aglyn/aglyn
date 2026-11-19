@@ -99,12 +99,19 @@ export function apnsProviderToken(credentials: ApnsCredentials, nowMs: number): 
  * The APNs payload: the alert, the person's picked sound and the tap data
  * beside `aps`. The sound names a file in the app's bundle; a build that
  * does not ship it yet plays the system sound instead.
+ *
+ * `mutable-content` routes the push through the app's notification service
+ * extension first (AGL-4215). macOS 26.6 plays its own built-in sound for any
+ * app-named sound, so the Mac apps' extension plays the picked file itself and
+ * shows the banner without a system sound. A device with no extension (iPhone,
+ * iPad, an older Mac build) ignores the flag and plays `sound` as before.
  */
 export function apnsPayload(message: PushMessage, sound?: NotificationSound): string {
   return JSON.stringify({
     aps: {
       alert: { title: message.title, ...(message.body ? { body: message.body } : {}) },
       sound: sound?.apple ?? 'default',
+      'mutable-content': 1,
     },
     ...message.data,
   })
@@ -112,16 +119,20 @@ export function apnsPayload(message: PushMessage, sound?: NotificationSound): st
 
 const GONE = new Set(['BadDeviceToken', 'Unregistered', 'DeviceTokenNotForTopic'])
 
+/** APNs' `reason` from an error body (`BadDeviceToken`, `ExpiredProviderToken`, …), or '' when there is none. */
+export function apnsReason(response: ApnsResponse): string {
+  try {
+    return String(JSON.parse(response.body)?.reason ?? '')
+  } catch {
+    // An unreadable body is a failure, not a verdict on the token.
+    return ''
+  }
+}
+
 export function apnsOutcome(response: ApnsResponse): PushOutcome {
   if (response.status === 200) return 'sent'
   if (response.status === 410) return 'prune'
-  let reason = ''
-  try {
-    reason = String(JSON.parse(response.body)?.reason ?? '')
-  } catch {
-    // An unreadable body is a failure, not a verdict on the token.
-  }
-  return GONE.has(reason) ? 'prune' : 'failed'
+  return GONE.has(apnsReason(response)) ? 'prune' : 'failed'
 }
 
 /** The default request: one HTTP/2 session per origin for the life of a send. */
@@ -205,9 +216,20 @@ export function createApnsTransport(options: ApnsTransportOptions): PushTranspor
                 )
                 // An expired or refused provider token is ours to mint again, not the device's fault.
                 if (response.status === 403) cached = null
-                outcomes[start + offset] = apnsOutcome(response)
-              } catch {
+                const outcome = apnsOutcome(response)
+                outcomes[start + offset] = outcome
+                // A refused push was counted and dropped without a word, so a broken sender looked like a
+                // quiet device (AGL-4215). The status and APNs' reason, never the token.
+                if (outcome !== 'sent') {
+                  console.warn(
+                    `push: APNs ${response.status} ${apnsReason(response) || '(no reason)'} for ${target.topic} (${target.apnsEnvironment ?? 'production'})`,
+                  )
+                }
+              } catch (error) {
                 outcomes[start + offset] = 'failed'
+                console.warn(
+                  `push: APNs request for ${target.topic} (${target.apnsEnvironment ?? 'production'}) failed: ${error instanceof Error ? error.message : String(error)}`,
+                )
               }
             }),
           )

@@ -187,6 +187,19 @@
       "path": "ratingAverage"
     }
   },
+  "BUSINESS_DETAILS_CLEARABLE_PATH_LIST": [
+    "seo.entity.name",
+    "seo.entity.slogan",
+    "seo.entity.telephone",
+    "seo.entity.email",
+    "seo.entity.address.streetAddress",
+    "seo.entity.address.addressLocality",
+    "seo.entity.address.addressRegion",
+    "seo.entity.address.postalCode",
+    "seo.entity.address.addressCountry",
+    "business.supportEmail",
+    "business.address"
+  ],
   "BUSINESS_PROFILE_FIELD_ORDER": [
     "whatYouDo",
     "services",
@@ -215,6 +228,7 @@
   "BUSINESS_PROFILE_SITE_DOC": "profile",
   "BUSINESS_PROFILE_SUBCOLLECTION": "businessProfile",
   "BUSINESS_PROFILE_WORKSPACE_DOC": "defaults",
+  "BUSINESS_SOCIAL_LINKS_MAX": 8,
   "BUSINESS_TONE_LABELS": {
     "friendly": "Friendly and warm",
     "plain": "Plain and direct",
@@ -1676,6 +1690,16 @@
   },
   "CRM_EMAIL_BODY_MAX": 10000,
   "CRM_EMAIL_SUBJECT_MAX": 200,
+  "CRM_EMAIL_TEMPLATE_KIND_LABELS": {
+    "snippet": "Snippet",
+    "template": "Template"
+  },
+  "CRM_EMAIL_TEMPLATE_NAME_MAX": 80,
+  "CRM_EMAIL_TEMPLATE_VISIBILITY_LABELS": {
+    "personal": "Personal",
+    "shared": "Shared"
+  },
+  "CRM_EMAIL_TEMPLATES_LIMIT": 200,
   "CRM_FIELD_OBJECT_LABELS": {
     "company": "Companies",
     "contact": "Contacts",
@@ -1693,6 +1717,98 @@
     "unqualified": "Unqualified",
     "working": "Working"
   },
+  "CRM_MERGE_FIELDS": [
+    {
+      "group": "Contact",
+      "key": "contact.firstName",
+      "label": "First name"
+    },
+    {
+      "group": "Contact",
+      "key": "contact.lastName",
+      "label": "Last name"
+    },
+    {
+      "group": "Contact",
+      "key": "contact.name",
+      "label": "Full name"
+    },
+    {
+      "group": "Contact",
+      "key": "contact.email",
+      "label": "Email address"
+    },
+    {
+      "group": "Contact",
+      "key": "contact.company",
+      "label": "Company"
+    },
+    {
+      "group": "Contact",
+      "key": "contact.title",
+      "label": "Job title"
+    },
+    {
+      "group": "Lead",
+      "key": "lead.firstName",
+      "label": "First name"
+    },
+    {
+      "group": "Lead",
+      "key": "lead.lastName",
+      "label": "Last name"
+    },
+    {
+      "group": "Lead",
+      "key": "lead.name",
+      "label": "Full name"
+    },
+    {
+      "group": "Lead",
+      "key": "lead.email",
+      "label": "Email address"
+    },
+    {
+      "group": "Lead",
+      "key": "lead.company",
+      "label": "Company"
+    },
+    {
+      "group": "Lead",
+      "key": "lead.title",
+      "label": "Job title"
+    },
+    {
+      "group": "Deal",
+      "key": "deal.name",
+      "label": "Deal name"
+    },
+    {
+      "group": "Deal",
+      "key": "deal.amount",
+      "label": "Deal amount"
+    },
+    {
+      "group": "You",
+      "key": "sender.firstName",
+      "label": "Your first name"
+    },
+    {
+      "group": "You",
+      "key": "sender.name",
+      "label": "Your name"
+    },
+    {
+      "group": "You",
+      "key": "sender.email",
+      "label": "Your email address"
+    },
+    {
+      "group": "Site",
+      "key": "site.name",
+      "label": "Site name"
+    }
+  ],
   "CRM_REPORT_PERIOD_LABELS": {
     "30d": "Last 30 days",
     "7d": "Last 7 days",
@@ -4884,13 +5000,6 @@
       },
       {
         "console": {
-          "id": "/domains",
-          "surface": "orgPluginTab"
-        },
-        "where": "The console’s Domains page; no native screen yet"
-      },
-      {
-        "console": {
           "id": "/waivers",
           "surface": "hostPluginTab"
         },
@@ -5269,6 +5378,7 @@
                   "id": "/accounting",
                   "surface": "orgPluginTab"
                 },
+                "docs": "/commerce-and-bookings/commerce/connect-quickbooks-online",
                 "icon": {
                   "android": "account_balance",
                   "apple": "banknote"
@@ -5278,6 +5388,22 @@
                 "order": 70,
                 "pluginId": "accounting",
                 "screen": "accounting.books"
+              },
+              {
+                "console": {
+                  "id": "/domains",
+                  "surface": "orgPluginTab"
+                },
+                "docs": "/building-sites/custom-domains/manage-domains",
+                "icon": {
+                  "android": "dns",
+                  "apple": "network"
+                },
+                "id": "domains",
+                "label": "Domains",
+                "order": 75,
+                "pluginId": "domains",
+                "screen": "domains.list"
               },
               {
                 "console": {
@@ -6633,7 +6759,7 @@
                   "id": "details",
                   "surface": "setupSection"
                 },
-                "description": "Logo, business details, layout and languages",
+                "description": "Logo, layout and languages",
                 "icon": {
                   "android": "info",
                   "apple": "info.circle"
@@ -9595,6 +9721,8 @@
   "PHONE_HOME_SITE_GROUP_LABEL": "Site & workspace",
   "PHONE_HOME_TEAM_LABEL": "Team",
   "PHONE_HOME_WORKSPACE_GROUP_LABEL": "Settings",
+  "PINNED_HOSTS_FIELD": "pinnedHosts",
+  "PINNED_HOSTS_MAX": 500,
   "PINNED_ORGS_FIELD": "pinnedOrgs",
   "PINNED_ORGS_MAX": 5,
   "PLAN_CARD_ADVANCE_MS": 8000,
@@ -10180,6 +10308,7 @@
       }
     ]
   },
+  "SITE_SLOGAN_MAX_LENGTH": 120,
   "STAR_COLORS": [
     "blue",
     "purple",

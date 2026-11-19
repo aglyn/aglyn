@@ -20,6 +20,7 @@ import { onIdTokenChanged } from 'firebase/auth'
 import { useEffect, useRef } from 'react'
 import {
   reportFirestoreSessionHeal,
+  setFirestoreSessionSignedOut,
   useAuth,
 } from '@aglyn/tenant-feature-instance'
 
@@ -67,6 +68,10 @@ export function useCrossTabSessionHeal(): void {
       const uid = user?.uid ?? null
       const previous = seenUid.current
       seenUid.current = uid
+      // Nobody signed in: a page still mounted behind the re-auth prompt
+      // stops reopening its refused listens until somebody is. A timer that
+      // was already pending when the sign-out landed is left to fire once.
+      setFirestoreSessionSignedOut(uid === null)
       if (previous === undefined || previous === uid || !uid) return
       reportFirestoreSessionHeal()
     })

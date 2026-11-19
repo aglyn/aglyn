@@ -164,8 +164,10 @@ describe('the free plan carries no price on any billable dimension', () => {
     // therefore no longer distinguishing on its own — Starter shares it.
     // Campaign email begins at Pro, so Pro is where this axis stops being
     // free, and the control moves with it rather than being dropped.
+    // Since AGL-4227 Starter prices email too: no campaigns, but every email
+    // past 1,000 a month bills.
     expect(PLAN_ENTITLEMENTS.starter.emailSendsPerMonth).toBe(0)
-    expect(PLAN_PRICING.starter.extraEmailSendsUsdPer1k).toBeNull()
+    expect(PLAN_PRICING.starter.extraEmailSendsUsdPer1k).toBe(2.5)
     expect(PLAN_ENTITLEMENTS.pro.emailSendsPerMonth).toBeGreaterThan(0)
     expect(PLAN_PRICING.pro.extraEmailSendsUsdPer1k).toBe(2.25)
   })
