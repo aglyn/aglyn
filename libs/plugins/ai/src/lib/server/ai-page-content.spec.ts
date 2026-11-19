@@ -32,6 +32,7 @@
  *    document and the page document never move, and a refusal writes nothing.
  */
 
+import { extractLayoutStyleOverrides, injectLayoutStyleOverrides } from '@aglyn/aglyn/app-utils/layout-style-overrides'
 import { measureNodeMap, NODE_MAP_MAX_BYTES } from '@aglyn/aglyn/app-utils/measure-node-map'
 import { decodeStoredNodes, encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
@@ -43,6 +44,7 @@ import type {
   PageContentRefusal,
 } from '@aglyn/aglyn/plugin-manager/plugin-page-content'
 import { PAGE_CONTENT_MAX_EDITS, PAGE_CONTENT_MAX_INSERT_ELEMENTS } from '@aglyn/aglyn/plugin-manager/plugin-page-content'
+import { aiEditCanvas } from '../jobs/ai-job-edit-step'
 import { aiDocumentElements, aiEditJobOutline } from '../model/ai-edit-job'
 import { ASSIST_EDIT_WHOLE_MAX_NODES } from '../model/assist-edit'
 import { ASSIST_EDIT_MAX_INSERT_NODES, ASSIST_EDIT_MAX_OPS } from './assist-edit'
@@ -391,6 +393,51 @@ describe('editing a page’s draft', () => {
     expect(saved.revision).not.toBe(page.revision)
     // The old revision no longer matches the draft it made.
     expect(refused(await edit([{ op: 'rename', elementId: 'hero', name: 'Again' }], { ifRevision: page.revision }))).toMatchObject({ status: 409 })
+  })
+
+  describe('the page’s layout restyles (AGL-4235)', () => {
+    const OVERRIDES = { frame: { header: { bgcolor: 'primary.main', py: 2 } } }
+    const withOverrides = () => docs.set(VERSION, { ...docs.get(VERSION), layoutStyleOverrides: OVERRIDES })
+
+    it('puts them on the root of a draft built on the saved tree, exactly as the editor opens the version', async () => {
+      withOverrides()
+      const before = docs.get(VERSION)
+      ok(await edit([{ op: 'rename', elementId: 'hero', name: 'Top' }]))
+      // The editor's own injection, held by a canvas as the editor holds it.
+      const editorTree = aiEditCanvas(injectLayoutStyleOverrides(PAGE_NODES, OVERRIDES) as never).toJSON().nodes as Record<string, Record<string, unknown>>
+      expect(treeAt(DRAFT)[ROOT]).toEqual(editorTree[ROOT])
+      expect(treeAt(DRAFT)[ROOT]['layoutStyleOverrides']).toEqual(OVERRIDES)
+      // What the editor's save would store from this draft: the tree without
+      // them, and the overrides as the version holds them.
+      const lifted = extractLayoutStyleOverrides(treeAt(DRAFT))
+      expect(lifted.layoutStyleOverrides).toEqual(OVERRIDES)
+      expect(lifted.nodes[ROOT]).toEqual((aiEditCanvas(PAGE_NODES as never).toJSON().nodes as Record<string, unknown>)[ROOT])
+      expect(docs.get(VERSION)).toEqual(before)
+    })
+
+    it('shows them read-only on the root, and leaves the revision the stored tree’s', async () => {
+      withOverrides()
+      const page = ok(await read())
+      expect(page.revision).toBe(aiPageContentRevision('saved', 'v-live', docs.get(VERSION)?.['nodes']))
+      expect(page.elements[0]).toMatchObject({ id: ROOT, props: {}, readOnly: { fields: ['layoutStyleOverrides'] } })
+      expect(page.elements[0]).not.toHaveProperty('layoutStyleOverrides')
+    })
+
+    it('changes nothing for a version that stores none', async () => {
+      ok(await edit([{ op: 'rename', elementId: 'hero', name: 'Top' }]))
+      expect(treeAt(DRAFT)[ROOT]).not.toHaveProperty('layoutStyleOverrides')
+      expect(ok(await read()).elements[0]).not.toHaveProperty('readOnly')
+    })
+
+    it('leaves a usable draft’s root as its author left it', async () => {
+      withOverrides()
+      seedDraft(PAGE_NODES)
+      ok(await edit([{ op: 'rename', elementId: 'hero', name: 'Top' }]))
+      expect(treeAt(DRAFT)[ROOT]).not.toHaveProperty('layoutStyleOverrides')
+      seedDraft(injectLayoutStyleOverrides(PAGE_NODES, { frame: { header: { color: 'red' } } }) as Record<string, unknown>)
+      ok(await edit([{ op: 'rename', elementId: 'hero', name: 'Again' }]))
+      expect(treeAt(DRAFT)[ROOT]['layoutStyleOverrides']).toEqual({ frame: { header: { color: 'red' } } })
+    })
   })
 
   it('reads the revision off the tree as stored', () => {

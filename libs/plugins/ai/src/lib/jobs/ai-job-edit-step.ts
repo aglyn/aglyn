@@ -19,6 +19,7 @@ import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { SCREEN_KIND_TEMPLATE } from '@aglyn/aglyn/app-utils/screen-route'
 import { screenSeoStageKey, SCREEN_SEO_TEXT_FIELDS } from '@aglyn/aglyn/app-utils/screen-seo-fields'
 import { hasConcurrentWrite, versionStamp } from '@aglyn/aglyn/app-utils/guarded-version-save'
+import { extractLayoutStyleOverrides, injectLayoutStyleOverrides } from '@aglyn/aglyn/app-utils/layout-style-overrides'
 import { decodeStoredNodes, encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { coeditMirrorRoomPath, VERSION_DRAFT_COLLECTION, VERSION_DRAFT_DOC_ID } from '@aglyn/aglyn/app-utils/version-draft'
 import { CanvasManager } from '@aglyn/aglyn/canvas-manager/canvas-manager'
@@ -363,6 +364,19 @@ function usableDraft(
   return { nodes, aiEditJobId: text(draft.get('aiEditJobId')) || null }
 }
 
+/**
+ * A version's own tree as the Besigner opens it (AGL-4235): the stored
+ * `nodes` with the version's layout style overrides parked on the root by the
+ * editor's own `injectLayoutStyleOverrides`. A draft the editor saves carries
+ * them there, so a draft built on this tree does too, and publishing it — from
+ * the editor or over the API — keeps them rather than clearing them. Null
+ * without a tree.
+ */
+export function aiEditSavedTree(version: FirebaseFirestore.DocumentSnapshot): NodesMap | null {
+  const nodes = decodeStoredNodes<NodesMap>(version.get('nodes'))
+  return nodes ? (injectLayoutStyleOverrides(nodes, version.get('layoutStyleOverrides')) as NodesMap) : null
+}
+
 /** The tree a change is built on, as it is stored now (AGL-4235). */
 export interface AiEditBase {
   /**
@@ -370,8 +384,15 @@ export interface AiEditBase {
    * offer it; `saved` for the version's own tree otherwise.
    */
   from: 'draft' | 'saved'
+  /**
+   * The tree, as the Besigner would hold it: a draft's as its author left it,
+   * the saved version's with its layout style overrides on the root.
+   */
   nodes: NodesMap
-  /** The `nodes` field as stored, exactly as read: what a revision of the tree is read off. */
+  /**
+   * The `nodes` field as stored, exactly as read: what a revision of the tree
+   * is read off, so parking the overrides on the root never moves it.
+   */
   stored: unknown
   /** What stamped the draft, when a write did (`aiEditJobId`); null for a saved tree. */
   stampedBy: string | null
@@ -392,7 +413,9 @@ export function aiEditBase(
 ): AiEditBase | null {
   const usable = options.useDraft === false ? null : usableDraft(draft, version)
   if (usable) return { from: 'draft', nodes: usable.nodes, stored: draft.get('nodes'), stampedBy: usable.aiEditJobId }
-  const nodes = decodeStoredNodes<NodesMap>(version.get('nodes'))
+  // A usable draft's root says what its author meant, overrides or none, so
+  // only the saved tree gets them, as the editor gives them when it opens it.
+  const nodes = aiEditSavedTree(version)
   return nodes ? { from: 'saved', nodes, stored: version.get('nodes'), stampedBy: null } : null
 }
 
@@ -456,7 +479,9 @@ export async function readAiEditTarget(
     if (input.jobId && draft?.aiEditJobId === input.jobId) {
       return { ...base, sourceVersionId, nodes: {}, draft: null, written: { versionId: sourceVersionId, placement: 'draft' } }
     }
-    const nodes = decodeStoredNodes<NodesMap>(source.get('nodes'))
+    // The saved tree as the Besigner opens it, the page's layout style
+    // overrides on its root (see `aiEditSavedTree`).
+    const nodes = aiEditSavedTree(source)
     if (!nodes || !Object.keys(nodes).length) return { status: 400, error: AI_EDIT_NO_NODES_COPY }
     return { ...base, sourceVersionId, nodes, draft: draft ? { nodes: draft.nodes } : null, written: null }
   }
@@ -630,7 +655,10 @@ export async function writeAiEdit<R = never>(firestore: Firestore, input: AiEdit
       const { bytes } = measureNodeMap(applied.nodes)
       if (bytes > input.maxNodeBytes) return { ok: false, error: AI_EDIT_TOO_LARGE_COPY, tooLarge: { bytes } }
     }
-    const packed = encodeStoredNodes(applied.nodes)
+    // A draft keeps the overrides on its root, as the editor's own draft
+    // does; a version stores them beside its tree, never in it, as the
+    // editor's save lifts them out (the copy below keeps the field).
+    const packed = encodeStoredNodes(placement === 'draft' ? applied.nodes : extractLayoutStyleOverrides(applied.nodes).nodes)
     if (!packed) return { ok: false, error: AI_EDIT_NO_NODES_COPY }
     const stored = Buffer.from(packed)
     const docPatch: Record<string, unknown> = {}

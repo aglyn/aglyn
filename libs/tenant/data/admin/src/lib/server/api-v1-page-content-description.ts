@@ -70,7 +70,7 @@ const ELEMENT: ApiV1Schema = {
         props: openMap('Settings an edit cannot set, such as rich text (`html`) or a class name. Setting `children` replaces rich text.'),
         style: openMap('Styles outside the keys an edit can set.'),
         interactions: integerField('How many interactions the element runs.'),
-        fields: stringListField('Other fields it carries that only the editor changes, such as `className` or `styleOverrides`.'),
+        fields: stringListField('Other fields it carries that only the editor changes, such as `className` or `styleOverrides`, and on the root `layoutStyleOverrides`, the page’s restyles of its layout.'),
       },
     },
   },

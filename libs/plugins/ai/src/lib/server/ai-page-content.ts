@@ -207,7 +207,7 @@ export function aiPageContentKind(kind: string, options: { root?: boolean } = {}
 }
 
 /** Node fields an edit here never writes, which an element shows read-only. */
-const READ_ONLY_NODE_FIELDS = ['className', 'styleOverrides', 'attrOverrides', 'presetRef'] as const
+const READ_ONLY_NODE_FIELDS = ['className', 'styleOverrides', 'attrOverrides', 'presetRef', 'layoutStyleOverrides'] as const
 
 /** One stored element as a read answers it: what an edit can set, and the rest read-only. */
 function elementView(element: AiDocumentElement, settable: ReadonlySet<string>): PageContentElement {
