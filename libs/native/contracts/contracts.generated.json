@@ -5146,6 +5146,9 @@
                 ],
                 "label": "CRM",
                 "order": 20,
+                "permissions": [
+                  "data.manage"
+                ],
                 "pluginId": "crm",
                 "screen": "crm.contacts",
                 "sections": [
@@ -5293,6 +5296,9 @@
                 "id": "emails",
                 "label": "Emails",
                 "order": 40,
+                "permissions": [
+                  "data.manage"
+                ],
                 "pluginId": "email",
                 "screen": "email.messages",
                 "sections": [
@@ -5458,6 +5464,9 @@
                 "id": "accounting",
                 "label": "Accounting",
                 "order": 70,
+                "permissions": [
+                  "accounting.manage"
+                ],
                 "pluginId": "accounting",
                 "screen": "accounting.books"
               },
@@ -5490,7 +5499,11 @@
                 "id": "sequences",
                 "label": "Sequences",
                 "order": 80,
+                "permissions": [
+                  "outreach.use"
+                ],
                 "pluginId": "outreach",
+                "requiresFeature": "outreach",
                 "screen": "outreach.sequences"
               },
               {
@@ -7211,6 +7224,7 @@
     "shell.workspaceSettings",
     "shell.siteSettings"
   ],
+  "NATIVE_NO_IN_APP_BILLING_NOTE": "Plan and billing changes are not available in the app.",
   "NATIVE_PRIVACY_CHOICES_ANALYTICS_DETAIL": "Google Analytics — which pages are used and where things go wrong.",
   "NATIVE_PRIVACY_CHOICES_ANALYTICS_LABEL": "Analytics",
   "NATIVE_PRIVACY_CHOICES_INTRO": "Choose what this app may use.",
@@ -7331,6 +7345,7 @@
       }
     ]
   },
+  "NATIVE_WEB_BILLING_LINK_LABEL": "Manage billing on the web",
   "NOTHING_MOVED": "Aglyn has not refunded or canceled anything.",
   "NOTIFICATION_SOUND_FIELD": "notificationSound",
   "NOTIFICATION_SOUNDS": [
@@ -10481,6 +10496,25 @@
     ]
   },
   "SITE_SLOGAN_MAX_LENGTH": 120,
+  "SITE_TEMPLATE_SHELF_BASE": [
+    {
+      "op": "==",
+      "path": "kind",
+      "value": "template"
+    }
+  ],
+  "SITE_TEMPLATE_SHELF_QUERY": {
+    "fields": [],
+    "search": {
+      "tokensPath": "nameTokens"
+    },
+    "sorts": [
+      {
+        "direction": "asc",
+        "path": "__name__"
+      }
+    ]
+  },
   "STAR_COLORS": [
     "blue",
     "purple",

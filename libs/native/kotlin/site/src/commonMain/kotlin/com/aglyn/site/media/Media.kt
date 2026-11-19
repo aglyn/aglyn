@@ -138,6 +138,8 @@ data class MediaItem(
   val folderId: String?,
   val alt: String,
   val description: String,
+  /** The file's own key/value pairs (`customMetadata`), as the library's drawer edits them. */
+  val customMetadata: Map<String, String> = emptyMap(),
   val tags: List<String>,
   val private: Boolean,
   val createdAt: FirestoreTimestamp?,
@@ -198,6 +200,7 @@ data class MediaItem(
         folderId = doc.string("folderId")?.ifBlank { null },
         alt = doc.string("alt").orEmpty(),
         description = doc.string("description").orEmpty(),
+        customMetadata = (doc.data["customMetadata"] as? Map<*, *>).orEmpty().entries.mapNotNull { (k, v) -> v?.let { k.toString() to it.toString() } }.toMap(),
         tags = (doc.data["tags"] as? List<*>)?.filterIsInstance<String>().orEmpty(),
         private = doc.bool("private") == true,
         createdAt = doc.data["createdAt"] as? FirestoreTimestamp,
@@ -697,6 +700,11 @@ class MediaApi(private val api: ConsoleApiClient, private val scope: MediaScope,
       ApiMethod.POST,
       body("action" to "update-details", "mediaId" to id, "fileName" to fileName, "alt" to alt, "description" to description, "tags" to tags),
     )
+  }
+
+  /** Replaces a file's custom metadata (`custom-metadata`): the route trims keys, drops reserved ones and caps the pairs. */
+  suspend fun setCustomMetadata(id: String, metadata: Map<String, String>) {
+    api.request("/api/media/folders", ApiMethod.POST, body("action" to "custom-metadata", "mediaId" to id, "customMetadata" to metadata))
   }
 
   /** Sets one file's tags and nothing else (the route keeps its name, alt text and description). */

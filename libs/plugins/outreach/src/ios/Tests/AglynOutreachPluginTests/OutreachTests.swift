@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynCore
 import Foundation
 import XCTest
 
@@ -38,5 +39,55 @@ final class OutreachTests: XCTestCase {
     XCTAssertTrue(outreachPermitted(member: ["role": "editor", "roleId": "r"], role: ["permissions": ["outreach.use": true]]))
     XCTAssertFalse(outreachPermitted(member: ["role": "admin", "roleId": "r"], role: ["permissions": ["outreach.use": false]]))
     XCTAssertFalse(outreachPermitted(member: ["role": "admin", "permissions": ["outreach.use": false]], role: nil))
+  }
+
+  /// A sequence's Results read as the console's `outreachSequenceReport` reads them, figure for figure and caveat for caveat.
+  func testSequenceReportIsTheConsoles() throws {
+    let num = { (value: Any?) -> Double? in (value as? NSNumber)?.doubleValue }
+    for (index, item) in try functionCases("outreachSequenceReport").enumerated() {
+      let got = outreachSequenceReport(
+        item.args[0] as? [String: Any], trackClicks: item.args[1] as? Bool == true,
+        countOpens: item.args.count > 2 ? item.args[2] as? Bool == true : false)
+      let want = item.result as! [String: Any]
+      XCTAssertEqual(got.sent, num(want["sent"]), "case \(index)")
+      XCTAssertEqual(got.people, num(want["people"]), "case \(index)")
+      XCTAssertEqual(got.clicks, num(want["clicks"]), "case \(index)")
+      XCTAssertEqual(got.uniqueClicks, num(want["uniqueClicks"]), "case \(index)")
+      XCTAssertEqual(got.machineClicks, num(want["machineClicks"]), "case \(index)")
+      XCTAssertEqual(got.lastClickAtMs, num(want["lastClickAtMs"]), "case \(index)")
+      XCTAssertEqual(got.clickTracked, want["clickTracked"] as? Bool, "case \(index)")
+      XCTAssertEqual(got.openTracked, want["openTracked"] as? Bool, "case \(index)")
+      XCTAssertEqual(got.openPeople, num(want["openPeople"]), "case \(index)")
+      XCTAssertEqual(got.opens, num(want["opens"]), "case \(index)")
+      XCTAssertEqual(got.uniqueOpens, num(want["uniqueOpens"]), "case \(index)")
+      XCTAssertEqual(got.machineOpens, num(want["machineOpens"]), "case \(index)")
+      XCTAssertEqual(got.proxyOpens, num(want["proxyOpens"]), "case \(index)")
+      XCTAssertEqual(got.lastOpenAtMs, num(want["lastOpenAtMs"]), "case \(index)")
+      XCTAssertEqual(got.opensUnmeasured, want["opensUnmeasured"] as? Bool, "case \(index)")
+      let rates = want["rates"] as? [String: Any] ?? [:]
+      for (rate, wanted) in [(got.clickRate, rates["click"]), (got.openRate, rates["open"])] {
+        let object = wanted as? [String: Any]
+        XCTAssertEqual(rate?.numerator, num(object?["numerator"]), "case \(index)")
+        XCTAssertEqual(rate?.denominator, num(object?["denominator"]), "case \(index)")
+        XCTAssertEqual(rate?.denominatorLabel, object?["denominatorLabel"] as? String, "case \(index)")
+        XCTAssertEqual(rate?.value ?? -1, num(object?["value"]) ?? -1, accuracy: 1e-12, "case \(index)")
+      }
+      let caveats = want["caveats"] as? [[String: Any]] ?? []
+      XCTAssertEqual(got.caveats.map(\.id), caveats.compactMap { $0["id"] as? String }, "case \(index)")
+      XCTAssertEqual(got.caveats.map(\.message), caveats.compactMap { $0["message"] as? String }, "case \(index)")
+    }
+  }
+
+  /// The links followed are the campaign report's own table (the core's `sendLinkReport`).
+  func testSequenceLinkReportIsTheConsoles() throws {
+    for (index, item) in try functionCases("outreachSequenceLinkReport").enumerated() {
+      let got = sendLinkReport(item.args.first as? [String: Any])
+      let want = item.result as! [String: Any]
+      XCTAssertEqual(got.rows.map(\.url), (want["rows"] as? [[String: Any]] ?? []).compactMap { $0["url"] as? String }, "case \(index)")
+      XCTAssertEqual(got.rows.map(\.clicks), (want["rows"] as? [[String: Any]] ?? []).compactMap { ($0["clicks"] as? NSNumber)?.intValue }, "case \(index)")
+      XCTAssertEqual(got.overflowClicks, (want["overflowClicks"] as? NSNumber)?.intValue, "case \(index)")
+      XCTAssertEqual(got.truncated, want["truncated"] as? Bool, "case \(index)")
+    }
+    XCTAssertEqual(formatOutreachTime(nil, timeZone: nil), "—")
   }
 }

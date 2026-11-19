@@ -20,7 +20,7 @@
  *
  * `orgs/{orgId}/accountingSyncItems/{itemId}`: one document per thing that
  * becomes a ledger document — a sale, its fee, a refund, a fee given back,
- * a payout, a day's summary. The id is derived from the source
+ * a payout and Stripe's fees in it, a day's summary. The id is derived from the source
  * (`sale_{hostId}_{orderId}`), so an event delivered twice — the event seam
  * delivers at least once — lands on the same document and is queued once.
  * Once posted, the item holds the ledger's id for it (`providerDocId`): that
@@ -53,6 +53,7 @@ import {
   orderExternalId,
   orderLabel,
   payoutExternalId,
+  payoutFeeExternalId,
   refundExternalId,
   refundSettlementExternalId,
   refundSettlementOf,
@@ -130,6 +131,9 @@ export const refundItemId = (refund: AccountingRefundSnapshot) =>
 export const feeRefundItemId = (refund: AccountingRefundSnapshot) =>
   syncItemId('fee-refund', refund.order.hostId, refund.refundId)
 export const payoutItemId = (payout: Pick<AccountingPayoutSnapshot, 'payoutId'>) => syncItemId('payout', payout.payoutId)
+/** Stripe's fees on a payout: a `fee` item, one part long where an order's fee is two (site, order). */
+export const payoutFeeItemId = (payout: Pick<AccountingPayoutSnapshot, 'payoutId'>) =>
+  syncItemId('fee', `payout-${payout.payoutId}`)
 export const settlementItemId = (order: Pick<AccountingOrderSnapshot, 'hostId' | 'orderId'>) =>
   syncItemId('settlement', order.hostId, order.orderId)
 export const refundSettlementItemId = (refund: AccountingRefundSnapshot) =>
@@ -378,6 +382,40 @@ export function itemForPayout(payout: AccountingPayoutSnapshot, nowMs: number): 
     }),
     payout,
   }
+}
+
+/**
+ * The items a payout becomes: its transfer, and Stripe's own fees in it when
+ * there were any. The fees are a `fee` item that carries the payout rather
+ * than an order, and like the transfer it posts on its own in either mode.
+ */
+export function itemsForPayout(payout: AccountingPayoutSnapshot, nowMs: number): AccountingSyncItemRecord[] {
+  const items = [itemForPayout(payout, nowMs)]
+  const fee = toCents(payout.stripeFeeCents ?? 0)
+  if (fee !== 0) {
+    items.push({
+      ...baseItem({
+        id: payoutFeeItemId(payout),
+        orgId: payout.orgId,
+        kind: 'fee',
+        mode: 'per-order',
+        sourceId: payout.payoutId,
+        externalId: payoutFeeExternalId(payout),
+        label:
+          fee > 0
+            ? `Stripe fees on payout of ${formatMoney(payout.amountCents, payout.currency)}`
+            : `Stripe fees returned on payout of ${formatMoney(payout.amountCents, payout.currency)}`,
+        amountCents: Math.abs(fee),
+        currency: payout.currency,
+        occurredAtMs: payout.arrivedAtMs,
+        summaryDate: null,
+        dependsOn: null,
+        nowMs,
+      }),
+      payout,
+    })
+  }
+  return items
 }
 
 /**

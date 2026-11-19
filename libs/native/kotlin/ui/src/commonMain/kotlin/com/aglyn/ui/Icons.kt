@@ -199,6 +199,7 @@ import androidx.compose.material.icons.outlined.Percent
 import androidx.compose.material.icons.outlined.Print
 import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.PowerOff
+import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Remove
@@ -305,6 +306,8 @@ object AglynIcons {
     "launch" to Icons.AutoMirrored.Outlined.Launch,
     "search" to Icons.Outlined.Search,
     "qr_code_scanner" to Icons.Outlined.QrCodeScanner,
+    // A link to open on a phone (a photo link's New link and Get a photo link).
+    "qr_code" to Icons.Outlined.QrCode2,
     "hotel" to Icons.Outlined.Hotel,
     "add" to Icons.Outlined.Add,
     "remove" to Icons.Outlined.Remove,

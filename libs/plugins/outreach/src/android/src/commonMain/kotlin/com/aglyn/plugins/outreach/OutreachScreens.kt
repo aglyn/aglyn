@@ -69,6 +69,13 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import com.aglyn.core.sendLinkReport
+import com.aglyn.core.percent
+import com.aglyn.core.SendRate
+import com.aglyn.core.LinkReport
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import com.aglyn.core.grouped
 
 /** Whether the console would show the Outreach tab to this member: null while it is still reading. */
 @Composable
@@ -168,6 +175,8 @@ fun SequenceDetail(context: NativePluginContext, api: OutreachApi, sequenceId: S
   val scope = rememberCoroutineScope()
   val doc by remember(sequenceId) { context.firestore.observeDoc("orgs/${api.orgId}/outreachSequences/$sequenceId") }.collectAsState(Live.Loading)
   val enrollments = remember(sequenceId) { LiveQueryList(context.firestore, scope, 25, ::enrollmentRowOf) }
+  // The sequence's link rollup (`reports/links`), one document whatever its size; absent until a click is counted.
+  val links by remember(sequenceId) { context.firestore.observeDoc("orgs/${api.orgId}/outreachSequences/$sequenceId/reports/links") }.collectAsState(Live.Loading)
   var editing by remember { mutableStateOf(false) }
   var enrolling by remember { mutableStateOf(false) }
   var confirm by remember { mutableStateOf<Pair<String, String>?>(null) }
@@ -217,6 +226,15 @@ fun SequenceDetail(context: NativePluginContext, api: OutreachApi, sequenceId: S
         )
       }
     }
+    @Suppress("UNCHECKED_CAST")
+    val settings = row.data["settings"] as? Map<String, Any?>
+    @Suppress("UNCHECKED_CAST")
+    SequenceResults(
+      report = outreachSequenceReport(row.data["stats"] as? Map<String, Any?>, settings?.get("trackClicks") == true, settings?.get("countOpens") == true),
+      links = sendLinkReport((links as? Live.Ready)?.value?.data),
+      linksFailed = links is Live.Failed,
+      timeZone = mailboxes.firstOrNull { it.id == row.mailboxId }?.timeZone,
+    )
     SectionCard("Enrollments") {
       val rows = (enrollments.rows as? Live.Ready)?.value.orEmpty()
       if (rows.isEmpty()) Text("Nobody is enrolled yet.", style = MaterialTheme.typography.bodyMedium)
@@ -542,3 +560,70 @@ fun ComplianceSection(context: NativePluginContext, api: OutreachApi) {
     }
   }
 }
+
+/**
+ * What a sequence measured (`OutreachSequenceReportCard`): its figures, each rate with the people it was taken over, the
+ * sentences saying what each figure is not, and the links followed.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SequenceResults(report: OutreachSequenceReport, links: LinkReport, linksFailed: Boolean, timeZone: String?) {
+  fun count(value: Double) = grouped(value.toLong())
+  fun rateValue(rate: SendRate?) = percent(rate)
+  fun rateHint(rate: SendRate?) = rate?.let { "${count(it.numerator)} of ${count(it.denominator)} ${it.denominatorLabel}" }
+  SectionCard("Results", Modifier.testTag("sequence-results")) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(space(3f)), verticalArrangement = Arrangement.spacedBy(space(2f))) {
+      ResultFigure("Emails sent", count(report.sent))
+      ResultFigure("People emailed", report.people?.let(::count) ?: "—", if (report.people == null) "Not counted for this sequence" else null)
+      // Opens, only for a sequence whose emails have carried the tracking image (AGL-3395).
+      if (report.openTracked) {
+        ResultFigure("Opened", count(report.uniqueOpens), if (report.opens == report.uniqueOpens) null else "${count(report.opens)} opens in all")
+        if (report.opensUnmeasured) {
+          ResultFigure("Open rate", "Unmeasured", "Only machines fetched the image")
+        } else {
+          ResultFigure("Open rate", rateValue(report.openRate), rateHint(report.openRate))
+        }
+        if (report.machineOpens > 0) {
+          ResultFigure(
+            "Machine opens",
+            count(report.machineOpens),
+            if (report.proxyOpens > 0) "Not in the rate · ${count(report.proxyOpens)} by mail proxies" else "Not in the rate",
+          )
+        }
+      }
+      ResultFigure("Clicked", count(report.uniqueClicks), if (report.clicks == report.uniqueClicks) null else "${count(report.clicks)} clicks in all")
+      ResultFigure("Click rate", rateValue(report.clickRate), rateHint(report.clickRate))
+      if (report.machineClicks > 0) ResultFigure("Scanner clicks", count(report.machineClicks), "Not in the rate")
+    }
+    report.lastOpenAtMs?.let {
+      Text("Last open ${formatOutreachTime(it, timeZone)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    report.lastClickAtMs?.let {
+      Text("Last click ${formatOutreachTime(it, timeZone)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    for (caveat in report.caveats) NoticeBanner(caveat.message, StatusTone.INFO)
+    if (linksFailed) {
+      NoticeBanner("The link report could not be loaded.", StatusTone.WARNING)
+    } else if (links.rows.isNotEmpty()) {
+      Text("Links followed", style = MaterialTheme.typography.titleSmall)
+      for (link in links.rows) PropertyRow(link.url, grouped(link.clicks))
+      Text(
+        "Two links to the same page are counted as one destination, whatever tracking parameters follow the address." +
+          if (links.truncated) " ${grouped(links.overflowClicks)} more clicks went to destinations past the ones listed." else "",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+  }
+}
+
+/** One figure, with what it counts under it (`OutreachFigure`). */
+@Composable
+private fun ResultFigure(label: String, value: String, hint: String? = null) {
+  Column {
+    Text(value, style = MaterialTheme.typography.headlineSmall)
+    Text(label, style = MaterialTheme.typography.bodyMedium)
+    if (hint != null) Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+  }
+}
+

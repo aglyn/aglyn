@@ -136,3 +136,22 @@ class PagesQuotaTest {
     kotlin.test.assertEquals(null, com.aglyn.site.pages.pagesUsageCount(json.parseToJsonElement("""{}""")))
   }
 }
+
+class PageUsedByTest {
+  @kotlin.test.Test
+  fun namesHowEachDependentPointsAtThePage() {
+    kotlin.test.assertEquals("links here", com.aglyn.site.pages.pageRelationLabel("link"))
+    kotlin.test.assertEquals("nested under", com.aglyn.site.pages.pageRelationLabel("child"))
+    kotlin.test.assertEquals("renders through", com.aglyn.site.pages.pageRelationLabel("template"))
+    kotlin.test.assertEquals(null, com.aglyn.site.pages.pageRelationLabel(null))
+  }
+}
+
+class MediaCustomMetadataTest {
+  @kotlin.test.Test
+  fun readsAFilesOwnKeyValuePairs() {
+    val doc = com.aglyn.core.FirestoreDoc("m1", "hosts/h/media/m1", mapOf("fileName" to "a.jpg", "contentType" to "image/jpeg", "customMetadata" to mapOf("photographer" to "Sam", "year" to 2026L, "gone" to null)))
+    val item = kotlin.test.assertNotNull(com.aglyn.site.media.MediaItem.from(doc))
+    kotlin.test.assertEquals(mapOf("photographer" to "Sam", "year" to "2026"), item.customMetadata)
+  }
+}

@@ -178,6 +178,10 @@
       "why": "Name-search token normalizers, so an app list search matches the console's search index (AGL-3621)."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/native-store-billing.ts",
+      "why": "The line a native store build shows where a buying control is left out (the owner's decision of 2026-11-19): the web billing link's label and the no-link sentence, one wording for both apps; no imports at all."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/native-nav.ts",
       "why": "The native apps' navigation as data: the lists and groups, the core's own rows and the assembly that places each plugin's rows (AGL-3943); no imports at all."
     },
@@ -938,6 +942,10 @@
       "why": "Whether a listing is browsable and its artifact type, read by the native marketplace screens (AGL-3668); type-only imports."
     },
     {
+      "path": "libs/plugins/marketplace/src/lib/model/listing-verification.ts",
+      "why": "Whether a publisher may ask for the Verified badge (verificationRequestBlock), replayed by the native listing page's Verified publisher card (AGL-1217); no imports."
+    },
+    {
       "path": "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts",
       "why": "Artifact type labels, install targets, categories, a plugin's install state and each type's install route and message; the native marketplace screens install from it (AGL-3668); type-only imports."
     },
@@ -1054,6 +1062,10 @@
       "why": "A send's stats shape, rates and link report (sendRate, sendLinkReport), replayed by the apps (AGL-3669)."
     },
     {
+      "path": "libs/plugins/outreach/src/lib/model/sequence-report.ts",
+      "why": "A sequence's Results (figures, rates, caveats and link table), replayed by the native sequence page (AGL-3668); imports send-report.ts and types."
+    },
+    {
       "path": "libs/shared/ui/jsx/src/lib/const/list-query-plan.ts",
       "why": "The console's list-plan entry the Commerce app's list page imports; it re-exports the pure list-query grammar (AGL-3622)."
     },
@@ -1124,6 +1136,38 @@
     {
       "path": "libs/plugins/commerce/src/lib/model/site-member-purchases.ts",
       "why": "A site account's lifetime purchase total (computeLifetimePurchaseCents), the console drawer's Purchases figure: the native account screen's compute load replays it."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/artifact-provenance.ts",
+      "why": "Where an installed copy came from (resolveProvenance), read by the native listing page to decide whether a copy is behind the listing and offer the update review (AGL-3668); no imports."
+    },
+    {
+      "path": "libs/plugins/marketplace/src/lib/model/artifact-merge.ts",
+      "why": "The words an update review uses for each change (describeChange, summarizeValue), replayed by the native update review of a copied listing (AGL-3668); imports only the pure artifact-provenance."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/picker/font-preview-url.ts",
+      "why": "Where a font preview's stylesheet and files come from (Google's CSS2 API for a preview's letters), replayed by the native apps' shared font loaders (AGL-3668); no imports."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/picker/font-choice.ts",
+      "why": "The font picker's labels, weight choices and catalog search, replayed by the native font picker (AGL-3668); type-only imports."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/picker/font-pairings.ts",
+      "why": "The font picker's suggested pairings, replayed by the native font picker (AGL-3668); type-only imports."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/catalog/google-fonts-catalog.ts",
+      "why": "How a Google Fonts catalog row reads (expandCatalogRow), replayed by the native font picker over the catalog route's answer (AGL-3668); type-only imports and the catalog JSON."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/catalog/google-fonts.catalog.json",
+      "why": "The generated Google Fonts catalog (data only), which google-fonts-catalog.ts loads and the fonts catalog route serves to the native apps (AGL-3668)."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/picker/site-sample-text.ts",
+      "why": "The words a font preview is drawn in (the site's name, search title and description), replayed by the native font picker (AGL-3668); no imports."
     }
   ]
 }

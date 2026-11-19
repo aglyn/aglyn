@@ -1680,7 +1680,9 @@ data class NativeNavRow(
     val label: String,
     val order: Double? = null,
     val params: Map<String, String>? = null,
+    val permissions: List<String>? = null,
     val pluginId: String? = null,
+    val requiresFeature: String? = null,
     val requiresHostAdmin: Boolean? = null,
     val screen: String,
     val sections: List<NativeNavSection>? = null,
@@ -4260,12 +4262,14 @@ internal data class ContractValuesPart5(
     @SerialName("NATIVE_EMAIL_STATE_STATUSES") val nativeEmailStateStatuses: List<String>,
     @SerialName("NATIVE_NAV_MANIFEST") val nativeNavManifest: NativeNavManifest,
     @SerialName("NATIVE_NAV_SHELL_SCREENS") val nativeNavShellScreens: List<String>,
+    @SerialName("NATIVE_NO_IN_APP_BILLING_NOTE") val nativeNoInAppBillingNote: String,
     @SerialName("NATIVE_PRIVACY_CHOICES_ANALYTICS_DETAIL") val nativePrivacyChoicesAnalyticsDetail: String,
     @SerialName("NATIVE_PRIVACY_CHOICES_ANALYTICS_LABEL") val nativePrivacyChoicesAnalyticsLabel: String,
     @SerialName("NATIVE_PRIVACY_CHOICES_INTRO") val nativePrivacyChoicesIntro: String,
     @SerialName("NATIVE_PRIVACY_CHOICES_STRICTLY_NECESSARY") val nativePrivacyChoicesStrictlyNecessary: String,
     @SerialName("NATIVE_SITE_CAMPAIGNS_QUERY") val nativeSiteCampaignsQuery: ListQueryDeclaration,
     @SerialName("NATIVE_SITE_EMAILS_QUERY") val nativeSiteEmailsQuery: ListQueryDeclaration,
+    @SerialName("NATIVE_WEB_BILLING_LINK_LABEL") val nativeWebBillingLinkLabel: String,
     @SerialName("NOTHING_MOVED") val nothingMoved: String,
     @SerialName("NOTIFICATION_SOUND_FIELD") val notificationSoundField: String,
     @SerialName("NOTIFICATION_SOUNDS") val notificationSounds: List<NotificationSound>,
@@ -4294,12 +4298,12 @@ internal data class ContractValuesPart5(
     @SerialName("ORDERS_TO_SHIP_FILTER_VALUE") val ordersToShipFilterValue: JsonElement,
     @SerialName("ORG_ROLE_GRANTS") val orgRoleGrants: OrgRoleGrants,
     @SerialName("ORG_ROLE_NAMES") val orgRoleNames: List<OrgRoleName>,
-    @SerialName("ORG_SUBMISSION_LIST_QUERY") val orgSubmissionListQuery: ListQueryDeclaration,
-    @SerialName("OUTREACH_DEFAULT_ALLOWED_COUNTRIES") val outreachDefaultAllowedCountries: List<String>,
 )
 
 @Serializable
 internal data class ContractValuesPart6(
+    @SerialName("ORG_SUBMISSION_LIST_QUERY") val orgSubmissionListQuery: ListQueryDeclaration,
+    @SerialName("OUTREACH_DEFAULT_ALLOWED_COUNTRIES") val outreachDefaultAllowedCountries: List<String>,
     @SerialName("OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY") val outreachDoNotContactDomainListQuery: ListQueryDeclaration,
     @SerialName("OUTREACH_ENROLLMENT_LIST_QUERY") val outreachEnrollmentListQuery: ListQueryDeclaration,
     @SerialName("OUTREACH_MAX_EMAIL_STEPS") val outreachMaxEmailSteps: Long,
@@ -4346,12 +4350,12 @@ internal data class ContractValuesPart6(
     @SerialName("POS_KIOSK_MAX_LINES") val posKioskMaxLines: Long,
     @SerialName("POS_KIOSK_MAX_QUANTITY") val posKioskMaxQuantity: Long,
     @SerialName("POS_KIOSK_UNLOCK_LOCKOUT_MS") val posKioskUnlockLockoutMs: Double,
-    @SerialName("POS_KIOSK_UNLOCK_MAX_ATTEMPTS") val posKioskUnlockMaxAttempts: Long,
-    @SerialName("POS_KIOSK_UNLOCK_TTL_MS") val posKioskUnlockTtlMs: Double,
 )
 
 @Serializable
 internal data class ContractValuesPart7(
+    @SerialName("POS_KIOSK_UNLOCK_MAX_ATTEMPTS") val posKioskUnlockMaxAttempts: Long,
+    @SerialName("POS_KIOSK_UNLOCK_TTL_MS") val posKioskUnlockTtlMs: Double,
     @SerialName("POS_OFFLINE_CARD_INTENT_KIND") val posOfflineCardIntentKind: String,
     @SerialName("POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT") val posOfflineCardMaxSaleCentsLimit: Long,
     @SerialName("POS_OFFLINE_CARD_RECONNECT_WITHIN_MS") val posOfflineCardReconnectWithinMs: Double,
@@ -4398,12 +4402,12 @@ internal data class ContractValuesPart7(
     @SerialName("SCREEN_ROOT_PATH") val screenRootPath: String,
     @SerialName("SCREEN_SLUG_PATH_SEPARATOR_MESSAGE") val screenSlugPathSeparatorMessage: String,
     @SerialName("SEARCH_ENGINE_VERIFICATION_LABELS") val searchEngineVerificationLabels: Map<String, String>,
-    @SerialName("SEARCH_ENGINE_VERIFICATION_META_NAMES") val searchEngineVerificationMetaNames: Map<String, String>,
-    @SerialName("SEO_FINDING_LABELS") val seoFindingLabels: Map<String, String>,
 )
 
 @Serializable
 internal data class ContractValuesPart8(
+    @SerialName("SEARCH_ENGINE_VERIFICATION_META_NAMES") val searchEngineVerificationMetaNames: Map<String, String>,
+    @SerialName("SEO_FINDING_LABELS") val seoFindingLabels: Map<String, String>,
     @SerialName("SEO_KEYWORD_LINES_MAX_CHARS") val seoKeywordLinesMaxChars: Long,
     @SerialName("SEO_MAX_KEYWORDS") val seoMaxKeywords: Long,
     @SerialName("SHIPPING_COST_MAX_CENTS") val shippingCostMaxCents: Long,
@@ -4414,6 +4418,8 @@ internal data class ContractValuesPart8(
     @SerialName("SITE_LIST_DECLARATION") val siteListDeclaration: ListQueryDeclaration,
     @SerialName("SITE_MEMBER_LIST_QUERY") val siteMemberListQuery: ListQueryDeclaration,
     @SerialName("SITE_SLOGAN_MAX_LENGTH") val siteSloganMaxLength: Long,
+    @SerialName("SITE_TEMPLATE_SHELF_BASE") val siteTemplateShelfBase: List<ListQueryFilter>,
+    @SerialName("SITE_TEMPLATE_SHELF_QUERY") val siteTemplateShelfQuery: ListQueryDeclaration,
     @SerialName("STAR_COLORS") val starColors: List<StarColor>,
     @SerialName("STARRED_FIELD") val starredField: String,
     @SerialName("STARRED_MAX") val starredMax: Long,
@@ -4448,14 +4454,14 @@ internal data class ContractValuesPart8(
     @SerialName("THEME_TEXT_CONTRAST") val themeTextContrast: Double,
     @SerialName("TIME_ZONE_CHOICES") val timeZoneChoices: List<String>,
     @SerialName("TIME_ZONE_DEFAULT_LABEL") val timeZoneDefaultLabel: String,
-    @SerialName("WORKFLOW_MAX_STEPS") val workflowMaxSteps: Long,
-    @SerialName("WORKSPACE_COLORS_FIELD") val workspaceColorsField: String,
-    @SerialName("WORKSPACE_COLORS_MAX") val workspaceColorsMax: Long,
-    @SerialName("WORKSPACE_SETTINGS_ROW") val workspaceSettingsRow: NativeNavRow,
 )
 
 @Serializable
 internal data class ContractValuesPart9(
+    @SerialName("WORKFLOW_MAX_STEPS") val workflowMaxSteps: Long,
+    @SerialName("WORKSPACE_COLORS_FIELD") val workspaceColorsField: String,
+    @SerialName("WORKSPACE_COLORS_MAX") val workspaceColorsMax: Long,
+    @SerialName("WORKSPACE_SETTINGS_ROW") val workspaceSettingsRow: NativeNavRow,
     @SerialName("WORKSPACE_STABLE_COLORS") val workspaceStableColors: List<String>,
 )
 
@@ -4679,12 +4685,14 @@ class ContractValues internal constructor(
     val nativeEmailStateStatuses: List<String> get() = part5.nativeEmailStateStatuses
     val nativeNavManifest: NativeNavManifest get() = part5.nativeNavManifest
     val nativeNavShellScreens: List<String> get() = part5.nativeNavShellScreens
+    val nativeNoInAppBillingNote: String get() = part5.nativeNoInAppBillingNote
     val nativePrivacyChoicesAnalyticsDetail: String get() = part5.nativePrivacyChoicesAnalyticsDetail
     val nativePrivacyChoicesAnalyticsLabel: String get() = part5.nativePrivacyChoicesAnalyticsLabel
     val nativePrivacyChoicesIntro: String get() = part5.nativePrivacyChoicesIntro
     val nativePrivacyChoicesStrictlyNecessary: String get() = part5.nativePrivacyChoicesStrictlyNecessary
     val nativeSiteCampaignsQuery: ListQueryDeclaration get() = part5.nativeSiteCampaignsQuery
     val nativeSiteEmailsQuery: ListQueryDeclaration get() = part5.nativeSiteEmailsQuery
+    val nativeWebBillingLinkLabel: String get() = part5.nativeWebBillingLinkLabel
     val nothingMoved: String get() = part5.nothingMoved
     val notificationSoundField: String get() = part5.notificationSoundField
     val notificationSounds: List<NotificationSound> get() = part5.notificationSounds
@@ -4713,8 +4721,8 @@ class ContractValues internal constructor(
     val ordersToShipFilterValue: JsonElement get() = part5.ordersToShipFilterValue
     val orgRoleGrants: OrgRoleGrants get() = part5.orgRoleGrants
     val orgRoleNames: List<OrgRoleName> get() = part5.orgRoleNames
-    val orgSubmissionListQuery: ListQueryDeclaration get() = part5.orgSubmissionListQuery
-    val outreachDefaultAllowedCountries: List<String> get() = part5.outreachDefaultAllowedCountries
+    val orgSubmissionListQuery: ListQueryDeclaration get() = part6.orgSubmissionListQuery
+    val outreachDefaultAllowedCountries: List<String> get() = part6.outreachDefaultAllowedCountries
     val outreachDoNotContactDomainListQuery: ListQueryDeclaration get() = part6.outreachDoNotContactDomainListQuery
     val outreachEnrollmentListQuery: ListQueryDeclaration get() = part6.outreachEnrollmentListQuery
     val outreachMaxEmailSteps: Long get() = part6.outreachMaxEmailSteps
@@ -4761,8 +4769,8 @@ class ContractValues internal constructor(
     val posKioskMaxLines: Long get() = part6.posKioskMaxLines
     val posKioskMaxQuantity: Long get() = part6.posKioskMaxQuantity
     val posKioskUnlockLockoutMs: Double get() = part6.posKioskUnlockLockoutMs
-    val posKioskUnlockMaxAttempts: Long get() = part6.posKioskUnlockMaxAttempts
-    val posKioskUnlockTtlMs: Double get() = part6.posKioskUnlockTtlMs
+    val posKioskUnlockMaxAttempts: Long get() = part7.posKioskUnlockMaxAttempts
+    val posKioskUnlockTtlMs: Double get() = part7.posKioskUnlockTtlMs
     val posOfflineCardIntentKind: String get() = part7.posOfflineCardIntentKind
     val posOfflineCardMaxSaleCentsLimit: Long get() = part7.posOfflineCardMaxSaleCentsLimit
     val posOfflineCardReconnectWithinMs: Double get() = part7.posOfflineCardReconnectWithinMs
@@ -4809,8 +4817,8 @@ class ContractValues internal constructor(
     val screenRootPath: String get() = part7.screenRootPath
     val screenSlugPathSeparatorMessage: String get() = part7.screenSlugPathSeparatorMessage
     val searchEngineVerificationLabels: Map<String, String> get() = part7.searchEngineVerificationLabels
-    val searchEngineVerificationMetaNames: Map<String, String> get() = part7.searchEngineVerificationMetaNames
-    val seoFindingLabels: Map<String, String> get() = part7.seoFindingLabels
+    val searchEngineVerificationMetaNames: Map<String, String> get() = part8.searchEngineVerificationMetaNames
+    val seoFindingLabels: Map<String, String> get() = part8.seoFindingLabels
     val seoKeywordLinesMaxChars: Long get() = part8.seoKeywordLinesMaxChars
     val seoMaxKeywords: Long get() = part8.seoMaxKeywords
     val shippingCostMaxCents: Long get() = part8.shippingCostMaxCents
@@ -4821,6 +4829,8 @@ class ContractValues internal constructor(
     val siteListDeclaration: ListQueryDeclaration get() = part8.siteListDeclaration
     val siteMemberListQuery: ListQueryDeclaration get() = part8.siteMemberListQuery
     val siteSloganMaxLength: Long get() = part8.siteSloganMaxLength
+    val siteTemplateShelfBase: List<ListQueryFilter> get() = part8.siteTemplateShelfBase
+    val siteTemplateShelfQuery: ListQueryDeclaration get() = part8.siteTemplateShelfQuery
     val starColors: List<StarColor> get() = part8.starColors
     val starredField: String get() = part8.starredField
     val starredMax: Long get() = part8.starredMax
@@ -4855,10 +4865,10 @@ class ContractValues internal constructor(
     val themeTextContrast: Double get() = part8.themeTextContrast
     val timeZoneChoices: List<String> get() = part8.timeZoneChoices
     val timeZoneDefaultLabel: String get() = part8.timeZoneDefaultLabel
-    val workflowMaxSteps: Long get() = part8.workflowMaxSteps
-    val workspaceColorsField: String get() = part8.workspaceColorsField
-    val workspaceColorsMax: Long get() = part8.workspaceColorsMax
-    val workspaceSettingsRow: NativeNavRow get() = part8.workspaceSettingsRow
+    val workflowMaxSteps: Long get() = part9.workflowMaxSteps
+    val workspaceColorsField: String get() = part9.workspaceColorsField
+    val workspaceColorsMax: Long get() = part9.workspaceColorsMax
+    val workspaceSettingsRow: NativeNavRow get() = part9.workspaceSettingsRow
     val workspaceStableColors: List<String> get() = part9.workspaceStableColors
 
     override fun equals(other: Any?): Boolean = this === other || (other is ContractValues && part1 == other.part1 && part2 == other.part2 && part3 == other.part3 && part4 == other.part4 && part5 == other.part5 && part6 == other.part6 && part7 == other.part7 && part8 == other.part8 && part9 == other.part9)
