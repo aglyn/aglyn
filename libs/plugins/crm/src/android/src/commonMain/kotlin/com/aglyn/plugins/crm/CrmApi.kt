@@ -489,3 +489,9 @@ private fun JsonArray?.orEmpty(): List<kotlinx.serialization.json.JsonElement> =
 
 /** Checks fetched in the last minute, by site and address (the console's `remembered`). */
 private val crmEmailChecksRemembered = mutableMapOf<String, Pair<Long, CrmEmailCheck?>>()
+
+/** When a proposed task is due: that many days from today, at 5 pm on the device's calendar (`crmProposedDueAtMs`). */
+fun crmProposedDueAtMs(dueInDays: Int, nowMs: Long = com.aglyn.core.nowMillis()): Long {
+  val day = com.aglyn.core.localDayAndTime(nowMs + dueInDays.coerceAtLeast(0) * 86_400_000L).first
+  return com.aglyn.core.localDateTimeMillis(day, "17:00") ?: nowMs
+}

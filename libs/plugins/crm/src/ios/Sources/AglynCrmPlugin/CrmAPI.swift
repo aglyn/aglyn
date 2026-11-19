@@ -45,6 +45,13 @@ struct TaskDraft: Equatable {
   var sourceSite: String?
 }
 
+/// When a proposed task is due: that many days from today, at 5 pm on the device's calendar (`crmProposedDueAtMs`).
+func crmProposedDueAtMs(_ dueInDays: Int, now: Date = Date(), calendar: Calendar = .current) -> Int64 {
+  let day = calendar.date(byAdding: .day, value: max(0, dueInDays), to: now) ?? now
+  let due = calendar.date(bySettingHour: 17, minute: 0, second: 0, of: day) ?? day
+  return Int64((due.timeIntervalSince1970 * 1000).rounded())
+}
+
 struct ConvertDraft {
   var ownerUID: String?
   var companyID: String?
