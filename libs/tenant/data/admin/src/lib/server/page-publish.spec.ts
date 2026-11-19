@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { injectLayoutStyleOverrides } from '@aglyn/aglyn/app-utils/layout-style-overrides'
 import { decodeStoredNodes, encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { NODE_MAP_MAX_BYTES } from '@aglyn/aglyn/app-utils/measure-node-map'
 import { SERVER_TIMESTAMP, settingsFirestoreDouble } from '../testing/settings-firestore-double'
@@ -199,9 +200,11 @@ describe('a live page with nothing to publish, or a draft that cannot be (AGL-42
   })
 
   it('refuses it too when the server editor wrote the draft, keeping the stored overrides untouched (AGL-4235)', async () => {
-    // A draft an API or Assist edit wrote from the saved tree, stamped as
-    // `writeAiEdit` stamps it: the editor's Publish from it would clear the
-    // overrides, so neither keeping nor clearing them here is what it does.
+    // A server-stamped draft whose root lacks the overrides: one written
+    // before the server editor put them on its base's root, or one built on
+    // an author's draft that cleared them. The editor's Publish from it would
+    // clear the overrides, so neither keeping nor clearing them here is what
+    // it does.
     const overrides = { lay: { n1: { color: 'red' } } }
     const double = seed({
       [version('about')]: { nodes: packed(tree('Old')), updatedAt: SAVED, layoutStyleOverrides: overrides },
@@ -230,6 +233,26 @@ describe('a live page with nothing to publish, or a draft that cannot be (AGL-42
     expect(stored(double.read(version('about'))?.['nodes'])).toEqual(tree('New'))
     const write = double.writes.find((entry) => entry.path === version('about'))
     expect(write?.data?.['layoutStyleOverrides']).toEqual(overrides)
+  })
+
+  it('publishes a server-written draft shaped by the editor’s own injection, the overrides unchanged (AGL-4235)', async () => {
+    // What `writeAiEdit` writes when it builds on the saved tree: the
+    // version's tree with its overrides put on the root by the one
+    // `injectLayoutStyleOverrides`, then the edits applied.
+    const overrides = { lay: { header: { bgcolor: 'primary.main', py: 2 } } }
+    const double = seed({
+      [version('about')]: { nodes: packed(tree('Old')), updatedAt: SAVED, layoutStyleOverrides: overrides },
+      [draft('about')]: {
+        nodes: packed(injectLayoutStyleOverrides(tree('New'), overrides)),
+        baseStamp: SAVED_STAMP,
+        updatedByUid: 'api',
+        aiEditJobId: 'edit-1',
+      },
+    })
+    const { result } = await publish(double, 'about')
+    expect(result).toEqual(expect.objectContaining({ ok: true, status: 'published' }))
+    expect(stored(double.read(version('about'))?.['nodes'])).toEqual(tree('New'))
+    expect(double.read(version('about'))?.['layoutStyleOverrides']).toEqual(overrides)
   })
 
   it('publishes a draft with no overrides over a version that stores none', async () => {

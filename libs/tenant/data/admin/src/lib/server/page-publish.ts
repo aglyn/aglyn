@@ -312,23 +312,28 @@ async function prepareTree(
   // WHOEVER wrote the draft, because what the editor would publish from that
   // draft is not what visitors see now:
   // - The editor parks the version's overrides on the canvas root when it
-  //   opens the VERSION (`injectLayoutStyleOverrides` in the page route), so
-  //   a draft the editor saves carries them, and a root without them there
-  //   means the author cleared them (`style-target.ts` sets the root's key to
-  //   `undefined` when the last one goes, so a cleared root and an untouched
-  //   one cannot be told apart here).
-  // - A draft the server editor wrote (`writeAiEdit`: the Assist edit job
-  //   and `editPageContent`, stamped `aiEditJobId`) built on the SAVED tree
-  //   has a root without them, because the stored `nodes` never carry them.
-  //   Open draft replaces the canvas with that tree whole
-  //   (`canvas.applyNodes(draft.nodes)` in `use-besigner-draft.ts`) and
-  //   re-applies nothing, so the editor's Publish from it CLEARS the stored
-  //   overrides (`replaceUnderMerge(stored, undefined)` deletes the field).
-  //   Keeping them here would publish what the editor would not; clearing
-  //   them would change what visitors see without anyone deciding to. And a
-  //   stamped draft built on an editor draft the author cleared looks the
-  //   same as one built on the saved tree, so the stamp cannot decide it.
-  // So the page is published from the editor, where the person sees the
+  //   opens the VERSION (`injectLayoutStyleOverrides`, in the core package,
+  //   called by the page route), so a draft the editor saves carries them,
+  //   and a root without them there means the author cleared them
+  //   (`style-target.ts` sets the root's key to `undefined` when the last one
+  //   goes, so a cleared root and an untouched one cannot be told apart here).
+  // - A draft the server editor writes (`writeAiEdit`: the Assist edit job
+  //   and `editPageContent`, stamped `aiEditJobId`) on the SAVED tree carries
+  //   them too (AGL-4235): its base is the version's tree with the overrides
+  //   put on the root by the same `injectLayoutStyleOverrides`
+  //   (`aiEditSavedTree`), so such a draft is published here with the
+  //   overrides as they are. One it builds on a usable draft keeps that
+  //   draft's root as its author left it.
+  // - What is still refused: an author who cleared them, and a server draft
+  //   written before that change, whose root lacks them. Open draft replaces
+  //   the canvas with the draft's tree whole (`canvas.applyNodes(draft.nodes)`
+  //   in `use-besigner-draft.ts`) and re-applies nothing, so the editor's
+  //   Publish from it CLEARS the stored overrides
+  //   (`replaceUnderMerge(stored, undefined)` deletes the field). Keeping them
+  //   here would publish what the editor would not; clearing them would change
+  //   what visitors see without anyone deciding to, and the stamp cannot tell
+  //   the two cases apart.
+  // So that page is published from the editor, where the person sees the
   // page as it would go live and chooses.
   if (!rootCarriedOverrides && normalizeLayoutStyleOverrides(context.version.get('layoutStyleOverrides'))) {
     throw new Refused(
