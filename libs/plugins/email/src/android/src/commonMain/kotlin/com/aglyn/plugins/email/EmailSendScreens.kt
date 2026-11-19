@@ -68,6 +68,9 @@ import com.aglyn.ui.TextButton
 import com.aglyn.ui.space
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import com.aglyn.core.percent
+import com.aglyn.core.sendLinkReport
+import com.aglyn.core.grouped
 
 const val EMAIL_MESSAGES_SCREEN = "email.messages"
 const val EMAIL_MESSAGE_SCREEN = "email.message"

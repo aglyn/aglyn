@@ -329,6 +329,27 @@ export function createCodatProvider(config: CodatConfig, options: AccountingHttp
     return pushOutcome(operation, dataType)
   }
 
+  /**
+   * The supplier a fee is paid to: the one `prepare` made for Aglyn's fee, or
+   * for any other payee (Stripe, for its own fees) the supplier of that name,
+   * found in the books or made there.
+   */
+  async function supplierFor(session: AccountingSession, doc: AccountingExpenseDoc, context: AccountingWriteContext) {
+    if (doc.payeeName === ACCOUNTING_FEE_PAYEE) return contactFor(context, 'supplier')
+    const found = await findOne(cached(company(session.accessToken), 'suppliers'), query('supplierName', '=', doc.payeeName))
+    const id = found
+      ? String(found['id'])
+      : (
+          await push(
+            session,
+            'suppliers',
+            { supplierName: doc.payeeName, status: 'Active' },
+            `codat-supplier-${doc.payeeName.toLowerCase()}-${session.accessToken}-${session.tenantId}`,
+          )
+        ).id
+    return { id, dataType: 'suppliers' }
+  }
+
   return {
     id: 'codat',
     picksTenantAfterExchange: true,
@@ -506,7 +527,7 @@ export function createCodatProvider(config: CodatConfig, options: AccountingHttp
       const body = {
         reference: doc.externalId,
         note: doc.memo,
-        contactRef: contactFor(context, 'supplier'),
+        contactRef: await supplierFor(session, doc, context),
         issueDate: `${doc.date}T00:00:00`,
         currency: normalizeCurrency(doc.currency),
         lineItems: [

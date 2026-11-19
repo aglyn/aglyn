@@ -594,6 +594,49 @@ describe('exportOrgData', () => {
     )
   })
 
+  it('DISCLOSES each import job with its rows, which a site erasure takes (AGL-4236)', async () => {
+    // `eraseHostTransferJobs` deletes a site's jobs under
+    // `orgs/{orgId}/transferJobs`. The coverage guard records them as reached
+    // inside the `orgs` tree; this asserts the read, down to the imported
+    // values in a chunk's `pieces`, so the decision is not a promise alone.
+    const withJob = {
+      ...seed,
+      sub: {
+        ...seed.sub,
+        'orgs/o1': {
+          ...seed.sub['orgs/o1'],
+          transferJobs: {
+            j1: { hostId: 'h1', createdBy: 'u1', fileName: 'products.csv', resource: 'commerce.products' },
+          },
+        },
+        'orgs/o1/transferJobs/j1': {
+          results: { '0': { json: '[{"row":1,"label":"Blue mug"}]' } },
+          undo: { '0': { json: '[]' } },
+          chunks: { '0': { pieces: 1 } },
+        },
+        'orgs/o1/transferJobs/j1/chunks/0': {
+          pieces: { '0': { json: '[{"title":"Blue mug","sku":"MUG-1"}]' } },
+        },
+      },
+    }
+    const result = await exportOrgData('o1', { firestore: fakeDb(withJob) })
+    const rows = result.data['orgs']
+    const paths = rows.map((row) => row.path)
+    expect(paths).toEqual(
+      expect.arrayContaining([
+        'orgs/o1/transferJobs/j1',
+        'orgs/o1/transferJobs/j1/results/0',
+        'orgs/o1/transferJobs/j1/undo/0',
+        'orgs/o1/transferJobs/j1/chunks/0/pieces/0',
+      ]),
+    )
+    expect(rows.find((row) => row.path === 'orgs/o1/transferJobs/j1')?.data).toMatchObject({
+      createdBy: 'u1',
+      fileName: 'products.csv',
+    })
+    expect(JSON.stringify(rows)).toContain('MUG-1')
+  })
+
   it('is BOUNDED — never another customer’s rows', async () => {
     // Each of these collections holds the whole estate's credentials, routing
     // and billing correlations. An unbounded read here is the failure that
