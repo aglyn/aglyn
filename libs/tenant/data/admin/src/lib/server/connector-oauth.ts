@@ -701,16 +701,16 @@ const SCOPE_WORDS: Record<ApiScope, { area: string; words: string }> = {
       'Add, edit and delete companies, deals, tasks and email templates; log and delete activities; add, edit and convert leads',
   },
   'pages:read': { area: 'Pages', words: 'See your pages: their names, addresses and whether they are published' },
-  'seo:read': { area: 'Search listing', words: 'See how your site and pages are described to search engines' },
+  'seo:read': { area: 'Search listing', words: 'See your search listings: how your site and pages are described to search engines' },
   'seo:write': {
     area: 'Search listing',
-    words: 'Change how your site and pages appear in search results; changes show on the live site right away',
+    words: 'Change your search listings, how your site and pages appear in search results; changes show on the live site right away',
   },
   'business:read': { area: 'Business details', words: 'See your business details' },
   'business:write': {
     area: 'Business details',
     words:
-      'Change your business name, slogan, phone, email, address and social links; changes show on the live site right away',
+      'Change your business details: name, slogan, phone, email, address and social links; changes show on the live site right away',
   },
 }
 
