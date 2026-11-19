@@ -1875,6 +1875,12 @@ export const PLUGIN_ORG_COLLECTIONS_DECLARED: readonly ResolvedPluginOrgCollecti
     "mediaScan": "none",
     "mediaScanReason": "An Assist exchange is one question a member typed and the answer Assist gave, kept as prose. A change Assist made lands on the site's own pages, which the scan reads; scanning the conversation would report an asset as used because someone asked about it. Exchanges expire on their own (`expiresAt`)."
   },
+  {
+    "pluginId": "waivers",
+    "name": "waivers",
+    "label": "Waiver",
+    "siteField": "hostId"
+  },
 ]
 
 /**

@@ -50,7 +50,7 @@ import {
 } from './connection-store'
 import { AccountingProviderError, listPaidPayouts, otherConnectedOrgsOfOwner, readConnectedAccount } from './payouts'
 import { enqueuePayout, gatherSummaries, runSyncPass, type AccountingEngineDeps } from './sync-engine'
-import { payoutItemId, syncItemsCollection } from './sync-store'
+import { itemsForPayout, syncItemsCollection } from './sync-store'
 
 export interface AccountingJobDeps extends AccountingEngineDeps {
   /** Whether a lockdown covers the workspace now. */
@@ -178,9 +178,21 @@ export function payoutReadError(error: unknown): string {
   )
 }
 
+/** Why a payout of a Stripe account another connected workspace shares waits for a person. */
+const SHARED_ACCOUNT_PAYOUT =
+  'This payout is from a Stripe account another of your workspaces also sells through, and that workspace ' +
+  'has its own books connected. Post it in the books it belongs to, then retry it here only if it belongs in these.'
+
+/** The same, for the Stripe fees in such a payout. */
+const SHARED_ACCOUNT_PAYOUT_FEES =
+  'These are the Stripe fees in a payout from a Stripe account another of your workspaces also sells through, and ' +
+  'that workspace has its own books connected. Post them in the books the payout belongs to, then retry them here ' +
+  'only if they belong in these.'
+
 /**
- * Queues the payouts that reached the bank since the last read. A payout of
- * an account shared with another connected workspace asks a person instead.
+ * Queues the payouts that reached the bank since the last read, each with
+ * Stripe's fees in it. A payout of an account shared with another connected
+ * workspace asks a person instead, and so do its fees.
  *
  * When Stripe refuses the read, the poll time still moves on, so the next
  * read waits the usual {@link PAYOUT_POLL_INTERVAL_MS} rather than failing
@@ -219,14 +231,15 @@ export async function pollPayouts(
     const created = await enqueuePayout(deps, payout)
     queued += created
     if (created && shared.length) {
-      await syncItemsCollection(firestore, connection.orgId).doc(payoutItemId(payout)).update({
-        status: 'needs_attention',
-        errorCode: 'shared-stripe-account',
-        lastError:
-          'This payout is from a Stripe account another of your workspaces also sells through, and that workspace ' +
-          'has its own books connected. Post it in the books it belongs to, then retry it here only if it belongs in these.',
-        updatedAtMs: deps.now(),
-      })
+      // The transfer and its fees are queued together, so both stand.
+      for (const item of itemsForPayout(payout, deps.now())) {
+        await syncItemsCollection(firestore, connection.orgId).doc(item.id).update({
+          status: 'needs_attention',
+          errorCode: 'shared-stripe-account',
+          lastError: item.kind === 'payout' ? SHARED_ACCOUNT_PAYOUT : SHARED_ACCOUNT_PAYOUT_FEES,
+          updatedAtMs: deps.now(),
+        })
+      }
     }
     cursor = Math.max(cursor, payout.arrivedAtMs)
   }
