@@ -620,6 +620,7 @@ internal fun SignedInShell(
             )
           },
         ) {
+          OfflineIndicator(services)
           HelpButton(help)
           if (assistTitle != null) TitleBarButton(if (chrome.aiPanel) "Close the AI panel" else assistTitle, "auto_awesome", "ai-panel-toggle") { chrome.toggleAiPanel() }
         }

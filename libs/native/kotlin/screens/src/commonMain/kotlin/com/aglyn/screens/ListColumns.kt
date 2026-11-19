@@ -24,6 +24,11 @@ class ListColumn(json: JsonElement) {
   val page: String? = json.obj("sort")?.str("page")
   val type: String = json.obj("sort")?.str("type") ?: "text"
   val first: String = if (json.obj("sort")?.str("first") == "desc") "desc" else "asc"
+  /**
+   * A fixed order for a field's values (`sort.ranks`, the console's role rank owner → viewer): a value is read as its place in the
+   * list, and one the list lacks after every listed one.
+   */
+  val ranks: List<String> = json.obj("sort")?.arr("ranks")?.mapNotNull { (it as? JsonPrimitive)?.content }.orEmpty()
   val sortable: Boolean get() = route != null || page != null
 }
 
@@ -67,9 +72,15 @@ internal object ListColumns {
   fun order(rows: List<JsonElement>, column: ListColumn, descending: Boolean, context: JsonElement): List<Int> {
     val path = column.page ?: return rows.indices.toList()
     fun missing(value: JsonElement?) = value == null || value is JsonNull || (value is JsonPrimitive && value.isString && value.content.isEmpty())
-    val keyed = rows.mapIndexed { index, row -> Triple(index, row, ScreenValues.lookup(path, ScreenContext.withItem(context, row))) }
+    val keyed = rows.mapIndexed { index, row ->
+      val scope = ScreenContext.withItem(context, row)
+      // A template (`{item.displayName|item.email}`) sorts by what it reads as; a path by the value there.
+      val value: JsonElement? = if ('{' in path) JsonPrimitive(ScreenValues.render(path, scope)) else ScreenValues.lookup(path, scope)
+      val keyedValue = if (column.ranks.isEmpty()) value else JsonPrimitive(column.ranks.indexOf(ScreenValues.text(value)).let { if (it == -1) column.ranks.size else it })
+      Triple(index, row, keyedValue)
+    }
     fun compare(a: JsonElement?, b: JsonElement?): Int {
-      val result = when (column.type) {
+      val result = when (if (column.ranks.isEmpty()) column.type else "number") {
         "number" -> (ScreenValues.number(a) ?: 0.0).compareTo(ScreenValues.number(b) ?: 0.0)
         "date" -> (ScreenValues.epochMillis(a) ?: 0L).compareTo(ScreenValues.epochMillis(b) ?: 0L)
         else -> ScreenValues.text(a).compareTo(ScreenValues.text(b), ignoreCase = true)

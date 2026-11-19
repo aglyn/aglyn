@@ -1256,7 +1256,7 @@ An action is `{ label, icon, method, url, body, headers, confirm, confirmWhen, c
 promptTitle, submitLabel, reason, success, instead, check, open, navigate, back, reload, when, disabledWhen, link, copy,
 export, overlay, reveal, else, then, write, route }`: `disabledWhen` on a form's submit keeps the button on screen and off
 while it holds, for a setup step the screen says above it (a `when` would hide it), and it reads the form's own values as `form.*`
-(Quotes settings: Save is off with no statement or more than five); `prompt` asks for inputs first (`form.*`), in a dialog titled
+(Quotes settings: Save is off with no statement or more than five); a form's `refuse` is its pre-save check (a plugin schema's `validate`): each entry is `{ when, text }` or `{ check, site }`, a check both kits implement (`PluginSettingsChecks`, replaying the console's answers in `plugin-settings-check-cases.generated.json`) asked over the values the form saves, on a site over the values it will run with (its override, else the workspace's, else the default); the first entry that refuses is said beside Save, which stays off until it no longer does; `prompt` asks for inputs first (`form.*`), in a dialog titled
 `promptTitle` with a `submitLabel` button where the label alone would say neither (a row's `Edit` opens
 "Edit category" with Save, as the console's dialog does); `reason: true`
 adds the required reason the staff routes record; `open` names the response
@@ -1330,7 +1330,9 @@ lists every column with a `sort`: a tap asks for its first order (`first`, `asc`
 for the default again, as a header click cycles. A `route` sort is the staff route's own order over every row (`sort=<path>:<dir>`;
 the list's load names the parameter with `sortParam` and the order it answers with none asked as `sortDefault`), so choosing it reads
 the route again from the first page; a `page` sort orders the rows already loaded by a path over the row, as the console does for the
-columns no query can order by (`type` is `text`, `number` or `date`; a row without the value goes last in both directions). A list with
+columns no query can order by (`type` is `text`, `number` or `date`; a row without the value goes last in both directions; a `page`
+that is a template, `{item.displayName|item.email}`, sorts by what it reads as; `ranks: ["owner", "admin", …]` reads a value as
+its place in that list, one it lacks after every listed one, as the console ranks roles). A list with
 `columnsZone: "<zone>"` also takes the columns plugins contribute: a plugin spec with `zones: ["<zone>"]` and a `column` of the same
 shape plus `load: { url, ids, max }` (`{ids}` in the url is the ids of the rows on the screen, `ids` the template for each, `max` the
 most a request may name) is read for the rows on the screen in batches and answers under `column.<id>`, which its `value` and `sort`
