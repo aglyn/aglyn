@@ -93,9 +93,11 @@ export const NATIVE_WEB_ONLY_TOP_LEVEL_SEGMENTS: readonly string[] = [
 /**
  * The pre-sign-in sections whose exact page the apps finish natively: sign-up
  * (with its `?plan=`), an emailed verification link, an emailed password
- * reset and account recovery (`AuthFlow.swift`; Android's console intent
- * filter lists the same four paths). Only the page itself opens the app;
- * anything under it stays in the browser, where the console handles it.
+ * reset and account recovery (`AuthFlow.swift`, `AuthFlow.kt`). Only the page
+ * itself opens the app; anything under it stays in the browser, where the
+ * console handles it. Android's App Link filter claims the same console paths
+ * as {@link consoleAppLinksComponents}, refusing each exclusion in its manifest
+ * (`native-app-association.spec.ts` holds the two together, AGL-4059).
  */
 export const NATIVE_AUTH_LINK_SEGMENTS: readonly string[] = [
   'account-recovery',

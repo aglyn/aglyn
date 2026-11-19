@@ -328,6 +328,7 @@ internal class ShellPluginContext(
   override val deviceStore get() = services.prefs
   override val siteRole get() = workspace.site?.role
   override val orgRole get() = workspace.org?.role
+  override val accountPrefs get() = services.accountPrefs
 
   override suspend fun isStaff() = com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(false) }.getOrNull()).isStaff
 

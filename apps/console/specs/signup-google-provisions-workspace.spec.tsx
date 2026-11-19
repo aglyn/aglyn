@@ -129,6 +129,12 @@ jest.mock('@aglyn/aglyn', () => ({
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, ''),
+  // AGL-4024. The sign-up door asks whether the derived name has a usable
+  // address before its first attempt; the REAL rule, so these cases keep
+  // sending the names they always sent.
+  isValidOrgSlug: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/organizations',
+  ).isValidOrgSlug,
   onboardingDestination: (slug: string, intent: unknown) =>
     intent ? `/${slug}/billing` : `/${slug}`,
   parseOnboardingPlanIntent: () => mockPlanIntent,

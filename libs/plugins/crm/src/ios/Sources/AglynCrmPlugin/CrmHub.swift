@@ -206,7 +206,7 @@ struct CrmHubScreen: View {
     case .tasks: TasksSection(context: context, scope: scope, api: api, reference: reference)
     case .reports: ReportsSection(context: context, scope: scope, reference: reference)
     case .fields: FieldsSection(context: context, scope: scope, reference: reference)
-    case .settings: SettingsSection(context: context, scope: scope, reference: reference)
+    case .settings: SettingsSection(context: context, scope: scope, api: api, reference: reference)
     }
   }
 }

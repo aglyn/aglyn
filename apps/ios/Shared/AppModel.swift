@@ -153,14 +153,14 @@ final class AppModel {
   }
 
   /// Joins every invitation waiting for the signed-in person, as the console does on every load (AGL-4023): once their
-  /// address is confirmed (the server lists none before), never during a support session. A workspace joined while none
-  /// is open opens.
+  /// address is confirmed (the server lists none before), never during a support session. While no workspace is open,
+  /// the newest invitation's workspace opens once it is joined (AGL-4047); the others join where the person stands.
   func joinInvites() async {
     guard let invites, auth?.user?.emailVerified == true else { return }
     let joined = await invites.run(impersonating: auth?.impersonation != nil)
-    guard let first = joined.first else { return }
+    guard !joined.isEmpty else { return }
     workspace?.reload()
-    if workspace?.org == nil { workspace?.open(orgID: first) }
+    if workspace?.org == nil, let newest = invites.opens { workspace?.open(orgID: newest) }
   }
 
   /// Re-reads the claims from the ID token (forced after a re-auth).
@@ -309,6 +309,7 @@ final class AppModel {
     context.sites = (workspace?.sites ?? []).map {
       NativeSiteRef(id: $0.id, name: $0.name, subdomain: $0.subdomain, role: $0.role)
     }
+    context.preferences = preferences
     return context
   }
 

@@ -198,14 +198,15 @@ describe('the bands are real, and the plan is what selects them', () => {
         'workflowRuns',
         'actionRuns',
       ],
-      // API access, campaign email and action runs are Pro-and-above (the API
-      // moved down from Business with pricing v4, AGL-4126). Assist credits are NOT: every plan sells a band since
+      // Campaign email and action runs are Pro-and-above. The API is not since
+      // AGL-4226 gave Starter 500 requests (it moved down from Business to Pro
+      // with pricing v4, AGL-4126). Assist credits are NOT: every plan sells a band since
       // AGL-3203 gave Starter 750, so `assistCredits` is absent from every
       // list here. Starter sells workflow runs but no actions, and its email
       // band is 0 for the same reason Free's is — sending campaigns needs a
       // per-site verified sending domain, so the allowance starts at the
       // tier that carries that cost.
-      starter: ['apiRequests', 'emailSends', 'actionRuns'],
+      starter: ['emailSends', 'actionRuns'],
       pro: [],
       business: [],
       scale: [],
@@ -488,9 +489,9 @@ describe('the cost model here is the cost model the margin floor uses', () => {
     }
   })
 
-  it('reproduces the metered part of Agency’s pinned $782.75 at full utilization', () => {
-    // `tier-margin-floor.spec.ts` pins Agency at $782.75 a month with every
-    // band at 100%. $578.67 of that is the eight metered axes this module
+  it('reproduces the metered part of Agency’s pinned $783.00 at full utilization', () => {
+    // `tier-margin-floor.spec.ts` pins Agency at $783.00 a month with every
+    // band at 100%. $578.92 of that is the eight metered axes this module
     // prices; the $204.08 between them is what the rollup has no meter for
     // here — the assist band ($58), the two CRM decision terms, a seat a
     // month for each of 510 people and the one-to-one email cap ($57.60), and the
@@ -507,7 +508,8 @@ describe('the cost model here is the cost model the margin floor uses', () => {
     // its transfer at Vercel's dearest region and its reads at nam5, which is
     // $0.41312 a gigabyte and $163.18 of the total.
     const cogs = orgMonthlyCogsUsd(rollupAt('agency', 1) as never, PLAN_ENTITLEMENTS.agency.hostLimit)
-    expect(cogs.cogsUsd).toBeCloseTo(578.67, 2)
+    // $578.92 since AGL-4226 re-derived the API request ($0.000117 → $0.00012).
+    expect(cogs.cogsUsd).toBeCloseTo(578.92, 2)
     expect(cogs.basis).toBe('measured')
   })
 
