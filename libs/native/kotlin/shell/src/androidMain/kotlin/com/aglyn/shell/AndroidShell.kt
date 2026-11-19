@@ -79,6 +79,7 @@ object AndroidShell {
       },
       writer = SwitchingFirestoreWriter(accountWriter, { com.aglyn.core.FirebaseFirestoreWriter(support.firestore()) }, supporting),
       openHostedPage = { url -> openCustomTab(context, url) },
+      connectivity = com.aglyn.core.AndroidConnectivity(context),
       // Single sign-on runs on the console in a Custom Tab, whose page hands the code back to this app's own scheme; the
       // activity hears it and finishes the sign-in (`finishConsoleHandoff`).
       consoleHandoff = com.aglyn.core.ConsoleHandoffTransport { page ->
