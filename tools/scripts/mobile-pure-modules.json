@@ -22,6 +22,10 @@
       "why": "Reached by variables: the binding token grammar."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/business-details.ts",
+      "why": "A site's business details as Setup → Business profile saves them (AGL-4136): the canonical seo.entity paths, the business mirrors and the clearable list, so the native Business details card writes what the console writes. Imports business-profile and host-tokens, both listed."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/business-profile-values.ts",
       "why": "The business profile's fields, limits, sources and owner-write rule, no imports: the native workspace defaults replay them (AGL-3671)."
     },
@@ -112,6 +116,10 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/host-naming.ts",
       "why": "Reached by organizations: site naming and slug rules over strings."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/host-tokens.ts",
+      "why": "Reached by business-details: the site's one contact email (siteContactEmail) and the host.* variables. Imports business-profile, content-authors, host-naming and local-business, all listed."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/image-edit.ts",
@@ -1052,6 +1060,10 @@
     {
       "path": "libs/shared/ui/jsx/src/lib/utils/weekly-hours.ts",
       "why": "The weekly hours picker's model: a week of open intervals read from and written back as the stored opening-hours lines (`Mo-Fr 09:00-17:00`); the native apps' hours pickers write the same text (AGL-3668). No imports."
+    },
+    {
+      "path": "libs/shared/util/email/src/lib/disposable-email-domains.ts",
+      "why": "Reached by crm.ts: the disposable-mailbox domains a company is never made from (AGL-4230); imports only mail-gateway's host normalizer."
     },
     {
       "path": "libs/shared/util/email/src/lib/hosted-page-screen.ts",

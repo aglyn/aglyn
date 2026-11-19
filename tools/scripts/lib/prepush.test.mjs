@@ -76,6 +76,14 @@ describe('checksFor', () => {
     assert.ok(names(checksFor(['libs/shared/ui/theme/src/lib/tenant.theme.ts'])).includes('check:page-view-rate'))
   })
 
+  it('runs the native declaration guard when a registrar or plugins.config.json moves (the #2703 shape)', () => {
+    const native = 'check:native-contribution-declarations'
+    assert.ok(names(checksFor(['libs/plugins/marketplace/src/ios/Sources/AglynMarketplacePlugin/Register.swift'])).includes(native))
+    assert.ok(names(checksFor(['libs/plugins/marketplace/src/android/src/commonMain/kotlin/Register.kt'])).includes(native))
+    assert.ok(names(checksFor(['plugins.config.json'])).includes(native))
+    assert.ok(!names(checksFor(['libs/plugins/marketplace/src/lib/plugin.ts'])).includes(native))
+  })
+
   it('reads a docs-only push with the address and identifier guards alone', () => {
     assert.deepEqual(names(checksFor(['docs/RELEASING.md'])), ['check:contact-addresses', 'check:personal-identifiers'])
   })

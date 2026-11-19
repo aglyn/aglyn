@@ -503,3 +503,39 @@ describe('quantity 0 vs absent vs no item at all', () => {
     expect(subscriptionUpdate()?.get('items[0][quantity]')).toBe('2')
   })
 })
+
+describe('no grandfathering: an extra site on the old $20 price moves to the current one (AGL-4227)', () => {
+  function loadWithRepricedHost() {
+    jest.resetModules()
+    process.env = {
+      ...CLEAN_ENV,
+      ...STRIPE_ENV,
+      STRIPE_PRICE_STARTER_EXTRA_HOST: 'price_starter_host_20',
+      STRIPE_PRICE_STARTER_EXTRA_HOST_V2: 'price_starter_host_25',
+    } as NodeJS.ProcessEnv
+    return require('../app/api/billing/addons/route').POST as (
+      request: Request,
+    ) => Promise<Response>
+  }
+
+  beforeEach(() => {
+    // The one existing-item shape: an extra site bought at $20.
+    datasetItem = {
+      id: 'si_host',
+      quantity: 1,
+      price: { id: 'price_starter_host_20', recurring: { interval: 'month' } },
+    }
+  })
+
+  it('a change to it updates the SAME item onto the $25 price', async () => {
+    const post = loadWithRepricedHost()
+    const response = await call(post, { action: 'set', kind: 'hosts', quantity: 2 })
+    expect(response.status).toBe(200)
+    const body = subscriptionUpdate()
+    expect(body?.get('items[0][id]')).toBe('si_host')
+    expect(body?.get('items[0][price]')).toBe('price_starter_host_25')
+    expect(body?.get('items[0][quantity]')).toBe('2')
+    // Never a second extra-site item beside it.
+    expect(body?.get('items[1][price]') ?? null).toBeNull()
+  })
+})

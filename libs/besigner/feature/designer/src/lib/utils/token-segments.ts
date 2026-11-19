@@ -195,7 +195,7 @@ export interface TokenLabelContext {
   options?: BindingOption[]
   variables?: Record<string, { name?: string } | undefined>
   functions?: Record<string, { name?: string } | undefined>
-  itemFields?: Array<{ id: string; label: string }>
+  itemFields?: ReadonlyArray<{ id: string; label: string }>
 }
 
 export interface ResolvedTokenLabel {

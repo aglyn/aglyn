@@ -65,6 +65,7 @@ describe('the staff Sites list has the composites its query shapes need', () => 
       'searchTokens:CONTAINS,createdAt:DESCENDING',
       'subdomain:ASCENDING,createdAt:DESCENDING',
       'suspended:ASCENDING,createdAt:DESCENDING',
+      'usageLevel:ASCENDING,createdAt:DESCENDING',
     ])
   })
 

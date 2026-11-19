@@ -244,7 +244,7 @@ export async function routeCartOrderToSuppliers(
             lines.length === 1
               ? `New order to fulfill for ${store}: ${lines[0].name}`
               : `New order to fulfill for ${store}: ${lines.length} items`
-          await sendEmail({
+          const emailOutcome = await sendEmail({
             to: supplier.email,
             subject,
             text:
@@ -266,8 +266,12 @@ export async function routeCartOrderToSuppliers(
             owedFor: 'order',
           })
           // Cost meter (AGL-1438): transactional, the order needs it.
-          await meterHostEmail(hostId)
-          told = true
+          // A refused send is not a supplier told (AGL-4227): no meter, no
+          // "Sent to supplier" on the timeline unless a webhook carried it.
+          if (emailOutcome?.sent) {
+            await meterHostEmail(hostId)
+            told = true
+          }
         }
         if (!told) continue
         await orderRef.set(

@@ -765,6 +765,13 @@
         "BUSINESS_PROFILE_FIELD_ORDER"
       ]
     },
+    "libs/aglyn/src/lib/app-utils/business-details.ts": {
+      "values": [
+        "SITE_SLOGAN_MAX_LENGTH",
+        "BUSINESS_SOCIAL_LINKS_MAX",
+        "BUSINESS_DETAILS_CLEARABLE_PATH_LIST"
+      ]
+    },
     "libs/aglyn/src/lib/app-utils/content-authors.ts": {
       "values": [
         "AUTHOR_SAME_AS_MAX"
@@ -910,6 +917,8 @@
         "AppSidebarStyle",
         "PinOrgResult",
         "PinOrgOutcome",
+        "PinnedHost",
+        "PinHostResult",
         "RailWorkspaces",
         "StarResult",
         "StarOutcome",
@@ -923,6 +932,8 @@
       "values": [
         "PINNED_ORGS_FIELD",
         "PINNED_ORGS_MAX",
+        "PINNED_HOSTS_FIELD",
+        "PINNED_HOSTS_MAX",
         "RECENT_ORGS_FIELD",
         "RECENT_ORGS_MAX",
         "RAIL_RECENT_ORGS",
@@ -1083,6 +1094,18 @@
         "AI_INSIGHT_CARD_COPY",
         "AI_INSIGHT_PLACEHOLDERS",
         "AI_INSIGHT_DIALOG_COPY"
+      ]
+    },
+    "libs/aglyn/src/lib/app-utils/crm-email-templates.ts": {
+      "types": [
+        "CrmMergeFieldDefinition"
+      ],
+      "values": [
+        "CRM_EMAIL_TEMPLATE_NAME_MAX",
+        "CRM_EMAIL_TEMPLATES_LIMIT",
+        "CRM_EMAIL_TEMPLATE_KIND_LABELS",
+        "CRM_EMAIL_TEMPLATE_VISIBILITY_LABELS",
+        "CRM_MERGE_FIELDS"
       ]
     }
   },
@@ -19629,6 +19652,326 @@
         ]
       ]
     },
+    "businessDetailsWrite": {
+      "module": "libs/aglyn/src/lib/app-utils/business-details.ts",
+      "args": [
+        [
+          {
+            "seo": {
+              "entity": {
+                "name": " Paws ",
+                "slogan": " Happy dogs ",
+                "telephone": " +1 512-555-0100 ",
+                "email": " hi@paws.example ",
+                "address": {
+                  "streetAddress": " 1 Main St ",
+                  "addressLocality": "Austin",
+                  "addressRegion": "TX",
+                  "postalCode": "78701",
+                  "addressCountry": "US"
+                }
+              }
+            },
+            "business": {
+              "socialLinks": [
+                {
+                  "label": " Instagram ",
+                  "url": " https://instagram.com/paws "
+                },
+                {
+                  "label": "Empty",
+                  "url": "  "
+                }
+              ]
+            }
+          },
+          null
+        ],
+        [
+          {
+            "seo": {
+              "entity": {
+                "name": "Paws"
+              }
+            }
+          },
+          {
+            "seo": {
+              "entity": {
+                "email": "a@paws.example"
+              }
+            },
+            "business": {
+              "supportEmail": "a@paws.example"
+            }
+          }
+        ],
+        [
+          {
+            "seo": {
+              "entity": {
+                "name": "Paws"
+              }
+            }
+          },
+          {
+            "seo": {
+              "entity": {
+                "name": "Paws"
+              }
+            }
+          }
+        ],
+        [
+          {
+            "seo": {
+              "entity": {
+                "email": "a@paws.example"
+              }
+            }
+          },
+          {
+            "business": {
+              "address": "4 Shore Rd\nMadison, WI 53703"
+            }
+          }
+        ],
+        [
+          {
+            "seo": {
+              "entity": {
+                "address": {
+                  "streetAddress": "9 Lake Dr",
+                  "addressLocality": "Madison"
+                }
+              }
+            }
+          },
+          {
+            "seo": {
+              "entity": {
+                "address": {
+                  "streetAddress": "4 Shore Rd",
+                  "addressLocality": "Madison"
+                }
+              }
+            },
+            "business": {
+              "address": "4 Shore Rd, Madison"
+            }
+          }
+        ],
+        [
+          {
+            "seo": {
+              "entity": {}
+            }
+          },
+          {
+            "seo": {
+              "entity": {
+                "address": {
+                  "streetAddress": "4 Shore Rd"
+                }
+              }
+            },
+            "business": {
+              "address": "4 Shore Rd"
+            }
+          }
+        ],
+        [
+          {
+            "seo": {
+              "entity": {
+                "address": {
+                  "streetAddress": "4 Shore Rd"
+                }
+              }
+            },
+            "business": {
+              "address": "kept"
+            }
+          },
+          {
+            "seo": {
+              "entity": {
+                "address": {
+                  "streetAddress": "4 Shore Rd"
+                }
+              }
+            },
+            "business": {
+              "address": "kept"
+            }
+          }
+        ],
+        [
+          {
+            "business": {
+              "socialLinks": [
+                {
+                  "label": " L0 ",
+                  "url": " https://example.com/0 "
+                },
+                {
+                  "label": " L1 ",
+                  "url": " https://example.com/1 "
+                },
+                {
+                  "label": " L2 ",
+                  "url": " https://example.com/2 "
+                },
+                {
+                  "label": " L3 ",
+                  "url": " https://example.com/3 "
+                },
+                {
+                  "label": " L4 ",
+                  "url": " https://example.com/4 "
+                },
+                {
+                  "label": " L5 ",
+                  "url": " https://example.com/5 "
+                },
+                {
+                  "label": " L6 ",
+                  "url": " https://example.com/6 "
+                },
+                {
+                  "label": " L7 ",
+                  "url": " https://example.com/7 "
+                },
+                {
+                  "label": " L8 ",
+                  "url": " https://example.com/8 "
+                },
+                {
+                  "label": " L9 ",
+                  "url": " https://example.com/9 "
+                }
+              ]
+            }
+          },
+          null
+        ],
+        [
+          {},
+          null
+        ]
+      ]
+    },
+    "hostTokenPreview": {
+      "module": "libs/aglyn/src/lib/app-utils/host-tokens.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "displayName": "Paws",
+            "subdomain": "paws"
+          }
+        ],
+        [
+          {
+            "displayName": "Paws",
+            "subdomain": "paws",
+            "cname": "https://paws.example",
+            "logoUrl": "https://cdn.example/logo.png",
+            "seo": {
+              "entity": {
+                "name": " Paws Grooming ",
+                "slogan": "Calm hands",
+                "telephone": "+1 (512) 555-0100",
+                "email": "hi@paws.example",
+                "address": {
+                  "streetAddress": "1 Main St",
+                  "addressLocality": "Austin",
+                  "addressRegion": "TX",
+                  "postalCode": "78701",
+                  "addressCountry": "US"
+                },
+                "areaServed": [
+                  "San Antonio, TX",
+                  "Austin"
+                ],
+                "sameAs": [
+                  "https://www.facebook.com/paws"
+                ]
+              }
+            },
+            "business": {
+              "supportEmail": "old@paws.example",
+              "address": "old block",
+              "socialLinks": [
+                {
+                  "label": "Instagram",
+                  "url": "https://instagram.com/paws"
+                },
+                {
+                  "label": "",
+                  "url": "https://x.com/paws"
+                },
+                {
+                  "label": "Bad",
+                  "url": "not a url"
+                }
+              ]
+            }
+          }
+        ],
+        [
+          {
+            "subdomain": "paws",
+            "seo": {
+              "entity": {
+                "telephone": "555 0100"
+              }
+            },
+            "business": {
+              "supportEmail": "old@paws.example",
+              "address": "4 Shore Rd\nMadison"
+            }
+          }
+        ]
+      ]
+    },
+    "businessDetailsSeed": {
+      "module": "libs/aglyn/src/lib/app-utils/business-details.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {
+            "business": {
+              "supportEmail": " old@paws.example "
+            }
+          }
+        ],
+        [
+          {
+            "seo": {
+              "entity": {
+                "email": "new@paws.example"
+              }
+            },
+            "business": {
+              "supportEmail": "old@paws.example"
+            }
+          }
+        ],
+        [
+          {
+            "displayName": "Paws",
+            "seo": {
+              "title": "Paws"
+            }
+          }
+        ]
+      ]
+    },
     "businessProfileSourceOf": {
       "module": "libs/aglyn/src/lib/app-utils/business-profile.ts",
       "args": [
@@ -30276,6 +30619,369 @@
         ]
       ]
     },
+    "readPinnedHosts": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          {
+            "pinnedHosts": [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pinnedHosts": [
+              {
+                "orgId": "",
+                "hostId": "h"
+              },
+              7,
+              null,
+              {
+                "orgId": "o",
+                "hostId": ""
+              },
+              {
+                "orgId": "o",
+                "hostId": 5
+              },
+              {
+                "orgId": "o",
+                "hostId": "h3"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pinnedHosts": "x"
+          }
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "workspacePinnedHosts": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "o1"
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "o3"
+        ],
+        [
+          [],
+          "o1"
+        ]
+      ]
+    },
+    "pinHost": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [],
+          {
+            "orgId": "o1",
+            "hostId": "h1"
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          {
+            "orgId": "o1",
+            "hostId": "h1"
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          {
+            "orgId": "o2",
+            "hostId": "h1"
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          {
+            "orgId": "",
+            "hostId": "h9"
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          {
+            "orgId": "o1",
+            "hostId": ""
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          {
+            "orgId": "o2",
+            "hostId": "h9"
+          }
+        ]
+      ]
+    },
+    "unpinHost": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "h1"
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "nope"
+        ],
+        [
+          [],
+          "h1"
+        ]
+      ]
+    },
+    "replacePinnedHost": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "h1",
+          {
+            "orgId": "o1",
+            "hostId": "h9"
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "h2",
+          {
+            "orgId": "o1",
+            "hostId": "h9"
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "h1",
+          {
+            "orgId": "o1",
+            "hostId": "h3"
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "h1",
+          {
+            "orgId": "o1",
+            "hostId": ""
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "h3",
+          {
+            "orgId": "o1",
+            "hostId": "h2"
+          }
+        ]
+      ]
+    },
     "readRecentOrgs": {
       "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
       "args": [
@@ -37235,6 +37941,239 @@
             },
             "overflowClicks": 5
           }
+        ]
+      ]
+    },
+    "crmTelHref": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          ""
+        ],
+        [
+          "  "
+        ],
+        [
+          "+15125550199"
+        ],
+        [
+          "(512) 555-0199"
+        ],
+        [
+          "512.555.0199"
+        ],
+        [
+          "+1 512 555 0199"
+        ],
+        [
+          "12"
+        ],
+        [
+          "123"
+        ],
+        [
+          "ext 12"
+        ],
+        [
+          "+44 20 7946 0958"
+        ],
+        [
+          "555-CALL-NOW"
+        ],
+        [
+          "+123456789012345678901"
+        ]
+      ]
+    },
+    "normalizeCrmEmailTemplate": {
+      "module": "libs/aglyn/src/lib/app-utils/crm-email-templates.ts",
+      "args": [
+        [
+          null
+        ],
+        [
+          {}
+        ],
+        [
+          {
+            "name": "  Intro  ",
+            "subject": "Hi {{contact.firstName}}",
+            "body": "Hello",
+            "kind": "snippet",
+            "visibility": "personal",
+            "ownerUid": "u1",
+            "createdByUid": "u1",
+            "createdAtMs": 5,
+            "updatedAtMs": 6,
+            "hostId": "h1",
+            "visibleTo": [
+              "host:h1"
+            ]
+          }
+        ],
+        [
+          {
+            "name": "Shared one",
+            "kind": "bogus",
+            "visibility": "bogus",
+            "ownerUid": "u2",
+            "hostId": null
+          }
+        ],
+        [
+          {
+            "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "visibility": "shared",
+            "ownerUid": "u3"
+          }
+        ]
+      ]
+    },
+    "crmEmailTemplateIsListed": {
+      "module": "libs/aglyn/src/lib/app-utils/crm-email-templates.ts",
+      "args": [
+        [
+          {
+            "visibility": "shared"
+          },
+          null
+        ],
+        [
+          {
+            "visibility": "personal",
+            "ownerUid": "u1"
+          },
+          "u1"
+        ],
+        [
+          {
+            "visibility": "personal",
+            "ownerUid": "u1"
+          },
+          "u2"
+        ],
+        [
+          {
+            "visibility": "personal"
+          },
+          null
+        ],
+        [
+          {
+            "visibility": "personal",
+            "ownerUid": "u1"
+          },
+          null
+        ]
+      ]
+    },
+    "campaignRollup": {
+      "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
+      "args": [
+        [
+          []
+        ],
+        [
+          [
+            {
+              "status": "draft"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "status": "sent",
+              "stats": {
+                "recipients": 10,
+                "sent": 10,
+                "delivered": 9,
+                "opens": 7,
+                "uniqueOpens": 5,
+                "clicks": 3,
+                "uniqueClicks": 2,
+                "unsubscribes": 1,
+                "bounced": 1
+              }
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "status": "sent",
+              "stats": {
+                "recipients": 10,
+                "sent": 10,
+                "delivered": 8,
+                "uniqueOpens": 4,
+                "uniqueClicks": 1,
+                "unsubscribes": 0,
+                "opens": 4,
+                "clicks": 1
+              }
+            },
+            {
+              "status": "sent",
+              "stats": {
+                "recipients": 5,
+                "sent": 5,
+                "opens": 2
+              }
+            },
+            {
+              "status": "scheduled",
+              "stats": {
+                "sent": 0
+              }
+            },
+            {
+              "status": "draft"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "status": "sending",
+              "stats": {
+                "sent": 40,
+                "audienceSize": 100,
+                "delivered": 38,
+                "uniqueOpens": 10
+              },
+              "resume": {
+                "remaining": 60,
+                "batch": 1,
+                "nextAtMs": 1700000000000
+              }
+            },
+            {
+              "status": "canceled",
+              "stats": {
+                "sent": 0
+              }
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "status": "canceled",
+              "stats": {
+                "sent": 3,
+                "delivered": 3,
+                "uniqueOpens": 0,
+                "unsubscribes": 0
+              }
+            },
+            {
+              "status": "failed"
+            }
+          ]
         ]
       ]
     }

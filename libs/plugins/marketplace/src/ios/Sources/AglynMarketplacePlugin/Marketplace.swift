@@ -313,7 +313,7 @@ let everyWorkspace = "every"
 /// "Bought by you": the signed-in person's own live purchases across every workspace (`MINE_LICENCE_QUERY` over
 /// `licenceBase`), narrowed to the workspace each landed in when one is chosen; `everyWorkspace` asks for those that name
 /// none, as `mineLicenceClauses` reads it.
-func boughtByYouQuery(uid: String, licensedTo: String?) -> FirestoreQuery {
+func boughtByYouQuery(uid: String, licensedTo: String?, limit: Int = 100) -> FirestoreQuery {
   let clauses: [ListFilterRequest] =
     switch licensedTo {
     case nil: []
@@ -325,7 +325,7 @@ func boughtByYouQuery(uid: String, licensedTo: String?) -> FirestoreQuery {
     ListQueryRequest(
       base: [ListQueryFilter(op: .equal, path: "buyerUid", value: .string(uid)), ListQueryFilter(op: .equal, path: "refundedAt", value: .null)],
       clauses: clauses)
-  ).firestoreQuery(["marketplacePurchases"], limit: 100)
+  ).firestoreQuery(["marketplacePurchases"], limit: limit)
 }
 
 /// Who bought a license the workspace holds, as the console's table says it.

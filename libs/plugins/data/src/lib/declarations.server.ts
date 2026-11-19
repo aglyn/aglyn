@@ -32,6 +32,7 @@ import {
   DATASET_STEP_TYPES,
   DATASET_STORAGE_METER_ID,
 } from './constants/bundle-common'
+import { DATASET_ICON_FIELD } from './model/dataset-icon-field'
 import { DATASET_IMAGE_FIELD } from './model/dataset-image-field'
 import { DATASET_PAGE_FIELD } from './model/dataset-page-field'
 import { RECORD_PAGE_ADDRESS_FIELD } from './record-pages/record-pages'
@@ -132,6 +133,8 @@ export function registerDataServerDeclarations(): void {
   registerCustomFieldType(DATASET_IMAGE_FIELD)
   // A record's page (AGL-3763), the `screen:` reference a Button or Link binds.
   registerCustomFieldType(DATASET_PAGE_FIELD)
+  // A record's icon (AGL-4190), the id and path an Icon element binds.
+  registerCustomFieldType(DATASET_ICON_FIELD)
   // Record pages in the sitemap and `/llms.txt` (AGL-3475), declared as the
   // `records` family in `plugins.config.json`; the reads load with the first
   // sitemap a crawler asks for.

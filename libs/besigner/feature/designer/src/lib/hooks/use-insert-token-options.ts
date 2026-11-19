@@ -61,6 +61,46 @@ export interface InsertTokenOptionsResult {
    * `{{item.*}}` token has a record to read (AGL-4212).
    */
   inRepeat: boolean
+  /**
+   * The record fields an `{{item.*}}` token can name here, with each one's
+   * named type where it has one (AGL-4190) — so a field that takes only one
+   * kind of value, an Icon picker, can offer only the fields that hold it.
+   */
+  itemFields: readonly ItemFieldOption[]
+  /** What the repeat's items are called, for the menu's group heading. */
+  itemNoun?: string
+  /** The repeated entity's name, for the menu's group hint. */
+  entityLabel?: string
+}
+
+/** One record field a repeat's `{{item.*}}` token can name. */
+export interface ItemFieldOption {
+  id: string
+  label: string
+  /** The field's named type (`icon`, `image`…), where it has one. */
+  customType?: string
+}
+
+/**
+ * The repeat's record fields of one named type as binding options (AGL-4190),
+ * in the same group and words the `{}` menu uses for every record field.
+ */
+export function itemFieldBindingOptions(
+  context: Pick<InsertTokenOptionsResult, 'itemFields' | 'itemNoun' | 'entityLabel'>,
+  customType: string,
+): BindingOption[] {
+  return context.itemFields
+    .filter((field) => field.customType === customType)
+    .map((field) => ({
+      group: `${context.itemNoun ?? 'Repeat'} item`,
+      label: field.label,
+      token: repeatItemToken(field.id),
+      ...(context.entityLabel
+        ? {
+            groupHint: `From ${(context.itemNoun ?? 'repeat').toLowerCase()} "${context.entityLabel}"`,
+          }
+        : {}),
+    }))
 }
 
 /**
@@ -217,11 +257,11 @@ export function useInsertTokenOptions(
       // name for what it repeats over.
       itemNoun: repeat?.source.label,
       entityLabel: named ? named.label : entity?.label,
-      itemFields: named
+      itemFields: (named
         ? named.fields.map((field) => ({ id: field.id, label: field.label }))
         : kind && entity
           ? entityOptions.entityFields?.[kind]?.[entity.id] ?? []
-          : [],
+          : []) as readonly ItemFieldOption[],
       // Carried out of the walk so the effect below can ask for the entity
       // list without repeating it.
       entityKind: kind,
@@ -325,10 +365,10 @@ export function useInsertTokenOptions(
     [options, bindingVariables, bindingFunctions, insertContext.itemFields],
   )
 
-  const inRepeat = insertContext.inRepeat
+  const { inRepeat, itemFields, itemNoun, entityLabel } = insertContext
   return useMemo(
-    () => ({ options, labelContext, inRepeat }),
-    [options, labelContext, inRepeat],
+    () => ({ options, labelContext, inRepeat, itemFields, itemNoun, entityLabel }),
+    [options, labelContext, inRepeat, itemFields, itemNoun, entityLabel],
   )
 }
 
