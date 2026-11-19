@@ -159,10 +159,10 @@ describe('the site router reads the site once and hands it on (AGL-4235)', () =>
     expect(probed?.uid).toBe(MEMBER)
   })
 
-  it('answers a site’s templates itself, not built yet, and keeps the name from every plugin (AGL-4235)', async () => {
+  it('answers a site’s templates itself, through its own module and scope, and keeps the name from every plugin (AGL-4235)', async () => {
     const response = await call(context(), `sites/${SITE}/templates`)
-    expect(response.status).toBe(501)
-    expect((await response.json()).error).toMatchObject({ type: 'not_implemented', message: 'Not available yet' })
+    expect(response.status).toBe(403)
+    expect((await response.json()).error).toMatchObject({ type: 'insufficient_scope', code: 'components:read' })
     expect(PLATFORM_API_V1_SITE_RESOURCES.has('templates')).toBe(true)
   })
 })
