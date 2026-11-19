@@ -135,6 +135,13 @@ export function settingsFirestoreDouble(seed: Record<string, Record<string, unkn
         writes.push({ op: 'set', path: ref.path, data })
       })
     },
+    // A staged delete (AGL-4235: a published draft), recorded like the rest.
+    delete: (ref: { path: string }) => {
+      staged.push(() => {
+        docs.delete(ref.path)
+        writes.push({ op: 'delete', path: ref.path })
+      })
+    },
     create: (ref: { path: string }, data: Record<string, unknown>) => {
       staged.push(() => {
         if (docs.has(ref.path)) throw Object.assign(new Error(`document exists at ${ref.path}`), { code: 6 })
