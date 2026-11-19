@@ -33,8 +33,12 @@ object BesignerPaths {
     return SITE.any { it.matches(scope.rest) }
   }
 
-  /** The Besigner on one page's working version, under the picked site. */
-  fun screen(screenId: String, versionId: String): String = "/screens/$screenId/versions/$versionId/besigner"
+  /**
+   * The Besigner on one page's working version, under the picked site, or that version's preview (`SCREEN_PREVIEW`:
+   * the page as it would look, with Publish and Open in Besigner).
+   */
+  fun screen(screenId: String, versionId: String, preview: Boolean = false): String =
+    "/screens/$screenId/versions/$versionId/${if (preview) "preview" else "besigner"}"
 
   /** A reusable component's version in the Besigner (`COMPONENT_BESIGNER`), or its preview. */
   fun component(componentId: String, versionId: String, preview: Boolean = false): String =
