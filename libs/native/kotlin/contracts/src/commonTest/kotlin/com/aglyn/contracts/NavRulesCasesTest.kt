@@ -186,7 +186,26 @@ class NavRulesCasesTest {
   @Test
   fun navLists() = cases("resolveNavList").forEach { (args, result) ->
     val listId = NativeNavListId.entries.first { it.raw == text(args[0]) }
-    same(result, resolveNavList(Contracts.nativeNavManifest, listId, ids(args[1]), args[2].jsonPrimitive.booleanOrNull == true), ResolvedNavList.serializer(), args.toString())
+    val flags = MapSerializer(String.serializer(), Boolean.serializer())
+    // A fourth argument is the reader's answers, which hold back a row the console's org tab strip drops.
+    val access = (args.getOrNull(3) as? kotlinx.serialization.json.JsonObject)?.let {
+      NativeNavAccess(decode(flags, it.getValue("permissions")), decode(flags, it.getValue("features")))
+    }
+    same(result, resolveNavList(Contracts.nativeNavManifest, listId, ids(args[1]), args[2].jsonPrimitive.booleanOrNull == true, access), ResolvedNavList.serializer(), args.toString())
+  }
+
+  @Test
+  fun sequencesWaitsForItsPermissionAndItsGrant() {
+    val (permissions, features) = navRowGateKeys()
+    assertTrue("outreach.use" in permissions && "outreach" in features)
+    fun shown(use: Boolean, granted: Boolean) = resolveNavList(
+      NativeNavListId.WORKSPACE, listOf("outreach"), false,
+      NativeNavAccess(mapOf("outreach.use" to use), mapOf("outreach" to granted)),
+    ).groups.flatMap { it.rows }.any { it.id == "sequences" }
+    assertTrue(shown(use = true, granted = true))
+    assertTrue(!shown(use = false, granted = true) && !shown(use = true, granted = false))
+    // No answers: a deep link's path is never held back.
+    assertTrue(resolveNavList(NativeNavListId.WORKSPACE, listOf("outreach"), false).groups.flatMap { it.rows }.any { it.id == "sequences" })
   }
 
   @Test

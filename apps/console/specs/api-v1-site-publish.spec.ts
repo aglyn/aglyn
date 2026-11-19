@@ -140,6 +140,12 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
+// The site router's own lock verdict (AGL-4235) reads the lock module
+// directly; no site here is locked, as the pipeline's double above says.
+jest.mock('../../../libs/tenant/data/admin/src/lib/server/lockdown', () => ({
+  lockdownRefusal: async () => null,
+}))
+
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),

@@ -40,6 +40,8 @@
 	<string>$(AGLYN_APPLE_SIGN_IN)</string>
 	<key>AGLYN_TELEMETRY</key>
 	<string>$(AGLYN_TELEMETRY)</string>
+	<key>AGLYN_IN_APP_BILLING</key>
+	<string>$(AGLYN_IN_APP_BILLING)</string>
 	<key>AGLYN_DEBUG_EMAIL</key>
 	<string>$(AGLYN_DEBUG_EMAIL)</string>
 	<key>AGLYN_DEBUG_PASSWORD</key>

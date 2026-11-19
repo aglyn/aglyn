@@ -10,7 +10,7 @@
       "scope": "site",
       "order": 55,
       "zones": [
-        "commerceSettings"
+        "commercePromotions"
       ],
       "showWhen": "data.settings",
       "load": {

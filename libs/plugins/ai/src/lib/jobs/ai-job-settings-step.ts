@@ -18,19 +18,20 @@
 import { supportedTimeZones } from '@aglyn/aglyn/app-utils/collection-entry-date'
 import { holdsSiteKey } from '@aglyn/aglyn/app-utils/host-permissions'
 import { orgPermissionLabel } from '@aglyn/aglyn/app-utils/org-permissions'
-import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { inheritedMediaAlt } from '@aglyn/aglyn/app-utils/media-metadata'
 import { mediaNodeSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
-import { SCREEN_ROOT_PATH } from '@aglyn/aglyn/app-utils/screen-route'
 import { siteLanguageCode } from '@aglyn/aglyn/app-utils/seo-locale'
+import { SEO_DESCRIPTION_MAX_LENGTH, SEO_TITLE_MAX_LENGTH } from '@aglyn/aglyn/app-utils/screen-seo-fields'
+import { SITE_SEO_SEPARATOR_MAX_LENGTH, SITE_SEO_TITLE_PATTERN_MAX_LENGTH } from '@aglyn/aglyn/app-utils/seo-listing-fields'
 import { isSeoTitleVariable } from '@aglyn/aglyn/app-utils/seo-title-variables'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import type { PluginAiCapabilityArgsSchema } from '@aglyn/aglyn/plugin-manager/plugin-ai-capabilities'
 import { changesProjectedHostFields, syncHostProjectionForMembers } from '@aglyn/tenant-data-admin/server/host-memberships'
 import { getLockdownVerdict } from '@aglyn/tenant-data-admin/server/lockdown'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
-import { FieldValue, type Firestore } from 'firebase-admin/firestore'
+import { stageSiteSettingsWrite } from '@aglyn/tenant-data-admin/server/site-settings-write'
+import type { Firestore } from 'firebase-admin/firestore'
 import type { AiJobOutput } from '../model/ai-jobs.types'
 import { registerAiJobAdmission, type AiJobAdmission, type AiJobAdmissionRefusal } from './ai-job-admission'
 import { aiJobEditModel } from './ai-job-edit-step'
@@ -119,13 +120,13 @@ export const AI_SETTINGS_LIMITS = {
   /** Admin → General, Display name. */
   name: 30,
   /** Setup → SEO, Title. */
-  seoTitle: 60,
+  seoTitle: SEO_TITLE_MAX_LENGTH,
   /** Setup → SEO, Description. */
-  seoDescription: 155,
+  seoDescription: SEO_DESCRIPTION_MAX_LENGTH,
   /** Setup → SEO, Separator. */
-  separator: 3,
+  separator: SITE_SEO_SEPARATOR_MAX_LENGTH,
   /** Setup → SEO, Title pattern. */
-  titlePattern: 120,
+  titlePattern: SITE_SEO_TITLE_PATTERN_MAX_LENGTH,
   /** Setup → SEO, the publisher's description. */
   businessDescription: 300,
   businessName: 100,
@@ -589,20 +590,10 @@ export async function writeAiSiteSettings(
     )
     const done = [...new Set(changes.map((change) => change.said))]
     if (!changed.length) return { ok: true, done, notDone: problems, changed: [], outboxId: null }
-    const updates: Record<string, unknown> = { updatedAt: input.now }
-    for (const change of changed) updates[change.path] = change.remove ? FieldValue.delete() : change.value
-    tx.update(hostRef, updates)
-    // The announce, written down in the save's own transaction: a setting
-    // has no address, so it asks for the whole site, as the console's does.
-    const outboxRef = firestore.collection('publishOutbox').doc(createResourceUid())
-    tx.set(outboxRef, {
-      hostId: input.hostId,
-      paths: [SCREEN_ROOT_PATH],
-      entireHost: true,
-      createdAt: FieldValue.serverTimestamp(),
-      attempts: 0,
-    })
-    return { ok: true, done, notDone: problems, changed: changed.map((change) => change.path), outboxId: outboxRef.id }
+    // The changes and the site-wide outbox entry beside them, through the one
+    // server writer every site-settings save shares (AGL-4235).
+    const outboxId = stageSiteSettingsWrite(tx, firestore, { hostRef, hostId: input.hostId, changes: changed, now: input.now })
+    return { ok: true, done, notDone: problems, changed: changed.map((change) => change.path), outboxId }
   })
 }
 
