@@ -43,6 +43,14 @@ public enum ListCreateZone {
   public static let forms = "hostForms"
 }
 
+/// The zone a saved funnel's results host, under them (the console's `funnelInsight`), and the props it hands its widgets
+/// (the console's `FunnelInsightZoneProps`): the funnel shown, as the page names it, and the range shown, in whole days.
+public enum FunnelInsightZone {
+  public static let name = "funnelInsight"
+  public static let funnelName = "funnelName"
+  public static let days = "days"
+}
+
 /// What other plugins put in one of a page's zones, in order, each told where it is drawn: the native twin of the
 /// console's `PluginWidgetSlot`. Inside a `ToolbarItemGroup` each widget is one toolbar item.
 public struct SlotWidgets: View {

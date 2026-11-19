@@ -75,6 +75,8 @@ object DesktopShell {
       googleDesktopClientId = read("googleDesktopClientId", null),
       googleDesktopClientSecret = read("googleDesktopClientSecret", null),
       appCheck = read("appCheck", null),
+      // The desktop apps are not sold through a store, so buying stays on unless a build turns it off.
+      inAppBilling = read("inAppBilling", "on"),
     )
   }
 
@@ -96,6 +98,8 @@ object DesktopShell {
   ): ShellServices {
     val config = AglynConfig.read(env, if (app == NativeApp.POS) AglynAppId.POS else AglynAppId.AGLYN)
     config.problems().forEach { System.err.println("Aglyn: $it") }
+    // Whether this build may take a payment to Aglyn (the owner's decision of 2026-11-19 hides it in store builds).
+    com.aglyn.core.StoreBilling.configure(config)
     val prefs = JavaPreferencesStore(if (app == NativeApp.POS) "com/aglyn/pos" else "com/aglyn/app")
     // Firebase App Check: Compose Desktop has no attestation, so the console mints this app's tokens for the session it
     // signed in (AGL-3816), and every Firebase call below carries them. Off for the emulator stack.

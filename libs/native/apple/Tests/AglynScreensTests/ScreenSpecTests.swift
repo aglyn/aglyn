@@ -93,7 +93,7 @@ final class ScreenSpecTests: XCTestCase {
         XCTAssertTrue(ids.insert(spec.id).inserted, "duplicate screen id \(spec.id)")
         XCTAssertTrue(["org", "site", "account", "staff"].contains(spec.scope), "\(spec.id): scope \(spec.scope)")
         for link in spec.links { XCTAssertTrue(link.hasPrefix("/"), "\(spec.id): link \(link)") }
-        let known = Set(["fields", "meters", "list", "form", "actions", "links", "notice", "zone", "image", "html", "qr"])
+        let known = Set(["fields", "meters", "list", "form", "actions", "links", "notice", "zone", "image", "html", "qr", "text"])
         for block in spec.blocks { XCTAssertTrue(known.contains(block.type), "\(spec.id): block \(block.type)") }
       }
       specs += parsed
@@ -106,6 +106,33 @@ final class ScreenSpecTests: XCTestCase {
       for target in Self.targets(spec.raw) {
         XCTAssertTrue(ids.contains(target) || handWritten.contains(target), "\(spec.id) opens \(target), which no spec declares")
       }
+    }
+  }
+
+  /// Every field a spec asks for is of a kind the renderer draws (`FieldInput`): a kind it does not know would be drawn as a
+  /// plain text box and send what was typed.
+  func testEveryFieldKindIsOneTheRendererDraws() throws {
+    let known: Set<String> = [
+      "text", "email", "url", "number", "stepper", "multiline", "password", "toggle", "select", "country", "date", "hours",
+      "heading", "choice", "multiselect", "lines", "file", "upload", "media", "lookup", "signature", "photo", "group",
+    ]
+    func walk(_ node: JSONValue, _ file: String) {
+      switch node {
+      case .object(let record):
+        for key in ["fields", "prompt"] {
+          for field in Optional(record[key] ?? .null).array {
+            if let kind = field["kind"]?.stringValue { XCTAssertTrue(known.contains(kind), "\(file): field kind \(kind)") }
+          }
+        }
+        for value in record.values { walk(value, file) }
+      case .array(let items):
+        for item in items { walk(item, file) }
+      default:
+        break
+      }
+    }
+    for url in Self.specFiles {
+      walk(try XCTUnwrap(JSONValue.decode(try Data(contentsOf: url))), url.lastPathComponent)
     }
   }
 

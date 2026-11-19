@@ -22,6 +22,12 @@
         "ListFilterRequest"
       ]
     },
+    "libs/aglyn/src/lib/app-utils/native-store-billing.ts": {
+      "values": [
+        "NATIVE_WEB_BILLING_LINK_LABEL",
+        "NATIVE_NO_IN_APP_BILLING_NOTE"
+      ]
+    },
     "libs/aglyn/src/lib/app-utils/name-search.ts": {
       "values": [
         "NAME_TOKEN_MAX_PREFIX",
@@ -32699,6 +32705,78 @@
           "workspace",
           [],
           false
+        ],
+        [
+          "workspace",
+          [
+            "crm",
+            "inbox",
+            "email",
+            "outreach",
+            "accounting",
+            "marketplace",
+            "workflows",
+            "marketing"
+          ],
+          false,
+          {
+            "permissions": {
+              "data.manage": true,
+              "outreach.use": false,
+              "accounting.manage": true
+            },
+            "features": {
+              "outreach": true
+            }
+          }
+        ],
+        [
+          "workspace",
+          [
+            "crm",
+            "inbox",
+            "email",
+            "outreach",
+            "accounting",
+            "marketplace",
+            "workflows",
+            "marketing"
+          ],
+          false,
+          {
+            "permissions": {
+              "data.manage": false,
+              "outreach.use": true,
+              "accounting.manage": false
+            },
+            "features": {
+              "outreach": false
+            }
+          }
+        ],
+        [
+          "workspace",
+          [
+            "crm",
+            "inbox",
+            "email",
+            "outreach",
+            "accounting",
+            "marketplace",
+            "workflows",
+            "marketing"
+          ],
+          false,
+          {
+            "permissions": {
+              "data.manage": true,
+              "outreach.use": true,
+              "accounting.manage": true
+            },
+            "features": {
+              "outreach": true
+            }
+          }
         ]
       ]
     },
@@ -37803,6 +37881,161 @@
         ],
         [
           null
+        ]
+      ]
+    },
+    "verificationRequestBlock": {
+      "module": "libs/plugins/marketplace/src/lib/model/listing-verification.ts",
+      "args": [
+        [
+          {
+            "listing": null,
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed"
+            },
+            "viewerOrgId": null,
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed"
+            },
+            "viewerOrgId": "org_b",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "verified"
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "in_review"
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a"
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed"
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "pending"
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "declined"
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "declined",
+                "decidedAt": {
+                  "seconds": 1760794400
+                }
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "declined",
+                "decidedAt": {
+                  "seconds": 1760621600
+                }
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "withdrawn"
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "approved"
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
         ]
       ]
     },
