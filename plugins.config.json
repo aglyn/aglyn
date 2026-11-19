@@ -3478,6 +3478,13 @@
         "waivers"
       ],
       "requiredPersonEraser": true,
+      "orgCollections": [
+        {
+          "name": "waivers",
+          "label": "Waiver",
+          "siteField": "hostId"
+        }
+      ],
       "hostCollections": [
         {
           "name": "waiverTitles",
