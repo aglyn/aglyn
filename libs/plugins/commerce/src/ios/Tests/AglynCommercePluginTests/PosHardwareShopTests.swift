@@ -16,28 +16,37 @@ final class PosHardwareShopTests: XCTestCase {
     for _ in 0..<7 { url.deleteLastPathComponent() }
     let file = url.appendingPathComponent("native/contracts/function-cases.generated.json")
     let all = try XCTUnwrap(JSONValue.decode(Data(contentsOf: file)))
-    return try XCTUnwrap(all["functions"]?[name]?["cases"]?.arrayValue)
+    return try XCTUnwrap(Optional(arr(all["functions"]?[name]?["cases"])))
   }
 
-  private func arg(_ item: JSONValue) -> JSONValue { item["args"]?.arrayValue?.first ?? .null }
+  /// The plugin's own JSONValue readers shadow AglynCore's here, so the cases read values by pattern.
+  private func num(_ value: JSONValue?) -> Double? {
+    if case .number(let number)? = value { return number }
+    return nil
+  }
+  private func arr(_ value: JSONValue?) -> [JSONValue] {
+    if case .array(let values)? = value { return values }
+    return []
+  }
+  private func arg(_ item: JSONValue) -> JSONValue { arr(item["args"]).first ?? .null }
 
   private func lines(_ json: JSONValue) -> [PosHardwareOrderLine] {
-    let rows: [JSONValue] = json.arrayValue ?? []
+    let rows: [JSONValue] = arr(json)
     return rows.map { row in
-      let count: Double = row["quantity"]?.numberValue ?? 0
+      let count: Double = num(row["quantity"]) ?? 0
       return PosHardwareOrderLine(name: row["name"]?.stringValue ?? "", quantity: Int(count))
     }
   }
 
   func testMoneyAndThePlanPromptAreTheConsoles() throws {
     for item in try cases("formatPosHardwareCents") {
-      let cents = Int(arg(item).numberValue ?? 0)
+      let cents = Int(num(arg(item)) ?? 0)
       XCTAssertEqual(formatPosHardwareCents(cents), item["result"]?.stringValue, "\(cents)")
     }
     let prompts = try cases("posPlanPrompt")
     XCTAssertEqual(prompts.count, 3)
     for item in prompts {
-      let arrived = (arg(item)["arrived"]?.arrayValue ?? []).compactMap(\.stringValue)
+      let arrived = arr(arg(item)["arrived"]).compactMap(\.stringValue)
       XCTAssertEqual(posHardwarePlanPrompt(arrived: arrived), item["result"]?.stringValue)
     }
   }
@@ -56,11 +65,11 @@ final class PosHardwareShopTests: XCTestCase {
 
   func testArrivedOrdersItemsAndNotesAreTheConsoles() throws {
     for item in try cases("posHardwareArrivedNumbers") {
-      let rows: [JSONValue] = arg(item).arrayValue ?? []
+      let rows: [JSONValue] = arr(arg(item))
       let orders: [(number: String, status: String, source: String?)] = rows.map { row in
         (number: row["number"]?.stringValue ?? "", status: row["status"]?.stringValue ?? "", source: row["source"]?.stringValue)
       }
-      XCTAssertEqual(posHardwareArrivedNumbers(orders), (item["result"]?.arrayValue ?? []).compactMap(\.stringValue))
+      XCTAssertEqual(posHardwareArrivedNumbers(orders), arr(item["result"]).compactMap(\.stringValue))
     }
     for item in try cases("posHardwareOrderItems") {
       XCTAssertEqual(posHardwareOrderItems(lines(arg(item))), item["result"]?.stringValue)
@@ -72,7 +81,7 @@ final class PosHardwareShopTests: XCTestCase {
       let input = arg(item)
       XCTAssertEqual(
         posHardwareWaitingNote(
-          storeName: input["storeName"]?.stringValue ?? "", serialsTaken: Int(input["serialsTaken"]?.numberValue ?? 0),
+          storeName: input["storeName"]?.stringValue ?? "", serialsTaken: Int(num(input["serialsTaken"]) ?? 0),
           hasLocation: input["hasLocation"]?.boolValue == true),
         item["result"]?.stringValue)
     }
@@ -87,27 +96,27 @@ final class PosHardwareShopTests: XCTestCase {
   func testTheBasketAndCheckOutAreTheConsoles() throws {
     for item in try cases("posHardwareBasket") {
       let input = arg(item)
-      let offerRows: [JSONValue] = input["offers"]?.arrayValue ?? []
+      let offerRows: [JSONValue] = arr(input["offers"])
       let offers: [(sku: String, unitCents: Int)] = offerRows.map { offer in
-        let cents: Double = offer["unitCents"]?.numberValue ?? 0
+        let cents: Double = num(offer["unitCents"]) ?? 0
         return (sku: offer["sku"]?.stringValue ?? "", unitCents: Int(cents))
       }
       var quantities: [String: Int] = [:]
       if let given = input["quantities"], case .object(let record) = given {
         for (sku, value) in record {
-          let count: Double = value.numberValue ?? 0
+          let count: Double = num(value) ?? 0
           quantities[sku] = Int(count)
         }
       }
       let basket = posHardwareBasket(
-        offers: offers, quantities: quantities, shippingCents: input["shippingCents"]?.numberValue.map { Int($0) },
+        offers: offers, quantities: quantities, shippingCents: num(input["shippingCents"]).map { Int($0) },
         automaticTax: input["automaticTax"]?.boolValue == true)
       let result = try XCTUnwrap(item["result"])
-      XCTAssertEqual(basket.lines.map(\.sku), (result["lines"]?.arrayValue ?? []).compactMap { $0["sku"]?.stringValue })
+      XCTAssertEqual(basket.lines.map(\.sku), arr(result["lines"]).compactMap { $0["sku"]?.stringValue })
       XCTAssertEqual(
-        basket.lines.map(\.quantity), (result["lines"]?.arrayValue ?? []).map { Int($0["quantity"]?.numberValue ?? 0) })
-      XCTAssertEqual(basket.itemsCents, Int(result["itemsCents"]?.numberValue ?? -1))
-      XCTAssertEqual(basket.totalCents, Int(result["totalCents"]?.numberValue ?? -1))
+        basket.lines.map(\.quantity), arr(result["lines"]).map { Int(self.num($0["quantity"]) ?? 0) })
+      XCTAssertEqual(basket.itemsCents, Int(num(result["itemsCents"]) ?? -1))
+      XCTAssertEqual(basket.totalCents, Int(num(result["totalCents"]) ?? -1))
       XCTAssertEqual(basket.totalLabel, result["totalLabel"]?.stringValue)
     }
     let states = try cases("posHardwareCheckoutState")
