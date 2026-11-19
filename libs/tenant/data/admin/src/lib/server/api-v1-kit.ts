@@ -134,9 +134,17 @@ export function requireScope(
 
 // ── Serialization ───────────────────────────────────────────────────────────
 
-/** Firestore values → JSON-safe values (Timestamps become ISO strings). */
+/**
+ * Firestore values → JSON-safe values (Timestamps become ISO strings).
+ *
+ * A plain `Date` is an ISO string too: a write answers with the document as
+ * it reads after the write, built in memory, where a date it set is still the
+ * `Date` it wrote rather than the stored `Timestamp`. Walked as an object it
+ * has no own keys and reads `{}`. An invalid `Date` reads `null`.
+ */
 export function serialize(value: unknown): unknown {
   if (value instanceof Timestamp) return value.toDate().toISOString()
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString()
   if (Array.isArray(value)) return value.map(serialize)
   if (value && typeof value === 'object') {
     const out: Record<string, unknown> = {}

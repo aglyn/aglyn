@@ -18,6 +18,7 @@
  */
 
 import { SERVER_TIMESTAMP, settingsFirestoreDouble } from '../testing/settings-firestore-double'
+import { pageView } from './api-v1-site-settings'
 import { readPageSeoPatch, settlePageSeoCache, writePageSeo } from './page-seo-write'
 
 const NOW = new Date('2026-11-19T12:00:00Z')
@@ -58,6 +59,15 @@ describe('writePageSeo (AGL-4235)', () => {
     expect(written).toEqual(expect.objectContaining({ ok: true, changed: true, routePath: null, outboxId: null }))
     expect(double.read(PAGE)).toEqual({ kind: 'page', updatedAt: NOW })
     expect(double.outbox()).toEqual([])
+  })
+
+  it('answers with the date it wrote as an ISO string, not an empty object (AGL-4235)', async () => {
+    const double = settingsFirestoreDouble({ 'hosts/host-1': {}, [PAGE]: { displayName: 'About', kind: 'page' } })
+    const written = await writePageSeo(double.firestore, { hostId: 'host-1', pageId: 'about', edits: { title: 'About us' }, now: NOW })
+    if (!written.ok) throw new Error('expected the write to land')
+    const view = pageView('about', written.page, {})
+    expect(view.updated).toBe(NOW.toISOString())
+    expect(JSON.parse(JSON.stringify(view)).updated).toBe('2026-11-19T12:00:00.000Z')
   })
 
   it('writes nothing when nothing differs', async () => {
