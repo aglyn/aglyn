@@ -22,8 +22,10 @@ final class PosHardwareShopTests: XCTestCase {
   private func arg(_ item: JSONValue) -> JSONValue { item["args"]?.arrayValue?.first ?? .null }
 
   private func lines(_ json: JSONValue) -> [PosHardwareOrderLine] {
-    (json.arrayValue ?? []).map {
-      PosHardwareOrderLine(name: $0["name"]?.stringValue ?? "", quantity: Int($0["quantity"]?.numberValue ?? 0))
+    let rows: [JSONValue] = json.arrayValue ?? []
+    return rows.map { row in
+      let count: Double = row["quantity"]?.numberValue ?? 0
+      return PosHardwareOrderLine(name: row["name"]?.stringValue ?? "", quantity: Int(count))
     }
   }
 
@@ -54,8 +56,9 @@ final class PosHardwareShopTests: XCTestCase {
 
   func testArrivedOrdersItemsAndNotesAreTheConsoles() throws {
     for item in try cases("posHardwareArrivedNumbers") {
-      let orders = (arg(item).arrayValue ?? []).map {
-        (number: $0["number"]?.stringValue ?? "", status: $0["status"]?.stringValue ?? "", source: $0["source"]?.stringValue)
+      let rows: [JSONValue] = arg(item).arrayValue ?? []
+      let orders: [(number: String, status: String, source: String?)] = rows.map { row in
+        (number: row["number"]?.stringValue ?? "", status: row["status"]?.stringValue ?? "", source: row["source"]?.stringValue)
       }
       XCTAssertEqual(posHardwareArrivedNumbers(orders), (item["result"]?.arrayValue ?? []).compactMap(\.stringValue))
     }
@@ -84,12 +87,17 @@ final class PosHardwareShopTests: XCTestCase {
   func testTheBasketAndCheckOutAreTheConsoles() throws {
     for item in try cases("posHardwareBasket") {
       let input = arg(item)
-      let offers = (input["offers"]?.arrayValue ?? []).map {
-        (sku: $0["sku"]?.stringValue ?? "", unitCents: Int($0["unitCents"]?.numberValue ?? 0))
+      let offerRows: [JSONValue] = input["offers"]?.arrayValue ?? []
+      let offers: [(sku: String, unitCents: Int)] = offerRows.map { offer in
+        let cents: Double = offer["unitCents"]?.numberValue ?? 0
+        return (sku: offer["sku"]?.stringValue ?? "", unitCents: Int(cents))
       }
       var quantities: [String: Int] = [:]
-      if case .object(let record)? = input["quantities"] {
-        for (sku, value) in record { quantities[sku] = Int(value.numberValue ?? 0) }
+      if let given = input["quantities"], case .object(let record) = given {
+        for (sku, value) in record {
+          let count: Double = value.numberValue ?? 0
+          quantities[sku] = Int(count)
+        }
       }
       let basket = posHardwareBasket(
         offers: offers, quantities: quantities, shippingCents: input["shippingCents"]?.numberValue.map { Int($0) },
