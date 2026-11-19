@@ -168,6 +168,12 @@ fun SpecScreen(
 ) {
   val session = LocalScreenSession.current
   val base = session.context(plugin, params)
+  // A screen that is only buying (`requires` holds `app.billing`) in a store build (the owner's decision of 2026-11-19):
+  // reached by a link, a search, Starred or Recent, it says plan and billing changes are not in the app, never "your role".
+  if (!com.aglyn.core.StoreBilling.buying && spec.requires.orEmpty().contains("app.billing")) {
+    EmptyState(spec.title.takeIf { '{' !in it } ?: "Billing", body = com.aglyn.core.StoreBilling.noBillingNote, icon = AglynIcons.named("credit_card"))
+    return
+  }
   if (!ScreenValues.condition(spec.requires, base)) {
     EmptyState(
       if (spec.scope == "staff") "Staff only" else "Not available to your role",

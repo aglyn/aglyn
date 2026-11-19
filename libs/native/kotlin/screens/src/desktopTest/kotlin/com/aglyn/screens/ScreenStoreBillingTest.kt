@@ -81,6 +81,9 @@ class ScreenStoreBillingTest {
       }
       assertEquals(ids.toSet(), found, screen.text("id"))
     }
+    // Choose a plan is only buying: a store build cannot reach it by any route.
+    val plans = (file["screens"] as JsonArray).map { it as JsonObject }.first { it.text("id") == "core.billing.plans" }
+    assertEquals("org.can[billing.manage] && app.billing", plans.text("requires"))
   }
 
   /** A store build's line is one block per screen at most. */

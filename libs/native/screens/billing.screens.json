@@ -260,7 +260,7 @@
       "title": "Choose a plan",
       "icon": "sparkles|workspace_premium",
       "scope": "org",
-      "requires": "org.can[billing.manage]",
+      "requires": "org.can[billing.manage] && app.billing",
       "blocks": [
         {
           "type": "billingOnWeb",

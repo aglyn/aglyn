@@ -8,10 +8,11 @@ import XCTest
 
 /// `app.billing` and `app.billingLink`: what a spec screen hides in a store build (the owner's decision of 2026-11-19).
 /// Kotlin replays the same (ScreenStoreBillingTest).
+@MainActor
 final class ScreenStoreBillingTests: XCTestCase {
-  override func tearDown() {
+  override func tearDown() async throws {
     StoreBilling.set(buying: false, webBillingLink: false)
-    super.tearDown()
+    try await super.tearDown()
   }
 
   private func app() -> JSONValue? { ScreenSession().context(nil, params: [:])["app"] }
@@ -61,5 +62,7 @@ final class ScreenStoreBillingTests: XCTestCase {
       XCTAssertEqual(found, ids, id)
       XCTAssertLessThanOrEqual(spec.blocks.filter { $0.type == "billingOnWeb" }.count, 1, id)
     }
+    // Choose a plan is only buying: a store build cannot reach it by any route.
+    XCTAssertEqual(CoreScreens.specs.first { $0.id == "core.billing.plans" }?.requires, "org.can[billing.manage] && app.billing")
   }
 }

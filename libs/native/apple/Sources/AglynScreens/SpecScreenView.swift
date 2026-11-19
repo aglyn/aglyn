@@ -49,7 +49,13 @@ public struct SpecScreenView: View {
 
   public var body: some View {
     Group {
-      if !ScreenValues.condition(spec.requires, in: baseContext) {
+      // A screen that is only buying (`requires` holds `app.billing`) in a store build (the owner's decision of 2026-11-19):
+      // reached by a link, a search, Starred or Recent, it shows the store line, never "your role".
+      if !StoreBilling.buying, spec.requires?.contains("app.billing") == true {
+        AglynEmptyState(spec.label, systemImage: "creditcard", message: StoreBilling.webBillingLink ? nil : StoreBilling.noBillingNote) {
+          if StoreBilling.webBillingLink { AglynStoreBillingLine() }
+        }
+      } else if !ScreenValues.condition(spec.requires, in: baseContext) {
         AglynEmptyState(
           spec.scope == "staff" ? "Staff only" : "Not available to your role", systemImage: "lock",
           message: spec.scope == "staff"
