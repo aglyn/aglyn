@@ -2,7 +2,7 @@
 sidebar_position: 1
 slug: /
 title: Aglyn REST API
-description: A REST API for your organization's datasets, contacts, CRM, sites, form submissions, store orders, products and media — authenticated with API keys.
+description: A REST API and MCP server for your organization's datasets, contacts, CRM, sites, form submissions, store orders, products and media — authenticated with API keys or by signing in.
 ---
 
 # Aglyn REST API
@@ -22,8 +22,11 @@ catalog to a marketplace, sync a CRM's contacts and deals in either direction, l
 calls from a dialer, back up records, or build an integration.
 
 :::info Plan availability
-The REST API is included on **Pro** and **Custom**. Create keys from
-**Organization → Settings → API keys**.
+The REST API is included on **Starter**, **Pro** and **Custom**. Create keys from
+**Organization → Settings → API keys**. What differs by plan is how much: Starter
+includes 500 requests a month and stops at 20,000, at 120 a minute for the whole
+workspace; Pro includes 1,500 with no monthly ceiling, at 600 a minute; Custom's
+limits are set by your agreement. See [Rate limits & usage](rate-limits.md).
 :::
 
 ## Base URL
@@ -130,6 +133,34 @@ Two things to know when reading it:
   field id the dataset's model doesn't define; [creating a site](resources/sites.md#create);
   and [media uploads](resources/media.md).
 
+## MCP server {#mcp}
+
+The same API is served as [Model Context Protocol](https://modelcontextprotocol.io)
+tools, for AI assistants, code editors and agents:
+
+```
+https://app.aglyn.com/api/mcp
+```
+
+Any MCP client can connect. Give it an API key as a bearer token, or give it nothing
+and it asks the person to [sign in](authentication.md#apps-that-sign-in) and pick a
+workspace and an access level — no key is copied anywhere. Either way, a tool call
+runs through the same pipeline a request does, with the same scopes, rate limit and
+usage meter.
+
+The transport is Streamable HTTP and the server keeps no session. A client that is
+only given the address finds everything else on its own:
+
+| Document | Address |
+| --- | --- |
+| Server card ([SEP-2127](https://modelcontextprotocol.io/seps/2127-mcp-server-cards)) | `https://app.aglyn.com/api/mcp/server-card` |
+| Protected resource ([RFC 9728](https://www.rfc-editor.org/rfc/rfc9728)) — named by the `401` | `https://app.aglyn.com/.well-known/oauth-protected-resource/api/mcp` |
+| Authorization server ([RFC 8414](https://www.rfc-editor.org/rfc/rfc8414)) | `https://app.aglyn.com/.well-known/oauth-authorization-server` |
+| API catalog ([RFC 9727](https://www.rfc-editor.org/rfc/rfc9727)), on every published site | `/.well-known/api-catalog` |
+
+The tool list is the server's own answer to `tools/list`, generated from the
+[OpenAPI description](#openapi), and depends on what the key or connection may do.
+
 ## Service endpoints
 
 Three endpoints need no scope; any valid key can call them.
@@ -144,6 +175,8 @@ What this API is and what it serves.
   "name": "Aglyn REST API",
   "version": "v1",
   "documentation": "https://docs.aglyn.com/api",
+  "openapi": "/api/v1/openapi.json",
+  "mcp": "/api/mcp",
   "resources": ["sites", "media", "contacts", "companies", "pipelines", "deals", "tasks", "activities", "leads", "email-templates", "datasets"]
 }
 ```
@@ -188,7 +221,7 @@ each CRM collection, for sizing a sync. See [Usage](usage.md).
 {
   "object": "usage",
   "month": "2026-08",
-  "apiRequests": { "used": 18422, "included": 100000, "remaining": 81578, "metered": true }
+  "apiRequests": { "used": 18422, "included": 100000, "remaining": 81578, "metered": true, "ceiling": null, "unitBytes": 262144 }
 }
 ```
 

@@ -466,23 +466,6 @@ export const FLAG_DOC_PAGES: Partial<
       checkNoPriceClaim: true,
     },
   ],
-  release_accounting: [
-    {
-      path: 'docs/commerce-and-bookings/commerce/connect-quickbooks-online.md',
-      disclosure: 'admonition',
-      checkNoPriceClaim: true,
-    },
-    {
-      path: 'docs/commerce-and-bookings/commerce/connect-xero.md',
-      disclosure: 'admonition',
-      checkNoPriceClaim: true,
-    },
-    {
-      path: 'docs/commerce-and-bookings/commerce/connect-other-accounting-software.md',
-      disclosure: 'admonition',
-      checkNoPriceClaim: true,
-    },
-  ],
 }
 
 /**

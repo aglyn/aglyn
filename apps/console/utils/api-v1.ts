@@ -30,6 +30,14 @@ import {
   checkApiRequestQuota,
   checkEntitlement,
 } from '@aglyn/aglyn/server'
+// The two AGL-4226 readers, from their module: the pipeline's specs stand
+// `@aglyn/aglyn/server` in with a hand-picked subset, and these answer from
+// the catalog with no I/O, so there is nothing for a spec to stand in for.
+import {
+  apiMonthlyRefusalMessage,
+  apiRequestBillingUnits,
+  apiWorkspaceRateLimitPerMinute,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   ApiErrors,
   type ApiScope,
@@ -277,6 +285,7 @@ export function apiUsageMonth(now = new Date()): string {
 function recordApiRequest(
   firestore: FirebaseFirestore.Firestore,
   orgId: string,
+  units = 1,
 ): void {
   const month = apiUsageMonth()
   void firestore
@@ -286,7 +295,7 @@ function recordApiRequest(
     .doc(month)
     .set(
       {
-        count: firebaseAdmin.firestore.FieldValue.increment(1),
+        count: firebaseAdmin.firestore.FieldValue.increment(units),
         month,
         updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       },
@@ -339,10 +348,85 @@ async function refuseIfApiQuotaExhausted(
   // boundary, matching the counter's own key.
   const now = new Date()
   const nextMonth = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)
+  //
+  // The body names WHICH monthly limit refused (AGL-4226): Starter's ceiling
+  // (`monthly_request_ceiling`, and the plan without one), or the band of a
+  // plan that sells nothing past it (`monthly_request_quota`).
   return ApiErrors.rateLimited(
     Math.max(1, Math.ceil((nextMonth - now.getTime()) / 1000)),
     headers,
+    {
+      code:
+        quota.refusedBy === 'ceiling'
+          ? 'monthly_request_ceiling'
+          : 'monthly_request_quota',
+      message: apiMonthlyRefusalMessage(org as never, quota),
+    },
   )
+}
+
+/** The `X-RateLimit-Scope` a response's `RateLimit-*` headers describe (AGL-4226). */
+const RATE_LIMIT_SCOPE_HEADER = 'X-RateLimit-Scope'
+
+/** The workspace's per-minute budget, beside the key's (AGL-4226). */
+function workspaceRateLimitHeaders(
+  result: { limit: number; remaining: number; resetMs: number },
+): Record<string, string> {
+  return {
+    'X-Workspace-RateLimit-Limit': String(result.limit),
+    'X-Workspace-RateLimit-Remaining': String(result.remaining),
+    'X-Workspace-RateLimit-Reset': String(Math.ceil(result.resetMs / 1000)),
+  }
+}
+
+/**
+ * The WORKSPACE's per-minute limit (AGL-4226), across every key and every
+ * connection — `/v1` and `/api/mcp` both come through `authenticateApiV1`.
+ *
+ * The per-key 120/min was the only bound, and creating a key costs nothing,
+ * so one workspace could hold N keys and make N × 120 requests a minute. This
+ * is the ceiling over all of them, sized by plan
+ * (`apiWorkspaceRateLimitPerMinute`: Starter 120, Pro 600, Custom by
+ * agreement) — and it is an upgrade reason, so it is an entitlement rather
+ * than a constant.
+ *
+ * DURABLE, like the per-key limiter and for its reason: a per-instance count
+ * multiplies by the warm fleet. Fails soft the same way. An `UNLIMITED`
+ * workspace spends no transaction at all.
+ *
+ * Returns the headers to merge onto every response, and the refusal when the
+ * workspace is over. A refusal's `RateLimit-*` describe THIS budget, and
+ * `X-RateLimit-Scope: workspace` says so — the key's budget is not what
+ * refused, and reporting it would tell the client it had room it does not.
+ */
+async function consumeWorkspaceRateLimit(
+  orgId: string,
+  org: Partial<AglynOrganization>,
+  keyHeaders: Record<string, string>,
+): Promise<{ headers: Record<string, string>; refusal: Response | null }> {
+  const limit = apiWorkspaceRateLimitPerMinute(org as never)
+  if (!Number.isFinite(limit)) return { headers: {}, refusal: null }
+  const rate = await consumeRateLimit(`apiv1-org:${orgId}`, { limit })
+  const headers = workspaceRateLimitHeaders(rate)
+  if (rate.allowed) return { headers, refusal: null }
+  return {
+    headers,
+    refusal: ApiErrors.rateLimited(
+      Math.ceil((rate.resetMs - Date.now()) / 1000),
+      {
+        ...keyHeaders,
+        ...rateLimitHeaders(rate),
+        ...headers,
+        [RATE_LIMIT_SCOPE_HEADER]: 'workspace',
+      },
+      {
+        code: 'workspace_rate_limit',
+        message:
+          `This workspace has made ${limit} API requests in the last minute across all of ` +
+          'its keys, the most its plan allows.',
+      },
+    ),
+  }
 }
 
 /**
@@ -360,10 +444,25 @@ export async function chargeApiV1Call(
   context: ApiV1Context,
 ): Promise<{ refusal: Response | null; headers: Record<string, string> }> {
   const rate = await consumeRateLimit(`apiv1:${context.keyId}`)
-  const headers = rateLimitHeaders(rate)
-  if (!rate.allowed) {
-    return { refusal: ApiErrors.rateLimited(Math.ceil((rate.resetMs - Date.now()) / 1000), headers), headers }
+  // The same two per-minute limits and the same scoped headers and codes as
+  // `authenticateApiV1` (AGL-4226): the key's, then the WORKSPACE's, so a
+  // batch of tool calls cannot go round the workspace ceiling.
+  let headers: Record<string, string> = {
+    ...rateLimitHeaders(rate),
+    [RATE_LIMIT_SCOPE_HEADER]: 'key',
   }
+  if (!rate.allowed) {
+    return {
+      refusal: ApiErrors.rateLimited(Math.ceil((rate.resetMs - Date.now()) / 1000), headers, {
+        code: 'key_rate_limit',
+        message: `This API key has made ${rate.limit} requests in the last minute.`,
+      }),
+      headers,
+    }
+  }
+  const workspace = await consumeWorkspaceRateLimit(context.orgId, context.org, headers)
+  if (workspace.refusal) return { refusal: workspace.refusal, headers }
+  headers = { ...headers, ...workspace.headers }
   const quotaRefusal = await refuseIfApiQuotaExhausted(context.firestore, context.orgId, context.org, headers)
   if (quotaRefusal) return { refusal: quotaRefusal, headers }
   recordApiRequest(context.firestore, context.orgId)
@@ -483,11 +582,17 @@ export async function authenticateApiV1(
   // empty, so a degraded window can only ever allow MORE than 120/min, never
   // fewer. `degraded` is recorded durably by the store itself.
   const rate = await consumeRateLimit(`apiv1:${verified.keyId}`)
-  const headers = rateLimitHeaders(rate)
+  // `X-RateLimit-Scope` (AGL-4226): the `RateLimit-*` headers describe the
+  // KEY's budget on every response but a workspace refusal.
+  let headers: Record<string, string> = {
+    ...rateLimitHeaders(rate),
+    [RATE_LIMIT_SCOPE_HEADER]: 'key',
+  }
   if (!rate.allowed) {
     return ApiErrors.rateLimited(
       Math.ceil((rate.resetMs - Date.now()) / 1000),
       headers,
+      { code: 'key_rate_limit', message: `This API key has made ${rate.limit} requests in the last minute.` },
     )
   }
 
@@ -527,6 +632,14 @@ export async function authenticateApiV1(
   if (!checkEntitlement(org, 'apiAccess')) {
     return ApiErrors.planRequired({ headers })
   }
+
+  // The workspace's own per-minute limit (AGL-4226), after the entitlement so
+  // a workspace without the API spends no transaction on it, and before the
+  // monthly quota and the meter so a refused request is neither read against
+  // the month nor billed.
+  const workspace = await consumeWorkspaceRateLimit(verified.orgId, org, headers)
+  if (workspace.refusal) return workspace.refusal
+  headers = { ...headers, ...workspace.headers }
 
   const firestore = firebaseAdmin.app().firestore()
   // Monthly request quota (AGL-2163). `checkApiRequestQuota(...).allowed`
@@ -578,4 +691,62 @@ export async function authenticateApiV1(
       },
     },
   }
+}
+
+
+/** The header that says how many billed units a response was charged (AGL-4227). */
+export const API_BILLING_UNITS_HEADER = 'X-Api-Billing-Units'
+
+/**
+ * The byte length of a request's body, read WITHOUT consuming it (AGL-4227):
+ * `Content-Length` when the client sent a valid one, otherwise the body
+ * itself, read from a clone. A method without a body is 0.
+ */
+export async function apiRequestBodyBytes(request: Request): Promise<number> {
+  if (request.method === 'GET' || request.method === 'HEAD') return 0
+  const declared = Number(request.headers.get('content-length'))
+  if (Number.isFinite(declared) && declared >= 0 && request.headers.has('content-length')) {
+    return declared
+  }
+  try {
+    return (await request.clone().arrayBuffer()).byteLength
+  } catch {
+    return 0
+  }
+}
+
+/** A response body's byte length, read from a clone so the body still streams. */
+export async function apiResponseBodyBytes(response: Response): Promise<number> {
+  if (!response.body) return 0
+  try {
+    return (await response.clone().arrayBuffer()).byteLength
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Charge a served request its SIZE (AGL-4227): one billed unit per started
+ * 256 KB of the larger of its request and response body
+ * (`apiRequestBillingUnits`). The pipeline already counted the call's first
+ * unit before the handler ran, so only the units past it are added — onto the
+ * same monthly counter the invoice, the ceiling and the usage meter read. The
+ * per-minute limits are not touched: they count calls.
+ *
+ * `alreadyCharged` is how many of this request's units are on the counter
+ * already: 1 for a REST call; for an MCP batch, 1 for the first tool call and
+ * 0 for every one after it, since the POST carrying them counted once.
+ *
+ * Returns the units the request came to, for the response header.
+ */
+export function chargeApiRequestSize(
+  context: Pick<ApiV1Context, 'firestore' | 'orgId'>,
+  requestBytes: number,
+  responseBytes: number,
+  alreadyCharged = 1,
+): number {
+  const units = apiRequestBillingUnits(requestBytes, responseBytes)
+  const extra = units - Math.max(0, alreadyCharged)
+  if (extra > 0) recordApiRequest(context.firestore, context.orgId, extra)
+  return units
 }

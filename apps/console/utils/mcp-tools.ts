@@ -39,6 +39,12 @@ type Schema = Record<string, unknown>
  * checks are what actually decide.
  */
 export interface McpToolAnnotations {
+  /**
+   * The tool's human name, repeated from the tool's own `title` (AGL-4225).
+   * MCP's `ToolAnnotations` defines `title` too, and the Claude directory reads
+   * it from here; the top-level field is the current specification's.
+   */
+  readonly title: string
   /** A GET: reads and changes nothing. */
   readonly readOnlyHint: boolean
   /**
@@ -48,6 +54,20 @@ export interface McpToolAnnotations {
    * creates. Meaningless on a read, where it is `false`.
    */
   readonly destructiveHint: boolean
+  /**
+   * Calling again with the same arguments changes nothing further. True for
+   * every GET, PATCH and DELETE by their method, and for a POST the operation
+   * marks `x-idempotent` (an upsert, a conversion, a publish); false for a
+   * create, which would make a second record.
+   */
+  readonly idempotentHint: boolean
+  /**
+   * The call reaches beyond the workspace's own records — the operation marks
+   * `x-open-world` with its reason (a public website, a buyer's email, a
+   * lookup outside). False for everything that only reads or writes the
+   * workspace's own data.
+   */
+  readonly openWorldHint: boolean
 }
 
 /** One MCP tool, and everything needed to execute it against `/api/v1`. */
@@ -82,13 +102,21 @@ export const MCP_BODY_ARGUMENT = 'body'
 /** `{a}` in a path template, e.g. `{datasetId}`. */
 const PATH_PARAM = /\{([^}]+)\}/g
 
+/**
+ * The tool's description: what the operation's own description says, then the
+ * public docs page for it (AGL-4225).
+ *
+ * Not the summary: that is the tool's `title`, shown beside the description,
+ * and repeating it as the first line made every description open by restating
+ * its own name.
+ */
 function describeOperation(operation: Schema): string {
-  const summary = typeof operation.summary === 'string' ? operation.summary : ''
   const detail =
-    typeof operation.description === 'string' ? operation.description : ''
-  // Both, when both exist: the summary names the verb and the description
-  // carries the caveats, and a model choosing between tools needs the verb.
-  return [summary, detail].filter(Boolean).join('\n\n')
+    typeof operation.description === 'string' ? operation.description.trim() : ''
+  const docs = (operation.externalDocs as Schema | undefined)?.url
+  return [detail, typeof docs === 'string' && docs ? `Docs: ${docs}` : '']
+    .filter(Boolean)
+    .join('\n\n')
 }
 
 /** `#/components/schemas/<Name>`, the only form of `$ref` the document uses. */
@@ -148,9 +176,8 @@ function buildInputSchema(operation: Schema, named: Record<string, Schema>): Sch
     if (parameter.in === 'path' || parameter.required === true) required.push(name)
   }
 
-  const bodySchema = (operation.requestBody as Schema)?.content as
-    | Record<string, Schema>
-    | undefined
+  const requestBody = operation.requestBody as Schema | undefined
+  const bodySchema = requestBody?.content as Record<string, Schema> | undefined
   const json = bodySchema?.['application/json']?.schema as Schema | undefined
   if (json) {
     properties[MCP_BODY_ARGUMENT] = {
@@ -160,6 +187,9 @@ function buildInputSchema(operation: Schema, named: Record<string, Schema>): Sch
           ? json.description
           : 'The request body.',
     }
+    // A body the operation requires is a required argument, so a client is
+    // told before it calls rather than by the 400 after (AGL-4225).
+    if (requestBody?.required === true) required.push(MCP_BODY_ARGUMENT)
   }
 
   return {
@@ -173,10 +203,27 @@ function buildInputSchema(operation: Schema, named: Record<string, Schema>): Sch
 }
 
 /**
- * Every operation in the document, as a tool.
+ * Operations deliberately NOT offered as tools, each with its reason. The one
+ * exception to "every operation is a tool"; adding to it is a decision, and
+ * `mcp-tools.spec.ts` pins the list.
+ */
+export const MCP_EXCLUDED_OPERATIONS: Readonly<Record<string, string>> = Object.freeze({
+  /*
+    `/v1/openapi.json` returns the whole OpenAPI document — every schema of
+    every operation, hundreds of kilobytes — into the model's context. A model
+    connected over MCP already holds the same information in a usable form:
+    each tool's own input schema and description, from `tools/list`. The
+    document stays public at its URL for a client that wants it (AGL-4225).
+  */
+  getApiDescription: 'returns the whole OpenAPI document; tools/list already carries each operation',
+})
+
+/**
+ * Every operation in the document, as a tool — except the few named in
+ * {@link MCP_EXCLUDED_OPERATIONS}.
  *
- * Nothing is filtered here. The document describes exactly the customer API,
- * so a filter would be a second opinion about what the API is, kept in a
+ * Nothing else is filtered here. The document describes exactly the customer
+ * API, so a filter would be a second opinion about what the API is, kept in a
  * second place, free to drift from the first.
  */
 export function buildMcpTools(document: Schema): McpTool[] {
@@ -191,18 +238,24 @@ export function buildMcpTools(document: Schema): McpTool[] {
       if (!METHODS.has(method)) continue
       const name = (operation as Schema).operationId
       if (typeof name !== 'string' || !name) continue
+      if (Object.prototype.hasOwnProperty.call(MCP_EXCLUDED_OPERATIONS, name)) continue
       const summary = (operation as Schema).summary
+      const title = typeof summary === 'string' && summary ? summary : name
       tools.push({
         name,
-        title: typeof summary === 'string' && summary ? summary : name,
+        title,
         description: describeOperation(operation as Schema),
         annotations: {
+          title,
           readOnlyHint: method === 'get',
           destructiveHint:
             method === 'patch' ||
             method === 'put' ||
             method === 'delete' ||
             (method !== 'get' && (operation as Schema)['x-destructive'] === true),
+          idempotentHint:
+            method !== 'post' || (operation as Schema)['x-idempotent'] === true,
+          openWorldHint: (operation as Schema)['x-open-world'] === true,
         },
         inputSchema: buildInputSchema(operation as Schema, named),
         method: method.toUpperCase(),
@@ -215,6 +268,24 @@ export function buildMcpTools(document: Schema): McpTool[] {
 
 /** The arguments a tool call may carry. */
 export type McpToolArguments = Record<string, unknown>
+
+/**
+ * The path arguments a call left out or left empty, in path order.
+ *
+ * A missing one cannot be left to the API to refuse, because it is not
+ * refused — it MISROUTES. `/v1/sites/{siteId}/orders` with no `siteId` builds
+ * `/v1/sites//orders`, whose segments read as site `orders`, and the call is
+ * answered "No such site" about a site the model never named (AGL-4225, the
+ * first real session). The MCP endpoint refuses it by name instead.
+ */
+export function missingPathArguments(tool: McpTool, args: McpToolArguments): string[] {
+  const missing: string[] = []
+  for (const [, key] of tool.path.matchAll(PATH_PARAM)) {
+    const value = args[key]
+    if (value === undefined || value === null || String(value).trim() === '') missing.push(key)
+  }
+  return missing
+}
 
 /**
  * Build the request `dispatchResource` would have received over HTTP.

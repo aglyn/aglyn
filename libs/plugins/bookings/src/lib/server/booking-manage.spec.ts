@@ -24,16 +24,22 @@
  * guest is told when their booking moves.
  */
 
+const mockMeterHostEmail = jest.fn(async (_hostId: string) => undefined)
+const mockSendEmail = jest.fn(async (_options: unknown): Promise<unknown> => undefined)
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
-  firebaseAdmin: { app: () => ({}) },
+  firebaseAdmin: { app: () => ({ firestore: () => ({}) }) },
   getOrgForHost: async () => null,
   hostSendingIdentity: async () => null,
-  meterHostEmail: async () => undefined,
+  meterHostEmail: (hostId: string) => mockMeterHostEmail(hostId),
   renderHostEmailWithTokens: async () => null,
 }))
 jest.mock('@aglyn/tenant-data-admin/server/tenant-write-lockdown', () => ({ getSiteLockdown: async () => null }))
 jest.mock('@aglyn/aglyn/server', () => ({ resolveBrandingProfile: () => ({ fromName: 'Shop' }) }))
-jest.mock('@aglyn/shared-util-email', () => ({ isEmailConfigured: () => true, sendEmail: async () => undefined }))
+jest.mock('@aglyn/shared-util-email', () => ({
+  isEmailConfigured: () => true,
+  sendEmail: (options: unknown) => mockSendEmail(options),
+}))
 
 import type { HostBookingService } from '../model/bookings'
 import type { BookingEventInput } from './booking-events'
@@ -45,6 +51,7 @@ import {
   type ManageFirestore,
   type ManageQuery,
   type RescheduleNotice,
+  sendRescheduledNotice,
 } from './booking-manage'
 
 type Doc = Record<string, unknown>
@@ -482,5 +489,35 @@ describe('bookings/cancel (AGL-3643)', () => {
     const get = res()
     await handler({ method: 'GET', headers: {}, body: {} } as never, get as never)
     expect(get.statusCode).toBe(405)
+  })
+})
+
+describe('a refused reschedule notice is not counted as sent (AGL-4227)', () => {
+  const notice = {
+    hostId: 'host-1',
+    bookingId: 'b1',
+    to: 'guest@example.com',
+    name: 'Guest',
+    serviceName: 'Consult',
+    when: 'Tue 10:00',
+    previousWhen: 'Mon 10:00',
+    timezone: 'UTC',
+  }
+
+  beforeEach(() => {
+    mockMeterHostEmail.mockClear()
+    mockSendEmail.mockReset()
+  })
+
+  it('meters a notice that left', async () => {
+    mockSendEmail.mockResolvedValue({ sent: true, id: 'e1' })
+    await sendRescheduledNotice(notice as never)
+    expect(mockMeterHostEmail).toHaveBeenCalledWith('host-1')
+  })
+
+  it('does not meter one a sending limit refused', async () => {
+    mockSendEmail.mockResolvedValue({ sent: false, reason: 'rate-limited' })
+    await sendRescheduledNotice(notice as never)
+    expect(mockMeterHostEmail).not.toHaveBeenCalled()
   })
 })

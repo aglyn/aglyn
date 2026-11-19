@@ -108,8 +108,9 @@ function mintRequest(
   // one and assert 401 against a 200.
   authorization: string | null = 'Bearer good-id-token',
   method = 'POST',
+  consoleOrigin = 'https://app.aglyn.com',
 ): Request {
-  return new Request('https://app.aglyn.com/api/content/preview-link', {
+  return new Request(`${consoleOrigin}/api/content/preview-link`, {
     method,
     headers: {
       'Content-Type': 'application/json',
@@ -191,6 +192,55 @@ describe('it mints a link scoped to exactly the entry it was asked for', () => {
       )
     ).json()
     expect(url).not.toContain('attacker.example')
+  })
+})
+
+/**
+ * The link follows the console it was minted on, by the rule every other
+ * "view the site" link follows (`siteLiveUrlForSlug`). It used to be the
+ * production origin whatever console asked, so a local or Vercel preview
+ * console handed out links to a production site that does not hold the
+ * content it was minted for.
+ */
+describe('it links the site the way the console it was minted on reaches it', () => {
+  const mintOn = (consoleOrigin: string) =>
+    POST(mintRequest(SCOPE, 'Bearer good-id-token', 'POST', consoleOrigin))
+
+  it('a deployed console links the site’s public origin', async () => {
+    const { url } = await (await mintOn('https://app.aglyn.com')).json()
+    const link = new URL(url)
+    expect(link.protocol).toBe('https:')
+    expect(link.hostname.startsWith('acme.')).toBe(true)
+    expect(link.searchParams.has('tenantHost')).toBe(false)
+  })
+
+  it.each([
+    ['localhost', 'http://localhost:4610'],
+    ['a *.localhost name', 'http://console.localhost:4610'],
+    ['the IPv4 loopback', 'http://127.0.0.1:4610'],
+    ['the Android emulator’s address for the machine', 'http://10.0.2.2:4610'],
+  ])('a local console (%s) links the local tenant', async (_name, consoleOrigin) => {
+    const response = await mintOn(consoleOrigin)
+    expect(response.status).toBe(200)
+    const link = new URL((await response.json()).url)
+    expect(link.origin).toBe('http://localhost:4500')
+    expect(link.pathname).toBe('/blog/shipping-the-export')
+    expect(link.searchParams.get('tenantHost')).toBe('acme')
+    expect(verifyCollectionPreviewToken(tokenFrom(link.toString()), SCOPE)).toBe(true)
+  })
+
+  it('a Vercel preview console links the tenant preview deployment', async () => {
+    const response = await mintOn('https://aglyn-console-git-feature-aglyn.vercel.app')
+    const link = new URL((await response.json()).url)
+    expect(link.hostname.endsWith('.vercel.app')).toBe(true)
+    expect(link.hostname).not.toContain('aglyn-console')
+    expect(link.searchParams.get('tenantHost')).toBe('acme')
+    expect(verifyCollectionPreviewToken(tokenFrom(link.toString()), SCOPE)).toBe(true)
+  })
+
+  it('a local console has nothing to link for a site with only a custom domain', async () => {
+    mockHost = { orgId: 'org-1', cname: 'example.com' }
+    expect((await mintOn('http://localhost:4610')).status).toBe(409)
   })
 })
 

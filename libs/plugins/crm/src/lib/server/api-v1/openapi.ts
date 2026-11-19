@@ -25,6 +25,7 @@ import {
   openObjectField,
   postalAddressField,
   queryParam,
+  requiredQueryParam,
   RECORD_STAMPS,
   stringField,
   stringListField,
@@ -51,9 +52,22 @@ function companyPicklistNote(label: string, plural: string): string {
   )
 }
 
+
+/**
+ * The site a lead belongs to (AGL-4225). A lead is a site's record and its id
+ * is unique only within the site, so the handler refuses every lead request
+ * without one — and until this was declared, a client reading the document
+ * could not know to send it.
+ */
+const LEAD_SITE_PARAM = requiredQueryParam(
+  'siteId',
+  'Required. The site the lead belongs to — the `id` of a site from `listSites`.',
+)
+
 export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescription>> = {
   contacts: {
     tag: 'Contacts',
+    docsPage: 'contacts',
     description: 'People, organization-wide. Part of the CRM, which is included from Starter.',
     schemaName: 'Contact',
     required: ['id', 'object', 'email'],
@@ -113,19 +127,20 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
     ops: [
       {
         path: '/v1/contacts', method: 'get', operationId: 'listContacts', summary: 'List contacts', list: true, returns: 'Contact', entitlement: 'crm',
-        description: 'Combining `email` with `tag` narrows on `email` and checks `tag` on the page, so pages can come back short. `lifecycleStage` and `ownerUid` live on a per-site profile and are ALWAYS checked on the page.',
+        description: 'Lists the workspace’s contacts: one record per person, with email, name, phone, tags and per-site profile. Filter by exact `email` to find one person.',
         filters: [
-          queryParam('email', 'Exact match, normalized the way the write path normalizes it. An unusable value is a 400.'),
-          queryParam('tag', 'Checked on the page when combined with `email`.'),
-          queryParam('lifecycleStage', 'Always checked on the page.'),
-          queryParam('ownerUid', 'Always checked on the page.'),
+          queryParam('email', 'The contact with this email address. Letter case is ignored; an address that cannot be read is refused.'),
+          queryParam('tag', 'Contacts with this tag.'),
+          queryParam('lifecycleStage', 'Contacts at this lifecycle stage.'),
+          queryParam('ownerUid', 'Contacts owned by this workspace member.'),
         ],
       },
-      { path: '/v1/contacts', method: 'post', operationId: 'createContact', summary: 'Create a contact', accepts: 'ContactWrite', returns: 'Contact', entitlement: 'crm', creates: true, description: 'A duplicate email is `409 conflict` (`code: "contact_exists"`), and the message names the existing id.' },
-      { path: '/v1/contacts/{contactId}', method: 'get', operationId: 'getContact', summary: 'Retrieve a contact', returns: 'Contact', entitlement: 'crm', pathParams: [{ name: 'contactId', description: 'Contact id.' }] },
-      { path: '/v1/contacts/{contactId}', method: 'patch', operationId: 'updateContact', summary: 'Update a contact', accepts: 'ContactWrite', returns: 'Contact', entitlement: 'crm', pathParams: [{ name: 'contactId', description: 'Contact id.' }] },
-      { path: '/v1/contacts/{contactId}', method: 'delete', operationId: 'deleteContact', summary: 'Delete a contact', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'contactId', description: 'Contact id.' }] },
-      { path: '/v1/contacts/{contactId}/merge', method: 'post', operationId: 'mergeContact', summary: 'Merge two contacts', accepts: 'ContactMerge', returns: 'Contact', entitlement: 'crm', destructive: true, pathParams: [{ name: 'contactId', description: 'The contact that survives.' }] },
+      // openWorld: after saving, the address’s mail domain is looked up (DNS) to flag addresses that would bounce.
+      { path: '/v1/contacts', method: 'post', operationId: 'createContact', summary: 'Add a contact', accepts: 'ContactWrite', returns: 'Contact', entitlement: 'crm', creates: true, description: 'Adds a person to the workspace’s contacts. An email address is a contact’s identity: one that already belongs to a contact is refused, naming the existing contact’s id. Returns the new contact.', openWorld: true },
+      { path: '/v1/contacts/{contactId}', method: 'get', operationId: 'getContact', summary: 'Get a contact', description: 'Returns one contact. Needs `contactId` from List contacts.', returns: 'Contact', entitlement: 'crm', pathParams: [{ name: 'contactId', description: 'Contact id.' }] },
+      { path: '/v1/contacts/{contactId}', method: 'patch', operationId: 'updateContact', summary: 'Update a contact', description: 'Changes a contact’s details; fields not sent stay as they are. The email address cannot be changed. Needs `contactId` from List contacts. Returns the updated contact.', accepts: 'ContactWrite', returns: 'Contact', entitlement: 'crm', pathParams: [{ name: 'contactId', description: 'Contact id.' }] },
+      { path: '/v1/contacts/{contactId}', method: 'delete', operationId: 'deleteContact', summary: 'Delete a contact', description: 'Removes a person from the workspace’s contacts, with the tags, notes, timeline and consent the workspace’s sites hold for them. Permanent. Needs `contactId` from List contacts.', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'contactId', description: 'Contact id.' }] },
+      { path: '/v1/contacts/{contactId}/merge', method: 'post', operationId: 'mergeContact', summary: 'Merge two contacts', description: 'Folds one contact into another: the contact in `contactId` survives and keeps its email, and the contact named in `sourceContactId` is merged into it and deleted. Permanent. Returns the surviving contact.', accepts: 'ContactMerge', returns: 'Contact', entitlement: 'crm', destructive: true, pathParams: [{ name: 'contactId', description: 'The contact that survives.' }], idempotent: true },
     ],
     components: {
       ContactMerge: {
@@ -148,6 +163,7 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
   },
   companies: {
     tag: 'Companies',
+    docsPage: 'companies',
     description: 'Organizations in the CRM.',
     schemaName: 'Company',
     required: ['id', 'object', 'name'],
@@ -202,15 +218,16 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
       ...RECORD_STAMPS,
     },
     ops: [
-      { path: '/v1/companies', method: 'get', operationId: 'listCompanies', summary: 'List companies', list: true, returns: 'Company', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, queryParam('domain', 'Exact match.'), queryParam('ownerUid', 'Owning user.')] },
-      { path: '/v1/companies', method: 'post', operationId: 'createCompany', summary: 'Create a company', accepts: 'CompanyWrite', returns: 'Company', entitlement: 'crm', creates: true, description: 'A duplicate domain is `409 conflict` (`code: "company_exists"`), naming the existing id.' },
-      { path: '/v1/companies/{companyId}', method: 'get', operationId: 'getCompany', summary: 'Retrieve a company', returns: 'Company', entitlement: 'crm', pathParams: [{ name: 'companyId', description: 'Company id.' }] },
-      { path: '/v1/companies/{companyId}', method: 'patch', operationId: 'updateCompany', summary: 'Update a company', accepts: 'CompanyWrite', returns: 'Company', entitlement: 'crm', pathParams: [{ name: 'companyId', description: 'Company id.' }] },
-      { path: '/v1/companies/{companyId}', method: 'delete', operationId: 'deleteCompany', summary: 'Delete a company', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'companyId', description: 'Company id.' }] },
+      { path: '/v1/companies', method: 'get', operationId: 'listCompanies', summary: 'List companies', description: 'Lists the companies in the workspace’s CRM. Filter by exact `domain` to find one.', list: true, returns: 'Company', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, queryParam('domain', 'Exact match.'), queryParam('ownerUid', 'Owning user.')] },
+      { path: '/v1/companies', method: 'post', operationId: 'createCompany', summary: 'Add a company', accepts: 'CompanyWrite', returns: 'Company', entitlement: 'crm', creates: true, description: 'Adds a company to the CRM. Needs a `name`. A company whose domain is already in the CRM is refused, naming the existing id. Returns the new company.', bodyRequires: ['name'] },
+      { path: '/v1/companies/{companyId}', method: 'get', operationId: 'getCompany', summary: 'Get a company', description: 'Returns one company. Needs `companyId` from List companies.', returns: 'Company', entitlement: 'crm', pathParams: [{ name: 'companyId', description: 'Company id.' }] },
+      { path: '/v1/companies/{companyId}', method: 'patch', operationId: 'updateCompany', summary: 'Update a company', description: 'Changes a company’s details; fields not sent stay as they are. Needs `companyId` from List companies. Returns the updated company.', accepts: 'CompanyWrite', returns: 'Company', entitlement: 'crm', pathParams: [{ name: 'companyId', description: 'Company id.' }] },
+      { path: '/v1/companies/{companyId}', method: 'delete', operationId: 'deleteCompany', summary: 'Delete a company', description: 'Deletes a company permanently. Needs `companyId` from List companies.', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'companyId', description: 'Company id.' }] },
     ],
   },
   pipelines: {
     tag: 'Pipelines',
+    docsPage: 'pipelines',
     description: 'Deal pipelines and their stages. Read-only over the API.',
     schemaName: 'Pipeline',
     required: ['id', 'object', 'name', 'stages'],
@@ -245,12 +262,13 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
       ...RECORD_STAMPS,
     },
     ops: [
-      { path: '/v1/pipelines', method: 'get', operationId: 'listPipelines', summary: 'List pipelines', list: true, returns: 'Pipeline', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM] },
-      { path: '/v1/pipelines/{pipelineId}', method: 'get', operationId: 'getPipeline', summary: 'Retrieve a pipeline', returns: 'Pipeline', entitlement: 'crm', pathParams: [{ name: 'pipelineId', description: 'Pipeline id.' }] },
+      { path: '/v1/pipelines', method: 'get', operationId: 'listPipelines', summary: 'List deal pipelines', description: 'Lists the workspace’s sales pipelines and their stages. A stage’s id is the `stageId` a deal takes.', list: true, returns: 'Pipeline', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM] },
+      { path: '/v1/pipelines/{pipelineId}', method: 'get', operationId: 'getPipeline', summary: 'Get a deal pipeline', description: 'Returns one pipeline and its stages. Needs `pipelineId` from List deal pipelines.', returns: 'Pipeline', entitlement: 'crm', pathParams: [{ name: 'pipelineId', description: 'Pipeline id.' }] },
     ],
   },
   deals: {
     tag: 'Deals',
+    docsPage: 'deals',
     description: 'Opportunities moving through a pipeline.',
     schemaName: 'Deal',
     required: ['id', 'object', 'title', 'pipelineId', 'stageId'],
@@ -309,15 +327,16 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
       ...RECORD_STAMPS,
     },
     ops: [
-      { path: '/v1/deals', method: 'get', operationId: 'listDeals', summary: 'List deals', list: true, returns: 'Deal', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, queryParam('pipelineId', 'Pipeline.'), queryParam('stageId', 'Stage.'), queryParam('status', 'Deal status.'), queryParam('ownerUid', 'Owning user.'), queryParam('type', 'Type, exactly as stored.'), queryParam('leadSource', 'Lead source, exactly as stored.'), queryParam('forecastCategory', 'Forecast category.'), queryParam('campaignId', 'Campaign.')] },
-      { path: '/v1/deals', method: 'post', operationId: 'createDeal', summary: 'Create a deal', accepts: 'DealWrite', returns: 'Deal', entitlement: 'crm', creates: true },
-      { path: '/v1/deals/{dealId}', method: 'get', operationId: 'getDeal', summary: 'Retrieve a deal', returns: 'Deal', entitlement: 'crm', pathParams: [{ name: 'dealId', description: 'Deal id.' }] },
-      { path: '/v1/deals/{dealId}', method: 'patch', operationId: 'updateDeal', summary: 'Update a deal', accepts: 'DealWrite', returns: 'Deal', entitlement: 'crm', pathParams: [{ name: 'dealId', description: 'Deal id.' }] },
-      { path: '/v1/deals/{dealId}', method: 'delete', operationId: 'deleteDeal', summary: 'Delete a deal', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'dealId', description: 'Deal id.' }] },
+      { path: '/v1/deals', method: 'get', operationId: 'listDeals', summary: 'List deals', description: 'Lists the workspace’s deals with their pipeline, stage, amount and status. Filter by pipeline, stage, status or owner.', list: true, returns: 'Deal', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, queryParam('pipelineId', 'Pipeline.'), queryParam('stageId', 'Stage.'), queryParam('status', 'Deal status.'), queryParam('ownerUid', 'Owning user.'), queryParam('type', 'Type, exactly as stored.'), queryParam('leadSource', 'Lead source, exactly as stored.'), queryParam('forecastCategory', 'Forecast category.'), queryParam('campaignId', 'Campaign.')] },
+      { path: '/v1/deals', method: 'post', operationId: 'createDeal', summary: 'Add a deal', description: 'Opens a deal. Needs a `title`; `pipelineId` and `stageId` come from List deal pipelines. Returns the new deal.', accepts: 'DealWrite', returns: 'Deal', entitlement: 'crm', creates: true, bodyRequires: ['title'] },
+      { path: '/v1/deals/{dealId}', method: 'get', operationId: 'getDeal', summary: 'Get a deal', description: 'Returns one deal. Needs `dealId` from List deals.', returns: 'Deal', entitlement: 'crm', pathParams: [{ name: 'dealId', description: 'Deal id.' }] },
+      { path: '/v1/deals/{dealId}', method: 'patch', operationId: 'updateDeal', summary: 'Update a deal', description: 'Changes a deal, including moving it to another stage or marking it won or lost; fields not sent stay as they are. Needs `dealId` from List deals. Returns the updated deal.', accepts: 'DealWrite', returns: 'Deal', entitlement: 'crm', pathParams: [{ name: 'dealId', description: 'Deal id.' }] },
+      { path: '/v1/deals/{dealId}', method: 'delete', operationId: 'deleteDeal', summary: 'Delete a deal', description: 'Deletes a deal permanently. Needs `dealId` from List deals.', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'dealId', description: 'Deal id.' }] },
     ],
   },
   tasks: {
     tag: 'Tasks',
+    docsPage: 'tasks',
     description: 'Follow-ups attached to CRM records.',
     schemaName: 'Task',
     required: ['id', 'object', 'title'],
@@ -349,15 +368,16 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
       ...RECORD_STAMPS,
     },
     ops: [
-      { path: '/v1/tasks', method: 'get', operationId: 'listTasks', summary: 'List tasks', list: true, returns: 'Task', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, queryParam('status', 'Task status.'), queryParam('assigneeUid', 'Assigned user.'), queryParam('contactId', 'Associated contact.'), queryParam('dealId', 'Associated deal.')] },
-      { path: '/v1/tasks', method: 'post', operationId: 'createTask', summary: 'Create a task', accepts: 'TaskWrite', returns: 'Task', entitlement: 'crm', creates: true },
-      { path: '/v1/tasks/{taskId}', method: 'get', operationId: 'getTask', summary: 'Retrieve a task', returns: 'Task', entitlement: 'crm', pathParams: [{ name: 'taskId', description: 'Task id.' }] },
-      { path: '/v1/tasks/{taskId}', method: 'patch', operationId: 'updateTask', summary: 'Update a task', accepts: 'TaskWrite', returns: 'Task', entitlement: 'crm', pathParams: [{ name: 'taskId', description: 'Task id.' }] },
-      { path: '/v1/tasks/{taskId}', method: 'delete', operationId: 'deleteTask', summary: 'Delete a task', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'taskId', description: 'Task id.' }] },
+      { path: '/v1/tasks', method: 'get', operationId: 'listTasks', summary: 'List tasks', description: 'Lists the workspace’s CRM tasks. Filter by status, assignee, contact or deal.', list: true, returns: 'Task', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, queryParam('status', 'Task status.'), queryParam('assigneeUid', 'Assigned user.'), queryParam('contactId', 'Associated contact.'), queryParam('dealId', 'Associated deal.')] },
+      { path: '/v1/tasks', method: 'post', operationId: 'createTask', summary: 'Add a task', description: 'Creates a task, such as a follow-up, with a `title` and optionally a due date, a reminder and the contact, company or deal it is about. Returns the new task.', accepts: 'TaskWrite', returns: 'Task', entitlement: 'crm', creates: true, bodyRequires: ['title'] },
+      { path: '/v1/tasks/{taskId}', method: 'get', operationId: 'getTask', summary: 'Get a task', description: 'Returns one task. Needs `taskId` from List tasks.', returns: 'Task', entitlement: 'crm', pathParams: [{ name: 'taskId', description: 'Task id.' }] },
+      { path: '/v1/tasks/{taskId}', method: 'patch', operationId: 'updateTask', summary: 'Update a task', description: 'Changes a task, including marking it done; fields not sent stay as they are. Needs `taskId` from List tasks. Returns the updated task.', accepts: 'TaskWrite', returns: 'Task', entitlement: 'crm', pathParams: [{ name: 'taskId', description: 'Task id.' }] },
+      { path: '/v1/tasks/{taskId}', method: 'delete', operationId: 'deleteTask', summary: 'Delete a task', description: 'Deletes a task permanently. Needs `taskId` from List tasks.', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'taskId', description: 'Task id.' }] },
     ],
   },
   activities: {
     tag: 'Activities',
+    docsPage: 'activities',
     description: 'Logged interactions. Append-only: no PATCH.',
     schemaName: 'Activity',
     required: ['id', 'object', 'kind', 'at'],
@@ -383,14 +403,15 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
       ...RECORD_STAMPS,
     },
     ops: [
-      { path: '/v1/activities', method: 'get', operationId: 'listActivities', summary: 'List activities', list: true, returns: 'Activity', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, queryParam('kind', 'Activity kind.'), queryParam('contactId', 'Associated contact.'), queryParam('dealId', 'Associated deal.')] },
-      { path: '/v1/activities', method: 'post', operationId: 'createActivity', summary: 'Log an activity', accepts: 'ActivityWrite', returns: 'Activity', entitlement: 'crm', creates: true },
-      { path: '/v1/activities/{activityId}', method: 'get', operationId: 'getActivity', summary: 'Retrieve an activity', returns: 'Activity', entitlement: 'crm', pathParams: [{ name: 'activityId', description: 'Activity id.' }] },
-      { path: '/v1/activities/{activityId}', method: 'delete', operationId: 'deleteActivity', summary: 'Delete an activity', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'activityId', description: 'Activity id.' }] },
+      { path: '/v1/activities', method: 'get', operationId: 'listActivities', summary: 'List activities', description: 'Lists the calls, emails, meetings and notes logged in the CRM. Filter by kind, contact or deal.', list: true, returns: 'Activity', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, queryParam('kind', 'Activity kind.'), queryParam('contactId', 'Associated contact.'), queryParam('dealId', 'Associated deal.')] },
+      { path: '/v1/activities', method: 'post', operationId: 'createActivity', summary: 'Log an activity', description: 'Records a call, email, meeting or note against a contact, company or deal. Needs the activity’s text in `body`. Returns the logged activity. Logging an email records it; it does not send one.', accepts: 'ActivityWrite', returns: 'Activity', entitlement: 'crm', creates: true },
+      { path: '/v1/activities/{activityId}', method: 'get', operationId: 'getActivity', summary: 'Get an activity', description: 'Returns one logged activity. Needs `activityId` from List activities.', returns: 'Activity', entitlement: 'crm', pathParams: [{ name: 'activityId', description: 'Activity id.' }] },
+      { path: '/v1/activities/{activityId}', method: 'delete', operationId: 'deleteActivity', summary: 'Delete an activity', description: 'Deletes a logged activity permanently. Needs `activityId` from List activities.', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'activityId', description: 'Activity id.' }] },
     ],
   },
   leads: {
     tag: 'Leads',
+    docsPage: 'leads',
     description: 'Unqualified interest, before it becomes a contact. A lead is a record of its own: the person and their company as text, until converting makes the contact and the company.',
     schemaName: 'Lead',
     required: ['id', 'object', 'siteId'],
@@ -456,19 +477,45 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
       ...RECORD_STAMPS,
     },
     ops: [
-      { path: '/v1/leads', method: 'get', operationId: 'listLeads', summary: 'List leads', list: true, returns: 'Lead', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, queryParam('siteId', 'Site the lead arrived on.'), queryParam('status', 'Lead status.'), queryParam('ownerUid', 'Owning user.')] },
-      { path: '/v1/leads', method: 'post', operationId: 'createLead', summary: 'Create a lead', accepts: 'LeadWrite', returns: 'Lead', entitlement: 'crm', creates: true, description: 'A lead sourced outside the site, entered before anyone has qualified it. One address is one lead per site: creating one the site already holds updates it and answers 200. No contact and no company are created — converting the lead does that — and no marketing consent is recorded.' },
-      { path: '/v1/leads/{leadId}', method: 'get', operationId: 'getLead', summary: 'Retrieve a lead', returns: 'Lead', entitlement: 'crm', pathParams: [{ name: 'leadId', description: 'Lead id.' }] },
-      { path: '/v1/leads/{leadId}', method: 'patch', operationId: 'updateLead', summary: 'Update a lead', accepts: 'LeadWrite', returns: 'Lead', entitlement: 'crm', pathParams: [{ name: 'leadId', description: 'Lead id.' }] },
-      { path: '/v1/leads/{leadId}/convert', method: 'post', operationId: 'convertLead', summary: 'Convert a lead', returns: 'LeadConversion', entitlement: 'crm', description: 'Creates a contact, and optionally a company and a deal. Idempotent on the lead: converting an already-converted lead returns the existing ids.', pathParams: [{ name: 'leadId', description: 'Lead id.' }] },
+      { path: '/v1/leads', method: 'get', operationId: 'listLeads', summary: 'List a site’s leads', description: 'Lists the leads one site has captured, not yet converted into contacts. Needs `siteId` from List sites. Filter by status or owner.', list: true, returns: 'Lead', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, LEAD_SITE_PARAM, queryParam('status', 'Lead status.'), queryParam('ownerUid', 'Owning user.')] },
+      // openWorld: after saving, the address’s mail domain is looked up (DNS) to flag addresses that would bounce.
+      { path: '/v1/leads', method: 'post', operationId: 'createLead', summary: 'Add a lead to a site', accepts: 'LeadWrite', returns: 'Lead', entitlement: 'crm', creates: true, description: 'Adds a lead to one site. Needs `siteId` from List sites and the lead’s `email`. One email is one lead per site: adding an address the site already holds updates that lead. No contact is created until the lead is converted. Returns the lead.', idempotent: true, openWorld: true, bodyRequires: ['siteId', 'email'] },
+      { path: '/v1/leads/{leadId}', method: 'get', operationId: 'getLead', summary: 'Get a lead', description: 'Returns one lead. Needs `siteId` from List sites and `leadId` from List a site’s leads.', returns: 'Lead', entitlement: 'crm', pathParams: [{ name: 'leadId', description: 'Lead id.' }], filters: [LEAD_SITE_PARAM] },
+      { path: '/v1/leads/{leadId}', method: 'patch', operationId: 'updateLead', summary: 'Update a lead', description: 'Changes a lead, including its status; fields not sent stay as they are. Needs `siteId` from List sites and `leadId` from List a site’s leads. Returns the updated lead.', accepts: 'LeadWrite', returns: 'Lead', entitlement: 'crm', pathParams: [{ name: 'leadId', description: 'Lead id.' }], filters: [LEAD_SITE_PARAM] },
+      // openWorld: the contact it creates has its mail domain looked up (DNS) to flag addresses that would bounce.
+      { path: '/v1/leads/{leadId}/convert', method: 'post', operationId: 'convertLead', summary: 'Convert a lead into a contact', accepts: 'LeadConvertRequest', bodyOptional: true, returns: 'LeadConversion', entitlement: 'crm', description: 'Turns a lead into a contact, joining an existing contact with the same email, and can also link or create a company and open a deal. Needs `siteId` from List sites and `leadId` from List a site’s leads. Converting a lead again returns the same ids.', pathParams: [{ name: 'leadId', description: 'Lead id.' }], idempotent: true, openWorld: true, filters: [LEAD_SITE_PARAM] },
     ],
     components: {
+      LeadConvertRequest: {
+        type: 'object',
+        description:
+          'Optional. What else the conversion does besides creating the contact. ' +
+          'Leave it out to convert the lead into a contact alone.',
+        properties: {
+          company: {
+            type: ['object', 'null'],
+            description:
+              'A company for the contact: `{ "link": "<companyId>" }` to link one from List companies, ' +
+              '`{ "create": { "name": "…", "domain": "…" } }` to add one (an existing company with that ' +
+              'name or domain is reused), or null for none.',
+          },
+          deal: {
+            type: ['object', 'null'],
+            description:
+              'A deal to open in the default pipeline: `{ "title": "…", "amountCents": 12500, "currency": ' +
+              '"usd", "stageId": "…", "type": "…" }`. `title` is required; the rest is optional. Null for none.',
+          },
+          ownerUid: { type: 'string', description: 'Workspace member who owns the contact and the deal. Defaults to the lead’s owner.' },
+          ownerEmail: { type: 'string', description: 'The owner by email address, instead of `ownerUid`.' },
+        },
+        additionalProperties: false,
+      },
       LeadConversion: {
         type: 'object',
         description:
-          'What the conversion produced. Idempotent on the lead: converting an ' +
-          'already-converted lead returns the existing ids rather than creating ' +
-          'a second set.',
+          'What the conversion produced: the contact, and the company and deal ' +
+          'when it made or linked them. Converting the same lead again returns ' +
+          'the same ids.',
         properties: {
           object: { type: 'string', const: 'lead_conversion' },
           contactId: { type: 'string' },
@@ -481,6 +528,7 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
   },
   'email-templates': {
     tag: 'Email templates',
+    docsPage: 'email-templates',
     description: 'Reusable email bodies.',
     schemaName: 'EmailTemplate',
     required: ['id', 'object', 'name'],
@@ -502,11 +550,11 @@ export const CRM_API_V1_DESCRIPTIONS: Readonly<Record<string, ApiV1ResourceDescr
       ...RECORD_STAMPS,
     },
     ops: [
-      { path: '/v1/email-templates', method: 'get', operationId: 'listEmailTemplates', summary: 'List email templates', list: true, returns: 'EmailTemplate', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, queryParam('kind', 'Template kind.'), queryParam('visibility', 'Visibility.')] },
-      { path: '/v1/email-templates', method: 'post', operationId: 'createEmailTemplate', summary: 'Create a template', accepts: 'EmailTemplateWrite', returns: 'EmailTemplate', entitlement: 'crm', creates: true },
-      { path: '/v1/email-templates/{templateId}', method: 'get', operationId: 'getEmailTemplate', summary: 'Retrieve a template', returns: 'EmailTemplate', entitlement: 'crm', pathParams: [{ name: 'templateId', description: 'Template id.' }] },
-      { path: '/v1/email-templates/{templateId}', method: 'patch', operationId: 'updateEmailTemplate', summary: 'Update a template', accepts: 'EmailTemplateWrite', returns: 'EmailTemplate', entitlement: 'crm', pathParams: [{ name: 'templateId', description: 'Template id.' }] },
-      { path: '/v1/email-templates/{templateId}', method: 'delete', operationId: 'deleteEmailTemplate', summary: 'Delete a template', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'templateId', description: 'Template id.' }] },
+      { path: '/v1/email-templates', method: 'get', operationId: 'listEmailTemplates', summary: 'List email templates', description: 'Lists the workspace’s saved email templates with their name, subject and kind.', list: true, returns: 'EmailTemplate', entitlement: 'crm', filters: [UPDATED_AFTER_PARAM, queryParam('kind', 'Template kind.'), queryParam('visibility', 'Visibility.')] },
+      { path: '/v1/email-templates', method: 'post', operationId: 'createEmailTemplate', summary: 'Add an email template', description: 'Saves a reusable email with a `name`, a subject and the message in `body`. Saving a template sends nothing. Returns the new template.', accepts: 'EmailTemplateWrite', returns: 'EmailTemplate', entitlement: 'crm', creates: true, bodyRequires: ['name', 'body'] },
+      { path: '/v1/email-templates/{templateId}', method: 'get', operationId: 'getEmailTemplate', summary: 'Get an email template', description: 'Returns one email template. Needs `templateId` from List email templates.', returns: 'EmailTemplate', entitlement: 'crm', pathParams: [{ name: 'templateId', description: 'Template id.' }] },
+      { path: '/v1/email-templates/{templateId}', method: 'patch', operationId: 'updateEmailTemplate', summary: 'Update an email template', description: 'Changes a template; fields not sent stay as they are. Needs `templateId` from List email templates. Returns the updated template.', accepts: 'EmailTemplateWrite', returns: 'EmailTemplate', entitlement: 'crm', pathParams: [{ name: 'templateId', description: 'Template id.' }] },
+      { path: '/v1/email-templates/{templateId}', method: 'delete', operationId: 'deleteEmailTemplate', summary: 'Delete an email template', description: 'Deletes a template permanently. Needs `templateId` from List email templates.', returns: 'Deleted', entitlement: 'crm', pathParams: [{ name: 'templateId', description: 'Template id.' }] },
     ],
   },
 }

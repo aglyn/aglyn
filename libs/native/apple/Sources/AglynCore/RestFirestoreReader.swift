@@ -173,8 +173,9 @@ public final class RestFirestoreReader: FirestoreReader, @unchecked Sendable {
     Self.rereadNow()
   }
 
+  /// A value its transform writes, which the update mask leaves out.
   private func isServerTimestamp(_ value: Any) -> Bool {
-    (value as? FirestoreSentinel) == .serverTimestamp
+    (value as? FirestoreSentinel) == .serverTimestamp || value is FirestoreArrayChange
   }
 
   public func updateDocument(_ path: [String], _ fields: [String: Any]) async throws {
@@ -357,6 +358,13 @@ public final class RestFirestoreReader: FirestoreReader, @unchecked Sendable {
       case FirestoreSentinel.delete:
         // Named in the update mask with no value: the field is removed.
         continue
+      case let change as FirestoreArrayChange:
+        transforms.append([
+          "fieldPath": path.map(quote).joined(separator: "."),
+          (change.kind == .union ? "appendMissingElements" : "removeAllFromArray"): [
+            "values": change.elements.map(encodeValue)
+          ],
+        ])
       case let map as [String: Any] where !map.isEmpty:
         encoded[key] = ["mapValue": ["fields": encodeFields(map, prefix: path, transforms: &transforms)]]
       default:
@@ -373,7 +381,7 @@ public final class RestFirestoreReader: FirestoreReader, @unchecked Sendable {
     fields.flatMap { key, value -> [String] in
       let path = prefix + [key]
       switch value {
-      case FirestoreSentinel.serverTimestamp: return []
+      case FirestoreSentinel.serverTimestamp, is FirestoreArrayChange: return []
       case let map as [String: Any] where !map.isEmpty: return leafPaths(map, prefix: path)
       default: return [path.map(quote).joined(separator: ".")]
       }

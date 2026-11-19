@@ -409,10 +409,12 @@ function entityFieldOptions(record: PluginIndexedRecord | null | undefined): Ent
   const fields = record?.facts['fields']
   if (!Array.isArray(fields)) return []
   return fields
-    .filter((field): field is { id: unknown; name?: unknown } => Boolean(field) && typeof field === 'object')
+    .filter((field): field is { id: unknown; name?: unknown; customType?: unknown } => Boolean(field) && typeof field === 'object')
     .map((field) => {
       const id = String(field.id ?? '')
-      return { id, label: String(field.name || id) }
+      // The field's named type rides along (AGL-4190): an Icon picker binds only an icon field.
+      const customType = typeof field.customType === 'string' && field.customType ? field.customType : undefined
+      return { id, label: String(field.name || id), ...(customType ? { customType } : {}) }
     })
     .filter((field) => field.id)
 }
