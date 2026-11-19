@@ -14,7 +14,7 @@ final class AIPluginTests: XCTestCase {
     let registry = NativePluginRegistry()
     let declared = NativeContributionDeclaration(
       screens: [
-        "ai.allotment", "ai.create", "ai.credits", "ai.hostMember", "ai.import.productCopy", "ai.import.start", "ai.job",
+        "ai.allotment", "ai.collaboratorCreditsColumn", "ai.create", "ai.credits", "ai.hostMember", "ai.import.productCopy", "ai.import.start", "ai.job",
         "ai.jobs", "ai.member", "ai.orgsSpendColumn", "ai.request", "ai.requests", "ai.signals", "ai.staffOrg",
         "ai.staffRequests", "ai.staffUser", "ai.usageAssistColumn", "ai.usageCreditsColumn", "ai.usageOverageColumn",
       ],

@@ -74,6 +74,10 @@
       "why": "The CRM's vocabularies, scope tokens and list fields, read by the native contracts and the CRM's replayed function cases (AGL-3669)."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/dashboard-widget-prefs.ts",
+      "why": "A person's site dashboard arrangement (users/{uid}.dashboardWidgets: hidden cards and their order per workspace) and its pure rules, so the native Home hides and orders the cards the console's Customize dashboard does; no imports."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/detect-template-placeholders.ts",
       "why": "The {{name}} placeholders a saved template asks for when it is used; the native Save as template declares the same (AGL-3668)."
     },
@@ -296,6 +300,10 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/site-list-query.ts",
       "why": "The Sites list query declaration (search and filters on the member's hostMemberships rows); the native Sites screens plan the same query (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/site-live-url.ts",
+      "why": "Where a site's pages are live as the console reaches them (siteLiveUrlForSlug): the native Visit site and Open live page follow the console's origin rules, so a local or preview console opens its own tenant, never production (AGL-4086). Imports tenant-apex only."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/site-wide-outbox.ts",

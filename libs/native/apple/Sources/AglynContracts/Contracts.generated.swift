@@ -6294,6 +6294,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let crmViewMaxFilters: Int
   public let crmViewNameMax: Int
   public let crossMaxDepth: Int
+  public let dashboardWidgetsField: String
   public let datasetAuthorableFieldTypes: [DatasetFieldType]
   public let datasetFieldTypeLabels: [String: String]
   public let datasetFieldTypes: [DatasetFieldType]
@@ -6347,6 +6348,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let funnelStepTypeLabels: [String: String]
   public let funnelsMaxPerSite: Int
   public let heldLicenceQuery: ListQueryDeclaration
+  public let hostAnalyticsWidgetId: String
   public let hostEvents: [HostEventDeclaration]
   public let hostVariableTypeLabels: [String: String]
   public let imageEditAspectsJson: String
@@ -6685,6 +6687,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case crmViewMaxFilters = "CRM_VIEW_MAX_FILTERS"
     case crmViewNameMax = "CRM_VIEW_NAME_MAX"
     case crossMaxDepth = "CROSS_MAX_DEPTH"
+    case dashboardWidgetsField = "DASHBOARD_WIDGETS_FIELD"
     case datasetAuthorableFieldTypes = "DATASET_AUTHORABLE_FIELD_TYPES"
     case datasetFieldTypeLabels = "DATASET_FIELD_TYPE_LABELS"
     case datasetFieldTypes = "DATASET_FIELD_TYPES"
@@ -6738,6 +6741,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case funnelStepTypeLabels = "FUNNEL_STEP_TYPE_LABELS"
     case funnelsMaxPerSite = "FUNNELS_MAX_PER_SITE"
     case heldLicenceQuery = "HELD_LICENCE_QUERY"
+    case hostAnalyticsWidgetId = "HOST_ANALYTICS_WIDGET_ID"
     case hostEvents = "HOST_EVENTS"
     case hostVariableTypeLabels = "HOST_VARIABLE_TYPE_LABELS"
     case imageEditAspectsJson = "IMAGE_EDIT_ASPECTS_JSON"
