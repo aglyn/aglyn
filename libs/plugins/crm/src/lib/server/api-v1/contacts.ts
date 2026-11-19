@@ -70,6 +70,7 @@ import {
   settleCompanyContactsCounts,
 } from '@aglyn/tenant-data-admin'
 import {
+  admitNamedSite,
   type ApiV1Context,
   claimWrite,
   orgOwnsHost,
@@ -921,15 +922,37 @@ function contactCrmUpdateFields(
 }
 
 /**
+ * The site a contact call names through `consentSiteId`, admitted the way
+ * the site router admits one in its path (AGL-4235, `admitNamedSite`): after
+ * the workspace-ownership check each caller already makes, a connected app
+ * whose person is not on the site hears `404 No such site`, and the site's
+ * own lock decides by the request's method. `null` to proceed.
+ *
+ * Asked of the writes too, though the contact itself is the workspace's:
+ * the console records a site as where consent was given only for a person
+ * whose access reaches that site (`crm/contacts-create`,
+ * `crm/contact-update`), so an app may not record one its person could not.
+ */
+async function consentSiteRefusal(
+  ctx: ApiV1Context,
+  request: Request,
+  siteId: string,
+): Promise<Response | null> {
+  const admitted = await admitNamedSite(ctx, request, siteId)
+  return 'snapshot' in admitted ? null : admitted
+}
+
+/**
  * The holder a contact READ is for, from `?consentSiteId=`: that site's
  * consent group, or `null` for the union view. The parameter the writes take,
  * validated the same way, so a client has one name for "which site" on every
- * contact call.
+ * contact call — and admitted the same way ({@link consentSiteRefusal}).
  */
-function contactViewGroup(
+async function contactViewGroup(
   ctx: ApiV1Context,
+  request: Request,
   url: URL,
-): { groupId: string | null } | { response: Response } {
+): Promise<{ groupId: string | null } | { response: Response }> {
   const siteId = (url.searchParams.get('consentSiteId') ?? '').trim()
   if (!siteId) return { groupId: null }
   if (!orgOwnsHost(ctx, siteId)) {
@@ -942,6 +965,8 @@ function contactViewGroup(
       }),
     }
   }
+  const refused = await consentSiteRefusal(ctx, request, siteId)
+  if (refused) return { response: refused }
   return {
     groupId: consentGroupForHost(ctx.org as Record<string, unknown>, siteId)
       .groupId,
@@ -1047,6 +1072,10 @@ async function createContact(
       fields: { consentSiteId: 'No such site in this organization' },
       headers: ctx.headers,
     })
+  }
+  if (consentSiteId) {
+    const refused = await consentSiteRefusal(ctx, request, consentSiteId)
+    if (refused) return refused
   }
   /*
    * Who may see the new contact: the whole org, unless the org keeps each
@@ -1279,6 +1308,10 @@ async function updateContact(
       headers: ctx.headers,
     })
   }
+  if (consentSiteId) {
+    const refused = await consentSiteRefusal(ctx, request, consentSiteId)
+    if (refused) return refused
+  }
   const crmErrors = await contactCrmRefErrors(ctx, crm, {
     contactId: contactRef.id,
     siteId: consentSiteId,
@@ -1510,6 +1543,7 @@ async function deleteContact(
  * `?channel=online` on orders already produces.
  */
 async function listContacts(
+  request: Request,
   ctx: ApiV1Context,
   collection: FirebaseFirestore.CollectionReference,
   url: URL,
@@ -1562,7 +1596,7 @@ async function listContacts(
     null
   const companyId =
     (url.searchParams.get('companyId') ?? '').trim().slice(0, CRM_ID_MAX) || null
-  const group = contactViewGroup(ctx, url)
+  const group = await contactViewGroup(ctx, request, url)
   if ('response' in group) return group.response
 
   // ONE selector, the most selective that was given: the unique email, then
@@ -1622,7 +1656,7 @@ export async function handleContacts(
     if (request.method === 'GET') {
       const denied = requireScope(ctx, 'contacts:read')
       if (denied) return denied
-      return listContacts(ctx, collection, url)
+      return listContacts(request, ctx, collection, url)
     }
     if (request.method === 'POST') {
       const denied = requireScope(ctx, 'contacts:write')
@@ -1646,7 +1680,7 @@ export async function handleContacts(
     }
     const denied = requireScope(ctx, 'contacts:write')
     if (denied) return denied
-    const group = contactViewGroup(ctx, url)
+    const group = await contactViewGroup(ctx, request, url)
     if ('response' in group) return group.response
     return mergeContactRoute(request, ctx, contactRef, (snap) =>
       contactView(snap, group.groupId),
@@ -1656,7 +1690,7 @@ export async function handleContacts(
   if (request.method === 'GET') {
     const denied = requireScope(ctx, 'contacts:read')
     if (denied) return denied
-    const group = contactViewGroup(ctx, url)
+    const group = await contactViewGroup(ctx, request, url)
     if ('response' in group) return group.response
     const snap = await contactRef.get()
     if (!snap.exists) {

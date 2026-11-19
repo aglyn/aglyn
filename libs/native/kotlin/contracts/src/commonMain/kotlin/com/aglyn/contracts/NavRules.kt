@@ -11,16 +11,38 @@ package com.aglyn.contracts
 val NativeNavManifestValue: NativeNavManifest get() = Contracts.nativeNavManifest
 
 /**
+ * The reader's answers a row's `permissions` and `requiresFeature` are read against (`NativeNavAccess`): the workspace's
+ * resolved permissions and plan features, an absent key not held.
+ */
+data class NativeNavAccess(val permissions: Map<String, Boolean>, val features: Map<String, Boolean>)
+
+/** Every permission and plan feature a manifest's rows ask, so a shell resolves only those. */
+fun navRowGateKeys(manifest: NativeNavManifest = NativeNavManifestValue): Pair<List<String>, List<String>> {
+  val rows = manifest.lists.flatMap { list -> list.groups.flatMap { it.rows } }
+  return rows.flatMap { it.permissions.orEmpty() }.toSortedSet().toList() to rows.mapNotNull { it.requiresFeature }.toSortedSet().toList()
+}
+
+/**
  * One list for the workspace or site in hand: rows of plugins that are off, and admin rows for a non-admin, left out; a
  * section of another plugin than its row's hides with that plugin; a group left empty is dropped unless the shell fills it.
+ * With [access], a row also hides as the console's organization tab strip drops its tab: a permission it asks that the
+ * reader does not hold, or a plan feature it requires that the workspace does not carry.
  */
-fun resolveNavList(manifest: NativeNavManifest, listId: NativeNavListId, enabledPluginIds: Collection<String>, hostAdmin: Boolean): ResolvedNavList {
+fun resolveNavList(
+  manifest: NativeNavManifest,
+  listId: NativeNavListId,
+  enabledPluginIds: Collection<String>,
+  hostAdmin: Boolean,
+  access: NativeNavAccess? = null,
+): ResolvedNavList {
   val list = manifest.lists.firstOrNull { it.id == listId } ?: return ResolvedNavList(emptyList(), listId)
   val on = enabledPluginIds.toSet()
   fun shows(pluginId: String?) = pluginId == null || pluginId in on
+  fun allowed(row: NativeNavRow): Boolean = access == null ||
+    (row.permissions.orEmpty().all { access.permissions[it] == true } && (row.requiresFeature?.let { access.features[it] == true } ?: true))
   val groups = list.groups.mapNotNull { group ->
     val rows = group.rows
-      .filter { shows(it.pluginId) && (hostAdmin || it.requiresHostAdmin != true) }
+      .filter { shows(it.pluginId) && (hostAdmin || it.requiresHostAdmin != true) && allowed(it) }
       .map { row -> row.sections?.let { sections -> row.copy(sections = sections.filter { shows(it.pluginId) }) } ?: row }
     if (rows.isEmpty() && group.dynamic == null) null else group.copy(rows = rows)
   }
@@ -28,8 +50,8 @@ fun resolveNavList(manifest: NativeNavManifest, listId: NativeNavListId, enabled
 }
 
 /** [resolveNavList] on the manifest this build carries. */
-fun resolveNavList(listId: NativeNavListId, enabledPluginIds: Collection<String>, hostAdmin: Boolean): ResolvedNavList =
-  resolveNavList(NativeNavManifestValue, listId, enabledPluginIds, hostAdmin)
+fun resolveNavList(listId: NativeNavListId, enabledPluginIds: Collection<String>, hostAdmin: Boolean, access: NativeNavAccess? = null): ResolvedNavList =
+  resolveNavList(NativeNavManifestValue, listId, enabledPluginIds, hostAdmin, access)
 
 // ── Create menus (native-nav.ts) ────────────────────────────────────────────
 
