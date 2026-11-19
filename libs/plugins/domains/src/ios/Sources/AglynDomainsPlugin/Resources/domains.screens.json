@@ -1,0 +1,334 @@
+{
+  "$comment": "The workspace's Domains page natively (the domains plugin's orgNavItems /domains, AGL-4040; gap sweep Domains row 9, piece 1): every domain the workspace holds, with its site, status, renewal and price at renewal, and a page per name. Route: /api/registrar/workspace (DOMAINS_API_ROUTES.workspace); site names from the person's users/{uid}/hostMemberships rows. Buying, transfers in and out, renewal and connect actions, the registrant contact and DNS records are later pieces (Domains rows 1-8).",
+  "screens": [
+    {
+      "id": "domains.list",
+      "title": "Domains",
+      "label": "Domains",
+      "subtitle": "Every domain your workspace holds",
+      "icon": "network|dns",
+      "scope": "org",
+      "links": [
+        "/domains"
+      ],
+      "load": {
+        "ws": "/api/registrar/workspace?orgId={org.id}",
+        "sites": {
+          "query": {
+            "collection": "users/{user.uid}/hostMemberships",
+            "where": [
+              [
+                "orgId",
+                "==",
+                "{org.id}"
+              ]
+            ],
+            "limit": 200
+          },
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "intro",
+          "tone": "info",
+          "text": "Every domain your workspace holds here. Open one to connect it to a site, manage its renewal, its registrant contact and its DNS records, or move it to another registrar."
+        },
+        {
+          "type": "notice",
+          "id": "plan",
+          "tone": "warning",
+          "when": "data.ws && !data.ws.entitled",
+          "text": "Buying and connecting domains is included from the Starter plan. Domains you already hold stay yours and keep renewing."
+        },
+        {
+          "type": "notice",
+          "id": "refusal",
+          "tone": "warning",
+          "when": "data.ws.entitled && data.ws.refusal",
+          "text": "{data.ws.refusal.message}"
+        },
+        {
+          "type": "list",
+          "id": "domains",
+          "title": "Domains",
+          "items": "data.ws.rows",
+          "empty": "No domains yet",
+          "icon": "network|dns",
+          "primary": "{item.domain}",
+          "secondary": [
+            {
+              "when": "item.connected",
+              "text": "{data.sites.items[$id=item.hostId].displayName|'A site'}"
+            },
+            {
+              "when": "!item.connected",
+              "text": "Not connected"
+            },
+            {
+              "when": "item.expiresAtMs && item.status == active && item.autoRenew",
+              "text": "Renews {item.expiresAtMs:date}"
+            },
+            {
+              "when": "item.expiresAtMs && item.status == active && !item.autoRenew",
+              "text": "Expires {item.expiresAtMs:date}"
+            },
+            {
+              "when": "item.expiresAtMs && item.status != active",
+              "text": "Expires {item.expiresAtMs:date}"
+            }
+          ],
+          "tertiary": [
+            {
+              "when": "item.renewalCents",
+              "text": "{item.renewalCents:cents} a year"
+            }
+          ],
+          "badges": [
+            {
+              "when": "item.status == charging && item.origin == transfer-in || item.status == registering && item.origin == transfer-in",
+              "text": "Starting transfer",
+              "tone": "info"
+            },
+            {
+              "when": "item.status == charging && item.origin != transfer-in || item.status == registering && item.origin != transfer-in",
+              "text": "Registering",
+              "tone": "info"
+            },
+            {
+              "when": "item.status == transferring-in",
+              "text": "Moving here",
+              "tone": "info"
+            },
+            {
+              "when": "item.status == connecting",
+              "text": "Connecting",
+              "tone": "info"
+            },
+            {
+              "when": "item.status == expired",
+              "text": "Expired",
+              "tone": "error"
+            },
+            {
+              "when": "item.status == transferred-out",
+              "text": "Moved away",
+              "tone": "neutral"
+            },
+            {
+              "when": "item.status == refunded || item.status == declined",
+              "text": "Not completed",
+              "tone": "neutral"
+            },
+            {
+              "when": "item.status == active && item.renewalFailing",
+              "text": "Renewal failing",
+              "tone": "error"
+            },
+            {
+              "when": "item.status == active && !item.renewalFailing && item.verifyByMs",
+              "text": "Confirm email",
+              "tone": "warning"
+            },
+            {
+              "when": "item.status == active && !item.renewalFailing && !item.verifyByMs",
+              "text": "Active",
+              "tone": "success"
+            }
+          ],
+          "open": {
+            "screen": "domains.domain",
+            "params": {
+              "domain": "{item.domain}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "domains.domain",
+      "title": "{params.domain}",
+      "label": "Domain",
+      "icon": "network|dns",
+      "scope": "org",
+      "links": [
+        "/domains/:domain"
+      ],
+      "load": {
+        "ws": "/api/registrar/workspace?orgId={org.id}",
+        "sites": {
+          "query": {
+            "collection": "users/{user.uid}/hostMemberships",
+            "where": [
+              [
+                "orgId",
+                "==",
+                "{org.id}"
+              ]
+            ],
+            "limit": 200
+          },
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "missing",
+          "tone": "info",
+          "when": "data.ws && !data.ws.rows[domain=params.domain]",
+          "text": "That domain isn’t in this workspace."
+        },
+        {
+          "type": "fields",
+          "id": "facts",
+          "object": "data.ws.rows[domain=params.domain]",
+          "when": "data.ws.rows[domain=params.domain]",
+          "rows": [
+            {
+              "label": "Site",
+              "value": "{data.sites.items[$id=item.hostId].displayName|'A site'}",
+              "when": "item.connected"
+            },
+            {
+              "label": "Site",
+              "value": "Not connected",
+              "when": "!item.connected"
+            },
+            {
+              "label": "Status",
+              "value": "Starting transfer",
+              "chip": true,
+              "tones": {
+                "Starting transfer": "info"
+              },
+              "when": "item.status == charging && item.origin == transfer-in || item.status == registering && item.origin == transfer-in"
+            },
+            {
+              "label": "Status",
+              "value": "Registering",
+              "chip": true,
+              "tones": {
+                "Registering": "info"
+              },
+              "when": "item.status == charging && item.origin != transfer-in || item.status == registering && item.origin != transfer-in"
+            },
+            {
+              "label": "Status",
+              "value": "Moving here",
+              "chip": true,
+              "tones": {
+                "Moving here": "info"
+              },
+              "when": "item.status == transferring-in"
+            },
+            {
+              "label": "Status",
+              "value": "Connecting",
+              "chip": true,
+              "tones": {
+                "Connecting": "info"
+              },
+              "when": "item.status == connecting"
+            },
+            {
+              "label": "Status",
+              "value": "Expired",
+              "chip": true,
+              "tones": {
+                "Expired": "error"
+              },
+              "when": "item.status == expired"
+            },
+            {
+              "label": "Status",
+              "value": "Moved away",
+              "chip": true,
+              "tones": {
+                "Moved away": "neutral"
+              },
+              "when": "item.status == transferred-out"
+            },
+            {
+              "label": "Status",
+              "value": "Not completed",
+              "chip": true,
+              "tones": {
+                "Not completed": "neutral"
+              },
+              "when": "item.status == refunded || item.status == declined"
+            },
+            {
+              "label": "Status",
+              "value": "Renewal failing",
+              "chip": true,
+              "tones": {
+                "Renewal failing": "error"
+              },
+              "when": "item.status == active && item.renewalFailing"
+            },
+            {
+              "label": "Status",
+              "value": "Confirm email",
+              "chip": true,
+              "tones": {
+                "Confirm email": "warning"
+              },
+              "when": "item.status == active && !item.renewalFailing && item.verifyByMs"
+            },
+            {
+              "label": "Status",
+              "value": "Active",
+              "chip": true,
+              "tones": {
+                "Active": "success"
+              },
+              "when": "item.status == active && !item.renewalFailing && !item.verifyByMs"
+            },
+            {
+              "label": "Renews",
+              "value": "{item.expiresAtMs:date}",
+              "when": "item.expiresAtMs && item.status == active && item.autoRenew"
+            },
+            {
+              "label": "Expires",
+              "value": "{item.expiresAtMs:date}",
+              "when": "item.expiresAtMs && item.status != active || item.expiresAtMs && !item.autoRenew"
+            },
+            {
+              "label": "Auto-renew",
+              "value": "On",
+              "when": "item.status == active && item.autoRenew"
+            },
+            {
+              "label": "Auto-renew",
+              "value": "Off",
+              "when": "item.status == active && !item.autoRenew"
+            },
+            {
+              "label": "Price at renewal",
+              "value": "{item.renewalCents:cents} a year",
+              "when": "item.renewalCents"
+            },
+            {
+              "label": "Registered",
+              "value": "{item.registeredAtMs:date}",
+              "when": "item.registeredAtMs"
+            },
+            {
+              "label": "Registrant",
+              "value": "{item.registrantName}",
+              "when": "item.registrantName"
+            },
+            {
+              "label": "Registrant email",
+              "value": "{item.registrantEmail}",
+              "when": "item.registrantEmail"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -414,6 +414,15 @@ private struct ListingBody: View {
   @State private var publisher = ObservedDocument()
   /// The publisher's OAuth app for each connection the plugin declares (AGL-4196), read for the listing's own workspace only.
   @State private var credentials = ListingConnectionCredentialsModel()
+  /// The person's own live purchases, every workspace: what decides Buy (AGL-2331, AGL-4049).
+  @State private var purchases = LiveQuery()
+  /// The person's own member document in the publishing workspace: a member of it is refused by the sale (AGL-3365).
+  @State private var publisherMembership = ObservedDocument()
+  /// Paying for this listing, in place under Buy (AGL-4049).
+  @State private var pay: MarketplacePay?
+  /// How the last purchase ended.
+  @State private var payNotice: (text: String, tone: AglynTone)?
+  @Environment(\.webAuthenticationSession) private var webAuthentication
 
   private var state: PluginInstallState {
     func version(_ doc: FirestoreDocument?) -> String? {
@@ -431,6 +440,16 @@ private struct ListingBody: View {
   private var mine: Bool { listing.profileID != nil && listing.profileID == context.orgID }
   private var installable: Bool { canInstall(context) && context.hostID != nil }
   private var handle: String? { publisher.document.flatMap { $0.string("handle") ?? $0.string("displayName") } }
+  private var purchaseRows: [LicenceRow] { purchases.state.value?.map(LicenceRow.init) ?? [] }
+  private var purchased: Bool { hasOrgLicence(purchaseRows, listingID: listing.id, orgID: context.orgID, uid: context.uid) }
+  private var heldElsewhere: Bool { licensedElsewhere(purchaseRows, listingID: listing.id, orgID: context.orgID, uid: context.uid) }
+  /// Whether Buy stands where Install would (`mustBuy`); it waits for the purchases to answer, so it never flashes.
+  private func buying(_ state: PluginInstallState) -> Bool {
+    purchases.state.value != nil
+      && mustBuy(priceUSD: listing.priceUSD, purchased: purchased, ownWorkspace: mine, installed: state.installedVersion != nil)
+  }
+  private var buyBlocked: Bool { publisherMembership.document != nil && !mine }
+  private var canBuy: Bool { context.orgID != nil && context.can(buyPermissionKey(listing.artifactType)) }
 
   var body: some View {
     let state = state
@@ -439,6 +458,9 @@ private struct ListingBody: View {
     List {
       if let error = runner.error { Section { AglynNotice(error, tone: .error) } }
       if let notice = runner.notice { Section { AglynNotice(notice, tone: .success) { runner.clear() } } }
+      if let payNotice {
+        Section { AglynNotice(payNotice.text, tone: payNotice.tone) { self.payNotice = nil }.accessibilityIdentifier("marketplace-pay-outcome") }
+      }
       Section {
         HStack(spacing: AglynSpace.two) {
           AglynRemoteImage(
@@ -461,8 +483,15 @@ private struct ListingBody: View {
           }
         }
         FlowChips(chips: chips(state))
-        if !mine, listing.paid, state.installedVersion == nil {
-          AglynNotice("A paid listing is bought once for the workspace; buying is not in the app yet.", tone: .info)
+        // You own one, just not here (AGL-2331): said before the money moves, so a second charge never reads as a double one.
+        if buying(state), heldElsewhere {
+          AglynNotice("You already own this in another workspace. A license covers one organization, so this one needs its own.", tone: .info)
+        }
+        // The lookup ran short: "not purchased" is an absence from a window, so a window that stopped early says so.
+        if buying(state), purchaseRows.count >= purchaseLookupCeiling {
+          AglynNotice(
+            "Checked against the first \(purchaseLookupCeiling) of your purchases, ordered by id; you have more. If you already own or installed this, it may not be reflected here — check your receipts before buying again.",
+            tone: .warning)
         }
         if pinsPhase == "loading" {
           HStack(spacing: AglynSpace.one) {
@@ -539,7 +568,41 @@ private struct ListingBody: View {
     }
     .task(id: listing.profileID) {
       if let profileID = listing.profileID { publisher.start(context.firestore, ["publisherProfiles", profileID]) }
+      // Their OWN member document, which the rules let anyone read of themselves: it says nothing of the publisher's roster.
+      if let profileID = listing.profileID, !mine, listing.paid, !context.uid.isEmpty {
+        publisherMembership.start(context.firestore, ["orgs", profileID, "members", context.uid])
+      }
     }
+    .task(id: context.uid) {
+      if !context.uid.isEmpty, listing.paid, !mine { purchases.start(context.firestore, listingPurchasesQuery(uid: context.uid)) }
+    }
+    .onDisappear {
+      purchases.stop()
+      publisherMembership.stop()
+    }
+  }
+
+  /// Opens payment for this listing under its Buy button; the outcome is said where the page says its notices.
+  private func startBuying() {
+    guard let orgID = context.orgID else { return }
+    payNotice = nil
+    let model = pay ?? MarketplacePay(api: MarketplacePayAPI(api: context.api, orgID: orgID, hostID: context.hostID))
+    let session = webAuthentication
+    model.openPage = { url in await session.openHostedPage(url) }
+    let name = listing.name
+    let firestore = context.firestore
+    let uid = context.uid
+    let purchases = purchases
+    model.onFinish = { outcome in
+      if let notice = payOutcomeNotice(outcome, name: name) {
+        payNotice = (notice.text, notice.tone.aglynTone)
+      }
+      // The licence is read again once a purchase ends, rather than waiting on the open listener: on the iPad simulator
+      // the listener did not deliver the new purchase until the page was opened again.
+      if outcome == .paid || outcome == .owned { purchases.start(firestore, listingPurchasesQuery(uid: uid)) }
+    }
+    pay = model
+    Task { await model.buy(listingID: listing.id, name: name) }
   }
 
   private func chips(_ state: PluginInstallState) -> [(String, AglynTone)] {
@@ -564,6 +627,22 @@ private struct ListingBody: View {
       }
       Button(state.scope == .org ? "Remove from the workspace" : "Remove from this site", role: .destructive) { open(.uninstall(state.scope ?? .host)) }
         .disabled(!installable || runner.busy).accessibilityIdentifier("listing-uninstall")
+    } else if buying(state) {
+      Button {
+        startBuying()
+      } label: {
+        Label(buyLabel(priceUSD: listing.priceUSD, licensedElsewhere: heldElsewhere), systemImage: "bag")
+      }
+      .buttonStyle(.aglynProminent)
+      .disabled(!canBuy || buyBlocked || runner.busy || pay?.open == true || pay?.busy == true)
+      .help(canBuy ? "" : context.refusal(buyPermissionKey(listing.artifactType)))
+      .accessibilityIdentifier("listing-buy")
+      if buyBlocked {
+        AglynNotice(publisherMemberBuyReason(publisher.document?.string("displayName") ?? handle), tone: .neutral)
+      } else if !canBuy {
+        AglynNotice(context.orgID == nil ? "Open one of your workspaces to buy this." : context.refusal(buyPermissionKey(listing.artifactType)), tone: .neutral)
+      }
+      if let pay { MarketplacePayPanel(context: context, pay: pay) }
     } else {
       Button {
         open(.install(targets.contains(.host) ? .host : targets.first))

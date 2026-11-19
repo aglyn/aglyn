@@ -41,8 +41,9 @@
  */
 
 import { ApiErrors, apiJson } from '@aglyn/tenant-data-admin'
-import { apiKeyActorLabel } from '@aglyn/aglyn/app-utils/activity-presenter'
 import {
+  apiActorFields,
+  apiActorLabel,
   type ApiV1Context,
   claimWrite,
   readJsonBody,
@@ -97,9 +98,9 @@ export async function mergeContactRoute(
       // A key has no uid; `'api'` is the attribution every API-created CRM
       // record carries in `createdByUid`, and the note it leaves names the
       // key when the organization named it.
-      actor: { uid: 'api', email: null, apiKeyName: ctx.keyName },
+      actor: { uid: 'api', email: null, ...apiActorFields(ctx) },
       hostId: null,
-      actorName: ctx.keyName ? apiKeyActorLabel(ctx.keyName) : 'API',
+      actorName: ctx.keyName ? apiActorLabel(ctx) : 'API',
     })
     if (result.ok === false) {
       await claim.release()

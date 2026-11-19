@@ -31,6 +31,7 @@ describe('domains plugin', () => {
     expect(slots).toEqual([
       ['hostDomain', 'customDomain'],
       ['hostDomainConnect', 'customDomain'],
+      ['hostVerification', undefined],
     ])
   })
 

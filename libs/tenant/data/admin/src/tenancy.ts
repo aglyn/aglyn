@@ -18,8 +18,13 @@
 export * from './lib/server/analytics-retention'
 export * from './lib/server/api-http'
 export * from './lib/server/api-keys'
+// Connector sign-in (AGL-4225): the OAuth door the MCP endpoint is reached
+// through, beside the keys it resolves to the same `/api/v1` context as.
+export * from './lib/server/connector-oauth'
+export * from './lib/server/connector-oauth-store'
 export * from './lib/server/account-emails'
 export * from './lib/server/auth-pools'
+export * from './lib/server/bandwidth-cap-engage'
 export * from './lib/server/client-error-report'
 // The merchant's payment account, as a contract. Its adapter is not exported:
 // a plugin asks the contract, and the doors that only need the readiness rule

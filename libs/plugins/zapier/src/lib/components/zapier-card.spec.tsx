@@ -38,6 +38,7 @@ const hook = (overrides: Partial<ZapierHookView> = {}): ZapierHookView => ({
   events: ['order.paid', 'order.refunded'],
   target: 'hooks.zapier.com',
   keyName: 'Zapier',
+  keyLabel: null,
   created: '2026-10-07T12:00:00.000Z',
   lastDeliveryAt: '2026-10-07T12:05:00.000Z',
   lastDeliveryStatus: 'delivered',

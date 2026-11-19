@@ -138,7 +138,7 @@ beforeEach(() => {
     keyId: 'key-1',
     scopes: ['read'],
   })
-  mockGetOrgDoc.mockResolvedValue({ plan: 'business' })
+  mockGetOrgDoc.mockResolvedValue({ plan: 'business', billingStatus: 'active' })
   mockLockdownRefusal.mockResolvedValue(null)
 })
 
@@ -149,20 +149,20 @@ describe('the /api/v1 chokepoint enforces the monthly request quota (AGL-2163)',
     // and the answer is still 200. This is the assertion that would have
     // caught the naive version of this fix.
     mockApiUsageCount = 10_000_000
-    expect(checkApiRequestQuota({ plan: 'business' } as never, 10_000_000).allowed).toBe(true)
+    expect(checkApiRequestQuota({ plan: 'business', billingStatus: 'active' } as never, 10_000_000).allowed).toBe(true)
     const response = await call()
     expect(response.status).toBe(200)
     // …and it did not even look: a paying customer pays no read for a check
     // whose answer their plan already determines.
     expect(mockApiUsageReads).toBe(0)
-    expect(apiRequestEnforcementShape({ plan: 'business' } as never)).toBe(
+    expect(apiRequestEnforcementShape({ plan: 'business', billingStatus: 'active' } as never)).toBe(
       'never-blocks',
     )
   })
 
   it('every self-serve plan that ships with API access is never-blocks', async () => {
     for (const plan of ['business', 'scale', 'advanced', 'agency']) {
-      expect(apiRequestEnforcementShape({ plan } as never)).toBe('never-blocks')
+      expect(apiRequestEnforcementShape({ plan, billingStatus: 'active' } as never)).toBe('never-blocks')
     }
     // Enterprise publishes no rate, and since 2026-09-07 its band is a finite
     // fallback of 10,000,000 (twice Agency's) rather than UNLIMITED — so on
@@ -220,5 +220,45 @@ describe('the /api/v1 chokepoint enforces the monthly request quota (AGL-2163)',
     expect((await call()).status).toBe(200)
     mockApiUsageCount = 5_000
     expect((await call()).status).toBe(429)
+  })
+})
+
+describe('Starter stops at its monthly ceiling at the chokepoint (AGL-4226)', () => {
+  const { PLAN_ENTITLEMENTS } = jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/plan-entitlements',
+  )
+  const CEILING = PLAN_ENTITLEMENTS.starter.maxApiRequestsPerMonth as number
+  const BAND = PLAN_ENTITLEMENTS.starter.apiRequestsPerMonth as number
+
+  it('meters past the band, then refuses at the ceiling with a message that names it', async () => {
+    mockGetOrgDoc.mockResolvedValue({ plan: 'starter', billingStatus: 'active' })
+    mockApiUsageCount = BAND + 10_000
+    expect((await call()).status).toBe(200)
+    mockApiUsageCount = CEILING
+    const refused = await call()
+    expect(refused.status).toBe(429)
+    // Seconds to the UTC month boundary, never to the next minute.
+    expect(Number(refused.headers.get('Retry-After'))).toBeGreaterThan(60)
+    const body = await refused.json()
+    expect(body.error.code).toBe('monthly_request_ceiling')
+    expect(body.error.message).toContain(CEILING.toLocaleString('en-US'))
+    expect(body.error.message).toContain('Pro has no monthly ceiling')
+  })
+
+  it('a Starter workspace with no live subscription stops at the band, and says why', async () => {
+    mockGetOrgDoc.mockResolvedValue({ plan: 'starter' })
+    mockApiUsageCount = BAND - 1
+    expect((await call()).status).toBe(200)
+    mockApiUsageCount = BAND
+    const refused = await call()
+    expect(refused.status).toBe(429)
+    expect((await refused.json()).error.code).toBe('monthly_request_quota')
+  })
+
+  it('Pro has no ceiling and still pays no read for it', async () => {
+    mockGetOrgDoc.mockResolvedValue({ plan: 'pro', billingStatus: 'active' })
+    mockApiUsageCount = 10_000_000
+    expect((await call()).status).toBe(200)
+    expect(mockApiUsageReads).toBe(0)
   })
 })

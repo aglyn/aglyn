@@ -771,7 +771,7 @@ fun runTriggeredByLabel(entry: Doc): String {
   fun text(key: String) = by.str(key)?.ifEmpty { null }
   return when (by.str("kind")) {
     "member" -> text("email") ?: text("uid")?.let { "Account $it" } ?: "A member"
-    "apiKey" -> text("apiKeyName")?.let { "API key $it" } ?: "API key"
+    "apiKey" -> text("connectedAppName")?.let { "Connected app $it" } ?: text("apiKeyName")?.let { "API key $it" } ?: "API key"
     "visitor" -> text("email")?.let { "Site visitor ($it)" } ?: "Site visitor"
     "webhook" -> text("name")?.let { "Inbound webhook $it" } ?: "Inbound webhook"
     "platform" -> "Aglyn"

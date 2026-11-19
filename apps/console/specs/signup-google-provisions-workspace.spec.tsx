@@ -129,6 +129,12 @@ jest.mock('@aglyn/aglyn', () => ({
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, ''),
+  // AGL-4024. The sign-up door asks whether the derived name has a usable
+  // address before its first attempt; the REAL rule, so these cases keep
+  // sending the names they always sent.
+  isValidOrgSlug: jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/organizations',
+  ).isValidOrgSlug,
   onboardingDestination: (slug: string, intent: unknown) =>
     intent ? `/${slug}/billing` : `/${slug}`,
   parseOnboardingPlanIntent: () => mockPlanIntent,
@@ -487,6 +493,70 @@ describe('AGL-1942 · a Google sign-up gets a ready workspace', () => {
       name: 'Ada Lovelace',
       nameWasTyped: false,
     })
+  })
+})
+
+/*
+ * AGL-4047 — a person who was invited signs up to join that workspace. The
+ * verified doors used to hand them a personal workspace as well and drop
+ * them into it; the console's automatic join is what opens the invited one.
+ * Asked after the account exists, with its own token: the form never says
+ * whether an address has an invitation.
+ */
+describe('AGL-4047 · an invitee is not handed a workspace of their own', () => {
+  const invitedFetch = (invites: unknown[]) =>
+    jest.fn(async (url: string) =>
+      String(url).includes('/api/orgs/invites')
+        ? { ok: true, status: 200, json: async () => ({ invites }) }
+        : String(url).includes('/api/orgs/create')
+          ? { ok: true, status: 200, json: async () => ({ orgId: 'o-1', slug: 'ada-lovelace' }) }
+          : { ok: true, status: 200, json: async () => ({}) },
+    ) as unknown as typeof fetch
+  const invite = { $id: 'inv-1', orgId: 'org-acme', orgSlug: 'acme-builders', role: 'editor' }
+
+  it('creates nothing on the popup door when an invitation is waiting', async () => {
+    global.fetch = invitedFetch([invite])
+    render(<SignUp />)
+    await clickGoogle()
+    await act(settle)
+
+    // Red before the fix: "Ada Lovelace" was created and the page
+    // hard-navigated into it, away from the workspace they were invited to.
+    expect(orgCreateBodies()).toEqual([])
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it('creates nothing on the mobile redirect door either', async () => {
+    global.fetch = invitedFetch([invite])
+    render(<SignUp />)
+    await act(async () => {
+      await redirectOnCredential?.(googleUser())
+      await settle()
+      await settle()
+    })
+    expect(orgCreateBodies()).toEqual([])
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it('still provisions for a person with no invitation', async () => {
+    global.fetch = invitedFetch([])
+    render(<SignUp />)
+    await clickGoogle()
+    await act(settle)
+    expect(orgCreateBodies()).toEqual([{ name: 'Ada Lovelace', derived: true }])
+    expect(mockNavigate).toHaveBeenCalledWith('/ada-lovelace')
+  })
+
+  it('never asks before the account is verified', async () => {
+    global.fetch = invitedFetch([invite])
+    render(<SignUp />)
+    await submitForm()
+    const asked = (global.fetch as jest.Mock).mock.calls.some(([url]) =>
+      String(url).includes('/api/orgs/invites'),
+    )
+    // The password door's account is unverified here: the decision is the
+    // workspace chooser's, on the first verified session.
+    expect(asked).toBe(false)
   })
 })
 

@@ -117,9 +117,26 @@ const leadDoc = (id: string) => ({
   }),
 })
 
+/*
+ * The CRM records band (AGL-4227): `null` leaves the org collection without
+ * a parent, so the band is not asked; a number is the org's contacts, and
+ * the org reads as Free.
+ */
+let mockBandContacts: number | null = null
+
 const leadsCollection = {
   doc: (id?: string) => leadDoc(id ?? `auto-${(autoIdCounter += 1)}`),
   count: () => ({ __count: true }),
+  get parent() {
+    if (mockBandContacts === null) return undefined
+    const counts = (name: string) =>
+      name === 'leads' ? Object.keys(leads).length : name === 'contacts' ? (mockBandContacts ?? 0) : 0
+    return {
+      collection: (name: string) => ({
+        count: () => ({ get: async () => ({ data: () => ({ count: counts(name) }) }) }),
+      }),
+    }
+  },
 }
 
 const hostRef: any = {
@@ -187,7 +204,7 @@ jest.mock('./organizations', () => ({
   resolveOrgIdForHost: async () => 'org-1',
   // The org document the lead door reads to decide what a new lead is
   // stamped with (`leadScopeForHost`): one that has chosen no default.
-  getOrgForHost: async () => ({ orgId: 'org-1', org: {} }),
+  getOrgForHost: async () => ({ orgId: 'org-1', org: mockBandContacts === null ? {} : { plan: 'free' } }),
   consentGroupForSite: async (hostId: string) =>
     jest.requireActual('@aglyn/aglyn/app-utils/consent-groups').soloConsentGroup(hostId),
   scopedToHost: (ref: any) => ref,
@@ -208,6 +225,34 @@ beforeEach(() => {
   counterWrites = []
   autoIdCounter = 0
   creditConversion.mockClear()
+  mockBandContacts = null
+})
+
+describe('Free keeps 100 people, leads included (AGL-4227)', () => {
+  it('files no NEW lead once contacts and leads fill the band, and counts the miss', async () => {
+    mockBandContacts = 60
+    for (let i = 0; i < 40; i += 1) leads[`held-${i}`] = { email: `held-${i}@example.com` }
+    expect(await capture({})).toBe(false)
+    expect(Object.keys(leads)).toHaveLength(40)
+    expect(counterWrites.some((patch) => 'total' in patch)).toBe(true)
+  })
+
+  it('still updates a person already kept', async () => {
+    mockBandContacts = 100
+    expect(await capture({})).toBe(false)
+    mockBandContacts = 99
+    expect(await capture({})).toBe(true)
+    mockBandContacts = 100
+    // The same person again: an update, never refused.
+    expect(await capture({ source: 'booking' })).toBe(true)
+    expect(Object.keys(leads)).toHaveLength(1)
+  })
+
+  it('files a new lead while there is room', async () => {
+    mockBandContacts = 98
+    leads['held'] = { email: 'held@example.com' }
+    expect(await capture({})).toBe(true)
+  })
 })
 
 describe('one person submitting twice is one lead', () => {

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "aglyn": {
+      "type": "http",
+      "url": "https://app.aglyn.com/api/mcp"
+    }
+  }
+}

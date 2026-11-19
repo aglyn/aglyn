@@ -15526,3 +15526,42 @@ describe('bought domains are the server’s alone (AGL-3962)', () => {
     }
   })
 })
+
+/**
+ * Connector sign-in's five collections (AGL-4225) are the server's alone.
+ *
+ * A code or a token is stored as its hash, but a connection names the
+ * workspace, the person and their address, and a client that could WRITE any
+ * of these could forge a connection, un-revoke one, or spend another's code.
+ * Nobody reads, lists or writes them from a client — staff and the workspace
+ * owner included; Settings reads the connections through its route.
+ */
+describe('connector sign-in records are the server’s alone (AGL-4225)', () => {
+  const COLLECTIONS = ['oauthClients', 'oauthCodes', 'oauthGrants', 'oauthAccessTokens', 'oauthRefreshTokens']
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const name of COLLECTIONS) {
+        await setDoc(doc(db, name, 'row-1'), { orgId: ORG, uid: OWNER, revokedAt: null })
+      }
+    })
+  })
+
+  it('no member, no staff and no visitor reads, lists or writes any of them', async () => {
+    const callers = [
+      ['an anonymous visitor', env.unauthenticatedContext().firestore()],
+      ['the workspace owner', authed(OWNER)],
+      ['an outsider', authed(OUTSIDER)],
+      ['staff', authed(STAFF, { staff: true })],
+    ]
+    for (const name of COLLECTIONS) {
+      for (const [label, db] of callers) {
+        await mustDeny(`${label} reading ${name}`, getDoc(doc(db, name, 'row-1')))
+        await mustDeny(`${label} listing ${name}`, getDocs(query(collection(db, name), limit(10))))
+        await mustDeny(`${label} un-revoking a row in ${name}`, updateDoc(doc(db, name, 'row-1'), { revokedAt: null, uid: OUTSIDER }))
+        await mustDeny(`${label} forging a row in ${name}`, setDoc(doc(db, name, 'forged'), { orgId: ORG, uid: OUTSIDER }))
+      }
+    }
+  })
+})

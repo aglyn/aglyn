@@ -121,6 +121,32 @@ describe('buildAgentApiCatalog — RFC 9727 / RFC 9264 shape', () => {
     expect(document.linkset).toHaveLength(2)
   })
 
+  it('publishes a typed description and service-meta links when given (AGL-4225)', () => {
+    const document = catalog([
+      {
+        url: 'https://console.test/api/mcp',
+        title: 'MCP',
+        specUrl: 'https://console.test/api/mcp/server-card',
+        specType: 'application/mcp-server-card+json',
+        metaLinks: [
+          { href: 'https://console.test/.well-known/oauth-protected-resource/api/mcp', type: 'application/json' },
+        ],
+      },
+    ])
+    const mcp = contextFor(document, 'https://console.test/api/mcp')
+    expect(mcp['service-desc']).toEqual([
+      { href: 'https://console.test/api/mcp/server-card', type: 'application/mcp-server-card+json' },
+    ])
+    expect(mcp['service-meta']).toEqual([
+      { href: 'https://console.test/.well-known/oauth-protected-resource/api/mcp', type: 'application/json' },
+    ])
+  })
+
+  it('emits no service-meta for an empty list', () => {
+    const document = catalog([{ url: 'https://x.test', title: 'X', docsUrl: 'https://x.test/docs', metaLinks: [] }])
+    expect(contextFor(document, 'https://x.test')['service-meta']).toBeUndefined()
+  })
+
   it('normalizes a trailing slash on the origin', () => {
     const document = buildAgentApiCatalog({
       origin: `${ORIGIN}/`,

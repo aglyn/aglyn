@@ -164,6 +164,8 @@ export const WIDGET_ZONE_LAYOUTS: Readonly<
   // A panel among a search listing editor's own fields.
   seoFields: 'bare',
   hostSeo: 'stack',
+  // A card under the SEO section's Search engine verification card.
+  hostVerification: 'stack',
   // Cards under the site's business profile (AGL-3661).
   hostBusinessProfile: 'stack',
   // A button in a site resource page's row of header actions: Screens,
