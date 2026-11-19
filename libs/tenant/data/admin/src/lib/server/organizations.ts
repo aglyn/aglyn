@@ -69,6 +69,7 @@ import {
 } from '@aglyn/aglyn/app-utils/account-acquisition'
 import { connectedAppActorLabel, type HostActivityActor } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
+import { DEFAULT_USAGE_LEVEL, USAGE_LEVEL_FIELD } from '@aglyn/aglyn/app-utils/usage-level'
 import {
   nameSearchKey,
   nameSearchReversed,
@@ -426,6 +427,9 @@ export async function createOrganization(
       // Suspended by equality on it, and a query cannot find a document by a
       // field it lacks. The console's `suspended-flag.ts` names its other writers.
       suspended: false,
+      // Not reviewed by staff yet (AGL-4228). Stored, never left out, for the
+      // same reason: the staff list filters the usage level by equality.
+      [USAGE_LEVEL_FIELD]: DEFAULT_USAGE_LEVEL,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
       // Creating the workspace is its owner's first activity in it, and the

@@ -293,6 +293,8 @@ public final class FirebaseFirestoreReader: FirestoreReader, @unchecked Sendable
     switch value {
     case FirestoreSentinel.serverTimestamp: return FieldValue.serverTimestamp()
     case FirestoreSentinel.delete: return FieldValue.delete()
+    case let change as FirestoreArrayChange:
+      return change.kind == .union ? FieldValue.arrayUnion(change.elements) : FieldValue.arrayRemove(change.elements)
     case let map as [String: Any]: return map.mapValues(writable)
     default: return value
     }

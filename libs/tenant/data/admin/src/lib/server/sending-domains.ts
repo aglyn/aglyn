@@ -108,6 +108,7 @@ import { getSiteLockdown } from './tenant-write-lockdown'
 import { sendingWorkspaceFor } from './outbound-send-review'
 import { flagLookalikeDomain } from './hosted-page-review'
 import { resolveTransactionalEmailDailyCeiling } from '@aglyn/aglyn/app-utils/transactional-email-ceiling'
+import { resolveMonthlyEmailCap } from '@aglyn/aglyn/app-utils/plan-entitlements'
 // Also INSTALLS the daily transactional ceiling's counter on `sendEmail`
 // (AGL-4145), for the same reason: the ceiling stamped on the workspace below
 // is only read by a send path that has the gate installed.
@@ -932,6 +933,8 @@ export async function hostSendingIdentity(
       transactionalEmailsPerDay: owner?.org
         ? resolveTransactionalEmailDailyCeiling(owner.org as never)
         : null,
+      // THE HARD MONTHLY CAP (AGL-4227), Free's, from the same document.
+      emailsPerMonth: owner?.org ? resolveMonthlyEmailCap(owner.org as never) : null,
     },
     /*
      * THE NAME THE SITE SENDS UNDER (AGL-3442), from the same two documents,

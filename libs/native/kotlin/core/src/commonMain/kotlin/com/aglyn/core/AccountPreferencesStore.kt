@@ -49,6 +49,11 @@ import kotlinx.serialization.json.Json
 data class AccountPreferences(
   val loaded: Boolean = false,
   val stored: List<String> = emptyList(),
+  /**
+   * Every site pin, each with its workspace (`pinnedHosts`, AGL-4005): as many a workspace as the person likes, one
+   * account-wide bound (AGL-4165).
+   */
+  val storedHostPins: List<com.aglyn.contracts.PinnedHost> = emptyList(),
   val recentOrgs: List<String> = emptyList(),
   val starred: List<StarredItem> = emptyList(),
   val recents: List<RecentItem> = emptyList(),
@@ -76,6 +81,12 @@ data class AccountPreferences(
   fun name(authDisplayName: String?, email: String?): String = readAccountName(identity, authDisplayName, email)
 
   val pinned: List<String> get() = com.aglyn.contracts.effectivePinnedOrgs(stored)
+
+  /** One workspace's pinned site ids, in the order pinned. */
+  fun pinnedHosts(orgId: String): List<String> = com.aglyn.contracts.workspacePinnedHosts(storedHostPins, orgId)
+
+  /** This workspace holds every site pin the account keeps, so one more asks which to replace. */
+  fun hostPinsFull(orgId: String): Boolean = pinnedHosts(orgId).size >= Contracts.pinnedHostsMax.toInt()
   val overCap: Boolean get() = pinnedOrgsOverCap(stored)
 
   /** The theme in force on this device. */
@@ -86,6 +97,9 @@ data class AccountPreferences(
 
 /** What pinning answered: done, already pinned, or full ("Pinned is full. Replace one?"). */
 enum class PinAnswer { PINNED, ALREADY, FULL }
+
+/** What pinning or unpinning a site did (the console's `PinToggleOutcome`). */
+enum class SitePinToggle { PINNED, UNPINNED, FULL, NONE }
 
 /**
  * The signed-in person's account preferences, read live from `users/{uid}` and written back through [writer] under the
@@ -103,6 +117,8 @@ class AccountPreferencesStore(
   private val mutable = MutableStateFlow(AccountPreferences())
   val state: StateFlow<AccountPreferences> = mutable
   private var uid: String? = null
+  /** The site pins as the account document last said, which a refused write falls back to. */
+  private var confirmedHostPins: List<com.aglyn.contracts.PinnedHost> = emptyList()
 
   /** Why the last write failed, in words for a snackbar; null once read. */
   val writeError = MutableStateFlow<String?>(null)
@@ -121,9 +137,11 @@ class AccountPreferencesStore(
         val (forUid, live) = entry ?: return@onEach
         if (live !is Live.Ready || forUid != uid) return@onEach
         val data = live.value?.data
+        confirmedHostPins = com.aglyn.contracts.readPinnedHosts(data)
         mutable.value = AccountPreferences(
           loaded = true,
           stored = readPinnedOrgs(data),
+          storedHostPins = confirmedHostPins,
           recentOrgs = readRecentOrgs(data),
           starred = readStarred(data),
           recents = readRecents(data),
@@ -174,6 +192,58 @@ class AccountPreferencesStore(
   fun reorderPins(order: List<String>) {
     val current = state.value.pinned.toSet()
     writePins(order.filter { it in current }.distinct().take(Contracts.pinnedOrgsMax.toInt()))
+  }
+
+  // ── Site pins (AGL-4005, AGL-4165) ──
+
+  /**
+   * Pins a site, or unpins one that is pinned (the console's `usePinnedHosts().toggle`). Past the account-wide bound it
+   * answers FULL and writes nothing, so the caller asks "Pinned is full. Replace one?". A pin or an unpin adds or removes
+   * ONE entry (`arrayUnion` / `arrayRemove`), so two devices pinning different sites never overwrite each other's list;
+   * a write that moves more (a site that changed workspace, the bound making room) writes the list.
+   */
+  fun toggleHostPin(hostId: String, orgId: String): SitePinToggle {
+    if (hostId.isEmpty() || orgId.isEmpty()) return SitePinToggle.NONE
+    val stored = state.value.storedHostPins
+    if (hostId in state.value.pinnedHosts(orgId)) {
+      val removed = stored.filter { it.hostId == hostId }.map { it.toPlain() }
+      writeHostPins(com.aglyn.contracts.unpinHost(stored, hostId), FirestoreArrayChange.remove(removed))
+      return SitePinToggle.UNPINNED
+    }
+    val pin = com.aglyn.contracts.PinnedHost(hostId = hostId, orgId = orgId)
+    val result = com.aglyn.contracts.pinHost(stored, pin)
+    return when (result.outcome) {
+      PinOrgOutcome.PINNED -> {
+        val appended = result.pinnedHosts.size == stored.size + 1
+        writeHostPins(result.pinnedHosts, if (appended) FirestoreArrayChange.union(pin.toPlain()) else result.pinnedHosts.map { it.toPlain() })
+        SitePinToggle.PINNED
+      }
+      PinOrgOutcome.FULL -> SitePinToggle.FULL
+      else -> SitePinToggle.NONE
+    }
+  }
+
+  /** Puts [hostId] where [replacing] was: the answer to "Pinned is full. Replace one?". */
+  fun replaceHostPin(replacing: String, hostId: String, orgId: String) {
+    val stored = state.value.storedHostPins
+    val next = com.aglyn.contracts.replacePinnedHost(stored, replacing, com.aglyn.contracts.PinnedHost(hostId = hostId, orgId = orgId))
+    if (next == stored) return
+    writeHostPins(next, next.map { it.toPlain() })
+  }
+
+  /**
+   * Shows [next] at once and merges [value] (a one-entry array change, or the whole list) the way the console does
+   * (`setDoc(…, { merge: true })`). A write the rules refuse puts the stored list back.
+   */
+  private fun writeHostPins(next: List<com.aglyn.contracts.PinnedHost>, value: Any) {
+    val signedIn = uid ?: return
+    mutable.value = mutable.value.copy(storedHostPins = next)
+    scope.launch {
+      runCatching { writer.merge("users/$signedIn", mapOf(Contracts.pinnedHostsField to value)) }.onFailure {
+        if (uid == signedIn) mutable.value = mutable.value.copy(storedHostPins = confirmedHostPins)
+        writeError.value = "That pin was not saved. Check the connection and try again."
+      }
+    }
   }
 
   /** The person opened this workspace: it moves to the front of the recent ones (no write when it already is). */

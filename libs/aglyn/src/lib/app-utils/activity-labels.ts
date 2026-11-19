@@ -190,6 +190,7 @@ export const STAFF_AUDIT_ACTION_LABELS: Readonly<Record<string, string>> = {
   'host.reattach-domain': 'Reattached a domain',
   'host.set-subdomain': 'Changed a site address',
   'host.transfer': 'Transferred a site',
+  'host.usageLevel': 'Set the site usage level',
   'lockdown.lock': 'Locked the workspace down',
   'lockdown.payouts-pause': 'Paused payouts',
   'lockdown.payouts-restore': 'Restored payouts',
@@ -224,6 +225,7 @@ export const STAFF_AUDIT_ACTION_LABELS: Readonly<Record<string, string>> = {
   'org.successManagerSet': 'Assigned a success manager',
   'org.upgradeProposal.propose': 'Proposed an upgrade',
   'org.upgradeProposal.withdraw': 'Withdrew an upgrade proposal',
+  'org.usageLevel': 'Set the workspace usage level',
   'orgs.unverified.reap': 'Removed unverified organizations',
   'person.erased': 'Erased a person',
   'person.erasure-requested': 'Requested erasure of a person',
@@ -259,6 +261,7 @@ export const STAFF_AUDIT_ACTION_LABELS: Readonly<Record<string, string>> = {
   'user.setPassword': 'Set the password',
   'user.signOutDevice': 'Signed a device out',
   'user.updateProfile': 'Updated the profile',
+  'user.usageLevel': 'Set the account usage level',
 }
 
 /** Leading namespaces as a reader names them. */

@@ -51,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import com.aglyn.contracts.Contracts
 import com.aglyn.core.Live
 import com.aglyn.core.PinAnswer
@@ -108,6 +109,12 @@ internal fun PhoneHome(
 internal fun PhoneHomeHeader(services: ShellServices, context: ShellPluginContext, workspace: WorkspaceState, onVisit: (String) -> Unit) {
   workspace.site?.let { site ->
     PhoneSiteLine(services, site, onVisit)
+    // Site Care's Request a change (the console's site dashboard, AGL-3959): off with the reason without Site Care.
+    workspace.org?.id?.let { orgId ->
+      androidx.compose.runtime.key(orgId, site.id) {
+        com.aglyn.site.sitecare.SiteCareRequestButton(services.api, orgId, site.id, onAddSiteCare = { context.navigate("core.billing") })
+      }
+    }
     return
   }
   val org = (orgDocLive(services, workspace.org?.id) as? Live.Ready)?.value?.data
@@ -124,6 +131,7 @@ private fun PhoneSiteLine(services: ShellServices, site: com.aglyn.core.Workspac
   val data = (host as? Live.Ready)?.value?.data
   val status = data?.let { com.aglyn.core.HostStatus.describe(it, com.aglyn.core.nowMillis()) }
   val address = site.addressWith(data?.get("cname") as? String)
+  val scope = androidx.compose.runtime.rememberCoroutineScope()
   Row(
     Modifier.fillMaxWidth().testTag("home-site-line"),
     verticalAlignment = Alignment.CenterVertically,
@@ -149,7 +157,14 @@ private fun PhoneSiteLine(services: ShellServices, site: com.aglyn.core.Workspac
       overflow = TextOverflow.Ellipsis,
     )
     if (address != null) {
-      TextButton(onClick = { onVisit("https://$address/") }, modifier = Modifier.testTag("home-visit-site")) {
+      TextButton(
+        onClick = {
+          // In preview or maintenance the site is entered as the team (the console's `SiteVisitButton`, AGL-4086).
+          if (!com.aglyn.core.SiteVisit.entersAsTeam(data)) onVisit("https://$address/")
+          else scope.launch { onVisit(com.aglyn.core.SiteVisit.url(true, site.id, "https://$address/", services.api)) }
+        },
+        modifier = Modifier.testTag("home-visit-site"),
+      ) {
         Text("Visit site", fontWeight = FontWeight.SemiBold)
       }
     }

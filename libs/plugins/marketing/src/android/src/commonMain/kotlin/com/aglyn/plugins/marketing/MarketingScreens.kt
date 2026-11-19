@@ -287,6 +287,10 @@ fun CampaignDetail(context: NativePluginContext, actions: MarketingActions, acce
   val scope = rememberCoroutineScope()
   val doc by remember(campaignId) { context.firestore.observeDoc("orgs/${actions.orgId}/emailCampaigns/$campaignId") }.collectAsState(Live.Loading)
   val emails = remember(campaignId) { LiveQueryList(context.firestore, scope, 25) { it } }
+  // The emails the campaign's figures sum: up to the page's ceiling, and one more to know there are more.
+  val reportSends by remember(campaignId) {
+    context.firestore.observe(campaignEmailsQuery(actions.orgId, actions.hostId, campaignId, CAMPAIGN_EMAIL_CEILING + 1))
+  }.collectAsState(Live.Loading)
   var editing by remember { mutableStateOf(false) }
   var deleting by remember { mutableStateOf(false) }
   var gone by remember(campaignId) { mutableStateOf(false) }
@@ -320,6 +324,9 @@ fun CampaignDetail(context: NativePluginContext, actions: MarketingActions, acce
       PropertyRow("Ends", row.endAtMs?.let { localDayAndTime(it).first })
       PropertyRow("Lists", row.listIds.joinToString(", ") { listNames[it] ?: it })
       PropertyRow("Unsubscribe header", if (row.listUnsubscribe) "On" else "Off")
+    }
+    (reportSends as? Live.Ready)?.value?.let { sends ->
+      CampaignMailCard(campaignMailRollup(sends.take(CAMPAIGN_EMAIL_CEILING).map { it.data }), truncated = sends.size > CAMPAIGN_EMAIL_CEILING)
     }
     SectionCard("Emails") {
       val rows = (emails.rows as? Live.Ready)?.value.orEmpty()

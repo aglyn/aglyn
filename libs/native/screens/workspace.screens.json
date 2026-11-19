@@ -761,7 +761,7 @@
           "type": "notice",
           "tone": "info",
           "when": "data.ent && !data.ent.features.apiAccess",
-          "text": "The REST API and API keys are included on the Pro plan — see Billing to upgrade."
+          "text": "The REST API and API keys are included on the Starter plan — see Billing to upgrade."
         },
         {
           "type": "notice",

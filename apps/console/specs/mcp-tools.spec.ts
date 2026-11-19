@@ -22,9 +22,11 @@ import { describeApiV1Resources } from '@aglyn/tenant-data-admin/server/api-v1-r
 import { registerPluginServerDeclarations } from '../constants/plugins.declarations.server.generated'
 import { buildCustomerApiOpenApi } from '../utils/api-v1-openapi'
 import {
+  MCP_EXCLUDED_OPERATIONS,
   buildMcpTools,
   buildToolRequest,
   MCP_BODY_ARGUMENT,
+  missingPathArguments,
 } from '../utils/mcp-tools'
 
 /**
@@ -53,16 +55,31 @@ beforeAll(async () => {
 
 describe('MCP tools derived from the v1 document (AGL-3091)', () => {
 
-  it('turns every documented operation into exactly one tool', () => {
+  it('turns every documented operation into exactly one tool, but the named exclusions', () => {
     const operations = Object.values(
-      DOCUMENT.paths as Record<string, Record<string, unknown>>,
+      DOCUMENT.paths as Record<string, Record<string, Record<string, unknown>>>,
     ).flatMap((methods) =>
       Object.entries(methods).filter(([method]) =>
         ['get', 'post', 'patch', 'put', 'delete'].includes(method),
       ),
     )
-    expect(tools).toHaveLength(operations.length)
+    const ids = operations.map(([, operation]) => operation.operationId as string)
+    const excluded = ids.filter((id) => id in MCP_EXCLUDED_OPERATIONS)
+    expect(tools).toHaveLength(operations.length - excluded.length)
     expect(operations.length).toBeGreaterThan(50)
+    // Every exclusion names an operation that exists, so a rename cannot
+    // quietly turn the exclusion into a no-op.
+    expect(excluded.sort()).toEqual(Object.keys(MCP_EXCLUDED_OPERATIONS).sort())
+  })
+
+  it('leaves the whole OpenAPI document out of tools/list, and says why (AGL-4225)', () => {
+    expect(Object.keys(MCP_EXCLUDED_OPERATIONS)).toEqual(['getApiDescription'])
+    expect(MCP_EXCLUDED_OPERATIONS.getApiDescription).toMatch(/whole OpenAPI document/)
+    expect(tools.map((tool) => tool.name)).not.toContain('getApiDescription')
+    // The other three service operations ARE tools.
+    for (const name of ['getApiRoot', 'getKeyIdentity', 'getUsage']) {
+      expect(tools.map((tool) => tool.name)).toContain(name)
+    }
   })
 
   it('names every tool uniquely, which `tools/call` depends on', () => {
@@ -113,27 +130,34 @@ describe('what a client is told about each tool (AGL-4225)', () => {
     expect(tools.find((tool) => tool.name === 'listSites')?.title).toBe('List sites')
   })
 
-  it('marks every tool by its method: reads read-only, creates additive, everything else destructive', () => {
+  it('marks every tool by its method, and every exception by name with its reason (AGL-4225)', () => {
     // Exhaustive over the real tool list, so a new operation is judged too.
+    // POSTs that repeat safely: an upsert, a merge (the source is gone after
+    // the first), a conversion that returns the same ids, a publish.
+    const idempotentPosts = ['convertLead', 'createLead', 'mergeContact', 'publishSite']
+    // What reaches past the workspace's own records, each for the reason the
+    // operation states beside its flag: a public website or address, the
+    // buyer's inbox, a DNS lookup of a new address's mail domain.
+    const openWorld = ['convertLead', 'createContact', 'createLead', 'createSite', 'publishSite', 'updateOrder']
     const counts: Record<string, number> = {}
     for (const tool of tools) {
       counts[tool.method] = (counts[tool.method] ?? 0) + 1
-      const flagged = ['mergeContact'].includes(tool.name)
-      const expected =
-        tool.method === 'GET'
-          ? { readOnlyHint: true, destructiveHint: false }
-          : tool.method === 'POST'
-            ? { readOnlyHint: false, destructiveHint: flagged }
-            : { readOnlyHint: false, destructiveHint: true }
+      const expected = {
+        title: tool.title,
+        readOnlyHint: tool.method === 'GET',
+        destructiveHint:
+          tool.method === 'PATCH' || tool.method === 'DELETE' || tool.name === 'mergeContact',
+        idempotentHint: tool.method !== 'POST' || idempotentPosts.includes(tool.name),
+        openWorldHint: openWorld.includes(tool.name),
+      }
       expect({ name: tool.name, ...tool.annotations }).toEqual({ name: tool.name, ...expected })
     }
     // Every method the document uses is present, so no branch above is vacuous.
     expect(Object.keys(counts).sort()).toEqual(['DELETE', 'GET', 'PATCH', 'POST'])
   })
 
-
   it('marks a write the operation calls destructive — the contact merge removes a contact', () => {
-    expect(tools.find((tool) => tool.name === 'mergeContact')?.annotations).toEqual({
+    expect(tools.find((tool) => tool.name === 'mergeContact')?.annotations).toMatchObject({
       readOnlyHint: false,
       destructiveHint: true,
     })
@@ -209,5 +233,12 @@ describe('turning a tool call back into a v1 request (AGL-3091)', () => {
       'https://app.example.com/api',
     )
     expect(request.body).toBeNull()
+  })
+
+  it('names the path arguments a call left out or empty, in path order (AGL-4225)', () => {
+    const tool = tools.find((candidate) => candidate.name === 'getProduct')!
+    expect(missingPathArguments(tool, {})).toEqual(['siteId', 'productId'])
+    expect(missingPathArguments(tool, { siteId: 's', productId: '' })).toEqual(['productId'])
+    expect(missingPathArguments(tool, { siteId: 's', productId: 'p' })).toEqual([])
   })
 })
