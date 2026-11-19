@@ -49,11 +49,57 @@ enum class SiteDomainFilter(val label: String, val value: String?) {
   NONE("No custom domain", "false"),
 }
 
-fun sitesRequest(orgId: String, search: String, domain: SiteDomainFilter): ListQueryRequest = ListQueryRequest(
+/**
+ * The Created filter (the console's Created range, `SITE_FILTER_FIELDS`): one condition on the site's own `createdAt`
+ * and one day (`yyyy-MM-dd`). A range orders the list by the field it ranges over, so under it the sites run newest
+ * first; otherwise by name.
+ */
+data class SiteCreatedFilter(val op: String, val day: String) {
+  val clause: ListFilterRequest get() = ListFilterRequest("createdAt", op, day)
+
+  /** "Created on or after Nov 1, 2026", as the console's chip says it. */
+  val label: String get() =
+    "${Contracts.siteFilterHeaders["createdAt"] ?: "Created"} ${com.aglyn.pluginhost.listFilterOperatorLabel(op)} ${shownDay(day)}"
+
+  companion object {
+    /** The conditions the declaration offers on Created, in its order. */
+    val operators: List<String> get() = Contracts.siteListDeclaration.fields.firstOrNull { it.column == "createdAt" }?.operators.orEmpty()
+
+    private val MONTHS = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+    /** `2026-11-01` as "Nov 1, 2026"; anything else as typed. */
+    fun shownDay(day: String): String {
+      val parts = Regex("^(\\d{4})-(\\d{2})-(\\d{2})$").matchEntire(day)?.groupValues ?: return day
+      val month = MONTHS.getOrNull(parts[2].toInt() - 1) ?: return day
+      return "$month ${parts[3].toInt()}, ${parts[1]}"
+    }
+  }
+}
+
+fun sitesRequest(orgId: String, search: String, domain: SiteDomainFilter, created: SiteCreatedFilter? = null): ListQueryRequest = ListQueryRequest(
   base = listOf(com.aglyn.contracts.ListQueryFilter(op = com.aglyn.contracts.ListQueryOp.EQUAL, path = "orgId", value = JsonPrimitive(orgId))),
-  clauses = buildList { domain.value?.let { add(ListFilterRequest("hasCustomDomain", "is", it)) } },
+  clauses = buildList {
+    domain.value?.let { add(ListFilterRequest("hasCustomDomain", "is", it)) }
+    created?.let { add(it.clause) }
+  },
   search = search.trim().ifEmpty { null }?.let { listOf(it) },
 )
+
+/** The plan the list runs, with what it refused and why. */
+fun sitesPlan(orgId: String, search: String, domain: SiteDomainFilter, created: SiteCreatedFilter?) =
+  planListQuery(Contracts.siteListDeclaration, sitesRequest(orgId, search, domain, created))
+
+/**
+ * The list as it is drawn (the console's `SitesCards`): the sites the person pinned in this workspace lead it, in the
+ * order pinned, then the query's own rows. A search or a filter is the query's answer and keeps its order; its pinned
+ * sites show their pin where they fall. A pinned site the window has not reached yet still leads, from [pinnedRows].
+ */
+fun sitesShown(rows: List<SiteRow>, pinned: List<String>, pinnedRows: List<SiteRow>, filtering: Boolean): List<SiteRow> {
+  if (filtering || rows.isEmpty() || pinned.isEmpty()) return rows
+  val lead = pinned.mapNotNull { id -> rows.firstOrNull { it.id == id } ?: pinnedRows.firstOrNull { it.id == id } }
+  val leading = lead.map { it.id }.toSet()
+  return lead + rows.filter { it.id !in leading }
+}
 
 /** One row of the list: the membership row's own fields. */
 data class SiteRow(
@@ -93,6 +139,19 @@ class SitesListModel(
     private set
   var domain by mutableStateOf(SiteDomainFilter.ALL)
     private set
+  var created by mutableStateOf<SiteCreatedFilter?>(null)
+    private set
+  /** The pinned sites' own rows, read beside the window so a pin the window has not reached yet still leads. */
+  var pinnedRows by mutableStateOf<List<SiteRow>>(emptyList())
+    private set
+  private var pinnedFor: List<String> = emptyList()
+  private var pinnedJob: Job? = null
+
+  /** A search or a filter is on: the list is the query's answer, in its order. */
+  val filtering: Boolean get() = search.isNotBlank() || domain != SiteDomainFilter.ALL || created != null
+
+  /** What the query could not take, in the planner's words (a Created day that is not a day). */
+  val refused get() = sitesPlan(orgId, search, domain, created).refused
   var rows by mutableStateOf<Load<List<SiteRow>>>(Load.Loading)
     private set
   var hasMore by mutableStateOf(false)
@@ -103,8 +162,41 @@ class SitesListModel(
   private var job: Job? = null
 
   private fun query(startAfter: List<Any?>? = null) =
-    planListQuery(Contracts.siteListDeclaration, sitesRequest(orgId, search, domain))
-      .toFirestoreQuery("users/$uid/hostMemberships", SITES_PAGE_SIZE, startAfter)
+    sitesPlan(orgId, search, domain, created).toFirestoreQuery("users/$uid/hostMemberships", SITES_PAGE_SIZE, startAfter)
+
+  /** Picks the Created filter, or clears it with null. */
+  fun pickCreated(next: SiteCreatedFilter?) {
+    if (next == created) return
+    created = next
+    reload()
+  }
+
+  /**
+   * Reads the pinned sites' own membership rows (thirty to a query, Firestore's `in` limit), each kept only while it is
+   * still in this workspace.
+   */
+  fun watchPinned(ids: List<String>) {
+    if (ids == pinnedFor) return
+    pinnedFor = ids
+    pinnedJob?.cancel()
+    if (ids.isEmpty()) {
+      pinnedRows = emptyList()
+      return
+    }
+    pinnedJob = scope.launch {
+      val read = ids.chunked(30).flatMap { chunk ->
+        runCatching {
+          firestore.page(
+            com.aglyn.core.FirestoreQuery(
+              "users/$uid/hostMemberships",
+              filters = listOf(com.aglyn.core.FirestoreFilter("__name__", com.aglyn.core.FilterOp.IN, chunk.map { "users/$uid/hostMemberships/$it" })),
+            ),
+          ).docs
+        }.getOrDefault(emptyList())
+      }
+      pinnedRows = read.filter { it.string("orgId") == orgId }.map(::siteRowOf)
+    }
+  }
 
   fun type(next: String) {
     if (next == search) return
@@ -216,24 +308,70 @@ fun canCreateSiteFromStarter(name: String, subdomain: String, pick: SiteStarterS
  * land on, which would leave an empty site. `style` is the one the person
  * chose: the site starts in its look, and the route records it on the site.
  */
-fun createSiteBody(orgId: String, name: String, subdomain: String, style: String): JsonObject =
-  jsonBody("displayName" to name.trim(), "subdomain" to subdomain.trim().lowercase(), "orgId" to orgId, "start" to "starter", "style" to style)
+fun createSiteBody(orgId: String, name: String, subdomain: String, style: String, preview: Boolean = false): JsonObject =
+  jsonBody(
+    "displayName" to name.trim(), "subdomain" to subdomain.trim().lowercase(), "orgId" to orgId, "start" to "starter", "style" to style,
+    "preview" to preview,
+  )
 
 /**
  * What Create site sends for a starter from the marketplace, as the console's own "Choose your starter" does: the listing,
  * with no style, since the starter brings its own look.
  */
-fun createSiteBody(orgId: String, name: String, subdomain: String, starter: SiteStart.Starter): JsonObject =
+fun createSiteBody(orgId: String, name: String, subdomain: String, starter: SiteStart.Starter, preview: Boolean = false): JsonObject =
   jsonBody(
     "displayName" to name.trim(), "subdomain" to subdomain.trim().lowercase(), "orgId" to orgId, "start" to "starter",
-    "starter" to mapOf("listingId" to starter.listingId),
+    "starter" to mapOf("listingId" to starter.listingId), "preview" to preview,
   )
 
+/**
+ * "Start in preview" (AGL-4086)'s default for how a site starts, as the console's `sitePreviewStartsOn`: on for a site
+ * brought in from somewhere else, off for everything else.
+ */
+fun sitePreviewStartsOn(start: String?): Boolean = start == "import"
+
+/** What "Start in preview" says under it (the console's `StartInPreviewSwitch`). */
+fun startInPreviewCaption(on: Boolean): String =
+  if (on) "Only you and your team can see the site until you make it public in Admin → Error pages. Visitors see \"Coming soon\"."
+  else "Visitors can see the site as soon as it has a page."
+
+/**
+ * `6 of 10 sites · Pro plan` beside Create site (the console's `describeSiteAllowance`, AGL-2166): null while the plan or
+ * the sites are still being read, so a placeholder count never reads as a measurement. [limit] null is no known cap
+ * ("6 sites"); an infinite or negative one is Unlimited.
+ */
+fun describeSiteAllowance(used: Int, limit: Double?, planLabel: String?, ready: Boolean): String? {
+  if (!ready || planLabel.isNullOrEmpty()) return null
+  val cap = limit?.let { if (!it.isFinite() || it < 0) "Unlimited" else it.toLong().toString() }
+  val sites = if (cap == null) "$used site${if (used == 1) "" else "s"}" else "$used of $cap site${if (cap == "1") "" else "s"}"
+  return "$sites · $planLabel plan"
+}
+
+/**
+ * The plan and its site cap, as `/api/orgs/entitlements` answers for a workspace: the effective plan's label, and
+ * `quotas.hostLimit` (a null there is the route's JSON for an unlimited cap).
+ */
+data class SiteAllowancePlan(val planLabel: String, val hostLimit: Double?) {
+  companion object {
+    fun of(body: JsonObject): SiteAllowancePlan? {
+      val plan = (body["plan"] as? JsonPrimitive)?.contentOrNull ?: return null
+      val quotas = body["quotas"] as? JsonObject
+      val raw = quotas?.get("hostLimit")
+      val limit = when {
+        raw == null -> null
+        raw is kotlinx.serialization.json.JsonNull -> Double.POSITIVE_INFINITY
+        else -> (raw as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()
+      }
+      return SiteAllowancePlan(com.aglyn.core.BundleWords.planLabels[plan] ?: plan.replaceFirstChar { it.uppercase() }, limit)
+    }
+  }
+}
+
 /** `POST /api/hosts/create`, the console's own Create site. */
-suspend fun createSite(api: ConsoleApiClient, orgId: String, name: String, subdomain: String, start: SiteStart): CreateSiteResult = try {
+suspend fun createSite(api: ConsoleApiClient, orgId: String, name: String, subdomain: String, start: SiteStart, preview: Boolean = false): CreateSiteResult = try {
   val body = when (start) {
-    is SiteStart.Style -> createSiteBody(orgId, name, subdomain, start.id)
-    is SiteStart.Starter -> createSiteBody(orgId, name, subdomain, start)
+    is SiteStart.Style -> createSiteBody(orgId, name, subdomain, start.id, preview)
+    is SiteStart.Starter -> createSiteBody(orgId, name, subdomain, start, preview)
   }
   val answer = api.request("/api/hosts/create", ApiMethod.POST, body)
   CreateSiteResult.Created(answer.field("hostId").orEmpty(), answer.field("subdomain") ?: subdomain)

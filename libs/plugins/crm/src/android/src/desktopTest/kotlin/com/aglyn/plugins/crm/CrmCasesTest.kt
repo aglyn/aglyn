@@ -54,6 +54,36 @@ class CrmCasesTest {
   }
 
   @Test
+  fun emailTemplateCases() {
+    cases("normalizeCrmEmailTemplate").forEach { (args, result) ->
+      val got = crmEmailTemplate("t", map(args[0]))
+      val want = map(result)!!
+      assertEquals(listOf(want["name"], want["subject"], want["body"], want["kind"], want["visibility"], want["ownerUid"]), listOf(got.name, got.subject, got.body, got.kind, got.visibility, got.ownerUid), args.toString())
+    }
+    cases("crmEmailTemplateIsListed").forEach { (args, result) ->
+      val template = map(args[0])!!
+      assertEquals(plain(result), crmEmailTemplateIsListed(template["visibility"] as? String, template["ownerUid"] as? String, plain(args[1]) as? String), args.toString())
+    }
+  }
+
+  @Test
+  fun theTemplateToolsOfferWhatTheRecordReads() {
+    assertEquals(listOf(com.aglyn.contracts.CrmMergeFieldGroup.CONTACT, com.aglyn.contracts.CrmMergeFieldGroup.YOU, com.aglyn.contracts.CrmMergeFieldGroup.SITE), crmMergeGroups(mapOf("contactId" to "c")))
+    assertEquals(com.aglyn.contracts.CrmMergeFieldGroup.LEAD, crmMergeGroups(mapOf("leadId" to "l")).first())
+    assertEquals("{{contact.firstName}}", crmMergeFieldToken("contact.firstName"))
+    assertEquals("Hi {{site.name}}", crmInsert("{{site.name}}", "Hi "))
+    val order = crmTemplatePickOrder(
+      listOf(
+        CrmEmailTemplate("1", "b", "", "x", "template", "personal"),
+        CrmEmailTemplate("2", "z", "", "x", "template", "shared"),
+        CrmEmailTemplate("3", "a", "", "x", "snippet", "shared"),
+        CrmEmailTemplate("4", "a", "", "x", "template", "shared"),
+      ),
+    )
+    assertEquals(listOf("4", "2", "1"), order.map { it.id })
+  }
+
+  @Test
   fun crmTelHrefCases() = cases("crmTelHref").forEach { (args, result) ->
     assertEquals(plain(result), crmTelHref(plain(args[0]) as? String), args.toString())
   }

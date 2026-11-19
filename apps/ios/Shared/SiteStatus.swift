@@ -15,6 +15,8 @@ final class SiteStatus {
   private(set) var status: HostStatus?
   /// The site's own custom domain (`cname`), once read.
   private(set) var cname: String?
+  /// The site is in preview or maintenance, so Visit site enters it as the team (AGL-4086).
+  private(set) var entersAsTeam = false
   @ObservationIgnored private var listener: FirestoreListening?
 
   func start(reader: FirestoreReader?, hostID: String?) {
@@ -23,6 +25,7 @@ final class SiteStatus {
     failed = false
     status = nil
     cname = nil
+    entersAsTeam = false
     guard let reader, let hostID else { return }
     listener = reader.listenDocument(["hosts", hostID]) { [weak self] result in
       guard let self else { return }
@@ -30,6 +33,7 @@ final class SiteStatus {
       case .success(let doc):
         self.status = HostStatus.describe(doc?.data)
         self.cname = doc?.string("cname")
+        self.entersAsTeam = SiteVisit.entersAsTeam(doc?.data)
       case .failure: self.failed = true
       }
       self.loaded = true

@@ -804,6 +804,11 @@ describe('the reserved /.well-known namespace (AGL-3016)', () => {
     '/.well-known/oauth-authorization-server/extra',
     '/.well-known/oauth-protected-resource/api/v1',
     '/.well-known/oauth-protected-resource/',
+    // Spelled like the plugin directory's domain proof (AGL-4225), and not it.
+    '/.well-known/openai-apps-challenge/',
+    '/.well-known/openai-apps-challenge.txt',
+    '/.well-known/openai-apps-challenge/extra',
+    '/.well-known/openai-apps',
     '/.well-known/security.txt',
     // Spelled like the two documents served here, and neither of them.
     '/.well-known/apple-app-site-association.json',
@@ -936,6 +941,31 @@ describe('connector sign-in discovery (AGL-4225)', () => {
   it('spends no verdict lookup serving them', async () => {
     await middleware(request('zgover.aglyn.com', '/.well-known/oauth-authorization-server'))
     expect(fetchCalls).toHaveLength(0)
+  })
+
+  // The domain proof a plugin directory fetches: one exact path, rewritten to
+  // its handler, which answers 404 until a token is configured.
+  it('rewrites the plugin directory\'s domain proof to its route handler', async () => {
+    const response = await middleware(request('app.aglyn.com', '/.well-known/openai-apps-challenge'))
+    expect(response.status).toBe(200)
+    expect(new URL(String(response.headers.get('x-middleware-rewrite'))).pathname).toBe(
+      '/api/domain-proof/openai-apps-challenge',
+    )
+    expect(response.headers.get('set-cookie')).toBeNull()
+    expect(response.headers.get('content-security-policy')).toBeNull()
+  })
+
+  it('answers 404 for the domain proof on the auth origin', async () => {
+    expect(
+      (await middleware(request('auth.aglyn.com', '/.well-known/openai-apps-challenge'))).status,
+    ).toBe(404)
+  })
+
+  it('spends no verdict lookup on the domain proof, and the matcher reaches it', async () => {
+    await middleware(request('zgover.aglyn.com', '/.well-known/openai-apps-challenge'))
+    expect(fetchCalls).toHaveLength(0)
+    const [pattern] = config.matcher as string[]
+    expect(new RegExp(`^${pattern}$`).test('/.well-known/openai-apps-challenge')).toBe(true)
   })
 
   it('serves the consent page on the console, unscoped by a workspace host', async () => {

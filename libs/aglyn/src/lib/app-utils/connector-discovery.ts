@@ -107,6 +107,43 @@ export function connectorDiscoveryRoute(pathname: string): string | null {
     : null
 }
 
+/**
+ * The domain proof OpenAI's plugin directory reads (AGL-4225).
+ *
+ * To list a connector, the directory fetches this exact path on the host that
+ * serves the MCP endpoint and expects the challenge token it issued as the
+ * whole body, in plain text. It is not a discovery document and is not in the
+ * map above: it describes nothing, and it exists only while a deployment has
+ * been given a token (`OPENAI_APPS_CHALLENGE`).
+ */
+export const OPENAI_APPS_CHALLENGE_PATH = '/.well-known/openai-apps-challenge'
+
+/** The route handler the middleware rewrites {@link OPENAI_APPS_CHALLENGE_PATH} to. */
+export const OPENAI_APPS_CHALLENGE_ROUTE = '/api/domain-proof/openai-apps-challenge'
+
+/** The handler serving `pathname`, or `null` for every path but the exact one. */
+export function connectorDomainProofRoute(pathname: string): string | null {
+  return pathname === OPENAI_APPS_CHALLENGE_PATH ? OPENAI_APPS_CHALLENGE_ROUTE : null
+}
+
+/**
+ * What a challenge token may be: URL-safe unreserved characters, 8 to 512 of
+ * them. The value is served verbatim as a response body, so anything else
+ * (whitespace inside it, markup, a pasted `KEY=value` line) is a
+ * misconfiguration and is refused rather than published.
+ */
+const DOMAIN_PROOF_TOKEN = /^[A-Za-z0-9._~-]{8,512}$/
+
+/**
+ * The token to serve for a configured value, or `null` when there is none to
+ * serve: unset, empty, or not shaped like a token. Surrounding whitespace is
+ * dropped, because a value pasted into a dashboard often carries a newline.
+ */
+export function connectorDomainProofToken(configured: string | undefined | null): string | null {
+  const token = (configured ?? '').trim()
+  return DOMAIN_PROOF_TOKEN.test(token) ? token : null
+}
+
 /** The resource identifier for the MCP endpoint on `origin`. */
 export function connectorResourceFor(origin: string): string {
   return `${origin}${CONNECTOR_RESOURCE_PATH}`
