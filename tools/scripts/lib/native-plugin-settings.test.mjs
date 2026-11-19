@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { pluginSettingsScreen } from './native-plugin-settings.mjs'
+import { checkCases, pluginSettingsScreen, sitePluginSettingsScreen } from './native-plugin-settings.mjs'
 
 const schema = {
   pluginId: 'demo',
@@ -33,6 +33,23 @@ test('a schema becomes one form that writes every field under the plugin', () =>
   assert.deepEqual(Object.keys(form.submit.write.fields), ['on', 'days', 'mode', 'path', 'updatedBy'])
 })
 
+test('a field kept as typed (a key, a code) says so on both screens; the others do not', () => {
+  const keyed = { ...schema, fields: [...schema.fields, { key: 'apiKey', label: 'Key', type: 'string', verbatim: true }] }
+  const workspace = pluginSettingsScreen({ schema: keyed, label: 'Demo' }).blocks[0].fields
+  assert.deepEqual(workspace.filter((field) => field.verbatim).map((field) => field.key), ['apiKey'])
+  const site = sitePluginSettingsScreen({ schema: keyed, label: 'Demo' }).blocks[0].fields
+  assert.deepEqual(site.filter((field) => field.verbatim).map((field) => field.key), ['apiKey'])
+})
+
+test("a schema's notice heads both screens, as the console's card draws it", () => {
+  const noticed = { ...schema, notice: 'Ask your own lawyer.' }
+  for (const screen of [pluginSettingsScreen({ schema: noticed, label: 'Demo' }), sitePluginSettingsScreen({ schema: noticed, label: 'Demo' })]) {
+    assert.deepEqual(screen.blocks[0], { type: 'notice', tone: 'info', text: 'Ask your own lawyer.' })
+    assert.equal(screen.blocks[1].type, 'form')
+  }
+  assert.equal(pluginSettingsScreen({ schema, label: 'Demo' }).blocks[0].type, 'form')
+})
+
 /**
  * A marketplace plugin's settings are drawn at run time from its manifest by `manifestSettingsScreen`
  * (marketplace-catalog.ts, which the apps replay). It is the very screen the generator makes for a built-in plugin's
@@ -52,4 +69,29 @@ test('a manifest of the same fields draws the screen a built-in plugin gets', as
     assert.equal(drawn.id, `marketplace.pluginSettings.${candidate.pluginId}`)
   }
   assert.equal(manifestSettingsScreen('demo', 'Demo', {}), null)
+})
+
+test("a schema's check refuses on both screens, and its cases are the console's own answers", () => {
+  const checked = {
+    pluginId: 'demo',
+    fields: [],
+    defaults: { enabled: false, apiKey: '' },
+    validate: (values) => (values.enabled === true && !values.apiKey ? 'Add the key first.' : null),
+  }
+  const inputs = [{ enabled: false }, { enabled: true, apiKey: '' }, { enabled: true, apiKey: 'k' }]
+  assert.deepEqual(pluginSettingsScreen({ schema: checked, label: 'Demo', check: 'demo' }).blocks.at(-1).refuse, [{ check: 'demo' }])
+  assert.deepEqual(sitePluginSettingsScreen({ schema: checked, label: 'Demo', check: 'demo' }).blocks.at(-1).refuse, [
+    { check: 'demo', site: true },
+  ])
+  assert.equal(pluginSettingsScreen({ schema: checked, label: 'Demo' }).blocks.at(-1).refuse, undefined)
+  assert.deepEqual(checkCases([{ schema: checked, check: 'demo', checkInputs: inputs }]), {
+    demo: [
+      { values: inputs[0], result: null },
+      { values: inputs[1], result: 'Add the key first.' },
+      { values: inputs[2], result: null },
+    ],
+  })
+  // A check whose validate no longer refuses anything, or that has nothing to record, fails the generator.
+  assert.throws(() => checkCases([{ schema: { ...checked, validate: () => null }, check: 'demo', checkInputs: inputs }]), /refuses none/)
+  assert.throws(() => checkCases([{ schema: checked, check: 'demo' }]), /no inputs/)
 })
