@@ -73,6 +73,8 @@ final class AppModel {
     if let config, problems.isEmpty {
       self.config = config
       AglynFirebase.configure(config)
+      // Whether this build may take a payment to Aglyn: off in a store build (the owner's decision of 2026-11-19).
+      StoreBilling.configure(config)
       // Every REST call to Firebase carries the App Check token production enforces (AGL-3818).
       let firebaseHTTP = AppCheckTransport(appCheck: AglynFirebase.appCheck)
       self.firebaseHTTP = firebaseHTTP
