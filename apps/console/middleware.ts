@@ -40,6 +40,7 @@ import { nativeAppAssociationRoute } from '@aglyn/aglyn/app-utils/native-app-ass
 import {
   CONNECTOR_AUTHORIZE_PATH,
   connectorDiscoveryRoute,
+  connectorDomainProofRoute,
 } from '@aglyn/aglyn/app-utils/connector-discovery'
 import {
   isTrackingHostName,
@@ -465,6 +466,13 @@ export async function middleware(request: NextRequest) {
   const discoveryRoute = onAuthOrigin ? null : connectorDiscoveryRoute(pathname)
   if (discoveryRoute) {
     return NextResponse.rewrite(new URL(discoveryRoute, request.url))
+  }
+  // The domain proof a plugin directory fetches before it lists the
+  // connector (AGL-4225): one more exact path, held to the same hosts as the
+  // documents above. Its handler answers 404 until a token is configured.
+  const domainProofRoute = onAuthOrigin ? null : connectorDomainProofRoute(pathname)
+  if (domainProofRoute) {
+    return NextResponse.rewrite(new URL(domainProofRoute, request.url))
   }
   if (
     pathname === WELL_KNOWN_PREFIX ||

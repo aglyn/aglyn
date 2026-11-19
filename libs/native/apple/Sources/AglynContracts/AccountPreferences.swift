@@ -84,6 +84,70 @@ public func movePinnedOrg(_ pinned: [String], _ orgID: String, offset: Int) -> [
   return current
 }
 
+// MARK: Site pins (AGL-4005, AGL-4165)
+
+/// Pins that name a workspace and a site, without repeats of a site, in their stored order.
+private func pinnedHostList(_ pins: [PinnedHost]) -> [PinnedHost] {
+  var seen = Set<String>()
+  return pins.filter { !$0.orgId.isEmpty && !$0.hostId.isEmpty && seen.insert($0.hostId).inserted }
+}
+
+/// Every site pin the person stored, in the order pinned, without repeats. Anything that is not an `{ orgId, hostId }`
+/// reads as no pin, so a stray value can never take the sites list down.
+public func readPinnedHosts(_ profile: [String: Any]?) -> [PinnedHost] {
+  guard let list = field(profile, values.pinnedHostsField) as? [Any] else { return [] }
+  return pinnedHostList(list.compactMap { entry in
+    guard let pin = entry as? [String: Any], let orgID = pin["orgId"] as? String, let hostID = pin["hostId"] as? String
+    else { return nil }
+    return PinnedHost(hostId: hostID, orgId: orgID)
+  })
+}
+
+/// One workspace's pinned site ids, in the order pinned.
+public func workspacePinnedHosts(_ stored: [PinnedHost], orgID: String) -> [String] {
+  Array(pinnedHostList(stored).filter { $0.orgId == orgID }.map(\.hostId).prefix(values.pinnedHostsMax))
+}
+
+/// Pins a site at the end of its workspace's pins. A workspace takes as many as the person likes; only the account-wide
+/// bound makes room, and only from other workspaces. A workspace that already holds every pin the account keeps answers
+/// `.full`, never a pin dropped quietly: the caller asks "Pinned is full. Replace one?".
+public func pinHost(_ stored: [PinnedHost], _ pin: PinnedHost) -> PinHostResult {
+  let current = pinnedHostList(stored)
+  if pin.orgId.isEmpty || pin.hostId.isEmpty || workspacePinnedHosts(current, orgID: pin.orgId).contains(pin.hostId) {
+    return PinHostResult(outcome: .alreadyPinned, pinnedHosts: current)
+  }
+  // A site pinned under the workspace it has since moved out of moves with it.
+  var next = current.filter { $0.hostId != pin.hostId } + [PinnedHost(hostId: pin.hostId, orgId: pin.orgId)]
+  while next.count > values.pinnedHostsMax {
+    guard let oldest = next.firstIndex(where: { $0.orgId != pin.orgId }) else {
+      return PinHostResult(outcome: .full, pinnedHosts: current)
+    }
+    next.remove(at: oldest)
+  }
+  return PinHostResult(outcome: .pinned, pinnedHosts: next)
+}
+
+/// The stored pins without one site.
+public func unpinHost(_ stored: [PinnedHost], _ hostID: String) -> [PinnedHost] {
+  pinnedHostList(stored).filter { $0.hostId != hostID }
+}
+
+/// The stored pins with `pin` in the place `replacing` held in the same workspace: the answer to "Pinned is full. Replace
+/// one?". Unchanged when `replacing` is not one of that workspace's pins or `pin` already is.
+public func replacePinnedHost(_ stored: [PinnedHost], replacing: String, with pin: PinnedHost) -> [PinnedHost] {
+  let current = pinnedHostList(stored)
+  let inWorkspace = workspacePinnedHosts(current, orgID: pin.orgId)
+  if pin.hostId.isEmpty || inWorkspace.contains(pin.hostId) || !inWorkspace.contains(replacing) { return current }
+  return current.filter { $0.hostId != pin.hostId }.map {
+    $0.hostId == replacing ? PinnedHost(hostId: pin.hostId, orgId: pin.orgId) : $0
+  }
+}
+
+public extension PinnedHost {
+  /// The pin as `users/{uid}.pinnedHosts` stores it.
+  var fields: [String: Any] { ["orgId": orgId, "hostId": hostId] }
+}
+
 // MARK: Recent workspaces and the rail
 
 /// The recently opened workspaces as stored, newest first.

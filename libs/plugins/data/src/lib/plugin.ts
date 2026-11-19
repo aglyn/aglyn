@@ -26,9 +26,11 @@ import { registerPageRecordSource } from '@aglyn/aglyn/app-utils/page-record-sou
 import { registerPluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { DATASET_TRANSFER_RESOURCE } from './transfer/dataset-transfer-key'
 import { DATASET_REPEAT_SOURCE } from './repeat/dataset-repeat-source'
+import { DATASET_ICON_FIELD } from './model/dataset-icon-field'
 import { DATASET_IMAGE_FIELD } from './model/dataset-image-field'
 import { DATASET_PAGE_FIELD } from './model/dataset-page-field'
 import { DatasetImageFieldInput, DatasetPageFieldInput } from './components/dataset-field-inputs.component'
+import { DatasetIconFieldInput } from './components/dataset-icon-field-input.component'
 import { RECORD_PAGE_ADDRESS_FIELD } from './record-pages/record-pages'
 import { RECORD_PAGE_SOURCE } from './record-pages/record-page-source'
 import { registerDataRecordRoutes } from './model/data-record-routes'
@@ -73,6 +75,8 @@ export function registerDataConsole(): void {
   // the record editor, never typed.
   Aglyn.registerCustomFieldType({ ...DATASET_IMAGE_FIELD, Input: DatasetImageFieldInput })
   Aglyn.registerCustomFieldType({ ...DATASET_PAGE_FIELD, Input: DatasetPageFieldInput })
+  // A record's icon (AGL-4190), which a page's Icon binds: picked, never typed.
+  Aglyn.registerCustomFieldType({ ...DATASET_ICON_FIELD, Input: DatasetIconFieldInput })
   // A record template draws on the canvas for one of its records (AGL-3475).
   registerPageRecordSource(RECORD_PAGE_SOURCE)
   // The workspace's datasets, for another plugin's picker (AGL-3080).
