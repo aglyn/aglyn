@@ -130,12 +130,42 @@ class RestFirestoreReader(
 
   /** A PATCH whose update mask names every leaf [data] holds: Firestore's own form of a merge. */
   override suspend fun merge(path: String, data: Map<String, Any?>) {
+    if (data.values.any { it is FirestoreArrayChange }) return commitMerge(path, data)
     val response = http.patch("$root/$path") {
       header("Authorization", "Bearer ${bearer()}")
       url { for (field in mergeFieldPaths(data)) parameters.append("updateMask.fieldPaths", field) }
       contentType(ContentType.Application.Json)
       // A deleted field is in the mask and absent from the fields, which is how REST removes it.
       setBody(buildJsonObject { put("fields", JsonObject(withoutDeletes(data).mapValues { encodeValue(it.value) })) }.toString())
+    }
+    if (response.status.value !in 200..299) {
+      val body = runCatching { Json.parseToJsonElement(response.bodyAsText()) }.getOrNull()
+      throw IllegalStateException(body?.let(::errorOf) ?: "Could not save.")
+    }
+    wrote.tryEmit(Unit)
+  }
+
+  /**
+   * A merge that changes an array by its elements ([FirestoreArrayChange]): one `commit` whose update writes the plain
+   * fields under their mask and whose transforms add or remove the elements, as the SDK's `arrayUnion` does.
+   */
+  private suspend fun commitMerge(path: String, data: Map<String, Any?>) {
+    val plain = data.filterValues { it !is FirestoreArrayChange }
+    val write = buildJsonObject {
+      put(
+        "update",
+        buildJsonObject {
+          put("name", "${root.substringAfter("/v1/")}/$path")
+          put("fields", JsonObject(withoutDeletes(plain).mapValues { encodeValue(it.value) }))
+        },
+      )
+      put("updateMask", buildJsonObject { put("fieldPaths", JsonArray(mergeFieldPaths(plain).map(::JsonPrimitive))) })
+      put("updateTransforms", JsonArray(arrayTransforms(data)))
+    }
+    val response = http.post("$root:commit") {
+      header("Authorization", "Bearer ${bearer()}")
+      contentType(ContentType.Application.Json)
+      setBody(buildJsonObject { put("writes", JsonArray(listOf(write))) }.toString())
     }
     if (response.status.value !in 200..299) {
       val body = runCatching { Json.parseToJsonElement(response.bodyAsText()) }.getOrNull()
@@ -308,6 +338,18 @@ class RestFirestoreReader(
   companion object {
     /** Consecutive `Listen` failures, with no snapshot between, before an observation falls back to polling. */
     const val LISTEN_ATTEMPTS = 3
+
+    /** Each top-level [FirestoreArrayChange] of [data] as a REST field transform. */
+    fun arrayTransforms(data: Map<String, Any?>): List<JsonObject> = data.mapNotNull { (key, value) ->
+      val change = value as? FirestoreArrayChange ?: return@mapNotNull null
+      buildJsonObject {
+        put("fieldPath", quoteFieldPathSegment(key))
+        put(
+          if (change.union) "appendMissingElements" else "removeAllFromArray",
+          buildJsonObject { put("values", JsonArray(change.elements.map(::encodeValue))) },
+        )
+      }
+    }
 
     /** [data] without its [FirestoreDelete] leaves, at every depth. */
     @Suppress("UNCHECKED_CAST")

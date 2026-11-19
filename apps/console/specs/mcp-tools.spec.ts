@@ -130,27 +130,34 @@ describe('what a client is told about each tool (AGL-4225)', () => {
     expect(tools.find((tool) => tool.name === 'listSites')?.title).toBe('List sites')
   })
 
-  it('marks every tool by its method: reads read-only, creates additive, everything else destructive', () => {
+  it('marks every tool by its method, and every exception by name with its reason (AGL-4225)', () => {
     // Exhaustive over the real tool list, so a new operation is judged too.
+    // POSTs that repeat safely: an upsert, a merge (the source is gone after
+    // the first), a conversion that returns the same ids, a publish.
+    const idempotentPosts = ['convertLead', 'createLead', 'mergeContact', 'publishSite']
+    // What reaches past the workspace's own records, each for the reason the
+    // operation states beside its flag: a public website or address, the
+    // buyer's inbox, a DNS lookup of a new address's mail domain.
+    const openWorld = ['convertLead', 'createContact', 'createLead', 'createSite', 'publishSite', 'updateOrder']
     const counts: Record<string, number> = {}
     for (const tool of tools) {
       counts[tool.method] = (counts[tool.method] ?? 0) + 1
-      const flagged = ['mergeContact'].includes(tool.name)
-      const expected =
-        tool.method === 'GET'
-          ? { readOnlyHint: true, destructiveHint: false }
-          : tool.method === 'POST'
-            ? { readOnlyHint: false, destructiveHint: flagged }
-            : { readOnlyHint: false, destructiveHint: true }
+      const expected = {
+        title: tool.title,
+        readOnlyHint: tool.method === 'GET',
+        destructiveHint:
+          tool.method === 'PATCH' || tool.method === 'DELETE' || tool.name === 'mergeContact',
+        idempotentHint: tool.method !== 'POST' || idempotentPosts.includes(tool.name),
+        openWorldHint: openWorld.includes(tool.name),
+      }
       expect({ name: tool.name, ...tool.annotations }).toEqual({ name: tool.name, ...expected })
     }
     // Every method the document uses is present, so no branch above is vacuous.
     expect(Object.keys(counts).sort()).toEqual(['DELETE', 'GET', 'PATCH', 'POST'])
   })
 
-
   it('marks a write the operation calls destructive — the contact merge removes a contact', () => {
-    expect(tools.find((tool) => tool.name === 'mergeContact')?.annotations).toEqual({
+    expect(tools.find((tool) => tool.name === 'mergeContact')?.annotations).toMatchObject({
       readOnlyHint: false,
       destructiveHint: true,
     })
