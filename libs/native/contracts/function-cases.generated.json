@@ -63242,6 +63242,16 @@
                       },
                       {
                         "console": {
+                          "id": "/products/subscriptions",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "subscriptions",
+                        "label": "Subscriptions",
+                        "screen": "commerce.subscriptions"
+                      },
+                      {
+                        "console": {
                           "id": "/products/returns",
                           "surface": "hostPluginSection"
                         },
@@ -64633,6 +64643,16 @@
                       },
                       {
                         "console": {
+                          "id": "/products/subscriptions",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "subscriptions",
+                        "label": "Subscriptions",
+                        "screen": "commerce.subscriptions"
+                      },
+                      {
+                        "console": {
                           "id": "/products/returns",
                           "surface": "hostPluginSection"
                         },
@@ -65304,6 +65324,16 @@
                         "id": "orders",
                         "label": "Orders",
                         "screen": "commerce.orders"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/subscriptions",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "subscriptions",
+                        "label": "Subscriptions",
+                        "screen": "commerce.subscriptions"
                       },
                       {
                         "console": {
@@ -72757,6 +72787,16 @@
                 "screen": "commerce.orders"
               },
               "score": 1000
+            },
+            {
+              "row": {
+                "detail": "Site · Sell · Orders",
+                "group": "appScreens",
+                "id": "site.orders.subscriptions",
+                "label": "Subscriptions",
+                "screen": "commerce.subscriptions"
+              },
+              "score": 100
             },
             {
               "row": {

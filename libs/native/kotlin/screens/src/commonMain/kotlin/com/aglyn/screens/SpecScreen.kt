@@ -71,6 +71,7 @@ import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.OpeningHoursPicker
 import com.aglyn.ui.OutlinedButton
+import com.aglyn.ui.QrCodeImage
 import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
@@ -697,6 +698,19 @@ private fun Block(
             Modifier.fillMaxWidth().heightIn(min = 160.dp, max = 320.dp),
             contentScale = androidx.compose.ui.layout.ContentScale.Fit,
           )
+          footer?.let { Text(it, Modifier.padding(horizontal = space(2f), vertical = space(1f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+      }
+    }
+    "qr" -> {
+      // `{ "type": "qr", "value": "{…}", "caption": "…" }`: a QR code of a link the screen shows (a waiver's share link), drawn by the
+      // kit's own encoder, never fetched.
+      val value = ScreenValues.render(block.string("value").orEmpty(), context)
+      if (value.isNotEmpty()) {
+        SectionCard(title) {
+          Box(Modifier.fillMaxWidth().padding(vertical = space(2f)).testTag("qr-${block.id}"), contentAlignment = Alignment.Center) {
+            QrCodeImage(value, size = 192.dp)
+          }
           footer?.let { Text(it, Modifier.padding(horizontal = space(2f), vertical = space(1f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
       }

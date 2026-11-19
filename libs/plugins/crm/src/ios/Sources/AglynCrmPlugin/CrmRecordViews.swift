@@ -294,6 +294,10 @@ struct RecordDetail: View {
   @State private var notice: String?
   @State private var error: String?
   @State private var site = LiveDoc()
+  /// A task another plugin proposed (the AI summary's next step), filling the New task sheet.
+  @State private var proposedTask: TaskDraft?
+  /// A stage another plugin proposed for this deal, asked about before it moves.
+  @State private var proposedStage: RecordStage?
   @Environment(\.openURL) private var openURL
 
   private var scope: CrmScope { doc.document.map { recordScope(listScope, $0.data) } ?? listScope }
@@ -410,6 +414,11 @@ struct RecordDetail: View {
               "phone": text("phone").isEmpty ? text("mobilePhone") : text("phone"), "company": text("companyName"),
             ])
         }
+        // What another plugin reads about this record, such as the AI summary (the console's `recordInsights` zone).
+        if !context.slotWidgets(recordInsightsZoneName).isEmpty {
+          SlotWidgets(context: context, slot: recordInsightsZoneName)
+            .environment(\.recordInsightsZone, insightsZone(row, document: document, pipeline: pipeline))
+        }
       }
       Section("Details") {
         // The fields that hold something; Edit holds every one.
@@ -477,6 +486,64 @@ struct RecordDetail: View {
     } message: {
       Text(alertMessage)
     }
+    .alert(
+      "Move this deal to \(proposedStage?.name ?? "")?", isPresented: Binding(get: { proposedStage != nil }, set: { if !$0 { proposedStage = nil } })
+    ) {
+      Button("Cancel", role: .cancel) { proposedStage = nil }
+      Button("Move to \(proposedStage?.name ?? "")") {
+        guard let stage = proposedStage else { return }
+        proposedStage = nil
+        Task {
+          do {
+            try await api.moveDeal(id, stageID: stage.id)
+            notice = "Moved to \(stage.name)"
+          } catch {
+            self.error = (error as? LocalizedError)?.errorDescription ?? "The deal could not be moved."
+          }
+        }
+      }
+    } message: {
+      Text("The deal moves as it would from its stage card, and any automation that listens for a stage change runs.")
+    }
+    // A proposed task fills one New task sheet; closing it leaves the next one blank.
+    .onChange(of: action) { _, next in if next != .task { proposedTask = nil } }
+  }
+
+  /// What this page hands the `recordInsights` zone (the console's `CrmRecordInsightsZone`): the record, a task proposal
+  /// where the record has tasks (not a lead), and an open deal's stages with a stage proposal.
+  private func insightsZone(_ row: CrmRow, document: FirestoreDocument, pipeline: Pipeline) -> RecordInsightsZone {
+    let openDeal = kind == .deal && (document.string("status") ?? "open") == "open"
+    let currentStage = document.string("stageId")
+    let stages: [RecordStage]? = openDeal ? pipeline.openStages.map { RecordStage(id: $0.id, name: $0.name) } : nil
+    var proposeTask: (@MainActor (ProposedTask, String) -> Void)?
+    if scope.canWrite && kind != .lead {
+      proposeTask = { task, _ in
+        var draft = taskDraft(row)
+        draft.title = task.title
+        draft.notes = task.notes
+        draft.kind = task.kind
+        draft.priority = task.priority
+        draft.dueAtMs = crmProposedDueAtMs(task.dueInDays)
+        proposedTask = draft
+        action = .task
+      }
+    }
+    var proposeStage: (@MainActor (String, String) -> Void)?
+    if openDeal && scope.canWrite {
+      proposeStage = { stageID, _ in
+        guard stageID != currentStage, let stage = pipeline.openStages.first(where: { $0.id == stageID }) else { return }
+        if !movesStages {
+          error = permissionRefusalText(ContractValues.shared.orgRoleGrants, key: crmMoveStagesKey)
+          return
+        }
+        proposedStage = RecordStage(id: stage.id, name: stage.name)
+      }
+    }
+    // The route's site, as the console's page hands its own `hostId`: none on the workspace's CRM, whatever site the record
+    // is held by, so a summary asked here is found here again.
+    return RecordInsightsZone(
+      hostID: listScope.hostID.isEmpty ? nil : listScope.hostID, orgID: scope.orgID, recordKind: kind.rawValue, recordID: id, name: row.title,
+      stages: stages, stageID: openDeal ? currentStage : nil, proposeTask: proposeTask, proposeStage: proposeStage)
   }
 
   private func alertTitle(_ row: CrmRow) -> String {
@@ -659,8 +726,9 @@ struct RecordDetail: View {
         done("Email sent.")
       }
     case .task:
-      TaskSheet(title: "New task", initial: taskDraft(row), reference: reference) { draft in
+      TaskSheet(title: "New task", initial: proposedTask ?? taskDraft(row), reference: reference) { draft in
         try await api.saveTask(nil, draft)
+        proposedTask = nil
         done("Task added.")
       }
     case .status:
