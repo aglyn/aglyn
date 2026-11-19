@@ -59,7 +59,19 @@
             "id": "form.submitted",
             "label": "Form submitted"
           }
-        ]
+        ],
+        "eventLabels": {
+          "order.paid": "Order paid",
+          "order.fulfilled": "Order shipped",
+          "order.delivered": "Order delivered",
+          "order.refunded": "Order refunded",
+          "order.cancelled": "Order canceled",
+          "booking.created": "Booking confirmed",
+          "booking.rescheduled": "Booking rescheduled",
+          "booking.canceled": "Booking canceled",
+          "contact.created": "New contact",
+          "form.submitted": "Form submitted"
+        }
       },
       "blocks": [
         {
@@ -88,7 +100,7 @@
           "title": "Connected Zaps",
           "when": "data.hooks.configured",
           "items": "data.hooks.hooks",
-          "primary": "{const.events[id=item.events.0].label|item.events.0}",
+          "primary": "{item.events:labeled/const.eventLabels}",
           "secondary": "Last sent {item.lastDeliveryAt:datetime}",
           "tertiary": "{item.keyLabel|item.keyName}",
           "icon": "bolt|bolt",

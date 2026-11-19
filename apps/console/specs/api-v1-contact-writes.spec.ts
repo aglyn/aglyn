@@ -51,6 +51,8 @@ const mockDocs = new Map<string, Record<string, unknown>>()
 let mockOrg: Record<string, unknown> = { plan: 'business' }
 let mockScopes: string[] = ['contacts:read', 'contacts:write']
 let mockUidSeq = 0
+/** The person a connected app acts for (AGL-4235); null models an API key. */
+let mockUid: string | null = null
 
 const mockMonth = new Date().toISOString().slice(0, 7)
 
@@ -319,6 +321,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       orgId: 'org-1',
       keyId: 'key-1',
       scopes: mockScopes,
+      ...(mockUid ? { uid: mockUid } : {}),
     }),
     getOrgDoc: async () => mockOrg,
     lockdownRefusal: async () => null,
@@ -345,6 +348,9 @@ jest.mock('@aglyn/tenant-data-admin', () => {
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The REAL lock verdict a named site is admitted by (AGL-4235): the
+  // site's own lock decides by the method, as at the site router.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/lockdown'),
   // The REAL idempotency claim, the REAL plan table, the REAL contact
   // normalizer and the REAL scope token. Stubbing any of them would make
   // every assertion below a statement about the stub — and the audience band
@@ -512,7 +518,13 @@ beforeAll(() => registerPluginServerDeclarations())
 
 beforeEach(() => {
   mockDocs.clear()
+  // The site documents a named consent site is admitted against (AGL-4235),
+  // as the site router reads them: membership, then the site's own lock.
+  for (const hostId of ['host-1', 'host-2']) {
+    mockDocs.set(`hosts/${hostId}`, { subdomain: hostId, memberRoles: {} })
+  }
   mockUidSeq = 0
+  mockUid = null
   mockScopes = ['contacts:read', 'contacts:write']
   // `hosts` is what `orgOwnsHost` checks: an opt-in over the API names the
   // site it was given to, and a site the org does not own is refused.
@@ -1235,5 +1247,107 @@ describe('the sites an API opt-in covers', () => {
       consentGroupId: 'host-1',
     })
     expect((await response.json()).consentSites).toEqual(['host-1'])
+  })
+})
+
+/*
+ * A contact belongs to the workspace, but `consentSiteId` names a site: where
+ * the opt-in was given on a write, whose profile is read on a read. The
+ * console records a site there only for a person whose access reaches it
+ * (`crm/contacts-create`, `crm/contact-update`), so a connected app may not
+ * name one its person is not on. Admitted the way the site router admits a
+ * site in its path (AGL-4235): membership first, then the site's own lock.
+ */
+describe('the consent site a contact call names is admitted as the site router admits one (AGL-4235)', () => {
+  const MEMBER = 'u-member'
+  const seat = (fields: Record<string, unknown> = {}) =>
+    mockDocs.set('hosts/host-1', { subdomain: 'host-1', memberRoles: { [MEMBER]: 'editor' }, ...fields })
+  const locked = (mode?: string) =>
+    seat({ suspendedAt: Date.now() - 1000, suspendedReasonCode: 'manual', ...(mode ? { suspendedMode: mode } : {}) })
+  const optIn = { email: 'ann@example.com', marketingConsent: true, consentSiteId: 'host-1' }
+  const getAt = (path: string) =>
+    GET(request(path, 'GET'), routeContext(path.split('?')[0].split('/')))
+  const seedOne = () =>
+    mockDocs.set(`${CONTACTS_PATH}/c-1`, { email: 'bo@example.com', name: 'Bo', tags: [], visibleTo: ['org'] })
+
+  it('answers a connected app whose person is not on the site No such site, on a create, an update and a read', async () => {
+    mockUid = MEMBER
+    seat({ memberRoles: { 'someone-else': 'admin' } })
+    seedOne()
+    const created = await postContact(optIn)
+    expect(created.status).toBe(404)
+    expect((await created.json()).error.message).toBe('No such site')
+    expect(contactCount()).toBe(1)
+
+    const patched = await patchContact('c-1', { marketingConsent: true, consentSiteId: 'host-1' })
+    expect(patched.status).toBe(404)
+    expect((await patched.json()).error.message).toBe('No such site')
+    expect(mockDocs.get(`${CONTACTS_PATH}/c-1`)).not.toHaveProperty('marketingConsentByHost')
+
+    for (const path of ['contacts/c-1?consentSiteId=host-1', 'contacts?consentSiteId=host-1']) {
+      const read = await getAt(path)
+      expect(`${path}: ${read.status}`).toBe(`${path}: 404`)
+      expect((await read.json()).error.message).toBe('No such site')
+    }
+  })
+
+  it('lets a member’s app record the site as where consent was given', async () => {
+    mockUid = MEMBER
+    seat()
+    const created = await postContact(optIn)
+    expect(created.status).toBe(201)
+    expect((await created.json()).consentSites).toEqual(['host-1'])
+    expect((await getAt('contacts/con_1?consentSiteId=host-1')).status).toBe(200)
+  })
+
+  it('does not ask an API key about membership: it is the workspace’s own credential', async () => {
+    seat({ memberRoles: {} })
+    expect((await postContact(optIn)).status).toBe(201)
+  })
+
+  it('keeps a site of another workspace answering exactly as before', async () => {
+    mockUid = MEMBER
+    const foreign = await postContact({ ...optIn, consentSiteId: 'host-9' })
+    expect(foreign.status).toBe(400)
+    expect((await foreign.json()).error.fields).toEqual({ consentSiteId: 'No such site in this organization' })
+  })
+
+  it('a read-only site lock passes a read of the site’s profile and refuses a write naming the site', async () => {
+    for (const uid of [MEMBER, null]) {
+      mockDocs.clear()
+      mockUid = uid
+      locked('read-only')
+      seedOne()
+      expect((await getAt('contacts/c-1?consentSiteId=host-1')).status).toBe(200)
+      for (const response of [
+        await postContact(optIn),
+        await patchContact('c-1', { marketingConsent: true, consentSiteId: 'host-1' }),
+      ]) {
+        expect(`${uid}: ${response.status}`).toBe(`${uid}: 423`)
+        expect(await response.json()).toMatchObject({ error: 'locked', scope: 'host', mode: 'read-only' })
+        expect(response.headers.get('X-RateLimit-Limit')).toBe('120')
+        expect(response.headers.get('X-RateLimit-Remaining')).toBe('119')
+      }
+      expect(contactCount()).toBe(1)
+      expect(mockDocs.get(`${CONTACTS_PATH}/c-1`)).not.toHaveProperty('marketingConsentByHost')
+    }
+  })
+
+  it('a full site lock refuses a read and a write alike', async () => {
+    mockUid = MEMBER
+    locked()
+    seedOne()
+    expect((await getAt('contacts/c-1?consentSiteId=host-1')).status).toBe(423)
+    expect((await postContact(optIn)).status).toBe(423)
+  })
+
+  it('leaves a call that names no site untouched, whatever the site holds', async () => {
+    mockUid = MEMBER
+    seat({ memberRoles: {}, suspendedAt: Date.now() - 1000, suspendedReasonCode: 'manual' })
+    seedOne()
+    expect((await getAt('contacts')).status).toBe(200)
+    expect((await getAt('contacts/c-1')).status).toBe(200)
+    expect((await postContact({ email: 'cy@example.com' })).status).toBe(201)
+    expect((await patchContact('c-1', { name: 'Bo Lee' })).status).toBe(200)
   })
 })

@@ -128,4 +128,74 @@ final class FormsTests: XCTestCase {
     ])
     XCTAssertEqual(promoteViolations(["error": "nope"]), [])
   }
+
+  func testReadsTheAfterSendSettingsAndTheSignUpSwitch() {
+    let plain = FormRow(FirestoreDocument(id: "f", data: [:]))
+    XCTAssertFalse(plain.optInOnSubmit)
+    XCTAssertFalse(plain.asksForQuote)
+    XCTAssertFalse(plain.sendsConfirmation())
+    // A confirmation follows the request until it is set by hand (`formSendsConfirmation`).
+    let quote = FormRow(FirestoreDocument(id: "q", data: ["request": ["kind": "quote"], "optInOnSubmit": true]))
+    XCTAssertTrue(quote.asksForQuote)
+    XCTAssertTrue(quote.optInOnSubmit)
+    XCTAssertTrue(quote.sendsConfirmation())
+    XCTAssertFalse(FormRow(FirestoreDocument(id: "q2", data: ["request": ["kind": "quote"], "confirmationEmail": false])).sendsConfirmation())
+    let fields = FormRow(
+      FirestoreDocument(
+        id: "e", data: ["fields": [["fieldName": "workEmail", "fieldType": "text"], ["fieldName": "art", "fieldType": "file"]]]))
+    XCTAssertTrue(fields.hasEmailField)
+    XCTAssertTrue(fields.hasFileField)
+    XCTAssertFalse(plain.hasEmailField)
+  }
+
+  func testTheMetricsSeriesAndRatesAreTheConsoles() {
+    let form = FormRow(
+      FirestoreDocument(
+        id: "m",
+        data: [
+          "stats": [
+            "submissions": 10, "leads": 4,
+            "periods": [
+              "2026-09": ["views": 50, "starts": 20, "submissions": 6],
+              "2026-11": ["views": 30, "submissions": 4],
+              "bogus": ["views": 1],
+            ],
+          ]
+        ]))
+    // The gap month is drawn as a zero between two recorded ones; a key that is not a month is left out.
+    XCTAssertEqual(formPeriodSeries(form.periods).map(\.period), ["2026-09", "2026-10", "2026-11"])
+    XCTAssertEqual(formPeriodSeries(form.periods).map(\.submissions), [6, 0, 4])
+    XCTAssertEqual(formPeriodSeries(form.periods, maxPeriods: 2).map(\.period), ["2026-10", "2026-11"])
+    let rates = FormRates(form)
+    XCTAssertEqual(rates.lead?.percent, "40.0%")
+    XCTAssertEqual(rates.lead?.detail, "4 of 10 submissions")
+    // Every stored month with views counts, as the console reads them (81 views, 10 submissions); starts in one (20, 6).
+    XCTAssertEqual(rates.completion?.percent, "12.3%")
+    XCTAssertEqual(rates.abandon?.percent, "70.0%")
+    XCTAssertEqual(rates.abandon?.detail, "14 of 20 starts")
+    XCTAssertNil(FormRates(FormRow(FirestoreDocument(id: "n", data: [:]))).completion)
+  }
+
+  func testSavesOnlyTheAfterSendAnswersThatChanged() async throws {
+    final class Writer: FirestoreWriter, @unchecked Sendable {
+      var updates: [[String: Any]] = []
+      var merges: [[String: Any]] = []
+      func merge(_ path: [String], _ data: [String: Any]) async throws { merges.append(data) }
+      func update(_ path: [String], _ data: [String: Any]) async throws { updates.append(data) }
+    }
+    let writer = Writer()
+    let api = FormsAPI(api: ConsoleAPIClient(origin: "https://x.test", getIDToken: { _ in "t" }), writer: writer, hostID: "h")
+    let form = FormRow(FirestoreDocument(id: "f", data: ["routing": ["lead": false]]))
+    try await api.saveResponses(form, asksForQuote: true, confirms: nil)
+    XCTAssertEqual((writer.updates[0]["request"] as? [String: Any])?["kind"] as? String, "quote")
+    XCTAssertNil(writer.updates[0]["confirmationEmail"])
+    try await api.saveResponses(form, asksForQuote: false, confirms: true)
+    XCTAssertTrue(writer.updates[1]["request"] is NSNull)
+    XCTAssertEqual(writer.updates[1]["confirmationEmail"] as? Bool, true)
+    try await api.saveRouting(form, lead: false, consentFieldName: nil, optInOnSubmit: true)
+    XCTAssertEqual(writer.merges[0]["optInOnSubmit"] as? Bool, true)
+    try await api.saveRouting(form, lead: false, consentFieldName: nil)
+    XCTAssertNil(writer.merges[1]["optInOnSubmit"])
+    XCTAssertEqual(formBesignerPath(formID: "f", versionID: "v", preview: true), "/forms/f/versions/v/preview")
+  }
 }

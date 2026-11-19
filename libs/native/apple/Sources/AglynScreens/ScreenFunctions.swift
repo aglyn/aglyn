@@ -25,12 +25,34 @@ public enum ScreenFunctions {
       return aiProductsImportJob(args.first ?? nil)
     case "timeZoneChoices":
       return timeZoneChoices()
+    case "computeLifetimePurchaseCents":
+      return lifetimePurchaseCents(args.first ?? nil)
     case "ssoEnforcementAccounts":
       return ssoEnforcementAccounts(
         args.first ?? nil, args.count > 1 ? args[1]?.stringValue : nil, args.count > 2 ? args[2] : nil)
     default:
       return nil
     }
+  }
+
+  /// What a site account has spent (the console's `computeLifetimePurchaseCents`, its drawer's Purchases): each order's
+  /// charged total (`totals.totalCents`, else the legacy `amountCents`) less what was refunded, never below zero, with
+  /// pending and cancelled orders left out.
+  static func lifetimePurchaseCents(_ orders: JSONValue?) -> JSONValue {
+    guard case .array(let rows)? = orders else { return .number(0) }
+    var total = 0.0
+    for order in rows {
+      guard case .object(let fields) = order else { continue }
+      let status = fields["status"].map { $0 == .null ? "" : ScreenValues.text($0) } ?? ""
+      if status == "pending" || status == "cancelled" { continue }
+      var amount: JSONValue? = nil
+      if case .object(let totals)? = fields["totals"], let cents = totals["totalCents"], cents != .null { amount = cents }
+      if amount == nil, let legacy = fields["amountCents"], legacy != .null { amount = legacy }
+      let charged = ScreenValues.number(amount) ?? 0
+      let refunded = max(0, ScreenValues.number(fields["refundedCents"]) ?? 0)
+      total += max(0, (charged.isNaN ? 0 : charged) - (refunded.isNaN ? 0 : refunded))
+    }
+    return .number(total)
   }
 
   private static func plain(_ value: JSONValue?) -> [String: JSONValue]? {
