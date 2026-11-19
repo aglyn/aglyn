@@ -61,6 +61,8 @@ const DOORS = [
   'libs/tenant/data/admin/src/lib/server/duplicate-resource.ts',
   // A site starter's pages, written onto the new site it provisions (AGL-4049).
   'libs/tenant/data/admin/src/lib/server/provision-starter.ts',
+  // A page and its first version in one transaction, for the public API (AGL-4235).
+  'libs/tenant/data/admin/src/lib/server/page-create.ts',
   'libs/plugins/marketplace/src/lib/server/install-email-starter.ts',
   'libs/plugins/ai/src/lib/jobs/ai-job-drafts.ts',
   'libs/plugins/email/src/lib/server-email-drafts.ts',
