@@ -213,7 +213,7 @@ final class CommerceRegistrationTests: XCTestCase {
     XCTAssertTrue(registry.quickActions(for: .aglyn).allSatisfy { registry.screen($0.screen) != nil })
     XCTAssertEqual(registry.tabs(for: .aglyn).map(\.id), ["commerce.orders-tab", "commerce.products-tab"])
     XCTAssertEqual(registry.resolve("/acme/hosts/shop/products/orders"), .screen("commerce.orders", ["orgSlug": "acme", "hostSlug": "shop"]))
-    XCTAssertEqual(registry.screens(for: .pos).map(\.id), ["commerce.card-readers", "commerce.display", "commerce.kiosk", "commerce.register"])
+    XCTAssertEqual(registry.screens(for: .pos).map(\.id), ["commerce.card-readers", "commerce.display", "commerce.hardware", "commerce.kiosk", "commerce.register"])
   }
 
   /// The store links the server writes open the page they name (AGL-4215): one order or quote from the console's own
