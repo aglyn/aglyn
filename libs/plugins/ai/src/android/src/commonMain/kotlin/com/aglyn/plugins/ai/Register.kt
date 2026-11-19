@@ -32,6 +32,8 @@ fun registerAINative(registrar: NativePluginRegistrar) {
     AiCreateScreen(context, AiCreateKind.of(params["kind"]), params["jobId"], params["brief"])
   }
   // Home's "Needs you" line, and the AI panel the shell docks beside every screen (a sheet on phones).
+  // The AI summary on a CRM record's page (the console's `recordInsights` widget, AGL-2917): the CRM hosts the zone.
+  registrar.widget("ai.crm-record", title = "AI summary", order = 10, slot = com.aglyn.pluginhost.RECORD_INSIGHTS_ZONE) { context -> AiCrmRecordCard(context) }
   registrar.widget("ai.needs-you", title = "Needs you", order = 40, requiresSite = true, slot = "homeNeedsYou") { context -> AiNeedsYouWidget(context) }
   registrar.widget("ai.assist-panel", title = "Assist", order = 10, slot = ASSIST_PANEL_SLOT) { context -> AssistPanel(context) }
   // "Ask AI about these numbers" (the console's `hostDashboard` and `orgDashboard` tiles): on a site's Home and Analytics,

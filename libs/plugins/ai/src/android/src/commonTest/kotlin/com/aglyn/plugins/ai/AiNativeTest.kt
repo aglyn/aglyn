@@ -14,7 +14,7 @@ class AiNativeTest {
     "widgets" to listOf(
       "ai.seo-audit", "ai.seo-start", "ai.site-memory",
       "ai.create-page", "ai.create-template", "ai.create-layout", "ai.create-form", "ai.create-component",
-      "ai.needs-you", "ai.assist-panel", "ai.insight-ask", "ai.org-insight-ask", "ai.explain-funnel",
+      "ai.needs-you", "ai.assist-panel", "ai.insight-ask", "ai.org-insight-ask", "ai.explain-funnel", "ai.crm-record",
     ),
     "quickActions" to listOf("ai.open"),
     "deepLinks" to listOf("ai.jobs.link", "ai.job.link", "ai.signals.link"),
@@ -37,6 +37,8 @@ class AiNativeTest {
       "In my funnel \"Pricing to contact\" over the last 30 days, where do visitors drop off most, and what might explain it?",
       aiFunnelQuestion("Pricing to contact", 30),
     )
+    // The AI summary is in a CRM record page's `recordInsights` zone (AGL-2917).
+    assertEquals(listOf("ai.crm-record"), registry.widgets(slot = com.aglyn.pluginhost.RECORD_INSIGHTS_ZONE).map { it.id })
     // Create with AI is in each list's create zone, under the console's zone names.
     assertEquals(listOf("ai.create-page"), registry.widgets(slot = "hostScreens").map { it.id })
     assertEquals(listOf("ai.create-template"), registry.widgets(slot = "hostTemplates").map { it.id })

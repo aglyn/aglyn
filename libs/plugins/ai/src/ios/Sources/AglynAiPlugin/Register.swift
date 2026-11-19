@@ -52,6 +52,10 @@ public func registerAINative(_ registrar: NativePluginRegistrar) {
   registrar.widget("ai.explain-funnel", title: aiFunnelAsk, icon: "sparkles", order: 10, requiresSite: true, slot: FunnelInsightZone.name) {
     AiFunnelAskButton(context: $0)
   }
+  // The AI summary on a CRM record's page (the console's `recordInsights` widget, AGL-2917): the CRM hosts the zone.
+  registrar.widget("ai.crm-record", title: "AI summary", icon: "sparkles", order: 10, slot: recordInsightsZoneName) {
+    AiCrmRecordCard(context: $0)
+  }
   for kind in AiCreateKind.allCases {
     registrar.widget(kind.widgetID, title: "Create with AI", icon: "sparkles", order: 10, requiresSite: true, slot: kind.slot) {
       AiCreateButton(context: $0, kind: kind)

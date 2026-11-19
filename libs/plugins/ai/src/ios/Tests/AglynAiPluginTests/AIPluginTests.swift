@@ -22,6 +22,7 @@ final class AIPluginTests: XCTestCase {
         "ai.seo-audit", "ai.seo-start", "ai.site-memory", "ai.create-page", "ai.create-template", "ai.create-layout",
         "ai.create-form", "ai.create-component", "ai.needs-you", "ai.assist-panel", "ai.insight-ask", "ai.org-insight-ask",
         "ai.explain-funnel",
+        "ai.crm-record",
       ],
       quickActions: ["ai.open"],
       deepLinks: ["ai.job.link", "ai.jobs.link", "ai.signals.link"])
@@ -42,6 +43,8 @@ final class AIPluginTests: XCTestCase {
     XCTAssertEqual(
       aiFunnelQuestion("Pricing to contact", days: 30),
       "In my funnel \"Pricing to contact\" over the last 30 days, where do visitors drop off most, and what might explain it?")
+    // The AI summary is in a CRM record page's `recordInsights` zone (AGL-2917).
+    XCTAssertEqual(registry.widgets(for: .aglyn, slot: recordInsightsZoneName).map(\.id), ["ai.crm-record"])
     // Create with AI is in each list's create zone, under the console's zone names.
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: "hostScreens").map(\.id), ["ai.create-page"])
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: "hostTemplates").map(\.id), ["ai.create-template"])
