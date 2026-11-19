@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
 
 class TaxEnginesNativeTest {
   private val declared = mapOf(
-    "screens" to listOf("tax-engines.service"),
+    "screens" to listOf("tax-engines.service", "tax-engines.order"),
     "deepLinks" to listOf(),
   )
 
@@ -23,7 +23,7 @@ class TaxEnginesNativeTest {
   @Test
   fun everySpecNamesItsRoutesAndTheCommerceSettingsZone() {
     val specs = TaxEnginesScreenJson.files.flatMap { ScreenSpec.parseFile(it) }
-    assertEquals(listOf("tax-engines.service").sorted(), specs.map { it.id }.sorted())
-    assertTrue(specs.any { "commerceSettings" in it.zones } || specs.all { it.zones.isEmpty() })
+    assertEquals(listOf("tax-engines.service", "tax-engines.order").sorted(), specs.map { it.id }.sorted())
+    assertTrue(specs.any { "commerceSettingsTaxes" in it.zones } || specs.all { it.zones.isEmpty() })
   }
 }

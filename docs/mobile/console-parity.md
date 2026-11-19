@@ -9,6 +9,14 @@ web link open in the apps' in-app browser screen (AGL-3935): pushed onto the
 stack on a phone, in the main area beside the navigation on a tablet, Mac or
 Windows, with back, forward, reload and Open in browser, Copy link and Share.
 
+Store builds and buying (the owner's decision of 2026-11-19): the App Store and Google Play builds leave out every
+control that takes or starts a payment to Aglyn (choosing or switching a plan, add-ons, AI credits, Site Care, paying
+an invoice, adding a card, paying for a marketplace listing, a paid starter) and show one line in its place: a "Manage
+billing on the web" link on the App Store's United States storefront, otherwise a plain sentence. Debug builds keep all
+of it. The switch is `StoreBilling` in AglynCore and the Kotlin core (`AGLYN_IN_APP_BILLING`, a build-time value, never
+remote; `app.billing` in the screen specs). A parity sweep never "fixes" a store build's missing billing controls: they
+are left out on purpose, and the billing rows below are driven in a debug build.
+
 This is the checklist. A box is ticked only when the row's screens and actions
 were driven in the running apps on the seeded local stack (Firebase emulators,
 `tools/scripts/seed-native-emulator.mjs` and a real local console), on every

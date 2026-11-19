@@ -24,6 +24,6 @@ class ShippingNativeTest {
   fun everySpecNamesItsRoutesAndTheCommerceSettingsZone() {
     val specs = ShippingScreenJson.files.flatMap { ScreenSpec.parseFile(it) }
     assertEquals(listOf("shipping.service", "shipping.shipFrom", "shipping.boxes", "shipping.labels", "shipping.services", "shipping.billing", "shipping.carriers", "shipping.connectCarrier", "shipping.own", "shipping.connectOwn", "shipping.spend", "shipping.order", "shipping.returnLabel", "shipping.batch", "shipping.batchReview").sorted(), specs.map { it.id }.sorted())
-    assertTrue(specs.any { "commerceSettings" in it.zones } || specs.all { it.zones.isEmpty() })
+    assertTrue(specs.any { "commerceSettingsShipping" in it.zones } || specs.all { it.zones.isEmpty() })
   }
 }
