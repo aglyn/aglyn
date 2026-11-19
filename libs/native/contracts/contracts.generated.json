@@ -2095,6 +2095,17 @@
     168
   ],
   "DROP_OFF_WATCHES_MAX": 12,
+  "DUPLICABLE_RESOURCE_NOUNS": {
+    "campaign": "campaign",
+    "component": "component",
+    "emailDesign": "email design",
+    "emailTemplate": "email template",
+    "form": "form",
+    "layout": "layout",
+    "screen": "page",
+    "template": "template",
+    "workflow": "workflow"
+  },
   "DUPLICATE_ACTIVITY_ACTION_LABELS": {
     "campaign.duplicated": "Duplicated a campaign",
     "component.duplicated": "Duplicated a component",
@@ -2106,6 +2117,47 @@
     "template.duplicated": "Duplicated a template",
     "workflow.duplicated": "Duplicated a workflow"
   },
+  "DUPLICATE_COPIES": {
+    "campaign": [
+      "The subject, message, sender and design",
+      "A new draft — the audience and the send time are cleared"
+    ],
+    "component": [
+      "The definition and its properties",
+      "The latest version as a new draft",
+      "No instances — pages keep pointing at the original"
+    ],
+    "emailDesign": [
+      "The latest version, with its full element tree",
+      "A new draft — not published"
+    ],
+    "emailTemplate": [
+      "The subject and body, with their merge fields"
+    ],
+    "form": [
+      "The design, fields, validation, consent and routing",
+      "A new form of its own — submissions stay with the original"
+    ],
+    "layout": [
+      "The latest version, with its full element tree and properties",
+      "A new draft — no page uses the copy yet"
+    ],
+    "screen": [
+      "The latest version, with its full element tree and layout values",
+      "Description and SEO fields",
+      "A new draft — the copy is not published and has no address yet"
+    ],
+    "template": [
+      "The element tree, placeholders and properties",
+      "Description, slug and SEO fields"
+    ],
+    "workflow": [
+      "Every step and the return value",
+      "The trigger is cleared, so the copy runs nothing until you arm it"
+    ]
+  },
+  "DUPLICATE_NAME_MAX": 200,
+  "DUPLICATE_NAME_PREFIX": "Copy of ",
   "EMAIL_BLOCK_STARTER_TREES_JSON": "{\"header\":{\"$id\":null,\"componentId\":\"emailSection\",\"pluginId\":\"email\",\"props\":{\"align\":\"center\",\"padding\":24,\"emailRole\":\"header\"},\"nodes\":[{\"$id\":null,\"componentId\":\"emailImage\",\"pluginId\":\"email\",\"props\":{\"alt\":\"Your company logo\",\"width\":160,\"align\":\"center\"}},{\"$id\":null,\"componentId\":\"emailText\",\"pluginId\":\"email\",\"props\":{\"children\":\"Your company\",\"variant\":\"subheading\",\"align\":\"center\"}}]},\"footer\":{\"$id\":null,\"componentId\":\"emailSection\",\"pluginId\":\"email\",\"props\":{\"align\":\"center\",\"padding\":24,\"emailRole\":\"footer\"},\"nodes\":[{\"$id\":null,\"componentId\":\"emailDivider\",\"pluginId\":\"email\",\"props\":{}},{\"$id\":null,\"componentId\":\"emailText\",\"pluginId\":\"email\",\"props\":{\"children\":\"Your company · 123 Main St, City\",\"variant\":\"caption\",\"align\":\"center\",\"color\":\"#6b6b6b\"}},{\"$id\":null,\"componentId\":\"emailText\",\"pluginId\":\"email\",\"props\":{\"children\":\"You're receiving this because you're a customer of Your company.\",\"variant\":\"caption\",\"align\":\"center\",\"color\":\"#6b6b6b\"}}]}}",
   "EMAIL_LIST_QUERY": {
     "fields": [

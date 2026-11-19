@@ -770,4 +770,21 @@ final class CrmContactByEmailTests: XCTestCase {
     XCTAssertNil(crmEmailCheckWarning(crmEmailCheck(.object(["checked": .bool(true), "code": .string("other"), "message": .string("x")]))))
     XCTAssertEqual(crmAccountLockChip(crmEmailCheck(.object(["accountLock": .string("banned")])))?.label, "Account banned")
   }
+
+  func testThePreviewFillsMergeFieldsAsTheConsoleDoes() throws {
+    for (index, item) in try functionCases("resolveCrmMergeFields").enumerated() {
+      let want = item.result as? [String: Any]
+      let got = crmResolveMergeFields(item.args[0] as? String ?? "", crmMergeContext(item.args[1] as? [String: Any]))
+      XCTAssertEqual(got.text, want?["text"] as? String, "case \(index)")
+      XCTAssertEqual(got.unresolved, want?["unresolved"] as? [String], "case \(index)")
+    }
+    for (index, item) in try functionCases("crmMergeUnresolvedMessage").enumerated() {
+      XCTAssertEqual(crmMergeUnresolvedMessage(item.args[0] as? [String] ?? []), item.result as? String, "case \(index)")
+    }
+    for (index, item) in try functionCases("duplicateDisplayName").enumerated() {
+      XCTAssertEqual(crmDuplicateDisplayName(item.args[0] as? String), item.result as? String, "case \(index)")
+    }
+    XCTAssertTrue(crmHasMergeFields("Hi {{ contact.firstName }}"))
+    XCTAssertFalse(crmHasMergeFields("Hi {contact.firstName} {{bare}}"))
+  }
 }

@@ -27,6 +27,7 @@ enum CrmRoutes {
   static let sharing = "/api/crm/sharing"
   static let emailSend = "/api/crm/email-send"
   static let emailCheck = "/api/crm/email-check"
+  static let emailTemplateDuplicate = "/api/crm/email-template-duplicate"
   static let members = "/api/orgs/members"
   static let orgActivity = "/api/crm/org-activity"
 }
@@ -373,6 +374,14 @@ struct CrmAPI {
 
   func deleteActivity(_ id: String) async throws {
     try await reader.deleteDocument(crmPath(scope.orgID, "crmActivities") + [id])
+  }
+
+  /// Duplicate… on a template (`email-template-duplicate`): the copy is filed under this person in the original's scope;
+  /// answers the copy's name, which the route numbers when another template has it.
+  func duplicateTemplate(_ id: String, name: String, attemptKey: String) async throws -> String {
+    let answer = try await api.request(
+      CrmRoutes.emailTemplateDuplicate, method: .post, body: body(["templateId": id, "name": name, "attemptKey": attemptKey]))
+    return answer?["name"]?.stringValue ?? name
   }
 
   func sendEmail(subject: String, message: String, links: [String: String]) async throws {

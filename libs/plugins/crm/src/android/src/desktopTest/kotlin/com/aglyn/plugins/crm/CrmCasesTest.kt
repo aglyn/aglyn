@@ -568,4 +568,23 @@ class CrmCasesTest {
     assertEquals(null, crmEmailCheckWarning(crmEmailCheck(Json.parseToJsonElement("""{"checked":true,"code":"other","message":"x"}"""))))
     assertEquals("Account banned", crmAccountLockChip(crmEmailCheck(Json.parseToJsonElement("""{"accountLock":"banned"}""")))?.label)
   }
+
+  @Test
+  fun thePreviewFillsMergeFieldsAsTheConsoleDoes() {
+    cases("resolveCrmMergeFields").forEach { (args, result) ->
+      val want = map(result)
+      val got = crmResolveMergeFields(plain(args[0]) as? String ?: "", crmMergeContext(map(args[1])))
+      assertEquals(want?.get("text"), got.text, args.toString())
+      assertEquals(want?.get("unresolved"), got.unresolved, args.toString())
+    }
+    cases("crmMergeUnresolvedMessage").forEach { (args, result) ->
+      @Suppress("UNCHECKED_CAST")
+      assertEquals(plain(result), crmMergeUnresolvedMessage(plain(args[0]) as List<String>), args.toString())
+    }
+    cases("duplicateDisplayName").forEach { (args, result) ->
+      assertEquals(plain(result), crmDuplicateDisplayName(plain(args[0]) as? String), args.toString())
+    }
+    assertTrue(crmHasMergeFields("Hi {{ contact.firstName }}"))
+    assertFalse(crmHasMergeFields("Hi {contact.firstName} {{bare}}"))
+  }
 }
