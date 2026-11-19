@@ -1,18 +1,19 @@
 ---
 sidebar_position: 3
 title: Sites
-description: List your organization's sites and read their details.
+description: List your organization's sites, read their details, create a site, and publish one — including making chosen pages' drafts live.
 ---
 
 # Sites
 
 List the sites in your organization, read their details, and
-[create](#create) new ones. Renaming and deleting a site stay console actions, and so
-does editing what is on a page — but you can [publish](#publish) a site, which is what
-makes writes you made elsewhere in the API appear on the live pages.
+[create](#create) new ones. Renaming and deleting a site stay console actions. You can
+[publish](#publish) a site, which is what makes writes you made elsewhere in the API
+appear on the live pages — and, given a list of pages, makes those pages' drafts live.
 
 Several things under a site are resources of their own, with their own scopes:
-[pages](pages.md) and each page's search listing, the site's
+[pages](pages.md) — with what is on each and its search listing — the site's
+[page templates](templates.md), the site's
 [search listing](seo.md), its [business details](business-details.md), its
 [products](products.md) and [orders](orders.md), its
 [form submissions](form-submissions.md), and its [media](media.md).
@@ -127,7 +128,7 @@ is not a member of.
 
 ### Publish {#publish}
 
-`POST /v1/sites/{siteId}/publish` — scope `sites:publish`.
+`POST /v1/sites/{siteId}/publish` — scope `sites:publish`. The body is optional: with [`pages`](#publish-pages) it also makes those pages' drafts live.
 
 Refreshes the site's live pages so data you wrote over the API appears **now** instead
 of when the cache happens to expire.
@@ -163,6 +164,7 @@ curl -X POST "https://app.aglyn.com/api/v1/sites/host_demo/publish" \
 | `reason` | `null` on success. Otherwise why not: `"not_routed"` (the site has no live pages yet), `"not-configured"`, `"tenant-{status}"`, `"error"`. |
 | `pages` | How many cached pages were dropped. |
 | `pagesDropped` | Pages **not** refreshed because the site exceeded the 250-page limit for one call. They catch up on their own when their cached copy expires, within the hour. |
+| `promoted` | Only when the request named [`pages`](#publish-pages): what happened to each. |
 
 A `200` does **not** always mean published. `published: false` with a `reason` is the
 honest answer for a site with nothing routed yet, or a refresh we could not complete —
@@ -171,6 +173,108 @@ going to change. Treat `published` as the field that matters, not the status cod
 
 Publishing is **idempotent and takes no `Idempotency-Key`**: publishing twice lands the
 same state and returns the same answer.
+
+#### Publish pages {#publish-pages}
+
+Send a body with `pages`, a list of 1 to 25 page ids, to make those pages' **drafts**
+live as well — what the editor's **Publish** does for one page. This is how
+[edits to a page's content](pages.md#edit-content) and a [new page](pages.md#create)
+reach visitors.
+
+```bash
+curl -X POST "https://app.aglyn.com/api/v1/sites/host_demo/publish" \
+  -H "Authorization: Bearer aglyn_sk_…" \
+  -H "Content-Type: application/json" \
+  -d '{ "pages": ["scr_about", "scr_catering"] }'
+```
+
+For each page, in order:
+
+| The page | What publishing it does | `status` |
+| --- | --- | --- |
+| Published, with a draft | The draft is saved into the page's live version, **replacing what the page showed**, and the draft is cleared. The version it replaces is not kept. | `published` |
+| Published, with no draft | Nothing; it is left as it is. | `unchanged` |
+| Not yet published | Its draft, if it has one, is saved into its version, and the page is published at its own address (its `slug` under its parent's address), with any published pages below it. | `published` |
+| The site's placeholder home page | Its draft is saved, and its address is republished as the site's own home page. | `published` |
+
+**Every page is checked before any is written.** If one is refused, nothing is
+published and the publish budget is not spent. After the pages, the site's live pages
+are refreshed exactly as a publish without a body does.
+
+```json
+{
+  "object": "publish",
+  "site": "host_demo",
+  "published": true,
+  "reason": null,
+  "pages": 14,
+  "pagesDropped": 0,
+  "promoted": [
+    { "page": "scr_about", "status": "published", "path": "/about" },
+    { "page": "scr_catering", "status": "published", "path": "/catering" }
+  ]
+}
+```
+
+`promoted` is present only when you sent `pages`: one line per page, with its address
+as a visitor types it. A retry is safe: a page whose draft already went live has no
+draft left and answers `unchanged`.
+
+Only a site's ordinary pages are published this way. **Layouts, reusable components,
+email designs and templates are never published by it**, and neither is any page you
+did not name. A body with no `pages` member, or no body at all, only refreshes the
+live pages, as before.
+
+With `pages`, a [connected app](../conventions.md#site-access) needs its person's
+**Publish site content** permission on the site, not only **Edit site content**.
+
+##### When a page is refused {#publish-refusals}
+
+A refusal answers with the first refused page's status and reason in the usual error
+envelope, and every page's line beside it in `results`:
+
+```json
+{
+  "error": {
+    "type": "conflict",
+    "message": "This page’s draft was started before its last save, so it is out of date. Open it in the editor to bring it up to date, then publish.",
+    "code": "stale_draft"
+  },
+  "results": [
+    { "page": "scr_about", "status": "refused", "code": "stale_draft", "message": "This page’s draft was started before its last save, so it is out of date. Open it in the editor to bring it up to date, then publish." },
+    { "page": "scr_catering", "status": "not_attempted" }
+  ]
+}
+```
+
+A body that is not valid — not a JSON object, `pages` not 1 to 25 distinct page ids,
+or another member beside it — is an ordinary `400` with `code: "validation_failed"` and
+`fields`, and no `results`. Each page's own refusals:
+
+| Status | `code` | Means |
+| --- | --- | --- |
+| `400` | `not_a_page` | The id is an email design, an error page, a collection template or a folder. |
+| `400` | `no_slug` | A page not yet published has no address (`slug`). [Give it one](pages.md#update) first. |
+| `400` | `slug_path_separator` | The page's address holds a `/`. |
+| `400` | `reserved_address` | The page, or a published page below it, would take a reserved address. |
+| `404` | `page_not_found` | No such page on this site, or it is deleted. |
+| `409` | `stale_draft` | The page's draft was started before its last save, so it is out of date. Open it in the editor to bring it up to date, then publish. |
+| `409` | `scheduled_publish_pending` | A scheduled publish is waiting on the page. Cancel it or run it in the console first. |
+| `409` | `forms_off_for_site` | The page carries a form, and Forms is switched off for the site. |
+| `409` | `no_version` | The page has no saved version to publish. |
+| `409` | `unpublished_ancestor` | The page sits under a page that is not published yet. Publish the parent first. |
+| `409` | `address_taken` | Another published page holds the address, or another page in the same request would take it. |
+| `409` | `address_changed` | The page is live at one address, and publishing it would move it to another. Publish it from the editor. |
+| `409` | `publish_from_editor` | Some pages can only be published from the editor; the message says why. Open the page in the editor and publish it there. |
+| `409` | `page_changed` | The page changed while it was being published. Nothing was published; try again. |
+| `413` | `page_too_large` | The page is over 900,000 bytes. |
+
+A refusal found while writing — another writer changed a page between the check and
+the write — stops there: the response carries `promoted` with what already went live,
+and `results` with every page's line, so nothing is claimed that did not happen. If a
+new page's draft was saved but its address was then refused (`code: "route_refused"`),
+its line says `"draftSaved": true`: the page still has no address, so no visitor sees
+it.
 
 #### It is rate limited per site, not per key {#publish-limit}
 
@@ -189,17 +293,23 @@ records and publishes once is both faster and within budget; one that publishes 
 record is refused after ten and gains nothing over waiting.
 
 A connected app publishes only where its person has **Edit site content** on the site
-— see [Conventions → Sites a connected app can reach](../conventions.md#site-access).
+— and **Publish site content** when the request names `pages` — see
+[Conventions → Sites a connected app can reach](../conventions.md#site-access).
 
 #### Writes that are live without a publish {#live-when-saved}
 
 Some writes refresh the live site themselves, because the console has no draft for
 them either: [products](products.md#live-when-saved), a site's
 [search listing](seo.md#live-when-saved), a page's
-[search listing](pages.md#live-when-saved), and
-[business details](business-details.md#live-when-saved). Each is saved at once and the
-live site refreshes right away — no publish needed, and none of them spends the
-publish budget.
+[search listing](pages.md#live-when-saved),
+[business details](business-details.md#live-when-saved), and a published page's
+[name, description, address or place](pages.md#update) and its
+[deletion](pages.md#delete). Each is saved at once and the live site refreshes right
+away — no publish needed, and none of them spends the publish budget.
+
+[Edits to a page's content](pages.md#edit-content) are **not** among them: they are
+saved as the page's draft, and visitors see them only once the page is
+[published](#publish-pages).
 
 Because there is nothing to review afterwards, an app acting for a person should show
 the change and get their approval before it sends the write.
@@ -216,8 +326,10 @@ written.
 | Status | `type` | When |
 | --- | --- | --- |
 | `403` | `insufficient_scope` | Key lacks `sites:read`, or `sites:publish` on the publish path. |
-| `403` | `forbidden` | `code: "site_permission_required"` — a [connected app](../conventions.md#site-access) publishing a site its person can't edit. |
+| `400` | `bad_request` | `code: "validation_failed"` — a publish body that is not valid; see [When a page is refused](#publish-refusals). |
+| `403` | `forbidden` | `code: "site_permission_required"` — a [connected app](../conventions.md#site-access) publishing a site its person can't edit, or naming `pages` without the permission to publish. |
 | `404` | `not_found` | Unknown or unowned site; unknown sub-path. |
 | `405` | `method_not_allowed` | Anything other than `GET`, or anything other than `POST` on `/publish`. |
 | `423` | — | The site is [locked](../conventions.md#site-access): every call on it while the lock lasts, or only writes under a read-only lock. |
+| `400`, `404`, `409`, `413` | — | A page named in `pages` was refused. See [When a page is refused](#publish-refusals). |
 | `429` | `rate_limited` | The site's [publish budget](#publish-limit) is spent. Carries `Retry-After`. |
