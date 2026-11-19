@@ -80,7 +80,7 @@ struct PageScheduleSection: View {
       }
       .buttonStyle(.borderless)
       if locked {
-        AglynUpgradeNotice(plan.upsell) { context.navigate("core.billing.plans") }
+        AglynUpgradeNotice(plan.upsell, action: planUpgradeAction { context.navigate("core.billing.plans") })
       } else if !canPublish {
         AglynHelperText("Your role on this site can edit content but not publish it.")
       }
