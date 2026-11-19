@@ -49,6 +49,31 @@ class MarketplaceCasesTest {
   }
 
   @Test
+  fun templateShelfAsksAndSaysWhatTheConsoleDoes() {
+    val plain = templateShelfQuery("", 24)
+    assertEquals(LISTINGS, plain.collectionPath)
+    assertEquals(24, plain.limit)
+    assertEquals(true, plain.filters.toString().contains("kind"), plain.toString())
+    val searched = templateShelfQuery("  bakery  ", 24)
+    assertEquals(true, searched.filters.toString().contains("nameTokens"), searched.toString())
+    assertEquals("5 pages · v3 · free", templateShelfFacts(5.0, "3", 0.0))
+    assertEquals("? pages · v1.2.0 · \$12", templateShelfFacts(null, "1.2.0", 12.0))
+    // A store build (StoreBilling.buying off) says a paid template is paid, not its price, and offers no Use on it.
+    assertEquals("5 pages · v3 · paid", templateShelfFacts(5.0, "3", 12.0, buying = false))
+    assertEquals("5 pages · v3 · free", templateShelfFacts(5.0, "3", 0.0, buying = false))
+    assertEquals(listOf(true, false, true), listOf(templateShelfOffersUse(12.0, true), templateShelfOffersUse(12.0, false), templateShelfOffersUse(0.0, false)))
+    assertEquals(
+      "Saved 1 template from \"Bakery\" to your library — open Templates to create pages from them.",
+      templateInstalledMessage(1, "Bakery"),
+    )
+    assertEquals(true, templateInstalledMessage(5, "Bakery").startsWith("Saved 5 templates"))
+    assertEquals(com.aglyn.pluginhost.TemplateGalleryShelfState.EMPTY, templateShelfState(offered = false, loading = true, visible = true))
+    assertEquals(com.aglyn.pluginhost.TemplateGalleryShelfState.LOADING, templateShelfState(offered = true, loading = true, visible = false))
+    assertEquals(com.aglyn.pluginhost.TemplateGalleryShelfState.SHOWN, templateShelfState(offered = true, loading = false, visible = true))
+    assertEquals(com.aglyn.pluginhost.TemplateGalleryShelfState.EMPTY, templateShelfState(offered = true, loading = false, visible = false))
+  }
+
+  @Test
   fun updateReviewOfACopy() {
     cases("resolveProvenance").forEach { (args, result) ->
       @Suppress("UNCHECKED_CAST")

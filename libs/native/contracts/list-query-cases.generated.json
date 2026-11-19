@@ -13214,6 +13214,269 @@
         ],
         "notices": []
       }
+    },
+    {
+      "declaration": "SITE_TEMPLATE_SHELF_QUERY",
+      "label": "no clauses",
+      "request": {
+        "clauses": [],
+        "base": [
+          {
+            "op": "==",
+            "path": "kind",
+            "value": "template"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "kind",
+            "value": "template"
+          }
+        ],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SITE_TEMPLATE_SHELF_QUERY",
+      "label": "sort __name__ asc",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "kind",
+            "value": "template"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "kind",
+            "value": "template"
+          }
+        ],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SITE_TEMPLATE_SHELF_QUERY",
+      "label": "sort __name__ reversed",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "direction": "desc",
+          "path": "__name__"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "kind",
+            "value": "template"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "kind",
+            "value": "template"
+          }
+        ],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SITE_TEMPLATE_SHELF_QUERY",
+      "label": "an undeclared sort is ignored",
+      "request": {
+        "clauses": [],
+        "sort": {
+          "path": "undeclared",
+          "direction": "asc"
+        },
+        "base": [
+          {
+            "op": "==",
+            "path": "kind",
+            "value": "template"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "kind",
+            "value": "template"
+          }
+        ],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SITE_TEMPLATE_SHELF_QUERY",
+      "label": "search one word",
+      "request": {
+        "clauses": [],
+        "search": [
+          "Acme"
+        ],
+        "base": [
+          {
+            "op": "==",
+            "path": "kind",
+            "value": "template"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "kind",
+            "value": "template"
+          },
+          {
+            "path": "nameTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [],
+        "searched": "acme",
+        "refused": [],
+        "notices": []
+      }
+    },
+    {
+      "declaration": "SITE_TEMPLATE_SHELF_QUERY",
+      "label": "search two words",
+      "request": {
+        "clauses": [],
+        "search": [
+          "acme",
+          "widgets"
+        ],
+        "base": [
+          {
+            "op": "==",
+            "path": "kind",
+            "value": "template"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "kind",
+            "value": "template"
+          },
+          {
+            "path": "nameTokens",
+            "op": "array-contains",
+            "value": "acme"
+          }
+        ],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [],
+        "searched": "acme",
+        "refused": [],
+        "notices": [
+          "Search matches one word at a time: showing results for \"acme\"."
+        ]
+      }
+    },
+    {
+      "declaration": "SITE_TEMPLATE_SHELF_QUERY",
+      "label": "an unknown field is refused",
+      "request": {
+        "clauses": [
+          {
+            "field": "nope",
+            "op": "equals",
+            "value": "x"
+          }
+        ],
+        "base": [
+          {
+            "op": "==",
+            "path": "kind",
+            "value": "template"
+          }
+        ]
+      },
+      "plan": {
+        "filters": [
+          {
+            "op": "==",
+            "path": "kind",
+            "value": "template"
+          }
+        ],
+        "orderBy": {
+          "direction": "asc",
+          "path": "__name__"
+        },
+        "served": [],
+        "searched": null,
+        "refused": [
+          {
+            "clause": {
+              "field": "nope",
+              "op": "equals",
+              "value": "x"
+            },
+            "reason": "this list does not filter by that"
+          }
+        ],
+        "notices": []
+      }
     }
   ]
 }

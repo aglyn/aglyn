@@ -298,6 +298,28 @@ final class MarketplaceTests: XCTestCase {
         installPictureReadPhase(orgPinPending: pin as? String == "pending", orgPin: read, sitePins: input["sitePins"] as? String ?? ""),
         item.result as? String, "\(item.args)")
     }
+    // The template gallery's shelf (the console's TemplateGalleryShelf).
+    let plain = templateShelfQuery(search: "", limit: 24)
+    XCTAssertEqual(plain.collection, [listingsCollection])
+    XCTAssertEqual(plain.limit, 24)
+    XCTAssertTrue("\(plain.filters) \(plain.equals)".contains("kind"))
+    XCTAssertTrue("\(templateShelfQuery(search: " bakery ", limit: 24).filters)".contains("nameTokens"))
+    XCTAssertEqual(templateShelfFacts(screenCount: 5, version: "3", priceUSD: 0), "5 pages · v3 · free")
+    XCTAssertEqual(templateShelfFacts(screenCount: nil, version: "1.2.0", priceUSD: 12), "? pages · v1.2.0 · $12")
+    // A store build (StoreBilling.buying off) says a paid template is paid, not its price, and offers no Use on it.
+    XCTAssertEqual(templateShelfFacts(screenCount: 5, version: "3", priceUSD: 12, buying: false), "5 pages · v3 · paid")
+    XCTAssertEqual(templateShelfFacts(screenCount: 5, version: "3", priceUSD: 0, buying: false), "5 pages · v3 · free")
+    XCTAssertTrue(templateShelfOffersUse(priceUSD: 12, buying: true))
+    XCTAssertFalse(templateShelfOffersUse(priceUSD: 12, buying: false))
+    XCTAssertTrue(templateShelfOffersUse(priceUSD: 0, buying: false))
+    XCTAssertEqual(
+      templateInstalledMessage(added: 1, name: "Bakery"),
+      "Saved 1 template from \"Bakery\" to your library — open Templates to create pages from them.")
+    XCTAssertTrue(templateInstalledMessage(added: 5, name: "Bakery").hasPrefix("Saved 5 templates"))
+    XCTAssertEqual(templateShelfState(offered: false, loading: true, visible: true), .empty)
+    XCTAssertEqual(templateShelfState(offered: true, loading: true, visible: false), .loading)
+    XCTAssertEqual(templateShelfState(offered: true, loading: false, visible: true), .shown)
+    XCTAssertEqual(templateShelfState(offered: true, loading: false, visible: false), .empty)
     // The update review of a copied listing (AGL-1018): the console's provenance and change words.
     for item in try functionCases("resolveProvenance") {
       let doc = item.args.first as? [String: Any]
@@ -440,7 +462,8 @@ final class MarketplaceTests: XCTestCase {
         "marketplace.publishPlugin", "marketplace.publishStarter",
       ],
       widgets: [
-        "marketplace.artifact-publish", "marketplace.org-installs", "marketplace.plugin-installation", "marketplace.site-connections", "marketplace.template-install-status",
+        "marketplace.artifact-publish", "marketplace.org-installs", "marketplace.plugin-installation", "marketplace.site-connections", "marketplace.template-gallery",
+        "marketplace.template-install-status",
         "marketplace.starter-picker",
       ],
       quickActions: ["marketplace.open"],

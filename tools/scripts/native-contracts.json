@@ -736,7 +736,9 @@
         "MARKETPLACE_BROWSE_QUERY",
         "BROWSE_SORTS",
         "HELD_LICENCE_QUERY",
-        "MINE_LICENCE_QUERY"
+        "MINE_LICENCE_QUERY",
+        "SITE_TEMPLATE_SHELF_QUERY",
+        "SITE_TEMPLATE_SHELF_BASE"
       ]
     },
     "libs/plugins/marketplace/src/lib/model/marketplace-catalog.ts": {
@@ -1367,7 +1369,10 @@
     },
     "ENTRY_LIST_QUERY": {},
     "MARKETPLACE_BROWSE_QUERY": {},
-    "MEDIA_LIST_QUERY": {}
+    "MEDIA_LIST_QUERY": {},
+    "SITE_TEMPLATE_SHELF_QUERY": {
+      "base": "SITE_TEMPLATE_SHELF_BASE"
+    }
   },
   "functionCases": {
     "formatOrderNumber": {
