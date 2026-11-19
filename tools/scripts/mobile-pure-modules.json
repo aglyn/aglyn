@@ -1062,6 +1062,10 @@
       "why": "A send's stats shape, rates and link report (sendRate, sendLinkReport), replayed by the apps (AGL-3669)."
     },
     {
+      "path": "libs/plugins/outreach/src/lib/model/sequence-report.ts",
+      "why": "A sequence's Results (figures, rates, caveats and link table), replayed by the native sequence page (AGL-3668); imports send-report.ts and types."
+    },
+    {
       "path": "libs/shared/ui/jsx/src/lib/const/list-query-plan.ts",
       "why": "The console's list-plan entry the Commerce app's list page imports; it re-exports the pure list-query grammar (AGL-3622)."
     },

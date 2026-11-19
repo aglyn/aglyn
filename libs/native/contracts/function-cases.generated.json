@@ -31284,6 +31284,628 @@
         }
       ]
     },
+    "outreachSequenceLinkReport": {
+      "module": "libs/plugins/outreach/src/lib/model/sequence-report.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": {
+            "attributedClicks": 0,
+            "overflowClicks": 0,
+            "rows": [],
+            "truncated": false,
+            "unattributedClicks": 0
+          }
+        },
+        {
+          "args": [
+            {
+              "links": {
+                "a": {
+                  "url": "https://juniper.example/shop",
+                  "clicks": 4
+                },
+                "b": {
+                  "url": "https://juniper.example/about",
+                  "clicks": 4
+                },
+                "c": {
+                  "url": "https://juniper.example/class",
+                  "clicks": 1
+                }
+              },
+              "overflowClicks": 0,
+              "unattributedClicks": 2
+            }
+          ],
+          "result": {
+            "attributedClicks": 9,
+            "overflowClicks": 0,
+            "rows": [
+              {
+                "clicks": 4,
+                "share": {
+                  "denominator": 9,
+                  "denominatorLabel": "link clicks counted",
+                  "numerator": 4,
+                  "value": 0.4444444444444444
+                },
+                "url": "https://juniper.example/about"
+              },
+              {
+                "clicks": 4,
+                "share": {
+                  "denominator": 9,
+                  "denominatorLabel": "link clicks counted",
+                  "numerator": 4,
+                  "value": 0.4444444444444444
+                },
+                "url": "https://juniper.example/shop"
+              },
+              {
+                "clicks": 1,
+                "share": {
+                  "denominator": 9,
+                  "denominatorLabel": "link clicks counted",
+                  "numerator": 1,
+                  "value": 0.1111111111111111
+                },
+                "url": "https://juniper.example/class"
+              }
+            ],
+            "truncated": false,
+            "unattributedClicks": 2
+          }
+        },
+        {
+          "args": [
+            {
+              "links": {
+                "a": {
+                  "url": "https://juniper.example/",
+                  "clicks": 3
+                }
+              },
+              "overflowClicks": 5
+            }
+          ],
+          "result": {
+            "attributedClicks": 3,
+            "overflowClicks": 5,
+            "rows": [
+              {
+                "clicks": 3,
+                "share": {
+                  "denominator": 3,
+                  "denominatorLabel": "link clicks counted",
+                  "numerator": 3,
+                  "value": 1
+                },
+                "url": "https://juniper.example/"
+              }
+            ],
+            "truncated": true,
+            "unattributedClicks": 0
+          }
+        }
+      ]
+    },
+    "outreachSequenceReport": {
+      "module": "libs/plugins/outreach/src/lib/model/sequence-report.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            false
+          ],
+          "result": {
+            "caveats": [
+              {
+                "id": "opens-not-measured",
+                "message": "Opens aren’t measured. A sequence email is plain text, the way a one-to-one email is, and counting an open needs a tracking image in an HTML email. Clicks are measured instead."
+              },
+              {
+                "id": "clicks-not-tracked",
+                "message": "Clicks aren’t being counted for this sequence. Turn on link tracking in its settings, and the emails sent after that have their links counted."
+              }
+            ],
+            "clickTracked": false,
+            "clicks": 0,
+            "lastClickAtMs": null,
+            "lastOpenAtMs": null,
+            "machineClicks": 0,
+            "machineOpens": 0,
+            "openPeople": null,
+            "openTracked": false,
+            "opens": 0,
+            "opensUnmeasured": false,
+            "people": null,
+            "proxyOpens": 0,
+            "rates": {
+              "click": null,
+              "open": null
+            },
+            "sent": 0,
+            "uniqueClicks": 0,
+            "uniqueOpens": 0
+          }
+        },
+        {
+          "args": [
+            null,
+            true
+          ],
+          "result": {
+            "caveats": [
+              {
+                "id": "opens-not-measured",
+                "message": "Opens aren’t measured. A sequence email is plain text, the way a one-to-one email is, and counting an open needs a tracking image in an HTML email. Clicks are measured instead."
+              }
+            ],
+            "clickTracked": false,
+            "clicks": 0,
+            "lastClickAtMs": null,
+            "lastOpenAtMs": null,
+            "machineClicks": 0,
+            "machineOpens": 0,
+            "openPeople": null,
+            "openTracked": false,
+            "opens": 0,
+            "opensUnmeasured": false,
+            "people": null,
+            "proxyOpens": 0,
+            "rates": {
+              "click": null,
+              "open": null
+            },
+            "sent": 0,
+            "uniqueClicks": 0,
+            "uniqueOpens": 0
+          }
+        },
+        {
+          "args": [
+            {
+              "sent": 0
+            },
+            true,
+            false
+          ],
+          "result": {
+            "caveats": [
+              {
+                "id": "opens-not-measured",
+                "message": "Opens aren’t measured. A sequence email is plain text, the way a one-to-one email is, and counting an open needs a tracking image in an HTML email. Clicks are measured instead."
+              }
+            ],
+            "clickTracked": false,
+            "clicks": 0,
+            "lastClickAtMs": null,
+            "lastOpenAtMs": null,
+            "machineClicks": 0,
+            "machineOpens": 0,
+            "openPeople": null,
+            "openTracked": false,
+            "opens": 0,
+            "opensUnmeasured": false,
+            "people": null,
+            "proxyOpens": 0,
+            "rates": {
+              "click": null,
+              "open": null
+            },
+            "sent": 0,
+            "uniqueClicks": 0,
+            "uniqueOpens": 0
+          }
+        },
+        {
+          "args": [
+            {
+              "sent": 12,
+              "people": 8
+            },
+            false
+          ],
+          "result": {
+            "caveats": [
+              {
+                "id": "opens-not-measured",
+                "message": "Opens aren’t measured. A sequence email is plain text, the way a one-to-one email is, and counting an open needs a tracking image in an HTML email. Clicks are measured instead."
+              },
+              {
+                "id": "clicks-not-tracked",
+                "message": "Clicks aren’t being counted for this sequence. Turn on link tracking in its settings, and the emails sent after that have their links counted."
+              }
+            ],
+            "clickTracked": false,
+            "clicks": 0,
+            "lastClickAtMs": null,
+            "lastOpenAtMs": null,
+            "machineClicks": 0,
+            "machineOpens": 0,
+            "openPeople": null,
+            "openTracked": false,
+            "opens": 0,
+            "opensUnmeasured": false,
+            "people": 8,
+            "proxyOpens": 0,
+            "rates": {
+              "click": null,
+              "open": null
+            },
+            "sent": 12,
+            "uniqueClicks": 0,
+            "uniqueOpens": 0
+          }
+        },
+        {
+          "args": [
+            {
+              "sent": 12,
+              "people": 8
+            },
+            true
+          ],
+          "result": {
+            "caveats": [
+              {
+                "id": "opens-not-measured",
+                "message": "Opens aren’t measured. A sequence email is plain text, the way a one-to-one email is, and counting an open needs a tracking image in an HTML email. Clicks are measured instead."
+              },
+              {
+                "id": "clicks-unrecorded",
+                "message": "No click has been counted for this sequence yet: either its emails carry no links, or they went out before link tracking was turned on. Emails sent from now on are counted."
+              }
+            ],
+            "clickTracked": false,
+            "clicks": 0,
+            "lastClickAtMs": null,
+            "lastOpenAtMs": null,
+            "machineClicks": 0,
+            "machineOpens": 0,
+            "openPeople": null,
+            "openTracked": false,
+            "opens": 0,
+            "opensUnmeasured": false,
+            "people": 8,
+            "proxyOpens": 0,
+            "rates": {
+              "click": null,
+              "open": null
+            },
+            "sent": 12,
+            "uniqueClicks": 0,
+            "uniqueOpens": 0
+          }
+        },
+        {
+          "args": [
+            {
+              "sent": 40,
+              "people": 20,
+              "clicks": 9,
+              "uniqueClicks": 6,
+              "machineClicks": 3,
+              "clickTracked": true,
+              "lastClickAtMs": 1793000000000
+            },
+            true
+          ],
+          "result": {
+            "caveats": [
+              {
+                "id": "opens-not-measured",
+                "message": "Opens aren’t measured. A sequence email is plain text, the way a one-to-one email is, and counting an open needs a tracking image in an HTML email. Clicks are measured instead."
+              },
+              {
+                "id": "machine-clicks-excluded",
+                "message": "Some clicks came from security scanners that open every link in an email before the recipient sees it. They’re counted separately and left out of the click rate."
+              }
+            ],
+            "clickTracked": true,
+            "clicks": 9,
+            "lastClickAtMs": 1793000000000,
+            "lastOpenAtMs": null,
+            "machineClicks": 3,
+            "machineOpens": 0,
+            "openPeople": null,
+            "openTracked": false,
+            "opens": 0,
+            "opensUnmeasured": false,
+            "people": 20,
+            "proxyOpens": 0,
+            "rates": {
+              "click": {
+                "denominator": 20,
+                "denominatorLabel": "people emailed",
+                "numerator": 6,
+                "value": 0.3
+              },
+              "open": null
+            },
+            "sent": 40,
+            "uniqueClicks": 6,
+            "uniqueOpens": 0
+          }
+        },
+        {
+          "args": [
+            {
+              "sent": 40,
+              "clicks": 2,
+              "uniqueClicks": 2,
+              "clickTracked": true
+            },
+            true
+          ],
+          "result": {
+            "caveats": [
+              {
+                "id": "opens-not-measured",
+                "message": "Opens aren’t measured. A sequence email is plain text, the way a one-to-one email is, and counting an open needs a tracking image in an HTML email. Clicks are measured instead."
+              }
+            ],
+            "clickTracked": true,
+            "clicks": 2,
+            "lastClickAtMs": null,
+            "lastOpenAtMs": null,
+            "machineClicks": 0,
+            "machineOpens": 0,
+            "openPeople": null,
+            "openTracked": false,
+            "opens": 0,
+            "opensUnmeasured": false,
+            "people": null,
+            "proxyOpens": 0,
+            "rates": {
+              "click": null,
+              "open": null
+            },
+            "sent": 40,
+            "uniqueClicks": 2,
+            "uniqueOpens": 0
+          }
+        },
+        {
+          "args": [
+            {
+              "sent": 30,
+              "people": 15,
+              "openTracked": true,
+              "openPeople": 10,
+              "opens": 14,
+              "uniqueOpens": 5,
+              "machineOpens": 6,
+              "proxyOpens": 9,
+              "lastOpenAtMs": 1793100000000,
+              "clickTracked": true,
+              "uniqueClicks": 1,
+              "clicks": 1
+            },
+            true,
+            true
+          ],
+          "result": {
+            "caveats": [
+              {
+                "id": "opens-counted",
+                "message": "Opens are counted from a tracking image in an HTML copy of each email, and the open rate is taken over the people sent one. Gmail readers’ opens count. Fetches made whether or not anyone reads the email — by Apple Mail as it arrives, by Yahoo’s image proxy, and by Google’s, Microsoft’s and other security scanners — are counted separately and left out of the rate."
+              }
+            ],
+            "clickTracked": true,
+            "clicks": 1,
+            "lastClickAtMs": null,
+            "lastOpenAtMs": 1793100000000,
+            "machineClicks": 0,
+            "machineOpens": 6,
+            "openPeople": 10,
+            "openTracked": true,
+            "opens": 14,
+            "opensUnmeasured": false,
+            "people": 15,
+            "proxyOpens": 6,
+            "rates": {
+              "click": {
+                "denominator": 15,
+                "denominatorLabel": "people emailed",
+                "numerator": 1,
+                "value": 0.06666666666666667
+              },
+              "open": {
+                "denominator": 10,
+                "denominatorLabel": "people sent a tracked email",
+                "numerator": 5,
+                "value": 0.5
+              }
+            },
+            "sent": 30,
+            "uniqueClicks": 1,
+            "uniqueOpens": 5
+          }
+        },
+        {
+          "args": [
+            {
+              "sent": 30,
+              "people": 15,
+              "openTracked": true,
+              "openPeople": 10,
+              "uniqueOpens": 0,
+              "machineOpens": 4
+            },
+            true,
+            true
+          ],
+          "result": {
+            "caveats": [
+              {
+                "id": "opens-counted",
+                "message": "Opens are counted from a tracking image in an HTML copy of each email, and the open rate is taken over the people sent one. Gmail readers’ opens count. Fetches made whether or not anyone reads the email — by Apple Mail as it arrives, by Yahoo’s image proxy, and by Google’s, Microsoft’s and other security scanners — are counted separately and left out of the rate."
+              },
+              {
+                "id": "opens-all-machine",
+                "message": "Every fetch of the tracking image so far was made by a machine — a mail provider’s proxy or a security scanner fetching it for the recipient — so whether anyone read these emails can’t be told from opens, and no open rate is shown. That is common when the people emailed are behind company mail security."
+              },
+              {
+                "id": "clicks-unrecorded",
+                "message": "No click has been counted for this sequence yet: either its emails carry no links, or they went out before link tracking was turned on. Emails sent from now on are counted."
+              }
+            ],
+            "clickTracked": false,
+            "clicks": 0,
+            "lastClickAtMs": null,
+            "lastOpenAtMs": null,
+            "machineClicks": 0,
+            "machineOpens": 4,
+            "openPeople": 10,
+            "openTracked": true,
+            "opens": 0,
+            "opensUnmeasured": true,
+            "people": 15,
+            "proxyOpens": 0,
+            "rates": {
+              "click": null,
+              "open": null
+            },
+            "sent": 30,
+            "uniqueClicks": 0,
+            "uniqueOpens": 0
+          }
+        },
+        {
+          "args": [
+            {
+              "sent": 30,
+              "people": 15,
+              "openTracked": true,
+              "openPeople": 10,
+              "uniqueOpens": 3
+            },
+            true,
+            false
+          ],
+          "result": {
+            "caveats": [
+              {
+                "id": "opens-stopped",
+                "message": "Opens were counted while this sequence’s emails carried a tracking image. It’s turned off now, so the figures cover only the emails sent while it was on."
+              },
+              {
+                "id": "clicks-unrecorded",
+                "message": "No click has been counted for this sequence yet: either its emails carry no links, or they went out before link tracking was turned on. Emails sent from now on are counted."
+              }
+            ],
+            "clickTracked": false,
+            "clicks": 0,
+            "lastClickAtMs": null,
+            "lastOpenAtMs": null,
+            "machineClicks": 0,
+            "machineOpens": 0,
+            "openPeople": 10,
+            "openTracked": true,
+            "opens": 0,
+            "opensUnmeasured": false,
+            "people": 15,
+            "proxyOpens": 0,
+            "rates": {
+              "click": null,
+              "open": {
+                "denominator": 10,
+                "denominatorLabel": "people sent a tracked email",
+                "numerator": 3,
+                "value": 0.3
+              }
+            },
+            "sent": 30,
+            "uniqueClicks": 0,
+            "uniqueOpens": 3
+          }
+        },
+        {
+          "args": [
+            {
+              "sent": 5,
+              "people": 5
+            },
+            false,
+            true
+          ],
+          "result": {
+            "caveats": [
+              {
+                "id": "opens-unrecorded",
+                "message": "Opens are counted for this sequence, and no email with the tracking image has gone out yet. Emails sent from now on carry it."
+              },
+              {
+                "id": "clicks-not-tracked",
+                "message": "Clicks aren’t being counted for this sequence. Turn on link tracking in its settings, and the emails sent after that have their links counted."
+              }
+            ],
+            "clickTracked": false,
+            "clicks": 0,
+            "lastClickAtMs": null,
+            "lastOpenAtMs": null,
+            "machineClicks": 0,
+            "machineOpens": 0,
+            "openPeople": null,
+            "openTracked": false,
+            "opens": 0,
+            "opensUnmeasured": false,
+            "people": 5,
+            "proxyOpens": 0,
+            "rates": {
+              "click": null,
+              "open": null
+            },
+            "sent": 5,
+            "uniqueClicks": 0,
+            "uniqueOpens": 0
+          }
+        },
+        {
+          "args": [
+            {
+              "sent": "7",
+              "people": -2,
+              "clicks": null,
+              "uniqueClicks": "x",
+              "clickTracked": true
+            },
+            true
+          ],
+          "result": {
+            "caveats": [
+              {
+                "id": "opens-not-measured",
+                "message": "Opens aren’t measured. A sequence email is plain text, the way a one-to-one email is, and counting an open needs a tracking image in an HTML email. Clicks are measured instead."
+              }
+            ],
+            "clickTracked": true,
+            "clicks": 0,
+            "lastClickAtMs": null,
+            "lastOpenAtMs": null,
+            "machineClicks": 0,
+            "machineOpens": 0,
+            "openPeople": null,
+            "openTracked": false,
+            "opens": 0,
+            "opensUnmeasured": false,
+            "people": 0,
+            "proxyOpens": 0,
+            "rates": {
+              "click": null,
+              "open": null
+            },
+            "sent": 7,
+            "uniqueClicks": 0,
+            "uniqueOpens": 0
+          }
+        }
+      ]
+    },
     "packageItemChanges": {
       "module": "libs/aglyn/src/lib/data-transfer/site-package-diff.ts",
       "cases": [
