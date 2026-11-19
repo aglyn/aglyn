@@ -294,6 +294,10 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
   val live by flow.collectAsState(Live.Loading)
   var dialog by remember(id) { mutableStateOf<RecordDialog?>(null) }
   var notice by remember(id) { mutableStateOf<String?>(null) }
+  /** A task another plugin proposed (the AI summary's next step), filling the New task dialog. */
+  var proposedTask by remember(id) { mutableStateOf<TaskDraft?>(null) }
+  /** A stage another plugin proposed for this deal, asked about before it moves. */
+  var proposedStage by remember(id) { mutableStateOf<com.aglyn.pluginhost.RecordStage?>(null) }
   // A deleted (or converted) record closes its detail.
   CloseWhenGone((live as? Live.Ready)?.let { it.value != null })
   when (val value = live) {
@@ -351,6 +355,42 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
               ),
             )
           }
+          // What another plugin reads about this record, such as the AI summary (the console's `recordInsights` zone): the record,
+          // a task proposal where the record has tasks (not a lead), and an open deal's stages with a stage proposal.
+          if (context.slotWidgets(com.aglyn.pluginhost.RECORD_INSIGHTS_ZONE).isNotEmpty()) {
+            val pipeline = reference.pipeline(doc.string("pipelineId"))
+            val openDeal = kind == CrmKind.DEAL && (doc.string("status") ?: "open") == "open"
+            val open = pipeline.stages.filter { it.kind == "open" }
+            // The route's site, as the console's page hands its own `hostId`: none on the workspace's CRM, whatever site the
+            // record is held by, so a summary asked here is found here again.
+            val zone = com.aglyn.pluginhost.RecordInsightsZone(
+              hostId = listScope.hostId?.ifEmpty { null },
+              orgId = scope.orgId,
+              recordKind = kind.name.lowercase(),
+              recordId = id,
+              name = row.title,
+              stages = if (openDeal) open.map { com.aglyn.pluginhost.RecordStage(it.id, it.name) } else null,
+              stageId = if (openDeal) doc.string("stageId") else null,
+              proposeTask = if (!scope.canWrite || kind == CrmKind.LEAD) null else { task, _ ->
+                proposedTask = TaskDraft(
+                  title = task.title, notes = task.notes, kind = task.kind, priority = task.priority,
+                  dueAtMs = crmProposedDueAtMs(task.dueInDays), assigneeUid = scope.uid,
+                ).withLink(kind, id, row)
+                dialog = RecordDialog.TASK
+              },
+              proposeStage = if (!openDeal || !scope.canWrite) null else { stageId, _ ->
+                val stage = open.firstOrNull { it.id == stageId }
+                when {
+                  stage == null || stageId == doc.string("stageId") -> Unit
+                  !movesStages -> notice = com.aglyn.contracts.permissionRefusalText(CRM_MOVE_STAGES_KEY)
+                  else -> proposedStage = com.aglyn.pluginhost.RecordStage(stage.id, stage.name)
+                }
+              },
+            )
+            androidx.compose.runtime.CompositionLocalProvider(com.aglyn.pluginhost.LocalRecordInsightsZone provides zone) {
+              com.aglyn.pluginhost.SlotWidgets(context, com.aglyn.pluginhost.RECORD_INSIGHTS_ZONE)
+            }
+          }
           SectionCard("Details", Modifier.fillMaxWidth()) {
             // The fields that hold something; Edit holds every one.
             val shown = fields.mapNotNull { field ->
@@ -385,7 +425,23 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
           TimelineCard(context, kind, id, scope, api)
         }
       }
-      RecordDialogs(context, kind, id, row, fields, values, scope, api, reference, dialog, movesStages, onClose = { dialog = null }, onNotice = { notice = it }, fromCache = value.fromCache)
+      RecordDialogs(
+        context, kind, id, row, fields, values, scope, api, reference, dialog, movesStages,
+        onClose = { dialog = null; proposedTask = null }, onNotice = { notice = it }, fromCache = value.fromCache, proposedTask = proposedTask,
+      )
+      proposedStage?.let { stage ->
+        val coroutines = rememberCoroutineScope()
+        val busy = remember(stage) { Busy() }
+        ActionDialog(
+          title = "Move this deal to ${stage.name}?",
+          body = "The deal moves as it would from its stage card, and any automation that listens for a stage change runs.",
+          confirmLabel = "Move to ${stage.name}",
+          busy = busy.busy,
+          error = busy.error,
+          onDismiss = { proposedStage = null },
+          onConfirm = { busy.run(coroutines, { proposedStage = null; notice = "Moved to ${stage.name}" }) { api.moveDeal(id, stage.id) } },
+        )
+      }
     }
   }
 }
@@ -634,6 +690,8 @@ private fun RecordDialogs(
   onNotice: (String) -> Unit,
   /** The record is only the device cache's copy yet: its edit sheet holds Save until the server's is in (AGL-4047). */
   fromCache: Boolean = false,
+  /** A task another plugin proposed for the New task dialog (the AI summary's next step). */
+  proposedTask: TaskDraft? = null,
 ) {
   val coroutines = rememberCoroutineScope()
   val busy = remember(dialog) { Busy() }
@@ -706,7 +764,7 @@ private fun RecordDialogs(
     }
     RecordDialog.TASK -> TaskDialog(
       title = "New task",
-      initial = TaskDraft(title = "", assigneeUid = scope.uid).withLink(kind, id, row),
+      initial = proposedTask ?: TaskDraft(title = "", assigneeUid = scope.uid).withLink(kind, id, row),
       reference = reference,
       busy = busy,
       onDismiss = onClose,
