@@ -19,7 +19,7 @@ func formatUTC(_ date: Date) -> String {
 }
 
 /// What the content screen's sheet is asking for.
-private enum ContentDialog: Identifiable {
+enum ContentDialog: Identifiable {
   case newCollection
   case settings(String)
   case categories(String)
@@ -44,16 +44,22 @@ private enum ContentDialog: Identifiable {
 }
 
 /// What the content screens share: who is asking, the writes, the one runner
-/// whose notice and refusals they all show.
-private struct ContentEnv {
+/// whose notice and refusals they all show. The permissions and the site's
+/// routing are read when a view asks, never kept: an entry pushed on a phone
+/// holds this value, and a permission or the site's document that arrives
+/// after the push (a cold start from a link) shows there at once.
+struct ContentEnv {
   let context: NativePluginContext
   let hostID: String
   let api: ContentAPI
   let runner: ActionRunner
-  let canWrite: Bool
-  let canPublish: Bool
-  let routing: SiteRouting
+  /// The site's own document, live.
+  let host: LiveDocument
   let open: (ContentDialog) -> Void
+
+  @MainActor var canWrite: Bool { context.can("site.edit") }
+  @MainActor var canPublish: Bool { context.can("site.publish") }
+  @MainActor var routing: SiteRouting { SiteRouting(host: host.state.value ?? nil) }
 }
 
 /// A site's content as the console's Content page shows it: pick a
@@ -132,8 +138,7 @@ struct ContentScreen: View {
     ContentEnv(
       context: context, hostID: hostID,
       api: ContentAPI(api: context.api, writer: context.writer, reader: context.firestore, hostID: hostID), runner: runner,
-      canWrite: context.can("site.edit"), canPublish: context.can("site.publish"),
-      routing: SiteRouting(host: host.state.value ?? nil), open: { dialog = $0 })
+      host: host, open: { dialog = $0 })
   }
 }
 

@@ -1234,6 +1234,9 @@ struct Breadcrumbs: View {
       let owner = navigation.mode == .main ? (scope.site?.name ?? scope.org?.name) : scope.modeTitle
       // Every level but the place in use opens it (AGL-4058): the scope, then the group.
       let levels = navCrumbs(for: row, in: list, owner: owner, ownerOpens: navScopeRow(in: list))
+      // A record of the row's own screen, pushed over its list (a page a link opened over Pages), carries the row's
+      // title: the row's level is then the place in use, said once ("Website › Pages", never "Website › Pages › Pages").
+      let pushed = pushed.flatMap { $0.title == levels.last?.label ? nil : $0 }
       HStack(spacing: 6) {
         ForEach(Array(levels.enumerated()), id: \.offset) { index, level in
           if index > 0 {

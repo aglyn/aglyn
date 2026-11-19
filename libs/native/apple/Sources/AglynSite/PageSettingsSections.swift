@@ -123,17 +123,19 @@ struct PageAccessSection: View {
   var body: some View {
     let inPreview = isPageInPreview(host, pageID: page.id)
     Section("Page access") {
-      Picker(
-        "Visibility",
-        selection: Binding(
-          get: { settings.visibility },
-          set: { next in if let next, next != settings.visibility { setVisibility(next) } })
-      ) {
-        if settings.visibility == nil { Text("Other").tag(PageVisibility?.none) }
-        ForEach(PageVisibility.allCases) { option in Text(option.label).tag(Optional(option)) }
+      AglynPlainFormRow("Visibility") {
+        Picker(
+          "Visibility",
+          selection: Binding(
+            get: { settings.visibility },
+            set: { next in if let next, next != settings.visibility { setVisibility(next) } })
+        ) {
+          if settings.visibility == nil { Text("Other").tag(PageVisibility?.none) }
+          ForEach(PageVisibility.allCases) { option in Text(option.label).tag(Optional(option)) }
+        }
+        .disabled(!canEdit || runner.busy)
+        .accessibilityIdentifier("page-visibility")
       }
-      .disabled(!canEdit || runner.busy)
-      .accessibilityIdentifier("page-visibility")
       if let hint = settings.visibility?.hint { AglynHelperText(hint) }
       if settings.visibility == .password {
         VStack(alignment: .leading, spacing: AglynSpace.one) {
