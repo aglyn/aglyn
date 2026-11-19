@@ -297,7 +297,8 @@ private struct EntryEditor: View {
         AglynEmptyState("This entry is gone", systemImage: "doc.richtext")
       case .ready(let doc?):
         EntryForm(
-          env: env, collection: collection, entry: ContentEntry(doc), fromCache: doc.fromCache,
+          env: env, collection: collection, entry: ContentEntry(doc), rawJSON: firestoreRawJSON(id: doc.id, data: doc.data),
+          fromCache: doc.fromCache,
           authors: (authors.state.value ?? []).map(ContentAuthor.init).sorted { $0.name.lowercased() < $1.name.lowercased() },
           model: model, openURL: { openURL($0) })
       }
@@ -315,6 +316,8 @@ private struct EntryForm: View {
   let env: ContentEnv
   let collection: ContentCollection
   let entry: ContentEntry
+  /// Every field the entry holds, exactly as saved (the console's Raw JSON card).
+  let rawJSON: String
   /// The entry is only the device cache's copy yet: Save is held until the server's is in (AGL-4047).
   let fromCache: Bool
   let authors: [ContentAuthor]
@@ -322,14 +325,16 @@ private struct EntryForm: View {
   let openURL: (URL) -> Void
   @State private var draft: EntryDraft
   @State private var saver = ActionRunner()
+  @State private var rawOpen = false
 
   init(
-    env: ContentEnv, collection: ContentCollection, entry: ContentEntry, fromCache: Bool, authors: [ContentAuthor],
+    env: ContentEnv, collection: ContentCollection, entry: ContentEntry, rawJSON: String, fromCache: Bool, authors: [ContentAuthor],
     model: EntryListModel, openURL: @escaping (URL) -> Void
   ) {
     self.env = env
     self.collection = collection
     self.entry = entry
+    self.rawJSON = rawJSON
     self.fromCache = fromCache
     self.authors = authors
     self.model = model
@@ -352,6 +357,7 @@ private struct EntryForm: View {
         AglynDetailRow("Updated", value: entry.updatedAt.map { relativeTime($0) })
         AglynDetailRow("Entry id", value: entry.id)
       }
+      RawJSONSection(json: rawJSON, open: $rawOpen)
     }
     .formStyle(.aglynGrouped)
     .environment(\.aglynFormChecking, fromCache ? formHold("entry") : nil)

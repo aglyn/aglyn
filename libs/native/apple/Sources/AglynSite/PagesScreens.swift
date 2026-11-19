@@ -578,6 +578,8 @@ struct PageDetail: View {
           SiteActivityCard(reader: context.firestore, api: context.api, hostID: hostID, targetID: page.id, title: "Page Activity")
         }
         .aglynBareFormRow()
+        // The stored document (the console's Raw JSON card), read only once it is opened.
+        PageRawJSONSection(reader: context.firestore, path: ["hosts", hostID, "screens", page.id])
       }
     }
     .formStyle(.aglynGrouped)

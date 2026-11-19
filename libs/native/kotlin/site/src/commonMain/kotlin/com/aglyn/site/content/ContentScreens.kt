@@ -453,6 +453,9 @@ private fun EntryEditor(
           DetailRow("Updated", entry.updatedAt?.let { relativeTime(it.epochMillis, now) })
           DetailRow("Entry id", entry.id)
         }
+        // Every field the entry holds, exactly as saved (the console's Raw JSON card), closed until asked for.
+        var rawOpen by remember(entry.id) { mutableStateOf(false) }
+        com.aglyn.site.RawJsonCard(doc.value?.let { com.aglyn.site.firestoreRawJson(it.id, it.data) }, rawOpen) { rawOpen = !rawOpen }
       }
       }
     }
