@@ -59,7 +59,8 @@ class NativePluginManifestTest {
     // Subscriptions and one subscription, the renewal notification's link (AGL-4191).
     assertEquals("commerce.subscriptions" to site, screenOf("/acme/hosts/shop/products/subscriptions"))
     assertEquals("commerce.subscription" to site + mapOf("subscription" to "s1", "subscriptionId" to "s1"), screenOf("/acme/hosts/shop/products/subscriptions?subscription=s1"))
-    assertEquals(null, screenOf("/acme/hosts/shop/products/pos"))
+    // Point of sale: its hardware shop and the readers waiting to be set up (AGL-4038).
+    assertEquals("commerce.hardware" to site, screenOf("/acme/hosts/shop/products/pos"))
     val org = mapOf("orgSlug" to "acme")
     assertEquals("marketplace.sell" to org + mapOf("section" to "payouts"), screenOf("/acme/marketplace/payouts"))
     assertEquals("marketplace.sell" to org + mapOf("section" to "listings"), screenOf("/acme/marketplace/listings"))

@@ -18,15 +18,18 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import {
-  decodeStoredNodes,
   normalizeScreenSlug,
   reservedScreenRouteMessage,
   reservedScreenRouteSegment,
-  resolveNamedTokens,
   screenRoutePathToUrl,
   SCREEN_SLUG_PATH_SEPARATOR_MESSAGE,
   screenSlugHasPathSeparator,
 } from '@aglyn/aglyn'
+import {
+  resolveTemplateNodes,
+  templateFillablePlaceholders,
+  templatePlaceholderValues,
+} from '@aglyn/aglyn/app-utils/page-template-use'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
@@ -85,11 +88,7 @@ export function UseTemplateDialog({
   // (AGL-2932). Templates saved before that was known list one anyway, and
   // filling it in here would erase the binding from what is made.
   const placeholders = useMemo(
-    () =>
-      (Array.isArray(template?.placeholders) ? template.placeholders : []).filter(
-        (entry: { name?: unknown }) =>
-          !String(entry?.name ?? '').startsWith(Aglyn.COMPONENT_PROP_TOKEN_PREFIX),
-      ),
+    () => templateFillablePlaceholders(template?.placeholders),
     [template],
   )
 
@@ -140,9 +139,9 @@ export function UseTemplateDialog({
       // Reading it raw fails silently in the direction that costs the most:
       // `resolveNamedTokens` over a `Bytes` finds no tokens and returns it,
       // and the screen, layout or component created below is EMPTY.
-      const nodes = resolveNamedTokens(
-        (decodeStoredNodes<any>(template.nodes) ?? {}) as any,
-        placeholders.length ? values : null,
+      const nodes = resolveTemplateNodes(
+        template.nodes,
+        templatePlaceholderValues(placeholders, values),
       )
       const carriedProps =
         Array.isArray(template.props) && template.props.length

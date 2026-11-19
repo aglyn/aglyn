@@ -19239,6 +19239,47 @@
         }
       ]
     },
+    "formatPosHardwareCents": {
+      "module": "libs/plugins/commerce/src/lib/model/pos-hardware.ts",
+      "cases": [
+        {
+          "args": [
+            0
+          ],
+          "result": "$0.00"
+        },
+        {
+          "args": [
+            5
+          ],
+          "result": "$0.05"
+        },
+        {
+          "args": [
+            7670
+          ],
+          "result": "$76.70"
+        },
+        {
+          "args": [
+            45370
+          ],
+          "result": "$453.70"
+        },
+        {
+          "args": [
+            123456789
+          ],
+          "result": "$1,234,567.89"
+        },
+        {
+          "args": [
+            -250
+          ],
+          "result": "-$2.50"
+        }
+      ]
+    },
     "formatQuoteNumber": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-quotes.ts",
       "cases": [
@@ -47096,6 +47137,976 @@
         }
       ]
     },
+    "posHardwareArrivedNumbers": {
+      "module": "libs/plugins/commerce/src/lib/model/pos-hardware-shop.ts",
+      "cases": [
+        {
+          "args": [
+            []
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            [
+              {
+                "number": "HW-1",
+                "status": "delivered"
+              },
+              {
+                "number": "HW-2",
+                "status": "registered",
+                "source": "online"
+              },
+              {
+                "number": "HW-3",
+                "status": "delivered",
+                "source": "in_person"
+              },
+              {
+                "number": "HW-4",
+                "status": "delivered",
+                "source": "storefront"
+              },
+              {
+                "number": "HW-5",
+                "status": "shipped"
+              }
+            ]
+          ],
+          "result": [
+            "HW-1",
+            "HW-2"
+          ]
+        }
+      ]
+    },
+    "posHardwareBasket": {
+      "module": "libs/plugins/commerce/src/lib/model/pos-hardware-shop.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "offers": [
+                {
+                  "sku": "stripe-reader-s700",
+                  "unitCents": 45370
+                },
+                {
+                  "sku": "stripe-reader-m2",
+                  "unitCents": 7670
+                },
+                {
+                  "sku": "stripe-reader-s700-dock",
+                  "unitCents": 10270
+                }
+              ],
+              "quantities": {},
+              "shippingCents": 1500,
+              "automaticTax": false
+            }
+          ],
+          "result": {
+            "itemsCents": 0,
+            "lines": [],
+            "totalCents": 1500,
+            "totalLabel": "Total"
+          }
+        },
+        {
+          "args": [
+            {
+              "offers": [
+                {
+                  "sku": "stripe-reader-s700",
+                  "unitCents": 45370
+                },
+                {
+                  "sku": "stripe-reader-m2",
+                  "unitCents": 7670
+                },
+                {
+                  "sku": "stripe-reader-s700-dock",
+                  "unitCents": 10270
+                }
+              ],
+              "quantities": {
+                "stripe-reader-m2": 2,
+                "stripe-reader-s700": 1
+              },
+              "shippingCents": 1500,
+              "automaticTax": false
+            }
+          ],
+          "result": {
+            "itemsCents": 60710,
+            "lines": [
+              {
+                "quantity": 1,
+                "sku": "stripe-reader-s700"
+              },
+              {
+                "quantity": 2,
+                "sku": "stripe-reader-m2"
+              }
+            ],
+            "totalCents": 62210,
+            "totalLabel": "Total"
+          }
+        },
+        {
+          "args": [
+            {
+              "offers": [
+                {
+                  "sku": "stripe-reader-s700",
+                  "unitCents": 45370
+                },
+                {
+                  "sku": "stripe-reader-m2",
+                  "unitCents": 7670
+                },
+                {
+                  "sku": "stripe-reader-s700-dock",
+                  "unitCents": 10270
+                }
+              ],
+              "quantities": {
+                "stripe-reader-s700-dock": 10,
+                "stripe-reader-m2": 0
+              },
+              "shippingCents": null,
+              "automaticTax": true
+            }
+          ],
+          "result": {
+            "itemsCents": 102700,
+            "lines": [
+              {
+                "quantity": 10,
+                "sku": "stripe-reader-s700-dock"
+              }
+            ],
+            "totalCents": 102700,
+            "totalLabel": "Total before tax"
+          }
+        },
+        {
+          "args": [
+            {
+              "offers": [
+                {
+                  "sku": "stripe-reader-s700",
+                  "unitCents": 45370
+                },
+                {
+                  "sku": "stripe-reader-m2",
+                  "unitCents": 7670
+                },
+                {
+                  "sku": "stripe-reader-s700-dock",
+                  "unitCents": 10270
+                }
+              ],
+              "quantities": {
+                "unknown": 3,
+                "stripe-reader-m2": 1
+              },
+              "shippingCents": 3000,
+              "automaticTax": true
+            }
+          ],
+          "result": {
+            "itemsCents": 7670,
+            "lines": [
+              {
+                "quantity": 1,
+                "sku": "stripe-reader-m2"
+              }
+            ],
+            "totalCents": 10670,
+            "totalLabel": "Total before tax"
+          }
+        }
+      ]
+    },
+    "posHardwareCheckoutState": {
+      "module": "libs/plugins/commerce/src/lib/model/pos-hardware-shop.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "canBuy": true,
+              "termsAccepted": true,
+              "businessUse": true,
+              "hasLines": true,
+              "hasShipping": true
+            }
+          ],
+          "result": {
+            "blockedReason": null,
+            "enabled": true
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": true,
+              "termsAccepted": true,
+              "businessUse": true,
+              "hasLines": true,
+              "hasShipping": false
+            }
+          ],
+          "result": {
+            "blockedReason": null,
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": true,
+              "termsAccepted": true,
+              "businessUse": true,
+              "hasLines": false,
+              "hasShipping": true
+            }
+          ],
+          "result": {
+            "blockedReason": null,
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": true,
+              "termsAccepted": true,
+              "businessUse": true,
+              "hasLines": false,
+              "hasShipping": false
+            }
+          ],
+          "result": {
+            "blockedReason": null,
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": true,
+              "termsAccepted": true,
+              "businessUse": false,
+              "hasLines": true,
+              "hasShipping": true
+            }
+          ],
+          "result": {
+            "blockedReason": "Accept the hardware terms of sale and confirm the hardware is for your business first.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": true,
+              "termsAccepted": true,
+              "businessUse": false,
+              "hasLines": true,
+              "hasShipping": false
+            }
+          ],
+          "result": {
+            "blockedReason": "Accept the hardware terms of sale and confirm the hardware is for your business first.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": true,
+              "termsAccepted": true,
+              "businessUse": false,
+              "hasLines": false,
+              "hasShipping": true
+            }
+          ],
+          "result": {
+            "blockedReason": "Accept the hardware terms of sale and confirm the hardware is for your business first.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": true,
+              "termsAccepted": true,
+              "businessUse": false,
+              "hasLines": false,
+              "hasShipping": false
+            }
+          ],
+          "result": {
+            "blockedReason": "Accept the hardware terms of sale and confirm the hardware is for your business first.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": true,
+              "termsAccepted": false,
+              "businessUse": true,
+              "hasLines": true,
+              "hasShipping": true
+            }
+          ],
+          "result": {
+            "blockedReason": "Accept the hardware terms of sale and confirm the hardware is for your business first.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": true,
+              "termsAccepted": false,
+              "businessUse": true,
+              "hasLines": true,
+              "hasShipping": false
+            }
+          ],
+          "result": {
+            "blockedReason": "Accept the hardware terms of sale and confirm the hardware is for your business first.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": true,
+              "termsAccepted": false,
+              "businessUse": true,
+              "hasLines": false,
+              "hasShipping": true
+            }
+          ],
+          "result": {
+            "blockedReason": "Accept the hardware terms of sale and confirm the hardware is for your business first.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": true,
+              "termsAccepted": false,
+              "businessUse": true,
+              "hasLines": false,
+              "hasShipping": false
+            }
+          ],
+          "result": {
+            "blockedReason": "Accept the hardware terms of sale and confirm the hardware is for your business first.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": true,
+              "termsAccepted": false,
+              "businessUse": false,
+              "hasLines": true,
+              "hasShipping": true
+            }
+          ],
+          "result": {
+            "blockedReason": "Accept the hardware terms of sale and confirm the hardware is for your business first.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": true,
+              "termsAccepted": false,
+              "businessUse": false,
+              "hasLines": true,
+              "hasShipping": false
+            }
+          ],
+          "result": {
+            "blockedReason": "Accept the hardware terms of sale and confirm the hardware is for your business first.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": true,
+              "termsAccepted": false,
+              "businessUse": false,
+              "hasLines": false,
+              "hasShipping": true
+            }
+          ],
+          "result": {
+            "blockedReason": "Accept the hardware terms of sale and confirm the hardware is for your business first.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": true,
+              "termsAccepted": false,
+              "businessUse": false,
+              "hasLines": false,
+              "hasShipping": false
+            }
+          ],
+          "result": {
+            "blockedReason": "Accept the hardware terms of sale and confirm the hardware is for your business first.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": false,
+              "termsAccepted": true,
+              "businessUse": true,
+              "hasLines": true,
+              "hasShipping": true
+            }
+          ],
+          "result": {
+            "blockedReason": "Only a member with the \"Buy point of sale hardware\" permission can place an order. Ask an organization admin.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": false,
+              "termsAccepted": true,
+              "businessUse": true,
+              "hasLines": true,
+              "hasShipping": false
+            }
+          ],
+          "result": {
+            "blockedReason": "Only a member with the \"Buy point of sale hardware\" permission can place an order. Ask an organization admin.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": false,
+              "termsAccepted": true,
+              "businessUse": true,
+              "hasLines": false,
+              "hasShipping": true
+            }
+          ],
+          "result": {
+            "blockedReason": "Only a member with the \"Buy point of sale hardware\" permission can place an order. Ask an organization admin.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": false,
+              "termsAccepted": true,
+              "businessUse": true,
+              "hasLines": false,
+              "hasShipping": false
+            }
+          ],
+          "result": {
+            "blockedReason": "Only a member with the \"Buy point of sale hardware\" permission can place an order. Ask an organization admin.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": false,
+              "termsAccepted": true,
+              "businessUse": false,
+              "hasLines": true,
+              "hasShipping": true
+            }
+          ],
+          "result": {
+            "blockedReason": "Only a member with the \"Buy point of sale hardware\" permission can place an order. Ask an organization admin.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": false,
+              "termsAccepted": true,
+              "businessUse": false,
+              "hasLines": true,
+              "hasShipping": false
+            }
+          ],
+          "result": {
+            "blockedReason": "Only a member with the \"Buy point of sale hardware\" permission can place an order. Ask an organization admin.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": false,
+              "termsAccepted": true,
+              "businessUse": false,
+              "hasLines": false,
+              "hasShipping": true
+            }
+          ],
+          "result": {
+            "blockedReason": "Only a member with the \"Buy point of sale hardware\" permission can place an order. Ask an organization admin.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": false,
+              "termsAccepted": true,
+              "businessUse": false,
+              "hasLines": false,
+              "hasShipping": false
+            }
+          ],
+          "result": {
+            "blockedReason": "Only a member with the \"Buy point of sale hardware\" permission can place an order. Ask an organization admin.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": false,
+              "termsAccepted": false,
+              "businessUse": true,
+              "hasLines": true,
+              "hasShipping": true
+            }
+          ],
+          "result": {
+            "blockedReason": "Only a member with the \"Buy point of sale hardware\" permission can place an order. Ask an organization admin.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": false,
+              "termsAccepted": false,
+              "businessUse": true,
+              "hasLines": true,
+              "hasShipping": false
+            }
+          ],
+          "result": {
+            "blockedReason": "Only a member with the \"Buy point of sale hardware\" permission can place an order. Ask an organization admin.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": false,
+              "termsAccepted": false,
+              "businessUse": true,
+              "hasLines": false,
+              "hasShipping": true
+            }
+          ],
+          "result": {
+            "blockedReason": "Only a member with the \"Buy point of sale hardware\" permission can place an order. Ask an organization admin.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": false,
+              "termsAccepted": false,
+              "businessUse": true,
+              "hasLines": false,
+              "hasShipping": false
+            }
+          ],
+          "result": {
+            "blockedReason": "Only a member with the \"Buy point of sale hardware\" permission can place an order. Ask an organization admin.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": false,
+              "termsAccepted": false,
+              "businessUse": false,
+              "hasLines": true,
+              "hasShipping": true
+            }
+          ],
+          "result": {
+            "blockedReason": "Only a member with the \"Buy point of sale hardware\" permission can place an order. Ask an organization admin.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": false,
+              "termsAccepted": false,
+              "businessUse": false,
+              "hasLines": true,
+              "hasShipping": false
+            }
+          ],
+          "result": {
+            "blockedReason": "Only a member with the \"Buy point of sale hardware\" permission can place an order. Ask an organization admin.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": false,
+              "termsAccepted": false,
+              "businessUse": false,
+              "hasLines": false,
+              "hasShipping": true
+            }
+          ],
+          "result": {
+            "blockedReason": "Only a member with the \"Buy point of sale hardware\" permission can place an order. Ask an organization admin.",
+            "enabled": false
+          }
+        },
+        {
+          "args": [
+            {
+              "canBuy": false,
+              "termsAccepted": false,
+              "businessUse": false,
+              "hasLines": false,
+              "hasShipping": false
+            }
+          ],
+          "result": {
+            "blockedReason": "Only a member with the \"Buy point of sale hardware\" permission can place an order. Ask an organization admin.",
+            "enabled": false
+          }
+        }
+      ]
+    },
+    "posHardwareOrderItems": {
+      "module": "libs/plugins/commerce/src/lib/model/pos-hardware-shop.ts",
+      "cases": [
+        {
+          "args": [
+            []
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            [
+              {
+                "name": "Pocket reader (M2)",
+                "quantity": 2
+              }
+            ]
+          ],
+          "result": "Pocket reader (M2) × 2"
+        },
+        {
+          "args": [
+            [
+              {
+                "name": "Touchscreen reader (S700)",
+                "quantity": 1
+              },
+              {
+                "name": "Case for the S700 and S710",
+                "quantity": 3
+              }
+            ]
+          ],
+          "result": "Touchscreen reader (S700) × 1, Case for the S700 and S710 × 3"
+        }
+      ]
+    },
+    "posHardwareReturnOffered": {
+      "module": "libs/plugins/commerce/src/lib/model/pos-hardware-shop.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "status": "paid"
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "status": "ordered"
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "status": "received"
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "status": "shipped"
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "status": "delivered"
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "status": "registered"
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "status": "canceled"
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "status": "refunded"
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "status": "shipped",
+              "source": "in_person"
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "status": "delivered",
+              "source": "in_person"
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "status": "registered",
+              "source": "in_person"
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "status": "shipped",
+              "source": "storefront"
+            }
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "status": "delivered",
+              "returnRequest": {
+                "state": "requested"
+              }
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "status": "registered",
+              "returnRequest": {
+                "state": "declined"
+              }
+            }
+          ],
+          "result": false
+        }
+      ]
+    },
+    "posHardwareReturnReasonReady": {
+      "module": "libs/plugins/commerce/src/lib/model/pos-hardware-shop.ts",
+      "cases": [
+        {
+          "args": [
+            ""
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "ab"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "  ab  "
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            "abc"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            "Wrong model"
+          ],
+          "result": true
+        }
+      ]
+    },
+    "posHardwareReturnTitle": {
+      "module": "libs/plugins/commerce/src/lib/model/pos-hardware-shop.ts",
+      "cases": [
+        {
+          "args": [
+            "HW-1A2B3C"
+          ],
+          "result": "Return HW-1A2B3C?"
+        }
+      ]
+    },
+    "posHardwareWaitingItems": {
+      "module": "libs/plugins/commerce/src/lib/model/pos-hardware-shop.ts",
+      "cases": [
+        {
+          "args": [
+            []
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            [
+              {
+                "name": "Pocket reader (M2)",
+                "quantity": 2
+              }
+            ]
+          ],
+          "result": "2 × Pocket reader (M2)"
+        },
+        {
+          "args": [
+            [
+              {
+                "name": "Touchscreen reader (S700)",
+                "quantity": 1
+              },
+              {
+                "name": "Case for the S700 and S710",
+                "quantity": 3
+              }
+            ]
+          ],
+          "result": "1 × Touchscreen reader (S700), 3 × Case for the S700 and S710"
+        }
+      ]
+    },
+    "posHardwareWaitingNote": {
+      "module": "libs/plugins/commerce/src/lib/model/pos-hardware-shop.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "storeName": "Main Street",
+              "serialsTaken": 0,
+              "hasLocation": true
+            }
+          ],
+          "result": "For Main Street. Add it on the POS devices card with the code it shows, then mark it set up."
+        },
+        {
+          "args": [
+            {
+              "storeName": "Main Street",
+              "serialsTaken": 0,
+              "hasLocation": false
+            }
+          ],
+          "result": "For Main Street. Add it on the POS devices card with the code it shows, then mark it set up. The first reader asks for the store’s address."
+        },
+        {
+          "args": [
+            {
+              "storeName": "Main Street",
+              "serialsTaken": 2,
+              "hasLocation": true
+            }
+          ],
+          "result": "For Main Street. Add it on the POS devices card with the code it shows, and it is set up: we know its serial number."
+        },
+        {
+          "args": [
+            {
+              "storeName": "Main Street",
+              "serialsTaken": 2,
+              "hasLocation": false
+            }
+          ],
+          "result": "For Main Street. Add it on the POS devices card with the code it shows, and it is set up: we know its serial number. The first reader asks for the store’s address."
+        }
+      ]
+    },
     "posOfflineCardIntentMetadata": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-pos-offline.ts",
       "cases": [
@@ -47655,6 +48666,38 @@
             null
           ],
           "result": "A PIN is 4 to 6 digits."
+        }
+      ]
+    },
+    "posPlanPrompt": {
+      "module": "libs/plugins/commerce/src/lib/model/pos-hardware.ts",
+      "cases": [
+        {
+          "args": [
+            {}
+          ],
+          "result": "You can buy readers on any plan. To take payments with them, add the point of sale: registers that ring up sales, card payments on your readers, cash with change due, receipts and shift reports."
+        },
+        {
+          "args": [
+            {
+              "arrived": [
+                "HW-1A2B3C"
+              ]
+            }
+          ],
+          "result": "HW-1A2B3C has arrived. To take payments with it, add the point of sale: registers that ring up sales, card payments on your readers, cash with change due, receipts and shift reports."
+        },
+        {
+          "args": [
+            {
+              "arrived": [
+                "HW-1A2B3C",
+                "HW-9F8E7D"
+              ]
+            }
+          ],
+          "result": "HW-1A2B3C, HW-9F8E7D have arrived. To take payments with them, add the point of sale: registers that ring up sales, card payments on your readers, cash with change due, receipts and shift reports."
         }
       ]
     },
@@ -70129,6 +71172,16 @@
                       },
                       {
                         "console": {
+                          "id": "/products/pos",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "pos",
+                        "label": "Point of sale",
+                        "screen": "commerce.hardware"
+                      },
+                      {
+                        "console": {
                           "id": "/products/channels",
                           "surface": "hostPluginSection"
                         },
@@ -71613,6 +72666,16 @@
                       },
                       {
                         "console": {
+                          "id": "/products/pos",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "pos",
+                        "label": "Point of sale",
+                        "screen": "commerce.hardware"
+                      },
+                      {
+                        "console": {
                           "id": "/products/channels",
                           "surface": "hostPluginSection"
                         },
@@ -72364,6 +73427,16 @@
                         "id": "notifications",
                         "label": "Notifications",
                         "screen": "commerce.settingsNotifications"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/pos",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "pos",
+                        "label": "Point of sale",
+                        "screen": "commerce.hardware"
                       },
                       {
                         "console": {

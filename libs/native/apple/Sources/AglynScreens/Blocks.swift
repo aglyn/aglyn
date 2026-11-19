@@ -578,7 +578,7 @@ struct FieldInput: View {
       case "toggle":
         Toggle(label, isOn: flag)
       case "select", "country":
-        PlainFormRow(label) {
+        AglynPlainFormRow(label) {
           Picker(label, selection: text) {
             ForEach(field.choices(in: context), id: \.value) { choice in Text(choice.label).tag(choice.value) }
           }
@@ -653,19 +653,19 @@ struct FieldInput: View {
       case "group":
         GroupFieldView(field: field, context: context, label: label, value: $value)
       case "multiline", "lines":
-        PlainFormRow(label) {
+        AglynPlainFormRow(label) {
           TextField(label, text: text, prompt: field.placeholder.map { Text($0) }, axis: .vertical)
             .lineLimit(3...8)
         }
         .aglynFieldLabel(label, value: text.wrappedValue, prompt: field.placeholder)
       case "password":
-        PlainFormRow(label) {
+        AglynPlainFormRow(label) {
           SecureField(label, text: text, prompt: field.placeholder.map { Text($0) })
             .textContentType(.password)
         }
         .aglynFieldLabel(label, value: text.wrappedValue, prompt: field.placeholder)
       default:
-        PlainFormRow(label) {
+        AglynPlainFormRow(label) {
           TextField(label, text: text, prompt: Text(field.placeholder ?? label))
             #if os(iOS)
               .keyboardType(keyboard)
@@ -1285,31 +1285,6 @@ func rowLine(_ spec: JSONValue?, in scope: JSONValue) -> String? {
     line = nil
   }
   return line.flatMap { $0.isEmpty ? nil : $0 }
-}
-
-/// A field as a form row draws it inside the Mac's own grouped form (`aglynPlainForm`): its label on the leading edge,
-/// the control after it, filling the row; anywhere else the control as it is, which a `Form` labels itself.
-struct PlainFormRow<Control: View>: View {
-  @Environment(\.aglynPlainForm) private var plain
-  let label: String
-  let control: Control
-
-  init(_ label: String, @ViewBuilder control: () -> Control) {
-    self.label = label
-    self.control = control()
-  }
-
-  var body: some View {
-    if plain {
-      HStack(alignment: .firstTextBaseline, spacing: 12) {
-        Text(label).foregroundStyle(AglynColor.textPrimary)
-        Spacer(minLength: 8)
-        control.labelsHidden().textFieldStyle(.roundedBorder).frame(maxWidth: 420, alignment: .trailing)
-      }
-    } else {
-      control
-    }
-  }
 }
 
 /// A list screen's one Filter control on the Mac and iPad (Figma List toolbar, Calm rule 3): beside its search, one menu

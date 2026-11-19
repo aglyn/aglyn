@@ -63,6 +63,9 @@ class MainActivity : ComponentActivity() {
     openLink(intent, linkOf(intent)?.takeUnless { services.handleConsoleHandoffReturn(it, lifecycleScope) })
     // Debug builds only: `adb shell am start … --ez autoSignIn true` signs the seeded member in.
     val autoSignIn = BuildConfig.DEBUG && intent.getBooleanExtra("autoSignIn", false)
+    // Debug builds only: `--es assistSettledAnswer <exchangeId>` opens the AI panel on one settled answer, so its
+    // Helpful / Unhelpful can be driven without starting a run.
+    if (BuildConfig.DEBUG) com.aglyn.pluginhost.DebugLaunch.assistSettledAnswer = intent.getStringExtra("assistSettledAnswer")
     // Debug builds only: `--ez storeBuild true` draws a store build's screens, with buying left out (StoreBilling).
     if (BuildConfig.DEBUG) {
       com.aglyn.core.StoreBilling.overrideForDebug(intent.getBooleanExtra(com.aglyn.core.StoreBilling.STORE_BUILD_EXTRA, false), debuggable = true)

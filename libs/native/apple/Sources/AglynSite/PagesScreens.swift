@@ -110,9 +110,12 @@ enum PageSheet: Identifiable {
   case fromTemplate
   case useTemplate(ArtifactRow)
   case saveTemplate(PageNode)
+  /// Schedule publication (a version, `versionID` preset from its row) or unpublish (AGL-113).
+  case schedule(PageNode, unpublish: Bool, versionID: String?)
 
   var id: String {
     switch self {
+    case .schedule(let page, let unpublish, let version): "schedule-\(page.id)-\(unpublish)-\(version ?? "")"
     case .fromTemplate: "from-template"
     case .useTemplate(let row): "use-template-\(row.id)"
     case .saveTemplate(let page): "save-template-\(page.id)"
@@ -172,8 +175,7 @@ struct PagesScreen: View {
             } detail: {
               if let row = model.row(selection) {
                 PageDetail(
-                  context: context, hostID: hostID, pageID: row.id, model: model, api: api, runner: runner,
-                  canEdit: canEdit, canPublish: canPublish)
+                  context: context, hostID: hostID, pageID: row.id, model: model, api: api, runner: runner)
               } else {
                 AglynSelectionPlaceholder("No page selected", systemImage: SiteSymbols.page)
               }
@@ -313,8 +315,7 @@ struct PagesScreen: View {
           ForEach(rows) { row in
             AglynPushLink {
               PageDetail(
-                context: context, hostID: hostID, pageID: row.id, model: model, api: api, runner: runner,
-                canEdit: canEdit, canPublish: canPublish, pushed: true
+                context: context, hostID: hostID, pageID: row.id, model: model, api: api, runner: runner, pushed: true
               )
               .navigationTitle(row.page.name)
               .aglynScreenTitle(row.page.name)
@@ -332,8 +333,7 @@ struct PagesScreen: View {
         .aglynPushDestination(item: $linkedPage) { id in
           if let row = rows.first(where: { $0.id == id }) {
             PageDetail(
-              context: context, hostID: hostID, pageID: id, model: model, api: api, runner: runner,
-              canEdit: canEdit, canPublish: canPublish, pushed: true
+              context: context, hostID: hostID, pageID: id, model: model, api: api, runner: runner, pushed: true
             )
             .navigationTitle(row.page.name)
             .aglynScreenTitle(row.page.name)
@@ -454,14 +454,26 @@ struct PageDetail: View {
   let model: SitePagesModel
   let api: PagesAPI
   let runner: ActionRunner
-  let canEdit: Bool
-  let canPublish: Bool
+  /// Read when the body asks, never kept: a page pushed on a phone holds this view's value, and a permission that
+  /// arrives after the push (a cold start from a link) enables its controls at once.
+  var canEdit: Bool { context.can("site.edit") }
+  var canPublish: Bool { context.can("site.publish") }
   /// Pushed over the list on a phone: it shows the actions' banner itself, and a deleted page leaves.
   var pushed = false
   @Environment(\.openURL) private var openURL
   @Environment(\.dismiss) private var dismiss
   @State private var sheet: PageSheet?
   @State private var confirm: PageConfirm?
+  /// The page's own document, live: its access and its schedule (the tree reads a page once).
+  @State private var screen = LiveDocument()
+  /// The site's own document, read here as well as by the list: pushed on a phone, the list's task stops with the list
+  /// out of sight, so its copy would not show what this page's switches just wrote (Preview stayed off once saved).
+  @State private var siteHost = LiveDocument()
+  @State private var plan = SchedulingPlan()
+
+  private var settingsAPI: PageSettingsAPI {
+    PageSettingsAPI(api: context.api, writer: context.writer, reader: context.firestore, hostID: hostID)
+  }
 
   var body: some View {
     if let row = model.row(pageID) {
@@ -644,7 +656,22 @@ struct PageDetail: View {
           AglynDetailRow("Page id", value: page.id)
         }
         PageVersionsSection(
-          context: context, hostID: hostID, page: page, model: model, api: api, runner: runner, canPublish: canPublish)
+          context: context, hostID: hostID, page: page, model: model, api: api, runner: runner, canPublish: canPublish,
+          schedulingLocked: plan.carried != true, open: open)
+        if page.kind != screenKindTemplate {
+          let settings = PageSettings(screen.state.value ?? nil)
+          PageScheduleSection(
+            context: context, page: page, live: row.livePath != nil, settings: settings, plan: plan, api: settingsAPI,
+            runner: runner, canPublish: canPublish, open: open)
+          PageAccessSection(
+            page: page, livePath: row.livePath, settings: settings, host: (siteHost.state.value ?? model.host.state.value)??.data, api: settingsAPI,
+            runner: runner, canEdit: canEdit, canPublish: canPublish)
+          PageSeoSection(
+            context: context, hostID: hostID, page: page, livePath: row.livePath, screen: screen.state.value??.data,
+            host: model.host.state.value??.data, api: settingsAPI, runner: runner, canEdit: canEdit
+          )
+          .id(page.id)
+        }
         // What breaks if this page goes (AGL-703), on demand: the scan reads every page, layout and component.
         PageUsedBySection(context: context, hostID: hostID, pageID: page.id)
         // What the page is doing, then who touched it (the console's page view, AGL-4011): its traffic above its activity.
@@ -663,6 +690,9 @@ struct PageDetail: View {
       }
     }
     .formStyle(.aglynGrouped)
+    .task(id: pageID) { await screen.bind(context.firestore, ["hosts", hostID, "screens", pageID]) }
+    .task(id: hostID) { await siteHost.bind(context.firestore, ["hosts", hostID]) }
+    .task(id: context.orgID) { if let orgID = context.orgID { await plan.org.bind(context.firestore, ["orgs", orgID]) } }
     // Back from the Besigner: the tree reads a page once, so what its publish changed (Published, Updated, the
     // live version) is read again now rather than shown stale until the list is reopened.
     .onReceive(NotificationCenter.default.publisher(for: RestFirestoreReader.rereadNotification)) { _ in
@@ -685,6 +715,9 @@ struct PageVersionsSection: View {
   let api: PagesAPI
   let runner: ActionRunner
   let canPublish: Bool
+  /// The plan leaves scheduled publishing out (or is still being read).
+  var schedulingLocked = true
+  var open: (PageSheet) -> Void = { _ in }
   @State private var versions = LiveQuery()
 
   private var versionCount: Int? {
@@ -708,10 +741,10 @@ struct PageVersionsSection: View {
             subtitle: version.createdAt.map { "Saved \(relativeTime($0).lowercased())" },
             systemImage: "clock.arrow.circlepath"
           ) {
-            if version.id == page.versionID {
-              StatusChip("Current", tone: .success)
-            } else {
-              HStack(spacing: AglynSpace.one) {
+            HStack(spacing: AglynSpace.one) {
+              if version.id == page.versionID {
+                StatusChip("Current", tone: .success)
+              } else {
                 Button("Open") {
                   context.openBesigner(DeepLinks.besignerScreen(page.id, versionID: version.id), scope: .site)
                 }
@@ -723,8 +756,23 @@ struct PageVersionsSection: View {
                 }
                 .disabled(!canPublish || runner.busy)
               }
-              .buttonStyle(.borderless)
+              // The console's version row: Preview it (the page as it would look, with Publish / Open in Besigner), and
+              // Schedule it to go live (AGL-113).
+              Menu {
+                Button("Preview", systemImage: "eye") {
+                  context.openBesigner(DeepLinks.besignerScreen(page.id, versionID: version.id, preview: true), scope: .site)
+                }
+                Button("Schedule…", systemImage: "calendar") {
+                  open(.schedule(page, unpublish: false, versionID: version.id))
+                }
+                .disabled(version.id == page.versionID || schedulingLocked || !canPublish)
+              } label: {
+                Label("More for this version", systemImage: "ellipsis.circle").labelStyle(.iconOnly)
+              }
+              .menuIndicator(.hidden)
+              .accessibilityIdentifier("page-version-more-\(version.id)")
             }
+            .buttonStyle(.borderless)
           }
           .accessibilityIdentifier("page-version-\(version.id)")
         }
@@ -765,6 +813,11 @@ struct PageSheetRouter: View {
         close()
         context.navigate(sitePagesScreen, ["page": id])
       }, close: close)
+    case .schedule(let page, let unpublish, let versionID):
+      PageScheduleSheet(
+        context: context, hostID: hostID, page: page, unpublish: unpublish, presetVersionID: versionID,
+        api: PageSettingsAPI(api: context.api, writer: context.writer, reader: context.firestore, hostID: hostID),
+        runner: runner, close: close)
     case .saveTemplate(let page):
       SaveAsTemplateSheet(
         context: context, hostID: hostID, kind: "page", defaultName: page.name,
@@ -774,7 +827,11 @@ struct PageSheetRouter: View {
           close()
         }, close: close)
     default:
-      PageSheetView(sheet: sheet, model: model, api: api, runner: runner) { id in
+      PageSheetView(
+        sheet: sheet, model: model, api: api, runner: runner,
+        settings: PageSettingsAPI(api: context.api, writer: context.writer, reader: context.firestore, hostID: hostID),
+        canPublish: context.can("site.publish")
+      ) { id in
         context.navigate(sitePagesScreen, ["page": id])
       } close: {
         close()
@@ -788,12 +845,16 @@ struct PageSheetView: View {
   let model: SitePagesModel
   let api: PagesAPI
   let runner: ActionRunner
+  var settings: PageSettingsAPI?
+  var canPublish = false
   let onSelectNew: (String) -> Void
   let close: () -> Void
   @State private var name = ""
   @State private var text = ""
   @State private var parent: String?
   @State private var loaded = false
+  /// New page: once published, only the site's team sees it until it is made public (AGL-4086).
+  @State private var startInPreview = false
 
   var body: some View {
     form
@@ -810,7 +871,7 @@ struct PageSheetView: View {
           parent = page.parentID
           // The choice is over every page, so the windows still unread are read first.
           Task { await model.loadAll() }
-        case .newPage, .newGroup, .fromTemplate, .useTemplate, .saveTemplate: break
+        case .newPage, .newGroup, .fromTemplate, .useTemplate, .saveTemplate, .schedule: break
         }
       }
   }
@@ -833,9 +894,14 @@ struct PageSheetView: View {
         confirmLabel: "Create page", confirmEnabled: !name.trimmed.isEmpty, busy: runner.busy, error: runner.error,
         onCancel: close
       ) {
-        let (name, description) = (name, text)
-        runner.run("\(name.trimmed) was added as a draft.", onDone: close) {
+        let (name, description, preview) = (name, text, startInPreview && canPublish)
+        let done =
+          preview
+          ? "\(name.trimmed) was added as a draft. Once you publish it, only your team sees it until you make it public."
+          : "\(name.trimmed) was added as a draft."
+        runner.run(done, onDone: close) {
           let made = try await api.createPage(name: name, description: description)
+          if preview { try await settings?.setPreview(made.id, true) }
           await model.reread([made.id])
         }
       } fields: {
@@ -843,6 +909,16 @@ struct PageSheetView: View {
         TextField(
           "Description (optional)", text: Binding(get: { text }, set: { text = $0.capped(pageDescriptionMax) }),
           axis: .vertical)
+        if settings != nil {
+          Toggle("Start in preview", isOn: $startInPreview)
+            .disabled(!canPublish)
+            .accessibilityIdentifier("page-start-in-preview")
+          AglynHelperText(
+            canPublish
+              ? "Once you publish it, only you and your team can see the page until you make it public in its Page "
+                + "access section."
+              : "Your role on this site can edit content but not publish it, so it cannot choose who sees the page.")
+        }
       }
     case .newGroup:
       AglynActionSheet(
@@ -936,7 +1012,7 @@ struct PageSheetView: View {
           moveChoice(choice.name, systemImage: choice.isGroup ? SiteSymbols.group : SiteSymbols.page, id: choice.id)
         }
       }
-    case .fromTemplate, .useTemplate, .saveTemplate:
+    case .fromTemplate, .useTemplate, .saveTemplate, .schedule:
       EmptyView()
     }
   }
