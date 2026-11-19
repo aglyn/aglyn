@@ -750,8 +750,13 @@ struct CreateSiteSheet: View {
 
   /// What the pick needs next, held at the foot of the sheet so it is beside whichever row was tapped, however long the list.
   private func pickNote(_ note: SiteStarterPickNote) -> some View {
-    AglynNotice(
-      note.message, tone: note.webAction == nil ? .success : .info, actionTitle: note.webAction, action: note.webAction.map { _ in leaveForTheWeb })
+    VStack(alignment: .leading, spacing: AglynSpace.one) {
+      AglynNotice(
+        note.message, tone: note.webAction == nil && !note.storeLine ? .success : .info, actionTitle: note.webAction,
+        action: note.webAction.map { _ in leaveForTheWeb })
+      // A store build's paid pick: the one store line (the owner's decision of 2026-11-19).
+      if note.storeLine { AglynStoreBillingLine() }
+    }
       .padding(AglynSpace.two)
       .background(AglynColor.paper)
       .overlay(alignment: .top) { Divider() }
@@ -942,13 +947,16 @@ enum CreateSiteBlock: Equatable {
   case role
   case limit(Int)
 
-  var message: String {
+  var message: String { message(buying: StoreBilling.buying) }
+
+  /// A store build (the owner's decision of 2026-11-19) does not send the reader to Billing to buy more sites.
+  func message(buying: Bool) -> String {
     switch self {
     case .role:
       permissionRefusalText(ContractValues.shared.orgRoleGrants, key: "hosts.create")
     case .limit(let limit):
-      "Your plan includes \(limit == 1 ? "one site" : "\(limit) sites"), and this workspace is using all of them. "
-        + "Upgrade or add extra sites from Billing."
+      "Your plan includes \(limit == 1 ? "one site" : "\(limit) sites"), and this workspace is using all of them."
+        + (buying ? " Upgrade or add extra sites from Billing." : "")
     }
   }
 }

@@ -621,6 +621,10 @@ private struct ListingBody: View {
       }
       Button(state.scope == .org ? "Remove from the workspace" : "Remove from this site", role: .destructive) { open(.uninstall(state.scope ?? .host)) }
         .disabled(!installable || runner.busy).accessibilityIdentifier("listing-uninstall")
+    } else if buying(state), !StoreBilling.buying {
+      // A store build takes no payment to Aglyn (the owner's decision of 2026-11-19): a paid listing says it is paid (its
+      // chip) and shows the store line where Buy would be.
+      AglynStoreBillingLine()
     } else if buying(state) {
       Button {
         startBuying()

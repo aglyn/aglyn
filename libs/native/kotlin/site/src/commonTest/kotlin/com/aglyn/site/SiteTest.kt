@@ -280,11 +280,14 @@ class SiteTest {
     assertEquals(null, siteStarterPickNote(null))
     assertEquals(null, siteStarterPickNote(SiteStarterSummary("l1", "Bakery")))
     val paid = SiteStarterSummary("l2", "Studio", priceUsd = 12.0)
-    assertEquals(SiteStarterPickNote("Studio costs $12. Buy it on the web, then create your site from it.", "Buy on the web"), siteStarterPickNote(paid))
-    assertEquals(SiteStarterPickNote("You own this starter. Create your site from it whenever you are ready.", null), siteStarterPickNote(paid.copy(owned = true)))
-    assertEquals("Continue on the web", siteStarterPickNote(SiteStarterSummary("l3", "AI", mode = SiteStarterMode.AI))?.webAction)
+    assertEquals(SiteStarterPickNote("Studio costs $12. Buy it on the web, then create your site from it.", "Buy on the web"), siteStarterPickNote(paid, buying = true))
+    assertEquals(SiteStarterPickNote("You own this starter. Create your site from it whenever you are ready.", null), siteStarterPickNote(paid.copy(owned = true), buying = true))
+    assertEquals("Continue on the web", siteStarterPickNote(SiteStarterSummary("l3", "AI", mode = SiteStarterMode.AI), buying = true)?.webAction)
     // A paid AI starter is bought before its questions.
-    assertEquals("Buy on the web", siteStarterPickNote(SiteStarterSummary("l4", "AI", priceUsd = 9.0, mode = SiteStarterMode.AI))?.webAction)
+    assertEquals("Buy on the web", siteStarterPickNote(SiteStarterSummary("l4", "AI", priceUsd = 9.0, mode = SiteStarterMode.AI), buying = true)?.webAction)
+    // A store build (the owner's decision of 2026-11-19): a paid pick is said to be paid, with no price and no web action.
+    assertEquals(SiteStarterPickNote("Studio is a paid starter.", null, storeLine = true), siteStarterPickNote(paid, buying = false))
+    assertEquals(false, siteStarterPickNote(paid.copy(owned = true), buying = false)?.storeLine)
   }
 
   @Test

@@ -197,7 +197,10 @@ struct ListingRow: Identifiable, Equatable {
 }
 
 /// "Free" or "$12".
-func priceLabel(_ priceUSD: Double) -> String { priceUSD <= 0 ? "Free" : "$" + jsNumberString(priceUSD) }
+/// A store build names no price (the owner's decision of 2026-11-19): it says the listing is paid.
+func priceLabel(_ priceUSD: Double, buying: Bool = StoreBilling.buying) -> String {
+  priceUSD <= 0 ? "Free" : !buying ? "Paid" : "$" + jsNumberString(priceUSD)
+}
 
 /// "4.5 ★ (12)" or "Not yet rated".
 func ratingLabel(_ listing: ListingRow) -> String {

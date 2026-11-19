@@ -125,11 +125,12 @@ fun AiInsightTile(context: NativePluginContext, surface: AiInsightSurface) {
       text = {
         Column(verticalArrangement = Arrangement.spacedBy(space(2f))) {
           Text(AiInsightUpsell.DOES)
-          Text(AiInsightUpsell.offer(canManage), color = MaterialTheme.colorScheme.onSurfaceVariant)
+          // A store build (the owner's decision of 2026-11-19): no offer and no Add, the store line instead.
+          if (com.aglyn.core.StoreBilling.buying) Text(AiInsightUpsell.offer(canManage), color = MaterialTheme.colorScheme.onSurfaceVariant) else com.aglyn.ui.StoreBillingLine()
         }
       },
       confirmButton = {
-        if (canManage) {
+        if (canManage && com.aglyn.core.StoreBilling.buying) {
           Button(onClick = { upsell = false; context.navigate("core.billing.addons") }, modifier = Modifier.testTag("ai-insight-upsell-add")) {
             Text("Add ${Contracts.platformBrandName} AI")
           }

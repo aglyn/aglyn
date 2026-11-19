@@ -686,9 +686,11 @@ private fun CreateSiteDialog(context: NativePluginContext, orgId: String, close:
           HorizontalDivider()
           NoticeBanner(
             note.message,
-            if (note.webAction == null) StatusTone.SUCCESS else StatusTone.INFO,
+            if (note.webAction == null && !note.storeLine) StatusTone.SUCCESS else StatusTone.INFO,
             Modifier.padding(space(2f)).testTag("starter-note"),
           ) {
+            // A store build's paid pick: the one store line (the owner's decision of 2026-11-19).
+            if (note.storeLine) com.aglyn.ui.StoreBillingLine()
             note.webAction?.let { label ->
               Button(
                 shape = controlShape(),

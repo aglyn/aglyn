@@ -96,7 +96,10 @@ final class MarketplaceTests: XCTestCase {
         ]))
     XCTAssertEqual(row.artifactType, "plugin")
     XCTAssertEqual(row.offeredVersion, "1.0.0")
-    XCTAssertEqual(priceLabel(row.priceUSD), "$12")
+    XCTAssertEqual(priceLabel(row.priceUSD, buying: true), "$12")
+    // A store build (the owner's decision of 2026-11-19) names no price.
+    XCTAssertEqual(priceLabel(row.priceUSD, buying: false), "Paid")
+    XCTAssertEqual(priceLabel(0, buying: false), "Free")
     XCTAssertEqual(ratingLabel(row), "4.5 ★ (2)")
     XCTAssertEqual(installTargets("plugin"), [.org, .host])
     XCTAssertEqual(installTargets("template"), [.host])

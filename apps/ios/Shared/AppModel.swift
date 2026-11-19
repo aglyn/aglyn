@@ -7,6 +7,7 @@ import AglynPluginHost
 import AglynPluginManifest
 import AglynScreens
 import AglynSite
+import AglynUI
 import Foundation
 import Observation
 
@@ -175,6 +176,16 @@ final class AppModel {
   }
 
   /// What every spec screen reads about who is signed in and where.
+  /// What a store build says where it leaves buying out (the owner's decision of 2026-11-19), for every screen: whether
+  /// this build may take a payment to Aglyn, and the link to this workspace's billing page where the storefront allows it.
+  var storeBilling: AglynStoreBilling {
+    AglynStoreBilling(
+      buying: StoreBilling.buying,
+      link: StoreBilling.webBillingLink
+        ? StoreBilling.webBillingURL(consoleOrigin: config?.consoleOrigin ?? "", orgSlug: workspace?.org?.slug ?? "") : nil,
+      linkLabel: StoreBilling.webBillingLinkLabel, note: StoreBilling.noBillingNote)
+  }
+
   var screenSession: ScreenSession {
     let auth = auth
     return ScreenSession(

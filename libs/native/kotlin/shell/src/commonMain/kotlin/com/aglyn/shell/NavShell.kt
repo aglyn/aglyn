@@ -418,6 +418,10 @@ internal fun SignedInShell(
   CompositionLocalProvider(
     androidx.compose.material3.LocalContentColor provides MaterialTheme.colorScheme.onSurface,
     com.aglyn.screens.LocalScreenSession provides screenSession,
+    // Where a store build may link to web billing (never on Google Play for now), the workspace's billing page in the
+    // device's browser (the owner's decision of 2026-11-19).
+    com.aglyn.ui.LocalWebBillingOpener provides com.aglyn.core.StoreBilling.webBillingUrl(services.api.origin, workspace.org?.slug.orEmpty())
+      ?.let { url -> { openInBrowser(url) } },
     LocalShellActions provides actions,
     LocalAccountIdentity provides accountIdentity(user, prefs, services.api.origin),
     LocalShellColors provides shell,
@@ -567,7 +571,9 @@ internal fun SignedInShell(
     val planFoot: @Composable () -> Unit = {
       val loaded = planReadings
       val logo = workspace.orgLogo
-      val offersUpgrade = logo?.plan != null && logo.plan in com.aglyn.core.OnboardingPlanIntent.UPGRADABLE_PLANS && !logo.enterprise &&
+      // Never in a store build, which takes no payment to Aglyn (the owner's decision of 2026-11-19).
+      val offersUpgrade = com.aglyn.core.StoreBilling.buying &&
+        logo?.plan != null && logo.plan in com.aglyn.core.OnboardingPlanIntent.UPGRADABLE_PLANS && !logo.enterprise &&
         shellHeld.workspace["billing.manage"] == true
       if (loaded != null && planOrgId != null && planHides >= 0 && services.prefs.get(planCardHiddenKey(planOrgId, loaded.plan)) == null &&
         com.aglyn.contracts.planCardShows(loaded.readings, offersUpgrade)

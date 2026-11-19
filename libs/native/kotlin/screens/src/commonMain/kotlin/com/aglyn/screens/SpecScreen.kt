@@ -406,16 +406,22 @@ private fun SpecBodyContent(
     ScreenModel.Phase.Loading -> SkeletonList(rows = 6)
     is ScreenModel.Phase.Failed -> if (phase.upsell) {
       EmptyState(
-        "Add this to your plan",
-        body = "${model.spec.title.takeIf { '{' !in it } ?: "This"} is not part of this workspace's plan yet. Add it to start using it.",
+        if (com.aglyn.core.StoreBilling.buying) "Add this to your plan" else "Not on this plan",
+        body = "${model.spec.title.takeIf { '{' !in it } ?: "This"} is not part of this workspace's plan yet." +
+          if (com.aglyn.core.StoreBilling.buying) " Add it to start using it." else "",
         icon = AglynIcons.named("workspace_premium"),
         tone = EmptyTone.UPSELL,
         action = {
-          FilledTonalButton(
-            onClick = { plugin.navigate(BILLING_ADDONS_SCREEN, emptyMap()) },
-            modifier = Modifier.testTag("upsell-addons"),
-            colors = com.aglyn.ui.aglynTonalButtonColors(),
-          ) { Text("See add-ons") }
+          // A store build takes no payment to Aglyn (the owner's decision of 2026-11-19): the store line, not See add-ons.
+          if (!com.aglyn.core.StoreBilling.buying) {
+            com.aglyn.ui.StoreBillingLine()
+          } else {
+            FilledTonalButton(
+              onClick = { plugin.navigate(BILLING_ADDONS_SCREEN, emptyMap()) },
+              modifier = Modifier.testTag("upsell-addons"),
+              colors = com.aglyn.ui.aglynTonalButtonColors(),
+            ) { Text("See add-ons") }
+          }
         },
         modifier = Modifier.testTag("spec-upsell"),
       )
@@ -685,6 +691,9 @@ private fun Block(
   val footer = block.footer?.let { ScreenValues.render(it, context) }?.takeIf { it.isNotEmpty() }
   when (block.type) {
     "notice" -> NoticeBanner(ScreenValues.render(block.string("text").orEmpty(), context), tone(block.string("tone")))
+    // `{ "type": "billingOnWeb", "when": "!app.billing" }`: the one line a store build shows where it leaves buying out (the
+    // owner's decision of 2026-11-19), once per screen; nothing in a build that may buy.
+    "billingOnWeb" -> if (!com.aglyn.core.StoreBilling.buying) SectionCard(title) { com.aglyn.ui.StoreBillingLine() }
     "list" -> ListBlock(block, title, footer, model, context, selection, open, trigger)
     "image" -> {
       // `{ "type": "image", "src": "{item.url}", "caption": "…" }`: a picture the route hands over (a staff media preview).

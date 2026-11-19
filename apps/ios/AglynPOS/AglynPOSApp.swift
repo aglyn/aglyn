@@ -31,6 +31,7 @@ struct AglynPOSApp: App {
     WindowGroup {
       RootView { navigation in POSShell(navigation: navigation) }
         .environment(model)
+        .environment(\.aglynStoreBilling, model.storeBilling)
     }
     .defaultSize(width: 1180, height: 780)
     .commands {
@@ -45,6 +46,7 @@ struct AglynPOSApp: App {
         NavigationStack { SettingsView() }
           .frame(width: 460, height: 420)
           .environment(model)
+          .environment(\.aglynStoreBilling, model.storeBilling)
           .tint(AglynColorTint.value)
       }
     #endif
