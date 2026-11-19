@@ -2985,7 +2985,8 @@
             "ai.needs-you",
             "ai.assist-panel",
             "ai.insight-ask",
-            "ai.org-insight-ask"
+            "ai.org-insight-ask",
+            "ai.crm-record"
           ],
           "quickActions": [
             "ai.open"
