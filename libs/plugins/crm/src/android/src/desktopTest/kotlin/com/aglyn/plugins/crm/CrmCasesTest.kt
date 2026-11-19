@@ -84,6 +84,110 @@ class CrmCasesTest {
   }
 
   @Test
+  fun aSavedViewIsReadAsTheConsoleReadsIt() {
+    cases("normalizeCrmViewState").forEach { (args, result) ->
+      val want = map(result)!!
+      val got = normalizeCrmViewState(map(args[0]))
+      @Suppress("UNCHECKED_CAST")
+      val clauses = (want["filters"] as List<Map<String, Any?>>).map {
+        CrmViewClause(it["field"] as String, it["op"] as String, it["value"] as String, it["label"] as? String)
+      }
+      assertEquals(clauses, got.filters, args.toString())
+      assertEquals(want["columns"], got.columns, args.toString())
+      assertEquals((want["sort"] as? Map<*, *>)?.let { CrmViewSort(it["field"] as String, it["direction"] as String) }, got.sort, args.toString())
+    }
+    cases("crmViewIsListed").forEach { (args, result) ->
+      val view = map(args[0])!!
+      assertEquals(plain(result), crmViewIsListed(view["shared"] == true, view["ownerUid"] as? String ?: "", plain(args[1]) as? String), args.toString())
+    }
+  }
+
+  @Test
+  fun theDefaultViewIsTheReadersAsTheConsoleKeepsIt() {
+    cases("crmDefaultViewId").forEach { (args, result) ->
+      assertEquals(plain(result), crmDefaultViewId(map(args[0]), plain(args[1]) as? String, plain(args[2]) as String), args.toString())
+    }
+    cases("crmDefaultViewPatch").forEach { (args, result) ->
+      assertEquals(plain(result), crmDefaultViewPatch(plain(args[0]) as String, plain(args[1]) as String, plain(args[2]) as? String), args.toString())
+    }
+  }
+
+  @Test
+  fun aViewOpensAsOneOfTheListsFilters() {
+    val view = CrmSavedView(
+      "v1", "Won by name", "u1", "u1", true,
+      CrmViewState(listOf(CrmViewClause("status", "equals", "won")), listOf("name"), CrmViewSort("name", "asc")),
+    )
+    val filter = crmViewFilter(view, CrmKind.DEAL)
+    assertEquals("view:v1", filter.key)
+    assertEquals("Won by name", filter.label)
+    assertEquals(listOf(ListFilterRequest("status", "equals", "won")), filter.clauses)
+    assertEquals(listOf(mapOf("field" to "status", "op" to "equals", "value" to "won")), crmViewClauses(filter))
+    // A sort the list does not declare keeps the list's own order, as `crmViewQuerySort` falls back.
+    assertEquals(null, crmViewQuerySort(CrmKind.COMPANY.declaration.sorts, CrmViewSort("industry", "asc")))
+    assertEquals("nameLower", crmViewQuerySort(CrmKind.COMPANY.declaration.sorts, CrmViewSort("name", "asc"))?.path)
+    assertEquals("Shared · your default", crmViewMenuDetail(view, "u1", "v1"))
+    assertEquals(null, crmViewMenuDetail(view, "u2", null))
+    assertEquals("Your default", crmViewMenuDetail(view, "u2", "v1"))
+  }
+
+  @Test
+  fun aTaskViewOpensOnItsTaskViewAndClauses() {
+    val saved = CrmSavedView(
+      "t1", "Overdue calls", "u1", "u1", false,
+      CrmViewState(listOf(CrmViewClause("view", "equals", "overdue"), CrmViewClause("kind", "equals", "call"))),
+    )
+    val open = crmTaskViewOpen(saved)
+    assertEquals(TaskView.OVERDUE, open.view)
+    assertEquals(listOf(ListFilterRequest("kind", "equals", "call")), open.clauses)
+    assertEquals(null, open.sort)
+    // No `view` clause reads as "My tasks", as the console's TASK_VIEW_DEFAULT does.
+    assertEquals(TaskView.MINE, crmTaskViewOpen(CrmSavedView("t2", "x", "", "", false, CrmViewState())).view)
+    assertEquals(emptyList<ListFilterRequest>(), crmTaskViewFilter(TaskView.MINE, null).clauses)
+    assertEquals(listOf(ListFilterRequest("view", "equals", "done")), crmTaskViewFilter(TaskView.DONE, null).clauses)
+    assertEquals("view:t1", crmTaskViewFilter(TaskView.OVERDUE, saved).key)
+    assertEquals(2, crmTaskViewFilter(TaskView.OVERDUE, saved).clauses.size)
+  }
+
+  private fun clause(element: JsonElement): ListFilterRequest {
+    val o = map(element)!!
+    return ListFilterRequest(o["field"] as String, o["op"] as String, o["value"] as String)
+  }
+
+  private fun asked(element: JsonElement): CrmClauseAsked {
+    val o = map(element)!!
+    return (o["refused"] as? String)?.let { CrmClauseAsked.Refused(it) } ?: CrmClauseAsked.Asked(clause(element))
+  }
+
+  @Test
+  fun aViewsClausesAreAskedAsEachListAsksThem() {
+    cases("contactQueryClause").forEach { (args, result) ->
+      val reader = map(args[1])!!
+      assertEquals(asked(result), contactQueryClause(clause(args[0]), reader["groupId"] as? String, reader["foldsScope"] as Boolean), args.toString())
+    }
+    cases("dealQueryClause").forEach { (args, result) -> assertEquals(asked(result), dealQueryClause(clause(args[0])), args.toString()) }
+    cases("leadQueryClause").forEach { (args, result) ->
+      val reader = args.getOrNull(1)?.let { map(it) }
+      @Suppress("UNCHECKED_CAST")
+      val tokens = reader?.get("scopeTokens") as? List<String>
+      assertEquals(asked(result), leadQueryClause(clause(args[0]), tokens, reader?.get("foldsScope") as? Boolean ?: true), args.toString())
+    }
+  }
+
+  @Test
+  fun aViewsRefusedClauseIsSaidNotDropped() {
+    val view = CrmSavedView(
+      "v2", "Mixed", "u1", "u1", false,
+      CrmViewState(listOf(CrmViewClause("type", "equals", "Renewal"), CrmViewClause("type", "isAnyOf", "${CRM_PICKLIST_FILTER_NONE},Renewal"))),
+    )
+    val filter = crmViewFilter(view, CrmKind.DEAL, ::dealQueryClause)
+    assertEquals(listOf(ListFilterRequest("typeKey", "equals", "renewal")), filter.clauses)
+    assertEquals(listOf("\"None\" cannot be picked beside a value"), filter.refused.map { it.reason })
+    // Saved again, the reader's own clauses are kept, never the translation.
+    assertEquals("type", crmViewClauses(filter).first()["field"])
+  }
+
+  @Test
   fun crmTelHrefCases() = cases("crmTelHref").forEach { (args, result) ->
     assertEquals(plain(result), crmTelHref(plain(args[0]) as? String), args.toString())
   }
@@ -425,5 +529,62 @@ class CrmCasesTest {
     assertFalse(editor.movesStages(mapOf("memberRoles" to mapOf("u1" to "editor"), "memberPermissions" to mapOf("u1" to mapOf("crm.moveStages" to false)))))
     assertTrue(memberScope(mapOf("role" to "editor")).movesStages(null))
     assertFalse(memberScope(mapOf("role" to "editor", "resolvedPermissions" to mapOf("crm.moveStages" to false))).movesStages(null))
+  }
+
+  @Test
+  fun anEmailStateIsReadAndRefusedAsTheConsoleDoes() {
+    cases("readEmailState").forEach { (args, result) ->
+      val state = crmReadEmailState(map(args[0]))
+      val want = map(result)
+      assertEquals(want?.get("status"), state?.status, args.toString())
+      assertEquals((want?.get("atMs") as? Number)?.toLong(), state?.atMs, args.toString())
+      assertEquals(want?.get("source"), state?.source, args.toString())
+      assertEquals(want?.get("detail"), state?.detail, args.toString())
+      assertEquals(want?.get("enrollmentId"), state?.enrollmentId, args.toString())
+    }
+    cases("emailStateRefusal").forEach { (args, result) ->
+      val state = map(args[0])?.let { crmReadEmailState(mapOf("emailState" to it)) }
+      assertEquals(plain(result), crmEmailStateRefusal(state, "UTC"), args.toString())
+    }
+    cases("emailStateForbidsEmail").forEach { (args, result) ->
+      val state = map(args[0])?.let { crmReadEmailState(mapOf("emailState" to it)) }
+      assertEquals(plain(result), crmEmailStateForbidsEmail(state), args.toString())
+    }
+    assertEquals(com.aglyn.ui.StatusTone.ERROR, crmEmailStateTone("bounced"))
+    assertEquals(com.aglyn.ui.StatusTone.NEUTRAL, crmEmailStateTone("unsubscribed"))
+    assertEquals(com.aglyn.ui.StatusTone.WARNING, crmEmailStateTone("undeliverable"))
+  }
+
+  @Test
+  fun theEmailCheckSaysWhatTheConsoleSays() {
+    val held = crmEmailCheck(Json.parseToJsonElement("""{"checked":true,"code":"gateway_held","message":"Their gateway refused 2 sends.","gateway":"Barracuda","chip":{"label":"Barracuda · 2 of 2 sends refused this week","tone":"refused"},"accountLock":null}"""))
+    assertEquals("Their gateway refused 2 sends. A one-to-one email still goes, but it is likely to be refused too.", crmEmailCheckWarning(held))
+    assertEquals(com.aglyn.ui.StatusTone.ERROR, crmGatewayChip(held, null)?.second)
+    assertEquals(null, crmAccountLockChip(held))
+    val noMx = crmEmailCheck(Json.parseToJsonElement("""{"checked":true,"code":"no_mx","message":"example.test has no mail server.","chip":{"label":"No mail server","tone":"blocked"}}"""))
+    assertEquals("example.test has no mail server. Sending will not reach them.", crmEmailCheckWarning(noMx))
+    // A "Would bounce" on the record already says what the blocked chip would.
+    assertEquals(null, crmGatewayChip(noMx, CrmEmailState("undeliverable", 0, "check", null)))
+    assertEquals(null, crmEmailCheckWarning(crmEmailCheck(Json.parseToJsonElement("""{"checked":true,"code":"other","message":"x"}"""))))
+    assertEquals("Account banned", crmAccountLockChip(crmEmailCheck(Json.parseToJsonElement("""{"accountLock":"banned"}""")))?.label)
+  }
+
+  @Test
+  fun thePreviewFillsMergeFieldsAsTheConsoleDoes() {
+    cases("resolveCrmMergeFields").forEach { (args, result) ->
+      val want = map(result)
+      val got = crmResolveMergeFields(plain(args[0]) as? String ?: "", crmMergeContext(map(args[1])))
+      assertEquals(want?.get("text"), got.text, args.toString())
+      assertEquals(want?.get("unresolved"), got.unresolved, args.toString())
+    }
+    cases("crmMergeUnresolvedMessage").forEach { (args, result) ->
+      @Suppress("UNCHECKED_CAST")
+      assertEquals(plain(result), crmMergeUnresolvedMessage(plain(args[0]) as List<String>), args.toString())
+    }
+    cases("duplicateDisplayName").forEach { (args, result) ->
+      assertEquals(plain(result), crmDuplicateDisplayName(plain(args[0]) as? String), args.toString())
+    }
+    assertTrue(crmHasMergeFields("Hi {{ contact.firstName }}"))
+    assertFalse(crmHasMergeFields("Hi {contact.firstName} {{bare}}"))
   }
 }
