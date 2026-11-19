@@ -56,6 +56,16 @@ export interface SeoListingFieldDefinition {
 /** A breadcrumb label: the page's short name in a trail. */
 export const SEO_BREADCRUMB_MAX_LENGTH = 40
 
+/**
+ * The site-wide pieces of a page's title (Setup → SEO, AGL-4235): the
+ * separator between a page's name and the site title, and the pattern an
+ * untitled page is titled with. The form and the API hold them to these.
+ */
+export const SITE_SEO_SEPARATOR_MAX_LENGTH = 3
+
+/** The longest title pattern Setup → SEO accepts. */
+export const SITE_SEO_TITLE_PATTERN_MAX_LENGTH = 120
+
 export const SEO_LISTING_FIELDS: Readonly<Record<SeoListingFieldKey, SeoListingFieldDefinition>> = {
   title: {
     key: 'title',

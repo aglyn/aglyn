@@ -412,6 +412,36 @@ export function isFirestoreQueueFailureReport(error: unknown): boolean {
 }
 
 /**
+ * `kind` for a request the BROWSER says failed, with nothing on the stack: a
+ * `DOMException` named `NetworkError` that no frame of ours raised.
+ *
+ * Two paged singly, on 2026-11-18 from aglyn.com/ and on 2026-11-19 from a
+ * customer's home page on its own domain, each reading only
+ * `A network error occurred.` — Chrome's own sentence for a `NetworkError`
+ * it raises without a message — with no stack. The customer's page loads no
+ * script but ours, a site's fonts arrive as CSS rather than through
+ * `FontFace`, and a normal load of either page raises nothing. So the promise
+ * belongs to the browser or an extension, and the request it made was lost
+ * on the visitor's connection.
+ *
+ * Nothing in the report can locate it, and no change of ours could answer
+ * one. A burst would be our origin failing to serve, which only a rate can
+ * tell: the same split as `chunk-load`.
+ *
+ * Narrow on purpose: the name `NetworkError` only, and only with no frame in
+ * the stack. One our own code raised carries our frames and is reported as
+ * itself.
+ */
+export const NETWORK_ERROR_KIND = 'network-error'
+
+export function isStacklessNetworkError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false
+  if ((error as { name?: unknown }).name !== 'NetworkError') return false
+  const stack = (error as { stack?: unknown }).stack
+  return typeof stack !== 'string' || !stackFrameUrls(stack).length
+}
+
+/**
  * The label for a fault we RECOVER from and still want to see, or undefined.
  *
  * These could be ours, so unlike an injected stack they are never dropped:
@@ -425,6 +455,7 @@ export function recoveredErrorKind(error: unknown): string | undefined {
     if (isStaleBuildError(error)) return CHUNK_LOAD_KIND
     if (isRecaptchaTimeout(error)) return RECAPTCHA_TIMEOUT_KIND
     if (isFirestoreQueueFailureReport(error)) return FIRESTORE_QUEUE_KIND
+    if (isStacklessNetworkError(error)) return NETWORK_ERROR_KIND
   } catch {
     // A getter that throws leaves the event unlabeled, never unreported.
   }
@@ -641,6 +672,18 @@ export function watchPageTranslation(
  */
 export function describeRejectionReason(reason: unknown): string {
   try {
+    // A DOMException's NAME is its type, and its message is often only the
+    // platform's sentence for that type: `A network error occurred.` alone
+    // does not say it was a `NetworkError` (2026-11-18). Other errors keep
+    // their message alone, as their reports always have.
+    if (
+      typeof DOMException !== 'undefined' &&
+      reason instanceof DOMException &&
+      reason.name &&
+      reason.message
+    ) {
+      return `${reason.name}: ${reason.message}`
+    }
     if (reason instanceof Error && reason.message) return reason.message
     if (typeof reason === 'string') return reason
     if (reason === null || reason === undefined) {
