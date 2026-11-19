@@ -51,6 +51,7 @@ jest.mock('./ai-jobs', () => ({
   registerAiJobStep: jest.fn(),
 }))
 
+import { injectLayoutStyleOverrides } from '@aglyn/aglyn/app-utils/layout-style-overrides'
 import { decodeStoredNodes, encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { AiJob } from '../model/ai-jobs.types'
@@ -79,6 +80,7 @@ import {
   AI_JOB_EDIT_RULES,
   AI_JOB_EDIT_STEP_BUDGET,
   AI_JOB_EDIT_STEP_MINIMUM_MS,
+  aiEditCanvas,
   aiEditDatasetScope,
   aiEditJobAdmission,
   aiEditJobPlacement,
@@ -474,6 +476,30 @@ describe('the page’s draft, on every plan (AGL-4116)', () => {
     const nodes = stored(DRAFT)
     expect(nodes['servicesTitle'].props.children).toBe('Repairs we do')
     expect(nodes['heroTitle'].props.children).toBe('Friendly, fast plumbing for the valley')
+  })
+
+  it('keeps the page’s layout restyles on the draft’s root, as the Besigner opens the version (AGL-4235)', async () => {
+    seed()
+    const overrides = { frame: { header: { bgcolor: 'primary.main' } } }
+    docs.set(`${SCREEN}/versions/v-live`, { ...docs.get(`${SCREEN}/versions/v-live`), layoutStyleOverrides: overrides })
+    mockRunAiRequest.mockResolvedValueOnce(completion(ANSWER))
+    await runStep({}, STARTER)
+    // The editor's own injection, held by a canvas as the editor holds it.
+    const editorRoot = (aiEditCanvas(injectLayoutStyleOverrides(PAGE_NODES, overrides) as never).toJSON().nodes as Record<string, unknown>)[ROOT]
+    expect(stored(DRAFT)[ROOT]).toEqual(editorRoot)
+    expect(stored(DRAFT)[ROOT]['layoutStyleOverrides']).toEqual(overrides)
+    // The version keeps them beside its tree, never in it.
+    expect(stored(`${SCREEN}/versions/v-live`)[ROOT]).not.toHaveProperty('layoutStyleOverrides')
+    expect(docs.get(`${SCREEN}/versions/v-live`)?.['layoutStyleOverrides']).toEqual(overrides)
+  })
+
+  it('leaves an author’s draft root as the author left it (AGL-4235)', async () => {
+    seed()
+    docs.set(`${SCREEN}/versions/v-live`, { ...docs.get(`${SCREEN}/versions/v-live`), layoutStyleOverrides: { frame: { header: { bgcolor: 'red' } } } })
+    docs.set(DRAFT, { nodes: packed(PAGE_NODES), baseStamp: SAVED_STAMP, updatedByUid: 'uid-0' })
+    mockRunAiRequest.mockResolvedValueOnce(completion(ANSWER))
+    await runStep({}, STARTER)
+    expect(stored(DRAFT)[ROOT]).not.toHaveProperty('layoutStyleOverrides')
   })
 
   it('starts from the version when the page was saved past the author’s draft, as the Besigner no longer offers it', async () => {

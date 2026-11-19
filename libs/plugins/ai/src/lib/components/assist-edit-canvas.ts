@@ -461,6 +461,14 @@ export type AssistEditCheck =
   | { ok: true }
   | { ok: false; reason: AssistEditRefusal; message: string }
 
+/** The elements one insert added, as the canvas named them. */
+export interface AssistEditInserted {
+  /** The insert's position among the proposal's ops. */
+  op: number
+  /** Every element it added, depth first in the order they read, its root first. */
+  ids: string[]
+}
+
 export type AssistEditApplyResult =
   | {
       ok: true
@@ -468,6 +476,11 @@ export type AssistEditApplyResult =
       opCounts: Record<string, number>
       /** Editor fields staged, as the editor keys them. */
       staged: string[]
+      /**
+       * The ids the canvas gave the elements each insert added (AGL-4235),
+       * so a caller can name them in a later change. Absent with no insert.
+       */
+      inserted?: AssistEditInserted[]
     }
   | { ok: false; reason: AssistEditRefusal; message: string }
 
@@ -627,6 +640,7 @@ function nestSubtree(op: AssistEditInsertOp): Record<string, unknown> {
       props: { ...node.props },
       ...(node.sx ? { sx: { ...node.sx } } : {}),
       ...(node.hidden ? { hidden: true } : {}),
+      ...(node.name ? { name: node.name } : {}),
       nodes: node.nodes
         .filter((child) => op.nodes[child] && !visited.has(child))
         .map((child) => build(child)),
@@ -641,7 +655,21 @@ function live(canvas: AssistEditCanvas, id: string): AssistEditCanvasNodeLike {
   return node
 }
 
-function applyOne(canvas: AssistEditCanvas, op: AssistEditOp): void {
+/** A subtree's ids, depth first in child order, its root first. */
+function subtreeInOrder(canvas: Pick<AssistEditCanvas, 'getNode'>, rootId: string): string[] {
+  const ids: string[] = []
+  const stack = [rootId]
+  while (stack.length) {
+    const id = stack.pop() as string
+    if (ids.includes(id) || !canvas.getNode(id)) continue
+    ids.push(id)
+    stack.push(...[...(canvas.getNode(id)?.nodes ?? [])].reverse())
+  }
+  return ids
+}
+
+/** Applies one op; an insert answers the ids of the elements it added. */
+function applyOne(canvas: AssistEditCanvas, op: AssistEditOp): string[] | void {
   switch (op.op) {
     case 'updateProps': {
       const node = live(canvas, op.nodeId)
@@ -679,9 +707,12 @@ function applyOne(canvas: AssistEditCanvas, op: AssistEditOp): void {
       })
       return
     }
-    case 'insertSubtree':
-      canvas.addNodeFromNested(nestSubtree(op), live(canvas, op.parentId), op.index ?? NaN)
-      return
+    case 'insertSubtree': {
+      const added = canvas.addNodeFromNested(nestSubtree(op), live(canvas, op.parentId), op.index ?? NaN) as
+        | AssistEditCanvasNodeLike
+        | undefined
+      return added?.$id ? subtreeInOrder(canvas, added.$id) : []
+    }
     case 'setSeo':
     case 'saveAsComponent':
       // Both are applied outside the canvas batch: search fields are staged
@@ -789,10 +820,15 @@ export function applyAssistEdit(
   if (check.ok === false) return check
   const open = session as EditorSession
   const canvasOps = proposal.ops.filter((op) => op.op !== 'setSeo' && op.op !== 'saveAsComponent')
+  const inserted: AssistEditInserted[] = []
   if (canvasOps.length) {
     try {
       canvas.batch(() => {
-        for (const op of canvasOps) applyOne(canvas, op)
+        proposal.ops.forEach((op, position) => {
+          if (op.op === 'setSeo' || op.op === 'saveAsComponent') return
+          const ids = applyOne(canvas, op)
+          if (ids) inserted.push({ op: position, ids })
+        })
       })
     } catch (error) {
       console.error('assist edit refused by the canvas', error)
@@ -812,7 +848,7 @@ export function applyAssistEdit(
     }
     staged.push(...stageEditorSessionFields(open, values).staged)
   }
-  return { ok: true, opCounts: assistEditOpCounts(proposal.ops), staged }
+  return { ok: true, opCounts: assistEditOpCounts(proposal.ops), staged, ...(inserted.length ? { inserted } : {}) }
 }
 
 /**

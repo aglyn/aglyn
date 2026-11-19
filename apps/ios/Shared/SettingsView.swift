@@ -30,18 +30,29 @@ struct SettingsView: View {
         }
         .accessibilityElement(children: .combine)
       }
-      if let navigation, !accountScreens.isEmpty {
+      if !accountScreens.isEmpty {
         Section("Your account") {
           ForEach(accountScreens) { screen in
-            Button {
-              navigation.push(.screen(screen.id, [:]))
-            } label: {
-              AglynRow(screen.label, subtitle: screen.subtitle, systemImage: screen.icon) {
-                Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
+            if let navigation {
+              Button {
+                navigation.push(.screen(screen.id, [:]))
+              } label: {
+                AglynRow(screen.label, subtitle: screen.subtitle, systemImage: screen.icon) {
+                  Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
+                }
               }
+              .buttonStyle(.aglynRow)
+              .accessibilityIdentifier("settings-\(screen.id)")
+            } else {
+              // The Mac's Settings window has no shell navigation of its own: the account's pages (Close account among
+              // them, which both stores require in the app) open inside the window, as the Register rows below do.
+              AglynPushLink {
+                PluginScreenView(screenID: screen.id).environment(ShellNavigation())
+              } label: {
+                AglynRow(screen.label, subtitle: screen.subtitle, systemImage: screen.icon)
+              }
+              .accessibilityIdentifier("settings-\(screen.id)")
             }
-            .buttonStyle(.aglynRow)
-            .accessibilityIdentifier("settings-\(screen.id)")
           }
         }
       }

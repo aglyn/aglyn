@@ -486,6 +486,12 @@ class FieldSpec private constructor(
   /** The field's own JSON, for a kind that reads more than the common keys (`upload`'s limits). */
   val config: JsonElement? = null,
 ) {
+  /**
+   * `"verbatim": true`: a key, code or address, kept exactly as typed: the keyboard neither capitalizes nor corrects it (the
+   * console marks such inputs `autoCapitalize="none"`, `spellCheck={false}`; a Weglot key typed as "Wg_…" is refused).
+   */
+  val verbatim: Boolean get() = (config as? JsonObject)?.get("verbatim") == JsonPrimitive(true)
+
   /** This field as it is asked: itself, or one per row of its `each` list, its templates rendered over the row. */
   fun expanded(scope: JsonElement): List<FieldSpec> {
     val path = each ?: return listOf(this)

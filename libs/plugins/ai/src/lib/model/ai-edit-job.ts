@@ -113,6 +113,9 @@ export const AI_EDIT_STALE_COPY =
 /** The canvas's own guards refused part of the change. */
 export const AI_EDIT_REFUSED_COPY = 'The editor refused part of this change, so none of it was saved.'
 
+/** The change would make the document larger than a save can store (AGL-4235). */
+export const AI_EDIT_TOO_LARGE_COPY = 'With this change the page would be too large to save, so none of it was saved.'
+
 /** What a version an edit job makes is called, from the change's one-line summary. */
 export const AI_EDIT_VERSION_PREFIX = 'AI edit'
 
@@ -178,6 +181,59 @@ export const AI_EDIT_COMPONENT_LEFT_OUT = 'saving part of the page as a reusable
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
+/** One element of a stored document, in the order the document reads. */
+export interface AiDocumentElement {
+  id: string
+  /** The element it sits in, or null for the document root. */
+  parentId: string | null
+  /** Its position among its parent's children. */
+  index: number
+  /** The elements placed inside it by this walk, in their stored order. */
+  children: string[]
+  /** How many children the element lists that are on the document, whatever the walk placed. */
+  childCount: number
+  /** The stored node, as it is. */
+  node: Record<string, unknown>
+}
+
+/**
+ * Every element of a stored document (AGL-4235), complete: the document root,
+ * then each element after its parent, depth first, children in their stored
+ * order — the page as it reads. An element listed under two parents is placed
+ * once, under the first the walk reaches; a child id with no node is skipped.
+ * Nothing is capped or shortened: this is the one walker, and a reader with a
+ * budget caps what it returns. `null` without a root.
+ */
+export function aiDocumentElements(nodes: Readonly<Record<string, unknown>>): AiDocumentElement[] | null {
+  const root = nodes[CANVAS_ROOT_ELEMENT_ID]
+  if (!isRecord(root)) return null
+  const childrenOf = (node: Record<string, unknown>): string[] =>
+    Array.isArray(node['nodes']) ? node['nodes'].filter((id): id is string => typeof id === 'string' && isRecord(nodes[id])) : []
+  const order: AiDocumentElement[] = []
+  const byId = new Map<string, AiDocumentElement>()
+  const seen = new Set<string>([CANVAS_ROOT_ELEMENT_ID])
+  // Depth first, children in their stored order: the page as it reads.
+  const stack: Array<{ id: string; parentId: string | null; index: number }> = [
+    { id: CANVAS_ROOT_ELEMENT_ID, parentId: null, index: 0 },
+  ]
+  while (stack.length) {
+    const at = stack.pop() as (typeof stack)[number]
+    const node = nodes[at.id] as Record<string, unknown>
+    const listed = childrenOf(node)
+    const element: AiDocumentElement = { ...at, children: [], childCount: listed.length, node }
+    order.push(element)
+    byId.set(at.id, element)
+    if (at.parentId !== null) byId.get(at.parentId)?.children.push(at.id)
+    for (let index = listed.length - 1; index >= 0; index -= 1) {
+      const child = listed[index]
+      if (seen.has(child)) continue
+      seen.add(child)
+      stack.push({ id: child, parentId: at.id, index })
+    }
+  }
+  return order
+}
+
 /**
  * The stored document as the outline the edit rung's protocol reads
  * (`parseAssistEditContext` with `whole` holds it to its limits): the
@@ -191,48 +247,28 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  * see, and a restyle starts from the styles the element has. Each element
  * keeps its real child count and the document its real size, so the prompt
  * can say what a document past the cap leaves out. `null` without a root.
+ *
+ * The walk is {@link aiDocumentElements}'s; this applies the outline's cap.
  */
 export function aiEditJobOutline(nodes: Readonly<Record<string, unknown>>): {
   selectedId: null
   total: number
   nodes: Array<Record<string, unknown>>
 } | null {
-  const root = nodes[CANVAS_ROOT_ELEMENT_ID]
-  if (!isRecord(root)) return null
-  const childrenOf = (node: Record<string, unknown>): string[] =>
-    Array.isArray(node['nodes']) ? node['nodes'].filter((id): id is string => typeof id === 'string' && isRecord(nodes[id])) : []
-  const order: Array<{ id: string; parentId: string | null; index: number }> = []
-  const seen = new Set<string>([CANVAS_ROOT_ELEMENT_ID])
-  // Depth first, children in their stored order: the page as it reads.
-  const stack: Array<{ id: string; parentId: string | null; index: number }> = [
-    { id: CANVAS_ROOT_ELEMENT_ID, parentId: null, index: 0 },
-  ]
-  while (stack.length) {
-    const at = stack.pop() as (typeof stack)[number]
-    order.push(at)
-    const children = childrenOf(nodes[at.id] as Record<string, unknown>)
-    for (let index = children.length - 1; index >= 0; index -= 1) {
-      const child = children[index]
-      if (seen.has(child)) continue
-      seen.add(child)
-      stack.push({ id: child, parentId: at.id, index })
-    }
-  }
+  const order = aiDocumentElements(nodes)
+  if (!order) return null
   return {
     selectedId: null,
     total: order.length,
-    nodes: order.slice(0, ASSIST_EDIT_WHOLE_MAX_NODES).map(({ id, parentId, index }) => {
-      const node = nodes[id] as Record<string, unknown>
-      return {
-        id,
-        componentId: node['componentId'],
-        parentId,
-        index,
-        childCount: childrenOf(node).length,
-        ...(typeof node['name'] === 'string' && node['name'] ? { name: node['name'] } : {}),
-        ...(isRecord(node['props']) ? { props: node['props'] } : {}),
-        ...(isRecord(node['sx']) ? { sx: node['sx'] } : {}),
-      }
-    }),
+    nodes: order.slice(0, ASSIST_EDIT_WHOLE_MAX_NODES).map(({ id, parentId, index, childCount, node }) => ({
+      id,
+      componentId: node['componentId'],
+      parentId,
+      index,
+      childCount,
+      ...(typeof node['name'] === 'string' && node['name'] ? { name: node['name'] } : {}),
+      ...(isRecord(node['props']) ? { props: node['props'] } : {}),
+      ...(isRecord(node['sx']) ? { sx: node['sx'] } : {}),
+    })),
   }
 }

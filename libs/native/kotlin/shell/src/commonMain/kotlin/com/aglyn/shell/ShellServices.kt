@@ -79,6 +79,8 @@ class ShellServices(
   val consoleAppCheck: com.aglyn.core.ConsoleMintedAppCheck? = null,
   /** The home-screen icon picker (Theme ▸ App icon): Android's launcher aliases in the Aglyn app; null where there is none. */
   val appIcons: AppIconSwitcher? = null,
+  /** Whether the device has a network connection, for the title bar's Offline indicator (AGL-1056); desktop reads as online. */
+  val connectivity: com.aglyn.core.Connectivity = com.aglyn.core.AlwaysOnline,
 ) {
   /** The signed-out screens and what a sign-up carries across them. */
   val authFlow = AuthFlow()

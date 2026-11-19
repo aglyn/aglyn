@@ -218,6 +218,11 @@ export type ClaimKind =
   | 'email-template-deletes'
   // A product created over the API (AGL-4235), scoped within its site.
   | 'product-creates'
+  // A page created over the API (AGL-4235), scoped within its site.
+  | 'page-creates'
+  // A set of edits to a page's draft (AGL-4235): inserts are not repeat-safe,
+  // so a retried request must replay its first answer.
+  | 'page-content-edits'
 
 /**
  * Take an exclusive claim on one write attempt (AGL-1709), and translate the

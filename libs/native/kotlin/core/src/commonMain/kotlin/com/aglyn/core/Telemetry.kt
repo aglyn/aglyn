@@ -25,6 +25,12 @@ interface TelemetrySink {
   fun setValue(key: String, value: String)
   /** An Analytics event. */
   fun log(event: String, parameters: Map<String, String>)
+
+  /**
+   * Turns Analytics collection on or off at once (the person's "Your Privacy Choices" switch); crash reports are not part
+   * of it.
+   */
+  fun setAnalyticsCollection(on: Boolean) {}
   /** What kind of error this is, for sending each kind once per place: the class, and a code where the SDK has one. */
   fun kind(error: Throwable): String = error::class.simpleName ?: "error"
   /** Whether an error is not a fault on this platform (a device that is offline). */
@@ -44,6 +50,9 @@ enum class TelemetryEvent(val id: String) {
 /** The one telemetry hook (see the file comment). */
 object Telemetry {
   @Volatile private var sink: TelemetrySink? = null
+
+  /** The person's analytics choice on this device ([PrivacyChoices]): off, no Analytics event is sent. */
+  @Volatile private var analytics: Boolean = true
   @Volatile private var lastScreen: String? = null
   @Volatile private var recorded: Set<String> = emptySet()
 
@@ -51,11 +60,20 @@ object Telemetry {
   private val OFFLINE = setOf("UnknownHostException", "SocketTimeoutException", "ConnectException", "NoRouteToHostException")
 
   /** Installs the sink. With [collecting] false nothing is ever handed to it: every call below is a no-op. */
-  fun start(collecting: Boolean, sink: TelemetrySink, app: AglynAppId? = null, version: String? = null, build: String? = null) {
+  fun start(
+    collecting: Boolean,
+    sink: TelemetrySink,
+    app: AglynAppId? = null,
+    version: String? = null,
+    build: String? = null,
+    analytics: Boolean = true,
+  ) {
     lastScreen = null
     recorded = emptySet()
+    this.analytics = analytics
     this.sink = if (collecting) sink else null
     if (!collecting) return
+    sink.setAnalyticsCollection(analytics)
     sink.setValue("app_version", version ?: "0")
     sink.setValue("app_build", build ?: "0")
     app?.let { sink.setValue("app", it.wire) }
@@ -69,6 +87,18 @@ object Telemetry {
   }
 
   /** Whether anything is collected in this process. */
+  /**
+   * The person flipped "Your Privacy Choices" › Analytics: applied at once. A build that does not collect (a debug build,
+   * an emulator stack) keeps sending nothing whatever the choice.
+   */
+  fun setAnalytics(allowed: Boolean) {
+    analytics = allowed
+    sink?.setAnalyticsCollection(allowed)
+  }
+
+  /** Whether Analytics events are sent in this process: collecting, and the person allows it. */
+  val isLoggingAnalytics: Boolean get() = sink != null && analytics
+
   val isCollecting: Boolean get() = sink != null
 
   /**
@@ -97,14 +127,14 @@ object Telemetry {
     lastScreen = clean
     sink.setValue("screen", clean)
     sink.breadcrumb("screen $clean")
-    sink.log(TelemetryEvent.SCREEN_VIEW.id, mapOf("screen_name" to clean, "screen_class" to clean))
+    if (analytics) sink.log(TelemetryEvent.SCREEN_VIEW.id, mapOf("screen_name" to clean, "screen_class" to clean))
   }
 
   /** A key flow. Parameter values must be identifiers (a tender type, a sign-in method); anything else is dropped. */
   fun event(event: TelemetryEvent, parameters: Map<String, String> = emptyMap()) {
     val sink = sink ?: return
     sink.breadcrumb(event.id)
-    sink.log(event.id, parameters.filter { (name, value) -> isIdentifier(name) && isIdentifier(value) })
+    if (analytics) sink.log(event.id, parameters.filter { (name, value) -> isIdentifier(name) && isIdentifier(value) })
   }
 
   /** The signed-in person: their Firebase uid only. */

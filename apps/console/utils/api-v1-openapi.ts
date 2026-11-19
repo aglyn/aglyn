@@ -73,7 +73,11 @@ import {
   stringListField as strList,
   SITE_ID_PATH_PARAM,
 } from '@aglyn/tenant-data-admin/server/api-v1-description'
+import { PAGE_PUBLISH_LIST_MAX } from '@aglyn/tenant-data-admin/server/page-publish'
 import { SITE_SETTINGS_DESCRIPTIONS } from '@aglyn/tenant-data-admin/server/api-v1-site-settings-description'
+import { PAGE_CONTENT_DESCRIPTION } from '@aglyn/tenant-data-admin/server/api-v1-page-content-description'
+import { PAGE_WRITES_DESCRIPTION } from '@aglyn/tenant-data-admin/server/api-v1-page-writes-description'
+import { SITE_TEMPLATES_DESCRIPTION } from '@aglyn/tenant-data-admin/server/api-v1-site-templates-description'
 
 /** A JSON Schema / OpenAPI fragment. Same shape the tenant builder uses. */
 type Schema = Record<string, unknown>
@@ -157,10 +161,20 @@ const RESOURCES: readonly ResourceSpec[] = [
       { path: '/v1/sites', method: 'post', operationId: 'createSite', summary: 'Create a site', accepts: 'SiteWrite', returns: 'Site', creates: true, description: 'Creates a new site with the given `displayName` and claims its `subdomain` on the platform’s domain, where the site can be visited. Returns the new site. A subdomain already in use is refused with suggestions. Limited to 10 an hour per workspace.', openWorld: true },
       { path: '/v1/sites/{siteId}', method: 'get', operationId: 'getSite', summary: 'Get a site', description: 'Returns one site: its name, subdomain and custom domain. Needs `siteId` from List sites.', returns: 'Site', pathParams: [SITE_ID_PATH_PARAM] },
       // openWorld: it changes what the public website shows to visitors.
+      // destructive: given `pages`, a page's draft replaces what that live
+      // page shows, and the version it replaces is not kept (AGL-4235).
+      // idempotent: a repeat finds no draft left, and changes nothing more.
       {
         path: '/v1/sites/{siteId}/publish', method: 'post', operationId: 'publishSite', summary: 'Publish a site’s latest changes', returns: 'PublishResult',
-        description: 'Refreshes the site’s live pages so what was saved, including records changed through this API, shows to visitors now instead of when the page cache next expires. Needs `siteId` from List sites. Returns whether it published and how many pages were refreshed. Limited to 10 an hour per site.',
-        pathParams: [SITE_ID_PATH_PARAM], idempotent: true, openWorld: true,
+        accepts: 'PublishRequest', bodyOptional: true,
+        description:
+          'Refreshes the site’s live pages so what was saved, including records changed through this API, shows to visitors now instead of when the page cache next expires. ' +
+          'Given `pages`, it first makes each named page’s draft its live content, replacing what that page showed, and publishes a page that has no address yet at its own address. ' +
+          'A page is refused when its draft is out of date, it is too large, it carries a form on a site with Forms switched off, a scheduled publish is waiting on it, or its address is taken or under a page with no address; when any page is refused, nothing is published. ' +
+          'A live page with no draft is left as it is. Layouts and components are not published. ' +
+          'Needs `siteId` from List sites and page ids from List a site’s pages; with `pages`, a connected app’s person needs permission to publish the site. ' +
+          'Returns whether the refresh ran and how many pages it refreshed, and with `pages`, each page’s outcome in `promoted`. Limited to 10 an hour per site.',
+        pathParams: [SITE_ID_PATH_PARAM], idempotent: true, openWorld: true, destructive: true,
       },
     ],
   },
@@ -234,6 +248,12 @@ const RESOURCES: readonly ResourceSpec[] = [
   // A site's search listing, its pages and its business details (AGL-4235),
   // described by the data layer beside the handlers and limits they share.
   ...SITE_SETTINGS_DESCRIPTIONS,
+  // What is on a page, adding, changing and removing pages, and a site's
+  // templates (AGL-4235). Each lists its operations only once its handler
+  // works; until then the builder below skips it.
+  PAGE_CONTENT_DESCRIPTION,
+  PAGE_WRITES_DESCRIPTION,
+  SITE_TEMPLATES_DESCRIPTION,
 ]
 
 /**
@@ -362,7 +382,15 @@ export function buildCustomerApiOpenApi(
   const createBodies = new Map<string, readonly [string, readonly string[]]>()
 
   for (const resource of resources) {
-    tags.push({ name: resource.tag, description: resource.description })
+    // A resource that describes no operation yet publishes nothing — no tag,
+    // no schema — so a handler still being built is not advertised (AGL-4235).
+    if (!resource.ops.length) continue
+    // Several resources may file under one tag (a site's pages: reading them,
+    // what is on them, adding and changing them); the tag is listed once, in
+    // the words of the first.
+    if (!tags.some((tag) => tag['name'] === resource.tag)) {
+      tags.push({ name: resource.tag, description: resource.description })
+    }
     schemas[resource.schemaName] = {
       type: 'object',
       description: resource.description,
@@ -642,13 +670,53 @@ export function buildCustomerApiOpenApi(
       },
       additionalProperties: true,
     },
+    PublishRequest: {
+      type: 'object',
+      description:
+        'What to make live before the site is refreshed. Leave the body out, or leave out `pages`, to only refresh what was saved.',
+      properties: {
+        pages: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 1,
+          maxItems: PAGE_PUBLISH_LIST_MAX,
+          uniqueItems: true,
+          description:
+            `Ids of 1 to ${PAGE_PUBLISH_LIST_MAX} pages, from List a site’s pages. Each page’s draft becomes its live content; ` +
+            'a page with no address yet is published at its own. Nothing else may be sent beside it.',
+        },
+      },
+      additionalProperties: false,
+    },
     PublishResult: {
       type: 'object',
       description: 'The outcome of a publish.',
       properties: {
         object: { type: 'string', const: 'publish' },
-        siteId: { type: 'string' },
-        publishedAt: { type: 'string', format: 'date-time' },
+        site: { type: 'string', description: 'The site’s id.' },
+        published: { type: 'boolean', description: 'Whether the refresh of the live pages ran.' },
+        reason: {
+          type: ['string', 'null'],
+          description: 'Why the refresh did not run, or `null` when it did. `not_routed`: the site has no page at an address.',
+        },
+        pages: { type: 'integer', description: 'How many live pages were refreshed.' },
+        pagesDropped: { type: 'integer', description: 'Live pages left to refresh on their own when the cache next expires.' },
+        promoted: {
+          type: 'array',
+          description: 'Only when `pages` was sent: each page’s outcome, in the order sent.',
+          items: {
+            type: 'object',
+            properties: {
+              page: { type: 'string', description: 'The page’s id.' },
+              path: { type: 'string', description: 'The page’s address on the site, such as `/about`.' },
+              status: {
+                type: 'string',
+                enum: ['published', 'unchanged'],
+                description: '`published`: its draft or its address went live. `unchanged`: it had no draft, and nothing changed.',
+              },
+            },
+          },
+        },
       },
       additionalProperties: true,
     },
