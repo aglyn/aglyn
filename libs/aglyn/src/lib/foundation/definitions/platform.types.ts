@@ -569,6 +569,15 @@ export interface AglynHost extends AglynDocument {
    */
   publicSinceMs?: number
   /**
+   * When this site was first given the free plan's ONE-TIME bandwidth grace
+   * (AGL-4232): 72 hours online past the monthly band before it pauses.
+   * Epoch ms, written once by the cap's engage writer and never cleared, so
+   * no month rollover, plan change or restart can give the same site a
+   * second grace. On the SITE rather than the org, because the grace is the
+   * site's and a site can change organizations. Client-denied in the rules.
+   */
+  bandwidthGraceUsedAt?: number
+  /**
    * STAFF host takedown (AGL-1501) — the host scope of the panic button,
    * for an infected or abusive site. The same field family as the org's
    * AGL-202 suspension: while `suspendedAt` is set (and `suspendedUntilMs`

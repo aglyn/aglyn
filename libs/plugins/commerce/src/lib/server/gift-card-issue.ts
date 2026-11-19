@@ -182,7 +182,9 @@ export async function issueGiftCard(input: IssueGiftCardInput): Promise<{ code: 
       // screen's soft rules never hold it (AGL-3356).
       owedFor: 'order',
     })
-      .then(() => true)
+      // A refused send (a sending limit, the outbound screen) RESOLVES with
+      // `sent: false`; it is not an emailed card (AGL-4227).
+      .then((outcome) => Boolean(outcome?.sent))
       .catch(() => false)
     if (sent) {
       // Cost meter (AGL-1438). Transactional: the card has already been

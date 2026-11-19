@@ -208,6 +208,9 @@ internal fun toSdkWrite(data: Map<String, Any?>): Map<String, Any?> = data.mapVa
 
 private fun sdkWriteValue(value: Any?): Any? = when (value) {
   FirestoreDelete -> com.google.firebase.firestore.FieldValue.delete()
+  is FirestoreArrayChange -> value.elements.map(::sdkWriteValue).toTypedArray().let {
+    if (value.union) com.google.firebase.firestore.FieldValue.arrayUnion(*it) else com.google.firebase.firestore.FieldValue.arrayRemove(*it)
+  }
   ServerTimestamp -> com.google.firebase.firestore.FieldValue.serverTimestamp()
   is FirestoreTimestamp -> Timestamp(value.seconds, value.nanos)
   is Map<*, *> -> value.entries.associate { it.key.toString() to sdkWriteValue(it.value) }

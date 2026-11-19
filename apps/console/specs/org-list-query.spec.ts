@@ -73,6 +73,7 @@ describe('every organization list has the composites its query shapes need', () 
       'plan:ASCENDING',
       'slug:ASCENDING',
       'suspended:ASCENDING',
+      'usageLevel:ASCENDING',
     ]
     const orders = [
       'createdAt:DESCENDING',

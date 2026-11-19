@@ -195,15 +195,57 @@ do not sort: an organization that never had a plan or a subscription stores neit
 and sorting on either would leave it out of the list. **AI spend (month)** sorts
 the page on screen by this month's figures.
 
+#### Usage level {#usage-level}
+
+Every account, organization and site carries a **usage level**: how much it actually
+uses Aglyn, as someone on staff judged it after looking. It starts as **Not reviewed**;
+picking any other level marks it reviewed and records who set it and when.
+
+| Level | Means |
+| -- | -- |
+| Not reviewed | Nobody on staff has looked yet. |
+| Trying it out | Signed up and looked around; little or nothing of their own built. |
+| Building | Putting their own content in; not live or not used yet. |
+| Live and using it | Published their own site and using it for their business. |
+| Power user | Runs their business on Aglyn: several sites, daily use, or selling through it. |
+
+Set it from the **Usage level** column on the Users, Organizations and Sites lists (pick
+a level in the row), or from the **Usage level** card on each one's detail page. On a
+site's page the card can also set its organization and that organization's owner, and
+on an organization's page its owner; both boxes are ticked by default. Setting one of
+those along with the site only ever raises it: marking a site *Building* leaves a
+*Power user* organization alone. Every change is in the audit log.
+
+Each list can be filtered by **Usage level** (*is*, or *is any of*), across the whole
+list rather than the page on screen, so *Not reviewed* is the queue still to look at.
+Customers never see their level.
+
+#### Account usage level {#usage-level-account}
+
+The **Usage level** card on an account's staff page records how much that person uses
+Aglyn. Pick a level from the card's menu; it saves at once and shows when it was last set.
+
+#### Organization usage level {#usage-level-organization}
+
+The **Usage level** card on an organization's staff page records how much that workspace
+uses Aglyn. Pick a level from the card's menu. Leave **Also set the workspace owner** ticked
+to raise the owner's own level to match; it never lowers a higher one.
+
+#### Site usage level {#usage-level-site}
+
+The **Usage level** card on a site's staff page records how much that site is used. Pick a
+level from the card's menu. Leave **Also set its workspace** and **Also set the workspace
+owner** ticked to raise those to match; neither is ever lowered.
+
 #### Filter the directory {#filter-the-directory}
 
 The grid's toolbar filters and searches the whole directory, not the page on screen.
 **Filters** offers **Organization** (*contains* a word, or *is* the whole name),
 **Org slug** (*is*), **Org ID** (*is*, or *is any of*), **Owner UID** (*is*, or *is any
-of*), **Created** (on, after, or before a day), and three pickers: **Stored plan** (the
+of*), **Created** (on, after, or before a day), and four pickers: **Stored plan** (the
 plan written on the org, which is not always the plan it reads as — the Plan column
 shows both when they differ), **Billing status** (the Stripe subscription status
-mirrored onto the org) and **Suspended** (*Suspended* shows only organizations whose
+mirrored onto the org), **[Usage level](#usage-level)** and **Suspended** (*Suspended* shows only organizations whose
 suspension is in force, *Not suspended* leaves them out). A timed suspension counts
 until its end time and not after, the same as the red **suspended** chip. **Search** matches the start of any word in the name, using the
 first word you type, and says so when you type more than one.

@@ -32,6 +32,8 @@ import type { SendingWorkspace } from './outbound-screen-gate'
 import type { SendingIdentityVerdict } from './sending-domain'
 import { resetEmailSendGovernorForTests, setEmailSendGovernor } from './send-rate'
 import {
+  transactionalCeilingMonthKey,
+  transactionalCeilingMonthResetMs,
   isTransactionalCeilingExempt,
   resetTransactionalSendCeilingGateForTests,
   setTransactionalSendCeilingGate,
@@ -265,7 +267,7 @@ describe('sendEmail × the daily transactional ceiling (AGL-4145)', () => {
           priority: 'bulk',
           context: 'abandoned cart',
         }),
-      ).toEqual({ orgId: 'org-1', hostId: 'host-1', ceiling: 5 })
+      ).toEqual({ orgId: 'org-1', hostId: 'host-1', ceiling: 5, monthlyCeiling: Number.POSITIVE_INFINITY })
     })
 
     it('never asks for platform mail, which carries no workspace', async () => {
@@ -391,5 +393,36 @@ describe('sendEmail × the daily transactional ceiling (AGL-4145)', () => {
         '2026-11-04',
       ])
     })
+  })
+})
+
+describe('the hard monthly cap rides the same seam (AGL-4227)', () => {
+  it('carries a finite monthly cap from the workspace onto the subject, and none otherwise', () => {
+    const subjectFor = (emailsPerMonth?: number | null) =>
+      transactionalCeilingSubject({
+        audience: 'tenant',
+        workspace: { ...workspace(200), ...(emailsPerMonth === undefined ? {} : { emailsPerMonth }) },
+        priority: 'transactional',
+        context: 'form confirmation',
+      })
+    expect(subjectFor(300)?.monthlyCeiling).toBe(300)
+    expect(subjectFor(undefined)?.monthlyCeiling).toBe(Number.POSITIVE_INFINITY)
+    expect(subjectFor(Number.POSITIVE_INFINITY)?.monthlyCeiling).toBe(Number.POSITIVE_INFINITY)
+  })
+
+  it('never governs account and security mail, monthly or daily', () => {
+    expect(
+      transactionalCeilingSubject({
+        audience: 'tenant',
+        workspace: { ...workspace(200), emailsPerMonth: 0 },
+        priority: 'transactional',
+        context: 'password-reset',
+      }),
+    ).toBeNull()
+  })
+
+  it('the month starts again at 00:00 UTC on the 1st', () => {
+    expect(transactionalCeilingMonthKey(Date.UTC(2026, 10, 30, 23, 59))).toBe('2026-11')
+    expect(transactionalCeilingMonthResetMs(Date.UTC(2026, 10, 30, 23, 59))).toBe(Date.UTC(2026, 11, 1))
   })
 })

@@ -1,6 +1,8 @@
 package com.aglyn.plugins.workflows
 
 import com.aglyn.pluginhost.NativePluginRegistrar
+import com.aglyn.screens.ScreenSpec
+import com.aglyn.screens.SpecScreens
 
 const val AUTOMATION_SCREEN = "workflows.automation"
 const val WORKFLOW_SCREEN = "workflows.workflow"
@@ -19,6 +21,8 @@ private fun idParam(value: String?): String? = value?.takeIf { it.isNotBlank() &
  * screen for phones and links, and an automation's run history.
  */
 fun registerWorkflowsNative(r: NativePluginRegistrar) {
+  // The staff screens (spec): the staff pages' read-only Automations cards.
+  SpecScreens.register(WorkflowsScreenJson.files.flatMap { ScreenSpec.parseFile(it) }, r)
   r.screen(AUTOMATION_SCREEN, title = "Automation", icon = "bolt") { context, params -> AutomationScreen(context, params) }
   r.screen(WORKFLOW_SCREEN, title = "Workflow", requiresSite = true, icon = "account_tree") { context, params ->
     StandaloneTarget(context, AutomationTarget.Workflow(idParam(params["id"])))

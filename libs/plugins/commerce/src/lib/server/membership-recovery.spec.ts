@@ -254,7 +254,15 @@ function makeResponse() {
   return { res, result }
 }
 
-const fetchMock = jest.fn(async () => ({ ok: true }) as Response)
+const fetchMock = jest.fn(
+  async () =>
+    ({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: 'email_test' }),
+      text: async () => JSON.stringify({ id: 'email_test' }),
+    }) as unknown as Response,
+)
 
 beforeAll(() => {
   global.fetch = fetchMock as unknown as typeof fetch

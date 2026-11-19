@@ -672,13 +672,57 @@
       "links": [
         "/billing/invoices"
       ],
+      "constants": {
+        "statuses": [
+          { "value": "open", "label": "Open" },
+          { "value": "paid", "label": "Paid" },
+          { "value": "uncollectible", "label": "Uncollectible" },
+          { "value": "void", "label": "Void" }
+        ]
+      },
       "load": {
         "invoices": {
-          "url": "/api/billing/invoices?orgId={org.id}",
+          "url": "/api/billing/invoices?orgId={org.id}&status={params.status}&number={params.number}&createdGte={params.from:dayseconds}&createdLt={params.to:dayseconds/end}",
           "cursor": "nextCursor",
           "items": "invoices"
         }
       },
+      "actions": [
+        {
+          "id": "filter",
+          "label": "Filter the list",
+          "icon": "line.3.horizontal.decrease|filter_list",
+          "prompt": [
+            {
+              "key": "status",
+              "label": "Status",
+              "kind": "select",
+              "initial": "{params.status}",
+              "options": [{ "value": "", "label": "Any" }],
+              "optionsFrom": { "items": "const.statuses", "value": "{item.value}", "label": "{item.label}" }
+            },
+            {
+              "key": "number",
+              "label": "Invoice",
+              "kind": "text",
+              "initial": "{params.number}",
+              "help": "The whole invoice number."
+            },
+            { "key": "from", "label": "From", "kind": "date", "initial": "{params.from}" },
+            { "key": "to", "label": "To", "kind": "date", "initial": "{params.to}" }
+          ],
+          "navigate": {
+            "screen": "core.billing.invoices",
+            "params": {
+              "status": "{form.status}",
+              "number": "{form.number}",
+              "from": "{form.from}",
+              "to": "{form.to}",
+              "emptyText": "No invoices match these filters."
+            }
+          }
+        }
+      ],
       "blocks": [
         {
           "type": "list",
@@ -687,6 +731,12 @@
           "primary": "{item.number|item.id}",
           "secondary": "{item.created:date}",
           "trailing": "{item.totalCents:cents/item.currency}",
+          "columns": [
+            { "id": "invoice", "label": "Invoice", "value": "{item.number|item.id}", "always": true, "sort": { "page": "item.number" } },
+            { "id": "date", "label": "Date", "value": "{item.created:date}", "show": false, "sort": { "page": "item.created", "type": "number", "first": "desc" } },
+            { "id": "total", "label": "Total", "value": "{item.totalCents:cents/item.currency}", "show": false, "sort": { "page": "item.totalCents", "type": "number", "first": "desc" } },
+            { "id": "status", "label": "Status", "value": "{item.status:title}", "show": false, "sort": { "page": "item.status" } }
+          ],
           "icon": "doc.text|receipt_long",
           "badges": [
             {
@@ -730,7 +780,7 @@
               "link": "{item.receiptUrl}"
             }
           ],
-          "empty": "No invoices yet."
+          "empty": "{params.emptyText|'No invoices yet.'}"
         }
       ]
     },
