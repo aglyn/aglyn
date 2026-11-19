@@ -37,13 +37,17 @@ struct HomeGlanceGrid: View {
       .filter { (hasSite || !$0.requiresSite) && ($0.pluginID == "core" || enabled.contains($0.pluginID)) }
   }
 
+  /// The cards to draw: the scope's glance cards, less the ones the person switched off, in the person's order.
+  private var shown: [NativeWidget] {
+    let widgets = Self.widgets(model, navigation)
+    guard let dashboard else { return widgets }
+    return DashboardWidgets.ordered(
+      widgets.filter { !dashboard.isHidden(DashboardWidgets.storedID($0.id)) }, order: dashboard.prefs.order
+    ) { DashboardWidgets.storedID($0.id) }
+  }
+
   var body: some View {
-    var widgets = Self.widgets(model, navigation)
-    if let dashboard {
-      widgets = DashboardWidgets.ordered(
-        widgets.filter { !dashboard.isHidden(DashboardWidgets.storedID($0.id)) }, order: dashboard.prefs.order
-      ) { DashboardWidgets.storedID($0.id) }
-    }
+    let widgets = shown
     if !widgets.isEmpty, let context = model.context(for: navigation) {
       VStack(alignment: .leading, spacing: AglynSpace.oneAndHalf) {
         if let title { AglynSectionHeader(title) }
