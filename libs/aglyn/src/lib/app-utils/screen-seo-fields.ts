@@ -31,13 +31,24 @@ export const SCREEN_SEO_TEXT_FIELDS = ['title', 'description'] as const
 export type ScreenSeoTextField = (typeof SCREEN_SEO_TEXT_FIELDS)[number]
 
 /**
+ * How long a search listing's title may be, in characters: about what a
+ * search result shows before it truncates. The one figure every surface
+ * reads (AGL-4235). Setup → SEO holds a site's title to it, a page's editors
+ * show it as guidance, and the API holds a page's and a site's title to it.
+ */
+export const SEO_TITLE_MAX_LENGTH = 60
+
+/** How long a search listing's description may be, read as {@link SEO_TITLE_MAX_LENGTH} is. */
+export const SEO_DESCRIPTION_MAX_LENGTH = 155
+
+/**
  * The length each field reads best at, in characters — the figure the
  * editors' helper text gives. Guidance, not a limit: the value is published
  * verbatim whatever its length.
  */
 export const SCREEN_SEO_TEXT_GUIDANCE: Readonly<Record<ScreenSeoTextField, number>> = {
-  title: 60,
-  description: 155,
+  title: SEO_TITLE_MAX_LENGTH,
+  description: SEO_DESCRIPTION_MAX_LENGTH,
 }
 
 /** The key an editor offers a field for staging under (`seo.title`). */

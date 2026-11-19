@@ -173,6 +173,8 @@ final class RedirectsEditor {
   private(set) var error: String?
   /// What just happened, or a warning that did not stop the save.
   var notice: String?
+  /// Why Add redirect did not open its form: the plan's cap, in the page's words.
+  var warning: String?
 
   @ObservationIgnored private let api: RedirectsWriteAPI
   @ObservationIgnored private let uid: String
@@ -182,7 +184,14 @@ final class RedirectsEditor {
     self.uid = uid
   }
 
-  func add() { open(RedirectDraft()) }
+  /// Add redirect, refused at the plan's cap as the page refuses it (`limitRefusal`), before the form opens.
+  func add(limitRefusal: String? = nil) {
+    if let limitRefusal {
+      warning = limitRefusal
+      return
+    }
+    open(RedirectDraft())
+  }
   func edit(_ row: RedirectRow) {
     open(RedirectDraft(row))
     opened = RedirectDraft(row)
@@ -214,6 +223,7 @@ final class RedirectsEditor {
 
   private func open(_ next: RedirectDraft) {
     error = nil
+    warning = nil
     draft = next
     opened = nil
     held = false

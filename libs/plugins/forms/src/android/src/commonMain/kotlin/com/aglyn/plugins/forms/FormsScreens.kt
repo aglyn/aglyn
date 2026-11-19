@@ -1,6 +1,9 @@
 package com.aglyn.plugins.forms
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -229,6 +232,15 @@ private fun FormDetail(
                 MenuAction("rename", "Rename", "edit", enabled = canEdit) { open(FormDialog.Rename(form)) },
                 MenuAction("duplicate", "Duplicate", "content_copy", enabled = canEdit) { open(FormDialog.Duplicate(form)) },
                 MenuAction("export", "Export submissions", "download") { open(FormDialog.Export(form)) },
+                // The console's quick Preview: the published version as a visitor sees it. A form never opened in the
+                // Besigner has no version to render.
+                MenuAction(
+                  "preview",
+                  "Preview",
+                  "visibility",
+                  enabled = form.versionId != null,
+                  reason = "Nothing to preview yet — open it in the besigner once.",
+                ) { form.versionId?.let { context.openBesigner(formBesignerPath(form.id, it, preview = true), ConsoleScope.SITE) } },
                 MenuAction("retire", if (form.retired) "Bring back" else "Retire", if (form.retired) "unarchive" else "archive", enabled = canEdit) { open(FormDialog.Retire(form)) },
               ),
             )
@@ -259,12 +271,9 @@ private fun FormDetail(
             }
           }
         }
-        StatRow {
-          StatTile("Submissions", (form.submissions ?: 0).toString(), Modifier.weight(1f), form.lastSubmissionAtMs?.let { "Last " + relativeTime(it, now) } ?: "None yet")
-          StatTile("Leads", form.leads?.toString() ?: "—", Modifier.weight(1f), if (form.routesLeads) "Sent to the CRM" else "Not sent to the CRM")
-          StatTile("Views", (form.views ?: 0).toString(), Modifier.weight(1f), "Times it was shown")
-        }
+        FormMetrics(form)
         RoutingCard(form, api, runner, canEdit)
+        ResponsesCard(form, api, runner, canEdit)
         SectionCard("Questions") {
           if (form.fields.isEmpty()) Text("This form declares no questions yet. Add them in the Besigner.", color = MaterialTheme.colorScheme.onSurfaceVariant)
           form.fields.forEachIndexed { index, field ->
@@ -290,6 +299,7 @@ private fun FormDetail(
 private fun RoutingCard(form: FormRow, api: FormsApi, runner: ActionRunner, canEdit: Boolean) {
   var lead by remember(form.id, form.routesLeads) { mutableStateOf(form.routesLeads) }
   var consent by remember(form.id, form.consentFieldName) { mutableStateOf(form.consentFieldName) }
+  var optIn by remember(form.id, form.optInOnSubmit) { mutableStateOf(form.optInOnSubmit) }
   var picking by remember { mutableStateOf(false) }
   SectionCard("CRM routing") {
     SwitchRow(
@@ -314,14 +324,146 @@ private fun RoutingCard(form: FormRow, api: FormsApi, runner: ActionRunner, canE
         }
       }
     }
-    if (lead && consent == null) NoticeBanner("A form that sends leads should ask for marketing consent.", StatusTone.WARNING)
+    if (lead && consent == null && !optIn) NoticeBanner("A form that sends leads should ask for marketing consent.", StatusTone.WARNING)
+    SwitchRow(
+      "This is a sign-up form: submitting it subscribes the person",
+      optIn,
+      { optIn = it },
+      supporting = "For a form whose only purpose is subscribing, like a newsletter sign-up. Every submission records marketing " +
+        "consent and makes the person at least a subscriber, so the form should say plainly what they are signing up for.",
+      enabled = canEdit,
+      modifier = Modifier.testTag("form-opt-in-on-submit"),
+    )
     Button(
-      onClick = { runner.run("CRM routing saved.") { api.saveRouting(form, lead, consent) } },
-      enabled = canEdit && !runner.busy && (lead != form.routesLeads || consent != form.consentFieldName),
+      onClick = { runner.run("CRM routing saved.") { api.saveRouting(form, lead, consent, optIn.takeIf { it != form.optInOnSubmit }) } },
+      enabled = canEdit && !runner.busy && (lead != form.routesLeads || consent != form.consentFieldName || optIn != form.optInOnSubmit),
       modifier = Modifier.testTag("form-routing-save"),
     ) { Text("Save routing") }
   }
 }
+
+/** "After someone sends it" (AGL-4098): whether the form asks for a quote, and whether the person is emailed a confirmation. */
+@Composable
+private fun ResponsesCard(form: FormRow, api: FormsApi, runner: ActionRunner, canEdit: Boolean) {
+  var quote by remember(form.id, form.asksForQuote) { mutableStateOf<Boolean?>(null) }
+  var confirms by remember(form.id, form.confirmationEmail) { mutableStateOf<Boolean?>(null) }
+  val effectiveQuote = quote ?: form.asksForQuote
+  val effectiveConfirms = confirms ?: form.confirmationEmail ?: effectiveQuote
+  val changed = (quote != null && quote != form.asksForQuote) || (confirms != null && confirms != form.sendsConfirmation())
+  SectionCard("After someone sends it", Modifier.testTag("form-responses")) {
+    SwitchRow(
+      "This form asks for a quote",
+      effectiveQuote,
+      { quote = it },
+      supporting = "Each submission arrives in the Inbox marked as a quote request, with any files attached, and you can start a " +
+        "quote from it in one step. The person is added to Contacts as with any form." +
+        (if (form.hasFileField) "" else " Add a File upload field in the design to take logos or artwork."),
+      enabled = canEdit,
+      modifier = Modifier.testTag("form-asks-for-quote"),
+    )
+    SwitchRow(
+      "Email the person a confirmation",
+      effectiveConfirms,
+      { confirms = it },
+      supporting = if (form.hasEmailField) {
+        "Sends the address they give a copy of what they sent, the names of their files and what happens next, in your " +
+          "site’s email style (Emails → Form confirmation). Replies come to your site’s contact email, and a quote you send " +
+          "them later arrives in the same conversation."
+      } else {
+        "Needs an email field in the published design: without an address there is no one to send it to."
+      },
+      enabled = canEdit,
+      modifier = Modifier.testTag("form-confirmation-email"),
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+      com.aglyn.ui.TextButton(onClick = { quote = null; confirms = null }, enabled = changed && !runner.busy) { Text("Discard") }
+      Button(
+        onClick = {
+          val (q, c) = quote to confirms
+          runner.run("Saved") {
+            api.saveResponses(form, q, c)
+            quote = null
+            confirms = null
+          }
+        },
+        enabled = canEdit && !runner.busy && changed,
+        modifier = Modifier.testTag("form-responses-save"),
+      ) { Text("Save") }
+    }
+  }
+}
+
+/**
+ * "What this form has collected" (the console's `FormMetricsCard`): the four figures, the rates with what each is taken
+ * over, submissions by month from the first recorded one, the most recent, and what is not measured.
+ */
+@Composable
+private fun FormMetrics(form: FormRow) {
+  val rates = remember(form) { FormRates.of(form) }
+  val series = remember(form.periods) { formPeriodSeries(form.periods) }
+  val peak = series.maxOfOrNull { it.submissions } ?: 0.0
+  val muted = MaterialTheme.colorScheme.onSurfaceVariant
+  SectionCard("What this form has collected", Modifier.testTag("form-metrics")) {
+    StatRow {
+      for ((label, value, caption) in listOf(
+        Triple("Views", form.views, "times this form was rendered"),
+        Triple("Submissions", form.submissions, "since this form was created"),
+        Triple("Leads", form.leads, "people this form filed to Leads"),
+        Triple("Declared fields", form.fields.size.toLong(), "on the published design"),
+      )) {
+        StatTile(label, value?.toString() ?: "—", Modifier.weight(1f), if (value == null) "not recorded" else caption)
+      }
+    }
+    Text("Rates", style = MaterialTheme.typography.labelLarge, color = muted)
+    for ((label, rate) in listOf(
+      "Views that became a submission" to rates.completion,
+      "Started and never submitted" to rates.abandon,
+      "Submissions that became a lead" to rates.lead,
+    )) {
+      Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        if (rate != null) {
+          Column(horizontalAlignment = Alignment.End) {
+            Text(rate.percent, style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+            note(rate.detail)
+          }
+        } else {
+          note("— not enough recorded to compute")
+        }
+      }
+    }
+    if (!form.routesLeads) note("This form does not route to leads, so there is nothing for that rate to be over.")
+    note(
+      "Views and starts are counted in the visitor’s browser and submissions on the server, so a blocked request is a view " +
+        "this misses and a submission it does not. Each rate covers only the months its denominator was being recorded.",
+    )
+    Text("Submissions by month", style = MaterialTheme.typography.labelLarge, color = muted)
+    if (series.isEmpty()) note("Nothing recorded yet. The series starts at the first month this form collects something.")
+    for (point in series) {
+      Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+        Text(point.period, Modifier.width(space(8f)), style = MaterialTheme.typography.bodySmall, color = muted)
+        androidx.compose.foundation.layout.Box(Modifier.weight(1f)) {
+          androidx.compose.foundation.layout.Box(
+            Modifier
+              .fillMaxWidth(if (peak > 0) (point.submissions / peak).toFloat().coerceAtLeast(0.005f) else 0.005f)
+              .height(space(1f))
+              .background(MaterialTheme.colorScheme.primary, MaterialTheme.shapes.small),
+          )
+        }
+        Text(point.submissions.toLong().toString(), Modifier.width(space(5f)), style = MaterialTheme.typography.bodySmall)
+      }
+    }
+    Text("Most recent", style = MaterialTheme.typography.labelLarge, color = muted)
+    Text(form.lastSubmissionAtMs?.let { "${com.aglyn.ui.formatDateTime(it, withTime = true)} UTC" } ?: "No submission has been recorded for this form.")
+    Text("Not measured", style = MaterialTheme.typography.labelLarge, color = muted)
+    note("Per-field answer rates — which questions people skip. The values live on the submission documents, and counting them is a read of the whole collection every time this page opens.")
+    note("Anything before a counter started. The month series begins where the record begins rather than padding backwards with zeros, and a rate is taken only over the months its denominator was live.")
+    note("Who abandoned, or where they stopped. A start is one signal per form, not per field, so this says how often a form was left and never which question lost the visitor.")
+  }
+}
+
+@Composable
+private fun note(text: String) = Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
 @Composable
 private fun FormVersions(context: NativePluginContext, form: FormRow, versions: Live<List<FirestoreDoc>>, api: FormsApi, runner: ActionRunner, canPublish: Boolean) {

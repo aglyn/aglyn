@@ -46,6 +46,7 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
       order: 10,
       sections: [
         nativeNavHubSection('host', '/products', 'orders', 'Orders', 'commerce.orders'),
+        nativeNavHubSection('host', '/products', 'subscriptions', 'Subscriptions', 'commerce.subscriptions'),
         nativeNavHubSection('host', '/products', 'returns', 'Returns', 'commerce.returns'),
         nativeNavHubSection('host', '/products', 'reservations', 'Reservations', 'commerce.reservations'),
       ],
@@ -68,6 +69,16 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
         nativeNavHubSection('host', '/products', 'catalog', 'Catalog', 'commerce.products'),
         nativeNavHubSection('host', '/products', 'promotions', 'Promotions', 'commerce.promotions'),
         nativeNavHubSection('host', '/products', 'analytics', 'Analytics', 'commerce.sales'),
+        // The console's Settings group (`COMMERCE_CONSOLE_SECTIONS`): each page's own
+        // settings, then the zone where other plugins' cards for that page land.
+        // Point of sale waits for its registers and hardware screens.
+        nativeNavHubSection('host', '/products', 'payments', 'Payments', 'commerce.settingsPayments'),
+        nativeNavHubSection('host', '/products', 'checkout', 'Checkout', 'commerce.settingsCheckout'),
+        nativeNavHubSection('host', '/products', 'taxes', 'Taxes', 'commerce.settingsTaxes'),
+        nativeNavHubSection('host', '/products', 'shipping', 'Shipping & delivery', 'commerce.settingsShipping'),
+        nativeNavHubSection('host', '/products', 'notifications', 'Notifications', 'commerce.settingsNotifications'),
+        nativeNavHubSection('host', '/products', 'channels', 'Sales channels', 'commerce.settingsChannels'),
+        nativeNavHubSection('host', '/products', 'integrations', 'Integrations', 'commerce.settings'),
       ],
       actions: [
         {

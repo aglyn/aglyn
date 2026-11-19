@@ -679,6 +679,9 @@ export async function authenticateApiV1(
       keyName: verified.name || null,
       // Only a connection carries a person (AGL-4225).
       credential: verified.uid ? 'connected_app' : 'api_key',
+      // The person that connection acts for (AGL-4235), which a site's own
+      // permissions and lock are read against. An API key has none.
+      ...(verified.uid ? { uid: verified.uid } : {}),
       scopes: verified.scopes,
       org,
       firestore,
