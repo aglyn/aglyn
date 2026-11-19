@@ -19,10 +19,9 @@ import type {
   PluginPersonErasureReport,
   PluginPersonErasureRequest,
 } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { waiverRetentionStamp, waiverRetentionStampMoved, type WaiverRetentionStamp } from '../model/waiver-retention'
 import type { StoredWaiverSignature } from '../model/waiver-signature'
-import { waiversDb, waiversRefs } from './db'
+import { waiversDb, waiversRefs, waiversStorageBucket } from './db'
 import { setWaiversRetentionYearsForTests, siteRetentionYears } from './retention'
 
 export { siteRetentionYears }
@@ -60,7 +59,7 @@ type Bucket = { deleteFiles(options: { prefix: string }): Promise<unknown> }
 
 function defaultBucket(): Bucket | null {
   try {
-    return firebaseAdmin.app().storage().bucket() as unknown as Bucket
+    return waiversStorageBucket() as unknown as Bucket
   } catch {
     return null
   }
