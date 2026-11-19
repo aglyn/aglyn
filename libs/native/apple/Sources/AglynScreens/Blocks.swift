@@ -810,12 +810,12 @@ struct FormBlock: View {
           }
           .buttonStyle(.aglynProminent)
           .controlSize(.regular)
-          .disabled(busy || heldPress.waiting || missing || action.disabledWhen.map { ScreenValues.condition($0, in: scope) } == true)
+          .disabled(busy || heldPress.waiting || missing || action.disabledWhen.map { ScreenValues.condition($0, in: filled) } == true)
           .accessibilityIdentifier("submit-\(block.id)")
         }
         .aglynHeldPress($heldPress, checking: held, refusal: FormEdits.unconfirmedText(block["checking"]?.stringValue)) {
           // The save of the form as it is now: the edits replayed onto the server's copy, if they still pass.
-          if !missing, action.disabledWhen.map({ ScreenValues.condition($0, in: scope) }) != true { save(action) }
+          if !missing, action.disabledWhen.map({ ScreenValues.condition($0, in: filled) }) != true { save(action) }
         }
       }
     }

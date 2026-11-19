@@ -358,6 +358,23 @@ final class MarketplaceTests: XCTestCase {
     let installedTemplate: [String: Any] = ["source": ["type": "marketplace", "listingId": "l1", "version": "2"]]
     XCTAssertEqual(copyUpdateState(installed: installedTemplate, latestVersion: "3", artifactType: "template").state, "update-available")
     XCTAssertEqual(copyUpdateState(installed: installedTemplate, latestVersion: "2", artifactType: "template").state, "current")
+    for item in try functionCases("verificationRequestBlock") {
+      let input = object(item.args[0])
+      XCTAssertEqual(
+        verificationRequestBlock(
+          listing: input["listing"] as? [String: Any], viewerOrgID: string(input["viewerOrgId"]),
+          nowMs: (input["nowMs"] as? NSNumber)?.doubleValue ?? 0),
+        string(item.result), "\(item.args)")
+    }
+    // The card: nothing for another workspace's listing or a verified one, nor a listing in review with nothing waiting.
+    XCTAssertFalse(ListingVerificationSection.shows("not-publisher", state: nil))
+    XCTAssertFalse(ListingVerificationSection.shows("already-verified", state: nil))
+    XCTAssertFalse(ListingVerificationSection.shows("not-listed", state: nil))
+    XCTAssertTrue(ListingVerificationSection.shows("not-listed", state: "pending"))
+    XCTAssertTrue(ListingVerificationSection.shows(nil, state: nil))
+    XCTAssertTrue(ListingVerificationSection.shows("cooling-down", state: "declined"))
+    XCTAssertEqual(verificationTimestampMs(Date(timeIntervalSince1970: 2)), 2000)
+    XCTAssertTrue(whatVerifiedClaims.contains(ContractValues.shared.platformBrandName))
     for item in try functionCases("installPlanOutcome") {
       let input = object(item.args[0])
       let outcome = installPlanOutcome(

@@ -768,6 +768,23 @@
                   "initial": "{item.fewLeftAt}"
                 },
                 {
+                  "key": "checkIn",
+                  "label": "At check-in",
+                  "kind": "select",
+                  "initial": "{const.checkInModes[id=item.checkInPerGuest].mode|'stay'}",
+                  "options": [
+                    {
+                      "value": "stay",
+                      "label": "One check-in per stay"
+                    },
+                    {
+                      "value": "guest",
+                      "label": "One check-in per guest"
+                    }
+                  ],
+                  "help": "One per guest gives each guest their own check-in and wristband. The check-in screen can set every stay at once."
+                },
+                {
                   "key": "nightlyRateUsd",
                   "label": "Nightly rate ($)",
                   "kind": "number",
@@ -824,7 +841,12 @@
                   "weekendMultiplier": "{form.weekendMultiplier}",
                   "minNights": "{form.minNights}",
                   "depositPct": "{form.depositPct}",
-                  "cancellationHours": "{form.cancellationHours}"
+                  "cancellationHours": "{form.cancellationHours}",
+                  "checkInPerGuest": {
+                    "$if": "form.checkIn == guest",
+                    "then": true,
+                    "else": false
+                  }
                 }
               },
               "success": "Resource saved"
@@ -890,6 +912,23 @@
                   "when": "form.units > 1"
                 },
                 {
+                  "key": "checkIn",
+                  "label": "At check-in",
+                  "kind": "select",
+                  "initial": "stay",
+                  "options": [
+                    {
+                      "value": "stay",
+                      "label": "One check-in per stay"
+                    },
+                    {
+                      "value": "guest",
+                      "label": "One check-in per guest"
+                    }
+                  ],
+                  "help": "One per guest gives each guest their own check-in and wristband. The check-in screen can set every stay at once."
+                },
+                {
                   "key": "nightlyRateUsd",
                   "label": "Nightly rate ($)",
                   "kind": "number",
@@ -942,7 +981,12 @@
                   "weekendMultiplier": "{form.weekendMultiplier}",
                   "minNights": "{form.minNights}",
                   "depositPct": "{form.depositPct}",
-                  "cancellationHours": "{form.cancellationHours}"
+                  "cancellationHours": "{form.cancellationHours}",
+                  "checkInPerGuest": {
+                    "$if": "form.checkIn == guest",
+                    "then": true,
+                    "else": false
+                  }
                 }
               },
               "success": "Resource saved"
@@ -1169,7 +1213,19 @@
           ],
           "load": "stays"
         }
-      ]
+      ],
+      "constants": {
+        "checkInModes": [
+          {
+            "id": "true",
+            "mode": "guest"
+          },
+          {
+            "id": "false",
+            "mode": "stay"
+          }
+        ]
+      }
     }
   ]
 }

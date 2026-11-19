@@ -46,6 +46,10 @@ AGLYN_DOCS_ORIGIN = https:/$()/docs.aglyn.com
 AGLYN_APPLE_SIGN_IN = YES
 // Crash reports, non-fatal errors and Analytics (AGL-4067): collected from a Release build on production only.
 AGLYN_TELEMETRY = on
+// Buying from Aglyn (a plan, an add-on, credits, a paid listing, an invoice, a card): off, by the owner's decision of
+// 2026-11-19. The App Store takes payment for digital things only through in-app purchase (guideline 3.1.1), so a store
+// build leaves every such control out (StoreBilling in AglynCore). Build-time only: nothing remote turns it on.
+AGLYN_IN_APP_BILLING = off
 
 AGLYN_DEBUG_EMAIL =
 AGLYN_DEBUG_PASSWORD =

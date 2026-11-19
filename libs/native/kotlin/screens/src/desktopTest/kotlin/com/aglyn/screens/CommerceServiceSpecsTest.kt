@@ -1187,9 +1187,24 @@ class CommerceServiceSpecsTest {
     for ((listed, hidden) in cases) {
       val (dir, id, data) = listed
       val spec = spec(dir, id)
-      assertTrue("commerceSettings" in spec.zones, id)
+      assertTrue(CONSOLE_PAGE_ZONE.getValue(dir) in spec.zones, id)
       assertTrue(ScreenValues.condition(spec.showWhen!!, screen(spec, emptyMap(), data).context), "$id is listed for $data")
       assertFalse(ScreenValues.condition(spec.showWhen!!, screen(spec, emptyMap(), hidden).context), "$id is not listed for $hidden")
     }
   }
+
+  /** The console page each plugin's card lands on (its plugin.ts `slot`), so its native zone. */
+  private val CONSOLE_PAGE_ZONE = mapOf(
+    "inventory-sync" to "commerceSettings",
+    "delivery-apps" to "commerceSettings",
+    "print-on-demand" to "commerceSettings",
+    "fulfillment-networks" to "commerceSettingsShipping",
+    "couriers" to "commerceSettingsShipping",
+    "post-purchase" to "commerceSettingsShipping",
+    "shipping" to "commerceSettingsShipping",
+    "tax-engines" to "commerceSettingsTaxes",
+    "review-platforms" to "commercePromotions",
+    "sales-channels" to "commerceSettingsChannels",
+    "marketplaces" to "commerceSettingsChannels",
+  )
 }
