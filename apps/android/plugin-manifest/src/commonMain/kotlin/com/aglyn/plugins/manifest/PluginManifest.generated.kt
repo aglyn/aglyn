@@ -21,6 +21,7 @@ import com.aglyn.plugins.eventscalendar.registerEventsCalendarNative
 import com.aglyn.plugins.forms.registerFormsNative
 import com.aglyn.plugins.fulfillmentnetworks.registerFulfillmentNetworksNative
 import com.aglyn.plugins.funnels.registerFunnelsNative
+import com.aglyn.plugins.helpdesks.registerHelpDesksNative
 import com.aglyn.plugins.inbox.registerInboxNative
 import com.aglyn.plugins.inventorysync.registerInventorySyncNative
 import com.aglyn.plugins.livechat.registerLiveChatNative
@@ -119,6 +120,11 @@ object NativePluginManifest {
             id = "funnels",
             contributes = mapOf("screens" to listOf("funnels.list"), "quickActions" to listOf("funnels.open"), "deepLinks" to listOf("funnels.page")),
             register = ::registerFunnelsNative,
+        ),
+        NativePluginManifestEntry(
+            id = "help-desks",
+            contributes = mapOf("screens" to listOf("help-desks.provider", "help-desks.service"), "widgets" to listOf("help-desks.service.card")),
+            register = ::registerHelpDesksNative,
         ),
         NativePluginManifestEntry(
             id = "inbox",

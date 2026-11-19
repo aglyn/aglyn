@@ -19,6 +19,7 @@ import AglynEventsCalendarPlugin
 import AglynFormsPlugin
 import AglynFulfillmentNetworksPlugin
 import AglynFunnelsPlugin
+import AglynHelpDesksPlugin
 import AglynInboxPlugin
 import AglynInventorySyncPlugin
 import AglynLiveChatPlugin
@@ -117,6 +118,11 @@ public enum NativePluginManifest {
       id: "funnels",
       contributes: ["screens": ["funnels.list"], "quickActions": ["funnels.open"], "deepLinks": ["funnels.page"]],
       register: AglynFunnelsPlugin.registerFunnelsNative
+    ),
+    NativePluginManifestEntry(
+      id: "help-desks",
+      contributes: ["screens": ["help-desks.provider", "help-desks.service"], "widgets": ["help-desks.service.card"]],
+      register: AglynHelpDesksPlugin.registerHelpDesksNative
     ),
     NativePluginManifestEntry(
       id: "inbox",
