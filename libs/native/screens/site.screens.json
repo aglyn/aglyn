@@ -1359,7 +1359,7 @@
             },
             {
               "id": "when",
-              "label": "When: {params.from:date|'Any'} – {params.before:date|'now'}",
+              "label": "When: {params.from|'Any':date} – {params.before|'now':date}",
               "icon": "calendar|calendar_month",
               "prompt": [
                 {

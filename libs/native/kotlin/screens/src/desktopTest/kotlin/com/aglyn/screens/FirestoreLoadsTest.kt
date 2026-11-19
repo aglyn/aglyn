@@ -122,4 +122,16 @@ class FirestoreLoadsTest {
     assertEquals("Pro", (gate(free)["label"] as JsonPrimitive).content)
     assertEquals(JsonNull, gate(free).let { runBlocking { FirestoreLoads.entitlement(free, "nothingLikeIt", "o1") }.jsonObject["label"] })
   }
+  /** The When chip names the range picked, and reads "Any – now" before one is. */
+  @Test
+  fun siteActivityWhenChipNamesTheRange() {
+    val root = generateSequence(java.io.File("").absoluteFile) { it.parentFile }.first { java.io.File(it, "libs/native/screens").isDirectory }
+    val spec = ScreenSpec.parseFile(java.io.File(root, "libs/native/screens/site.screens.json").readText())
+      .first { it.id == "core.site.activity" }
+    val items = spec.blocks.first { it.id == "activityFilter" }.raw.arr("items")
+    val label = items.first { it.str("id") == "when" }.str("label")!!
+    assertEquals("When: Any – now", ScreenValues.render(label, Json.parseToJsonElement("""{"params":{"from":"","before":""}}""")))
+    assertEquals("When: Any – now", ScreenValues.render(label, Json.parseToJsonElement("{}")))
+    assertEquals("When: Nov 1, 2026 – now", ScreenValues.render(label, Json.parseToJsonElement("""{"params":{"from":"2026-11-01"}}""")))
+  }
 }
