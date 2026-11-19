@@ -124,6 +124,9 @@ export async function deliverToZapierHooks(
     const grant = await grantOf(hook.orgId, hook.keyId)
     if (!grant || !grant.scopes.includes(spec.scope)) return 'remove'
     if (!checkEntitlement(org as never, 'apiAccess')) return 'pause'
+    // Outbound events are webhooks (AGL-4226): a plan with the API and
+    // without webhooks holds its hooks paused, as a lapsed plan does.
+    if (!checkEntitlement(org as never, 'webhooks')) return 'pause'
     if (spec.feature && !checkEntitlement(org as never, spec.feature)) return 'pause'
     return 'deliver'
   }

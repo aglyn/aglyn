@@ -1,0 +1,221 @@
+{
+  "$comment": "The Marketing plugin's staff screen (AGL-3380): the staff organization page's Email campaigns, read-only (its sends, each opening the message, and its email campaigns), natively from this spec (the console's staff-org-email-card.component.tsx). Kept in its Apple package (Resources) and linked from its Kotlin module (src/android/screens).",
+  "screens": [
+    {
+      "id": "marketing.staffOrgEmail",
+      "title": "Email campaigns",
+      "label": "Email campaigns",
+      "subtitle": "What the organization sent and its email campaigns, read-only.",
+      "icon": "envelope|mail",
+      "scope": "staff",
+      "requires": "staff.is",
+      "zones": [
+        "staffOrg"
+      ],
+      "order": 45,
+      "load": {
+        "sends": {
+          "query": {
+            "collection": "orgs/{params.orgId}/campaigns",
+            "orderBy": "__name__",
+            "limit": 50
+          },
+          "optional": true,
+          "more": 50
+        },
+        "campaigns": {
+          "query": {
+            "collection": "orgs/{params.orgId}/emailCampaigns",
+            "orderBy": "__name__",
+            "limit": 50
+          },
+          "optional": true,
+          "more": 50
+        }
+      },
+      "blocks": [
+        {
+          "type": "list",
+          "title": "Sends",
+          "items": "data.sends.items",
+          "primary": "{item.subject|'(no subject)'}",
+          "secondary": [
+            "{item.hostId|'no site'}",
+            "{item.audience}"
+          ],
+          "tertiary": [
+            {
+              "text": "{item.sentAt:datetime}",
+              "when": "item.sentAt"
+            },
+            {
+              "text": "due {item.sendAtMs:datetime}",
+              "when": "!item.sentAt && item.sendAtMs"
+            },
+            {
+              "text": "{item.createdAtMs:datetime}",
+              "when": "!item.sentAt && !item.sendAtMs"
+            }
+          ],
+          "icon": "envelope|mail",
+          "empty": "This organization has sent no campaigns",
+          "badges": [
+            {
+              "text": "{item.status|'draft'}",
+              "tone": "neutral",
+              "when": "item.status != sent,failed"
+            },
+            {
+              "text": "sent",
+              "when": "item.status == sent",
+              "tone": "success"
+            },
+            {
+              "text": "failed",
+              "when": "item.status == failed",
+              "tone": "error"
+            },
+            {
+              "text": "held for review",
+              "when": "item.staffReview.state == held",
+              "tone": "warning"
+            },
+            {
+              "text": "{item.stats.sent} sent",
+              "when": "item.stats.sent"
+            },
+            {
+              "text": "{item.stats.uniqueOpens} opened",
+              "when": "item.stats.uniqueOpens"
+            },
+            {
+              "text": "{item.stats.uniqueClicks} clicked",
+              "when": "item.stats.uniqueClicks"
+            },
+            {
+              "text": "{item.stats.bounced} bounced",
+              "when": "item.stats.bounced",
+              "tone": "error"
+            }
+          ],
+          "open": {
+            "screen": "marketing.staffOrgEmailSend",
+            "params": {
+              "orgId": "{params.orgId}",
+              "sendId": "{item.$id}"
+            }
+          }
+        },
+        {
+          "type": "list",
+          "title": "Campaigns",
+          "items": "data.campaigns.items",
+          "primary": "{item.name|item.$id}",
+          "secondary": [
+            {
+              "text": "{item.startAtMs:datetime} – {item.endAtMs:datetime}",
+              "when": "item.endAtMs"
+            },
+            {
+              "text": "{item.startAtMs:datetime} – open",
+              "when": "item.startAtMs && !item.endAtMs"
+            }
+          ],
+          "icon": "megaphone|campaign",
+          "empty": "This organization has no email campaigns",
+          "badges": [
+            {
+              "each": "item.visibleTo",
+              "text": "{row:instance}",
+              "when": "row != org"
+            },
+            {
+              "text": "every site",
+              "when": "item.visibleTo ~= org"
+            },
+            {
+              "text": "deleted",
+              "when": "item.deletedAt",
+              "tone": "error"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "marketing.staffOrgEmailSend",
+      "title": "{data.send.subject|'(no subject)'}",
+      "label": "Send",
+      "icon": "envelope|mail",
+      "scope": "staff",
+      "requires": "staff.is",
+      "load": {
+        "send": {
+          "doc": "orgs/{params.orgId}/campaigns/{params.sendId}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "title": "Send",
+          "object": "data.send",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "{item.status|'draft'}"
+            },
+            {
+              "label": "Audience",
+              "value": "{item.audience}",
+              "when": "item.audience"
+            },
+            {
+              "label": "Site",
+              "value": "{item.hostId|'no site'}"
+            },
+            {
+              "label": "Preheader",
+              "value": "{item.preheader}",
+              "when": "item.preheader"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "items": [
+            {
+              "id": "design",
+              "label": "Open design preview",
+              "icon": "eye|visibility",
+              "when": "data.send.templateScreenId && data.send.hostId",
+              "besigner": "/admin/sites/{data.send.hostId}/preview/screen/{data.send.templateScreenId}"
+            },
+            {
+              "id": "site",
+              "label": "Open site",
+              "icon": "globe|language",
+              "when": "data.send.hostId",
+              "navigate": {
+                "screen": "core.staff.site",
+                "params": {
+                  "hostId": "{data.send.hostId}"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "text": "No message body was stored",
+          "when": "!data.send.body"
+        },
+        {
+          "type": "html",
+          "title": "Message",
+          "when": "data.send.body",
+          "source": "{data.send.body}"
+        }
+      ]
+    }
+  ]
+}

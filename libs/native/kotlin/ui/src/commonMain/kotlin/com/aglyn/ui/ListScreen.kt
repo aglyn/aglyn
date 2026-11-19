@@ -111,6 +111,12 @@ fun ListColumnSections() {
 data class FilterChoice(val group: String, val key: String, val label: String)
 
 /**
+ * A filter that is not one pick of a group (a Created day, which asks for a condition and a date): drawn in the Filter
+ * menu as [action], and, once on, as a chip saying [active] whose × runs [clear].
+ */
+data class FilterExtra(val action: MenuAction, val active: String? = null, val clear: () -> Unit = {})
+
+/**
  * A desktop (Compact) button as Figma's Button, Density = Compact draws it: radius 6, semibold. Regular is 28 tall with a
  * 14 icon and 13/18 text, padding 10, gap 6 (the list toolbar's Filter, a list column's action); [tall] is 36 with a 16
  * icon and 14/20 text, padding 14, gap 8 (a full-width title row's primary). [filled] takes the accent; otherwise the
@@ -247,6 +253,8 @@ fun ListScreenScaffold(
   /** The picked key per group; a group whose pick is its first option counts as not filtering. */
   picked: Map<String, String> = emptyMap(),
   onPick: (FilterChoice) -> Unit = {},
+  /** Filters beyond the groups' picks, after them in the Filter menu. */
+  extras: List<FilterExtra> = emptyList(),
   /**
    * The list sits in a list column beside its detail (Orders): on the desktop its title row is Figma 13:483's, 28 tall
    * with a Compact 28 action. Otherwise (Sites, Figma 13:3) the primary is the filled 36 button.
@@ -266,6 +274,8 @@ fun ListScreenScaffold(
   val compactHead = metrics.compact || currentWidthClass() != WidthClass.COMPACT
   val groups = filters.groupBy { it.group }
   val active = groups.mapNotNull { (group, options) -> options.firstOrNull { it.key == picked[group] }?.takeIf { it != options.first() } }
+  val extrasOn = extras.filter { it.active != null }
+  val activeCount = active.size + extrasOn.size
   // E, or what is left of it inside a list pane that already brings its content in (LocalContentInset).
   val edge = LocalContentInset.current ?: contentInset()
   Column(modifier.fillMaxSize().testTag("$tag-screen")) {
@@ -303,11 +313,11 @@ fun ListScreenScaffold(
       horizontalArrangement = Arrangement.spacedBy(space(1f)),
     ) {
       SearchField(query, onQuery, placeholder = placeholder, modifier = Modifier.weight(1f))
-      if (groups.isNotEmpty()) {
+      if (groups.isNotEmpty() || extras.isNotEmpty()) {
         var open by remember { mutableStateOf(false) }
         Box {
-          val filterLabel = if (active.isEmpty()) "Filter" else "Filter · ${active.size}"
-          val filterTag = Modifier.testTag("$tag-filter").semantics { contentDescription = if (active.isEmpty()) "Filter" else "Filter, ${active.size} set" }
+          val filterLabel = if (activeCount == 0) "Filter" else "Filter · $activeCount"
+          val filterTag = Modifier.testTag("$tag-filter").semantics { contentDescription = if (activeCount == 0) "Filter" else "Filter, $activeCount set" }
           if (compactHead) {
             // Figma's list toolbar Button: 28, the surface with the strong border.
             CompactButton(filterLabel, "filter_list", { open = true }, filterTag)
@@ -330,12 +340,22 @@ fun ListScreenScaffold(
                 )
               }
             }
+            if (extras.isNotEmpty() && groups.isNotEmpty()) HorizontalDivider()
+            for (extra in extras) {
+              DropdownMenuItem(
+                text = { Text(extra.action.label) },
+                leadingIcon = extra.action.icon?.let { { Icon(AglynIcons.named(it), null) } },
+                enabled = extra.action.enabled,
+                onClick = { open = false; extra.action.onClick() },
+                modifier = Modifier.testTag("$tag-filter-${extra.action.key}"),
+              )
+            }
           }
         }
       }
     }
     // The filters in force, each with × to clear it back to its group's first option.
-    if (active.isNotEmpty()) {
+    if (activeCount > 0) {
       Row(Modifier.fillMaxWidth().padding(horizontal = edge).padding(bottom = space(1f)), horizontalArrangement = Arrangement.spacedBy(space(1f))) {
         for (choice in active) {
           InputChip(
@@ -346,6 +366,17 @@ fun ListScreenScaffold(
             trailingIcon = { Icon(AglynIcons.named("close"), "Clear ${choice.label}", Modifier.size(14.dp)) },
             shape = if (metrics.compact) androidx.compose.foundation.shape.RoundedCornerShape(metrics.controlRadius) else MaterialTheme.shapes.small,
             modifier = Modifier.testTag("$tag-active-${choice.key}"),
+          )
+        }
+        for (extra in extrasOn) {
+          InputChip(
+            selected = true,
+            onClick = extra.clear,
+            colors = aglynInputChipColors(),
+            label = { Text(extra.active.orEmpty()) },
+            trailingIcon = { Icon(AglynIcons.named("close"), "Clear ${extra.active}", Modifier.size(14.dp)) },
+            shape = if (metrics.compact) androidx.compose.foundation.shape.RoundedCornerShape(metrics.controlRadius) else MaterialTheme.shapes.small,
+            modifier = Modifier.testTag("$tag-active-${extra.action.key}"),
           )
         }
       }

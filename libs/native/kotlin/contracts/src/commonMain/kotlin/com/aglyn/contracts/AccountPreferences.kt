@@ -71,6 +71,71 @@ fun movePinnedOrg(pinned: List<String>, orgId: String, offset: Int): List<String
   return current
 }
 
+// ── Site pins (AGL-4005, AGL-4165) ──────────────────────────────────────────
+
+private val pinnedHostsMax get() = Contracts.pinnedHostsMax.toInt()
+
+/** Pins that name a workspace and a site, without repeats of a site, in their stored order. */
+private fun pinnedHostList(pins: List<PinnedHost>): List<PinnedHost> {
+  val seen = mutableSetOf<String>()
+  return pins.filter { it.orgId.isNotEmpty() && it.hostId.isNotEmpty() && seen.add(it.hostId) }
+}
+
+/**
+ * Every site pin the person stored, in the order pinned, without repeats. Anything that is not an `{ orgId, hostId }`
+ * reads as no pin, so a stray value can never take the sites list down.
+ */
+fun readPinnedHosts(profile: Any?): List<PinnedHost> =
+  pinnedHostList(
+    ((field(profile, Contracts.pinnedHostsField) as? List<*>) ?: emptyList<Any?>()).mapNotNull { entry ->
+      val pin = entry as? Map<*, *> ?: return@mapNotNull null
+      val orgId = pin["orgId"] as? String ?: return@mapNotNull null
+      val hostId = pin["hostId"] as? String ?: return@mapNotNull null
+      PinnedHost(hostId = hostId, orgId = orgId)
+    },
+  )
+
+/** One workspace's pinned site ids, in the order pinned. */
+fun workspacePinnedHosts(stored: List<PinnedHost>, orgId: String): List<String> =
+  pinnedHostList(stored).filter { it.orgId == orgId }.map { it.hostId }.take(pinnedHostsMax)
+
+/**
+ * Pins a site at the end of its workspace's pins. A workspace takes as many as the person likes; only the account-wide
+ * bound makes room, and only from other workspaces. A workspace that already holds every pin the account keeps answers
+ * FULL, never a pin dropped quietly: the caller asks "Pinned is full. Replace one?".
+ */
+fun pinHost(stored: List<PinnedHost>, pin: PinnedHost): PinHostResult {
+  val current = pinnedHostList(stored)
+  if (pin.orgId.isEmpty() || pin.hostId.isEmpty() || pin.hostId in workspacePinnedHosts(current, pin.orgId)) {
+    return PinHostResult(PinOrgOutcome.ALREADY_PINNED, current)
+  }
+  // A site pinned under the workspace it has since moved out of moves with it.
+  val next = (current.filter { it.hostId != pin.hostId } + PinnedHost(hostId = pin.hostId, orgId = pin.orgId)).toMutableList()
+  while (next.size > pinnedHostsMax) {
+    val oldest = next.indexOfFirst { it.orgId != pin.orgId }
+    if (oldest == -1) return PinHostResult(PinOrgOutcome.FULL, current)
+    next.removeAt(oldest)
+  }
+  return PinHostResult(PinOrgOutcome.PINNED, next)
+}
+
+/** The stored pins without one site. */
+fun unpinHost(stored: List<PinnedHost>, hostId: String): List<PinnedHost> = pinnedHostList(stored).filter { it.hostId != hostId }
+
+/**
+ * The stored pins with [pin] in the place [replacing] held in the same workspace: the answer to "Pinned is full. Replace
+ * one?". Unchanged when [replacing] is not one of that workspace's pins or [pin] already is.
+ */
+fun replacePinnedHost(stored: List<PinnedHost>, replacing: String, pin: PinnedHost): List<PinnedHost> {
+  val current = pinnedHostList(stored)
+  val inWorkspace = workspacePinnedHosts(current, pin.orgId)
+  if (pin.hostId.isEmpty() || pin.hostId in inWorkspace || replacing !in inWorkspace) return current
+  return current.filter { it.hostId != pin.hostId }.map { if (it.hostId == replacing) PinnedHost(hostId = pin.hostId, orgId = pin.orgId) else it }
+}
+
+/** The pin as `users/{uid}.pinnedHosts` stores it. */
+fun PinnedHost.toPlain(): Map<String, Any?> = mapOf("orgId" to orgId, "hostId" to hostId)
+
 // ── Recent workspaces and the rail ──────────────────────────────────────────
 
 private val recentOrgsMax get() = Contracts.recentOrgsMax.toInt()

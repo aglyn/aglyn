@@ -73,6 +73,7 @@ export const DOCS_HELP_EXCERPTS = {
   businessProfile: 'Tell Aglyn AI what your business does, who it is for and how it sounds. Every AI job for the site reads it, uses your real contact details only, and remembers the edits you keep.',
   buyADomain: 'Search for a domain on your site\'s Custom Domain page or your workspace\'s Domains page, buy it, and your site goes live at it automatically — no DNS records, renewals handled for you.',
   catalog: 'Products with options and variants, categories, tags, and manual or smart collections.',
+  claude: 'Connect Claude or another AI assistant to your Aglyn workspace. Sign in, choose what it may do, and ask it to look things up or make changes for you.',
   comingSoonLaunch: 'Put a coming-soon page on your domain, keep the rest of the site out of search while you finish it, collect signups, and reverse all of it on launch day.',
   commerce: 'Sell physical, digital, and service products with a full catalog, orders pipeline, shipping, taxes, and your own Stripe account.',
   commerceEndToEnd: 'Create products with billing modes, design the storefront with Commerce blocks, take Stripe checkout for one-time and subscription sales, and run orders from the console.',
@@ -368,7 +369,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#what-you-can-do': 'Drag-and-drop components from the drawer onto the canvas, and reparent them by dragging in the hierarchy or on the canvas.',
   },
   billing: {
-    '#api-access': 'The customer REST API is included on Pro and Custom — mint scoped API keys and call the versioned /v1 endpoints from anywhere.',
+    '#api-access': 'The customer REST API is included on Starter, Pro and Custom — mint scoped API keys and call the versioned /v1 endpoints from anywhere.',
     '#billing-address': 'The address Aglyn issues your invoices to, and the address sales tax on your Aglyn subscription is calculated from.',
     '#billing-address-on-profile': 'Settings → Profile shows your billing address read-only, beside the workspace\'s other details; change it on Billing → Settings.',
     '#billing-email': 'Invoices are sent to the billing email, along with receipts and — the one that matters most — the notices we send when a card fails and a subscription is about to lapse.',

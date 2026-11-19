@@ -1057,6 +1057,17 @@ object ScreenValues {
     else -> null
   }
 
+  /** `fixed/N`: [value] to exactly [places] decimals, half away from zero, without grouping (`toFixed`). */
+  fun fixedText(value: Double, places: Int): String {
+    var scale = 1.0
+    repeat(places) { scale *= 10 }
+    val scaled = floor(abs(value) * scale + 0.5)
+    val whole = floor(scaled / scale).toLong()
+    val fraction = (scaled - whole * scale).toLong()
+    val digits = if (places > 0) "." + fraction.toString().padStart(places, '0') else ""
+    return (if (value < 0 && scaled > 0) "-" else "") + whole.toString() + digits
+  }
+
   /** Thousands grouped with commas, up to `fraction` decimals, half up. */
   fun grouped(value: Double, fraction: Int = 0): String {
     var scale = 1.0
@@ -1174,6 +1185,8 @@ object ScreenValues {
       "usd" -> number(value)?.let { if (it > 0 && it < 0.005) "<\$0.01" else formatOrderMoney(round(it * 100), "USD") } ?: text(value)
       "bytes" -> number(value)?.let { bytesText(it) } ?: text(value)
       // Bytes as megabytes to one decimal, plain so a meter can read it back (the storage band's figure).
+      // `fixed/N`: exactly N decimals, no grouping, as JavaScript's `toFixed` writes a figure (`$0.0123` an Assist cost).
+      "fixed" -> number(value)?.let { fixedText(it, parts.getOrNull(1)?.toIntOrNull()?.coerceAtLeast(0) ?: 2) } ?: text(value)
       "megabytes" -> number(value)?.let { numberText(Math.round(it / 1_048_576 * 10) / 10.0) } ?: text(value)
       "number" -> number(value)?.let { grouped(it, 2) } ?: text(value)
       "percent" -> number(value)?.let { "${grouped(it * 100, 1)}%" } ?: text(value)
@@ -1205,6 +1218,9 @@ object ScreenValues {
       "plural" -> if (value == null || value == JsonNull) "" else (if (value is JsonArray) (if (value.isNotEmpty() && value.all { number(it) != null }) value.sumOf { number(it) ?: 0.0 } else value.size.toDouble()) else number(value) ?: 0.0).let { count -> "${numberText(count)} ${parts.getOrElse(1) { "" }}${if (count == 1.0) "" else "s"}" }
       // `ordernumber/item.$id`: an order's number as `#1042`, else the last six characters of its id (`#A1B2C3`).
       "ordernumber" -> if (truthy(value)) "#${text(value)}" else parts.getOrNull(1)?.let { text(lookup(it, context)) }?.takeIf { it.isNotEmpty() }?.let { "#${it.takeLast(6).uppercase()}" } ?: "#\u2014"
+      // `dayseconds` (or `dayseconds/end`): a picked day, `2026-11-01`, as the Unix seconds of its local midnight (or of the
+      // next day's), the bounds the console's invoice filters ask Stripe for (`planInvoiceQuery`). No day, nothing.
+      "dayseconds" -> daySeconds(text(value), end = parts.getOrNull(1) == "end")?.toString() ?: ""
       // A UTC day as `2026-10-09`: the day a stay starts on, which a device's zone must not move.
       "isodate" -> epochMillis(value)?.let { at ->
         val (y, m, d) = localParts(at, "UTC")
@@ -1305,3 +1321,13 @@ internal expect fun localParts(millis: Long, zone: String?): List<Int>
 internal expect fun nowParts(): List<Int>
 
 internal expect fun nowMillis(): Long
+
+/** A `yyyy-MM-dd` day's local midnight in Unix seconds, `plusDays` later (1: an inclusive day's exclusive bound). */
+internal expect fun localDayStartSeconds(year: Int, month: Int, day: Int, plusDays: Int): Long?
+
+/** `dayseconds`: a picked day's local midnight (or with [end] the next day's) in Unix seconds; null for no day. */
+internal fun daySeconds(day: String, end: Boolean): Long? {
+  val pieces = day.take(10).split("-").mapNotNull { it.toIntOrNull() }
+  if (pieces.size != 3) return null
+  return localDayStartSeconds(pieces[0], pieces[1], pieces[2], if (end) 1 else 0)
+}

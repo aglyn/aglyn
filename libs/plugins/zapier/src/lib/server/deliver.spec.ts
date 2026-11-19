@@ -164,6 +164,15 @@ describe('deliverToZapierHooks (AGL-3643)', () => {
     expect(lapsed.hooks.has('a')).toBe(true)
   })
 
+  it('pauses, and keeps, the hooks of a plan with the API and without webhooks (AGL-4226)', async () => {
+    const noWebhooks = setup([hook('a')], {
+      org: { plan: 'business', hosts: { h1: true }, entitlements: { features: { webhooks: false } } },
+    })
+    expect(await deliverToZapierHooks(noWebhooks.deps, input())).toEqual({ delivered: 0, failed: 0, paused: 1, removed: 0 })
+    expect(noWebhooks.posts).toEqual([])
+    expect(noWebhooks.hooks.has('a')).toBe(true)
+  })
+
   it('asks the key and the org once per event, however many hooks share them', async () => {
     const { deps } = setup([hook('a'), hook('b'), hook('c')])
     const readGrant = jest.spyOn(deps, 'readGrant')

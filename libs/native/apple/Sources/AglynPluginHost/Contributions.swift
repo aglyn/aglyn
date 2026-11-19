@@ -71,6 +71,9 @@ public struct NativePluginContext {
   /// The workspace's sites the person can open, for a workspace-wide screen: its site column, and the site a new
   /// record goes to. Empty where the shell gives none.
   public var sites: [NativeSiteRef] = []
+  /// The signed-in person's own preferences on their account (`users/{uid}`): the site pins a sites list shows and
+  /// changes. Nil where the shell gives none (a preview, a test).
+  public var preferences: AccountPreferencesStore?
   /// The console's URL slugs for the same pick (`/{orgSlug}/hosts/{hostSlug}`).
   public let orgSlug: String?
   public private(set) var hostSlug: String?

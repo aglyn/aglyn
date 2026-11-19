@@ -698,6 +698,17 @@ export const EXPECTED_POSTURE = Object.freeze([
               // rewrite target is named beside it for a direct call.
               '/.well-known/api-catalog',
               '/api/api-catalog',
+              // The origin's tab icon (AGL-4225). Favicon services (Google's
+              // among them) and connector directories fetch it from a
+              // non-browser stack; challenged, they kept a stale copy forever.
+              // `/favicon.ico` answers a 302 to the site's own icon on the
+              // media CDN (already admitted above) or, for a site with none,
+              // to the static fallback, so the fallback is named beside it.
+              // Both are public and edge-cached. Measured as a stranger:
+              // 429 before, 200 after; `/favicon.icox`, `/` and the other
+              // `/_static` files still 429.
+              '/favicon.ico',
+              '/_static/favicon.ico',
             ]),
           }),
         ]),
@@ -1179,6 +1190,11 @@ export const EXPECTED_POSTURE = Object.freeze([
         // `applinks:app.aglyn.com`. A PREFIX ending in a slash admits only the
         // `/.well-known/` namespace; the middleware answers each file there or
         // a 404, and nothing under it is authenticated.
+        //
+        // The same prefix is what lets OpenAI's plugin directory read its
+        // domain proof, `/.well-known/openai-apps-challenge` (AGL-4225): that
+        // fetcher cannot solve a challenge either, and the file needs no rule
+        // of its own while this one stands.
         conditions: Object.freeze([
           Object.freeze({ type: 'path', op: 'pre', value: '/.well-known/' }),
         ]),
@@ -1206,6 +1222,20 @@ export const EXPECTED_POSTURE = Object.freeze([
             op: 're',
             value: '^/api/(mcp(/server-card)?|oauth/(register|token|revoke))$',
           }),
+        ]),
+      }),
+      Object.freeze({
+        name: 'Console favicon bypass',
+        why: "directories and favicon services fetch the console's tab icon from a non-browser HTTP stack and cannot solve a challenge, so a connector listing drew a placeholder where the icon belongs",
+        // Live since 2026-11-18 (AGL-4225). Measured first as a stranger:
+        // `/favicon.ico` was 429. After: 200 `image/vnd.microsoft.icon`, and
+        // `/favicon.icox`, `/` and `/_static/images/brand/icon-256x256.png`
+        // still 429.
+        //
+        // ONE exact path, anchored at both ends: a public static file that
+        // carries no data and that the middleware matcher already skips.
+        conditions: Object.freeze([
+          Object.freeze({ type: 'path', op: 're', value: '^/favicon\\.ico$' }),
         ]),
       }),
       Object.freeze({
