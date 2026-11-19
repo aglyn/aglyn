@@ -33,4 +33,24 @@ final class FormDraft {
     values.merge(proposed) { _, new in new }
     version += 1
   }
+
+  /// Hands over, once, the proposed values a form owns: they leave the draft, so a form opened later never stages them
+  /// again over what was saved.
+  func take(_ paths: [String]) -> [String: String] {
+    var taken: [String: String] = [:]
+    for path in paths { if let value = values.removeValue(forKey: path) { taken[path] = value } }
+    return taken
+  }
+
+  /// The site's one draft (AGL-4136). The SEO zone proposes into it, and a value for a field another section's card owns
+  /// (the name, email and phone on Setup → Business profile's Business details) waits here until that card takes it, as the
+  /// console stages a proposal in the draft of the card that owns its field.
+  static func forSite(_ hostID: String) -> FormDraft {
+    if let draft = sites[hostID] { return draft }
+    let draft = FormDraft()
+    sites[hostID] = draft
+    return draft
+  }
+
+  private static var sites: [String: FormDraft] = [:]
 }

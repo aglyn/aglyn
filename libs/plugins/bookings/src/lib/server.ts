@@ -934,7 +934,7 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
       const branding = resolveBrandingProfile(
         (await getOrgForHost(hostId).catch(() => null))?.org as never,
       )
-      await sendEmail({
+      const confirmation = await sendEmail({
         to: email,
         subject: designed?.subject ?? `Booking confirmed: ${service.name}`,
         text: designed?.text || fallbackText,
@@ -947,10 +947,10 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         // screen's soft rules never hold it (AGL-3356).
         owedFor: 'booking',
       })
-      // Cost meter (AGL-1438). Transactional: counted, never capped — a
-      // confirmation the customer never receives reads to them as a booking
-      // that did not happen.
-      await meterHostEmail(hostId)
+      // Cost meter (AGL-1438), for a message that LEFT (AGL-4227): one the
+      // workspace's email limit or the provider refused is not a cost, and
+      // counting it would show the owner mail their customer never got.
+      if (confirmation?.sent) await meterHostEmail(hostId)
     }
 
     // THE RECORD'S MEETING (AGL-2660). A free booking is confirmed right
