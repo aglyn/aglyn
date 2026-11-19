@@ -107,6 +107,9 @@ describeOrSkip('connector credentials under concurrency (emulator)', () => {
     const results = await Promise.all([attempt(), attempt()])
     const winners = results.filter((result) => result.ok)
     expect(winners).toHaveLength(1)
+    expect(results.filter((result) => !result.ok)).toEqual([
+      expect.objectContaining({ ok: false, error: 'invalid_grant' }),
+    ])
     // A concurrent retry is the lost-answer case the grace window exists for:
     // refused, and the winner's credentials keep working.
     expect(await verifyConnectorAccessToken(winners[0].tokens.access_token, { liveness: live })).not.toBeNull()
