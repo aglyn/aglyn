@@ -238,7 +238,9 @@ private struct ListingCard: View {
         HStack {
           StatusChip(priceLabel(row.priceUSD), tone: row.paid ? .info : .success)
           Spacer()
-          Text(row.paid ? "Buy" : "Get").font(AglynFont.button).foregroundStyle(AglynColor.tint)
+          if let action = listingCardAction(paid: row.paid) {
+            Text(action).font(AglynFont.button).foregroundStyle(AglynColor.tint)
+          }
         }
       }
       .frame(width: 180, alignment: .leading)

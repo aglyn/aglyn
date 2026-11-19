@@ -100,6 +100,11 @@ final class MarketplaceTests: XCTestCase {
     // A store build (the owner's decision of 2026-11-19) names no price.
     XCTAssertEqual(priceLabel(row.priceUSD, buying: false), "Paid")
     XCTAssertEqual(priceLabel(0, buying: false), "Free")
+    // The card's foot word: Buy only where a payment may be taken; a free listing says Get in every build.
+    XCTAssertEqual(listingCardAction(paid: row.paid, buying: true), "Buy")
+    XCTAssertNil(listingCardAction(paid: row.paid, buying: false))
+    XCTAssertEqual(listingCardAction(paid: false, buying: false), "Get")
+    XCTAssertEqual(listingCardAction(paid: false, buying: true), "Get")
     XCTAssertEqual(ratingLabel(row), "4.5 ★ (2)")
     XCTAssertEqual(installTargets("plugin"), [.org, .host])
     XCTAssertEqual(installTargets("template"), [.host])
@@ -149,6 +154,36 @@ final class MarketplaceTests: XCTestCase {
     XCTAssertEqual(specs.first { $0.id == "marketplace.publishStarter" }?.zones, ["siteTemplate"])
     let declared = SpecScreens.declaration(specs).screens
     XCTAssertEqual(declared.sorted(), ids)
+  }
+
+  /// The publish screens' "See plans" (the starter's plan step, the higher take rate) open Choose a plan, so a store build
+  /// (the owner's decision of 2026-11-19) draws neither link and keeps the sentence above it. Kotlin: MarketplaceTest.
+  @MainActor
+  func testSeePlansOnThePublishScreensNeedsABuildThatMayBuy() throws {
+    let specs = ScreenCatalog.load(from: .module)
+    func context(buying: Bool) -> JSONValue {
+      .object([
+        "app": .object(["billing": .bool(buying), "billingLink": .bool(false)]),
+        "data": .object([
+          "facts": .object(["steps": .object(["plan": .string("Publishing to the marketplace is included from Starter.")])]),
+          "fee": .object(["pct": .number(15), "paid": .number(5)]),
+        ]),
+      ])
+    }
+    var found: [String] = []
+    for id in ["marketplace.publishStarter", "marketplace.publish"] {
+      let spec = try XCTUnwrap(specs.first { $0.id == id }, id)
+      for block in spec.blocks where block.type == "links" {
+        guard block["items"]?.arrayValue?.contains(where: { $0["screen"]?.stringValue == "core.billing.plans" }) == true else { continue }
+        found.append(id)
+        XCTAssertTrue(ScreenValues.condition(block.when, in: context(buying: true)), id)
+        XCTAssertFalse(ScreenValues.condition(block.when, in: context(buying: false)), id)
+      }
+      // The sentence the link sat under stays in both builds.
+      let notice = try XCTUnwrap(spec.blocks.first { $0.type == "notice" && ($0.id == "step-plan" || $0.id == "fee-higher") }, id)
+      XCTAssertTrue(ScreenValues.condition(notice.when, in: context(buying: false)), id)
+    }
+    XCTAssertEqual(found, ["marketplace.publishStarter", "marketplace.publish"])
   }
 
   // MARK: What a plugin's page says about its installs (marketplace-catalog.ts, replayed)
