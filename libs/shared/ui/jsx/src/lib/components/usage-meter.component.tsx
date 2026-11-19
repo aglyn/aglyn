@@ -17,6 +17,7 @@
 'use client'
 
 import { LinearProgress, Link, Stack, Typography } from '@mui/material'
+import { useBuyingHidden } from '../contexts/buying-hidden.context'
 import { HelpTip, type HelpTipContent } from './help-tip.component'
 
 export interface UsageMeterProps {
@@ -78,6 +79,9 @@ export function UsageMeter(props: UsageMeterProps) {
   const pct =
     unlimited || unmetered || limit <= 0 ? 0 : Math.min(100, (used / limit) * 100)
   const warning = !unlimited && !unmetered && pct >= USAGE_METER_WARNING_PCT
+  // Where buying is hidden (an app build for store review) the bar still
+  // turns amber; only the Upgrade link goes.
+  const buyingHidden = useBuyingHidden()
   return (
     <Stack spacing={0.5} sx={{ mb: 2 }}>
       <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
@@ -95,7 +99,7 @@ export function UsageMeter(props: UsageMeterProps) {
           {unmetered
             ? `not yet metered · limit ${formatLimit(limit, unit, unlimited)}`
             : `${used} / ${formatLimit(limit, unit, unlimited)}`}
-          {warning ? (
+          {warning && !buyingHidden ? (
             <>
               {' · '}
               <Link href={upgradeHref} color="primary" underline="hover">

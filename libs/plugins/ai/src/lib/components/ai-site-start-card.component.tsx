@@ -24,6 +24,7 @@ import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import { mdiCreation, mdiPageLayoutHeaderFooter, mdiWebSync } from '@aglyn/shared-data-mdi'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { HelpTip, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { useBuyingHidden } from '@aglyn/shared-ui-jsx/contexts/buying-hidden.context'
 import BlockedControl from '@aglyn/shared-ui-jsx/components/blocked-control.component'
 import { OptionCardGrid } from '@aglyn/shared-ui-jsx/components/option-card-grid.component'
 import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
@@ -400,6 +401,8 @@ export function AiSiteStartCard({
   initialAnswers = null,
 }: AiSiteStartCardProps) {
   const { data: user } = useUser()
+  // An app build for store review leaves out every way to buy more.
+  const buyingHidden = useBuyingHidden()
   const router = useRouter()
   // Held in a ref so a request reads WHO is signed in, never the identity of
   // the object that says so.
@@ -1064,7 +1067,7 @@ export function AiSiteStartCard({
                 severity="warning"
                 data-start-area="notice"
                 action={
-                  orgSlug ? (
+                  orgSlug && !buyingHidden ? (
                     <Button color="inherit" size="small" href={aiCreditsBillingHref(orgSlug)}>
                       {'Upgrade'}
                     </Button>
@@ -1167,7 +1170,7 @@ export function AiSiteStartCard({
                 </Box>
                 {importAvailability.state === 'blocked' ? (
                   <PrerequisiteNotice
-                    {...(importAvailability.reason === 'plan' && orgSlug
+                    {...(importAvailability.reason === 'plan' && orgSlug && !buyingHidden
                       ? { href: aiCreditsBillingHref(orgSlug), actionLabel: 'Upgrade' }
                       : {})}
                   >
@@ -1206,7 +1209,7 @@ export function AiSiteStartCard({
                     starterStyle={pickedStarterStyle}
                     inspiration={
                       siteInspiration
-                        ? { limit: aiSiteInspirationLimit(freeTaste), upgradeHref: orgSlug ? aiCreditsBillingHref(orgSlug) : null }
+                        ? { limit: aiSiteInspirationLimit(freeTaste), upgradeHref: orgSlug && !buyingHidden ? aiCreditsBillingHref(orgSlug) : null }
                         : null
                     }
                   />

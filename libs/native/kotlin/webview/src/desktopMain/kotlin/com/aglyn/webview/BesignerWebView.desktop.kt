@@ -188,7 +188,9 @@ private fun WebView2Besigner(
             super.addNotify()
             val hwnd = Native.getComponentPointer(this)
             val made = WebView2View(hwnd, listener, bridgeScript) { base ->
-              BesignerEntry.userAgent(base, System.getProperty("jpackage.app-version"), "windows")
+              BesignerEntry.userAgent(
+                base, System.getProperty("jpackage.app-version"), "windows", com.aglyn.core.StoreBilling.buying,
+              )
             }
             view = made
             val scale = graphicsConfiguration?.defaultTransform?.scaleX ?: 1.0

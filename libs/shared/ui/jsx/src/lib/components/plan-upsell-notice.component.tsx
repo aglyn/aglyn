@@ -18,6 +18,7 @@
 
 import type { AlertProps } from '@mui/material'
 import type { ReactNode } from 'react'
+import { useBuyingHidden } from '../contexts/buying-hidden.context'
 import { PrerequisiteNotice } from './prerequisite-notice.component'
 
 export interface PlanUpsellNoticeProps {
@@ -49,8 +50,11 @@ export interface PlanUpsellNoticeProps {
  */
 export function PlanUpsellNotice(props: PlanUpsellNoticeProps) {
   const { children, planLabel, upgradeHref, sx } = props
+  // Where buying is hidden (an app build for store review), the sentence
+  // stays and the Upgrade button goes.
+  const buyingHidden = useBuyingHidden()
   return (
-    <PrerequisiteNotice href={upgradeHref} actionLabel="Upgrade" sx={sx}>
+    <PrerequisiteNotice href={buyingHidden ? undefined : upgradeHref} actionLabel="Upgrade" sx={sx}>
       {children}
       {planLabel ? ` Included from ${planLabel}.` : null}
     </PrerequisiteNotice>

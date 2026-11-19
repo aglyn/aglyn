@@ -115,17 +115,26 @@ object BesignerEntry {
    */
   const val USER_AGENT_PRODUCT = "AglynApp"
 
-  /** `AglynApp/<version> (<platform>)`. */
-  fun userAgentMarker(version: String?, platform: String): String {
+  /**
+   * The token a build that cannot buy adds inside the marker's comment: `AglynApp/1.4.0 (android; no-buying)`. The
+   * console reads it (`userAgentHidesBuying`) and leaves every control that leads to buying out of the page, as
+   * `StoreBilling` leaves them out of the app's own screens. Set from `StoreBilling.buying`, which the build decides.
+   * The Swift kit's `BesignerEntry.userAgentNoBuyingToken` is the same token.
+   */
+  const val USER_AGENT_NO_BUYING_TOKEN = "no-buying"
+
+  /** `AglynApp/<version> (<platform>)`, or `AglynApp/<version> (<platform>; no-buying)` when [buying] is false. */
+  fun userAgentMarker(version: String?, platform: String, buying: Boolean = true): String {
     val shown = version.orEmpty().filterNot { it.isWhitespace() }.ifEmpty { "0" }
-    return "$USER_AGENT_PRODUCT/$shown ($platform)"
+    val comment = if (buying) platform else "$platform; $USER_AGENT_NO_BUYING_TOKEN"
+    return "$USER_AGENT_PRODUCT/$shown ($comment)"
   }
 
   /** The web view's whole user agent: the engine's own [base] kept, the marker after it. */
-  fun userAgent(base: String?, version: String?, platform: String): String {
+  fun userAgent(base: String?, version: String?, platform: String, buying: Boolean = true): String {
     val kept = base.orEmpty().trim()
     if ("$USER_AGENT_PRODUCT/" in kept) return kept
-    val marker = userAgentMarker(version, platform)
+    val marker = userAgentMarker(version, platform, buying)
     return if (kept.isEmpty()) marker else "$kept $marker"
   }
 
