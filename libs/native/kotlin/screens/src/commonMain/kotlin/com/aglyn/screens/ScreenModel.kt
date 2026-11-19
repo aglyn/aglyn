@@ -54,6 +54,8 @@ data class AccountOperations(
   val unlinkProvider: suspend (providerId: String) -> Unit = {
     throw IllegalStateException("Disconnecting a sign-in method is not available here.")
   },
+  /** Signs the account in use out: after Close account, whose account no longer exists (the console goes to `/signout`). */
+  val signOut: suspend () -> Unit = {},
 )
 
 /**
@@ -71,6 +73,10 @@ data class ScreenSession(
   val origin: String = "",
   /** Signs in again with the password, so the next token carries a fresh `auth_time`. */
   val reauthenticate: suspend (password: String) -> Unit = {},
+  /** The ways the account in use can confirm it is them again ([Reconfirm.methods]), read when the step is asked for. */
+  val reconfirmMethods: suspend () -> List<ReconfirmMethod> = { listOf(ReconfirmMethod.PASSWORD) },
+  /** Confirms it with a way other than the password: Google's sheet, single sign-on's console page, a passkey. */
+  val reconfirmWith: suspend (method: ReconfirmMethod) -> Unit = {},
   /** Re-reads the token's claims (after a reauth). */
   val refreshClaims: suspend () -> Unit = {},
   /** Opens a page someone else hosts (Stripe) in the platform's secure in-app browser. */
@@ -154,6 +160,10 @@ data class ScreenSession(
         put("passkeyRp", passkeyRelyingParty)
         // The platform's name, for words the console prints with it ("Aglyn staff · support").
         put("brand", com.aglyn.core.AglynConfig.DEFAULT_BRAND_NAME)
+        // Whether this build may take or start a payment to Aglyn (off in a store build, the owner's decision of 2026-11-19),
+        // and where it may not, whether it may link to web billing: `app.billing`, `app.billingLink`.
+        put("billing", com.aglyn.core.StoreBilling.buying)
+        put("billingLink", com.aglyn.core.StoreBilling.webBillingLink)
         put("permissionRefusal", buildJsonObject { com.aglyn.contracts.Contracts.orgRoleGrants.permissions.forEach { put(it.key, com.aglyn.contracts.permissionRefusalText(it.key)) } })
         put("permissionCatalog", rows(false))
         put("narrowablePermissions", rows(true))

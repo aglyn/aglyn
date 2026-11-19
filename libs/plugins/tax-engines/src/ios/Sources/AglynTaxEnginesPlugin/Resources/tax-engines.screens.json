@@ -10,7 +10,7 @@
       "scope": "site",
       "order": 30,
       "zones": [
-        "commerceSettings"
+        "commerceSettingsTaxes"
       ],
       "showWhen": "data.conn.available",
       "load": {
@@ -407,6 +407,149 @@
               },
               "success": "Added {form.email}",
               "when": "site.can[taxEngines.exemptions]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tax-engines.order",
+      "title": "Tax service",
+      "label": "Tax service",
+      "icon": "percent|percent",
+      "scope": "site",
+      "zones": [
+        "orderDetail"
+      ],
+      "order": 45,
+      "showWhen": "data.tx.transaction",
+      "constants": {
+        "statuses": [
+          {
+            "id": "committed",
+            "label": "Recorded",
+            "tone": "success"
+          },
+          {
+            "id": "pending",
+            "label": "Recording",
+            "tone": "warning"
+          },
+          {
+            "id": "failed",
+            "label": "Not recorded",
+            "tone": "error"
+          },
+          {
+            "id": "voided",
+            "label": "Voided",
+            "tone": "neutral"
+          }
+        ]
+      },
+      "load": {
+        "tx": {
+          "url": "/api/tax-engines/order-transaction?hostId={site.id}&orderId={params.orderId}",
+          "optional": true
+        },
+        "order": {
+          "doc": "hosts/{site.id}/orders/{params.orderId}",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "none",
+          "tone": "info",
+          "when": "!data.tx.transaction",
+          "text": "This order was not sent to a tax service."
+        },
+        {
+          "type": "fields",
+          "id": "record",
+          "when": "data.tx.transaction",
+          "title": "{data.tx.transaction.providerLabel}",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "{const.statuses[id=data.tx.transaction.status].label}",
+              "chip": true,
+              "tones": {
+                "Recorded": "success",
+                "Recording": "warning",
+                "Not recorded": "error",
+                "*": "neutral"
+              }
+            },
+            {
+              "label": "Tax",
+              "value": "{data.tx.transaction.taxCents:cents/data.order.currency} recorded under {data.tx.transaction.code}",
+              "when": "data.tx.transaction.refunds == 0 || !data.tx.transaction.refunds"
+            },
+            {
+              "label": "Tax",
+              "value": "{data.tx.transaction.taxCents:cents/data.order.currency} recorded under {data.tx.transaction.code}; {data.tx.transaction.refunds} refund of {data.tx.transaction.refundedCents:cents/data.order.currency} reversed",
+              "when": "data.tx.transaction.refunds == 1"
+            },
+            {
+              "label": "Tax",
+              "value": "{data.tx.transaction.taxCents:cents/data.order.currency} recorded under {data.tx.transaction.code}; {data.tx.transaction.refunds} refunds of {data.tx.transaction.refundedCents:cents/data.order.currency} reversed",
+              "when": "data.tx.transaction.refunds > 1"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "fallbackTimeout",
+          "tone": "warning",
+          "when": "data.tx.transaction.fallbackReason == timeout",
+          "text": "{data.tx.transaction.providerLabel} did not answer in time at checkout, so it was taxed at the store’s own rates. The tax recorded is what the buyer paid."
+        },
+        {
+          "type": "notice",
+          "id": "fallbackError",
+          "tone": "warning",
+          "when": "data.tx.transaction.fallbackReason && data.tx.transaction.fallbackReason != timeout",
+          "text": "{data.tx.transaction.providerLabel} could not price this sale at checkout, so it was taxed at the store’s own rates. The tax recorded is what the buyer paid."
+        },
+        {
+          "type": "notice",
+          "id": "errorFailed",
+          "tone": "error",
+          "when": "data.tx.transaction.lastError && data.tx.transaction.status == failed",
+          "text": "{data.tx.transaction.lastError}"
+        },
+        {
+          "type": "notice",
+          "id": "errorOther",
+          "tone": "warning",
+          "when": "data.tx.transaction.lastError && data.tx.transaction.status != failed",
+          "text": "{data.tx.transaction.lastError}"
+        },
+        {
+          "type": "notice",
+          "id": "refusal",
+          "tone": "info",
+          "when": "data.tx.transaction.status == failed,pending && !site.can[taxEngines.orders]",
+          "text": "{app.permissionRefusal[taxEngines.orders]}"
+        },
+        {
+          "type": "actions",
+          "id": "retry",
+          "when": "data.tx.transaction.status == failed,pending && site.can[taxEngines.orders]",
+          "items": [
+            {
+              "id": "recordAgain",
+              "label": "Record it again",
+              "icon": "arrow.clockwise|sync",
+              "url": "/api/tax-engines/order-transaction/retry",
+              "body": {
+                "hostId": "{site.id}",
+                "orderId": "{params.orderId}"
+              },
+              "reload": true,
+              "when": "site.can[taxEngines.orders]"
             }
           ]
         }

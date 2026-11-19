@@ -313,8 +313,7 @@ struct SpecScreenBody: View {
         }
       }
       .sheet(item: $reauthing) { pending in
-        ReauthSheet(email: session.email, message: pending.reauthMessage) { password in
-          try await session.reauthenticate(password)
+        ReauthSheet(session: session, message: pending.reauthMessage, api: plugin.api) {
           reauthing = nil
           await session.refreshClaims()
           await execute(pending.action, scope: pending.scope)
@@ -630,6 +629,23 @@ struct SpecScreenBody: View {
           if let footer, !footer.isEmpty { Text(footer) }
         }
       }
+    case "qr":
+      // `{ "type": "qr", "value": "{…}", "caption": "…" }`: a QR code of a link the screen shows (a waiver's share link), drawn by
+      // the kit's own encoder, never fetched.
+      let value = ScreenValues.render(block["value"]?.stringValue ?? "", in: context)
+      if !value.isEmpty {
+        Section {
+          AglynQRCode(value, size: 192)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, AglynSpace.two)
+            .accessibilityLabel(block["caption"]?.stringValue.map { ScreenValues.render($0, in: context) } ?? "QR code")
+            .accessibilityIdentifier("qr-\(block.id)")
+        } header: {
+          if let title { Text(title) }
+        } footer: {
+          if let footer, !footer.isEmpty { Text(footer) }
+        }
+      }
     case "html":
       // `{ "type": "html", "source": "{data.message.html}", "empty": "…" }`: a message's HTML, drawn as styled text.
       // Scripts, styles, frames, forms and images never reach the importer, and a link opens in the system handler.
@@ -641,6 +657,22 @@ struct SpecScreenBody: View {
           Text(EmailHTML.attributed(source))
             .font(AglynFont.body)
             .textSelection(.enabled)
+        }
+      }
+    case "text":
+      // `{ "type": "text", "source": "{…}" }`: words a person reads through, as written (a waiver's own text): line breaks
+      // kept, **strong**, *emphasis* and links drawn, inline only (the Kotlin kit's `InlineMarkdown`); nothing shows while
+      // the source is empty.
+      let source = ScreenValues.render(block["source"]?.stringValue ?? "", in: context)
+      if !source.isEmpty {
+        section(title, footer) {
+          Text(
+            (try? AttributedString(markdown: source, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+              ?? AttributedString(source)
+          )
+          .font(AglynFont.body)
+          .textSelection(.enabled)
+          .accessibilityIdentifier("text-\(block.id)")
         }
       }
     case "notice":
@@ -762,6 +794,11 @@ struct SpecScreenBody: View {
       #if os(iOS)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
       #endif
+      // Close account succeeded: the account is gone, so the app signs out at once, as the console does.
+      if Reconfirm.signsOut(url: action.url) {
+        await session.account.signOut()
+        return
+      }
       let after = ScreenContext.with(scope, "response", response ?? .null)
       if let instead = action.insteadEntry(in: after) {
         revealed = (
@@ -864,9 +901,11 @@ struct SearchModifier: ViewModifier {
 
   func body(content: Content) -> some View {
     if enabled {
+      // The kit's search takes the submit itself: on the Mac, the iPad and in a phone area's title row it is
+      // `AglynListToolbar`'s text field, whose Return an outer `.onSubmit(of: .search)` never hears, so the route was
+      // never asked; the system search bar elsewhere hands it on the same way.
       content
-        .aglynSearchable(text: $text, prompt: "Search")
-        .onSubmit(of: .search, submit)
+        .aglynSearchable(text: $text, prompt: "Search", onSubmit: submit)
         .onChange(of: text) { _, now in if now.isEmpty { submit() } }
     } else {
       content

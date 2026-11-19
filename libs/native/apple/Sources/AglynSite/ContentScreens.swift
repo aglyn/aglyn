@@ -297,7 +297,8 @@ private struct EntryEditor: View {
         AglynEmptyState("This entry is gone", systemImage: "doc.richtext")
       case .ready(let doc?):
         EntryForm(
-          env: env, collection: collection, entry: ContentEntry(doc), fromCache: doc.fromCache,
+          env: env, collection: collection, entry: ContentEntry(doc), rawJSON: firestoreRawJSON(id: doc.id, data: doc.data),
+          fromCache: doc.fromCache,
           authors: (authors.state.value ?? []).map(ContentAuthor.init).sorted { $0.name.lowercased() < $1.name.lowercased() },
           model: model, openURL: { openURL($0) })
       }
@@ -315,6 +316,8 @@ private struct EntryForm: View {
   let env: ContentEnv
   let collection: ContentCollection
   let entry: ContentEntry
+  /// Every field the entry holds, exactly as saved (the console's Raw JSON card).
+  let rawJSON: String
   /// The entry is only the device cache's copy yet: Save is held until the server's is in (AGL-4047).
   let fromCache: Bool
   let authors: [ContentAuthor]
@@ -322,14 +325,16 @@ private struct EntryForm: View {
   let openURL: (URL) -> Void
   @State private var draft: EntryDraft
   @State private var saver = ActionRunner()
+  @State private var rawOpen = false
 
   init(
-    env: ContentEnv, collection: ContentCollection, entry: ContentEntry, fromCache: Bool, authors: [ContentAuthor],
+    env: ContentEnv, collection: ContentCollection, entry: ContentEntry, rawJSON: String, fromCache: Bool, authors: [ContentAuthor],
     model: EntryListModel, openURL: @escaping (URL) -> Void
   ) {
     self.env = env
     self.collection = collection
     self.entry = entry
+    self.rawJSON = rawJSON
     self.fromCache = fromCache
     self.authors = authors
     self.model = model
@@ -352,6 +357,7 @@ private struct EntryForm: View {
         AglynDetailRow("Updated", value: entry.updatedAt.map { relativeTime($0) })
         AglynDetailRow("Entry id", value: entry.id)
       }
+      RawJSONSection(json: rawJSON, open: $rawOpen)
     }
     .formStyle(.aglynGrouped)
     .environment(\.aglynFormChecking, fromCache ? formHold("entry") : nil)
@@ -409,7 +415,9 @@ private struct EntryForm: View {
         }
         .disabled(!env.canPublish || env.runner.busy)
         .accessibilityIdentifier("entry-unpublish")
-        if let url = livePageURL(env.routing, livePath: "/\(collection.slug)/\(entry.slug)").flatMap(URL.init(string:)) {
+        if let url = livePageURL(
+          env.routing, livePath: "/\(collection.slug)/\(entry.slug)", consoleOrigin: env.context.api.origin
+        ).flatMap(URL.init(string:)) {
           Button {
             openURL(url)
           } label: {
@@ -432,6 +440,25 @@ private struct EntryForm: View {
       .buttonStyle(.aglynProminent)
       .disabled(!env.canPublish || env.runner.busy || stored != draft)
       .accessibilityIdentifier("entry-publish")
+      // The other half of View on site (AGL-3205): an entry the site does not serve yet, as the site will render it,
+      // behind a signed two-hour link. Only for a saved entry with an address.
+      if !entry.slug.isEmpty && !collection.slug.isEmpty {
+        Button {
+          let (collectionSlug, entrySlug) = (collection.slug, entry.slug)
+          env.runner.run("Preview opened — link copied, and it works for 2 hours") {
+            guard let url = try await env.api.previewLink(collectionSlug: collectionSlug, entrySlug: entrySlug) else {
+              throw ConsoleAPIError(status: 0, message: "Could not create a preview link")
+            }
+            AglynPasteboard.copy(url.absoluteString)
+            openURL(url)
+          }
+        } label: {
+          Label("Preview on site", systemImage: "eye")
+        }
+        .buttonStyle(.aglynSecondary)
+        .disabled(env.runner.busy)
+        .accessibilityIdentifier("entry-preview-on-site")
+      }
     }
   }
 

@@ -193,6 +193,8 @@ public struct MediaItem: Identifiable, Equatable, Sendable {
   public let folderID: String?
   public let alt: String
   public let description: String
+  /// The file's own key/value pairs (`customMetadata`), as the library's drawer edits them.
+  public let customMetadata: [String: String]
   public let tags: [String]
   public let isPrivate: Bool
   public let createdAt: Date?
@@ -213,6 +215,10 @@ public struct MediaItem: Identifiable, Equatable, Sendable {
   public let videoSeconds: Int?
   /// Whether the film's document records a captured poster frame (only then is its poster URL a picture, not a 404).
   public let hasPoster: Bool
+  /// The stored bytes' digest, which a write into the file names so it cannot overwrite a replace it never saw.
+  public let contentSha256: String?
+  /// What the file carries inside itself (`embeddedMetadata`, AGL-3331), as the server last read it; nil until read.
+  public let embedded: MediaEmbeddedRecord?
 
   /// Nil for a deleted file.
   public init?(_ doc: FirestoreDocument) {
@@ -231,6 +237,7 @@ public struct MediaItem: Identifiable, Equatable, Sendable {
     folderID = blank(doc.string("folderId"))
     alt = doc.string("alt") ?? ""
     description = doc.string("description") ?? ""
+    customMetadata = (doc.data["customMetadata"] as? [String: Any] ?? [:]).compactMapValues { $0 is NSNull ? nil : "\($0)" }
     tags = (doc.data["tags"] as? [Any])?.compactMap { $0 as? String } ?? []
     isPrivate = doc.bool("private") == true
     createdAt = doc.date("createdAt")
@@ -241,6 +248,8 @@ public struct MediaItem: Identifiable, Equatable, Sendable {
     scopeExcept = (doc.data["scopeExcept"] as? [Any])?.compactMap { $0 as? String }
     videoSeconds = libraryVideoSeconds(doc.data["video"])
     hasPoster = doc.data["poster"] is [String: Any]
+    contentSha256 = blank(doc.string("contentSha256"))
+    embedded = MediaEmbeddedRecord(doc.data["embeddedMetadata"])
   }
 
   private static func trimmedOrigin(_ origin: String) -> String {
@@ -761,6 +770,11 @@ public struct MediaAPI: Sendable {
       ])
   }
 
+  /// Replaces a file's custom metadata (`custom-metadata`): the route trims keys, drops reserved ones and caps the pairs.
+  public func setCustomMetadata(_ id: String, _ metadata: [String: String]) async throws {
+    try await post("/api/media/folders", ["action": "custom-metadata", "mediaId": id, "customMetadata": metadata])
+  }
+
   /// Sets one file's tags and nothing else (the route keeps its name, alt text and description).
   public func setTags(_ id: String, tags: [String]) async throws {
     try await post("/api/media/folders", ["action": "update-details", "mediaId": id, "tags": tags])
@@ -887,3 +901,10 @@ public func parseMediaQuarantine(_ answer: JSONValue?) -> [String: MediaQuaranti
   }
   return notices
 }
+
+/// The release flag video uploads are behind (`VIDEO_UPLOADS_RELEASE_FLAG`, AGL-2830).
+public let videoUploadsReleaseFlag = "release_video_uploads"
+
+/// What the library says while video uploads are paused (`VIDEO_UPLOADS_PAUSED_MESSAGE`).
+public let videoUploadsPausedMessage =
+  "Video uploads are paused. Videos already in your media library keep playing, and images and documents upload as usual."

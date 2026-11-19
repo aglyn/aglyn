@@ -22,6 +22,8 @@ public struct AccountOperations: Sendable {
   public var linkGoogle: @Sendable (_ authenticate: @escaping @Sendable (URL, String) async throws -> URL) async throws -> Void
   /// The words a refusal from either shows.
   public var message: @Sendable (_ error: Error) -> String
+  /// Signs the account in use out: after Close account, whose account no longer exists (the console goes to `/signout`).
+  public var signOut: @Sendable () async -> Void
 
   public init(
     changePassword: @escaping @Sendable (String, String) async throws -> Void = { _, _ in
@@ -34,8 +36,10 @@ public struct AccountOperations: Sendable {
     linkGoogle: @escaping @Sendable (@escaping @Sendable (URL, String) async throws -> URL) async throws -> Void = { _ in
       throw ConsoleAPIError(status: 0, message: "Connecting Google is not set up in this build.")
     },
-    message: @escaping @Sendable (Error) -> String = { $0.localizedDescription }
+    message: @escaping @Sendable (Error) -> String = { $0.localizedDescription },
+    signOut: @escaping @Sendable () async -> Void = {}
   ) {
+    self.signOut = signOut
     self.changePassword = changePassword
     self.updateDisplayName = updateDisplayName
     self.unlinkProvider = unlinkProvider
@@ -57,6 +61,15 @@ public struct ScreenSession: Sendable {
   /// Signs in again with the password, so the next token carries a fresh
   /// `auth_time` (routes that guard a dangerous step ask for one).
   public var reauthenticate: @Sendable (_ password: String) async throws -> Void
+  /// The ways the account in use can confirm it is them again (`Reconfirm.methods`), read when the step is asked for.
+  public var reconfirmMethods: @Sendable () async -> [ReconfirmMethod]
+  /// Confirms it with a credential the sheet obtained (Apple's sheet, a passkey's custom token).
+  public var reconfirm: @Sendable (_ credential: ReconfirmCredential) async throws -> Void
+  /// Confirms it with a way that runs in the platform's auth session: Google's sheet, single sign-on's console page.
+  /// `authenticate` opens the URL and returns the URL it came back to.
+  public var reconfirmInBrowser:
+    @Sendable (_ method: ReconfirmMethod, _ authenticate: @escaping @Sendable (URL, String) async throws -> URL) async throws
+      -> Void
   /// Re-reads the token's claims (after a reauth, or when a screen asks).
   public var refreshClaims: @Sendable () async -> Void
   /// Signs in as a customer with the custom token a staff route minted (`/api/admin/impersonate`), in the identity
@@ -80,6 +93,10 @@ public struct ScreenSession: Sendable {
     email: String? = nil, displayName: String? = nil, orgName: String? = nil, orgRole: String? = nil,
     siteName: String? = nil, claims: TokenClaims = TokenClaims(), origin: String = "",
     reauthenticate: @escaping @Sendable (String) async throws -> Void = { _ in },
+    reconfirmMethods: @escaping @Sendable () async -> [ReconfirmMethod] = { [.password] },
+    reconfirm: @escaping @Sendable (ReconfirmCredential) async throws -> Void = { _ in },
+    reconfirmInBrowser: @escaping @Sendable (ReconfirmMethod, @escaping @Sendable (URL, String) async throws -> URL) async throws
+      -> Void = { _, _ in },
     refreshClaims: @escaping @Sendable () async -> Void = {},
     impersonate: @escaping @Sendable (String, String?) async throws -> Void = { _, _ in },
     account: AccountOperations = AccountOperations(), googleConfigured: Bool = false,
@@ -98,6 +115,9 @@ public struct ScreenSession: Sendable {
     self.claims = claims
     self.origin = origin
     self.reauthenticate = reauthenticate
+    self.reconfirmMethods = reconfirmMethods
+    self.reconfirm = reconfirm
+    self.reconfirmInBrowser = reconfirmInBrowser
     self.refreshClaims = refreshClaims
     self.impersonate = impersonate
     self.account = account
@@ -167,6 +187,9 @@ public struct ScreenSession: Sendable {
         "origin": .string(origin), "passkeyRp": passkeyRelyingParty.map(JSONValue.string) ?? .null,
         // The platform's name, for words the console prints with it ("Aglyn staff · support").
         "brand": .string(AglynConfig.defaultBrandName),
+        // Whether this build may take or start a payment to Aglyn (off in a store build, the owner's decision of
+        // 2026-11-19), and where it may not, whether it may link to web billing: `app.billing`, `app.billingLink`.
+        "billing": .bool(StoreBilling.buying), "billingLink": .bool(StoreBilling.webBillingLink),
         "permissionRefusal": .object(Dictionary(uniqueKeysWithValues: ContractValues.shared.orgRoleGrants.permissions.map { ($0.key, JSONValue.string(permissionRefusalText(ContractValues.shared.orgRoleGrants, key: $0.key))) })),
         "permissionCatalog": rows(narrowable: false), "narrowablePermissions": rows(narrowable: true),
       ],
@@ -1115,7 +1138,7 @@ public final class ScreenModel {
         let file = DownloadedFile(name: named, contentType: "application/json", data: try value.encoded(pretty: true))
         return .file(file, name: named, message: action.success.map { ScreenValues.render($0, in: scope) })
       } catch let error as ConsoleAPIError {
-        if Self.wantsReauth(error) { return .needsReauth(error.message) }
+        if Self.wantsReauth(error) { return .needsReauth(Self.reauthMessage(error)) }
         return .failed(error.message)
       } catch {
         return .failed(error.localizedDescription)
@@ -1127,7 +1150,7 @@ public final class ScreenModel {
         let name = file.name ?? ScreenValues.render(fallback, in: scope)
         return .file(file, name: name, message: action.success.map { ScreenValues.render($0, in: scope) })
       } catch let error as ConsoleAPIError {
-        if Self.wantsReauth(error) { return .needsReauth(error.message) }
+        if Self.wantsReauth(error) { return .needsReauth(Self.reauthMessage(error)) }
         return .failed(error.message)
       } catch {
         return .failed(error.localizedDescription)
@@ -1154,7 +1177,7 @@ public final class ScreenModel {
       performed = action
       return .done(message: Self.message(for: action, response: response, in: scope), response: response)
     } catch let error as ConsoleAPIError {
-      if Self.wantsReauth(error) { return .needsReauth(error.message) }
+      if Self.wantsReauth(error) { return .needsReauth(Self.reauthMessage(error)) }
       if error.status == action.elseStatus, let otherwise = action.otherwise?.action { return await perform(otherwise, in: scope) }
       if let gate = action.gate, let screen = gate["screen"]?.stringValue,
         ScreenValues.condition(gate["when"]?.stringValue, in: ["error": error.body ?? .null])
@@ -1298,11 +1321,17 @@ public final class ScreenModel {
       // Closing the prompt is the person's answer, not a failure worth alarming them with.
       return .done(message: nil, response: nil)
     } catch let error as ConsoleAPIError {
-      if Self.wantsReauth(error) { return .needsReauth(error.message) }
+      if Self.wantsReauth(error) { return .needsReauth(Self.reauthMessage(error)) }
       return .failed(ScreenPasskeys.message(for: error, in: passkey, scope: scope))
     } catch {
       return .failed(ScreenPasskeys.message(for: error, in: passkey, scope: scope))
     }
+  }
+
+  /// What "Confirm it is you" says: the route's own `message` ("Confirm it is you before closing the account."), not its
+  /// `reauth-required` code, as the Kotlin twin reads it.
+  nonisolated static func reauthMessage(_ error: ConsoleAPIError) -> String {
+    error.body?["message"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 } ?? error.message
   }
 
   /// A route's "your plan does not include this" answer: payment required, or a refusal naming an entitlement.

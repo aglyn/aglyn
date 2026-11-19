@@ -71,6 +71,11 @@ class AuthFlow {
   var pendingHandoff by mutableStateOf<com.aglyn.core.ConsoleHandoff.Pending?>(null)
   /** Why the last console sign-in failed, for the sign-in screen. */
   var handoffError by mutableStateOf<String?>(null)
+  /**
+   * A console hand-off that only confirms it is the account in use (single sign-on before Close account): its return is
+   * a confirmation, never a sign-in, and completes this.
+   */
+  internal var pendingReconfirm: kotlinx.coroutines.CompletableDeferred<Unit>? = null
   internal var firstRunSettledFor: String? = null
 
   /**
@@ -259,8 +264,8 @@ suspend fun ShellServices.settleFirstRun(workspace: WorkspaceState) {
 }
 
 /** "Create an organization" from the empty workspace list, or "Create it now" for the name sign-up could not use. Null on success. */
-suspend fun ShellServices.createWorkspace(name: String): String? {
-  val outcome = signUp.createWorkspace(name)
+suspend fun ShellServices.createWorkspace(name: String, slug: String? = null): String? {
+  val outcome = signUp.createWorkspace(name, slug)
   if (outcome.slug != null) {
     authFlow.firstRun = FirstRunState.Idle
     return null
@@ -293,9 +298,39 @@ suspend fun ShellServices.finishConsoleHandoff(callback: String) {
   val pending = authFlow.pendingHandoff
     ?: throw AuthError("That sign-in has expired or was already used. Sign in again.")
   authFlow.pendingHandoff = null
+  val reconfirming = authFlow.pendingReconfirm
+  if (reconfirming != null) {
+    // A confirmation of the account in use: its outcome goes back to the step that asked, never to the sign-in screen.
+    authFlow.pendingReconfirm = null
+    try {
+      val grant = com.aglyn.core.ConsoleHandoff.redeem(api, com.aglyn.core.ConsoleHandoff.code(callback, pending), pending)
+      auth.reconfirm(com.aglyn.core.ReconfirmCredential.CustomToken(grant.token, grant.tenantId))
+      reconfirming.complete(Unit)
+    } catch (failure: Throwable) {
+      reconfirming.completeExceptionally(failure)
+    }
+    return
+  }
   val code = com.aglyn.core.ConsoleHandoff.code(callback, pending)
   val grant = com.aglyn.core.ConsoleHandoff.redeem(api, code, pending)
   // The desktop's first App Check token, which the custom-token exchange below needs.
   grant.appCheckToken?.let { consoleAppCheck?.seed(it, grant.appCheckExpiresAtMs) }
   auth.signInWithCustomToken(grant.token, grant.tenantId)
+}
+
+/**
+ * Confirms it is the account in use through its workspace's single sign-on (the console's `reauthenticateWithPopup` with the
+ * account's `saml.`/`oidc.` provider, AGL-1140): the console's `/sso` page, as signing in does, whose return confirms the
+ * same account instead of signing in. On Android the page comes back to the app's scheme later, so this waits for it.
+ */
+suspend fun ShellServices.reconfirmThroughConsole(loginHint: String?) {
+  val waiting = kotlinx.coroutines.CompletableDeferred<Unit>()
+  authFlow.pendingReconfirm?.cancel()
+  authFlow.pendingReconfirm = waiting
+  try {
+    signInThroughConsole(com.aglyn.core.ConsoleHandoff.Start.SINGLE_SIGN_ON, loginHint)
+    waiting.await()
+  } finally {
+    if (authFlow.pendingReconfirm === waiting) authFlow.pendingReconfirm = null
+  }
 }

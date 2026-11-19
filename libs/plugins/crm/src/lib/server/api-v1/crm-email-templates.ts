@@ -195,7 +195,7 @@ async function createTemplate(request: Request, ctx: ApiV1Context): Promise<Resp
   const body = await readJsonBody(request)
   const parsed = readTemplateInput(body, { partial: false })
   if ('errors' in parsed) return crmValidationFailed(ctx, 'email template', parsed.errors)
-  const site = readCrmSite(ctx, 'email template', body)
+  const site = await readCrmSite(ctx, request, 'email template', body)
   if ('response' in site) return site.response
   const placed = placeOwner(parsed.values, null)
   if ('errors' in placed) return crmValidationFailed(ctx, 'email template', placed.errors)

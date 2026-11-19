@@ -30,6 +30,8 @@ final class AppModel {
   private(set) var workspace: WorkspaceStore?
   /// The signed-in person's pins, recents, stars, workspace colors and theme (`users/{uid}`), synced with the console.
   private(set) var preferences: AccountPreferencesStore?
+  /// Whether the device has a network connection, for the title bar's Offline indicator (AGL-1056).
+  let network = NetworkStatus()
   /// The signed-in person's invitations, joined on their own (AGL-4023): never an Accept step.
   private(set) var invites: InviteAutoJoin?
   /// The workspace and site (by address) of a link opened before anyone was signed in on this launch.
@@ -73,6 +75,8 @@ final class AppModel {
     if let config, problems.isEmpty {
       self.config = config
       AglynFirebase.configure(config)
+      // Whether this build may take a payment to Aglyn: off in a store build (the owner's decision of 2026-11-19).
+      StoreBilling.configure(config)
       // Every REST call to Firebase carries the App Check token production enforces (AGL-3818).
       let firebaseHTTP = AppCheckTransport(appCheck: AglynFirebase.appCheck)
       self.firebaseHTTP = firebaseHTTP
@@ -179,9 +183,19 @@ final class AppModel {
       email: auth?.user?.email, displayName: auth?.user?.displayName, orgName: workspace?.org?.name,
       orgRole: workspace?.org?.role, siteName: workspace?.site?.name, claims: claims,
       origin: config?.consoleOrigin ?? "",
+      // The account in use signs in again its own way (AGL-1140); a confirmation is never a sign-in of someone else.
       reauthenticate: { [weak self] password in
-        guard let email = await self?.auth?.user?.email else { throw ConsoleAPIError(status: 401, message: "Sign in again.") }
-        try await self?.auth?.signIn(email: email, password: password)
+        guard let auth = await self?.auth else { throw ConsoleAPIError(status: 401, message: "Sign in again.") }
+        try await auth.reconfirm(.password(password))
+      },
+      reconfirmMethods: { [weak self] in await self?.reconfirmMethods() ?? [] },
+      reconfirm: { [weak self] credential in
+        guard let auth = await self?.auth else { throw ConsoleAPIError(status: 401, message: "Sign in again.") }
+        try await auth.reconfirm(credential)
+      },
+      reconfirmInBrowser: { [weak self] method, authenticate in
+        guard let self else { throw ConsoleAPIError(status: 401, message: "Sign in again.") }
+        try await self.reconfirmInBrowser(method, authenticate: authenticate)
       },
       refreshClaims: { [weak self] in await self?.refreshClaims(force: true) },
       impersonate: { [weak self] token, tenantId in
@@ -207,7 +221,8 @@ final class AppModel {
             firebaseIDToken: { try await auth.idToken(forceRefresh: true) }, authenticate: authenticate)
           await self?.refreshClaims(force: true)
         },
-        message: { passwordChangeMessage($0) }),
+        message: { passwordChangeMessage($0) },
+        signOut: { [weak self] in await self?.signOut() }),
       googleConfigured: config?.google != nil, passkeyRelyingParty: config?.passkeyRelyingParty,
       orgPermissions: orgAccess.workspacePermissions, sitePermissions: orgAccess.pickedSitePermissions,
       permissionsSiteID: orgAccess.pickedSiteID,

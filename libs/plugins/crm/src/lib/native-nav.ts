@@ -45,6 +45,8 @@ function row(scope: 'org' | 'host', order: number): NativeNavRow {
     icon: nativeNavIcon('person.text.rectangle', 'contact_mail'),
     screen: 'crm.contacts',
     pluginId: 'crm',
+    // The org tab strip asks the extension's permission (plugin.ts).
+    ...(scope === 'org' ? { permissions: ['data.manage'] } : {}),
     order,
     keywords: ['contacts', 'people', 'deals', 'tasks'],
     sections: [

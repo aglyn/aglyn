@@ -696,6 +696,12 @@
               "help": "Read a site’s products, variants, prices and stock."
             },
             {
+              "key": "productsWrite",
+              "label": "Products — write",
+              "kind": "toggle",
+              "help": "Add, edit and delete a site’s products and their variants. A change to a product that is on sale shows on the live site right away."
+            },
+            {
               "key": "bookingsRead",
               "label": "Bookings — read",
               "kind": "toggle",
@@ -724,6 +730,36 @@
               "label": "CRM — write",
               "kind": "toggle",
               "help": "Add, edit and delete companies, deals and tasks, log activities, and work and convert leads, on behalf of a named site. Cannot edit a pipeline’s stages."
+            },
+            {
+              "key": "pagesRead",
+              "label": "Pages — read",
+              "kind": "toggle",
+              "help": "List a site’s pages: each one’s name, address, whether it is published and its search listing. Never reads what a page is built from."
+            },
+            {
+              "key": "seoRead",
+              "label": "Search listing — read",
+              "kind": "toggle",
+              "help": "Read how a site and its pages are described to search engines: titles, descriptions and sharing images."
+            },
+            {
+              "key": "seoWrite",
+              "label": "Search listing — write",
+              "kind": "toggle",
+              "help": "Change how a site and its pages appear in search results. Changes show on the live site right away."
+            },
+            {
+              "key": "businessRead",
+              "label": "Business details — read",
+              "kind": "toggle",
+              "help": "Read a site’s business details: name, slogan, phone, email, address and social links."
+            },
+            {
+              "key": "businessWrite",
+              "label": "Business details — write",
+              "kind": "toggle",
+              "help": "Change a site’s business name, slogan, phone, email, address and social links. Changes show on the live site right away."
             }
           ],
           "body": {
@@ -744,11 +780,17 @@
                 "orders:read": "{form.ordersRead}",
                 "orders:write": "{form.ordersWrite}",
                 "products:read": "{form.productsRead}",
+                "products:write": "{form.productsWrite}",
                 "bookings:read": "{form.bookingsRead}",
                 "media:read": "{form.mediaRead}",
                 "media:write": "{form.mediaWrite}",
                 "crm:read": "{form.crmRead}",
-                "crm:write": "{form.crmWrite}"
+                "crm:write": "{form.crmWrite}",
+                "pages:read": "{form.pagesRead}",
+                "seo:read": "{form.seoRead}",
+                "seo:write": "{form.seoWrite}",
+                "business:read": "{form.businessRead}",
+                "business:write": "{form.businessWrite}"
               }
             }
           },
@@ -2022,6 +2064,10 @@
       "load": {
         "org": {
           "doc": "orgs/{org.id}"
+        },
+        "closure": {
+          "url": "/api/closure-notices?subject=workspace&orgId={org.id}",
+          "optional": true
         }
       },
       "blocks": [
@@ -2036,6 +2082,32 @@
           "tone": "warning",
           "when": "data.org.erasureRequestedAt",
           "text": "This organization is scheduled for deletion. After a 7-day hold, all of its sites, files, and data are permanently erased. Cancel now to keep it."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "!data.closure || data.closure.unavailable",
+          "text": "Some details of what this changes could not be checked right now. Try again in a moment before you confirm."
+        },
+        {
+          "type": "list",
+          "when": "data.closure.notices",
+          "items": "data.closure.notices",
+          "primary": "{item.title}",
+          "secondary": "{item.body}",
+          "wrap": true,
+          "icon": "exclamationmark.triangle|warning"
+        },
+        {
+          "type": "list",
+          "when": "data.closure.notices",
+          "items": "data.closure.notices",
+          "flatten": "items",
+          "primary": "{item.primary}",
+          "secondary": "{item.secondary}",
+          "tertiary": "{item.$parent.title}",
+          "trailing": "{item.amount}",
+          "icon": "list.bullet|list"
         },
         {
           "type": "actions",
@@ -2313,6 +2385,20 @@
               "icon": "gearshape|settings",
               "screen": "core.pluginSettings.bookings",
               "when": "org.can[org.settings] && params.pluginId == bookings"
+            },
+            {
+              "title": "Waivers settings",
+              "subtitle": "How long a signed waiver is kept",
+              "icon": "gearshape|settings",
+              "screen": "core.pluginSettings.waivers",
+              "when": "org.can[org.settings] && params.pluginId == waivers"
+            },
+            {
+              "title": "Weglot settings",
+              "subtitle": "Your Weglot key, the languages and the switcher",
+              "icon": "gearshape|settings",
+              "screen": "core.pluginSettings.weglot",
+              "when": "org.can[org.settings] && params.pluginId == weglot"
             }
           ]
         },

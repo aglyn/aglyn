@@ -54,6 +54,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -71,6 +72,7 @@ import com.aglyn.ui.EmptyTone
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.OpeningHoursPicker
 import com.aglyn.ui.OutlinedButton
+import com.aglyn.ui.QrCodeImage
 import com.aglyn.ui.RemoteImage
 import com.aglyn.ui.SearchField
 import com.aglyn.ui.SectionCard
@@ -338,6 +340,11 @@ private fun SpecBodyContent(
         }
       }
       is ActionOutcome.Done -> {
+        // Close account succeeded: the account is gone, so the app signs out at once, as the console does.
+        if (Reconfirm.signsOut(action.url)) {
+          session.account.signOut()
+          return
+        }
         val after = ScreenContext.with(actionScope, "response", outcome.response)
         val instead = action.insteadEntry(after)
         if (instead != null) {
@@ -528,43 +535,86 @@ private fun SpecBodyContent(
     PromptDialog(pending, model.context, search = { group, words -> model.lookup(group, words) }, onRun = { filled -> prompting = null; scope.launch { execute(pending.action, filled) } }) { prompting = null }
   }
   reauthing?.let { pending ->
+    // The account signs in again its own way (AGL-1140), as the console's close-account dialog: the password when it has
+    // one, else its own provider again; [Reconfirm.methods] decides which.
+    var methods by remember(pending) { mutableStateOf<List<ReconfirmMethod>?>(null) }
+    LaunchedEffect(pending) { methods = session.reconfirmMethods() }
     var password by remember(pending) { mutableStateOf("") }
     var error by remember(pending) { mutableStateOf<String?>(null) }
-    var busy by remember(pending) { mutableStateOf(false) }
+    var working by remember(pending) { mutableStateOf<ReconfirmMethod?>(null) }
+    val offered = methods.orEmpty()
+    val withPassword = ReconfirmMethod.PASSWORD in offered
+    // Without a password, the dialog's own button runs the account's first way; the rest sit under it.
+    val primary = if (withPassword) ReconfirmMethod.PASSWORD else offered.firstOrNull()
+    val others = offered.filter { it != primary && it != ReconfirmMethod.PASSWORD }
+    fun run(method: ReconfirmMethod) {
+      working = method
+      error = null
+      scope.launch {
+        try {
+          if (method == ReconfirmMethod.PASSWORD) session.reauthenticate(password) else session.reconfirmWith(method)
+          session.refreshClaims()
+          reauthing = null
+          execute(pending.action, pending.scope)
+        } catch (failure: kotlinx.coroutines.CancellationException) {
+          throw failure
+        } catch (failure: Throwable) {
+          // Closing Google's sheet is not a failure (the console ignores `popup-closed-by-user`).
+          if (failure.message != "Google sign-in was canceled.") error = failure.message ?: "That did not confirm it is you."
+        }
+        working = null
+      }
+    }
     ActionDialog(
       title = "Confirm it is you",
       body = pending.reauthMessage ?: "Confirm it is you to continue.",
-      confirmLabel = "Continue",
-      busy = busy,
+      confirmLabel = primary?.let(::reconfirmLabel) ?: "OK",
+      busy = working != null,
       error = error,
-      confirmEnabled = password.isNotEmpty(),
+      confirmEnabled = methods != null && (!withPassword || password.isNotEmpty()),
       dismissLabel = "Cancel",
       icon = "lock",
-      onConfirm = {
-        busy = true
-        scope.launch {
-          try {
-            session.reauthenticate(password)
-            session.refreshClaims()
-            reauthing = null
-            execute(pending.action, pending.scope)
-          } catch (failure: Throwable) {
-            error = failure.message ?: "That password did not work."
-          }
-          busy = false
-        }
-      },
+      onConfirm = { if (primary != null) run(primary) else reauthing = null },
       onDismiss = { reauthing = null },
     ) {
-      OutlinedTextField(
-        value = password,
-        onValueChange = { password = it },
-        label = { Text("Password") },
-        singleLine = true,
-        visualTransformation = PasswordVisualTransformation(),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-        modifier = Modifier.fillMaxWidth().testTag("reauth-password"),
-      )
+      Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
+        if (withPassword) {
+          OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            label = { Text("Password") },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            modifier = Modifier.fillMaxWidth().testTag("reauth-password"),
+          )
+        }
+        if (methods != null && offered.isEmpty()) {
+          Text(Reconfirm.NO_METHOD_MESSAGE, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("reauth-no-method"))
+        }
+        if (others.isNotEmpty()) {
+          Text(
+            if (withPassword) "Or sign in again another way." else "Or:",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+          for (method in others) {
+            if (method == ReconfirmMethod.GOOGLE) {
+              com.aglyn.ui.GoogleButton(reconfirmLabel(method), { run(method) }, Modifier.testTag("reauth-google"), enabled = working == null)
+            } else {
+              com.aglyn.ui.AuthButton(
+                reconfirmLabel(method),
+                onClick = { run(method) },
+                modifier = Modifier.testTag("reauth-${method.name.lowercase()}"),
+                kind = com.aglyn.ui.AuthButtonKind.SECONDARY,
+                icon = AglynIcons.named(if (method == ReconfirmMethod.PASSKEY) "lock" else "key"),
+                busy = working == method,
+                enabled = working == null,
+              )
+            }
+          }
+        }
+      }
     }
   }
   gating?.let { gated ->
@@ -701,6 +751,20 @@ private fun Block(
         }
       }
     }
+    "qr" -> {
+      // `{ "type": "qr", "value": "{…}", "caption": "…" }`: a QR code of a link the screen shows (a waiver's share link), drawn by the
+      // kit's own encoder, never fetched.
+      val value = ScreenValues.render(block.string("value").orEmpty(), context)
+      if (value.isNotEmpty()) {
+        SectionCard(title) {
+          Box(Modifier.fillMaxWidth().padding(vertical = space(2f)).testTag("qr-${block.id}"), contentAlignment = Alignment.Center) {
+            // The caption is what a screen reader says (as on Apple); the kit's default names a payment code.
+            QrCodeImage(value, size = 192.dp, description = block.string("caption")?.let { ScreenValues.render(it, context) } ?: "QR code")
+          }
+          footer?.let { Text(it, Modifier.padding(horizontal = space(2f), vertical = space(1f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+      }
+    }
     "html" -> {
       // `{ "type": "html", "source": "{data.message.html}", "empty": "…" }`: a message's HTML, drawn as styled text. Scripts, styles,
       // frames, forms and images never reach the platform's reader, and a link opens in the system handler.
@@ -720,6 +784,22 @@ private fun Block(
           }
         }
         footer?.let { Text(it, Modifier.padding(horizontal = space(2f), vertical = space(1f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+      }
+    }
+    "text" -> {
+      // `{ "type": "text", "source": "{…}" }`: words a person reads through, as written (a waiver's own text): line breaks
+      // kept, **strong**, *emphasis* and links drawn, through the kit's inline reader (the Apple kit's
+      // `AttributedString(markdown:)` inline only); nothing shows while the source is empty.
+      val source = ScreenValues.render(block.string("source").orEmpty(), context)
+      if (source.isNotEmpty()) {
+        val link = MaterialTheme.colorScheme.primary
+        SectionCard(title) {
+          val shown = remember(source, link) { com.aglyn.ui.InlineMarkdown.annotated(source, link) { href -> plugin.openLink(href) } }
+          androidx.compose.foundation.text.selection.SelectionContainer {
+            Text(shown, Modifier.padding(horizontal = space(2f), vertical = space(1f)).testTag("text-${block.id}"), style = MaterialTheme.typography.bodyMedium)
+          }
+          footer?.let { Text(it, Modifier.padding(horizontal = space(2f), vertical = space(1f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
       }
     }
     "zone" -> {
@@ -1164,6 +1244,10 @@ internal fun fieldJson(field: FieldSpec, value: FieldValue?): JsonElement = when
     val text = if (value is FieldValue.File) value.text else (value as FieldValue.Text).value
     if (text.isEmpty()) JsonNull else if (field.parse == "json") runCatching { kotlinx.serialization.json.Json.parseToJsonElement(text) }.getOrDefault(JsonNull) else JsonPrimitive(text)
   }
+  // A drawn signature: `{ strokes, png }`, or null while nothing is drawn.
+  field.kind == "signature" && value is FieldValue.Text -> SignatureInk.json(value.value)
+  // A set of fields asked for each of several (the minors on a waiver): the sets, each field as it sends itself.
+  field.kind == "group" && value is FieldValue.Text -> FieldGroups.json(field, value.value, JsonObject(emptyMap()))
   // One entry per line while edited; the list is what is sent (nothing typed is an empty list).
   field.kind == "lines" && value is FieldValue.Text ->
     JsonArray(value.value.split('\n').map { it.trim() }.filter { it.isNotEmpty() }.map { JsonPrimitive(it) })
@@ -1189,6 +1273,7 @@ internal fun initialValue(field: FieldSpec, context: JsonElement): FieldValue {
   if (field.kind == "toggle") return FieldValue.Flag(ScreenValues.truthy(resolved))
   if (field.kind == "multiselect") return FieldValue.Text(((resolved as? JsonArray) ?: JsonArray(emptyList())).joinToString("\n") { ScreenValues.text(it) })
   if (field.kind == "lines") return FieldValue.Text(((resolved as? JsonArray) ?: JsonArray(emptyList())).joinToString("\n") { ScreenValues.text(it) })
+  if (field.kind == "group") return FieldValue.Text(FieldGroups.initial(field, resolved))
   if (field.kind == "date") ScreenValues.epochMillis(resolved)?.let { millis ->
     val (y, m, d) = localParts(millis, "UTC")
     return FieldValue.Text("$y-${m.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}")
@@ -1236,6 +1321,9 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
       }
       "upload" -> UploadFieldInput(field, context, text) { onChange(FieldValue.Text(it)) }
       "media" -> MediaFieldInput(field, text) { onChange(FieldValue.Text(it)) }
+      "signature" -> SignatureFieldInput(field, label, help, text) { onChange(FieldValue.Text(it)) }
+      "photo" -> PhotoFieldInput(field, label, text) { onChange(FieldValue.Text(it)) }
+      "group" -> GroupFieldInput(field, context, label, text) { onChange(FieldValue.Text(it)) }
       "multiselect" -> {
         // Each choice a switch; the chosen ids are kept one per line. An id the list no longer offers is kept, not dropped.
         val choices = field.choices(context)
@@ -1299,6 +1387,9 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
             "password" -> KeyboardType.Password
             else -> KeyboardType.Text
           },
+          // A key or code is kept as typed (`verbatim`); every other field keeps the keyboard's own defaults.
+          capitalization = if (field.verbatim) KeyboardCapitalization.None else KeyboardCapitalization.Unspecified,
+          autoCorrectEnabled = if (field.verbatim) false else null,
         ),
         modifier = Modifier.fillMaxWidth(),
       )
@@ -1312,7 +1403,7 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
     val mismatch = field.mismatch?.takeIf { text.isNotEmpty() && field.refuses(JsonPrimitive(text), context) }?.let { ScreenValues.render(it, context) }
     if (mismatch != null) {
       Text(mismatch, Modifier.padding(top = space(0.5f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-    } else if (help != null && field.kind != "toggle") {
+    } else if (help != null && field.kind != "toggle" && field.kind != "signature") {
       Text(help, Modifier.padding(top = space(0.5f)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
   }
@@ -1364,6 +1455,20 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
   fun current(field: FieldSpec) = values[field.key] ?: seed[field.key] ?: initialValue(field, scope)
   val filled = ScreenContext.with(scope, "form", formObject(fields) { current(it) })
   val missing = fields.any { ScreenValues.condition(it.whenCondition, filled) && it.unmet(fieldJson(it, current(it)), scope) }
+  // The form's first `refuse` entry that refuses what is typed: the console's pre-save check (a plugin's `validate`), said
+  // beside Save, which it holds back. An entry is `{ when, text }`, or `{ check, site }` naming a check both kits implement
+  // (`PluginSettingsChecks`), asked over the values the form saves (on a site, the values it will run with).
+  val refused = block.raw.arr("refuse").firstNotNullOfOrNull { entry ->
+    val check = entry.str("check")
+    if (check != null) {
+      val site = ((entry as? JsonObject)?.get("site") as? JsonPrimitive)?.booleanOrNull == true
+      PluginSettingsChecks.refusal(check, PluginSettingsChecks.values(filled, site))
+    } else if (ScreenValues.condition(entry.str("when"), filled)) {
+      ScreenValues.render(entry.str("text").orEmpty(), filled)
+    } else {
+      null
+    }
+  }
   // A load this form is seeded from is only the cache's answer yet: Save is held, with the reason beside it.
   val held = FormEdits.heldBy(block.string("object"), fields.mapNotNull { it.initial }, context.obj("checking")).isNotEmpty()
   fun save(action: ActionSpec) {
@@ -1373,7 +1478,7 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
   // A Save pressed while held is kept, and runs over the edits replayed onto the server's copy (AGL-4047).
   val heldPress = com.aglyn.ui.rememberHeldPress(held, FormEdits.unconfirmedText(block.string("checking"))) {
     val action = ActionSpec.parse(block["submit"]) ?: return@rememberHeldPress
-    if (!missing && action.disabledWhen?.let { ScreenValues.condition(it, scope) } != true) save(action)
+    if (!missing && refused == null && action.disabledWhen?.let { ScreenValues.condition(it, filled) } != true) save(action)
   }
   Column(Modifier.fillMaxWidth().padding(space(2f)), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
     for (field in fields.filter { ScreenValues.condition(it.whenCondition, filled) }) {
@@ -1387,7 +1492,14 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
       ?.takeIf { changed || fields.isEmpty() || !ScreenValues.render(it.label, scope).startsWith("Save") }
       ?.let { action ->
       val refusal = heldPress.refusal
-      if (refusal != null && changed) {
+      if (refused != null) {
+        Text(
+          refused,
+          Modifier.align(Alignment.End).testTag("refused-${block.id}"),
+          style = MaterialTheme.typography.bodySmall,
+          color = com.aglyn.ui.LocalAglynPalette.current.warning.text,
+        )
+      } else if (refusal != null && changed) {
         Text(
           refusal,
           Modifier.align(Alignment.End).testTag("unconfirmed-${block.id}"),
@@ -1405,7 +1517,7 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
       FilledTonalButton(
         colors = com.aglyn.ui.aglynTonalButtonColors(),
         onClick = { if (heldPress.pressed(held)) save(action) },
-        enabled = !busy && !heldPress.waiting && !missing && action.disabledWhen?.let { ScreenValues.condition(it, scope) } != true,
+        enabled = !busy && !heldPress.waiting && !missing && refused == null && action.disabledWhen?.let { ScreenValues.condition(it, filled) } != true,
         modifier = Modifier.align(Alignment.End).testTag("submit-${block.id}"),
       ) {
         if (busy || heldPress.waiting) CircularProgressIndicator(Modifier.size(16.dp).padding(end = space(1f)), strokeWidth = 2.dp)
@@ -1464,3 +1576,12 @@ private fun ZoneRow(spec: ScreenSpec, plugin: NativePluginContext, params: Nativ
 
 /** Where a plan refusal sends a person to add what the screen needs. */
 internal const val BILLING_ADDONS_SCREEN = "core.billing.addons"
+
+/** The button that confirms it is you one way. */
+internal fun reconfirmLabel(method: ReconfirmMethod): String = when (method) {
+  ReconfirmMethod.PASSWORD -> "Continue"
+  ReconfirmMethod.APPLE -> "Continue with Apple"
+  ReconfirmMethod.GOOGLE -> "Continue with Google"
+  ReconfirmMethod.SINGLE_SIGN_ON -> "Continue with SSO"
+  ReconfirmMethod.PASSKEY -> "Use a passkey"
+}

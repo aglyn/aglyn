@@ -110,8 +110,8 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
   r.deepLink("commerce.quote-link", path: "/products/orders?quote=:quote", screen: commerceQuoteScreen)
   r.deepLink("commerce.returns-page", path: "/products/returns", screen: "commerce.returns")
   r.deepLink("commerce.return-link", path: "/products/returns?return=:returnId", screen: "commerce.return")
-  r.deepLink("commerce.shipping-page", path: "/products/shipping", screen: "commerce.shipping")
-  r.deepLink("commerce.notifications-page", path: "/products/notifications", screen: "commerce.notifications")
+  r.deepLink("commerce.shipping-page", path: "/products/shipping", screen: "commerce.settingsShipping")
+  r.deepLink("commerce.notifications-page", path: "/products/notifications", screen: "commerce.settingsNotifications")
 
   r.tab("commerce.orders-tab", title: "Orders", icon: "bag", screen: commerceOrdersScreen, order: 100)
   r.tab("commerce.products-tab", title: "Products", icon: "shippingbox", screen: commerceProductsScreen, order: 110)

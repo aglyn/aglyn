@@ -32,6 +32,8 @@ fun registerAINative(registrar: NativePluginRegistrar) {
     AiCreateScreen(context, AiCreateKind.of(params["kind"]), params["jobId"], params["brief"])
   }
   // Home's "Needs you" line, and the AI panel the shell docks beside every screen (a sheet on phones).
+  // The AI summary on a CRM record's page (the console's `recordInsights` widget, AGL-2917): the CRM hosts the zone.
+  registrar.widget("ai.crm-record", title = "AI summary", order = 10, slot = com.aglyn.pluginhost.RECORD_INSIGHTS_ZONE) { context -> AiCrmRecordCard(context) }
   registrar.widget("ai.needs-you", title = "Needs you", order = 40, requiresSite = true, slot = "homeNeedsYou") { context -> AiNeedsYouWidget(context) }
   registrar.widget("ai.assist-panel", title = "Assist", order = 10, slot = ASSIST_PANEL_SLOT) { context -> AssistPanel(context) }
   // "Ask AI about these numbers" (the console's `hostDashboard` and `orgDashboard` tiles): on a site's Home and Analytics,
@@ -41,6 +43,10 @@ fun registerAINative(registrar: NativePluginRegistrar) {
   }
   registrar.widget("ai.org-insight-ask", title = "Ask AI about these numbers", order = 900, size = WidgetSize.HALF, slot = "orgDashboard") { context ->
     AiInsightTile(context, AiInsightSurface.WORKSPACE)
+  }
+  // "Ask AI about this funnel" (the console's `funnelInsight` widget): under a saved funnel's results, the funnels plugin's zone.
+  registrar.widget("ai.explain-funnel", title = AI_FUNNEL_ASK, order = 10, requiresSite = true, slot = com.aglyn.pluginhost.FUNNEL_INSIGHT_ZONE) { context ->
+    AiFunnelAskButton(context)
   }
   AiCreateKind.entries.forEach { kind ->
     registrar.widget(kind.widgetId, title = "Create with AI", order = 10, requiresSite = true, slot = kind.slot) { context ->

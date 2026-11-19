@@ -140,6 +140,8 @@ private fun WorkspaceStep(services: ShellServices, workspace: WorkspaceState, on
   val prefs by services.accountPrefs.state.collectAsState()
   var query by remember { mutableStateOf("") }
   var shown by remember { mutableIntStateOf(PICKER_PAGE) }
+  // The console's Plan, Your role and Pinned filters, over the workspaces loaded.
+  var filter by remember { mutableStateOf(com.aglyn.core.WorkspacePickerFilter()) }
   LaunchedEffect(workspace.orgs.size) { services.workspace.loadLogos(workspace.orgs.map { it.id }) }
   val byId = workspace.orgs.associateBy { it.id }
   val pinned = prefs.pinned.mapNotNull { byId[it] }
@@ -151,9 +153,19 @@ private fun WorkspaceStep(services: ShellServices, workspace: WorkspaceState, on
   } else {
     emptyList()
   }
+  val narrowed = if (filter.isOn) {
+    workspace.orgs.filter { org -> filter.admits(org, workspace.orgLogos[org.id]?.plan, org.id in prefs.pinned) }
+  } else {
+    null
+  }
   SearchField(query, "Find a workspace", "picker-workspace-search") { query = it }
+  WorkspaceFilterRow(filter) { filter = it }
   LazyColumn(Modifier.fillMaxWidth()) {
-    if (searching) {
+    if (narrowed != null && !searching) {
+      item { PickerHeading(if (narrowed.isEmpty()) "No workspace matches these filters" else "Workspaces · ${narrowed.size}") }
+      items(narrowed, key = { "f-${it.id}" }) { org -> WorkspaceRow(services, workspace, org, prefs.pinned, onPinFull, onPick) }
+      if (workspace.hasMoreOrgs) item { PickerHeading("Filtering the ${workspace.orgs.size} workspaces loaded so far.") }
+    } else if (searching) {
       if (matches.isEmpty()) item { PickerHeading(if (workspace.hasMoreOrgs) "No match in the workspaces loaded. Show more to look further." else "No workspace matches") }
       items(matches, key = { "m-${it.id}" }) { org -> WorkspaceRow(services, workspace, org, prefs.pinned, onPinFull, onPick) }
     } else {
@@ -185,6 +197,50 @@ private fun WorkspaceStep(services: ShellServices, workspace: WorkspaceState, on
         onOpenScreen("core.invites.mine")
       }
     }
+  }
+}
+
+/** One Filter for the picker (Plan, Your role, Pinned), its choices in a menu, the filters on as chips with ×. */
+@Composable
+private fun WorkspaceFilterRow(filter: com.aglyn.core.WorkspacePickerFilter, onChange: (com.aglyn.core.WorkspacePickerFilter) -> Unit) {
+  val headers = com.aglyn.core.WorkspacePickerFilter.HEADERS
+  var open by remember { mutableStateOf(false) }
+  androidx.compose.foundation.layout.FlowRow(
+    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+    horizontalArrangement = Arrangement.spacedBy(8.dp),
+  ) {
+    androidx.compose.foundation.layout.Box {
+      com.aglyn.ui.OutlinedButton(onClick = { open = true }, shape = com.aglyn.ui.controlShape(), modifier = Modifier.testTag("picker-workspace-filter")) {
+        Icon(AglynIcons.named("filter_list"), null, Modifier.size(18.dp))
+        Text(if (filter.isOn) " Filter · ${filter.count}" else " Filter")
+      }
+      androidx.compose.material3.DropdownMenu(open, onDismissRequest = { open = false }) {
+        Text(headers.getValue("plan"), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+        for ((value, label) in listOf(null to "Any") + com.aglyn.core.WorkspacePickerFilter.PLANS) {
+          androidx.compose.material3.DropdownMenuItem(
+            text = { Text(label) }, trailingIcon = { if (filter.plan == value) Icon(AglynIcons.named("check"), null) },
+            onClick = { open = false; onChange(filter.copy(plan = value)) },
+          )
+        }
+        HorizontalDivider()
+        Text(headers.getValue("role"), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+        for ((value, label) in listOf(null to "Any") + com.aglyn.core.WorkspacePickerFilter.ROLES) {
+          androidx.compose.material3.DropdownMenuItem(
+            text = { Text(label) }, trailingIcon = { if (filter.role == value) Icon(AglynIcons.named("check"), null) },
+            onClick = { open = false; onChange(filter.copy(role = value)) },
+          )
+        }
+        HorizontalDivider()
+        Text(headers.getValue("pinned"), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+        for ((value, label) in listOf(null to "Any", true to "Pinned", false to "Not pinned")) {
+          androidx.compose.material3.DropdownMenuItem(
+            text = { Text(label) }, trailingIcon = { if (filter.pinned == value) Icon(AglynIcons.named("check"), null) },
+            onClick = { open = false; onChange(filter.copy(pinned = value)) },
+          )
+        }
+      }
+    }
+    if (filter.isOn) TextButton(onClick = { onChange(com.aglyn.core.WorkspacePickerFilter()) }, modifier = Modifier.testTag("picker-workspace-filter-clear")) { Text("Clear filters") }
   }
 }
 
@@ -342,6 +398,7 @@ private fun AddWorkspaceRow(services: ShellServices) {
   PickerRow("Add workspace", null, false, "picker-add-workspace", leading = { Icon(AglynIcons.named("add"), null, Modifier.size(24.dp)) }) { open = true }
   if (!open) return
   var name by remember { mutableStateOf("") }
+  var slug by remember { mutableStateOf<String?>(null) }
   var error by remember { mutableStateOf<String?>(null) }
   var busy by remember { mutableStateOf(false) }
   val scope = rememberCoroutineScope()
@@ -350,15 +407,22 @@ private fun AddWorkspaceRow(services: ShellServices) {
     modifier = Modifier.sheetEntrance(com.aglyn.ui.SheetEntrance.GROW).testTag("add-workspace-dialog"),
     title = { Text("Add a workspace") },
     text = {
-      OutlinedTextField(
-        name,
-        onValueChange = { name = it; error = null },
-        label = { Text("Workspace name") },
-        singleLine = true,
-        isError = error != null,
-        supportingText = { Text(error ?: "A workspace holds your sites, team and billing.") },
-        modifier = Modifier.fillMaxWidth().testTag("add-workspace-name"),
-      )
+      Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+          name,
+          onValueChange = { name = it; error = null },
+          label = { Text("Workspace name") },
+          singleLine = true,
+          isError = error != null,
+          supportingText = { Text(error ?: "A workspace holds your sites, team and billing.") },
+          modifier = Modifier.fillMaxWidth().testTag("add-workspace-name"),
+        )
+        // The Workspace URL (the console's field): made from the name until the person types their own.
+        WorkspaceUrlField(slug ?: com.aglyn.core.WorkspaceName.slug(name), services.config.workspaceDomain) {
+          slug = com.aglyn.core.WorkspaceName.urlInput(it)
+          error = null
+        }
+      }
     },
     confirmButton = {
       Button(shape = com.aglyn.ui.controlShape(), 
@@ -366,7 +430,7 @@ private fun AddWorkspaceRow(services: ShellServices) {
         onClick = {
           busy = true
           scope.launch {
-            val outcome = services.signUp.createWorkspace(name)
+            val outcome = services.signUp.createWorkspace(name, slug ?: com.aglyn.core.WorkspaceName.slug(name))
             busy = false
             val created = outcome.orgId
             if (created != null) {

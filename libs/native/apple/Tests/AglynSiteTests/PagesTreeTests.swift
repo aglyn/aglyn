@@ -126,3 +126,21 @@ final class PagesTreeTests: XCTestCase {
     XCTAssertFalse(rows.contains { $0.id == "p00c" })
   }
 }
+
+final class PagesQuotaTests: XCTestCase {
+  func testReadsThePlanCapAndTheBillableCount() {
+    XCTAssertEqual(pagesQuotaLimit(.object(["quotas": .object(["screensPerHost": .number(25)])])), 25)
+    XCTAssertNil(pagesQuotaLimit(.object(["quotas": .object(["screensPerHost": .null])])))
+    XCTAssertEqual(pagesUsageCount(.object(["screens": .number(7), "media": .number(2)])), 7)
+    XCTAssertNil(pagesUsageCount(.object([:])))
+  }
+}
+
+final class PageUsedByTests: XCTestCase {
+  func testNamesHowEachDependentPointsAtThePage() {
+    XCTAssertEqual(pageRelationLabel("link"), "links here")
+    XCTAssertEqual(pageRelationLabel("child"), "nested under")
+    XCTAssertEqual(pageRelationLabel("template"), "renders through")
+    XCTAssertNil(pageRelationLabel(nil))
+  }
+}

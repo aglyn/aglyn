@@ -41,7 +41,7 @@ struct SetupScreen: View {
         // On the Mac and iPad the Site settings sidebar is the list of sections (and a link lands on its row, AGL-4059's
         // `NavPaths`), so a section opens as the area itself: no list beside it and nothing pushed, and the shell draws
         // its head with the crumbs (AGL-4058). A phone keeps the list and pushes the section.
-        SetupDetail(context: context, section: section, integrations: integrations).id(section)
+        SetupDetail(context: context, section: section).id(section)
       } else if wide {
         AglynListDetailColumns(listWidth: 320) {
           List {
@@ -55,7 +55,7 @@ struct SetupScreen: View {
           .aglynSelectionKeys(sections, selection: $selection)
         } detail: {
           if let selection {
-            SetupDetail(context: context, section: selection, integrations: integrations).id(selection)
+            SetupDetail(context: context, section: selection).id(selection)
           } else {
             AglynSelectionPlaceholder("No section selected", systemImage: "gearshape")
           }
@@ -78,7 +78,7 @@ struct SetupScreen: View {
         }
         .aglynListBackground()
         .aglynPushDestination(item: $pushed) { section in
-          SetupDetail(context: context, section: section, integrations: integrations).navigationTitle(section.title)
+          SetupDetail(context: context, section: section).navigationTitle(section.title)
             .aglynScreenTitle(section.title)
         }
         .onAppear { if pushed == nil, !opened, let initialSection { pushed = SetupSection.of(initialSection); opened = true } }
@@ -95,9 +95,16 @@ struct SetupScreen: View {
 struct SetupDetail: View {
   let context: NativePluginContext
   let section: SetupSection
-  /// The `hostSettings` cards of plugins running on the site, for the Integrations section.
-  var integrations: [NativeWidget] = []
   @State private var host = LiveDocument()
+  @State private var org = LiveDocument()
+
+  /// The `hostSettings` cards of plugins running on the site, for the Integrations section, worked out from the live
+  /// site and workspace documents here rather than handed in: a link that opens the section pushes it before the list has
+  /// read either, and a list handed over then stayed empty ("Nothing to connect").
+  private var integrations: [NativeWidget] {
+    guard case .ready(let hostDoc?) = host.state, case .ready(let orgDoc?) = org.state else { return [] }
+    return integrationWidgets(context.slotWidgets(integrationsSlot), running: runningPlugins(org: orgDoc.data, host: hostDoc.data))
+  }
 
   var body: some View {
     Group {
@@ -115,6 +122,7 @@ struct SetupDetail: View {
       }
     }
     .task(id: context.hostID) { if let id = context.hostID { await host.bind(context.firestore, ["hosts", id]) } }
+    .task(id: context.orgID) { if let id = context.orgID { await org.bind(context.firestore, ["orgs", id]) } }
   }
 
   private func sectionForm(_ doc: FirestoreDocument, hostID: String) -> some View {
@@ -650,7 +658,7 @@ private struct ThemeSection: View {
       canManage: context.can("site.publish"), reloadKey: reloadKey, reload: { await reload() })
     FontInstallerCard(context: context, hostID: hostID, canEdit: canEdit)
     ThemeEditorCard(
-      api: api, canEdit: canEdit, load: load, retry: { attempt += 1 },
+      api: api, canEdit: canEdit, host: doc.data, load: load, retry: { attempt += 1 },
       saved: { values in
         if var loaded = load.value {
           loaded.stored = values
@@ -926,6 +934,7 @@ private struct NameThemeSheet: View {
 private struct ThemeEditorCard: View {
   let api: HostSettingsAPI
   let canEdit: Bool
+  let host: [String: Any]
   let load: LiveValue<ThemeLoaded>
   let retry: () -> Void
   let saved: (ThemeValues) -> Void
@@ -940,7 +949,7 @@ private struct ThemeEditorCard: View {
         Button("Try again", action: retry)
       }
     case .ready(let loaded):
-      ThemeEditorForm(api: api, canEdit: canEdit, catalog: loaded.catalog, stored: loaded.stored, saved: saved)
+      ThemeEditorForm(api: api, canEdit: canEdit, catalog: loaded.catalog, stored: loaded.stored, host: host, saved: saved)
     }
   }
 }
@@ -951,13 +960,17 @@ private struct ThemeEditorForm: View {
   let catalog: ThemeCatalog
   let stored: ThemeValues
   let saved: (ThemeValues) -> Void
+  /// The site document, for the words the font previews are drawn in.
+  let host: [String: Any]
   @State private var draft: ThemeValues
   @State private var scheme: String
-  @State private var browsingFonts = false
   @State private var runner = newRunner()
 
-  init(api: HostSettingsAPI, canEdit: Bool, catalog: ThemeCatalog, stored: ThemeValues, saved: @escaping (ThemeValues) -> Void) {
+  init(
+    api: HostSettingsAPI, canEdit: Bool, catalog: ThemeCatalog, stored: ThemeValues, host: [String: Any], saved: @escaping (ThemeValues) -> Void
+  ) {
     self.api = api
+    self.host = host
     self.canEdit = canEdit
     self.catalog = catalog
     self.stored = stored
@@ -1000,22 +1013,10 @@ private struct ThemeEditorForm: View {
         ForEach(catalog.darkSchemeOptions, id: \.value) { Text($0.label).tag($0.value) }
       }
       .disabled(!canEdit)
-      Button {
-        browsingFonts = true
-      } label: {
-        LabeledContent("Font family") {
-          HStack(spacing: 4) {
-            Text(draft.fontFamily == catalog.systemFont ? "The theme's own" : draft.fontFamily).foregroundStyle(.secondary)
-            Image(systemName: "chevron.right").imageScale(.small).foregroundStyle(.tertiary)
-          }
-        }
-      }
-      .buttonStyle(.aglynRow)
-      .disabled(!canEdit)
-      .accessibilityIdentifier("font-family")
-      .sheet(isPresented: $browsingFonts) {
-        FontBrowserSheet(catalog: catalog, selection: draft.fontFamily) { draft.fontFamily = $0 }
-      }
+      // The Typography card's font control (the console's `themeEditorFonts` zone, which the always-on fonts plugin fills).
+      ThemeFontsControl(
+        api: FontPickerAPI(api: api.api, hostID: api.hostID), fontsAPI: FontsAPI(api: api.api, hostID: api.hostID),
+        sample: siteSampleFrom(jsonValue(host)), canEdit: canEdit, fonts: $draft.fonts)
       ThemeNumberField(range: catalog.borderRadius, value: $draft.borderRadius, enabled: canEdit)
       ThemeNumberField(range: catalog.spacing, value: $draft.spacing, enabled: canEdit)
       ThemeNumberField(range: catalog.navHeightXs, value: $draft.navHeightXs, enabled: canEdit)
@@ -1064,66 +1065,6 @@ extension ThemeEditorForm {
         colors[token] = .some(next)
         draft.colors[scheme] = colors
       })
-  }
-}
-
-/// The Google Fonts catalog as a searchable list by category: pick one for the theme, or the theme's own.
-private struct FontBrowserSheet: View {
-  let catalog: ThemeCatalog
-  let selection: String
-  let pick: (String) -> Void
-  @Environment(\.dismiss) private var dismiss
-  @State private var search = ""
-  @State private var category = "all"
-
-  var body: some View {
-    NavigationStack {
-      let fonts = filterFonts(catalog.fonts, search: search, category: category == "all" ? nil : category)
-      List {
-        Section {
-          row("The theme's own", detail: nil, family: catalog.systemFont)
-        }
-        Section("\(fonts.count) \(fonts.count == 1 ? "font" : "fonts")") {
-          ForEach(fonts, id: \.family) { font in
-            row(font.family, detail: fontCategories.first { $0.value == font.category }?.label ?? font.category, family: font.family)
-          }
-        }
-      }
-      .safeAreaInset(edge: .top, spacing: 0) {
-        AglynChipRow(
-          [AglynChipOption("all", "All")] + fontCategories.map { AglynChipOption($0.value, $0.label) }, selected: category
-        ) { category = $0 }
-        .background(.bar)
-      }
-      .aglynSearchable(text: $search, prompt: "Search fonts")
-      .navigationTitle("Font family")
-      .aglynScreenTitle("Font family")
-      #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-      #endif
-      .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
-    }
-    .aglynSheetMinimumSize(width: 380, height: 480)
-  }
-
-  private func row(_ title: String, detail: String?, family: String) -> some View {
-    Button {
-      pick(family)
-      dismiss()
-    } label: {
-      HStack {
-        VStack(alignment: .leading, spacing: 2) {
-          Text(title)
-          if let detail { Text(detail).font(AglynFont.caption).foregroundStyle(.secondary) }
-        }
-        Spacer()
-        if family == selection { Image(systemName: "checkmark").foregroundStyle(AglynColor.tint) }
-      }
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.aglynRow)
-    .accessibilityAddTraits(family == selection ? .isSelected : [])
-    .accessibilityIdentifier("font-\(family)")
   }
 }
 

@@ -129,6 +129,8 @@ final class ShellNavigation {
   var showAccount = false
   /// The Add account screen.
   var showAddAccount = false
+  /// "Your Privacy Choices": the analytics switch for this device.
+  var showPrivacyChoices = false
   /// The search (⌘K) open: the title bar's field focused with its dropdown, or the phone's full-screen search.
   var showOneBox = false
   /// What the search holds in this tab.
