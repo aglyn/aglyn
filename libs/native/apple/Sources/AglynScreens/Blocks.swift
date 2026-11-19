@@ -668,9 +668,9 @@ struct FieldInput: View {
           TextField(label, text: text, prompt: Text(field.placeholder ?? label))
             #if os(iOS)
               .keyboardType(keyboard)
-              .textInputAutocapitalization(field.kind == "text" ? .sentences : .never)
+              .textInputAutocapitalization(field.kind == "text" && !field.verbatim ? .sentences : .never)
             #endif
-            .autocorrectionDisabled(field.kind != "text")
+            .autocorrectionDisabled(field.kind != "text" || field.verbatim)
         }
         .aglynFieldLabel(label, value: text.wrappedValue, prompt: field.placeholder)
       }

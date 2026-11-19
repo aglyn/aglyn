@@ -3563,6 +3563,7 @@
               "label": "Weglot API key",
               "kind": "text",
               "initial": "{item.apiKey ?? const.defaults.apiKey}",
+              "verbatim": true,
               "help": "Your Weglot project’s public key, starting with wg_. It is public by design and appears in your pages’ source."
             },
             {
@@ -3570,6 +3571,7 @@
               "label": "Language your site is written in",
               "kind": "text",
               "initial": "{item.sourceLanguage ?? const.defaults.sourceLanguage}",
+              "verbatim": true,
               "help": "A language code such as en. It must match the original language of your Weglot project."
             },
             {
@@ -3577,6 +3579,7 @@
               "label": "Languages to translate into",
               "kind": "text",
               "initial": "{item.targetLanguages ?? const.defaults.targetLanguages}",
+              "verbatim": true,
               "help": "Codes separated by commas, such as fr, es, de. Add the same languages to your Weglot project; the switcher offers only languages Weglot serves."
             },
             {
@@ -3705,6 +3708,7 @@
               "kind": "text",
               "initial": "{data.site.apiKey ?? data.org.apiKey ?? const.defaults.apiKey}",
               "when": "form.ov_apiKey",
+              "verbatim": true,
               "help": "Your Weglot project’s public key, starting with wg_. It is public by design and appears in your pages’ source."
             },
             {
@@ -3719,6 +3723,7 @@
               "kind": "text",
               "initial": "{data.site.sourceLanguage ?? data.org.sourceLanguage ?? const.defaults.sourceLanguage}",
               "when": "form.ov_sourceLanguage",
+              "verbatim": true,
               "help": "A language code such as en. It must match the original language of your Weglot project."
             },
             {
@@ -3733,6 +3738,7 @@
               "kind": "text",
               "initial": "{data.site.targetLanguages ?? data.org.targetLanguages ?? const.defaults.targetLanguages}",
               "when": "form.ov_targetLanguages",
+              "verbatim": true,
               "help": "Codes separated by commas, such as fr, es, de. Add the same languages to your Weglot project; the switcher offers only languages Weglot serves."
             },
             {

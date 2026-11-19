@@ -54,6 +54,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -1338,6 +1339,9 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
             "password" -> KeyboardType.Password
             else -> KeyboardType.Text
           },
+          // A key or code is kept as typed (`verbatim`); every other field keeps the keyboard's own defaults.
+          capitalization = if (field.verbatim) KeyboardCapitalization.None else KeyboardCapitalization.Unspecified,
+          autoCorrectEnabled = if (field.verbatim) false else null,
         ),
         modifier = Modifier.fillMaxWidth(),
       )

@@ -33,6 +33,14 @@ test('a schema becomes one form that writes every field under the plugin', () =>
   assert.deepEqual(Object.keys(form.submit.write.fields), ['on', 'days', 'mode', 'path', 'updatedBy'])
 })
 
+test('a field kept as typed (a key, a code) says so on both screens; the others do not', () => {
+  const keyed = { ...schema, fields: [...schema.fields, { key: 'apiKey', label: 'Key', type: 'string', verbatim: true }] }
+  const workspace = pluginSettingsScreen({ schema: keyed, label: 'Demo' }).blocks[0].fields
+  assert.deepEqual(workspace.filter((field) => field.verbatim).map((field) => field.key), ['apiKey'])
+  const site = sitePluginSettingsScreen({ schema: keyed, label: 'Demo' }).blocks[0].fields
+  assert.deepEqual(site.filter((field) => field.verbatim).map((field) => field.key), ['apiKey'])
+})
+
 test("a schema's notice heads both screens, as the console's card draws it", () => {
   const noticed = { ...schema, notice: 'Ask your own lawyer.' }
   for (const screen of [pluginSettingsScreen({ schema: noticed, label: 'Demo' }), sitePluginSettingsScreen({ schema: noticed, label: 'Demo' })]) {

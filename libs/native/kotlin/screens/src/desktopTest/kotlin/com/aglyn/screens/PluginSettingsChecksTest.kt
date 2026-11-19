@@ -69,4 +69,20 @@ class PluginSettingsChecksTest {
     )
     assertNull(PluginSettingsChecks.refusal("unknown", obj("enabled" to true)))
   }
+
+  /**
+   * Weglot's key and language codes are kept as typed (the schema's `verbatim`, the console's `autoCapitalize="none"`):
+   * a keyboard that capitalizes or corrects would make a typed key "Wg_…", which the check refuses.
+   */
+  @Test
+  fun keysAndCodesAreKeptAsTyped() {
+    val screens = ScreenSpec.parseFile(File(root, "libs/native/screens/plugin-settings.screens.json").readText())
+    for (id in listOf("core.pluginSettings.weglot", "core.sitePluginSettings.weglot")) {
+      val form = screens.first { it.id == id }.blocks.first { it.type == "form" }
+      val fields = (form.raw as JsonObject)["fields"]!!.let { it as JsonArray }.mapNotNull { FieldSpec.parse(it) }
+      assertEquals(listOf("apiKey", "sourceLanguage", "targetLanguages"), fields.filter { it.verbatim }.map { it.key }, id)
+    }
+    assertTrue(FieldSpec.parse(Json.parseToJsonElement("""{"key":"apiKey","kind":"text","verbatim":true}"""))!!.verbatim)
+    assertTrue(!FieldSpec.parse(Json.parseToJsonElement("""{"key":"name","kind":"text"}"""))!!.verbatim)
+  }
 }

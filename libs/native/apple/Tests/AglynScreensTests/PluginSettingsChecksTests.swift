@@ -53,4 +53,19 @@ final class PluginSettingsChecksTests: XCTestCase {
     // An unknown check refuses nothing.
     XCTAssertNil(PluginSettingsChecks.refusal("unknown", ["enabled": true]))
   }
+
+  /// Weglot's key and language codes are kept as typed (the schema's `verbatim`, the console's `autoCapitalize="none"`):
+  /// the phone keyboard would make a typed key "Wg_…", which the check refuses. Other text stays a sentence field.
+  func testKeysAndCodesAreKeptAsTyped() throws {
+    let data = try Data(contentsOf: ScreenSpecTests.screensDir.appendingPathComponent("plugin-settings.screens.json"))
+    guard case .array(let screens)? = try XCTUnwrap(JSONValue.decode(data))["screens"] else { return XCTFail("no screens") }
+    for id in ["core.pluginSettings.weglot", "core.sitePluginSettings.weglot"] {
+      let screen = try XCTUnwrap(screens.first { $0["id"]?.stringValue == id }, id)
+      let form = try XCTUnwrap(screen["blocks"].array.first { $0["type"]?.stringValue == "form" }, id)
+      let fields = form["fields"].array.compactMap { FieldSpec($0) }
+      XCTAssertEqual(fields.filter(\.verbatim).map(\.key), ["apiKey", "sourceLanguage", "targetLanguages"], id)
+    }
+    XCTAssertFalse(try XCTUnwrap(FieldSpec(["key": "name", "kind": "text"])).verbatim)
+    XCTAssertTrue(try XCTUnwrap(FieldSpec(["key": "apiKey", "kind": "text", "verbatim": true])).verbatim)
+  }
 }

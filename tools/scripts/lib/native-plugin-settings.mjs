@@ -77,6 +77,8 @@ export function pluginSettingsScreen({ schema, label, checking, check }) {
       initial: `{item.${field.key} ?? const.defaults.${field.key}}`,
     }
     if (field.type === 'select') out.options = (field.options ?? []).map(({ value, label: text }) => ({ value, label: text }))
+    // A key or code is kept as typed: the apps' keyboards neither capitalize nor correct it, as the console's input.
+    if (field.verbatim) out.verbatim = true
     const help = helpFor(field)
     if (help) out.help = help
     return out
@@ -137,6 +139,7 @@ export function sitePluginSettingsScreen({ schema, label, check }) {
       when: `form.ov_${field.key}`,
     }
     if (field.type === 'select') control.options = (field.options ?? []).map(({ value, label: text }) => ({ value, label: text }))
+    if (field.verbatim) control.verbatim = true
     const help = helpFor(field)
     if (help) control.help = help
     fields.push(control)
