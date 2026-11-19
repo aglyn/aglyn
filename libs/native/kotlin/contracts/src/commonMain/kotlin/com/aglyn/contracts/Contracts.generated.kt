@@ -4259,8 +4259,10 @@ internal data class ContractValuesPart5(
     @SerialName("NATIVE_EMAIL_STATE_STATUSES") val nativeEmailStateStatuses: List<String>,
     @SerialName("NATIVE_NAV_MANIFEST") val nativeNavManifest: NativeNavManifest,
     @SerialName("NATIVE_NAV_SHELL_SCREENS") val nativeNavShellScreens: List<String>,
+    @SerialName("NATIVE_NO_IN_APP_BILLING_NOTE") val nativeNoInAppBillingNote: String,
     @SerialName("NATIVE_SITE_CAMPAIGNS_QUERY") val nativeSiteCampaignsQuery: ListQueryDeclaration,
     @SerialName("NATIVE_SITE_EMAILS_QUERY") val nativeSiteEmailsQuery: ListQueryDeclaration,
+    @SerialName("NATIVE_WEB_BILLING_LINK_LABEL") val nativeWebBillingLinkLabel: String,
     @SerialName("NOTHING_MOVED") val nothingMoved: String,
     @SerialName("NOTIFICATION_SOUND_FIELD") val notificationSoundField: String,
     @SerialName("NOTIFICATION_SOUNDS") val notificationSounds: List<NotificationSound>,
@@ -4294,12 +4296,12 @@ internal data class ContractValuesPart5(
     @SerialName("OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY") val outreachDoNotContactDomainListQuery: ListQueryDeclaration,
     @SerialName("OUTREACH_ENROLLMENT_LIST_QUERY") val outreachEnrollmentListQuery: ListQueryDeclaration,
     @SerialName("OUTREACH_MAX_EMAIL_STEPS") val outreachMaxEmailSteps: Long,
-    @SerialName("OUTREACH_MAX_STEP_DELAY_BUSINESS_DAYS") val outreachMaxStepDelayBusinessDays: Long,
-    @SerialName("OUTREACH_MAX_STEPS") val outreachMaxSteps: Long,
 )
 
 @Serializable
 internal data class ContractValuesPart6(
+    @SerialName("OUTREACH_MAX_STEP_DELAY_BUSINESS_DAYS") val outreachMaxStepDelayBusinessDays: Long,
+    @SerialName("OUTREACH_MAX_STEPS") val outreachMaxSteps: Long,
     @SerialName("OUTREACH_MIN_EMAIL_FOLLOW_UP_BUSINESS_DAYS") val outreachMinEmailFollowUpBusinessDays: Long,
     @SerialName("OUTREACH_SEQUENCE_LIST_QUERY") val outreachSequenceListQuery: ListQueryDeclaration,
     @SerialName("OUTREACH_SEQUENCE_NAME_MAX") val outreachSequenceNameMax: Long,
@@ -4346,12 +4348,12 @@ internal data class ContractValuesPart6(
     @SerialName("POS_OFFLINE_CARD_INTENT_KIND") val posOfflineCardIntentKind: String,
     @SerialName("POS_OFFLINE_CARD_MAX_SALE_CENTS_LIMIT") val posOfflineCardMaxSaleCentsLimit: Long,
     @SerialName("POS_OFFLINE_CARD_RECONNECT_WITHIN_MS") val posOfflineCardReconnectWithinMs: Double,
-    @SerialName("POS_OFFLINE_CLOCK_SKEW_MS") val posOfflineClockSkewMs: Double,
-    @SerialName("POS_OFFLINE_DISABLED_TENDERS") val posOfflineDisabledTenders: Map<String, String>,
 )
 
 @Serializable
 internal data class ContractValuesPart7(
+    @SerialName("POS_OFFLINE_CLOCK_SKEW_MS") val posOfflineClockSkewMs: Double,
+    @SerialName("POS_OFFLINE_DISABLED_TENDERS") val posOfflineDisabledTenders: Map<String, String>,
     @SerialName("POS_OFFLINE_FLAG_LABELS") val posOfflineFlagLabels: Map<String, String>,
     @SerialName("POS_OFFLINE_LATE_SYNC_MS") val posOfflineLateSyncMs: Double,
     @SerialName("POS_OFFLINE_MAX_AGE_MS") val posOfflineMaxAgeMs: Double,
@@ -4398,12 +4400,12 @@ internal data class ContractValuesPart7(
     @SerialName("SEO_KEYWORD_LINES_MAX_CHARS") val seoKeywordLinesMaxChars: Long,
     @SerialName("SEO_MAX_KEYWORDS") val seoMaxKeywords: Long,
     @SerialName("SHIPPING_COST_MAX_CENTS") val shippingCostMaxCents: Long,
-    @SerialName("SITE_CARDS_PAGE_SIZE") val siteCardsPageSize: Long,
-    @SerialName("SITE_FILTER_HEADERS") val siteFilterHeaders: Map<String, String>,
 )
 
 @Serializable
 internal data class ContractValuesPart8(
+    @SerialName("SITE_CARDS_PAGE_SIZE") val siteCardsPageSize: Long,
+    @SerialName("SITE_FILTER_HEADERS") val siteFilterHeaders: Map<String, String>,
     @SerialName("SITE_FILTER_OPTIONS") val siteFilterOptions: SiteFilterOptions,
     @SerialName("SITE_JOURNEY_KEY_MAX") val siteJourneyKeyMax: Long,
     @SerialName("SITE_LIST_DECLARATION") val siteListDeclaration: ListQueryDeclaration,
@@ -4668,8 +4670,10 @@ class ContractValues internal constructor(
     val nativeEmailStateStatuses: List<String> get() = part5.nativeEmailStateStatuses
     val nativeNavManifest: NativeNavManifest get() = part5.nativeNavManifest
     val nativeNavShellScreens: List<String> get() = part5.nativeNavShellScreens
+    val nativeNoInAppBillingNote: String get() = part5.nativeNoInAppBillingNote
     val nativeSiteCampaignsQuery: ListQueryDeclaration get() = part5.nativeSiteCampaignsQuery
     val nativeSiteEmailsQuery: ListQueryDeclaration get() = part5.nativeSiteEmailsQuery
+    val nativeWebBillingLinkLabel: String get() = part5.nativeWebBillingLinkLabel
     val nothingMoved: String get() = part5.nothingMoved
     val notificationSoundField: String get() = part5.notificationSoundField
     val notificationSounds: List<NotificationSound> get() = part5.notificationSounds
@@ -4703,8 +4707,8 @@ class ContractValues internal constructor(
     val outreachDoNotContactDomainListQuery: ListQueryDeclaration get() = part5.outreachDoNotContactDomainListQuery
     val outreachEnrollmentListQuery: ListQueryDeclaration get() = part5.outreachEnrollmentListQuery
     val outreachMaxEmailSteps: Long get() = part5.outreachMaxEmailSteps
-    val outreachMaxStepDelayBusinessDays: Long get() = part5.outreachMaxStepDelayBusinessDays
-    val outreachMaxSteps: Long get() = part5.outreachMaxSteps
+    val outreachMaxStepDelayBusinessDays: Long get() = part6.outreachMaxStepDelayBusinessDays
+    val outreachMaxSteps: Long get() = part6.outreachMaxSteps
     val outreachMinEmailFollowUpBusinessDays: Long get() = part6.outreachMinEmailFollowUpBusinessDays
     val outreachSequenceListQuery: ListQueryDeclaration get() = part6.outreachSequenceListQuery
     val outreachSequenceNameMax: Long get() = part6.outreachSequenceNameMax
@@ -4751,8 +4755,8 @@ class ContractValues internal constructor(
     val posOfflineCardIntentKind: String get() = part6.posOfflineCardIntentKind
     val posOfflineCardMaxSaleCentsLimit: Long get() = part6.posOfflineCardMaxSaleCentsLimit
     val posOfflineCardReconnectWithinMs: Double get() = part6.posOfflineCardReconnectWithinMs
-    val posOfflineClockSkewMs: Double get() = part6.posOfflineClockSkewMs
-    val posOfflineDisabledTenders: Map<String, String> get() = part6.posOfflineDisabledTenders
+    val posOfflineClockSkewMs: Double get() = part7.posOfflineClockSkewMs
+    val posOfflineDisabledTenders: Map<String, String> get() = part7.posOfflineDisabledTenders
     val posOfflineFlagLabels: Map<String, String> get() = part7.posOfflineFlagLabels
     val posOfflineLateSyncMs: Double get() = part7.posOfflineLateSyncMs
     val posOfflineMaxAgeMs: Double get() = part7.posOfflineMaxAgeMs
@@ -4799,8 +4803,8 @@ class ContractValues internal constructor(
     val seoKeywordLinesMaxChars: Long get() = part7.seoKeywordLinesMaxChars
     val seoMaxKeywords: Long get() = part7.seoMaxKeywords
     val shippingCostMaxCents: Long get() = part7.shippingCostMaxCents
-    val siteCardsPageSize: Long get() = part7.siteCardsPageSize
-    val siteFilterHeaders: Map<String, String> get() = part7.siteFilterHeaders
+    val siteCardsPageSize: Long get() = part8.siteCardsPageSize
+    val siteFilterHeaders: Map<String, String> get() = part8.siteFilterHeaders
     val siteFilterOptions: SiteFilterOptions get() = part8.siteFilterOptions
     val siteJourneyKeyMax: Long get() = part8.siteJourneyKeyMax
     val siteListDeclaration: ListQueryDeclaration get() = part8.siteListDeclaration

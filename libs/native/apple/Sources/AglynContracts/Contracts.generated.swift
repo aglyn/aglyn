@@ -6409,8 +6409,10 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let nativeEmailStateStatuses: [String]
   public let nativeNavManifest: NativeNavManifest
   public let nativeNavShellScreens: [String]
+  public let nativeNoInAppBillingNote: String
   public let nativeSiteCampaignsQuery: ListQueryDeclaration
   public let nativeSiteEmailsQuery: ListQueryDeclaration
+  public let nativeWebBillingLinkLabel: String
   public let nothingMoved: String
   public let notificationSoundField: String
   public let notificationSounds: [NotificationSound]
@@ -6791,8 +6793,10 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case nativeEmailStateStatuses = "NATIVE_EMAIL_STATE_STATUSES"
     case nativeNavManifest = "NATIVE_NAV_MANIFEST"
     case nativeNavShellScreens = "NATIVE_NAV_SHELL_SCREENS"
+    case nativeNoInAppBillingNote = "NATIVE_NO_IN_APP_BILLING_NOTE"
     case nativeSiteCampaignsQuery = "NATIVE_SITE_CAMPAIGNS_QUERY"
     case nativeSiteEmailsQuery = "NATIVE_SITE_EMAILS_QUERY"
+    case nativeWebBillingLinkLabel = "NATIVE_WEB_BILLING_LINK_LABEL"
     case nothingMoved = "NOTHING_MOVED"
     case notificationSoundField = "NOTIFICATION_SOUND_FIELD"
     case notificationSounds = "NOTIFICATION_SOUNDS"

@@ -22,6 +22,12 @@
         "ListFilterRequest"
       ]
     },
+    "libs/aglyn/src/lib/app-utils/native-store-billing.ts": {
+      "values": [
+        "NATIVE_WEB_BILLING_LINK_LABEL",
+        "NATIVE_NO_IN_APP_BILLING_NOTE"
+      ]
+    },
     "libs/aglyn/src/lib/app-utils/name-search.ts": {
       "values": [
         "NAME_TOKEN_MAX_PREFIX",
