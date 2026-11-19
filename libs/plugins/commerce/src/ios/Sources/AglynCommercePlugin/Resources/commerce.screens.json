@@ -146,6 +146,13 @@
               "subtitle": "The emails customers get, and order webhooks"
             },
             {
+              "title": "Point of sale",
+              "icon": "shippingbox|local_shipping",
+              "screen": "commerce.hardware",
+              "subtitle": "Card readers and accessories, set up and shipped to you",
+              "when": "site.can[managePos] || site.can[posBuyHardware]"
+            },
+            {
               "title": "Sales channels",
               "icon": "storefront|storefront",
               "screen": "commerce.settingsChannels",
@@ -156,13 +163,6 @@
               "icon": "puzzlepiece|extension",
               "screen": "commerce.settings",
               "subtitle": "The services your store connects to"
-            },
-            {
-              "title": "Hardware",
-              "icon": "shippingbox|local_shipping",
-              "screen": "commerce.hardware",
-              "subtitle": "Card readers and accessories, set up and shipped to you",
-              "when": "site.can[managePos] || site.can[posBuyHardware]"
             }
           ]
         },
