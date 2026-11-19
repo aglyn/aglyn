@@ -118,6 +118,14 @@ fun ArtifactsScreen(context: NativePluginContext, kind: ArtifactKind, initialId:
   LaunchedEffect(quota, rowsKey) { quota.recount() }
   val runner = remember(hostId, kind) { ActionRunner(scope) }
   val api = remember(hostId, kind, context.api, context.writer) { ArtifactsApi(context.api, context.writer, hostId, kind) }
+  // Who is in each layout, component or template right now (AGL-2486), read every 30 seconds while the list shows.
+  var presence by remember(hostId) { mutableStateOf(com.aglyn.site.pages.PresenceSummary()) }
+  LaunchedEffect(hostId, context.api) {
+    while (true) {
+      presence = com.aglyn.site.pages.fetchPresenceSummary(context.api, hostId)
+      kotlinx.coroutines.delay(com.aglyn.site.pages.PRESENCE_SUMMARY_POLL_MS)
+    }
+  }
   var dialog by remember { mutableStateOf<ArtifactDialog?>(null) }
   val canEdit = com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.edit")
 
@@ -175,7 +183,7 @@ fun ArtifactsScreen(context: NativePluginContext, kind: ArtifactKind, initialId:
             } else {
               LazyColumn(Modifier.fillMaxSize().testTag("${kind.collection}-list"), state = listState) {
                 items(rows, key = { it.id }) { row ->
-                  ArtifactListRow(context, kind, row, row.id == selected, onChanged = { model.reload(keep = true) }) { onSelect(row.id) }
+                  ArtifactListRow(context, kind, row, presence.people(kind.singular, row.id), row.id == selected, onChanged = { model.reload(keep = true) }) { onSelect(row.id) }
                 }
                 if (model.hasMore) item { SkeletonList(rows = 2) }
               }
@@ -246,7 +254,8 @@ private fun rowSupporting(kind: ArtifactKind, row: ArtifactRow): String = listOf
 
 @Composable
 private fun ArtifactListRow(
-  context: NativePluginContext, kind: ArtifactKind, row: ArtifactRow, selected: Boolean, onChanged: () -> Unit, onClick: () -> Unit,
+  context: NativePluginContext, kind: ArtifactKind, row: ArtifactRow, people: List<com.aglyn.site.pages.PresentPerson>, selected: Boolean,
+  onChanged: () -> Unit, onClick: () -> Unit,
 ) {
   AglynListItem(
     title = if (row.isStarterBundle) row.starterName ?: row.name else row.name,
@@ -254,18 +263,22 @@ private fun ArtifactListRow(
     icon = AglynIcons.named(kind.icon),
     selected = selected,
     trailing = {
-      when {
-        // Stacked, not side by side: a plugin's status beside the source chip left the name a few letters on a list pane.
-        kind == ArtifactKind.TEMPLATE -> androidx.compose.foundation.layout.Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
-          StatusChip(if (row.isStarterBundle) "Starter bundle" else templateSourceLabel(row.sourceType), StatusTone.NEUTRAL)
-          // What the plugin that installed this template says about the copy (an update to take), drawn by that plugin.
-          if (isInstalledTemplateSource(row.sourceType)) {
-            // An update replaces the row, so the list (read once, not live) is read again.
-            SlotWidgets(context, TEMPLATE_INSTALL_STATUS_SLOT, props = templateInstallStatusProps(row, context.hostId.orEmpty()), onChanged = onChanged)
+      Row(horizontalArrangement = Arrangement.spacedBy(space(0.5f)), verticalAlignment = Alignment.CenterVertically) {
+        // Who is in it right now, across its versions (AGL-2486).
+        com.aglyn.site.pages.DocumentPresenceChips(people)
+        when {
+          // Stacked, not side by side: a plugin's status beside the source chip left the name a few letters on a list pane.
+          kind == ArtifactKind.TEMPLATE -> androidx.compose.foundation.layout.Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
+            StatusChip(if (row.isStarterBundle) "Starter bundle" else templateSourceLabel(row.sourceType), StatusTone.NEUTRAL)
+            // What the plugin that installed this template says about the copy (an update to take), drawn by that plugin.
+            if (isInstalledTemplateSource(row.sourceType)) {
+              // An update replaces the row, so the list (read once, not live) is read again.
+              SlotWidgets(context, TEMPLATE_INSTALL_STATUS_SLOT, props = templateInstallStatusProps(row, context.hostId.orEmpty()), onChanged = onChanged)
+            }
           }
+          row.versionId == null -> StatusChip("No version yet", StatusTone.NEUTRAL)
+          else -> Unit
         }
-        row.versionId == null -> StatusChip("No version yet", StatusTone.NEUTRAL)
-        else -> Unit
       }
     },
     onClick = onClick,

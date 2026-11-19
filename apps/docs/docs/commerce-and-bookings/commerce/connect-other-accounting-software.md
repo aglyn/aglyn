@@ -73,7 +73,7 @@ accounts and tax codes, how sales are posted and a start date, then select
 | **Sales income** | Where item sales are recorded. |
 | **Shipping income** | Where shipping you charge is recorded. Leave it empty to use sales income. |
 | **Stripe clearing account** | Every sale is paid into it and every payout leaves it, so it returns to zero with each payout. |
-| **Aglyn fee expense** | Where the Aglyn fee on each sale is recorded. |
+| **Aglyn fee expense** | Where the Aglyn fee on each sale and the fees Stripe takes are recorded. |
 | **Payout bank account** | The bank account Stripe pays out to. |
 | **Tips** | Where tips taken at the register are recorded. Leave it empty to use sales income. |
 | **Cash and other payments** | A bank account for money that does not go through Stripe: cash at the register, room charges, and sales on a marketplace. |
@@ -89,6 +89,7 @@ Nothing is posted until the accounts are chosen.
 | A paid order | Income paid in full into the Stripe clearing account. |
 | A refund | A payment out of the Stripe clearing account against the income account. |
 | The Aglyn fee on a sale | A cost from the Stripe clearing account to the fee expense account. |
+| Stripe's fees on a payout | A cost from the Stripe clearing account to the fee expense account, posted with each payout, so once a payout has posted, the clearing account matches what Stripe is still holding for you. |
 | A Stripe payout | A **transfer** from the Stripe clearing account to the payout bank account. |
 | A sale paid in cash, by room charge or on a marketplace | Its income, then a **transfer** of that share from the Stripe clearing account to the cash and other payments account. |
 
@@ -97,12 +98,15 @@ it; store credit is a discount; a tip is its own line. A refund comes back the
 way the sale was paid, in proportion. A sale made with Stripe in test mode is
 never posted.
 
-Sales and refunds are all filed under one customer, and fees under one
-supplier, which Aglyn adds to your books the first time it posts.
+Sales and refunds are all filed under one customer. The Aglyn fee is filed
+under a supplier named **Aglyn**, and Stripe's fees under one named **Stripe**.
+Aglyn adds each to your books the first time it posts, unless your books
+already have one by that name.
 
 Choose **One summary journal entry per day** to post one **journal entry** per
 day instead of an entry per order, with the day's totals. It needs one more
-account: **Sales tax liability**. Payouts are still posted one by one.
+account: **Sales tax liability**. Payouts, and Stripe's fees on each, are still
+posted one by one.
 
 Your software takes each entry in its own time: seconds for most online
 software, longer for QuickBooks Desktop, which waits for its Web Connector to
