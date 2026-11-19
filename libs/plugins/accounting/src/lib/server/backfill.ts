@@ -83,7 +83,8 @@ export function backfillRefund(
   entry: Pick<OrderHistoryEntry, 'order' | 'lastRefundAtMs'>,
   nowMs: number,
 ): (AccountingRefundSnapshot & { coversUntilMs: number }) | null {
-  // What came back to the buyer, less a Stripe Tax sale's tax, which was Aglyn's.
+  // What came back to the buyer, less any tax that was not the merchant's
+  // (a Stripe Tax sale through the platform's account; a direct one keeps it).
   const refunded = Math.min(merchantShareOfRefund(order, toCents(entry.order?.refundedCents)), order.totals.totalCents)
   if (refunded <= 0) return null
   return {

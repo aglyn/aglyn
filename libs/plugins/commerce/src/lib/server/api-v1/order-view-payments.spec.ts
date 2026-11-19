@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { orderPaymentsView, orderViewFromData } from './order-view'
+import { orderChargeModelView, orderPaymentsView, orderViewFromData } from './order-view'
 
 /**
  * How a sale was paid, in the public order view (AGL-3614): a ledger needs
@@ -59,5 +59,30 @@ describe('how a sale was paid, in the public order view', () => {
     expect(view.payments).toEqual([])
     expect(view.giftCardRedeemedCents).toBe(1500)
     expect(view.totals.tipCents).toBe(0)
+  })
+
+  it('says a sale was charged on the seller’s own Stripe account, from the order or a register card payment', () => {
+    expect(orderViewFromData('o-3', { channel: 'online', chargeModel: 'direct', taxMode: 'stripe-automatic' })).toMatchObject({
+      chargeModel: 'direct',
+      taxMode: 'stripe-automatic',
+    })
+    expect(orderViewFromData('o-4', { channel: 'online', taxMode: 'stripe-automatic' }).chargeModel).toBeNull()
+    expect(orderChargeModelView({ chargeModel: 'destination' })).toBeNull()
+    // A register card taken on the store's own account says so on its payment only.
+    const register = {
+      channel: 'pos',
+      payments: [
+        { id: 'p1', method: 'cash', status: 'succeeded', amountCents: 500 },
+        { id: 'p2', method: 'card_present', status: 'succeeded', amountCents: 1500, chargeModel: 'direct', stripeAccountId: 'acct_1' },
+      ],
+    }
+    expect(orderViewFromData('o-5', register).chargeModel).toBe('direct')
+    // A card payment that did not succeed moved no money on that account.
+    expect(
+      orderChargeModelView({
+        channel: 'pos',
+        payments: [{ id: 'p1', method: 'card_present', status: 'failed', amountCents: 1500, chargeModel: 'direct' }],
+      }),
+    ).toBeNull()
   })
 })

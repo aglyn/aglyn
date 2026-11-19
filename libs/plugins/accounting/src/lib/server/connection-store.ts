@@ -93,8 +93,13 @@ export interface AccountingConnectionRecord {
   mapping: AccountingMapping
   /** What the adapter's `prepare` set up for the mapping. */
   extras: AccountingProviderExtras
-  /** The contact a fee is paid to, in a ledger that needs one. */
+  /** The contact Aglyn's fee is paid to, in a ledger that needs one. */
   feePayeeId: string | null
+  /**
+   * The contact Stripe's own fees are paid to (`Stripe`), in a ledger that
+   * needs one. Absent until the first such fee posts.
+   */
+  stripeFeePayeeId?: string | null
   /** Every tax key a synced order has named. */
   seenTaxKeys: string[]
   /** The newest payout arrival already queued, epoch ms. */
@@ -465,6 +470,7 @@ export function newConnectionRecord(input: {
     mapping: same?.mapping ?? { ...EMPTY_ACCOUNTING_MAPPING },
     extras: same?.extras ?? {},
     feePayeeId: same?.feePayeeId ?? null,
+    stripeFeePayeeId: same?.stripeFeePayeeId ?? null,
     seenTaxKeys: same?.seenTaxKeys ?? [],
     payoutCursorMs: same?.payoutCursorMs ?? input.nowMs,
     callDay: same?.callDay ?? null,

@@ -23,6 +23,8 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
+import com.aglyn.core.SendRate
+import com.aglyn.core.sendRate
 
 /*
  * SEQUENCES (the Apple plugin's `Outreach.swift`). Internal only: shown where
@@ -212,13 +214,124 @@ fun enrollmentRowOf(doc: FirestoreDoc) = EnrollmentRow(
   doc.long("stepIndex") ?: 0, millisOf(doc.data["nextDueAtMs"]), doc.string("stopReason"),
 )
 
-data class MailboxRow(val id: String, val email: String, val sendAs: String?, val displayName: String?, val status: String, val dailyCap: Long?, val sentToday: Long?)
+data class MailboxRow(
+  val id: String,
+  val email: String,
+  val sendAs: String?,
+  val displayName: String?,
+  val status: String,
+  val dailyCap: Long?,
+  val sentToday: Long?,
+  /** The mailbox's zone, which its sequences' times are read in; null for the reader's own. */
+  val timeZone: String? = null,
+)
 
 @Suppress("UNCHECKED_CAST")
 fun mailboxRowOf(doc: FirestoreDoc) = MailboxRow(
   doc.id, doc.string("email") ?: doc.id, doc.string("sendAs"), doc.string("displayName"), doc.string("status") ?: "connected", doc.long("dailyCap"),
   ((doc.data["health"] as? Map<String, Any?>)?.get("sentToday") as? Number)?.toLong(),
+  doc.string("timezone"),
 )
+
+/*---------- results (`sequence-report.ts`) ----------*/
+
+/** One sentence saying what a figure is not (`OutreachReportCaveat`). */
+data class OutreachReportCaveat(val id: String, val message: String)
+
+/** Everything a sequence's Results card shows (`OutreachSequenceReport`); the card adds no arithmetic of its own. */
+data class OutreachSequenceReport(
+  val sent: Double,
+  val people: Double?,
+  val clicks: Double,
+  val uniqueClicks: Double,
+  val machineClicks: Double,
+  val lastClickAtMs: Double?,
+  val clickTracked: Boolean,
+  val openTracked: Boolean,
+  val openPeople: Double?,
+  val opens: Double,
+  val uniqueOpens: Double,
+  val machineOpens: Double,
+  val proxyOpens: Double,
+  val lastOpenAtMs: Double?,
+  val opensUnmeasured: Boolean,
+  val clickRate: SendRate?,
+  val openRate: SendRate?,
+  val caveats: List<OutreachReportCaveat>,
+)
+
+private val OUTREACH_CAVEATS = mapOf(
+  "opens-not-measured" to "Opens aren’t measured. A sequence email is plain text, the way a one-to-one email is, and counting an open needs a tracking image in an HTML email. Clicks are measured instead.",
+  "opens-unrecorded" to "Opens are counted for this sequence, and no email with the tracking image has gone out yet. Emails sent from now on carry it.",
+  "opens-counted" to "Opens are counted from a tracking image in an HTML copy of each email, and the open rate is taken over the people sent one. Gmail readers’ opens count. Fetches made whether or not anyone reads the email — by Apple Mail as it arrives, by Yahoo’s image proxy, and by Google’s, Microsoft’s and other security scanners — are counted separately and left out of the rate.",
+  "opens-all-machine" to "Every fetch of the tracking image so far was made by a machine — a mail provider’s proxy or a security scanner fetching it for the recipient — so whether anyone read these emails can’t be told from opens, and no open rate is shown. That is common when the people emailed are behind company mail security.",
+  "opens-stopped" to "Opens were counted while this sequence’s emails carried a tracking image. It’s turned off now, so the figures cover only the emails sent while it was on.",
+  "clicks-not-tracked" to "Clicks aren’t being counted for this sequence. Turn on link tracking in its settings, and the emails sent after that have their links counted.",
+  "clicks-unrecorded" to "No click has been counted for this sequence yet: either its emails carry no links, or they went out before link tracking was turned on. Emails sent from now on are counted.",
+  "machine-clicks-excluded" to "Some clicks came from security scanners that open every link in an email before the recipient sees it. They’re counted separately and left out of the click rate.",
+)
+
+/** JavaScript's `Number(value ?? 0)`, kept only when finite and positive. */
+private fun reportCount(value: Any?): Double {
+  val parsed = when (value) {
+    null -> 0.0
+    is Boolean -> if (value) 1.0 else 0.0
+    is Number -> value.toDouble()
+    is String -> if (value.isBlank()) 0.0 else value.trim().toDoubleOrNull()
+    else -> null
+  }
+  return if (parsed != null && parsed.isFinite() && parsed > 0) parsed else 0.0
+}
+
+private fun finiteMs(value: Any?): Double? = (value as? Number)?.toDouble()?.takeIf { it.isFinite() }
+
+/** `outreachSequenceReport`: a sequence's stored counters as its Results card reads them. */
+fun outreachSequenceReport(stats: Map<String, Any?>?, trackClicks: Boolean, countOpens: Boolean = false): OutreachSequenceReport {
+  val source = stats.orEmpty()
+  val sent = reportCount(source["sent"])
+  // Absent, not zero: `people` is the click rate's denominator, and "never counted" is not "nobody emailed".
+  val people = if ("people" in source) reportCount(source["people"]) else null
+  val uniqueClicks = reportCount(source["uniqueClicks"])
+  val machineClicks = reportCount(source["machineClicks"])
+  val clickTracked = source["clickTracked"] == true
+  val openTracked = source["openTracked"] == true
+  val openPeople = if ("openPeople" in source) reportCount(source["openPeople"]) else null
+  val uniqueOpens = reportCount(source["uniqueOpens"])
+  val machineOpens = reportCount(source["machineOpens"])
+  val opensUnmeasured = openTracked && uniqueOpens == 0.0 && machineOpens > 0
+  val ids = buildList {
+    if (!openTracked) add(if (countOpens) "opens-unrecorded" else "opens-not-measured") else add(if (countOpens) "opens-counted" else "opens-stopped")
+    if (opensUnmeasured) add("opens-all-machine")
+    if (!clickTracked) {
+      if (sent > 0) add(if (trackClicks) "clicks-unrecorded" else "clicks-not-tracked") else if (!trackClicks) add("clicks-not-tracked")
+    }
+    if (machineClicks > 0) add("machine-clicks-excluded")
+  }
+  return OutreachSequenceReport(
+    sent = sent,
+    people = people,
+    clicks = reportCount(source["clicks"]),
+    uniqueClicks = uniqueClicks,
+    machineClicks = machineClicks,
+    lastClickAtMs = finiteMs(source["lastClickAtMs"]),
+    clickTracked = clickTracked,
+    openTracked = openTracked,
+    openPeople = openPeople,
+    opens = reportCount(source["opens"]),
+    uniqueOpens = uniqueOpens,
+    machineOpens = machineOpens,
+    proxyOpens = minOf(reportCount(source["proxyOpens"]), machineOpens),
+    lastOpenAtMs = finiteMs(source["lastOpenAtMs"]),
+    opensUnmeasured = opensUnmeasured,
+    clickRate = if (clickTracked) sendRate(uniqueClicks, people, "people emailed") else null,
+    openRate = if (openTracked && !opensUnmeasured) sendRate(uniqueOpens, openPeople, "people sent a tracked email") else null,
+    caveats = ids.map { OutreachReportCaveat(it, OUTREACH_CAVEATS[it].orEmpty()) },
+  )
+}
+
+/** `formatOutreachTime`: a moment as the sequence pages print one, in the mailbox's zone where it has one. */
+fun formatOutreachTime(ms: Double?, timeZone: String?): String =
+  if (ms == null || !ms.isFinite()) "—" else com.aglyn.contracts.formatLocalDay(ms.toLong(), "MMM d, h:mm a z", timeZone)
 
 /*---------- writes ----------*/
 

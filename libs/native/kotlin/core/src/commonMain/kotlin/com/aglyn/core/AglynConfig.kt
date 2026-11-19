@@ -59,6 +59,11 @@ data class AglynEnv(
   val docsOrigin: String? = null,
   /** Crash reports and Analytics: `on` or `off`; unset is on, except on a local stack (`AGLYN_TELEMETRY`, AGL-4067). */
   val telemetry: String? = null,
+  /**
+   * Buying from Aglyn (a plan, an add-on, credits, a paid listing, an invoice, a card): `on` or `off`; unset is off
+   * (`AGLYN_IN_APP_BILLING`). Off in the release build type by the owner's decision of 2026-11-19 ([StoreBilling]).
+   */
+  val inAppBilling: String? = null,
 )
 
 data class AglynConfig(
@@ -100,6 +105,14 @@ data class AglynConfig(
    * in any debuggable build (`AndroidFirebase`).
    */
   val telemetry: Boolean = true,
+  /**
+   * Whether this build may take or start a payment to Aglyn: a plan, an add-on, credits, a paid listing, an invoice or a
+   * card. Off for the release build type (Google Play), by the owner's decision of 2026-11-19: Play takes payment for
+   * subscriptions and business software only through Play Billing, so a store build hides buying. On for debug. A
+   * build-time value only: nothing remote (Remote Config, Firestore, a route's answer) may turn it on. Read it through
+   * [StoreBilling], which also applies the debug override.
+   */
+  val inAppBilling: Boolean = false,
 ) {
   /** The domain workspace addresses sit under (`acme-inc.aglyn.com`): the console's host without its own label. */
   val workspaceDomain: String
@@ -191,6 +204,9 @@ data class AglynConfig(
       else -> false
     }
 
+    /** `AGLYN_IN_APP_BILLING`: on only when the build says so; unset or anything else is off, so a typo never turns buying on. */
+    fun inAppBillingSetting(value: String?): Boolean = (value ?: "").trim().lowercase() in setOf("on", "true", "yes", "1")
+
     internal fun hostOf(origin: String): String =
       ORIGIN.matchEntire(origin)?.groupValues?.get(2)?.lowercase() ?: ""
 
@@ -222,6 +238,7 @@ data class AglynConfig(
         legalOrigin = httpsOrigin(env.legalOrigin) ?: DEFAULT_LEGAL_ORIGIN,
         docsOrigin = httpsOrigin(env.docsOrigin) ?: DEFAULT_DOCS_ORIGIN,
         telemetry = telemetrySetting(env.telemetry, localStack),
+        inAppBilling = inAppBillingSetting(env.inAppBilling),
       )
     }
   }

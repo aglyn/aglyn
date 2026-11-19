@@ -140,6 +140,25 @@ public func templateKindLabel(_ kind: String?) -> String {
     ?? (resolved.prefix(1).uppercased() + resolved.dropFirst())
 }
 
+/// The `templateInstallStatus` zone (AGL-3080): what the plugin that installed a template says about the site's copy.
+public let templateInstallStatusSlot = "templateInstallStatus"
+
+/// A template some plugin installed (`isInstalledTemplateSource`): neither saved here nor a starter.
+public func isInstalledTemplateSource(_ type: String?) -> Bool {
+  guard let type, !type.isEmpty else { return false }
+  return type != "authored" && type != "starter"
+}
+
+/// What the `templateInstallStatus` zone hands each widget for a template row (`ConsoleTemplateInstallStatusZoneProps`):
+/// the site, the template, and its server-managed source stamp and edit mark.
+public func templateInstallStatusProps(_ row: ArtifactRow, hostID: String) -> [String: String] {
+  var props = ["hostId": hostID, "templateId": row.id, "displayName": row.name, "sourceType": row.sourceType ?? ""]
+  if let listing = row.sourceListingID { props["listingId"] = listing }
+  if let version = row.sourceVersion { props["version"] = version }
+  if row.edited { props["edited"] = "true" }
+  return props
+}
+
 /// A template's source badge: saved on this site, a starter, or a plugin's.
 public func templateSourceLabel(_ type: String?) -> String {
   switch type {
@@ -160,6 +179,11 @@ public struct ArtifactRow: Identifiable, Equatable, Sendable {
   /// A layout's parent layout (`layoutId`, "Renders inside").
   public let parentLayoutID: String?
   public let sourceType: String?
+  /// The listing and version a plugin-installed template came from (`source.listingId`, `source.version`).
+  public let sourceListingID: String?
+  public let sourceVersion: String?
+  /// The site edited its copy since installing it (`editedAt`).
+  public let edited: Bool
   public let starterID: String?
   public let starterName: String?
   public let starterOrder: Int?
@@ -183,6 +207,9 @@ public struct ArtifactRow: Identifiable, Equatable, Sendable {
     versionID = nonBlankText(doc.string("versionId"))
     parentLayoutID = nonBlankText(doc.string("layoutId"))
     sourceType = source?["type"] as? String
+    sourceListingID = nonBlankText(source?["listingId"] as? String)
+    sourceVersion = (source?["version"] as? String).flatMap(nonBlankText) ?? (source?["version"] as? NSNumber).map { jsNumberString($0.doubleValue) }
+    edited = doc.data["editedAt"] != nil && !(doc.data["editedAt"] is NSNull)
     starterID = nonBlankText(source?["starterId"] as? String)
     starterName = nonBlankText(source?["starterName"] as? String)
     starterOrder = (source?["starterOrder"] as? NSNumber)?.intValue
