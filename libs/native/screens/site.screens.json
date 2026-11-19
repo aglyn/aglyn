@@ -1659,24 +1659,220 @@
       "links": [
         "/admin/activity"
       ],
+      "constants": {
+        "sorts": [
+          {
+            "id": "",
+            "label": "When, newest first"
+          },
+          {
+            "id": "createdAt asc",
+            "label": "When, oldest first"
+          },
+          {
+            "id": "action asc",
+            "label": "Action, A to Z"
+          },
+          {
+            "id": "action desc",
+            "label": "Action, Z to A"
+          }
+        ]
+      },
       "load": {
         "activity": {
           "query": {
             "collection": "hosts/{site.id}/activity",
-            "orderBy": "createdAt desc",
-            "limit": 100
-          }
+            "orderBy": "{params.sort|'createdAt desc'}",
+            "limit": 50,
+            "where": [
+              [
+                "searchTokens",
+                "array-contains",
+                "{params.q:token}",
+                "params.q"
+              ],
+              [
+                "action",
+                "==",
+                "{params.action}",
+                "params.action"
+              ],
+              [
+                "createdAt",
+                ">=",
+                {
+                  "$date": "{params.from}"
+                },
+                "params.from"
+              ],
+              [
+                "createdAt",
+                "<",
+                {
+                  "$date": "{params.before}"
+                },
+                "params.before"
+              ]
+            ]
+          },
+          "more": 50
         }
       },
       "blocks": [
         {
+          "type": "actions",
+          "id": "activityFilter",
+          "items": [
+            {
+              "id": "search",
+              "label": "{params.q|'Search'}",
+              "icon": "magnifyingglass|search",
+              "prompt": [
+                {
+                  "key": "q",
+                  "label": "Search by who made the change or what changed",
+                  "kind": "text",
+                  "initial": "{params.q}",
+                  "help": "Finds entries by the start of a word in the address of whoever made the change (or the API key's name) and in the name of what changed, across the whole log."
+                }
+              ],
+              "navigate": {
+                "screen": "core.site.activity",
+                "params": {
+                  "q": "{form.q}",
+                  "action": "",
+                  "from": "{params.from}",
+                  "before": "{params.before}",
+                  "sort": "",
+                  "emptyText": "No activity matches these filters."
+                }
+              }
+            },
+            {
+              "id": "action",
+              "label": "Action: {params.action|'Any'}",
+              "icon": "line.3.horizontal.decrease|filter_list",
+              "prompt": [
+                {
+                  "key": "action",
+                  "label": "Action (exactly as recorded)",
+                  "kind": "text",
+                  "initial": "{params.action}"
+                }
+              ],
+              "navigate": {
+                "screen": "core.site.activity",
+                "params": {
+                  "q": "",
+                  "action": "{form.action}",
+                  "from": "{params.from}",
+                  "before": "{params.before}",
+                  "sort": "",
+                  "emptyText": "No activity matches these filters."
+                }
+              }
+            },
+            {
+              "id": "when",
+              "label": "When: {params.from|'Any':date} – {params.before|'now':date}",
+              "icon": "calendar|calendar_month",
+              "prompt": [
+                {
+                  "key": "from",
+                  "label": "On or after",
+                  "kind": "date",
+                  "initial": "{params.from}"
+                },
+                {
+                  "key": "before",
+                  "label": "Before",
+                  "kind": "date",
+                  "initial": "{params.before}"
+                }
+              ],
+              "navigate": {
+                "screen": "core.site.activity",
+                "params": {
+                  "q": "{params.q}",
+                  "action": "{params.action}",
+                  "from": "{form.from}",
+                  "before": "{form.before}",
+                  "sort": "",
+                  "emptyText": "No activity matches these filters."
+                }
+              }
+            },
+            {
+              "id": "sort",
+              "label": "Order: {const.sorts[id=params.sort].label|'When, newest first'}",
+              "icon": "arrow.up.arrow.down|sort",
+              "prompt": [
+                {
+                  "key": "sort",
+                  "label": "Order",
+                  "kind": "select",
+                  "initial": "{params.sort|''}",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "When, newest first"
+                    },
+                    {
+                      "value": "createdAt asc",
+                      "label": "When, oldest first"
+                    },
+                    {
+                      "value": "action asc",
+                      "label": "Action, A to Z"
+                    },
+                    {
+                      "value": "action desc",
+                      "label": "Action, Z to A"
+                    }
+                  ]
+                }
+              ],
+              "navigate": {
+                "screen": "core.site.activity",
+                "params": {
+                  "q": "",
+                  "action": "",
+                  "from": "",
+                  "before": "",
+                  "sort": "{form.sort}",
+                  "emptyText": ""
+                }
+              }
+            },
+            {
+              "id": "clear",
+              "label": "Clear",
+              "icon": "xmark.circle|close",
+              "when": "params.q || params.action || params.from || params.before || params.sort",
+              "navigate": {
+                "screen": "core.site.activity",
+                "params": {
+                  "q": "",
+                  "action": "",
+                  "from": "",
+                  "before": "",
+                  "sort": "",
+                  "emptyText": ""
+                }
+              }
+            }
+          ]
+        },
+        {
           "type": "list",
+          "load": "activity",
           "items": "data.activity.items",
           "primary": "{item.action:activity}",
           "secondary": "{item.target.name|item.target.label|item.target.title|item.target.type:title}",
           "tertiary": "{item.actorEmail|item.apiKeyName|item.connectedAppLabel|'System'} · {item.createdAt:datetime}",
           "icon": "clock|schedule",
-          "empty": "No activity yet."
+          "empty": "{params.emptyText|'No activity yet.'}"
         }
       ]
     },

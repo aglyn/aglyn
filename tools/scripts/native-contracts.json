@@ -41283,6 +41283,126 @@
         ]
       ]
     },
+    "siteLiveUrlForSlug": {
+      "module": "libs/aglyn/src/lib/app-utils/site-live-url.ts",
+      "argsProduct": [
+        [
+          {
+            "subdomain": "juniper-street"
+          },
+          {
+            "subdomain": "juniper-street",
+            "cname": "juniperbakery.example"
+          },
+          {
+            "cname": "only-custom.example"
+          },
+          {
+            "subdomain": "",
+            "cname": ""
+          },
+          {
+            "subdomain": "a b&c"
+          },
+          null
+        ],
+        [
+          "/",
+          "/menu",
+          "//about/team",
+          "contact",
+          ""
+        ],
+        [
+          "localhost",
+          "127.0.0.1",
+          "::1",
+          "[::1]",
+          "10.0.2.2",
+          "studio.localhost",
+          "aglyn-console-git-feature-aglyn.vercel.app",
+          "app.aglyn.com",
+          "acme.aglyn.com",
+          null
+        ]
+      ]
+    },
+    "isLocalConsole": {
+      "module": "libs/aglyn/src/lib/app-utils/site-live-url.ts",
+      "args": [
+        [
+          "localhost"
+        ],
+        [
+          "127.0.0.1"
+        ],
+        [
+          "::1"
+        ],
+        [
+          "[::1]"
+        ],
+        [
+          "10.0.2.2"
+        ],
+        [
+          "studio.localhost"
+        ],
+        [
+          "aglyn-console-git-feature-aglyn.vercel.app"
+        ],
+        [
+          "app.aglyn.com"
+        ],
+        [
+          "acme.aglyn.com"
+        ],
+        [
+          "localhost.example.com"
+        ],
+        [
+          "10.0.2.20"
+        ]
+      ]
+    },
+    "isPreviewConsole": {
+      "module": "libs/aglyn/src/lib/app-utils/site-live-url.ts",
+      "args": [
+        [
+          "localhost"
+        ],
+        [
+          "127.0.0.1"
+        ],
+        [
+          "::1"
+        ],
+        [
+          "[::1]"
+        ],
+        [
+          "10.0.2.2"
+        ],
+        [
+          "studio.localhost"
+        ],
+        [
+          "aglyn-console-git-feature-aglyn.vercel.app"
+        ],
+        [
+          "app.aglyn.com"
+        ],
+        [
+          "acme.aglyn.com"
+        ],
+        [
+          "vercel.app.example.com"
+        ],
+        [
+          "10.0.2.20"
+        ]
+      ]
+    },
     "campaignRollup": {
       "module": "libs/plugins/marketing/src/lib/model/campaign-container.ts",
       "args": [

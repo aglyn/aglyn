@@ -413,12 +413,13 @@ fun SiteOverview(context: NativePluginContext, hostId: String) {
                 Text("Open site")
               }
             }
-            (custom ?: platform)?.let { domain ->
+            // The site as the console the app talks to reaches it: a local console opens the local tenant.
+            (custom ?: platform)?.let { com.aglyn.core.SiteLiveUrl.home(doc.string("subdomain"), custom, context.api.origin) }?.let { link ->
               OutlinedButton(
                 onClick = {
                   // In preview or maintenance the site is entered as the team (the console's `SiteVisitButton`, AGL-4086).
-                  if (!com.aglyn.core.SiteVisit.entersAsTeam(doc.data)) runCatching { uri.openUri("https://$domain/") }
-                  else visitScope.launch { runCatching { uri.openUri(com.aglyn.core.SiteVisit.url(true, hostId, "https://$domain/", context.api)) } }
+                  if (!com.aglyn.core.SiteVisit.entersAsTeam(doc.data)) runCatching { uri.openUri(link) }
+                  else visitScope.launch { runCatching { uri.openUri(com.aglyn.core.SiteVisit.url(true, hostId, link, context.api)) } }
                 },
                 modifier = Modifier.testTag("site-visit"),
               ) {
