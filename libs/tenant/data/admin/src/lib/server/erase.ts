@@ -55,6 +55,8 @@ import {
   consentGroupSiteHold,
 } from '@aglyn/aglyn/app-utils/consent-groups'
 import { listPluginOrgCollections } from '@aglyn/aglyn/plugin-manager/plugin-host-collections'
+import { declaredTransferResource } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
+import { parseTransferResourceKey } from '@aglyn/aglyn/data-transfer'
 import {
   PLUGIN_HOST_KEYED_COLLECTIONS,
   erasePluginSiteResources,
@@ -236,6 +238,52 @@ async function eraseHostOwnedOrgDocuments(orgId: string, hostId: string): Promis
         error,
       )
     }
+  }
+  return erased
+}
+
+/**
+ * Destroy the site's own import jobs (AGL-4236).
+ *
+ * `orgs/{orgId}/transferJobs/{jobId}` lives under the workspace and names the
+ * site in `hostId`, so neither the site's tree nor a plugin's `orgCollections`
+ * declaration reaches it. A trimmed job is kept for good — its file name,
+ * columns, mapping, summary and per-row `results` — so a job for a deleted
+ * site would describe records that went with it, forever.
+ *
+ * Only a job whose resource is declared `scope: 'host'` goes: its records
+ * lived in the site's tree and are gone. A workspace resource imported
+ * through one site (the CRM's contacts, AGL-3541) also carries `hostId`, but
+ * its records are the workspace's and outlive the site, and so does its undo.
+ * A resource no plugin declares any more is left alone: nothing says whose
+ * records it wrote. Each job goes with its subcollections and its uploaded
+ * file. Best-effort, like every other trailing cleanup in `eraseHost`.
+ */
+export async function eraseHostTransferJobs(orgId: string, hostId: string): Promise<number> {
+  if (!orgId || !hostId) return 0
+  const firestore = firebaseAdmin.app().firestore()
+  let erased = 0
+  try {
+    const rows = await firestore
+      .collection('orgs')
+      .doc(orgId)
+      .collection('transferJobs')
+      .where('hostId', '==', hostId)
+      .get()
+    for (const doc of rows.docs) {
+      const resource = String(doc.get('resource') ?? '')
+      const declared = declaredTransferResource(parseTransferResourceKey(resource).key)
+      if (declared?.scope !== 'host') continue
+      await storageBucket()
+        .deleteFiles({ prefix: `orgs/${orgId}/transfers/${doc.id}/` })
+        .catch((error: unknown) => {
+          console.error(`eraseHost: transfer file cleanup failed for ${doc.id}`, error)
+        })
+      await firestore.recursiveDelete(doc.ref)
+      erased += 1
+    }
+  } catch (error) {
+    console.error(`eraseHost: transferJobs cleanup failed for ${hostId}`, error)
   }
   return erased
 }
@@ -501,6 +549,8 @@ export async function eraseHost(
       console.error(`eraseHost: projection cleanup failed for ${hostId}`, error)
     })
     await eraseHostOwnedOrgDocuments(orgId, hostId)
+    // The site's own import jobs, kept under the workspace (AGL-4236).
+    await eraseHostTransferJobs(orgId, hostId)
     // Before the plugins decide what is this site's own: a document shared with
     // all sites except some and reaching only this site comes off it here, so
     // it reads as the workspace's and stays (AGL-4047). Never throws.

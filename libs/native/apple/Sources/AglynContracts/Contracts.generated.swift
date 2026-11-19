@@ -2504,12 +2504,14 @@ public struct NativeNavRow: Codable, Hashable, Sendable {
   public var label: String
   public var order: Double?
   public var params: [String: String]?
+  public var permissions: [String]?
   public var pluginId: String?
+  public var requiresFeature: String?
   public var requiresHostAdmin: Bool?
   public var screen: String
   public var sections: [NativeNavSection]?
 
-  public init(actions: [NativeNavAction]? = nil, console: NativeNavConsoleRef, consoleLabel: String? = nil, description: String? = nil, docs: String? = nil, icon: NativeNavIcon, id: String, keywords: [String]? = nil, label: String, order: Double? = nil, params: [String: String]? = nil, pluginId: String? = nil, requiresHostAdmin: Bool? = nil, screen: String, sections: [NativeNavSection]? = nil) {
+  public init(actions: [NativeNavAction]? = nil, console: NativeNavConsoleRef, consoleLabel: String? = nil, description: String? = nil, docs: String? = nil, icon: NativeNavIcon, id: String, keywords: [String]? = nil, label: String, order: Double? = nil, params: [String: String]? = nil, permissions: [String]? = nil, pluginId: String? = nil, requiresFeature: String? = nil, requiresHostAdmin: Bool? = nil, screen: String, sections: [NativeNavSection]? = nil) {
     self.actions = actions
     self.console = console
     self.consoleLabel = consoleLabel
@@ -2521,7 +2523,9 @@ public struct NativeNavRow: Codable, Hashable, Sendable {
     self.label = label
     self.order = order
     self.params = params
+    self.permissions = permissions
     self.pluginId = pluginId
+    self.requiresFeature = requiresFeature
     self.requiresHostAdmin = requiresHostAdmin
     self.screen = screen
     self.sections = sections
@@ -6409,8 +6413,10 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let nativeEmailStateStatuses: [String]
   public let nativeNavManifest: NativeNavManifest
   public let nativeNavShellScreens: [String]
+  public let nativeNoInAppBillingNote: String
   public let nativeSiteCampaignsQuery: ListQueryDeclaration
   public let nativeSiteEmailsQuery: ListQueryDeclaration
+  public let nativeWebBillingLinkLabel: String
   public let nothingMoved: String
   public let notificationSoundField: String
   public let notificationSounds: [NotificationSound]
@@ -6793,8 +6799,10 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case nativeEmailStateStatuses = "NATIVE_EMAIL_STATE_STATUSES"
     case nativeNavManifest = "NATIVE_NAV_MANIFEST"
     case nativeNavShellScreens = "NATIVE_NAV_SHELL_SCREENS"
+    case nativeNoInAppBillingNote = "NATIVE_NO_IN_APP_BILLING_NOTE"
     case nativeSiteCampaignsQuery = "NATIVE_SITE_CAMPAIGNS_QUERY"
     case nativeSiteEmailsQuery = "NATIVE_SITE_EMAILS_QUERY"
+    case nativeWebBillingLinkLabel = "NATIVE_WEB_BILLING_LINK_LABEL"
     case nothingMoved = "NOTHING_MOVED"
     case notificationSoundField = "NOTIFICATION_SOUND_FIELD"
     case notificationSounds = "NOTIFICATION_SOUNDS"

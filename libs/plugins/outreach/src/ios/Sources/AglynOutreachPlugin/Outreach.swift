@@ -294,13 +294,126 @@ struct MailboxRow: Identifiable {
   let status: String
   let dailyCap: Int?
   let sentToday: Int?
+  /// The mailbox's zone, which its sequences' times are read in; nil for the reader's own.
+  var timeZone: String? = nil
 }
 
 func mailboxRow(_ doc: FirestoreDocument) -> MailboxRow {
   MailboxRow(
     id: doc.id, email: doc.string("email") ?? doc.id, sendAs: doc.string("sendAs"), displayName: doc.string("displayName"),
     provider: doc.string("provider") ?? "google", status: doc.string("status") ?? "connected", dailyCap: doc.int("dailyCap"),
-    sentToday: ((doc.data["health"] as? [String: Any])?["sentToday"] as? NSNumber)?.intValue)
+    sentToday: ((doc.data["health"] as? [String: Any])?["sentToday"] as? NSNumber)?.intValue, timeZone: doc.string("timezone"))
+}
+
+// MARK: Results (`sequence-report.ts`)
+
+/// One sentence saying what a figure is not (`OutreachReportCaveat`).
+struct OutreachReportCaveat: Equatable {
+  let id: String
+  let message: String
+}
+
+/// Everything a sequence's Results card shows (`OutreachSequenceReport`); the card adds no arithmetic of its own.
+struct OutreachSequenceReport: Equatable {
+  var sent = 0.0
+  var people: Double?
+  var clicks = 0.0
+  var uniqueClicks = 0.0
+  var machineClicks = 0.0
+  var lastClickAtMs: Double?
+  var clickTracked = false
+  var openTracked = false
+  var openPeople: Double?
+  var opens = 0.0
+  var uniqueOpens = 0.0
+  var machineOpens = 0.0
+  var proxyOpens = 0.0
+  var lastOpenAtMs: Double?
+  var opensUnmeasured = false
+  var clickRate: SendRate?
+  var openRate: SendRate?
+  var caveats: [OutreachReportCaveat] = []
+}
+
+private let outreachCaveats: [String: String] = [
+  "opens-not-measured":
+    "Opens aren’t measured. A sequence email is plain text, the way a one-to-one email is, and counting an open needs a tracking image in an HTML email. Clicks are measured instead.",
+  "opens-unrecorded":
+    "Opens are counted for this sequence, and no email with the tracking image has gone out yet. Emails sent from now on carry it.",
+  "opens-counted":
+    "Opens are counted from a tracking image in an HTML copy of each email, and the open rate is taken over the people sent one. Gmail readers’ opens count. Fetches made whether or not anyone reads the email — by Apple Mail as it arrives, by Yahoo’s image proxy, and by Google’s, Microsoft’s and other security scanners — are counted separately and left out of the rate.",
+  "opens-all-machine":
+    "Every fetch of the tracking image so far was made by a machine — a mail provider’s proxy or a security scanner fetching it for the recipient — so whether anyone read these emails can’t be told from opens, and no open rate is shown. That is common when the people emailed are behind company mail security.",
+  "opens-stopped":
+    "Opens were counted while this sequence’s emails carried a tracking image. It’s turned off now, so the figures cover only the emails sent while it was on.",
+  "clicks-not-tracked":
+    "Clicks aren’t being counted for this sequence. Turn on link tracking in its settings, and the emails sent after that have their links counted.",
+  "clicks-unrecorded":
+    "No click has been counted for this sequence yet: either its emails carry no links, or they went out before link tracking was turned on. Emails sent from now on are counted.",
+  "machine-clicks-excluded":
+    "Some clicks came from security scanners that open every link in an email before the recipient sees it. They’re counted separately and left out of the click rate.",
+]
+
+/// JavaScript's `Number(value ?? 0)` kept only when finite and positive.
+private func reportCount(_ value: Any?) -> Double {
+  let parsed: Double? =
+    switch value {
+    case nil, is NSNull: 0
+    case let number as NSNumber: number.doubleValue
+    case let text as String: text.trimmingCharacters(in: .whitespaces).isEmpty ? 0 : Double(text.trimmingCharacters(in: .whitespaces))
+    default: nil
+    }
+  guard let parsed, parsed.isFinite, parsed > 0 else { return 0 }
+  return parsed
+}
+
+private func finiteMs(_ value: Any?) -> Double? {
+  guard let number = value as? NSNumber, !(value is Bool), number.doubleValue.isFinite else { return nil }
+  return number.doubleValue
+}
+
+/// `outreachSequenceReport`: a sequence's stored counters as its Results card reads them.
+func outreachSequenceReport(_ stats: [String: Any]?, trackClicks: Bool, countOpens: Bool = false) -> OutreachSequenceReport {
+  let source = stats ?? [:]
+  var report = OutreachSequenceReport()
+  report.sent = reportCount(source["sent"])
+  // Absent, not zero: `people` is the click rate's denominator, and "never counted" is not "nobody emailed".
+  report.people = source.keys.contains("people") ? reportCount(source["people"]) : nil
+  report.clicks = reportCount(source["clicks"])
+  report.uniqueClicks = reportCount(source["uniqueClicks"])
+  report.machineClicks = reportCount(source["machineClicks"])
+  report.clickTracked = source["clickTracked"] as? Bool == true
+  report.openTracked = source["openTracked"] as? Bool == true
+  report.openPeople = source.keys.contains("openPeople") ? reportCount(source["openPeople"]) : nil
+  report.opens = reportCount(source["opens"])
+  report.uniqueOpens = reportCount(source["uniqueOpens"])
+  report.machineOpens = reportCount(source["machineOpens"])
+  report.proxyOpens = min(reportCount(source["proxyOpens"]), report.machineOpens)
+  report.lastClickAtMs = finiteMs(source["lastClickAtMs"])
+  report.lastOpenAtMs = finiteMs(source["lastOpenAtMs"])
+  report.opensUnmeasured = report.openTracked && report.uniqueOpens == 0 && report.machineOpens > 0
+  var ids: [String] = []
+  if !report.openTracked { ids.append(countOpens ? "opens-unrecorded" : "opens-not-measured") } else { ids.append(countOpens ? "opens-counted" : "opens-stopped") }
+  if report.opensUnmeasured { ids.append("opens-all-machine") }
+  if !report.clickTracked {
+    if report.sent > 0 { ids.append(trackClicks ? "clicks-unrecorded" : "clicks-not-tracked") } else if !trackClicks { ids.append("clicks-not-tracked") }
+  }
+  if report.machineClicks > 0 { ids.append("machine-clicks-excluded") }
+  report.caveats = ids.map { OutreachReportCaveat(id: $0, message: outreachCaveats[$0] ?? "") }
+  report.clickRate = report.clickTracked ? sendRate(report.uniqueClicks, report.people, "people emailed") : nil
+  report.openRate =
+    report.openTracked && !report.opensUnmeasured ? sendRate(report.uniqueOpens, report.openPeople, "people sent a tracked email") : nil
+  return report
+}
+
+/// `formatOutreachTime`: a moment as the sequence pages print one, in the mailbox's zone where it has one.
+func formatOutreachTime(_ ms: Double?, timeZone: String?) -> String {
+  guard let ms, ms.isFinite else { return "—" }
+  let formatter = DateFormatter()
+  formatter.locale = Locale(identifier: "en_US")
+  formatter.setLocalizedDateFormatFromTemplate("MMMdjmmz")
+  if let timeZone, let zone = TimeZone(identifier: timeZone) { formatter.timeZone = zone }
+  return formatter.string(from: Date(timeIntervalSince1970: ms / 1000))
 }
 
 // MARK: Writes

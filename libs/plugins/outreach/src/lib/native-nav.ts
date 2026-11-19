@@ -40,6 +40,10 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
       icon: nativeNavIcon('paperplane', 'send'),
       screen: 'outreach.sequences',
       pluginId: 'outreach',
+      // The org tab strip's gates (plugin.ts): Use Sequences, and the
+      // `features.outreach` entitlement no plan carries.
+      permissions: ['outreach.use'],
+      requiresFeature: 'outreach',
       order: 80,
       docs: '/content-and-data/crm/sequences',
       console: nativeNavRef('orgPluginTab', '/outreach'),

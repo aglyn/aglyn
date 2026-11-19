@@ -1412,7 +1412,7 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
   // A Save pressed while held is kept, and runs over the edits replayed onto the server's copy (AGL-4047).
   val heldPress = com.aglyn.ui.rememberHeldPress(held, FormEdits.unconfirmedText(block.string("checking"))) {
     val action = ActionSpec.parse(block["submit"]) ?: return@rememberHeldPress
-    if (!missing && action.disabledWhen?.let { ScreenValues.condition(it, scope) } != true) save(action)
+    if (!missing && action.disabledWhen?.let { ScreenValues.condition(it, filled) } != true) save(action)
   }
   Column(Modifier.fillMaxWidth().padding(space(2f)), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
     for (field in fields.filter { ScreenValues.condition(it.whenCondition, filled) }) {
@@ -1444,7 +1444,7 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
       FilledTonalButton(
         colors = com.aglyn.ui.aglynTonalButtonColors(),
         onClick = { if (heldPress.pressed(held)) save(action) },
-        enabled = !busy && !heldPress.waiting && !missing && action.disabledWhen?.let { ScreenValues.condition(it, scope) } != true,
+        enabled = !busy && !heldPress.waiting && !missing && action.disabledWhen?.let { ScreenValues.condition(it, filled) } != true,
         modifier = Modifier.align(Alignment.End).testTag("submit-${block.id}"),
       ) {
         if (busy || heldPress.waiting) CircularProgressIndicator(Modifier.size(16.dp).padding(end = space(1f)), strokeWidth = 2.dp)

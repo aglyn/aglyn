@@ -233,7 +233,7 @@ struct ArtifactsScreen: View {
       if selectable {
         List {
           ForEach(rows) { row in
-            ArtifactListRow(kind: kind, row: row).aglynSelectableRow(row.id, selection: $selection)
+            ArtifactListRow(context: context, hostID: context.hostID ?? "", kind: kind, row: row).aglynSelectableRow(row.id, selection: $selection)
               .accessibilityIdentifier("\(kind.singular)-\(row.id)")
           }
           if model.hasMore { AglynLoadMoreRow("Show more \(kind.title.lowercased())") { model.loadMore() } }
@@ -249,7 +249,7 @@ struct ArtifactsScreen: View {
             Button {
               selection = row.id
             } label: {
-              ArtifactListRow(kind: kind, row: row)
+              ArtifactListRow(context: context, hostID: context.hostID ?? "", kind: kind, row: row)
             }
             .buttonStyle(.aglynRow)
             .aglynListRow()
@@ -277,6 +277,8 @@ private func rowSupporting(_ kind: ArtifactKind, _ row: ArtifactRow) -> String {
 }
 
 private struct ArtifactListRow: View {
+  let context: NativePluginContext
+  let hostID: String
   let kind: ArtifactKind
   let row: ArtifactRow
 
@@ -284,6 +286,10 @@ private struct ArtifactListRow: View {
     AglynRow(row.isStarterBundle ? row.starterName ?? row.name : row.name, subtitle: rowSupporting(kind, row), systemImage: kind.systemImage) {
       if kind == .template {
         StatusChip(row.isStarterBundle ? "Starter bundle" : templateSourceLabel(row.sourceType))
+        // What the plugin that installed this template says about the copy (an update to take), drawn by that plugin.
+        if isInstalledTemplateSource(row.sourceType) {
+          SlotWidgets(context: context, slot: templateInstallStatusSlot, props: templateInstallStatusProps(row, hostID: hostID))
+        }
       } else if row.versionID == nil {
         StatusChip("No version yet")
       }

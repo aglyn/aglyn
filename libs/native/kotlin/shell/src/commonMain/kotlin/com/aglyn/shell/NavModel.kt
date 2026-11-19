@@ -108,6 +108,19 @@ fun enabledPluginsFor(orgEnabled: List<String>?, host: Map<String, Any?>?, inSit
 }
 
 /**
+ * The person's answers to what the rows ask ([com.aglyn.contracts.navRowGateKeys]): their workspace permissions and the
+ * workspace's plan features, so a workspace row hides as the console's organization tab strip drops its tab, for a
+ * permission their role does not hold or a feature no plan sells that the workspace was not granted (Sequences).
+ */
+fun navAccess(permissions: Map<String, Boolean>, org: Map<String, Any?>?): com.aglyn.contracts.NativeNavAccess {
+  val (keys, features) = com.aglyn.contracts.navRowGateKeys()
+  return com.aglyn.contracts.NativeNavAccess(
+    keys.associateWith { permissions[it] == true },
+    features.associateWith { com.aglyn.core.planFeatureCarried(org, it) },
+  )
+}
+
+/**
  * One list as this device draws it: the manifest's resolved list, less any row whose native screen this build does not
  * have, and (in the whole-workspace scope) less any row whose screen needs a site, so no row leads to "Pick a site
  * first" (interim rule, 2026-10-18, until each area has its workspace-wide mode).
@@ -118,13 +131,14 @@ fun navGroups(
   hostAdmin: Boolean,
   registry: NativePluginRegistry,
   inSite: Boolean,
+  access: com.aglyn.contracts.NativeNavAccess? = null,
 ): List<NavGroupItem> {
   fun available(screen: String): Boolean {
     if (screen.startsWith("shell.")) return true
     val native = registry.screen(screen) ?: return false
     return inSite || !native.requiresSite
   }
-  return resolveNavList(listId, enabledPluginIds, hostAdmin).groups.mapNotNull { group ->
+  return resolveNavList(listId, enabledPluginIds, hostAdmin, access).groups.mapNotNull { group ->
     val rows = group.rows.filter { available(it.screen) }.map { row ->
       val sections = row.sections.orEmpty().filter { available(it.screen) }.map {
         NavSectionItem(NavKeys.of(it.screen, it.params), it.id, it.label, it.screen, it.params.orEmpty(), it.docs)
