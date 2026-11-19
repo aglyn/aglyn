@@ -86556,6 +86556,200 @@
         }
       ]
     },
+    "verificationRequestBlock": {
+      "module": "libs/plugins/marketplace/src/lib/model/listing-verification.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "listing": null,
+              "viewerOrgId": "org_a",
+              "nowMs": 1763300000000
+            }
+          ],
+          "result": "not-publisher"
+        },
+        {
+          "args": [
+            {
+              "listing": {
+                "profileId": "org_a",
+                "reviewStatus": "listed"
+              },
+              "viewerOrgId": null,
+              "nowMs": 1763300000000
+            }
+          ],
+          "result": "not-publisher"
+        },
+        {
+          "args": [
+            {
+              "listing": {
+                "profileId": "org_a",
+                "reviewStatus": "listed"
+              },
+              "viewerOrgId": "org_b",
+              "nowMs": 1763300000000
+            }
+          ],
+          "result": "not-publisher"
+        },
+        {
+          "args": [
+            {
+              "listing": {
+                "profileId": "org_a",
+                "reviewStatus": "verified"
+              },
+              "viewerOrgId": "org_a",
+              "nowMs": 1763300000000
+            }
+          ],
+          "result": "already-verified"
+        },
+        {
+          "args": [
+            {
+              "listing": {
+                "profileId": "org_a",
+                "reviewStatus": "in_review"
+              },
+              "viewerOrgId": "org_a",
+              "nowMs": 1763300000000
+            }
+          ],
+          "result": "not-listed"
+        },
+        {
+          "args": [
+            {
+              "listing": {
+                "profileId": "org_a"
+              },
+              "viewerOrgId": "org_a",
+              "nowMs": 1763300000000
+            }
+          ],
+          "result": "not-listed"
+        },
+        {
+          "args": [
+            {
+              "listing": {
+                "profileId": "org_a",
+                "reviewStatus": "listed"
+              },
+              "viewerOrgId": "org_a",
+              "nowMs": 1763300000000
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "listing": {
+                "profileId": "org_a",
+                "reviewStatus": "listed",
+                "verificationRequest": {
+                  "state": "pending"
+                }
+              },
+              "viewerOrgId": "org_a",
+              "nowMs": 1763300000000
+            }
+          ],
+          "result": "already-pending"
+        },
+        {
+          "args": [
+            {
+              "listing": {
+                "profileId": "org_a",
+                "reviewStatus": "listed",
+                "verificationRequest": {
+                  "state": "declined"
+                }
+              },
+              "viewerOrgId": "org_a",
+              "nowMs": 1763300000000
+            }
+          ],
+          "result": "cooling-down"
+        },
+        {
+          "args": [
+            {
+              "listing": {
+                "profileId": "org_a",
+                "reviewStatus": "listed",
+                "verificationRequest": {
+                  "state": "declined",
+                  "decidedAt": {
+                    "seconds": 1760794400
+                  }
+                }
+              },
+              "viewerOrgId": "org_a",
+              "nowMs": 1763300000000
+            }
+          ],
+          "result": "cooling-down"
+        },
+        {
+          "args": [
+            {
+              "listing": {
+                "profileId": "org_a",
+                "reviewStatus": "listed",
+                "verificationRequest": {
+                  "state": "declined",
+                  "decidedAt": {
+                    "seconds": 1760621600
+                  }
+                }
+              },
+              "viewerOrgId": "org_a",
+              "nowMs": 1763300000000
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "listing": {
+                "profileId": "org_a",
+                "reviewStatus": "listed",
+                "verificationRequest": {
+                  "state": "withdrawn"
+                }
+              },
+              "viewerOrgId": "org_a",
+              "nowMs": 1763300000000
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "listing": {
+                "profileId": "org_a",
+                "reviewStatus": "listed",
+                "verificationRequest": {
+                  "state": "approved"
+                }
+              },
+              "viewerOrgId": "org_a",
+              "nowMs": 1763300000000
+            }
+          ],
+          "result": null
+        }
+      ]
+    },
     "videoMediaProps": {
       "module": "libs/aglyn/src/lib/app-utils/media-metadata.ts",
       "cases": [

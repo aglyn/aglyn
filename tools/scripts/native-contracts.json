@@ -37884,6 +37884,161 @@
         ]
       ]
     },
+    "verificationRequestBlock": {
+      "module": "libs/plugins/marketplace/src/lib/model/listing-verification.ts",
+      "args": [
+        [
+          {
+            "listing": null,
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed"
+            },
+            "viewerOrgId": null,
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed"
+            },
+            "viewerOrgId": "org_b",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "verified"
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "in_review"
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a"
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed"
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "pending"
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "declined"
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "declined",
+                "decidedAt": {
+                  "seconds": 1760794400
+                }
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "declined",
+                "decidedAt": {
+                  "seconds": 1760621600
+                }
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "withdrawn"
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ],
+        [
+          {
+            "listing": {
+              "profileId": "org_a",
+              "reviewStatus": "listed",
+              "verificationRequest": {
+                "state": "approved"
+              }
+            },
+            "viewerOrgId": "org_a",
+            "nowMs": 1763300000000
+          }
+        ]
+      ]
+    },
     "computeLifetimePurchaseCents": {
       "module": "libs/plugins/commerce/src/lib/model/site-member-purchases.ts",
       "args": [

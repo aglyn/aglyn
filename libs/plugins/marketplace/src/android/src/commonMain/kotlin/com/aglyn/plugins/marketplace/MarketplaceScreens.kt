@@ -269,7 +269,7 @@ private fun ListingDetail(context: NativePluginContext, listingId: String, start
           dialog = ListingDialog.Install(if (InstallTarget.HOST in targets) InstallTarget.HOST else targets.firstOrNull())
         }
       }
-      ListingBody(context, listing, plugin, state, pinsPhase, mine, runner, api) { dialog = it }
+      ListingBody(context, listing, value.value?.data, plugin, state, pinsPhase, mine, runner, api) { dialog = it }
       ListingDialogs(context, listing, dialog, state, api, runner) { dialog = null }
     }
   }
@@ -279,6 +279,8 @@ private fun ListingDetail(context: NativePluginContext, listingId: String, start
 private fun ListingBody(
   context: NativePluginContext,
   listing: ListingRow,
+  /** The listing document's fields, which the publisher's Verified card reads. */
+  document: Map<String, Any?>?,
   plugin: Boolean,
   state: PluginInstallState,
   /** "loading", "error" or "ready": whether the pins have answered (AGL-4047). */
@@ -470,6 +472,7 @@ private fun ListingBody(
       StatTile("Installs", (listing.activeInstalls ?: listing.installCount).toString(), Modifier.weight(1f), "${listing.installCount} all time")
     }
     // The publisher's OAuth app for each connection the plugin declares (AGL-4196), for the listing's own workspace only.
+    if (mine && plugin && document != null) ListingVerificationCard(context, listing.id, document)
     if (mine && plugin) ListingConnectionCredentialsCards(context, listing.id)
     if (listing.description.isNotBlank()) SectionCard("About") { Text(listing.description) }
     listing.readme?.let { readme -> SectionCard("Read me") { Text(readme.take(4000), style = MaterialTheme.typography.bodyMedium) } }
