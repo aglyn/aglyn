@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynPluginHost
+import AglynScreens
 import AglynUI
 import SwiftUI
 
@@ -71,6 +72,8 @@ struct POSShell: View {
         \.aglynStackMotion, AglynStackMotion(ledger: ledger) { [weak navigation] in navigation?.paths[.home]?.count ?? 0 })
     #endif
     .signOutConfirmation(isPresented: $confirmSignOut)
+    // Who is signed in, for every spec screen: the account's own screens ("Confirm it is you" before Close account) read it.
+    .environment(\.aglynScreenSession, model.screenSession)
     // Aglyn POS draws the same theme as the account's Aglyn.
     .aglynAppTheme(nonce: navigation.themeNonce)
     // The register keeps the system's navigation and toolbar on every device; it is not part of the shell redesign.

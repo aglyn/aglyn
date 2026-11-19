@@ -119,6 +119,20 @@ private func restBuildHash() -> String? {
   }
 #endif
 
+/// A confirmation that signed in as someone other than the account in use.
+let reconfirmMismatchMessage = "That is a different account. Confirm it is you with the account signed in here."
+
+/// A sign-in that only confirms it is the account in use again (`AuthSession.reconfirm`): the account's own method.
+public enum ReconfirmCredential: Sendable, Equatable {
+  case password(String)
+  /// Sign in with Apple's identity token and the raw nonce its request was hashed from.
+  case apple(idToken: String, rawNonce: String)
+  /// Google's ID token (the platform sheet's).
+  case google(idToken: String)
+  /// A custom token the server minted for this account: a passkey sign-in's, or single sign-on's console hand-off.
+  case customToken(String, tenantID: String?)
+}
+
 /// The words a failed sign-in shows, by Firebase Auth error code.
 public func signInErrorMessage(_ error: Error) -> String {
   let brand = AglynBrand.name
@@ -131,6 +145,8 @@ public func signInErrorMessage(_ error: Error) -> String {
       return "Too many attempts. Wait a few minutes, then try again."
     case "USER_DISABLED":
       return "This account is turned off. Contact your workspace owner."
+    case IdentityToolkitAuth.userMismatch:
+      return reconfirmMismatchMessage
     case nil where rest.status == 0:
       return "\(brand) could not be reached. Check the connection and try again."
     default:
@@ -145,6 +161,8 @@ public func signInErrorMessage(_ error: Error) -> String {
     return "Too many attempts. Wait a few minutes, then try again."
   case .userDisabled:
     return "This account is turned off. Contact your workspace owner."
+  case .userMismatch:
+    return reconfirmMismatchMessage
   case .networkError:
     return "\(brand) could not be reached. Check the connection and try again."
   case .secondFactorRequired:
@@ -595,6 +613,58 @@ public final class AuthSession {
       await refreshStanding()
       return isNew
     }
+  }
+
+  // MARK: Confirming it is you
+
+  /// Signs the account in use in again, so its next token carries a fresh `auth_time`: the step a route that guards an
+  /// irreversible action asks for (`/api/account/close` wants one under five minutes old). It is the console's
+  /// `reauthenticateWithCredential` / `reauthenticateWithPopup` (close-account card, AGL-1140): the account's own sign-in
+  /// method, and an answer for anyone else is refused (`user-mismatch`) before it can replace the account in use. A
+  /// support session cannot do it (the route refuses an impersonated close anyway).
+  public func reconfirm(_ credential: ReconfirmCredential) async throws {
+    guard impersonation == nil, let current = user else { throw IdentityToolkitError(code: nil, status: 401) }
+    if let rest = currentRest {
+      let signed: AglynUser
+      switch credential {
+      case .password(let password):
+        signed = try await rest.signIn(email: current.email ?? "", password: password, expecting: current.uid)
+      case .apple(let idToken, let rawNonce):
+        signed = try await rest.signIn(idpPostBody: Self.appleBody(idToken, rawNonce), expecting: current.uid).user
+      case .google(let idToken):
+        signed = try await rest.signIn(idpPostBody: Self.googleBody(idToken), expecting: current.uid).user
+      case .customToken(let token, let tenantID):
+        signed = try await rest.signIn(customToken: token, tenantId: tenantID, expecting: current.uid)
+      }
+      setCurrent(signed)
+      await refreshStanding()
+      return
+    }
+    guard let signedIn = Auth.auth().currentUser, signedIn.uid == current.uid else {
+      throw IdentityToolkitError(code: nil, status: 401)
+    }
+    switch credential {
+    case .password(let password):
+      _ = try await signedIn.reauthenticate(with: EmailAuthProvider.credential(withEmail: current.email ?? "", password: password))
+    case .apple(let idToken, let rawNonce):
+      _ = try await signedIn.reauthenticate(
+        with: OAuthProvider.appleCredential(withIDToken: idToken, rawNonce: rawNonce, fullName: nil))
+    case .google(let idToken):
+      _ = try await signedIn.reauthenticate(with: GoogleAuthProvider.credential(withIDToken: idToken, accessToken: ""))
+    case .customToken(let token, let tenantID):
+      // The SDK cannot reauthenticate with a custom token, so the token's own `uid` is checked before it signs in.
+      try IdentityToolkitAuth.require(TokenClaims(idToken: token).values["uid"]?.stringValue ?? "", is: current.uid)
+      Auth.auth().tenantID = tenantID.flatMap { $0.isEmpty ? nil : $0 }
+      _ = try await Auth.auth().signIn(withCustomToken: token)
+    }
+  }
+
+  static func appleBody(_ idToken: String, _ rawNonce: String) -> String {
+    "id_token=\(ConsoleAPIClient.encodeComponent(idToken))&providerId=apple.com&nonce=\(ConsoleAPIClient.encodeComponent(rawNonce))"
+  }
+
+  static func googleBody(_ idToken: String) -> String {
+    "id_token=\(ConsoleAPIClient.encodeComponent(idToken))&providerId=google.com"
   }
 
   // MARK: The account in use

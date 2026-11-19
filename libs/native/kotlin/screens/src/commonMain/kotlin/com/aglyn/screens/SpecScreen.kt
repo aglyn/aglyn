@@ -340,6 +340,11 @@ private fun SpecBodyContent(
         }
       }
       is ActionOutcome.Done -> {
+        // Close account succeeded: the account is gone, so the app signs out at once, as the console does.
+        if (Reconfirm.signsOut(action.url)) {
+          session.account.signOut()
+          return
+        }
         val after = ScreenContext.with(actionScope, "response", outcome.response)
         val instead = action.insteadEntry(after)
         if (instead != null) {
@@ -530,43 +535,86 @@ private fun SpecBodyContent(
     PromptDialog(pending, model.context, search = { group, words -> model.lookup(group, words) }, onRun = { filled -> prompting = null; scope.launch { execute(pending.action, filled) } }) { prompting = null }
   }
   reauthing?.let { pending ->
+    // The account signs in again its own way (AGL-1140), as the console's close-account dialog: the password when it has
+    // one, else its own provider again; [Reconfirm.methods] decides which.
+    var methods by remember(pending) { mutableStateOf<List<ReconfirmMethod>?>(null) }
+    LaunchedEffect(pending) { methods = session.reconfirmMethods() }
     var password by remember(pending) { mutableStateOf("") }
     var error by remember(pending) { mutableStateOf<String?>(null) }
-    var busy by remember(pending) { mutableStateOf(false) }
+    var working by remember(pending) { mutableStateOf<ReconfirmMethod?>(null) }
+    val offered = methods.orEmpty()
+    val withPassword = ReconfirmMethod.PASSWORD in offered
+    // Without a password, the dialog's own button runs the account's first way; the rest sit under it.
+    val primary = if (withPassword) ReconfirmMethod.PASSWORD else offered.firstOrNull()
+    val others = offered.filter { it != primary && it != ReconfirmMethod.PASSWORD }
+    fun run(method: ReconfirmMethod) {
+      working = method
+      error = null
+      scope.launch {
+        try {
+          if (method == ReconfirmMethod.PASSWORD) session.reauthenticate(password) else session.reconfirmWith(method)
+          session.refreshClaims()
+          reauthing = null
+          execute(pending.action, pending.scope)
+        } catch (failure: kotlinx.coroutines.CancellationException) {
+          throw failure
+        } catch (failure: Throwable) {
+          // Closing Google's sheet is not a failure (the console ignores `popup-closed-by-user`).
+          if (failure.message != "Google sign-in was canceled.") error = failure.message ?: "That did not confirm it is you."
+        }
+        working = null
+      }
+    }
     ActionDialog(
       title = "Confirm it is you",
       body = pending.reauthMessage ?: "Confirm it is you to continue.",
-      confirmLabel = "Continue",
-      busy = busy,
+      confirmLabel = primary?.let(::reconfirmLabel) ?: "OK",
+      busy = working != null,
       error = error,
-      confirmEnabled = password.isNotEmpty(),
+      confirmEnabled = methods != null && (!withPassword || password.isNotEmpty()),
       dismissLabel = "Cancel",
       icon = "lock",
-      onConfirm = {
-        busy = true
-        scope.launch {
-          try {
-            session.reauthenticate(password)
-            session.refreshClaims()
-            reauthing = null
-            execute(pending.action, pending.scope)
-          } catch (failure: Throwable) {
-            error = failure.message ?: "That password did not work."
-          }
-          busy = false
-        }
-      },
+      onConfirm = { if (primary != null) run(primary) else reauthing = null },
       onDismiss = { reauthing = null },
     ) {
-      OutlinedTextField(
-        value = password,
-        onValueChange = { password = it },
-        label = { Text("Password") },
-        singleLine = true,
-        visualTransformation = PasswordVisualTransformation(),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-        modifier = Modifier.fillMaxWidth().testTag("reauth-password"),
-      )
+      Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
+        if (withPassword) {
+          OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            label = { Text("Password") },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            modifier = Modifier.fillMaxWidth().testTag("reauth-password"),
+          )
+        }
+        if (methods != null && offered.isEmpty()) {
+          Text(Reconfirm.NO_METHOD_MESSAGE, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("reauth-no-method"))
+        }
+        if (others.isNotEmpty()) {
+          Text(
+            if (withPassword) "Or sign in again another way." else "Or:",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+          for (method in others) {
+            if (method == ReconfirmMethod.GOOGLE) {
+              com.aglyn.ui.GoogleButton(reconfirmLabel(method), { run(method) }, Modifier.testTag("reauth-google"), enabled = working == null)
+            } else {
+              com.aglyn.ui.AuthButton(
+                reconfirmLabel(method),
+                onClick = { run(method) },
+                modifier = Modifier.testTag("reauth-${method.name.lowercase()}"),
+                kind = com.aglyn.ui.AuthButtonKind.SECONDARY,
+                icon = AglynIcons.named(if (method == ReconfirmMethod.PASSKEY) "lock" else "key"),
+                busy = working == method,
+                enabled = working == null,
+              )
+            }
+          }
+        }
+      }
     }
   }
   gating?.let { gated ->
@@ -1528,3 +1576,12 @@ private fun ZoneRow(spec: ScreenSpec, plugin: NativePluginContext, params: Nativ
 
 /** Where a plan refusal sends a person to add what the screen needs. */
 internal const val BILLING_ADDONS_SCREEN = "core.billing.addons"
+
+/** The button that confirms it is you one way. */
+internal fun reconfirmLabel(method: ReconfirmMethod): String = when (method) {
+  ReconfirmMethod.PASSWORD -> "Continue"
+  ReconfirmMethod.APPLE -> "Continue with Apple"
+  ReconfirmMethod.GOOGLE -> "Continue with Google"
+  ReconfirmMethod.SINGLE_SIGN_ON -> "Continue with SSO"
+  ReconfirmMethod.PASSKEY -> "Use a passkey"
+}

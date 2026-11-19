@@ -313,8 +313,7 @@ struct SpecScreenBody: View {
         }
       }
       .sheet(item: $reauthing) { pending in
-        ReauthSheet(email: session.email, message: pending.reauthMessage) { password in
-          try await session.reauthenticate(password)
+        ReauthSheet(session: session, message: pending.reauthMessage, api: plugin.api) {
           reauthing = nil
           await session.refreshClaims()
           await execute(pending.action, scope: pending.scope)
@@ -795,6 +794,11 @@ struct SpecScreenBody: View {
       #if os(iOS)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
       #endif
+      // Close account succeeded: the account is gone, so the app signs out at once, as the console does.
+      if Reconfirm.signsOut(url: action.url) {
+        await session.account.signOut()
+        return
+      }
       let after = ScreenContext.with(scope, "response", response ?? .null)
       if let instead = action.insteadEntry(in: after) {
         revealed = (
