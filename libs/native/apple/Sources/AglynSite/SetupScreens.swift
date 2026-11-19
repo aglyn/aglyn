@@ -41,7 +41,7 @@ struct SetupScreen: View {
         // On the Mac and iPad the Site settings sidebar is the list of sections (and a link lands on its row, AGL-4059's
         // `NavPaths`), so a section opens as the area itself: no list beside it and nothing pushed, and the shell draws
         // its head with the crumbs (AGL-4058). A phone keeps the list and pushes the section.
-        SetupDetail(context: context, section: section, integrations: integrations).id(section)
+        SetupDetail(context: context, section: section).id(section)
       } else if wide {
         AglynListDetailColumns(listWidth: 320) {
           List {
@@ -55,7 +55,7 @@ struct SetupScreen: View {
           .aglynSelectionKeys(sections, selection: $selection)
         } detail: {
           if let selection {
-            SetupDetail(context: context, section: selection, integrations: integrations).id(selection)
+            SetupDetail(context: context, section: selection).id(selection)
           } else {
             AglynSelectionPlaceholder("No section selected", systemImage: "gearshape")
           }
@@ -78,7 +78,7 @@ struct SetupScreen: View {
         }
         .aglynListBackground()
         .aglynPushDestination(item: $pushed) { section in
-          SetupDetail(context: context, section: section, integrations: integrations).navigationTitle(section.title)
+          SetupDetail(context: context, section: section).navigationTitle(section.title)
             .aglynScreenTitle(section.title)
         }
         .onAppear { if pushed == nil, !opened, let initialSection { pushed = SetupSection.of(initialSection); opened = true } }
@@ -95,9 +95,16 @@ struct SetupScreen: View {
 struct SetupDetail: View {
   let context: NativePluginContext
   let section: SetupSection
-  /// The `hostSettings` cards of plugins running on the site, for the Integrations section.
-  var integrations: [NativeWidget] = []
   @State private var host = LiveDocument()
+  @State private var org = LiveDocument()
+
+  /// The `hostSettings` cards of plugins running on the site, for the Integrations section, worked out from the live
+  /// site and workspace documents here rather than handed in: a link that opens the section pushes it before the list has
+  /// read either, and a list handed over then stayed empty ("Nothing to connect").
+  private var integrations: [NativeWidget] {
+    guard case .ready(let hostDoc?) = host.state, case .ready(let orgDoc?) = org.state else { return [] }
+    return integrationWidgets(context.slotWidgets(integrationsSlot), running: runningPlugins(org: orgDoc.data, host: hostDoc.data))
+  }
 
   var body: some View {
     Group {
@@ -115,6 +122,7 @@ struct SetupDetail: View {
       }
     }
     .task(id: context.hostID) { if let id = context.hostID { await host.bind(context.firestore, ["hosts", id]) } }
+    .task(id: context.orgID) { if let id = context.orgID { await org.bind(context.firestore, ["orgs", id]) } }
   }
 
   private func sectionForm(_ doc: FirestoreDocument, hostID: String) -> some View {
