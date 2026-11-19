@@ -73,7 +73,15 @@ import {
 } from '@aglyn/tenant-data-admin/server/api-v1-site-settings'
 import { handleSiteTemplates } from '@aglyn/tenant-data-admin/server/api-v1-site-templates'
 import {
+  commitPagePublishes,
+  type PagePublishEntry,
+  type PagePublishListRefusal,
+  precheckPagePublishes,
+  readPagePublishBody,
+} from '@aglyn/tenant-data-admin/server/page-publish'
+import {
   admitNamedSite,
+  apiActorFields,
   apiActorLabel,
   isConnectedAppContext,
   requireSitePermission,
@@ -518,6 +526,15 @@ export const PUBLISH_WINDOW_MS = 60 * 60 * 1000
  * No `Idempotency-Key`: publishing twice lands the same state and returns the
  * same answer, exactly as `updateRecord` argues. The budget, not the key, is
  * what makes a retry loop safe.
+ *
+ * ## Given `pages` (AGL-4235)
+ *
+ * `{ "pages": [id, …] }` also makes those pages' drafts live, as the page
+ * editor's Publish does, and gives a page with no address its address
+ * (`page-publish.ts`). Scope, then the PUBLISHING permission for a connected
+ * app, then every page checked with nothing written, then the budget, then
+ * each page committed, then the refresh below. A retry is still safe: a page
+ * whose draft went live has no draft left, and answers `unchanged`.
  */
 async function handlePublish(
   request: Request,
@@ -532,8 +549,21 @@ async function handlePublish(
   const denied = requireScope(ctx, 'sites:publish')
   if (denied) return denied
 
+  // An optional list of pages whose drafts go live (AGL-4235). No body, an
+  // empty one, or one without `pages` is exactly the refresh below.
+  const requested = readPagePublishBody(await request.text().catch(() => ''))
+  if ('errors' in requested) {
+    return ApiErrors.badRequest({
+      message: 'The publish request failed validation',
+      code: 'validation_failed',
+      fields: requested.errors,
+      headers: ctx.headers,
+    })
+  }
+  const pageIds = requested.pages
+
   // The site router's read (AGL-4235); read here only if no router gave one.
-  const snap = ctx.site?.id === hostId ? ctx.site.snapshot : await hostRef(ctx, hostId).get()
+  let snap = ctx.site?.id === hostId ? ctx.site.snapshot : await hostRef(ctx, hostId).get()
   const subdomain = String(snap.get('subdomain') ?? '').trim()
   if (!snap.exists || !subdomain) {
     return ApiErrors.notFound({ message: 'No such site', headers: ctx.headers })
@@ -541,8 +571,18 @@ async function handlePublish(
   // A connected app publishes only where its person may write the site's
   // content (AGL-4235), the roles the console's own publish route admits. An
   // API key is not asked; see the docblock above for what stands in for it.
-  const notPermitted = requireSitePermission(ctx, snap, 'site.edit')
+  // Making a page's draft live is the console's Publish, which the `author`
+  // role may not press, so a list asks for the publishing permission.
+  const notPermitted = requireSitePermission(ctx, snap, pageIds ? 'site.publish' : 'site.edit')
   if (notPermitted) return notPermitted
+
+  // Every page is checked before the budget is spent or anything is written.
+  const pageInput = { hostId, orgId: ctx.orgId, org: ctx.org as { enabledPlugins?: string[] } }
+  const checked = pageIds ? await precheckPagePublishes(ctx.firestore, { ...pageInput, pageIds }) : null
+  if (checked && checked.ok === false) {
+    return pagePublishRefusal(ctx, checked, { results: checked.pages })
+  }
+  const plans = checked && checked.ok === true ? checked.plans : null
 
   // Per-host hourly budget, ABOVE the fan-out and below the authorization.
   const rate = await consumeRateLimit(`apiv1-publish:${hostId}`, {
@@ -558,6 +598,25 @@ async function handlePublish(
       ctx.headers,
     )
   }
+
+  // The pages' drafts go live, one at a time, each re-checked as it is
+  // written. A refusal now is a race with another writer: stop, and say
+  // exactly what went live and what did not.
+  let promoted: PagePublishEntry[] | undefined
+  if (plans) {
+    const committed = await commitPagePublishes(
+      ctx.firestore,
+      { ...pageInput, actor: { uid: 'api', email: null, ...apiActorFields(ctx) } },
+      plans,
+    )
+    promoted = committed.promoted
+    if (committed.ok === false) {
+      return pagePublishRefusal(ctx, committed, { promoted: committed.promoted, results: committed.pages })
+    }
+    // The refresh below reads the routing map as the publishes left it.
+    snap = await hostRef(ctx, hostId).get()
+  }
+  const promotedView = promoted ? { promoted } : {}
 
   // `screens` is the routing map the console route reads for the same purpose:
   // screen id → route path. A site with none is not an error — an unrouted or
@@ -581,6 +640,7 @@ async function handlePublish(
         published: false,
         reason: 'not_routed',
         pages: 0,
+        ...promotedView,
       },
       { headers: ctx.headers },
     )
@@ -609,8 +669,35 @@ async function handlePublish(
       // lapses — worth saying, because the caller is the one deciding whether
       // to poll.
       pagesDropped: result.pathsDropped,
+      ...promotedView,
     },
     { headers: ctx.headers },
+  )
+}
+
+/** The `type` each refusal status answers with, as `ApiErrors` names them. */
+const PAGE_PUBLISH_ERROR_TYPES: Record<PagePublishListRefusal['status'], string> = {
+  400: 'bad_request',
+  404: 'not_found',
+  409: 'conflict',
+  413: 'payload_too_large',
+}
+
+/**
+ * A refused page publish: the first refused page's status and reason in the
+ * error envelope, and beside it every page's line (AGL-4235).
+ */
+function pagePublishRefusal(
+  ctx: ApiV1Context,
+  refused: PagePublishListRefusal,
+  extra: { promoted?: PagePublishEntry[]; results: PagePublishEntry[] },
+): Response {
+  return apiJson(
+    {
+      error: { type: PAGE_PUBLISH_ERROR_TYPES[refused.status], message: refused.message, code: refused.code },
+      ...extra,
+    },
+    { status: refused.status, headers: ctx.headers },
   )
 }
 
