@@ -404,6 +404,7 @@
           "type": "list",
           "title": "Collaborators",
           "items": "data.members.items",
+          "columnsZone": "hostMembersColumn",
           "primary": "{item.displayName|item.email}",
           "secondary": "{item.email}",
           "icon": "person.crop.circle|account_circle",

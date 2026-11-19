@@ -2969,6 +2969,7 @@
             "ai.usageOverageColumn",
             "ai.hostMember",
             "ai.allotment",
+            "ai.collaboratorCreditsColumn",
             "ai.import.productCopy",
             "ai.import.start",
             "ai.create"
