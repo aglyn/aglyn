@@ -434,3 +434,40 @@ export async function siteLockRefusal(
   })
   return locked ? withResponseHeaders(locked, context.headers) : null
 }
+
+/**
+ * For a site a request names OUTSIDE the `/v1/sites/{siteId}/…` path — a
+ * `siteId` query parameter, a `consentSiteId` in a body — exactly what the
+ * site router does for one named in the path (AGL-4235), built from the same
+ * two helpers in the same order:
+ *
+ * 1. `hosts/{hostId}`, read once and fresh, because the lock is read off it.
+ * 2. For a connected app, whether its person is on the site at all
+ *    ({@link holdsSiteMembership}). Missing, or not a member, answers the
+ *    router's `404 No such site`, so an app cannot learn a site exists by
+ *    naming it — which is why this comes before the lock, whose 423 would.
+ * 3. The site's own lock and takedown ({@link siteLockRefusal}), the request's
+ *    method deciding: a read-only lock passes a GET and refuses a write.
+ *
+ * It does NOT ask whether the workspace owns the site. The caller keeps the
+ * ownership check it already makes (`orgOwnsHost`, or what its resource does
+ * in its place) and calls this after it, so a site of another workspace keeps
+ * answering exactly what that resource answers today. The snapshot is handed
+ * back so a handler that reads the site again uses this read.
+ */
+export async function admitNamedSite(
+  context: ApiV1Context,
+  request: Request,
+  hostId: string,
+): Promise<{ snapshot: FirebaseFirestore.DocumentSnapshot } | Response> {
+  const snapshot = await context.firestore.collection('hosts').doc(hostId).get()
+  if (!snapshot.exists || !holdsSiteMembership(context, snapshot)) {
+    return ApiErrors.notFound({ message: 'No such site', headers: context.headers })
+  }
+  const locked = await siteLockRefusal(
+    context,
+    request,
+    snapshot.data() as LockdownVerdictOptions['host'],
+  )
+  return locked ?? { snapshot }
+}
