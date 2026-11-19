@@ -3446,13 +3446,17 @@
             "waivers.share",
             "waivers.signatures",
             "waivers.signature",
-            "waivers.waiver"
+            "waivers.waiver",
+            "waivers.sign",
+            "waivers.signed",
+            "waivers.paper"
           ],
           "widgets": [
             "waivers.check-in-status"
           ],
           "deepLinks": [
-            "waivers.home.link"
+            "waivers.home.link",
+            "waivers.sign.link"
           ]
         }
       },
