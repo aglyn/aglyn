@@ -17,7 +17,7 @@ import kotlin.test.assertEquals
 /**
  * A site's Collaborators carry the AI plugin's "AI credits (site, month)" column (the console's hostMembers column
  * `ai-collaborator-credits`, gap sweep Site home row 9): each collaborator's credits on the site this month, 0 for someone
- * with none, and a dash for an invited collaborator or a reader the usage route refuses, as the console's cell reads.
+ * with none, and a dash (left off the row's line) for an invited collaborator or a reader the usage route refuses, as the console's cell reads.
  */
 class SiteCollaboratorCreditsColumnTest {
   private val root: File = generateSequence(File("").absoluteFile) { it.parentFile }.first { File(it, "libs/native/screens").isDirectory }
@@ -68,7 +68,9 @@ class SiteCollaboratorCreditsColumnTest {
     val columns = ListColumns.columns(model.spec.blocks.first())
     val rows = ScreenValues.rows(ScreenValues.lookup("data.members.items", model.context))
     val lines = rows.map { ListColumns.line(columns, setOf("aiSiteCredits"), ScreenContext.withItem(model.context, it)) }
-    assertEquals(listOf("AI credits (site, month) 1,234", "AI credits (site, month) 0", "AI credits (site, month) —"), lines)
+    // A dash is the cell's "nothing to say": the row line leaves it out, as it does every column's.
+    assertEquals(listOf("AI credits (site, month) 1,234", "AI credits (site, month) 0", ""), lines)
+    assertEquals("—", ScreenValues.render(columns.single().value, ScreenContext.withItem(model.context, rows[2])))
   }
 
   @Test
@@ -80,7 +82,8 @@ class SiteCollaboratorCreditsColumnTest {
     model.load()
     val columns = ListColumns.columns(model.spec.blocks.first())
     val row = ScreenValues.rows(ScreenValues.lookup("data.members.items", model.context)).single()
-    assertEquals("AI credits (site, month) —", ListColumns.line(columns, setOf("aiSiteCredits"), ScreenContext.withItem(model.context, row)))
+    assertEquals("—", ScreenValues.render(columns.single().value, ScreenContext.withItem(model.context, row)))
+    assertEquals("", ListColumns.line(columns, setOf("aiSiteCredits"), ScreenContext.withItem(model.context, row)))
     assertEquals(JsonObject(emptyMap()).toString(), ScreenValues.lookup("column.aiSiteCredits", model.context).toString())
   }
 }

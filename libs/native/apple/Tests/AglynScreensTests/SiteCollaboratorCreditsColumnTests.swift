@@ -51,7 +51,9 @@ final class SiteCollaboratorCreditsColumnTests: XCTestCase {
     let columns = ListColumns.columns(of: try XCTUnwrap(model.spec.blocks.first))
     let rows = ScreenValues.rows(ScreenValues.lookup("data.members.items", in: model.context))
     let lines = rows.map { ListColumns.line(columns, shown: ["aiSiteCredits"], in: ScreenContext.with(model.context, item: $0)) }
-    XCTAssertEqual(lines, ["AI credits (site, month) 1,234", "AI credits (site, month) 0", "AI credits (site, month) \u{2014}"])
+    // A dash is the cell's "nothing to say": the row line leaves it out, as it does every column's.
+    XCTAssertEqual(lines, ["AI credits (site, month) 1,234", "AI credits (site, month) 0", ""])
+    XCTAssertEqual(ScreenValues.render(try XCTUnwrap(columns.first).value, in: ScreenContext.with(model.context, item: rows[2])), "\u{2014}")
   }
 
   @MainActor
@@ -66,8 +68,7 @@ final class SiteCollaboratorCreditsColumnTests: XCTestCase {
     await model.load()
     let columns = ListColumns.columns(of: try XCTUnwrap(model.spec.blocks.first))
     let row = try XCTUnwrap(ScreenValues.rows(ScreenValues.lookup("data.members.items", in: model.context)).first)
-    XCTAssertEqual(
-      ListColumns.line(columns, shown: ["aiSiteCredits"], in: ScreenContext.with(model.context, item: row)),
-      "AI credits (site, month) \u{2014}")
+    XCTAssertEqual(ScreenValues.render(try XCTUnwrap(columns.first).value, in: ScreenContext.with(model.context, item: row)), "\u{2014}")
+    XCTAssertEqual(ListColumns.line(columns, shown: ["aiSiteCredits"], in: ScreenContext.with(model.context, item: row)), "")
   }
 }
