@@ -1,6 +1,7 @@
 // Copyright 2026 Aglyn LLC
 // SPDX-License-Identifier: Apache-2.0
 
+import AglynCore
 import XCTest
 
 @testable import AglynScreens
@@ -36,5 +37,13 @@ final class ReconfirmMethodsTests: XCTestCase {
     XCTAssertTrue(Reconfirm.signsOut(url: "/api/account/close"))
     XCTAssertFalse(Reconfirm.signsOut(url: "/api/account/export"))
     XCTAssertFalse(Reconfirm.signsOut(url: nil))
+  }
+
+  func testConfirmItIsYouSaysTheRoutesWordsNotItsCode() {
+    let refusal = ConsoleAPIError(
+      status: 401, message: "reauth-required",
+      body: .object(["error": "reauth-required", "message": "Confirm it is you before closing the account."]))
+    XCTAssertEqual(ScreenModel.reauthMessage(refusal), "Confirm it is you before closing the account.")
+    XCTAssertEqual(ScreenModel.reauthMessage(ConsoleAPIError(status: 401, message: "reauth-required")), "reauth-required")
   }
 }

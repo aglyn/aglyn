@@ -1135,7 +1135,7 @@ public final class ScreenModel {
         let file = DownloadedFile(name: named, contentType: "application/json", data: try value.encoded(pretty: true))
         return .file(file, name: named, message: action.success.map { ScreenValues.render($0, in: scope) })
       } catch let error as ConsoleAPIError {
-        if Self.wantsReauth(error) { return .needsReauth(error.message) }
+        if Self.wantsReauth(error) { return .needsReauth(Self.reauthMessage(error)) }
         return .failed(error.message)
       } catch {
         return .failed(error.localizedDescription)
@@ -1147,7 +1147,7 @@ public final class ScreenModel {
         let name = file.name ?? ScreenValues.render(fallback, in: scope)
         return .file(file, name: name, message: action.success.map { ScreenValues.render($0, in: scope) })
       } catch let error as ConsoleAPIError {
-        if Self.wantsReauth(error) { return .needsReauth(error.message) }
+        if Self.wantsReauth(error) { return .needsReauth(Self.reauthMessage(error)) }
         return .failed(error.message)
       } catch {
         return .failed(error.localizedDescription)
@@ -1174,7 +1174,7 @@ public final class ScreenModel {
       performed = action
       return .done(message: Self.message(for: action, response: response, in: scope), response: response)
     } catch let error as ConsoleAPIError {
-      if Self.wantsReauth(error) { return .needsReauth(error.message) }
+      if Self.wantsReauth(error) { return .needsReauth(Self.reauthMessage(error)) }
       if error.status == action.elseStatus, let otherwise = action.otherwise?.action { return await perform(otherwise, in: scope) }
       if let gate = action.gate, let screen = gate["screen"]?.stringValue,
         ScreenValues.condition(gate["when"]?.stringValue, in: ["error": error.body ?? .null])
@@ -1318,11 +1318,17 @@ public final class ScreenModel {
       // Closing the prompt is the person's answer, not a failure worth alarming them with.
       return .done(message: nil, response: nil)
     } catch let error as ConsoleAPIError {
-      if Self.wantsReauth(error) { return .needsReauth(error.message) }
+      if Self.wantsReauth(error) { return .needsReauth(Self.reauthMessage(error)) }
       return .failed(ScreenPasskeys.message(for: error, in: passkey, scope: scope))
     } catch {
       return .failed(ScreenPasskeys.message(for: error, in: passkey, scope: scope))
     }
+  }
+
+  /// What "Confirm it is you" says: the route's own `message` ("Confirm it is you before closing the account."), not its
+  /// `reauth-required` code, as the Kotlin twin reads it.
+  nonisolated static func reauthMessage(_ error: ConsoleAPIError) -> String {
+    error.body?["message"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 } ?? error.message
   }
 
   /// A route's "your plan does not include this" answer: payment required, or a refusal naming an entitlement.
