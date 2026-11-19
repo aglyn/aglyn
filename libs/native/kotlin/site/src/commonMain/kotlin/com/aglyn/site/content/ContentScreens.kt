@@ -275,6 +275,7 @@ private fun EntryEditor(
   val authorsLive by remember(hostId, context.firestore) { context.firestore.observe(FirestoreQuery("hosts/$hostId/authors", limit = 100)) }.collectAsState(Live.Loading)
   val authors = (authorsLive as? Live.Ready)?.value.orEmpty().map(::contentAuthorOf).sortedBy { it.name.lowercase() }
   val uri = LocalUriHandler.current
+  @Suppress("DEPRECATION") val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
   // A deleted entry closes its editor and drops out of the list.
   CloseWhenGone((live as? Live.Ready)?.let { ready -> ready.value?.let(ContentEntry::from) != null })
   when (val doc = live) {
@@ -343,6 +344,24 @@ private fun EntryEditor(
                 enabled = canPublish && !runner.busy && stored == draft,
                 modifier = Modifier.testTag("entry-publish"),
               ) { Text(if (entry.status == "scheduled") "Publish now" else "Publish") }
+              // The other half of View on site (AGL-3205): an entry the site does not serve yet, as the site will render
+              // it, behind a signed two-hour link. Only for a saved entry with an address.
+              if (entry.slug.isNotEmpty() && collection.slug.isNotEmpty()) {
+                OutlinedButton(
+                  onClick = {
+                    runner.run("Preview opened — link copied, and it works for 2 hours") {
+                      val url = api.previewLink(collection.slug, entry.slug) ?: throw com.aglyn.core.ConsoleApiError("Could not create a preview link", 0, null)
+                      @Suppress("DEPRECATION") clipboard.setText(androidx.compose.ui.text.AnnotatedString(url))
+                      uri.openUri(url)
+                    }
+                  },
+                  enabled = !runner.busy,
+                  modifier = Modifier.testTag("entry-preview-on-site"),
+                ) {
+                  Icon(AglynIcons.named("visibility"), contentDescription = null)
+                  Text("Preview on site", Modifier.padding(start = space(1f)))
+                }
+              }
             }
           }
           if (!canPublish) Text("Publishing needs the editor or admin role; you can save drafts.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -434,6 +453,9 @@ private fun EntryEditor(
           DetailRow("Updated", entry.updatedAt?.let { relativeTime(it.epochMillis, now) })
           DetailRow("Entry id", entry.id)
         }
+        // Every field the entry holds, exactly as saved (the console's Raw JSON card), closed until asked for.
+        var rawOpen by remember(entry.id) { mutableStateOf(false) }
+        com.aglyn.site.RawJsonCard(doc.value?.let { com.aglyn.site.firestoreRawJson(it.id, it.data) }, rawOpen) { rawOpen = !rawOpen }
       }
       }
     }

@@ -4110,6 +4110,7 @@ internal data class ContractValuesPart2(
     @SerialName("CRM_ACTIVITY_DIRECTION_LABELS") val crmActivityDirectionLabels: Map<String, String>,
     @SerialName("CRM_ACTIVITY_KIND_LABELS") val crmActivityKindLabels: Map<String, String>,
     @SerialName("CRM_ACTIVITY_KIND_NOUNS") val crmActivityKindNouns: Map<String, String>,
+    @SerialName("CRM_DEFAULT_VIEWS_FIELD") val crmDefaultViewsField: String,
     @SerialName("CRM_EMAIL_BODY_MAX") val crmEmailBodyMax: Long,
     @SerialName("CRM_EMAIL_SUBJECT_MAX") val crmEmailSubjectMax: Long,
     @SerialName("CRM_EMAIL_TEMPLATE_KIND_LABELS") val crmEmailTemplateKindLabels: Map<String, String>,
@@ -4122,6 +4123,9 @@ internal data class ContractValuesPart2(
     @SerialName("CRM_MERGE_FIELDS") val crmMergeFields: List<CrmMergeFieldDefinition>,
     @SerialName("CRM_REPORT_PERIOD_LABELS") val crmReportPeriodLabels: Map<String, String>,
     @SerialName("CRM_TASK_KIND_LABELS") val crmTaskKindLabels: Map<String, String>,
+    @SerialName("CRM_VIEW_MAX_COLUMNS") val crmViewMaxColumns: Long,
+    @SerialName("CRM_VIEW_MAX_FILTERS") val crmViewMaxFilters: Long,
+    @SerialName("CRM_VIEW_NAME_MAX") val crmViewNameMax: Long,
     @SerialName("CROSS_MAX_DEPTH") val crossMaxDepth: Long,
     @SerialName("DATASET_AUTHORABLE_FIELD_TYPES") val datasetAuthorableFieldTypes: List<DatasetFieldType>,
     @SerialName("DATASET_FIELD_TYPE_LABELS") val datasetFieldTypeLabels: Map<String, String>,
@@ -4135,15 +4139,20 @@ internal data class ContractValuesPart2(
     @SerialName("DROP_OFF_MAX_HOURS") val dropOffMaxHours: Double,
     @SerialName("DROP_OFF_WAIT_HOURS") val dropOffWaitHours: List<Double>,
     @SerialName("DROP_OFF_WATCHES_MAX") val dropOffWatchesMax: Long,
-    @SerialName("DUPLICATE_ACTIVITY_ACTION_LABELS") val duplicateActivityActionLabels: Map<String, String>,
-    @SerialName("EMAIL_BLOCK_STARTER_TREES_JSON") val emailBlockStarterTreesJson: String,
-    @SerialName("EMAIL_LIST_QUERY") val emailListQuery: ListQueryDeclaration,
-    @SerialName("EMAIL_TEMPLATE_QUERY") val emailTemplateQuery: ListQueryDeclaration,
-    @SerialName("ENTRY_LIST_FILTER_HEADERS") val entryListFilterHeaders: Map<String, String>,
+    @SerialName("DUPLICABLE_RESOURCE_NOUNS") val duplicableResourceNouns: Map<String, String>,
 )
 
 @Serializable
 internal data class ContractValuesPart3(
+    @SerialName("DUPLICATE_ACTIVITY_ACTION_LABELS") val duplicateActivityActionLabels: Map<String, String>,
+    @SerialName("DUPLICATE_COPIES") val duplicateCopies: Map<String, List<String>>,
+    @SerialName("DUPLICATE_NAME_MAX") val duplicateNameMax: Long,
+    @SerialName("DUPLICATE_NAME_PREFIX") val duplicateNamePrefix: String,
+    @SerialName("EMAIL_BLOCK_STARTER_TREES_JSON") val emailBlockStarterTreesJson: String,
+    @SerialName("EMAIL_LIST_QUERY") val emailListQuery: ListQueryDeclaration,
+    @SerialName("EMAIL_STATE_LABELS") val emailStateLabels: Map<String, String>,
+    @SerialName("EMAIL_TEMPLATE_QUERY") val emailTemplateQuery: ListQueryDeclaration,
+    @SerialName("ENTRY_LIST_FILTER_HEADERS") val entryListFilterHeaders: Map<String, String>,
     @SerialName("ENTRY_LIST_QUERY") val entryListQuery: ListQueryDeclaration,
     @SerialName("ENTRY_STATUS_OPTIONS") val entryStatusOptions: List<EntryStatusOptionsItem>,
     @SerialName("EVENT_COVER_ALT_MAX_LENGTH") val eventCoverAltMaxLength: Long,
@@ -4183,6 +4192,10 @@ internal data class ContractValuesPart3(
     @SerialName("INSTALL_TARGETS") val installTargets: Map<String, List<InstallTarget>>,
     @SerialName("LABEL_CODE_MAX_LENGTH") val labelCodeMaxLength: Long,
     @SerialName("LABEL_SIZES") val labelSizes: List<LabelSize>,
+)
+
+@Serializable
+internal data class ContractValuesPart4(
     @SerialName("LAYOUT_LIST_QUERY") val layoutListQuery: ListQueryDeclaration,
     @SerialName("LEAD_LIST_DECLARATION") val leadListDeclaration: ListQueryDeclaration,
     @SerialName("LEAD_LIST_QUERY") val leadListQuery: ListQueryDeclaration,
@@ -4192,10 +4205,6 @@ internal data class ContractValuesPart3(
     @SerialName("LIST_QUERY_ID_PATH") val listQueryIdPath: String,
     @SerialName("LISTING_CATEGORIES") val listingCategories: List<String>,
     @SerialName("LOCAL_BUSINESS_TYPE_OPTIONS") val localBusinessTypeOptions: List<LocalBusinessTypeOptionsItem>,
-)
-
-@Serializable
-internal data class ContractValuesPart4(
     @SerialName("LOCAL_FULFILLMENT_OPEN_STATUSES") val localFulfillmentOpenStatuses: List<String>,
     @SerialName("LOCAL_FULFILLMENT_QUEUE_FIELDS") val localFulfillmentQueueFields: LocalFulfillmentQueueFields,
     @SerialName("LOCAL_FULFILLMENT_QUEUE_LIMIT") val localFulfillmentQueueLimit: Long,
@@ -4235,19 +4244,21 @@ internal data class ContractValuesPart4(
     @SerialName("NATIVE_CRM_FIELD_DEFAULT_CURRENCY") val nativeCrmFieldDefaultCurrency: String,
     @SerialName("NATIVE_CRM_FIELD_OBJECTS") val nativeCrmFieldObjects: List<String>,
     @SerialName("NATIVE_CRM_FIELD_TYPE_LABELS") val nativeCrmFieldTypeLabels: Map<String, String>,
+)
+
+@Serializable
+internal data class ContractValuesPart5(
     @SerialName("NATIVE_CRM_FIELD_TYPES") val nativeCrmFieldTypes: List<String>,
     @SerialName("NATIVE_CRM_LEAD_OPEN_STATUSES") val nativeCrmLeadOpenStatuses: List<String>,
+    @SerialName("NATIVE_CRM_LEAD_SOURCE_DIRECTIONS") val nativeCrmLeadSourceDirections: List<String>,
     @SerialName("NATIVE_CRM_LEAD_STATUSES") val nativeCrmLeadStatuses: List<String>,
     @SerialName("NATIVE_CRM_PICKLISTS") val nativeCrmPicklists: List<NativeCrmPicklist>,
     @SerialName("NATIVE_CRM_REPORT_PERIODS") val nativeCrmReportPeriods: List<String>,
     @SerialName("NATIVE_CRM_TASK_KINDS") val nativeCrmTaskKinds: List<String>,
     @SerialName("NATIVE_CURRENCY_FRACTION_DIGITS") val nativeCurrencyFractionDigits: Map<String, Double>,
+    @SerialName("NATIVE_EMAIL_STATE_STATUSES") val nativeEmailStateStatuses: List<String>,
     @SerialName("NATIVE_NAV_MANIFEST") val nativeNavManifest: NativeNavManifest,
     @SerialName("NATIVE_NAV_SHELL_SCREENS") val nativeNavShellScreens: List<String>,
-)
-
-@Serializable
-internal data class ContractValuesPart5(
     @SerialName("NATIVE_SITE_CAMPAIGNS_QUERY") val nativeSiteCampaignsQuery: ListQueryDeclaration,
     @SerialName("NATIVE_SITE_EMAILS_QUERY") val nativeSiteEmailsQuery: ListQueryDeclaration,
     @SerialName("NOTHING_MOVED") val nothingMoved: String,
@@ -4285,6 +4296,10 @@ internal data class ContractValuesPart5(
     @SerialName("OUTREACH_MAX_EMAIL_STEPS") val outreachMaxEmailSteps: Long,
     @SerialName("OUTREACH_MAX_STEP_DELAY_BUSINESS_DAYS") val outreachMaxStepDelayBusinessDays: Long,
     @SerialName("OUTREACH_MAX_STEPS") val outreachMaxSteps: Long,
+)
+
+@Serializable
+internal data class ContractValuesPart6(
     @SerialName("OUTREACH_MIN_EMAIL_FOLLOW_UP_BUSINESS_DAYS") val outreachMinEmailFollowUpBusinessDays: Long,
     @SerialName("OUTREACH_SEQUENCE_LIST_QUERY") val outreachSequenceListQuery: ListQueryDeclaration,
     @SerialName("OUTREACH_SEQUENCE_NAME_MAX") val outreachSequenceNameMax: Long,
@@ -4296,10 +4311,6 @@ internal data class ContractValuesPart5(
     @SerialName("PHONE_HOME_TEAM_LABEL") val phoneHomeTeamLabel: String,
     @SerialName("PHONE_HOME_WORKSPACE_GROUP_LABEL") val phoneHomeWorkspaceGroupLabel: String,
     @SerialName("PINNED_HOSTS_FIELD") val pinnedHostsField: String,
-)
-
-@Serializable
-internal data class ContractValuesPart6(
     @SerialName("PINNED_HOSTS_MAX") val pinnedHostsMax: Long,
     @SerialName("PINNED_ORGS_FIELD") val pinnedOrgsField: String,
     @SerialName("PINNED_ORGS_MAX") val pinnedOrgsMax: Long,
@@ -4337,6 +4348,10 @@ internal data class ContractValuesPart6(
     @SerialName("POS_OFFLINE_CARD_RECONNECT_WITHIN_MS") val posOfflineCardReconnectWithinMs: Double,
     @SerialName("POS_OFFLINE_CLOCK_SKEW_MS") val posOfflineClockSkewMs: Double,
     @SerialName("POS_OFFLINE_DISABLED_TENDERS") val posOfflineDisabledTenders: Map<String, String>,
+)
+
+@Serializable
+internal data class ContractValuesPart7(
     @SerialName("POS_OFFLINE_FLAG_LABELS") val posOfflineFlagLabels: Map<String, String>,
     @SerialName("POS_OFFLINE_LATE_SYNC_MS") val posOfflineLateSyncMs: Double,
     @SerialName("POS_OFFLINE_MAX_AGE_MS") val posOfflineMaxAgeMs: Double,
@@ -4348,10 +4363,6 @@ internal data class ContractValuesPart6(
     @SerialName("PRINTER_BRAND_LABELS") val printerBrandLabels: Map<String, String>,
     @SerialName("PRINTER_BRANDS") val printerBrands: List<PrinterBrand>,
     @SerialName("PRINTER_MODEL_SUGGESTIONS") val printerModelSuggestions: Map<String, List<String>>,
-)
-
-@Serializable
-internal data class ContractValuesPart7(
     @SerialName("PRINTER_OFFLINE_AFTER_MS") val printerOfflineAfterMs: Double,
     @SerialName("PRINTER_STATE_LABELS") val printerStateLabels: Map<String, String>,
     @SerialName("PRODUCT_LIST_BASE") val productListBase: List<ListQueryFilter>,
@@ -4389,6 +4400,10 @@ internal data class ContractValuesPart7(
     @SerialName("SHIPPING_COST_MAX_CENTS") val shippingCostMaxCents: Long,
     @SerialName("SITE_CARDS_PAGE_SIZE") val siteCardsPageSize: Long,
     @SerialName("SITE_FILTER_HEADERS") val siteFilterHeaders: Map<String, String>,
+)
+
+@Serializable
+internal data class ContractValuesPart8(
     @SerialName("SITE_FILTER_OPTIONS") val siteFilterOptions: SiteFilterOptions,
     @SerialName("SITE_JOURNEY_KEY_MAX") val siteJourneyKeyMax: Long,
     @SerialName("SITE_LIST_DECLARATION") val siteListDeclaration: ListQueryDeclaration,
@@ -4400,10 +4415,6 @@ internal data class ContractValuesPart7(
     @SerialName("STAY_CHECK_IN_MODES") val stayCheckInModes: List<StayCheckInMode>,
     @SerialName("SUBMISSION_FILTER_HEADERS") val submissionFilterHeaders: Map<String, String>,
     @SerialName("SUBMISSION_LIST_QUERY") val submissionListQuery: ListQueryDeclaration,
-)
-
-@Serializable
-internal data class ContractValuesPart8(
     @SerialName("SUBMISSION_READ_OPTIONS") val submissionReadOptions: List<ListFilterOption>,
     @SerialName("SUPPRESSION_LIST_QUERY") val suppressionListQuery: ListQueryDeclaration,
     @SerialName("TAB_BAR_AREAS_MAX") val tabBarAreasMax: Long,
@@ -4520,6 +4531,7 @@ class ContractValues internal constructor(
     val crmActivityDirectionLabels: Map<String, String> get() = part2.crmActivityDirectionLabels
     val crmActivityKindLabels: Map<String, String> get() = part2.crmActivityKindLabels
     val crmActivityKindNouns: Map<String, String> get() = part2.crmActivityKindNouns
+    val crmDefaultViewsField: String get() = part2.crmDefaultViewsField
     val crmEmailBodyMax: Long get() = part2.crmEmailBodyMax
     val crmEmailSubjectMax: Long get() = part2.crmEmailSubjectMax
     val crmEmailTemplateKindLabels: Map<String, String> get() = part2.crmEmailTemplateKindLabels
@@ -4532,6 +4544,9 @@ class ContractValues internal constructor(
     val crmMergeFields: List<CrmMergeFieldDefinition> get() = part2.crmMergeFields
     val crmReportPeriodLabels: Map<String, String> get() = part2.crmReportPeriodLabels
     val crmTaskKindLabels: Map<String, String> get() = part2.crmTaskKindLabels
+    val crmViewMaxColumns: Long get() = part2.crmViewMaxColumns
+    val crmViewMaxFilters: Long get() = part2.crmViewMaxFilters
+    val crmViewNameMax: Long get() = part2.crmViewNameMax
     val crossMaxDepth: Long get() = part2.crossMaxDepth
     val datasetAuthorableFieldTypes: List<DatasetFieldType> get() = part2.datasetAuthorableFieldTypes
     val datasetFieldTypeLabels: Map<String, String> get() = part2.datasetFieldTypeLabels
@@ -4545,11 +4560,16 @@ class ContractValues internal constructor(
     val dropOffMaxHours: Double get() = part2.dropOffMaxHours
     val dropOffWaitHours: List<Double> get() = part2.dropOffWaitHours
     val dropOffWatchesMax: Long get() = part2.dropOffWatchesMax
-    val duplicateActivityActionLabels: Map<String, String> get() = part2.duplicateActivityActionLabels
-    val emailBlockStarterTreesJson: String get() = part2.emailBlockStarterTreesJson
-    val emailListQuery: ListQueryDeclaration get() = part2.emailListQuery
-    val emailTemplateQuery: ListQueryDeclaration get() = part2.emailTemplateQuery
-    val entryListFilterHeaders: Map<String, String> get() = part2.entryListFilterHeaders
+    val duplicableResourceNouns: Map<String, String> get() = part2.duplicableResourceNouns
+    val duplicateActivityActionLabels: Map<String, String> get() = part3.duplicateActivityActionLabels
+    val duplicateCopies: Map<String, List<String>> get() = part3.duplicateCopies
+    val duplicateNameMax: Long get() = part3.duplicateNameMax
+    val duplicateNamePrefix: String get() = part3.duplicateNamePrefix
+    val emailBlockStarterTreesJson: String get() = part3.emailBlockStarterTreesJson
+    val emailListQuery: ListQueryDeclaration get() = part3.emailListQuery
+    val emailStateLabels: Map<String, String> get() = part3.emailStateLabels
+    val emailTemplateQuery: ListQueryDeclaration get() = part3.emailTemplateQuery
+    val entryListFilterHeaders: Map<String, String> get() = part3.entryListFilterHeaders
     val entryListQuery: ListQueryDeclaration get() = part3.entryListQuery
     val entryStatusOptions: List<EntryStatusOptionsItem> get() = part3.entryStatusOptions
     val eventCoverAltMaxLength: Long get() = part3.eventCoverAltMaxLength
@@ -4589,15 +4609,15 @@ class ContractValues internal constructor(
     val installTargets: Map<String, List<InstallTarget>> get() = part3.installTargets
     val labelCodeMaxLength: Long get() = part3.labelCodeMaxLength
     val labelSizes: List<LabelSize> get() = part3.labelSizes
-    val layoutListQuery: ListQueryDeclaration get() = part3.layoutListQuery
-    val leadListDeclaration: ListQueryDeclaration get() = part3.leadListDeclaration
-    val leadListQuery: ListQueryDeclaration get() = part3.leadListQuery
-    val leadSourceOptions: List<ListFilterOption> get() = part3.leadSourceOptions
-    val listMemberQuery: ListQueryDeclaration get() = part3.listMemberQuery
-    val listQueryDisjunctions: Long get() = part3.listQueryDisjunctions
-    val listQueryIdPath: String get() = part3.listQueryIdPath
-    val listingCategories: List<String> get() = part3.listingCategories
-    val localBusinessTypeOptions: List<LocalBusinessTypeOptionsItem> get() = part3.localBusinessTypeOptions
+    val layoutListQuery: ListQueryDeclaration get() = part4.layoutListQuery
+    val leadListDeclaration: ListQueryDeclaration get() = part4.leadListDeclaration
+    val leadListQuery: ListQueryDeclaration get() = part4.leadListQuery
+    val leadSourceOptions: List<ListFilterOption> get() = part4.leadSourceOptions
+    val listMemberQuery: ListQueryDeclaration get() = part4.listMemberQuery
+    val listQueryDisjunctions: Long get() = part4.listQueryDisjunctions
+    val listQueryIdPath: String get() = part4.listQueryIdPath
+    val listingCategories: List<String> get() = part4.listingCategories
+    val localBusinessTypeOptions: List<LocalBusinessTypeOptionsItem> get() = part4.localBusinessTypeOptions
     val localFulfillmentOpenStatuses: List<String> get() = part4.localFulfillmentOpenStatuses
     val localFulfillmentQueueFields: LocalFulfillmentQueueFields get() = part4.localFulfillmentQueueFields
     val localFulfillmentQueueLimit: Long get() = part4.localFulfillmentQueueLimit
@@ -4637,15 +4657,17 @@ class ContractValues internal constructor(
     val nativeCrmFieldDefaultCurrency: String get() = part4.nativeCrmFieldDefaultCurrency
     val nativeCrmFieldObjects: List<String> get() = part4.nativeCrmFieldObjects
     val nativeCrmFieldTypeLabels: Map<String, String> get() = part4.nativeCrmFieldTypeLabels
-    val nativeCrmFieldTypes: List<String> get() = part4.nativeCrmFieldTypes
-    val nativeCrmLeadOpenStatuses: List<String> get() = part4.nativeCrmLeadOpenStatuses
-    val nativeCrmLeadStatuses: List<String> get() = part4.nativeCrmLeadStatuses
-    val nativeCrmPicklists: List<NativeCrmPicklist> get() = part4.nativeCrmPicklists
-    val nativeCrmReportPeriods: List<String> get() = part4.nativeCrmReportPeriods
-    val nativeCrmTaskKinds: List<String> get() = part4.nativeCrmTaskKinds
-    val nativeCurrencyFractionDigits: Map<String, Double> get() = part4.nativeCurrencyFractionDigits
-    val nativeNavManifest: NativeNavManifest get() = part4.nativeNavManifest
-    val nativeNavShellScreens: List<String> get() = part4.nativeNavShellScreens
+    val nativeCrmFieldTypes: List<String> get() = part5.nativeCrmFieldTypes
+    val nativeCrmLeadOpenStatuses: List<String> get() = part5.nativeCrmLeadOpenStatuses
+    val nativeCrmLeadSourceDirections: List<String> get() = part5.nativeCrmLeadSourceDirections
+    val nativeCrmLeadStatuses: List<String> get() = part5.nativeCrmLeadStatuses
+    val nativeCrmPicklists: List<NativeCrmPicklist> get() = part5.nativeCrmPicklists
+    val nativeCrmReportPeriods: List<String> get() = part5.nativeCrmReportPeriods
+    val nativeCrmTaskKinds: List<String> get() = part5.nativeCrmTaskKinds
+    val nativeCurrencyFractionDigits: Map<String, Double> get() = part5.nativeCurrencyFractionDigits
+    val nativeEmailStateStatuses: List<String> get() = part5.nativeEmailStateStatuses
+    val nativeNavManifest: NativeNavManifest get() = part5.nativeNavManifest
+    val nativeNavShellScreens: List<String> get() = part5.nativeNavShellScreens
     val nativeSiteCampaignsQuery: ListQueryDeclaration get() = part5.nativeSiteCampaignsQuery
     val nativeSiteEmailsQuery: ListQueryDeclaration get() = part5.nativeSiteEmailsQuery
     val nothingMoved: String get() = part5.nothingMoved
@@ -4683,17 +4705,17 @@ class ContractValues internal constructor(
     val outreachMaxEmailSteps: Long get() = part5.outreachMaxEmailSteps
     val outreachMaxStepDelayBusinessDays: Long get() = part5.outreachMaxStepDelayBusinessDays
     val outreachMaxSteps: Long get() = part5.outreachMaxSteps
-    val outreachMinEmailFollowUpBusinessDays: Long get() = part5.outreachMinEmailFollowUpBusinessDays
-    val outreachSequenceListQuery: ListQueryDeclaration get() = part5.outreachSequenceListQuery
-    val outreachSequenceNameMax: Long get() = part5.outreachSequenceNameMax
-    val outreachTaskTitleMax: Long get() = part5.outreachTaskTitleMax
-    val paymentAcceptedMaxLength: Long get() = part5.paymentAcceptedMaxLength
-    val pendingReservationHoldMs: Double get() = part5.pendingReservationHoldMs
-    val phoneHomeGroupLabels: Map<String, String> get() = part5.phoneHomeGroupLabels
-    val phoneHomeSiteGroupLabel: String get() = part5.phoneHomeSiteGroupLabel
-    val phoneHomeTeamLabel: String get() = part5.phoneHomeTeamLabel
-    val phoneHomeWorkspaceGroupLabel: String get() = part5.phoneHomeWorkspaceGroupLabel
-    val pinnedHostsField: String get() = part5.pinnedHostsField
+    val outreachMinEmailFollowUpBusinessDays: Long get() = part6.outreachMinEmailFollowUpBusinessDays
+    val outreachSequenceListQuery: ListQueryDeclaration get() = part6.outreachSequenceListQuery
+    val outreachSequenceNameMax: Long get() = part6.outreachSequenceNameMax
+    val outreachTaskTitleMax: Long get() = part6.outreachTaskTitleMax
+    val paymentAcceptedMaxLength: Long get() = part6.paymentAcceptedMaxLength
+    val pendingReservationHoldMs: Double get() = part6.pendingReservationHoldMs
+    val phoneHomeGroupLabels: Map<String, String> get() = part6.phoneHomeGroupLabels
+    val phoneHomeSiteGroupLabel: String get() = part6.phoneHomeSiteGroupLabel
+    val phoneHomeTeamLabel: String get() = part6.phoneHomeTeamLabel
+    val phoneHomeWorkspaceGroupLabel: String get() = part6.phoneHomeWorkspaceGroupLabel
+    val pinnedHostsField: String get() = part6.pinnedHostsField
     val pinnedHostsMax: Long get() = part6.pinnedHostsMax
     val pinnedOrgsField: String get() = part6.pinnedOrgsField
     val pinnedOrgsMax: Long get() = part6.pinnedOrgsMax
@@ -4731,17 +4753,17 @@ class ContractValues internal constructor(
     val posOfflineCardReconnectWithinMs: Double get() = part6.posOfflineCardReconnectWithinMs
     val posOfflineClockSkewMs: Double get() = part6.posOfflineClockSkewMs
     val posOfflineDisabledTenders: Map<String, String> get() = part6.posOfflineDisabledTenders
-    val posOfflineFlagLabels: Map<String, String> get() = part6.posOfflineFlagLabels
-    val posOfflineLateSyncMs: Double get() = part6.posOfflineLateSyncMs
-    val posOfflineMaxAgeMs: Double get() = part6.posOfflineMaxAgeMs
-    val posOfflineSaleMaxLines: Long get() = part6.posOfflineSaleMaxLines
-    val posOfflineSyncBatchMax: Long get() = part6.posOfflineSyncBatchMax
-    val posOfflineSyncRoute: String get() = part6.posOfflineSyncRoute
-    val posTenderLabels: Map<String, String> get() = part6.posTenderLabels
-    val priceRangeMaxLength: Long get() = part6.priceRangeMaxLength
-    val printerBrandLabels: Map<String, String> get() = part6.printerBrandLabels
-    val printerBrands: List<PrinterBrand> get() = part6.printerBrands
-    val printerModelSuggestions: Map<String, List<String>> get() = part6.printerModelSuggestions
+    val posOfflineFlagLabels: Map<String, String> get() = part7.posOfflineFlagLabels
+    val posOfflineLateSyncMs: Double get() = part7.posOfflineLateSyncMs
+    val posOfflineMaxAgeMs: Double get() = part7.posOfflineMaxAgeMs
+    val posOfflineSaleMaxLines: Long get() = part7.posOfflineSaleMaxLines
+    val posOfflineSyncBatchMax: Long get() = part7.posOfflineSyncBatchMax
+    val posOfflineSyncRoute: String get() = part7.posOfflineSyncRoute
+    val posTenderLabels: Map<String, String> get() = part7.posTenderLabels
+    val priceRangeMaxLength: Long get() = part7.priceRangeMaxLength
+    val printerBrandLabels: Map<String, String> get() = part7.printerBrandLabels
+    val printerBrands: List<PrinterBrand> get() = part7.printerBrands
+    val printerModelSuggestions: Map<String, List<String>> get() = part7.printerModelSuggestions
     val printerOfflineAfterMs: Double get() = part7.printerOfflineAfterMs
     val printerStateLabels: Map<String, String> get() = part7.printerStateLabels
     val productListBase: List<ListQueryFilter> get() = part7.productListBase
@@ -4779,17 +4801,17 @@ class ContractValues internal constructor(
     val shippingCostMaxCents: Long get() = part7.shippingCostMaxCents
     val siteCardsPageSize: Long get() = part7.siteCardsPageSize
     val siteFilterHeaders: Map<String, String> get() = part7.siteFilterHeaders
-    val siteFilterOptions: SiteFilterOptions get() = part7.siteFilterOptions
-    val siteJourneyKeyMax: Long get() = part7.siteJourneyKeyMax
-    val siteListDeclaration: ListQueryDeclaration get() = part7.siteListDeclaration
-    val siteMemberListQuery: ListQueryDeclaration get() = part7.siteMemberListQuery
-    val siteSloganMaxLength: Long get() = part7.siteSloganMaxLength
-    val starColors: List<StarColor> get() = part7.starColors
-    val starredField: String get() = part7.starredField
-    val starredMax: Long get() = part7.starredMax
-    val stayCheckInModes: List<StayCheckInMode> get() = part7.stayCheckInModes
-    val submissionFilterHeaders: Map<String, String> get() = part7.submissionFilterHeaders
-    val submissionListQuery: ListQueryDeclaration get() = part7.submissionListQuery
+    val siteFilterOptions: SiteFilterOptions get() = part8.siteFilterOptions
+    val siteJourneyKeyMax: Long get() = part8.siteJourneyKeyMax
+    val siteListDeclaration: ListQueryDeclaration get() = part8.siteListDeclaration
+    val siteMemberListQuery: ListQueryDeclaration get() = part8.siteMemberListQuery
+    val siteSloganMaxLength: Long get() = part8.siteSloganMaxLength
+    val starColors: List<StarColor> get() = part8.starColors
+    val starredField: String get() = part8.starredField
+    val starredMax: Long get() = part8.starredMax
+    val stayCheckInModes: List<StayCheckInMode> get() = part8.stayCheckInModes
+    val submissionFilterHeaders: Map<String, String> get() = part8.submissionFilterHeaders
+    val submissionListQuery: ListQueryDeclaration get() = part8.submissionListQuery
     val submissionReadOptions: List<ListFilterOption> get() = part8.submissionReadOptions
     val suppressionListQuery: ListQueryDeclaration get() = part8.suppressionListQuery
     val tabBarAreasMax: Long get() = part8.tabBarAreasMax

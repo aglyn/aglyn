@@ -153,6 +153,17 @@ fun PagesScreen(context: NativePluginContext, initialPageId: String? = null, sta
           // Create with AI and anything else a plugin puts beside New page (the console's `hostScreens` zone).
           SlotWidgets(context, ListCreateZone.PAGES, SlotPlacement.HEADER)
         }
+        // The plan readout (AGL-2113): the count the create route refuses at, asked again as the list changes.
+        val quota = remember(hostId, context.api) { PagesQuotaModel(hostId, context.api) }
+        val pageIds = (live.rows as? Live.Ready)?.value?.joinToString(",") { it.page.id }
+        LaunchedEffect(quota, pageIds) { quota.load() }
+        val shown = quota.count ?: (live.rows as? Live.Ready)?.value?.size ?: 0
+        Text(
+          com.aglyn.site.artifacts.artifactQuotaReadout(shown, quota.limit, quota.ready, "page"),
+          Modifier.padding(horizontal = space(2f)).testTag("page-quota"),
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         if (dialog == null) {
           Column(Modifier.padding(horizontal = space(2f)), verticalArrangement = Arrangement.spacedBy(space(1f))) { RunnerBanners(runner) }
         }
@@ -365,6 +376,8 @@ private fun PageDetail(
       // What the page is doing, then who touched it (the console's page view, AGL-4011): its traffic above its activity.
       com.aglyn.site.analytics.PageTrafficCard(context.firestore, context.api, hostId, page.id, upgrade = { context.navigate("core.billing.plans") })
       com.aglyn.site.analytics.SiteActivityCard(context.firestore, context.api, hostId, targetId = page.id, title = "Page Activity")
+      // The stored document (the console's Raw JSON card), read only once it is opened.
+      com.aglyn.site.LiveRawJsonCard(context.firestore, "hosts/$hostId/screens/${page.id}")
     }
   }
 }

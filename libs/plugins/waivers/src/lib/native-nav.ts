@@ -15,15 +15,33 @@
  * limitations under the License.
  */
 
-import { nativeNavRef, type NativeNavElsewhere } from '@aglyn/aglyn/app-utils/native-nav'
+import {
+  type NativeNavContribution,
+  nativeNavIcon,
+  nativeNavRef,
+} from '@aglyn/aglyn/app-utils/native-nav'
 
 /**
- * Waivers in the native apps' navigation (AGL-4042). The console's Waivers
- * tab has no native screen yet: a rider's status shows at check-in through
- * the waivers routes, and the Waivers page itself opens in the console.
+ * Waivers in the native apps' navigation (AGL-4042): the console's Waivers tab
+ * as the plugin's spec screens (the site's waivers, writing one, and the
+ * signatures), placed into the core's lists by `order` (`assembleNativeNav`,
+ * `generate:native-contracts`). A rider's status also shows at check-in.
  *
  * Imports only the core's plain nav module, so the native contracts read it.
  */
-export const NATIVE_NAV_ELSEWHERE: readonly NativeNavElsewhere[] = [
-  { console: nativeNavRef('hostPluginTab', '/waivers'), where: 'The console’s Waivers page; no native screen yet' },
+export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
+  {
+    list: 'site',
+    group: 'sell',
+    row: {
+      id: 'waivers',
+      label: 'Waivers',
+      icon: nativeNavIcon('signature', 'assignment'),
+      screen: 'waivers.home',
+      pluginId: 'waivers',
+      order: 50,
+      docs: '/commerce-and-bookings/commerce/waivers',
+      console: nativeNavRef('hostPluginTab', '/waivers'),
+    },
+  },
 ]
