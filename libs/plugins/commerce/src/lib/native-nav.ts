@@ -46,6 +46,7 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
       order: 10,
       sections: [
         nativeNavHubSection('host', '/products', 'orders', 'Orders', 'commerce.orders'),
+        nativeNavHubSection('host', '/products', 'subscriptions', 'Subscriptions', 'commerce.subscriptions'),
         nativeNavHubSection('host', '/products', 'returns', 'Returns', 'commerce.returns'),
         nativeNavHubSection('host', '/products', 'reservations', 'Reservations', 'commerce.reservations'),
       ],
