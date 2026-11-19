@@ -131,6 +131,7 @@ struct PagesScreen: View {
   @State private var linkedPage: String?
   @State private var linkSeeded = false
   @State private var sheet: PageSheet?
+  @State private var quota = PagesQuotaModel()
   @Environment(\.aglynPhoneAreaHead) private var phoneHead
   @Environment(\.aglynWideChrome) private var wide
 
@@ -241,73 +242,87 @@ struct PagesScreen: View {
         SlotWidgets(context: context, slot: ListCreateZone.pages)
       }
     case .ready(let rows):
-      Group {
-        if selectable {
-          List {
-            ForEach(rows) { row in
-              PageListRow(row: row, expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
-                Task { await model.toggle(row.id) }
-              })
-              .aglynSelectableRow(row.id, selection: $selection)
-              .accessibilityIdentifier("page-\(row.id)")
-            }
-            moreRow
+      VStack(spacing: 0) {
+        // The plan readout (AGL-2113): the count the create route refuses at, asked again as the list changes.
+        AglynQuotaReadout(ready: quota.ready, used: quota.count ?? rows.count, limit: quota.limit, noun: "page")
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .aglynContentEdges()
+          .padding(.vertical, AglynSpace.half)
+          .accessibilityIdentifier("page-quota")
+          .task(id: rows.map(\.id).joined(separator: ",")) { await quota.load(api: context.api, hostID: hostID) }
+        pagesList(rows, hostID: hostID, api: api, selectable: selectable)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func pagesList(_ rows: [PageTreeRow], hostID: String, api: PagesAPI, selectable: Bool) -> some View {
+    Group {
+      if selectable {
+        List {
+          ForEach(rows) { row in
+            PageListRow(row: row, expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
+              Task { await model.toggle(row.id) }
+            })
+            .aglynSelectableRow(row.id, selection: $selection)
+            .accessibilityIdentifier("page-\(row.id)")
           }
-          .aglynSelectableListStyle()
-          .aglynSelectionKeys(rows.map(\.id), selection: $selection)
-          .onChange(of: rows, initial: true) { _, rows in
-            // The page a link named wins once it is listed, even when the first rows (from the cache) came without
-            // it, as a page a job has just drafted can.
-            if !linkSeeded, let initialPageID, rows.contains(where: { $0.id == initialPageID }) {
-              linkSeeded = true
-              selection = initialPageID
-            } else if selection == nil || !rows.contains(where: { $0.id == selection }) {
-              selection = rows.first { !$0.page.isGroup }?.id
-            }
+          moreRow
+        }
+        .aglynSelectableListStyle()
+        .aglynSelectionKeys(rows.map(\.id), selection: $selection)
+        .onChange(of: rows, initial: true) { _, rows in
+          // The page a link named wins once it is listed, even when the first rows (from the cache) came without
+          // it, as a page a job has just drafted can.
+          if !linkSeeded, let initialPageID, rows.contains(where: { $0.id == initialPageID }) {
+            linkSeeded = true
+            selection = initialPageID
+          } else if selection == nil || !rows.contains(where: { $0.id == selection }) {
+            selection = rows.first { !$0.page.isGroup }?.id
           }
-          .sensoryFeedback(.selection, trigger: selection)
-        } else {
-          List {
-            ForEach(rows) { row in
-              AglynPushLink {
-                PageDetail(
-                  context: context, hostID: hostID, pageID: row.id, model: model, api: api, runner: runner,
-                  canEdit: canEdit, canPublish: canPublish, pushed: true
-                )
-                .navigationTitle(row.page.name)
-                .aglynScreenTitle(row.page.name)
-              } label: {
-                PageListRow(row: row, expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
-                  Task { await model.toggle(row.id) }
-                })
-              }
-              .aglynListRow()
-              .accessibilityIdentifier("page-\(row.id)")
-            }
-            moreRow
-          }
-          // A link to one page (a notification, a job's draft) opens it, as the wide layout selects it.
-          .aglynPushDestination(item: $linkedPage) { id in
-            if let row = rows.first(where: { $0.id == id }) {
+        }
+        .sensoryFeedback(.selection, trigger: selection)
+      } else {
+        List {
+          ForEach(rows) { row in
+            AglynPushLink {
               PageDetail(
-                context: context, hostID: hostID, pageID: id, model: model, api: api, runner: runner,
+                context: context, hostID: hostID, pageID: row.id, model: model, api: api, runner: runner,
                 canEdit: canEdit, canPublish: canPublish, pushed: true
               )
               .navigationTitle(row.page.name)
               .aglynScreenTitle(row.page.name)
+            } label: {
+              PageListRow(row: row, expanded: model.tree?.expanded.contains(row.id) == true, onToggle: searching ? nil : {
+                Task { await model.toggle(row.id) }
+              })
             }
+            .aglynListRow()
+            .accessibilityIdentifier("page-\(row.id)")
           }
-          .onChange(of: rows, initial: true) { _, rows in
-            guard !linkSeeded, let initialPageID, rows.contains(where: { $0.id == initialPageID }) else { return }
-            linkSeeded = true
-            linkedPage = initialPageID
-          }
-          // The pushed list's look; the selectable one keeps its own (its rows already sit on the content edges).
-          .aglynListBackground()
+          moreRow
         }
+        // A link to one page (a notification, a job's draft) opens it, as the wide layout selects it.
+        .aglynPushDestination(item: $linkedPage) { id in
+          if let row = rows.first(where: { $0.id == id }) {
+            PageDetail(
+              context: context, hostID: hostID, pageID: id, model: model, api: api, runner: runner,
+              canEdit: canEdit, canPublish: canPublish, pushed: true
+            )
+            .navigationTitle(row.page.name)
+            .aglynScreenTitle(row.page.name)
+          }
+        }
+        .onChange(of: rows, initial: true) { _, rows in
+          guard !linkSeeded, let initialPageID, rows.contains(where: { $0.id == initialPageID }) else { return }
+          linkSeeded = true
+          linkedPage = initialPageID
+        }
+        // The pushed list's look; the selectable one keeps its own (its rows already sit on the content edges).
+        .aglynListBackground()
       }
-      .accessibilityIdentifier("pages-list")
     }
+    .accessibilityIdentifier("pages-list")
   }
 
   private var searching: Bool { !model.search.trimmingCharacters(in: .whitespaces).isEmpty }
