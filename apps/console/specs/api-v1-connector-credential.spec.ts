@@ -106,7 +106,12 @@ jest.mock('firebase-admin/firestore', () => ({
   Timestamp: { fromMillis: (ms: number) => ({ toMillis: () => ms }) },
 }))
 
-import { chargeApiV1Call, PREAUTH_LOOKUP_LIMIT, resetPreAuthLookupBudgetForTests } from '../utils/api-v1'
+import {
+  authenticateApiV1,
+  chargeApiV1Call,
+  PREAUTH_LOOKUP_LIMIT,
+  resetPreAuthLookupBudgetForTests,
+} from '../utils/api-v1'
 import { GET } from '../app/api/v1/[[...route]]/route'
 
 const GRANT = 'grant_AAAAAAAAAAAAAAAA'
@@ -189,6 +194,32 @@ describe('a connector token through the /api/v1 door (AGL-4225)', () => {
       expect.objectContaining({ uid: 'user-1', org: { plan: 'business', billingStatus: 'active' } }),
     )
     expect(mockUsageWrites).toEqual([expect.stringMatching(/^orgs\/org-1\/apiUsage\//)])
+  })
+
+  it('carries the person the app acts for on the context, and a key carries none (AGL-4235)', async () => {
+    const credential = token('person')
+    storeConnection(credential)
+    const connected = await authenticateApiV1(
+      new Request('https://app.aglyn.com/api/v1/me', { headers: { authorization: `Bearer ${credential}` } }),
+    )
+    expect('context' in connected && connected.context).toMatchObject({ credential: 'connected_app', uid: 'user-1' })
+
+    const key = 'aglyn_sk_' + 'k'.repeat(32)
+    mockStore.set(`apiKeys/${hash(key)}`, {
+      keyId: 'key_1',
+      orgId: 'org-1',
+      name: 'Zapier',
+      scopes: ['sites:read'],
+      revokedAt: null,
+      expiresAt: null,
+      lastUsedAt: stamp(Date.now()),
+    })
+    const keyed = await authenticateApiV1(
+      new Request('https://app.aglyn.com/api/v1/me', { headers: { authorization: `Bearer ${key}` } }),
+    )
+    if (!('context' in keyed)) throw new Error(`the key was refused: ${keyed.status}`)
+    expect(keyed.context.credential).toBe('api_key')
+    expect('uid' in keyed.context).toBe(false)
   })
 
   it('gets the plan refusal a key gets', async () => {

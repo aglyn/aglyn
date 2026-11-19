@@ -30,6 +30,11 @@
  */
 import { type AttemptClaim, claimAttempt } from '@aglyn/aglyn/server'
 import type { AglynOrganization } from '@aglyn/aglyn'
+import {
+  type CoreSiteKey,
+  holdsSiteKey,
+  siteKeyRefusal,
+} from '@aglyn/aglyn/app-utils/host-permissions'
 import { FieldPath, Timestamp } from 'firebase-admin/firestore'
 import {
   apiJson,
@@ -37,8 +42,10 @@ import {
   decodeCursor,
   encodeCursor,
   parseLimit,
+  withResponseHeaders,
 } from './api-http'
 import type { ApiScope } from './api-keys'
+import type { LockdownVerdictOptions } from './lockdown'
 
 // ── The context ─────────────────────────────────────────────────────────────
 
@@ -60,6 +67,19 @@ export interface ApiV1Context {
    * {@link apiActorLabel} and {@link apiActorFields}.
    */
   credential?: 'api_key' | 'connected_app'
+  /**
+   * The person a connected app acts for (AGL-4235), from the verified
+   * credential. Absent for an API key, which is the workspace's own
+   * credential with no person behind it.
+   */
+  uid?: string
+  /**
+   * The site a `/v1/sites/{siteId}/…` request names, as the site router
+   * already read it (AGL-4235): set on the context the router hands every
+   * site-scoped handler, plugin handlers included, so a handler asks for the
+   * site document once. Absent outside a site path.
+   */
+  site?: { id: string; snapshot: FirebaseFirestore.DocumentSnapshot }
   scopes: ApiScope[]
   org: Partial<AglynOrganization>
   firestore: FirebaseFirestore.Firestore
@@ -336,4 +356,81 @@ export function usageBand(
 export function orgOwnsHost(ctx: ApiV1Context, hostId: string): boolean {
   const hosts = (ctx.org.hosts ?? {}) as Record<string, unknown>
   return Boolean(hosts[hostId])
+}
+
+// ── The person behind a connected app, on one site (AGL-4235) ───────────────
+
+/** A host document as a snapshot (`get`) or as its data. */
+type HostDocumentInHand = Parameters<typeof holdsSiteKey>[0]
+
+/**
+ * May the person a connected app acts for SEE this site at all? The rules'
+ * `isHostMember`: any role in the site's `memberRoles` projection, which
+ * carries no entry for someone who is not on the site. The same test the
+ * console's own routes make with the host document in hand
+ * (`/api/media/storage`, `/api/hosts/usage`).
+ *
+ * An API key is not asked: it is the workspace's own credential with no
+ * person behind it, and `orgOwnsHost` is the whole of its reach. A connected
+ * app with no uid fails closed.
+ */
+export function holdsSiteMembership(
+  context: Pick<ApiV1Context, 'credential' | 'uid'>,
+  hostDoc: HostDocumentInHand,
+): boolean {
+  if (!isConnectedAppContext(context)) return true
+  if (!context.uid || !hostDoc) return false
+  const roles =
+    typeof (hostDoc as { get?: unknown }).get === 'function'
+      ? (hostDoc as { get(field: string): unknown }).get('memberRoles')
+      : (hostDoc as { memberRoles?: unknown }).memberRoles
+  return Boolean((roles as Record<string, unknown> | null | undefined)?.[context.uid])
+}
+
+/**
+ * Refuse a connected app whose person does not hold `key` on this site
+ * (AGL-4235), by the same `holdsSiteKey` the console's doors ask, so an app
+ * can do on a site exactly what its person could do there in the console and
+ * nothing more. `403 site_permission_required`, naming the permission the
+ * way the console does. A connected app with no uid fails closed.
+ *
+ * An API key passes: it is the workspace's own credential with no person
+ * behind it, so there is no member to ask about (the docblock on
+ * `handlePublish` sets this out). Its reach is its scopes and the
+ * workspace's ownership of the site.
+ */
+export function requireSitePermission(
+  context: ApiV1Context,
+  hostDoc: HostDocumentInHand,
+  key: CoreSiteKey,
+): Response | null {
+  if (!isConnectedAppContext(context)) return null
+  if (context.uid && holdsSiteKey(hostDoc, context.uid, key)) return null
+  return ApiErrors.sitePermissionRequired(siteKeyRefusal(key), context.headers)
+}
+
+/**
+ * The SITE-level lock and takedown verdict for this request (AGL-4235): the
+ * one `lockdownRefusal`, given the site document as well as the workspace and
+ * the person, with this request's rate-limit headers merged on exactly as
+ * `authenticateApiV1` merges them onto the workspace-level refusal. The
+ * method decides, as it does there: a read-only lock passes a GET and refuses
+ * a write; a full lock refuses both.
+ *
+ * Loaded on first use: the lock readers bring the Admin SDK's module graph,
+ * which nothing else in this kit needs.
+ */
+export async function siteLockRefusal(
+  context: ApiV1Context,
+  request: Request,
+  hostData: LockdownVerdictOptions['host'],
+): Promise<Response | null> {
+  const { lockdownRefusal } = await import('./lockdown')
+  const locked = await lockdownRefusal({
+    request,
+    org: context.org as LockdownVerdictOptions['org'],
+    ...(context.uid ? { uid: context.uid } : {}),
+    host: hostData,
+  })
+  return locked ? withResponseHeaders(locked, context.headers) : null
 }
