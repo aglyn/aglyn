@@ -34113,6 +34113,228 @@
         }
       ]
     },
+    "pinHost": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [],
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            }
+          ],
+          "result": {
+            "outcome": "pinned",
+            "pinnedHosts": [
+              {
+                "hostId": "h1",
+                "orgId": "o1"
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            }
+          ],
+          "result": {
+            "outcome": "alreadyPinned",
+            "pinnedHosts": [
+              {
+                "hostId": "h1",
+                "orgId": "o1"
+              },
+              {
+                "hostId": "h2",
+                "orgId": "o2"
+              },
+              {
+                "hostId": "h3",
+                "orgId": "o1"
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            {
+              "orgId": "o2",
+              "hostId": "h1"
+            }
+          ],
+          "result": {
+            "outcome": "pinned",
+            "pinnedHosts": [
+              {
+                "hostId": "h2",
+                "orgId": "o2"
+              },
+              {
+                "hostId": "h3",
+                "orgId": "o1"
+              },
+              {
+                "hostId": "h1",
+                "orgId": "o2"
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            {
+              "orgId": "",
+              "hostId": "h9"
+            }
+          ],
+          "result": {
+            "outcome": "alreadyPinned",
+            "pinnedHosts": [
+              {
+                "hostId": "h1",
+                "orgId": "o1"
+              },
+              {
+                "hostId": "h2",
+                "orgId": "o2"
+              },
+              {
+                "hostId": "h3",
+                "orgId": "o1"
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            {
+              "orgId": "o1",
+              "hostId": ""
+            }
+          ],
+          "result": {
+            "outcome": "alreadyPinned",
+            "pinnedHosts": [
+              {
+                "hostId": "h1",
+                "orgId": "o1"
+              },
+              {
+                "hostId": "h2",
+                "orgId": "o2"
+              },
+              {
+                "hostId": "h3",
+                "orgId": "o1"
+              }
+            ]
+          }
+        },
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            {
+              "orgId": "o2",
+              "hostId": "h9"
+            }
+          ],
+          "result": {
+            "outcome": "pinned",
+            "pinnedHosts": [
+              {
+                "hostId": "h1",
+                "orgId": "o1"
+              },
+              {
+                "hostId": "h2",
+                "orgId": "o2"
+              },
+              {
+                "hostId": "h3",
+                "orgId": "o1"
+              },
+              {
+                "hostId": "h9",
+                "orgId": "o2"
+              }
+            ]
+          }
+        }
+      ]
+    },
     "pinOrg": {
       "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
       "cases": [
@@ -43311,6 +43533,87 @@
         }
       ]
     },
+    "readPinnedHosts": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "pinnedHosts": [
+                {
+                  "orgId": "o1",
+                  "hostId": "h1"
+                },
+                {
+                  "orgId": "o1",
+                  "hostId": "h1"
+                },
+                {
+                  "orgId": "o2",
+                  "hostId": "h2"
+                }
+              ]
+            }
+          ],
+          "result": [
+            {
+              "hostId": "h1",
+              "orgId": "o1"
+            },
+            {
+              "hostId": "h2",
+              "orgId": "o2"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "pinnedHosts": [
+                {
+                  "orgId": "",
+                  "hostId": "h"
+                },
+                7,
+                null,
+                {
+                  "orgId": "o",
+                  "hostId": ""
+                },
+                {
+                  "orgId": "o",
+                  "hostId": 5
+                },
+                {
+                  "orgId": "o",
+                  "hostId": "h3"
+                }
+              ]
+            }
+          ],
+          "result": [
+            {
+              "hostId": "h3",
+              "orgId": "o"
+            }
+          ]
+        },
+        {
+          "args": [
+            {
+              "pinnedHosts": "x"
+            }
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            null
+          ],
+          "result": []
+        }
+      ]
+    },
     "readPinnedOrgs": {
       "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
       "cases": [
@@ -46003,6 +46306,192 @@
               }
             ]
           }
+        }
+      ]
+    },
+    "replacePinnedHost": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            "h1",
+            {
+              "orgId": "o1",
+              "hostId": "h9"
+            }
+          ],
+          "result": [
+            {
+              "hostId": "h9",
+              "orgId": "o1"
+            },
+            {
+              "hostId": "h2",
+              "orgId": "o2"
+            },
+            {
+              "hostId": "h3",
+              "orgId": "o1"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            "h2",
+            {
+              "orgId": "o1",
+              "hostId": "h9"
+            }
+          ],
+          "result": [
+            {
+              "hostId": "h1",
+              "orgId": "o1"
+            },
+            {
+              "hostId": "h2",
+              "orgId": "o2"
+            },
+            {
+              "hostId": "h3",
+              "orgId": "o1"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            "h1",
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "result": [
+            {
+              "hostId": "h1",
+              "orgId": "o1"
+            },
+            {
+              "hostId": "h2",
+              "orgId": "o2"
+            },
+            {
+              "hostId": "h3",
+              "orgId": "o1"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            "h1",
+            {
+              "orgId": "o1",
+              "hostId": ""
+            }
+          ],
+          "result": [
+            {
+              "hostId": "h1",
+              "orgId": "o1"
+            },
+            {
+              "hostId": "h2",
+              "orgId": "o2"
+            },
+            {
+              "hostId": "h3",
+              "orgId": "o1"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            "h3",
+            {
+              "orgId": "o1",
+              "hostId": "h2"
+            }
+          ],
+          "result": [
+            {
+              "hostId": "h1",
+              "orgId": "o1"
+            },
+            {
+              "hostId": "h2",
+              "orgId": "o1"
+            }
+          ]
         }
       ]
     },
@@ -80665,6 +81154,80 @@
         }
       ]
     },
+    "unpinHost": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            "h1"
+          ],
+          "result": [
+            {
+              "hostId": "h2",
+              "orgId": "o2"
+            },
+            {
+              "hostId": "h3",
+              "orgId": "o1"
+            }
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            "nope"
+          ],
+          "result": [
+            {
+              "hostId": "h1",
+              "orgId": "o1"
+            },
+            {
+              "hostId": "h2",
+              "orgId": "o2"
+            },
+            {
+              "hostId": "h3",
+              "orgId": "o1"
+            }
+          ]
+        },
+        {
+          "args": [
+            [],
+            "h1"
+          ],
+          "result": []
+        }
+      ]
+    },
     "unpinOrg": {
       "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
       "cases": [
@@ -83629,6 +84192,61 @@
             "—"
           ],
           "result": "?"
+        }
+      ]
+    },
+    "workspacePinnedHosts": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "cases": [
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            "o1"
+          ],
+          "result": [
+            "h1",
+            "h3"
+          ]
+        },
+        {
+          "args": [
+            [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h3"
+              }
+            ],
+            "o3"
+          ],
+          "result": []
+        },
+        {
+          "args": [
+            [],
+            "o1"
+          ],
+          "result": []
         }
       ]
     },

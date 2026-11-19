@@ -992,6 +992,9 @@ export const NOTIFICATION_TYPE_CHANNEL_DEFAULTS: Partial<
   'system.riskNotice': { email: true },
   'system.dmcaCounterNotice': { email: true },
   'system.bandwidthCeilingTripped': { email: true },
+  // A Free site going over its traffic limit (AGL-4232): its grace deadline,
+  // or that it is paused. The owner must hear it outside the console too.
+  'system.bandwidthCapEngaged': { email: true },
   'system.billingWebhookHalfApplied': { email: true },
   'system.disputeUnattributed': { email: true },
 }
