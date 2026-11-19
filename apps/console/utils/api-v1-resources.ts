@@ -619,14 +619,69 @@ async function handlePublish(
     }
   }
   const promotedView = promoted ? { promoted } : {}
-  if (!promoted) return refreshLivePages(ctx, hostId, snap, subdomain, promotedView)
+
   // Pages went live, so a failure of the refresh after them still says which
-  // did (AGL-4235); the refresh is what failed, not their publish.
+  // did (AGL-4235): the refresh is what failed, not their publish.
   try {
-    // The refresh reads the routing map as the publishes left it.
-    snap = await hostRef(ctx, hostId).get()
-    return await refreshLivePages(ctx, hostId, snap, subdomain, promotedView)
+    // The refresh below reads the routing map as the publishes left it.
+    if (promoted) snap = await hostRef(ctx, hostId).get()
+    // `screens` is the routing map the console route reads for the same purpose:
+    // screen id → route path. A site with none is not an error — an unrouted or
+    // empty site has no live page to drop — but it must not report a publish it
+    // did not perform, which is the "reported fast, still slow" confusion the
+    // original bug was made of.
+    const screens = (snap.get('screens') ?? {}) as Record<string, unknown>
+    const paths = [
+      ...Object.values(screens)
+        .filter((path) => typeof path === 'string')
+        .map((path) => screenRoutePathToUrl(path as string)),
+      // The pages plugins serve from the site's screens with no routing-map
+      // entry of their own — a record template's (AGL-3475).
+      ...(await pluginLivePaths({ hostId })),
+    ].filter((path, index, all) => all.indexOf(path) === index)
+    if (!paths.length) {
+      return apiJson(
+        {
+          object: 'publish',
+          site: hostId,
+          published: false,
+          reason: 'not_routed',
+          pages: 0,
+          ...promotedView,
+        },
+        { headers: ctx.headers },
+      )
+    }
+
+    const result = await postTenantRevalidate({
+      subdomain,
+      hostId,
+      paths,
+      // Same second cache key as the console's own publish route — a site on a
+      // custom domain serves its pages under `cname--{domain}`.
+      cname: String(snap.get('cname') ?? '') || undefined,
+    })
+    return apiJson(
+      {
+        object: 'publish',
+        site: hostId,
+        published: result.reason === 'ok',
+        // Named rather than swallowed: `not-configured` and a tenant refusal are
+        // the two cases where a caller would otherwise read a success and keep
+        // polling a page that never changed.
+        reason: result.reason === 'ok' ? null : result.reason,
+        pages: result.revalidated.length,
+        // The tenant's own 250-path cap (AGL-1161). A site above it is refreshed
+        // in part, and the remainder catches up when its hour-long ISR window
+        // lapses — worth saying, because the caller is the one deciding whether
+        // to poll.
+        pagesDropped: result.pathsDropped,
+        ...promotedView,
+      },
+      { headers: ctx.headers },
+    )
   } catch (error) {
+    if (!promoted) throw error
     console.error('api/v1 publish: refresh after the pages went live failed', error)
     return apiJson(
       {
@@ -641,71 +696,6 @@ async function handlePublish(
       { status: 500, headers: ctx.headers },
     )
   }
-}
-
-/** The refresh of a site's live pages that every publish ends with. */
-async function refreshLivePages(
-  ctx: ApiV1Context,
-  hostId: string,
-  snap: { get(field: string): unknown },
-  subdomain: string,
-  promotedView: { promoted?: PagePublishEntry[] },
-): Promise<Response> {
-  // `screens` is the routing map the console route reads for the same purpose:
-  // screen id → route path. A site with none is not an error — an unrouted or
-  // empty site has no live page to drop — but it must not report a publish it
-  // did not perform, which is the "reported fast, still slow" confusion the
-  // original bug was made of.
-  const screens = (snap.get('screens') ?? {}) as Record<string, unknown>
-  const paths = [
-    ...Object.values(screens)
-      .filter((path) => typeof path === 'string')
-      .map((path) => screenRoutePathToUrl(path as string)),
-    // The pages plugins serve from the site's screens with no routing-map
-    // entry of their own — a record template's (AGL-3475).
-    ...(await pluginLivePaths({ hostId })),
-  ].filter((path, index, all) => all.indexOf(path) === index)
-  if (!paths.length) {
-    return apiJson(
-      {
-        object: 'publish',
-        site: hostId,
-        published: false,
-        reason: 'not_routed',
-        pages: 0,
-        ...promotedView,
-      },
-      { headers: ctx.headers },
-    )
-  }
-
-  const result = await postTenantRevalidate({
-    subdomain,
-    hostId,
-    paths,
-    // Same second cache key as the console's own publish route — a site on a
-    // custom domain serves its pages under `cname--{domain}`.
-    cname: String(snap.get('cname') ?? '') || undefined,
-  })
-  return apiJson(
-    {
-      object: 'publish',
-      site: hostId,
-      published: result.reason === 'ok',
-      // Named rather than swallowed: `not-configured` and a tenant refusal are
-      // the two cases where a caller would otherwise read a success and keep
-      // polling a page that never changed.
-      reason: result.reason === 'ok' ? null : result.reason,
-      pages: result.revalidated.length,
-      // The tenant's own 250-path cap (AGL-1161). A site above it is refreshed
-      // in part, and the remainder catches up when its hour-long ISR window
-      // lapses — worth saying, because the caller is the one deciding whether
-      // to poll.
-      pagesDropped: result.pathsDropped,
-      ...promotedView,
-    },
-    { headers: ctx.headers },
-  )
 }
 
 /**
