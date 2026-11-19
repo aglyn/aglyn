@@ -216,6 +216,8 @@ export type ClaimKind =
   | 'lead-creates'
   | 'email-templates'
   | 'email-template-deletes'
+  // A product created over the API (AGL-4235), scoped within its site.
+  | 'product-creates'
 
 /**
  * Take an exclusive claim on one write attempt (AGL-1709), and translate the

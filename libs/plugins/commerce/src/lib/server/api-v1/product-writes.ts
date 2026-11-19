@@ -23,7 +23,6 @@ import {
   type ApiV1Context,
   apiActorFields,
   claimWrite,
-  type ClaimKind,
   readJsonBody,
 } from '@aglyn/tenant-data-admin/server/api-v1-kit'
 import {
@@ -472,11 +471,23 @@ export interface ProductApiDeps {
 }
 
 /**
- * The idempotency namespace of a product create. Not yet among the kit's
- * named kinds; the claim hashes the kind as a string, so it is its own
- * namespace either way.
+ * The product a create starts from: the editor's blank draft, unpriced.
+ *
+ * The editor opens a new product at its default price for the person looking
+ * at it to change or clear. A caller sees no such field: one that sent no
+ * price asked for none, so its variant is saved unpriced — "Price coming
+ * soon", not for sale (`variantHasPrice`) — rather than at a price nobody
+ * chose. A grid rebuilt from options takes the first variant's values, as the
+ * editor's does, so its new combinations are unpriced too until a variant
+ * write prices them.
  */
-const PRODUCT_CREATE_CLAIM = 'product-creates' as unknown as ClaimKind
+export function unpricedProductDraft(): EditedProduct {
+  const draft = blankProductDraft()
+  return {
+    ...draft,
+    variants: draft.variants.map(({ priceUsd: _editorDefault, ...variant }) => variant as ProductVariant),
+  }
+}
 
 /**
  * `POST /v1/sites/{siteId}/products` — the editor's Add product.
@@ -503,10 +514,10 @@ export async function createProduct(
   const values = parsed.values
   const dangling = await danglingCategories(ctx, hostId, values.categoryIds)
   if (dangling) return validationFailed(ctx, dangling)
-  const draft = mergeProductWrite(blankProductDraft(), values, (deps.now ?? Date.now)())
+  const draft = mergeProductWrite(unpricedProductDraft(), values, (deps.now ?? Date.now)())
   if ('refusal' in draft) return refusalResponse(ctx, { ok: false, code: 'refused', ...draft.refusal })
 
-  const claimed = await claimWrite(ctx, hostId, request.headers.get('Idempotency-Key'), PRODUCT_CREATE_CLAIM)
+  const claimed = await claimWrite(ctx, hostId, request.headers.get('Idempotency-Key'), 'product-creates')
   if ('replay' in claimed) return claimed.replay
   const { claim } = claimed
   try {
