@@ -621,4 +621,21 @@ final class CrmContactByEmailTests: XCTestCase {
     // Off a site it follows "Manage data" until something sets it.
     XCTAssertFalse(CrmScope(orgID: "o1", hostID: "", uid: "u1", org: [:], member: ["role": "editor", "resolvedPermissions": ["data.manage": false]], orgLevel: true).canWrite)
   }
+
+  func testThePreviewFillsMergeFieldsAsTheConsoleDoes() throws {
+    for (index, item) in try functionCases("resolveCrmMergeFields").enumerated() {
+      let want = item.result as? [String: Any]
+      let got = crmResolveMergeFields(item.args[0] as? String ?? "", crmMergeContext(item.args[1] as? [String: Any]))
+      XCTAssertEqual(got.text, want?["text"] as? String, "case \(index)")
+      XCTAssertEqual(got.unresolved, want?["unresolved"] as? [String], "case \(index)")
+    }
+    for (index, item) in try functionCases("crmMergeUnresolvedMessage").enumerated() {
+      XCTAssertEqual(crmMergeUnresolvedMessage(item.args[0] as? [String] ?? []), item.result as? String, "case \(index)")
+    }
+    for (index, item) in try functionCases("duplicateDisplayName").enumerated() {
+      XCTAssertEqual(crmDuplicateDisplayName(item.args[0] as? String), item.result as? String, "case \(index)")
+    }
+    XCTAssertTrue(crmHasMergeFields("Hi {{ contact.firstName }}"))
+    XCTAssertFalse(crmHasMergeFields("Hi {contact.firstName} {{bare}}"))
+  }
 }

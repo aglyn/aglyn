@@ -654,7 +654,12 @@ struct RecordDetail: View {
         done("Logged.")
       }
     case .email:
-      CrmEmailComposer(context: context, scope: scope, api: api, to: row.data["email"] as? String, links: emailLinks(row)) { subject, message in
+      CrmEmailComposer(
+        context: context, scope: scope, api: api, to: row.data["email"] as? String, links: emailLinks(row),
+        loadMerge: { [kind, scope, siteName = site.doc?.data["displayName"] as? String, record = doc.document?.data ?? row.data] in
+          await crmMergeContext(context.firestore, scope: scope, kind: kind, record: record, siteName: siteName)
+        }
+      ) { subject, message in
         try await api.sendEmail(subject: subject, message: message, links: [kind.linkField: id])
         done("Email sent.")
       }
@@ -1060,6 +1065,8 @@ struct EmailSheet: View {
   var links: [String: String] = [:]
   /// The workspace's templates as this reader may list them; nil leaves the template tools out.
   var templates: [CrmEmailTemplate]?
+  /// Reads the documents the preview fills merge fields from; nil leaves the preview out.
+  var loadMerge: (() async -> CrmMergeContext)?
   /// Saves the draft as a template; nil leaves Save as template out.
   var saveTemplate: ((_ name: String, _ visibility: String, _ subject: String, _ body: String) async throws -> Void)?
   let save: (String, String) async throws -> Void
@@ -1068,6 +1075,14 @@ struct EmailSheet: View {
   @State private var applied: CrmEmailTemplate?
   @State private var replacing: CrmEmailTemplate?
   @State private var savingTemplate = false
+  @State private var merge: CrmMergeContext?
+
+  private var hasFields: Bool { crmHasMergeFields("\(subject)\n\(message)") }
+  /// The draft as it will be sent, once the records are read (the dialog's `preview`).
+  private var preview: (subject: CrmMergeResult, body: CrmMergeResult)? {
+    guard hasFields, let merge else { return nil }
+    return (crmResolveMergeFields(subject, merge), crmResolveMergeFields(message, merge))
+  }
 
   private var pickable: [CrmEmailTemplate] { crmTemplatePickOrder(templates ?? []) }
   private var snippets: [CrmEmailTemplate] { (templates ?? []).filter { $0.kind == "snippet" } }
@@ -1121,11 +1136,29 @@ struct EmailSheet: View {
           .lineLimit(5...16)
           .accessibilityIdentifier("crm-email-body")
       } footer: {
-        Text(
-          message.contains("{{")
-            ? "Plain text. Merge fields are filled in from this record when the email is sent."
-            : "The email is sent from your sending address and logged on the record.")
+        let unresolved = preview.map { ($0.subject.unresolved + $0.body.unresolved).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } } } ?? []
+        if !unresolved.isEmpty {
+          Text(crmMergeUnresolvedMessage(unresolved)).foregroundStyle(AglynColor.warning).accessibilityIdentifier("crm-email-unresolved")
+        } else {
+          Text(
+            hasFields
+              ? "Plain text. Merge fields are filled in from this record when the email is sent."
+              : "Plain text. A blank line starts a new paragraph.")
+        }
       }
+      if let preview {
+        Section("Preview — as it will be sent") {
+          VStack(alignment: .leading, spacing: AglynSpace.half) {
+            Text(preview.subject.text).font(AglynFont.strongSubheadline)
+            Text(preview.body.text).font(AglynFont.subheadline)
+          }
+          .accessibilityIdentifier("crm-email-preview")
+        }
+      }
+    }
+    .task(id: hasFields) {
+      guard hasFields, merge == nil, let loadMerge else { return }
+      merge = await loadMerge()
     }
     .alert(
       "Replace the message?", isPresented: Binding(get: { replacing != nil }, set: { if !$0 { replacing = nil } }), presenting: replacing

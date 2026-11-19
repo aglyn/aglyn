@@ -46,6 +46,7 @@ object CrmRoutes {
   const val LIST_FIELDS = "/api/crm/list-fields"
   const val SHARING = "/api/crm/sharing"
   const val EMAIL_SEND = "/api/crm/email-send"
+  const val EMAIL_TEMPLATE_DUPLICATE = "/api/crm/email-template-duplicate"
   const val PICKLIST_VALUES = "/api/crm/picklist-values"
   const val MEMBERS = "/api/orgs/members"
   const val ORG_ACTIVITY = "/api/crm/org-activity"
@@ -417,6 +418,15 @@ class CrmApi(private val api: ConsoleApiClient, private val writer: FirestoreWri
   }
 
   /*---------- email templates ----------*/
+
+  /**
+   * Duplicate… on a template (`email-template-duplicate`): the copy is filed under this person in the original's scope.
+   * Answers the copy's name, which the route numbers when another template has it.
+   */
+  suspend fun duplicateTemplate(id: String, name: String, attemptKey: String): String {
+    val answer = api.request(CrmRoutes.EMAIL_TEMPLATE_DUPLICATE, ApiMethod.POST, body("templateId" to id, "name" to name, "attemptKey" to attemptKey))?.jsonObject
+    return (answer?.get("name") as? JsonPrimitive)?.contentOrNull ?: name
+  }
 
   private val templatesPath get() = crmPath(scope.orgId, CRM_EMAIL_TEMPLATES_COLLECTION)
 

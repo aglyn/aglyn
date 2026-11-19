@@ -8914,6 +8914,34 @@
         }
       ]
     },
+    "crmMergeUnresolvedMessage": {
+      "module": "libs/aglyn/src/lib/app-utils/crm-email-templates.ts",
+      "cases": [
+        {
+          "args": [
+            []
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            [
+              "contact.firstName"
+            ]
+          ],
+          "result": "1 field has no value: {{contact.firstName}}"
+        },
+        {
+          "args": [
+            [
+              "contact.firstName",
+              "deal.amount"
+            ]
+          ],
+          "result": "2 fields have no value: {{contact.firstName}}, {{deal.amount}}"
+        }
+      ]
+    },
     "crmReadTokens": {
       "module": "libs/aglyn/src/lib/app-utils/crm.ts",
       "cases": [
@@ -13780,6 +13808,41 @@
             []
           ],
           "result": ""
+        }
+      ]
+    },
+    "duplicateDisplayName": {
+      "module": "libs/aglyn/src/lib/app-utils/duplicate-resource.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": "Copy of Untitled"
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": "Copy of Untitled"
+        },
+        {
+          "args": [
+            "  Welcome  "
+          ],
+          "result": "Copy of Welcome"
+        },
+        {
+          "args": [
+            "Copy of Welcome"
+          ],
+          "result": "Copy of Welcome"
+        },
+        {
+          "args": [
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          "result": "Copy of xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
         }
       ]
     },
@@ -61788,6 +61851,392 @@
               "screen": "forms.list"
             }
           ]
+        }
+      ]
+    },
+    "resolveCrmMergeFields": {
+      "module": "libs/aglyn/src/lib/app-utils/crm-email-templates.ts",
+      "cases": [
+        {
+          "args": [
+            "Hi {{contact.firstName}} {{contact.lastName}} ({{ contact.name }}) at {{contact.company}}, {{contact.title}} — {{contact.email}}",
+            {
+              "contact": {
+                "name": "Pat Lee",
+                "email": " Pat.Lee@Example.com ",
+                "facets": {
+                  "g1": {
+                    "name": "Patricia Lee",
+                    "companyName": "Harbor Market",
+                    "jobTitle": "Owner"
+                  },
+                  "g2": {
+                    "firstName": "Mary Ann",
+                    "lastName": "van Dyke",
+                    "name": "Mary Ann van Dyke"
+                  }
+                }
+              },
+              "contactGroupId": "g1",
+              "deal": {
+                "title": "Spring order",
+                "amountCents": 125050,
+                "currency": "usd"
+              },
+              "lead": {
+                "name": "Sam Ortiz Diaz",
+                "email": "sam@x",
+                "company": "Ortiz Co",
+                "jobTitle": "Buyer"
+              },
+              "sender": {
+                "name": "Dana Smith",
+                "email": "Dana@Shop.test"
+              },
+              "site": {
+                "name": " Juniper Bakery "
+              }
+            }
+          ],
+          "result": {
+            "text": "Hi Patricia Lee (Patricia Lee) at Harbor Market, Owner — pat.lee@example.com",
+            "unresolved": []
+          }
+        },
+        {
+          "args": [
+            "Hi {{contact.firstName}} {{contact.lastName}}",
+            {
+              "contact": {
+                "name": "Pat Lee",
+                "email": " Pat.Lee@Example.com ",
+                "facets": {
+                  "g1": {
+                    "name": "Patricia Lee",
+                    "companyName": "Harbor Market",
+                    "jobTitle": "Owner"
+                  },
+                  "g2": {
+                    "firstName": "Mary Ann",
+                    "lastName": "van Dyke",
+                    "name": "Mary Ann van Dyke"
+                  }
+                }
+              },
+              "contactGroupId": "g2",
+              "deal": {
+                "title": "Spring order",
+                "amountCents": 125050,
+                "currency": "usd"
+              },
+              "lead": {
+                "name": "Sam Ortiz Diaz",
+                "email": "sam@x",
+                "company": "Ortiz Co",
+                "jobTitle": "Buyer"
+              },
+              "sender": {
+                "name": "Dana Smith",
+                "email": "Dana@Shop.test"
+              },
+              "site": {
+                "name": " Juniper Bakery "
+              }
+            }
+          ],
+          "result": {
+            "text": "Hi Mary Ann van Dyke",
+            "unresolved": []
+          }
+        },
+        {
+          "args": [
+            "Hi {{contact.name}} / {{contact.firstName}}",
+            {
+              "contact": {
+                "name": "Pat Lee",
+                "email": " Pat.Lee@Example.com ",
+                "facets": {
+                  "g1": {
+                    "name": "Patricia Lee",
+                    "companyName": "Harbor Market",
+                    "jobTitle": "Owner"
+                  },
+                  "g2": {
+                    "firstName": "Mary Ann",
+                    "lastName": "van Dyke",
+                    "name": "Mary Ann van Dyke"
+                  }
+                }
+              },
+              "contactGroupId": null,
+              "deal": {
+                "title": "Spring order",
+                "amountCents": 125050,
+                "currency": "usd"
+              },
+              "lead": {
+                "name": "Sam Ortiz Diaz",
+                "email": "sam@x",
+                "company": "Ortiz Co",
+                "jobTitle": "Buyer"
+              },
+              "sender": {
+                "name": "Dana Smith",
+                "email": "Dana@Shop.test"
+              },
+              "site": {
+                "name": " Juniper Bakery "
+              }
+            }
+          ],
+          "result": {
+            "text": "Hi Pat Lee / Pat",
+            "unresolved": []
+          }
+        },
+        {
+          "args": [
+            "{{lead.firstName}}|{{lead.lastName}}|{{lead.name}}|{{lead.email}}|{{lead.company}}|{{lead.title}}",
+            {
+              "contact": {
+                "name": "Pat Lee",
+                "email": " Pat.Lee@Example.com ",
+                "facets": {
+                  "g1": {
+                    "name": "Patricia Lee",
+                    "companyName": "Harbor Market",
+                    "jobTitle": "Owner"
+                  },
+                  "g2": {
+                    "firstName": "Mary Ann",
+                    "lastName": "van Dyke",
+                    "name": "Mary Ann van Dyke"
+                  }
+                }
+              },
+              "contactGroupId": "g1",
+              "deal": {
+                "title": "Spring order",
+                "amountCents": 125050,
+                "currency": "usd"
+              },
+              "lead": {
+                "name": "Sam Ortiz Diaz",
+                "email": "sam@x",
+                "company": "Ortiz Co",
+                "jobTitle": "Buyer"
+              },
+              "sender": {
+                "name": "Dana Smith",
+                "email": "Dana@Shop.test"
+              },
+              "site": {
+                "name": " Juniper Bakery "
+              }
+            }
+          ],
+          "result": {
+            "text": "Sam|Ortiz Diaz|Sam Ortiz Diaz||Ortiz Co|Buyer",
+            "unresolved": [
+              "lead.email"
+            ]
+          }
+        },
+        {
+          "args": [
+            "{{deal.name}} for {{deal.amount}}",
+            {
+              "contact": {
+                "name": "Pat Lee",
+                "email": " Pat.Lee@Example.com ",
+                "facets": {
+                  "g1": {
+                    "name": "Patricia Lee",
+                    "companyName": "Harbor Market",
+                    "jobTitle": "Owner"
+                  },
+                  "g2": {
+                    "firstName": "Mary Ann",
+                    "lastName": "van Dyke",
+                    "name": "Mary Ann van Dyke"
+                  }
+                }
+              },
+              "contactGroupId": "g1",
+              "deal": {
+                "title": "Spring order",
+                "amountCents": 125050,
+                "currency": "usd"
+              },
+              "lead": {
+                "name": "Sam Ortiz Diaz",
+                "email": "sam@x",
+                "company": "Ortiz Co",
+                "jobTitle": "Buyer"
+              },
+              "sender": {
+                "name": "Dana Smith",
+                "email": "Dana@Shop.test"
+              },
+              "site": {
+                "name": " Juniper Bakery "
+              }
+            }
+          ],
+          "result": {
+            "text": "Spring order for $1,250.50",
+            "unresolved": []
+          }
+        },
+        {
+          "args": [
+            "{{deal.amount}}",
+            {
+              "deal": {
+                "amountCents": "12",
+                "currency": "eur"
+              }
+            }
+          ],
+          "result": {
+            "text": "",
+            "unresolved": [
+              "deal.amount"
+            ]
+          }
+        },
+        {
+          "args": [
+            "{{deal.amount}}",
+            {
+              "deal": {
+                "amountCents": 99
+              }
+            }
+          ],
+          "result": {
+            "text": "$0.99",
+            "unresolved": []
+          }
+        },
+        {
+          "args": [
+            "From {{sender.firstName}} ({{sender.name}}, {{sender.email}}) at {{site.name}}",
+            {
+              "contact": {
+                "name": "Pat Lee",
+                "email": " Pat.Lee@Example.com ",
+                "facets": {
+                  "g1": {
+                    "name": "Patricia Lee",
+                    "companyName": "Harbor Market",
+                    "jobTitle": "Owner"
+                  },
+                  "g2": {
+                    "firstName": "Mary Ann",
+                    "lastName": "van Dyke",
+                    "name": "Mary Ann van Dyke"
+                  }
+                }
+              },
+              "contactGroupId": "g1",
+              "deal": {
+                "title": "Spring order",
+                "amountCents": 125050,
+                "currency": "usd"
+              },
+              "lead": {
+                "name": "Sam Ortiz Diaz",
+                "email": "sam@x",
+                "company": "Ortiz Co",
+                "jobTitle": "Buyer"
+              },
+              "sender": {
+                "name": "Dana Smith",
+                "email": "Dana@Shop.test"
+              },
+              "site": {
+                "name": " Juniper Bakery "
+              }
+            }
+          ],
+          "result": {
+            "text": "From Dana (Dana Smith, dana@shop.test) at Juniper Bakery",
+            "unresolved": []
+          }
+        },
+        {
+          "args": [
+            "Hi {{contact.firstName|there}}, {{contact.nope}} {{other.field}} {{contact.firstName}}",
+            {}
+          ],
+          "result": {
+            "text": "Hi there,   ",
+            "unresolved": [
+              "contact.nope",
+              "other.field",
+              "contact.firstName"
+            ]
+          }
+        },
+        {
+          "args": [
+            "Hi {{contact.firstName | friend }}! {single} {{bare}} {{ site.name }}",
+            null
+          ],
+          "result": {
+            "text": "Hi friend! {single} {{bare}} ",
+            "unresolved": [
+              "site.name"
+            ]
+          }
+        },
+        {
+          "args": [
+            "",
+            {
+              "contact": {
+                "name": "Pat Lee",
+                "email": " Pat.Lee@Example.com ",
+                "facets": {
+                  "g1": {
+                    "name": "Patricia Lee",
+                    "companyName": "Harbor Market",
+                    "jobTitle": "Owner"
+                  },
+                  "g2": {
+                    "firstName": "Mary Ann",
+                    "lastName": "van Dyke",
+                    "name": "Mary Ann van Dyke"
+                  }
+                }
+              },
+              "contactGroupId": "g1",
+              "deal": {
+                "title": "Spring order",
+                "amountCents": 125050,
+                "currency": "usd"
+              },
+              "lead": {
+                "name": "Sam Ortiz Diaz",
+                "email": "sam@x",
+                "company": "Ortiz Co",
+                "jobTitle": "Buyer"
+              },
+              "sender": {
+                "name": "Dana Smith",
+                "email": "Dana@Shop.test"
+              },
+              "site": {
+                "name": " Juniper Bakery "
+              }
+            }
+          ],
+          "result": {
+            "text": "",
+            "unresolved": []
+          }
         }
       ]
     },

@@ -235,7 +235,9 @@ struct CrmTemplatesSection: View {
   @State private var editing: CrmEmailTemplate?
   @State private var creating = false
   @State private var deleting: CrmEmailTemplate?
+  @State private var duplicating: CrmEmailTemplate?
   @State private var error: String?
+  @State private var notice: String?
 
   var body: some View {
     let templates = model.templates(uid: scope.uid)
@@ -243,6 +245,7 @@ struct CrmTemplatesSection: View {
     let atCap = templates.count >= limit
     Section {
       if let error { AglynNotice(error, tone: .error) { self.error = nil } }
+      if let notice { AglynNotice(notice, tone: .success) { self.notice = nil } }
       if model.list.ready && templates.isEmpty {
         Text("No templates yet. Write one here, or save an email you are about to send as a template.").foregroundStyle(.secondary)
       }
@@ -263,9 +266,13 @@ struct CrmTemplatesSection: View {
         .buttonStyle(.plain)
         .contextMenu {
           Button("Edit", systemImage: "pencil") { editing = template }
+          Button(crmDuplicateMenuLabel, systemImage: "plus.square.on.square") { duplicating = template }
           Button("Delete", systemImage: "trash", role: .destructive) { deleting = template }
         }
-        .swipeActions { Button("Delete", role: .destructive) { deleting = template } }
+        .swipeActions {
+          Button("Delete", role: .destructive) { deleting = template }
+          Button(crmDuplicateMenuLabel) { duplicating = template }.accessibilityIdentifier("crm-template-duplicate")
+        }
         .accessibilityIdentifier("crm-template-\(template.id)")
       }
       Button("New template", systemImage: "plus") { creating = true }
@@ -284,6 +291,12 @@ struct CrmTemplatesSection: View {
     .sheet(isPresented: $creating) {
       CrmTemplateSheet(editing: nil) { name, kind, visibility, subject, body in
         try await api.createTemplate(name: name, kind: kind, visibility: visibility, subject: subject, body: body)
+      }
+    }
+    .sheet(item: $duplicating) { template in
+      CrmDuplicateTemplateSheet(template: template) { name, attemptKey in
+        let copy = try await api.duplicateTemplate(template.id, name: name, attemptKey: attemptKey)
+        notice = "Duplicated as “\(copy)”"
       }
     }
     .sheet(item: $editing) { template in
@@ -318,17 +331,57 @@ struct CrmEmailComposer: View {
   let api: CrmAPI
   let to: String?
   let links: [String: String]
+  var loadMerge: (() async -> CrmMergeContext)?
   let send: (String, String) async throws -> Void
   @State private var model = CrmTemplatesModel()
 
   var body: some View {
     EmailSheet(
-      to: to, links: links, templates: model.list.ready ? model.templates(uid: scope.uid) : [],
+      to: to, links: links, templates: model.list.ready ? model.templates(uid: scope.uid) : [], loadMerge: loadMerge,
       saveTemplate: { name, visibility, subject, body in
         try await api.createTemplate(name: name, kind: "template", visibility: visibility, subject: subject, body: body)
       }, save: send
     )
     .task { model.start(context.firestore, scope) }
     .onDisappear { model.stop() }
+  }
+}
+
+/// The row menus' label for the act (`DUPLICATE_MENU_LABEL`).
+let crmDuplicateMenuLabel = "Duplicate…"
+
+/// `duplicateDisplayName`: the copy's default name, "Copy of …" once, within the name's limit.
+func crmDuplicateDisplayName(_ source: String?) -> String {
+  let values = ContractValues.shared
+  let trimmed = (source ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+  let name = trimmed.isEmpty ? "Untitled" : trimmed
+  let base = name.hasPrefix(values.duplicateNamePrefix) ? name : values.duplicateNamePrefix + name
+  return String(base.prefix(values.duplicateNameMax))
+}
+
+/// Duplicate… on a template (`DuplicateResourceDialog`): the copy's name, filled with "Copy of …", above what the copy
+/// carries. One attempt key per open, so a retried tap makes one copy.
+struct CrmDuplicateTemplateSheet: View {
+  let template: CrmEmailTemplate
+  let duplicate: (_ name: String, _ attemptKey: String) async throws -> Void
+  @State private var name = ""
+  @State private var attemptKey = UUID().uuidString
+
+  var body: some View {
+    let values = ContractValues.shared
+    let noun = values.duplicableResourceNouns["emailTemplate"] ?? "email template"
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    AglynFormSheet("Duplicate \(noun)", confirm: "Duplicate", working: "Duplicating…", canConfirm: !trimmed.isEmpty, save: { try await duplicate(trimmed, attemptKey) }) {
+      Section {
+        TextField("Name", text: Binding(get: { name }, set: { name = String($0.prefix(values.duplicateNameMax)) }))
+          .accessibilityIdentifier("crm-template-duplicate-name")
+      } footer: {
+        Text("A name another \(noun) already has gets a number.")
+      }
+      Section("What the copy carries") {
+        ForEach(values.duplicateCopies["emailTemplate"] ?? [], id: \.self) { Text($0) }
+      }
+    }
+    .onAppear { name = crmDuplicateDisplayName(template.name) }
   }
 }

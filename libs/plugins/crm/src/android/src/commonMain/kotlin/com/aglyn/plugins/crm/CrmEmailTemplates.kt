@@ -170,7 +170,9 @@ internal fun CrmTemplatesCard(context: NativePluginContext, scope: CrmScope, api
   var editing by remember { mutableStateOf<CrmEmailTemplate?>(null) }
   var creating by remember { mutableStateOf(false) }
   var deleting by remember { mutableStateOf<CrmEmailTemplate?>(null) }
-  val busy = remember(editing, creating, deleting) { Busy() }
+  var duplicating by remember { mutableStateOf<CrmEmailTemplate?>(null) }
+  var notice by remember { mutableStateOf<String?>(null) }
+  val busy = remember(editing, creating, deleting, duplicating) { Busy() }
   val limit = Contracts.crmEmailTemplatesLimit.toInt()
   val atCap = (templates?.size ?: 0) >= limit
   SectionCard(
@@ -181,6 +183,7 @@ internal fun CrmTemplatesCard(context: NativePluginContext, scope: CrmScope, api
       "The letters your team sends from a record. A template fills in the subject and the message of Send email; a snippet drops a paragraph in where the cursor is. Merge fields such as {{contact.firstName}} are filled in from the record when the email is sent.",
       style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    notice?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = { notice = null }) { Text("Dismiss") } }) }
     if (templates != null && templates.isEmpty()) {
       Text("No templates yet. Write one here, or save an email you are about to send as a template.", style = MaterialTheme.typography.bodyMedium)
     }
@@ -195,6 +198,7 @@ internal fun CrmTemplatesCard(context: NativePluginContext, scope: CrmScope, api
             modifier = Modifier.testTag("crm-template-${template.id}"),
           )
         }
+        TextButton(onClick = { duplicating = template }, modifier = Modifier.testTag("crm-template-duplicate-${template.id}")) { Text(CRM_DUPLICATE_MENU_LABEL) }
         TextButton(onClick = { deleting = template }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
       }
     }
@@ -206,6 +210,26 @@ internal fun CrmTemplatesCard(context: NativePluginContext, scope: CrmScope, api
       busy.run(coroutines, { creating = false; editing = null }) {
         if (opened == null) api.createTemplate(name, kind, visibility, subject, body) else api.updateTemplate(opened.id, name, kind, visibility, subject, body)
       }
+    }
+  }
+  duplicating?.let { template ->
+    // Duplicate… (`DuplicateResourceDialog`): the copy's name, filled with "Copy of …", above what the copy carries. One
+    // attempt key per open, so a retried tap makes one copy.
+    val noun = Contracts.duplicableResourceNouns["emailTemplate"] ?: "email template"
+    var name by remember(template.id) { mutableStateOf(crmDuplicateDisplayName(template.name)) }
+    val attemptKey = remember(template.id) { newRecordId() }
+    ActionDialog(
+      "Duplicate $noun", "Duplicate",
+      { busy.run(coroutines, { duplicating = null }) { notice = "Duplicated as “${api.duplicateTemplate(template.id, name.trim(), attemptKey)}”" } },
+      { duplicating = null }, busy = busy.busy, error = busy.error, confirmEnabled = name.isNotBlank(),
+    ) {
+      OutlinedTextField(
+        name, { name = it.take(Contracts.duplicateNameMax.toInt()) }, label = { Text("Name") }, singleLine = true,
+        supportingText = { Text("A name another $noun already has gets a number.") },
+        modifier = Modifier.fillMaxWidth().testTag("crm-template-duplicate-name"),
+      )
+      Text("What the copy carries", style = MaterialTheme.typography.titleSmall)
+      Contracts.duplicateCopies["emailTemplate"].orEmpty().forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
     }
   }
   deleting?.let { template ->
@@ -234,6 +258,14 @@ internal fun CrmEmailDialog(context: NativePluginContext, scope: CrmScope, api: 
   var inserting by remember { mutableStateOf(false) }
   var savingTemplate by remember { mutableStateOf(false) }
   val saveBusy = remember(savingTemplate) { Busy() }
+  // The draft as it will be sent (the dialog's `preview`): the records are read the first time it names a merge field.
+  val hasFields = crmHasMergeFields("$subject\n$message")
+  var merge by remember { mutableStateOf<CrmMergeContext?>(null) }
+  androidx.compose.runtime.LaunchedEffect(hasFields) {
+    if (hasFields && merge == null) merge = crmMergeContextFor(context.firestore, scope, row.kind, row.data)
+  }
+  val preview = if (hasFields) merge?.let { crmResolveMergeFields(subject, it) to crmResolveMergeFields(message, it) } else null
+  val unresolved = preview?.let { (it.first.unresolved + it.second.unresolved).distinct() }.orEmpty()
   fun apply(template: CrmEmailTemplate) {
     if (template.subject.isNotEmpty()) subject = template.subject
     message = template.body
@@ -290,9 +322,22 @@ internal fun CrmEmailDialog(context: NativePluginContext, scope: CrmScope, api: 
     }
     OutlinedTextField(
       message, { message = it.take(Contracts.crmEmailBodyMax.toInt()) }, label = { Text("Message") }, minLines = 5,
-      supportingText = { Text(if (message.contains("{{")) "Plain text. Merge fields are filled in from this record when the email is sent." else "Plain text. A blank line starts a new paragraph.") },
+      supportingText = {
+        if (unresolved.isNotEmpty()) {
+          Text(crmMergeUnresolvedMessage(unresolved), color = com.aglyn.ui.LocalAglynPalette.current.warning.text, modifier = Modifier.testTag("crm-email-unresolved"))
+        } else {
+          Text(if (hasFields) "Plain text. Merge fields are filled in from this record when the email is sent." else "Plain text. A blank line starts a new paragraph.")
+        }
+      },
       modifier = Modifier.fillMaxWidth().testTag("crm-email-body"),
     )
+    preview?.let { (previewSubject, previewBody) ->
+      Column(Modifier.fillMaxWidth().testTag("crm-email-preview"), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+        Text("Preview — as it will be sent", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(previewSubject.text, style = MaterialTheme.typography.titleSmall)
+        Text(previewBody.text, style = MaterialTheme.typography.bodyMedium)
+      }
+    }
   }
   replacing?.let { template ->
     ActionDialog(
@@ -316,3 +361,6 @@ internal fun CrmEmailDialog(context: NativePluginContext, scope: CrmScope, api: 
     }
   }
 }
+
+/** The row menus' label for the act (`DUPLICATE_MENU_LABEL`). */
+internal const val CRM_DUPLICATE_MENU_LABEL = "Duplicate…"

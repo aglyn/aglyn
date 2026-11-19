@@ -426,4 +426,23 @@ class CrmCasesTest {
     assertTrue(memberScope(mapOf("role" to "editor")).movesStages(null))
     assertFalse(memberScope(mapOf("role" to "editor", "resolvedPermissions" to mapOf("crm.moveStages" to false))).movesStages(null))
   }
+
+  @Test
+  fun thePreviewFillsMergeFieldsAsTheConsoleDoes() {
+    cases("resolveCrmMergeFields").forEach { (args, result) ->
+      val want = map(result)
+      val got = crmResolveMergeFields(plain(args[0]) as? String ?: "", crmMergeContext(map(args[1])))
+      assertEquals(want?.get("text"), got.text, args.toString())
+      assertEquals(want?.get("unresolved"), got.unresolved, args.toString())
+    }
+    cases("crmMergeUnresolvedMessage").forEach { (args, result) ->
+      @Suppress("UNCHECKED_CAST")
+      assertEquals(plain(result), crmMergeUnresolvedMessage(plain(args[0]) as List<String>), args.toString())
+    }
+    cases("duplicateDisplayName").forEach { (args, result) ->
+      assertEquals(plain(result), crmDuplicateDisplayName(plain(args[0]) as? String), args.toString())
+    }
+    assertTrue(crmHasMergeFields("Hi {{ contact.firstName }}"))
+    assertFalse(crmHasMergeFields("Hi {contact.firstName} {{bare}}"))
+  }
 }
