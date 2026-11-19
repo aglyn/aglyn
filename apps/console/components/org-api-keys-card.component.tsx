@@ -68,11 +68,17 @@ const SCOPE_OPTIONS: Array<{ scope: string; label: string; description: string }
   { scope: 'orders:read', label: 'Orders — read', description: 'Read a site’s store orders, their line items and totals.' },
   { scope: 'orders:write', label: 'Orders — record shipments', description: 'Mark a site’s orders fulfilled or delivered and attach a carrier and tracking number — what a 3PL or warehouse system needs. Cannot cancel or refund an order, and never moves stock or money.' },
   { scope: 'products:read', label: 'Products — read', description: 'Read a site’s products, variants, prices and stock.' },
+  { scope: 'products:write', label: 'Products — write', description: 'Add, edit and delete a site’s products and their variants. A change to a product that is on sale shows on the live site right away.' },
   { scope: 'bookings:read', label: 'Bookings — read', description: 'Read a site’s bookings: the service, the time, the guest and what they paid. Cannot move or cancel a booking.' },
   { scope: 'media:read', label: 'Media — read', description: 'List files in the organization library and a site’s media.' },
   { scope: 'media:write', label: 'Media — upload', description: 'Add files to the organization library and a site’s media. Counts against your storage allowance. Cannot replace or delete an existing file.' },
   { scope: 'crm:read', label: 'CRM — read', description: 'List and read companies, pipelines, deals, tasks and activities across the organization, and each site’s leads.' },
   { scope: 'crm:write', label: 'CRM — write', description: 'Add, edit and delete companies, deals and tasks, log activities, and work and convert leads, on behalf of a named site. Cannot edit a pipeline’s stages.' },
+  { scope: 'pages:read', label: 'Pages — read', description: 'List a site’s pages: each one’s name, address, whether it is published and its search listing. Never reads what a page is built from.' },
+  { scope: 'seo:read', label: 'Search listing — read', description: 'Read how a site and its pages are described to search engines: titles, descriptions and sharing images.' },
+  { scope: 'seo:write', label: 'Search listing — write', description: 'Change how a site and its pages appear in search results. Changes show on the live site right away.' },
+  { scope: 'business:read', label: 'Business details — read', description: 'Read a site’s business details: name, slogan, phone, email, address and social links.' },
+  { scope: 'business:write', label: 'Business details — write', description: 'Change a site’s business name, slogan, phone, email, address and social links. Changes show on the live site right away.' },
 ]
 
 interface PublicApiKey {

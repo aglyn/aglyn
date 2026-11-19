@@ -108,7 +108,7 @@ class ScreenSpecTest {
     }
     val ids = specs.map { it.id }
     assertEquals(ids.size, ids.toSet().size, "duplicate screen ids")
-    val known = setOf("fields", "meters", "list", "form", "actions", "links", "notice", "zone", "image", "html")
+    val known = setOf("fields", "meters", "list", "form", "actions", "links", "notice", "zone", "image", "html", "qr", "text")
     // Screens a plugin draws by hand rather than from a spec, which a spec may still open.
     val handWritten = setOf("commerce.orders", "commerce.order", "commerce.quotes", "commerce.quote", "commerce.products", "commerce.product", "commerce.sales", "marketplace.listing", "marketplace.sell", "site.pages")
     for (spec in specs) {
@@ -117,6 +117,31 @@ class ScreenSpecTest {
       for (target in targets(spec.raw)) assertTrue(target in ids || target in handWritten, "${spec.id} opens $target, which no spec declares")
       for (icon in icons(spec.raw)) assertTrue(AglynIcons.has(icon), "${spec.id}: Material icon \"$icon\" is not in AglynIcons")
     }
+  }
+
+  /** Every field a spec asks for is of a kind the renderer draws (`FieldInput`): an unknown kind would be a plain text box. */
+  @Test
+  fun everyFieldKindIsOneTheRendererDraws() {
+    val known = setOf(
+      "text", "email", "url", "number", "stepper", "multiline", "password", "toggle", "select", "country", "date", "hours",
+      "heading", "choice", "multiselect", "lines", "file", "upload", "media", "lookup", "signature", "photo", "group",
+    )
+    fun walk(node: JsonElement, file: String) {
+      when (node) {
+        is JsonObject -> {
+          for (key in listOf("fields", "prompt")) {
+            for (field in (node[key] as? JsonArray).orEmpty()) {
+              val kind = ((field as? JsonObject)?.get("kind") as? JsonPrimitive)?.content ?: continue
+              assertTrue(kind in known, "$file: field kind $kind")
+            }
+          }
+          node.values.forEach { walk(it, file) }
+        }
+        is JsonArray -> node.forEach { walk(it, file) }
+        else -> Unit
+      }
+    }
+    for (file in specFiles()) walk(Json.parseToJsonElement(file.readText()), file.name)
   }
 
   private fun targets(json: JsonElement): List<String> = when (json) {
