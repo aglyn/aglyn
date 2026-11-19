@@ -57,19 +57,9 @@ struct FormDetailView: View {
         Section { AglynNotice(notice, tone: .success) { runner.clear() } }
       }
       header(form)
-      Section {
-        AglynCardGrid(minimum: 140, maxColumns: 3, spacing: AglynSpace.one) {
-          AglynFigureTile(
-            "Submissions", value: "\(form.submissions ?? 0)",
-            caption: form.lastSubmissionAt.map { "Last " + relativeTime($0, now: now) } ?? "None yet")
-          AglynFigureTile(
-            "Leads", value: form.leads.map(String.init) ?? "—",
-            caption: form.routesLeads ? "Sent to the CRM" : "Not sent to the CRM")
-          AglynFigureTile("Views", value: "\(form.views ?? 0)", caption: "Times it was shown")
-        }
-        .listRowInsets(EdgeInsets(top: AglynSpace.one, leading: AglynSpace.one, bottom: AglynSpace.one, trailing: AglynSpace.one))
-      }
+      FormMetricsSections(form: form)
       FormRoutingSection(form: form, api: api, runner: runner, canEdit: context.can("site.edit"))
+      FormResponsesSection(form: form, api: api, runner: runner, canEdit: context.can("site.edit"))
       Section("Questions") {
         if form.fields.isEmpty {
           Text("This form declares no questions yet. Add them in the Besigner.").foregroundStyle(.secondary)
@@ -104,6 +94,17 @@ struct FormDetailView: View {
             .disabled(!context.can("site.edit"))
           Button { act(.export(form)) } label: { Label("Export submissions", systemImage: "square.and.arrow.down") }
             .keyboardShortcut("e", modifiers: .command)
+          // The console's quick Preview: the published version as a visitor sees it. A form never opened in the
+          // Besigner has no version to render.
+          Button {
+            if let version = form.versionID {
+              context.openBesigner(formBesignerPath(formID: form.id, versionID: version, preview: true), scope: .site)
+            }
+          } label: {
+            Label(form.versionID == nil ? "Preview (open it in the Besigner once)" : "Preview", systemImage: "eye")
+          }
+          .disabled(form.versionID == nil)
+          .accessibilityIdentifier("form-preview")
           Divider()
           Button(role: form.retired ? nil : .destructive) { act(.retire(form)) } label: {
             Label(form.retired ? "Bring back" : "Retire", systemImage: form.retired ? "tray.and.arrow.up" : "archivebox")
@@ -210,8 +211,11 @@ struct FormRoutingSection: View {
   let canEdit: Bool
   @State private var lead = false
   @State private var consent: String?
+  @State private var optIn = false
 
-  private var changed: Bool { lead != form.routesLeads || consent != form.consentFieldName }
+  private var changed: Bool {
+    lead != form.routesLeads || consent != form.consentFieldName || optIn != form.optInOnSubmit
+  }
 
   var body: some View {
     Section {
@@ -235,15 +239,29 @@ struct FormRoutingSection: View {
       }
       .disabled(!canEdit)
       .accessibilityIdentifier("form-consent")
-      if lead && consent == nil {
+      if lead && consent == nil && !optIn {
         AglynNotice("A form that sends leads should ask for marketing consent.", tone: .warning)
       }
+      Toggle(isOn: $optIn) {
+        VStack(alignment: .leading, spacing: 2) {
+          Text("This is a sign-up form: submitting it subscribes the person")
+          Text(
+            "For a form whose only purpose is subscribing, like a newsletter sign-up. Every submission records marketing "
+              + "consent and makes the person at least a subscriber, so the form should say plainly what they are "
+              + "signing up for."
+          )
+          .font(AglynFont.caption).foregroundStyle(.secondary)
+        }
+      }
+      .disabled(!canEdit)
+      .accessibilityIdentifier("form-opt-in-on-submit")
       Button {
         guard let api else { return }
         let lead = lead
         let consent = consent
+        let optIn = optIn != form.optInOnSubmit ? optIn : nil
         runner.run(success: "CRM routing saved.") {
-          try await api.saveRouting(form, lead: lead, consentFieldName: consent)
+          try await api.saveRouting(form, lead: lead, consentFieldName: consent, optInOnSubmit: optIn)
         }
       } label: {
         if runner.busy && changed { ProgressView() } else { Text("Save routing") }
@@ -255,5 +273,168 @@ struct FormRoutingSection: View {
     }
     .onChange(of: form.routesLeads, initial: true) { _, value in lead = value }
     .onChange(of: form.consentFieldName, initial: true) { _, value in consent = value }
+    .onChange(of: form.optInOnSubmit, initial: true) { _, value in optIn = value }
+  }
+}
+
+/// "After someone sends it" (AGL-4098): whether the form asks for a quote, and whether the person is emailed a
+/// confirmation, saved together.
+struct FormResponsesSection: View {
+  let form: FormRow
+  let api: FormsAPI?
+  let runner: PluginActionRunner
+  let canEdit: Bool
+  @State private var quote: Bool?
+  @State private var confirms: Bool?
+
+  private var effectiveQuote: Bool { quote ?? form.asksForQuote }
+  private var effectiveConfirms: Bool { confirms ?? form.confirmationEmail ?? effectiveQuote }
+  private var changed: Bool {
+    (quote != nil && quote != form.asksForQuote) || (confirms != nil && confirms != form.sendsConfirmation())
+  }
+
+  var body: some View {
+    Section {
+      Toggle(isOn: Binding(get: { effectiveQuote }, set: { quote = $0 })) {
+        VStack(alignment: .leading, spacing: 2) {
+          Text("This form asks for a quote")
+          Text(
+            "Each submission arrives in the Inbox marked as a quote request, with any files attached, and you can start "
+              + "a quote from it in one step. The person is added to Contacts as with any form."
+              + (form.hasFileField ? "" : " Add a File upload field in the design to take logos or artwork.")
+          )
+          .font(AglynFont.caption).foregroundStyle(.secondary)
+        }
+      }
+      .disabled(!canEdit)
+      .accessibilityIdentifier("form-asks-for-quote")
+      Toggle(isOn: Binding(get: { effectiveConfirms }, set: { confirms = $0 })) {
+        VStack(alignment: .leading, spacing: 2) {
+          Text("Email the person a confirmation")
+          Text(
+            form.hasEmailField
+              ? "Sends the address they give a copy of what they sent, the names of their files and what happens next, "
+                + "in your site’s email style (Emails → Form confirmation). Replies come to your site’s contact email, "
+                + "and a quote you send them later arrives in the same conversation."
+              : "Needs an email field in the published design: without an address there is no one to send it to."
+          )
+          .font(AglynFont.caption).foregroundStyle(.secondary)
+        }
+      }
+      .disabled(!canEdit)
+      .accessibilityIdentifier("form-confirmation-email")
+      HStack {
+        Button("Discard") {
+          quote = nil
+          confirms = nil
+        }
+        .disabled(!changed || runner.busy)
+        Button {
+          guard let api else { return }
+          let (quote, confirms) = (quote, confirms)
+          runner.run(success: "Saved") {
+            try await api.saveResponses(form, asksForQuote: quote, confirms: confirms)
+            self.quote = nil
+            self.confirms = nil
+          }
+        } label: {
+          if runner.busy && changed { ProgressView() } else { Text("Save") }
+        }
+        .disabled(!canEdit || runner.busy || !changed)
+        .accessibilityIdentifier("form-responses-save")
+      }
+      .buttonStyle(.borderless)
+    } header: {
+      Text("After someone sends it")
+    }
+  }
+}
+
+/// "What this form has collected" (the console's `FormMetricsCard`): the four figures, the rates with what each is
+/// taken over, submissions by month from the first recorded one, the most recent, and what is not measured.
+struct FormMetricsSections: View {
+  let form: FormRow
+
+  var body: some View {
+    let rates = FormRates(form)
+    let series = formPeriodSeries(form.periods)
+    let peak = series.map(\.submissions).max() ?? 0
+    Section("What this form has collected") {
+      AglynCardGrid(minimum: 140, maxColumns: 4, spacing: AglynSpace.one) {
+        figure("Views", form.views, note: "times this form was rendered")
+        figure("Submissions", form.submissions, note: "since this form was created")
+        figure("Leads", form.leads, note: "people this form filed to Leads")
+        figure("Declared fields", form.fields.count, note: "on the published design")
+      }
+      .listRowInsets(EdgeInsets(top: AglynSpace.one, leading: AglynSpace.one, bottom: AglynSpace.one, trailing: AglynSpace.one))
+    }
+    Section("Rates") {
+      rate("Views that became a submission", rates.completion)
+      rate("Started and never submitted", rates.abandon)
+      rate("Submissions that became a lead", rates.lead)
+      if !form.routesLeads {
+        AglynHelperText("This form does not route to leads, so there is nothing for that rate to be over.")
+      }
+      AglynHelperText(
+        "Views and starts are counted in the visitor’s browser and submissions on the server, so a blocked request is a "
+          + "view this misses and a submission it does not. Each rate covers only the months its denominator was being "
+          + "recorded.")
+    }
+    Section("Submissions by month") {
+      if series.isEmpty {
+        Text("Nothing recorded yet. The series starts at the first month this form collects something.")
+          .foregroundStyle(.secondary)
+      }
+      ForEach(series, id: \.period) { point in
+        HStack(spacing: AglynSpace.one) {
+          Text(point.period).font(AglynFont.caption).foregroundStyle(.secondary).frame(minWidth: 64, alignment: .leading)
+          GeometryReader { geo in
+            Capsule()
+              .fill(AglynColor.tint)
+              .frame(width: max(2, peak > 0 ? geo.size.width * point.submissions / peak : 2), height: 8)
+              .frame(maxHeight: .infinity, alignment: .center)
+          }
+          .frame(height: 12)
+          Text(Int(point.submissions).formatted()).font(AglynFont.caption).frame(minWidth: 40, alignment: .trailing)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+          "\(point.period): \(Int(point.submissions)) submissions"
+            + (point.views > 0 ? ", \(Int(point.views)) views" : ""))
+      }
+    }
+    Section("Most recent") {
+      Text(
+        form.lastSubmissionAt.map { $0.formatted(date: .abbreviated, time: .shortened) }
+          ?? "No submission has been recorded for this form.")
+    }
+    Section("Not measured") {
+      AglynHelperText(
+        "Per-field answer rates — which questions people skip. The values live on the submission documents, and "
+          + "counting them is a read of the whole collection every time this page opens.")
+      AglynHelperText(
+        "Anything before a counter started. The month series begins where the record begins rather than padding "
+          + "backwards with zeros, and a rate is taken only over the months its denominator was live.")
+      AglynHelperText(
+        "Who abandoned, or where they stopped. A start is one signal per form, not per field, so this says how often a "
+          + "form was left and never which question lost the visitor.")
+    }
+  }
+
+  private func figure(_ label: String, _ value: Int?, note: String) -> some View {
+    AglynFigureTile(label, value: value.map { $0.formatted() } ?? "—", caption: value == nil ? "not recorded" : note)
+  }
+
+  private func rate(_ label: String, _ rate: MeasuredRate?) -> some View {
+    LabeledContent(label) {
+      if let rate {
+        VStack(alignment: .trailing, spacing: 0) {
+          Text(rate.percent).bold()
+          Text(rate.detail).font(AglynFont.caption).foregroundStyle(.secondary)
+        }
+      } else {
+        Text("— not enough recorded to compute").font(AglynFont.caption).foregroundStyle(.secondary)
+      }
+    }
   }
 }

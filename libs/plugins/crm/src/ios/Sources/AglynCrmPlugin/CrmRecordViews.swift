@@ -39,8 +39,28 @@ struct RecordsSection: View {
   @State private var confirming: CrmBulkAction?
   @State private var bulkBusy = false
   @State private var bulkResult: CrmBulkResult?
+  /// The section's saved views and the reader's default (`useCrmSavedView`).
+  @State private var views = CrmViewsModel()
+  /// Whether the reader picked a filter or a view, which the default view then leaves alone.
+  @State private var picking = false
+  @State private var defaultApplied = false
 
   private var filters: [CrmFilter] { (contactEmailFilter(openEmail).map { [$0] } ?? []) + crmFilters(kind, scope) }
+
+  /// The saved views as filters: the reader's own and the shared ones.
+  private var viewFilters: [CrmFilter] {
+    let listed = views.views(uid: scope.uid)
+    return (listed.mine + listed.shared).map { crmViewFilter($0, kind: kind) { crmAskClause(kind, $0, scope: scope) } }
+  }
+
+  /// What the list shows: the chip or view picked, the first chip until then (or while a view is still loading).
+  private var activeFilter: CrmFilter {
+    (filters + viewFilters).first { $0.id == filterID } ?? filters.first { $0.id == filterID } ?? filters[0]
+  }
+
+  private var defaultViewKey: String {
+    "\(views.profile.ready)|\(views.list.ready)|\(views.defaultID(orgID: scope.orgID, section: kind.viewSection) ?? "")"
+  }
 
   /// The one row the address filter found, once the list has settled on it.
   private var oneMatch: String? {
@@ -109,25 +129,55 @@ struct RecordsSection: View {
     } message: { _ in
       Text(confirmation?.message ?? "")
     }
-    .task(id: "\(filterID)|\(search)") {
+    .task(id: CrmListKey(filter: activeFilter, search: search)) {
       picked = []
       if filterID.isEmpty { filterID = filters.first?.id ?? "" }
       if selection == nil { selection = initial }
-      let filter = filters.first { $0.id == filterID } ?? filters[0]
+      let filter = activeFilter
       let model = list ?? LiveQueryList(pageSize: 25) { crmRow(kind, $0, scope) }
       list = model
       let search = search
       model.show(context.firestore) { crmListQuery(kind, scope, filter, search: search, limit: $0) }
     }
-    .onDisappear { list?.stop() }
+    .task(id: scope) { views.start(context.firestore, scope, section: kind.viewSection) }
+    .onChange(of: defaultViewKey, initial: true) { _, _ in openDefaultView() }
+    .onDisappear {
+      list?.stop()
+      views.stop()
+    }
+  }
+
+  /// The reader's default view opens first, once, unless they already picked or the list was opened for an address.
+  private func openDefaultView() {
+    guard !defaultApplied, views.profile.ready, views.list.ready else { return }
+    defaultApplied = true
+    guard !picking, contactEmailFilter(openEmail) == nil,
+      let id = views.defaultID(orgID: scope.orgID, section: kind.viewSection),
+      viewFilters.contains(where: { $0.id == crmViewFilterPrefix + id })
+    else { return }
+    filterID = crmViewFilterPrefix + id
   }
 
   private var chips: some View {
     HStack(spacing: 0) {
+      if !scope.uid.isEmpty {
+        CrmViewsMenu(
+          section: kind.viewSection, plural: kind.plural, scope: scope, api: api, model: views, current: activeFilter,
+          open: { id in
+            picking = true
+            filterID = crmViewFilterPrefix + id
+          },
+          openAll: { filterID = filters.first?.id ?? "" }
+        )
+        .aglynContentEdges()
+      }
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: AglynSpace.one) {
           ForEach(filters) { filter in
-            AglynChoiceChip(filter.label, selected: filterID == filter.id) { filterID = filter.id }
+            AglynChoiceChip(filter.label, selected: filterID == filter.id) {
+              picking = true
+              filterID = filter.id
+            }
           }
         }
         .aglynContentEdges()
@@ -194,6 +244,10 @@ struct RecordsSection: View {
   private func listPane(selectable: Bool) -> some View {
     VStack(spacing: 0) {
       chips
+      // A saved view's clauses this list cannot ask, said rather than silently dropped.
+      ForEach(activeFilter.refused, id: \.sentence) { refusal in
+        AglynNotice(refusal.sentence, tone: .warning).aglynContentEdges()
+      }
       bulkBar
       if let list {
         if !list.ready {
@@ -294,6 +348,8 @@ struct RecordDetail: View {
   @State private var notice: String?
   @State private var error: String?
   @State private var site = LiveDoc()
+  /// What `crm/email-check` said about a contact's or a lead's address, sent from its site.
+  @State private var emailCheck: CrmEmailCheck?
   /// A task another plugin proposed (the AI summary's next step), filling the New task sheet.
   @State private var proposedTask: TaskDraft?
   /// A stage another plugin proposed for this deal, asked about before it moves.
@@ -305,6 +361,13 @@ struct RecordDetail: View {
   private var movesStages: Bool { scope.movesStages(on: site.doc?.data) }
   private var hasStage: Bool { kind == .contact || (kind == .deal && (doc.document?.string("status") ?? "open") == "open") }
   private var api: CrmAPI { CrmAPI(api: listAPI.api, reader: listAPI.reader, scope: scope) }
+  /// The address the gateway chip asks about: a contact's or a lead's own (`record.email`).
+  private var checkedAddress: String? {
+    guard kind == .contact || kind == .lead, let document = doc.document else { return nil }
+    // The person as the page shows them: a contact's holder facet over the shared fields.
+    let email = (crmRow(kind, document, scope, stages: [:]).data["email"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+    return email.isEmpty ? nil : email
+  }
 
   var body: some View {
     Group {
@@ -322,6 +385,11 @@ struct RecordDetail: View {
     .task(id: id) { start() }
     .task(id: scope.hostID) {
       if !scope.hostID.isEmpty { site.start(context.firestore, ["hosts", scope.hostID]) }
+    }
+    .task(id: "\(scope.hostID)|\(checkedAddress ?? "")") {
+      emailCheck = nil
+      guard let checkedAddress else { return }
+      emailCheck = await api.emailCheck(checkedAddress)
     }
     .onDisappear {
       doc.stop()
@@ -400,6 +468,8 @@ struct RecordDetail: View {
         AglynRecordHeader(
           row.title, subtitle: row.subtitle, systemImage: kind.symbol, status: row.chip.map { ($0, row.tone) },
           primary: acts.primary, more: acts.more)
+        // The verdict on the address first, then its mail gateway (`CrmEmailStateChip`, `CrmEmailGatewayChip`).
+        if kind == .contact || kind == .lead { CrmEmailChips(state: crmReadEmailState(row.data), check: emailCheck) }
         if kind == .deal { DealStagePath(pipeline: pipeline, stageID: document.string("stageId"), status: document.string("status")) }
         // What another plugin does with the person, such as start a quote (the console's `crmRecordActions` zone).
         if kind == .contact, !context.slotWidgets(crmRecordActionsZone).isEmpty {
@@ -587,6 +657,9 @@ struct RecordDetail: View {
     var acts: [(String, String, RecordAction)] = [("Edit", "pencil", .edit), ("Log activity", "note.text", .log)]
     if kind != .deal { acts.append(("Log a call", "phone.badge.plus", .logCall)) }
     if crmHasEmail(row.data) || kind == .deal { acts.append(("Email", "envelope", .email)) }
+    // The record's own verdict on its address outranks having one (`CrmSendEmailButton`): Send email is off, the reason
+    // under the chips.
+    let emailRefused = crmEmailStateForbidsEmail(crmReadEmailState(row.data))
     acts.append(("New task", "checklist", .task))
     let status = row.data["status"] as? String
     switch kind {
@@ -605,14 +678,14 @@ struct RecordDetail: View {
     let next: RecordAction =
       switch kind {
       case .lead: status == "qualified" && row.data["convertedContactId"] == nil ? .convert : .log
-      case .contact: crmHasEmail(row.data) ? .email : .log
+      case .contact: crmHasEmail(row.data) && !emailRefused ? .email : .log
       case .deal: (status ?? "open") == "open" && movesStages ? .move : .log
       case .company: .log
       }
     let all = acts.map { title, symbol, act in
       AglynRecordAction(
         "crm-action-\(act.rawValue)", title, systemImage: symbol, destructive: act == .delete,
-        enabled: movesStages || ![.stage, .move, .won, .lost].contains(act)
+        enabled: (movesStages || ![.stage, .move, .won, .lost].contains(act)) && !(act == .email && emailRefused)
       ) { action = act }
     }
     let primary = all.first { $0.id == "crm-action-\(next.rawValue)" }
@@ -721,7 +794,12 @@ struct RecordDetail: View {
         done("Logged.")
       }
     case .email:
-      CrmEmailComposer(context: context, scope: scope, api: api, to: row.data["email"] as? String, links: emailLinks(row)) { subject, message in
+      CrmEmailComposer(
+        context: context, scope: scope, api: api, to: row.data["email"] as? String, links: emailLinks(row),
+        loadMerge: { [kind, scope, siteName = site.doc?.data["displayName"] as? String, record = doc.document?.data ?? row.data] in
+          await crmMergeContext(context.firestore, scope: scope, kind: kind, record: record, siteName: siteName)
+        }
+      ) { subject, message in
         try await api.sendEmail(subject: subject, message: message, links: [kind.linkField: id])
         done("Email sent.")
       }
@@ -1128,6 +1206,10 @@ struct EmailSheet: View {
   var links: [String: String] = [:]
   /// The workspace's templates as this reader may list them; nil leaves the template tools out.
   var templates: [CrmEmailTemplate]?
+  /// The deliverability check's warning before the send (`CrmEmailCheckAlert`); nil when there is nothing to say.
+  var warning: String?
+  /// Reads the documents the preview fills merge fields from; nil leaves the preview out.
+  var loadMerge: (() async -> CrmMergeContext)?
   /// Saves the draft as a template; nil leaves Save as template out.
   var saveTemplate: ((_ name: String, _ visibility: String, _ subject: String, _ body: String) async throws -> Void)?
   let save: (String, String) async throws -> Void
@@ -1136,6 +1218,14 @@ struct EmailSheet: View {
   @State private var applied: CrmEmailTemplate?
   @State private var replacing: CrmEmailTemplate?
   @State private var savingTemplate = false
+  @State private var merge: CrmMergeContext?
+
+  private var hasFields: Bool { crmHasMergeFields("\(subject)\n\(message)") }
+  /// The draft as it will be sent, once the records are read (the dialog's `preview`).
+  private var preview: (subject: CrmMergeResult, body: CrmMergeResult)? {
+    guard hasFields, let merge else { return nil }
+    return (crmResolveMergeFields(subject, merge), crmResolveMergeFields(message, merge))
+  }
 
   private var pickable: [CrmEmailTemplate] { crmTemplatePickOrder(templates ?? []) }
   private var snippets: [CrmEmailTemplate] { (templates ?? []).filter { $0.kind == "snippet" } }
@@ -1149,6 +1239,7 @@ struct EmailSheet: View {
     ) {
       Section {
         if let to { LabeledContent("To", value: to) }
+        if let warning { AglynNotice(warning, tone: .warning).accessibilityIdentifier("crm-email-check-warning") }
         if !pickable.isEmpty {
           Picker("Template", selection: Binding(get: { applied?.id ?? "" }, set: { id in pick(pickable.first { $0.id == id }) })) {
             Text("None").tag("")
@@ -1189,11 +1280,29 @@ struct EmailSheet: View {
           .lineLimit(5...16)
           .accessibilityIdentifier("crm-email-body")
       } footer: {
-        Text(
-          message.contains("{{")
-            ? "Plain text. Merge fields are filled in from this record when the email is sent."
-            : "The email is sent from your sending address and logged on the record.")
+        let unresolved = preview.map { ($0.subject.unresolved + $0.body.unresolved).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } } } ?? []
+        if !unresolved.isEmpty {
+          Text(crmMergeUnresolvedMessage(unresolved)).foregroundStyle(AglynColor.warning).accessibilityIdentifier("crm-email-unresolved")
+        } else {
+          Text(
+            hasFields
+              ? "Plain text. Merge fields are filled in from this record when the email is sent."
+              : "Plain text. A blank line starts a new paragraph.")
+        }
       }
+      if let preview {
+        Section("Preview — as it will be sent") {
+          VStack(alignment: .leading, spacing: AglynSpace.half) {
+            Text(preview.subject.text).font(AglynFont.strongSubheadline)
+            Text(preview.body.text).font(AglynFont.subheadline)
+          }
+          .accessibilityIdentifier("crm-email-preview")
+        }
+      }
+    }
+    .task(id: hasFields) {
+      guard hasFields, merge == nil, let loadMerge else { return }
+      merge = await loadMerge()
     }
     .alert(
       "Replace the message?", isPresented: Binding(get: { replacing != nil }, set: { if !$0 { replacing = nil } }), presenting: replacing

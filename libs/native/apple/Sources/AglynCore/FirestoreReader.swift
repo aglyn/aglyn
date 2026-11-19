@@ -313,6 +313,29 @@ extension FirestoreReader {
     }
   }
 
+  /// One read of a document as the server has it: the listener's answers are taken until one is not the device cache's
+  /// copy (a route just changed the document, and the cache still holds the old one), or `wait` passes and the last
+  /// answer stands.
+  @MainActor
+  public func readFromServer(_ path: [String], wait: TimeInterval = 4) async throws -> FirestoreDocument? {
+    let read = ServerRead()
+    return try await withCheckedThrowingContinuation { continuation in
+      read.continuation = continuation
+      read.listener = listenDocument(path) { result in
+        read.last = result
+        if case .success(let doc) = result, doc?.fromCache == true, !read.waited { return }
+        read.finish(result)
+      }
+      if read.done { read.listener?.remove() }
+      Task { @MainActor in
+        try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+        // Only a copy already in hand stands; with none yet, the next answer settles it, cached or not.
+        read.waited = true
+        if let last = read.last { read.finish(last) }
+      }
+    }
+  }
+
   /// One read of a document.
   @MainActor
   public func readOnce(_ path: [String]) async throws -> FirestoreDocument? {
@@ -327,5 +350,23 @@ extension FirestoreReader {
       }
       if done { listener?.remove() }
     }
+  }
+}
+
+/// One `readFromServer`'s state, on the main actor with the listener that feeds it.
+@MainActor
+private final class ServerRead {
+  var continuation: CheckedContinuation<FirestoreDocument?, Error>?
+  var listener: FirestoreListening?
+  var last: Result<FirestoreDocument?, Error>?
+  var waited = false
+  var done = false
+
+  func finish(_ result: Result<FirestoreDocument?, Error>) {
+    guard !done else { return }
+    done = true
+    listener?.remove()
+    continuation?.resume(with: result)
+    continuation = nil
   }
 }

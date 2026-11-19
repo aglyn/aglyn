@@ -117,6 +117,21 @@ fun RecordsSection(
   val coroutines = rememberCoroutineScope()
   val filters = remember(kind, scope, openEmail) { listOfNotNull(contactEmailFilter(openEmail)) + crmFilters(kind, scope) }
   var filterKey by rememberSaveable(kind) { mutableStateOf(filters.first().key) }
+  // The section's saved views and the reader's default (`useCrmSavedView`): a view is one more filter the list runs.
+  val views = rememberCrmViews(context, scope, kind.viewSection)
+  val viewFilters = views?.all.orEmpty().map { view -> crmViewFilter(view, kind) { crmAskClause(kind, it, scope) } }
+  val activeFilter = (filters + viewFilters).firstOrNull { it.key == filterKey } ?: filters.first()
+  var picking by rememberSaveable(kind) { mutableStateOf(false) }
+  var defaultApplied by rememberSaveable(kind) { mutableStateOf(false) }
+  var viewNotice by remember(kind) { mutableStateOf<Pair<String, StatusTone>?>(null) }
+  // The reader's default view opens first, once, unless they already picked or the list was opened for an address.
+  LaunchedEffect(views != null) {
+    val ready = views ?: return@LaunchedEffect
+    if (defaultApplied) return@LaunchedEffect
+    defaultApplied = true
+    val id = ready.defaultId ?: return@LaunchedEffect
+    if (!picking && contactEmailFilter(openEmail) == null && ready.all.any { it.id == id }) filterKey = CRM_VIEW_FILTER_PREFIX + id
+  }
   var search by rememberSaveable(kind) { mutableStateOf("") }
   var asked by rememberSaveable(kind) { mutableStateOf("") }
   var creating by remember(kind) { mutableStateOf(startNew && scope.canWrite) }
@@ -125,9 +140,9 @@ fun RecordsSection(
   }
   val bulk = remember(kind, scope) { CrmBulkState() }
   val movesStages = rememberMovesStages(context, scope)
-  LaunchedEffect(list, filterKey, asked) {
+  LaunchedEffect(list, activeFilter, asked) {
     bulk.picked = emptySet()
-    val filter = filters.firstOrNull { it.key == filterKey } ?: filters.first()
+    val filter = activeFilter
     list.show { limit -> crmListQuery(kind, scope, filter, asked, limit) }
   }
   val listed = (list.rows as? Live.Ready)?.value.orEmpty()
@@ -161,9 +176,18 @@ fun RecordsSection(
         Column(Modifier.padding(horizontal = space(2f), vertical = space(1f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
           SearchField(search, { search = it; if (it.isBlank()) asked = "" }, placeholder = "Search ${kind.plural.lowercase()}", onSearch = { asked = search })
           Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) { ChoiceChipRow(filters.map { ChipOption(it.key, it.label) }, filterKey, { filterKey = it }) }
+            if (scope.uid.isNotEmpty()) {
+              CrmViewsMenu(
+                kind.viewSection, kind.plural, scope, api, views, activeFilter, { picking = true; filterKey = CRM_VIEW_FILTER_PREFIX + it },
+                { text, tone -> viewNotice = text to tone },
+              ) { filterKey = filters.first().key }
+            }
+            Box(Modifier.weight(1f)) { ChoiceChipRow(filters.map { ChipOption(it.key, it.label) }, filterKey, { picking = true; filterKey = it }) }
             if (scope.canWrite) CrmSelectToggle(bulk.selecting) { bulk.selecting = it; if (!it) bulk.picked = emptySet() }
           }
+          viewNotice?.let { (text, tone) -> NoticeBanner(text, tone, Modifier.testTag("crm-view-notice")) }
+          // A saved view's clauses this list cannot ask, said rather than silently dropped.
+          activeFilter.refused.forEach { NoticeBanner(it.sentence, StatusTone.WARNING) }
           // Counted over the rows the list still shows: an act that moves rows out of the view leaves none of them picked.
           if (bulk.selecting && pickedRows.isNotEmpty()) {
             CrmBulkBar(pickedRows.size, crmBulkActions(kind, scope.workspaceWide), bulk.running, ::bulkEnabled, { action -> bulk.pick(action) { runBulk(it, CrmBulkValue()) } }) { bulk.picked = emptySet() }
@@ -291,6 +315,9 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
       val movesStages = rememberMovesStages(context, scope)
       val stages = reference.pipeline(doc.string("pipelineId")).stages.associate { it.id to it.name }
       val row = crmRow(kind, doc, scope, stages)
+      // What `crm/email-check` says about a contact's or a lead's own address, sent from its site.
+      val checkedAddress = (row.data["email"] as? String)?.trim()?.takeIf { it.isNotEmpty() && (kind == CrmKind.CONTACT || kind == CrmKind.LEAD) }
+      val emailCheck by androidx.compose.runtime.produceState<CrmEmailCheck?>(null, scope.hostId, checkedAddress) { this.value = api.emailCheck(checkedAddress) }
       val fields = reference.fields(kind)
       val values = formValues(fields, row.data)
       Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -319,6 +346,8 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
             primary = primary,
             more = more,
           )
+          // The verdict on the address first, then its mail gateway (`CrmEmailStateChip`, `CrmEmailGatewayChip`).
+          if (kind == CrmKind.CONTACT || kind == CrmKind.LEAD) CrmEmailChips(crmReadEmailState(row.data), emailCheck)
           if (kind == CrmKind.DEAL) DealStagePath(reference.pipeline(doc.string("pipelineId")), doc.string("stageId"), doc.string("status"))
           // What another plugin does with the person, such as start a quote (the console's `crmRecordActions` zone).
           if (kind == CrmKind.CONTACT) {
@@ -427,8 +456,14 @@ fun RecordDetail(context: NativePluginContext, kind: CrmKind, id: String, listSc
  * contact, Move an open deal's stage), and every other act in ⋯, Remove or Delete last.
  */
 private fun recordActions(kind: CrmKind, row: CrmRow, movesStages: Boolean, call: com.aglyn.ui.RecordAction?, open: (RecordDialog) -> Unit): Pair<com.aglyn.ui.RecordAction?, List<com.aglyn.ui.RecordAction>> {
+  // The record's own verdict on its address outranks having one (`CrmSendEmailButton`): Send email is off, the reason under
+  // the chips.
+  val emailRefused = crmEmailStateForbidsEmail(crmReadEmailState(row.data))
   fun act(label: String, icon: String, dialog: RecordDialog) =
-    com.aglyn.ui.RecordAction("crm-action-${dialog.name.lowercase()}", label, icon, destructive = dialog == RecordDialog.DELETE, enabled = movesStages || dialog !in setOf(RecordDialog.STAGE, RecordDialog.MOVE, RecordDialog.WON, RecordDialog.LOST)) { open(dialog) }
+    com.aglyn.ui.RecordAction(
+      "crm-action-${dialog.name.lowercase()}", label, icon, destructive = dialog == RecordDialog.DELETE,
+      enabled = (movesStages || dialog !in setOf(RecordDialog.STAGE, RecordDialog.MOVE, RecordDialog.WON, RecordDialog.LOST)) && !(dialog == RecordDialog.EMAIL && emailRefused),
+    ) { open(dialog) }
   val all = buildList {
     add(act("Edit", "edit", RecordDialog.EDIT))
     add(act("Log activity", "sticky_note", RecordDialog.LOG))
@@ -455,7 +490,7 @@ private fun recordActions(kind: CrmKind, row: CrmRow, movesStages: Boolean, call
   }
   val next = when (kind) {
     CrmKind.LEAD -> if (row.data["status"] == "qualified" && row.data["convertedContactId"] == null) RecordDialog.CONVERT else RecordDialog.LOG
-    CrmKind.CONTACT -> if (crmHasEmail(row.data)) RecordDialog.EMAIL else RecordDialog.LOG
+    CrmKind.CONTACT -> if (crmHasEmail(row.data) && !emailRefused) RecordDialog.EMAIL else RecordDialog.LOG
     CrmKind.DEAL -> if ((row.data["status"] == "open" || row.data["status"] == null) && movesStages) RecordDialog.MOVE else RecordDialog.LOG
     CrmKind.COMPANY -> RecordDialog.LOG
   }
