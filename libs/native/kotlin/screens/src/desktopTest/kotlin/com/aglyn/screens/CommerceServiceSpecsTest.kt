@@ -794,6 +794,9 @@ class CommerceServiceSpecsTest {
     val block = model.spec.blocks.first { it.id == "hooks" }
     val row = ScreenContext.with(model.context, "item", model.context.jsonObject["data"]!!.jsonObject["hooks"]!!.jsonObject["hooks"]!!.jsonArray[0])
     assertEquals("Order paid", ScreenValues.render(block.string("primary")!!, row))
+    // A Zap that takes several events lists every one, as the console's eventsSentence does.
+    val several = zapier(true, """[{"id":"hk2","events":["order.paid","order.refunded","custom.thing"],"lastDeliveryAt":null}]""")
+    assertEquals("Order paid, Order refunded, custom.thing", ScreenValues.render(block.string("primary")!!, ScreenContext.with(several.context, "item", several.context.jsonObject["data"]!!.jsonObject["hooks"]!!.jsonObject["hooks"]!!.jsonArray[0])))
     assertEquals("Zapier", ScreenValues.render(block.string("tertiary")!!, row))
     val disconnect = block.raw.jsonObject["actions"]!!.jsonArray.mapNotNull { ActionSpec.parse(it) }.first()
     assertEquals(json("""{"hostId":"h1","hookId":"hk1"}"""), ScreenValues.resolveBody(disconnect.body!!, row))
@@ -1184,9 +1187,24 @@ class CommerceServiceSpecsTest {
     for ((listed, hidden) in cases) {
       val (dir, id, data) = listed
       val spec = spec(dir, id)
-      assertTrue("commerceSettings" in spec.zones, id)
+      assertTrue(CONSOLE_PAGE_ZONE.getValue(dir) in spec.zones, id)
       assertTrue(ScreenValues.condition(spec.showWhen!!, screen(spec, emptyMap(), data).context), "$id is listed for $data")
       assertFalse(ScreenValues.condition(spec.showWhen!!, screen(spec, emptyMap(), hidden).context), "$id is not listed for $hidden")
     }
   }
+
+  /** The console page each plugin's card lands on (its plugin.ts `slot`), so its native zone. */
+  private val CONSOLE_PAGE_ZONE = mapOf(
+    "inventory-sync" to "commerceSettings",
+    "delivery-apps" to "commerceSettings",
+    "print-on-demand" to "commerceSettings",
+    "fulfillment-networks" to "commerceSettingsShipping",
+    "couriers" to "commerceSettingsShipping",
+    "post-purchase" to "commerceSettingsShipping",
+    "shipping" to "commerceSettingsShipping",
+    "tax-engines" to "commerceSettingsTaxes",
+    "review-platforms" to "commercePromotions",
+    "sales-channels" to "commerceSettingsChannels",
+    "marketplaces" to "commerceSettingsChannels",
+  )
 }

@@ -2009,6 +2009,72 @@
           "footer": "Distance zones measure from the location deliveries leave from, once it is placed on a map."
         }
       ]
+    },
+    {
+      "id": "commerce.quoteSettings",
+      "title": "Quotes",
+      "label": "Quotes",
+      "subtitle": "What every new quote starts with, and what customers confirm before they approve a proof",
+      "icon": "doc.text|request_quote",
+      "scope": "site",
+      "constants": {
+        "defaultStatements": [
+          "I checked the spelling, names and numbers.",
+          "I checked the colors, sizes and placement.",
+          "I understand production starts when I approve, and changes after that may cost extra."
+        ]
+      },
+      "load": {
+        "store": {
+          "doc": "hosts/{site.id}/settings/store",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "form",
+          "id": "quotes",
+          "fields": [
+            {
+              "key": "requireProofApproval",
+              "label": "Customers approve the proof before they can pay",
+              "kind": "toggle",
+              "initial": "{data.store.quotes.requireProofApproval}"
+            },
+            {
+              "key": "requireProofSignIn",
+              "label": "Customers sign in to see and approve proofs",
+              "kind": "toggle",
+              "initial": "{data.store.quotes.requireProofSignIn}",
+              "help": "New quotes start with these settings, and you can change them on each quote. Signing in applies to a customer with an account on your site; a customer without one, like a phone or walk-in customer, keeps using the private link."
+            },
+            {
+              "key": "approvalStatements",
+              "label": "Before a customer approves a proof",
+              "kind": "lines",
+              "initial": "{data.store.quotes.approvalStatements|const.defaultStatements}",
+              "help": "They tick each of these, then type their name. The quote keeps what they confirmed, with their name and the time. One per line, up to 5."
+            }
+          ],
+          "submit": {
+            "id": "save",
+            "label": "Save",
+            "icon": "checkmark|check",
+            "disabledWhen": "!form.approvalStatements.0 || form.approvalStatements.5",
+            "write": {
+              "doc": "hosts/{site.id}/settings/store",
+              "fields": {
+                "quotes": {
+                  "requireProofApproval": "{form.requireProofApproval}",
+                  "requireProofSignIn": "{form.requireProofSignIn}",
+                  "approvalStatements": "{form.approvalStatements}"
+                }
+              }
+            },
+            "success": "Quote settings saved"
+          }
+        }
+      ]
     }
   ]
 }

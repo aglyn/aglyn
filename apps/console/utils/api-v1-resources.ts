@@ -66,7 +66,18 @@ import {
   readApiV1UsageFigures,
 } from '@aglyn/tenant-data-admin/server/api-v1-resources'
 import type { ApiV1ResourceDescription } from '@aglyn/tenant-data-admin/server/api-v1-description'
-import { apiActorLabel, isConnectedAppContext, usageBand } from '@aglyn/tenant-data-admin/server/api-v1-kit'
+import {
+  handleSiteBusiness,
+  handleSitePages,
+  handleSiteSeo,
+} from '@aglyn/tenant-data-admin/server/api-v1-site-settings'
+import {
+  admitNamedSite,
+  apiActorLabel,
+  isConnectedAppContext,
+  requireSitePermission,
+  usageBand,
+} from '@aglyn/tenant-data-admin/server/api-v1-kit'
 import { createHash, randomUUID } from 'crypto'
 import { Timestamp } from 'firebase-admin/firestore'
 import { type ApiV1Context, apiUsageMonth, requireScope } from './api-v1'
@@ -368,22 +379,49 @@ async function handleSites(
     return ApiErrors.notFound({ message: 'No such site', headers: ctx.headers })
   }
 
+  /*
+   * Everything that names a site is decided here, once, before any
+   * sub-resource is dispatched (AGL-4235), by `admitNamedSite`, the one
+   * implementation every resource that names a site elsewhere calls too:
+   *
+   * 1. The site document, read once. Read fresh rather than through a cached
+   *    host reader, because the lock below is read off it, and a lock or a
+   *    takedown must not be served stale.
+   * 2. For a connected app, whether its person may see this site at all.
+   *    Not a member answers exactly as a site the workspace does not own, so
+   *    an app cannot learn a site exists by naming it — which is why this
+   *    comes before the lock, whose 423 would say that it does.
+   * 3. The SITE's own lock and takedown. The pipeline asks the workspace's
+   *    and the person's, but had no site to give the verdict, so a site that
+   *    was locked or taken down kept answering every site-scoped endpoint.
+   *    The method decides, as it does in the pipeline.
+   * 4. The snapshot rides on the context, so no handler reads it again.
+   */
+  const admitted = await admitNamedSite(ctx, request, hostId)
+  if (!('snapshot' in admitted)) return admitted
+  const { snapshot } = admitted
+  const siteCtx: ApiV1Context = { ...ctx, site: { id: hostId, snapshot } }
+
   if (!sub) {
-    const denied = requireScope(ctx, 'sites:read')
+    const denied = requireScope(siteCtx, 'sites:read')
     if (denied) return denied
     if (request.method !== 'GET') return ApiErrors.methodNotAllowed({ headers: ctx.headers })
-    const [site] = await siteViews(ctx.firestore, [hostId])
-    return apiJson(site, { headers: ctx.headers })
+    return apiJson(siteView(hostId, snapshot.data()), { headers: ctx.headers })
   }
 
   if (sub === 'media')
-    return handleScopedMedia(request, ctx, url, hostRef(ctx, hostId), {
+    return handleScopedMedia(request, siteCtx, url, hostRef(ctx, hostId), {
       collection: 'hosts',
       base: `hosts/${hostId}`,
       hostId,
       cdnScope: hostId,
     })
-  if (sub === 'publish') return handlePublish(request, ctx, hostId)
+  if (sub === 'publish') return handlePublish(request, siteCtx, hostId)
+  // The site's search listing, pages and business details (AGL-4235): the
+  // handlers are the data layer's, and ask their own scopes and permission.
+  if (sub === 'seo') return handleSiteSeo(request, siteCtx)
+  if (sub === 'business') return handleSiteBusiness(request, siteCtx)
+  if (sub === 'pages') return handleSitePages(request, siteCtx, segments, url)
   /*
    * A resource a plugin models under the site is the plugin's (AGL-3080) — a
    * site's orders and products, its form submissions. Asked only AFTER
@@ -391,7 +429,7 @@ async function handleSites(
    * sub-resource, and a handler is never handed a site its key cannot reach.
    */
   const plugin = await pluginSiteResource(sub)
-  if (plugin) return servePluginResource(plugin.resource, request, ctx, segments, url)
+  if (plugin) return servePluginResource(plugin.resource, request, siteCtx, segments, url)
   // Kept below the sub-resources so an unknown one still 404s here.
 
   return ApiErrors.notFound({ message: 'Unknown endpoint', headers: ctx.headers })
@@ -490,11 +528,17 @@ async function handlePublish(
   const denied = requireScope(ctx, 'sites:publish')
   if (denied) return denied
 
-  const snap = await ctx.firestore.collection('hosts').doc(hostId).get()
+  // The site router's read (AGL-4235); read here only if no router gave one.
+  const snap = ctx.site?.id === hostId ? ctx.site.snapshot : await hostRef(ctx, hostId).get()
   const subdomain = String(snap.get('subdomain') ?? '').trim()
   if (!snap.exists || !subdomain) {
     return ApiErrors.notFound({ message: 'No such site', headers: ctx.headers })
   }
+  // A connected app publishes only where its person may write the site's
+  // content (AGL-4235), the roles the console's own publish route admits. An
+  // API key is not asked; see the docblock above for what stands in for it.
+  const notPermitted = requireSitePermission(ctx, snap, 'site.edit')
+  if (notPermitted) return notPermitted
 
   // Per-host hourly budget, ABOVE the fan-out and below the authorization.
   const rate = await consumeRateLimit(`apiv1-publish:${hostId}`, {
@@ -1043,6 +1087,13 @@ async function handleScopedMedia(
     }
     const deniedWrite = requireScope(ctx, 'media:write')
     if (deniedWrite) return deniedWrite
+    // A site's own library takes a connected app's file only where its
+    // person may write the site's content (AGL-4235), off the document the
+    // site router read. An API key is not asked: it has no person behind it.
+    if (scope.collection === 'hosts') {
+      const notPermitted = requireSitePermission(ctx, ctx.site?.snapshot, 'site.edit')
+      if (notPermitted) return notPermitted
+    }
     return createMedia(request, ctx, scopeRef, scope, origin)
   }
 

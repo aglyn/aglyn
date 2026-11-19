@@ -660,6 +660,22 @@ struct SpecScreenBody: View {
             .textSelection(.enabled)
         }
       }
+    case "text":
+      // `{ "type": "text", "source": "{…}" }`: words a person reads through, as written (a waiver's own text): line breaks
+      // kept, **strong**, *emphasis* and links drawn, inline only (the Kotlin kit's `InlineMarkdown`); nothing shows while
+      // the source is empty.
+      let source = ScreenValues.render(block["source"]?.stringValue ?? "", in: context)
+      if !source.isEmpty {
+        section(title, footer) {
+          Text(
+            (try? AttributedString(markdown: source, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+              ?? AttributedString(source)
+          )
+          .font(AglynFont.body)
+          .textSelection(.enabled)
+          .accessibilityIdentifier("text-\(block.id)")
+        }
+      }
     case "notice":
       Section {
         AglynNotice(ScreenValues.render(block["text"]?.stringValue ?? "", in: context), tone: tone(block["tone"]?.stringValue))

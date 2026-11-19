@@ -412,3 +412,20 @@ export function resetMockFirestore(): void {
   addedSeq = 0
   mockClock.nowMs = 1_760_000_000_000
 }
+
+/**
+ * The site documents a suite's workspace owns (AGL-4235): a CRM operation
+ * that names a site outside the site path reads `hosts/{id}` once to admit it
+ * — the person's membership, the site's own lock — exactly as the site router
+ * does, so a site the workspace owns must have a document here too.
+ * `memberRoles` holds whoever a spec seats on the site; an API key is not
+ * asked about it.
+ */
+export function seedSites(
+  hostIds: readonly string[],
+  fields: Record<string, unknown> = {},
+): void {
+  for (const hostId of hostIds) {
+    mockDocs.set(`hosts/${hostId}`, { subdomain: hostId, memberRoles: {}, ...fields })
+  }
+}
