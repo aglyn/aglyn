@@ -60,6 +60,12 @@
               "subtitle": "Fulfill, refund and print"
             },
             {
+              "title": "Subscriptions",
+              "icon": "arrow.triangle.2.circlepath|autorenew",
+              "screen": "commerce.subscriptions",
+              "subtitle": "Every subscription and its recurring revenue"
+            },
+            {
               "title": "Quotes",
               "icon": "doc.text|request_quote",
               "screen": "commerce.quotes",

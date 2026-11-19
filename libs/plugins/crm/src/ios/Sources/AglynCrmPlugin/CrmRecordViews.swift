@@ -39,8 +39,28 @@ struct RecordsSection: View {
   @State private var confirming: CrmBulkAction?
   @State private var bulkBusy = false
   @State private var bulkResult: CrmBulkResult?
+  /// The section's saved views and the reader's default (`useCrmSavedView`).
+  @State private var views = CrmViewsModel()
+  /// Whether the reader picked a filter or a view, which the default view then leaves alone.
+  @State private var picking = false
+  @State private var defaultApplied = false
 
   private var filters: [CrmFilter] { (contactEmailFilter(openEmail).map { [$0] } ?? []) + crmFilters(kind, scope) }
+
+  /// The saved views as filters: the reader's own and the shared ones.
+  private var viewFilters: [CrmFilter] {
+    let listed = views.views(uid: scope.uid)
+    return (listed.mine + listed.shared).map { crmViewFilter($0, kind: kind) { crmAskClause(kind, $0, scope: scope) } }
+  }
+
+  /// What the list shows: the chip or view picked, the first chip until then (or while a view is still loading).
+  private var activeFilter: CrmFilter {
+    (filters + viewFilters).first { $0.id == filterID } ?? filters.first { $0.id == filterID } ?? filters[0]
+  }
+
+  private var defaultViewKey: String {
+    "\(views.profile.ready)|\(views.list.ready)|\(views.defaultID(orgID: scope.orgID, section: kind.viewSection) ?? "")"
+  }
 
   /// The one row the address filter found, once the list has settled on it.
   private var oneMatch: String? {
@@ -109,25 +129,55 @@ struct RecordsSection: View {
     } message: { _ in
       Text(confirmation?.message ?? "")
     }
-    .task(id: "\(filterID)|\(search)") {
+    .task(id: CrmListKey(filter: activeFilter, search: search)) {
       picked = []
       if filterID.isEmpty { filterID = filters.first?.id ?? "" }
       if selection == nil { selection = initial }
-      let filter = filters.first { $0.id == filterID } ?? filters[0]
+      let filter = activeFilter
       let model = list ?? LiveQueryList(pageSize: 25) { crmRow(kind, $0, scope) }
       list = model
       let search = search
       model.show(context.firestore) { crmListQuery(kind, scope, filter, search: search, limit: $0) }
     }
-    .onDisappear { list?.stop() }
+    .task(id: scope) { views.start(context.firestore, scope, section: kind.viewSection) }
+    .onChange(of: defaultViewKey, initial: true) { _, _ in openDefaultView() }
+    .onDisappear {
+      list?.stop()
+      views.stop()
+    }
+  }
+
+  /// The reader's default view opens first, once, unless they already picked or the list was opened for an address.
+  private func openDefaultView() {
+    guard !defaultApplied, views.profile.ready, views.list.ready else { return }
+    defaultApplied = true
+    guard !picking, contactEmailFilter(openEmail) == nil,
+      let id = views.defaultID(orgID: scope.orgID, section: kind.viewSection),
+      viewFilters.contains(where: { $0.id == crmViewFilterPrefix + id })
+    else { return }
+    filterID = crmViewFilterPrefix + id
   }
 
   private var chips: some View {
     HStack(spacing: 0) {
+      if !scope.uid.isEmpty {
+        CrmViewsMenu(
+          section: kind.viewSection, plural: kind.plural, scope: scope, api: api, model: views, current: activeFilter,
+          open: { id in
+            picking = true
+            filterID = crmViewFilterPrefix + id
+          },
+          openAll: { filterID = filters.first?.id ?? "" }
+        )
+        .aglynContentEdges()
+      }
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: AglynSpace.one) {
           ForEach(filters) { filter in
-            AglynChoiceChip(filter.label, selected: filterID == filter.id) { filterID = filter.id }
+            AglynChoiceChip(filter.label, selected: filterID == filter.id) {
+              picking = true
+              filterID = filter.id
+            }
           }
         }
         .aglynContentEdges()
@@ -194,6 +244,10 @@ struct RecordsSection: View {
   private func listPane(selectable: Bool) -> some View {
     VStack(spacing: 0) {
       chips
+      // A saved view's clauses this list cannot ask, said rather than silently dropped.
+      ForEach(activeFilter.refused, id: \.sentence) { refusal in
+        AglynNotice(refusal.sentence, tone: .warning).aglynContentEdges()
+      }
       bulkBar
       if let list {
         if !list.ready {
@@ -294,6 +348,10 @@ struct RecordDetail: View {
   @State private var notice: String?
   @State private var error: String?
   @State private var site = LiveDoc()
+  /// A task another plugin proposed (the AI summary's next step), filling the New task sheet.
+  @State private var proposedTask: TaskDraft?
+  /// A stage another plugin proposed for this deal, asked about before it moves.
+  @State private var proposedStage: RecordStage?
   @Environment(\.openURL) private var openURL
 
   private var scope: CrmScope { doc.document.map { recordScope(listScope, $0.data) } ?? listScope }
@@ -410,6 +468,11 @@ struct RecordDetail: View {
               "phone": text("phone").isEmpty ? text("mobilePhone") : text("phone"), "company": text("companyName"),
             ])
         }
+        // What another plugin reads about this record, such as the AI summary (the console's `recordInsights` zone).
+        if !context.slotWidgets(recordInsightsZoneName).isEmpty {
+          SlotWidgets(context: context, slot: recordInsightsZoneName)
+            .environment(\.recordInsightsZone, insightsZone(row, document: document, pipeline: pipeline))
+        }
       }
       Section("Details") {
         // The fields that hold something; Edit holds every one.
@@ -477,6 +540,64 @@ struct RecordDetail: View {
     } message: {
       Text(alertMessage)
     }
+    .alert(
+      "Move this deal to \(proposedStage?.name ?? "")?", isPresented: Binding(get: { proposedStage != nil }, set: { if !$0 { proposedStage = nil } })
+    ) {
+      Button("Cancel", role: .cancel) { proposedStage = nil }
+      Button("Move to \(proposedStage?.name ?? "")") {
+        guard let stage = proposedStage else { return }
+        proposedStage = nil
+        Task {
+          do {
+            try await api.moveDeal(id, stageID: stage.id)
+            notice = "Moved to \(stage.name)"
+          } catch {
+            self.error = (error as? LocalizedError)?.errorDescription ?? "The deal could not be moved."
+          }
+        }
+      }
+    } message: {
+      Text("The deal moves as it would from its stage card, and any automation that listens for a stage change runs.")
+    }
+    // A proposed task fills one New task sheet; closing it leaves the next one blank.
+    .onChange(of: action) { _, next in if next != .task { proposedTask = nil } }
+  }
+
+  /// What this page hands the `recordInsights` zone (the console's `CrmRecordInsightsZone`): the record, a task proposal
+  /// where the record has tasks (not a lead), and an open deal's stages with a stage proposal.
+  private func insightsZone(_ row: CrmRow, document: FirestoreDocument, pipeline: Pipeline) -> RecordInsightsZone {
+    let openDeal = kind == .deal && (document.string("status") ?? "open") == "open"
+    let currentStage = document.string("stageId")
+    let stages: [RecordStage]? = openDeal ? pipeline.openStages.map { RecordStage(id: $0.id, name: $0.name) } : nil
+    var proposeTask: (@MainActor (ProposedTask, String) -> Void)?
+    if scope.canWrite && kind != .lead {
+      proposeTask = { task, _ in
+        var draft = taskDraft(row)
+        draft.title = task.title
+        draft.notes = task.notes
+        draft.kind = task.kind
+        draft.priority = task.priority
+        draft.dueAtMs = crmProposedDueAtMs(task.dueInDays)
+        proposedTask = draft
+        action = .task
+      }
+    }
+    var proposeStage: (@MainActor (String, String) -> Void)?
+    if openDeal && scope.canWrite {
+      proposeStage = { stageID, _ in
+        guard stageID != currentStage, let stage = pipeline.openStages.first(where: { $0.id == stageID }) else { return }
+        if !movesStages {
+          error = permissionRefusalText(ContractValues.shared.orgRoleGrants, key: crmMoveStagesKey)
+          return
+        }
+        proposedStage = RecordStage(id: stage.id, name: stage.name)
+      }
+    }
+    // The route's site, as the console's page hands its own `hostId`: none on the workspace's CRM, whatever site the record
+    // is held by, so a summary asked here is found here again.
+    return RecordInsightsZone(
+      hostID: listScope.hostID.isEmpty ? nil : listScope.hostID, orgID: scope.orgID, recordKind: kind.rawValue, recordID: id, name: row.title,
+      stages: stages, stageID: openDeal ? currentStage : nil, proposeTask: proposeTask, proposeStage: proposeStage)
   }
 
   private func alertTitle(_ row: CrmRow) -> String {
@@ -659,8 +780,9 @@ struct RecordDetail: View {
         done("Email sent.")
       }
     case .task:
-      TaskSheet(title: "New task", initial: taskDraft(row), reference: reference) { draft in
+      TaskSheet(title: "New task", initial: proposedTask ?? taskDraft(row), reference: reference) { draft in
         try await api.saveTask(nil, draft)
+        proposedTask = nil
         done("Task added.")
       }
     case .status:
