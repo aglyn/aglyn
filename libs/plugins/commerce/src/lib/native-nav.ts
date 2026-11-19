@@ -71,12 +71,14 @@ export const NATIVE_NAV_ROWS: readonly NativeNavContribution[] = [
         nativeNavHubSection('host', '/products', 'analytics', 'Analytics', 'commerce.sales'),
         // The console's Settings group (`COMMERCE_CONSOLE_SECTIONS`): each page's own
         // settings, then the zone where other plugins' cards for that page land.
-        // Point of sale waits for its registers and hardware screens.
+        // Point of sale: natively its hardware shop and the readers waiting to be set up
+        // (AGL-4038); the registers and POS devices live in the POS app.
         nativeNavHubSection('host', '/products', 'payments', 'Payments', 'commerce.settingsPayments'),
         nativeNavHubSection('host', '/products', 'checkout', 'Checkout', 'commerce.settingsCheckout'),
         nativeNavHubSection('host', '/products', 'taxes', 'Taxes', 'commerce.settingsTaxes'),
         nativeNavHubSection('host', '/products', 'shipping', 'Shipping & delivery', 'commerce.settingsShipping'),
         nativeNavHubSection('host', '/products', 'notifications', 'Notifications', 'commerce.settingsNotifications'),
+        nativeNavHubSection('host', '/products', 'pos', 'Point of sale', 'commerce.hardware'),
         nativeNavHubSection('host', '/products', 'channels', 'Sales channels', 'commerce.settingsChannels'),
         nativeNavHubSection('host', '/products', 'integrations', 'Integrations', 'commerce.settings'),
       ],
