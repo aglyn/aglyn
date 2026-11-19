@@ -575,10 +575,16 @@ export const payHandler: PluginApiHandler = async (req, res) => {
       if (expanded.ok) intent = expanded.payload?.payment_intent ?? null
     }
     if (intent?.client_secret && intent?.status === 'requires_action') {
+      // The invoice's own Stripe page, for a buyer with no Stripe.js to take
+      // the bank's step in place: the native apps open it in the system's
+      // secure browser and then `settle`, as their Billing does for a plan
+      // change the bank has to confirm. The console ignores it.
+      const hostedInvoiceUrl = String(finalized.payload?.hosted_invoice_url ?? '')
       const payload = {
         requiresAction: true,
         paymentClientSecret: intent.client_secret,
         invoiceId,
+        ...(hostedInvoiceUrl.startsWith('https://') ? { hostedInvoiceUrl } : {}),
       }
       await claim.record(200, payload)
       return res.status(200).json(payload)

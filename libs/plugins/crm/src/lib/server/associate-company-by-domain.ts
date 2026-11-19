@@ -17,6 +17,7 @@
 
 import {
   companyDomainForEmail,
+  companyDomainMintable,
   companyNameForDomain,
   CRM_COLLECTIONS,
   crmReadTokens,
@@ -45,7 +46,14 @@ export type CompanyAssociation =
   | { outcome: 'linked' | 'created'; companyId: string }
   | {
       outcome: 'none'
-      reason: 'no-domain' | 'no-org' | 'ambiguous' | 'no-match' | 'failed'
+      reason:
+        | 'no-domain'
+        | 'no-org'
+        | 'ambiguous'
+        | 'no-match'
+        /** A school's or a student's domain: linked, never minted (AGL-4230). */
+        | 'not-mintable'
+        | 'failed'
     }
 
 /**
@@ -126,6 +134,9 @@ export async function associateCompanyByDomain(
     }
     if (!orgAutoCreatesCompanies(org)) {
       return { outcome: 'none', reason: 'no-match' }
+    }
+    if (!companyDomainMintable(domain)) {
+      return { outcome: 'none', reason: 'not-mintable' }
     }
 
     /*

@@ -222,7 +222,7 @@ fun AiSeoAuditCard(context: NativePluginContext) {
           }
         }
         OutlinedButton(onClick = ::stageSite, enabled = siteFields.isNotEmpty() && siteStaged != jobId, modifier = Modifier.testTag("ai-seo-stage-site")) { Text("Put in the form") }
-        if (siteStaged == jobId) NoticeBanner("In the SEO form below as unsaved changes. Review them, then press Save.", StatusTone.SUCCESS)
+        if (siteStaged == jobId) NoticeBanner(aiSeoStagedNote(siteFields), StatusTone.SUCCESS)
       }
 
       // The pages a fix was proposed for, or is still owed to; the check above lists the rest.

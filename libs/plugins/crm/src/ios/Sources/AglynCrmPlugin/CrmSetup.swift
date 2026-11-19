@@ -205,6 +205,7 @@ private struct EditFieldSheet: View {
 struct SettingsSection: View {
   let context: NativePluginContext
   let scope: CrmScope
+  let api: CrmAPI
   let reference: CrmReference
   @State private var error: String?
 
@@ -216,7 +217,7 @@ struct SettingsSection: View {
     Form {
       if let error { AglynNotice(error, tone: .error) { self.error = nil } }
       if !scope.canManage { AglynNotice(permissionRefusalText(ContractValues.shared.orgRoleGrants, key: crmSettingsKey), tone: .info) }
-      CrmDefaultSharingSection(context: context, scope: scope)
+      CrmDefaultSharingSection(context: context, scope: scope).disabled(!scope.canManage)
       Section {
         Toggle(
           "Make a company from a work address",
@@ -224,6 +225,7 @@ struct SettingsSection: View {
       } footer: {
         Text("When someone writes in from a business domain no company has yet.")
       }
+      .disabled(!scope.canManage)
       // A site's own default owner is set from that site; the workspace's page has none of its own.
       if !scope.orgLevel {
         Section("Default owner for this site") {
@@ -237,6 +239,7 @@ struct SettingsSection: View {
             ForEach(reference.members) { Text($0.label).tag($0.uid) }
           }
         }
+        .disabled(!scope.canManage)
       }
       Section {
         ForEach(reference.members) { member in
@@ -251,9 +254,11 @@ struct SettingsSection: View {
       } footer: {
         Text("New records without a rule's owner go to these people in turn.")
       }
+      .disabled(!scope.canManage)
+      // Templates are every CRM editor's, not a setting of the workspace's (`email-templates-card.tsx`).
+      CrmTemplatesSection(context: context, scope: scope, api: api)
     }
     .formStyle(.aglynGrouped)
-    .disabled(!scope.canManage)
     .accessibilityIdentifier("crm-settings")
   }
 

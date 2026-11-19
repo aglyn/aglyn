@@ -97,7 +97,7 @@
         "system.riskNotice:email": true,
         "system.dmcaCounterNotice:email": true,
         "system.bandwidthCeilingTripped:email": true,
-        "system.bandwidthCapEngaged:email": false,
+        "system.bandwidthCapEngaged:email": true,
         "system.billingWebhookHalfApplied:email": true,
         "system.disputeUnattributed:email": true,
         "system.operatorAlert:email": false
@@ -218,7 +218,7 @@
         "system.riskNotice:email": true,
         "system.dmcaCounterNotice:email": true,
         "system.bandwidthCeilingTripped:email": true,
-        "system.bandwidthCapEngaged:email": false,
+        "system.bandwidthCapEngaged:email": true,
         "system.billingWebhookHalfApplied:email": true,
         "system.disputeUnattributed:email": true,
         "system.operatorAlert:email": false
@@ -330,7 +330,7 @@
         "system.riskNotice:email": true,
         "system.dmcaCounterNotice:email": true,
         "system.bandwidthCeilingTripped:email": true,
-        "system.bandwidthCapEngaged:email": false,
+        "system.bandwidthCapEngaged:email": true,
         "system.billingWebhookHalfApplied:email": true,
         "system.disputeUnattributed:email": true,
         "system.operatorAlert:email": false
@@ -464,7 +464,7 @@
         "system.riskNotice:email": true,
         "system.dmcaCounterNotice:email": true,
         "system.bandwidthCeilingTripped:email": true,
-        "system.bandwidthCapEngaged:email": false,
+        "system.bandwidthCapEngaged:email": true,
         "system.billingWebhookHalfApplied:email": true,
         "system.disputeUnattributed:email": true,
         "system.operatorAlert:email": false

@@ -107,6 +107,8 @@ class ScreenBillingOverageTest {
         put("deals", buildJsonObject { put("count", parts.at("deals")) })
         put("api", buildJsonObject { put("count", case.at("apiRequests")) })
         put("emails", buildJsonObject { put("2026-10", case.at("emails")) })
+        // Both console switches on, so Starter's email band is quoted (AGL-4227).
+        put("config", json("""{"includedEmailBilledFrom":"2026-10"}"""))
       }
       val model = seeded(data, "2026-10")
       val context = model.context
@@ -126,7 +128,8 @@ class ScreenBillingOverageTest {
       }
       val emailRate = expect.num("emailRate")
       val emailOver = expect.num("emailOverage") ?: 0.0
-      val included = case.at("quotas").num("emailSendsPerMonth") ?: 0.0
+      // The band email is billed past: Starter's 1,000, else the campaign band.
+      val included = case.num("emailBand") ?: 0.0
       if (emailRate != null && emailOver > 0 && included > 0) {
         expected += "${count(emailOver)} emails over your included ${count(included)} this month at ${dollars(emailRate)}/1,000 — ≈${dollars(expect.num("emailUsd") ?: 0.0)} on this month's invoice. Transactional mail — receipts, invites, password resets — is never refused at the cap, so it is what takes an organization past the band."
       }

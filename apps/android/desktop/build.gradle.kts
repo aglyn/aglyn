@@ -110,6 +110,23 @@ compose.desktop {
       }
       macOS {
         bundleID = if (pos) "com.aglyn.pos.desktop" else "com.aglyn.app.desktop"
+        // Aglyn opens aglyn:// console links (AGL-4059, DesktopLinks). Windows has no scheme in Compose's packaging; a
+        // link reaches the app there on its command line.
+        if (!pos) {
+          infoPlist {
+            extraKeysRawXml = """
+              <key>CFBundleURLTypes</key>
+              <array>
+                <dict>
+                  <key>CFBundleURLName</key>
+                  <string>com.aglyn.app.desktop</string>
+                  <key>CFBundleURLSchemes</key>
+                  <array><string>aglyn</string></array>
+                </dict>
+              </array>
+            """.trimIndent()
+          }
+        }
         iconFile.set(project.file(if (pos) "icons/aglyn-pos.icns" else "icons/aglyn.icns"))
       }
     }

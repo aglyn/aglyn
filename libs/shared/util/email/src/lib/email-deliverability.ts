@@ -140,49 +140,12 @@ export function isRoleEmailAddress(email: unknown): boolean {
   return ROLE_LOCAL_PARTS.has(local)
 }
 
-/**
- * Domains that hand out a mailbox that expires. Not a complete list — no
- * list is — but the ones a signup form actually meets.
- */
-const DISPOSABLE_DOMAINS: ReadonlySet<string> = new Set([
-  '10minutemail.com',
-  '20minutemail.com',
-  'burnermail.io',
-  'discard.email',
-  'dispostable.com',
-  'emailondeck.com',
-  'fakeinbox.com',
-  'getairmail.com',
-  'getnada.com',
-  'guerrillamail.com',
-  'guerrillamail.net',
-  'guerrillamail.org',
-  'guerrillamailblock.com',
-  'maildrop.cc',
-  'mailinator.com',
-  'mailinator.net',
-  'mailnesia.com',
-  'mintemail.com',
-  'mohmal.com',
-  'mytemp.email',
-  'sharklasers.com',
-  'spamgourmet.com',
-  'temp-mail.org',
-  'tempail.com',
-  'tempmail.com',
-  'tempmailo.com',
-  'tempr.email',
-  'throwawaymail.com',
-  'trashmail.com',
-  'trashmail.de',
-  'yopmail.com',
-  'yopmail.net',
-])
+// The disposable-mailbox list lives in its own pure leaf, so the CRM's
+// company rules and the native apps can read it without this module
+// (AGL-4230).
+import { isDisposableEmailDomain } from './disposable-email-domains'
 
-/** Whether a domain is a disposable-mailbox provider. */
-export function isDisposableEmailDomain(domain: unknown): boolean {
-  return DISPOSABLE_DOMAINS.has(normalizeMailHost(domain))
-}
+export { isDisposableEmailDomain }
 
 /**
  * The providers a mistyped domain is compared against. Long labels only: a

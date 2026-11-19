@@ -1095,6 +1095,16 @@ public enum ScreenValues {
     ]
   }
 
+  /// `2026-11-15` as `Nov 15, 2026`, with no time zone in between; nil for anything that is not a plain calendar day.
+  static func calendarDayText(_ text: String) -> String? {
+    let parts = text.split(separator: "-", omittingEmptySubsequences: false)
+    guard text.count == 10, parts.count == 3, let year = Int(parts[0]), let month = Int(parts[1]), let day = Int(parts[2]),
+      parts[0].count == 4, (1...12).contains(month), (1...31).contains(day)
+    else { return nil }
+    let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    return "\(months[month - 1]) \(day), \(year)"
+  }
+
   private static func dateText(_ millis: Int64, _ pattern: String) -> String {
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -1111,6 +1121,18 @@ public enum ScreenValues {
     case .bool(let flag)?: flag ? 1 : 0
     default: nil
     }
+  }
+
+  /// `fixed/N`: `value` to exactly `places` decimals, half away from zero, without grouping (`toFixed`).
+  static func fixedText(_ value: Double, places: Int) -> String {
+    var scale = 1.0
+    for _ in 0..<places { scale *= 10 }
+    let scaled = (abs(value) * scale + 0.5).rounded(.down)
+    let whole = Int64((scaled / scale).rounded(.down))
+    let fraction = Int64(scaled - Double(whole) * scale)
+    let raw = String(fraction)
+    let digits = places > 0 ? "." + String(repeating: "0", count: max(0, places - raw.count)) + raw : ""
+    return (value < 0 && scaled > 0 ? "-" : "") + String(whole) + digits
   }
 
   /// Groups thousands with commas and keeps up to `fraction` decimals.
@@ -1189,6 +1211,18 @@ public enum ScreenValues {
     }.joined(separator: " · ")
   }
 
+  /// A `yyyy-MM-dd` day's local midnight in Unix seconds; with `end`, the next day's (an inclusive day's exclusive bound).
+  static func daySeconds(_ day: String, end: Bool) -> Int64? {
+    let pieces = day.prefix(10).split(separator: "-").compactMap { Int($0) }
+    guard pieces.count == 3 else { return nil }
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = .current
+    guard let start = calendar.date(from: DateComponents(year: pieces[0], month: pieces[1], day: pieces[2])),
+      let at = end ? calendar.date(byAdding: .day, value: 1, to: start) : start
+    else { return nil }
+    return Int64(at.timeIntervalSince1970)
+  }
+
   /// A value in a named format. Unknown formats print the plain text.
   public static func formatted(_ value: JSONValue?, as format: String, in context: JSONValue) -> String {
     // `cents/<currency path>` reads the currency beside the amount.
@@ -1200,6 +1234,9 @@ public enum ScreenValues {
     }
     switch name {
     case "date":
+      // A calendar day as stored (`2026-11-15`, a waiver's day key) is that day wherever the device is; only a moment is
+      // read in the device's time zone (the console's `formatDayKey` reads a day key in UTC).
+      if case .string(let text)? = value, let day = calendarDayText(text) { return day }
       return epochMillis(value).map { dateText($0, "MMM d, yyyy") } ?? text(value)
     case "datetime":
       return epochMillis(value).map { dateText($0, "MMM d, yyyy, h:mm a") } ?? text(value)
@@ -1240,6 +1277,10 @@ public enum ScreenValues {
       return formatOrderMoney(Int((amount * 100).rounded()), currency: "USD")
     case "bytes":
       return number(value).map(bytesText) ?? text(value)
+    // `fixed/N`: exactly N decimals, no grouping, as JavaScript's `toFixed` writes a figure (`$0.0123` an Assist cost).
+    case "fixed":
+      guard let amount = number(value) else { return text(value) }
+      return fixedText(amount, places: parts.count > 1 ? max(0, Int(parts[1]) ?? 2) : 2)
     case "megabytes":
       // Bytes as megabytes to one decimal, plain so a meter can read it back (the storage band's figure).
       return number(value).map { numberText(($0 / 1_048_576 * 10).rounded() / 10) } ?? text(value)
@@ -1293,6 +1334,10 @@ public enum ScreenValues {
       if truthy(value) { return "#\(text(value))" }
       let id = parts.count > 1 ? text(lookup(parts[1], in: context)) : ""
       return id.isEmpty ? "#\u{2014}" : "#\(id.suffix(6).uppercased())"
+    case "dayseconds":
+      // `dayseconds` (or `dayseconds/end`): a picked day, `2026-11-01`, as the Unix seconds of its local midnight (or of the
+      // next day's), the bounds the console's invoice filters ask Stripe for (`planInvoiceQuery`). No day, nothing.
+      return daySeconds(text(value), end: parts.count > 1 && parts[1] == "end").map(String.init) ?? ""
     case "isodate":
       // A UTC day as `2026-10-09`: the day a stay starts on, which a device's zone must not move.
       guard let at = epochMillis(value) else { return "\u{2014}" }

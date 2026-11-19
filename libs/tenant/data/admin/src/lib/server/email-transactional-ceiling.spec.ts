@@ -227,6 +227,7 @@ describe('the claim against the organization’s day', () => {
       allowed: false,
       ceiling: 3,
       used: 3,
+      period: 'day',
       retryAtMs: transactionalCeilingResetMs(DAY_1),
     })
     // The refused claim wrote nothing to the counter.
@@ -312,6 +313,60 @@ describe('the claim against the organization’s day', () => {
         firestore: broken,
       }),
     ).resolves.toEqual({ allowed: true, claim: null })
+  })
+})
+
+describe('Free\'s hard monthly cap, on the same claim (AGL-4227)', () => {
+  const monthly = (store: Store, monthlyCeiling: number, nowMs = DAY_1, count = 1) =>
+    claimTransactionalEmailSends({
+      orgId: ORG,
+      hostId: 'host-a',
+      count,
+      ceiling: 200,
+      monthlyCeiling,
+      context: 'form confirmation',
+      nowMs,
+      firestore: fakeFirestore(store),
+    })
+  const monthOf = (store: Store) =>
+    Number(store.docs.get(`orgs/${ORG}/counters/${TRANSACTIONAL_EMAIL_SENDS_COUNTER}`)?.['2026-11'] ?? 0)
+
+  it('counts the month on its own field, and refuses past the cap until the 1st', async () => {
+    const store = newStore()
+    await expect(monthly(store, 2)).resolves.toMatchObject({
+      allowed: true,
+      claim: { monthKey: '2026-11', count: 1 },
+    })
+    await monthly(store, 2, DAY_2)
+    expect(monthOf(store)).toBe(2)
+    // The next DAY does not reset the month.
+    const refused = await monthly(store, 2, DAY_2)
+    expect(refused).toMatchObject({ allowed: false, period: 'month', ceiling: 2, used: 2 })
+    expect(refused.retryAtMs).toBe(Date.UTC(2026, 11, 1))
+    expect(monthOf(store)).toBe(2)
+  })
+
+  it('a month that starts with no field counts from zero — never refuses for mail sent before it shipped', async () => {
+    const store = newStore()
+    // A day field already holding this month's earlier mail (the daily
+    // ceiling's), and no month field yet: the cap starts at 0.
+    store.docs.set(`orgs/${ORG}/counters/${TRANSACTIONAL_EMAIL_SENDS_COUNTER}`, { '2026-11-02': 150 })
+    await expect(monthly(store, 300)).resolves.toMatchObject({ allowed: true, used: 0 })
+    expect(monthOf(store)).toBe(1)
+  })
+
+  it('a plan with no cap writes no month field', async () => {
+    const store = newStore()
+    await claim(store, 5)
+    expect(monthOf(store)).toBe(0)
+  })
+
+  it('a released claim gives the month back too', async () => {
+    const store = newStore()
+    const granted = await monthly(store, 10, DAY_1, 3)
+    expect(monthOf(store)).toBe(3)
+    await releaseTransactionalEmailSends(granted.claim, fakeFirestore(store))
+    expect(monthOf(store)).toBe(0)
   })
 })
 
