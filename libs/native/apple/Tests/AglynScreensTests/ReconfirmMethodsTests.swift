@@ -31,4 +31,10 @@ final class ReconfirmMethodsTests: XCTestCase {
     // A passkey is not offered beside the account's own way.
     XCTAssertEqual(Reconfirm.methods(providers: ["google.com"], offers: everything), [.google])
   }
+
+  func testClosingTheAccountSignsOutAndNothingElseDoes() {
+    XCTAssertTrue(Reconfirm.signsOut(url: "/api/account/close"))
+    XCTAssertFalse(Reconfirm.signsOut(url: "/api/account/export"))
+    XCTAssertFalse(Reconfirm.signsOut(url: nil))
+  }
 }

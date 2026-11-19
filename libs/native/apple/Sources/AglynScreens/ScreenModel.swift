@@ -22,6 +22,8 @@ public struct AccountOperations: Sendable {
   public var linkGoogle: @Sendable (_ authenticate: @escaping @Sendable (URL, String) async throws -> URL) async throws -> Void
   /// The words a refusal from either shows.
   public var message: @Sendable (_ error: Error) -> String
+  /// Signs the account in use out: after Close account, whose account no longer exists (the console goes to `/signout`).
+  public var signOut: @Sendable () async -> Void
 
   public init(
     changePassword: @escaping @Sendable (String, String) async throws -> Void = { _, _ in
@@ -34,8 +36,10 @@ public struct AccountOperations: Sendable {
     linkGoogle: @escaping @Sendable (@escaping @Sendable (URL, String) async throws -> URL) async throws -> Void = { _ in
       throw ConsoleAPIError(status: 0, message: "Connecting Google is not set up in this build.")
     },
-    message: @escaping @Sendable (Error) -> String = { $0.localizedDescription }
+    message: @escaping @Sendable (Error) -> String = { $0.localizedDescription },
+    signOut: @escaping @Sendable () async -> Void = {}
   ) {
+    self.signOut = signOut
     self.changePassword = changePassword
     self.updateDisplayName = updateDisplayName
     self.unlinkProvider = unlinkProvider

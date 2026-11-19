@@ -1350,6 +1350,7 @@ internal fun rememberScreenSession(
         services.auth.unlinkProvider(provider)
         freshClaims()
       },
+      signOut = { services.signOut() },
     ),
   )
 }

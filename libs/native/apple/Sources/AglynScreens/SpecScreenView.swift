@@ -761,6 +761,11 @@ struct SpecScreenBody: View {
       #if os(iOS)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
       #endif
+      // Close account succeeded: the account is gone, so the app signs out at once, as the console does.
+      if Reconfirm.signsOut(url: action.url) {
+        await session.account.signOut()
+        return
+      }
       let after = ScreenContext.with(scope, "response", response ?? .null)
       if let instead = action.insteadEntry(in: after) {
         revealed = (

@@ -50,6 +50,14 @@ public enum Reconfirm {
     providers.first { $0.hasPrefix("saml.") } ?? providers.first { $0.hasPrefix("oidc.") }
   }
 
+  /// Close account's route (AGL-1140). Its contract: the client signs the person out on any 2xx, because the account
+  /// behind the session no longer exists and every later request would fail in a way that reads like a bug (the
+  /// console goes straight to `/signout`).
+  public static let closeAccountRoute = "/api/account/close"
+
+  /// Whether a finished action closed the account, so the app signs out.
+  public static func signsOut(url: String?) -> Bool { url == closeAccountRoute }
+
   /// What the sheet says when this app can run none of the account's ways.
   public static let noMethodMessage =
     "This app cannot ask for this account's sign-in method. Sign out, sign in again, then try this within five minutes."

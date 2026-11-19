@@ -29,6 +29,15 @@ object Reconfirm {
     return if (own.isEmpty() && offers.passkey && !federated) listOf(ReconfirmMethod.PASSKEY) else own
   }
 
+  /**
+   * Close account's route (AGL-1140). Its contract: the client signs the person out on any 2xx, because the account behind the
+   * session no longer exists and every later request would fail in a way that reads like a bug (the console goes to `/signout`).
+   */
+  const val CLOSE_ACCOUNT_ROUTE = "/api/account/close"
+
+  /** Whether a finished action closed the account, so the app signs out. */
+  fun signsOut(url: String?): Boolean = url == CLOSE_ACCOUNT_ROUTE
+
   /** What the dialog says when this app can run none of the account's ways. */
   const val NO_METHOD_MESSAGE =
     "This app cannot ask for this account's sign-in method. Sign out, sign in again, then try this within five minutes."

@@ -338,6 +338,11 @@ private fun SpecBodyContent(
         }
       }
       is ActionOutcome.Done -> {
+        // Close account succeeded: the account is gone, so the app signs out at once, as the console does.
+        if (Reconfirm.signsOut(action.url)) {
+          session.account.signOut()
+          return
+        }
         val after = ScreenContext.with(actionScope, "response", outcome.response)
         val instead = action.insteadEntry(after)
         if (instead != null) {

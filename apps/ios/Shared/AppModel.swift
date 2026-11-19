@@ -217,7 +217,8 @@ final class AppModel {
             firebaseIDToken: { try await auth.idToken(forceRefresh: true) }, authenticate: authenticate)
           await self?.refreshClaims(force: true)
         },
-        message: { passwordChangeMessage($0) }),
+        message: { passwordChangeMessage($0) },
+        signOut: { [weak self] in await self?.signOut() }),
       googleConfigured: config?.google != nil, passkeyRelyingParty: config?.passkeyRelyingParty,
       orgPermissions: orgAccess.workspacePermissions, sitePermissions: orgAccess.pickedSitePermissions,
       permissionsSiteID: orgAccess.pickedSiteID,

@@ -29,4 +29,10 @@ class ReconfirmMethodsTest {
     assertEquals(emptyList(), Reconfirm.methods(listOf("saml.acme"), Reconfirm.Offers(passkey = true)))
     assertEquals(listOf(ReconfirmMethod.GOOGLE), Reconfirm.methods(listOf("google.com"), everything))
   }
+
+  @Test fun closingTheAccountSignsOutAndNothingElseDoes() {
+    assertEquals(true, Reconfirm.signsOut("/api/account/close"))
+    assertEquals(false, Reconfirm.signsOut("/api/account/export"))
+    assertEquals(false, Reconfirm.signsOut(null))
+  }
 }

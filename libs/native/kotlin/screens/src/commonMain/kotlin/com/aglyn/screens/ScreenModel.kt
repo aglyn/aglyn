@@ -54,6 +54,8 @@ data class AccountOperations(
   val unlinkProvider: suspend (providerId: String) -> Unit = {
     throw IllegalStateException("Disconnecting a sign-in method is not available here.")
   },
+  /** Signs the account in use out: after Close account, whose account no longer exists (the console goes to `/signout`). */
+  val signOut: suspend () -> Unit = {},
 )
 
 /**
