@@ -134,6 +134,7 @@ import androidx.compose.material.icons.outlined.AddCard
 import androidx.compose.material.icons.outlined.CreditScore
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.PrivacyTip
+import androidx.compose.material.icons.outlined.BackHand
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.AltRoute
@@ -414,6 +415,7 @@ object AglynIcons {
     "archive" to Icons.Outlined.Archive,
     "lock" to Icons.Outlined.Lock,
     "privacy_tip" to Icons.Outlined.PrivacyTip,
+    "back_hand" to Icons.Outlined.BackHand,
     "receipt_long" to Icons.Outlined.ReceiptLong,
     "text_fields" to Icons.Outlined.TextFields,
     "lock_open" to Icons.Outlined.LockOpen,

@@ -245,6 +245,8 @@ export interface AssistEditNode {
   props: Record<string, unknown>
   sx?: Record<string, unknown>
   hidden?: boolean
+  /** The layer name, when the request gave the new element one (AGL-4235). */
+  name?: string
 }
 
 /**

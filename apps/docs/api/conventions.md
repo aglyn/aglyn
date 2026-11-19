@@ -55,6 +55,8 @@ back with 60 rows — or with none — and `has_more: true`. The full list:
 | Endpoint | What is dropped after the read |
 | --- | --- |
 | [Products](resources/products.md), [media](resources/media.md) | Rows deleted since they were written. |
+| [Pages](resources/pages.md) | What is neither a page nor a folder: email designs, error pages, collection templates, deleted pages. |
+| [Templates](resources/templates.md) | Stored templates that are not the site's page templates: component and layout templates, deleted ones. |
 | [Orders](resources/orders.md) `?channel=online` | `online` is the default rather than a stored value, so older orders carry no `channel` field to match. |
 | [Contacts](resources/contacts.md#combined-filter) `?email=` **with** `?tag=` | `email` narrows the query; `tag` is checked on the result. |
 | [Form submissions](resources/form-submissions.md#read-filter) `?form=` or `?formId=` **with** `?read=` | The form filter narrows the query; `read` is checked on the result. |
@@ -155,11 +157,13 @@ errors add a `code` with the specific detail.
 | `400` | `bad_request` | Failed validation (`code: "validation_failed"`). |
 | `401` | `unauthorized` | Missing, malformed, revoked, or expired key. |
 | `403` | `plan_required` | The organization's plan doesn't include what the call needs. `code` says which thing — see [below](#plan-required). |
-| `403` | `insufficient_scope` | The key lacks the required scope (`code` is the scope). |
+| `403` | `insufficient_scope` | The key lacks the required scope (`code` is the scope). A change to a [published page](resources/pages.md#what-visitors-see) answers this with `code: "sites:publish"` when the key has `pages:write` but not `sites:publish`. |
 | `403` | `forbidden` | Not permitted for another reason, named by `code`. `code: "site_permission_required"` — a [connected app](#site-access) whose person lacks the site permission the call needs; the message names it. |
 | `404` | `not_found` | No such resource — or no such endpoint. |
 | `405` | `method_not_allowed` | Method not supported on that path; the `Allow` header lists what is. |
-| `409` | `conflict` | The request conflicts with current state. `code: "idempotency_in_progress"` — an earlier request with the same [`Idempotency-Key`](#idempotency) is still running. `code: "dataset_not_empty"` — the dataset you asked us to delete still holds records. `code: "contact_exists"` — that email is already a [contact](resources/contacts.md#contact-exists), and the message names its id. `code: "company_exists"` — that domain is already a [company](resources/companies.md#company-exists), likewise naming its id. `code: "order_transition"` — the [order](resources/orders.md#which-moves-are-allowed) cannot move to the status you asked for from the one it is in, and the message names that status. |
+| `409` | `conflict` | The request conflicts with current state. `code: "idempotency_in_progress"` — an earlier request with the same [`Idempotency-Key`](#idempotency) is still running. `code: "dataset_not_empty"` — the dataset you asked us to delete still holds records. `code: "contact_exists"` — that email is already a [contact](resources/contacts.md#contact-exists), and the message names its id. `code: "company_exists"` — that domain is already a [company](resources/companies.md#company-exists), likewise naming its id. `code: "order_transition"` — the [order](resources/orders.md#which-moves-are-allowed) cannot move to the status you asked for from the one it is in, and the message names that status. `code: "address_taken"` — another published [page](resources/pages.md) already has that address. `code: "stale"` — the page's content changed since the [`ifRevision`](resources/pages.md#if-revision) you sent. A [page publish](resources/sites.md#publish-refusals) refused for one of the reasons listed there. |
+| `413` | `payload_too_large` | Too large to store: an [upload](resources/media.md) over its size limit, or a [page](resources/pages.md#edit-content) that an edit would take over 900,000 bytes (`code: "page_too_large"`). |
+| `422` | `unprocessable_entity` | The request is well formed, and what it asks for is refused. `code: "edit_refused"` — a [page content edit](resources/pages.md#edit-content) the element does not take; `fields` names each problem by edit and member, and nothing is saved. |
 | `423` | — | The workspace or the [site](#site-access) is locked. A different body — see below. |
 | `429` | `rate_limited` | [Rate limit](rate-limits.md) exceeded. |
 | `500` | `internal_error` | Something went wrong on our side. Safe to retry. |
@@ -177,11 +181,16 @@ in the query or body — first checks that site, the same way for every resource
 3. **The site must not be locked.** A locked site answers `423` on every call that
    names it. A read-only lock still lets reads through and refuses writes.
 
-Then a connected app's **writes** to a site's products, search listing, business
-details or media, and a publish, also need its person's **Edit site content**
-permission on that site — the permission the same change needs in the console.
-Without it the answer is `403 forbidden` with `code: "site_permission_required"`.
-An API key is not asked.
+Then a connected app's **writes** to a site also need its person's permission on that
+site — the permission the same change needs in the console:
+
+| Write | Permission |
+| --- | --- |
+| Products, search listing, business details, media; creating a page, changing a page's name or description, editing what is on a page; a publish without `pages` | **Edit site content** |
+| Changing a page's address or place, deleting a page; a publish that names `pages` | **Publish site content** |
+
+Without it the answer is `403 forbidden` with `code: "site_permission_required"`, and
+the message names the permission. An API key is not asked.
 
 The lock answer is the one body outside the usual envelope:
 
@@ -252,7 +261,7 @@ site id for an hour; naming the plan is the answer they can act on.
 
 ## Idempotency
 
-Twenty-one operations accept an **`Idempotency-Key`** header:
+Twenty-three operations accept an **`Idempotency-Key`** header:
 
 | Operation | Key scoped to |
 | --- | --- |
@@ -267,6 +276,8 @@ Twenty-one operations accept an **`Idempotency-Key`** header:
 | `POST /v1/media` | the organization |
 | `POST /v1/sites/{siteId}/media` | that site |
 | `POST /v1/sites/{siteId}/products` | that site |
+| `POST /v1/sites/{siteId}/pages` | that site |
+| `POST /v1/sites/{siteId}/pages/{pageId}/content/edits` | that page |
 | `POST /v1/companies`, `DELETE /v1/companies/{companyId}` | the organization |
 | `POST /v1/deals`, `DELETE /v1/deals/{dealId}` | the organization |
 | `POST /v1/tasks`, `DELETE /v1/tasks/{taskId}` | the organization |
@@ -297,7 +308,9 @@ curl -X POST https://app.aglyn.com/api/v1/datasets/ds_1/records \
 ```
 
 - A fresh create returns **`201`**; a replay of a key we've already seen returns
-  **`200`** with the original record. Use the status to tell them apart.
+  **`200`** with the original record. Use the status to tell them apart. A
+  [page content edit](resources/pages.md#edit-content) creates no record, so its first
+  answer and its replay are both `200`, the replay being the first answer verbatim.
 - Keys are scoped to the **object in the table above** and to the **operation**, and
   are remembered for **30 days**. Use a UUID per logical operation, and don't reuse
   one key across datasets: the second dataset treats it as a separate operation and

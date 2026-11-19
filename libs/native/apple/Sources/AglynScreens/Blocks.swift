@@ -5,6 +5,7 @@ import AglynContracts
 import AglynCore
 import AglynPluginHost
 import AglynUI
+import AuthenticationServices
 import SwiftUI
 
 /// Label and value rows. A row may copy its value, show it as a status chip,
@@ -668,9 +669,9 @@ struct FieldInput: View {
           TextField(label, text: text, prompt: Text(field.placeholder ?? label))
             #if os(iOS)
               .keyboardType(keyboard)
-              .textInputAutocapitalization(field.kind == "text" ? .sentences : .never)
+              .textInputAutocapitalization(field.kind == "text" && !field.verbatim ? .sentences : .never)
             #endif
-            .autocorrectionDisabled(field.kind != "text")
+            .autocorrectionDisabled(field.kind != "text" || field.verbatim)
         }
         .aglynFieldLabel(label, value: text.wrappedValue, prompt: field.placeholder)
       }
@@ -776,6 +777,22 @@ struct FormBlock: View {
     }
   }
 
+  /// The form's first `refuse` entry that refuses what is typed: the console's pre-save check (a plugin's `validate`),
+  /// said beside Save, which it holds back. An entry is `{ when, text }`, or `{ check, site }` naming a check both kits
+  /// implement (`PluginSettingsChecks`), asked over the values the form saves (on a site, the values it will run with).
+  private var refused: String? {
+    let filled = filled
+    for entry in block["refuse"].array {
+      if let check = entry["check"]?.stringValue {
+        let values = PluginSettingsChecks.values(in: filled, site: entry["site"] == .bool(true))
+        if let text = PluginSettingsChecks.refusal(check, values) { return text }
+      } else if ScreenValues.condition(entry["when"]?.stringValue, in: filled) {
+        return ScreenValues.render(entry["text"]?.stringValue ?? "", in: filled)
+      }
+    }
+    return nil
+  }
+
   /// A load this form is seeded from is only the cache's answer yet.
   private var held: Bool {
     !FormEdits.heldBy(object: block["object"]?.stringValue, initials: fields.compactMap(\.initial), checking: context["checking"]).isEmpty
@@ -795,7 +812,10 @@ struct FormBlock: View {
       if let action = block["submit"].flatMap(ActionSpec.init), ScreenValues.condition(action.when, in: scope) {
         // One Save per form at the standard control size, trailing (spec 8): never a full-width bar per form.
         HStack(spacing: AglynSpace.one) {
-          if let refusal = heldPress.refusal, dirty {
+          if let refused {
+            Text(refused).font(AglynFont.caption).foregroundStyle(AglynColor.warning)
+              .accessibilityIdentifier("refused-\(block.id)")
+          } else if let refusal = heldPress.refusal, dirty {
             Text(refusal).font(AglynFont.caption).foregroundStyle(AglynColor.warning)
               .accessibilityIdentifier("unconfirmed-\(block.id)")
           } else if held && dirty {
@@ -810,12 +830,12 @@ struct FormBlock: View {
           }
           .buttonStyle(.aglynProminent)
           .controlSize(.regular)
-          .disabled(busy || heldPress.waiting || missing || action.disabledWhen.map { ScreenValues.condition($0, in: filled) } == true)
+          .disabled(busy || heldPress.waiting || missing || refused != nil || action.disabledWhen.map { ScreenValues.condition($0, in: filled) } == true)
           .accessibilityIdentifier("submit-\(block.id)")
         }
         .aglynHeldPress($heldPress, checking: held, refusal: FormEdits.unconfirmedText(block["checking"]?.stringValue)) {
           // The save of the form as it is now: the edits replayed onto the server's copy, if they still pass.
-          if !missing, action.disabledWhen.map({ ScreenValues.condition($0, in: filled) }) != true { save(action) }
+          if !missing, refused == nil, action.disabledWhen.map({ ScreenValues.condition($0, in: filled) }) != true { save(action) }
         }
       }
     }
@@ -1064,24 +1084,49 @@ struct LookupSheet: View {
   }
 }
 
-/// "Confirm it is you": the password again, so the route sees a fresh sign-in.
+/// "Confirm it is you": the account signs in again its own way, so the route sees a fresh sign-in (AGL-1140). As the
+/// console's close-account dialog: the password when the account has one, else its own provider (Apple, Google, single
+/// sign-on) again; `Reconfirm.methods` decides which, from the account's sign-in methods and what this build can run.
 struct ReauthSheet: View {
-  let email: String?
+  let session: ScreenSession
   let message: String?
-  let confirm: (String) async throws -> Void
+  /// The console client a passkey sign-in asks for its challenge.
+  let api: ConsoleAPIClient?
+  /// Runs once the account is confirmed: the step that asked goes again.
+  let confirmed: () async -> Void
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.webAuthenticationSession) private var webAuthentication
+  @Environment(\.authorizationController) private var authorizationController
+  @Environment(\.colorScheme) private var colorScheme
+  @State private var methods: [ReconfirmMethod]?
   @State private var password = ""
   @State private var error: String?
-  @State private var busy = false
+  @State private var working: ReconfirmMethod?
+  @State private var appleNonce = ""
+
+  private var others: [ReconfirmMethod] { (methods ?? []).filter { $0 != .password } }
 
   var body: some View {
     NavigationStack {
       Form {
         Section {
           Text(message ?? "Confirm it is you to continue.").font(AglynFont.subheadline)
-          if let email { LabeledContent("Account", value: email) }
-          SecureField("Password", text: $password).textContentType(.password)
-            .accessibilityIdentifier("reauth-password")
+          if let email = session.email { LabeledContent("Account", value: email) }
+          if methods?.contains(.password) == true {
+            SecureField("Password", text: $password).textContentType(.password)
+              .accessibilityIdentifier("reauth-password")
+          }
+        }
+        if !others.isEmpty {
+          Section {
+            ForEach(others, id: \.self) { method in button(method) }
+          } footer: {
+            Text(methods?.contains(.password) == true ? "Or sign in again another way." : "Sign in again to confirm it is you.")
+          }
+        }
+        if methods?.isEmpty == true {
+          Section { AglynNotice(Reconfirm.noMethodMessage, tone: .info) }
+            .accessibilityIdentifier("reauth-no-method")
         }
         if let error { Section { AglynNotice(error, tone: .error) } }
       }
@@ -1091,23 +1136,111 @@ struct ReauthSheet: View {
       .aglynScreenTitle("Confirm it is you")
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-        ToolbarItem(placement: .confirmationAction) {
-          Button("Continue") {
-            busy = true
-            Task {
-              do {
-                try await confirm(password)
-              } catch {
-                self.error = signInErrorMessage(error)
-              }
-              busy = false
-            }
+        if methods?.contains(.password) == true {
+          ToolbarItem(placement: .confirmationAction) {
+            Button("Continue") { run(.password) { try await session.reconfirm(.password(password)) } }
+              .disabled(password.isEmpty || working != nil)
+              .accessibilityIdentifier("reauth-continue")
           }
-          .disabled(password.isEmpty || busy)
         }
       }
+      .task { if methods == nil { methods = await session.reconfirmMethods() } }
     }
-    .aglynSheetMinimumSize(width: 360, height: 260)
+    .aglynSheetMinimumSize(width: 360, height: 300)
+  }
+
+  @ViewBuilder
+  private func button(_ method: ReconfirmMethod) -> some View {
+    switch method {
+    case .apple:
+      SignInWithAppleButton(.continue) { request in
+        let nonce = AppleSignInNonce.make()
+        appleNonce = nonce.raw
+        request.requestedScopes = []
+        request.nonce = nonce.hashed
+      } onCompletion: { result in
+        apple(result)
+      }
+      .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+      .frame(height: AglynAuthTokens.Metrics.buttonHeight)
+      .disabled(working != nil)
+      .accessibilityIdentifier("reauth-apple")
+    case .google:
+      Button("Continue with Google") { browser(.google) }
+        .buttonStyle(AglynGoogleButtonStyle())
+        .disabled(working != nil)
+        .accessibilityIdentifier("reauth-google")
+    case .singleSignOn:
+      Button { browser(.singleSignOn) } label: {
+        AglynButtonLabel("Continue with SSO", systemImage: "key", busy: working == .singleSignOn)
+      }
+      .buttonStyle(AglynButtonStyle(.secondary))
+      .disabled(working != nil)
+      .accessibilityIdentifier("reauth-sso")
+    case .passkey:
+      Button { passkey() } label: {
+        AglynButtonLabel("Use a passkey", systemImage: "lock", busy: working == .passkey)
+      }
+      .buttonStyle(AglynButtonStyle(.secondary))
+      .disabled(working != nil || api == nil || session.passkeyRelyingParty == nil)
+      .accessibilityIdentifier("reauth-passkey")
+    case .password:
+      EmptyView()
+    }
+  }
+
+  /// Runs one way of confirming; a canceled sheet is not a failure (the console ignores `popup-closed-by-user`).
+  private func run(_ method: ReconfirmMethod, _ body: @escaping () async throws -> Void) {
+    working = method
+    error = nil
+    Task {
+      do {
+        try await body()
+        await confirmed()
+      } catch {
+        if !isCanceledSignIn(error) { self.error = Self.message(error, method) }
+      }
+      working = nil
+    }
+  }
+
+  private func browser(_ method: ReconfirmMethod) {
+    run(method) { [webAuthentication] in
+      try await session.reconfirmInBrowser(method) { url, scheme in
+        try await webAuthentication.authenticate(using: url, callbackURLScheme: scheme, preferredBrowserSession: .shared)
+      }
+    }
+  }
+
+  private func apple(_ result: Result<ASAuthorization, Error>) {
+    switch result {
+    case .failure(let failure):
+      if !isCanceledSignIn(failure) { error = "Sign in with Apple did not finish. Try again." }
+    case .success(let authorization):
+      guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+        let data = credential.identityToken, let token = String(data: data, encoding: .utf8), !appleNonce.isEmpty
+      else {
+        error = "Sign in with Apple did not finish. Try again."
+        return
+      }
+      let nonce = appleNonce
+      run(.apple) { try await session.reconfirm(.apple(idToken: token, rawNonce: nonce)) }
+    }
+  }
+
+  private func passkey() {
+    guard let api, let relyingParty = session.passkeyRelyingParty else { return }
+    run(.passkey) { [authorizationController] in
+      let token = try await PasskeySignIn.token(api: api, relyingParty: relyingParty, controller: authorizationController)
+      try await session.reconfirm(.customToken(token, tenantID: nil))
+    }
+  }
+
+  static func message(_ error: Error, _ method: ReconfirmMethod) -> String {
+    if let google = error as? GoogleLinkError { return google.message }
+    if method == .passkey, PasskeySignIn.failed(error) { return PasskeySignIn.message(for: error) }
+    if let api = error as? ConsoleAPIError { return api.message }
+    return signInErrorMessage(error)
   }
 }
 

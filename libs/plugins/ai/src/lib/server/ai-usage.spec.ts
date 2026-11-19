@@ -308,6 +308,18 @@ describe('/api/ai/usage — what leaves (AGL-2928)', () => {
       ['user-a', 700],
       ['user-b', 300],
     ])
+    expect(body.hostCells).toBeUndefined()
+  })
+
+  it('answers the apps’ collaborators column one cell per asked person, 0 for someone with nothing this month', async () => {
+    const body = await (
+      await get({ hostId: 'host-1', view: 'prepared', uids: 'user-a,user-c,, user-b' })
+    ).json()
+    expect(body.hostCells).toEqual({ 'user-a': 700, 'user-c': 0, 'user-b': 300 })
+    // The table is still there for anything else that reads it.
+    expect(body.rows).toHaveLength(2)
+    // No site named: no cells, whatever the view.
+    expect((await (await get({ view: 'prepared', uids: 'user-a' })).json()).hostCells).toBeUndefined()
   })
 
   it('streams the CSV whole across a roster larger than one page, and promises its row count', async () => {

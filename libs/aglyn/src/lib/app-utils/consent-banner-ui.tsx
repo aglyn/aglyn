@@ -33,6 +33,7 @@ import {
   useState,
 } from 'react'
 import type { ConsentPreferencesDialog } from './consent-preferences-dialog'
+import { CONSENT_OPT_OUT_TITLE } from './privacy-choices'
 import {
   readStoredVisitorConsent,
   refusalStatusFor,
@@ -88,24 +89,9 @@ import {
  * outrank a popup backdrop no theme knows about.
  */
 
-/**
- * The title of the persistent opt-out control — **fixed by regulation, not a
- * copy choice**.
- *
- * Once a business "shares" personal information for cross-context behavioral
- * advertising, CCPA §1798.135(b) requires a clear and conspicuous opt-out
- * link, and CCPA regs §7015 permit a SINGLE combined link only when it is
- * titled with these exact words. Aglyn crossed that line when advertising
- * technology went onto aglyn.com, so the pill's previous label — "Privacy
- * choices" — stopped being compliant the moment the tag shipped.
- *
- * Capitalisation is part of the specified title. Do not sentence-case it to
- * match the rest of the overlay copy, do not shorten it to fit a narrow
- * viewport, and do not translate it away on a US-facing site: it is pinned by
- * `consent-opt-out-title.spec.tsx`, which renders the real control and reads
- * the text back.
- */
-export const CONSENT_OPT_OUT_TITLE = 'Your Privacy Choices'
+// The title of the persistent opt-out control, fixed by regulation (CCPA regs §7015): it lives in
+// `privacy-choices.ts`, a module with no imports, so the native apps read the same words through their contracts.
+export { CONSENT_OPT_OUT_TITLE }
 
 /**
  * The official CCPA **opt-out icon** — the other half of §7015, and the half

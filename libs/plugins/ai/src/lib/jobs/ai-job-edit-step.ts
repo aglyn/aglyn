@@ -19,6 +19,7 @@ import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { SCREEN_KIND_TEMPLATE } from '@aglyn/aglyn/app-utils/screen-route'
 import { screenSeoStageKey, SCREEN_SEO_TEXT_FIELDS } from '@aglyn/aglyn/app-utils/screen-seo-fields'
 import { hasConcurrentWrite, versionStamp } from '@aglyn/aglyn/app-utils/guarded-version-save'
+import { extractLayoutStyleOverrides, injectLayoutStyleOverrides } from '@aglyn/aglyn/app-utils/layout-style-overrides'
 import { decodeStoredNodes, encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { coeditMirrorRoomPath, VERSION_DRAFT_COLLECTION, VERSION_DRAFT_DOC_ID } from '@aglyn/aglyn/app-utils/version-draft'
 import { CanvasManager } from '@aglyn/aglyn/canvas-manager/canvas-manager'
@@ -27,7 +28,8 @@ import type { EditorSession } from '@aglyn/aglyn/plugin-manager/editor-sessions'
 import type { NodesMap } from '@aglyn/aglyn/types/nodes'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { resolveOrgIdForHost } from '@aglyn/tenant-data-admin/server/organizations'
-import { applyAssistEdit } from '../components/assist-edit-canvas'
+import { measureNodeMap } from '@aglyn/aglyn/app-utils/measure-node-map'
+import { applyAssistEdit, type AssistEditInserted } from '../components/assist-edit-canvas'
 import {
   AI_EDIT_COMPONENT_LEFT_OUT,
   AI_EDIT_EMAIL_COPY,
@@ -38,6 +40,7 @@ import {
   AI_EDIT_REFUSED_COPY,
   AI_EDIT_SEO_LEFT_OUT,
   AI_EDIT_STALE_COPY,
+  AI_EDIT_TOO_LARGE_COPY,
   AI_EDIT_VERSION_GONE_COPY,
   aiEditJobOutline,
   aiEditOutputNote,
@@ -270,7 +273,7 @@ export function aiApplyEditToNodes(
   nodes: NodesMap,
   proposal: AssistEditProposal,
   seo?: Partial<Record<(typeof SCREEN_SEO_TEXT_FIELDS)[number], string>>,
-): { ok: true; nodes: NodesMap } | { ok: false; reason: string } {
+): { ok: true; nodes: NodesMap; inserted: AssistEditInserted[] } | { ok: false; reason: string } {
   const canvas = aiEditCanvas(nodes)
   const fields: Record<string, (value: string) => void> = {}
   if (seo) {
@@ -285,7 +288,7 @@ export function aiApplyEditToNodes(
   }
   const applied = applyAssistEdit(canvas, proposal, session)
   if (applied.ok === false) return { ok: false, reason: applied.reason }
-  return { ok: true, nodes: canvas.toJSON().nodes as NodesMap }
+  return { ok: true, nodes: canvas.toJSON().nodes as NodesMap, inserted: applied.inserted ?? [] }
 }
 
 // ── Reading the document ──────────────────────────────────────────────────
@@ -361,8 +364,63 @@ function usableDraft(
   return { nodes, aiEditJobId: text(draft.get('aiEditJobId')) || null }
 }
 
+/**
+ * A version's own tree as the Besigner opens it (AGL-4235): the stored
+ * `nodes` with the version's layout style overrides parked on the root by the
+ * editor's own `injectLayoutStyleOverrides`. A draft the editor saves carries
+ * them there, so a draft built on this tree does too, and publishing it — from
+ * the editor or over the API — keeps them rather than clearing them. Null
+ * without a tree.
+ */
+export function aiEditSavedTree(version: FirebaseFirestore.DocumentSnapshot): NodesMap | null {
+  const nodes = decodeStoredNodes<NodesMap>(version.get('nodes'))
+  return nodes ? (injectLayoutStyleOverrides(nodes, version.get('layoutStyleOverrides')) as NodesMap) : null
+}
+
+/** The tree a change is built on, as it is stored now (AGL-4235). */
+export interface AiEditBase {
+  /**
+   * `draft` for the version's working draft, when the Besigner would still
+   * offer it; `saved` for the version's own tree otherwise.
+   */
+  from: 'draft' | 'saved'
+  /**
+   * The tree, as the Besigner would hold it: a draft's as its author left it,
+   * the saved version's with its layout style overrides on the root.
+   */
+  nodes: NodesMap
+  /**
+   * The `nodes` field as stored, exactly as read: what a revision of the tree
+   * is read off, so parking the overrides on the root never moves it.
+   */
+  stored: unknown
+  /** What stamped the draft, when a write did (`aiEditJobId`); null for a saved tree. */
+  stampedBy: string | null
+}
+
+/**
+ * The tree a change to a version is built on — the one rule, for the edit job,
+ * its write and a reader that shows a page as the next change will find it:
+ * the version's working draft when the Besigner would still offer it, so an
+ * author's work in progress is never thrown away; otherwise the version's own
+ * tree. `useDraft: false` is a change that lands somewhere other than the
+ * draft, built on the version alone. Null when neither has a tree.
+ */
+export function aiEditBase(
+  draft: FirebaseFirestore.DocumentSnapshot,
+  version: FirebaseFirestore.DocumentSnapshot,
+  options: { useDraft?: boolean } = {},
+): AiEditBase | null {
+  const usable = options.useDraft === false ? null : usableDraft(draft, version)
+  if (usable) return { from: 'draft', nodes: usable.nodes, stored: draft.get('nodes'), stampedBy: usable.aiEditJobId }
+  // A usable draft's root says what its author meant, overrides or none, so
+  // only the saved tree gets them, as the editor gives them when it opens it.
+  const nodes = aiEditSavedTree(version)
+  return nodes ? { from: 'saved', nodes, stored: version.get('nodes'), stampedBy: null } : null
+}
+
 /** A version's working draft document: the Besigner's, at the core's one address. */
-function draftRef(versions: FirebaseFirestore.CollectionReference, versionId: string): FirebaseFirestore.DocumentReference {
+export function draftRef(versions: FirebaseFirestore.CollectionReference, versionId: string): FirebaseFirestore.DocumentReference {
   return versions.doc(versionId).collection(VERSION_DRAFT_COLLECTION).doc(VERSION_DRAFT_DOC_ID)
 }
 
@@ -421,7 +479,9 @@ export async function readAiEditTarget(
     if (input.jobId && draft?.aiEditJobId === input.jobId) {
       return { ...base, sourceVersionId, nodes: {}, draft: null, written: { versionId: sourceVersionId, placement: 'draft' } }
     }
-    const nodes = decodeStoredNodes<NodesMap>(source.get('nodes'))
+    // The saved tree as the Besigner opens it, the page's layout style
+    // overrides on its root (see `aiEditSavedTree`).
+    const nodes = aiEditSavedTree(source)
     if (!nodes || !Object.keys(nodes).length) return { status: 400, error: AI_EDIT_NO_NODES_COPY }
     return { ...base, sourceVersionId, nodes, draft: draft ? { nodes: draft.nodes } : null, written: null }
   }
@@ -463,29 +523,77 @@ export function aiEditJobPlacement(input: {
 
 // ── Writing it ────────────────────────────────────────────────────────────
 
-export interface AiEditWriteInput {
+/** What a proposal built from the stored tree sees of the document, besides the tree (AGL-4235). */
+export interface AiEditWriteBase extends AiEditBase {
+  /** The document's current version, as the transaction reads it. */
+  pointerVersionId: string | null
+}
+
+export interface AiEditWriteInput<R = never> {
   hostId: string
   kind: AiEditTargetKind
   id: string
   sourceVersionId: string
-  /** The new version's id, which is the job's; also the stamp a draft it writes carries. */
+  /**
+   * A fresh id for this write: the new version's id, which is the job's, and
+   * the stamp a draft it writes carries, which is how a write asked again
+   * finds what it wrote. An API edit hands its own (AGL-4235).
+   */
   jobVersionId: string
   versioning: boolean
   /** The request asked for a new version (see {@link aiEditJobPlacement}). */
   newVersion: boolean
-  proposal: AssistEditProposal
+  /**
+   * The change. A model's proposal is checked before the write against the
+   * tree the model was shown, and the canvas's guards refuse it whole if an
+   * element changed since. A caller that holds no tree yet (AGL-4235) hands a
+   * function instead, given the tree exactly as this transaction reads it,
+   * and validates and builds the change on that, so what it checked and what
+   * is written are one tree. It refuses with `{ refused }`, and nothing is
+   * written.
+   */
+  proposal: AssistEditProposal | ((base: AiEditWriteBase) => AssistEditProposal | { refused: R })
   /** Whether the page's search fields may be written: a page no visitor reaches. */
   writeSeo: boolean
   versionName: string
+  /** Who the write is for: a member's uid, or a stable id for a writer that is no person. */
   uid: string
+  /**
+   * Who the write is for in words, written on a draft as `updatedByLabel`
+   * when given: an API key's or a connected app's name (AGL-4235). The job
+   * writes none.
+   */
+  updatedByLabel?: string
+  /**
+   * Refuse a tree larger than this many bytes, measured as the save measures
+   * it (`measureNodeMap`), and write nothing. Absent: not measured.
+   */
+  maxNodeBytes?: number
   /** The job the member started, stamped as `aiJobId` on a new version. */
   aiJobId: string
   now: Date
 }
 
-export type AiEditWrite =
-  | { ok: true; versionId: string; placement: AiEditPlacement; seoWritten: boolean }
-  | { ok: false; error: string }
+export type AiEditWrite<R = never> =
+  | {
+      ok: true
+      versionId: string
+      placement: AiEditPlacement
+      seoWritten: boolean
+      /**
+       * What this call wrote, when it wrote (not a run asked again): the
+       * stored tree's bytes, and the ids the canvas gave each insert's elements.
+       */
+      written?: { stored: Uint8Array; inserted: AssistEditInserted[] }
+    }
+  | {
+      ok: false
+      error: string
+      /** The caller's own refusal, from a proposal built on the stored tree. */
+      refused?: R
+      /** The tree would pass `maxNodeBytes`: its size. */
+      tooLarge?: { bytes: number }
+    }
 
 /**
  * The change written, in one transaction that reads the document as it is
@@ -494,14 +602,14 @@ export type AiEditWrite =
  * proposal to the stored nodes through the canvas's guards. An element that
  * changed since the model saw it refuses the whole change, as the editor does.
  */
-export async function writeAiEdit(firestore: Firestore, input: AiEditWriteInput): Promise<AiEditWrite> {
+export async function writeAiEdit<R = never>(firestore: Firestore, input: AiEditWriteInput<R>): Promise<AiEditWrite<R>> {
   const hostRef = firestore.collection('hosts').doc(input.hostId)
   const docRef = hostRef.collection(COLLECTIONS[input.kind]).doc(input.id)
   const versions = docRef.collection('versions')
   const sourceRef = versions.doc(input.sourceVersionId)
   const newRef = versions.doc(input.jobVersionId)
   const sourceDraftRef = draftRef(versions, input.sourceVersionId)
-  return firestore.runTransaction(async (tx): Promise<AiEditWrite> => {
+  return firestore.runTransaction(async (tx): Promise<AiEditWrite<R>> => {
     const [host, doc, source, already, draftDoc] = await Promise.all([
       tx.get(hostRef),
       tx.get(docRef),
@@ -525,23 +633,32 @@ export async function writeAiEdit(firestore: Firestore, input: AiEditWriteInput)
     })
     // Read again here, as the version is: an author who saved their draft,
     // or published it, since the read is what the change is built on now.
-    const draft = placement === 'draft' ? usableDraft(draftDoc, source) : null
-    if (draft?.aiEditJobId === input.jobVersionId) {
+    const base = aiEditBase(draftDoc, source, { useDraft: placement === 'draft' })
+    if (base?.from === 'draft' && base.stampedBy === input.jobVersionId) {
       return { ok: true, versionId: input.sourceVersionId, placement, seoWritten: false }
     }
-    const nodes = draft?.nodes ?? decodeStoredNodes<NodesMap>(source.get('nodes'))
-    if (!nodes) return { ok: false, error: AI_EDIT_NO_NODES_COPY }
+    if (!base) return { ok: false, error: AI_EDIT_NO_NODES_COPY }
+    const nodes = base.nodes
+    const built = typeof input.proposal === 'function' ? input.proposal({ ...base, pointerVersionId: pointer }) : input.proposal
+    if ('refused' in built) return { ok: false, error: AI_EDIT_REFUSED_COPY, refused: built.refused }
     const versionId = placement === 'draft' ? input.sourceVersionId : input.jobVersionId
     const seo: Partial<Record<(typeof SCREEN_SEO_TEXT_FIELDS)[number], string>> = {}
     const writeSeo = input.writeSeo && input.kind === 'screen' && !served
     const proposal: AssistEditProposal = {
-      ...input.proposal,
-      ops: writeSeo ? input.proposal.ops : input.proposal.ops.filter((op) => op.op !== 'setSeo'),
-      target: { ...input.proposal.target, versionId },
+      ...built,
+      ops: writeSeo ? built.ops : built.ops.filter((op) => op.op !== 'setSeo'),
+      target: { ...built.target, versionId },
     }
     const applied = aiApplyEditToNodes(nodes, proposal, writeSeo ? seo : undefined)
     if (applied.ok === false) return { ok: false, error: applied.reason === 'stale' ? AI_EDIT_STALE_COPY : AI_EDIT_REFUSED_COPY }
-    const packed = encodeStoredNodes(applied.nodes)
+    if (input.maxNodeBytes !== undefined) {
+      const { bytes } = measureNodeMap(applied.nodes)
+      if (bytes > input.maxNodeBytes) return { ok: false, error: AI_EDIT_TOO_LARGE_COPY, tooLarge: { bytes } }
+    }
+    // A draft keeps the overrides on its root, as the editor's own draft
+    // does; a version stores them beside its tree, never in it, as the
+    // editor's save lifts them out (the copy below keeps the field).
+    const packed = encodeStoredNodes(placement === 'draft' ? applied.nodes : extractLayoutStyleOverrides(applied.nodes).nodes)
     if (!packed) return { ok: false, error: AI_EDIT_NO_NODES_COPY }
     const stored = Buffer.from(packed)
     const docPatch: Record<string, unknown> = {}
@@ -553,6 +670,7 @@ export async function writeAiEdit(firestore: Firestore, input: AiEditWriteInput)
         baseStamp: versionStamp(source.get('updatedAt')),
         updatedByUid: input.uid,
         updatedByEmail: null,
+        ...(input.updatedByLabel ? { updatedByLabel: input.updatedByLabel } : {}),
         updatedAt: input.now,
         aiEditJobId: input.jobVersionId,
       })
@@ -577,7 +695,13 @@ export async function writeAiEdit(firestore: Firestore, input: AiEditWriteInput)
       if (value) docPatch[`seo.${field}`] = value
     }
     if (Object.keys(docPatch).length) tx.update(docRef, { ...docPatch, updatedAt: input.now })
-    return { ok: true, versionId, placement, seoWritten: Object.keys(seo).length > 0 }
+    return {
+      ok: true,
+      versionId,
+      placement,
+      seoWritten: Object.keys(seo).length > 0,
+      written: { stored, inserted: applied.inserted },
+    }
   })
 }
 
