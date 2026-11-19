@@ -196,10 +196,25 @@ describe('createProduct', () => {
     const { status, body } = await call('POST', `sites/${SITE}/products`, { name: '  Rye bread ' })
     expect(status).toBe(201)
     expect(body).toMatchObject({ object: 'product', name: 'Rye bread', slug: 'rye-bread', status: 'draft', type: 'physical' })
-    // The editor's default price, on its one default variant.
-    expect(body.variants).toEqual([expect.objectContaining({ id: 'default', priceUsd: 25, inventory: null })])
-    expect(stored(body.id)).toMatchObject({ nameLower: 'rye bread', priceUsd: 25, deletedAt: null })
+    // Sent no price, it is saved unpriced, never at the editor's placeholder.
+    expect(body.variants).toEqual([expect.objectContaining({ id: 'default', priceUsd: null, inventory: null })])
+    expect(stored(body.id)).toMatchObject({ nameLower: 'rye bread', priceUsd: null, deletedAt: null })
+    expect((stored(body.id)?.['variants'] as Record<string, unknown>[])[0]).not.toHaveProperty('priceUsd')
     expect(mockDropCache).toHaveBeenCalledWith(expect.objectContaining({ hostIds: [SITE] }))
+  })
+
+  it('leaves every combination its options make unpriced until a variant is priced', async () => {
+    const { status, body } = await call('POST', `sites/${SITE}/products`, {
+      name: 'Mug',
+      options: [{ name: 'Color', values: ['Red', 'Blue'] }],
+      variants: [{ options: { Color: 'Blue' }, priceUsd: 14 }],
+    })
+    expect(status).toBe(201)
+    const [red, blue] = body.variants
+    expect(red).toMatchObject({ options: { Color: 'Red' }, priceUsd: null })
+    expect(blue).toMatchObject({ options: { Color: 'Blue' }, priceUsd: 14 })
+    // The legacy flat price is the first variant's, and it has none.
+    expect(stored(body.id)).toMatchObject({ priceUsd: null })
   })
 
   it('may be created active, with options that make its variants, priced and stocked by their options', async () => {

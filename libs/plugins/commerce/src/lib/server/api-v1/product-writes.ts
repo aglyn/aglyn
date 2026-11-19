@@ -485,7 +485,11 @@ export function unpricedProductDraft(): EditedProduct {
   const draft = blankProductDraft()
   return {
     ...draft,
-    variants: draft.variants.map(({ priceUsd: _editorDefault, ...variant }) => variant as ProductVariant),
+    variants: draft.variants.map((variant) => {
+      const unpriced: Partial<ProductVariant> = { ...variant }
+      delete unpriced.priceUsd
+      return unpriced as ProductVariant
+    }),
   }
 }
 

@@ -17,8 +17,9 @@
 
 jest.mock('@aglyn/tenant-data-admin', () => ({ __esModule: true, ApiErrors: {}, apiJson: jest.fn(), firebaseAdmin: {} }))
 
+import { COMMERCE_DEFAULT_PRICE_USD } from '../../model/commerce'
 import { blankProductDraft } from '../../model/product-write'
-import { applyVariantWrite, mergeProductWrite, readProductWrite, readVariantWrite } from './product-writes'
+import { applyVariantWrite, mergeProductWrite, readProductWrite, readVariantWrite, unpricedProductDraft } from './product-writes'
 
 /*
  * The product write's body and how it lands on a product (AGL-4235), apart
@@ -96,5 +97,23 @@ describe('mergeProductWrite', () => {
   it('applyVariantWrite sets stock as typed: a number counted, null untracked', () => {
     expect(applyVariantWrite({ id: 'v', priceUsd: 1, inventory: 3 }, { inventory: null })).toEqual({ id: 'v', priceUsd: 1, inventory: null })
     expect(applyVariantWrite({ id: 'v', priceUsd: 1 }, { inventory: 0 })).toEqual({ id: 'v', priceUsd: 1, inventory: 0 })
+  })
+})
+
+describe('unpricedProductDraft', () => {
+  it('is the editor’s blank draft with no price on its variant', () => {
+    const draft = unpricedProductDraft()
+    expect({ ...draft, variants: [] }).toEqual({ ...blankProductDraft(), variants: [] })
+    expect(draft.variants).toEqual([{ id: 'default' }])
+  })
+
+  it('gives every combination a grid rebuild makes the first variant’s missing price', () => {
+    const merged = mergeProductWrite(unpricedProductDraft(), { options: [{ name: 'Size', values: ['S', 'L'] }] }, 1)
+    if ('refusal' in merged) throw new Error('refused')
+    expect(merged.variants.map((variant) => 'priceUsd' in variant)).toEqual([false, false])
+  })
+
+  it('leaves the editor’s own blank draft at its default price', () => {
+    expect(blankProductDraft().variants[0].priceUsd).toBe(COMMERCE_DEFAULT_PRICE_USD)
   })
 })

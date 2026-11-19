@@ -52,7 +52,7 @@ const SEO_DESCRIPTION_MAX = SCREEN_SEO_TEXT_GUIDANCE.description
 
 /** One variant's writable fields, shared by the variant write and each entry of a product write's `variants`. */
 const VARIANT_WRITE_FIELDS = {
-  priceUsd: nullable({ type: 'number', minimum: 0, description: 'Price in US dollars. `null` leaves the variant unpriced: the store shows “Price coming soon” and does not sell it.' }),
+  priceUsd: nullable({ type: 'number', minimum: 0, description: 'Price in US dollars. `null` leaves the variant unpriced: the store shows “Price coming soon” and does not sell it. A product created without a price is unpriced.' }),
   compareAtPriceUsd: nullable({ type: 'number', minimum: 0, description: 'The strike-through price, in US dollars; it must be higher than `priceUsd`. `null` removes it.' }),
   sku: nullable(str('Stock-keeping code, unique within the product. `null` or an empty string removes it.')),
   barcode: nullable(str('Barcode, such as a UPC or EAN. `null` or an empty string removes it.')),
