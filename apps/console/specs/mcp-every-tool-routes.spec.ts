@@ -68,34 +68,63 @@ const EMPTY_SNAPSHOT = {
   docChanges: () => [],
 }
 
+/** The site every site-scoped tool names (`minimalArguments` gives it). */
+const SITE_ID = 'id-1'
+/** The person the connected app acts for, a member of that site. */
+const UID = 'user-1'
+
 /**
- * A Firestore that holds nothing: every chain (`collection().doc().get()`,
- * `where().orderBy().limit().get()`, `count().get()`) resolves to an empty
- * snapshot, and every write resolves. Not thenable itself, so an `await` on a
- * reference does not hang.
+ * The one document this data layer holds: the site, which the site router
+ * reads before it dispatches (AGL-4235). Without it every site tool would be
+ * answered "No such site" by the router, and the claim below — that every
+ * tool reaches its handler — would be true of none of them.
+ */
+const SITE_DATA: Record<string, unknown> = {
+  displayName: 'Routing check',
+  subdomain: 'routing-check',
+  memberRoles: { [UID]: 'admin' },
+}
+const SITE_SNAPSHOT = {
+  ...EMPTY_SNAPSHOT,
+  exists: true,
+  id: SITE_ID,
+  data: () => SITE_DATA,
+  get: (field: string) => SITE_DATA[field],
+}
+
+/**
+ * A Firestore that holds nothing but the site: every chain
+ * (`collection().doc().get()`, `where().orderBy().limit().get()`,
+ * `count().get()`) resolves to an empty snapshot, `hosts/{SITE_ID}` excepted,
+ * and every write resolves. Not thenable itself, so an `await` on a reference
+ * does not hang.
  */
 function emptyFirestore(): FirebaseFirestore.Firestore {
-  const node: unknown = new Proxy(function chain() {}, {
-    get(_target, key) {
-      if (key === 'then') return undefined
-      if (key === 'get') return async () => EMPTY_SNAPSHOT
-      if (key === 'getAll') return async () => []
-      if (key === 'count') return () => ({ get: async () => ({ data: () => ({ count: 0 }) }) })
-      if (key === 'runTransaction') {
-        return async (fn: (tx: unknown) => unknown) => fn(node)
-      }
-      if (['set', 'update', 'delete', 'create', 'commit', 'add'].includes(String(key))) {
-        return async () => node
-      }
-      if (key === 'id') return 'generated-id'
-      if (key === 'path') return 'orgs/org-1'
-      return node
-    },
-    apply() {
-      return node
-    },
-  })
-  return node as FirebaseFirestore.Firestore
+  const at = (path: readonly string[]): unknown =>
+    new Proxy(function chain() {}, {
+      get(_target, key) {
+        if (key === 'then') return undefined
+        if (key === 'get') {
+          const isSite = path.join('/') === `collection/hosts/doc/${SITE_ID}`
+          return async () => (isSite ? SITE_SNAPSHOT : EMPTY_SNAPSHOT)
+        }
+        if (key === 'getAll') return async () => []
+        if (key === 'count') return () => ({ get: async () => ({ data: () => ({ count: 0 }) }) })
+        if (key === 'runTransaction') {
+          return async (fn: (tx: unknown) => unknown) => fn(at([]))
+        }
+        if (['set', 'update', 'delete', 'create', 'commit', 'add'].includes(String(key))) {
+          return async () => at(path)
+        }
+        if (key === 'id') return 'generated-id'
+        if (key === 'path') return 'orgs/org-1'
+        return at([...path, String(key)])
+      },
+      apply(_target, _this, args: unknown[]) {
+        return at([...path, ...args.filter((arg): arg is string => typeof arg === 'string')])
+      },
+    })
+  return at([]) as FirebaseFirestore.Firestore
 }
 
 /** The smallest arguments the tool's own schema accepts. */
@@ -138,14 +167,17 @@ describe('every advertised MCP tool routes (AGL-4225)', () => {
       keyId: 'grant_1',
       keyName: 'Routing check',
       credential: 'connected_app',
+      uid: UID,
       // Every scope, so a scope refusal cannot stand in for routing.
       scopes: [...API_SCOPES],
-      org: { plan: 'pro' } as ApiV1Context['org'],
+      // The workspace owns the site every site tool names.
+      org: { plan: 'pro', hosts: { [SITE_ID]: true } } as ApiV1Context['org'],
       firestore: emptyFirestore(),
       headers: {},
     }
     mockAuthenticate.mockResolvedValue({ context })
     const unrouted: string[] = []
+    const refusedAtTheSite: string[] = []
     let reached = 0
     for (const tool of tools) {
       let text: string
@@ -174,8 +206,13 @@ describe('every advertised MCP tool routes (AGL-4225)', () => {
       if (/Unknown endpoint|method_not_allowed|No tool named/.test(text)) {
         unrouted.push(`${tool.name} ${tool.method} ${tool.path} → ${text.slice(0, 120)}`)
       }
+      // The site router let it through to the handler (AGL-4235).
+      if (tool.path.includes('{siteId}') && /No such site/.test(text)) {
+        refusedAtTheSite.push(`${tool.name} ${tool.method} ${tool.path}`)
+      }
     }
     expect(unrouted).toEqual([])
+    expect(refusedAtTheSite).toEqual([])
     expect(reached).toBe(tools.length)
   })
 
