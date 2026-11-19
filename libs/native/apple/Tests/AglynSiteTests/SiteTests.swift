@@ -177,11 +177,53 @@ final class SiteTests: XCTestCase {
     XCTAssertEqual(cleanSubdomainInput("My Site_2!"), "mysite2")
   }
 
+  /// The console's Created range: one condition on `createdAt`, and under it the list runs newest first.
+  func testTheCreatedFilterRangesOverCreatedNewestFirst() {
+    XCTAssertEqual(SiteCreatedFilter.operators, ["is", "after", "onOrAfter", "before", "onOrBefore"])
+    let created = SiteCreatedFilter(op: "onOrAfter", day: "2026-11-01")
+    let query = sitesQuery(uid: "u", orgID: "org1", search: "", domain: .all, created: created, limit: 31)
+    XCTAssertTrue(query.filters.contains { $0.path == "createdAt" && $0.op == .greaterThanOrEqual })
+    XCTAssertEqual(query.order.first?.field, "createdAt")
+    XCTAssertEqual(query.order.first?.descending, true)
+    XCTAssertTrue(created.label.hasPrefix("Created on or after "))
+    XCTAssertFalse(
+      sitesPlan(orgID: "org1", search: "", domain: .all, created: SiteCreatedFilter(op: "is", day: "soon")).refused.isEmpty,
+      "a day that is not a day is refused, as the console says")
+  }
+
+  /// Pinned sites lead the unfiltered list in the order pinned, from the window or their own rows; a search or a filter
+  /// keeps the query's order.
+  func testPinnedSitesLeadTheUnfilteredList() {
+    let rows = ["a", "b", "c"].map { SiteRow(doc($0, ["displayName": $0.uppercased()])) }
+    let far = SiteRow(doc("z", ["displayName": "Z"]))
+    XCTAssertEqual(sitesShown(rows, pinned: ["c", "z", "gone"], pinnedRows: [far], filtering: false).map(\.id), ["c", "z", "a", "b"])
+    XCTAssertEqual(sitesShown(rows, pinned: ["c"], pinnedRows: [], filtering: true).map(\.id), ["a", "b", "c"])
+    XCTAssertEqual(sitesShown([], pinned: ["c"], pinnedRows: [far], filtering: false).map(\.id), [])
+  }
+
   func testCreatesTheSiteWithTheStarterInTheChosenStyle() {
     XCTAssertEqual(
       createSiteBody(orgID: "org1", name: "  My Shop ", subdomain: " MyShop ", style: "trades"),
       // The console's "Create the starter site"; without it the server may leave the site empty for a guided start the app does not have.
-      ["displayName": "My Shop", "subdomain": "myshop", "orgId": "org1", "start": "starter", "style": "trades"])
+      ["displayName": "My Shop", "subdomain": "myshop", "orgId": "org1", "start": "starter", "style": "trades", "preview": false])
+    // "Start in preview" (AGL-4086) rides the same request.
+    XCTAssertEqual(
+      createSiteBody(orgID: "org1", name: "Shop", subdomain: "shop", style: "trades", preview: true)["preview"], .bool(true))
+    XCTAssertFalse(sitePreviewStartsOn("starter"))
+    XCTAssertTrue(sitePreviewStartsOn("import"))
+  }
+
+  /// `6 of 10 sites · Pro plan` beside Create site, as the console's `describeSiteAllowance` says it.
+  func testTheSiteAllowanceReadsAsTheConsoleSaysIt() {
+    XCTAssertEqual(describeSiteAllowance(used: 6, limit: 10, planLabel: "Pro", ready: true), "6 of 10 sites · Pro plan")
+    XCTAssertEqual(describeSiteAllowance(used: 1, limit: 1, planLabel: "Free", ready: true), "1 of 1 site · Free plan")
+    XCTAssertEqual(describeSiteAllowance(used: 4, limit: .infinity, planLabel: "Custom", ready: true), "4 of Unlimited sites · Custom plan")
+    XCTAssertEqual(describeSiteAllowance(used: 4, limit: -1, planLabel: "Pro", ready: true), "4 of Unlimited sites · Pro plan")
+    XCTAssertEqual(describeSiteAllowance(used: 1, limit: nil, planLabel: "Pro", ready: true), "1 site · Pro plan")
+    XCTAssertNil(describeSiteAllowance(used: 0, limit: 1, planLabel: "Free", ready: false), "a placeholder never reads as a count")
+    XCTAssertNil(describeSiteAllowance(used: 0, limit: 1, planLabel: nil, ready: true))
+    XCTAssertEqual(SiteAllowancePlan(["plan": "pro", "quotas": ["hostLimit": 10]]), SiteAllowancePlan(planLabel: "Pro", hostLimit: 10))
+    XCTAssertEqual(SiteAllowancePlan(["plan": "enterprise", "quotas": ["hostLimit": .null]])?.hostLimit, .infinity)
   }
 
   func testCreateSiteWaitsForAStyleThePersonPicked() {
@@ -199,7 +241,10 @@ final class SiteTests: XCTestCase {
     XCTAssertEqual(
       createSiteBody(orgID: "org1", name: "  My Shop ", subdomain: " MyShop ", starter: "l1"),
       // The console's "Choose your starter": the listing, and no style, since the starter brings its own look.
-      ["displayName": "My Shop", "subdomain": "myshop", "orgId": "org1", "start": "starter", "starter": ["listingId": "l1"]])
+      [
+        "displayName": "My Shop", "subdomain": "myshop", "orgId": "org1", "start": "starter", "starter": ["listingId": "l1"],
+        "preview": false,
+      ])
   }
 
   func testCreateSiteWaitsForAStarterItCanCreateFromHere() {

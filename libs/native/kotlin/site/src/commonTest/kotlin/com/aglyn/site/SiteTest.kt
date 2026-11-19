@@ -179,6 +179,28 @@ class SiteTest {
     assertTrue(SUBDOMAIN_PATTERN.matches("my-new-site"))
   }
 
+  /** The console's Created range: one condition on `createdAt`, and under it the list runs newest first. */
+  @Test
+  fun theCreatedFilterRangesOverCreatedNewestFirst() {
+    assertEquals(listOf("is", "after", "onOrAfter", "before", "onOrBefore"), com.aglyn.site.sites.SiteCreatedFilter.operators)
+    val created = com.aglyn.site.sites.SiteCreatedFilter("onOrAfter", "2026-11-01")
+    val query = com.aglyn.site.sites.sitesPlan("org1", "", SiteDomainFilter.ALL, created).toFirestoreQuery("users/u/hostMemberships", 30)
+    assertTrue(query.filters.any { it.field == "createdAt" && it.op == FilterOp.GTE })
+    assertEquals("createdAt", query.orderBy.first().field)
+    assertTrue(query.orderBy.first().descending)
+    assertEquals("Created on or after Nov 1, 2026", created.label)
+    assertTrue(com.aglyn.site.sites.sitesPlan("org1", "", SiteDomainFilter.ALL, com.aglyn.site.sites.SiteCreatedFilter("is", "soon")).refused.isNotEmpty())
+  }
+
+  /** Pinned sites lead the unfiltered list in the order pinned; a search or a filter keeps the query's order. */
+  @Test
+  fun pinnedSitesLeadTheUnfilteredList() {
+    fun row(id: String) = com.aglyn.site.sites.SiteRow(id, id.uppercase(), null, null, false, null, null)
+    val rows = listOf(row("a"), row("b"), row("c"))
+    assertEquals(listOf("c", "z", "a", "b"), com.aglyn.site.sites.sitesShown(rows, listOf("c", "z", "gone"), listOf(row("z")), false).map { it.id })
+    assertEquals(listOf("a", "b", "c"), com.aglyn.site.sites.sitesShown(rows, listOf("c"), emptyList(), true).map { it.id })
+  }
+
   @Test
   fun createsTheSiteWithTheStarterInTheChosenStyle() {
     val body = createSiteBody("org1", "  My Shop ", " MyShop ", "trades")
@@ -188,6 +210,28 @@ class SiteTest {
     // The console's "Create the starter site"; without it the server may leave the site empty for a guided start the app does not have.
     assertEquals("starter", body["start"]?.jsonPrimitive?.content)
     assertEquals("trades", body["style"]?.jsonPrimitive?.content)
+    // "Start in preview" (AGL-4086) rides the same request; off unless the person turns it on.
+    assertEquals("false", body["preview"]?.jsonPrimitive?.content)
+    assertEquals("true", createSiteBody("org1", "Shop", "shop", "trades", preview = true)["preview"]?.jsonPrimitive?.content)
+    assertEquals(false, com.aglyn.site.sites.sitePreviewStartsOn("starter"))
+    assertEquals(true, com.aglyn.site.sites.sitePreviewStartsOn("import"))
+  }
+
+  /** `6 of 10 sites · Pro plan` beside Create site, as the console's `describeSiteAllowance` says it. */
+  @Test
+  fun theSiteAllowanceReadsAsTheConsoleSaysIt() {
+    val describe = { used: Int, limit: Double?, plan: String?, ready: Boolean -> com.aglyn.site.sites.describeSiteAllowance(used, limit, plan, ready) }
+    assertEquals("6 of 10 sites · Pro plan", describe(6, 10.0, "Pro", true))
+    assertEquals("1 of 1 site · Free plan", describe(1, 1.0, "Free", true))
+    assertEquals("4 of Unlimited sites · Custom plan", describe(4, Double.POSITIVE_INFINITY, "Custom", true))
+    assertEquals("4 of Unlimited sites · Pro plan", describe(4, -1.0, "Pro", true))
+    assertEquals("1 site · Pro plan", describe(1, null, "Pro", true))
+    assertEquals(null, describe(0, 1.0, "Free", false))
+    assertEquals(null, describe(0, 1.0, null, true))
+    val pro = kotlinx.serialization.json.Json.parseToJsonElement("""{"plan":"pro","quotas":{"hostLimit":10}}""").jsonObject
+    assertEquals(com.aglyn.site.sites.SiteAllowancePlan("Pro", 10.0), com.aglyn.site.sites.SiteAllowancePlan.of(pro))
+    val custom = kotlinx.serialization.json.Json.parseToJsonElement("""{"plan":"enterprise","quotas":{"hostLimit":null}}""").jsonObject
+    assertEquals(Double.POSITIVE_INFINITY, com.aglyn.site.sites.SiteAllowancePlan.of(custom)?.hostLimit)
   }
 
   @Test
@@ -792,6 +836,30 @@ class SiteTest {
     assertEquals(listOf("theme-cool" to "custom", "theme-warm" to "custom", "installed--harvest" to "installed"), listed.map { it.id to it.kind })
   }
 
+  /** The favicon saves through the console's route (`saveMirroredHostFields`), which re-fans it into every member's site list row. */
+  @Test
+  fun theFaviconSavesThroughTheMembershipsRoute() = runTest {
+    val seen = mutableListOf<Pair<String, kotlinx.serialization.json.JsonObject>>()
+    val engine = MockEngine { request ->
+      val text = (request.body as? io.ktor.http.content.OutgoingContent.ByteArrayContent)?.bytes()?.decodeToString().orEmpty()
+      seen += request.url.encodedPath to Json.parseToJsonElement(text.ifEmpty { "{}" }).jsonObject
+      respond("{}", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+    }
+    val api = ConsoleApiClient(origin = "https://console.test/", http = HttpClient(engine), getIdToken = { "t" }, sleep = {}, maxAttempts = 1)
+    val writer = object : com.aglyn.core.FirestoreWriter {
+      override suspend fun merge(path: String, data: Map<String, Any?>) = error("the favicon is never a direct write")
+      override suspend fun delete(path: String) = error("no")
+      override suspend fun add(collectionPath: String, data: Map<String, Any?>): String = error("no")
+    }
+    val settings = com.aglyn.site.setup.HostSettingsApi(api, writer, "h1")
+    settings.saveFavicon("https://cdn.example.com/icon.png")
+    settings.saveFavicon("")
+    assertEquals(listOf("/api/hosts/sync-memberships", "/api/hosts/sync-memberships"), seen.map { it.first })
+    assertEquals("h1", seen[0].second["hostId"]?.jsonPrimitive?.content)
+    assertEquals("https://cdn.example.com/icon.png", seen[0].second["favicon"]?.jsonPrimitive?.content)
+    assertEquals("", seen[1].second["favicon"]?.jsonPrimitive?.content)
+  }
+
   /**
    * Business details (AGL-4136): the card writes what the console's save writes. The canonical `seo.entity.*` paths and the
    * slogan, the email and the formatted address kept in step in the `business` copies, a cleared field deleted with its
@@ -861,5 +929,28 @@ class SiteTest {
     assertEquals("https://instagram.com/paws", rows.first { it.key == "instagramUrl" }.value)
     assertTrue(rows.none { it.type == "image" })
     assertEquals(false, rows.first { it.key == "phone" }.set)
+  }
+
+  /** Site Care's Request a change asks the console's route as its button does (AGL-3959). */
+  @Test
+  fun siteCareAsksTheConsolesRoute() = runTest {
+    val seen = mutableListOf<io.ktor.client.request.HttpRequestData>()
+    val bodies = mutableListOf<String>()
+    var siteCare = true
+    val engine = MockEngine { request ->
+      seen += request
+      bodies += (request.body as? io.ktor.http.content.OutgoingContent.ByteArrayContent)?.bytes()?.decodeToString().orEmpty()
+      respond("""{"siteCare":$siteCare,"ticketId":"t1","dueAt":"Wednesday, November 18"}""", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+    }
+    val api = ConsoleApiClient(origin = "https://console.test/", http = HttpClient(engine), getIdToken = { "t" }, sleep = {}, maxAttempts = 1)
+    val care = com.aglyn.site.sitecare.SiteCareApi(api, "o1")
+    assertEquals(true, care.hasSiteCare())
+    assertEquals("status", seen[0].url.parameters["view"])
+    assertEquals("Wednesday, November 18", care.request("h1", "Hours", "Closed on the 25th"))
+    val sent = Json.parseToJsonElement(bodies[1]).jsonObject
+    assertEquals(listOf("o1", "h1", "Hours", "Closed on the 25th"), listOf("orgId", "hostId", "subject", "body").map { sent[it]?.jsonPrimitive?.content })
+    assertEquals("We have your request and will have it done by two business days from now. We will email you when it is done.", com.aglyn.site.sitecare.siteCareSentText(""))
+    siteCare = false
+    assertEquals(false, care.hasSiteCare())
   }
 }

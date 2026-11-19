@@ -56,6 +56,7 @@ import {
   resolveOrgIdForHost,
   scopedToHost,
 } from './organizations'
+import { captureAdmitsPerson } from './crm-records'
 import {
   composeContactName,
   crmLeadListFields,
@@ -518,6 +519,29 @@ export async function addHostLeadOutcome(options: {
     const leadRef = key
       ? (await leadForWrite(hostId, key)).ref
       : leadsRef.doc()
+    /*
+     * THE CRM RECORDS BAND, for a NEW person (AGL-4227) — the same rule the
+     * contact door asks (`captureAdmitsPerson`). On a plan that sells no
+     * records past its band (Free) a capture past it files no new lead; the
+     * submission, booking or order that carried the person is kept where it
+     * lives, and the visitor is never told. A returning person is an update
+     * and is never refused. Paid plans meter as before. Asked before the
+     * transaction, as the contact door asks it: one aggregate read on a new
+     * person only.
+     */
+    if (key ? !(await leadRef.get()).exists : true) {
+      const owner = await getOrgForHost(hostId).catch(() => null)
+      const orgRef = leadsRef.parent
+      // An org that could not be read is not judged as Free: the capture is
+      // kept, as every other lookup failure on this door keeps it.
+      if (owner?.org && orgRef && !(await captureAdmitsPerson(owner.org as never, orgRef))) {
+        await hostRef
+          .collection('counters')
+          .doc('contactsDropped')
+          .set({ total: FieldValue.increment(1) }, { merge: true })
+        return NOT_STORED
+      }
+    }
     /*
      * The scope this capture stamps, and the group whose terms its consent is
      * recorded under. Both resolved HERE rather than in the transaction body:

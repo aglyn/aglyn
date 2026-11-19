@@ -1652,6 +1652,72 @@
       ]
     },
     {
+      "id": "ai.usageAssistColumn",
+      "title": "Assist",
+      "label": "Assist",
+      "subtitle": "A column on a workspace's Usage by month (the console's staffOrgUsageColumn): the Assist cost each month, in dollars to four places",
+      "scope": "staff",
+      "requires": "staff.is",
+      "zones": [
+        "staffOrgUsageColumn"
+      ],
+      "order": 10,
+      "column": {
+        "id": "assistCost",
+        "label": "Assist",
+        "value": "${item.assistCostUsd|'0':fixed/4}",
+        "sort": {
+          "page": "item.assistCostUsd",
+          "type": "number",
+          "first": "desc"
+        }
+      }
+    },
+    {
+      "id": "ai.usageCreditsColumn",
+      "title": "AI credits used",
+      "label": "AI credits used",
+      "subtitle": "A column on a workspace's Usage by month (the console's staffOrgUsageColumn): the AI credits the workspace used each month",
+      "scope": "staff",
+      "requires": "staff.is",
+      "zones": [
+        "staffOrgUsageColumn"
+      ],
+      "order": 20,
+      "column": {
+        "id": "aiCredits",
+        "label": "AI credits used",
+        "value": "{round(item.assistCredits):number}",
+        "sort": {
+          "page": "item.assistCredits",
+          "type": "number",
+          "first": "desc"
+        }
+      }
+    },
+    {
+      "id": "ai.usageOverageColumn",
+      "title": "AI overage billed ($)",
+      "label": "AI overage billed ($)",
+      "subtitle": "A column on a workspace's Usage by month (the console's staffOrgUsageColumn): the AI overage billed each month",
+      "scope": "staff",
+      "requires": "staff.is",
+      "zones": [
+        "staffOrgUsageColumn"
+      ],
+      "order": 30,
+      "column": {
+        "id": "aiOverage",
+        "label": "AI overage billed ($)",
+        "value": "${item.assistOverageUsd:fixed/2}",
+        "sort": {
+          "page": "item.assistOverageUsd",
+          "type": "number",
+          "first": "desc"
+        }
+      }
+    },
+    {
       "id": "ai.orgsSpendColumn",
       "title": "AI spend (month)",
       "label": "AI spend (month)",
