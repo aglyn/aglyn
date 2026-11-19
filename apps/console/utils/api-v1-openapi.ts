@@ -73,6 +73,7 @@ import {
   stringListField as strList,
   SITE_ID_PATH_PARAM,
 } from '@aglyn/tenant-data-admin/server/api-v1-description'
+import { SITE_SETTINGS_DESCRIPTIONS } from '@aglyn/tenant-data-admin/server/api-v1-site-settings-description'
 
 /** A JSON Schema / OpenAPI fragment. Same shape the tenant builder uses. */
 type Schema = Record<string, unknown>
@@ -230,6 +231,9 @@ const RESOURCES: readonly ResourceSpec[] = [
       { path: '/v1/sites/{siteId}/media', method: 'post', operationId: 'uploadSiteMedia', summary: 'Upload a file to a site', description: 'Adds a file to one site’s own library. Needs `siteId` from List sites. Send the file’s bytes base64-encoded in `data`, with its `contentType`. Unless `private` is true, the file gets a public link that anyone can open. Returns the stored file and its URLs.', accepts: 'MediaUpload', returns: 'MediaAsset', creates: true, openWorld: true, pathParams: [SITE_ID_PATH_PARAM] },
     ],
   },
+  // A site's search listing, its pages and its business details (AGL-4235),
+  // described by the data layer beside the handlers and limits they share.
+  ...SITE_SETTINGS_DESCRIPTIONS,
 ]
 
 /**

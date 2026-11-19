@@ -67,6 +67,11 @@ import {
 } from '@aglyn/tenant-data-admin/server/api-v1-resources'
 import type { ApiV1ResourceDescription } from '@aglyn/tenant-data-admin/server/api-v1-description'
 import {
+  handleSiteBusiness,
+  handleSitePages,
+  handleSiteSeo,
+} from '@aglyn/tenant-data-admin/server/api-v1-site-settings'
+import {
   apiActorLabel,
   holdsSiteMembership,
   isConnectedAppContext,
@@ -415,6 +420,11 @@ async function handleSites(
       cdnScope: hostId,
     })
   if (sub === 'publish') return handlePublish(request, siteCtx, hostId)
+  // The site's search listing, pages and business details (AGL-4235): the
+  // handlers are the data layer's, and ask their own scopes and permission.
+  if (sub === 'seo') return handleSiteSeo(request, siteCtx)
+  if (sub === 'business') return handleSiteBusiness(request, siteCtx)
+  if (sub === 'pages') return handleSitePages(request, siteCtx, segments, url)
   /*
    * A resource a plugin models under the site is the plugin's (AGL-3080) — a
    * site's orders and products, its form submissions. Asked only AFTER
