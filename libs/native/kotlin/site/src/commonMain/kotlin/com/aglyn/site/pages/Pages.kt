@@ -164,11 +164,13 @@ fun movableParents(pages: List<PageNode>, pageId: String): List<PageNode> {
     .sortedBy { it.name.lowercase() }
 }
 
-/** A page's live address on the site's own domain, as the hub's "Open live page" builds it. */
-fun livePageUrl(routing: SiteRouting, livePath: String, apex: String = com.aglyn.core.DEFAULT_TENANT_APEX): String? {
-  val domain = routing.cname ?: routing.subdomain?.let { "$it.$apex" } ?: return null
-  return "https://$domain$livePath"
-}
+/**
+ * A page's live address as the hub's "Open live page" builds it (`siteLiveUrlForSlug`, [com.aglyn.core.SiteLiveUrl]):
+ * on the site's own domain from a deployed console ([consoleOrigin] null reads as one), on the local tenant or the
+ * tenant preview deployment from a local or preview console.
+ */
+fun livePageUrl(routing: SiteRouting, livePath: String, consoleOrigin: String? = null, apex: String = com.aglyn.core.DEFAULT_TENANT_APEX): String? =
+  com.aglyn.core.SiteLiveUrl.forSlug(routing.subdomain, routing.cname, livePath, com.aglyn.core.SiteLiveUrl.consoleHostname(consoleOrigin), apex)
 
 /** One saved version of a page. */
 data class PageVersion(val id: String, val name: String?, val createdAt: FirestoreTimestamp?)
