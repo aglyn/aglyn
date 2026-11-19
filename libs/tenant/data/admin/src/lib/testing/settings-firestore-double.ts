@@ -18,10 +18,10 @@
 import { FieldValue } from 'firebase-admin/firestore'
 
 /**
- * An in-memory Firestore for the specs of the site settings writers
- * (AGL-4235): documents by path, a transaction whose `update` reads dotted
- * keys as paths and honors `FieldValue.delete()`, and the ordered, paged
- * collection reads `paginate` makes. Every write is recorded, in order, so a
+ * An in-memory Firestore for the specs of the site settings and page writers
+ * (AGL-4235): documents by path, a transaction and a batch whose `update`
+ * reads dotted keys as paths and honors `FieldValue.delete()`, and the
+ * ordered, paged collection reads `paginate` makes. Every write is recorded, in order, so a
  * spec can say exactly what a save stored and what it announced.
  *
  * Only what those writers and their handlers use. A spec double, never
@@ -94,6 +94,9 @@ export function settingsFirestoreDouble(seed: Record<string, Record<string, unkn
   const collection = (path: string, state: { limit?: number; after?: string } = {}): Record<string, unknown> => ({
     path,
     doc: (id?: string) => doc(`${path}/${id ?? `auto-${++ids}`}`),
+    // A projection reads the same documents here; what it keeps off the wire
+    // is no concern of a double.
+    select: () => collection(path, state),
     orderBy: () => collection(path, state),
     where: () => collection(path, state),
     limit: (limit: number) => collection(path, { ...state, limit }),
@@ -110,33 +113,72 @@ export function settingsFirestoreDouble(seed: Record<string, Record<string, unkn
     },
   })
 
+  /**
+   * The writes a transaction or a batch stages, applied in order at commit.
+   * A merge-set merges its top-level keys into what is stored; a `create`
+   * over a document that exists fails as Firestore does, with code 6.
+   */
+  const writer = (staged: Array<() => void>) => ({
+    update: (ref: { path: string }, data: Record<string, unknown>) => {
+      staged.push(() => {
+        const current = docs.get(ref.path)
+        if (!current) throw new Error(`no document to update at ${ref.path}`)
+        applyUpdate(current, data)
+        writes.push({ op: 'update', path: ref.path, data })
+      })
+    },
+    set: (ref: { path: string }, data: Record<string, unknown>, options?: { merge?: boolean }) => {
+      staged.push(() => {
+        const next: Record<string, unknown> = options?.merge ? (docs.get(ref.path) ?? {}) : {}
+        applyUpdate(next, data)
+        docs.set(ref.path, next)
+        writes.push({ op: 'set', path: ref.path, data })
+      })
+    },
+    create: (ref: { path: string }, data: Record<string, unknown>) => {
+      staged.push(() => {
+        if (docs.has(ref.path)) throw Object.assign(new Error(`document exists at ${ref.path}`), { code: 6 })
+        const next: Record<string, unknown> = {}
+        applyUpdate(next, data)
+        docs.set(ref.path, next)
+        writes.push({ op: 'set', path: ref.path, data })
+      })
+    },
+  })
+
+  /** Applies staged writes all or none: a failing one restores what was stored. */
+  const commitAll = (staged: Array<() => void>) => {
+    const before = new Map([...docs.entries()].map(([path, data]) => [path, structuredClone(data)]))
+    const recorded = writes.length
+    try {
+      for (const commit of staged) commit()
+    } catch (error) {
+      docs.clear()
+      for (const [path, data] of before) docs.set(path, data)
+      writes.length = recorded
+      throw error
+    }
+  }
+
   const runTransaction = async <T>(run: (tx: unknown) => Promise<T>): Promise<T> => {
     const staged: Array<() => void> = []
     const tx = {
-      get: async (ref: { path: string }) => snapshotOf(ref.path),
-      update: (ref: { path: string }, data: Record<string, unknown>) => {
-        staged.push(() => {
-          const current = docs.get(ref.path)
-          if (!current) throw new Error(`no document to update at ${ref.path}`)
-          applyUpdate(current, data)
-          writes.push({ op: 'update', path: ref.path, data })
-        })
-      },
-      set: (ref: { path: string }, data: Record<string, unknown>) => {
-        staged.push(() => {
-          const next: Record<string, unknown> = {}
-          applyUpdate(next, data)
-          docs.set(ref.path, next)
-          writes.push({ op: 'set', path: ref.path, data })
-        })
-      },
+      // A document by its path, or a query (a collection, narrowed or not) by its documents.
+      get: async (ref: { path: string; doc?: unknown; get?: () => Promise<unknown> }) =>
+        typeof ref.doc === 'function' && ref.get ? ref.get() : snapshotOf(ref.path),
+      ...writer(staged),
     }
     const result = await run(tx)
-    for (const commit of staged) commit()
+    commitAll(staged)
     return result
   }
 
-  const firestore = { collection: (name: string) => collection(name), runTransaction } as unknown as FirebaseFirestore.Firestore
+  const batch = () => {
+    const staged: Array<() => void> = []
+    return { ...writer(staged), commit: async () => commitAll(staged) }
+  }
+
+  const firestore = { collection: (name: string) => collection(name), runTransaction, batch } as unknown as FirebaseFirestore.Firestore
   return {
     firestore,
     docs,
