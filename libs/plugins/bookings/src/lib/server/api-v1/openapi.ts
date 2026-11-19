@@ -33,6 +33,7 @@ import {
  */
 export const BOOKINGS_API_V1_DESCRIPTION: ApiV1ResourceDescription = {
   tag: 'Bookings',
+  docsPage: 'bookings',
   description: 'A site’s bookings. Read-only over the API.',
   schemaName: 'Booking',
   required: ['id', 'object', 'status'],
@@ -72,7 +73,7 @@ export const BOOKINGS_API_V1_DESCRIPTION: ApiV1ResourceDescription = {
       path: '/v1/sites/{siteId}/bookings',
       method: 'get',
       operationId: 'listBookings',
-      summary: 'List bookings',
+      summary: 'List a site’s bookings', description: 'Lists the appointments booked on one site, with service, time, customer and status. Needs `siteId` from List sites. Filter by status or service. Read only.',
       list: true,
       returns: 'Booking',
       filters: [
@@ -85,7 +86,7 @@ export const BOOKINGS_API_V1_DESCRIPTION: ApiV1ResourceDescription = {
       path: '/v1/sites/{siteId}/bookings/{bookingId}',
       method: 'get',
       operationId: 'getBooking',
-      summary: 'Retrieve a booking',
+      summary: 'Get a booking', description: 'Returns one booking. Needs `siteId` from List sites and `bookingId` from List a site’s bookings.',
       returns: 'Booking',
       pathParams: [
         SITE_ID_PATH_PARAM,

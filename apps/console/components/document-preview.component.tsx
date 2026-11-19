@@ -247,6 +247,21 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
   const [formDesigns, setFormDesigns] = useState<
     Record<string, Aglyn.PlacedFormDesign> | undefined
   >(undefined)
+  /**
+   * The site's variables and functions (AGL-4234), keyed by document id as the
+   * tenant reads them (`get-variables.ts`), so a `{{var:…}}` or `{{fn:…}}`
+   * token draws here as the published page draws it. `undefined` while the
+   * reads are outstanding, which holds the first paint like the definitions
+   * do; `null` when they failed, and the tokens then render as written.
+   */
+  const [bindings, setBindings] = useState<
+    | {
+        variables: Record<string, Aglyn.HostVariable>
+        functions: Record<string, Aglyn.HostFunction>
+      }
+    | null
+    | undefined
+  >(undefined)
   // The snapshot as grafted, with host tokens filled, before its repeats
   // are expanded.
   const [prepared, setPrepared] = useState<
@@ -791,6 +806,40 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
         if (!cancelled) setFormDesigns({})
       })
 
+    // The site's variables and functions (AGL-4234), read beside them for the
+    // same reason, and kept as the tenant keeps them: by document id, without
+    // the deleted and the nameless.
+    const readBindings = <T,>(name: 'variables' | 'functions') =>
+      firestoreOneShotRetry(
+        () =>
+          getDocs(
+            query(collection(firestore, 'hosts', hostId, name), limit(100)),
+          ),
+        name,
+      ).then((res) => {
+        const next: Record<string, T> = {}
+        for (const docSnapshot of res.docs) {
+          const value = docSnapshot.data() as
+            | { name?: unknown; deletedAt?: unknown }
+            | undefined
+          if (value?.name && !value.deletedAt) {
+            next[docSnapshot.id] = value as T
+          }
+        }
+        return next
+      })
+    Promise.all([
+      readBindings<Aglyn.HostVariable>('variables'),
+      readBindings<Aglyn.HostFunction>('functions'),
+    ])
+      .then(([variables, functions]) => {
+        if (!cancelled) setBindings({ variables, functions })
+      })
+      .catch((error) => {
+        console.error(error)
+        if (!cancelled) setBindings(null)
+      })
+
     // The site document (AGL-2881), read beside them for the same reason: the
     // first paint waits on it, and the tenant composes with it.
     firestoreOneShotRetry(
@@ -841,6 +890,16 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
         )
         return {}
       })
+      // The variables and functions gate it too (AGL-4234).
+      setBindings((current) => {
+        if (current !== undefined) return current
+        console.warn(
+          `[preview] the host variables read did not settle within ` +
+            `${DEFINITIONS_TIMEOUT_MS}ms — rendering {{var:…}} and {{fn:…}} ` +
+            'tokens as written rather than holding a blank page.',
+        )
+        return null
+      })
       // The site read gates the same apply, under the same ceiling.
       setHostDoc((current) => {
         if (current !== undefined) return current
@@ -865,7 +924,14 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
     // for the real nav a beat later — a visible flash of chrome that the live
     // site never shows. The site read holds it for the same reason: a host
     // variable drawn as its token and then as its value is that flash again.
-    if (!definitions || !formDesigns || hostDoc === undefined) return
+    if (
+      !definitions ||
+      !formDesigns ||
+      hostDoc === undefined ||
+      bindings === undefined
+    ) {
+      return
+    }
     const previewableFormDesigns =
       kind === 'form' && docId && docId in formDesigns
         ? Object.fromEntries(
@@ -898,7 +964,7 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
        * like the live site instead of dropping to MUI's default blue.
        */
       setHostTheme(state?.theme ?? resolveSiteTheme(hostDoc as any))
-      const grafted = Aglyn.composeReusableComponentNodes(
+      const composedNodes = Aglyn.composeReusableComponentNodes(
         nodes as any,
         definitions as any,
         // Placed forms resolve here too, in the SAME call the tenant makes
@@ -911,6 +977,17 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
         // version in place of the draft this preview exists to show.
         [Aglyn.placedFormPlacement(previewableFormDesigns as any)],
       )
+      // Site variables and functions (AGL-4234) resolve over the grafted tree
+      // first, through the function the tenant composes with and in its order,
+      // so a `{{var:…}}` in a page, a component or a form fills in here as it
+      // does for a visitor. Without the lists the tokens stay as written.
+      const grafted = bindings
+        ? Aglyn.resolveNodesBindings(
+            composedNodes as any,
+            bindings.variables,
+            bindings.functions,
+          )
+        : composedNodes
       setPrepared(
         // Host variables (AGL-2881) resolve over the GRAFTED tree, through
         // the function the tenant composes with, so a token inside a
@@ -943,6 +1020,7 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
     definitions,
     formDesigns,
     hostDoc,
+    bindings,
     storedNodes,
   ])
 
