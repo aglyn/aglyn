@@ -28,6 +28,7 @@ import { fileURLToPath } from 'node:url'
 
 import {
   advertisedConnectorPaths,
+  cardTextProblems,
   catalogProblems,
   expectedCardName,
   originAgreementProblems,
@@ -150,3 +151,19 @@ test('a registry entry on the wrong path, under another name, or too long is nam
 test('the card name is the reversed host', () => {
   assert.equal(expectedCardName('https://app.aglyn.com/api/mcp'), 'com.aglyn.app/mcp')
 })
+
+test('the registry entry carries the card’s title and description, from source', () => {
+  const read = (file) => readFileSync(join(REPO_ROOT, file), 'utf8')
+  const sources = {
+    protocolSource: read('apps/console/utils/mcp-protocol.ts'),
+    cardSource: read('apps/console/utils/mcp-server-card.ts'),
+  }
+  const entry = JSON.parse(read('integrations/mcp-registry/server.json'))
+  assert.deepEqual(cardTextProblems(sources, entry), [])
+  assert.equal(cardTextProblems(sources, { ...entry, description: 'Something else.' }).length, 1)
+  assert.equal(
+    cardTextProblems({ ...sources, cardSource: sources.cardSource.replace('websiteUrl: PLATFORM_HOME_URL', 'websiteUrl: docs') }, entry).length,
+    1,
+  )
+})
+

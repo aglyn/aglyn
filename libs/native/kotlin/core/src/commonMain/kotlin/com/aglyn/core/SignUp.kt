@@ -13,6 +13,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.put
 
 /**
@@ -454,8 +455,18 @@ private suspend fun runCatchingRequest(block: suspend () -> JsonElement?): Boole
 /** Lowercase letters with their accents removed, as `normalize('NFKD').replace(/[̀-ͯ]/g, '')` leaves them. */
 internal expect fun stripMarks(value: String): String
 
-/** An invitation addressed to any confirmed address on the signed-in account (`GET /api/orgs/invites?mine=1`). */
-data class PendingInvite(val id: String, val orgId: String, val orgName: String?, val role: String?, val handoff: Boolean) {
+/**
+ * An invitation addressed to any confirmed address on the signed-in account (`GET /api/orgs/invites?mine=1`). [createdAtMs] is
+ * when it was sent; null from an older answer or before the server stamped it.
+ */
+data class PendingInvite(
+  val id: String,
+  val orgId: String,
+  val orgName: String?,
+  val role: String?,
+  val handoff: Boolean,
+  val createdAtMs: Long? = null,
+) {
   /** "You've been invited to Acme as admin." (the console's `inviteSentence`). */
   val sentence: String
     get() = if (handoff) {
@@ -474,7 +485,8 @@ suspend fun SignUpService.pendingInvites(): List<PendingInvite> {
     val row = element as? JsonObject ?: return@mapNotNull null
     val id = row.string("\$id") ?: return@mapNotNull null
     val org = row.string("orgId")?.ifEmpty { null } ?: return@mapNotNull null
-    PendingInvite(id, org, row.string("orgName"), row.string("role"), row["handoff"] is JsonObject)
+    val sent = (row["createdAtMs"] as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull?.toLong()
+    PendingInvite(id, org, row.string("orgName"), row.string("role"), row["handoff"] is JsonObject, sent)
   }
 }
 

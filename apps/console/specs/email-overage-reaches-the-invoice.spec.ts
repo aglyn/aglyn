@@ -53,6 +53,7 @@
  */
 
 import {
+  INCLUDED_EMAIL_SENDS_BY_PLAN,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
@@ -277,7 +278,7 @@ function seedOrg(plan: string) {
   mockDocs.set('hosts/host-1/counters/formSubmissions', { [MONTH]: 0 })
 }
 
-function loadRoute(billFrom?: string) {
+function loadRoute(billFrom?: string, starterFrom?: string) {
   jest.resetModules()
   process.env = {
     ...ORIGINAL_ENV,
@@ -292,6 +293,9 @@ function loadRoute(billFrom?: string) {
     // The switch under test. Absent means the overage is measured, shown and
     // priced into COGS, and reaches no invoice.
     ...(billFrom === undefined ? {} : { BILL_EMAIL_SEND_OVERAGE_FROM: billFrom }),
+    // Starter's own start month (AGL-4227), EXPLICITLY absent unless a case
+    // names it, so a value leaking from the root `.env` decides nothing here.
+    BILL_STARTER_EMAIL_SENDS_FROM: starterFrom ?? '',
   } as NodeJS.ProcessEnv
   return require('../app/api/billing/report-usage/route').POST as (
     request: Request,
@@ -482,5 +486,98 @@ describe('with the switch unset or in the future, it does not', () => {
     expect(mockDocs.get(`orgs/org-1/usage/${MONTH}`)!['billedCents']).toBe(
       Math.round((4_000 / 1000) * RATE_PER_1K * 100),
     )
+  })
+})
+
+describe('Starter bills every email past 1,000 a month (AGL-4227)', () => {
+  /**
+   * Starter's CAMPAIGN band is 0 — campaigns start at Pro — so measuring its
+   * overage against that band priced nothing at any volume, and its receipts,
+   * notices and one-to-one CRM mail cost the platform up to $27 a month
+   * unbilled. It now bills against `INCLUDED_EMAIL_SENDS_BY_PLAN.starter`,
+   * every send on the cost meter counted, through the same path as Pro's:
+   * `emailSendsOverage` → `priceEmailSendOverage` → `billedCents` → the one
+   * org-month meter event, behind the same `BILL_EMAIL_SEND_OVERAGE_FROM`.
+   */
+  const STARTER_BAND = INCLUDED_EMAIL_SENDS_BY_PLAN.starter as number
+  const STARTER_RATE = PLAN_PRICING.starter.extraEmailSendsUsdPer1k as number
+
+  it('includes 1,000 of everything, at $2.50 past it', () => {
+    expect(STARTER_BAND).toBe(1_000)
+    expect(STARTER_RATE).toBe(2.5)
+    // Campaigns still start at Pro: the campaign band is untouched.
+    expect(PLAN_ENTITLEMENTS.starter.emailSendsPerMonth).toBe(0)
+    // Above Pro's rate, so the ladder points up.
+    expect(STARTER_RATE).toBeGreaterThan(PLAN_PRICING.pro.extraEmailSendsUsdPer1k as number)
+  })
+
+  it('a month inside the 1,000 bills nothing', async () => {
+    seedOrg('starter')
+    mockEmailSends = STARTER_BAND
+    await runRollup(loadRoute(MONTH, MONTH))
+    const rollup = mockDocs.get(`orgs/org-1/usage/${MONTH}`)!
+    expect(rollup['emailSendsOverage']).toBe(0)
+    expect(rollup['billedCents']).toBe(0)
+  })
+
+  it('with both switches on, the excess reaches the meter event at Starter\'s rate', async () => {
+    seedOrg('starter')
+    mockEmailSends = STARTER_BAND + 4_000
+    await runRollup(loadRoute(MONTH, MONTH))
+    const rollup = mockDocs.get(`orgs/org-1/usage/${MONTH}`)!
+    expect(rollup['emailSendsOverage']).toBe(4_000)
+    // 4,000 at $2.50/1,000 = $10.00.
+    expect(rollup['billedCents']).toBe(Math.round(4 * STARTER_RATE * 100))
+    expect(rollup['billedCents']).toBe(1_000)
+    expect(meterEvents).toHaveLength(1)
+    expect(Number(meterEvents[0].get('payload[value]'))).toBe(1_000)
+  })
+
+  it('with the switch unset, it is measured and withheld, exactly like Pro\'s', async () => {
+    seedOrg('starter')
+    mockEmailSends = STARTER_BAND + 4_000
+    await runRollup(loadRoute())
+    const rollup = mockDocs.get(`orgs/org-1/usage/${MONTH}`)!
+    expect(rollup['emailSendsOverage']).toBe(4_000)
+    expect(rollup['billedCents']).toBe(0)
+    expect(rollup['emailSendsOverageWithheldUsd']).toBe(10)
+  })
+
+  /**
+   * STARTER'S OWN START MONTH (AGL-4227). The platform switch is already in
+   * the past in production, so without this the deploy month — and any
+   * earlier org-month the daily cron re-sweeps — would invoice Starter for
+   * mail sent before the price existed.
+   */
+  it('with the platform switch on and Starter\'s unset, Starter is measured and withheld', async () => {
+    seedOrg('starter')
+    mockEmailSends = STARTER_BAND + 4_000
+    await runRollup(loadRoute('2026-01'))
+    const rollup = mockDocs.get(`orgs/org-1/usage/${MONTH}`)!
+    expect(rollup['emailSendsOverage']).toBe(4_000)
+    expect(rollup['emailSendsOverageBilled']).toBe(false)
+    expect(rollup['billedCents']).toBe(0)
+    expect(meterEvents).toHaveLength(0)
+  })
+
+  it('a Starter month BEFORE its start prices $0, however late it is swept', async () => {
+    // July swept with the start set to November: the rollup of a month that
+    // predates the start never becomes a charge.
+    seedOrg('starter')
+    mockEmailSends = STARTER_BAND + 4_000
+    await runRollup(loadRoute('2026-01', '2026-11'))
+    const rollup = mockDocs.get(`orgs/org-1/usage/${MONTH}`)!
+    expect(rollup['emailSendsOverageBilled']).toBe(false)
+    expect(rollup['billedCents']).toBe(0)
+    expect(rollup['emailSendsOverageWithheldUsd']).toBe(10)
+  })
+
+  it('Pro is not touched by Starter\'s start month', async () => {
+    seedOrg('pro')
+    mockEmailSends = (PLAN_ENTITLEMENTS.pro.emailSendsPerMonth as number) + 4_000
+    await runRollup(loadRoute(MONTH, '2026-11'))
+    const rollup = mockDocs.get(`orgs/org-1/usage/${MONTH}`)!
+    expect(rollup['emailSendsOverageBilled']).toBe(true)
+    expect(rollup['billedCents']).toBe(Math.round(4 * (PLAN_PRICING.pro.extraEmailSendsUsdPer1k as number) * 100))
   })
 })

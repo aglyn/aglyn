@@ -269,6 +269,34 @@ describe('associateCompanyByDomain', () => {
     expect(contact?.companyIds).toEqual([companyId])
   })
 
+  it('never creates a company from a school or student domain, and still links one somebody made (AGL-4230)', async () => {
+    mockOrg = { crm: { autoCreateCompanies: true } }
+    const pupil = { ...created, email: 'pat@lakewood.k12.oh.us' }
+    expect(await associateCompanyByDomain(pupil)).toEqual({
+      outcome: 'none',
+      reason: 'not-mintable',
+    })
+    expect([...docs.keys()].filter((key) => key.includes('/companies/'))).toEqual([])
+
+    docs.set('orgs/org-1/companies/co-district', {
+      name: 'Lakewood Schools',
+      domain: 'lakewood.k12.oh.us',
+      visibleTo: ['host:site-1'],
+    })
+    expect(await associateCompanyByDomain(pupil)).toEqual({
+      outcome: 'linked',
+      companyId: 'co-district',
+    })
+  })
+
+  it('asks nothing for a disposable inbox, auto-create or not (AGL-4230)', async () => {
+    mockOrg = { crm: { autoCreateCompanies: true } }
+    expect(
+      await associateCompanyByDomain({ ...created, email: 'pat@sharklasers.com' }),
+    ).toEqual({ outcome: 'none', reason: 'no-domain' })
+    expect(queries).toEqual([])
+  })
+
   it('stamps the org scope on a created company when the org shares by default', async () => {
     mockOrg = { crm: { autoCreateCompanies: true }, defaultResourceScope: 'org' }
     const outcome = await associateCompanyByDomain(created)

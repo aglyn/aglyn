@@ -1,16 +1,10 @@
 ---
 sidebar_position: 6
 title: Claude and other AI assistants
-description: Connect Claude, or any AI assistant that supports connectors, to your Aglyn workspace so it can look things up and make changes for you - contacts, orders, form submissions, site content and more - after you sign in and choose what it may do. Rolling out.
-unlisted: true
+description: Connect Claude or another AI assistant to your Aglyn workspace. Sign in, choose what it may do, and ask it to look things up or make changes for you.
 ---
 
 # Claude and other AI assistants
-
-:::caution Rolling out
-Signing in to Aglyn from an AI assistant is **not yet available**. Until it is,
-an assistant will not be able to finish connecting.
-:::
 
 Connect [Claude](https://claude.ai) to your workspace and ask it for things in
 plain words: *"Who filled in the contact form this week?"*, *"Add these five
@@ -39,7 +33,7 @@ same way.
    of connectors.
 
 Connecting takes the **Manage API keys** permission in the workspace, which
-owners and admins have. It is part of plans that include API access.
+owners and admins have. It is included from the Starter plan.
 
 On a Team or Enterprise plan for Claude, an owner of your Claude organization
 adds the connector once, and each person then connects with their own Aglyn

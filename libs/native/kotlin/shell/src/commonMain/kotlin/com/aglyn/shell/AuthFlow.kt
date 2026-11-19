@@ -6,13 +6,16 @@ import androidx.compose.runtime.setValue
 import com.aglyn.core.AuthError
 import com.aglyn.core.AuthState
 import com.aglyn.core.AuthUser
+import com.aglyn.core.FirstRunSettlement
 import com.aglyn.core.OnboardingPlanIntent
 import com.aglyn.core.PendingSignUpWorkspace
 import com.aglyn.core.SignUpDoor
 import com.aglyn.core.UtmAttribution
 import com.aglyn.core.WorkspaceState
 import com.aglyn.core.derivedWorkspaceName
+import com.aglyn.core.provisionVerifiedSignUp
 import com.aglyn.core.queryParams
+import com.aglyn.core.settleFirstRun
 import com.aglyn.pluginhost.DeepLinks
 
 /** Which of the console's `(auth)` pages the signed-out app shows. */
@@ -212,14 +215,15 @@ suspend fun ShellServices.standDownUnconsentedAccount() {
 
 /**
  * The one landing routine (`provisionAndLandSignUp`): a verified account's workspace is created now and the app lands in it;
- * an unverified one's name is held until the address is confirmed.
+ * an unverified one's name is held until the address is confirmed. A verified invitee gets none: the automatic join opens the
+ * workspace they were invited to (AGL-4047).
  */
 private suspend fun ShellServices.provisionAndLand(user: AuthUser, name: String, nameWasTyped: Boolean) {
   if (!user.emailVerified) {
     signUp.holdWorkspace(user.uid, PendingSignUpWorkspace(name, nameWasTyped))
     return
   }
-  val outcome = signUp.createWorkspace(name)
+  val outcome = signUp.provisionVerifiedSignUp(name) ?: return
   val slug = outcome.slug
   val plan = authFlow.plan
   if (slug != null && plan != null) authFlow.landingLink = plan.destination(slug)
@@ -227,27 +231,31 @@ private suspend fun ShellServices.provisionAndLand(user: AuthUser, name: String,
 
 /**
  * The first verified session of an account with no workspace (the console's chooser, AGL-2590): the name the sign-up held
- * is claimed once and its workspace created; the plan it remembered then decides where the app lands.
+ * is claimed once and its workspace created; the plan it remembered then decides where the app lands. An invitee's held name is
+ * not claimed and nothing is created (AGL-4047), and this is not marked settled, so a person whose invitation is withdrawn
+ * before any join still gets the workspace they named.
  */
 suspend fun ShellServices.settleFirstRun(workspace: WorkspaceState) {
   val user = signedInUser() ?: return
   if (!user.emailVerified || auth.impersonation.value != null || !workspace.ready || workspace.orgs.isNotEmpty()) return
   if (authFlow.firstRunSettledFor == user.uid) return
   authFlow.firstRunSettledFor = user.uid
-  authFlow.firstRun = FirstRunState.Provisioning
-  val pending = signUp.claimHeldWorkspace(user.uid, auth.providerIds())
-  if (pending == null) {
-    authFlow.firstRun = FirstRunState.Idle
-    return
+  val settled = signUp.settleFirstRun(user.uid, auth.providerIds(), joiningAnInvite = inviteJoin.state.value.joinedOrJoining) {
+    authFlow.firstRun = FirstRunState.Provisioning
   }
-  val outcome = signUp.createWorkspace(pending.name)
-  val slug = outcome.slug
-  if (slug != null) {
-    signUp.consumePlanIntent(user.uid)?.let { authFlow.landingLink = it.destination(slug) }
-    authFlow.firstRun = FirstRunState.Idle
-    return
+  authFlow.firstRun = when (settled) {
+    FirstRunSettlement.Invited -> {
+      authFlow.firstRunSettledFor = null
+      FirstRunState.Idle
+    }
+    FirstRunSettlement.NothingHeld -> FirstRunState.Idle
+    is FirstRunSettlement.Created -> {
+      settled.plan?.let { authFlow.landingLink = it.destination(settled.slug) }
+      FirstRunState.Idle
+    }
+    is FirstRunSettlement.Failed ->
+      if (settled.pending.nameWasTyped) FirstRunState.Failed(settled.pending.name, settled.error) else FirstRunState.Idle
   }
-  authFlow.firstRun = if (pending.nameWasTyped) FirstRunState.Failed(pending.name, outcome.error) else FirstRunState.Idle
 }
 
 /** "Create an organization" from the empty workspace list, or "Create it now" for the name sign-up could not use. Null on success. */

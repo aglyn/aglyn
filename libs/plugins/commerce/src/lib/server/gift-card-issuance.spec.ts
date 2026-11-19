@@ -216,6 +216,7 @@ jest.mock('@aglyn/shared-util-email', () => ({
   isEmailConfigured: () => true,
   sendEmail: async (message: any) => {
     sentEmails.push(message)
+    return { sent: true, id: "email_test" }
   },
 }))
 

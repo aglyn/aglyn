@@ -88,6 +88,12 @@ interface NativePluginContext {
   /** The person's role in the picked workspace (`owner`, `admin`, `editor`, `viewer`). */
   val orgRole: String? get() = null
 
+  /**
+   * The signed-in person's own preferences on their account (`users/{uid}`): the site pins a sites list shows and
+   * changes. Null where the shell gives none (a device screen, a test).
+   */
+  val accountPrefs: com.aglyn.core.AccountPreferencesStore? get() = null
+
   /** Whether the signed-in person is Aglyn staff, as their token says. For what to show only: the routes decide. */
   suspend fun isStaff(): Boolean = false
 
