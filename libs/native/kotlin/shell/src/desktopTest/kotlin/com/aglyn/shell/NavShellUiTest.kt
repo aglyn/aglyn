@@ -2,6 +2,7 @@ package com.aglyn.shell
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.graphics.toPixelMap
@@ -23,6 +24,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.longClick
@@ -558,7 +560,8 @@ class NavShellUiTest {
     // The Tab bar sheet, from the account sheet: Media moves up, then Done.
     onNodeWithTag("phone-account").performClick()
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("account-tab-bar") > 0 }
-    onNodeWithTag("account-tab-bar").performScrollTo().performClick()
+    // The sheet opens half way and Tab bar is its last row, below the fold: pressed through its click action.
+    onNodeWithTag("account-tab-bar").performSemanticsAction(SemanticsActions.OnClick)
     waitUntil(timeoutMillis = 3_000) { onAllNodesWithTagCount("tab-bar-sheet") > 0 }
     onNodeWithTag("tab-bar-pinned-media").performCustomAccessibilityActionWithLabel("Move up")
     onNodeWithTag("tab-bar-add-overview").performScrollTo().performClick()
