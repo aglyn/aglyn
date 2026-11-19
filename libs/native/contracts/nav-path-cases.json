@@ -17,6 +17,8 @@
     { "path": "/products/returns", "screen": "commerce.returns" },
     { "path": "/products/returns?return=:returnId", "screen": "commerce.return" },
     { "path": "/products/reservations", "screen": "commerce.reservations" },
+    { "path": "/products/subscriptions", "screen": "commerce.subscriptions" },
+    { "path": "/products/subscriptions?subscription=:subscriptionId", "screen": "commerce.subscription" },
     { "path": "/crm", "screen": "crm.contacts" },
     { "path": "/crm/contacts", "screen": "crm.contacts" },
     { "path": "/crm/leads", "screen": "crm.leads" },
@@ -254,10 +256,10 @@
     {
       "name": "a page the app has no screen for yet, over the area it is in",
       "scope": "site",
-      "expect": { "mode": "main", "area": { "row": "products", "screen": "commerce.products", "params": {} }, "pushed": [{ "unavailable": "/acme/hosts/shop/products/subscriptions?subscription=s1" }], "opensSection": false, "starredRowStays": true },
+      "expect": { "mode": "main", "area": { "row": "products", "screen": "commerce.products", "params": {} }, "pushed": [{ "unavailable": "/acme/hosts/shop/products/pos?tab=registers" }], "opensSection": false, "starredRowStays": true },
       "entries": [
-        { "via": "link", "link": "/acme/hosts/shop/products/subscriptions?subscription=s1" },
-        { "via": "notification", "link": "/h1/products/subscriptions?subscription=s1", "orgSlug": "acme", "hostId": "h1", "hostSubdomain": "shop" }
+        { "via": "link", "link": "/acme/hosts/shop/products/pos?tab=registers" },
+        { "via": "notification", "link": "/h1/products/pos?tab=registers", "orgSlug": "acme", "hostId": "h1", "hostSubdomain": "shop" }
       ]
     },
     {

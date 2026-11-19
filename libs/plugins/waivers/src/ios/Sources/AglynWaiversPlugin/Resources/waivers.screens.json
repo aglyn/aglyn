@@ -1,0 +1,1789 @@
+{
+  "$comment": "The Waivers plugin's page, natively (AGL-4042): the site's waivers (status, version, how long a signature lasts, the share link), writing one with its version history, publish, unpublish and retire, and the signatures (searched by a name, an email or a day, narrowed to one waiver, exported as a spreadsheet, one opened with its audit trail, voided, or downloaded as the signed PDF), a waiver signed at the window on staff's own device (the rider's details, minors, the boxes, the e-sign consent, a drawn or typed signature, then the signed copy's code and the next signer), and a waiver signed on paper recorded with a photo of the page. Calls the console's own waivers routes as the console does. Grammar: docs/mobile/native-architecture.md section 13.",
+  "screens": [
+    {
+      "id": "waivers.home",
+      "title": "Waivers",
+      "label": "Waivers",
+      "subtitle": "Signed waivers and the waivers you ask riders to sign",
+      "icon": "signature|assignment",
+      "scope": "site",
+      "links": [
+        "/waivers"
+      ],
+      "constants": {
+        "statuses": [
+          {
+            "id": "draft",
+            "label": "Draft"
+          },
+          {
+            "id": "published",
+            "label": "Published"
+          },
+          {
+            "id": "retired",
+            "label": "Retired"
+          }
+        ],
+        "methods": [
+          {
+            "id": "online",
+            "label": "Online"
+          },
+          {
+            "id": "at_window",
+            "label": "At the window"
+          },
+          {
+            "id": "paper",
+            "label": "On paper"
+          }
+        ],
+        "defaultBoxes": [
+          "I have read this waiver and I understand it."
+        ]
+      },
+      "load": {
+        "list": {
+          "url": "/api/waivers/templates?hostId={site.id}",
+          "optional": true
+        },
+        "sigs": {
+          "url": "/api/waivers/signatures?hostId={site.id}&limit=25",
+          "cursor": "next",
+          "cursorParam": "after",
+          "items": "signatures",
+          "when": "site.can[collectWaivers] || site.can[manageWaivers]",
+          "optional": true
+        }
+      },
+      "actions": [
+        {
+          "id": "new",
+          "label": "New waiver",
+          "icon": "plus|add",
+          "when": "site.can[manageWaivers]",
+          "url": null,
+          "navigate": {
+            "screen": "waivers.waiver",
+            "params": {
+              "waiverId": ""
+            }
+          }
+        }
+      ],
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "noContact",
+          "tone": "warning",
+          "when": "data.list && !data.list.businessContact",
+          "text": "Signers can’t see how to reach you. The e-sign agreement on every waiver tells them to contact you for a paper copy or to withdraw, and this site has no contact email or phone yet. Add a support email in Setup, under Details."
+        },
+        {
+          "type": "notice",
+          "id": "noCollect",
+          "tone": "info",
+          "when": "!site.can[collectWaivers] && !site.can[manageWaivers]",
+          "text": "Signatures hold signers’ personal details, so they take the Collect waivers permission, which site admins and editors hold by default."
+        },
+        {
+          "type": "actions",
+          "id": "signaturesTools",
+          "title": "Signatures",
+          "when": "site.can[collectWaivers] || site.can[manageWaivers]",
+          "items": [
+            {
+              "id": "find",
+              "label": "Search signatures",
+              "icon": "magnifyingglass|search",
+              "when": "site.can[collectWaivers] || site.can[manageWaivers]",
+              "promptTitle": "Search signatures",
+              "submitLabel": "Search",
+              "prompt": [
+                {
+                  "key": "q",
+                  "label": "Search a name or an email",
+                  "kind": "text",
+                  "initial": "{params.q}",
+                  "help": "Search a whole first or last name, a full email address, or pick a day."
+                },
+                {
+                  "key": "day",
+                  "label": "Signed on",
+                  "kind": "date",
+                  "initial": "{params.day}"
+                },
+                {
+                  "key": "waiverId",
+                  "label": "Waiver",
+                  "kind": "select",
+                  "initial": "{params.waiverId}",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "Every waiver"
+                    }
+                  ],
+                  "optionsFrom": {
+                    "items": "data.list.waivers",
+                    "value": "{item.id}",
+                    "label": "{item.title}"
+                  }
+                }
+              ],
+              "navigate": {
+                "screen": "waivers.signatures",
+                "params": {
+                  "q": "{form.q}",
+                  "day": "{form.day}",
+                  "waiverId": "{form.waiverId}"
+                }
+              }
+            },
+            {
+              "id": "paper",
+              "label": "Record paper waiver",
+              "icon": "doc.viewfinder|photo_camera",
+              "when": "site.can[collectWaivers] || site.can[manageWaivers]",
+              "url": null,
+              "navigate": {
+                "screen": "waivers.paper",
+                "params": {}
+              }
+            },
+            {
+              "id": "export",
+              "label": "Export CSV",
+              "icon": "square.and.arrow.down|download",
+              "when": "site.can[collectWaivers] || site.can[manageWaivers]",
+              "method": "GET",
+              "url": "/api/waivers/signatures?hostId={site.id}&format=csv",
+              "download": "waiver-signatures.csv"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "signatures",
+          "title": "Newest signatures",
+          "when": "site.can[collectWaivers] || site.can[manageWaivers]",
+          "items": "data.sigs.signatures",
+          "load": "sigs",
+          "icon": "signature|assignment",
+          "primary": [
+            "{item.signerName}",
+            {
+              "text": "{item.minors.*.name}",
+              "when": "item.minors.0"
+            }
+          ],
+          "secondary": [
+            "{item.signedAtMs:datetime}",
+            "{item.waiverTitle} (v{item.version})",
+            "{const.methods[id=item.method].label}"
+          ],
+          "tertiary": [
+            "{item.email}",
+            {
+              "text": "Good through {item.validThroughDayKey:date}",
+              "when": "item.validThroughDayKey"
+            }
+          ],
+          "badges": [
+            {
+              "text": "Voided",
+              "tone": "warning",
+              "when": "item.voided"
+            },
+            {
+              "text": "Kept until {item.retainedUntilMs:datetime}",
+              "tone": "info",
+              "when": "!item.voided && item.retainedUntilMs"
+            },
+            {
+              "text": "Signed",
+              "tone": "success",
+              "when": "!item.voided && !item.retainedUntilMs"
+            }
+          ],
+          "empty": "No signatures yet. Share a waiver’s link, or sign one at the window.",
+          "open": {
+            "screen": "waivers.signature",
+            "params": {
+              "signatureId": "{item.id}"
+            }
+          }
+        },
+        {
+          "type": "notice",
+          "id": "listFailed",
+          "tone": "error",
+          "when": "!data.list",
+          "text": "The site’s waivers could not be loaded. Pull to try again."
+        },
+        {
+          "type": "list",
+          "id": "waivers",
+          "title": "Waivers",
+          "when": "data.list",
+          "items": "data.list.waivers",
+          "icon": "doc.text|description",
+          "primary": "{item.title}",
+          "secondary": [
+            {
+              "text": "Good for the day it is signed",
+              "when": "item.validity.kind == days && item.validity.days == 1"
+            },
+            {
+              "text": "Good for a year",
+              "when": "item.validity.kind == days && item.validity.days == 365"
+            },
+            {
+              "text": "Good for {item.validity.days} days",
+              "when": "item.validity.kind == days && item.validity.days != 1 && item.validity.days != 365"
+            },
+            {
+              "text": "Good through {item.validity.endDayKey:date}",
+              "when": "item.validity.kind == season"
+            },
+            {
+              "text": "Good for one visit (the day it is signed)",
+              "when": "item.validity.kind != days && item.validity.kind != season"
+            }
+          ],
+          "tertiary": [
+            "Version {item.version}",
+            {
+              "text": "Last changed {item.updatedAtMs:datetime}",
+              "when": "item.updatedAtMs"
+            }
+          ],
+          "badges": [
+            {
+              "text": "{const.statuses[id=item.status].label}",
+              "tones": {
+                "Published": "success",
+                "*": "neutral"
+              }
+            }
+          ],
+          "actions": [
+            {
+              "id": "share",
+              "label": "Share",
+              "icon": "square.and.arrow.up|share",
+              "url": null,
+              "navigate": {
+                "screen": "waivers.share",
+                "params": {
+                  "waiverId": "{item.id}"
+                }
+              }
+            },
+            {
+              "id": "signAtWindow",
+              "label": "Sign at window",
+              "icon": "signature|edit",
+              "url": null,
+              "when": "item.status == published && site.can[collectWaivers] || item.status == published && site.can[manageWaivers]",
+              "navigate": {
+                "screen": "waivers.sign",
+                "params": {
+                  "waiverId": "{item.id}"
+                }
+              }
+            }
+          ],
+          "empty": "No waivers yet. Write your waiver once, publish it, and riders can sign it before they arrive or at the window.",
+          "open": {
+            "screen": "waivers.waiver",
+            "params": {
+              "waiverId": "{item.id}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "waivers.share",
+      "title": "Share for signing",
+      "label": "Share for signing",
+      "icon": "square.and.arrow.up|share",
+      "scope": "site",
+      "constants": {
+        "statuses": [
+          {
+            "id": "draft",
+            "label": "Draft"
+          },
+          {
+            "id": "published",
+            "label": "Published"
+          },
+          {
+            "id": "retired",
+            "label": "Retired"
+          }
+        ],
+        "methods": [
+          {
+            "id": "online",
+            "label": "Online"
+          },
+          {
+            "id": "at_window",
+            "label": "At the window"
+          },
+          {
+            "id": "paper",
+            "label": "On paper"
+          }
+        ],
+        "defaultBoxes": [
+          "I have read this waiver and I understand it."
+        ]
+      },
+      "load": {
+        "list": {
+          "url": "/api/waivers/templates?hostId={site.id}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "draft",
+          "tone": "warning",
+          "when": "data.list.waivers[id=params.waiverId].status != published",
+          "text": "Publish this waiver first: the link takes signatures only while it is published."
+        },
+        {
+          "type": "notice",
+          "id": "ownSite",
+          "tone": "info",
+          "when": "data.list.signPageOrigin",
+          "text": "Riders open this link on their own phone to sign before they arrive. It opens on your site, with your header and footer. Print the QR code for the gate or the window."
+        },
+        {
+          "type": "notice",
+          "id": "consoleSite",
+          "tone": "info",
+          "when": "!data.list.signPageOrigin",
+          "text": "Riders open this link on their own phone to sign before they arrive. Print the QR code for the gate or the window."
+        },
+        {
+          "type": "fields",
+          "id": "link",
+          "rows": [
+            {
+              "label": "Waiver",
+              "value": "{data.list.waivers[id=params.waiverId].title}"
+            },
+            {
+              "label": "Link",
+              "value": "{data.list.signPageOrigin}/sign-waiver?waiver={params.waiverId}",
+              "when": "data.list.signPageOrigin"
+            },
+            {
+              "label": "Link",
+              "value": "{app.origin}/kiosk/waivers/sign?host={site.id}&waiver={params.waiverId}",
+              "when": "!data.list.signPageOrigin"
+            }
+          ]
+        },
+        {
+          "type": "qr",
+          "id": "code",
+          "value": "{data.list.signPageOrigin}/sign-waiver?waiver={params.waiverId}",
+          "when": "data.list.signPageOrigin",
+          "caption": "QR code for {data.list.waivers[id=params.waiverId].title}"
+        },
+        {
+          "type": "qr",
+          "id": "codeConsole",
+          "value": "{app.origin}/kiosk/waivers/sign?host={site.id}&waiver={params.waiverId}",
+          "when": "!data.list.signPageOrigin",
+          "caption": "QR code for {data.list.waivers[id=params.waiverId].title}"
+        },
+        {
+          "type": "actions",
+          "id": "copy",
+          "items": [
+            {
+              "id": "copyLink",
+              "label": "Copy link",
+              "icon": "doc.on.doc|content_copy",
+              "when": "data.list.signPageOrigin",
+              "copy": "{data.list.signPageOrigin}/sign-waiver?waiver={params.waiverId}",
+              "success": "Copied"
+            },
+            {
+              "id": "copyConsoleLink",
+              "label": "Copy link",
+              "icon": "doc.on.doc|content_copy",
+              "when": "!data.list.signPageOrigin",
+              "copy": "{app.origin}/kiosk/waivers/sign?host={site.id}&waiver={params.waiverId}",
+              "success": "Copied"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "waivers.signatures",
+      "title": "Signatures",
+      "label": "Signatures",
+      "icon": "signature|assignment",
+      "scope": "site",
+      "constants": {
+        "statuses": [
+          {
+            "id": "draft",
+            "label": "Draft"
+          },
+          {
+            "id": "published",
+            "label": "Published"
+          },
+          {
+            "id": "retired",
+            "label": "Retired"
+          }
+        ],
+        "methods": [
+          {
+            "id": "online",
+            "label": "Online"
+          },
+          {
+            "id": "at_window",
+            "label": "At the window"
+          },
+          {
+            "id": "paper",
+            "label": "On paper"
+          }
+        ],
+        "defaultBoxes": [
+          "I have read this waiver and I understand it."
+        ]
+      },
+      "load": {
+        "list": {
+          "url": "/api/waivers/templates?hostId={site.id}",
+          "optional": true
+        },
+        "sigs": {
+          "url": "/api/waivers/signatures?hostId={site.id}&limit=25&q={params.day|params.q}&waiverId={params.waiverId}",
+          "cursor": "next",
+          "cursorParam": "after",
+          "items": "signatures",
+          "when": "site.can[collectWaivers] || site.can[manageWaivers]",
+          "optional": true
+        }
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "id": "filters",
+          "rows": [
+            {
+              "label": "Search",
+              "value": "{params.q}",
+              "when": "params.q && !params.day"
+            },
+            {
+              "label": "Signed on",
+              "value": "{params.day:date}",
+              "when": "params.day"
+            },
+            {
+              "label": "Waiver",
+              "value": "{data.list.waivers[id=params.waiverId].title|'Every waiver'}"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "signaturesTools",
+          "when": "site.can[collectWaivers] || site.can[manageWaivers]",
+          "items": [
+            {
+              "id": "find",
+              "label": "Search signatures",
+              "icon": "magnifyingglass|search",
+              "when": "site.can[collectWaivers] || site.can[manageWaivers]",
+              "promptTitle": "Search signatures",
+              "submitLabel": "Search",
+              "prompt": [
+                {
+                  "key": "q",
+                  "label": "Search a name or an email",
+                  "kind": "text",
+                  "initial": "{params.q}",
+                  "help": "Search a whole first or last name, a full email address, or pick a day."
+                },
+                {
+                  "key": "day",
+                  "label": "Signed on",
+                  "kind": "date",
+                  "initial": "{params.day}"
+                },
+                {
+                  "key": "waiverId",
+                  "label": "Waiver",
+                  "kind": "select",
+                  "initial": "{params.waiverId}",
+                  "options": [
+                    {
+                      "value": "",
+                      "label": "Every waiver"
+                    }
+                  ],
+                  "optionsFrom": {
+                    "items": "data.list.waivers",
+                    "value": "{item.id}",
+                    "label": "{item.title}"
+                  }
+                }
+              ],
+              "navigate": {
+                "screen": "waivers.signatures",
+                "params": {
+                  "q": "{form.q}",
+                  "day": "{form.day}",
+                  "waiverId": "{form.waiverId}"
+                }
+              }
+            },
+            {
+              "id": "paper",
+              "label": "Record paper waiver",
+              "icon": "doc.viewfinder|photo_camera",
+              "when": "site.can[collectWaivers] || site.can[manageWaivers]",
+              "url": null,
+              "navigate": {
+                "screen": "waivers.paper",
+                "params": {}
+              }
+            },
+            {
+              "id": "export",
+              "label": "Export CSV",
+              "icon": "square.and.arrow.down|download",
+              "when": "site.can[collectWaivers] || site.can[manageWaivers]",
+              "method": "GET",
+              "url": "/api/waivers/signatures?hostId={site.id}&format=csv&q={params.day|params.q}&waiverId={params.waiverId}",
+              "download": "waiver-signatures.csv"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "signatures",
+          "title": "Signatures",
+          "when": "site.can[collectWaivers] || site.can[manageWaivers]",
+          "items": "data.sigs.signatures",
+          "load": "sigs",
+          "icon": "signature|assignment",
+          "primary": [
+            "{item.signerName}",
+            {
+              "text": "{item.minors.*.name}",
+              "when": "item.minors.0"
+            }
+          ],
+          "secondary": [
+            "{item.signedAtMs:datetime}",
+            "{item.waiverTitle} (v{item.version})",
+            "{const.methods[id=item.method].label}"
+          ],
+          "tertiary": [
+            "{item.email}",
+            {
+              "text": "Good through {item.validThroughDayKey:date}",
+              "when": "item.validThroughDayKey"
+            }
+          ],
+          "badges": [
+            {
+              "text": "Voided",
+              "tone": "warning",
+              "when": "item.voided"
+            },
+            {
+              "text": "Kept until {item.retainedUntilMs:datetime}",
+              "tone": "info",
+              "when": "!item.voided && item.retainedUntilMs"
+            },
+            {
+              "text": "Signed",
+              "tone": "success",
+              "when": "!item.voided && !item.retainedUntilMs"
+            }
+          ],
+          "empty": "No signature matches. Search a whole first or last name, a full email address, or pick a day.",
+          "open": {
+            "screen": "waivers.signature",
+            "params": {
+              "signatureId": "{item.id}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "waivers.signature",
+      "title": "{data.sig.signature.signer.name|'Signature'}",
+      "label": "Signature",
+      "icon": "signature|assignment",
+      "scope": "site",
+      "constants": {
+        "statuses": [
+          {
+            "id": "draft",
+            "label": "Draft"
+          },
+          {
+            "id": "published",
+            "label": "Published"
+          },
+          {
+            "id": "retired",
+            "label": "Retired"
+          }
+        ],
+        "methods": [
+          {
+            "id": "online",
+            "label": "Online"
+          },
+          {
+            "id": "at_window",
+            "label": "At the window"
+          },
+          {
+            "id": "paper",
+            "label": "On paper"
+          }
+        ],
+        "defaultBoxes": [
+          "I have read this waiver and I understand it."
+        ]
+      },
+      "load": {
+        "sig": {
+          "url": "/api/waivers/signature?hostId={site.id}&signatureId={params.signatureId}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "voided",
+          "tone": "warning",
+          "when": "data.sig.signature.voidedAt",
+          "text": "Voided {data.sig.signature.voidedAt:datetime}: {data.sig.signature.voidReason}"
+        },
+        {
+          "type": "notice",
+          "id": "erasure",
+          "tone": "info",
+          "when": "data.sig.signature.erasure",
+          "text": "The signer asked to be erased on {data.sig.signature.erasure.requestedAtMs:datetime}. This signed waiver is kept as your record of what they agreed to until {data.sig.signature.retainUntilMs:datetime}, then deleted."
+        },
+        {
+          "type": "fields",
+          "id": "waiver",
+          "rows": [
+            {
+              "label": "Waiver",
+              "value": "{data.sig.signature.waiverTitle}, version {data.sig.signature.version}"
+            },
+            {
+              "label": "Covers",
+              "value": "Good for {data.sig.signature.dayKey:date}",
+              "when": "data.sig.signature.dayKey == @data.sig.signature.validThroughDayKey"
+            },
+            {
+              "label": "Covers",
+              "value": "Good {data.sig.signature.dayKey:date} through {data.sig.signature.validThroughDayKey:date}",
+              "when": "data.sig.signature.dayKey != @data.sig.signature.validThroughDayKey"
+            },
+            {
+              "label": "Method",
+              "value": "{const.methods[id=data.sig.signature.method].label}"
+            },
+            {
+              "label": "Adult age",
+              "value": "{data.sig.signature.adultAge|'18'}"
+            },
+            {
+              "label": "Kept until",
+              "value": "{data.sig.signature.retainUntilMs:datetime}",
+              "when": "data.sig.signature.retainUntilMs && !data.sig.signature.erasure"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "id": "signer",
+          "title": "Signer",
+          "rows": [
+            {
+              "label": "Name",
+              "value": "{data.sig.signature.signer.name}"
+            },
+            {
+              "label": "Date of birth",
+              "value": "{data.sig.signature.signer.dateOfBirth:date}"
+            },
+            {
+              "label": "Email",
+              "value": "{data.sig.signature.signer.email}"
+            },
+            {
+              "label": "Phone",
+              "value": "{data.sig.signature.signer.phone}"
+            },
+            {
+              "label": "Relationship",
+              "value": "{data.sig.signature.guardianRelationship}",
+              "when": "data.sig.signature.minors.0"
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "id": "minors",
+          "title": "Minors",
+          "when": "data.sig.signature.minors.0",
+          "items": "data.sig.signature.minors",
+          "count": false,
+          "primary": "{item.name}",
+          "secondary": "Born {item.dateOfBirth:date}",
+          "icon": "person|person"
+        },
+        {
+          "type": "fields",
+          "id": "mark",
+          "title": "Signature",
+          "rows": [
+            {
+              "label": "Signature",
+              "value": "Drawn by hand. The PDF redraws it.",
+              "when": "data.sig.signature.signature.kind == drawn"
+            },
+            {
+              "label": "Signature",
+              "value": "{data.sig.signature.signature.text}",
+              "when": "data.sig.signature.signature.kind == typed"
+            },
+            {
+              "label": "Signature",
+              "value": "Signed on paper.",
+              "when": "data.sig.signature.signature.kind != drawn && data.sig.signature.signature.kind != typed"
+            },
+            {
+              "label": "Agreed to sign electronically",
+              "value": "{data.sig.signature.consent.text}",
+              "when": "data.sig.signature.consent.agreed"
+            }
+          ]
+        },
+        {
+          "type": "fields",
+          "id": "audit",
+          "title": "Audit trail",
+          "rows": [
+            {
+              "label": "Signed",
+              "value": "{data.sig.signature.signedAtMs:datetime}"
+            },
+            {
+              "label": "Signed on",
+              "value": "{data.sig.signature.audit.signedOnHost}",
+              "when": "data.sig.signature.method != paper"
+            },
+            {
+              "label": "IP address",
+              "value": "{data.sig.signature.audit.ip}",
+              "when": "data.sig.signature.method != paper"
+            },
+            {
+              "label": "Device",
+              "value": "{data.sig.signature.audit.userAgent}",
+              "when": "data.sig.signature.method != paper"
+            },
+            {
+              "label": "Recorded by",
+              "value": "{data.sig.signature.audit.staffName|data.sig.signature.audit.staffUid}",
+              "when": "data.sig.signature.method == paper && data.sig.signature.audit.staffName || data.sig.signature.method == paper && data.sig.signature.audit.staffUid"
+            },
+            {
+              "label": "Handed over by",
+              "value": "{data.sig.signature.audit.staffName|data.sig.signature.audit.staffUid}",
+              "when": "data.sig.signature.method != paper && data.sig.signature.audit.staffName || data.sig.signature.method != paper && data.sig.signature.audit.staffUid"
+            },
+            {
+              "label": "Text fingerprint",
+              "value": "SHA-256 {data.sig.signature.signedTextSha256}"
+            },
+            {
+              "label": "Signature ID",
+              "value": "{data.sig.signature.id}"
+            }
+          ]
+        },
+        {
+          "type": "actions",
+          "id": "record",
+          "items": [
+            {
+              "id": "pdf",
+              "label": "Download PDF",
+              "icon": "doc.richtext|picture_as_pdf",
+              "method": "GET",
+              "url": "/api/waivers/signature-pdf?hostId={site.id}&signatureId={params.signatureId}",
+              "download": "waiver-{params.signatureId}.pdf"
+            },
+            {
+              "id": "void",
+              "label": "Void",
+              "icon": "xmark.seal|block",
+              "destructive": true,
+              "when": "!data.sig.signature.voidedAt && site.can[manageWaivers]",
+              "promptTitle": "Void this signature",
+              "submitLabel": "Void signature",
+              "prompt": [
+                {
+                  "key": "reason",
+                  "label": "Why it is being voided",
+                  "kind": "text",
+                  "required": true,
+                  "help": "Kept on the record. A voided signature no longer counts for any day."
+                }
+              ],
+              "url": "/api/waivers/signature",
+              "body": {
+                "hostId": "{site.id}",
+                "signatureId": "{params.signatureId}",
+                "action": "void",
+                "reason": "{form.reason}"
+              },
+              "success": "Signature voided",
+              "reload": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "waivers.waiver",
+      "title": "{data.w.waiver.title|'New waiver'}",
+      "label": "Waiver",
+      "icon": "doc.text|description",
+      "scope": "site",
+      "constants": {
+        "statuses": [
+          {
+            "id": "draft",
+            "label": "Draft"
+          },
+          {
+            "id": "published",
+            "label": "Published"
+          },
+          {
+            "id": "retired",
+            "label": "Retired"
+          }
+        ],
+        "methods": [
+          {
+            "id": "online",
+            "label": "Online"
+          },
+          {
+            "id": "at_window",
+            "label": "At the window"
+          },
+          {
+            "id": "paper",
+            "label": "On paper"
+          }
+        ],
+        "defaultBoxes": [
+          "I have read this waiver and I understand it."
+        ]
+      },
+      "load": {
+        "w": {
+          "url": "/api/waivers/template?hostId={site.id}&waiverId={params.waiverId}",
+          "when": "params.waiverId"
+        }
+      },
+      "blocks": [
+        {
+          "type": "fields",
+          "id": "state",
+          "rows": [
+            {
+              "label": "Status",
+              "value": "{const.statuses[id=data.w.waiver.status].label} · version {data.w.waiver.version}",
+              "when": "data.w.waiver"
+            },
+            {
+              "label": "Status",
+              "value": "Not saved yet",
+              "when": "!data.w.waiver"
+            }
+          ]
+        },
+        {
+          "type": "notice",
+          "id": "ownWords",
+          "tone": "info",
+          "text": "Write your waiver in your own words. Aglyn doesn’t review what it says, so ask your own lawyer what yours should cover. Saving a change starts a new version; signatures already taken keep the version they signed."
+        },
+        {
+          "type": "actions",
+          "id": "status",
+          "when": "data.w.waiver && site.can[manageWaivers]",
+          "items": [
+            {
+              "id": "publish",
+              "label": "Publish",
+              "icon": "paperplane|public",
+              "when": "data.w.waiver.status != published",
+              "url": "/api/waivers/template",
+              "body": {
+                "hostId": "{site.id}",
+                "waiverId": "{params.waiverId}",
+                "action": "publish"
+              },
+              "success": "Published: its share link, the site’s Sign waiver element and the window can take signatures now.",
+              "reload": true
+            },
+            {
+              "id": "unpublish",
+              "label": "Unpublish",
+              "icon": "eye.slash|visibility_off",
+              "when": "data.w.waiver.status == published",
+              "url": "/api/waivers/template",
+              "body": {
+                "hostId": "{site.id}",
+                "waiverId": "{params.waiverId}",
+                "action": "unpublish"
+              },
+              "success": "Unpublished: it takes no new signatures until you publish it again.",
+              "reload": true
+            },
+            {
+              "id": "retire",
+              "label": "Retire",
+              "icon": "archivebox|inventory_2",
+              "destructive": true,
+              "when": "data.w.waiver.status != retired",
+              "url": "/api/waivers/template",
+              "body": {
+                "hostId": "{site.id}",
+                "waiverId": "{params.waiverId}",
+                "action": "retire"
+              },
+              "success": "Retired: it takes no new signatures. Signatures already taken are kept.",
+              "reload": true
+            }
+          ]
+        },
+        {
+          "type": "form",
+          "id": "edit",
+          "when": "site.can[manageWaivers] && params.waiverId",
+          "fields": [
+            {
+              "key": "title",
+              "label": "Title",
+              "kind": "text",
+              "required": true,
+              "initial": "{data.w.waiver.title}",
+              "help": "What signers see at the top, like “Rider release and waiver”."
+            },
+            {
+              "key": "body",
+              "label": "Waiver text",
+              "kind": "multiline",
+              "required": true,
+              "initial": "{data.w.waiver.body}",
+              "placeholder": "Write your waiver here in your own words: the activity, the risks a rider takes on, what they agree to, and anything they must tell you before they ride."
+            },
+            {
+              "key": "checkboxes",
+              "label": "Boxes every signer must tick",
+              "kind": "lines",
+              "initial": "{data.w.waiver.checkboxes.*.label|const.defaultBoxes}",
+              "help": "One per line, up to 12."
+            },
+            {
+              "key": "adultAge",
+              "label": "Adult age",
+              "kind": "select",
+              "initial": "{data.w.waiver.adultAge|'18'}",
+              "options": [
+                {
+                  "value": "18",
+                  "label": "18"
+                },
+                {
+                  "value": "19",
+                  "label": "19"
+                },
+                {
+                  "value": "20",
+                  "label": "20"
+                },
+                {
+                  "value": "21",
+                  "label": "21"
+                }
+              ],
+              "help": "Signers under this age need a parent or guardian to sign for them."
+            },
+            {
+              "key": "allowMinors",
+              "label": "A parent or guardian may sign for people under the adult age",
+              "kind": "toggle",
+              "initial": "{data.w.waiver.allowMinors ?? 'true'}"
+            },
+            {
+              "key": "kind",
+              "label": "One signature is good for",
+              "kind": "select",
+              "initial": "{data.w.waiver.validity.kind|'visit'}",
+              "options": [
+                {
+                  "value": "visit",
+                  "label": "One visit: the day it is signed"
+                },
+                {
+                  "value": "season",
+                  "label": "A season, through a day you choose"
+                },
+                {
+                  "value": "days",
+                  "label": "A number of days"
+                }
+              ]
+            },
+            {
+              "key": "endDayKey",
+              "label": "Last day of the season",
+              "kind": "date",
+              "initial": "{data.w.waiver.validity.endDayKey}",
+              "when": "form.kind == season",
+              "required": true
+            },
+            {
+              "key": "days",
+              "label": "Days, the signing day included",
+              "kind": "number",
+              "min": 1,
+              "max": 400,
+              "initial": "{data.w.waiver.validity.days|'365'}",
+              "when": "form.kind == days",
+              "required": true
+            }
+          ],
+          "submit": {
+            "id": "save",
+            "label": "Save",
+            "icon": "checkmark|check",
+            "url": "/api/waivers/templates",
+            "body": {
+              "hostId": "{site.id}",
+              "waiverId?": "{params.waiverId}",
+              "waiver": {
+                "title": "{form.title}",
+                "body": "{form.body}",
+                "checkboxes": {
+                  "$map": {
+                    "list": "{form.checkboxes}",
+                    "where": "item",
+                    "fields": {
+                      "id?": "{data.w.waiver.checkboxes[label=item].id}",
+                      "label": "{item}"
+                    }
+                  }
+                },
+                "adultAge": {
+                  "$number": "{form.adultAge}"
+                },
+                "allowMinors": "{form.allowMinors}",
+                "validity": {
+                  "$if": "form.kind == season",
+                  "then": {
+                    "kind": "season",
+                    "endDayKey": "{form.endDayKey}"
+                  },
+                  "else": {
+                    "$if": "form.kind == days",
+                    "then": {
+                      "kind": "days",
+                      "days": {
+                        "$number": "{form.days}"
+                      }
+                    },
+                    "else": {
+                      "kind": "visit"
+                    }
+                  }
+                }
+              }
+            },
+            "success": "Saved.",
+            "reload": true
+          }
+        },
+        {
+          "type": "form",
+          "id": "create",
+          "when": "site.can[manageWaivers] && !params.waiverId",
+          "fields": [
+            {
+              "key": "title",
+              "label": "Title",
+              "kind": "text",
+              "required": true,
+              "initial": "{data.w.waiver.title}",
+              "help": "What signers see at the top, like “Rider release and waiver”."
+            },
+            {
+              "key": "body",
+              "label": "Waiver text",
+              "kind": "multiline",
+              "required": true,
+              "initial": "{data.w.waiver.body}",
+              "placeholder": "Write your waiver here in your own words: the activity, the risks a rider takes on, what they agree to, and anything they must tell you before they ride."
+            },
+            {
+              "key": "checkboxes",
+              "label": "Boxes every signer must tick",
+              "kind": "lines",
+              "initial": "{data.w.waiver.checkboxes.*.label|const.defaultBoxes}",
+              "help": "One per line, up to 12."
+            },
+            {
+              "key": "adultAge",
+              "label": "Adult age",
+              "kind": "select",
+              "initial": "{data.w.waiver.adultAge|'18'}",
+              "options": [
+                {
+                  "value": "18",
+                  "label": "18"
+                },
+                {
+                  "value": "19",
+                  "label": "19"
+                },
+                {
+                  "value": "20",
+                  "label": "20"
+                },
+                {
+                  "value": "21",
+                  "label": "21"
+                }
+              ],
+              "help": "Signers under this age need a parent or guardian to sign for them."
+            },
+            {
+              "key": "allowMinors",
+              "label": "A parent or guardian may sign for people under the adult age",
+              "kind": "toggle",
+              "initial": "{data.w.waiver.allowMinors ?? 'true'}"
+            },
+            {
+              "key": "kind",
+              "label": "One signature is good for",
+              "kind": "select",
+              "initial": "{data.w.waiver.validity.kind|'visit'}",
+              "options": [
+                {
+                  "value": "visit",
+                  "label": "One visit: the day it is signed"
+                },
+                {
+                  "value": "season",
+                  "label": "A season, through a day you choose"
+                },
+                {
+                  "value": "days",
+                  "label": "A number of days"
+                }
+              ]
+            },
+            {
+              "key": "endDayKey",
+              "label": "Last day of the season",
+              "kind": "date",
+              "initial": "{data.w.waiver.validity.endDayKey}",
+              "when": "form.kind == season",
+              "required": true
+            },
+            {
+              "key": "days",
+              "label": "Days, the signing day included",
+              "kind": "number",
+              "min": 1,
+              "max": 400,
+              "initial": "{data.w.waiver.validity.days|'365'}",
+              "when": "form.kind == days",
+              "required": true
+            }
+          ],
+          "submit": {
+            "id": "save",
+            "label": "Save",
+            "icon": "checkmark|check",
+            "url": "/api/waivers/templates",
+            "body": {
+              "hostId": "{site.id}",
+              "waiver": {
+                "title": "{form.title}",
+                "body": "{form.body}",
+                "checkboxes": {
+                  "$map": {
+                    "list": "{form.checkboxes}",
+                    "where": "item",
+                    "fields": {
+                      "id?": "{data.w.waiver.checkboxes[label=item].id}",
+                      "label": "{item}"
+                    }
+                  }
+                },
+                "adultAge": {
+                  "$number": "{form.adultAge}"
+                },
+                "allowMinors": "{form.allowMinors}",
+                "validity": {
+                  "$if": "form.kind == season",
+                  "then": {
+                    "kind": "season",
+                    "endDayKey": "{form.endDayKey}"
+                  },
+                  "else": {
+                    "$if": "form.kind == days",
+                    "then": {
+                      "kind": "days",
+                      "days": {
+                        "$number": "{form.days}"
+                      }
+                    },
+                    "else": {
+                      "kind": "visit"
+                    }
+                  }
+                }
+              }
+            },
+            "success": "Saved.",
+            "back": true
+          }
+        },
+        {
+          "type": "notice",
+          "id": "readOnly",
+          "tone": "info",
+          "when": "!site.can[manageWaivers]",
+          "text": "Writing waivers needs the Manage waivers permission."
+        },
+        {
+          "type": "list",
+          "id": "versions",
+          "title": "Version history",
+          "when": "data.w.versions.0",
+          "items": "data.w.versions",
+          "count": false,
+          "icon": "clock.arrow.circlepath|history",
+          "primary": [
+            "Version {item.version}",
+            {
+              "text": "(current)",
+              "when": "item.version == @data.w.waiver.version"
+            }
+          ],
+          "secondary": "{item.title} · saved {item.savedAtMs:datetime}"
+        }
+      ]
+    },
+    {
+      "id": "waivers.sign",
+      "title": "{data.w.waiver.title|'Sign at the window'}",
+      "label": "Sign at the window",
+      "subtitle": "Hand the tablet to the rider",
+      "icon": "signature|edit",
+      "scope": "site",
+      "links": [
+        "/waivers/sign/:waiverId"
+      ],
+      "load": {
+        "w": {
+          "url": "/api/waivers/public?hostId={site.id}&waiverId={params.waiverId}"
+        }
+      },
+      "actions": [
+        {
+          "id": "done",
+          "label": "Done signing",
+          "icon": "checkmark|check",
+          "url": null,
+          "back": true
+        }
+      ],
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "noCollect",
+          "tone": "info",
+          "when": "!site.can[collectWaivers] && !site.can[manageWaivers]",
+          "text": "Taking signatures at the window needs the Collect waivers permission."
+        },
+        {
+          "type": "notice",
+          "id": "handOver",
+          "tone": "info",
+          "when": "site.can[collectWaivers] || site.can[manageWaivers]",
+          "text": "Hand the tablet to the rider. Take it back when the screen says signed."
+        },
+        {
+          "type": "text",
+          "id": "about",
+          "title": "{data.w.site.name}",
+          "when": "site.can[collectWaivers] || site.can[manageWaivers]",
+          "source": "{data.w.waiver.validityText}"
+        },
+        {
+          "type": "text",
+          "id": "contact",
+          "when": "site.can[collectWaivers] && data.w.site.contact || site.can[manageWaivers] && data.w.site.contact",
+          "source": "Questions about this waiver? Contact {data.w.site.name} at {data.w.site.contact}."
+        },
+        {
+          "type": "text",
+          "id": "words",
+          "when": "site.can[collectWaivers] || site.can[manageWaivers]",
+          "source": "{data.w.waiver.body}"
+        },
+        {
+          "type": "form",
+          "id": "sign",
+          "when": "site.can[collectWaivers] || site.can[manageWaivers]",
+          "fields": [
+            {
+              "key": "signed",
+              "label": "",
+              "kind": "text",
+              "when": "form.never",
+              "initial": "{stash.waiverSigned}"
+            },
+            {
+              "key": "aboutYou",
+              "label": "About you",
+              "kind": "heading",
+              "when": "!form.forMinors"
+            },
+            {
+              "key": "guardian",
+              "label": "Parent or guardian",
+              "kind": "heading",
+              "when": "form.forMinors"
+            },
+            {
+              "key": "name",
+              "label": "Full name",
+              "kind": "text"
+            },
+            {
+              "key": "email",
+              "label": "Email",
+              "kind": "email",
+              "help": "Optional: a signed copy is sent here."
+            },
+            {
+              "key": "phone",
+              "label": "Phone",
+              "kind": "text"
+            },
+            {
+              "key": "dateOfBirth",
+              "label": "Date of birth",
+              "kind": "date"
+            },
+            {
+              "key": "forMinors",
+              "label": "I’m also signing for people under {data.w.adultAge}",
+              "kind": "toggle",
+              "when": "data.w.waiver.allowMinors"
+            },
+            {
+              "key": "minors",
+              "label": "",
+              "kind": "group",
+              "when": "data.w.waiver.allowMinors && form.forMinors",
+              "min": 1,
+              "max": 10,
+              "itemLabel": "Minor {item.n}",
+              "addLabel": "Add another minor",
+              "removeLabel": "Remove",
+              "fields": [
+                {
+                  "key": "name",
+                  "label": "Minor’s full name",
+                  "kind": "text"
+                },
+                {
+                  "key": "dateOfBirth",
+                  "label": "Minor’s date of birth",
+                  "kind": "date"
+                }
+              ]
+            },
+            {
+              "key": "relationship",
+              "label": "Your relationship to them",
+              "kind": "text",
+              "when": "data.w.waiver.allowMinors && form.forMinors"
+            },
+            {
+              "key": "checked",
+              "label": "",
+              "kind": "multiselect",
+              "when": "data.w.waiver.checkboxes.0",
+              "optionsFrom": {
+                "items": "data.w.waiver.checkboxes",
+                "value": "{item.id}",
+                "label": "{item.label}"
+              }
+            },
+            {
+              "key": "consentHeading",
+              "label": "{data.w.consent.heading|'Signing electronically'}",
+              "kind": "heading"
+            },
+            {
+              "key": "consent",
+              "label": "{data.w.consent.text}",
+              "kind": "toggle"
+            },
+            {
+              "key": "signatureHeading",
+              "label": "Signature",
+              "kind": "heading"
+            },
+            {
+              "key": "method",
+              "label": "How to sign",
+              "kind": "select",
+              "initial": "drawn",
+              "options": [
+                {
+                  "value": "drawn",
+                  "label": "Draw"
+                },
+                {
+                  "value": "typed",
+                  "label": "Type"
+                }
+              ]
+            },
+            {
+              "key": "drawn",
+              "label": "Signature",
+              "kind": "signature",
+              "when": "form.method == drawn",
+              "help": "Sign with your finger, a stylus or a mouse."
+            },
+            {
+              "key": "typed",
+              "label": "Type your full name",
+              "kind": "text",
+              "when": "form.method == typed"
+            }
+          ],
+          "submit": {
+            "id": "signWaiver",
+            "label": "Sign waiver",
+            "icon": "signature|edit",
+            "url": "/api/waivers/sign-at-window",
+            "body": {
+              "hostId": "{site.id}",
+              "attemptKey": "{attempt}",
+              "waiverId": "{data.w.waiver.id}",
+              "version": {
+                "$number": "{data.w.waiver.version}"
+              },
+              "signer": {
+                "name": "{form.name}",
+                "email": "{form.email}",
+                "phone": "{form.phone}",
+                "dateOfBirth": "{form.dateOfBirth}"
+              },
+              "minors": {
+                "$if": "form.forMinors",
+                "then": "{form.minors}",
+                "else": []
+              },
+              "guardianRelationship": {
+                "$if": "form.forMinors",
+                "then": "{form.relationship}",
+                "else": ""
+              },
+              "checked": "{form.checked}",
+              "signature": {
+                "$if": "form.method == typed",
+                "then": {
+                  "kind": "typed",
+                  "text": "{form.typed}"
+                },
+                "else": {
+                  "kind": "drawn",
+                  "strokes": "{form.drawn.strokes}"
+                }
+              },
+              "signatureImage": {
+                "$if": "form.method != typed",
+                "then": "{form.drawn.png}"
+              },
+              "consent": "{form.consent}",
+              "website": ""
+            },
+            "stash": {
+              "waiverSigned": "{response.signature.id}"
+            },
+            "navigate": {
+              "screen": "waivers.signed",
+              "params": {
+                "title": "{data.w.waiver.title}",
+                "signer": "{response.signature.signerName}",
+                "minors": "{response.signature.minors.*.name}",
+                "dayKey": "{response.signature.dayKey}",
+                "through": "{response.signature.validThroughDayKey}",
+                "emailed": "{?response.signature.email}",
+                "copyUrl": "{response.copyUrl}"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "waivers.signed",
+      "title": "Signed",
+      "label": "Signed",
+      "icon": "checkmark.seal|check_circle",
+      "scope": "site",
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "signedDay",
+          "tone": "success",
+          "when": "!params.minors && params.dayKey == @params.through",
+          "text": "Signed. Thank you! {params.title} is signed for {params.signer}. Good for {params.dayKey:date}."
+        },
+        {
+          "type": "notice",
+          "id": "signedDays",
+          "tone": "success",
+          "when": "!params.minors && params.dayKey != @params.through",
+          "text": "Signed. Thank you! {params.title} is signed for {params.signer}. Good {params.dayKey:date} through {params.through:date}."
+        },
+        {
+          "type": "notice",
+          "id": "signedMinorsDay",
+          "tone": "success",
+          "when": "params.minors && params.dayKey == @params.through",
+          "text": "Signed. Thank you! {params.title} is signed for {params.signer}, {params.minors}. Good for {params.dayKey:date}."
+        },
+        {
+          "type": "notice",
+          "id": "signedMinorsDays",
+          "tone": "success",
+          "when": "params.minors && params.dayKey != @params.through",
+          "text": "Signed. Thank you! {params.title} is signed for {params.signer}, {params.minors}. Good {params.dayKey:date} through {params.through:date}."
+        },
+        {
+          "type": "notice",
+          "id": "emailed",
+          "tone": "success",
+          "when": "params.emailed == true",
+          "text": "A signed copy is on its way to your email."
+        },
+        {
+          "type": "qr",
+          "id": "copy",
+          "when": "params.copyUrl",
+          "value": "{app.origin}{params.copyUrl}",
+          "caption": "Code to download your signed copy",
+          "footer": "Scan with your phone to download your signed copy (PDF). The code works for an hour."
+        },
+        {
+          "type": "actions",
+          "id": "next",
+          "items": [
+            {
+              "id": "nextSigner",
+              "label": "Next signer",
+              "icon": "person.badge.plus|person_add",
+              "url": null,
+              "back": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "waivers.paper",
+      "title": "Record a paper waiver",
+      "label": "Record a paper waiver",
+      "icon": "doc.viewfinder|photo_camera",
+      "scope": "site",
+      "load": {
+        "list": {
+          "url": "/api/waivers/templates?hostId={site.id}"
+        }
+      },
+      "blocks": [
+        {
+          "type": "notice",
+          "id": "noCollect",
+          "tone": "info",
+          "when": "!site.can[collectWaivers] && !site.can[manageWaivers]",
+          "text": "Recording waivers needs the Collect waivers permission."
+        },
+        {
+          "type": "notice",
+          "id": "nonePublished",
+          "tone": "info",
+          "when": "!data.list.waivers[status='published']",
+          "text": "Publish a waiver first: a paper waiver is recorded against the waiver it was printed from."
+        },
+        {
+          "type": "form",
+          "id": "record",
+          "when": "site.can[collectWaivers] || site.can[manageWaivers]",
+          "fields": [
+            {
+              "key": "waiverId",
+              "label": "Waiver",
+              "kind": "select",
+              "required": true,
+              "initial": "",
+              "optionsFrom": {
+                "items": "data.list.waivers",
+                "value": "{item.id}",
+                "label": "{item.title}",
+                "filter": "item.status == published"
+              }
+            },
+            {
+              "key": "signedOn",
+              "label": "Date written on the paper",
+              "kind": "date",
+              "initial": "{now.localDayMs}"
+            },
+            {
+              "key": "name",
+              "label": "Signer’s full name",
+              "kind": "text",
+              "required": true
+            },
+            {
+              "key": "email",
+              "label": "Email",
+              "kind": "email",
+              "help": "Optional. Files them in your contacts; no email is sent for a paper waiver."
+            },
+            {
+              "key": "phone",
+              "label": "Phone",
+              "kind": "text"
+            },
+            {
+              "key": "dateOfBirth",
+              "label": "Signer’s date of birth",
+              "kind": "date"
+            },
+            {
+              "key": "minors",
+              "label": "Minors on this waiver",
+              "kind": "group",
+              "when": "data.list.waivers[id=form.waiverId].allowMinors",
+              "min": 0,
+              "max": 10,
+              "addLabel": "Add a minor",
+              "removeLabel": "Remove",
+              "fields": [
+                {
+                  "key": "name",
+                  "label": "Minor {item.n}’s name",
+                  "kind": "text"
+                },
+                {
+                  "key": "dateOfBirth",
+                  "label": "Date of birth",
+                  "kind": "date"
+                }
+              ]
+            },
+            {
+              "key": "relationship",
+              "label": "Signer’s relationship to them",
+              "kind": "text",
+              "when": "data.list.waivers[id=form.waiverId].allowMinors && form.minors.0"
+            },
+            {
+              "key": "photo",
+              "label": "Take a photo of the signed page",
+              "kind": "photo",
+              "required": true,
+              "retakeLabel": "Retake the photo",
+              "alt": "The signed page",
+              "maxEdge": 1600
+            }
+          ],
+          "submit": {
+            "id": "recordWaiver",
+            "label": "Record waiver",
+            "icon": "checkmark|check",
+            "url": "/api/waivers/paper",
+            "body": {
+              "hostId": "{site.id}",
+              "attemptKey": "{attempt}",
+              "waiverId": "{form.waiverId}",
+              "signedOnDayKey": "{form.signedOn}",
+              "signer": {
+                "name": "{form.name}",
+                "email": "{form.email}",
+                "phone": "{form.phone}",
+                "dateOfBirth": "{form.dateOfBirth}"
+              },
+              "minors": {
+                "$if": "form.minors.0",
+                "then": "{form.minors}",
+                "else": []
+              },
+              "guardianRelationship": {
+                "$if": "form.minors.0",
+                "then": "{form.relationship}",
+                "else": ""
+              },
+              "photo": "{form.photo}"
+            },
+            "back": true
+          }
+        }
+      ]
+    }
+  ]
+}

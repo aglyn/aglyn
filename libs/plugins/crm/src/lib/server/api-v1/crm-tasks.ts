@@ -296,7 +296,7 @@ async function createTask(request: Request, ctx: ApiV1Context): Promise<Response
   const picklists = await taskPicklistsOf(ctx)
   const parsed = readTaskInput(body, { partial: false }, picklists)
   if ('errors' in parsed) return crmValidationFailed(ctx, 'task', parsed.errors)
-  const site = readCrmSite(ctx, 'task', body)
+  const site = await readCrmSite(ctx, request, 'task', body)
   if ('response' in site) return site.response
   const refErrors = await taskRefErrors(ctx, parsed.values)
   if (Object.keys(refErrors).length) return crmValidationFailed(ctx, 'task', refErrors)

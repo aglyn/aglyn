@@ -15,6 +15,8 @@ struct RedirectsListScreen: View {
   @State private var model = HostRedirectsModel()
   @State private var selection: RedirectRow.ID?
   @State private var editor: RedirectsEditor?
+  @State private var quota = RedirectQuotaModel()
+  @State private var exporting: TransferExportRequest?
 
   var body: some View {
     WideLayoutReader { wide in
@@ -31,14 +33,47 @@ struct RedirectsListScreen: View {
     }
     .navigationTitle("Redirects")
     .aglynScreenTitle("Redirects")
-    .aglynPrimaryAction(id: "redirects-add", "Add redirect", systemImage: "plus", enabled: editor != nil) { editor?.add() }
+    .aglynPrimaryAction(id: "redirects-add", "Add redirect", systemImage: "plus", enabled: editor != nil) {
+      editor?.add(limitRefusal: quota.refusal)
+    }
+    // The page's Import and Export, in its head: Import for "Manage data", Export for whoever reads the rules.
+    .aglynScreenToolbar(id: "redirects") {
+      AglynSecondaryActions {
+        if canImportRedirects(context) {
+          Button {
+            context.navigate(coreDataImportScreen, redirectsImportParams(hostID: context.hostID))
+          } label: {
+            Label("Import", systemImage: "square.and.arrow.down")
+          }
+          .accessibilityIdentifier("import-redirects")
+        }
+        Button {
+          exporting = redirectsExportRequest(hostID: context.hostID)
+        } label: {
+          Label("Export", systemImage: "square.and.arrow.up")
+        }
+        .accessibilityIdentifier("export-redirects")
+      }
+    }
+    .sheet(item: $exporting) { request in
+      TransferExportSheet(context: context, request: request) { done in
+        exporting = nil
+        if let done { editor?.notice = done }
+      }
+    }
     .safeAreaInset(edge: .bottom) {
-      if let notice = editor?.notice {
+      if let warning = editor?.warning {
+        AglynNotice(warning, tone: .warning) { editor?.warning = nil }
+          .padding(AglynSpace.two)
+      } else if let notice = editor?.notice {
         AglynNotice(notice, tone: .success) { editor?.notice = nil }
           .padding(AglynSpace.two)
       }
     }
-    .onChange(of: model.rows) { _, rows in editor?.refresh(rows) }
+    .onChange(of: model.rows) { _, rows in
+      editor?.refresh(rows)
+      Task { await quota.recount(context) }
+    }
     .sheet(isPresented: Binding(get: { editor?.draft != nil }, set: { if !$0 { editor?.close() } })) {
       if let editor { RedirectEditorSheet(editor: editor) }
     }
@@ -59,12 +94,24 @@ struct RedirectsListScreen: View {
           api: ConsoleRedirectsWriteAPI(api: context.api, writer: context.writer, hostID: $0), uid: context.uid)
       }
       model.start(context.firestore, hostID: context.hostID)
+      await quota.load(context)
     }
     .onDisappear { model.stop() }
   }
 
-  @ViewBuilder
+  /// The rules, then what the page keeps under them: the plan's readout and "Test a path".
   private func list(selectable: Bool) -> some View {
+    VStack(spacing: 0) {
+      rules(selectable: selectable).frame(maxHeight: .infinity)
+      if model.ready && !model.failed {
+        Divider()
+        RedirectsPageFooter(context: context, quota: quota)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func rules(selectable: Bool) -> some View {
     if !model.ready {
       List { SkeletonRows(count: 4) }.aglynListBackground()
     } else if model.failed {
@@ -74,7 +121,7 @@ struct RedirectsListScreen: View {
         "No redirects yet", systemImage: RedirectsSymbols.rule,
         message: "Send an old address to a new one so visitors and search engines find it."
       ) {
-        Button("Add redirect") { editor?.add() }.buttonStyle(.aglynProminent)
+        Button("Add redirect") { editor?.add(limitRefusal: quota.refusal) }.buttonStyle(.aglynProminent)
       }
     } else if selectable {
       List(model.rows) { row in
