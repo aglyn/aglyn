@@ -1827,6 +1827,7 @@
   "CRM_VIEW_MAX_FILTERS": 20,
   "CRM_VIEW_NAME_MAX": 60,
   "CROSS_MAX_DEPTH": 3,
+  "DASHBOARD_WIDGETS_FIELD": "dashboardWidgets",
   "DATASET_AUTHORABLE_FIELD_TYPES": [
     "text",
     "bool",
@@ -3160,6 +3161,7 @@
       }
     ]
   },
+  "HOST_ANALYTICS_WIDGET_ID": "core-host-analytics",
   "HOST_EVENTS": [
     {
       "label": "Form submitted",

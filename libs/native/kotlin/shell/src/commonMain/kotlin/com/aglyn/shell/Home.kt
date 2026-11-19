@@ -103,7 +103,9 @@ internal fun HomeScreen(
         FirstRunContent(services)
         return@Column
       }
-      HomeSiteLine(workspace, host, now, services.api.origin, onSwitch = { navigator.command = ShellCommand.SWITCH_SITE }) { url ->
+      var customizing by remember { androidx.compose.runtime.mutableStateOf(false) }
+      if (customizing) HomeDashboardCustomize(services, context, onDismiss = { customizing = false })
+      HomeSiteLine(workspace, host, now, services.api.origin, onSwitch = { navigator.command = ShellCommand.SWITCH_SITE }, onCustomize = { customizing = true }) { url ->
         // In preview or maintenance the site is entered as the team (the console's `SiteVisitButton`, AGL-4086).
         val team = com.aglyn.core.SiteVisit.entersAsTeam((host as? Live.Ready)?.value?.data)
         val hostId = site?.id
@@ -231,9 +233,10 @@ private fun HomeSiteLine(
   now: Long,
   origin: String,
   onSwitch: () -> Unit,
+  onCustomize: () -> Unit,
   onVisit: (String) -> Unit,
 ) {
-  SiteHeader(workspace, host, now, origin, onSwitch, onVisit)
+  SiteHeader(workspace, host, now, origin, onSwitch, onCustomize, onVisit)
 }
 
 @Composable
@@ -252,6 +255,7 @@ private fun SiteHeader(
   /** The console the app talks to, which serves the site's favicon. */
   origin: String,
   onSwitch: () -> Unit,
+  onCustomize: () -> Unit,
   onVisit: (String) -> Unit,
 ) {
   val site = workspace.site
@@ -290,6 +294,7 @@ private fun SiteHeader(
     statusDetail = status?.takeIf { it.kind != HostStatusKind.LIVE }?.detail,
     onSwitch = onSwitch,
     onVisit = visit?.takeIf { address != null }?.let { { onVisit(it) } },
+    onCustomize = onCustomize,
   )
 }
 

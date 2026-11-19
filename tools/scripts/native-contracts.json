@@ -1131,6 +1131,12 @@
         "EMAIL_STATE_LABELS"
       ]
     },
+    "libs/aglyn/src/lib/app-utils/dashboard-widget-prefs.ts": {
+      "values": [
+        "DASHBOARD_WIDGETS_FIELD",
+        "HOST_ANALYTICS_WIDGET_ID"
+      ]
+    },
     "libs/aglyn/src/lib/app-utils/privacy-choices.ts": {
       "values": [
         "CONSENT_OPT_OUT_TITLE",
@@ -42728,6 +42734,341 @@
         ],
         [
           "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        ]
+      ]
+    },
+    "readDashboardWidgetPrefs": {
+      "module": "libs/aglyn/src/lib/app-utils/dashboard-widget-prefs.ts",
+      "args": [
+        [
+          {
+            "org-a": {
+              "hidden": [
+                "crm-glance",
+                7,
+                "inbox-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            "org-b": "nope",
+            "org-c": {
+              "hidden": "x"
+            }
+          },
+          "org-a"
+        ],
+        [
+          {
+            "org-a": {
+              "hidden": [
+                "crm-glance",
+                7,
+                "inbox-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            "org-b": "nope",
+            "org-c": {
+              "hidden": "x"
+            }
+          },
+          "org-b"
+        ],
+        [
+          {
+            "org-a": {
+              "hidden": [
+                "crm-glance",
+                7,
+                "inbox-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            "org-b": "nope",
+            "org-c": {
+              "hidden": "x"
+            }
+          },
+          "org-c"
+        ],
+        [
+          {
+            "org-a": {
+              "hidden": [
+                "crm-glance",
+                7,
+                "inbox-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            "org-b": "nope",
+            "org-c": {
+              "hidden": "x"
+            }
+          },
+          "org-missing"
+        ],
+        [
+          {
+            "org-a": {
+              "hidden": [
+                "crm-glance",
+                7,
+                "inbox-glance"
+              ],
+              "order": [
+                "inbox-glance",
+                "commerce-glance"
+              ]
+            },
+            "org-b": "nope",
+            "org-c": {
+              "hidden": "x"
+            }
+          },
+          null
+        ],
+        [
+          null,
+          "org-a"
+        ],
+        [
+          "text",
+          "org-a"
+        ],
+        [
+          {
+            "org-a": null
+          },
+          "org-a"
+        ]
+      ]
+    },
+    "isDashboardWidgetHidden": {
+      "module": "libs/aglyn/src/lib/app-utils/dashboard-widget-prefs.ts",
+      "argsProduct": [
+        [
+          {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          },
+          {
+            "hidden": [],
+            "order": []
+          }
+        ],
+        [
+          "crm-glance",
+          "inbox-glance",
+          "core-host-analytics"
+        ]
+      ]
+    },
+    "setDashboardWidgetHidden": {
+      "module": "libs/aglyn/src/lib/app-utils/dashboard-widget-prefs.ts",
+      "argsProduct": [
+        [
+          {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          },
+          {
+            "hidden": [],
+            "order": []
+          },
+          {
+            "hidden": [
+              "a",
+              "crm-glance",
+              "b"
+            ],
+            "order": [
+              "x"
+            ]
+          }
+        ],
+        [
+          "crm-glance",
+          "core-host-analytics"
+        ],
+        [
+          true,
+          false
+        ]
+      ]
+    },
+    "moveDashboardWidget": {
+      "module": "libs/aglyn/src/lib/app-utils/dashboard-widget-prefs.ts",
+      "argsProduct": [
+        [
+          {
+            "hidden": [],
+            "order": []
+          },
+          {
+            "hidden": [
+              "crm-glance"
+            ],
+            "order": [
+              "inbox-glance",
+              "commerce-glance"
+            ]
+          },
+          {
+            "hidden": [],
+            "order": [
+              "workflows-host-activity",
+              "crm-glance",
+              "commerce-glance"
+            ]
+          }
+        ],
+        [
+          [
+            "commerce-glance",
+            "inbox-glance",
+            "crm-glance",
+            "crm-tasks-due"
+          ],
+          [
+            "workflows-host-activity"
+          ]
+        ],
+        [
+          "commerce-glance",
+          "crm-tasks-due",
+          "inbox-glance",
+          "workflows-host-activity",
+          "missing"
+        ],
+        [
+          -1,
+          1,
+          2,
+          -5
+        ]
+      ]
+    },
+    "orderDashboardWidgets": {
+      "module": "libs/aglyn/src/lib/app-utils/dashboard-widget-prefs.ts",
+      "args": [
+        [
+          [
+            {
+              "widgetId": "commerce-glance"
+            },
+            {
+              "widgetId": "inbox-glance"
+            },
+            {
+              "widgetId": "crm-glance"
+            },
+            {
+              "widgetId": "crm-tasks-due"
+            },
+            {
+              "widgetId": "accounts-newest-site-users"
+            }
+          ],
+          []
+        ],
+        [
+          [
+            {
+              "widgetId": "commerce-glance"
+            },
+            {
+              "widgetId": "inbox-glance"
+            },
+            {
+              "widgetId": "crm-glance"
+            },
+            {
+              "widgetId": "crm-tasks-due"
+            },
+            {
+              "widgetId": "accounts-newest-site-users"
+            }
+          ],
+          [
+            "crm-tasks-due",
+            "inbox-glance"
+          ]
+        ],
+        [
+          [
+            {
+              "widgetId": "commerce-glance"
+            },
+            {
+              "widgetId": "inbox-glance"
+            },
+            {
+              "widgetId": "crm-glance"
+            },
+            {
+              "widgetId": "crm-tasks-due"
+            },
+            {
+              "widgetId": "accounts-newest-site-users"
+            }
+          ],
+          [
+            "missing",
+            "accounts-newest-site-users",
+            "commerce-glance"
+          ]
+        ],
+        [
+          [],
+          [
+            "a"
+          ]
+        ],
+        [
+          [
+            {
+              "widgetId": "commerce-glance"
+            },
+            {
+              "widgetId": "inbox-glance"
+            },
+            {
+              "widgetId": "crm-glance"
+            },
+            {
+              "widgetId": "crm-tasks-due"
+            },
+            {
+              "widgetId": "accounts-newest-site-users"
+            }
+          ],
+          [
+            "crm-glance",
+            "crm-glance"
+          ]
         ]
       ]
     }
