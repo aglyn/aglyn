@@ -104,6 +104,26 @@ class MarketplaceCasesTest {
   }
 
   @Test
+  fun verificationRequestBlockCases() {
+    cases("verificationRequestBlock").forEach { (args, result) ->
+      @Suppress("UNCHECKED_CAST")
+      val input = plainJson(args[0]) as Map<String, Any?>
+      @Suppress("UNCHECKED_CAST")
+      val block = verificationRequestBlock(input["listing"] as Map<String, Any?>?, input["viewerOrgId"] as String?, (input["nowMs"] as Number).toDouble())
+      assertEquals(str(result), block, args.toString())
+    }
+    // The card: nothing for another workspace's listing or a verified one, nor a listing in review with nothing waiting.
+    assertEquals(
+      listOf(false, false, false, true, true, true),
+      listOf(
+        verificationCardShows("not-publisher", null), verificationCardShows("already-verified", null), verificationCardShows("not-listed", null),
+        verificationCardShows("not-listed", "pending"), verificationCardShows(null, null), verificationCardShows("cooling-down", "declined"),
+      ),
+    )
+    assertEquals(true, WHAT_VERIFIED_CLAIMS.contains(com.aglyn.contracts.Contracts.platformBrandName))
+  }
+
+  @Test
   fun installStateCases() = cases("resolvePluginInstallState").forEach { (args, result) ->
     fun pin(json: JsonElement) = (json as? JsonObject)?.let { obj -> obj["version"]?.let { (it as JsonPrimitive).content } }
     val state = resolvePluginInstallState(str(args[0]), pin(args[1]), args[1] is JsonObject, pin(args[2]), args[2] is JsonObject)

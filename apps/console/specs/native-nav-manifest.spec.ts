@@ -50,6 +50,8 @@ import type {
   NativeNavRow,
 } from '@aglyn/aglyn/app-utils/native-nav'
 import hostNavTabItems from '../constants/host-nav-tabs'
+import { requiredExtensionPermissions } from '../utils/extension-permission'
+import { orgPluginRefusalSellsSomething } from '../utils/org-plugin-surfaces'
 import orgNavTabItems from '../constants/org-nav-tabs'
 import { CONSOLE_PLUGIN_MANIFEST } from '../constants/plugins.client.generated'
 import { setupSections } from '../app/(app)/[orgSlug]/hosts/[host]/setup/setup-sections'
@@ -293,6 +295,35 @@ describe('every console place is placed', () => {
         expect([row.id, section.console.surface]).toEqual([row.id, 'orgPluginSection'])
       }
     }
+  })
+})
+
+describe('a workspace row hides as the console’s organization tab strip drops its tab', () => {
+  it('each organization plugin tab’s row asks the permissions and the unsold plan feature its tab asks', () => {
+    const asked = listConsoleOrgNavItems().flatMap(({ extension, navItem }) => {
+      const row = allRows.find(
+        (entry) => entry.console.surface === 'orgPluginTab' && entry.console.id === navItem.href,
+      )
+      if (!row) return []
+      const unsold = extension.featureFlag && !orgPluginRefusalSellsSomething(extension)
+      return [
+        {
+          row: { id: row.id, permissions: row.permissions ?? [], requiresFeature: row.requiresFeature },
+          tab: {
+            id: row.id,
+            permissions: [...requiredExtensionPermissions(extension, navItem)],
+            requiresFeature: unsold ? extension.featureFlag : undefined,
+          },
+        },
+      ]
+    })
+    expect(asked.length).toBeGreaterThan(0)
+    expect(asked.map((entry) => entry.row)).toEqual(asked.map((entry) => entry.tab))
+  })
+
+  it('Sequences waits for Use Sequences and a workspace granted Sequences', () => {
+    const row = allRows.find((entry) => entry.id === 'sequences') as NativeNavRow
+    expect([row.permissions, row.requiresFeature]).toEqual([['outreach.use'], 'outreach'])
   })
 })
 
