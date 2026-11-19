@@ -98,6 +98,8 @@ const NOT_SCREEN_CREATES: Readonly<Record<string, string>> = {
   'libs/plugins/marketplace/src/lib/server/admin-reviews.ts':
     'reads the pages stored in a site starter’s version so staff can review them; writes no screen (AGL-4049)',
   'libs/plugins/ai/src/lib/server/ai-seo-apply.ts': 'creates a version under a screen that exists',
+  'libs/tenant/data/admin/src/lib/server/page-seo-write.ts':
+    'updates the seo map of a page that exists, in a transaction that returns missing rather than writing when the page is not there; creates only a publish outbox row (AGL-4235)',
   'libs/plugins/ai/src/lib/jobs/ai-empty-site-sweep.ts':
     'reads whether a site has any screens; writes its own sweep marker and the job\'s siteRemoved, never a screen (AGL-3936)',
   'libs/plugins/ai/src/lib/jobs/ai-job-privacy-step.ts':
