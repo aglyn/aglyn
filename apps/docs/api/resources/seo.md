@@ -94,9 +94,8 @@ site refreshes right away — search engines and the browser tab see the new tit
 description the next time they load a page. There's no need to
 [publish](sites.md#publish) after it.
 
-After **30** such changes to one site in **an hour**, later changes are still saved and
-show within a few minutes. The `X-Live-Refresh` response header says which happened:
-`now` or `scheduled`.
+Because there is nothing to review afterwards, an app acting for a person should show
+the change and get their approval before it sends the write.
 
 ## Errors
 

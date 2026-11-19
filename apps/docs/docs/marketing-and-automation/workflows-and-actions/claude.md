@@ -83,11 +83,8 @@ you need permission to edit that site's content.
 
 Changes to products, to how your site appears in search results, and to your
 business details show on your live site as soon as they are saved. There is no
-draft to check first. Before you approve a change, read what Claude proposes
-to do.
-
-If many of these changes are made to one site in a short time, the later ones
-can take a few minutes to show.
+draft to check first, and no publish step. Before you approve a change, read
+what Claude proposes to do.
 
 ### What it cannot do
 

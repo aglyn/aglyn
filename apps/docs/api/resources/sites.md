@@ -201,9 +201,8 @@ them either: [products](products.md#live-when-saved), a site's
 live site refreshes right away — no publish needed, and none of them spends the
 publish budget.
 
-After **30** such changes to one site in **an hour**, later changes are still saved and
-show within a few minutes. The `X-Live-Refresh` response header says which happened:
-`now` or `scheduled`.
+Because there is nothing to review afterwards, an app acting for a person should show
+the change and get their approval before it sends the write.
 
 ### Form submissions
 
