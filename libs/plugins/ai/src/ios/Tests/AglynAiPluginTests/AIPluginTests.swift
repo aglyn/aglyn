@@ -21,6 +21,7 @@ final class AIPluginTests: XCTestCase {
       widgets: [
         "ai.seo-audit", "ai.seo-start", "ai.site-memory", "ai.create-page", "ai.create-template", "ai.create-layout",
         "ai.create-form", "ai.create-component", "ai.needs-you", "ai.assist-panel", "ai.insight-ask", "ai.org-insight-ask",
+        "ai.crm-record",
       ],
       quickActions: ["ai.open"],
       deepLinks: ["ai.job.link", "ai.jobs.link", "ai.signals.link"])
@@ -36,6 +37,8 @@ final class AIPluginTests: XCTestCase {
     // Home's "Needs you" lines and the shell's AI panel are slots of their own (AGL-3945).
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: "homeNeedsYou").map(\.id), ["ai.needs-you"])
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: assistPanelSlot).map(\.id), ["ai.assist-panel"])
+    // The AI summary is in a CRM record page's `recordInsights` zone (AGL-2917).
+    XCTAssertEqual(registry.widgets(for: .aglyn, slot: recordInsightsZoneName).map(\.id), ["ai.crm-record"])
     // Create with AI is in each list's create zone, under the console's zone names.
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: "hostScreens").map(\.id), ["ai.create-page"])
     XCTAssertEqual(registry.widgets(for: .aglyn, slot: "hostTemplates").map(\.id), ["ai.create-template"])
