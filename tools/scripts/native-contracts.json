@@ -917,6 +917,8 @@
         "AppSidebarStyle",
         "PinOrgResult",
         "PinOrgOutcome",
+        "PinnedHost",
+        "PinHostResult",
         "RailWorkspaces",
         "StarResult",
         "StarOutcome",
@@ -930,6 +932,8 @@
       "values": [
         "PINNED_ORGS_FIELD",
         "PINNED_ORGS_MAX",
+        "PINNED_HOSTS_FIELD",
+        "PINNED_HOSTS_MAX",
         "RECENT_ORGS_FIELD",
         "RECENT_ORGS_MAX",
         "RAIL_RECENT_ORGS",
@@ -30612,6 +30616,369 @@
           ],
           "z",
           1
+        ]
+      ]
+    },
+    "readPinnedHosts": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          {
+            "pinnedHosts": [
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o1",
+                "hostId": "h1"
+              },
+              {
+                "orgId": "o2",
+                "hostId": "h2"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pinnedHosts": [
+              {
+                "orgId": "",
+                "hostId": "h"
+              },
+              7,
+              null,
+              {
+                "orgId": "o",
+                "hostId": ""
+              },
+              {
+                "orgId": "o",
+                "hostId": 5
+              },
+              {
+                "orgId": "o",
+                "hostId": "h3"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "pinnedHosts": "x"
+          }
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    "workspacePinnedHosts": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "o1"
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "o3"
+        ],
+        [
+          [],
+          "o1"
+        ]
+      ]
+    },
+    "pinHost": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [],
+          {
+            "orgId": "o1",
+            "hostId": "h1"
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          {
+            "orgId": "o1",
+            "hostId": "h1"
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          {
+            "orgId": "o2",
+            "hostId": "h1"
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          {
+            "orgId": "",
+            "hostId": "h9"
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          {
+            "orgId": "o1",
+            "hostId": ""
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          {
+            "orgId": "o2",
+            "hostId": "h9"
+          }
+        ]
+      ]
+    },
+    "unpinHost": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "h1"
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "nope"
+        ],
+        [
+          [],
+          "h1"
+        ]
+      ]
+    },
+    "replacePinnedHost": {
+      "module": "libs/aglyn/src/lib/app-utils/account-preferences.ts",
+      "args": [
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "h1",
+          {
+            "orgId": "o1",
+            "hostId": "h9"
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "h2",
+          {
+            "orgId": "o1",
+            "hostId": "h9"
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "h1",
+          {
+            "orgId": "o1",
+            "hostId": "h3"
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "h1",
+          {
+            "orgId": "o1",
+            "hostId": ""
+          }
+        ],
+        [
+          [
+            {
+              "orgId": "o1",
+              "hostId": "h1"
+            },
+            {
+              "orgId": "o2",
+              "hostId": "h2"
+            },
+            {
+              "orgId": "o1",
+              "hostId": "h3"
+            }
+          ],
+          "h3",
+          {
+            "orgId": "o1",
+            "hostId": "h2"
+          }
         ]
       ]
     },

@@ -5,6 +5,15 @@ import AglynContracts
 import Foundation
 import Observation
 
+/// What pinning or unpinning a site did (the console's `PinToggleOutcome`).
+public enum SitePinToggle: Sendable, Equatable {
+  case pinned, unpinned
+  /// Every pin the account keeps is in this workspace: ask which to replace.
+  case full
+  /// Nothing to do (no site or no workspace).
+  case none
+}
+
 /// The preferences a person keeps on their account (`users/{uid}`, AGL-3943): pins, recent workspaces, starred and
 /// recent items, workspace colors and the apps' theme. Read live, so a pin made in the console or on another device
 /// reaches this one; written through the shared rules (`pinOrg`, `toggleStarred`, …) so every writer keeps the caps the
@@ -16,6 +25,9 @@ public final class AccountPreferencesStore {
   public let uid: String
   /// Every pin as stored, which may be more than five for an account that pinned before the cap.
   public private(set) var storedPins: [String] = []
+  /// Every site pin, each with its workspace (`pinnedHosts`, AGL-4005): as many a workspace as the person likes, one
+  /// account-wide bound (AGL-4165). Shown at once on a pin; a refused write puts the stored list back.
+  public private(set) var storedHostPins: [PinnedHost] = []
   public private(set) var recentOrgs: [String] = []
   public private(set) var starred: [StarredItem] = []
   public private(set) var recents: [RecentItem] = []
@@ -40,6 +52,8 @@ public final class AccountPreferencesStore {
   @ObservationIgnored private let reader: FirestoreReader
   @ObservationIgnored private var listener: FirestoreListening?
   @ObservationIgnored private let now: () -> Date
+  /// The site pins as the account document last said, which a refused write falls back to.
+  @ObservationIgnored private var confirmedHostPins: [PinnedHost] = []
 
   public init(uid: String, reader: FirestoreReader, now: @escaping () -> Date = Date.init) {
     self.uid = uid
@@ -63,6 +77,8 @@ public final class AccountPreferencesStore {
   /// Takes a stored document's values, each read through the shared rules.
   func apply(_ data: [String: Any]?) {
     storedPins = readPinnedOrgs(data)
+    confirmedHostPins = readPinnedHosts(data)
+    if confirmedHostPins != storedHostPins { storedHostPins = confirmedHostPins }
     recentOrgs = readRecentOrgs(data)
     starred = readStarred(data)
     recents = readRecents(data)
@@ -137,6 +153,68 @@ public final class AccountPreferencesStore {
     guard next != storedPins else { return }
     storedPins = next
     write([ContractValues.shared.pinnedOrgsField: next])
+  }
+
+  // MARK: Site pins (AGL-4005, AGL-4165)
+
+  /// One workspace's pinned site ids, in the order pinned.
+  public func pinnedHosts(in orgID: String) -> [String] { workspacePinnedHosts(storedHostPins, orgID: orgID) }
+
+  /// Whether this workspace holds every site pin the account keeps, so one more asks which to replace. Short of that a
+  /// workspace is never full.
+  public func hostPinsFull(in orgID: String) -> Bool {
+    pinnedHosts(in: orgID).count >= ContractValues.shared.pinnedHostsMax
+  }
+
+  /// Pins a site, or unpins one that is pinned (the console's `usePinnedHosts().toggle`). Past the account-wide bound it
+  /// answers `.full` and writes nothing, so the caller asks "Pinned is full. Replace one?".
+  ///
+  /// A pin or an unpin adds or removes ONE entry (`arrayUnion` / `arrayRemove`), so two devices pinning different sites
+  /// never overwrite each other's list; a write that moves more (a site that changed workspace, the bound making room)
+  /// writes the list.
+  @discardableResult
+  public func toggleHostPin(_ hostID: String, orgID: String) -> SitePinToggle {
+    guard !hostID.isEmpty, !orgID.isEmpty else { return .none }
+    if pinnedHosts(in: orgID).contains(hostID) {
+      let removed = storedHostPins.filter { $0.hostId == hostID }
+      writeHostPins(unpinHost(storedHostPins, hostID), FirestoreArrayChange.remove(removed.map(\.fields)))
+      return .unpinned
+    }
+    let pin = PinnedHost(hostId: hostID, orgId: orgID)
+    let result = pinHost(storedHostPins, pin)
+    switch result.outcome {
+    case .pinned:
+      let appended = result.pinnedHosts.count == storedHostPins.count + 1
+      let value: Any = appended ? FirestoreArrayChange.union([pin.fields]) : result.pinnedHosts.map(\.fields)
+      writeHostPins(result.pinnedHosts, value)
+      return .pinned
+    case .full: return .full
+    default: return .none
+    }
+  }
+
+  /// Puts `hostID` where `replacing` was: the answer to "Pinned is full. Replace one?".
+  public func replaceHostPin(_ replacing: String, with hostID: String, orgID: String) {
+    let next = replacePinnedHost(storedHostPins, replacing: replacing, with: PinnedHost(hostId: hostID, orgId: orgID))
+    guard next != storedHostPins else { return }
+    writeHostPins(next, next.map(\.fields))
+  }
+
+  /// Shows `next` at once and writes `value` (a one-entry array change, or the whole list) the way the console does
+  /// (`setDoc(…, { merge: true })`). A write the rules refuse puts the stored list back.
+  private func writeHostPins(_ next: [PinnedHost], _ value: Any) {
+    storedHostPins = next
+    let (reader, uid) = (reader, uid)
+    Task { [weak self] in
+      do {
+        try await reader.setDocument(["users", uid], [ContractValues.shared.pinnedHostsField: value], merge: true)
+        self?.writeError = nil
+      } catch {
+        guard let self else { return }
+        self.storedHostPins = self.confirmedHostPins
+        self.writeError = "That pin was not saved. Check the connection and try again."
+      }
+    }
   }
 
   // MARK: Recent workspaces

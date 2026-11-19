@@ -179,6 +179,28 @@ class SiteTest {
     assertTrue(SUBDOMAIN_PATTERN.matches("my-new-site"))
   }
 
+  /** The console's Created range: one condition on `createdAt`, and under it the list runs newest first. */
+  @Test
+  fun theCreatedFilterRangesOverCreatedNewestFirst() {
+    assertEquals(listOf("is", "after", "onOrAfter", "before", "onOrBefore"), com.aglyn.site.sites.SiteCreatedFilter.operators)
+    val created = com.aglyn.site.sites.SiteCreatedFilter("onOrAfter", "2026-11-01")
+    val query = com.aglyn.site.sites.sitesPlan("org1", "", SiteDomainFilter.ALL, created).toFirestoreQuery("users/u/hostMemberships", 30)
+    assertTrue(query.filters.any { it.field == "createdAt" && it.op == FilterOp.GTE })
+    assertEquals("createdAt", query.orderBy.first().field)
+    assertTrue(query.orderBy.first().descending)
+    assertEquals("Created on or after Nov 1, 2026", created.label)
+    assertTrue(com.aglyn.site.sites.sitesPlan("org1", "", SiteDomainFilter.ALL, com.aglyn.site.sites.SiteCreatedFilter("is", "soon")).refused.isNotEmpty())
+  }
+
+  /** Pinned sites lead the unfiltered list in the order pinned; a search or a filter keeps the query's order. */
+  @Test
+  fun pinnedSitesLeadTheUnfilteredList() {
+    fun row(id: String) = com.aglyn.site.sites.SiteRow(id, id.uppercase(), null, null, false, null, null)
+    val rows = listOf(row("a"), row("b"), row("c"))
+    assertEquals(listOf("c", "z", "a", "b"), com.aglyn.site.sites.sitesShown(rows, listOf("c", "z", "gone"), listOf(row("z")), false).map { it.id })
+    assertEquals(listOf("a", "b", "c"), com.aglyn.site.sites.sitesShown(rows, listOf("c"), emptyList(), true).map { it.id })
+  }
+
   @Test
   fun createsTheSiteWithTheStarterInTheChosenStyle() {
     val body = createSiteBody("org1", "  My Shop ", " MyShop ", "trades")
@@ -188,6 +210,28 @@ class SiteTest {
     // The console's "Create the starter site"; without it the server may leave the site empty for a guided start the app does not have.
     assertEquals("starter", body["start"]?.jsonPrimitive?.content)
     assertEquals("trades", body["style"]?.jsonPrimitive?.content)
+    // "Start in preview" (AGL-4086) rides the same request; off unless the person turns it on.
+    assertEquals("false", body["preview"]?.jsonPrimitive?.content)
+    assertEquals("true", createSiteBody("org1", "Shop", "shop", "trades", preview = true)["preview"]?.jsonPrimitive?.content)
+    assertEquals(false, com.aglyn.site.sites.sitePreviewStartsOn("starter"))
+    assertEquals(true, com.aglyn.site.sites.sitePreviewStartsOn("import"))
+  }
+
+  /** `6 of 10 sites · Pro plan` beside Create site, as the console's `describeSiteAllowance` says it. */
+  @Test
+  fun theSiteAllowanceReadsAsTheConsoleSaysIt() {
+    val describe = { used: Int, limit: Double?, plan: String?, ready: Boolean -> com.aglyn.site.sites.describeSiteAllowance(used, limit, plan, ready) }
+    assertEquals("6 of 10 sites · Pro plan", describe(6, 10.0, "Pro", true))
+    assertEquals("1 of 1 site · Free plan", describe(1, 1.0, "Free", true))
+    assertEquals("4 of Unlimited sites · Custom plan", describe(4, Double.POSITIVE_INFINITY, "Custom", true))
+    assertEquals("4 of Unlimited sites · Pro plan", describe(4, -1.0, "Pro", true))
+    assertEquals("1 site · Pro plan", describe(1, null, "Pro", true))
+    assertEquals(null, describe(0, 1.0, "Free", false))
+    assertEquals(null, describe(0, 1.0, null, true))
+    val pro = kotlinx.serialization.json.Json.parseToJsonElement("""{"plan":"pro","quotas":{"hostLimit":10}}""").jsonObject
+    assertEquals(com.aglyn.site.sites.SiteAllowancePlan("Pro", 10.0), com.aglyn.site.sites.SiteAllowancePlan.of(pro))
+    val custom = kotlinx.serialization.json.Json.parseToJsonElement("""{"plan":"enterprise","quotas":{"hostLimit":null}}""").jsonObject
+    assertEquals(Double.POSITIVE_INFINITY, com.aglyn.site.sites.SiteAllowancePlan.of(custom)?.hostLimit)
   }
 
   @Test

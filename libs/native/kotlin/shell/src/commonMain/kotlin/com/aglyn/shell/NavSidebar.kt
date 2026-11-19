@@ -368,10 +368,13 @@ internal fun SiteSwitcherPopover(services: ShellServices, workspace: WorkspaceSt
   val actions = LocalShellActions.current
   var query by remember { mutableStateOf("") }
   val orgId = workspace.org?.id
-  val recentIds = prefs.recents.filter { it.orgId == orgId }.mapNotNull { it.hostId }.distinct()
+  // The sites pinned here lead, in the order pinned (the console's site switcher lists them first, AGL-4005).
+  val pinnedIds = orgId?.let { prefs.pinnedHosts(it) }.orEmpty()
+  val recentIds = prefs.recents.filter { it.orgId == orgId }.mapNotNull { it.hostId }.distinct().filter { it !in pinnedIds }
   val sites = workspace.sites
+  val pinned = pinnedIds.mapNotNull { id -> sites.firstOrNull { it.id == id } }
   val recent = recentIds.mapNotNull { id -> sites.firstOrNull { it.id == id } }.take(5)
-  val rest = sites.filter { s -> recent.none { it.id == s.id } }.sortedBy { it.name.lowercase() }
+  val rest = sites.filter { s -> recent.none { it.id == s.id } && s.id !in pinnedIds }.sortedBy { it.name.lowercase() }
   val matches = if (query.isBlank()) null else sites.mapNotNull { site -> scoreMatch(site.name, listOfNotNull(site.subdomain, site.cname), query)?.let { it to site } }
     .sortedWith { a, b -> com.aglyn.contracts.scoredOrder.compare(a.first to a.second.name, b.first to b.second.name) }.map { it.second }
   fun pick(site: WorkspaceSite) { onDismiss(); services.workspace.selectSite(site.id) }
@@ -395,11 +398,13 @@ internal fun SiteSwitcherPopover(services: ShellServices, workspace: WorkspaceSt
         Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
           if (matches != null) {
             if (matches.isEmpty()) MenuLabel("No sites match")
-            for (site in matches) SwitcherSiteRow(services, site, site.id == workspace.site?.id) { pick(site) }
+            for (site in matches) SwitcherSiteRow(services, site, site.id == workspace.site?.id, site.id in pinnedIds) { pick(site) }
           } else {
+            if (pinned.isNotEmpty()) MenuLabel("Pinned")
+            for (site in pinned) SwitcherSiteRow(services, site, site.id == workspace.site?.id, true) { pick(site) }
             if (recent.isNotEmpty()) MenuLabel("Recent")
             for (site in recent) SwitcherSiteRow(services, site, site.id == workspace.site?.id) { pick(site) }
-            if (recent.isNotEmpty() && rest.isNotEmpty()) MenuLabel("All sites")
+            if ((recent.isNotEmpty() || pinned.isNotEmpty()) && rest.isNotEmpty()) MenuLabel("All sites")
             for (site in rest) SwitcherSiteRow(services, site, site.id == workspace.site?.id) { pick(site) }
           }
         }
@@ -433,7 +438,7 @@ private fun MenuLabel(text: String) {
 
 /** One site in the switcher (Figma: 44 tall, favicon 24 radius 6, name 13 semibold, address 12, a check on the current). */
 @Composable
-private fun SwitcherSiteRow(services: ShellServices, site: WorkspaceSite, current: Boolean, onClick: () -> Unit) {
+private fun SwitcherSiteRow(services: ShellServices, site: WorkspaceSite, current: Boolean, pinned: Boolean = false, onClick: () -> Unit) {
   Row(
     Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable(onClick = onClick).heightIn(min = 44.dp).padding(horizontal = 10.dp)
       .testTag("site-switcher-${site.id}").semantics(mergeDescendants = true) { role = Role.Button; this.selected = current },
@@ -447,6 +452,7 @@ private fun SwitcherSiteRow(services: ShellServices, site: WorkspaceSite, curren
       Text(site.name, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
       Text(site.address ?: site.subdomain, fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
+    if (pinned) Icon(AglynIcons.named("push_pin"), "Pinned", Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
     if (current) Icon(AglynIcons.named("check"), null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
   }
 }
