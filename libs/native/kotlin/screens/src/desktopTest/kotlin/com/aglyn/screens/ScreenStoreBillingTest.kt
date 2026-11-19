@@ -47,4 +47,24 @@ class ScreenStoreBillingTest {
     build("on")
     assertTrue(ScreenValues.condition(condition, ScreenSession(orgPermissions = mapOf("billing.manage" to true)).context(null, emptyMap())))
   }
+
+  /** Billing's Outstanding card: Pay now and View (Stripe's invoice page, which takes a payment) are absent in a store build. */
+  @Test
+  fun payNowAndTheInvoicePageAreAbsentWhereTheBuildMayNotBuy() {
+    val root = generateSequence(java.io.File("").absoluteFile) { it.parentFile }.first { java.io.File(it, "libs/native/screens").isDirectory }
+    val spec = ScreenSpec.parseFile(java.io.File(root, "libs/native/screens/billing.screens.json").readText()).first { it.id == "core.billing" }
+    val list = spec.blocks.first { it.type == "list" && it.raw.str("title") == "Outstanding" }
+    val actions = list.raw.arr("actions").mapNotNull { ActionSpec.parse(it) }
+    fun shown(): List<String?> {
+      val context = ScreenContext.withItem(
+        ScreenSession(orgPermissions = mapOf("billing.manage" to true)).context(null, emptyMap()),
+        kotlinx.serialization.json.Json.parseToJsonElement("""{"id":"in_1","hostedInvoiceUrl":"https://invoice.test/i"}"""),
+      )
+      return actions.filter { ScreenValues.condition(it.whenCondition, context) }.map { it.id }
+    }
+    build("off")
+    assertEquals(emptyList(), shown())
+    build("on")
+    assertEquals(listOf("payNow", "view"), shown())
+  }
 }

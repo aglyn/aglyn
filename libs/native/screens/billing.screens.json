@@ -100,7 +100,7 @@
               "id": "payNow",
               "label": "Pay now",
               "icon": "creditcard|credit_card",
-              "when": "org.can[billing.manage]",
+              "when": "app.billing && org.can[billing.manage]",
               "url": "/api/billing/pay-invoice",
               "body": {
                 "orgId": "{org.id}",
@@ -132,7 +132,7 @@
               "id": "view",
               "label": "View",
               "icon": "doc.richtext|description",
-              "when": "item.hostedInvoiceUrl",
+              "when": "app.billing && item.hostedInvoiceUrl",
               "link": "{item.hostedInvoiceUrl}"
             }
           ],
