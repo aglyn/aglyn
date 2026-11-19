@@ -249,6 +249,12 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
+// The site router's own lock verdict (AGL-4235) reads the lock module
+// directly; no site here is locked, as the pipeline's double above says.
+jest.mock('../../../libs/tenant/data/admin/src/lib/server/lockdown', () => ({
+  lockdownRefusal: async () => null,
+}))
+
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   // The real structural inspector (AGL-1475), not a stub. This mock replaces
@@ -378,6 +384,8 @@ const png = (sizeBytes = 1024) => ({
 
 beforeEach(() => {
   mockDocs.clear()
+  // The site the requests name, which the site router reads first (AGL-4235).
+  mockDocs.set('hosts/host-1', { displayName: 'Demo', subdomain: 'demo' })
   mockObjects = new Map()
   mockOrg = { plan: 'business', hosts: { 'host-1': true } }
   mockScopes = ['media:read', 'media:write']

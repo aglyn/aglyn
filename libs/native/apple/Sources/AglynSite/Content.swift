@@ -492,6 +492,16 @@ public struct ContentAPI: Sendable {
     try await reader.deleteDocument(entryPath(collectionID, id))
   }
 
+  /// A signed two-hour link to an entry the site does not serve yet, as the site will render it (AGL-3205): minted by
+  /// `/api/content/preview-link`, which re-checks that this person may edit the site's content. Nil when it answered no
+  /// link.
+  public func previewLink(collectionSlug: String, entrySlug: String) async throws -> URL? {
+    let answer = try await api.request(
+      "/api/content/preview-link", method: .post,
+      body: jsonBody(["hostId": hostID, "collectionSlug": collectionSlug, "entrySlug": entrySlug]))
+    return answer?["url"]?.stringValue.flatMap(URL.init(string:))
+  }
+
   /// Tells the live site a collection's entries changed; never fails the write before it.
   public func announce(_ collectionID: String, slugs: [String]) async {
     _ = try? await api.request(

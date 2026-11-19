@@ -7323,6 +7323,136 @@
         }
       ]
     },
+    "computeLifetimePurchaseCents": {
+      "module": "libs/plugins/commerce/src/lib/model/site-member-purchases.ts",
+      "cases": [
+        {
+          "args": [
+            []
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            [
+              {
+                "status": "paid",
+                "totals": {
+                  "totalCents": 2500
+                }
+              }
+            ]
+          ],
+          "result": 2500
+        },
+        {
+          "args": [
+            [
+              {
+                "status": "paid",
+                "totals": {
+                  "totalCents": 2500
+                },
+                "refundedCents": 500
+              },
+              {
+                "status": "fulfilled",
+                "amountCents": 1200
+              }
+            ]
+          ],
+          "result": 3200
+        },
+        {
+          "args": [
+            [
+              {
+                "status": "pending",
+                "totals": {
+                  "totalCents": 9900
+                }
+              },
+              {
+                "status": "cancelled",
+                "totals": {
+                  "totalCents": 4000
+                }
+              },
+              {
+                "status": "refunded",
+                "totals": {
+                  "totalCents": 3000
+                },
+                "refundedCents": 3000
+              }
+            ]
+          ],
+          "result": 0
+        },
+        {
+          "args": [
+            [
+              {
+                "status": "paid",
+                "totals": {
+                  "totalCents": 1000
+                },
+                "refundedCents": 1500
+              },
+              {
+                "totals": {
+                  "totalCents": null
+                },
+                "amountCents": "750"
+              }
+            ]
+          ],
+          "result": 750
+        },
+        {
+          "args": [
+            [
+              {
+                "status": "delivered",
+                "totals": {},
+                "amountCents": 400,
+                "refundedCents": -50
+              },
+              {
+                "status": "partially_fulfilled",
+                "totals": {
+                  "totalCents": "abc"
+                }
+              },
+              {
+                "status": null,
+                "totals": {
+                  "totalCents": 1250.5
+                }
+              }
+            ]
+          ],
+          "result": 1650.5
+        },
+        {
+          "args": [
+            [
+              {
+                "status": "paid",
+                "totals": {
+                  "totalCents": 2000
+                },
+                "refundedCents": null,
+                "dispute": {
+                  "reversedCents": 2000
+                }
+              }
+            ]
+          ],
+          "result": 2000
+        }
+      ]
+    },
     "computeQuoteTotals": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-quotes.ts",
       "cases": [
@@ -7891,6 +8021,307 @@
               "h2"
             ],
             "name": null
+          }
+        }
+      ]
+    },
+    "contactQueryClause": {
+      "module": "libs/plugins/crm/src/lib/constants/contact-filters.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "field": "email",
+              "op": "startsWith",
+              "value": "pat"
+            },
+            {
+              "groupId": "g1",
+              "foldsScope": true
+            }
+          ],
+          "result": {
+            "field": "email",
+            "op": "startsWith",
+            "value": "pat"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "formIds",
+              "op": "contains",
+              "value": "f1"
+            },
+            {
+              "groupId": "g1",
+              "foldsScope": false
+            }
+          ],
+          "result": {
+            "refused": "your access is limited to specific sites, which this filter cannot be combined with — an organization administrator can use it"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "formIds",
+              "op": "contains",
+              "value": "f1"
+            },
+            {
+              "groupId": "g1",
+              "foldsScope": true
+            }
+          ],
+          "result": {
+            "field": "formIds",
+            "op": "contains",
+            "value": "f1"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "emailState",
+              "op": "isEmpty",
+              "value": ""
+            },
+            {
+              "groupId": "g1",
+              "foldsScope": true
+            }
+          ],
+          "result": {
+            "field": "emailStatus",
+            "op": "equals",
+            "value": "none"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "emailState",
+              "op": "isNotEmpty",
+              "value": ""
+            },
+            {
+              "groupId": "g1",
+              "foldsScope": true
+            }
+          ],
+          "result": {
+            "field": "emailStatus",
+            "op": "isAnyOf",
+            "value": "ok,undeliverable,bounced,blocked,unsubscribed,complained,do_not_contact"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "emailState",
+              "op": "isAnyOf",
+              "value": "ok,bounced"
+            },
+            {
+              "groupId": "g1",
+              "foldsScope": true
+            }
+          ],
+          "result": {
+            "field": "emailStatus",
+            "op": "isAnyOf",
+            "value": "ok,bounced"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "emailState",
+              "op": "equals",
+              "value": "nope"
+            },
+            {
+              "groupId": "g1",
+              "foldsScope": true
+            }
+          ],
+          "result": {
+            "refused": "pick one of the choices"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "lifecycleStage",
+              "op": "equals",
+              "value": "customer"
+            },
+            {
+              "groupId": "g1",
+              "foldsScope": true
+            }
+          ],
+          "result": {
+            "field": "facetKeys",
+            "op": "contains",
+            "value": "g1:stage=customer"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "lifecycleStage",
+              "op": "isAnyOf",
+              "value": "customer,lead"
+            },
+            {
+              "groupId": null,
+              "foldsScope": true
+            }
+          ],
+          "result": {
+            "field": "facetKeys",
+            "op": "isAnyOf",
+            "value": "*:stage=customer,*:stage=lead"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "ownerUid",
+              "op": "equals",
+              "value": "u1"
+            },
+            {
+              "groupId": "g1",
+              "foldsScope": false
+            }
+          ],
+          "result": {
+            "refused": "your access is limited to specific sites, which this filter cannot be combined with — an organization administrator can use it"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "tags",
+              "op": "contains",
+              "value": "VIP Guest"
+            },
+            {
+              "groupId": "g1",
+              "foldsScope": true
+            }
+          ],
+          "result": {
+            "field": "facetKeys",
+            "op": "contains",
+            "value": "g1:tag=vip guest"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "source",
+              "op": "isNotEmpty",
+              "value": ""
+            },
+            {
+              "groupId": "g1",
+              "foldsScope": true
+            }
+          ],
+          "result": {
+            "field": "facetKeys",
+            "op": "contains",
+            "value": "g1:source"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "custom_plan",
+              "op": "equals",
+              "value": "Enterprise"
+            },
+            {
+              "groupId": "g1",
+              "foldsScope": true
+            }
+          ],
+          "result": {
+            "field": "facetKeys",
+            "op": "contains",
+            "value": "g1:custom.plan=enterprise"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "leadSource",
+              "op": "equals",
+              "value": "Trade show"
+            },
+            {
+              "groupId": "g1",
+              "foldsScope": true
+            }
+          ],
+          "result": {
+            "field": "facetKeys",
+            "op": "contains",
+            "value": "g1:leadSource=trade show"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "ordersCount",
+              "op": "=",
+              "value": "3"
+            },
+            {
+              "groupId": "g1",
+              "foldsScope": true
+            }
+          ],
+          "result": {
+            "field": "facetKeys",
+            "op": "contains",
+            "value": "g1:orders=3"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "companyId",
+              "op": "equals",
+              "value": "  "
+            },
+            {
+              "groupId": "g1",
+              "foldsScope": true
+            }
+          ],
+          "result": {
+            "refused": "no value yet"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "industry",
+              "op": "equals",
+              "value": "x"
+            },
+            {
+              "groupId": "g1",
+              "foldsScope": true
+            }
+          ],
+          "result": {
+            "refused": "this list does not filter by that"
           }
         }
       ]
@@ -8788,6 +9219,122 @@
         }
       ]
     },
+    "crmDefaultViewId": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "cases": [
+        {
+          "args": [
+            null,
+            "o1",
+            "contacts"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "crmDefaultViews": {
+                "o1": {
+                  "contacts": "v1",
+                  "deals": "  "
+                }
+              }
+            },
+            "o1",
+            "contacts"
+          ],
+          "result": "v1"
+        },
+        {
+          "args": [
+            {
+              "crmDefaultViews": {
+                "o1": {
+                  "contacts": "v1",
+                  "deals": "  "
+                }
+              }
+            },
+            "o1",
+            "deals"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "crmDefaultViews": {
+                "o1": {
+                  "contacts": "v1"
+                }
+              }
+            },
+            "o2",
+            "contacts"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "crmDefaultViews": [
+                "v1"
+              ]
+            },
+            "o1",
+            "contacts"
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "crmDefaultViews": {
+                "o1": {
+                  "contacts": "v1"
+                }
+              }
+            },
+            null,
+            "contacts"
+          ],
+          "result": null
+        }
+      ]
+    },
+    "crmDefaultViewPatch": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "cases": [
+        {
+          "args": [
+            "o1",
+            "leads",
+            "v9"
+          ],
+          "result": {
+            "crmDefaultViews": {
+              "o1": {
+                "leads": "v9"
+              }
+            }
+          }
+        },
+        {
+          "args": [
+            "o1",
+            "tasks",
+            null
+          ],
+          "result": {
+            "crmDefaultViews": {
+              "o1": {
+                "tasks": null
+              }
+            }
+          }
+        }
+      ]
+    },
     "crmEmailTemplateIsListed": {
       "module": "libs/aglyn/src/lib/app-utils/crm-email-templates.ts",
       "cases": [
@@ -8911,6 +9458,34 @@
               "c"
             ]
           }
+        }
+      ]
+    },
+    "crmMergeUnresolvedMessage": {
+      "module": "libs/aglyn/src/lib/app-utils/crm-email-templates.ts",
+      "cases": [
+        {
+          "args": [
+            []
+          ],
+          "result": ""
+        },
+        {
+          "args": [
+            [
+              "contact.firstName"
+            ]
+          ],
+          "result": "1 field has no value: {{contact.firstName}}"
+        },
+        {
+          "args": [
+            [
+              "contact.firstName",
+              "deal.amount"
+            ]
+          ],
+          "result": "2 fields have no value: {{contact.firstName}}, {{deal.amount}}"
         }
       ]
     },
@@ -10274,6 +10849,61 @@
             "+123456789012345678901"
           ],
           "result": null
+        }
+      ]
+    },
+    "crmViewIsListed": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "shared": true,
+              "ownerUid": "u2"
+            },
+            "u1"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "shared": false,
+              "ownerUid": "u1"
+            },
+            "u1"
+          ],
+          "result": true
+        },
+        {
+          "args": [
+            {
+              "shared": false,
+              "ownerUid": "u2"
+            },
+            "u1"
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "shared": false,
+              "ownerUid": ""
+            },
+            ""
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "shared": false,
+              "ownerUid": "u1"
+            },
+            null
+          ],
+          "result": false
         }
       ]
     },
@@ -11823,6 +12453,107 @@
               "primary": true
             }
           ]
+        }
+      ]
+    },
+    "dealQueryClause": {
+      "module": "libs/plugins/crm/src/lib/constants/deal-filters.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "field": "status",
+              "op": "equals",
+              "value": "won"
+            }
+          ],
+          "result": {
+            "field": "status",
+            "op": "equals",
+            "value": "won"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "type",
+              "op": "equals",
+              "value": "New Business"
+            }
+          ],
+          "result": {
+            "field": "typeKey",
+            "op": "equals",
+            "value": "new business"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "type",
+              "op": "isAnyOf",
+              "value": "New Business,Renewal"
+            }
+          ],
+          "result": {
+            "field": "typeKey",
+            "op": "isAnyOf",
+            "value": "new business,renewal"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "leadSource",
+              "op": "equals",
+              "value": "\u0000none"
+            }
+          ],
+          "result": {
+            "field": "leadSourceKey",
+            "op": "isEmpty",
+            "value": ""
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "leadSource",
+              "op": "isEmpty",
+              "value": ""
+            }
+          ],
+          "result": {
+            "field": "leadSourceKey",
+            "op": "isEmpty",
+            "value": ""
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "type",
+              "op": "isAnyOf",
+              "value": "\u0000none,Renewal"
+            }
+          ],
+          "result": {
+            "refused": "\"None\" cannot be picked beside a value"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "nextTaskAtMs",
+              "op": "isEmpty",
+              "value": ""
+            }
+          ],
+          "result": {
+            "field": "nextTaskAtMs",
+            "op": "isEmpty",
+            "value": ""
+          }
         }
       ]
     },
@@ -13851,6 +14582,41 @@
         }
       ]
     },
+    "duplicateDisplayName": {
+      "module": "libs/aglyn/src/lib/app-utils/duplicate-resource.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": "Copy of Untitled"
+        },
+        {
+          "args": [
+            ""
+          ],
+          "result": "Copy of Untitled"
+        },
+        {
+          "args": [
+            "  Welcome  "
+          ],
+          "result": "Copy of Welcome"
+        },
+        {
+          "args": [
+            "Copy of Welcome"
+          ],
+          "result": "Copy of Welcome"
+        },
+        {
+          "args": [
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          "result": "Copy of xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+      ]
+    },
     "effectiveDatasetModel": {
       "module": "libs/plugins/data/src/lib/model/dataset-model-core.ts",
       "cases": [
@@ -14165,6 +14931,160 @@
               }
             }
           }
+        }
+      ]
+    },
+    "emailStateForbidsEmail": {
+      "module": "libs/aglyn/src/lib/app-utils/email-state.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "status": "ok",
+              "atMs": 0,
+              "source": "member",
+              "detail": null
+            }
+          ],
+          "result": false
+        },
+        {
+          "args": [
+            {
+              "status": "unsubscribed",
+              "atMs": 0,
+              "source": "member",
+              "detail": null
+            }
+          ],
+          "result": true
+        }
+      ]
+    },
+    "emailStateRefusal": {
+      "module": "libs/aglyn/src/lib/app-utils/email-state.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "status": "ok",
+              "atMs": 0,
+              "source": "member",
+              "detail": null
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "status": "undeliverable",
+              "atMs": 0,
+              "source": "campaign",
+              "detail": null
+            }
+          ],
+          "result": "Email to this address would bounce: its domain has no mail server."
+        },
+        {
+          "args": [
+            {
+              "status": "bounced",
+              "atMs": 0,
+              "source": "campaign",
+              "detail": null
+            }
+          ],
+          "result": "Email to this address bounced: the mailbox does not exist."
+        },
+        {
+          "args": [
+            {
+              "status": "blocked",
+              "atMs": 0,
+              "source": "campaign",
+              "detail": null
+            }
+          ],
+          "result": "Their mail gateway blocked email to this address."
+        },
+        {
+          "args": [
+            {
+              "status": "unsubscribed",
+              "atMs": 0,
+              "source": "campaign",
+              "detail": null
+            }
+          ],
+          "result": "They unsubscribed."
+        },
+        {
+          "args": [
+            {
+              "status": "complained",
+              "atMs": 0,
+              "source": "campaign",
+              "detail": null
+            }
+          ],
+          "result": "They marked an email as spam."
+        },
+        {
+          "args": [
+            {
+              "status": "do_not_contact",
+              "atMs": 0,
+              "source": "campaign",
+              "detail": null
+            }
+          ],
+          "result": "On the do-not-contact list."
+        },
+        {
+          "args": [
+            {
+              "status": "bounced",
+              "atMs": 0,
+              "source": "campaign",
+              "detail": "550 no such user."
+            }
+          ],
+          "result": "Email to this address bounced: the mailbox does not exist. 550 no such user."
+        },
+        {
+          "args": [
+            {
+              "status": "undeliverable",
+              "atMs": 1700000000000,
+              "source": "check",
+              "detail": null
+            }
+          ],
+          "result": "Email to this address would bounce: its domain has no mail server (checked on Nov 14, 2023)."
+        },
+        {
+          "args": [
+            {
+              "status": "unsubscribed",
+              "atMs": 1700000000000,
+              "source": "campaign",
+              "detail": "Via the footer link."
+            }
+          ],
+          "result": "They unsubscribed on Nov 14, 2023. Via the footer link."
         }
       ]
     },
@@ -23827,6 +24747,262 @@
         }
       ]
     },
+    "leadQueryClause": {
+      "module": "libs/plugins/crm/src/lib/model/lead-filters.ts",
+      "cases": [
+        {
+          "args": [
+            {
+              "field": "status",
+              "op": "equals",
+              "value": "open"
+            }
+          ],
+          "result": {
+            "field": "status",
+            "op": "isAnyOf",
+            "value": "new,nurturing,working"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "status",
+              "op": "isAnyOf",
+              "value": "new,qualified"
+            }
+          ],
+          "result": {
+            "field": "status",
+            "op": "isAnyOf",
+            "value": "new,qualified"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "status",
+              "op": "equals",
+              "value": "bogus"
+            }
+          ],
+          "result": {
+            "refused": "bogus is not a lead status"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "emailState",
+              "op": "isAnyOf",
+              "value": "problem,none"
+            }
+          ],
+          "result": {
+            "field": "emailStatus",
+            "op": "isAnyOf",
+            "value": "undeliverable,bounced,blocked,unsubscribed,complained,do_not_contact,none"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "emailState",
+              "op": "equals",
+              "value": "bogus"
+            }
+          ],
+          "result": {
+            "refused": "bogus is not an email verdict"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "leadSource",
+              "op": "equals",
+              "value": "\u0000none"
+            }
+          ],
+          "result": {
+            "field": "leadSourceKey",
+            "op": "isEmpty",
+            "value": ""
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "leadSource",
+              "op": "isAnyOf",
+              "value": "\u0000none,Web"
+            }
+          ],
+          "result": {
+            "refused": "\"No lead source\" cannot be picked beside a value"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "leadSource",
+              "op": "isAnyOf",
+              "value": "Web,Trade Show"
+            }
+          ],
+          "result": {
+            "field": "leadSourceKey",
+            "op": "isAnyOf",
+            "value": "web,trade show"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "leadSourceDirection",
+              "op": "equals",
+              "value": "inbound"
+            }
+          ],
+          "result": {
+            "field": "leadSourceDirection",
+            "op": "equals",
+            "value": "inbound"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "leadSourceDirection",
+              "op": "equals",
+              "value": "sideways"
+            }
+          ],
+          "result": {
+            "refused": "sideways is not a lead source direction"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "ownerUid",
+              "op": "isAnyOf",
+              "value": "u1,u2"
+            }
+          ],
+          "result": {
+            "field": "ownerUid",
+            "op": "isAnyOf",
+            "value": "u1,u2"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "industry",
+              "op": "equals",
+              "value": "Food & Drink"
+            }
+          ],
+          "result": {
+            "field": "industryKey",
+            "op": "equals",
+            "value": "food & drink"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "rating",
+              "op": "equals",
+              "value": "Hot"
+            }
+          ],
+          "result": {
+            "field": "ratingKey",
+            "op": "equals",
+            "value": "hot"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "campaignIds",
+              "op": "isAnyOf",
+              "value": "c1,c2"
+            }
+          ],
+          "result": {
+            "refused": "pick one campaign"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "campaignIds",
+              "op": "equals",
+              "value": "c1"
+            }
+          ],
+          "result": {
+            "field": "campaignIds",
+            "op": "contains",
+            "value": "c1"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "campaignIds",
+              "op": "equals",
+              "value": "c1"
+            },
+            {
+              "scopeTokens": [
+                "host:s1",
+                "group:g1"
+              ],
+              "foldsScope": true
+            }
+          ],
+          "result": {
+            "field": "scopedCampaignIds",
+            "op": "isAnyOf",
+            "value": "host:s1~c1,group:g1~c1"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "campaignIds",
+              "op": "equals",
+              "value": "c1"
+            },
+            {
+              "scopeTokens": [
+                "host:s1"
+              ],
+              "foldsScope": false
+            }
+          ],
+          "result": {
+            "refused": "your access is limited to specific sites, which this filter cannot be combined with — an organization administrator can use it"
+          }
+        },
+        {
+          "args": [
+            {
+              "field": "name",
+              "op": "equals",
+              "value": "x"
+            }
+          ],
+          "result": {
+            "refused": "this list does not filter by that"
+          }
+        }
+      ]
+    },
     "liftLegacyOrder": {
       "module": "libs/plugins/commerce/src/lib/model/commerce-orders.ts",
       "cases": [
@@ -26870,6 +28046,353 @@
             "updatedAtMs": 0,
             "visibility": "shared",
             "visibleTo": []
+          }
+        }
+      ]
+    },
+    "normalizeCrmViewState": {
+      "module": "libs/aglyn/src/lib/app-utils/crm.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": {
+            "columns": [],
+            "filters": [],
+            "sort": null
+          }
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": {
+            "columns": [],
+            "filters": [],
+            "sort": null
+          }
+        },
+        {
+          "args": [
+            {
+              "filters": [
+                {
+                  "field": "ownerUid",
+                  "op": "equals",
+                  "value": "u1",
+                  "label": "Dana"
+                },
+                {
+                  "field": "",
+                  "op": "equals",
+                  "value": "x"
+                },
+                {
+                  "field": "tags",
+                  "op": "",
+                  "value": "x"
+                },
+                {
+                  "field": "tags",
+                  "op": "contains",
+                  "value": ""
+                },
+                {
+                  "field": "nextTaskAtMs",
+                  "op": "isEmpty",
+                  "value": ""
+                },
+                {
+                  "field": " status ",
+                  "op": " isAnyOf ",
+                  "value": " open,won "
+                }
+              ],
+              "columns": [
+                "name",
+                " email ",
+                "name",
+                "",
+                7
+              ],
+              "sort": {
+                "field": "name",
+                "direction": "desc"
+              }
+            }
+          ],
+          "result": {
+            "columns": [
+              "name",
+              "email"
+            ],
+            "filters": [
+              {
+                "field": "ownerUid",
+                "label": "Dana",
+                "op": "equals",
+                "value": "u1"
+              },
+              {
+                "field": "nextTaskAtMs",
+                "op": "isEmpty",
+                "value": ""
+              },
+              {
+                "field": "status",
+                "op": "isAnyOf",
+                "value": "open,won"
+              }
+            ],
+            "sort": {
+              "direction": "desc",
+              "field": "name"
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "filters": "nope",
+              "columns": {
+                "a": 1
+              },
+              "sort": {
+                "field": "updatedAt",
+                "direction": "sideways"
+              }
+            }
+          ],
+          "result": {
+            "columns": [],
+            "filters": [],
+            "sort": {
+              "direction": "asc",
+              "field": "updatedAt"
+            }
+          }
+        },
+        {
+          "args": [
+            {
+              "filters": [
+                {
+                  "field": "a",
+                  "op": "equals",
+                  "value": "1"
+                },
+                {
+                  "field": "b",
+                  "op": "equals",
+                  "value": "2"
+                },
+                {
+                  "field": "c",
+                  "op": "equals",
+                  "value": "3"
+                },
+                {
+                  "field": "d",
+                  "op": "equals",
+                  "value": "4"
+                },
+                {
+                  "field": "e",
+                  "op": "equals",
+                  "value": "5"
+                },
+                {
+                  "field": "f",
+                  "op": "equals",
+                  "value": "6"
+                },
+                {
+                  "field": "g",
+                  "op": "equals",
+                  "value": "7"
+                },
+                {
+                  "field": "h",
+                  "op": "equals",
+                  "value": "8"
+                },
+                {
+                  "field": "i",
+                  "op": "equals",
+                  "value": "9"
+                },
+                {
+                  "field": "j",
+                  "op": "equals",
+                  "value": "10"
+                },
+                {
+                  "field": "k",
+                  "op": "equals",
+                  "value": "11"
+                },
+                {
+                  "field": "l",
+                  "op": "equals",
+                  "value": "12"
+                },
+                {
+                  "field": "m",
+                  "op": "equals",
+                  "value": "13"
+                },
+                {
+                  "field": "n",
+                  "op": "equals",
+                  "value": "14"
+                },
+                {
+                  "field": "o",
+                  "op": "equals",
+                  "value": "15"
+                },
+                {
+                  "field": "p",
+                  "op": "equals",
+                  "value": "16"
+                },
+                {
+                  "field": "q",
+                  "op": "equals",
+                  "value": "17"
+                },
+                {
+                  "field": "r",
+                  "op": "equals",
+                  "value": "18"
+                },
+                {
+                  "field": "s",
+                  "op": "equals",
+                  "value": "19"
+                },
+                {
+                  "field": "t",
+                  "op": "equals",
+                  "value": "20"
+                },
+                {
+                  "field": "u",
+                  "op": "equals",
+                  "value": "21"
+                }
+              ],
+              "sort": {
+                "field": "  "
+              }
+            }
+          ],
+          "result": {
+            "columns": [],
+            "filters": [
+              {
+                "field": "a",
+                "op": "equals",
+                "value": "1"
+              },
+              {
+                "field": "b",
+                "op": "equals",
+                "value": "2"
+              },
+              {
+                "field": "c",
+                "op": "equals",
+                "value": "3"
+              },
+              {
+                "field": "d",
+                "op": "equals",
+                "value": "4"
+              },
+              {
+                "field": "e",
+                "op": "equals",
+                "value": "5"
+              },
+              {
+                "field": "f",
+                "op": "equals",
+                "value": "6"
+              },
+              {
+                "field": "g",
+                "op": "equals",
+                "value": "7"
+              },
+              {
+                "field": "h",
+                "op": "equals",
+                "value": "8"
+              },
+              {
+                "field": "i",
+                "op": "equals",
+                "value": "9"
+              },
+              {
+                "field": "j",
+                "op": "equals",
+                "value": "10"
+              },
+              {
+                "field": "k",
+                "op": "equals",
+                "value": "11"
+              },
+              {
+                "field": "l",
+                "op": "equals",
+                "value": "12"
+              },
+              {
+                "field": "m",
+                "op": "equals",
+                "value": "13"
+              },
+              {
+                "field": "n",
+                "op": "equals",
+                "value": "14"
+              },
+              {
+                "field": "o",
+                "op": "equals",
+                "value": "15"
+              },
+              {
+                "field": "p",
+                "op": "equals",
+                "value": "16"
+              },
+              {
+                "field": "q",
+                "op": "equals",
+                "value": "17"
+              },
+              {
+                "field": "r",
+                "op": "equals",
+                "value": "18"
+              },
+              {
+                "field": "s",
+                "op": "equals",
+                "value": "19"
+              },
+              {
+                "field": "t",
+                "op": "equals",
+                "value": "20"
+              }
+            ],
+            "sort": null
           }
         }
       ]
@@ -43486,6 +45009,94 @@
             "textSize": "system",
             "theme": "aglyn",
             "useWorkspaceBrand": true
+          }
+        }
+      ]
+    },
+    "readEmailState": {
+      "module": "libs/aglyn/src/lib/app-utils/email-state.ts",
+      "cases": [
+        {
+          "args": [
+            null
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {}
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "emailState": "bounced"
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "emailState": {
+                "status": "nope"
+              }
+            }
+          ],
+          "result": null
+        },
+        {
+          "args": [
+            {
+              "emailState": {
+                "status": "bounced",
+                "atMs": 1700000000000,
+                "source": "sequence",
+                "detail": "550 no such user",
+                "enrollmentId": "e1"
+              }
+            }
+          ],
+          "result": {
+            "atMs": 1700000000000,
+            "detail": "550 no such user",
+            "enrollmentId": "e1",
+            "source": "sequence",
+            "status": "bounced"
+          }
+        },
+        {
+          "args": [
+            {
+              "emailState": {
+                "status": "blocked",
+                "atMs": -4,
+                "source": "other",
+                "detail": ""
+              }
+            }
+          ],
+          "result": {
+            "atMs": 0,
+            "detail": null,
+            "source": "campaign",
+            "status": "blocked"
+          }
+        },
+        {
+          "args": [
+            {
+              "emailState": {
+                "status": "ok"
+              }
+            }
+          ],
+          "result": {
+            "atMs": 0,
+            "detail": null,
+            "source": "campaign",
+            "status": "ok"
           }
         }
       ]
@@ -61859,6 +63470,392 @@
         }
       ]
     },
+    "resolveCrmMergeFields": {
+      "module": "libs/aglyn/src/lib/app-utils/crm-email-templates.ts",
+      "cases": [
+        {
+          "args": [
+            "Hi {{contact.firstName}} {{contact.lastName}} ({{ contact.name }}) at {{contact.company}}, {{contact.title}} — {{contact.email}}",
+            {
+              "contact": {
+                "name": "Pat Lee",
+                "email": " Pat.Lee@Example.com ",
+                "facets": {
+                  "g1": {
+                    "name": "Patricia Lee",
+                    "companyName": "Harbor Market",
+                    "jobTitle": "Owner"
+                  },
+                  "g2": {
+                    "firstName": "Mary Ann",
+                    "lastName": "van Dyke",
+                    "name": "Mary Ann van Dyke"
+                  }
+                }
+              },
+              "contactGroupId": "g1",
+              "deal": {
+                "title": "Spring order",
+                "amountCents": 125050,
+                "currency": "usd"
+              },
+              "lead": {
+                "name": "Sam Ortiz Diaz",
+                "email": "sam@x",
+                "company": "Ortiz Co",
+                "jobTitle": "Buyer"
+              },
+              "sender": {
+                "name": "Dana Smith",
+                "email": "Dana@Shop.test"
+              },
+              "site": {
+                "name": " Juniper Bakery "
+              }
+            }
+          ],
+          "result": {
+            "text": "Hi Patricia Lee (Patricia Lee) at Harbor Market, Owner — pat.lee@example.com",
+            "unresolved": []
+          }
+        },
+        {
+          "args": [
+            "Hi {{contact.firstName}} {{contact.lastName}}",
+            {
+              "contact": {
+                "name": "Pat Lee",
+                "email": " Pat.Lee@Example.com ",
+                "facets": {
+                  "g1": {
+                    "name": "Patricia Lee",
+                    "companyName": "Harbor Market",
+                    "jobTitle": "Owner"
+                  },
+                  "g2": {
+                    "firstName": "Mary Ann",
+                    "lastName": "van Dyke",
+                    "name": "Mary Ann van Dyke"
+                  }
+                }
+              },
+              "contactGroupId": "g2",
+              "deal": {
+                "title": "Spring order",
+                "amountCents": 125050,
+                "currency": "usd"
+              },
+              "lead": {
+                "name": "Sam Ortiz Diaz",
+                "email": "sam@x",
+                "company": "Ortiz Co",
+                "jobTitle": "Buyer"
+              },
+              "sender": {
+                "name": "Dana Smith",
+                "email": "Dana@Shop.test"
+              },
+              "site": {
+                "name": " Juniper Bakery "
+              }
+            }
+          ],
+          "result": {
+            "text": "Hi Mary Ann van Dyke",
+            "unresolved": []
+          }
+        },
+        {
+          "args": [
+            "Hi {{contact.name}} / {{contact.firstName}}",
+            {
+              "contact": {
+                "name": "Pat Lee",
+                "email": " Pat.Lee@Example.com ",
+                "facets": {
+                  "g1": {
+                    "name": "Patricia Lee",
+                    "companyName": "Harbor Market",
+                    "jobTitle": "Owner"
+                  },
+                  "g2": {
+                    "firstName": "Mary Ann",
+                    "lastName": "van Dyke",
+                    "name": "Mary Ann van Dyke"
+                  }
+                }
+              },
+              "contactGroupId": null,
+              "deal": {
+                "title": "Spring order",
+                "amountCents": 125050,
+                "currency": "usd"
+              },
+              "lead": {
+                "name": "Sam Ortiz Diaz",
+                "email": "sam@x",
+                "company": "Ortiz Co",
+                "jobTitle": "Buyer"
+              },
+              "sender": {
+                "name": "Dana Smith",
+                "email": "Dana@Shop.test"
+              },
+              "site": {
+                "name": " Juniper Bakery "
+              }
+            }
+          ],
+          "result": {
+            "text": "Hi Pat Lee / Pat",
+            "unresolved": []
+          }
+        },
+        {
+          "args": [
+            "{{lead.firstName}}|{{lead.lastName}}|{{lead.name}}|{{lead.email}}|{{lead.company}}|{{lead.title}}",
+            {
+              "contact": {
+                "name": "Pat Lee",
+                "email": " Pat.Lee@Example.com ",
+                "facets": {
+                  "g1": {
+                    "name": "Patricia Lee",
+                    "companyName": "Harbor Market",
+                    "jobTitle": "Owner"
+                  },
+                  "g2": {
+                    "firstName": "Mary Ann",
+                    "lastName": "van Dyke",
+                    "name": "Mary Ann van Dyke"
+                  }
+                }
+              },
+              "contactGroupId": "g1",
+              "deal": {
+                "title": "Spring order",
+                "amountCents": 125050,
+                "currency": "usd"
+              },
+              "lead": {
+                "name": "Sam Ortiz Diaz",
+                "email": "sam@x",
+                "company": "Ortiz Co",
+                "jobTitle": "Buyer"
+              },
+              "sender": {
+                "name": "Dana Smith",
+                "email": "Dana@Shop.test"
+              },
+              "site": {
+                "name": " Juniper Bakery "
+              }
+            }
+          ],
+          "result": {
+            "text": "Sam|Ortiz Diaz|Sam Ortiz Diaz||Ortiz Co|Buyer",
+            "unresolved": [
+              "lead.email"
+            ]
+          }
+        },
+        {
+          "args": [
+            "{{deal.name}} for {{deal.amount}}",
+            {
+              "contact": {
+                "name": "Pat Lee",
+                "email": " Pat.Lee@Example.com ",
+                "facets": {
+                  "g1": {
+                    "name": "Patricia Lee",
+                    "companyName": "Harbor Market",
+                    "jobTitle": "Owner"
+                  },
+                  "g2": {
+                    "firstName": "Mary Ann",
+                    "lastName": "van Dyke",
+                    "name": "Mary Ann van Dyke"
+                  }
+                }
+              },
+              "contactGroupId": "g1",
+              "deal": {
+                "title": "Spring order",
+                "amountCents": 125050,
+                "currency": "usd"
+              },
+              "lead": {
+                "name": "Sam Ortiz Diaz",
+                "email": "sam@x",
+                "company": "Ortiz Co",
+                "jobTitle": "Buyer"
+              },
+              "sender": {
+                "name": "Dana Smith",
+                "email": "Dana@Shop.test"
+              },
+              "site": {
+                "name": " Juniper Bakery "
+              }
+            }
+          ],
+          "result": {
+            "text": "Spring order for $1,250.50",
+            "unresolved": []
+          }
+        },
+        {
+          "args": [
+            "{{deal.amount}}",
+            {
+              "deal": {
+                "amountCents": "12",
+                "currency": "eur"
+              }
+            }
+          ],
+          "result": {
+            "text": "",
+            "unresolved": [
+              "deal.amount"
+            ]
+          }
+        },
+        {
+          "args": [
+            "{{deal.amount}}",
+            {
+              "deal": {
+                "amountCents": 99
+              }
+            }
+          ],
+          "result": {
+            "text": "$0.99",
+            "unresolved": []
+          }
+        },
+        {
+          "args": [
+            "From {{sender.firstName}} ({{sender.name}}, {{sender.email}}) at {{site.name}}",
+            {
+              "contact": {
+                "name": "Pat Lee",
+                "email": " Pat.Lee@Example.com ",
+                "facets": {
+                  "g1": {
+                    "name": "Patricia Lee",
+                    "companyName": "Harbor Market",
+                    "jobTitle": "Owner"
+                  },
+                  "g2": {
+                    "firstName": "Mary Ann",
+                    "lastName": "van Dyke",
+                    "name": "Mary Ann van Dyke"
+                  }
+                }
+              },
+              "contactGroupId": "g1",
+              "deal": {
+                "title": "Spring order",
+                "amountCents": 125050,
+                "currency": "usd"
+              },
+              "lead": {
+                "name": "Sam Ortiz Diaz",
+                "email": "sam@x",
+                "company": "Ortiz Co",
+                "jobTitle": "Buyer"
+              },
+              "sender": {
+                "name": "Dana Smith",
+                "email": "Dana@Shop.test"
+              },
+              "site": {
+                "name": " Juniper Bakery "
+              }
+            }
+          ],
+          "result": {
+            "text": "From Dana (Dana Smith, dana@shop.test) at Juniper Bakery",
+            "unresolved": []
+          }
+        },
+        {
+          "args": [
+            "Hi {{contact.firstName|there}}, {{contact.nope}} {{other.field}} {{contact.firstName}}",
+            {}
+          ],
+          "result": {
+            "text": "Hi there,   ",
+            "unresolved": [
+              "contact.nope",
+              "other.field",
+              "contact.firstName"
+            ]
+          }
+        },
+        {
+          "args": [
+            "Hi {{contact.firstName | friend }}! {single} {{bare}} {{ site.name }}",
+            null
+          ],
+          "result": {
+            "text": "Hi friend! {single} {{bare}} ",
+            "unresolved": [
+              "site.name"
+            ]
+          }
+        },
+        {
+          "args": [
+            "",
+            {
+              "contact": {
+                "name": "Pat Lee",
+                "email": " Pat.Lee@Example.com ",
+                "facets": {
+                  "g1": {
+                    "name": "Patricia Lee",
+                    "companyName": "Harbor Market",
+                    "jobTitle": "Owner"
+                  },
+                  "g2": {
+                    "firstName": "Mary Ann",
+                    "lastName": "van Dyke",
+                    "name": "Mary Ann van Dyke"
+                  }
+                }
+              },
+              "contactGroupId": "g1",
+              "deal": {
+                "title": "Spring order",
+                "amountCents": 125050,
+                "currency": "usd"
+              },
+              "lead": {
+                "name": "Sam Ortiz Diaz",
+                "email": "sam@x",
+                "company": "Ortiz Co",
+                "jobTitle": "Buyer"
+              },
+              "sender": {
+                "name": "Dana Smith",
+                "email": "Dana@Shop.test"
+              },
+              "site": {
+                "name": " Juniper Bakery "
+              }
+            }
+          ],
+          "result": {
+            "text": "",
+            "unresolved": []
+          }
+        }
+      ]
+    },
     "resolveDisableCascade": {
       "module": "libs/aglyn/src/lib/plugin-manager/enabled-plugins.ts",
       "cases": [
@@ -63310,6 +65307,16 @@
                       },
                       {
                         "console": {
+                          "id": "/products/subscriptions",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "subscriptions",
+                        "label": "Subscriptions",
+                        "screen": "commerce.subscriptions"
+                      },
+                      {
+                        "console": {
                           "id": "/products/returns",
                           "surface": "hostPluginSection"
                         },
@@ -64701,6 +66708,16 @@
                       },
                       {
                         "console": {
+                          "id": "/products/subscriptions",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "subscriptions",
+                        "label": "Subscriptions",
+                        "screen": "commerce.subscriptions"
+                      },
+                      {
+                        "console": {
                           "id": "/products/returns",
                           "surface": "hostPluginSection"
                         },
@@ -65372,6 +67389,16 @@
                         "id": "orders",
                         "label": "Orders",
                         "screen": "commerce.orders"
+                      },
+                      {
+                        "console": {
+                          "id": "/products/subscriptions",
+                          "surface": "hostPluginSection"
+                        },
+                        "docs": "/commerce-and-bookings/commerce/overview",
+                        "id": "subscriptions",
+                        "label": "Subscriptions",
+                        "screen": "commerce.subscriptions"
                       },
                       {
                         "console": {
@@ -73020,6 +75047,16 @@
                 "screen": "commerce.orders"
               },
               "score": 1000
+            },
+            {
+              "row": {
+                "detail": "Site · Sell · Orders",
+                "group": "appScreens",
+                "id": "site.orders.subscriptions",
+                "label": "Subscriptions",
+                "screen": "commerce.subscriptions"
+              },
+              "score": 100
             },
             {
               "row": {

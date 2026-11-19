@@ -630,6 +630,23 @@ struct SpecScreenBody: View {
           if let footer, !footer.isEmpty { Text(footer) }
         }
       }
+    case "qr":
+      // `{ "type": "qr", "value": "{…}", "caption": "…" }`: a QR code of a link the screen shows (a waiver's share link), drawn by
+      // the kit's own encoder, never fetched.
+      let value = ScreenValues.render(block["value"]?.stringValue ?? "", in: context)
+      if !value.isEmpty {
+        Section {
+          AglynQRCode(value, size: 192)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, AglynSpace.two)
+            .accessibilityLabel(block["caption"]?.stringValue.map { ScreenValues.render($0, in: context) } ?? "QR code")
+            .accessibilityIdentifier("qr-\(block.id)")
+        } header: {
+          if let title { Text(title) }
+        } footer: {
+          if let footer, !footer.isEmpty { Text(footer) }
+        }
+      }
     case "html":
       // `{ "type": "html", "source": "{data.message.html}", "empty": "…" }`: a message's HTML, drawn as styled text.
       // Scripts, styles, frames, forms and images never reach the importer, and a link opens in the system handler.
@@ -641,6 +658,22 @@ struct SpecScreenBody: View {
           Text(EmailHTML.attributed(source))
             .font(AglynFont.body)
             .textSelection(.enabled)
+        }
+      }
+    case "text":
+      // `{ "type": "text", "source": "{…}" }`: words a person reads through, as written (a waiver's own text): line breaks
+      // kept, **strong**, *emphasis* and links drawn, inline only (the Kotlin kit's `InlineMarkdown`); nothing shows while
+      // the source is empty.
+      let source = ScreenValues.render(block["source"]?.stringValue ?? "", in: context)
+      if !source.isEmpty {
+        section(title, footer) {
+          Text(
+            (try? AttributedString(markdown: source, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+              ?? AttributedString(source)
+          )
+          .font(AglynFont.body)
+          .textSelection(.enabled)
+          .accessibilityIdentifier("text-\(block.id)")
         }
       }
     case "notice":
