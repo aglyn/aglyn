@@ -157,7 +157,132 @@ export function bandwidthCapEngaged(
   if (!Number.isFinite(resolveOrgEntitlements(org).bandwidthGb)) return false
   const cap = org.bandwidthCap
   if (!cap || typeof cap !== 'object') return false
-  return cap.month === bandwidthCapMonthKey(now)
+  if (cap.month !== bandwidthCapMonthKey(now)) return false
+  // The one-time grace (AGL-4232): engaged, but not refusing until it ends.
+  // Nothing writes at that moment; every reader re-derives it from the clock.
+  return !(typeof cap.graceUntil === 'number' && now.getTime() < cap.graceUntil)
+}
+
+/**
+ * How long the ONE-TIME grace keeps a site online past its band (AGL-4232):
+ * the first time a site goes over, ever, it stays up this long so its owner
+ * can upgrade before visitors are turned away.
+ */
+export const BANDWIDTH_CAP_GRACE_MS = 72 * 60 * 60 * 1000
+
+/**
+ * When the grace ends, while one is running for this org this month; `null`
+ * when the org is not over its band, is already paused, or never had one.
+ * The owner's surfaces read this to say "upgrade or your site pauses on …".
+ */
+export function bandwidthCapGraceUntil(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  now: Date = new Date(),
+): number | null {
+  const cap = org?.bandwidthCap
+  if (!cap || typeof cap !== 'object' || cap.month !== bandwidthCapMonthKey(now)) return null
+  if (typeof cap.graceUntil !== 'number' || now.getTime() >= cap.graceUntil) return null
+  // Only where the cap would refuse were there no grace: an upgraded org has
+  // nothing to be warned about.
+  const { graceUntil: _running, ...withoutGrace } = cap
+  return bandwidthCapEngaged({ ...org, bandwidthCap: withoutGrace }, now) ? cap.graceUntil : null
+}
+
+/**
+ * The marker a writer stamps when the cap engages (AGL-1967/2155, AGL-4232):
+ * the month and its diagnostics, plus the grace window when the org's sites
+ * have never had one. ONE shape for every writer, so a reader cannot tell
+ * which of them stamped it.
+ */
+export function bandwidthCapMarker(options: {
+  month: string
+  nowMs: number
+  pageViews: number
+  includedPageViews: number
+  /** When the grace this engagement carries ends; null for none. */
+  graceUntil: number | null
+}): OrgBandwidthCap {
+  return {
+    month: options.month,
+    engagedAt: options.nowMs,
+    pageViews: Math.round(options.pageViews),
+    includedPageViews: Math.round(options.includedPageViews),
+    ...(options.graceUntil !== null ? { graceUntil: options.graceUntil } : {}),
+  }
+}
+
+/** A grace stamp as stored: epoch ms, or anything else meaning "never". */
+type GraceStamped = { bandwidthGraceUsedAt?: unknown } | null | undefined
+
+const graceStamp = (doc: GraceStamped): number =>
+  typeof doc?.bandwidthGraceUsedAt === 'number' ? doc.bandwidthGraceUsedAt : 0
+
+/**
+ * The grace an engagement carries (AGL-4232), from the workspace's own stamp
+ * (`orgs/{id}.bandwidthGraceUsedAt`) and its sites' stamps as read: a NEW one
+ * when neither the workspace nor any of its sites has ever had it, the one
+ * ALREADY RUNNING when a stamp is still inside its window (a grace granted on
+ * the 29th that runs into the next month), else none.
+ *
+ * Both stamps are required absent so deleting the site and making a new one
+ * does not re-arm it: the grace is given once per workspace's sites.
+ */
+export function bandwidthGraceForEngagement(
+  hosts: ReadonlyArray<GraceStamped>,
+  nowMs: number,
+  org?: GraceStamped,
+): { graceUntil: number | null; grants: boolean } {
+  if (bandwidthGraceAvailable(hosts) && graceStamp(org) === 0) {
+    return { graceUntil: nowMs + BANDWIDTH_CAP_GRACE_MS, grants: true }
+  }
+  const latest = Math.max(graceStamp(org), ...hosts.map(graceStamp))
+  const running = latest + BANDWIDTH_CAP_GRACE_MS
+  return { graceUntil: latest > 0 && nowMs < running ? running : null, grants: false }
+}
+
+/**
+ * Whether an org's sites are owed the one-time grace by their own stamps: it
+ * has at least one site, and none of them has ever had it
+ * (`AglynHost.bandwidthGraceUsedAt`). The workspace's stamp is asked beside
+ * it by {@link bandwidthGraceForEngagement}.
+ */
+export function bandwidthGraceAvailable(hosts: ReadonlyArray<GraceStamped>): boolean {
+  return hosts.length > 0 && hosts.every((host) => graceStamp(host) === 0)
+}
+
+/** When a `YYYY-MM` month ends: midnight UTC on the 1st of the next. */
+export function bandwidthCapMonthEndMs(month: string): number {
+  const [year, monthIndex] = month.split('-').map(Number)
+  return Date.UTC(year, monthIndex, 1)
+}
+
+/**
+ * Whether a grace ends only after the month it was granted in (AGL-4232).
+ * Then no pause comes: the new month's count starts at zero, and the site
+ * pauses only when it next passes the band, with no grace left.
+ */
+export function bandwidthGraceOutlastsMonth(graceUntil: number, month: string): boolean {
+  return graceUntil >= bandwidthCapMonthEndMs(month)
+}
+
+/**
+ * The grace deadline as the owner reads it: an unambiguous UTC date and
+ * time, e.g. "Thursday, November 19 at 3:04 PM UTC".
+ */
+export function formatBandwidthGraceDeadline(ms: number): string {
+  const date = new Date(ms)
+  const day = date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'UTC',
+  })
+  const time = date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  })
+  return `${day} at ${time} UTC`
 }
 
 /**
@@ -204,6 +329,82 @@ export function bandwidthCapApplies(
   })
 }
 
+/**
+ * The one sentence every grace message carries (AGL-4232): the abuse ceiling
+ * stays the cost bound during a grace, so a surge far past the band can still
+ * pause the site before the deadline. Said, so the deadline is never a
+ * promise the ceiling breaks.
+ */
+export const BANDWIDTH_GRACE_SURGE_SENTENCE =
+  'An unusually large surge of traffic can still pause it before then.'
+
+/**
+ * What the OWNER is told when a grace starts (AGL-4232), in the console and by
+ * email: the deadline in plain words, with the way past it. `{site}` is
+ * filled by the notifier from the site it reads. `used` is the writer's own
+ * account of what was used (page views, or traffic including media).
+ * `carried` is a grace granted earlier that still runs as the site goes over
+ * again in a new month: the same deadline, said again, since it is this
+ * month's news.
+ */
+export function bandwidthGraceOwnerNotice(options: {
+  graceUntil: number
+  /** The `YYYY-MM` the cap engaged for, which decides whether a pause comes. */
+  month: string
+  used: string
+  resumesOn: string
+  carried?: boolean
+}): BandwidthCapNotice {
+  // A grace begun in a month's last 72 hours outlasts it: the count starts
+  // again on the 1st, so no pause comes, and saying a date would be false.
+  if (bandwidthGraceOutlastsMonth(options.graceUntil, options.month)) {
+    return {
+      title: '{site} is past its monthly traffic limit and stays online',
+      body:
+        `{site} has used ${options.used} this month. It stays online: the ` +
+        `month ends before its extra time would, and its count starts again ` +
+        `on ${options.resumesOn}. Nothing is charged for the extra traffic. ` +
+        'This extra time is given once and has now been used, so the next time ' +
+        'your sites pass their limit they pause straight away. An unusually large ' +
+        'surge of traffic can still pause it before the month ends. Upgrade in ' +
+        'Billing to keep it online whatever its traffic.',
+    }
+  }
+  const deadline = formatBandwidthGraceDeadline(options.graceUntil)
+  return {
+    title: `Upgrade or {site} pauses on ${deadline}`,
+    body:
+      `{site} has used ${options.used} this month. ` +
+      (options.carried
+        ? `It stays online until ${deadline}, when the extra time it was already given ends. `
+        : `It stays online until ${deadline}. `) +
+      'Upgrade in Billing before then to keep it online; if you ' +
+      `don't, visitors see a "temporarily unavailable" notice from then until ` +
+      `${options.resumesOn}. ${BANDWIDTH_GRACE_SURGE_SENTENCE} Nothing is charged ` +
+      'for the extra traffic. This extra time is given once, so the next time your ' +
+      'sites pass their limit they pause straight away.',
+  }
+}
+
+/**
+ * What the OWNER is told when a site is paused with no grace, or when its
+ * grace has ended (AGL-4232): in the console and by email, from whichever
+ * writer saw it. `{site}` is filled by the notifier.
+ */
+export function bandwidthPausedOwnerNotice(options: {
+  used: string
+  resumesOn: string
+}): BandwidthCapNotice {
+  return {
+    title: '{site} paused — monthly traffic limit reached',
+    body:
+      `{site} has used ${options.used} this month, so visitors see a ` +
+      `"temporarily unavailable" notice instead of its pages until ` +
+      `${options.resumesOn}. Nothing is charged for the extra traffic. The site ` +
+      'comes back on its own then, or as soon as you upgrade in Billing.',
+  }
+}
+
 /** What a visitor sees on a capped site. */
 export interface BandwidthCapNotice {
   title: string
@@ -229,12 +430,11 @@ export interface BandwidthCapNotice {
  * while keeping the WORDS separate is the split that keeps both honest.
  */
 export function bandwidthCapNotice(): BandwidthCapNotice {
+  // NEUTRAL (AGL-4232): nothing about limits, plans, traffic or pricing —
+  // those are the owner's to read in the console, not a visitor's.
   return {
-    title: 'Over the monthly traffic limit',
-    body:
-      'This site has used all of the traffic included with it this month, ' +
-      'so its pages are paused until the start of next month. Nothing is ' +
-      'wrong with your connection, and nothing here has been removed.',
+    title: 'Temporarily unavailable',
+    body: 'This site is temporarily unavailable.',
   }
 }
 

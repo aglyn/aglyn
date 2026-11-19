@@ -184,6 +184,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 jest.mock('@aglyn/shared-util-email', () => ({
   sendEmail: async (message: any) => {
     sentEmails.push(message)
+    return { sent: true, id: "email_test" }
   },
 }))
 
