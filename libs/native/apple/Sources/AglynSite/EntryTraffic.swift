@@ -91,7 +91,7 @@ public struct EntryTrafficCard: View {
       AglynUpgradeNotice(
         "Per-page traffic — how many people read this entry, day by day — is a Pro feature. Data is already being "
           + "collected, so history is waiting the moment you upgrade.",
-        action: upgrade)
+        action: planUpgradeAction(upgrade))
     case true?:
       if let path {
         switch docs.state {

@@ -77,7 +77,7 @@ fun EntryTrafficCard(
       }
       false -> UpgradeNotice(
         "Per-page traffic — how many people read this entry, day by day — is a Pro feature. Data is already being collected, so history is waiting the moment you upgrade.",
-        action = upgrade,
+        action = com.aglyn.site.planUpgradeAction(open = upgrade),
       )
       true -> if (path == null) {
         Text(
