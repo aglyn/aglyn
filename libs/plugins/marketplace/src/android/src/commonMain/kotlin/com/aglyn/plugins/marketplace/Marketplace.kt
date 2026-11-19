@@ -194,7 +194,12 @@ data class ListingRow(
 }
 
 /** "Free" or "$12". */
-fun priceLabel(priceUsd: Double): String = if (priceUsd <= 0) "Free" else "$" + com.aglyn.pluginhost.jsNumber(priceUsd)
+fun priceLabel(priceUsd: Double, buying: Boolean = com.aglyn.core.StoreBilling.buying): String = when {
+  priceUsd <= 0 -> "Free"
+  // A store build names no price (the owner's decision of 2026-11-19): it says the listing is paid.
+  !buying -> "Paid"
+  else -> "$" + com.aglyn.pluginhost.jsNumber(priceUsd)
+}
 
 /** "4.5 ★ (12)" or "Not yet rated". */
 fun ratingLabel(listing: ListingRow): String =

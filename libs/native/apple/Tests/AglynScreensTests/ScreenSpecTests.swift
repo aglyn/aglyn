@@ -93,7 +93,7 @@ final class ScreenSpecTests: XCTestCase {
         XCTAssertTrue(ids.insert(spec.id).inserted, "duplicate screen id \(spec.id)")
         XCTAssertTrue(["org", "site", "account", "staff"].contains(spec.scope), "\(spec.id): scope \(spec.scope)")
         for link in spec.links { XCTAssertTrue(link.hasPrefix("/"), "\(spec.id): link \(link)") }
-        let known = Set(["fields", "meters", "list", "form", "actions", "links", "notice", "zone", "image", "html", "qr", "text"])
+        let known = Set(["fields", "meters", "list", "form", "actions", "links", "notice", "zone", "image", "html", "qr", "text", "billingOnWeb"])
         for block in spec.blocks { XCTAssertTrue(known.contains(block.type), "\(spec.id): block \(block.type)") }
       }
       specs += parsed
@@ -1236,6 +1236,7 @@ final class ScreenSpecTests: XCTestCase {
     let set = try XCTUnwrap(actions.first { $0.id == "set" })
     let turnOn = try XCTUnwrap(actions.first { $0.id == "on" })
     let base: JSONValue = [
+      "app": ["billing": true],
       "org": ["id": "o1", "manager": true, "can": ["billing.manage": true]],
       "const": spec.raw["constants"] ?? .null,
       "data": ["addons": [
@@ -1246,6 +1247,8 @@ final class ScreenSpecTests: XCTestCase {
     ]
     // The stepper is the AI row's one control: no switch, no typed quantity.
     XCTAssertTrue(ScreenValues.condition(blocks.when, in: base))
+    // A store build (the owner's decision of 2026-11-19) offers no stepper at all.
+    XCTAssertFalse(ScreenValues.condition(blocks.when, in: ScreenContext.with(base, "app", ["billing": false])))
     XCTAssertFalse(ScreenValues.condition(set.when, in: base))
     XCTAssertFalse(ScreenValues.condition(turnOn.when, in: base))
     let field = try XCTUnwrap(blocks.prompt.first)
@@ -1410,7 +1413,16 @@ final class ScreenSpecTests: XCTestCase {
     // Only a different plan is offered, and only to a workspace with a live subscription.
     let scope = ScreenContext.with(base, "item", ["id": "pro"])
     XCTAssertFalse(ScreenValues.condition(switchPlan.when, in: scope))
-    XCTAssertTrue(ScreenValues.condition(switchPlan.when, in: ScreenContext.with(scope, "item", ["id": "business"]).withManager()))
+    let business = ScreenContext.with(ScreenContext.with(scope, "item", ["id": "business"]).withManager(), "app", ["billing": true])
+    XCTAssertTrue(ScreenValues.condition(switchPlan.when, in: business))
+    // A store build (the owner's decision of 2026-11-19) offers no switch and no checkout.
+    XCTAssertFalse(ScreenValues.condition(switchPlan.when, in: ScreenContext.with(business, "app", ["billing": false])))
+    for id in ["monthly", "yearly"] {
+      let checkout = try XCTUnwrap(list["actions"].array.compactMap(ActionSpec.init).first { $0.id == id })
+      let free: JSONValue = ["org": ["can": ["billing.manage": true]], "data": ["org": ["plan": "free"]], "item": ["id": "pro"]]
+      XCTAssertTrue(ScreenValues.condition(checkout.when, in: ScreenContext.with(free, "app", ["billing": true])))
+      XCTAssertFalse(ScreenValues.condition(checkout.when, in: ScreenContext.with(free, "app", ["billing": false])))
+    }
   }
 
   @MainActor

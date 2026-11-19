@@ -1824,7 +1824,7 @@
               "id": "update-payment-method",
               "label": "Update payment method",
               "icon": "creditcard|credit_card",
-              "when": "data.notices.notices[noticeId=params.noticeId].actions[id='update-payment-method']",
+              "when": "app.billing && data.notices.notices[noticeId=params.noticeId].actions[id='update-payment-method']",
               "route": "{data.notices.notices[noticeId=params.noticeId].actions[id='update-payment-method'].href}"
             },
             {

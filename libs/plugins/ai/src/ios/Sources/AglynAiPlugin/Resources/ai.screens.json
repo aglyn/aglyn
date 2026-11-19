@@ -629,14 +629,24 @@
         {
           "type": "notice",
           "tone": "warning",
-          "when": "!data.credits.credits && !data.credits.unlimited",
+          "when": "!data.credits.credits && !data.credits.unlimited && app.billing",
           "text": "AI is not part of this workspace's plan yet. Plans are on the Billing page."
+        },
+        {
+          "type": "notice",
+          "tone": "warning",
+          "when": "!data.credits.credits && !data.credits.unlimited && !app.billing",
+          "text": "AI is not part of this workspace's plan yet."
+        },
+        {
+          "type": "billingOnWeb",
+          "when": "!app.billing && org.can[billing.manage] && data.overage"
         },
         {
           "type": "form",
           "title": "When the included credits run out",
           "id": "hardCap",
-          "when": "data.overage",
+          "when": "data.overage && app.billing",
           "fields": [
             {
               "key": "hardCap",
@@ -660,7 +670,7 @@
         {
           "type": "form",
           "id": "cap",
-          "when": "data.overage.sellsOverage && !data.overage.hardCap",
+          "when": "app.billing && data.overage.sellsOverage && !data.overage.hardCap",
           "fields": [
             {
               "key": "capUsd",

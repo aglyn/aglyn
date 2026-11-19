@@ -20,10 +20,14 @@ public enum AglynUpgradeKind: Sendable {
 /// A feature the plan leaves out, where the feature would be (Figma Notice/Upgrade; the console's blocked plugin page):
 /// a lock (or a ticket for an add-on), the console's sentence naming the plan that includes it, and View plans (or View
 /// add-ons). The screen stays reachable so the way to buy the feature is where people look for it.
+///
+/// A store build takes no payment to Aglyn (the owner's decision of 2026-11-19): it keeps the sentence and draws the store
+/// line (`AglynStoreBillingLine`) where View plans would be.
 public struct AglynUpgradeNotice: View {
   let message: String
   let kind: AglynUpgradeKind
   let action: (() -> Void)?
+  @Environment(\.aglynStoreBilling) private var billing
 
   public init(_ message: String, kind: AglynUpgradeKind = .plan, action: (() -> Void)?) {
     self.message = message
@@ -77,7 +81,9 @@ public struct AglynUpgradeNotice: View {
 
   @ViewBuilder
   private var button: some View {
-    if let action {
+    if !billing.buying {
+      AglynStoreBillingLine()
+    } else if let action {
       Button(kind.actionTitle, action: action)
         .buttonStyle(AglynHeaderButtonStyle())
         .fixedSize()
@@ -88,8 +94,10 @@ public struct AglynUpgradeNotice: View {
 
 /// An add-on's offer where the console shows one (Figma Promo/Add-on card; the console's AiUpsellDialog): an icon tile,
 /// the title, what it does, where it comes from (the console's offer sentence), then Not now and the add action. A
-/// member who cannot buy it reads the "ask an owner or admin" sentence and only Close.
+/// member who cannot buy it reads the "ask an owner or admin" sentence and only Close. A store build (the owner's decision
+/// of 2026-11-19) draws no offer sentence and no add action: what the add-on does, the store line, and the dismiss.
 public struct AglynAddOnPromoCard: View {
+  @Environment(\.aglynStoreBilling) private var billing
   let title: String
   let systemImage: String
   let does: String
@@ -131,10 +139,14 @@ public struct AglynAddOnPromoCard: View {
         .font(.system(size: 13))
         .foregroundStyle(AglynColor.textPrimary)
         .fixedSize(horizontal: false, vertical: true)
-      Text(offer)
-        .font(.system(size: 12))
-        .foregroundStyle(AglynColor.secondaryText)
-        .fixedSize(horizontal: false, vertical: true)
+      if billing.buying {
+        Text(offer)
+          .font(.system(size: 12))
+          .foregroundStyle(AglynColor.secondaryText)
+          .fixedSize(horizontal: false, vertical: true)
+      } else {
+        AglynStoreBillingLine()
+      }
       HStack(spacing: 8) {
         Spacer(minLength: 0)
         Button(dismissTitle, action: dismiss)
@@ -143,7 +155,7 @@ public struct AglynAddOnPromoCard: View {
           .padding(.horizontal, 10)
           .frame(height: 28)
           .accessibilityIdentifier("addon-promo-dismiss")
-        if let actionTitle {
+        if let actionTitle, billing.buying {
           Button(action: action) {
             Text(actionTitle)
               .font(.system(size: 13, weight: .semibold))

@@ -512,6 +512,7 @@ struct ShellFrame<Content: View>: View {
       }
       .sheet(isPresented: $navigation.showShortcuts) { KeyboardShortcutsSheet() }
       .environment(\.aglynScreenSession, model.screenSession)
+      .environment(\.aglynStoreBilling, model.storeBilling)
       .aglynAppTheme(nonce: navigation.themeNonce)
       .onAppear {
         tellNavigationItsShell()

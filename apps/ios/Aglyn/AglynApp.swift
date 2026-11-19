@@ -31,6 +31,7 @@ struct AglynApp: App {
     WindowGroup(id: "main", for: ShellSeed.self) { $seed in
       RootView { navigation in MainShell(navigation: navigation, seed: seed) }
         .environment(model)
+        .environment(\.aglynStoreBilling, model.storeBilling)
     }
     // Figma's Mac frames are 1440 × 900.
     .defaultSize(width: 1440, height: 900)
@@ -51,6 +52,7 @@ struct AglynApp: App {
         NavigationStack { SettingsView() }
           .frame(width: 460, height: 420)
           .environment(model)
+          .environment(\.aglynStoreBilling, model.storeBilling)
           // The account's screens open inside this window (Close account among them), and read who is signed in.
           .environment(\.aglynScreenSession, model.screenSession)
           .tint(AglynColorTint.value)

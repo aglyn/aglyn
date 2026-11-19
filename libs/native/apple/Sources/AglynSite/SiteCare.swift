@@ -76,10 +76,13 @@ public struct SiteCareRequestButton: View {
             .help(siteCare ? "" : siteCareMissingReason)
             .accessibilityHint(siteCare ? "" : siteCareMissingReason)
             .accessibilityIdentifier("site-care-request")
-          if !siteCare {
+          // A store build takes no payment to Aglyn (the owner's decision of 2026-11-19): the store line, not Add Site Care.
+          if !siteCare, StoreBilling.buying {
             Button("Add Site Care", action: onAddSiteCare)
               .buttonStyle(.borderless)
               .accessibilityIdentifier("site-care-add")
+          } else if !siteCare {
+            AglynStoreBillingLine()
           }
         }
       } else {

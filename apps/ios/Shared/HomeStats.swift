@@ -137,10 +137,11 @@ struct HomeWorkspaceStats: View {
   }
 
   /// The console's `OrgUpgradeProposalCard`: only for the people who may buy it (`billing.manage`, custom roles
-  /// included), only while the proposal stands.
+  /// included), only while the proposal stands. Never in a store build, which takes no payment to Aglyn (the owner's
+  /// decision of 2026-11-19): the card is a plan to buy and nothing else.
   @ViewBuilder
   private var proposal: some View {
-    if model.orgAccess.permissions(["billing.manage"])["billing.manage"] == true,
+    if StoreBilling.buying, model.orgAccess.permissions(["billing.manage"])["billing.manage"] == true,
       let standing = UpgradeProposal.standing(org.document?.data),
       let slug = model.workspace?.org?.slug
     {

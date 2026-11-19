@@ -247,11 +247,14 @@ struct PlanCard: View {
           Text(meter.label).font(.system(size: AglynShellMetrics.rowText, weight: .semibold))
             .foregroundStyle(AglynColor.textPrimary).lineLimit(1)
           Spacer(minLength: 0)
-          Button("Upgrade") { upgrade() }
-            .buttonStyle(.plain)
-            .font(.system(size: AglynShellMetrics.rowText))
-            .foregroundStyle(AglynColor.tint)
-            .accessibilityIdentifier("plan-card-upgrade")
+          // A store build takes no payment to Aglyn, so it offers no Upgrade (the owner's decision of 2026-11-19).
+          if StoreBilling.buying {
+            Button("Upgrade") { upgrade() }
+              .buttonStyle(.plain)
+              .font(.system(size: AglynShellMetrics.rowText))
+              .foregroundStyle(AglynColor.tint)
+              .accessibilityIdentifier("plan-card-upgrade")
+          }
         }
         // The console's meter: the accent below 80%, amber from 80%, red at the limit.
         GeometryReader { proxy in
@@ -312,7 +315,9 @@ struct PlanCard: View {
       @unknown default: break
       }
     }
-    .accessibilityAction(named: "Upgrade") { upgrade() }
+    .accessibilityActions {
+      if StoreBilling.buying { Button("Upgrade") { upgrade() } }
+    }
     .accessibilityAction(named: "Open usage") { openUsage() }
     .accessibilityIdentifier("plan-card")
   }
@@ -367,8 +372,9 @@ struct PlanCard: View {
 extension AppModel {
   /// Whether the workspace menu offers "Upgrade plan", as the console's menu does: once the plan is known, below the top
   /// self-serve plan (Free and Starter; Pro tops the ladder, Custom is quoted), for an owner or admin who can open Billing.
+  /// Never in a store build, which takes no payment to Aglyn (the owner's decision of 2026-11-19).
   var offersUpgrade: Bool {
-    guard let org = workspace?.org, let plan = workspace?.orgLogos[org.id]?.plan,
+    guard StoreBilling.buying, let org = workspace?.org, let plan = workspace?.orgLogos[org.id]?.plan,
       registry.screen("core.billing") != nil
     else { return false }
     return OnboardingPlanIntent.upgradablePlans.contains(plan) && orgAccess.holds("billing.manage", onSite: nil)

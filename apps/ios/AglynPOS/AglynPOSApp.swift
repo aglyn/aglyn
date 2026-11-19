@@ -32,6 +32,7 @@ struct AglynPOSApp: App {
     WindowGroup {
       RootView { navigation in POSShell(navigation: navigation) }
         .environment(model)
+        .environment(\.aglynStoreBilling, model.storeBilling)
     }
     .defaultSize(width: 1180, height: 780)
     .commands {
@@ -46,6 +47,7 @@ struct AglynPOSApp: App {
         NavigationStack { SettingsView() }
           .frame(width: 460, height: 420)
           .environment(model)
+          .environment(\.aglynStoreBilling, model.storeBilling)
           // The account's screens open inside this window (Close account among them), and read who is signed in.
           .environment(\.aglynScreenSession, model.screenSession)
           .tint(AglynColorTint.value)

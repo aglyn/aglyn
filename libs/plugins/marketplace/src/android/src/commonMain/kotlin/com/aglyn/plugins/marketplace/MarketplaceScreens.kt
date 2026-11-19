@@ -439,6 +439,9 @@ private fun ListingBody(
               Text(if (state.scope == InstallTarget.ORG) "Remove from the workspace" else "Remove from this site")
             }
           }
+          // A store build takes no payment to Aglyn (the owner's decision of 2026-11-19): a paid listing says it is paid
+          // (its chip) and shows the store line where Buy would be.
+          buying && !com.aglyn.core.StoreBilling.buying -> com.aglyn.ui.StoreBillingLine()
           buying -> {
             Button(
               onClick = {
@@ -477,7 +480,7 @@ private fun ListingBody(
           }
         }
       }
-      if (pinsPhase == "ready" && buying) {
+      if (pinsPhase == "ready" && buying && com.aglyn.core.StoreBilling.buying) {
         when {
           buyBlocked -> NoticeBanner(publisherMemberBuyReason((publisher as? Live.Ready)?.value?.string("displayName") ?: handle), StatusTone.NEUTRAL)
           !canBuy -> NoticeBanner(if (context.orgId == null) "Open one of your workspaces to buy this." else permissionRefusalText(buyKey), StatusTone.NEUTRAL)

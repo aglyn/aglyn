@@ -167,7 +167,12 @@ struct AiInsightUpsellSheet: View {
     NavigationStack {
       VStack(alignment: .leading, spacing: AglynSpace.two) {
         Text(AiInsightUpsell.does).font(AglynFont.body)
-        Text(AiInsightUpsell.offer(canManageBilling: canManageBilling)).font(AglynFont.subheadline).foregroundStyle(.secondary)
+        // A store build (the owner's decision of 2026-11-19): no offer and no Add, the store line instead.
+        if StoreBilling.buying {
+          Text(AiInsightUpsell.offer(canManageBilling: canManageBilling)).font(AglynFont.subheadline).foregroundStyle(.secondary)
+        } else {
+          AglynStoreBillingLine()
+        }
         Spacer(minLength: 0)
       }
       .padding(AglynSpace.three)
@@ -177,7 +182,7 @@ struct AiInsightUpsellSheet: View {
         ToolbarItem(placement: .cancellationAction) {
           Button(canManageBilling ? "Not now" : "Close") { dismiss() }
         }
-        if canManageBilling && canOfferAdd {
+        if canManageBilling, canOfferAdd, StoreBilling.buying {
           ToolbarItem(placement: .confirmationAction) {
             Button("Add \(ContractValues.shared.platformBrandName) AI") {
               dismiss()
