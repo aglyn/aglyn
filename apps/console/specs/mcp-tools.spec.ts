@@ -138,14 +138,22 @@ describe('what a client is told about each tool (AGL-4225)', () => {
     // What reaches past the workspace's own records, each for the reason the
     // operation states beside its flag: a public website or address, the
     // buyer's inbox, a DNS lookup of a new address's mail domain, a public
-    // link to an uploaded file (AGL-4235).
+    // link to an uploaded file, a public store's catalog, and a site's search
+    // listings and business details, which are live on save (AGL-4235).
     const openWorld = [
       'convertLead',
       'createContact',
       'createLead',
+      'createProduct',
       'createSite',
+      'deleteProduct',
       'publishSite',
+      'updateBusinessDetails',
       'updateOrder',
+      'updatePageSeo',
+      'updateProduct',
+      'updateProductVariant',
+      'updateSiteSeo',
       'uploadOrgMedia',
       'uploadSiteMedia',
     ]
