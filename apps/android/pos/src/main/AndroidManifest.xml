@@ -15,6 +15,9 @@
   <!-- Card readers: Tap to Pay needs NFC, Bluetooth readers need Bluetooth LE; neither is required to install. -->
   <uses-feature android:name="android.hardware.nfc" android:required="false" />
   <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+  <!-- The Stripe Terminal SDK's ACCESS_WIFI_STATE makes Google Play infer that Wi-Fi hardware is required; a register on
+       Ethernet or mobile data still works, so say it is optional and keep those devices in the store. -->
+  <uses-feature android:name="android.hardware.wifi" android:required="false" />
 
   <application
     android:name=".AglynPosApplication"
