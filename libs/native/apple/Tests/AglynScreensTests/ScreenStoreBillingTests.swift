@@ -35,6 +35,24 @@ final class ScreenStoreBillingTests: XCTestCase {
     XCTAssertTrue(ScreenValues.condition(condition, in: context))
   }
 
+  /// Billing's Outstanding card: Pay now and View (Stripe's invoice page, which takes a payment) are absent in a store
+  /// build and there in a build that may buy.
+  @MainActor
+  func testPayNowAndTheInvoicePageAreAbsentWhereTheBuildMayNotBuy() throws {
+    let billing = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.billing" })
+    let list = try XCTUnwrap(billing.blocks.first { $0.type == "list" && $0["title"]?.stringValue == "Outstanding" })
+    let actions = list["actions"].array.compactMap(ActionSpec.init)
+    func shown() -> [String] {
+      let context = ScreenContext.with(
+        ScreenSession(orgPermissions: ["billing.manage": true]).context(nil, params: [:]), item: ["id": "in_1", "hostedInvoiceUrl": "https://invoice.test/i"])
+      return actions.filter { ScreenValues.condition($0.when, in: context) }.map(\.id)
+    }
+    StoreBilling.set(buying: false, webBillingLink: false)
+    XCTAssertEqual(shown(), [])
+    StoreBilling.set(buying: true, webBillingLink: false)
+    XCTAssertEqual(shown(), ["payNow", "view"])
+  }
+
   /// Every control in Billing that takes or starts a payment to Aglyn holds `app.billing`, on itself or its block.
   func testEveryBuyingControlInBillingNeedsTheBuild() throws {
     let buying: [String: Set<String>] = [

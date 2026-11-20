@@ -1206,6 +1206,21 @@ class ScreenSpecTest {
     assertEquals(listOf("General", "Building"), create.prompt.first().choices(context).map { it.first })
   }
 
+  /** Billing's Outstanding card (the console's open invoices): Pay now charges the card on file, never says "paid". */
+  @Test
+  fun outstandingInvoicesPayNowAsTheConsoleDoes() {
+    val spec = ScreenSpec.parseFile(File(screensDir, "billing.screens.json").readText()).first { it.id == "core.billing" }
+    val list = spec.blocks.first { it.type == "list" && it.raw.str("title") == "Outstanding" }
+    val pay = list.raw.arr("actions").mapNotNull { ActionSpec.parse(it) }.first { it.id == "payNow" }
+    assertEquals("/api/billing/pay-invoice", pay.url)
+    val base = Json.parseToJsonElement("""{"org":{"id":"o1"},"item":{"id":"in_1"}}""")
+    assertEquals(Json.parseToJsonElement("""{"orgId":"o1","action":"pay","invoiceId":"in_1"}"""), ScreenValues.resolveBody(pay.body!!, base))
+    fun answer(json: String) = ScreenContext.with(base, "response", Json.parseToJsonElement(json))
+    assertEquals("hostedInvoiceUrl", pay.insteadEntry(answer("""{"requiresAction":true,"hostedInvoiceUrl":"https://invoice.test/i"}"""))!!.str("open"))
+    assertEquals("Already settled", pay.insteadEntry(answer("""{"alreadyPaid":true}"""))!!.str("title"))
+    assertEquals(null, pay.insteadEntry(answer("""{"submitted":true,"status":"paid"}""")))
+  }
+
   @Test
   fun theAddOnConfirmationReadsThePreviewAndBankAnswersReplaceTheSuccessMessage() {
     val spec = ScreenSpec.parseFile(File(screensDir, "billing.screens.json").readText()).first { it.id == "core.billing.addons" }

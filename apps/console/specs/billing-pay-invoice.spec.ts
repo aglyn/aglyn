@@ -256,6 +256,22 @@ describe('who decides that it was paid', () => {
     expect(payload.requiresAction).toBe(true)
     expect(payload.paymentClientSecret).toBe('pi_secret_1')
     expect(payload.submitted).toBeUndefined()
+    // No hosted page on the invoice, none in the answer.
+    expect(payload.hostedInvoiceUrl).toBeUndefined()
+  })
+
+  it('names the invoice’s own Stripe page beside the challenge, for an app with no Stripe.js', async () => {
+    invoiceRecord = {
+      id: 'in_1',
+      status: 'open',
+      customer: 'cus_test_1',
+      hosted_invoice_url: 'https://invoice.stripe.com/i/acct_1/test_in_1',
+    }
+    payOutcome = { ok: false, payload: { error: { code: 'invoice_payment_intent_requires_action' } } }
+    expandedPaymentIntent = { client_secret: 'pi_secret_1', status: 'requires_action' }
+    const payload = await (await post(load(), { action: 'pay', invoiceId: 'in_1' })).json()
+    expect(payload.requiresAction).toBe(true)
+    expect(payload.hostedInvoiceUrl).toBe('https://invoice.stripe.com/i/acct_1/test_in_1')
   })
 
   it('CONTROL — an intent in any OTHER state is a decline, not a challenge', async () => {

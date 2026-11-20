@@ -1182,6 +1182,20 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(initialValue(other, in: start), .flag(false))
   }
 
+  /// Billing's Outstanding card (the console's open invoices): Pay now charges the card on file, never says "paid".
+  @MainActor
+  func testOutstandingInvoicesPayNowAsTheConsoleDoes() throws {
+    let billing = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.billing" })
+    let list = try XCTUnwrap(billing.blocks.first { $0.type == "list" && $0["title"]?.stringValue == "Outstanding" })
+    let pay = try XCTUnwrap(list["actions"].array.compactMap(ActionSpec.init).first { $0.id == "payNow" })
+    XCTAssertEqual(pay.url, "/api/billing/pay-invoice")
+    let base: JSONValue = ["org": ["id": "o1"], "item": ["id": "in_1"]]
+    let bank = ScreenContext.with(base, "response", ["requiresAction": true, "hostedInvoiceUrl": "https://invoice.test/i"])
+    XCTAssertEqual(pay.insteadEntry(in: bank)?["open"]?.stringValue, "hostedInvoiceUrl")
+    XCTAssertEqual(pay.insteadEntry(in: ScreenContext.with(base, "response", ["alreadyPaid": true]))?["title"]?.stringValue, "Already settled")
+    XCTAssertNil(pay.insteadEntry(in: ScreenContext.with(base, "response", ["submitted": true])))
+  }
+
   @MainActor
   func testTheForumOffersTheRoutesCategoriesAndFiltersByThem() throws {
     let forum = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.support.forum" })
