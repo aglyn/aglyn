@@ -67,13 +67,11 @@ class AglynPosApplication : Application() {
       } else {
         null
       },
-      // Tap to Pay and Bluetooth readers through the Stripe Terminal SDK.
-      // Only the SDK's simulated readers run until live readers are switched
-      // on for a build (TERMINAL_LIVE_READERS), which needs Stripe live mode.
+      // Tap to Pay and Bluetooth readers through the Stripe Terminal SDK: simulated or
+      // live as the site's reader session says (test mode = the server's test key), as on Apple.
       peripherals = StaticPeripherals(
         cardCollector = StripeTerminalCollector(
           this,
-          simulated = !BuildConfig.TERMINAL_LIVE_READERS,
           permissions = { permissionGate },
           forwards = offlineCardForwards,
           mirrorOfflineToStripe = BuildConfig.DEBUG,

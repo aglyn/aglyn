@@ -135,9 +135,10 @@ becomes the first card tender; the payment is the shared
 authorizes; the server captures). The reader's prompts show on the checkout
 screen, and a reader update is offered (or required) on the readers screen.
 
-Every build uses the SDK's **simulated** readers until live readers are
-switched on with `-Paglyn.terminalLiveReaders=true` on a release build, which
-needs Stripe Terminal live mode. Tap to Pay's PIN screens run in the SDK's
+Simulated or real readers come from the server, as on Apple: the connection-token
+answer's `testMode` (the server's Stripe key is a test key) gives the SDK's
+**simulated** readers, a live key real ones, in any build. Live readers are
+offered once the server has `STRIPE_TERMINAL_LIVE_ENABLED`; nothing in the build. Tap to Pay's PIN screens run in the SDK's
 `:stripetaptopay` process, where the app does nothing on start.
 
 A card typed in at the register ("Type card", offered when the site has a Stripe

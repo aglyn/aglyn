@@ -11,6 +11,8 @@ import com.aglyn.hardware.CardCollector
 import com.aglyn.hardware.CardCollectorKind
 import com.aglyn.hardware.CardCollectorState
 import com.aglyn.hardware.CardReaderSessionSource
+import com.aglyn.hardware.RememberedReaderSite
+import com.aglyn.hardware.TerminalReaderMode
 import com.aglyn.hardware.CardReaderSetupCode
 import com.aglyn.hardware.CardReaderSetupError
 import com.aglyn.hardware.DeviceReader
@@ -88,8 +90,10 @@ fun interface PermissionGate {
  * no `onBehalfOf`: card-present payments settle on the platform account and
  * the server's intent decides the rest.
  *
- * [simulated] runs the SDK's simulated readers (test mode). Until live
- * readers are switched on for a build, every build is simulated.
+ * SIMULATED OR LIVE READERS come from the site's reader session, as on
+ * Apple ([TerminalReaderMode]): the connection-token route says test mode
+ * exactly when the server's Stripe key is a test key, so a test server gets
+ * the SDK's simulated readers and a live server real ones, in any build.
  *
  * WITH NO CONNECTION (AGL-4039) a Bluetooth reader still takes cards: the app
  * creates the intent itself ([SdkOfflinePort], the sequence in the shared
@@ -101,7 +105,6 @@ fun interface PermissionGate {
  */
 class StripeTerminalCollector(
   private val context: Context,
-  private val simulated: Boolean,
   private val permissions: () -> PermissionGate?,
   /** What the SDK did with cards it stored offline, shared with the register (AGL-4039). */
   private val forwards: OfflineCardForwardLedger,
@@ -122,12 +125,14 @@ class StripeTerminalCollector(
   private val mutableUpdate = MutableStateFlow<ReaderUpdate?>(null)
   override val update: StateFlow<ReaderUpdate?> = mutableUpdate
 
-  override val kinds: List<CardCollectorKind> by lazy {
-    buildList {
-      if (tapToPayPossible()) add(CardCollectorKind.TAP_TO_PAY)
+  override val kinds: List<CardCollectorKind>
+    get() = buildList {
+      if (TerminalReaderMode.offersTapToPay(deviceCanTapToPay, testMode)) add(CardCollectorKind.TAP_TO_PAY)
       add(CardCollectorKind.BLUETOOTH)
     }
-  }
+
+  /** The open site's session test mode; null until one is known (then no reader search). */
+  private var testMode: Boolean? = null
 
   /** The site whose tokens the SDK is using, and where they come from. */
   private var hostId: String? = null
@@ -165,7 +170,7 @@ class StripeTerminalCollector(
   }
 
   override fun registerConnectivityChanged(online: Boolean) {
-    if (!mirrorOfflineToStripe || !simulated || !Terminal.isInitialized()) return
+    if (!mirrorOfflineToStripe || testMode != true || !Terminal.isInitialized()) return
     val mode = if (online) SimulatedOfflineMode.DISABLED else SimulatedOfflineMode.OFFLINE_IMMEDIATE
     runCatching { Terminal.getInstance().simulatedOfflineModeConfiguration = SimulatedOfflineModeConfiguration(mode, SimulatedOfflineMode.DISABLED) }
   }
@@ -221,12 +226,15 @@ class StripeTerminalCollector(
 
   override suspend fun discover(kind: CardCollectorKind, hostId: String, sessions: CardReaderSessionSource) {
     if (!prepare(hostId, sessions, ask = true)) return
+    val mode = TerminalReaderMode.of(testMode) ?: return run {
+      mutableDiscovery.value = ReaderDiscovery.Failed("Card readers are not set up for this store yet.")
+    }
     cancelDiscovery()
     found.clear()
     mutableDiscovery.value = ReaderDiscovery.Searching(kind)
     val config = when (kind) {
-      CardCollectorKind.TAP_TO_PAY -> DiscoveryConfiguration.TapToPayDiscoveryConfiguration(simulated)
-      else -> DiscoveryConfiguration.BluetoothDiscoveryConfiguration(DISCOVERY_SECONDS, simulated)
+      CardCollectorKind.TAP_TO_PAY -> DiscoveryConfiguration.TapToPayDiscoveryConfiguration(mode.simulated)
+      else -> DiscoveryConfiguration.BluetoothDiscoveryConfiguration(DISCOVERY_SECONDS, mode.simulated)
     }
     val error = suspendCancellableCoroutine<TerminalException?> { done ->
       val listener = object : DiscoveryListener {
@@ -349,6 +357,7 @@ class StripeTerminalCollector(
       this.hostId = hostId
       this.sessions = sessions
       locationId = null
+      testMode = null
     }
     if (locationId == null) {
       val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -356,7 +365,8 @@ class StripeTerminalCollector(
         val session = sessions.session(hostId)
         locationId = session.locationId
         merchantName = session.merchantDisplayName
-        prefs.edit().putString("$KEY_SITE$hostId", "${session.locationId}\t${session.merchantDisplayName}").apply()
+        testMode = session.testMode
+        prefs.edit().putString("$KEY_SITE$hostId", RememberedReaderSite.of(session).encode()).apply()
       } catch (lost: CardReaderSetupError) {
         if (lost.code != CardReaderSetupCode.UNREACHABLE) {
           mutableState.value = CardCollectorState.Unavailable(lost.message ?: "Card readers are not set up for this store yet.")
@@ -364,14 +374,15 @@ class StripeTerminalCollector(
           return false
         }
         // No connection: start from what this site's reader last saw online, so a card can be stored (AGL-4039).
-        val known = prefs.getString("$KEY_SITE$hostId", null)?.split('\t')
-        if (known == null || known.size != 2) {
+        val known = RememberedReaderSite.decode(prefs.getString("$KEY_SITE$hostId", null))
+        if (known == null) {
           mutableState.value = CardCollectorState.Unavailable("Card readers are not set up for this store yet.")
           if (ask) mutableDiscovery.value = ReaderDiscovery.Failed("Connect once so the card reader can get ready to work offline.")
           return false
         }
-        locationId = known[0]
-        merchantName = known[1]
+        locationId = known.locationId
+        merchantName = known.merchantDisplayName
+        testMode = known.testMode
       } catch (error: Throwable) {
         if (error is CancellationException) throw error
         val words = (error as? CardReaderSetupError)?.message ?: error.message ?: "Card readers are not set up for this store yet."
@@ -383,13 +394,13 @@ class StripeTerminalCollector(
     if (!Terminal.isInitialized()) {
       try {
         Terminal.init(context.applicationContext, LogLevel.WARNING, tokens, terminalListener, offlineListener)
-        // The simulated reader stores cards offline only when asked to (test mode).
-        if (simulated) Terminal.getInstance().simulatorConfiguration = SimulatorConfiguration(offlineEnabled = true)
       } catch (error: TerminalException) {
         mutableState.value = CardCollectorState.Unavailable(friendlyDiscoveryError(error.errorCode.name, error.errorMessage))
         return false
       }
     }
+    // The simulated reader stores cards offline only when asked to (test mode).
+    if (testMode == true) Terminal.getInstance().simulatorConfiguration = SimulatorConfiguration(offlineEnabled = true)
     if (mutableState.value is CardCollectorState.Unavailable) mutableState.value = CardCollectorState.Disconnected
     true
   }
@@ -483,8 +494,10 @@ class StripeTerminalCollector(
     else -> null
   }
 
-  private fun tapToPayPossible(): Boolean =
-    simulated || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && context.packageManager.hasSystemFeature(PackageManager.FEATURE_NFC))
+  /** This device can take Tap to Pay itself: NFC and Android 13+. */
+  private val deviceCanTapToPay: Boolean by lazy {
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && context.packageManager.hasSystemFeature(PackageManager.FEATURE_NFC)
+  }
 
   companion object {
     private const val TAG = "AglynTerminal"
