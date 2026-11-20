@@ -208,6 +208,11 @@ final class AppModel {
         guard let self else { throw ConsoleAPIError(status: 401, message: "Sign in again.") }
         try await self.reconfirmInBrowser(method, authenticate: authenticate)
       },
+      providerIDs: { [weak self] in await self?.auth?.providerIDs() ?? [] },
+      revokeAppleToken: { [weak self] code in
+        guard let auth = await self?.auth else { throw ConsoleAPIError(status: 401, message: "Sign in again.") }
+        try await auth.revokeAppleToken(authorizationCode: code)
+      },
       refreshClaims: { [weak self] in await self?.refreshClaims(force: true) },
       impersonate: { [weak self] token, tenantId in
         try await self?.auth?.beginImpersonation(token: token, tenantId: tenantId)

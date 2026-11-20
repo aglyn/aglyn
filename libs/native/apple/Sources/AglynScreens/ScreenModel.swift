@@ -70,6 +70,11 @@ public struct ScreenSession: Sendable {
   public var reconfirmInBrowser:
     @Sendable (_ method: ReconfirmMethod, _ authenticate: @escaping @Sendable (URL, String) async throws -> URL) async throws
       -> Void
+  /// The sign-in providers the account in use holds (`password`, `apple.com`, …): Close account reads whether it owes
+  /// Apple a revoke (`Reconfirm.AppleRevokeFlow`).
+  public var providerIDs: @Sendable () async -> [String]
+  /// Revokes the account in use's Apple token with a fresh Sign in with Apple authorization code (`AppleRevocation`).
+  public var revokeAppleToken: @Sendable (_ authorizationCode: String) async throws -> Void
   /// Re-reads the token's claims (after a reauth, or when a screen asks).
   public var refreshClaims: @Sendable () async -> Void
   /// Signs in as a customer with the custom token a staff route minted (`/api/admin/impersonate`), in the identity
@@ -97,6 +102,8 @@ public struct ScreenSession: Sendable {
     reconfirm: @escaping @Sendable (ReconfirmCredential) async throws -> Void = { _ in },
     reconfirmInBrowser: @escaping @Sendable (ReconfirmMethod, @escaping @Sendable (URL, String) async throws -> URL) async throws
       -> Void = { _, _ in },
+    providerIDs: @escaping @Sendable () async -> [String] = { [] },
+    revokeAppleToken: @escaping @Sendable (String) async throws -> Void = { _ in },
     refreshClaims: @escaping @Sendable () async -> Void = {},
     impersonate: @escaping @Sendable (String, String?) async throws -> Void = { _, _ in },
     account: AccountOperations = AccountOperations(), googleConfigured: Bool = false,
@@ -118,6 +125,8 @@ public struct ScreenSession: Sendable {
     self.reconfirmMethods = reconfirmMethods
     self.reconfirm = reconfirm
     self.reconfirmInBrowser = reconfirmInBrowser
+    self.providerIDs = providerIDs
+    self.revokeAppleToken = revokeAppleToken
     self.refreshClaims = refreshClaims
     self.impersonate = impersonate
     self.account = account

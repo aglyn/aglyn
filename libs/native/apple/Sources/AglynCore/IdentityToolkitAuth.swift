@@ -291,6 +291,15 @@ public actor IdentityToolkitAuth {
     return providers.compactMap { $0["providerId"]?.stringValue }
   }
 
+  /// Revokes the account's Apple token with a fresh Sign in with Apple authorization code (`accounts:revokeToken`, the
+  /// SDK's `revokeToken(withAuthorizationCode:)`), before the account is closed (`AppleRevocation`).
+  public func revokeAppleToken(authorizationCode: String) async throws {
+    guard let token = try await idToken(forceRefresh: false) else { throw IdentityToolkitError(code: nil, status: 401) }
+    _ = try await post(
+      "\(identityBase)/v1/accounts:revokeToken?key=\(apiKey)",
+      json: AppleRevocation.revokeRequestBody(authorizationCode: authorizationCode, idToken: token))
+  }
+
   /// Confirms an address with the one-time code an emailed verification link carries (`applyActionCode`).
   public func applyActionCode(_ code: String) async throws {
     _ = try await post("\(identityBase)/v1/accounts:update?key=\(apiKey)", json: ["oobCode": .string(code)])
