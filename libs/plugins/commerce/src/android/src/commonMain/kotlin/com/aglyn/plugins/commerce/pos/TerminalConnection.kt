@@ -24,6 +24,22 @@ import kotlinx.serialization.json.put
 
 const val TERMINAL_TOKEN_ROUTE = "/api/commerce/pos-terminal-connection-token"
 
+/** What a failed setup step says: the route's own words for a refusal, else to check the connection. */
+fun setupFailureMessage(error: Throwable): String =
+  (error as? ConsoleApiError)?.takeIf { it.status != 0 }?.message ?: "That did not go through. Check the connection and try again."
+
+/** The console's payments onboarding route (Stripe Connect), the one the Apple app's Set up payments row calls. */
+const val COMMERCE_CONNECT_ROUTE = "/api/commerce/connect"
+
+/** Payments setup for one site: the Stripe page that finishes it. Only the store's owner may; the route says so to anyone else. */
+class PaymentsSetupApi(private val api: ConsoleApiClient, private val hostId: String) {
+  /** The Stripe page that finishes payments setup, or null when payments are already set up. */
+  suspend fun setupPage(): String? {
+    val url = api.request(COMMERCE_CONNECT_ROUTE, ApiMethod.POST, buildJsonObject { put("hostId", hostId) }).obj()["url"].str()
+    return url?.takeIf { it.startsWith("https://") }
+  }
+}
+
 /** What the readers panel draws: may this site take cards on a device reader yet. */
 data class TerminalReadiness(
   val available: Boolean,
@@ -70,6 +86,23 @@ class CommerceTerminalConnection(private val api: ConsoleApiClient) : CardReader
       throw asSetupError(error)
     }
     return readReaderSession(body)
+  }
+
+  /**
+   * Gives the site its Terminal Location from [address] (the route's `location` action), so Tap to Pay and Bluetooth
+   * readers can connect. Answers the Location's id; a refusal throws the route's own words ([ConsoleApiError]).
+   */
+  suspend fun registerLocation(hostId: String, address: ReaderAddress): String {
+    val body = api.request(
+      TERMINAL_TOKEN_ROUTE,
+      ApiMethod.POST,
+      buildJsonObject {
+        put("hostId", hostId)
+        put("action", "location")
+        put("address", address.json())
+      },
+    )
+    return body.obj()["locationId"].str().orEmpty()
   }
 
   suspend fun readiness(hostId: String): TerminalReadiness {

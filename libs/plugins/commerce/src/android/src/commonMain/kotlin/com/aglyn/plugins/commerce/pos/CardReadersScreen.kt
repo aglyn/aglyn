@@ -29,6 +29,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -96,6 +98,21 @@ fun CardReadersScreen(context: NativePluginContext) {
     }
   }
   val collector = context.peripherals.cardCollector
+  val maySetUpDevices = com.aglyn.pluginhost.rememberMemberPermissions(context).can(READER_ADDRESS_PERMISSION)
+  val uri = LocalUriHandler.current
+  val scope = rememberCoroutineScope()
+  var addingAddress by remember { mutableStateOf(false) }
+  var settingUpPayments by remember { mutableStateOf(false) }
+  var paymentsSetupError by remember { mutableStateOf<String?>(null) }
+  // Stripe's page opens in the secure browser tab; coming back to the app reads the store's readiness again.
+  var leftForPaymentsSetup by remember { mutableStateOf(false) }
+  val focused = LocalWindowInfo.current.isWindowFocused
+  LaunchedEffect(focused) {
+    if (focused && leftForPaymentsSetup) {
+      leftForPaymentsSetup = false
+      refresh++
+    }
+  }
   val device by (collector?.state ?: remember { MutableStateFlow<CardCollectorState?>(null) }).collectAsState()
 
   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -111,7 +128,49 @@ fun CardReadersScreen(context: NativePluginContext) {
             val value = ready.value
             Check("Card payments offered here", value.available, if (value.testMode) "Test mode: no real cards are charged." else null)
             Check("Payments set up", value.merchantReady, if (!value.merchantReady) "Finish payments setup before taking cards." else null)
-            Check("Store address for card readers", value.locationReady, if (!value.locationReady) "Add the address card readers are used at." else null)
+            if (!value.merchantReady) {
+              // As the Apple app's row: Stripe's onboarding, on this device, for the store's owner (the route refuses anyone else).
+              AglynListItem(
+                title = "Set up payments",
+                supporting = "With Stripe, on this device. Only the store’s owner can do this.",
+                icon = AglynIcons.named("credit_card"),
+                onClick = if (settingUpPayments) null else {
+                  {
+                    settingUpPayments = true
+                    paymentsSetupError = null
+                    scope.launch {
+                      try {
+                        val page = PaymentsSetupApi(context.api, hostId).setupPage()
+                        if (page != null) {
+                          leftForPaymentsSetup = true
+                          uri.openUri(page)
+                        } else {
+                          refresh++
+                        }
+                      } catch (failure: Throwable) {
+                        if (failure is CancellationException) throw failure
+                        paymentsSetupError = (failure as? ConsoleApiError)?.takeIf { it.status != 0 }?.message
+                          ?: "Payments setup could not start. Check the connection and try again."
+                      } finally {
+                        settingUpPayments = false
+                      }
+                    }
+                  }
+                },
+                modifier = Modifier.testTag("payments-set-up"),
+              )
+              paymentsSetupError?.let { NoticeBanner(it, StatusTone.ERROR) }
+            }
+            Check(
+              "Store address for card readers",
+              value.locationReady,
+              if (!value.locationReady) "Add the address card readers are used at." else null,
+              action = if (offersReaderAddress(value.locationReady, maySetUpDevices)) {
+                { OutlinedButton(onClick = { addingAddress = true }, Modifier.testTag("reader-address-add")) { Text("Add address") } }
+              } else {
+                null
+              },
+            )
           }
         }
       }
@@ -126,6 +185,69 @@ fun CardReadersScreen(context: NativePluginContext) {
       )
     }
   }
+
+  if (addingAddress) {
+    ReaderAddressDialog(
+      save = { address -> CommerceTerminalConnection(context.api).registerLocation(hostId, address) },
+      onDismiss = { addingAddress = false },
+      onSaved = {
+        addingAddress = false
+        refresh++
+      },
+    )
+  }
+}
+
+/**
+ * The store's reader address on its own, for a store that takes cards on Tap to Pay or a Bluetooth reader and pairs
+ * no smart reader: the same fields and checks as the pairing's address, saved as the store's Terminal Location.
+ */
+@Composable
+private fun ReaderAddressDialog(save: suspend (ReaderAddress) -> Unit, onDismiss: () -> Unit, onSaved: () -> Unit) {
+  val scope = rememberCoroutineScope()
+  var address by remember { mutableStateOf(ReaderAddress("", "", "", "", "US")) }
+  var busy by remember { mutableStateOf(false) }
+  var error by remember { mutableStateOf<String?>(null) }
+  ActionDialog(
+    title = "Where the reader is used",
+    body = "Stripe sets card readers up for this address's country.",
+    icon = "store",
+    confirmLabel = "Save",
+    confirmEnabled = checkReaderAddress(address) == null,
+    busy = busy,
+    error = error,
+    onDismiss = { if (!busy) onDismiss() },
+    onConfirm = {
+      busy = true
+      error = null
+      scope.launch {
+        try {
+          save(address)
+          onSaved()
+        } catch (failure: Throwable) {
+          if (failure is CancellationException) throw failure
+          error = setupFailureMessage(failure)
+        } finally {
+          busy = false
+        }
+      }
+    },
+  ) {
+    ReaderAddressFields(address) { address = it }
+  }
+}
+
+/** The address fields the pairing and the store's address share. */
+@Composable
+private fun ReaderAddressFields(address: ReaderAddress, onChange: (ReaderAddress) -> Unit) {
+  OutlinedTextField(address.line1, { onChange(address.copy(line1 = it)) }, label = { Text("Street") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("reader-street"))
+  OutlinedTextField(address.city, { onChange(address.copy(city = it)) }, label = { Text("City") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("reader-city"))
+  // Two fields a row at most: three squeezed the labels onto two lines on a phone.
+  Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+    OutlinedTextField(address.state, { onChange(address.copy(state = it)) }, label = { Text("State") }, singleLine = true, modifier = Modifier.weight(1f).testTag("reader-state"))
+    OutlinedTextField(address.postalCode, { onChange(address.copy(postalCode = it)) }, label = { Text("Postal code") }, singleLine = true, modifier = Modifier.weight(1f).testTag("reader-postal"))
+  }
+  OutlinedTextField(address.country, { onChange(address.copy(country = it.take(2).uppercase())) }, label = { Text("Country") }, supportingText = { Text("Two letters, like US") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("reader-country"))
 }
 
 /**
@@ -263,12 +385,21 @@ private fun ReaderChoices(readers: List<DeviceReader>, enabled: Boolean, onConne
 }
 
 @Composable
-private fun Check(title: String, ok: Boolean, detail: String?) {
+private fun Check(title: String, ok: Boolean, detail: String?, action: (@Composable () -> Unit)? = null) {
   AglynListItem(
     title = title,
     supporting = detail,
     icon = AglynIcons.named(if (ok) "check_circle" else "warning"),
-    trailing = { StatusChip(if (ok) "Ready" else "Needed", if (ok) StatusTone.SUCCESS else StatusTone.WARNING) },
+    trailing = {
+      if (action != null) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
+          action()
+          StatusChip("Needed", StatusTone.WARNING)
+        }
+      } else {
+        StatusChip(if (ok) "Ready" else "Needed", if (ok) StatusTone.SUCCESS else StatusTone.WARNING)
+      }
+    },
   )
 }
 
@@ -347,13 +478,9 @@ private fun SmartReadersSection(
   if (pairing) {
     var code by remember { mutableStateOf("") }
     var label by remember { mutableStateOf("") }
-    var line1 by remember { mutableStateOf("") }
-    var city by remember { mutableStateOf("") }
-    var state by remember { mutableStateOf("") }
-    var postal by remember { mutableStateOf("") }
-    var country by remember { mutableStateOf("US") }
+    var typed by remember { mutableStateOf(ReaderAddress("", "", "", "", "US")) }
     var registerId by remember { mutableStateOf("") }
-    val address = if (needsAddress) ReaderAddress(line1, city, state, postal, country) else null
+    val address = if (needsAddress) typed else null
     val problem = checkReaderPairing(code, address)
     ActionDialog(
       title = "Pair a smart reader",
@@ -380,14 +507,7 @@ private fun SmartReadersSection(
       }
       if (needsAddress) {
         Text("Where the reader is used", style = MaterialTheme.typography.labelLarge)
-        OutlinedTextField(line1, { line1 = it }, label = { Text("Street") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(city, { city = it }, label = { Text("City") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        // Two fields a row at most: three squeezed the labels onto two lines on a phone.
-        Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-          OutlinedTextField(state, { state = it }, label = { Text("State") }, singleLine = true, modifier = Modifier.weight(1f))
-          OutlinedTextField(postal, { postal = it }, label = { Text("Postal code") }, singleLine = true, modifier = Modifier.weight(1f))
-        }
-        OutlinedTextField(country, { country = it.take(2).uppercase() }, label = { Text("Country") }, supportingText = { Text("Two letters, like US") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        ReaderAddressFields(typed) { typed = it }
       }
     }
   }

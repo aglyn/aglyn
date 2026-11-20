@@ -16,14 +16,39 @@ data class ReaderAddress(
   val country: String,
 )
 
+/** The address as the routes take it (the readers route's pairing and the reader-token route's `location`). */
+fun ReaderAddress.json(): JsonObject = JsonObject(
+  mapOf(
+    "line1" to JsonPrimitive(line1.trim()),
+    "city" to JsonPrimitive(city.trim()),
+    "state" to JsonPrimitive(state.trim()),
+    "postalCode" to JsonPrimitive(postalCode.trim()),
+    "country" to JsonPrimitive(country.trim().uppercase()),
+  ),
+)
+
+/** Why an address cannot be sent, or null. The route checks again. */
+fun checkReaderAddress(address: ReaderAddress): String? = when {
+  address.line1.isBlank() || address.city.isBlank() || address.postalCode.isBlank() -> "Enter the street, city and postal code."
+  !Regex("^[A-Za-z]{2}$").matches(address.country.trim()) -> "Enter the two-letter country code, such as US."
+  else -> null
+}
+
 /** Why a pairing cannot be sent, or null. The route checks again. */
 fun checkReaderPairing(code: String, address: ReaderAddress?): String? = when {
   !Regex("^[A-Za-z0-9-]{3,64}$").matches(code.trim()) -> "Enter the code the reader shows on its screen."
-  address != null && (address.line1.isBlank() || address.city.isBlank() || address.postalCode.isBlank()) ->
-    "Enter the street, city and postal code."
-  address != null && !Regex("^[A-Za-z]{2}$").matches(address.country.trim()) -> "Enter the two-letter country code, such as US."
+  address != null -> checkReaderAddress(address)
   else -> null
 }
+
+/** The permission the console asks to give the store its reader address (with a smart reader's pairing): setting up POS devices. */
+const val READER_ADDRESS_PERMISSION = POS_HARDWARE_DEVICES_KEY
+
+/**
+ * Whether the "Store address for card readers" row offers its address form: only while the store has none, and only
+ * to someone who may set up the store's POS devices. Everyone else reads the row's sentence.
+ */
+fun offersReaderAddress(locationReady: Boolean, maySetUpDevices: Boolean): Boolean = !locationReady && maySetUpDevices
 
 /**
  * The store's smart readers, through the same route the console's Card
@@ -47,17 +72,7 @@ class ConsoleSmartReadersApi(private val api: ConsoleApiClient, private val host
       "label" to JsonPrimitive(label.trim()),
     )
     if (!registerId.isNullOrEmpty()) fields["registerId"] = JsonPrimitive(registerId)
-    if (address != null) {
-      fields["address"] = JsonObject(
-        mapOf(
-          "line1" to JsonPrimitive(address.line1.trim()),
-          "city" to JsonPrimitive(address.city.trim()),
-          "state" to JsonPrimitive(address.state.trim()),
-          "postalCode" to JsonPrimitive(address.postalCode.trim()),
-          "country" to JsonPrimitive(address.country.trim().uppercase()),
-        ),
-      )
-    }
+    if (address != null) fields["address"] = address.json()
     api.request(POS_READERS_ROUTE, ApiMethod.POST, JsonObject(fields))
   }
 
