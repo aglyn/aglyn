@@ -103,13 +103,35 @@ internal fun FirstRunContent(services: ShellServices) {
   }
 }
 
+/** The console's empty home (AGL-3761): the first site sets the workspace up, or a workspace is made on its own. */
 @Composable
 private fun Empty(services: ShellServices, onCreate: () -> Unit) {
+  var starting by remember { mutableStateOf(false) }
+  var siteError by remember { mutableStateOf<String?>(null) }
+  val scope = rememberCoroutineScope()
   EmptyState(
-    "No workspaces yet",
-    body = "A workspace is your organization: its sites, team, billing and plan live together.",
-    icon = AglynIcons.named("workspaces"),
-    action = { Button(shape = com.aglyn.ui.controlShape(), onClick = onCreate, modifier = Modifier.testTag("first-run-create")) { Text("Create an organization") } },
+    "Create your first site",
+    body = "Your first site sets up your workspace automatically — no separate setup needed.",
+    icon = AglynIcons.named("web"),
+    action = {
+      Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(space(1f))) {
+        siteError?.let { NoticeBanner(it, StatusTone.ERROR) }
+        Button(
+          shape = com.aglyn.ui.controlShape(),
+          enabled = !starting,
+          onClick = {
+            starting = true
+            siteError = null
+            scope.launch {
+              siteError = services.createFirstSite()
+              starting = false
+            }
+          },
+          modifier = Modifier.testTag("first-run-create-site"),
+        ) { Text(if (starting) "Setting up your workspace…" else "Create site") }
+        TextButton(onClick = onCreate, modifier = Modifier.testTag("first-run-create")) { Text("Create an organization") }
+      }
+    },
   )
 }
 

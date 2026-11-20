@@ -15,6 +15,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.test.Test
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
@@ -202,6 +204,27 @@ class SignUpTest {
     signUp.createWorkspace("Acme", " acme-co ")
     assertEquals(Json.parseToJsonElement("""{"name":"Acme","slug":"acme-co"}"""), Json.parseToJsonElement(calls[0].body))
     assertEquals("acme-co", WorkspaceName.urlInput("Acme-Co"))
+  }
+
+  /** "Create your first site" (`createFirstSiteWorkspace`): named for the account, and once more under a suffix when taken. */
+  @Test
+  fun theFirstSitesWorkspaceIsNamedForTheAccountAndRetriedOnceWhenTaken() = runTest {
+    assertEquals("Hannah Reyes", FirstSiteWorkspace.name(" Hannah Reyes ", "h@example.test"))
+    assertEquals("hannah", FirstSiteWorkspace.name("  ", "hannah@example.test"))
+    assertEquals("workspace", FirstSiteWorkspace.name(null, null))
+    assertEquals("hannah-reyes-0000", FirstSiteWorkspace.fallbackSlug("Hannah Reyes") { 0.0 })
+    assertEquals("workspace-zzzz", FirstSiteWorkspace.fallbackSlug("!!") { 0.9999999 })
+    val calls = mutableListOf<Call>()
+    val signUp = service(
+      mutableListOf(HttpStatusCode.Conflict to """{"error":"taken"}""", HttpStatusCode.OK to """{"orgId":"o3","slug":"hannah-reyes-ab12"}"""),
+      calls,
+    )
+    assertEquals(SignUpWorkspaceOutcome("hannah-reyes-ab12", "o3", null), signUp.createFirstSiteWorkspace("Hannah Reyes", null))
+    assertEquals(Json.parseToJsonElement("""{"name":"Hannah Reyes","derived":true}"""), Json.parseToJsonElement(calls[0].body))
+    val retried = Json.parseToJsonElement(calls[1].body).jsonObject
+    assertTrue(retried["slug"]!!.jsonPrimitive.content.startsWith("hannah-reyes-"))
+    val failing = service(mutableListOf(HttpStatusCode.BadGateway to "{}"), mutableListOf())
+    assertEquals(SignUpWorkspaceOutcome(null, null, FirstSiteWorkspace.FAILED), failing.createFirstSiteWorkspace("A", null))
   }
 
   @Test

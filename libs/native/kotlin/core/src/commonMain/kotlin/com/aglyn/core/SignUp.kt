@@ -242,6 +242,31 @@ data class PendingSignUpWorkspace(val name: String, val nameWasTyped: Boolean)
 /** What `/api/orgs/create` answered. */
 data class SignUpWorkspaceOutcome(val slug: String?, val orgId: String?, val error: String?)
 
+/**
+ * The workspace a first site needs (the console's `createFirstSiteWorkspace`, AGL-3761): named for the account, made before
+ * the site, so the site is created inside it once the person picks how it starts.
+ */
+object FirstSiteWorkspace {
+  /** The account's own name, else its email's local part, else "workspace", at most 80 characters (`firstSiteWorkspaceName`). */
+  fun name(displayName: String?, email: String?): String {
+    val named = displayName?.trim().orEmpty()
+    val local = email?.split("@")?.firstOrNull()?.trim().orEmpty()
+    val base = named.ifEmpty { local.ifEmpty { "workspace" } }
+    return base.take(80)
+  }
+
+  /** A second address for a name whose own was taken: its slug and a short suffix (`firstSiteWorkspaceFallbackSlug`). */
+  fun fallbackSlug(name: String, random: () -> Double = { kotlin.random.Random.nextDouble() }): String {
+    val suffix = kotlin.math.floor(random() * 36.0 * 36.0 * 36.0 * 36.0).toLong().toString(36).padStart(4, '0')
+    val own = WorkspaceName.slug(name)
+    val slug = "${own.ifEmpty { "workspace" }.take(25)}-$suffix"
+    return if (WorkspaceName.slug(slug) == slug) slug else "workspace-$suffix"
+  }
+
+  /** What the console says when the workspace could not be made. */
+  const val FAILED = "Your workspace could not be set up. Try again."
+}
+
 /** How sending the verification email went. */
 sealed interface VerificationSend {
   data object Sent : VerificationSend
@@ -348,6 +373,36 @@ class SignUpService(
     SignUpWorkspaceOutcome(null, null, (error.body as? JsonObject).string("error"))
   } catch (_: Throwable) {
     SignUpWorkspaceOutcome(null, null, null)
+  }
+
+  /**
+   * "Create site" from an account with no workspace (`createFirstSiteWorkspace`): the workspace for the first site, named for
+   * the account (`derived`: nobody typed it), tried once more under a suffixed address when its own is taken.
+   */
+  suspend fun createFirstSiteWorkspace(displayName: String?, email: String?): SignUpWorkspaceOutcome {
+    val name = FirstSiteWorkspace.name(displayName, email)
+    suspend fun attempt(slug: String?): Pair<Int?, SignUpWorkspaceOutcome> = try {
+      val answer = api.request(
+        "/api/orgs/create", ApiMethod.POST,
+        buildJsonObject {
+          put("name", name)
+          put("derived", true)
+          if (slug != null) put("slug", slug)
+        },
+      ) as? JsonObject
+      200 to SignUpWorkspaceOutcome(answer.string("slug"), answer.string("orgId"), null)
+    } catch (error: CancellationException) {
+      throw error
+    } catch (error: ConsoleApiError) {
+      error.status to SignUpWorkspaceOutcome(null, null, (error.body as? JsonObject).string("error"))
+    } catch (_: Throwable) {
+      null to SignUpWorkspaceOutcome(null, null, null)
+    }
+    // A name with no usable address of its own goes straight to the suffixed one.
+    var tried = attempt(if (WorkspaceName.slug(name).isEmpty()) FirstSiteWorkspace.fallbackSlug(name) else null)
+    if (tried.first == 409) tried = attempt(FirstSiteWorkspace.fallbackSlug(name))
+    val outcome = tried.second
+    return if (outcome.slug != null) outcome else SignUpWorkspaceOutcome(null, null, outcome.error ?: FirstSiteWorkspace.FAILED)
   }
 
   /** Records the product-updates opt-in (`postPlatformMarketingConsent`), only ever when it was ticked. */
