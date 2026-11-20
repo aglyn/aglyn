@@ -58,6 +58,69 @@ public enum Reconfirm {
   /// Whether a finished action closed the account, so the app signs out.
   public static func signsOut(url: String?) -> Bool { url == closeAccountRoute }
 
+  /// Close account for an account that signs in with Apple (`AppleRevocation`, App Store Review Guideline 5.1.1(v)):
+  /// before the close is sent, the app holds a fresh Sign in with Apple authorization to revoke with. One flow per press
+  /// of Close my account:
+  /// - "Confirm it is you" opens first with the account's own ways. Confirming with Apple is the authorization: its code
+  ///   is kept and the person approves once.
+  /// - Confirmed another way (a password, Google, a passkey, single sign-on), here or when the route asks for a fresh
+  ///   sign-in: the sheet opens once more with Apple alone, only to revoke.
+  /// - A sheet closed without Apple, or a build that cannot run Sign in with Apple, closes anyway; the missing revoke is
+  ///   recorded (`AppleRevocation.revoke`). Closing is the person's right.
+  /// An account without `apple.com` closes exactly as before: no sheet, no revoke.
+  public struct AppleRevokeFlow: Sendable, Equatable {
+    public enum Next: Sendable, Equatable {
+      /// Open "Confirm it is you" with these ways first.
+      case ask([ReconfirmMethod])
+      /// Send the close; `owed` revokes first with `code` (nil records the missing authorization).
+      case close(owed: Bool, code: String?)
+    }
+
+    /// The Apple authorization code held for the revoke; it is spent once.
+    public private(set) var code: String?
+    /// Whether the account was confirmed another way in this flow.
+    public private(set) var confirmedAnotherWay = false
+    private var askedAll = false
+    private var askedApple = false
+    private var settled = false
+
+    public init() {}
+
+    /// A Sign in with Apple authorization in this flow (the sheet's Apple button): its code is kept for the revoke.
+    public mutating func authorized(code: String) {
+      guard !code.isEmpty else { return }
+      self.code = code
+    }
+
+    /// The account was confirmed with a way other than Apple.
+    public mutating func confirmed() {
+      if code == nil { confirmedAnotherWay = true }
+    }
+
+    /// What happens before the close is sent, for an account holding `providers` and offered `methods` to confirm with.
+    public mutating func next(providers: [String], methods: [ReconfirmMethod]) -> Next {
+      guard AppleRevocation.owed(providers: providers) else { return .close(owed: false, code: nil) }
+      if let held = code {
+        code = nil
+        settled = true
+        return .close(owed: true, code: held)
+      }
+      if settled { return .close(owed: false, code: nil) }
+      if methods.contains(.apple) {
+        if confirmedAnotherWay, !askedApple {
+          askedApple = true
+          return .ask([.apple])
+        }
+        if !confirmedAnotherWay, !askedAll {
+          askedAll = true
+          return .ask(methods)
+        }
+      }
+      settled = true
+      return .close(owed: true, code: nil)
+    }
+  }
+
   /// What the sheet says when this app can run none of the account's ways.
   public static let noMethodMessage =
     "This app cannot ask for this account's sign-in method. Sign out, sign in again, then try this within five minutes."

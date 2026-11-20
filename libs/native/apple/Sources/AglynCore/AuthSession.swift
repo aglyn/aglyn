@@ -659,6 +659,17 @@ public final class AuthSession {
     }
   }
 
+  /// Revokes the account in use's Apple token with a fresh Sign in with Apple authorization code, before Close account
+  /// (`AppleRevocation`): Firebase revokes it at Apple with the project's Apple key. A support session cannot.
+  public func revokeAppleToken(authorizationCode: String) async throws {
+    guard impersonation == nil, user != nil else { throw IdentityToolkitError(code: nil, status: 401) }
+    if let rest = currentRest {
+      try await rest.revokeAppleToken(authorizationCode: authorizationCode)
+      return
+    }
+    try await Auth.auth().revokeToken(withAuthorizationCode: authorizationCode)
+  }
+
   static func appleBody(_ idToken: String, _ rawNonce: String) -> String {
     "id_token=\(ConsoleAPIClient.encodeComponent(idToken))&providerId=apple.com&nonce=\(ConsoleAPIClient.encodeComponent(rawNonce))"
   }

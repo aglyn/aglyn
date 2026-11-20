@@ -154,6 +154,8 @@ struct PendingAction: Identifiable {
   let action: ActionSpec
   let scope: JSONValue
   var reauthMessage: String?
+  /// The ways "Confirm it is you" offers instead of the account's own (Close account's Apple revoke).
+  var reconfirmWays: [ReconfirmMethod]?
 }
 
 /// An action whose route refused for something another screen settles: that screen, drawn over this one.
@@ -184,6 +186,10 @@ struct SpecScreenBody: View {
   @State private var confirming: PendingAction?
   @State private var prompting: PendingAction?
   @State private var reauthing: PendingAction?
+  /// Close account's Apple revoke (`Reconfirm.AppleRevokeFlow`), one per press of the action.
+  @State private var appleRevoke = Reconfirm.AppleRevokeFlow()
+  /// The revoke's "Confirm it is you" on show: closed without confirming, the close goes on anyway.
+  @State private var revokeAsked: PendingAction?
   @State private var gating: GatedAction?
   @State private var gatedAgain: GatedAction?
   @State private var gateResolved = false
@@ -318,9 +324,23 @@ struct SpecScreenBody: View {
             .environment(\.aglynGateResolve, { gateResolved = true })
         }
       }
-      .sheet(item: $reauthing) { pending in
-        ReauthSheet(session: session, message: pending.reauthMessage, api: plugin.api) {
+      .sheet(
+        item: $reauthing,
+        onDismiss: {
+          // Close account's revoke step closed without confirming: closing is the person's right, so it goes on and
+          // the missing revoke is recorded. A sheet that follows at once (the Apple step) is left alone.
+          guard reauthing == nil, let asked = revokeAsked else { return }
+          revokeAsked = nil
+          Task { await execute(asked.action, scope: asked.scope) }
+        }
+      ) { pending in
+        ReauthSheet(
+          session: session, message: pending.reauthMessage, api: plugin.api, ways: pending.reconfirmWays,
+          appleAuthorized: { code in appleRevoke.authorized(code: code) }
+        ) {
+          revokeAsked = nil
           reauthing = nil
+          appleRevoke.confirmed()
           await session.refreshClaims()
           await execute(pending.action, scope: pending.scope)
         }
@@ -724,6 +744,7 @@ struct SpecScreenBody: View {
   }
 
   private func trigger(_ action: ActionSpec, scope: JSONValue) {
+    if Reconfirm.signsOut(url: action.url) { appleRevoke = Reconfirm.AppleRevokeFlow() }
     if action.asksInputs(in: scope) {
       prompting = PendingAction(action: action, scope: scope)
     } else if action.check == nil, action.asksConfirmation, ScreenValues.condition(action.confirmWhen, in: scope) {
@@ -781,9 +802,26 @@ struct SpecScreenBody: View {
       }
       return
     }
+    // Close account revokes the account's Apple token first, when it signs in with Apple (`Reconfirm.AppleRevokeFlow`).
+    var revoking: (owed: Bool, code: String?) = (false, nil)
+    if Reconfirm.signsOut(url: action.url) {
+      let providers = await session.providerIDs()
+      let methods = AppleRevocation.owed(providers: providers) ? await session.reconfirmMethods() : []
+      switch appleRevoke.next(providers: providers, methods: methods) {
+      case .ask(let ways):
+        let ask = PendingAction(action: action, scope: scope, reconfirmWays: ways)
+        revokeAsked = ask
+        reauthing = ask
+        return
+      case .close(let owed, let code):
+        revoking = (owed, code)
+      }
+    }
     notice = nil
     running = action.id
-    let outcome = await model.run(action, in: scope)
+    let outcome = await AppleRevocation.close(
+      owed: revoking.owed, code: revoking.code, revoke: { [session] code in try await session.revokeAppleToken(code) }
+    ) { await model.run(action, in: scope) }
     running = nil
     switch outcome {
     case .needsReauth(let message):

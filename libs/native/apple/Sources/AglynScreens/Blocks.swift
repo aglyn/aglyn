@@ -1092,6 +1092,12 @@ struct ReauthSheet: View {
   let message: String?
   /// The console client a passkey sign-in asks for its challenge.
   let api: ConsoleAPIClient?
+  /// The ways to offer instead of the account's own (`Reconfirm.AppleRevokeFlow`: Apple alone, to revoke before Close
+  /// account); nil reads them from the account.
+  var ways: [ReconfirmMethod]? = nil
+  /// Takes a Sign in with Apple authorization's one-time code once it confirmed the account, for the revoke Close
+  /// account owes (`AppleRevocation`).
+  var appleAuthorized: (String) -> Void = { _ in }
   /// Runs once the account is confirmed: the step that asked goes again.
   let confirmed: () async -> Void
   @Environment(\.dismiss) private var dismiss
@@ -1144,7 +1150,11 @@ struct ReauthSheet: View {
           }
         }
       }
-      .task { if methods == nil { methods = await session.reconfirmMethods() } }
+      .task {
+        if methods == nil {
+          if let ways { methods = ways } else { methods = await session.reconfirmMethods() }
+        }
+      }
     }
     .aglynSheetMinimumSize(width: 360, height: 300)
   }
@@ -1224,7 +1234,12 @@ struct ReauthSheet: View {
         return
       }
       let nonce = appleNonce
-      run(.apple) { try await session.reconfirm(.apple(idToken: token, rawNonce: nonce)) }
+      // The code is single-use and kept only for the revoke; Firebase's reauthentication spends the identity token.
+      let code = credential.authorizationCode.flatMap { String(data: $0, encoding: .utf8) }
+      run(.apple) { [appleAuthorized] in
+        try await session.reconfirm(.apple(idToken: token, rawNonce: nonce))
+        if let code { appleAuthorized(code) }
+      }
     }
   }
 
