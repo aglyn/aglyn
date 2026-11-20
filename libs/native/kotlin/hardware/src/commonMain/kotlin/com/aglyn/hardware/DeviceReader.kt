@@ -76,6 +76,12 @@ interface DeviceReaderControls {
   suspend fun disconnect()
 
   suspend fun installUpdate()
+
+  /**
+   * The store's card reader setup changed (its reader address was just added): a failure that asked for it goes, and
+   * the store is read again, silently, so this device's reader is ready to set up without another Find or Set up press.
+   */
+  suspend fun storeSetupChanged(hostId: String, sessions: CardReaderSessionSource) = Unit
 }
 
 /** The controls of a collector that has none (simulated, desktop). */

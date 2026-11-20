@@ -95,4 +95,33 @@ class ReaderAddressTest {
     assertNull(PaymentsSetupApi(api(mutableListOf(), HttpStatusCode.OK to """{"chargesEnabled":true}"""), "h1").setupPage())
     assertNull(PaymentsSetupApi(api(mutableListOf(), HttpStatusCode.OK to """{"url":"http://example.test/x"}"""), "h1").setupPage())
   }
+
+  /** This device's reader controls, recording when the store's setup is said to have changed. */
+  private class RecordingControls : com.aglyn.hardware.DeviceReaderControls by com.aglyn.hardware.NoDeviceReaderControls {
+    val changed = mutableListOf<String>()
+
+    override suspend fun storeSetupChanged(hostId: String, sessions: com.aglyn.hardware.CardReaderSessionSource) {
+      changed += hostId
+    }
+  }
+
+  private val noSessions = com.aglyn.hardware.CardReaderSessionSource { error("no session in this test") }
+
+  @Test
+  fun aSavedAddressHasThisDevicesReaderReadTheStoreAgain() = runTest {
+    val controls = RecordingControls()
+    val saved = mutableListOf<ReaderAddress>()
+    saveReaderAddress(address, { saved += it }, controls, "h1", noSessions)
+    assertEquals(listOf(address), saved)
+    assertEquals(listOf("h1"), controls.changed)
+  }
+
+  @Test
+  fun anAddressThatWasNotSavedLeavesTheReaderAsItWas() = runTest {
+    val controls = RecordingControls()
+    assertFailsWith<ConsoleApiError> {
+      saveReaderAddress(address, { throw refused("Enter the street.") }, controls, "h1", noSessions)
+    }
+    assertEquals(emptyList(), controls.changed)
+  }
 }

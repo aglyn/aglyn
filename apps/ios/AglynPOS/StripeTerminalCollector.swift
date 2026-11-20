@@ -610,6 +610,17 @@
 
     func permitTapToPayTerms(_ permitted: Bool) { termsPermitted = permitted }
 
+    func storeSetupChanged(hostID: String, sessions: CardReaderSessionSource) async {
+      guard !state.isConnected else { return }
+      if case .failed = discovery { discovery = .idle }
+      // The store's session is read again (a failed read left no location), and a reader that was unavailable for want
+      // of the address becomes ready to set up.
+      if siteID == hostID { locationID = nil }
+      silent = true
+      defer { silent = false }
+      _ = await prepare(hostID: hostID, sessions: sessions, ask: false)
+    }
+
     func clearTapToPayTermsJustAccepted() { tapToPayTermsJustAccepted = false }
 
     fileprivate func termsAccepted() {

@@ -263,6 +263,15 @@ class StripeTerminalCollector(
     }
   }
 
+  override suspend fun storeSetupChanged(hostId: String, sessions: CardReaderSessionSource) {
+    if (mutableState.value is CardCollectorState.Connected) return
+    if (mutableDiscovery.value is ReaderDiscovery.Failed) mutableDiscovery.value = ReaderDiscovery.Idle
+    // The store's session is read again (a failed read left no location), and a reader that was unavailable for want
+    // of the address becomes ready to set up.
+    if (this.hostId == hostId) lock.withLock { locationId = null }
+    prepare(hostId, sessions, ask = false)
+  }
+
   override suspend fun cancelDiscovery() {
     val pending = discovering ?: return
     if (!pending.isCompleted) {

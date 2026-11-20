@@ -241,7 +241,10 @@ struct CardReadersScreen: View {
     }
     .sheet(isPresented: $addingAddress) {
       ReaderAddressSheet { address in
-        _ = try await CommerceTerminalConnection(api: context.api).registerLocation(hostID: hostID, address: address)
+        let connection = CommerceTerminalConnection(api: context.api)
+        try await saveReaderAddress(
+          address, save: { _ = try await connection.registerLocation(hostID: hostID, address: $0) },
+          controls: collector?.deviceReaders, hostID: hostID, sessions: connection)
       } done: {
         addingAddress = false
         refresh += 1
@@ -654,6 +657,17 @@ struct ReaderAddressFields: View {
 
 /// The store's reader address on its own, for a store that takes cards on Tap to Pay or a Bluetooth reader and pairs
 /// no smart reader: the same fields and checks as the pairing's address, saved as the store's Terminal Location.
+/// Saves the store's reader address, then has this device's reader read the store again, so its notice that asked for
+/// the address goes at once rather than at the next Find or Set up press.
+@MainActor
+func saveReaderAddress(
+  _ address: ReaderAddress, save: (ReaderAddress) async throws -> Void, controls: DeviceReaderControls?, hostID: String,
+  sessions: CardReaderSessionSource
+) async throws {
+  try await save(address)
+  await controls?.storeSetupChanged(hostID: hostID, sessions: sessions)
+}
+
 struct ReaderAddressSheet: View {
   let save: (ReaderAddress) async throws -> Void
   let done: () -> Void
