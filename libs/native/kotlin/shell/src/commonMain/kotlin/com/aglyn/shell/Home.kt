@@ -112,7 +112,8 @@ internal fun HomeScreen(
         if (!team || hostId == null) runCatching { uriHandler.openUri(url) }
         else visitScope.launch { runCatching { uriHandler.openUri(com.aglyn.core.SiteVisit.url(true, hostId, url, services.api)) } }
       }
-      // Site Care's Request a change (the console's site dashboard, AGL-3959): off with the reason without Site Care.
+      // Site Care's Request a change (the console's site dashboard, AGL-3959): off with the reason without Site Care, absent
+      // then in a store build (`siteCareControl`).
       val careOrg = workspace.org?.id
       if (site != null && careOrg != null) {
         androidx.compose.runtime.key(careOrg, site.id) {

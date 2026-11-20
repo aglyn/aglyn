@@ -102,7 +102,8 @@ struct HomeView: View {
     .accessibilityIdentifier("home-customize-dashboard")
   }
 
-  /// Site Care's Request a change (the console's site dashboard, AGL-3959): off with the reason on a workspace without it.
+  /// Site Care's Request a change (the console's site dashboard, AGL-3959): off with the reason on a workspace without it,
+  /// and absent there in a store build (`siteCareControl`).
   @ViewBuilder
   private var siteCare: some View {
     if let picked, let orgID = model.workspace?.org?.id, let api = model.api {
