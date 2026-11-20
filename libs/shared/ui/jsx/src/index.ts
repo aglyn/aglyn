@@ -114,7 +114,6 @@ export * from './lib/components/sr-only'
 // `@aglyn/shared-ui-jsx/components/zoomable-panning-component` if the besigner
 // ever uncomments that import.
 
-export * from './lib/contexts/buying-hidden.context'
 export * from './lib/contexts/confirmation.context'
 export * from './lib/contexts/loading.context'
 
