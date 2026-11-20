@@ -8,8 +8,8 @@ import SwiftUI
 /*
  * Site Care's "Request a change" on a site's Home (the console's SiteCareRequestButton, AGL-3959): a workspace with Site
  * Care tells the team what to change in its own words and is told when it will be done; one without it sees the button
- * off with the reason, beside Add Site Care. Routes: /api/site-care/requests (`view=status`, and the POST). The Kotlin
- * site lib's SiteCare.kt.
+ * off with the reason, beside Add Site Care (a store build draws nothing there: `siteCareControl`). Routes:
+ * /api/site-care/requests (`view=status`, and the POST). The Kotlin site lib's SiteCare.kt.
  */
 
 /// Why Request a change is off on a workspace without Site Care (`SITE_CARE_MISSING_REASON`).
@@ -49,6 +49,25 @@ public struct SiteCareAPI: Sendable {
   }
 }
 
+/// What Site Care draws on a site's Home.
+public enum SiteCareControl: Equatable, Sendable {
+  /// Nothing: the route has not answered, or the build cannot sell Site Care to a workspace without it.
+  case none
+  /// Request a change, which opens the request.
+  case request
+  /// The console's Request a change, off with the reason, beside Add Site Care.
+  case offWithAdd
+}
+
+/// With Site Care, Request a change in every build. Without it, the console's off button and Add Site Care, only where
+/// the build may sell: in a store build (the owner's decision of 2026-11-19) both lead only to buying Site Care, so the
+/// block is absent, with no dead button and no store line standing alone on a site's Home.
+public func siteCareControl(siteCare: Bool?, buying: Bool) -> SiteCareControl {
+  guard let siteCare else { return .none }
+  if siteCare { return .request }
+  return buying ? .offWithAdd : .none
+}
+
 /// Request a change, with the sheet it opens. Draws nothing until the route has said whether the workspace has Site Care.
 public struct SiteCareRequestButton: View {
   let api: ConsoleAPIClient
@@ -68,26 +87,26 @@ public struct SiteCareRequestButton: View {
 
   public var body: some View {
     Group {
-      if let siteCare {
+      switch siteCareControl(siteCare: siteCare, buying: StoreBilling.buying) {
+      case .request:
+        Button("Request a change") { open = true }
+          .buttonStyle(.aglynSecondary)
+          .accessibilityIdentifier("site-care-request")
+      case .offWithAdd:
         HStack(spacing: AglynSpace.one) {
           Button("Request a change") { open = true }
             .buttonStyle(.aglynSecondary)
-            .disabled(!siteCare)
-            .help(siteCare ? "" : siteCareMissingReason)
-            .accessibilityHint(siteCare ? "" : siteCareMissingReason)
+            .disabled(true)
+            .help(siteCareMissingReason)
+            .accessibilityHint(siteCareMissingReason)
             .accessibilityIdentifier("site-care-request")
-          // A store build takes no payment to Aglyn (the owner's decision of 2026-11-19): the store line, not Add Site Care.
-          if !siteCare, StoreBilling.buying {
-            Button("Add Site Care", action: onAddSiteCare)
-              .buttonStyle(.borderless)
-              .accessibilityIdentifier("site-care-add")
-          } else if !siteCare {
-            AglynStoreBillingLine()
-          }
+          Button("Add Site Care", action: onAddSiteCare)
+            .buttonStyle(.borderless)
+            .accessibilityIdentifier("site-care-add")
         }
-      } else {
+      case .none:
         // An empty Group is no view, so its `.task` would never run and the button would never appear: hold a zero-size
-        // view while the route answers.
+        // view while the route answers (and, in a store build without Site Care, from then on).
         Color.clear.frame(width: 0, height: 0)
       }
     }

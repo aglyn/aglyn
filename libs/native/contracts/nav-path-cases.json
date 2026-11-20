@@ -254,6 +254,17 @@
       ]
     },
     {
+      "name": "the console's root (where a marketplace review notice links): Home, where the window stands",
+      "scope": "unchanged",
+      "expect": { "mode": "main", "area": { "shell": "home" }, "pushed": [], "opensSection": false, "starredRowStays": false },
+      "entries": [
+        { "via": "link", "link": "/" },
+        { "via": "universal", "link": "https://console.example.com/" },
+        { "via": "aglyn", "link": "aglyn:///" },
+        { "via": "notification", "link": "/", "orgSlug": "acme" }
+      ]
+    },
+    {
       "name": "a page the app has no screen for yet, over the area it is in",
       "scope": "site",
       "expect": { "mode": "main", "area": { "row": "products", "screen": "commerce.products", "params": {} }, "pushed": [{ "unavailable": "/acme/hosts/shop/products/pos?tab=registers" }], "opensSection": false, "starredRowStays": true },

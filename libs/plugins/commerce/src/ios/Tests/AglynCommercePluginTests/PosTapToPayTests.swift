@@ -23,6 +23,7 @@ private final class FakeIPhoneReader: CardCollector, DeviceReaderControls {
   private(set) var permitted: Bool?
   private(set) var connects: [CardCollectorKind] = []
   private(set) var warmUps = 0
+  private(set) var storeChanges: [String] = []
 
   func connect(hostID: String, kind: CardCollectorKind, sessions: CardReaderSessionSource) async -> CardCollectorState {
     connects.append(kind)
@@ -45,6 +46,7 @@ private final class FakeIPhoneReader: CardCollector, DeviceReaderControls {
   func installUpdate() async {}
   func reconnectRemembered(hostID: String, sessions: CardReaderSessionSource) async {}
   func warmUp(hostID: String, sessions: CardReaderSessionSource) async { warmUps += 1 }
+  func storeSetupChanged(hostID: String, sessions: CardReaderSessionSource) async { storeChanges.append(hostID) }
   func permitTapToPayTerms(_ permitted: Bool) { self.permitted = permitted }
   func clearTapToPayTermsJustAccepted() { tapToPayTermsJustAccepted = false }
 }
@@ -85,6 +87,28 @@ private final class DecliningReader: CardReaderService {
 
 @MainActor
 final class PosTapToPayTests: XCTestCase {
+  private struct NoSession: CardReaderSessionSource {
+    func session(hostID: String) async throws -> CardReaderSession { throw CancellationError() }
+  }
+
+  /// A saved store address has this device's reader read the store again (its notice that asked for the address goes);
+  /// one that was not saved leaves the reader as it was.
+  func testASavedAddressHasThisDevicesReaderReadTheStoreAgain() async {
+    let reader = FakeIPhoneReader()
+    let address = ReaderAddress(line1: "100 Main St", city: "Austin", state: "TX", postalCode: "78701", country: "US")
+    var saved: [ReaderAddress] = []
+    try? await saveReaderAddress(address, save: { saved.append($0) }, controls: reader, hostID: "h1", sessions: NoSession())
+    XCTAssertEqual(saved, [address])
+    XCTAssertEqual(reader.storeChanges, ["h1"])
+    struct Refused: Error {}
+    let other = FakeIPhoneReader()
+    do {
+      try await saveReaderAddress(address, save: { _ in throw Refused() }, controls: other, hostID: "h1", sessions: NoSession())
+      XCTFail("the save failed")
+    } catch {}
+    XCTAssertEqual(other.storeChanges, [])
+  }
+
   private func register(_ reader: FakeIPhoneReader) -> RegisterModel {
     let api = ConsoleAPIClient(origin: "https://console.test", getIDToken: { _ in "token" }, sleep: { _ in }, maxAttempts: 1)
     return RegisterModel(hostID: "h1", reader: NoDocuments(), api: api, collector: reader)

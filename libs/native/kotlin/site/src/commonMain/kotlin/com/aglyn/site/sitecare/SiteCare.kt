@@ -33,8 +33,8 @@ import kotlinx.serialization.json.booleanOrNull
 /*
  * Site Care's "Request a change" on a site's Home (the console's SiteCareRequestButton, AGL-3959): a workspace with Site
  * Care tells the team what to change in its own words and is told when it will be done; one without it sees the button
- * off with the reason, beside Add Site Care. Routes: /api/site-care/requests (`view=status`, and the POST). The Apple site
- * lib's SiteCare.swift.
+ * off with the reason, beside Add Site Care (a store build draws nothing there: `siteCareControl`). Routes:
+ * /api/site-care/requests (`view=status`, and the POST). The Apple site lib's SiteCare.swift.
  */
 
 /** Why Request a change is off on a workspace without Site Care (`SITE_CARE_MISSING_REASON`). */
@@ -66,6 +66,30 @@ class SiteCareApi(private val api: ConsoleApiClient, private val orgId: String) 
   }
 }
 
+/** What Site Care draws on a site's Home. */
+enum class SiteCareControl {
+  /** Nothing: the route has not answered, or the build cannot sell Site Care to a workspace without it. */
+  NONE,
+
+  /** Request a change, which opens the request. */
+  REQUEST,
+
+  /** The console's Request a change, off with the reason, beside Add Site Care. */
+  OFF_WITH_ADD,
+}
+
+/**
+ * With Site Care, Request a change in every build. Without it, the console's off button and Add Site Care, only where the
+ * build may sell: in a store build (the owner's decision of 2026-11-19) both lead only to buying Site Care, so the block
+ * is absent, with no dead button and no store line standing alone on a site's Home.
+ */
+fun siteCareControl(siteCare: Boolean?, buying: Boolean): SiteCareControl = when {
+  siteCare == null -> SiteCareControl.NONE
+  siteCare -> SiteCareControl.REQUEST
+  buying -> SiteCareControl.OFF_WITH_ADD
+  else -> SiteCareControl.NONE
+}
+
 /** Request a change, with the dialog it opens. Draws nothing until the route has said whether the workspace has Site Care. */
 @Composable
 fun SiteCareRequestButton(api: ConsoleApiClient, orgId: String, hostId: String?, onAddSiteCare: () -> Unit, modifier: Modifier = Modifier) {
@@ -73,20 +97,16 @@ fun SiteCareRequestButton(api: ConsoleApiClient, orgId: String, hostId: String?,
   var siteCare by remember(orgId) { mutableStateOf<Boolean?>(null) }
   var open by remember { mutableStateOf(false) }
   LaunchedEffect(orgId) { siteCare = care.hasSiteCare() }
-  val has = siteCare ?: return
-  Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-    if (has) {
+  when (siteCareControl(siteCare, com.aglyn.core.StoreBilling.buying)) {
+    SiteCareControl.NONE -> return
+    SiteCareControl.REQUEST -> Row(modifier, verticalAlignment = Alignment.CenterVertically) {
       OutlinedButton(onClick = { open = true }, modifier = Modifier.testTag("site-care-request")) { Text("Request a change") }
-    } else {
+    }
+    SiteCareControl.OFF_WITH_ADD -> Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
       WithTooltip(SITE_CARE_MISSING_REASON) {
         OutlinedButton(onClick = {}, enabled = false, modifier = Modifier.testTag("site-care-request")) { Text("Request a change") }
       }
-      // A store build takes no payment to Aglyn (the owner's decision of 2026-11-19): the store line, not Add Site Care.
-      if (com.aglyn.core.StoreBilling.buying) {
-        TextButton(onClick = onAddSiteCare, modifier = Modifier.testTag("site-care-add")) { Text("Add Site Care") }
-      } else {
-        com.aglyn.ui.StoreBillingLine()
-      }
+      TextButton(onClick = onAddSiteCare, modifier = Modifier.testTag("site-care-add")) { Text("Add Site Care") }
     }
   }
   if (open) SiteCareRequestDialog(care, hostId) { open = false }

@@ -744,7 +744,7 @@ private fun Block(
   copy: (String) -> Unit,
 ) {
   val title = block.title?.let { ScreenValues.render(it, context) }?.takeIf { it.isNotEmpty() }
-  val footer = block.footer?.let { ScreenValues.render(it, context) }?.takeIf { it.isNotEmpty() }
+  val footer = block.footer?.takeIf { ScreenValues.condition(block.footerWhen, context) }?.let { ScreenValues.render(it, context) }?.takeIf { it.isNotEmpty() }
   when (block.type) {
     "notice" -> NoticeBanner(ScreenValues.render(block.string("text").orEmpty(), context), tone(block.string("tone")))
     // `{ "type": "billingOnWeb", "when": "!app.billing" }`: the one line a store build shows where it leaves buying out (the

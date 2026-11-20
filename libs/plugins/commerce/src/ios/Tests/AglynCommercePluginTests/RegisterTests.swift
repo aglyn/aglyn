@@ -219,6 +219,39 @@ final class CheckoutTests: XCTestCase {
     XCTAssertNotNil(api.steps.first?.1, "a payment carries its attempt key")
   }
 
+  func testToPayCarriesTheChosenTipSoItMatchesWhatTheTenderTakes() async {
+    // A discounted, taxed sale: $22.90 less $3.44, plus $1.61 tax = $21.07; an 18% tip on it is $3.79.
+    let discounted = PosOpenedSale(
+      orderID: "o1", subtotalCents: 2290, discountCents: 344, taxCents: 161, totalCents: 2107, dueCents: 2107,
+      stockWarnings: [])
+    let api = ScriptedSaleAPI()
+    let paid = PosSalePayment(
+      id: "pay1", method: "cash", amountCents: 2107, tipCents: 379, status: "succeeded", cardBrand: nil, last4: nil,
+      changeCents: 0, readerID: nil, failureMessage: nil)
+    api.answers = [
+      .success(
+        PosPaymentAnswer(
+          sale: PosSale(
+            orderID: "o1", status: "paid", totalCents: 2107, paidCents: 2107, dueCents: 0, tenderableCents: 0,
+            tipCents: 379, payments: [paid]),
+          paymentID: "pay1", completed: true, clientSecret: nil, paymentIntentID: nil))
+    ]
+    let checkout = Checkout(
+      api: api, opened: discounted, settings: PosRegisterSettings(tippingEnabled: true, tipPercentages: [18]),
+      sleep: { _ in })
+    XCTAssertEqual(checkout.dueWithTipCents, 2107)
+    guard let tip = checkout.tips.first(where: { $0.id == "pct-18" }) else { return XCTFail("no 18% tip") }
+    checkout.chooseTip(tip)
+    XCTAssertEqual(checkout.tipCents, 379)
+    XCTAssertEqual(checkout.dueCents, 2107, "the sale's balance leaves the tip beside it")
+    XCTAssertEqual(checkout.dueWithTipCents, 2486)
+    XCTAssertEqual(checkout.dueWithTipCents, checkout.amountCents + checkout.tipCents)
+    XCTAssertEqual(cashQuickAmounts(checkout.amountCents + checkout.tipCents).first, 2486)
+    await checkout.payCash(tenderedCents: 3000)
+    XCTAssertEqual(api.steps.first?.0, .cash(tenderedCents: 3000, tipCents: 379, amountCents: nil))
+    XCTAssertEqual(checkout.step, .receipt(changeCents: 514))
+  }
+
   func testTooLittleCashIsRefusedBeforeAnyCall() async {
     let api = ScriptedSaleAPI()
     let checkout = Checkout(api: api, opened: opened, settings: PosRegisterSettings(), sleep: { _ in })

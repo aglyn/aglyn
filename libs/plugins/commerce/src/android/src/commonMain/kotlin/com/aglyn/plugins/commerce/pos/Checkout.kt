@@ -71,6 +71,13 @@ data class CheckoutState(
 
   val isSplit: Boolean get() = amountCents < dueCents
 
+  /**
+   * What is left to pay, the chosen tip included: the sale's balance plus the tip the next tender takes. The tip rides
+   * beside the sale and is not on it until a payment carries it, so the sale's own due reads short by it; this is the
+   * figure the summary's Due shows, and it matches what the tender buttons take when nothing is split.
+   */
+  val dueWithTipCents: Long get() = sale.dueCents + tipCents
+
   /** Card payments still at a reader (a sale reopened after a restart can hold one). */
   val inFlight: List<PosSalePayment> get() = sale.payments.filter { it.status == "pending" }
 

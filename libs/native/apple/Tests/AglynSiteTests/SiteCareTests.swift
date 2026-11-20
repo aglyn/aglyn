@@ -30,4 +30,15 @@ final class SiteCareTests: XCTestCase {
     let without = await care.hasSiteCare()
     XCTAssertEqual(without, false)
   }
+
+  /// With Site Care, Request a change in every build; without it, the off button beside Add Site Care only where the
+  /// build sells, and nothing at all in a store build; nothing either until the route answers.
+  func testWhatSiteCareDrawsInEachBuild() {
+    XCTAssertEqual(siteCareControl(siteCare: true, buying: true), .request)
+    XCTAssertEqual(siteCareControl(siteCare: true, buying: false), .request)
+    XCTAssertEqual(siteCareControl(siteCare: false, buying: true), .offWithAdd)
+    XCTAssertEqual(siteCareControl(siteCare: false, buying: false), .none)
+    XCTAssertEqual(siteCareControl(siteCare: nil, buying: true), .none)
+    XCTAssertEqual(siteCareControl(siteCare: nil, buying: false), .none)
+  }
 }

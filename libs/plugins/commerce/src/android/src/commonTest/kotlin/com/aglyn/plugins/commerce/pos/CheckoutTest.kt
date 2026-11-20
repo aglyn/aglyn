@@ -43,6 +43,36 @@ class CheckoutTest {
   }
 
   @Test
+  fun theDueCarriesTheChosenTipSoItMatchesWhatTheTenderTakes() = runTest {
+    // A discounted, taxed sale: $22.90 less $3.44, plus $1.61 tax = $21.07; an 18% tip on it is $3.79.
+    val discounted = PosOpenedSale("o1", 2290, 344, 161, 2107, 2107, emptyList())
+    val paid = PosPaymentAnswer(
+      sale = PosSale("o1", "paid", 2107, 2107, 0, 0, 379, listOf(payment("c1", "succeeded", "cash", 2107, tipCents = 379))),
+      paymentId = "c1",
+      completed = true,
+      clientSecret = null,
+      paymentIntentId = null,
+    )
+    val api = ScriptedSaleApi(mapOf("cash" to listOf(paid)))
+    var minted = 0
+    val checkout = Checkout(api, discounted, PosRegisterSettings(tippingEnabled = true, tipPercentages = listOf(18.0)), AttemptKeys { "key-${++minted}" }, noSleep)
+    assertEquals(2107L, checkout.state.value.dueWithTipCents)
+    checkout.chooseTip(checkout.tips().single { it.id == "pct-18" })
+    val state = checkout.state.value
+    assertEquals(379L, state.tipCents)
+    // Due and the tender's "Take" read the same figure; the sale's own due leaves the tip beside it.
+    assertEquals(2107L, state.sale.dueCents)
+    assertEquals(2486L, state.dueWithTipCents)
+    assertEquals(state.amountCents + state.tipCents, state.dueWithTipCents)
+    assertEquals(2486L, cashQuickAmounts(state.amountCents + state.tipCents).first())
+    // $30 handed over: the change is counted from the sale and the tip together.
+    checkout.payCash(3000)
+    assertEquals(SaleStep.Cash(3000, 379, null), api.calls.single().step)
+    assertEquals(CheckoutStep.Receipt(514), checkout.state.value.step)
+    assertEquals(0L, checkout.state.value.tipCents)
+  }
+
+  @Test
   fun pricesTipsOnWhatThisTenderPaysAndRepricesThemOnASplit() {
     val checkout = checkout(ScriptedSaleApi())
     assertEquals(listOf(0L, 150L, 200L), checkout.tips().map { it.cents })

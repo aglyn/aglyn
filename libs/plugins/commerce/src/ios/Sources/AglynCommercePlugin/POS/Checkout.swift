@@ -99,6 +99,10 @@ final class Checkout {
   /// What the next tender pays: the part, when it is less than the balance, or the balance.
   var amountCents: Int { partCents.flatMap { (1..<max(1, dueCents)).contains($0) ? $0 : nil } ?? dueCents }
   var isSplit: Bool { amountCents < dueCents }
+  /// What is left to pay, the chosen tip included. The tip rides beside the sale and is not on it until a payment
+  /// carries it, so the balance alone reads short by it; this is what "To pay" shows, and it matches what the tender
+  /// buttons take when nothing is split.
+  var dueWithTipCents: Int { dueCents + tipCents }
   /// Card payments still at a reader (a sale reopened after a restart can hold one).
   var inFlight: [PosSalePayment] { sale.payments.filter { $0.status == "pending" } }
   /// Tenders are open: nothing in flight, nothing unknown, something to pay.

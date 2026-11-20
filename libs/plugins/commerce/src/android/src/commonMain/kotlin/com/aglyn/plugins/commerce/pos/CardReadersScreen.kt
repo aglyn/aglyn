@@ -42,7 +42,9 @@ import com.aglyn.hardware.CardCollectorState
 import com.aglyn.hardware.DeviceReader
 import com.aglyn.hardware.ReaderDiscovery
 import com.aglyn.hardware.deviceReaders
+import com.aglyn.hardware.CardReaderSessionSource
 import com.aglyn.hardware.CardReaderSetupError
+import com.aglyn.hardware.DeviceReaderControls
 import com.aglyn.pluginhost.NativePluginContext
 import com.aglyn.ui.ActionDialog
 import com.aglyn.ui.OutlinedButton
@@ -188,13 +190,36 @@ fun CardReadersScreen(context: NativePluginContext) {
 
   if (addingAddress) {
     ReaderAddressDialog(
-      save = { address -> CommerceTerminalConnection(context.api).registerLocation(hostId, address) },
+      save = { address ->
+        val connection = CommerceTerminalConnection(context.api)
+        saveReaderAddress(address, { connection.registerLocation(hostId, it) }, collector?.deviceReaders, hostId, connection)
+      },
       onDismiss = { addingAddress = false },
       onSaved = {
         addingAddress = false
         refresh++
       },
     )
+  }
+}
+
+/**
+ * Saves the store's reader address, then has this device's reader read the store again, so its notice that asked for
+ * the address goes at once rather than at the next Find or Set up press.
+ */
+internal suspend fun saveReaderAddress(
+  address: ReaderAddress,
+  save: suspend (ReaderAddress) -> Unit,
+  controls: DeviceReaderControls?,
+  hostId: String,
+  sessions: CardReaderSessionSource,
+) {
+  save(address)
+  try {
+    controls?.storeSetupChanged(hostId, sessions)
+  } catch (error: Throwable) {
+    // The address is saved; the reader's own Find or Set up reads the store again.
+    if (error is CancellationException) throw error
   }
 }
 

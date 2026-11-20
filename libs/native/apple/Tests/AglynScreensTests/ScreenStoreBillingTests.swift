@@ -53,6 +53,25 @@ final class ScreenStoreBillingTests: XCTestCase {
     XCTAssertEqual(shown(), ["payNow", "view"])
   }
 
+  /// Outstanding's footer names the button that settles an invoice, so it shows only where that button is drawn.
+  func testTheOutstandingFooterShowsOnlyWithItsButton() throws {
+    let billing = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.billing" })
+    let list = try XCTUnwrap(billing.blocks.first { $0.type == "list" && $0["title"]?.stringValue == "Outstanding" })
+    func footerShows(manage: Bool) -> Bool {
+      ScreenValues.condition(
+        list.footerWhen, in: ScreenSession(orgPermissions: ["billing.manage": manage]).context(nil, params: [:]))
+    }
+    StoreBilling.set(buying: false, webBillingLink: false)
+    XCTAssertFalse(footerShows(manage: true))
+    StoreBilling.set(buying: true, webBillingLink: false)
+    XCTAssertTrue(footerShows(manage: true))
+    XCTAssertFalse(footerShows(manage: false))
+    // A block with no `footerWhen` keeps its footer.
+    let plain = try XCTUnwrap(BlockSpec(["type": "list", "footer": "x"]))
+    XCTAssertNil(plain.footerWhen)
+    XCTAssertTrue(ScreenValues.condition(plain.footerWhen, in: ScreenSession().context(nil, params: [:])))
+  }
+
   /// Every control in Billing that takes or starts a payment to Aglyn holds `app.billing`, on itself or its block.
   func testEveryBuyingControlInBillingNeedsTheBuild() throws {
     let buying: [String: Set<String>] = [

@@ -130,6 +130,8 @@ class LoadSpec(val key: String, json: JsonElement) {
 class BlockSpec(val type: String, val raw: JsonElement, idOverride: String? = null) {
   val title: String? = raw.str("title")
   val footer: String? = raw.str("footer")
+  /** When the footer shows (`footerWhen`); none shows it always. */
+  val footerWhen: String? = raw.str("footerWhen")
   val whenCondition: String? = raw.str("when")
   /**
    * The block's `id`, else `type:title`; a repeat of an earlier block's gets `#2`, `#3` in spec order, so two untitled

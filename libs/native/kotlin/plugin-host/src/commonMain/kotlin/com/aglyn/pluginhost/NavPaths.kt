@@ -145,8 +145,9 @@ object NavPaths {
       rest.startsWith("/manage/notifications") -> return NavLinkPath(scope, NavPath(area = NavArea.Shell(NavShellPage.NOTIFICATIONS)))
       // The site's Analytics page is the shell's own (`shell.analytics`, the site list's Overview row).
       rest == "/analytics" || rest.startsWith("/analytics/") -> return NavLinkPath(scope, assemble(listOf(NavStep.Screen(ANALYTICS_SCREEN)), here, lists))
-      // A workspace's own address (`/{orgSlug}`) and a site's dashboard are their Home.
-      scope.orgSlug != null && rest == "/" -> return NavLinkPath(scope, NavPath(area = NavArea.Shell(NavShellPage.HOME)))
+      // A workspace's own address (`/{orgSlug}`) and a site's dashboard are their Home, and so is the console's root (`/`,
+      // where a marketplace review notice links), on the workspace on screen.
+      rest == "/" -> return NavLinkPath(scope, NavPath(area = NavArea.Shell(NavShellPage.HOME)))
       else -> NavStep.Unavailable(full)
     }
     val path = assemble(levels, here, lists)
