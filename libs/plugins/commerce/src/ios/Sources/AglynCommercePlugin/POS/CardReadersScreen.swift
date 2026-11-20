@@ -178,15 +178,15 @@ struct CardReadersScreen: View {
             if let paymentsSetupError { AglynNotice(paymentsSetupError, tone: .error) }
           }
           if offersReaderAddress(locationReady: value.locationReady, maySetUpDevices: context.can(readerAddressPermission)) {
-            AglynRow(
-              "Store address for card readers", subtitle: "Add the address card readers are used at.",
-              systemImage: "exclamationmark.triangle"
-            ) {
-              Button("Add address") { addingAddress = true }
-                .buttonStyle(.aglynSecondary)
-                .accessibilityIdentifier("reader-address-add")
-              StatusChip("Needed", tone: .warning)
+            check("Store address for card readers", false, "Add the address card readers are used at.")
+            // Its own row, as Set up payments above: a phone has no room for a button beside the sentence.
+            Button {
+              addingAddress = true
+            } label: {
+              AglynRow("Add address", systemImage: "mappin.and.ellipse")
             }
+            .buttonStyle(.aglynRow)
+            .accessibilityIdentifier("reader-address-add")
           } else {
             check(
               "Store address for card readers", value.locationReady,
@@ -669,7 +669,10 @@ struct ReaderAddressSheet: View {
         if let error { Section { AglynNotice(error, tone: .error) } }
       }
       .formStyle(.grouped)
-      .navigationTitle("Where the reader is used")
+      .navigationTitle("Add address")
+      #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+      #endif
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
         ToolbarItem(placement: .confirmationAction) {

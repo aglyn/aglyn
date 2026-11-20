@@ -161,16 +161,16 @@ fun CardReadersScreen(context: NativePluginContext) {
               )
               paymentsSetupError?.let { NoticeBanner(it, StatusTone.ERROR) }
             }
-            Check(
-              "Store address for card readers",
-              value.locationReady,
-              if (!value.locationReady) "Add the address card readers are used at." else null,
-              action = if (offersReaderAddress(value.locationReady, maySetUpDevices)) {
-                { OutlinedButton(onClick = { addingAddress = true }, Modifier.testTag("reader-address-add")) { Text("Add address") } }
-              } else {
-                null
-              },
-            )
+            Check("Store address for card readers", value.locationReady, if (!value.locationReady) "Add the address card readers are used at." else null)
+            if (offersReaderAddress(value.locationReady, maySetUpDevices)) {
+              // Its own row, as Set up payments above: a phone has no room for a button beside the sentence.
+              AglynListItem(
+                title = "Add address",
+                icon = AglynIcons.named("location_on"),
+                onClick = { addingAddress = true },
+                modifier = Modifier.testTag("reader-address-add"),
+              )
+            }
           }
         }
       }
@@ -209,9 +209,9 @@ private fun ReaderAddressDialog(save: suspend (ReaderAddress) -> Unit, onDismiss
   var busy by remember { mutableStateOf(false) }
   var error by remember { mutableStateOf<String?>(null) }
   ActionDialog(
-    title = "Where the reader is used",
-    body = "Stripe sets card readers up for this address's country.",
-    icon = "store",
+    title = "Add address",
+    body = "Where the reader is used. Stripe sets card readers up for this address's country.",
+    icon = "location_on",
     confirmLabel = "Save",
     confirmEnabled = checkReaderAddress(address) == null,
     busy = busy,
@@ -385,21 +385,12 @@ private fun ReaderChoices(readers: List<DeviceReader>, enabled: Boolean, onConne
 }
 
 @Composable
-private fun Check(title: String, ok: Boolean, detail: String?, action: (@Composable () -> Unit)? = null) {
+private fun Check(title: String, ok: Boolean, detail: String?) {
   AglynListItem(
     title = title,
     supporting = detail,
     icon = AglynIcons.named(if (ok) "check_circle" else "warning"),
-    trailing = {
-      if (action != null) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
-          action()
-          StatusChip("Needed", StatusTone.WARNING)
-        }
-      } else {
-        StatusChip(if (ok) "Ready" else "Needed", if (ok) StatusTone.SUCCESS else StatusTone.WARNING)
-      }
-    },
+    trailing = { StatusChip(if (ok) "Ready" else "Needed", if (ok) StatusTone.SUCCESS else StatusTone.WARNING) },
   )
 }
 
