@@ -139,6 +139,21 @@ export interface AiNodeTreeContext {
   /** DAM media ids a `media` prop may reference. Absent: any well-formed reference. */
   assetIds?: Iterable<string>
   /**
+   * The media library scopes a `media:{scope}/{mediaId}` reference may name
+   * (AGL-4235): a site's own library and its workspace's, as the caller holds
+   * them. Held in the same check as `assetIds`, so a reference must pass both
+   * when both are given. Absent: any well-formed scope.
+   */
+  mediaScopes?: Iterable<string>
+  /**
+   * Values are taken exactly as written (AGL-4235): a boolean must be a
+   * boolean, a number a number and text a string, where a model's answer
+   * would be coerced — `"true"` to `true`, `5` to `"5"`. A value that is not
+   * already the type is dropped and named in `repairs`, which a caller that
+   * refuses every repair reads as an error. Absent: coerced, as for a model.
+   */
+  exact?: boolean
+  /**
    * Reusable components an instance may place. Absent: no instance is
    * admitted, which is the palette's own rule for a tree nobody grounded.
    */
@@ -338,6 +353,41 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+/** The media a `media:` reference may name, from the caller's context: its asset ids and scopes. */
+interface MediaAdmission {
+  ids: Set<string> | null
+  scopes: Set<string> | null
+}
+
+function mediaAdmissionOf(context: AiNodeTreeContext | undefined): MediaAdmission | null {
+  const ids = context?.assetIds ? new Set(context.assetIds) : null
+  const scopes = context?.mediaScopes ? new Set(context.mediaScopes) : null
+  return ids || scopes ? { ids, scopes } : null
+}
+
+/** Whether a parsed reference names media the caller admits; any, with nothing named. */
+function mediaAdmitted(ref: { scope: string; mediaId: string }, media: MediaAdmission | null): boolean {
+  if (!media) return true
+  if (media.ids && !media.ids.has(ref.mediaId)) return false
+  return !media.scopes || media.scopes.has(ref.scope)
+}
+
+/**
+ * One element's palette entry with the props every element carries (see
+ * {@link withNodeCapabilities}): what the validator holds an element's props
+ * to, for a reader that says which props an element takes. Null for an
+ * element the palette does not list.
+ */
+export function aiPaletteEntryWithCapabilities(componentId: string): AiPaletteEntry | null {
+  const entry = AI_PALETTE[componentId]
+  return entry ? withNodeCapabilities(entry) : null
+}
+
+/** The field an icon is picked with, which no caller but the site owner fills (see `sanitizeString`). */
+export function aiPropIsIconPick(entry: AiPaletteEntry, name: string): boolean {
+  return entry.propFields[name] === ICON_PICKER_FIELD
+}
+
 /** An `https:` address that parses as one. */
 export function isHttpsUrl(value: string): boolean {
   if (!/^https:\/\//i.test(value)) return false
@@ -493,7 +543,7 @@ function sanitizeString(
   raw: string,
   props: Record<string, unknown>,
   screenIds: Set<string> | null,
-  assetIds: Set<string> | null,
+  media: MediaAdmission | null,
   repairs: string[],
   bindingTokens: ReadonlySet<string> | null = null,
 ): string | undefined {
@@ -544,7 +594,7 @@ function sanitizeString(
       if (bindingTokens?.has(value)) break
       if (isHttpsUrl(value)) break
       const ref = parseMediaRef(value)
-      if (!ref || (assetIds && !assetIds.has(ref.mediaId))) {
+      if (!ref || !mediaAdmitted(ref, media)) {
         repairs.push(
           `${nodeId}.${name} is neither a media reference this site holds nor an https: URL; dropped`,
         )
@@ -647,9 +697,10 @@ function sanitizeProps(
   paletteEntry: AiPaletteEntry,
   raw: unknown,
   screenIds: Set<string> | null,
-  assetIds: Set<string> | null,
+  media: MediaAdmission | null,
   repairs: string[],
   bindingTokens: ReadonlySet<string> | null = null,
+  exact = false,
 ): { props: Record<string, unknown> } | { missing: string } {
   const entry = withNodeCapabilities(paletteEntry)
   const source = isRecord(raw) ? raw : {}
@@ -697,7 +748,7 @@ function sanitizeProps(
     }
     switch (schema.type) {
       case 'boolean': {
-        const coerced = coerceBoolean(value)
+        const coerced = exact && typeof value !== 'boolean' ? undefined : coerceBoolean(value)
         if (coerced === undefined) {
           repairs.push(`${nodeId}.${name} is not a boolean; dropped`)
           continue
@@ -707,7 +758,7 @@ function sanitizeProps(
       }
       case 'number':
       case 'integer': {
-        const coerced = coerceNumber(schema, value)
+        const coerced = exact && typeof value !== 'number' ? undefined : coerceNumber(schema, value)
         if (coerced === undefined) {
           repairs.push(`${nodeId}.${name} is not a number in range; dropped`)
           continue
@@ -719,7 +770,7 @@ function sanitizeProps(
         const text =
           typeof value === 'string'
             ? value
-            : typeof value === 'number' || typeof value === 'boolean'
+            : !exact && (typeof value === 'number' || typeof value === 'boolean')
               ? String(value)
               : undefined
         if (text === undefined) {
@@ -734,7 +785,7 @@ function sanitizeProps(
           text,
           source,
           screenIds,
-          assetIds,
+          media,
           repairs,
           bindingTokens,
         )
@@ -769,7 +820,7 @@ interface ReferenceSets {
   componentProps: Record<string, AiComponentPropTypes>
   formIds: Set<string> | null
   datasetIds: Set<string> | null
-  assetIds: Set<string> | null
+  media: MediaAdmission | null
   /** The tree defines a reusable component, which may hand its own property tokens on. */
   definesComponent: boolean
 }
@@ -784,7 +835,7 @@ function instancePropValue(
   name: string,
   type: string,
   raw: unknown,
-  assetIds: Set<string> | null,
+  media: MediaAdmission | null,
   repairs: string[],
 ): unknown {
   if (type === 'number') {
@@ -821,7 +872,7 @@ function instancePropValue(
   if (type === 'image') {
     if (isHttpsUrl(value)) return value
     const ref = parseMediaRef(value)
-    if (!ref || (assetIds && !assetIds.has(ref.mediaId))) {
+    if (!ref || !mediaAdmitted(ref, media)) {
       repairs.push(
         `${nodeId}.propValues.${name} is neither a media reference this site holds nor an https: URL; dropped`,
       )
@@ -911,7 +962,7 @@ function sanitizeReferenceProps(
         name,
         declared?.[name] ?? 'text',
         raw,
-        refs.assetIds,
+        refs.media,
         repairs,
       )
       if (value !== undefined) values[name] = value
@@ -1022,8 +1073,10 @@ export function validateAiNodePatch(
     { ...entry, propsSchema: { ...entry.propsSchema, required: [] } },
     patch.props,
     context?.screenIds ? new Set(context.screenIds) : null,
-    context?.assetIds ? new Set(context.assetIds) : null,
+    mediaAdmissionOf(context),
     repairs,
+    null,
+    context?.exact === true,
   )
   const sx =
     patch.sx === undefined ? undefined : sanitizeSx(componentId, patch.sx, repairs)
@@ -1178,7 +1231,7 @@ function validate(
     componentProps: context?.componentProps ?? {},
     formIds: context?.formIds ? new Set(context.formIds) : null,
     datasetIds: context?.datasetIds ? new Set(context.datasetIds) : null,
-    assetIds: context?.assetIds ? new Set(context.assetIds) : null,
+    media: mediaAdmissionOf(context),
     definesComponent,
   }
   // An instance is admitted only where the caller grounded it in the site's
@@ -1201,7 +1254,7 @@ function validate(
   }
 
   const screenIds = context?.screenIds ? new Set(context.screenIds) : null
-  const assetIds = refs.assetIds
+  const media = refs.media
   const repairs: string[] = []
   const output: NodesMap = {}
   const rootIsWrapper =
@@ -1359,9 +1412,10 @@ function validate(
         : entry,
       reference.props,
       screenIds,
-      assetIds,
+      media,
       repairs,
       bindingTokens,
+      context?.exact === true,
     )
     if ('missing' in propsResult) {
       return {

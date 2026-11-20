@@ -93,14 +93,14 @@ final class ScreenSpecTests: XCTestCase {
         XCTAssertTrue(ids.insert(spec.id).inserted, "duplicate screen id \(spec.id)")
         XCTAssertTrue(["org", "site", "account", "staff"].contains(spec.scope), "\(spec.id): scope \(spec.scope)")
         for link in spec.links { XCTAssertTrue(link.hasPrefix("/"), "\(spec.id): link \(link)") }
-        let known = Set(["fields", "meters", "list", "form", "actions", "links", "notice", "zone", "image", "html", "qr", "text"])
+        let known = Set(["fields", "meters", "list", "form", "actions", "links", "notice", "zone", "image", "html", "qr", "text", "billingOnWeb"])
         for block in spec.blocks { XCTAssertTrue(known.contains(block.type), "\(spec.id): block \(block.type)") }
       }
       specs += parsed
     }
     // Every screen a spec opens or navigates to exists: a spec, or one a plugin draws by hand.
     let handWritten: Set<String> = [
-      "commerce.orders", "commerce.order", "commerce.quotes", "commerce.quote", "commerce.products", "commerce.product", "commerce.sales", "marketplace.listing", "marketplace.sell", "site.pages",
+      "commerce.orders", "commerce.order", "commerce.quotes", "commerce.quote", "commerce.products", "commerce.product", "commerce.sales", "commerce.hardware", "marketplace.listing", "marketplace.sell", "site.pages",
     ]
     for spec in specs {
       for target in Self.targets(spec.raw) {
@@ -441,6 +441,24 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(ListColumns.next(after: order, tapping: plan), ListOrder(column: "plan", descending: false))
     XCTAssertEqual(ListColumns.routeValue(ListOrder(column: "created", descending: true), columns: columns), "createdAt:desc")
     XCTAssertNil(ListColumns.routeValue(ListOrder(column: "plan", descending: false), columns: columns))
+  }
+
+  /// The Team roster's sorts (the console's MEMBER_SORTS): Role by rank, owner first, a role the ranks lack after them; Member by
+  /// what the row reads as (its name, else its address).
+  func testARankedColumnOrdersByRankAndATemplateByWhatItReads() throws {
+    let role = try XCTUnwrap(ListColumn(["id": "role", "sort": ["page": "item.role", "ranks": ["owner", "admin", "editor", "viewer"]]]))
+    let rows: [JSONValue] = [
+      ["id": "a", "role": "viewer"], ["id": "b", "role": "owner"], ["id": "c", "role": "editor"], ["id": "d", "role": "guest"],
+      ["id": "e", "role": "admin"],
+    ]
+    func ids(_ column: ListColumn, _ rows: [JSONValue], descending: Bool) -> [String] {
+      ListColumns.sorted(rows, by: column, descending: descending, in: [:]).map { ScreenValues.text($0["id"] ?? .null) }
+    }
+    XCTAssertEqual(ids(role, rows, descending: false), ["b", "e", "c", "a", "d"])
+    XCTAssertEqual(ids(role, rows, descending: true), ["d", "a", "c", "e", "b"])
+    let member = try XCTUnwrap(ListColumn(["id": "member", "sort": ["page": "{item.displayName|item.email}"]]))
+    let people: [JSONValue] = [["id": "x", "email": "zed@example.test"], ["id": "y", "displayName": "Amy"]]
+    XCTAssertEqual(ids(member, people, descending: false), ["y", "x"])
   }
 
   /// A page column orders the rows on the screen: numbers as numbers, text without regard to case, dates as moments; a row
@@ -1164,6 +1182,20 @@ final class ScreenSpecTests: XCTestCase {
     XCTAssertEqual(initialValue(other, in: start), .flag(false))
   }
 
+  /// Billing's Outstanding card (the console's open invoices): Pay now charges the card on file, never says "paid".
+  @MainActor
+  func testOutstandingInvoicesPayNowAsTheConsoleDoes() throws {
+    let billing = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.billing" })
+    let list = try XCTUnwrap(billing.blocks.first { $0.type == "list" && $0["title"]?.stringValue == "Outstanding" })
+    let pay = try XCTUnwrap(list["actions"].array.compactMap(ActionSpec.init).first { $0.id == "payNow" })
+    XCTAssertEqual(pay.url, "/api/billing/pay-invoice")
+    let base: JSONValue = ["org": ["id": "o1"], "item": ["id": "in_1"]]
+    let bank = ScreenContext.with(base, "response", ["requiresAction": true, "hostedInvoiceUrl": "https://invoice.test/i"])
+    XCTAssertEqual(pay.insteadEntry(in: bank)?["open"]?.stringValue, "hostedInvoiceUrl")
+    XCTAssertEqual(pay.insteadEntry(in: ScreenContext.with(base, "response", ["alreadyPaid": true]))?["title"]?.stringValue, "Already settled")
+    XCTAssertNil(pay.insteadEntry(in: ScreenContext.with(base, "response", ["submitted": true])))
+  }
+
   @MainActor
   func testTheForumOffersTheRoutesCategoriesAndFiltersByThem() throws {
     let forum = try XCTUnwrap(CoreScreens.specs.first { $0.id == "core.support.forum" })
@@ -1218,6 +1250,7 @@ final class ScreenSpecTests: XCTestCase {
     let set = try XCTUnwrap(actions.first { $0.id == "set" })
     let turnOn = try XCTUnwrap(actions.first { $0.id == "on" })
     let base: JSONValue = [
+      "app": ["billing": true],
       "org": ["id": "o1", "manager": true, "can": ["billing.manage": true]],
       "const": spec.raw["constants"] ?? .null,
       "data": ["addons": [
@@ -1228,6 +1261,8 @@ final class ScreenSpecTests: XCTestCase {
     ]
     // The stepper is the AI row's one control: no switch, no typed quantity.
     XCTAssertTrue(ScreenValues.condition(blocks.when, in: base))
+    // A store build (the owner's decision of 2026-11-19) offers no stepper at all.
+    XCTAssertFalse(ScreenValues.condition(blocks.when, in: ScreenContext.with(base, "app", ["billing": false])))
     XCTAssertFalse(ScreenValues.condition(set.when, in: base))
     XCTAssertFalse(ScreenValues.condition(turnOn.when, in: base))
     let field = try XCTUnwrap(blocks.prompt.first)
@@ -1392,7 +1427,16 @@ final class ScreenSpecTests: XCTestCase {
     // Only a different plan is offered, and only to a workspace with a live subscription.
     let scope = ScreenContext.with(base, "item", ["id": "pro"])
     XCTAssertFalse(ScreenValues.condition(switchPlan.when, in: scope))
-    XCTAssertTrue(ScreenValues.condition(switchPlan.when, in: ScreenContext.with(scope, "item", ["id": "business"]).withManager()))
+    let business = ScreenContext.with(ScreenContext.with(scope, "item", ["id": "business"]).withManager(), "app", ["billing": true])
+    XCTAssertTrue(ScreenValues.condition(switchPlan.when, in: business))
+    // A store build (the owner's decision of 2026-11-19) offers no switch and no checkout.
+    XCTAssertFalse(ScreenValues.condition(switchPlan.when, in: ScreenContext.with(business, "app", ["billing": false])))
+    for id in ["monthly", "yearly"] {
+      let checkout = try XCTUnwrap(list["actions"].array.compactMap(ActionSpec.init).first { $0.id == id })
+      let free: JSONValue = ["org": ["can": ["billing.manage": true]], "data": ["org": ["plan": "free"]], "item": ["id": "pro"]]
+      XCTAssertTrue(ScreenValues.condition(checkout.when, in: ScreenContext.with(free, "app", ["billing": true])))
+      XCTAssertFalse(ScreenValues.condition(checkout.when, in: ScreenContext.with(free, "app", ["billing": false])))
+    }
   }
 
   @MainActor

@@ -81,7 +81,12 @@ fun SiteCareRequestButton(api: ConsoleApiClient, orgId: String, hostId: String?,
       WithTooltip(SITE_CARE_MISSING_REASON) {
         OutlinedButton(onClick = {}, enabled = false, modifier = Modifier.testTag("site-care-request")) { Text("Request a change") }
       }
-      TextButton(onClick = onAddSiteCare, modifier = Modifier.testTag("site-care-add")) { Text("Add Site Care") }
+      // A store build takes no payment to Aglyn (the owner's decision of 2026-11-19): the store line, not Add Site Care.
+      if (com.aglyn.core.StoreBilling.buying) {
+        TextButton(onClick = onAddSiteCare, modifier = Modifier.testTag("site-care-add")) { Text("Add Site Care") }
+      } else {
+        com.aglyn.ui.StoreBillingLine()
+      }
     }
   }
   if (open) SiteCareRequestDialog(care, hostId) { open = false }

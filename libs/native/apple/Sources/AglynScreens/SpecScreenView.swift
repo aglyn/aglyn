@@ -49,7 +49,13 @@ public struct SpecScreenView: View {
 
   public var body: some View {
     Group {
-      if !ScreenValues.condition(spec.requires, in: baseContext) {
+      // A screen that is only buying (`requires` holds `app.billing`) in a store build (the owner's decision of 2026-11-19):
+      // reached by a link, a search, Starred or Recent, it shows the store line, never "your role".
+      if !StoreBilling.buying, spec.requires?.contains("app.billing") == true {
+        AglynEmptyState(spec.label, systemImage: "creditcard", message: StoreBilling.webBillingLink ? nil : StoreBilling.noBillingNote) {
+          if StoreBilling.webBillingLink { AglynStoreBillingLine() }
+        }
+      } else if !ScreenValues.condition(spec.requires, in: baseContext) {
         AglynEmptyState(
           spec.scope == "staff" ? "Staff only" : "Not available to your role", systemImage: "lock",
           message: spec.scope == "staff"
@@ -313,8 +319,7 @@ struct SpecScreenBody: View {
         }
       }
       .sheet(item: $reauthing) { pending in
-        ReauthSheet(email: session.email, message: pending.reauthMessage) { password in
-          try await session.reauthenticate(password)
+        ReauthSheet(session: session, message: pending.reauthMessage, api: plugin.api) {
           reauthing = nil
           await session.refreshClaims()
           await execute(pending.action, scope: pending.scope)
@@ -361,7 +366,7 @@ struct SpecScreenBody: View {
       .background(AglynGround())
     case .planRefused(let message):
       AglynUpsellState(
-        "Add this to your plan", message: message, systemImage: "sparkles", actionTitle: "See add-ons"
+        StoreBilling.buying ? "Add this to your plan" : "Not on this plan", message: message, systemImage: "sparkles", actionTitle: "See add-ons"
       ) {
         plugin.navigate("core.billing.addons", [:])
       }
@@ -683,6 +688,14 @@ struct SpecScreenBody: View {
       } header: {
         if let title { Text(title) }
       }
+    case "billingOnWeb":
+      // `{ "type": "billingOnWeb", "when": "!app.billing" }`: the one line a store build shows where it leaves buying out
+      // (the owner's decision of 2026-11-19), once per screen; nothing in a build that may buy.
+      if !StoreBilling.buying {
+        section(title, footer) {
+          AglynStoreBillingLine()
+        }
+      }
     default:
       EmptyView()
     }
@@ -795,6 +808,11 @@ struct SpecScreenBody: View {
       #if os(iOS)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
       #endif
+      // Close account succeeded: the account is gone, so the app signs out at once, as the console does.
+      if Reconfirm.signsOut(url: action.url) {
+        await session.account.signOut()
+        return
+      }
       let after = ScreenContext.with(scope, "response", response ?? .null)
       if let instead = action.insteadEntry(in: after) {
         revealed = (
@@ -897,9 +915,11 @@ struct SearchModifier: ViewModifier {
 
   func body(content: Content) -> some View {
     if enabled {
+      // The kit's search takes the submit itself: on the Mac, the iPad and in a phone area's title row it is
+      // `AglynListToolbar`'s text field, whose Return an outer `.onSubmit(of: .search)` never hears, so the route was
+      // never asked; the system search bar elsewhere hands it on the same way.
       content
-        .aglynSearchable(text: $text, prompt: "Search")
-        .onSubmit(of: .search, submit)
+        .aglynSearchable(text: $text, prompt: "Search", onSubmit: submit)
         .onChange(of: text) { _, now in if now.isEmpty { submit() } }
     } else {
       content

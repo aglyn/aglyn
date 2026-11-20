@@ -33,6 +33,14 @@ public enum TapToPayIPhone {
   public static let symbol = "wave.3.right.circle.fill"
   /// The iOS version Tap to Pay on iPhone is offered on.
   public static let minimumOSMajor = 18
+  /// Apple's entitlement for it. A build is signed with it only where Apple granted it (development builds so far), and a
+  /// build without it never offers Tap to Pay on iPhone (`offered(entitlements:onPhone:)`).
+  public static let entitlement = "com.apple.developer.proximity-reader.payment.acceptance"
+
+  /// Whether this build offers it: on an iPhone, signed with Apple's entitlement.
+  public static func offered(entitlements: SigningEntitlements = .current, onPhone: Bool) -> Bool {
+    onPhone && entitlements.contains(entitlement)
+  }
 }
 
 /// Why a press of the Tap to Pay on iPhone button cannot take the card yet, in the cashier's words.

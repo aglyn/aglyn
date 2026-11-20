@@ -81,6 +81,8 @@ internal class ShellActions(
   val notificationSettings: () -> Unit = {},
   /** The staff list (the console's "Staff console"), for staff only; null hides the row. */
   val staffConsole: (() -> Unit)? = null,
+  /** "Your Privacy Choices": the analytics switch for this device. */
+  val privacyChoices: () -> Unit = {},
 )
 
 /** The workspace menu (its name ▾): who it is, then Invite people, Workspace settings, Billing and usage, Workspace color. */
@@ -108,8 +110,9 @@ internal fun WorkspaceMenu(services: ShellServices, workspace: WorkspaceState, c
     }
     MenuRow("Billing and usage", "credit_card", tag = "workspace-menu-billing") { chrome.workspaceMenu = false; actions.openScreen("core.billing", emptyMap()) }
     // The console's "Upgrade plan" (its user menu): once the plan is known, below the top self-serve plan, to someone with "Manage billing".
+    // Never in a store build, which takes no payment to Aglyn (the owner's decision of 2026-11-19).
     val logo = workspace.orgLogo
-    if (logo?.plan != null && logo.plan in com.aglyn.core.OnboardingPlanIntent.UPGRADABLE_PLANS && !logo.enterprise && chrome.managesBilling) {
+    if (com.aglyn.core.StoreBilling.buying && logo?.plan != null && logo.plan in com.aglyn.core.OnboardingPlanIntent.UPGRADABLE_PLANS && !logo.enterprise && chrome.managesBilling) {
       androidx.compose.material3.Button(
         onClick = { chrome.workspaceMenu = false; actions.openScreen("core.billing", emptyMap()) },
         shape = com.aglyn.ui.controlShape(),
@@ -202,6 +205,8 @@ internal fun AccountMenuItems(services: ShellServices, user: AuthUser?, close: (
   actions.staffConsole?.let { open -> MenuRow(STAFF_CONSOLE_TITLE, "shield", tag = "account-menu-staff-console") { close(); open() } }
   MenuRow("Documentation", "article", tag = "account-menu-docs") { close(); actions.openWeb(helpLinks(services.config).first { it.id == "docs" }.url) }
   MenuRow("Report an issue", "bug_report", tag = "account-menu-report") { close(); actions.openScreen("core.support", emptyMap()) }
+  // The console's user menu row of the same title (Console chrome row 3): the regulated words, from the contracts.
+  MenuRow(com.aglyn.contracts.Contracts.consentOptOutTitle, PRIVACY_CHOICES_ICON, tag = "account-menu-privacy-choices") { close(); actions.privacyChoices() }
   if (accounts != null) {
     HorizontalDivider()
     Text(

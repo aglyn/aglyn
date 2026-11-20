@@ -64,6 +64,7 @@ import {
   runPluginUserErasers,
 } from '@aglyn/aglyn/server'
 import { resolveSiteStyleLooks } from '@aglyn/aglyn/plugin-manager/plugin-site-style-looks'
+import { resolvePluginPageContent } from '@aglyn/aglyn/plugin-manager/plugin-page-content'
 import { registerPluginThemePresets } from '@aglyn/aglyn/plugin-manager/plugin-theme-presets'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { AI_PLUGIN_ENTITLEMENTS, registerAiDeclarations } from './declarations'
@@ -206,5 +207,18 @@ describe('the server declarations answer each style\'s look (AGL-4049)', () => {
     expect(trades).toMatchObject({ kind: 'builtin', base: 'bootstrap', fonts: 'oswald' })
     await expect(source?.look('auto')).resolves.toBeNull()
     await expect(source?.look('nope')).resolves.toBeNull()
+  })
+})
+
+describe('the server declarations answer the page content contract (AGL-4235)', () => {
+  it('registers the one page editor, which loads on the first request', () => {
+    resetPluginServicesForTests()
+    expect(resolvePluginPageContent()).toBeNull()
+    registerAiServerDeclarations()
+    const service = resolvePluginPageContent()
+    expect(typeof service?.read).toBe('function')
+    expect(typeof service?.editDraft).toBe('function')
+    // Registering again replaces it rather than refusing it.
+    expect(() => registerAiServerDeclarations()).not.toThrow()
   })
 })

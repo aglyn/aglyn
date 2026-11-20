@@ -76,17 +76,24 @@ public struct SiteStarterPickNote: Equatable, Sendable {
   public let message: String
   /// The button that opens the console's Create site on the pick; nil when nothing is left to do there.
   public let webAction: String?
+  /// A store build's paid pick: the store line under the note (`StoreBilling`), in place of Buy on the web.
+  public let storeLine: Bool
 
-  public init(message: String, webAction: String?) {
+  public init(message: String, webAction: String?, storeLine: Bool = false) {
     self.message = message
     self.webAction = webAction
+    self.storeLine = storeLine
   }
 }
 
-/// Nil for a pick that needs saying nothing: a free base starter creates at once.
-public func siteStarterPickNote(_ pick: SiteStarterSummary?) -> SiteStarterPickNote? {
+/// Nil for a pick that needs saying nothing: a free base starter creates at once. A store build (`buying` false, the
+/// owner's decision of 2026-11-19) says a paid pick is paid, with no price and no Buy on the web.
+public func siteStarterPickNote(_ pick: SiteStarterSummary?, buying: Bool = StoreBilling.buying) -> SiteStarterPickNote? {
   guard let pick else { return nil }
   let name = pick.displayName.isEmpty ? "This starter" : pick.displayName
+  if siteStarterPickBlock(pick) == .purchase, !buying {
+    return SiteStarterPickNote(message: "\(name) is a paid starter.", webAction: nil, storeLine: true)
+  }
   if siteStarterPickBlock(pick) == .purchase {
     return SiteStarterPickNote(
       message: "\(name) costs \(siteStarterPriceLabel(pick.priceUsd)). Buy it on the web, then create your site from it.",

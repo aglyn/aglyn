@@ -37,6 +37,7 @@ class ListQueryCasesTest {
     "ENTRY_LIST_QUERY" -> Contracts.entryListQuery
     "MARKETPLACE_BROWSE_QUERY" -> Contracts.marketplaceBrowseQuery
     "MEDIA_LIST_QUERY" -> Contracts.mediaListQuery
+    "SITE_TEMPLATE_SHELF_QUERY" -> Contracts.siteTemplateShelfQuery
     else -> error("no declaration $name")
   }
 

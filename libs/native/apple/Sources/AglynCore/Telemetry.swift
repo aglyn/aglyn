@@ -24,6 +24,13 @@ public protocol TelemetrySink: AnyObject, Sendable {
   func setValue(_ value: String, forKey key: String)
   /// An Analytics event.
   func log(_ event: String, parameters: [String: String])
+  /// Turns Analytics collection on or off at once (the person's "Your Privacy Choices" switch); crash reports are not
+  /// part of it.
+  func setAnalyticsCollection(_ on: Bool)
+}
+
+extension TelemetrySink {
+  public func setAnalyticsCollection(_ on: Bool) {}
 }
 
 /// The events the apps log. Names follow Firebase's (`screen_view`, `sign_up`) where Firebase has one.
@@ -41,20 +48,28 @@ public enum Telemetry {
   private final class State: @unchecked Sendable {
     let lock = NSLock()
     var sink: TelemetrySink?
+    /// The person's analytics choice on this device (`PrivacyChoices`): off, no Analytics event is sent.
+    var analytics = true
     var lastScreen: String?
     var recorded = Set<String>()
   }
 
   private static let state = State()
 
-  /// Installs the sink. With `collecting` false nothing is ever handed to it: every call below is a no-op.
-  public static func start(collecting: Bool, sink: TelemetrySink, app: AglynAppID? = nil, info: [String: Any]? = nil) {
+  /// Installs the sink. With `collecting` false nothing is ever handed to it: every call below is a no-op. `analytics` is
+  /// the person's choice on this device (`PrivacyChoices.analyticsAllowed`), read before this runs: off, the sink's
+  /// Analytics collection is turned off and no Analytics event is logged, while crash reports go on as the build says.
+  public static func start(
+    collecting: Bool, sink: TelemetrySink, app: AglynAppID? = nil, info: [String: Any]? = nil, analytics: Bool = true
+  ) {
     state.lock.lock()
     state.sink = collecting ? sink : nil
+    state.analytics = analytics
     state.lastScreen = nil
     state.recorded = []
     state.lock.unlock()
     guard collecting else { return }
+    sink.setAnalyticsCollection(analytics)
     let info = info ?? Bundle.main.infoDictionary ?? [:]
     sink.setValue(AppVersion.resolve(info), forKey: "app_version")
     sink.setValue(info["CFBundleVersion"] as? String ?? "0", forKey: "app_build")
@@ -68,6 +83,23 @@ public enum Telemetry {
     state.lastScreen = nil
     state.recorded = []
     state.lock.unlock()
+  }
+
+  /// The person flipped "Your Privacy Choices" › Analytics: applied at once. A build that does not collect (a debug
+  /// build, an emulator stack) keeps sending nothing whatever the choice.
+  public static func setAnalytics(_ allowed: Bool) {
+    state.lock.lock()
+    state.analytics = allowed
+    let sink = state.sink
+    state.lock.unlock()
+    sink?.setAnalyticsCollection(allowed)
+  }
+
+  /// Whether Analytics events are sent in this process: collecting, and the person allows it.
+  public static var isLoggingAnalytics: Bool {
+    state.lock.lock()
+    defer { state.lock.unlock() }
+    return state.sink != nil && state.analytics
   }
 
   /// Whether anything is collected in this process.
@@ -104,7 +136,9 @@ public enum Telemetry {
     guard changed else { return }
     sink.setValue(key, forKey: "screen")
     sink.breadcrumb("screen \(key)")
-    sink.log(TelemetryEvent.screenView.rawValue, parameters: ["screen_name": key, "screen_class": key])
+    if isLoggingAnalytics {
+      sink.log(TelemetryEvent.screenView.rawValue, parameters: ["screen_name": key, "screen_class": key])
+    }
   }
 
   /// A key flow. Parameter values must be identifiers (a tender type, a sign-in method); anything else is dropped.
@@ -113,7 +147,7 @@ public enum Telemetry {
     var clean: [String: String] = [:]
     for (name, value) in parameters where isIdentifier(name) && isIdentifier(value) { clean[name] = value }
     sink.breadcrumb(event.rawValue)
-    sink.log(event.rawValue, parameters: clean)
+    if isLoggingAnalytics { sink.log(event.rawValue, parameters: clean) }
   }
 
   /// The signed-in person: their Firebase uid only.

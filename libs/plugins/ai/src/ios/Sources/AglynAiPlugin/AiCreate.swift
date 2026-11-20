@@ -444,10 +444,14 @@ struct AiCreateScreen: View {
     HStack {
       Button("AI credits") { context.navigate("ai.credits") }
         .accessibilityIdentifier("ai-create-credits")
-      Button("Plans and billing") { context.navigate("core.billing.plans") }
-        .accessibilityIdentifier("ai-create-billing")
+      // A store build takes no payment to Aglyn (the owner's decision of 2026-11-19): the store line, not Plans and billing.
+      if StoreBilling.buying {
+        Button("Plans and billing") { context.navigate("core.billing.plans") }
+          .accessibilityIdentifier("ai-create-billing")
+      }
     }
     .buttonStyle(.aglynSecondary)
+    AglynStoreBillingLine()
   }
 
   // MARK: The add-on's offer

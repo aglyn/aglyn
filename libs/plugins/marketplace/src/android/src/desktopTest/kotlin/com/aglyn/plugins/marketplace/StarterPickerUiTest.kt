@@ -173,20 +173,28 @@ class StarterPickerUiTest {
   }
 
   @Test
-  fun aPaidPickSaysItsPriceAndGoesToTheWeb() = runDesktopComposeUiTest(width = 900, height = 1000) {
-    val seen = Seen()
-    val context = owner(seen, { 200 to """{"rows":[$free,$paid],"labels":{}}""" })
-    open(context, seen)
-    onNodeWithTag("site-name").performTextInput("My Shop")
-    toRow("starter-north-bakery")
-    onNodeWithText("$12").assertIsDisplayed()
-    onNodeWithTag("starter-north-bakery").performClick()
-    onNodeWithText("Northwind Bakery costs $12. Buy it on the web, then create your site from it.").assertIsDisplayed()
-    onNodeWithTag("create-site-confirm").assertIsNotEnabled()
-    onNodeWithTag("starter-web").performClick()
-    waitUntil(timeoutMillis = 5_000) { seen.urls.isNotEmpty() }
-    assertEquals(listOf("http://localhost/acme/hosts?create=site&starter=north-bakery"), seen.urls)
-    assertEquals(null, seen.created)
+  fun aPaidPickSaysItsPriceAndGoesToTheWeb() {
+    // A price and the way to buy it show in a build that may buy (app.billing), as here; a store build says neither.
+    com.aglyn.core.StoreBilling.configure(com.aglyn.core.AglynConfig.read(com.aglyn.core.AglynEnv(consoleUrl = "https://app.example.com", inAppBilling = "on"), com.aglyn.core.AglynAppId.AGLYN))
+    try {
+      runDesktopComposeUiTest(width = 900, height = 1000) {
+        val seen = Seen()
+        val context = owner(seen, { 200 to """{"rows":[$free,$paid],"labels":{}}""" })
+        open(context, seen)
+        onNodeWithTag("site-name").performTextInput("My Shop")
+        toRow("starter-north-bakery")
+        onNodeWithText("$12").assertIsDisplayed()
+        onNodeWithTag("starter-north-bakery").performClick()
+        onNodeWithText("Northwind Bakery costs $12. Buy it on the web, then create your site from it.").assertIsDisplayed()
+        onNodeWithTag("create-site-confirm").assertIsNotEnabled()
+        onNodeWithTag("starter-web").performClick()
+        waitUntil(timeoutMillis = 5_000) { seen.urls.isNotEmpty() }
+        assertEquals(listOf("http://localhost/acme/hosts?create=site&starter=north-bakery"), seen.urls)
+        assertEquals(null, seen.created)
+      }
+    } finally {
+      com.aglyn.core.StoreBilling.configure(com.aglyn.core.AglynConfig.read(com.aglyn.core.AglynEnv(consoleUrl = "https://app.example.com", inAppBilling = "off"), com.aglyn.core.AglynAppId.AGLYN))
+    }
   }
 
   @Test

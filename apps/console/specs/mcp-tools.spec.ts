@@ -138,18 +138,22 @@ describe('what a client is told about each tool (AGL-4225)', () => {
     // What reaches past the workspace's own records, each for the reason the
     // operation states beside its flag: a public website or address, the
     // buyer's inbox, a DNS lookup of a new address's mail domain, a public
-    // link to an uploaded file, a public store's catalog, and a site's search
-    // listings and business details, which are live on save (AGL-4235).
+    // link to an uploaded file, a public store's catalog, a site's search
+    // listings and business details, which are live on save, and a published
+    // page's name, address, place in the menu or removal, which visitors see
+    // at once (AGL-4235).
     const openWorld = [
       'convertLead',
       'createContact',
       'createLead',
       'createProduct',
       'createSite',
+      'deletePage',
       'deleteProduct',
       'publishSite',
       'updateBusinessDetails',
       'updateOrder',
+      'updatePage',
       'updatePageSeo',
       'updateProduct',
       'updateProductVariant',
@@ -157,9 +161,11 @@ describe('what a client is told about each tool (AGL-4225)', () => {
       'uploadOrgMedia',
       'uploadSiteMedia',
     ]
-    // POSTs that can overwrite: a merge removes a contact, and adding a lead
-    // whose address the site already holds updates that lead (AGL-4235).
-    const destructivePosts = ['createLead', 'mergeContact']
+    // POSTs that can overwrite: a merge removes a contact, adding a lead
+    // whose address the site already holds updates that lead, a publish given
+    // `pages` replaces what each live page shows with its draft, and a content
+    // edit can overwrite and remove elements of a page's draft (AGL-4235).
+    const destructivePosts = ['createLead', 'editPageContent', 'mergeContact', 'publishSite']
     const counts: Record<string, number> = {}
     for (const tool of tools) {
       counts[tool.method] = (counts[tool.method] ?? 0) + 1

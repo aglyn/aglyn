@@ -104,12 +104,24 @@ describe('GET /v1/sites/{siteId}/pages (AGL-4235)', () => {
     expect((await response.json()).error).toMatchObject({ type: 'insufficient_scope', code: 'pages:read' })
   })
 
-  it('lists the pages a visitor can reach, hiding deleted pages and the kinds that are not pages', async () => {
+  it('lists the pages and the folders they sit in, hiding deleted pages and the kinds that are not pages', async () => {
     const response = await call(context({ scopes: ['pages:read'] }), 'pages')
     expect(response.status).toBe(200)
     const body = await response.json()
-    expect(body.data.map((one: { id: string }) => one.id)).toEqual(['about', 'draft', 'home'])
+    expect(body.data.map((one: { id: string }) => one.id)).toEqual(['about', 'draft', 'group', 'home'])
     expect(body.has_more).toBe(false)
+  })
+
+  it('lists a folder as kind group, with no address (AGL-4235)', async () => {
+    const { data } = await (await call(context(), 'pages')).json()
+    expect(data.find((one: { id: string }) => one.id === 'group')).toMatchObject({
+      id: 'group',
+      object: 'page',
+      name: 'Company',
+      kind: 'group',
+      path: null,
+      published: false,
+    })
   })
 
   it('reports published and path from the routing map', async () => {
@@ -148,8 +160,14 @@ describe('GET /v1/sites/{siteId}/pages/{pageId} (AGL-4235)', () => {
     expect(body).not.toHaveProperty('nodes')
   })
 
-  it('answers a deleted page, or one that is not a page, as No such page', async () => {
-    for (const id of ['gone', 'newsletter', 'post', 'nothing']) {
+  it('returns a folder, as kind group with no address (AGL-4235)', async () => {
+    const response = await call(context(), 'pages/group')
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ id: 'group', kind: 'group', path: null, published: false })
+  })
+
+  it('answers a deleted page, or one that is not a page or a folder, as No such page', async () => {
+    for (const id of ['gone', 'newsletter', 'not-found', 'post', 'nothing']) {
       const response = await call(context(), `pages/${id}`)
       expect(response.status).toBe(404)
       expect((await response.json()).error.message).toBe('No such page')
@@ -228,6 +246,18 @@ describe('PATCH /v1/sites/{siteId}/pages/{pageId}/seo (AGL-4235)', () => {
     expect(dropCache).toHaveBeenCalledWith(expect.objectContaining({ hostIds: [SITE], paths: { [SITE]: ['/company/about'] } }))
   })
 
+  it('answers with when it was changed as an ISO string, not an empty object', async () => {
+    const before = Date.now()
+    const response = await call(context(), 'pages/about/seo', 'PATCH', { description: 'Who we are' })
+    const after = Date.now()
+    expect(response.status).toBe(200)
+    const { updated } = await response.json()
+    expect(typeof updated).toBe('string')
+    expect(new Date(updated).toISOString()).toBe(updated)
+    expect(Date.parse(updated)).toBeGreaterThanOrEqual(before)
+    expect(Date.parse(updated)).toBeLessThanOrEqual(after)
+  })
+
   it('owes no announce for a page with no public address', async () => {
     expect((await call(context(), 'pages/draft/seo', 'PATCH', { title: 'Draft' })).status).toBe(200)
     expect(double.outbox()).toEqual([])
@@ -235,7 +265,8 @@ describe('PATCH /v1/sites/{siteId}/pages/{pageId}/seo (AGL-4235)', () => {
   })
 
   it('answers a page that is gone or not a page as No such page, writing nothing', async () => {
-    for (const id of ['gone', 'newsletter', 'nothing']) {
+    // A folder is listed with the pages, and still has no search listing.
+    for (const id of ['gone', 'newsletter', 'group', 'nothing']) {
       const response = await call(context(), `pages/${id}/seo`, 'PATCH', { title: 'X' })
       expect(response.status).toBe(404)
     }
@@ -244,6 +275,32 @@ describe('PATCH /v1/sites/{siteId}/pages/{pageId}/seo (AGL-4235)', () => {
 
   it('answers only PATCH on a page’s search listing', async () => {
     expect((await call(context(), 'pages/about/seo')).status).toBe(405)
-    expect((await call(context(), 'pages/about', 'PATCH', {})).status).toBe(405)
+    expect((await call(context(), 'pages/about', 'PUT', {})).status).toBe(405)
+  })
+
+  it('hands a page’s content to its own module, which asks its own scope (AGL-4235)', async () => {
+    for (const [path, method, scope] of [
+      ['pages/about/content', 'GET', 'pages:read'],
+      ['pages/about/content/edits', 'POST', 'pages:write'],
+    ] as const) {
+      const ctx = context({ scopes: ['seo:write'] })
+      const response = await call(ctx, path, method, method === 'GET' ? undefined : {})
+      expect({ path, method, status: response.status }).toEqual({ path, method, status: 403 })
+      expect((await response.json()).error).toMatchObject({ type: 'insufficient_scope', code: scope })
+    }
+    expect(double.writes).toEqual([])
+  })
+
+  it('hands the page writes to their own module, which asks its own scope (AGL-4235)', async () => {
+    for (const [path, method] of [
+      ['pages', 'POST'],
+      ['pages/about', 'PATCH'],
+      ['pages/about', 'DELETE'],
+    ] as const) {
+      const response = await call(context(), path, method, method === 'DELETE' ? undefined : {})
+      expect({ path, method, status: response.status }).toEqual({ path, method, status: 403 })
+      expect((await response.json()).error).toMatchObject({ type: 'insufficient_scope', code: 'pages:write' })
+    }
+    expect(double.writes).toEqual([])
   })
 })

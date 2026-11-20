@@ -142,9 +142,11 @@ actual fun BesignerWebView(
           layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
           settings.javaScriptEnabled = true
           settings.domStorageEnabled = true
-          // The console leaves its browser-only chrome out of the app (AGL-3894).
+          // The console leaves its browser-only chrome out of the app (AGL-3894), and, in a build that cannot buy, every
+          // control that leads to buying (`no-buying` in the marker, from StoreBilling.buying).
           val version = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
-          settings.userAgentString = BesignerEntry.userAgent(settings.userAgentString, version, "android")
+          settings.userAgentString =
+            BesignerEntry.userAgent(settings.userAgentString, version, "android", com.aglyn.core.StoreBilling.buying)
           if (bridge != null) {
             addJavascriptInterface(
               object {

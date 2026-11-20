@@ -293,6 +293,8 @@ internal fun SignedInShell(
   }
 
   val staffFirst = staffGroups.firstOrNull()?.rows?.firstOrNull()?.key
+  var privacyChoices by remember { mutableStateOf(false) }
+  if (privacyChoices) PrivacyChoicesDialog(services.prefs) { privacyChoices = false }
   val actions = remember(navigator, chrome, services, screenSession.claims.isStaff, wide, staffFirst) {
     ShellActions(
       openScreen = { screen, params ->
@@ -314,6 +316,7 @@ internal fun SignedInShell(
       editProfile = { chrome.closeMenus(); navigator.select(NavKeys.of("core.account.profile", emptyMap())) },
       notificationSettings = { chrome.settingsMode = null; navigator.select(ShellNavigator.SETTINGS); navigator.push(Route.NotificationSettings) },
       staffConsole = staffConsoleAction(screenSession.claims.isStaff) { openStaffConsole(chrome, navigator, wide, staffFirst) },
+      privacyChoices = { chrome.closeMenus(); privacyChoices = true },
     )
   }
 
@@ -423,6 +426,10 @@ internal fun SignedInShell(
   CompositionLocalProvider(
     androidx.compose.material3.LocalContentColor provides MaterialTheme.colorScheme.onSurface,
     com.aglyn.screens.LocalScreenSession provides screenSession,
+    // Where a store build may link to web billing (never on Google Play for now), the workspace's billing page in the
+    // device's browser (the owner's decision of 2026-11-19).
+    com.aglyn.ui.LocalWebBillingOpener provides com.aglyn.core.StoreBilling.webBillingUrl(services.api.origin, workspace.org?.slug.orEmpty())
+      ?.let { url -> { openInBrowser(url) } },
     LocalShellActions provides actions,
     LocalAccountIdentity provides accountIdentity(user, prefs, services.api.origin),
     LocalShellColors provides shell,
@@ -476,6 +483,8 @@ internal fun SignedInShell(
     val openRef: (com.aglyn.contracts.AccountItemRef) -> Unit = { item -> context.openPlace(item) }
     val banner: @Composable () -> Unit = {
       impersonation?.let { ImpersonationBanner(it, onExit = { exitScope.launch { services.auth.endImpersonation() } }) }
+      // The Terms moved (or there is no record): asked over every screen, never a wall (AGL-2316).
+      LegalReacceptanceBanner(services, uid)
     }
     // The ☆ for the place on screen: a screen's title row draws it (the shared list scaffold); else the breadcrumbs do.
     val starSlot = remember(here) { here?.let { item -> com.aglyn.ui.PageStarSlot { StarButton(services, item, prefs) } } }
@@ -572,7 +581,9 @@ internal fun SignedInShell(
     val planFoot: @Composable () -> Unit = {
       val loaded = planReadings
       val logo = workspace.orgLogo
-      val offersUpgrade = logo?.plan != null && logo.plan in com.aglyn.core.OnboardingPlanIntent.UPGRADABLE_PLANS && !logo.enterprise &&
+      // Never in a store build, which takes no payment to Aglyn (the owner's decision of 2026-11-19).
+      val offersUpgrade = com.aglyn.core.StoreBilling.buying &&
+        logo?.plan != null && logo.plan in com.aglyn.core.OnboardingPlanIntent.UPGRADABLE_PLANS && !logo.enterprise &&
         shellHeld.workspace["billing.manage"] == true
       if (loaded != null && planOrgId != null && planHides >= 0 && services.prefs.get(planCardHiddenKey(planOrgId, loaded.plan)) == null &&
         com.aglyn.contracts.planCardShows(loaded.readings, offersUpgrade)
@@ -623,6 +634,7 @@ internal fun SignedInShell(
             )
           },
         ) {
+          OfflineIndicator(services)
           HelpButton(help)
           if (assistTitle != null) TitleBarButton(if (chrome.aiPanel) "Close the AI panel" else assistTitle, "auto_awesome", "ai-panel-toggle") { chrome.toggleAiPanel() }
         }
@@ -1274,7 +1286,7 @@ internal fun staffNavGroups(): List<NavGroupItem> {
 
 /** The session every spec screen reads: who is signed in, the scope, and the account operations. */
 @Composable
-private fun rememberScreenSession(
+internal fun rememberScreenSession(
   services: ShellServices,
   navigator: ShellNavigator,
   workspace: WorkspaceState,
@@ -1286,6 +1298,7 @@ private fun rememberScreenSession(
   val passkeyRelyingParty = services.config.passkeyRelyingParty.takeIf { com.aglyn.screens.LocalPasskeyCreator.current != null }
   // Google can be connected where the platform bound a way to sign in to it.
   val googleSource = com.aglyn.screens.LocalGoogleCredentialSource.current
+  val asserter = com.aglyn.screens.LocalPasskeyAsserter.current
   val held = com.aglyn.pluginhost.rememberMemberPermissions(services.firestore, workspace.org?.id, workspace.site?.id, user?.uid.orEmpty(), workspace.org?.role)
   suspend fun freshClaims() = setClaims(com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(true) }.getOrNull()))
   return com.aglyn.screens.ScreenSession(
@@ -1302,7 +1315,42 @@ private fun rememberScreenSession(
     siteName = workspace.site?.name,
     claims = claims,
     origin = services.config.consoleOrigin,
-    reauthenticate = { password -> services.auth.signInWithEmail(user?.email.orEmpty(), password) },
+    // The account in use signs in again its own way (AGL-1140); a confirmation is never a sign-in of someone else.
+    reauthenticate = { password -> services.auth.reconfirm(com.aglyn.core.ReconfirmCredential.Password(password)) },
+    reconfirmMethods = {
+      com.aglyn.screens.Reconfirm.methods(
+        services.auth.providerIds(),
+        com.aglyn.screens.Reconfirm.Offers(
+          google = googleSource != null,
+          singleSignOn = services.consoleHandoff != null,
+          passkey = asserter != null && services.config.passkeyRelyingParty != null,
+        ),
+      )
+    },
+    reconfirmWith = { method ->
+      when (method) {
+        com.aglyn.screens.ReconfirmMethod.GOOGLE -> {
+          val source = googleSource ?: throw com.aglyn.core.AuthError("Google sign-in is not available here.")
+          services.auth.reconfirm(com.aglyn.core.ReconfirmCredential.Google(source.idToken(user?.email)))
+        }
+        com.aglyn.screens.ReconfirmMethod.PASSKEY -> {
+          val relyingParty = services.config.passkeyRelyingParty
+          if (asserter == null || relyingParty == null) throw com.aglyn.core.AuthError("Passkeys are not available here.")
+          val token = try {
+            com.aglyn.screens.PasskeySignIn.token(services.api, relyingParty, asserter)
+          } catch (failure: com.aglyn.core.AuthError) {
+            throw failure
+          } catch (failure: kotlinx.coroutines.CancellationException) {
+            throw failure
+          } catch (failure: Throwable) {
+            throw com.aglyn.core.AuthError(com.aglyn.screens.PasskeySignIn.message(failure, services.config.brandName), failure)
+          }
+          services.auth.reconfirm(com.aglyn.core.ReconfirmCredential.CustomToken(token))
+        }
+        com.aglyn.screens.ReconfirmMethod.SINGLE_SIGN_ON -> services.reconfirmThroughConsole(user?.email)
+        else -> throw com.aglyn.core.AuthError("Confirm it is you another way.")
+      }
+    },
     impersonate = { token, tenantId -> services.auth.beginImpersonation(token, tenantId) },
     refreshClaims = { freshClaims() },
     openHostedPage = services.openHostedPage,
@@ -1319,6 +1367,7 @@ private fun rememberScreenSession(
         services.auth.unlinkProvider(provider)
         freshClaims()
       },
+      signOut = { services.signOut() },
     ),
   )
 }

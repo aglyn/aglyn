@@ -27,6 +27,7 @@ import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-bi
 import { mdiChevronDown, mdiChevronUp } from '@aglyn/shared-data-mdi'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { AppLink, HelpTip, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { useBuyingHidden } from '@aglyn/shared-ui-jsx/contexts/buying-hidden.context'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   Box,
@@ -235,6 +236,8 @@ export function AssistJobsDrawer({
   pageHref = null,
 }: AssistJobsDrawerProps): JSX.Element | null {
   const entitled = orgReady && checkEntitlement(org as never, 'aiGenerative')
+  // An app build for store review leaves out every way to buy more.
+  const buyingHidden = useBuyingHidden()
   const [expanded, setExpanded] = useState(false)
   /**
    * The person opened or closed the list themselves: from then on the
@@ -636,9 +639,11 @@ export function AssistJobsDrawer({
                     <Button size="small" variant="contained" disabled={resuming === job.id} onClick={() => void resume(job)}>
                       {'Resume'}
                     </Button>
-                    <Button size="small" component={AppLink} href={aiCreditsBillingHref(orgSlug)}>
-                      {'Upgrade'}
-                    </Button>
+                    {buyingHidden ? null : (
+                      <Button size="small" component={AppLink} href={aiCreditsBillingHref(orgSlug)}>
+                        {'Upgrade'}
+                      </Button>
+                    )}
                   </Stack>
                 ) : null}
                 {job.siteRemoved ? (

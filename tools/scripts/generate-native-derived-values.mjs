@@ -76,7 +76,7 @@ const CHECK = process.argv.includes('--check')
 export const NATIVE_PLAN_FEATURES = [
   'marketingOverlays', 'abTesting', 'screenAnalytics', 'outreach', 'giftCards', 'storefrontSubscriptions', 'commerceAnalytics',
   'abandonedCart', 'productReviews', 'dropshipRouting', 'contentGating', 'crm', 'commerce', 'bookings', 'eventCalendar',
-  'dataStore', 'redirects', 'workflows',
+  'dataStore', 'redirects', 'workflows', 'scheduledPublishing',
 ]
 
 const JSON_OUT = 'libs/native/contracts/derived-values.generated.json'

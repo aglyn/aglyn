@@ -28,6 +28,7 @@ import {
   mdiOpenInNew,
 } from '@aglyn/shared-data-mdi'
 import { AppLink, HelpTip, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { useBuyingHidden } from '@aglyn/shared-ui-jsx/contexts/buying-hidden.context'
 import type { MaybeTokenSource } from '@aglyn/shared-util-http/authorized-token'
 import {
   Accordion,
@@ -244,6 +245,8 @@ export interface AiSiteImportJobProps {
  */
 export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, busy, notice, onResume, onStartAll, onJob }: AiSiteImportJobProps) {
   const phase = aiSiteImportPhaseOf(job)
+  // An app build for store review leaves out every way to buy more.
+  const buyingHidden = useBuyingHidden()
   const state = job.siteImport ?? null
   const start = aiSiteImportStartAction(job)
   // The plan's review (AGL-4152): what it shows and what its owner switches, before anything is built.
@@ -373,7 +376,7 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
                   {line.paths.length > 8 || line.count > line.paths.length ? ', …' : ''}
                 </Typography>
               ) : null}
-              {line.reason === 'plan-limit' && orgSlug ? (
+              {line.reason === 'plan-limit' && orgSlug && !buyingHidden ? (
                 <Button size="small" component={AppLink} href={aiCreditsBillingHref(orgSlug)} sx={{ mt: 0.5 }}>
                   {'See plans'}
                 </Button>
@@ -565,7 +568,7 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
           <Button variant="contained" disabled={busy || (ownership && !claim?.current)} onClick={() => onResume()}>
             {busy ? 'Starting…' : phase === 'paused' ? 'Resume' : start ? `${start.label} again` : 'Read the site again'}
           </Button>
-          {phase === 'paused' && orgSlug ? (
+          {phase === 'paused' && orgSlug && !buyingHidden ? (
             <Button variant="outlined" component={AppLink} href={aiCreditsBillingHref(orgSlug)}>
               {'Get more AI credits'}
             </Button>

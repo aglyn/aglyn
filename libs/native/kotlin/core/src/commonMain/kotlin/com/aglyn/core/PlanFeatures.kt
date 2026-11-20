@@ -46,10 +46,13 @@ fun marketplaceFeePct(org: Map<String, Any?>?): Double {
 
 /**
  * What a workspace reads where a feature its plan leaves out would be, as the console's `blockedExtensionNotice` words it
- * (apps/console/utils/extension-entitlement.ts): it names the plan that includes the feature, or says no plan does.
+ * (apps/console/utils/extension-entitlement.ts): it names the plan that includes the feature, or says no plan does. A store
+ * build ([buying] false, the owner's decision of 2026-11-19) says only what the plan leaves out: no "from Billing", where
+ * nothing can be bought.
  */
-fun upgradeNoticeMessage(title: String, feature: String): String {
+fun upgradeNoticeMessage(title: String, feature: String, buying: Boolean = StoreBilling.buying): String {
   val plan = PlanFeatureDefaults.grantedFrom[feature]
+  if (!buying) return if (plan != null) "$title is not included in your current plan. Included from $plan." else "$title isn't included in any plan — it's a paid add-on."
   return if (plan != null) {
     "$title is not included in your current plan. Manage your plan and add-ons from Billing. Included from $plan."
   } else {

@@ -97,6 +97,8 @@ import androidx.compose.material.icons.outlined.SupervisorAccount
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Tab
 import androidx.compose.material.icons.outlined.Tag
+import androidx.compose.material.icons.outlined.ThumbDown
+import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material.icons.outlined.ToggleOn
 import androidx.compose.material.icons.outlined.TravelExplore
 import androidx.compose.material.icons.outlined.Unsubscribe
@@ -134,6 +136,7 @@ import androidx.compose.material.icons.outlined.AddCard
 import androidx.compose.material.icons.outlined.CreditScore
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.PrivacyTip
+import androidx.compose.material.icons.outlined.BackHand
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.AltRoute
@@ -198,6 +201,7 @@ import androidx.compose.material.icons.outlined.Percent
 import androidx.compose.material.icons.outlined.Print
 import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.PowerOff
+import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Remove
@@ -304,6 +308,8 @@ object AglynIcons {
     "launch" to Icons.AutoMirrored.Outlined.Launch,
     "search" to Icons.Outlined.Search,
     "qr_code_scanner" to Icons.Outlined.QrCodeScanner,
+    // A link to open on a phone (a photo link's New link and Get a photo link).
+    "qr_code" to Icons.Outlined.QrCode2,
     "hotel" to Icons.Outlined.Hotel,
     "add" to Icons.Outlined.Add,
     "remove" to Icons.Outlined.Remove,
@@ -391,6 +397,9 @@ object AglynIcons {
     "mark_unread" to Icons.Outlined.MarkEmailUnread,
     "mark_read" to Icons.Outlined.Drafts,
     "send" to Icons.AutoMirrored.Outlined.Send,
+    // An Assist answer's Helpful / Unhelpful.
+    "thumb_up" to Icons.Outlined.ThumbUp,
+    "thumb_down" to Icons.Outlined.ThumbDown,
     "list" to Icons.AutoMirrored.Outlined.List,
     "label" to Icons.AutoMirrored.Outlined.Label,
     "timeline" to Icons.Outlined.Timeline,
@@ -411,6 +420,7 @@ object AglynIcons {
     "archive" to Icons.Outlined.Archive,
     "lock" to Icons.Outlined.Lock,
     "privacy_tip" to Icons.Outlined.PrivacyTip,
+    "back_hand" to Icons.Outlined.BackHand,
     "receipt_long" to Icons.Outlined.ReceiptLong,
     "text_fields" to Icons.Outlined.TextFields,
     "lock_open" to Icons.Outlined.LockOpen,

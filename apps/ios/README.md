@@ -98,6 +98,16 @@ xcodebuild build -project Aglyn.xcodeproj -scheme Aglyn -destination 'platform=m
   -derivedDataPath build/DerivedData -clonedSourcePackagesDirPath build/SourcePackages
 ```
 
+To run a command-line build on a simulator, stop the app first. `xcrun simctl install` over a running app leaves the
+old process running, and a link (`simctl openurl`) or a plain `simctl launch` then reaches that old build: a check of
+a "fresh install" shows the screens as they were before the change, and only a relaunch shows the new build.
+
+```bash
+xcrun simctl terminate booted com.aglyn.app.debug
+xcrun simctl install booted build/DerivedData/Build/Products/Debug-iphonesimulator/Aglyn.app
+xcrun simctl launch --terminate-running-process booted com.aglyn.app.debug -AglynAutoSignIn YES
+```
+
 After you change a plugin's `mobile` block, run `npm run generate:plugin-manifests`.
 
 A card typed in at the register goes into Aglyn POS's own native card fields

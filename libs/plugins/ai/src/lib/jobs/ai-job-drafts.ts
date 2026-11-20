@@ -33,13 +33,9 @@ import {
   resolveEffectivePlan,
   resolveOrgEntitlements,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
-import {
-  billableScreenIds,
-  normalizeScreenSlug,
-  reservedScreenRouteSegment,
-  SCREEN_ROOT_PATH,
-} from '@aglyn/aglyn/app-utils/screen-route'
+import { billableScreenIds, SCREEN_ROOT_PATH } from '@aglyn/aglyn/app-utils/screen-route'
 import { decodeStoredNodes, encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
+import { draftScreenSlug } from '@aglyn/aglyn/app-utils/draft-screen-slug'
 import type {
   AglynOrgBilling,
   OrgFeatureFlags,
@@ -522,17 +518,11 @@ export async function readAiDraftBandTakenSince(
 }
 
 /**
- * A draft screen's one-segment address: the one asked for, else one from its
- * name, never a reserved segment, and never an address a live screen keeps
- * or the routing map already serves — so the member's publish at it later
- * takes nothing from a live page. The root is asked for only while no screen
- * holds it.
- *
- * Except the placeholder home page a site is created with (AGL-3408), which
- * holds `/` only until a real home page is published there: the guided start
- * is offered to exactly the sites that still have it, and the home page it
- * drafts has to be able to ask for the root. Publishing it replaces the
- * placeholder in the same write.
+ * A draft screen's one-segment address: the platform's rule for a new,
+ * unpublished page (`draftScreenSlug`), which the server's page create
+ * shares (AGL-4235). Never a reserved segment, never an address a live
+ * screen keeps or the routing map serves, and the root only while no screen
+ * but the placeholder home page holds it.
  */
 export function aiDraftScreenSlug(
   requested: string | null | undefined,
@@ -541,26 +531,7 @@ export function aiDraftScreenSlug(
   routingMap: RoutingMap,
   defaultHomeScreenId?: string | null,
 ): string {
-  const placeholder = (id: string | undefined, path: unknown) =>
-    Boolean(defaultHomeScreenId) && id === defaultHomeScreenId && path === SCREEN_ROOT_PATH
-  const taken = new Set<string>([
-    ...rows
-      .filter((row) => !row.deleted && row.slug && !placeholder(row.id, row.slug))
-      .map((row) => row.slug),
-    ...Object.entries(routingMap ?? {})
-      .filter(([id, path]) => typeof path === 'string' && !placeholder(id, path))
-      .map(([, path]) => path as string),
-  ])
-  const usable = (value: string | undefined) =>
-    value && !reservedScreenRouteSegment(value) && !(value === SCREEN_ROOT_PATH && taken.has(value))
-      ? value
-      : undefined
-  const base = usable(normalizeScreenSlug(requested ?? undefined)) ?? usable(normalizeScreenSlug(name)) ?? 'page'
-  if (base === SCREEN_ROOT_PATH) return base
-  let slug = base
-  let attempt = 2
-  while (taken.has(slug)) slug = `${base}-${attempt++}`
-  return slug
+  return draftScreenSlug(requested, name, rows, routingMap, defaultHomeScreenId)
 }
 
 export interface AiDraftRecord {

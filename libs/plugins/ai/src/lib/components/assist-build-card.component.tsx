@@ -20,6 +20,7 @@
 import type { MaybeTokenSource } from '@aglyn/shared-util-http/authorized-token'
 import { pluginDocsHelp } from '@aglyn/aglyn/app-utils/docs-help'
 import { HelpTip } from '@aglyn/shared-ui-jsx'
+import { useBuyingHidden } from '@aglyn/shared-ui-jsx/contexts/buying-hidden.context'
 import { Alert, Box, Button, CircularProgress, Paper, Stack, Typography } from '@mui/material'
 import { useEffect, useRef, useState } from 'react'
 import { aiBuildCanRetry, aiBuildItemRows, aiBuildOutcomeLine, aiBuildRetryCreditRange } from '../model/ai-build-progress'
@@ -81,6 +82,8 @@ export function AssistBuildCard({
   orgSlug,
 }: AssistBuildCardProps): JSX.Element {
   const [busy, setBusy] = useState(false)
+  // An app build for store review leaves out every way to buy more.
+  const buyingHidden = useBuyingHidden()
   // A Free Try again past what is left (AGL-3722): its prompt, until chosen.
   const [retryPrompt, setRetryPrompt] = useState<AiCreditsPrompt | null>(null)
   const userRef = useRef(user)
@@ -182,7 +185,7 @@ export function AssistBuildCard({
           sx={{ mt: 0.5 }}
           action={
             <Stack direction="row" spacing={1}>
-              {orgSlug ? (
+              {orgSlug && !buyingHidden ? (
                 <Button color="inherit" size="small" href={aiCreditsBillingHref(orgSlug)}>
                   {'Upgrade'}
                 </Button>

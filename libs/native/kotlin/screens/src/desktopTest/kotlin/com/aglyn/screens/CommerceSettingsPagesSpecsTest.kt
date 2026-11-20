@@ -77,7 +77,7 @@ class CommerceSettingsPagesSpecsTest : SpecTestBase() {
     assertEquals(
       listOf(
         "commerce.settingsPayments", "commerce.settingsCheckout", "commerce.settingsTaxes", "commerce.settingsShipping",
-        "commerce.settingsNotifications", "commerce.settingsChannels", "commerce.settings",
+        "commerce.settingsNotifications", "commerce.hardware", "commerce.settingsChannels", "commerce.settings",
       ),
       configure.raw.jsonObject["items"]!!.jsonArray.map { (it.jsonObject["screen"] as JsonPrimitive).content },
     )

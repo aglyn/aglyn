@@ -18,6 +18,7 @@
 'use client'
 
 import { Box, Button, Stack, Typography } from '@mui/material'
+import { useBuyingHidden } from '@aglyn/shared-ui-jsx/contexts/buying-hidden.context'
 import { useId } from 'react'
 import {
   aiCreditsChoices,
@@ -107,7 +108,9 @@ export function AiCreditsPromptNotice({
   onBuildWhatFits,
   onSmaller,
 }: AiCreditsPromptProps): JSX.Element {
-  const choices = aiCreditsChoices(prompt, { smaller: Boolean(onSmaller), upgrade: Boolean(orgSlug) })
+  // An app build for store review offers no Upgrade among the choices.
+  const buyingHidden = useBuyingHidden()
+  const choices = aiCreditsChoices(prompt, { smaller: Boolean(onSmaller), upgrade: Boolean(orgSlug) && !buyingHidden })
   return (
     <Box
       role="alert"

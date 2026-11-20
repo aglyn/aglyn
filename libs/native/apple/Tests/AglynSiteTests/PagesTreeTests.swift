@@ -135,3 +135,12 @@ final class PagesQuotaTests: XCTestCase {
     XCTAssertNil(pagesUsageCount(.object([:])))
   }
 }
+
+final class PageUsedByTests: XCTestCase {
+  func testNamesHowEachDependentPointsAtThePage() {
+    XCTAssertEqual(pageRelationLabel("link"), "links here")
+    XCTAssertEqual(pageRelationLabel("child"), "nested under")
+    XCTAssertEqual(pageRelationLabel("template"), "renders through")
+    XCTAssertNil(pageRelationLabel(nil))
+  }
+}

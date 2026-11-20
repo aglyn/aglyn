@@ -54,21 +54,55 @@ const USER_AGENT_MARKER = new RegExp(
 )
 
 /**
+ * The token a store build of the apps adds inside the marker's comment:
+ * `AglynApp/1.4.0 (ios; no-buying)`. The apps' builds for App Store and
+ * Google Play review take no payment to Aglyn and show no way to start one
+ * (`StoreBilling.buying` off in both kits), and the web content they show
+ * must not either. The build decides it, never a remote flag, so the token
+ * is set when the web view is made and does not change while it is open.
+ */
+export const NATIVE_APP_NO_BUYING_TOKEN = 'no-buying'
+
+/**
  * The marker the apps append, for the native code's specs and for anyone
- * reading this file to know the exact shape: `AglynApp/1.4.0 (ios)`.
+ * reading this file to know the exact shape: `AglynApp/1.4.0 (ios)`, or
+ * `AglynApp/1.4.0 (ios; no-buying)` from a build that cannot buy.
  */
 export function nativeAppUserAgentMarker(
   version: string,
   platform: string,
+  buying = true,
 ): string {
-  return `${NATIVE_APP_USER_AGENT_PRODUCT}/${version || '0'} (${platform})`
+  const comment = buying ? platform : `${platform}; ${NATIVE_APP_NO_BUYING_TOKEN}`
+  return `${NATIVE_APP_USER_AGENT_PRODUCT}/${version || '0'} (${comment})`
 }
+
+/** The marker with its comment: `AglynApp/<version> (<comment>)`. */
+const USER_AGENT_MARKER_COMMENT = new RegExp(
+  `(?:^|[\\s(;])${NATIVE_APP_USER_AGENT_PRODUCT}/[^\\s/]+ \\(([^)]*)\\)`,
+)
 
 /** Whether a user-agent string carries the apps' marker. */
 export function userAgentNamesNativeApp(
   userAgent: string | null | undefined,
 ): boolean {
   return typeof userAgent === 'string' && USER_AGENT_MARKER.test(userAgent)
+}
+
+/**
+ * Whether a user-agent string is a native app's web view from a build that
+ * cannot buy: the marker's comment carries {@link NATIVE_APP_NO_BUYING_TOKEN}.
+ * A browser, or an app build that can buy, answers false.
+ */
+export function userAgentHidesBuying(
+  userAgent: string | null | undefined,
+): boolean {
+  if (typeof userAgent !== 'string') return false
+  const comment = USER_AGENT_MARKER_COMMENT.exec(userAgent)?.[1]
+  if (!comment) return false
+  return comment
+    .split(';')
+    .some((part) => part.trim() === NATIVE_APP_NO_BUYING_TOKEN)
 }
 
 /**
@@ -94,6 +128,20 @@ export function isNativeAppWebView(): boolean {
   }
 }
 
+/**
+ * Whether this page is inside a native app's web view whose build cannot buy,
+ * so every control that leads to buying (Upgrade, See plans, add-ons, Buy, a
+ * payment to finish or a card to update) stays out of the page. Read only
+ * from the user agent: the entry page's mark says nothing about the build.
+ *
+ * Presentation only, like the rest of this file: the routes that take a
+ * payment never read it.
+ */
+export function nativeAppHidesBuying(): boolean {
+  if (typeof window === 'undefined') return false
+  return userAgentHidesBuying(window.navigator?.userAgent)
+}
+
 const subscribeNever = (): (() => void) => () => undefined
 const onServer = (): boolean => false
 
@@ -105,4 +153,12 @@ const onServer = (): boolean => false
  */
 export function useIsNativeAppWebView(): boolean {
   return useSyncExternalStore(subscribeNever, isNativeAppWebView, onServer)
+}
+
+/**
+ * `nativeAppHidesBuying()` for a render: false on the server and in the first
+ * client render, so hydration matches the browser's page, then the answer.
+ */
+export function useNativeAppHidesBuying(): boolean {
+  return useSyncExternalStore(subscribeNever, nativeAppHidesBuying, onServer)
 }

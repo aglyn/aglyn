@@ -24,11 +24,6 @@ import {
 } from '@aglyn/aglyn'
 import { useLoading } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import {
-  LIST_QUERY_ID_PATH,
-  type ListQueryDeclaration,
-  type ListQueryFilter,
-} from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -45,27 +40,11 @@ import {
 } from '@mui/material'
 import { collection } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { SITE_TEMPLATE_SHELF_BASE, SITE_TEMPLATE_SHELF_QUERY } from '../model/listing-query'
 import { ListingImage } from './listing-image.component'
 
 /** The name this shelf reports itself by to the gallery. */
 const SHELF_ID = 'marketplace-site-templates'
-
-/**
- * What the shelf asks: no Filters panel, the walk's order (the document
- * name, which the automatic single-field indexes serve under the one
- * equality and the one array clause), and the listing's name keys, which
- * every publish stamps (AGL-3321).
- */
-const SITE_TEMPLATE_SHELF: ListQueryDeclaration = {
-  fields: [],
-  sorts: [{ path: LIST_QUERY_ID_PATH, direction: 'asc' }],
-  search: { tokensPath: 'nameTokens' },
-}
-
-/** The shelf's scope: published site templates. */
-const SITE_TEMPLATE_BASE: ListQueryFilter[] = [
-  { path: 'kind', op: '==', value: 'template' },
-]
 
 /**
  * Marketplace site templates in the template gallery (AGL-137) — the
@@ -97,8 +76,8 @@ export function TemplateGalleryShelf(props: ConsoleTemplateGalleryZoneProps) {
 
   const market = useListQuery<any>({
     collection: offered ? collection(firestore, 'marketplaceListings') : null,
-    declaration: SITE_TEMPLATE_SHELF,
-    request: { clauses: [], search: searchWords, base: SITE_TEMPLATE_BASE },
+    declaration: SITE_TEMPLATE_SHELF_QUERY,
+    request: { clauses: [], search: searchWords, base: SITE_TEMPLATE_SHELF_BASE },
     deps: [firestore, offered],
     idField: '$id',
   })

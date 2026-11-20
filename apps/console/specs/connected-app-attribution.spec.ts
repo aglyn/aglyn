@@ -91,9 +91,13 @@ describe('connected-app attribution (AGL-4225)', () => {
       expect(json).toContain('item.connectedAppLabel')
       expect(json).not.toContain('item.connectedAppName')
     }
-    // The host activity writer stores that label beside the name.
-    expect(read('libs/tenant/data/admin/src/lib/server/organizations.ts')).toContain(
+    // The host activity writer stores that label beside the name: the entry
+    // is built in one place (AGL-4235), which `logHostActivity` writes.
+    expect(read('libs/tenant/data/admin/src/lib/server/host-activity-entry.ts')).toContain(
       'connectedAppLabel: connectedAppActorLabel(actor.connectedAppName)',
+    )
+    expect(read('libs/tenant/data/admin/src/lib/server/organizations.ts')).toContain(
+      '.add(hostActivityEntry(actor, action, target, FieldValue.serverTimestamp()))',
     )
     expect(read('libs/native/apple/Sources/AglynContracts/AutomationRules.swift')).toContain('"Connected app \\(app)"')
     expect(read('libs/native/kotlin/contracts/src/commonMain/kotlin/com/aglyn/contracts/AutomationRules.kt')).toContain(
