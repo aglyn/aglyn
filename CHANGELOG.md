@@ -9,6 +9,120 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.28.0 — 2026-11-20
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.27.0...v1.28.0)
+
+### Added
+
+- **commerce:** native Hardware shop and Card readers to set up under Products › Point of sale ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **native:** leave Pay now and the invoice page out of store builds ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667))
+- **native:** a store build shows a domain's Auto-renew switch only to turn it off, never on
+- **api:** a 422 in the one error envelope, and the page content edits refuse through it ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** get a page's content and edit its draft over /v1, described for the tools, with a link that opens the draft ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **ai:** read a page's elements whole and edit its draft strictly, through the edit rung, as the core page content contract ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **core:** the page content contract states its limits, an element's read-only fields and every inserted element's id ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** the pages list and page read include folders, as kind group with no address ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** create, update and delete a site's pages over /v1, never publishing, with the publish permission and sites:publish for what visitors see ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** list a site's page templates over /v1, under components:read ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **templates:** read the page templates a new page can start from on the server: the site's library, then the built-in starter pages ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **pages:** change a page's name, address, parent and position in one checked batch on the server, as the console's details card, slug edit and Pages hub do ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** publishSite given pages makes their drafts live before the refresh, all checked before any is written ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **pages:** read a site publish's optional list of pages, 1 to 25 distinct ids and nothing beside them ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **pages:** put a page's draft live on the server, as the page editor's Publish does, checked for every page before any is written ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** name the page create and page content edit idempotency kinds in the kit ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** route a page's content, the page writes and a site's templates to their own modules, not built yet and not described ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **pages:** create an unpublished page and its first version in one server transaction, under the plan's page allowance ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **core:** a core.page-content contract to read and draft-edit a page's elements, answered by one plugin ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** add pages:write and components:read, and pages:read now reads what is on a page ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **native:** store builds hide every control that takes a payment to Aglyn
+- **native:** Your Privacy Choices, a per-device switch for the apps' analytics
+- **native:** a domain's page switches auto-renew and says when a name expired or moved away, as the console does
+- **native:** a domain's page shows who it is registered to and edits it for the next renewal, as the console does
+- **native:** a domain's page connects it to a site, moves it to another or disconnects it, as the console's Domains page does
+- **native:** a site's Collaborators show each one's AI credits on the site this month, as the console's column does
+- **native:** check Weglot settings before a save as the console's card does ([AGL-3671](https://linear.app/aglyn/issue/AGL-3671))
+- **native:** Site activity searches, filters, orders and pages the log as the console's table does
+- **native:** Customize dashboard on a site's Home, the console's arrangement on both apps
+- **native:** refuse to turn Weglot on without its API key, as the console does ([AGL-3671](https://linear.app/aglyn/issue/AGL-3671))
+- **native:** say what deleting a workspace or closing an account will change ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667), [AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **native:** filter the workspace picker by Plan, Your role and Pinned ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667))
+- **native:** say Offline in the title bar when the device has no network ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667), [AGL-1056](https://linear.app/aglyn/issue/AGL-1056))
+- **native:** Changes to this member on a member's page ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667))
+- **native:** link Waivers and Weglot settings from their plugin pages ([AGL-3671](https://linear.app/aglyn/issue/AGL-3671))
+- **native:** ask again when the Terms move, as the console's banner does ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667), [AGL-2316](https://linear.app/aglyn/issue/AGL-2316))
+- **native:** Outstanding invoices with Pay now on Billing ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667))
+- **native:** Waivers and Weglot settings in the apps ([AGL-3671](https://linear.app/aglyn/issue/AGL-3671))
+- **native:** the Workspace URL field on Create an organization ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667))
+- **native:** sort the notifications feed as the console's headers do ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667))
+- **native:** search, filter and sort the Team roster as the console does ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667))
+
+### Fixed
+
+- **api:** a write's answer gives its date as text, not an empty object ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **native:** commerce.hardware is a hand-written screen the Store hub opens, in the console's order ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **native:** review polish on Apple: not-in-app wording, iPad Visibility label and crumb, pushed page and entry read permissions live
+- **native:** store builds show no See plans on the marketplace publish screens and no Buy on a paid listing card
+- **api:** read a refresh's three documents in one transactional getAll ([AGL-4225](https://linear.app/aglyn/issue/AGL-4225))
+- **commerce:** Apple hardware screen compiles (order list parse, tuple labels, sequential loads) ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **ai:** a draft the server editor builds on the saved tree carries the page's layout style overrides on its root, as the editor opens the version ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** the publish's refresh stays in its handler, where the rendered-data sweep sees it announce ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **native:** keep Weglot's key and language codes as typed on phone keyboards ([AGL-3671](https://linear.app/aglyn/issue/AGL-3671))
+- **api:** a publish of pages stopped by an unexpected error says which pages went live, which one failed and what was saved for it ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **native:** Choose a plan needs app.billing, so no route reaches it in a store build; screen tests run on the main actor
+- **native:** Home's glance cards are filtered and ordered outside the view body, so the app target compiles
+- **native:** import the back_hand icon ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667))
+- **native:** the Terms banner stacks above the phone's top bar instead of over it ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667))
+- **native:** a spec list's search asks its route on Return in the kit's own field ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667))
+- **native:** a store build's paid starter does not ask anyone to buy it
+- **native:** read the Terms status on a view that is always there, so the banner can show ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667))
+- **native:** Site activity's When chip reads Any – now before a range is picked
+- **native:** Site activity's Clear uses an icon the Kotlin kit has
+- **native:** Visit site and Open live page reach the site the way the configured console does ([AGL-4086](https://linear.app/aglyn/issue/AGL-4086))
+
+### Changed
+
+- **pages:** one copy of the binding lookups' keying, in the core package, shared by the editor and the server's page publish ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **ai:** one walker for a stored page and one base rule, and the edit write takes a change built on the tree its transaction reads ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **ai:** one closed world and one validation for the edit rung's callers, with a strict mode that refuses every repair and media held to named scopes ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **pages:** one builder for a page's name and description save, shared by the page details card and the API ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **templates:** what a template asks for, its placeholder values and its filled-in tree move into the core package, shared by the Use dialog and the API ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **pages:** the billable page scan and the new page address rule move into the libs, one copy each ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **activity:** one builder for a host activity entry, so a write can stage its row in its own batch ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **pages:** one server implementation of a page's publish, unpublish, delete and move, shared by the native pages route, with an opt-in cascade publish ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **pages:** move the routing write plan and the publish outbox shape into the shared app utilities ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+
+### Documentation
+
+- **api:** a publish stopped partway or a failed refresh still says what went live, publish_from_editor is only a draft without the page's layout style overrides, and the root reads them as read-only ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** pages over the API: content read and draft edits, create, update, delete, folders, templates, and publishing chosen pages; the assistant guide and skill match ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** describe publishSite's optional pages, its request body and its promoted result, and mark it destructive ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+
+<details>
+<summary>Also in this release: 16 test, 1 chore</summary>
+
+- **shared-ui:** the store-build buying switch stays out of the published-page barrel
+- **commerce:** Aglyn POS lists the Hardware screen among its screens ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **commerce:** hardware shop Swift cases read values by pattern; parity row for the shop ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **native:** the hold notice and paid starter tests run in a build that may buy, and the hold notice also checks a store build (restack of #2822 onto main's tests)
+- **commerce:** hardware shop Swift cases typed for the compiler ([AGL-4038](https://linear.app/aglyn/issue/AGL-4038))
+- **pages:** a server-written draft shaped by the editor's own overrides injection publishes with them unchanged, and the refusal says what it still cannot decide ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** the site router hands a site's templates to their module, which asks components:read ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **pages:** a server-written draft without the layout style overrides is refused as the editor's own is, with why the stamp cannot decide it ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **api:** the tool hints, counts, page content routing and screen-create sweep say what the page tools now do ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **pages:** keep one entry for the page search listing save in the page-creates inventory after the merge ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **activity:** the connected app label is written by the one host activity entry builder ([AGL-4235](https://linear.app/aglyn/issue/AGL-4235))
+- **native:** press the account sheet's Tab bar row through its click action, below the fold now ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667))
+- **native:** scroll to the phone account sheet's Tab bar row, now below Your Privacy Choices ([AGL-3667](https://linear.app/aglyn/issue/AGL-3667))
+- **native:** read the column's zones through the optional list accessor
+- **native:** a dash cell is left off the collaborator's row line, as every column's is
+- **native:** the collaborators column test imports the console client
+- **native:** a bracketed IPv6 console host reads as the console reads it
+
+</details>
+
+66 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.27.0 — 2026-11-19
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.26.6...v1.27.0)
