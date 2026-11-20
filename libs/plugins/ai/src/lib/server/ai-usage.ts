@@ -39,6 +39,7 @@ import {
   AI_USAGE_CSV_HEADER,
   AI_USAGE_EXPORT_ROWS_HEADER,
   aiUsageCsvLine,
+  aiUsageHostCells,
   toAiUsageWireRow,
   type OrgAiUsageTableWire,
   type UserAiUsageWire,
@@ -188,6 +189,10 @@ async function handler(request: Request): Promise<Response> {
         months,
         orgCredits: usage.orgCredits,
         rows,
+      }
+      // The apps' collaborators column: one cell per asked person.
+      if (hostId && String(params['view'] ?? '') === 'prepared') {
+        table.hostCells = aiUsageHostCells(rows, String(params['uids'] ?? '').split(','))
       }
       return json(table, 200)
     }

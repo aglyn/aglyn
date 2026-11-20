@@ -381,8 +381,10 @@
     private static let rememberedReader = "aglyn.pos.reader.id"
 
     private init() {
-      // Tap to Pay is on iPhone only; an iPad takes cards on a Bluetooth reader.
-      kinds = UIDevice.current.userInterfaceIdiom == .phone ? [.tapToPay, .bluetooth] : [.bluetooth]
+      // Tap to Pay is on iPhone only; an iPad takes cards on a Bluetooth reader. And only in a build signed with Apple's
+      // Tap to Pay entitlement (development-only so far): a store build without it shows no option that can only fail.
+      kinds =
+        TapToPayIPhone.offered(onPhone: UIDevice.current.userInterfaceIdiom == .phone) ? [.tapToPay, .bluetooth] : [.bluetooth]
       events.collector = self
     }
 
@@ -607,6 +609,17 @@
     }
 
     func permitTapToPayTerms(_ permitted: Bool) { termsPermitted = permitted }
+
+    func storeSetupChanged(hostID: String, sessions: CardReaderSessionSource) async {
+      guard !state.isConnected else { return }
+      if case .failed = discovery { discovery = .idle }
+      // The store's session is read again (a failed read left no location), and a reader that was unavailable for want
+      // of the address becomes ready to set up.
+      if siteID == hostID { locationID = nil }
+      silent = true
+      defer { silent = false }
+      _ = await prepare(hostID: hostID, sessions: sessions, ask: false)
+    }
 
     func clearTapToPayTermsJustAccepted() { tapToPayTermsJustAccepted = false }
 

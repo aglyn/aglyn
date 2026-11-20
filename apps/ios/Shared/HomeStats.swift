@@ -23,14 +23,31 @@ struct HomeGlanceGrid: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
   let title: String?
+  /// The person's arrangement (Customize dashboard): hidden cards leave, the rest keep its order.
+  var dashboard: DashboardPrefsStore? = nil
 
-  var body: some View {
+  /// The glance cards the plugins on for the scope draw, in their registered order.
+  @MainActor
+  static func widgets(_ model: AppModel, _ navigation: ShellNavigation) -> [NativeWidget] {
     let hasSite = model.scopedSite(navigation) != nil
     // Only the cards of plugins on for the scope, as the console's slot gates them (a site's set inside a site).
     let scope = ShellScope(model: model, navigation: navigation)
     let enabled = Set(hasSite ? scope.sitePlugins : scope.workspacePlugins)
-    let widgets = model.registry.widgets(for: .aglyn)
+    return model.registry.widgets(for: .aglyn)
       .filter { (hasSite || !$0.requiresSite) && ($0.pluginID == "core" || enabled.contains($0.pluginID)) }
+  }
+
+  /// The cards to draw: the scope's glance cards, less the ones the person switched off, in the person's order.
+  private var shown: [NativeWidget] {
+    let widgets = Self.widgets(model, navigation)
+    guard let dashboard else { return widgets }
+    return DashboardWidgets.ordered(
+      widgets.filter { !dashboard.isHidden(DashboardWidgets.storedID($0.id)) }, order: dashboard.prefs.order
+    ) { DashboardWidgets.storedID($0.id) }
+  }
+
+  var body: some View {
+    let widgets = shown
     if !widgets.isEmpty, let context = model.context(for: navigation) {
       VStack(alignment: .leading, spacing: AglynSpace.oneAndHalf) {
         if let title { AglynSectionHeader(title) }
@@ -52,17 +69,39 @@ struct HomeSiteStats: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
   let site: WorkspaceSite
+  /// Customize dashboard: the cards the person switched off are not drawn, and none is until the arrangement is read
+  /// (the console's slots withhold theirs the same way, rather than drawing a card and taking it away).
+  let dashboard: DashboardPrefsStore
 
   var body: some View {
-    if let reader = model.reader {
-      SiteTrafficCard(reader: reader, api: model.api, hostID: site.id, refresh: model.refreshToken) {
-        navigation.select(.analytics)
+    if let reader = model.reader, dashboard.ready {
+      if !dashboard.isHidden(DashboardWidgets.trafficID) {
+        SiteTrafficCard(reader: reader, api: model.api, hostID: site.id, refresh: model.refreshToken) {
+          navigation.select(.analytics)
+        }
       }
-      HomeGlanceGrid(title: "At a glance")
-      SiteActivityCard(reader: reader, api: model.api, hostID: site.id, limit: 5, refresh: model.refreshToken) {
-        navigation.select(.plugin("core.site.activity"))
+      HomeGlanceGrid(title: "At a glance", dashboard: dashboard)
+      if !dashboard.isHidden(DashboardWidgets.activityID) {
+        SiteActivityCard(reader: reader, api: model.api, hostID: site.id, limit: 5, refresh: model.refreshToken) {
+          navigation.select(.plugin("core.site.activity"))
+        }
       }
     }
+  }
+
+  /// Customize dashboard's rows: Traffic (it stays first, as on the console), the glance cards in the person's order
+  /// (they move among themselves), and Recent activity.
+  @MainActor
+  static func customizeRows(_ model: AppModel, _ navigation: ShellNavigation, _ dashboard: DashboardPrefsStore)
+    -> [DashboardCustomizeRow]
+  {
+    let glance = DashboardWidgets.ordered(HomeGlanceGrid.widgets(model, navigation), order: dashboard.prefs.order) {
+      DashboardWidgets.storedID($0.id)
+    }
+    let group = glance.map { DashboardWidgets.storedID($0.id) }
+    return [DashboardCustomizeRow(id: DashboardWidgets.trafficID, title: "Traffic")]
+      + glance.map { DashboardCustomizeRow(id: DashboardWidgets.storedID($0.id), title: $0.title, groupIDs: group) }
+      + [DashboardCustomizeRow(id: DashboardWidgets.activityID, title: "Recent activity", groupIDs: [DashboardWidgets.activityID])]
   }
 }
 
@@ -98,10 +137,11 @@ struct HomeWorkspaceStats: View {
   }
 
   /// The console's `OrgUpgradeProposalCard`: only for the people who may buy it (`billing.manage`, custom roles
-  /// included), only while the proposal stands.
+  /// included), only while the proposal stands. Never in a store build, which takes no payment to Aglyn (the owner's
+  /// decision of 2026-11-19): the card is a plan to buy and nothing else.
   @ViewBuilder
   private var proposal: some View {
-    if model.orgAccess.permissions(["billing.manage"])["billing.manage"] == true,
+    if StoreBilling.buying, model.orgAccess.permissions(["billing.manage"])["billing.manage"] == true,
       let standing = UpgradeProposal.standing(org.document?.data),
       let slug = model.workspace?.org?.slug
     {

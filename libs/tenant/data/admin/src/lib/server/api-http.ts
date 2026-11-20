@@ -119,6 +119,14 @@ export const ApiErrors = {
   methodNotAllowed: (init?: ApiResponseInit) =>
     errorResponse(405, 'method_not_allowed', 'Method not allowed', init),
   /**
+   * 422: the request is well formed and what it asks is refused on its
+   * merits (AGL-4235), such as a page content edit the editor will not make.
+   * A malformed request is a 400; this is one that parsed and still cannot
+   * be done. `init.code` names which rule refused it.
+   */
+  unprocessable: (init?: ApiResponseInit) =>
+    errorResponse(422, 'unprocessable_entity', 'Cannot be done as asked', init),
+  /**
    * The three refusals an upload can produce that a JSON-only API never could
    * (AGL-2463). Built here rather than at the call site so `/v1` keeps ONE
    * error envelope — a client branching on `error.type` must not meet a bare
@@ -156,6 +164,13 @@ export const ApiErrors = {
     }),
   internal: (init?: ApiResponseInit) =>
     errorResponse(500, 'internal_error', 'Something went wrong', init),
+  /**
+   * 501: an endpoint whose path is routed and whose operation is not built
+   * yet (AGL-4235). Never described in the OpenAPI document, so no tool is
+   * generated for it; a caller that finds the path anyway is told plainly.
+   */
+  notImplemented: (init?: ApiResponseInit) =>
+    errorResponse(501, 'not_implemented', 'Not available yet', init),
   /**
    * 503: the request could not be judged because a dependency failed, so
    * nothing about the credential or the request is wrong (AGL-4225). Carries

@@ -44,6 +44,12 @@ export interface PluginConfigField {
   /** For `number` fields. */
   min?: number
   max?: number
+  /**
+   * For `string` fields holding a key, a code or an address: kept exactly as
+   * typed, so a phone's keyboard neither capitalizes nor corrects it (a Weglot
+   * key typed as "Wg_…" would be refused). The apps' fields carry it too.
+   */
+  verbatim?: boolean
 }
 
 export interface PluginConfigSchema {

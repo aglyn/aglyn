@@ -103,7 +103,10 @@ extension AglynRadius {
 /// A screen a plan or add-on unlocks, shown to someone without it: what it
 /// does and the one way to get it, in the info tone. Never the failure
 /// symbol, since nothing went wrong.
+///
+/// A store build (the owner's decision of 2026-11-19) draws the store line where the way to get it would be.
 public struct AglynUpsellState: View {
+  @Environment(\.aglynStoreBilling) private var billing
   let title: String
   let message: String
   let systemImage: String
@@ -131,7 +134,9 @@ public struct AglynUpsellState: View {
     } description: {
       Text(message)
     } actions: {
-      if let actionTitle, let action {
+      if !billing.buying {
+        AglynStoreBillingLine()
+      } else if let actionTitle, let action {
         Button(actionTitle, action: action)
           .buttonStyle(.aglynProminent)
           .accessibilityIdentifier("upsell-action")

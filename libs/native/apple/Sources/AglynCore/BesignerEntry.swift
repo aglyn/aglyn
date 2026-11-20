@@ -115,16 +115,24 @@ public enum BesignerEntry {
   /// first. Presentation only: the console never grants anything on it.
   public static let userAgentProduct = "AglynApp"
 
-  /// `AglynApp/<version> (<platform>)`.
-  public static func userAgentMarker(version: String, platform: String) -> String {
+  /// The token a build that cannot buy adds inside the marker's comment: `AglynApp/1.4.0 (ios; no-buying)`. The
+  /// console reads it (`userAgentHidesBuying`) and leaves every control that leads to buying out of the page, as
+  /// `StoreBilling` leaves them out of the app's own screens. Set from `StoreBilling.buying`, which the build decides.
+  public static let userAgentNoBuyingToken = "no-buying"
+
+  /// `AglynApp/<version> (<platform>)`, or `AglynApp/<version> (<platform>; no-buying)` when `buying` is false.
+  public static func userAgentMarker(version: String, platform: String, buying: Bool = true) -> String {
     let shown = version.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: " ", with: "")
-    return "\(userAgentProduct)/\(shown.isEmpty ? "0" : shown) (\(platform))"
+    let comment = buying ? platform : "\(platform); \(userAgentNoBuyingToken)"
+    return "\(userAgentProduct)/\(shown.isEmpty ? "0" : shown) (\(comment))"
   }
 
   /// The web view's `applicationNameForUserAgent`: WebKit's own (`Mobile/15E148`
   /// on iOS, which pages read as "a phone") kept, the marker after it.
-  public static func applicationNameForUserAgent(base: String?, version: String, platform: String) -> String {
-    let marker = userAgentMarker(version: version, platform: platform)
+  public static func applicationNameForUserAgent(
+    base: String?, version: String, platform: String, buying: Bool = true
+  ) -> String {
+    let marker = userAgentMarker(version: version, platform: platform, buying: buying)
     let kept = (base ?? "").trimmingCharacters(in: .whitespaces)
     if kept.contains("\(userAgentProduct)/") { return kept }
     return kept.isEmpty ? marker : "\(kept) \(marker)"

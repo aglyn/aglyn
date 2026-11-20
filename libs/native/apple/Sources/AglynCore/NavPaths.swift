@@ -176,8 +176,9 @@ public enum NavPaths {
     } else if rest == "/analytics" || rest.hasPrefix("/analytics/") {
       // The site's Analytics page is the shell's own (`shell.analytics`, the site list's Overview row).
       return (scope, assemble([.screen(NativeNav.analytics, [:])], inSite: inSite, lists: lists))
-    } else if scope.orgSlug != nil, rest == "/" {
-      // A workspace's own address (`/{orgSlug}`) and a site's dashboard are their Home.
+    } else if rest == "/" {
+      // A workspace's own address (`/{orgSlug}`) and a site's dashboard are their Home, and so is the console's root
+      // (`/`, where a marketplace review notice links), on the workspace on screen.
       return (scope, NavPath(area: .shell(.home)))
     } else {
       last = .unavailable(full)

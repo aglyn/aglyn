@@ -53,6 +53,7 @@ import {
   type SiteBrandSlot,
 } from '@aglyn/aglyn/app-utils/site-brand-files'
 import { useLoading } from '@aglyn/shared-ui-jsx'
+import { useBuyingHidden } from '@aglyn/shared-ui-jsx/contexts/buying-hidden.context'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -259,6 +260,8 @@ function CreateSiteFlow({
     [address.fields, brand.fields],
   )
   const orgSlug = currentOrg?.slug ?? null
+  // An app build for store review leaves out the way to Billing from the limit notice.
+  const buyingHidden = useBuyingHidden()
   /**
    * "Start in preview" (AGL-4086): the person's choice, or `null` while they
    * have not made one, so the start they take decides — on for a site brought
@@ -914,7 +917,7 @@ function CreateSiteFlow({
         </DialogContent>
         <DialogActions>
           <Button onClick={onClose}>{'Close'}</Button>
-          {blocked === 'limit' && orgSlug ? (
+          {blocked === 'limit' && orgSlug && !buyingHidden ? (
             <Button variant="contained" href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}>
               {'Go to Billing'}
             </Button>

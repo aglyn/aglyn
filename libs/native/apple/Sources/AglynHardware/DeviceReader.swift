@@ -311,9 +311,13 @@ public protocol DeviceReaderControls: AnyObject {
   /// True once Apple's terms were accepted on this device, until the screen showing Apple's education clears it.
   var tapToPayTermsJustAccepted: Bool { get }
   func clearTapToPayTermsJustAccepted()
+  /// The store's card reader setup changed (its reader address was just added): a failure that asked for it goes, and
+  /// the store is read again, silently, so this device's reader is ready to set up without another Find or Set up press.
+  func storeSetupChanged(hostID: String, sessions: CardReaderSessionSource) async
 }
 
 extension DeviceReaderControls {
+  public func storeSetupChanged(hostID: String, sessions: CardReaderSessionSource) async {}
   public func warmUp(hostID: String, sessions: CardReaderSessionSource) async {
     await reconnectRemembered(hostID: hostID, sessions: sessions)
   }

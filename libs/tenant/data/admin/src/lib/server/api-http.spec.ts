@@ -57,6 +57,15 @@ describe('api-http', () => {
       })
     })
 
+    it('refuses a well-formed request on its merits as a 422, in the same envelope (AGL-4235)', async () => {
+      const res = ApiErrors.unprocessable({ message: 'No such element', code: 'element_not_found', fields: { 'edits[0].elementId': 'unknown' } })
+      expect(res.status).toBe(422)
+      expect(await res.json()).toEqual({
+        error: { type: 'unprocessable_entity', message: 'No such element', code: 'element_not_found', fields: { 'edits[0].elementId': 'unknown' } },
+      })
+      expect((await ApiErrors.unprocessable().json()).error).toEqual({ type: 'unprocessable_entity', message: 'Cannot be done as asked' })
+    })
+
     it('challenges a missing scope the RFC 6750 §3.1 way, keeping the caller headers (AGL-4225)', () => {
       const res = ApiErrors.insufficientScope('crm:write', { 'RateLimit-Limit': '60' })
       expect(res.headers.get('WWW-Authenticate')).toBe(

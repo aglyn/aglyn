@@ -328,7 +328,7 @@ private fun EntryEditor(
                 enabled = canPublish && !runner.busy,
                 modifier = Modifier.testTag("entry-unpublish"),
               ) { Text("Unpublish") }
-              val liveUrl = livePageUrl(routing, "/${collection.slug}/${entry.slug}")
+              val liveUrl = livePageUrl(routing, "/${collection.slug}/${entry.slug}", context.api.origin)
               if (liveUrl != null) {
                 OutlinedButton(onClick = { uri.openUri(liveUrl) }) {
                   Icon(AglynIcons.named("open_in_new"), contentDescription = null)
@@ -453,6 +453,16 @@ private fun EntryEditor(
           DetailRow("Updated", entry.updatedAt?.let { relativeTime(it.epochMillis, now) })
           DetailRow("Entry id", entry.id)
         }
+        // What the entry is doing, then who touched it (the console's entry page, AGL-2498): its traffic counted against
+        // its own address, never the template screen's, then its activity.
+        com.aglyn.site.analytics.EntryTrafficCard(
+          context.firestore,
+          context.api,
+          hostId,
+          entry.slug.takeIf { it.isNotEmpty() }?.let { "/${collection.slug}/$it" },
+          upgrade = { context.navigate("core.billing.plans") },
+        )
+        com.aglyn.site.analytics.SiteActivityCard(context.firestore, context.api, hostId, targetId = entry.id, title = "Entry activity")
         // Every field the entry holds, exactly as saved (the console's Raw JSON card), closed until asked for.
         var rawOpen by remember(entry.id) { mutableStateOf(false) }
         com.aglyn.site.RawJsonCard(doc.value?.let { com.aglyn.site.firestoreRawJson(it.id, it.data) }, rawOpen) { rawOpen = !rawOpen }

@@ -735,7 +735,19 @@
               "key": "pagesRead",
               "label": "Pages — read",
               "kind": "toggle",
-              "help": "List a site’s pages: each one’s name, address, whether it is published and its search listing. Never reads what a page is built from."
+              "help": "List a site’s pages and read each one: its name, address, whether it is published, its search listing and what is on it."
+            },
+            {
+              "key": "pagesWrite",
+              "label": "Pages — write",
+              "kind": "toggle",
+              "help": "Add, rename, move, reorder and delete a site’s pages and edit what is on them. Edits to a page are saved as a draft and show on the live site only once it is published. New pages start unpublished."
+            },
+            {
+              "key": "componentsRead",
+              "label": "Templates — read",
+              "kind": "toggle",
+              "help": "List a site’s page templates, the starting points a new page can be built from."
             },
             {
               "key": "seoRead",
@@ -787,6 +799,8 @@
                 "crm:read": "{form.crmRead}",
                 "crm:write": "{form.crmWrite}",
                 "pages:read": "{form.pagesRead}",
+                "pages:write": "{form.pagesWrite}",
+                "components:read": "{form.componentsRead}",
                 "seo:read": "{form.seoRead}",
                 "seo:write": "{form.seoWrite}",
                 "business:read": "{form.businessRead}",
@@ -1810,7 +1824,7 @@
               "id": "update-payment-method",
               "label": "Update payment method",
               "icon": "creditcard|credit_card",
-              "when": "data.notices.notices[noticeId=params.noticeId].actions[id='update-payment-method']",
+              "when": "app.billing && data.notices.notices[noticeId=params.noticeId].actions[id='update-payment-method']",
               "route": "{data.notices.notices[noticeId=params.noticeId].actions[id='update-payment-method'].href}"
             },
             {
@@ -2064,6 +2078,10 @@
       "load": {
         "org": {
           "doc": "orgs/{org.id}"
+        },
+        "closure": {
+          "url": "/api/closure-notices?subject=workspace&orgId={org.id}",
+          "optional": true
         }
       },
       "blocks": [
@@ -2078,6 +2096,32 @@
           "tone": "warning",
           "when": "data.org.erasureRequestedAt",
           "text": "This organization is scheduled for deletion. After a 7-day hold, all of its sites, files, and data are permanently erased. Cancel now to keep it."
+        },
+        {
+          "type": "notice",
+          "tone": "info",
+          "when": "!data.closure || data.closure.unavailable",
+          "text": "Some details of what this changes could not be checked right now. Try again in a moment before you confirm."
+        },
+        {
+          "type": "list",
+          "when": "data.closure.notices",
+          "items": "data.closure.notices",
+          "primary": "{item.title}",
+          "secondary": "{item.body}",
+          "wrap": true,
+          "icon": "exclamationmark.triangle|warning"
+        },
+        {
+          "type": "list",
+          "when": "data.closure.notices",
+          "items": "data.closure.notices",
+          "flatten": "items",
+          "primary": "{item.primary}",
+          "secondary": "{item.secondary}",
+          "tertiary": "{item.$parent.title}",
+          "trailing": "{item.amount}",
+          "icon": "list.bullet|list"
         },
         {
           "type": "actions",
@@ -2355,6 +2399,20 @@
               "icon": "gearshape|settings",
               "screen": "core.pluginSettings.bookings",
               "when": "org.can[org.settings] && params.pluginId == bookings"
+            },
+            {
+              "title": "Waivers settings",
+              "subtitle": "How long a signed waiver is kept",
+              "icon": "gearshape|settings",
+              "screen": "core.pluginSettings.waivers",
+              "when": "org.can[org.settings] && params.pluginId == waivers"
+            },
+            {
+              "title": "Weglot settings",
+              "subtitle": "Your Weglot key, the languages and the switcher",
+              "icon": "gearshape|settings",
+              "screen": "core.pluginSettings.weglot",
+              "when": "org.can[org.settings] && params.pluginId == weglot"
             }
           ]
         },

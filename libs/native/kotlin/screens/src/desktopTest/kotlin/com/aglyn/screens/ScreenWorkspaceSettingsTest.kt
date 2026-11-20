@@ -53,7 +53,7 @@ class ScreenWorkspaceSettingsTest {
     val apiKeys = spec("core.settings.apiKeys")
     val create = apiKeys.raw.arr("actions").mapNotNull { ActionSpec.parse(it) }.first { it.id == "create" }
     // Every scope the console offers is a switch, and the first is on for a new key as it is in the console.
-    assertEquals(23, create.prompt.count { it.kind == "toggle" })
+    assertEquals(25, create.prompt.count { it.kind == "toggle" })
     assertEquals(listOf("datasetsRead"), create.prompt.filter { it.initial == "true" }.map { it.key })
     val model = ScreenModel(apiKeys, json("""{"org":{"id":"o1"}}"""), client(200 to """{"token":"k"}""", sent = sent))
     val scope = json("""{"org":{"id":"o1"},"form":{"name":"Warehouse","datasetsRead":true,"ordersWrite":true,"mediaRead":true,"crmWrite":true}}""")
@@ -74,9 +74,13 @@ class ScreenWorkspaceSettingsTest {
                        {"id":"view-details","label":"View details","href":"/acme/hosts/shop/orders/o9"},
                        {"id":"request-review","label":"Request a review","href":"/acme/settings/holds?notice=n1"}]},
            {"noticeId":"n2","actions":[]}]}},
-         "params":{"noticeId":"n1"}}""",
+         "params":{"noticeId":"n1"},"app":{"billing":true}}""",
     )
+    // Update payment method is a payment control: shown in a build that may buy (app.billing), as here.
     assertEquals(listOf("review", "view-details", "update-payment-method", "why"), shown(next, scope))
+    // A store build (app.billing false) leaves it out.
+    val store = json(scope.toString().replace("\"billing\":true", "\"billing\":false"))
+    assertEquals(listOf("review", "view-details", "why"), shown(next, store))
     val billing = next.first { it.id == "update-payment-method" }
     assertEquals("/acme/billing/settings", ScreenValues.render(billing.route!!, scope))
     // A notice that is not reviewable offers no review, and one that names no action offers none.

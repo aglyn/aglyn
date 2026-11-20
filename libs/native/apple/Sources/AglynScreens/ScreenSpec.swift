@@ -201,6 +201,8 @@ public struct BlockSpec: Sendable, Identifiable {
   public let type: String
   public let title: String?
   public let footer: String?
+  /// When the footer shows (`footerWhen`); none shows it always.
+  public let footerWhen: String?
   public let when: String?
   public let raw: JSONValue
 
@@ -209,6 +211,7 @@ public struct BlockSpec: Sendable, Identifiable {
     self.type = type
     self.title = json["title"]?.stringValue
     self.footer = json["footer"]?.stringValue
+    self.footerWhen = json["footerWhen"]?.stringValue
     self.when = json["when"]?.stringValue
     self.raw = json
     self.id = json["id"]?.stringValue ?? "\(type):\(json["title"]?.stringValue ?? "")"
@@ -669,6 +672,10 @@ public struct FieldSpec: Sendable, Identifiable {
   public let coversAll: Bool
   /// The field's own JSON, for a kind that reads more than the common keys (`upload`'s limits).
   public let config: JSONValue?
+  /// `"verbatim": true`: a key, code or address, kept exactly as typed: the keyboard neither capitalizes nor corrects it
+  /// (the console marks such inputs `autoCapitalize="none"`, `spellCheck={false}`; a Weglot key typed as "Wg_…" is
+  /// refused).
+  public var verbatim: Bool { config?["verbatim"] == .bool(true) }
 
 
   /// A fresh value for a field that `generate`s one (`length` and `alphabet` are templates, so a spec can name

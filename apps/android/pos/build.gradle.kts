@@ -58,9 +58,6 @@ android {
   buildTypes {
     val releaseFirebaseAppId = setting("firebaseAppId", "1:543499566626:android:c66921bb5d51cf8b0d147b")
     crashlyticsAppId(releaseFirebaseAppId)
-    // Stripe Terminal's real readers (Tap to Pay, Bluetooth). Off: the SDK's
-    // simulated readers only, until Stripe Terminal live mode is set up.
-    val liveReaders = setting("terminalLiveReaders", "false").toBoolean().toString()
     val emulatorProject = setting("firebaseProjectId", "demo-aglyn")
     debug {
       applicationIdSuffix = ".dev"
@@ -87,7 +84,6 @@ android {
       buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", quoted(setting("debugGoogleWebClientId", "")))
       buildConfigField("String", "DEBUG_EMAIL", quoted("mobile-owner@example.test"))
       buildConfigField("String", "DEBUG_PASSWORD", quoted("seed-$emulatorProject-mobile"))
-      buildConfigField("boolean", "TERMINAL_LIVE_READERS", "false")
     }
     release {
       isMinifyEnabled = true
@@ -124,7 +120,6 @@ android {
       buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", quoted(setting("googleWebClientId", "543499566626-j9srpjdgmqtjk7rk1a0a1lbmf1l1l4e1.apps.googleusercontent.com")))
       buildConfigField("String", "DEBUG_EMAIL", quoted(""))
       buildConfigField("String", "DEBUG_PASSWORD", quoted(""))
-      buildConfigField("boolean", "TERMINAL_LIVE_READERS", liveReaders)
     }
   }
 }

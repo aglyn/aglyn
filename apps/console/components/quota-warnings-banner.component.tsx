@@ -29,6 +29,7 @@ import {
   type ResolvedPluginUsageBand,
 } from '@aglyn/aglyn/plugin-manager/plugin-usage-axes'
 import { AppLink } from '@aglyn/shared-ui-jsx'
+import { useBuyingHidden } from '@aglyn/shared-ui-jsx/contexts/buying-hidden.context'
 import { USAGE_METER_WARNING_PCT } from '@aglyn/shared-ui-jsx/components/usage-meter.component'
 import { Alert, Button } from '@mui/material'
 import {
@@ -294,6 +295,11 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   // the action waits for "known org-wide" and the rewording waits for the
   // stronger "known scoped".
   const scopedViewer = scopeLoaded && !viewerOrgWide
+  // An app build for store review leaves out every button that buys or pays
+  // (Upgrade, Finish payment, Fix billing, Update payment method); the
+  // sentences and Dismiss stay.
+  const buyingHidden = useBuyingHidden()
+  const offersBuying = orgWideViewer && !buyingHidden
   const [quotas, setQuotas] = useState<QuotaState[]>([])
   const [dismissed, setDismissed] = useState(true)
 
@@ -591,7 +597,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
         severity={bandwidthGraceUntil !== null ? 'warning' : 'error'}
         sx={{ borderRadius: 0 }}
         action={
-          orgWideViewer ? (
+          offersBuying ? (
             <AppLink
               componentVariant="button"
               color="inherit"
@@ -697,7 +703,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
         severity="warning"
         sx={{ borderRadius: 0 }}
         action={
-          orgWideViewer ? (
+          offersBuying ? (
             <AppLink
               componentVariant="button"
               color="inherit"
@@ -728,7 +734,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
         severity={lapsed ? 'error' : 'warning'}
         sx={{ borderRadius: 0 }}
         action={
-          orgWideViewer ? (
+          offersBuying ? (
             // Past due, the sentence asks for a new payment method, so the
             // button is named for that and lands on the Billing button that
             // does it (AGL-3442). Lapsed, the plan has already stopped, and
@@ -803,7 +809,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
               {'Usage'}
             </AppLink>
           ) : null}
-          {orgWideViewer ? (
+          {offersBuying ? (
             <AppLink
               componentVariant="button"
               color="inherit"

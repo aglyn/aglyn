@@ -55,13 +55,19 @@ data class SiteStarterPickNote(
   val message: String,
   /** The button that opens the console's Create site on the pick; null when nothing is left to do there. */
   val webAction: String?,
+  /** A store build's paid pick: the store line under the note ([StoreBilling]), in place of Buy on the web. */
+  val storeLine: Boolean = false,
 )
 
-/** Null for a pick that needs saying nothing: a free base starter creates at once. */
-fun siteStarterPickNote(pick: SiteStarterSummary?): SiteStarterPickNote? {
+/**
+ * Null for a pick that needs saying nothing: a free base starter creates at once. A store build ([buying] false, the owner's
+ * decision of 2026-11-19) says a paid pick is paid, with no price and no Buy on the web.
+ */
+fun siteStarterPickNote(pick: SiteStarterSummary?, buying: Boolean = StoreBilling.buying): SiteStarterPickNote? {
   if (pick == null) return null
   val name = pick.displayName.ifEmpty { "This starter" }
   return when {
+    siteStarterPickBlock(pick) == SiteStarterPickBlock.PURCHASE && !buying -> SiteStarterPickNote("$name is a paid starter.", null, storeLine = true)
     siteStarterPickBlock(pick) == SiteStarterPickBlock.PURCHASE ->
       SiteStarterPickNote("$name costs ${siteStarterPriceLabel(pick.priceUsd)}. Buy it on the web, then create your site from it.", "Buy on the web")
     pick.mode == SiteStarterMode.AI -> SiteStarterPickNote("An AI starter asks a few questions, on the web.", "Continue on the web")

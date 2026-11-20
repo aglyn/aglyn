@@ -23,8 +23,12 @@ import { renderToString } from 'react-dom/server'
 import {
   isNativeAppWebView,
   markNativeAppWebView,
+  nativeAppHidesBuying,
   nativeAppUserAgentMarker,
+  NATIVE_APP_NO_BUYING_TOKEN,
   useIsNativeAppWebView,
+  useNativeAppHidesBuying,
+  userAgentHidesBuying,
   userAgentNamesNativeApp,
 } from './native-app-web-view'
 
@@ -114,5 +118,68 @@ describe('useIsNativeAppWebView (AGL-3894)', () => {
     setUserAgent(APP_MAC)
     render(<Probe />)
     expect(screen.getByText('in app')).toBeTruthy()
+  })
+})
+
+/** The same web views from a store build, which cannot buy. */
+const STORE_IPHONE = APP_IPHONE.replace('(ios)', '(ios; no-buying)')
+const STORE_ANDROID = APP_ANDROID.replace('(android)', '(android; no-buying)')
+
+describe('the store build\'s no-buying token', () => {
+  it('rides inside the marker\'s comment', () => {
+    expect(NATIVE_APP_NO_BUYING_TOKEN).toBe('no-buying')
+    expect(nativeAppUserAgentMarker('1.4.0', 'ios', false)).toBe('AglynApp/1.4.0 (ios; no-buying)')
+    expect(nativeAppUserAgentMarker('1.4.0', 'ios', true)).toBe('AglynApp/1.4.0 (ios)')
+  })
+
+  it('still names the app', () => {
+    expect(userAgentNamesNativeApp(STORE_IPHONE)).toBe(true)
+    expect(userAgentNamesNativeApp(STORE_ANDROID)).toBe(true)
+  })
+
+  it.each([
+    ['the iPhone store build', STORE_IPHONE],
+    ['the Android store build', STORE_ANDROID],
+    ['the token among others', 'Mozilla/5.0 AglynApp/2.0 (macos; beta; no-buying)'],
+  ])('hides buying in %s', (_label, userAgent) => {
+    expect(userAgentHidesBuying(userAgent)).toBe(true)
+  })
+
+  it.each([
+    ['Safari on an iPhone', SAFARI_IPHONE],
+    ['an app build that can buy', APP_IPHONE],
+    ['the Android app that can buy', APP_ANDROID],
+    ['the token outside the marker', `${SAFARI_IPHONE} (no-buying)`],
+    ['the token in another product\'s comment', 'Mozilla/5.0 (no-buying) AglynApp/1.4.0 (ios)'],
+    ['a longer token', 'AglynApp/1.4.0 (ios; no-buying-ever)'],
+    ['no agent', undefined],
+  ])('keeps buying in %s', (_label, userAgent) => {
+    expect(userAgentHidesBuying(userAgent)).toBe(false)
+  })
+
+  it('is read from the user agent only, never the entry page\'s mark', () => {
+    setUserAgent(SAFARI_IPHONE)
+    markNativeAppWebView()
+    expect(nativeAppHidesBuying()).toBe(false)
+    setUserAgent(STORE_ANDROID)
+    expect(nativeAppHidesBuying()).toBe(true)
+  })
+})
+
+function BuyingProbe() {
+  return <span>{useNativeAppHidesBuying() ? 'no buying' : 'buying'}</span>
+}
+
+describe('useNativeAppHidesBuying', () => {
+  it('renders the browser\'s answer on the server, so hydration matches', () => {
+    setUserAgent(STORE_IPHONE)
+    expect(renderToString(<BuyingProbe />)).toContain('buying')
+    expect(renderToString(<BuyingProbe />)).not.toContain('no buying')
+  })
+
+  it('answers from the marker on the client', () => {
+    setUserAgent(STORE_IPHONE)
+    render(<BuyingProbe />)
+    expect(screen.getByText('no buying')).toBeTruthy()
   })
 })

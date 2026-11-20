@@ -61,6 +61,8 @@ const DOORS = [
   'libs/tenant/data/admin/src/lib/server/duplicate-resource.ts',
   // A site starter's pages, written onto the new site it provisions (AGL-4049).
   'libs/tenant/data/admin/src/lib/server/provision-starter.ts',
+  // A page and its first version in one transaction, for the public API (AGL-4235).
+  'libs/tenant/data/admin/src/lib/server/page-create.ts',
   'libs/plugins/marketplace/src/lib/server/install-email-starter.ts',
   'libs/plugins/ai/src/lib/jobs/ai-job-drafts.ts',
   'libs/plugins/email/src/lib/server-email-drafts.ts',
@@ -85,8 +87,8 @@ const NOT_SCREEN_CREATES: Readonly<Record<string, string>> = {
   'apps/console/utils/server/tenant-revalidate.ts':
     'reads the routing map to name a site’s pages; creates only publish outbox rows (AGL-4121)',
   'apps/console/constants/screen-publishing.ts': 'merge-sets the publish fields of a screen that exists',
-  'apps/console/app/api/hosts/pages/route.ts':
-    'merge-sets the publish fields of screens that exist, and moves, trashes or unpublishes them (AGL-3668)',
+  'libs/tenant/data/admin/src/lib/server/page-route-actions.ts':
+    'merge-sets the publish fields of screens that exist, and moves, trashes or unpublishes them, for the native pages route and the API (AGL-3668, AGL-4235)',
   'apps/console/utils/server/page-security-hold.ts':
     'reads a held page’s screen and version; merge-sets the abuse report row (AGL-3450)',
   'libs/tenant/runtime/src/lib/apply-publish-schedule.ts':
@@ -94,6 +96,8 @@ const NOT_SCREEN_CREATES: Readonly<Record<string, string>> = {
   'libs/plugins/marketplace/src/lib/server/admin-reviews.ts':
     'reads the pages stored in a site starter’s version so staff can review them; writes no screen (AGL-4049)',
   'libs/plugins/ai/src/lib/server/ai-seo-apply.ts': 'creates a version under a screen that exists',
+  'libs/tenant/data/admin/src/lib/server/page-publish.ts':
+    'merge-sets a page’s draft into the version that page points at and deletes the draft; creates only a publish outbox row and an activity row, and publishes the address of a page that exists through page-route-actions (AGL-4235)',
   'libs/tenant/data/admin/src/lib/server/page-seo-write.ts':
     'updates the seo map of a page that exists, in a transaction that returns missing rather than writing when the page is not there; creates only a publish outbox row (AGL-4235)',
   'libs/plugins/ai/src/lib/jobs/ai-empty-site-sweep.ts':

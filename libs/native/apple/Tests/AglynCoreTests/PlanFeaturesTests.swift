@@ -59,14 +59,19 @@ final class PlanFeaturesTests: XCTestCase {
   /// The console's `upgradeNoticeMessage` / `blockedExtensionNotice` sentences (apps/console/utils/extension-entitlement.ts).
   func testUpgradeNoticesAreTheConsoles() {
     XCTAssertEqual(
-      upgradeNoticeMessage(title: "CRM", feature: "crm"),
+      upgradeNoticeMessage(title: "CRM", feature: "crm", buying: true),
       "CRM is not included in your current plan. Manage your plan and add-ons from Billing. Included from Starter.")
     XCTAssertEqual(
-      upgradeNoticeMessage(title: "Events", feature: "eventCalendar"),
+      upgradeNoticeMessage(title: "Events", feature: "eventCalendar", buying: true),
       "The Event Calendar is a paid add-on ($9/mo for your whole workspace, supported directly by Aglyn). Enable it from Billing → Add-ons.")
     XCTAssertEqual(
-      upgradeNoticeMessage(title: "Sequences", feature: "outreach"),
+      upgradeNoticeMessage(title: "Sequences", feature: "outreach", buying: true),
       "Sequences isn't included in any plan — it's a paid add-on. Manage your plan and add-ons from Billing.")
+    // A store build (the owner's decision of 2026-11-19): what the plan leaves out, with no price and no "from Billing".
+    XCTAssertEqual(
+      upgradeNoticeMessage(title: "CRM", feature: "crm", buying: false), "CRM is not included in your current plan. Included from Starter.")
+    XCTAssertEqual(
+      upgradeNoticeMessage(title: "Events", feature: "eventCalendar", buying: false), "Events isn't included in any plan — it's a paid add-on.")
     XCTAssertTrue(upgradeNoticeSellsAddOn("eventCalendar"))
     XCTAssertFalse(upgradeNoticeSellsAddOn("crm"))
     for feature in ["crm", "bookings", "dataStore", "redirects", "workflows"] {

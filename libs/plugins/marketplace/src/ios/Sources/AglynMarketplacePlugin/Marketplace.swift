@@ -197,7 +197,16 @@ struct ListingRow: Identifiable, Equatable {
 }
 
 /// "Free" or "$12".
-func priceLabel(_ priceUSD: Double) -> String { priceUSD <= 0 ? "Free" : "$" + jsNumberString(priceUSD) }
+/// A store build names no price (the owner's decision of 2026-11-19): it says the listing is paid.
+func priceLabel(_ priceUSD: Double, buying: Bool = StoreBilling.buying) -> String {
+  priceUSD <= 0 ? "Free" : !buying ? "Paid" : "$" + jsNumberString(priceUSD)
+}
+
+/// The word at the foot of a listing card: "Get" for a free listing, "Buy" for a paid one, and nothing for a paid one in a
+/// build that may not take a payment (the owner's decision of 2026-11-19): the card still opens the listing.
+func listingCardAction(paid: Bool, buying: Bool = StoreBilling.buying) -> String? {
+  paid ? (buying ? "Buy" : nil) : "Get"
+}
 
 /// "4.5 ★ (12)" or "Not yet rated".
 func ratingLabel(_ listing: ListingRow) -> String {

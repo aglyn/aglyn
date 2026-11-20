@@ -29,6 +29,7 @@ import ConsoleBrandingEffects from '../components/console-branding-effects.compo
 import EditHintBounce from '../components/edit-hint-bounce.component'
 import EditorHintCookie from '../components/editor-hint-cookie.component'
 import HostIdProvider from '../components/host-id-provider'
+import NativeAppBuyingGate from '../components/native-app-buying-gate.component'
 import PreviewStatePrune from '../components/preview-state-prune.component'
 import VisitorMarketingSurface from '../components/visitor-marketing-surface.component'
 import FirebaseAppLayout from '../components/layouts/firebase-app.layout'
@@ -58,37 +59,41 @@ interface ProvidersProps {
 
 const ThemeStack = withThemeCssVarProvider(
   ({ children, nonce }: ProvidersProps) => (
-    <FirebaseAppLayout>
-      {/* White-label chrome effects (White-Label Phase 2): favicon + MUI
-          primary color for a white-label-entitled org. Inside FirebaseAppLayout
-          so the org scope + Firestore contexts it reads are available. */}
-      <ConsoleBrandingEffects />
-      {/* Editor-presence hint for the tenant admin bar (AGL-1829): keeps the
-          registrable-domain `aglyn_editor` cookie in step with the session.
-          Inside FirebaseAppLayout for the auth context; renders nothing. */}
-      <EditorHintCookie />
-      {/* The `*.aglyn.app` half of that hint (AGL-1842): a throttled
-          login-time top-level bounce through the tenant app plants the hint
-          on the OTHER registrable domain, where cookies set here cannot
-          reach. Renders nothing. */}
-      <EditHintBounce />
-      {/* Stale besigner preview snapshots out of localStorage, which the
-          Firestore client also needs room in (AGL-4204). Renders nothing. */}
-      <PreviewStatePrune />
-      <VisitorMarketingSurface nonce={nonce} />
-      <LoadingLayoutAppComponent>
-        <ConfirmationProviderComponent>
-          {/* Every toast carries a close button: a reader clears one without
-              waiting out its timer, which on a phone covers the bottom of
-              the page. */}
-          <SnackbarProvider dismissible>
-            <HostIdProvider>
-              <ConsolePluginsGate>{children}</ConsolePluginsGate>
-            </HostIdProvider>
-          </SnackbarProvider>
-        </ConfirmationProviderComponent>
-      </LoadingLayoutAppComponent>
-    </FirebaseAppLayout>
+    // Outermost, so every page, dialog and drawer reads it: whether the
+    // native app hosting this page leaves buying out. False in a browser.
+    <NativeAppBuyingGate>
+      <FirebaseAppLayout>
+        {/* White-label chrome effects (White-Label Phase 2): favicon + MUI
+            primary color for a white-label-entitled org. Inside FirebaseAppLayout
+            so the org scope + Firestore contexts it reads are available. */}
+        <ConsoleBrandingEffects />
+        {/* Editor-presence hint for the tenant admin bar (AGL-1829): keeps the
+            registrable-domain `aglyn_editor` cookie in step with the session.
+            Inside FirebaseAppLayout for the auth context; renders nothing. */}
+        <EditorHintCookie />
+        {/* The `*.aglyn.app` half of that hint (AGL-1842): a throttled
+            login-time top-level bounce through the tenant app plants the hint
+            on the OTHER registrable domain, where cookies set here cannot
+            reach. Renders nothing. */}
+        <EditHintBounce />
+        {/* Stale besigner preview snapshots out of localStorage, which the
+            Firestore client also needs room in (AGL-4204). Renders nothing. */}
+        <PreviewStatePrune />
+        <VisitorMarketingSurface nonce={nonce} />
+        <LoadingLayoutAppComponent>
+          <ConfirmationProviderComponent>
+            {/* Every toast carries a close button: a reader clears one without
+                waiting out its timer, which on a phone covers the bottom of
+                the page. */}
+            <SnackbarProvider dismissible>
+              <HostIdProvider>
+                <ConsolePluginsGate>{children}</ConsolePluginsGate>
+              </HostIdProvider>
+            </SnackbarProvider>
+          </ConfirmationProviderComponent>
+        </LoadingLayoutAppComponent>
+      </FirebaseAppLayout>
+    </NativeAppBuyingGate>
   ),
   { theme: { light: consoleAppThemeLight, dark: consoleAppThemeDark } },
 )

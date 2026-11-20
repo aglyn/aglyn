@@ -119,4 +119,35 @@ final class BesignerEntryTests: XCTestCase {
       BesignerEntry.applicationNameForUserAgent(base: "Mobile/15E148 AglynApp/1.4.0 (ios)", version: "1.5.0", platform: "ios"),
       "Mobile/15E148 AglynApp/1.4.0 (ios)")
   }
+
+  // A build that cannot buy says so inside the marker's comment; the console's `userAgentHidesBuying` reads it.
+  func testABuildThatCannotBuyCarriesTheNoBuyingToken() {
+    XCTAssertEqual(BesignerEntry.userAgentNoBuyingToken, "no-buying")
+    XCTAssertEqual(
+      BesignerEntry.userAgentMarker(version: "1.4.0", platform: "ios", buying: false), "AglynApp/1.4.0 (ios; no-buying)")
+    XCTAssertEqual(
+      BesignerEntry.userAgentMarker(version: "1.4.0", platform: "macos", buying: true), "AglynApp/1.4.0 (macos)")
+    XCTAssertEqual(
+      BesignerEntry.applicationNameForUserAgent(base: "Mobile/15E148", version: "1.4.0", platform: "ios", buying: false),
+      "Mobile/15E148 AglynApp/1.4.0 (ios; no-buying)")
+    XCTAssertEqual(
+      BesignerEntry.applicationNameForUserAgent(base: nil, version: "1.4.0", platform: "macos", buying: false),
+      "AglynApp/1.4.0 (macos; no-buying)")
+  }
+
+  // The token follows `StoreBilling`'s decision: a Release build without in-app billing, and a Debug build launched
+  // with `-AglynStoreBuild YES`, both carry it; a build that may buy does not.
+  func testTheTokenFollowsTheBuildsBuyingDecision() {
+    let storeBuild = StoreBilling.decide(configured: false, storeBuildOverride: false)
+    let debugOverride = StoreBilling.decide(configured: true, storeBuildOverride: true)
+    let canBuy = StoreBilling.decide(configured: true, storeBuildOverride: false)
+    for buying in [storeBuild, debugOverride] {
+      XCTAssertTrue(
+        BesignerEntry.applicationNameForUserAgent(base: nil, version: "1.4.0", platform: "ios", buying: buying)
+          .hasSuffix("(ios; no-buying)"))
+    }
+    XCTAssertEqual(
+      BesignerEntry.applicationNameForUserAgent(base: nil, version: "1.4.0", platform: "ios", buying: canBuy),
+      "AglynApp/1.4.0 (ios)")
+  }
 }

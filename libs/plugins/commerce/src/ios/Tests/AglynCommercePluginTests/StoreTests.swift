@@ -213,7 +213,7 @@ final class CommerceRegistrationTests: XCTestCase {
     XCTAssertTrue(registry.quickActions(for: .aglyn).allSatisfy { registry.screen($0.screen) != nil })
     XCTAssertEqual(registry.tabs(for: .aglyn).map(\.id), ["commerce.orders-tab", "commerce.products-tab"])
     XCTAssertEqual(registry.resolve("/acme/hosts/shop/products/orders"), .screen("commerce.orders", ["orgSlug": "acme", "hostSlug": "shop"]))
-    XCTAssertEqual(registry.screens(for: .pos).map(\.id), ["commerce.card-readers", "commerce.display", "commerce.kiosk", "commerce.register"])
+    XCTAssertEqual(registry.screens(for: .pos).map(\.id), ["commerce.card-readers", "commerce.display", "commerce.hardware", "commerce.kiosk", "commerce.register"])
   }
 
   /// The store links the server writes open the page they name (AGL-4215): one order or quote from the console's own
@@ -241,7 +241,8 @@ final class CommerceRegistrationTests: XCTestCase {
       // Subscriptions and one subscription, the renewal notification's link (AGL-4191).
       ("/acme/hosts/shop/products/subscriptions", .screen("commerce.subscriptions", site), #line),
       ("/acme/hosts/shop/products/subscriptions?subscription=s1", .screen("commerce.subscription", with(["subscription": "s1", "subscriptionId": "s1"])), #line),
-      ("/acme/hosts/shop/products/pos", .unavailable("/acme/hosts/shop/products/pos"), #line),
+      // Point of sale: its hardware shop and the readers waiting to be set up (AGL-4038); the emails' `#pos-hardware`.
+      ("/acme/hosts/shop/products/pos", .screen("commerce.hardware", site), #line),
     ]
     for (link, expected, line) in cases { XCTAssertEqual(registry.resolve(link), expected, link, line: line) }
   }

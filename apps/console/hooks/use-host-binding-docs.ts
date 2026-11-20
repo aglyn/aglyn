@@ -16,10 +16,8 @@
  */
 'use client'
 
-import {
-  EditorPluginConnectionsContext,
-  type EditorPluginConnections,
-} from '@aglyn/aglyn/app-utils/plugin-connection-editor'
+import { bindingLookupsFromDocs, connectionVariableDocs } from '@aglyn/aglyn/app-utils/binding-lookups'
+import { EditorPluginConnectionsContext } from '@aglyn/aglyn/app-utils/plugin-connection-editor'
 import type { CanvasBindingLookups } from '@aglyn/besigner-ui'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { collection, limit, query } from 'firebase/firestore'
@@ -55,54 +53,9 @@ export function useHostBindingDocs(hostId: string) {
   }
 }
 
-/**
- * The site's variables and functions keyed by id AND by name, deleted and
- * unnamed ones left out.
- *
- * Id keys serve `resolveBindings`, which reads nothing else (AGL-97, AGL-194).
- * Name keys serve typed-name normalization, which looks a typed `{{name}}` up
- * by its name (`normalizeBindingTokens`). Names first so an id key wins a
- * collision — the id is the reference that survives a rename.
- */
-/**
- * The variables a site's declared plugin connections give it (AGL-4196), as
- * documents the lookups read like the site's own: keyed by the
- * `{{var:<listingId>__<connectionId>-<field>}}` id, named for a person (the
- * connection's label and the field), holding what the last sync wrote. The
- * canvas then prints the value the published page will, and a bound token
- * reads by its name rather than its id.
- */
-export function connectionVariableDocs(
-  connections: EditorPluginConnections | undefined,
-): Array<{ $id: string; name: string; value: string; connection: true }> {
-  return (connections?.variables ?? []).map((variable) => ({
-    $id: variable.id,
-    name: variable.label,
-    value: variable.value ?? '',
-    connection: true,
-  }))
-}
-
-export function bindingLookupsFromDocs(
-  variableDocs: readonly any[] | undefined,
-  functionDocs: readonly any[] | undefined,
-  connections?: EditorPluginConnections,
-): { variables: Record<string, any>; functions: Record<string, any> } {
-  const live = (docs: readonly any[] | undefined) =>
-    (docs ?? []).filter((one) => !one?.deletedAt && one?.name)
-  const keyed = (docs: readonly any[] | undefined) => {
-    const map: Record<string, any> = {}
-    for (const one of live(docs)) map[one.name] = one
-    for (const one of live(docs)) map[one.$id] = one
-    return map
-  }
-  // The connections' first, so a site variable that happens to share a name
-  // keeps it; their ids can never be a site's own (`pluginConnectionVariableId`).
-  return {
-    variables: keyed([...connectionVariableDocs(connections), ...(variableDocs ?? [])]),
-    functions: keyed(functionDocs),
-  }
-}
+// The pure keying lives in the core package, shared with the server's page
+// publish (AGL-4235); re-exported so the editor's imports stay where they are.
+export { bindingLookupsFromDocs, connectionVariableDocs }
 
 /**
  * The lookups every Besigner save converts typed names against

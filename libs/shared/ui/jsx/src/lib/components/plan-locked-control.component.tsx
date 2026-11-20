@@ -18,6 +18,7 @@
 
 import { Box } from '@mui/material'
 import type { ReactElement } from 'react'
+import { useBuyingHidden } from '../contexts/buying-hidden.context'
 import { AppLink } from './app-link'
 import { BlockedControl } from './blocked-control.component'
 
@@ -45,6 +46,9 @@ export interface PlanLockedControlProps {
  */
 export function PlanLockedControl(props: PlanLockedControlProps) {
   const { locked, reason, planLabel, upgradeHref, children } = props
+  // Where buying is hidden (an app build for store review) the control stays
+  // disabled with its reason; the link to the plan grid goes.
+  const buyingHidden = useBuyingHidden()
   if (!locked) return children
   return (
     <Box
@@ -54,7 +58,7 @@ export function PlanLockedControl(props: PlanLockedControlProps) {
       <BlockedControl blocked reason={reason}>
         {children}
       </BlockedControl>
-      {upgradeHref ? (
+      {upgradeHref && !buyingHidden ? (
         <AppLink href={upgradeHref} variant="caption" aria-label={`${reason} Upgrade`}>
           {planLabel ? `Included from ${planLabel}` : 'Upgrade'}
         </AppLink>

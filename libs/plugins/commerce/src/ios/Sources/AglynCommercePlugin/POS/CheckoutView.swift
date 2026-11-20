@@ -153,12 +153,13 @@ struct CheckoutView: View {
         AglynAmountRow("Discount", amount: "−\(model.money(discount))")
       }
       if let tax = checkout.opened.taxCents { AglynAmountRow("Tax", amount: model.money(tax)) }
+      if checkout.tipCents > 0 { AglynAmountRow("Tip", amount: model.money(checkout.tipCents)) }
       if checkout.sale.paidCents > 0 { AglynAmountRow("Paid", amount: model.money(checkout.sale.paidCents), tone: .success) }
       Divider()
       // Paid, or a card just declined: the sale's total (Figma 177:5163); otherwise what is left to pay.
       let whole = isPaid || checkout.showsDeclined
       AglynAmountRow(
-        whole ? "Total" : "To pay", amount: model.money(whole ? checkout.sale.totalCents : checkout.dueCents),
+        whole ? "Total" : "To pay", amount: model.money(whole ? checkout.sale.totalCents : checkout.dueWithTipCents),
         emphasized: true)
     }
     .padding(AglynSpace.two)

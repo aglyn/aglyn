@@ -48,6 +48,36 @@ class FirestoreLoadsTest {
     assertEquals(20, query.limit)
   }
 
+  /**
+   * Site activity (the console's host activity table): the search word, the action and the When range from the screen's
+   * params, each only while it is picked; the order the person picked; the newest first otherwise.
+   */
+  @Test
+  fun siteActivityIsSearchedFilteredAndOrderedFromItsParams() {
+    val root = generateSequence(java.io.File("").absoluteFile) { it.parentFile }.first { java.io.File(it, "libs/native/screens").isDirectory }
+    val spec = ScreenSpec.parseFile(java.io.File(root, "libs/native/screens/site.screens.json").readText())
+      .first { it.id == "core.site.activity" }
+    val load = spec.loads.first { it.key == "activity" }
+    assertEquals(50, load.more)
+    fun ask(params: String): FirestoreQuery {
+      val reader = Reader()
+      runBlocking { FirestoreLoads.query(reader, load.query!!, Json.parseToJsonElement("""{"site":{"id":"h1"},"params":$params}""")) }
+      return reader.queries.single()
+    }
+    val plain = ask("{}")
+    assertEquals("hosts/h1/activity", plain.collectionPath)
+    assertTrue(plain.filters.isEmpty())
+    assertEquals(listOf("createdAt" to true), plain.orderBy.map { it.field to it.descending })
+    assertEquals(50, plain.limit)
+    val narrowed = ask("""{"q":"  Ada Lovelace","from":"2026-11-01","before":"2026-11-16"}""")
+    assertEquals(listOf("searchTokens", "createdAt", "createdAt"), narrowed.filters.map { it.field })
+    assertEquals(listOf(FilterOp.ARRAY_CONTAINS, FilterOp.GTE, FilterOp.LT), narrowed.filters.map { it.op })
+    assertEquals("ada", narrowed.filters[0].value)
+    assertEquals(com.aglyn.core.FirestoreTimestamp(1793491200, 0), narrowed.filters[1].value)
+    assertEquals(listOf(FilterOp.EQ), ask("""{"action":"page.publish"}""").filters.map { it.op })
+    assertEquals(listOf("action" to false), ask("""{"sort":"action asc"}""").orderBy.map { it.field to it.descending })
+  }
+
   @Test
   fun anAggregateAsksTheServerForTheWholeCollectionAndReadsNoRows() {
     val reader = Reader()
@@ -91,5 +121,17 @@ class FirestoreLoadsTest {
     // The cheapest plan that carries gift cards: Pro since pricing v4 (Business is retired).
     assertEquals("Pro", (gate(free)["label"] as JsonPrimitive).content)
     assertEquals(JsonNull, gate(free).let { runBlocking { FirestoreLoads.entitlement(free, "nothingLikeIt", "o1") }.jsonObject["label"] })
+  }
+  /** The When chip names the range picked, and reads "Any – now" before one is. */
+  @Test
+  fun siteActivityWhenChipNamesTheRange() {
+    val root = generateSequence(java.io.File("").absoluteFile) { it.parentFile }.first { java.io.File(it, "libs/native/screens").isDirectory }
+    val spec = ScreenSpec.parseFile(java.io.File(root, "libs/native/screens/site.screens.json").readText())
+      .first { it.id == "core.site.activity" }
+    val items = spec.blocks.first { it.id == "activityFilter" }.raw.arr("items")
+    val label = items.first { it.str("id") == "when" }.str("label")!!
+    assertEquals("When: Any – now", ScreenValues.render(label, Json.parseToJsonElement("""{"params":{"from":"","before":""}}""")))
+    assertEquals("When: Any – now", ScreenValues.render(label, Json.parseToJsonElement("{}")))
+    assertEquals("When: Nov 1, 2026 – now", ScreenValues.render(label, Json.parseToJsonElement("""{"params":{"from":"2026-11-01"}}""")))
   }
 }

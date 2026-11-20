@@ -177,6 +177,9 @@ public enum WorkspaceName {
   public static let refusal =
     "Pick a different name — this one can’t be used as a workspace address. Try adding a word, and avoid reserved names like “admin” or “workspace”."
 
+  /// What the Workspace URL field takes as it is typed: lower case, as the console's field lower-cases it.
+  public static func urlInput(_ text: String) -> String { text.lowercased() }
+
   public static func helper(workspaceDomain: String) -> String {
     "This becomes your workspace address, e.g. acme-inc.\(workspaceDomain)"
   }
@@ -375,12 +378,13 @@ public struct SignUpService: Sendable {
     return OnboardingPlanIntent.parse(DeepLinks.queryParams(query))
   }
 
-  /// Creates the workspace (`createSignUpWorkspace`). A 409 means the address was taken and nothing was created.
-  public func createWorkspace(name: String) async -> SignUpWorkspaceOutcome {
+  /// Creates the workspace (`createSignUpWorkspace`). A 409 means the address was taken and nothing was created. `slug` is
+  /// the Workspace URL the person typed (the console's Create an organization sends it); none lets the route make one.
+  public func createWorkspace(name: String, slug: String? = nil) async -> SignUpWorkspaceOutcome {
     do {
-      let answer = try await api.request(
-        "/api/orgs/create", method: .post,
-        body: .object(["name": .string(name.trimmingCharacters(in: .whitespacesAndNewlines))]))
+      var body: [String: JSONValue] = ["name": .string(name.trimmingCharacters(in: .whitespacesAndNewlines))]
+      if let slug { body["slug"] = .string(slug.trimmingCharacters(in: .whitespacesAndNewlines)) }
+      let answer = try await api.request("/api/orgs/create", method: .post, body: .object(body))
       return SignUpWorkspaceOutcome(slug: answer?["slug"]?.stringValue, orgID: answer?["orgId"]?.stringValue, error: nil)
     } catch let error as ConsoleAPIError {
       return SignUpWorkspaceOutcome(slug: nil, orgID: nil, error: error.body?["error"]?.stringValue)

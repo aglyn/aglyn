@@ -20,6 +20,12 @@ val LocalSlotPlacement = staticCompositionLocalOf { SlotPlacement.BODY }
 val LocalSlotProps = staticCompositionLocalOf<Map<String, String>> { emptyMap() }
 
 /**
+ * Tells the page hosting a zone that a widget changed the record it was drawn for (a template replaced by an update), so a
+ * page that read its list once reads it again; the console's lists are live and need no telling. Nothing outside a zone.
+ */
+val LocalSlotChanged = staticCompositionLocalOf<() -> Unit> { {} }
+
+/**
  * The zones a site's lists host beside their create action, under the console's names: the native twins of the
  * `hostScreens`, `hostTemplates`, `hostLayouts`, `hostComponents` and `hostForms` zones. A list draws its zone and never
  * names the plugins that fill it (the AI plugin's Create with AI is one).
@@ -47,10 +53,11 @@ const val FUNNEL_INSIGHT_DAYS = "days"
 @Composable
 fun SlotWidgets(
   context: NativePluginContext, slot: String, placement: SlotPlacement = SlotPlacement.BODY, props: Map<String, String> = emptyMap(),
+  onChanged: () -> Unit = {},
 ) {
   val widgets = context.slotWidgets(slot)
   if (widgets.isEmpty()) return
-  CompositionLocalProvider(LocalSlotPlacement provides placement, LocalSlotProps provides props) {
+  CompositionLocalProvider(LocalSlotPlacement provides placement, LocalSlotProps provides props, LocalSlotChanged provides onChanged) {
     widgets.forEach { widget -> widget.content(context) }
   }
 }

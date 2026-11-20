@@ -74,6 +74,10 @@
       "why": "The CRM's vocabularies, scope tokens and list fields, read by the native contracts and the CRM's replayed function cases (AGL-3669)."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/dashboard-widget-prefs.ts",
+      "why": "A person's site dashboard arrangement (users/{uid}.dashboardWidgets: hidden cards and their order per workspace) and its pure rules, so the native Home hides and orders the cards the console's Customize dashboard does; no imports."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/detect-template-placeholders.ts",
       "why": "The {{name}} placeholders a saved template asks for when it is used; the native Save as template declares the same (AGL-3668)."
     },
@@ -226,6 +230,10 @@
       "why": "Reached by host-events: each plugin's declared host events, generated data with no imports."
     },
     {
+      "path": "libs/aglyn/src/lib/app-utils/privacy-choices.ts",
+      "why": "\"Your Privacy Choices\": the regulated title (CCPA regs §7015) and the native apps' panel words, read through the contracts so no app types a second copy (Console chrome row 3); no imports at all."
+    },
+    {
       "path": "libs/aglyn/src/lib/app-utils/published-legal-pages.ts",
       "why": "Which legal documents have a published page and the origin they are served from (LEGAL_ORIGIN): the hardware terms of sale the receipts print name its Terms address (AGL-4038); no imports, one public env read like platform-brand.ts."
     },
@@ -292,6 +300,10 @@
     {
       "path": "libs/aglyn/src/lib/app-utils/site-list-query.ts",
       "why": "The Sites list query declaration (search and filters on the member's hostMemberships rows); the native Sites screens plan the same query (AGL-3668)."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/site-live-url.ts",
+      "why": "Where a site's pages are live as the console reaches them (siteLiveUrlForSlug): the native Visit site and Open live page follow the console's origin rules, so a local or preview console opens its own tenant, never production (AGL-4086). Imports tenant-apex only."
     },
     {
       "path": "libs/aglyn/src/lib/app-utils/site-wide-outbox.ts",
@@ -484,6 +496,14 @@
     {
       "path": "libs/plugins/commerce/src/lib/model/commerce-pos-kiosk.ts",
       "why": "The self-service kiosk's catalog, cart, sale and context shapes and their pure checks (AGL-3623); imports only commerce-pos and product-modifiers. The native POS app reads the kiosk route through these."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/pos-hardware.ts",
+      "why": "The card reader shop's model (AGL-4038): the order statuses and the words a merchant reads of them, the most of one item a line takes, the point of sale prompt and the money format, so the apps' Hardware screen says what the console's Hardware card does; imports only platform-brand and a type of pos-hardware-terms."
+    },
+    {
+      "path": "libs/plugins/commerce/src/lib/model/pos-hardware-shop.ts",
+      "why": "The Hardware card's and the Card readers to set up card's words and small rules (AGL-4038): the basket, Check out's reason, when a return is offered, a waiting reader's note; imports only pos-hardware-terms. The apps' Hardware screen reads them through the native contracts."
     },
     {
       "path": "libs/plugins/commerce/src/lib/model/pos-hardware-terms.ts",
@@ -1058,6 +1078,10 @@
       "why": "A send's stats shape, rates and link report (sendRate, sendLinkReport), replayed by the apps (AGL-3669)."
     },
     {
+      "path": "libs/plugins/outreach/src/lib/model/sequence-report.ts",
+      "why": "A sequence's Results (figures, rates, caveats and link table), replayed by the native sequence page (AGL-3668); imports send-report.ts and types."
+    },
+    {
       "path": "libs/shared/ui/jsx/src/lib/const/list-query-plan.ts",
       "why": "The console's list-plan entry the Commerce app's list page imports; it re-exports the pure list-query grammar (AGL-3622)."
     },
@@ -1128,6 +1152,38 @@
     {
       "path": "libs/plugins/commerce/src/lib/model/site-member-purchases.ts",
       "why": "A site account's lifetime purchase total (computeLifetimePurchaseCents), the console drawer's Purchases figure: the native account screen's compute load replays it."
+    },
+    {
+      "path": "libs/aglyn/src/lib/app-utils/artifact-provenance.ts",
+      "why": "Where an installed copy came from (resolveProvenance), read by the native listing page to decide whether a copy is behind the listing and offer the update review (AGL-3668); no imports."
+    },
+    {
+      "path": "libs/plugins/marketplace/src/lib/model/artifact-merge.ts",
+      "why": "The words an update review uses for each change (describeChange, summarizeValue), replayed by the native update review of a copied listing (AGL-3668); imports only the pure artifact-provenance."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/picker/font-preview-url.ts",
+      "why": "Where a font preview's stylesheet and files come from (Google's CSS2 API for a preview's letters), replayed by the native apps' shared font loaders (AGL-3668); no imports."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/picker/font-choice.ts",
+      "why": "The font picker's labels, weight choices and catalog search, replayed by the native font picker (AGL-3668); type-only imports."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/picker/font-pairings.ts",
+      "why": "The font picker's suggested pairings, replayed by the native font picker (AGL-3668); type-only imports."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/catalog/google-fonts-catalog.ts",
+      "why": "How a Google Fonts catalog row reads (expandCatalogRow), replayed by the native font picker over the catalog route's answer (AGL-3668); type-only imports and the catalog JSON."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/catalog/google-fonts.catalog.json",
+      "why": "The generated Google Fonts catalog (data only), which google-fonts-catalog.ts loads and the fonts catalog route serves to the native apps (AGL-3668)."
+    },
+    {
+      "path": "libs/plugins/fonts/src/lib/picker/site-sample-text.ts",
+      "why": "The words a font preview is drawn in (the site's name, search title and description), replayed by the native font picker (AGL-3668); no imports."
     }
   ]
 }

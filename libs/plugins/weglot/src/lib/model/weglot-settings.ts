@@ -102,6 +102,7 @@ export const WEGLOT_CONFIG_SCHEMA: PluginConfigSchema = {
       type: 'string',
       description:
         'Your Weglot project’s public key, starting with wg_. It is public by design and appears in your pages’ source.',
+      verbatim: true,
     },
     {
       key: 'sourceLanguage',
@@ -109,6 +110,7 @@ export const WEGLOT_CONFIG_SCHEMA: PluginConfigSchema = {
       type: 'string',
       description:
         'A language code such as en. It must match the original language of your Weglot project.',
+      verbatim: true,
     },
     {
       key: 'targetLanguages',
@@ -116,6 +118,7 @@ export const WEGLOT_CONFIG_SCHEMA: PluginConfigSchema = {
       type: 'string',
       description:
         'Codes separated by commas, such as fr, es, de. Add the same languages to your Weglot project; the switcher offers only languages Weglot serves.',
+      verbatim: true,
     },
     {
       key: 'switcher',

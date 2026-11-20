@@ -49,7 +49,13 @@ public struct SpecScreenView: View {
 
   public var body: some View {
     Group {
-      if !ScreenValues.condition(spec.requires, in: baseContext) {
+      // A screen that is only buying (`requires` holds `app.billing`) in a store build (the owner's decision of 2026-11-19):
+      // reached by a link, a search, Starred or Recent, it shows the store line, never "your role".
+      if !StoreBilling.buying, spec.requires?.contains("app.billing") == true {
+        AglynEmptyState(spec.label, systemImage: "creditcard", message: StoreBilling.webBillingLink ? nil : StoreBilling.noBillingNote) {
+          if StoreBilling.webBillingLink { AglynStoreBillingLine() }
+        }
+      } else if !ScreenValues.condition(spec.requires, in: baseContext) {
         AglynEmptyState(
           spec.scope == "staff" ? "Staff only" : "Not available to your role", systemImage: "lock",
           message: spec.scope == "staff"
@@ -148,6 +154,8 @@ struct PendingAction: Identifiable {
   let action: ActionSpec
   let scope: JSONValue
   var reauthMessage: String?
+  /// The ways "Confirm it is you" offers instead of the account's own (Close account's Apple revoke).
+  var reconfirmWays: [ReconfirmMethod]?
 }
 
 /// An action whose route refused for something another screen settles: that screen, drawn over this one.
@@ -178,6 +186,10 @@ struct SpecScreenBody: View {
   @State private var confirming: PendingAction?
   @State private var prompting: PendingAction?
   @State private var reauthing: PendingAction?
+  /// Close account's Apple revoke (`Reconfirm.AppleRevokeFlow`), one per press of the action.
+  @State private var appleRevoke = Reconfirm.AppleRevokeFlow()
+  /// The revoke's "Confirm it is you" on show: closed without confirming, the close goes on anyway.
+  @State private var revokeAsked: PendingAction?
   @State private var gating: GatedAction?
   @State private var gatedAgain: GatedAction?
   @State private var gateResolved = false
@@ -312,10 +324,23 @@ struct SpecScreenBody: View {
             .environment(\.aglynGateResolve, { gateResolved = true })
         }
       }
-      .sheet(item: $reauthing) { pending in
-        ReauthSheet(email: session.email, message: pending.reauthMessage) { password in
-          try await session.reauthenticate(password)
+      .sheet(
+        item: $reauthing,
+        onDismiss: {
+          // Close account's revoke step closed without confirming: closing is the person's right, so it goes on and
+          // the missing revoke is recorded. A sheet that follows at once (the Apple step) is left alone.
+          guard reauthing == nil, let asked = revokeAsked else { return }
+          revokeAsked = nil
+          Task { await execute(asked.action, scope: asked.scope) }
+        }
+      ) { pending in
+        ReauthSheet(
+          session: session, message: pending.reauthMessage, api: plugin.api, ways: pending.reconfirmWays,
+          appleAuthorized: { code in appleRevoke.authorized(code: code) }
+        ) {
+          revokeAsked = nil
           reauthing = nil
+          appleRevoke.confirmed()
           await session.refreshClaims()
           await execute(pending.action, scope: pending.scope)
         }
@@ -361,7 +386,7 @@ struct SpecScreenBody: View {
       .background(AglynGround())
     case .planRefused(let message):
       AglynUpsellState(
-        "Add this to your plan", message: message, systemImage: "sparkles", actionTitle: "See add-ons"
+        StoreBilling.buying ? "Add this to your plan" : "Not on this plan", message: message, systemImage: "sparkles", actionTitle: "See add-ons"
       ) {
         plugin.navigate("core.billing.addons", [:])
       }
@@ -523,7 +548,9 @@ struct SpecScreenBody: View {
   @ViewBuilder
   private func blockView(_ block: BlockSpec) -> some View {
     let title = block.title.map { ScreenValues.render($0, in: context) }
-    let footer = block.footer.map { ScreenValues.render($0, in: context) }
+    let footer = block.footer.flatMap {
+      ScreenValues.condition(block.footerWhen, in: context) ? ScreenValues.render($0, in: context) : nil
+    }
     switch block.type {
     case "fields":
       section(title, footer) { FieldsBlock(block: block, context: context, copy: copyToClipboard) }
@@ -683,6 +710,14 @@ struct SpecScreenBody: View {
       } header: {
         if let title { Text(title) }
       }
+    case "billingOnWeb":
+      // `{ "type": "billingOnWeb", "when": "!app.billing" }`: the one line a store build shows where it leaves buying out
+      // (the owner's decision of 2026-11-19), once per screen; nothing in a build that may buy.
+      if !StoreBilling.buying {
+        section(title, footer) {
+          AglynStoreBillingLine()
+        }
+      }
     default:
       EmptyView()
     }
@@ -709,6 +744,7 @@ struct SpecScreenBody: View {
   }
 
   private func trigger(_ action: ActionSpec, scope: JSONValue) {
+    if Reconfirm.signsOut(url: action.url) { appleRevoke = Reconfirm.AppleRevokeFlow() }
     if action.asksInputs(in: scope) {
       prompting = PendingAction(action: action, scope: scope)
     } else if action.check == nil, action.asksConfirmation, ScreenValues.condition(action.confirmWhen, in: scope) {
@@ -766,9 +802,26 @@ struct SpecScreenBody: View {
       }
       return
     }
+    // Close account revokes the account's Apple token first, when it signs in with Apple (`Reconfirm.AppleRevokeFlow`).
+    var revoking: (owed: Bool, code: String?) = (false, nil)
+    if Reconfirm.signsOut(url: action.url) {
+      let providers = await session.providerIDs()
+      let methods = AppleRevocation.owed(providers: providers) ? await session.reconfirmMethods() : []
+      switch appleRevoke.next(providers: providers, methods: methods) {
+      case .ask(let ways):
+        let ask = PendingAction(action: action, scope: scope, reconfirmWays: ways)
+        revokeAsked = ask
+        reauthing = ask
+        return
+      case .close(let owed, let code):
+        revoking = (owed, code)
+      }
+    }
     notice = nil
     running = action.id
-    let outcome = await model.run(action, in: scope)
+    let outcome = await AppleRevocation.close(
+      owed: revoking.owed, code: revoking.code, revoke: { [session] code in try await session.revokeAppleToken(code) }
+    ) { await model.run(action, in: scope) }
     running = nil
     switch outcome {
     case .needsReauth(let message):
@@ -795,6 +848,11 @@ struct SpecScreenBody: View {
       #if os(iOS)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
       #endif
+      // Close account succeeded: the account is gone, so the app signs out at once, as the console does.
+      if Reconfirm.signsOut(url: action.url) {
+        await session.account.signOut()
+        return
+      }
       let after = ScreenContext.with(scope, "response", response ?? .null)
       if let instead = action.insteadEntry(in: after) {
         revealed = (
@@ -897,9 +955,11 @@ struct SearchModifier: ViewModifier {
 
   func body(content: Content) -> some View {
     if enabled {
+      // The kit's search takes the submit itself: on the Mac, the iPad and in a phone area's title row it is
+      // `AglynListToolbar`'s text field, whose Return an outer `.onSubmit(of: .search)` never hears, so the route was
+      // never asked; the system search bar elsewhere hands it on the same way.
       content
-        .aglynSearchable(text: $text, prompt: "Search")
-        .onSubmit(of: .search, submit)
+        .aglynSearchable(text: $text, prompt: "Search", onSubmit: submit)
         .onChange(of: text) { _, now in if now.isEmpty { submit() } }
     } else {
       content

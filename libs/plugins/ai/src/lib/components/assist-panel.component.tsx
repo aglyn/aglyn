@@ -43,6 +43,7 @@ import {
   mdiThumbUpOutline,
 } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { useBuyingHidden } from '@aglyn/shared-ui-jsx/contexts/buying-hidden.context'
 import { BetaChip } from '@aglyn/shared-ui-jsx/components/beta-chip.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -774,6 +775,8 @@ export function AssistPanelComponent(props: AssistDockProps) {
   const verdict = { visible: assistVisible, staffPreview: assistStaffPreview }
   const branding = { productName }
   const billingSlug = orgSlug
+  // An app build for store review leaves out every way to buy more.
+  const buyingHidden = useBuyingHidden()
   const pathname = usePathname()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -1523,7 +1526,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
                     {`Page-aware guidance is included from ${
                       planLabelGrantingFeature('aiAssist') ?? 'a paid plan'
                     }. `}
-                    {billingSlug ? (
+                    {billingSlug && !buyingHidden ? (
                       <AppLink href={`/${billingSlug}/billing#plans`}>
                         {'Upgrade'}
                       </AppLink>
@@ -1739,7 +1742,7 @@ export function AssistPanelComponent(props: AssistDockProps) {
                     is capped, with no way to act on it. Safe to fall back to
                     the resolved org's slug here because the render gate
                     above has already established the URL names it. */}
-                {billingSlug ? (
+                {billingSlug && !buyingHidden ? (
                   <>
                     {' — '}
                     <AppLink

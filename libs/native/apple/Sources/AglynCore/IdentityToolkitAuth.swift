@@ -187,8 +187,10 @@ public actor IdentityToolkitAuth {
     }
   }
 
+  /// `expecting` is the account in use when this only confirms it is them again: an answer for anyone else is refused
+  /// before it is kept, so the session in use never turns into another person's.
   @discardableResult
-  public func signIn(email: String, password: String) async throws -> AglynUser {
+  public func signIn(email: String, password: String, expecting: String? = nil) async throws -> AglynUser {
     let body = try await post(
       "\(identityBase)/v1/accounts:signInWithPassword?key=\(apiKey)",
       json: [
@@ -199,8 +201,16 @@ public actor IdentityToolkitAuth {
     guard case .string(let uid)? = body["localId"], case .string(let idToken)? = body["idToken"],
       case .string(let refreshToken)? = body["refreshToken"]
     else { throw IdentityToolkitError(code: nil, status: 200) }
+    try Self.require(uid, is: expecting)
     let user = AglynUser(uid: uid, email: body["email"]?.stringValue, displayName: body["displayName"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 })
     return accept(user: user, idToken: idToken, refreshToken: refreshToken, expiresIn: body["expiresIn"])
+  }
+
+  /// The code a confirmation that signed in as someone else is refused with (the SDK's `user-mismatch`).
+  public static let userMismatch = "USER_MISMATCH"
+
+  static func require(_ uid: String, is expected: String?) throws {
+    if let expected, expected != uid { throw IdentityToolkitError(code: userMismatch, status: 400) }
   }
 
   /// Signs in with a Firebase custom token: one the server mints for a passkey that signed its challenge, or one a support
@@ -208,7 +218,7 @@ public actor IdentityToolkitAuth {
   /// account lives in its workspace's tenant), because a custom token exchanged in another pool is a cross-pool exchange. The
   /// person is read off the ID token the exchange answers with.
   @discardableResult
-  public func signIn(customToken: String, tenantId: String? = nil) async throws -> AglynUser {
+  public func signIn(customToken: String, tenantId: String? = nil, expecting: String? = nil) async throws -> AglynUser {
     var json: [String: JSONValue] = ["token": .string(customToken), "returnSecureToken": .bool(true)]
     if let tenantId, !tenantId.isEmpty { json["tenantId"] = .string(tenantId) }
     let body = try await post("\(identityBase)/v1/accounts:signInWithCustomToken?key=\(apiKey)", json: json)
@@ -217,6 +227,7 @@ public actor IdentityToolkitAuth {
     }
     let claims = TokenClaims(idToken: idToken).values
     guard let uid = claims["user_id"]?.stringValue ?? claims["sub"]?.stringValue else { throw IdentityToolkitError(code: nil, status: 200) }
+    try Self.require(uid, is: expecting)
     let user = AglynUser(uid: uid, email: claims["email"]?.stringValue, displayName: claims["name"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 })
     return accept(user: user, idToken: idToken, refreshToken: refreshToken, expiresIn: body["expiresIn"])
   }
@@ -242,7 +253,7 @@ public actor IdentityToolkitAuth {
 
   /// Signs in with an identity provider's credential (`accounts:signInWithIdp`): Google's ID token or Apple's, as
   /// `postBody` names it. It signs up a person the project has not seen, so the answer says whether it did.
-  public func signIn(idpPostBody: String) async throws -> (user: AglynUser, isNewUser: Bool) {
+  public func signIn(idpPostBody: String, expecting: String? = nil) async throws -> (user: AglynUser, isNewUser: Bool) {
     let body = try await post(
       "\(identityBase)/v1/accounts:signInWithIdp?key=\(apiKey)",
       json: [
@@ -255,6 +266,7 @@ public actor IdentityToolkitAuth {
       // `needConfirmation` answers a credential whose address another sign-in method already holds.
       throw IdentityToolkitError(code: body["needConfirmation"] == .bool(true) ? "NEED_CONFIRMATION" : nil, status: 200)
     }
+    try Self.require(uid, is: expecting)
     let name = body["displayName"]?.stringValue ?? body["fullName"]?.stringValue
     let user = AglynUser(uid: uid, email: body["email"]?.stringValue, displayName: name.flatMap { $0.isEmpty ? nil : $0 })
     let accepted = accept(user: user, idToken: idToken, refreshToken: refreshToken, expiresIn: body["expiresIn"])
@@ -277,6 +289,15 @@ public actor IdentityToolkitAuth {
       case .array(let providers)? = account["providerUserInfo"]
     else { return [] }
     return providers.compactMap { $0["providerId"]?.stringValue }
+  }
+
+  /// Revokes the account's Apple token with a fresh Sign in with Apple authorization code (`accounts:revokeToken`, the
+  /// SDK's `revokeToken(withAuthorizationCode:)`), before the account is closed (`AppleRevocation`).
+  public func revokeAppleToken(authorizationCode: String) async throws {
+    guard let token = try await idToken(forceRefresh: false) else { throw IdentityToolkitError(code: nil, status: 401) }
+    _ = try await post(
+      "\(identityBase)/v1/accounts:revokeToken?key=\(apiKey)",
+      json: AppleRevocation.revokeRequestBody(authorizationCode: authorizationCode, idToken: token))
   }
 
   /// Confirms an address with the one-time code an emailed verification link carries (`applyActionCode`).

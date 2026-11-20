@@ -490,8 +490,12 @@ fun AiCreateScreen(context: NativePluginContext, kind: AiCreateKind?, initialJob
   fun CreditActions() {
     Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
       OutlinedButton(onClick = { context.navigate("ai.credits") }, modifier = Modifier.testTag("ai-create-credits")) { Text("AI credits") }
-      OutlinedButton(onClick = { context.navigate("core.billing.plans") }, modifier = Modifier.testTag("ai-create-billing")) { Text("Plans and billing") }
+      // A store build takes no payment to Aglyn (the owner's decision of 2026-11-19): the store line, not Plans and billing.
+      if (com.aglyn.core.StoreBilling.buying) {
+        OutlinedButton(onClick = { context.navigate("core.billing.plans") }, modifier = Modifier.testTag("ai-create-billing")) { Text("Plans and billing") }
+      }
     }
+    com.aglyn.ui.StoreBillingLine()
   }
 
   Box(Modifier.fillMaxSize().testTag("ai-create"), contentAlignment = Alignment.TopCenter) {

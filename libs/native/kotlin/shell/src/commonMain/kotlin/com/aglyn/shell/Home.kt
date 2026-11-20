@@ -103,14 +103,17 @@ internal fun HomeScreen(
         FirstRunContent(services)
         return@Column
       }
-      HomeSiteLine(workspace, host, now, services.api.origin, onSwitch = { navigator.command = ShellCommand.SWITCH_SITE }) { url ->
+      var customizing by remember { androidx.compose.runtime.mutableStateOf(false) }
+      if (customizing) HomeDashboardCustomize(services, context, onDismiss = { customizing = false })
+      HomeSiteLine(workspace, host, now, services.api.origin, onSwitch = { navigator.command = ShellCommand.SWITCH_SITE }, onCustomize = { customizing = true }) { url ->
         // In preview or maintenance the site is entered as the team (the console's `SiteVisitButton`, AGL-4086).
         val team = com.aglyn.core.SiteVisit.entersAsTeam((host as? Live.Ready)?.value?.data)
         val hostId = site?.id
         if (!team || hostId == null) runCatching { uriHandler.openUri(url) }
         else visitScope.launch { runCatching { uriHandler.openUri(com.aglyn.core.SiteVisit.url(true, hostId, url, services.api)) } }
       }
-      // Site Care's Request a change (the console's site dashboard, AGL-3959): off with the reason without Site Care.
+      // Site Care's Request a change (the console's site dashboard, AGL-3959): off with the reason without Site Care, absent
+      // then in a store build (`siteCareControl`).
       val careOrg = workspace.org?.id
       if (site != null && careOrg != null) {
         androidx.compose.runtime.key(careOrg, site.id) {
@@ -231,9 +234,10 @@ private fun HomeSiteLine(
   now: Long,
   origin: String,
   onSwitch: () -> Unit,
+  onCustomize: () -> Unit,
   onVisit: (String) -> Unit,
 ) {
-  SiteHeader(workspace, host, now, origin, onSwitch, onVisit)
+  SiteHeader(workspace, host, now, origin, onSwitch, onCustomize, onVisit)
 }
 
 @Composable
@@ -252,6 +256,7 @@ private fun SiteHeader(
   /** The console the app talks to, which serves the site's favicon. */
   origin: String,
   onSwitch: () -> Unit,
+  onCustomize: () -> Unit,
   onVisit: (String) -> Unit,
 ) {
   val site = workspace.site
@@ -270,7 +275,10 @@ private fun SiteHeader(
   }
   val status = (host as? Live.Ready)?.value?.let { HostStatus.describe(it.data, now) }
   // The host's own custom domain first, then the membership row's copy, then the platform address.
-  val address = site.addressWith((host as? Live.Ready)?.value?.data?.get("cname") as? String)
+  val hostCname = (host as? Live.Ready)?.value?.data?.get("cname") as? String
+  val address = site.addressWith(hostCname)
+  // Visit site opens the site as the console the app talks to reaches it: a local console, the local tenant.
+  val visit = site.visitUrl(hostCname, origin)
   SiteHeaderCard(
     workspaceName = workspace.org?.name,
     siteName = site.name,
@@ -286,7 +294,8 @@ private fun SiteHeader(
     // Live needs no sentence: the pages card counts them.
     statusDetail = status?.takeIf { it.kind != HostStatusKind.LIVE }?.detail,
     onSwitch = onSwitch,
-    onVisit = address?.let { { onVisit("https://$it/") } },
+    onVisit = visit?.takeIf { address != null }?.let { { onVisit(it) } },
+    onCustomize = onCustomize,
   )
 }
 

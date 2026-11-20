@@ -127,9 +127,10 @@ private fun androidx.compose.foundation.layout.ColumnScope.CheckoutBody(
         state.opened.discountCents?.takeIf { it > 0 }?.let { AmountRow("Discount", "-${fmt(it)}", muted = true) }
         state.opened.taxCents?.let { AmountRow("Tax", fmt(it), muted = true) }
         AmountRow("Total", fmt(state.sale.totalCents))
+        if (state.tipCents > 0) AmountRow("Tip", fmt(state.tipCents), muted = true, modifier = Modifier.testTag("pos-tip"))
         if (state.sale.paidCents > 0) AmountRow("Paid", fmt(state.sale.paidCents), muted = true)
         HorizontalDivider()
-        AmountRow("Due", fmt(state.sale.dueCents), emphasized = true, modifier = Modifier.testTag("pos-due"))
+        AmountRow("Due", fmt(state.dueWithTipCents), emphasized = true, modifier = Modifier.testTag("pos-due"))
       }
     }
     state.notice?.let { notice ->

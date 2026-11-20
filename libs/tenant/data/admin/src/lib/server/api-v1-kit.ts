@@ -134,9 +134,17 @@ export function requireScope(
 
 // ── Serialization ───────────────────────────────────────────────────────────
 
-/** Firestore values → JSON-safe values (Timestamps become ISO strings). */
+/**
+ * Firestore values → JSON-safe values (Timestamps become ISO strings).
+ *
+ * A plain `Date` is an ISO string too: a write answers with the document as
+ * it reads after the write, built in memory, where a date it set is still the
+ * `Date` it wrote rather than the stored `Timestamp`. Walked as an object it
+ * has no own keys and reads `{}`. An invalid `Date` reads `null`.
+ */
 export function serialize(value: unknown): unknown {
   if (value instanceof Timestamp) return value.toDate().toISOString()
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString()
   if (Array.isArray(value)) return value.map(serialize)
   if (value && typeof value === 'object') {
     const out: Record<string, unknown> = {}
@@ -218,6 +226,11 @@ export type ClaimKind =
   | 'email-template-deletes'
   // A product created over the API (AGL-4235), scoped within its site.
   | 'product-creates'
+  // A page created over the API (AGL-4235), scoped within its site.
+  | 'page-creates'
+  // A set of edits to a page's draft (AGL-4235): inserts are not repeat-safe,
+  // so a retried request must replay its first answer.
+  | 'page-content-edits'
 
 /**
  * Take an exclusive claim on one write attempt (AGL-1709), and translate the

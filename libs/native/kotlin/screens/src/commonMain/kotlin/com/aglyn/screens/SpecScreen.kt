@@ -54,6 +54,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -169,6 +170,12 @@ fun SpecScreen(
 ) {
   val session = LocalScreenSession.current
   val base = session.context(plugin, params)
+  // A screen that is only buying (`requires` holds `app.billing`) in a store build (the owner's decision of 2026-11-19):
+  // reached by a link, a search, Starred or Recent, it says plan and billing changes are not in the app, never "your role".
+  if (!com.aglyn.core.StoreBilling.buying && spec.requires.orEmpty().contains("app.billing")) {
+    EmptyState(spec.title.takeIf { '{' !in it } ?: "Billing", body = com.aglyn.core.StoreBilling.noBillingNote, icon = AglynIcons.named("credit_card"))
+    return
+  }
   if (!ScreenValues.condition(spec.requires, base)) {
     EmptyState(
       if (spec.scope == "staff") "Staff only" else "Not available to your role",
@@ -339,6 +346,11 @@ private fun SpecBodyContent(
         }
       }
       is ActionOutcome.Done -> {
+        // Close account succeeded: the account is gone, so the app signs out at once, as the console does.
+        if (Reconfirm.signsOut(action.url)) {
+          session.account.signOut()
+          return
+        }
         val after = ScreenContext.with(actionScope, "response", outcome.response)
         val instead = action.insteadEntry(after)
         if (instead != null) {
@@ -407,16 +419,22 @@ private fun SpecBodyContent(
     ScreenModel.Phase.Loading -> SkeletonList(rows = 6)
     is ScreenModel.Phase.Failed -> if (phase.upsell) {
       EmptyState(
-        "Add this to your plan",
-        body = "${model.spec.title.takeIf { '{' !in it } ?: "This"} is not part of this workspace's plan yet. Add it to start using it.",
+        if (com.aglyn.core.StoreBilling.buying) "Add this to your plan" else "Not on this plan",
+        body = "${model.spec.title.takeIf { '{' !in it } ?: "This"} is not part of this workspace's plan yet." +
+          if (com.aglyn.core.StoreBilling.buying) " Add it to start using it." else "",
         icon = AglynIcons.named("workspace_premium"),
         tone = EmptyTone.UPSELL,
         action = {
-          FilledTonalButton(
-            onClick = { plugin.navigate(BILLING_ADDONS_SCREEN, emptyMap()) },
-            modifier = Modifier.testTag("upsell-addons"),
-            colors = com.aglyn.ui.aglynTonalButtonColors(),
-          ) { Text("See add-ons") }
+          // A store build takes no payment to Aglyn (the owner's decision of 2026-11-19): the store line, not See add-ons.
+          if (!com.aglyn.core.StoreBilling.buying) {
+            com.aglyn.ui.StoreBillingLine()
+          } else {
+            FilledTonalButton(
+              onClick = { plugin.navigate(BILLING_ADDONS_SCREEN, emptyMap()) },
+              modifier = Modifier.testTag("upsell-addons"),
+              colors = com.aglyn.ui.aglynTonalButtonColors(),
+            ) { Text("See add-ons") }
+          }
         },
         modifier = Modifier.testTag("spec-upsell"),
       )
@@ -529,43 +547,86 @@ private fun SpecBodyContent(
     PromptDialog(pending, model.context, search = { group, words -> model.lookup(group, words) }, onRun = { filled -> prompting = null; scope.launch { execute(pending.action, filled) } }) { prompting = null }
   }
   reauthing?.let { pending ->
+    // The account signs in again its own way (AGL-1140), as the console's close-account dialog: the password when it has
+    // one, else its own provider again; [Reconfirm.methods] decides which.
+    var methods by remember(pending) { mutableStateOf<List<ReconfirmMethod>?>(null) }
+    LaunchedEffect(pending) { methods = session.reconfirmMethods() }
     var password by remember(pending) { mutableStateOf("") }
     var error by remember(pending) { mutableStateOf<String?>(null) }
-    var busy by remember(pending) { mutableStateOf(false) }
+    var working by remember(pending) { mutableStateOf<ReconfirmMethod?>(null) }
+    val offered = methods.orEmpty()
+    val withPassword = ReconfirmMethod.PASSWORD in offered
+    // Without a password, the dialog's own button runs the account's first way; the rest sit under it.
+    val primary = if (withPassword) ReconfirmMethod.PASSWORD else offered.firstOrNull()
+    val others = offered.filter { it != primary && it != ReconfirmMethod.PASSWORD }
+    fun run(method: ReconfirmMethod) {
+      working = method
+      error = null
+      scope.launch {
+        try {
+          if (method == ReconfirmMethod.PASSWORD) session.reauthenticate(password) else session.reconfirmWith(method)
+          session.refreshClaims()
+          reauthing = null
+          execute(pending.action, pending.scope)
+        } catch (failure: kotlinx.coroutines.CancellationException) {
+          throw failure
+        } catch (failure: Throwable) {
+          // Closing Google's sheet is not a failure (the console ignores `popup-closed-by-user`).
+          if (failure.message != "Google sign-in was canceled.") error = failure.message ?: "That did not confirm it is you."
+        }
+        working = null
+      }
+    }
     ActionDialog(
       title = "Confirm it is you",
       body = pending.reauthMessage ?: "Confirm it is you to continue.",
-      confirmLabel = "Continue",
-      busy = busy,
+      confirmLabel = primary?.let(::reconfirmLabel) ?: "OK",
+      busy = working != null,
       error = error,
-      confirmEnabled = password.isNotEmpty(),
+      confirmEnabled = methods != null && (!withPassword || password.isNotEmpty()),
       dismissLabel = "Cancel",
       icon = "lock",
-      onConfirm = {
-        busy = true
-        scope.launch {
-          try {
-            session.reauthenticate(password)
-            session.refreshClaims()
-            reauthing = null
-            execute(pending.action, pending.scope)
-          } catch (failure: Throwable) {
-            error = failure.message ?: "That password did not work."
-          }
-          busy = false
-        }
-      },
+      onConfirm = { if (primary != null) run(primary) else reauthing = null },
       onDismiss = { reauthing = null },
     ) {
-      OutlinedTextField(
-        value = password,
-        onValueChange = { password = it },
-        label = { Text("Password") },
-        singleLine = true,
-        visualTransformation = PasswordVisualTransformation(),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-        modifier = Modifier.fillMaxWidth().testTag("reauth-password"),
-      )
+      Column(verticalArrangement = Arrangement.spacedBy(space(1f))) {
+        if (withPassword) {
+          OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            label = { Text("Password") },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            modifier = Modifier.fillMaxWidth().testTag("reauth-password"),
+          )
+        }
+        if (methods != null && offered.isEmpty()) {
+          Text(Reconfirm.NO_METHOD_MESSAGE, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("reauth-no-method"))
+        }
+        if (others.isNotEmpty()) {
+          Text(
+            if (withPassword) "Or sign in again another way." else "Or:",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+          for (method in others) {
+            if (method == ReconfirmMethod.GOOGLE) {
+              com.aglyn.ui.GoogleButton(reconfirmLabel(method), { run(method) }, Modifier.testTag("reauth-google"), enabled = working == null)
+            } else {
+              com.aglyn.ui.AuthButton(
+                reconfirmLabel(method),
+                onClick = { run(method) },
+                modifier = Modifier.testTag("reauth-${method.name.lowercase()}"),
+                kind = com.aglyn.ui.AuthButtonKind.SECONDARY,
+                icon = AglynIcons.named(if (method == ReconfirmMethod.PASSKEY) "lock" else "key"),
+                busy = working == method,
+                enabled = working == null,
+              )
+            }
+          }
+        }
+      }
     }
   }
   gating?.let { gated ->
@@ -683,9 +744,12 @@ private fun Block(
   copy: (String) -> Unit,
 ) {
   val title = block.title?.let { ScreenValues.render(it, context) }?.takeIf { it.isNotEmpty() }
-  val footer = block.footer?.let { ScreenValues.render(it, context) }?.takeIf { it.isNotEmpty() }
+  val footer = block.footer?.takeIf { ScreenValues.condition(block.footerWhen, context) }?.let { ScreenValues.render(it, context) }?.takeIf { it.isNotEmpty() }
   when (block.type) {
     "notice" -> NoticeBanner(ScreenValues.render(block.string("text").orEmpty(), context), tone(block.string("tone")))
+    // `{ "type": "billingOnWeb", "when": "!app.billing" }`: the one line a store build shows where it leaves buying out (the
+    // owner's decision of 2026-11-19), once per screen; nothing in a build that may buy.
+    "billingOnWeb" -> if (!com.aglyn.core.StoreBilling.buying) SectionCard(title) { com.aglyn.ui.StoreBillingLine() }
     "list" -> ListBlock(block, title, footer, model, context, selection, open, trigger)
     "image" -> {
       // `{ "type": "image", "src": "{item.url}", "caption": "…" }`: a picture the route hands over (a staff media preview).
@@ -1338,6 +1402,9 @@ internal fun FieldInput(field: FieldSpec, context: JsonElement, value: FieldValu
             "password" -> KeyboardType.Password
             else -> KeyboardType.Text
           },
+          // A key or code is kept as typed (`verbatim`); every other field keeps the keyboard's own defaults.
+          capitalization = if (field.verbatim) KeyboardCapitalization.None else KeyboardCapitalization.Unspecified,
+          autoCorrectEnabled = if (field.verbatim) false else null,
         ),
         modifier = Modifier.fillMaxWidth(),
       )
@@ -1403,6 +1470,20 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
   fun current(field: FieldSpec) = values[field.key] ?: seed[field.key] ?: initialValue(field, scope)
   val filled = ScreenContext.with(scope, "form", formObject(fields) { current(it) })
   val missing = fields.any { ScreenValues.condition(it.whenCondition, filled) && it.unmet(fieldJson(it, current(it)), scope) }
+  // The form's first `refuse` entry that refuses what is typed: the console's pre-save check (a plugin's `validate`), said
+  // beside Save, which it holds back. An entry is `{ when, text }`, or `{ check, site }` naming a check both kits implement
+  // (`PluginSettingsChecks`), asked over the values the form saves (on a site, the values it will run with).
+  val refused = block.raw.arr("refuse").firstNotNullOfOrNull { entry ->
+    val check = entry.str("check")
+    if (check != null) {
+      val site = ((entry as? JsonObject)?.get("site") as? JsonPrimitive)?.booleanOrNull == true
+      PluginSettingsChecks.refusal(check, PluginSettingsChecks.values(filled, site))
+    } else if (ScreenValues.condition(entry.str("when"), filled)) {
+      ScreenValues.render(entry.str("text").orEmpty(), filled)
+    } else {
+      null
+    }
+  }
   // A load this form is seeded from is only the cache's answer yet: Save is held, with the reason beside it.
   val held = FormEdits.heldBy(block.string("object"), fields.mapNotNull { it.initial }, context.obj("checking")).isNotEmpty()
   fun save(action: ActionSpec) {
@@ -1412,7 +1493,7 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
   // A Save pressed while held is kept, and runs over the edits replayed onto the server's copy (AGL-4047).
   val heldPress = com.aglyn.ui.rememberHeldPress(held, FormEdits.unconfirmedText(block.string("checking"))) {
     val action = ActionSpec.parse(block["submit"]) ?: return@rememberHeldPress
-    if (!missing && action.disabledWhen?.let { ScreenValues.condition(it, filled) } != true) save(action)
+    if (!missing && refused == null && action.disabledWhen?.let { ScreenValues.condition(it, filled) } != true) save(action)
   }
   Column(Modifier.fillMaxWidth().padding(space(2f)), verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
     for (field in fields.filter { ScreenValues.condition(it.whenCondition, filled) }) {
@@ -1426,7 +1507,14 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
       ?.takeIf { changed || fields.isEmpty() || !ScreenValues.render(it.label, scope).startsWith("Save") }
       ?.let { action ->
       val refusal = heldPress.refusal
-      if (refusal != null && changed) {
+      if (refused != null) {
+        Text(
+          refused,
+          Modifier.align(Alignment.End).testTag("refused-${block.id}"),
+          style = MaterialTheme.typography.bodySmall,
+          color = com.aglyn.ui.LocalAglynPalette.current.warning.text,
+        )
+      } else if (refusal != null && changed) {
         Text(
           refusal,
           Modifier.align(Alignment.End).testTag("unconfirmed-${block.id}"),
@@ -1444,7 +1532,7 @@ private fun FormBlock(block: BlockSpec, context: JsonElement, busy: Boolean, sub
       FilledTonalButton(
         colors = com.aglyn.ui.aglynTonalButtonColors(),
         onClick = { if (heldPress.pressed(held)) save(action) },
-        enabled = !busy && !heldPress.waiting && !missing && action.disabledWhen?.let { ScreenValues.condition(it, filled) } != true,
+        enabled = !busy && !heldPress.waiting && !missing && refused == null && action.disabledWhen?.let { ScreenValues.condition(it, filled) } != true,
         modifier = Modifier.align(Alignment.End).testTag("submit-${block.id}"),
       ) {
         if (busy || heldPress.waiting) CircularProgressIndicator(Modifier.size(16.dp).padding(end = space(1f)), strokeWidth = 2.dp)
@@ -1503,3 +1591,12 @@ private fun ZoneRow(spec: ScreenSpec, plugin: NativePluginContext, params: Nativ
 
 /** Where a plan refusal sends a person to add what the screen needs. */
 internal const val BILLING_ADDONS_SCREEN = "core.billing.addons"
+
+/** The button that confirms it is you one way. */
+internal fun reconfirmLabel(method: ReconfirmMethod): String = when (method) {
+  ReconfirmMethod.PASSWORD -> "Continue"
+  ReconfirmMethod.APPLE -> "Continue with Apple"
+  ReconfirmMethod.GOOGLE -> "Continue with Google"
+  ReconfirmMethod.SINGLE_SIGN_ON -> "Continue with SSO"
+  ReconfirmMethod.PASSKEY -> "Use a passkey"
+}
