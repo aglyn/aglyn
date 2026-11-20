@@ -201,6 +201,8 @@ public struct BlockSpec: Sendable, Identifiable {
   public let type: String
   public let title: String?
   public let footer: String?
+  /// When the footer shows (`footerWhen`); none shows it always.
+  public let footerWhen: String?
   public let when: String?
   public let raw: JSONValue
 
@@ -209,6 +211,7 @@ public struct BlockSpec: Sendable, Identifiable {
     self.type = type
     self.title = json["title"]?.stringValue
     self.footer = json["footer"]?.stringValue
+    self.footerWhen = json["footerWhen"]?.stringValue
     self.when = json["when"]?.stringValue
     self.raw = json
     self.id = json["id"]?.stringValue ?? "\(type):\(json["title"]?.stringValue ?? "")"

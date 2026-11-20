@@ -96,6 +96,7 @@
           "type": "list",
           "title": "Outstanding",
           "footer": "Anything unpaid, and the button that settles it.",
+          "footerWhen": "app.billing && org.can[billing.manage]",
           "when": "data.outstanding",
           "items": "data.outstanding.invoices",
           "primary": "{item.number|item.id} · {item.amountDueCents:cents/item.currency}",

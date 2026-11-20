@@ -528,7 +528,9 @@ struct SpecScreenBody: View {
   @ViewBuilder
   private func blockView(_ block: BlockSpec) -> some View {
     let title = block.title.map { ScreenValues.render($0, in: context) }
-    let footer = block.footer.map { ScreenValues.render($0, in: context) }
+    let footer = block.footer.flatMap {
+      ScreenValues.condition(block.footerWhen, in: context) ? ScreenValues.render($0, in: context) : nil
+    }
     switch block.type {
     case "fields":
       section(title, footer) { FieldsBlock(block: block, context: context, copy: copyToClipboard) }

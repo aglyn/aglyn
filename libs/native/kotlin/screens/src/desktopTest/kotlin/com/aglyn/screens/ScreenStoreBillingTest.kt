@@ -71,6 +71,23 @@ class ScreenStoreBillingTest {
     assertEquals(listOf("payNow", "view"), shown())
   }
 
+  /** Outstanding's footer names the button that settles an invoice, so it shows only where that button is drawn. */
+  @Test
+  fun theOutstandingFooterShowsOnlyWithItsButton() {
+    val root = generateSequence(java.io.File("").absoluteFile) { it.parentFile }.first { java.io.File(it, "libs/native/screens").isDirectory }
+    val spec = ScreenSpec.parseFile(java.io.File(root, "libs/native/screens/billing.screens.json").readText()).first { it.id == "core.billing" }
+    val list = spec.blocks.first { it.type == "list" && it.raw.str("title") == "Outstanding" }
+    fun footerShows(manage: Boolean) =
+      ScreenValues.condition(list.footerWhen, ScreenSession(orgPermissions = mapOf("billing.manage" to manage)).context(null, emptyMap()))
+    build("off")
+    assertFalse(footerShows(manage = true))
+    build("on")
+    assertTrue(footerShows(manage = true))
+    assertFalse(footerShows(manage = false))
+    // A block with no `footerWhen` keeps its footer.
+    assertTrue(ScreenValues.condition(BlockSpec("list", Json.parseToJsonElement("""{"type":"list","footer":"x"}""")).footerWhen, ScreenSession().context(null, emptyMap())))
+  }
+
   /** Every control in Billing that takes or starts a payment to Aglyn holds `app.billing`, on itself or its block. */
   @Test
   fun everyBuyingControlInBillingNeedsTheBuild() {
