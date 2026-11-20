@@ -52,20 +52,37 @@ struct ReaderAddress: Equatable {
   }
 }
 
+/// Why an address cannot be sent yet, or nil. The route checks again.
+func checkReaderAddress(_ address: ReaderAddress) -> String? {
+  if [address.line1, address.city, address.postalCode].contains(where: { $0.trimmingCharacters(in: .whitespaces).isEmpty }) {
+    return "Enter the street, city and postal code."
+  }
+  if address.country.trimmingCharacters(in: .whitespaces).range(of: "^[A-Za-z]{2}$", options: .regularExpression) == nil {
+    return "Enter the two-letter country code, such as US."
+  }
+  return nil
+}
+
 /// Why a pairing cannot be sent yet, or nil. The route checks again.
 func checkReaderPairing(code: String, address: ReaderAddress?) -> String? {
   if code.trimmingCharacters(in: .whitespaces).range(of: "^[A-Za-z0-9-]{3,64}$", options: .regularExpression) == nil {
     return "Enter the code the reader shows on its screen."
   }
-  if let address {
-    if [address.line1, address.city, address.postalCode].contains(where: { $0.trimmingCharacters(in: .whitespaces).isEmpty }) {
-      return "Enter the street, city and postal code."
-    }
-    if address.country.trimmingCharacters(in: .whitespaces).range(of: "^[A-Za-z]{2}$", options: .regularExpression) == nil {
-      return "Enter the two-letter country code, such as US."
-    }
-  }
+  if let address { return checkReaderAddress(address) }
   return nil
+}
+
+/// The permission the console asks to give the store its reader address (with a smart reader's pairing): setting up POS devices.
+let readerAddressPermission = posHardwareDevicesKey
+
+/// Whether the "Store address for card readers" row offers its address form: only while the store has none, and only
+/// to someone who may set up the store's POS devices. Everyone else reads the row's sentence.
+func offersReaderAddress(locationReady: Bool, maySetUpDevices: Bool) -> Bool { !locationReady && maySetUpDevices }
+
+/// What a failed setup step says: the route's own words for a refusal, else to check the connection.
+func setupFailureMessage(_ error: Error) -> String {
+  (error as? ConsoleAPIError).flatMap { $0.status == 0 ? nil : $0.message }
+    ?? "That did not go through. Check the connection and try again."
 }
 
 /// The site's smart readers, through the route the console's POS devices card calls, under the same staff gate.
@@ -127,6 +144,7 @@ struct CardReadersScreen: View {
   @State private var settingUpPayments = false
   @State private var paymentsSetupError: String?
   @State private var offerTapToPay = false
+  @State private var addingAddress = false
   @Environment(\.webAuthenticationSession) private var webAuthentication
 
   private var hostID: String { context.hostID ?? "" }
@@ -159,9 +177,21 @@ struct CardReadersScreen: View {
             .accessibilityIdentifier("payments-set-up")
             if let paymentsSetupError { AglynNotice(paymentsSetupError, tone: .error) }
           }
-          check(
-            "Store address for card readers", value.locationReady,
-            value.locationReady ? nil : "Pair a smart reader below with the store's address, or add it in the console's register settings.")
+          if offersReaderAddress(locationReady: value.locationReady, maySetUpDevices: context.can(readerAddressPermission)) {
+            check("Store address for card readers", false, "Add the address card readers are used at.")
+            // Its own row, as Set up payments above: a phone has no room for a button beside the sentence.
+            Button {
+              addingAddress = true
+            } label: {
+              AglynRow("Add address", systemImage: "mappin.and.ellipse")
+            }
+            .buttonStyle(.aglynRow)
+            .accessibilityIdentifier("reader-address-add")
+          } else {
+            check(
+              "Store address for card readers", value.locationReady,
+              value.locationReady ? nil : "Pair a smart reader below with the store's address, or add it in the console's register settings.")
+          }
         }
       }
       if let collector, let controls = collector.deviceReaders {
@@ -206,6 +236,14 @@ struct CardReadersScreen: View {
         api: smart, registers: registers, needsAddress: readiness.value?.locationReady == false
       ) {
         pairing = false
+        refresh += 1
+      }
+    }
+    .sheet(isPresented: $addingAddress) {
+      ReaderAddressSheet { address in
+        _ = try await CommerceTerminalConnection(api: context.api).registerLocation(hostID: hostID, address: address)
+      } done: {
+        addingAddress = false
         refresh += 1
       }
     }
@@ -566,19 +604,7 @@ struct PairReaderSheet: View {
         } footer: {
           Text("On the reader, open Settings and choose Generate pairing code, then type the code it shows.")
         }
-        if needsAddress {
-          Section {
-            TextField("Street", text: $address.line1).accessibilityIdentifier("reader-street")
-            TextField("City", text: $address.city).accessibilityIdentifier("reader-city")
-            TextField("State", text: $address.state).accessibilityIdentifier("reader-state")
-            TextField("Postal code", text: $address.postalCode).accessibilityIdentifier("reader-postal")
-            TextField("Country", text: $address.country).accessibilityIdentifier("reader-country")
-          } header: {
-            Text("Where the reader is used")
-          } footer: {
-            Text("Stripe sets card readers up for this address's country.")
-          }
-        }
+        if needsAddress { ReaderAddressFields(address: $address) }
         if let error { Section { AglynNotice(error, tone: .error) } }
       }
       .formStyle(.grouped)
@@ -602,6 +628,70 @@ struct PairReaderSheet: View {
       done()
     } catch {
       self.error = (error as? ConsoleAPIError)?.message ?? "The reader could not be paired. Try again."
+    }
+    busy = false
+  }
+}
+
+/// The address fields the pairing and the store's address share.
+struct ReaderAddressFields: View {
+  @Binding var address: ReaderAddress
+
+  var body: some View {
+    Section {
+      TextField("Street", text: $address.line1).accessibilityIdentifier("reader-street")
+      TextField("City", text: $address.city).accessibilityIdentifier("reader-city")
+      TextField("State", text: $address.state).accessibilityIdentifier("reader-state")
+      TextField("Postal code", text: $address.postalCode).accessibilityIdentifier("reader-postal")
+      TextField("Country", text: $address.country).accessibilityIdentifier("reader-country")
+    } header: {
+      Text("Where the reader is used")
+    } footer: {
+      Text("Stripe sets card readers up for this address's country.")
+    }
+  }
+}
+
+/// The store's reader address on its own, for a store that takes cards on Tap to Pay or a Bluetooth reader and pairs
+/// no smart reader: the same fields and checks as the pairing's address, saved as the store's Terminal Location.
+struct ReaderAddressSheet: View {
+  let save: (ReaderAddress) async throws -> Void
+  let done: () -> Void
+  @Environment(\.dismiss) private var dismiss
+  @State private var address = ReaderAddress()
+  @State private var busy = false
+  @State private var error: String?
+
+  var body: some View {
+    NavigationStack {
+      Form {
+        ReaderAddressFields(address: $address)
+        if let error { Section { AglynNotice(error, tone: .error) } }
+      }
+      .formStyle(.grouped)
+      .navigationTitle("Add address")
+      #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+      #endif
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Save") { Task { await submit() } }
+            .accessibilityIdentifier("reader-address-save")
+            .disabled(checkReaderAddress(address) != nil || busy)
+        }
+      }
+    }
+  }
+
+  private func submit() async {
+    busy = true
+    error = nil
+    do {
+      try await save(address)
+      done()
+    } catch {
+      self.error = setupFailureMessage(error)
     }
     busy = false
   }

@@ -70,6 +70,15 @@ struct CommerceTerminalConnection: CardReaderSessionSource {
     }
   }
 
+  /// Gives the site its Terminal Location from `address` (the route's `location` action), so Tap to Pay and Bluetooth
+  /// readers can connect. Answers the Location's id; a refusal throws the route's own words (`ConsoleAPIError`).
+  func registerLocation(hostID: String, address: ReaderAddress) async throws -> String {
+    let body = try await api.request(
+      terminalTokenRoute, method: .post,
+      body: ["hostId": .string(hostID), "action": "location", "address": address.json])
+    return body?["locationId"]?.stringValue ?? ""
+  }
+
   func readiness(hostID: String) async throws -> TerminalReadiness {
     let body = try await api.request(
       terminalTokenRoute, method: .post, body: ["hostId": .string(hostID), "action": "status"])
