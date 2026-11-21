@@ -19,7 +19,11 @@ import { holdsSiteKey, siteKeyRefusal } from '@aglyn/aglyn/app-utils/host-permis
 import type { ThemeLibraryAction } from '@aglyn/aglyn/app-utils/theme-library'
 import { dropPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 import { listServerThemePresets } from '@aglyn/aglyn/plugin-manager/plugin-theme-presets'
-import { overrideWriteValue } from '@aglyn/aglyn/app-utils/artifact-overrides'
+import {
+  overrideWriteValue,
+  readArtifactOverride,
+  resolveOverride,
+} from '@aglyn/aglyn/app-utils/artifact-overrides'
 import {
   describeThemeOverride,
   isOverrideForCurrentTheme,
@@ -27,7 +31,11 @@ import {
   themeOverrideAfterReset,
   themeOverridePatch,
 } from '@aglyn/aglyn/app-utils/site-theme'
-import { readThemeSelection } from '@aglyn/aglyn/app-utils/theme-library'
+import {
+  DEFAULT_THEME_ENTRY_ID,
+  presetEntryId,
+  readThemeSelection,
+} from '@aglyn/aglyn/app-utils/theme-library'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import type { HostTheme } from '@aglyn/shared-data-types'
 import {
@@ -45,6 +53,8 @@ import {
   readThemeEditorEdits,
   readThemeEditorValues,
 } from '@aglyn/shared-ui-theme/util/theme-editor-edits'
+import { hostBrandKey } from '@aglyn/shared-ui-theme/tenant.theme'
+import { themePreviewKit } from '@aglyn/shared-ui-theme/util/theme-preview-kit'
 import { Timestamp } from 'firebase-admin/firestore'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { presetTargetFromRegistry, summarizeThemePresets } from '../../_lib/theme-presets'
@@ -146,11 +156,12 @@ function readAction(body: Record<string, unknown>): ThemeLibraryAction | string 
  */
 async function editorAction(
   request: Request,
-  action: 'values' | 'edit' | 'reset',
+  action: 'values' | 'edit' | 'reset' | 'preview',
   hostId: string,
   rawEdits: unknown,
   decoded: { uid: string; email?: string | null; staff?: unknown },
   resetPath?: unknown,
+  previewTarget?: unknown,
 ): Promise<Response> {
   const edits = action === 'edit' ? readThemeEditorEdits(rawEdits) : []
   if (typeof edits === 'string') return Response.json({ error: edits }, { status: 400 })
@@ -166,6 +177,7 @@ async function editorAction(
     return Response.json({ error: siteKeyRefusal('site.edit') }, { status: 403 })
   }
   const host = hostSnapshot.data() as Record<string, any>
+  if (action === 'preview') return previewTheme(hostRef, host, previewTarget)
   if (action === 'values') {
     return Response.json(
       {
@@ -202,6 +214,65 @@ async function editorAction(
     { type: 'theme' },
   ).catch(() => undefined)
   return Response.json({ ok: true, values: readThemeEditorValues(edited) }, { status: 200 })
+}
+
+/**
+ * The theme picker's preview of a theme the site is not using yet (the
+ * console's `ThemeLibraryCard`, before "Use this theme"), for an app that
+ * cannot run the console's `ThemePreview`: the colours and type ramp of the
+ * very theme that preview renders under, in light and dark, with the edits
+ * stashed on that theme laid over it as the console lays them. A read, so
+ * it asks what the editor's values ask.
+ */
+async function previewTheme(
+  hostRef: FirebaseFirestore.DocumentReference,
+  host: Record<string, any>,
+  rawTarget: unknown,
+): Promise<Response> {
+  const target = (rawTarget ?? {}) as Record<string, unknown>
+  const kind = target['kind']
+  const id = typeof target['id'] === 'string' ? target['id'] : ''
+  let entryId: string
+  let name: string
+  let theme: HostTheme
+  if (kind === 'default') {
+    entryId = DEFAULT_THEME_ENTRY_ID
+    name = ''
+    theme = {} as HostTheme
+  } else if (kind === 'preset') {
+    const registered = presetTargetFromRegistry(id, listServerThemePresets())
+    if (!registered) return Response.json({ error: 'That built-in theme is not available.' }, { status: 404 })
+    entryId = presetEntryId(registered.id)
+    name = registered.name
+    theme = registered.theme
+  } else if ((kind === 'custom' || kind === 'installed') && id) {
+    entryId = id
+    name = ''
+    theme = {} as HostTheme
+  } else {
+    return Response.json({ error: 'Pick a theme.' }, { status: 400 })
+  }
+  const entrySnapshot = await hostRef.collection('themes').doc(entryId).get()
+  const entry = (entrySnapshot.exists ? entrySnapshot.data() : undefined) as Record<string, any> | undefined
+  if (kind === 'custom' || kind === 'installed') {
+    if (!entry || entry['kind'] !== kind) {
+      return Response.json({ error: 'That theme is no longer in this site’s library.' }, { status: 404 })
+    }
+    name = typeof entry['name'] === 'string' ? entry['name'] : ''
+    theme = (entry['theme'] ?? {}) as HostTheme
+  }
+  const stash = readArtifactOverride({ overrides: entry?.['override'] })
+  const previewed = stash ? resolveOverride<HostTheme>(theme, stash.patch) : theme
+  const siteKey = hostBrandKey(host)
+  return Response.json(
+    {
+      name,
+      edited: Boolean(stash),
+      light: themePreviewKit(previewed, 'light', siteKey),
+      dark: themePreviewKit(previewed, 'dark', siteKey),
+    },
+    { status: 200 },
+  )
 }
 
 /**
@@ -261,8 +332,11 @@ async function handler(request: Request): Promise<Response> {
   const hostId = String(body?.hostId ?? '')
   if (!hostId) return Response.json({ error: 'Missing hostId' }, { status: 400 })
   const editor =
-    body?.action === 'values' || body?.action === 'edit' || body?.action === 'reset'
-      ? (body.action as 'values' | 'edit' | 'reset')
+    body?.action === 'values' ||
+    body?.action === 'edit' ||
+    body?.action === 'reset' ||
+    body?.action === 'preview'
+      ? (body.action as 'values' | 'edit' | 'reset' | 'preview')
       : null
   const action = editor ? null : readAction((body ?? {}) as Record<string, unknown>)
   if (typeof action === 'string') {
@@ -280,7 +354,9 @@ async function handler(request: Request): Promise<Response> {
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
       return emailUnverifiedResponse()
     }
-    if (editor) return await editorAction(request, editor, hostId, body?.edits, decoded, body?.path)
+    if (editor) {
+      return await editorAction(request, editor, hostId, body?.edits, decoded, body?.path, body?.target)
+    }
     if (!action) return Response.json({ error: 'Unknown action.' }, { status: 400 })
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)

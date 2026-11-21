@@ -755,10 +755,13 @@ private struct ThemeLibraryCard: View {
   @State private var runner = newRunner()
   @State private var naming: NamingTarget?
   @State private var deleting: SavedTheme?
+  /// The theme being previewed before it is used (the console picker's first step).
+  @State private var previewing: ThemePreviewTarget?
 
   var body: some View {
     let selection = themeSelection(of: host)
     let edited = hasThemeEdits(host)
+    let currentName = selection.name ?? (selection.kind == "default" ? "Default theme" : "Custom theme")
     Section("Your theme") {
       HStack {
         VStack(alignment: .leading, spacing: 2) {
@@ -779,7 +782,7 @@ private struct ThemeLibraryCard: View {
           }
           .disabled(!canManage || !edited)
           Button("Use the default theme", systemImage: "arrow.clockwise") {
-            runner.run("Switched to the default theme.") { try await api.selectTheme(kind: "default") }
+            previewing = ThemePreviewTarget(kind: "default", themeID: nil, name: "Default theme")
           }
           .disabled(!canManage || selection.kind == "default")
         } label: {
@@ -802,11 +805,10 @@ private struct ThemeLibraryCard: View {
               if current {
                 StatusChip("In use", tone: .success)
               } else {
-                Button("Use") {
-                  runner.run("Switched to \(preset.name).") { try await api.selectTheme(kind: "preset", id: preset.id) }
-                }
-                .buttonStyle(.borderless)
-                .disabled(!canManage || runner.busy)
+                Button("Preview") { previewing = ThemePreviewTarget(kind: "preset", themeID: preset.id, name: preset.name) }
+                  .buttonStyle(.borderless)
+                  .disabled(runner.busy)
+                  .accessibilityIdentifier("preset-preview-\(preset.id)")
               }
             }
           }
@@ -828,6 +830,11 @@ private struct ThemeLibraryCard: View {
       await saved.bind(
         context.firestore,
         FirestoreQuery(["hosts", hostID, "themes"], order: [.init("__name__")], limit: themeLibraryReadLimit))
+    }
+    .sheet(item: $previewing) { target in
+      ThemePreviewSheet(
+        target: target, api: api, currentName: currentName, currentEdited: edited, canManage: canManage, runner: runner
+      ) { previewing = nil }
     }
     .sheet(item: $naming) { target in
       NameThemeSheet(target: target, runner: runner, api: api) { naming = nil }
@@ -858,9 +865,10 @@ private struct ThemeLibraryCard: View {
         if current {
           StatusChip("In use", tone: .success)
         } else {
-          Button("Use") { runner.run("Switched to \(theme.name).") { try await api.selectTheme(kind: theme.kind, id: theme.id) } }
+          Button("Preview") { previewing = ThemePreviewTarget(kind: theme.kind, themeID: theme.id, name: theme.name) }
             .buttonStyle(.borderless)
-            .disabled(!canManage || runner.busy)
+            .disabled(runner.busy)
+            .accessibilityIdentifier("saved-theme-preview-\(theme.id)")
         }
         Menu {
           if theme.kind == "custom" {
