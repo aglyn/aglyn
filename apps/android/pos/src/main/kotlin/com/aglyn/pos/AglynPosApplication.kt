@@ -10,6 +10,7 @@ import com.aglyn.pluginhost.NativeApp
 import com.aglyn.plugins.manifest.NativePluginManifest
 import com.aglyn.shell.AndroidShell
 import com.aglyn.pos.card.StripeKeyedCardEntry
+import com.aglyn.pos.terminal.DebugCardDrive
 import com.aglyn.pos.terminal.PermissionGate
 import com.aglyn.pos.terminal.StripeTerminalCollector
 import com.aglyn.shell.ShellServices
@@ -75,6 +76,7 @@ class AglynPosApplication : Application() {
           permissions = { permissionGate },
           forwards = offlineCardForwards,
           mirrorOfflineToStripe = BuildConfig.DEBUG,
+          debugCardDrive = { if (BuildConfig.DEBUG) DebugCardDrive.fromSystemProperties() else null },
         ),
         // What the reader's SDK did with cards it stored offline, read by the register (AGL-4039).
         offlineCardForwards = offlineCardForwards,
