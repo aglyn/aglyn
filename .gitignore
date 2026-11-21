@@ -142,7 +142,3 @@ vite.config.*.timestamp*
 # Recorded AI provider answers a development run replays (AGL-3660,
 # libs/plugins/ai/src/lib/runtime/ai-dev-replay.ts). Never committed.
 /.cache/ai-replay/
-
-# Apple's Tap to Pay on iPhone visual (AGL-4061): kept out of this public repository until it is cleared to live
-# here; a build without it lays the announcement out with the image slot empty.
-/apps/ios/AglynPOS/Assets.xcassets/TapToPayHero.imageset/
