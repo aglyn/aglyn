@@ -365,6 +365,7 @@ class Checkout(
       is TenderOutcome.Settled -> outcome.answer
       is TenderOutcome.Canceled -> outcome.answer
       is TenderOutcome.Failed -> outcome.answer
+      is TenderOutcome.TimedOut -> outcome.answer
       is TenderOutcome.Unknown -> null
     }
     mutable.update { state ->
@@ -388,6 +389,8 @@ class Checkout(
         }
         is TenderOutcome.Canceled -> base.copy(step = CheckoutStep.Tender, notice = Notice(NoticeTone.WARNING, "The payment was canceled. Nobody was charged."))
         is TenderOutcome.Failed -> base.copy(step = CheckoutStep.Tender, notice = Notice(NoticeTone.ERROR, outcome.message))
+        // Told as a timeout, never as a decline (Apple 5.9).
+        is TenderOutcome.TimedOut -> base.copy(step = CheckoutStep.Tender, notice = Notice(NoticeTone.ERROR, CARD_TIMED_OUT_NOTICE))
         is TenderOutcome.Unknown -> base
       }
     }

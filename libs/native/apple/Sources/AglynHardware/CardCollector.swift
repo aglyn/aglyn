@@ -133,6 +133,8 @@ public protocol CardCollector: AnyObject {
   /// What the reader asks the cashier to read out right now ("Insert the
   /// card."), while a payment is in progress.
   var prompt: String? { get }
+  /// The card was read and the payment is being confirmed (Apple 5.8): true from the read's end until the outcome.
+  var processing: Bool { get }
   /// The readers this device can offer, for the readers screen.
   var kinds: [CardCollectorKind] { get }
   /// Connects for one site; `sessions` mints the connection tokens.
@@ -147,6 +149,7 @@ public protocol CardCollector: AnyObject {
 
 extension CardCollector {
   public var prompt: String? { nil }
+  public var processing: Bool { false }
 }
 
 /// A reader for tests, demos and training: no card, no SDK. It validates the
@@ -158,18 +161,22 @@ public final class SimulatedCardCollector: CardCollector {
   public static let label = "Simulated reader"
 
   public private(set) var state: CardCollectorState = .disconnected
+  public private(set) var processing = false
   public let kinds: [CardCollectorKind] = [.simulated]
   @ObservationIgnored private let delay: Duration
+  @ObservationIgnored private let processingDelay: Duration
   @ObservationIgnored private let answer: @Sendable (CardCollectRequest) -> CardCollectOutcome
   @ObservationIgnored private var canceled = false
 
+  /// `delay` is the wait for the card; `processingDelay` the wait after it, while the payment shows as processing.
   public init(
-    delay: Duration = .milliseconds(1200),
+    delay: Duration = .milliseconds(1200), processingDelay: Duration = .zero,
     answer: @escaping @Sendable (CardCollectRequest) -> CardCollectOutcome = {
       .collected(paymentIntentID: $0.paymentIntentID, amountCents: $0.amountCents, tipCents: 0)
     }
   ) {
     self.delay = delay
+    self.processingDelay = processingDelay
     self.answer = answer
   }
 
@@ -192,6 +199,9 @@ public final class SimulatedCardCollector: CardCollector {
     canceled = false
     try? await Task.sleep(for: delay)
     if canceled { return .canceled(paymentIntentID: request.paymentIntentID) }
+    processing = true
+    defer { processing = false }
+    if processingDelay > .zero { try? await Task.sleep(for: processingDelay) }
     return answer(request)
   }
 
@@ -207,4 +217,8 @@ public final class SimulatedCardCollector: CardCollector {
 @MainActor
 public enum DeviceCardReaders {
   public static var shared: CardCollector?
+
+  /// Whether this build offers Tap to Pay on iPhone here (an iPhone, signed with Apple's entitlement, in Aglyn POS): what
+  /// shows Apple's merchant education in Settings › Help as well as in Card readers (Apple 4.3).
+  public static var offersTapToPay: Bool { shared?.kinds.contains(.tapToPay) == true }
 }

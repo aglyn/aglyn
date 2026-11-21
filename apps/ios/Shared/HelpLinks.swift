@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynCore
+import AglynHardware
 import AglynUI
 import SwiftUI
 
@@ -32,9 +33,25 @@ struct HelpLink: Identifiable, Equatable {
 struct HelpSection: View {
   @Environment(AppModel.self) private var model
   @Environment(\.openURL) private var openURL
+  @State private var guideError: String?
 
   var body: some View {
-    Section("Help") {
+    Section {
+      #if os(iOS) && canImport(ProximityReader)
+        // Apple's own Tap to Pay on iPhone guide, where help lives, in a build that offers it (Apple 4.3); the same guide
+        // Card readers › How to accept payments opens.
+        if DeviceCardReaders.offersTapToPay {
+          Button {
+            Task { guideError = await TapToPayEducation.present() }
+          } label: {
+            AglynRow("How to accept payments", subtitle: "\(TapToPayIPhone.title): cards, phones and watches", systemImage: "book") {
+              Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
+            }
+          }
+          .buttonStyle(.aglynRow)
+          .accessibilityIdentifier("help-tap-to-pay")
+        }
+      #endif
       ForEach(HelpLink.all(model.config)) { link in
         Button {
           openURL(link.url)
@@ -46,6 +63,10 @@ struct HelpSection: View {
         .buttonStyle(.aglynRow)
         .accessibilityIdentifier("help-\(link.id)")
       }
+    } header: {
+      Text("Help")
+    } footer: {
+      if let guideError { Text(guideError) }
     }
   }
 }

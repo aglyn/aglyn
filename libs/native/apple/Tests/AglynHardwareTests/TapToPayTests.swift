@@ -16,35 +16,34 @@ final class TapToPayTests: XCTestCase {
   }
 
   func testAPressTakesTheCardOnceReadyAndConnectsFirstOtherwise() {
-    XCTAssertEqual(tapToPayPress(osMajor: 18, state: ready, progress: nil, notice: nil), .collect)
-    XCTAssertEqual(tapToPayPress(osMajor: 26, state: .disconnected, progress: nil, notice: nil), .connect)
+    XCTAssertEqual(tapToPayPress(osMajor: 18, state: ready, progress: nil), .collect)
+    XCTAssertEqual(tapToPayPress(osMajor: 26, state: .disconnected, progress: nil), .connect)
     // A Bluetooth reader being connected is not Tap to Pay: the press connects Tap to Pay.
     XCTAssertEqual(
       tapToPayPress(
-        osMajor: 18, state: .connected(label: "Stripe Reader M2", kind: .bluetooth, testMode: true), progress: nil,
-        notice: nil),
+        osMajor: 18, state: .connected(label: "Stripe Reader M2", kind: .bluetooth, testMode: true), progress: nil),
       .connect)
   }
 
   func testAPressWhileTheIPhoneIsBeingSetUpSaysSoWithItsProgress() {
     XCTAssertEqual(
-      tapToPayPress(osMajor: 18, state: .disconnected, progress: 0.4, notice: nil),
+      tapToPayPress(osMajor: 18, state: .disconnected, progress: 0.4),
       .explain(.preparing(progress: 0.4)))
     XCTAssertEqual(
-      tapToPayPress(osMajor: 18, state: .connecting("Starting Tap to Pay…"), progress: nil, notice: nil),
+      tapToPayPress(osMajor: 18, state: .connecting("Starting Tap to Pay…"), progress: nil),
       .explain(.preparing(progress: nil)))
   }
 
   func testOnOlderIOSThePressAsksForAnUpdateAndNeverGreysOut() {
-    XCTAssertEqual(tapToPayPress(osMajor: 17, state: ready, progress: nil, notice: nil), .explain(.needsUpdate))
+    XCTAssertEqual(tapToPayPress(osMajor: 17, state: ready, progress: nil), .explain(.needsUpdate))
     XCTAssertTrue(TapToPayNotice.needsUpdate.message.contains("iOS 18"))
   }
 
-  func testAMissingPlatformLinkIsSaidAgainAndOtherFailuresRetry() {
-    XCTAssertEqual(
-      tapToPayPress(osMajor: 18, state: .disconnected, progress: nil, notice: .notTurnedOn), .explain(.notTurnedOn))
-    XCTAssertEqual(
-      tapToPayPress(osMajor: 18, state: .disconnected, progress: nil, notice: .failed("Try again.")), .connect)
+  /// Apple 1.6: whether the terms are accepted is Apple's answer at each press. A press after "not turned on" (or any
+  /// other failure) connects again, so the SDK is asked afresh; no earlier answer is kept to stop it.
+  func testEveryPressAsksTheSDKAgainWhateverItAnsweredLastTime() {
+    XCTAssertEqual(tapToPayPress(osMajor: 18, state: .disconnected, progress: nil), .connect)
+    XCTAssertEqual(tapToPayPress(osMajor: 18, state: .unavailable("Tap to Pay on iPhone isn’t turned on yet"), progress: nil), .connect)
   }
 
   /// A physical iPhone in test mode takes Tap to Pay on its real reader (Apple's screens appear); the Simulator, or a

@@ -85,18 +85,20 @@ struct CheckoutView: View {
     .sheet(item: cardForm) { session in CardFieldsSheet(session: session) }
   }
 
-  /// A card that was not approved (Figma iPhone POS 177:5163): what happened, its receipt to send or print (Apple
-  /// 5.10), and the way on to another tender. The receipt goes through the share sheet: the console sends a paid sale's
+  /// A card that was not approved, or whose payment timed out (Figma iPhone POS 177:5163; the timeout is its own
+  /// outcome, Apple 5.9): what happened, its receipt to send or print (Apple 5.10), and the way on to another tender. The receipt goes through the share sheet: the console sends a paid sale's
   /// receipt, never a declined card's.
   private func declinedReceipt(_ declined: DeclinedCard) -> some View {
     VStack(alignment: .leading, spacing: AglynSpace.three) {
       AglynNotice(declined.notice, tone: .error)
-        .accessibilityIdentifier("declined-notice")
+        .accessibilityIdentifier(declined.timedOut ? "timed-out-notice" : "declined-notice")
       AglynSectionHeader("Receipt")
       if let data = model.receipt {
         ScrollView(.horizontal, showsIndicators: false) {
           ReceiptPreviewText(
-            document: layoutDeclinedReceipt(data, cardLabel: declined.cardLabel, ReceiptLayoutOptions(columns: PaperColumns.mm58 + 8)))
+            document: layoutDeclinedReceipt(
+              data, cardLabel: declined.cardLabel, ReceiptLayoutOptions(columns: PaperColumns.mm58 + 8),
+              timedOut: declined.timedOut))
             .padding(AglynSpace.one)
         }
         .aglynCardSurface()
@@ -107,7 +109,9 @@ struct CheckoutView: View {
           Button("Print receipt") {
             Task {
               let text = renderText(
-                layoutDeclinedReceipt(data, cardLabel: declined.cardLabel, ReceiptLayoutOptions(columns: PaperColumns.mm80)))
+                layoutDeclinedReceipt(
+                  data, cardLabel: declined.cardLabel, ReceiptLayoutOptions(columns: PaperColumns.mm80),
+                  timedOut: declined.timedOut))
               if case .failed(let words) = await model.systemPrint(text, "Declined receipt \(data.orderNumber)") {
                 model.toast = CheckoutNotice(tone: .error, message: words)
               }
@@ -454,6 +458,34 @@ struct CheckoutView: View {
 
   private func card(_ label: String) -> some View {
     VStack(spacing: AglynSpace.two) {
+      if model.cardService(labeled: label)?.processing == true {
+        processing
+      } else {
+        waitingForCard(label)
+      }
+    }
+    .frame(maxWidth: .infinity)
+    .padding(AglynSpace.three)
+    .aglynCardSurface()
+  }
+
+  /// The card was read; the payment is being confirmed (Apple 5.8). Nothing to cancel any more: the outcome is moments away.
+  private var processing: some View {
+    VStack(spacing: AglynSpace.two) {
+      ProgressView()
+        .controlSize(.large)
+      Text("Processing payment…")
+        .font(AglynFont.title2).multilineTextAlignment(.center)
+      Text(model.money(checkout.amountCents + checkout.tipCents)).font(AglynFont.figure).monospacedDigit()
+      Text("The card was read. This takes a moment.")
+        .font(AglynFont.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+    }
+    .accessibilityElement(children: .combine)
+    .accessibilityIdentifier("card-processing")
+  }
+
+  private func waitingForCard(_ label: String) -> some View {
+    VStack(spacing: AglynSpace.two) {
       Image(systemName: model.cardService(labeled: label)?.kind == .keyed ? "creditcard.circle" : "wave.3.right.circle")
         .font(.system(size: 64))
         .foregroundStyle(AglynColor.tint)
@@ -475,9 +507,6 @@ struct CheckoutView: View {
       }
       .buttonStyle(.aglynSecondary)
     }
-    .frame(maxWidth: .infinity)
-    .padding(AglynSpace.three)
-    .aglynCardSurface()
   }
 
   private func receipt(_ change: Int) -> some View {

@@ -87,19 +87,18 @@ public enum TapToPayPress: Equatable, Sendable {
 
 /// The press, from the device's state. `osMajor` is the running iOS major version;
 /// `progress` is the reader's setup progress while it installs its configuration.
-public func tapToPayPress(
-  osMajor: Int, state: CardCollectorState, progress: Double?, notice: TapToPayNotice?
-) -> TapToPayPress {
+///
+/// Whether Apple's terms are accepted is Apple's answer, read through the SDK at each press (Apple 1.6): an earlier
+/// "not turned on" never stops a press from connecting, so the SDK is asked again every time. What it answered last
+/// may only shape what a screen shows (`DeviceReaderControls.tapToPayNotice`).
+public func tapToPayPress(osMajor: Int, state: CardCollectorState, progress: Double?) -> TapToPayPress {
   if osMajor < TapToPayIPhone.minimumOSMajor { return .explain(.needsUpdate) }
   if let progress { return .explain(.preparing(progress: progress)) }
   switch state {
   case .connected(_, .tapToPay, _): return .collect
   case .connecting: return .explain(.preparing(progress: nil))
-  default: break
+  default: return .connect
   }
-  // Only what a retry cannot fix is said again; anything else connects again.
-  if let notice, notice == .needsUpdate || notice == .notTurnedOn { return .explain(notice) }
-  return .connect
 }
 
 /// Whether Tap to Pay on iPhone discovery asks the SDK for its simulated reader. Only in Stripe test mode, and only where

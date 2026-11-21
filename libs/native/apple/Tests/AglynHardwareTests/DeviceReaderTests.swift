@@ -42,6 +42,10 @@ private final class FakePort: TerminalPaymentPort {
   }
 }
 
+private struct NoSessions: CardReaderSessionSource {
+  func session(hostID: String) async throws -> CardReaderSession { throw CancellationError() }
+}
+
 @MainActor
 final class DeviceReaderTests: XCTestCase {
   private let intentID = "pi_12345678abcd"
@@ -60,6 +64,47 @@ final class DeviceReaderTests: XCTestCase {
     XCTAssertEqual(outcome, .collected(paymentIntentID: intentID, amountCents: 2500, tipCents: 0))
     XCTAssertEqual(port.calls, ["retrieve", "collect", "confirm"])
     XCTAssertEqual(port.skipTipping, true)
+  }
+
+  /// Apple 5.8: once the card is read, and before the payment is confirmed, the register is told so it shows processing.
+  func testTheReadIsReportedBeforeTheConfirmAndNotWhenTheReadFails() async {
+    let port = FakePort(retrieved: .success(open()))
+    var seen: [String] = []
+    _ = await collectCardPayment(port, request, readerDeviceType: "TAP_TO_PAY_DEVICE") { seen = port.calls }
+    XCTAssertEqual(seen, ["retrieve", "collect"], "reported after the read, before the confirm")
+    let unread = FakePort(retrieved: .success(open()), collected: .failure(TerminalError(code: "CARD_READ_TIMED_OUT")))
+    var read = false
+    _ = await collectCardPayment(unread, request, readerDeviceType: "TAP_TO_PAY_DEVICE") { read = true }
+    XCTAssertFalse(read)
+  }
+
+  /// Apple 5.9: a reader or network timeout is its own outcome, worded as one, never as a decline.
+  func testATimeoutIsToldAsATimeoutNotADecline() async {
+    for code in ["CARD_READ_TIMED_OUT", "REQUEST_TIMED_OUT", "STRIPE_API_CONNECTION_ERROR", "NOT_CONNECTED_TO_INTERNET"] {
+      XCTAssertTrue(cardCollectTimedOut(code: code), code)
+    }
+    XCTAssertFalse(cardCollectTimedOut(code: "DECLINED_BY_STRIPE_API"))
+    XCTAssertFalse(cardCollectTimedOut(code: "BLUETOOTH_SCAN_TIMED_OUT"), "finding a reader is not a payment")
+    XCTAssertFalse(cardCollectTimedOut(code: nil))
+    let port = FakePort(retrieved: .success(open()), collected: .failure(TerminalError(code: "CARD_READ_TIMED_OUT")))
+    let outcome = await collectCardPayment(port, request, readerDeviceType: "TAP_TO_PAY_DEVICE")
+    XCTAssertEqual(
+      outcome, .failed(paymentIntentID: intentID, message: "The payment timed out.", code: "CARD_READ_TIMED_OUT"))
+  }
+
+  func testASimulatedReaderShowsProcessingAfterTheReadOnly() async {
+    let collector = SimulatedCardCollector(delay: .zero, processingDelay: .milliseconds(200))
+    _ = await collector.connect(hostID: "h1", kind: .simulated, sessions: NoSessions())
+    XCTAssertFalse(collector.processing)
+    let collecting = Task { await collector.collect(request) }
+    var sawProcessing = false
+    for _ in 0..<100 where !sawProcessing {
+      try? await Task.sleep(for: .milliseconds(5))
+      sawProcessing = collector.processing
+    }
+    _ = await collecting.value
+    XCTAssertTrue(sawProcessing)
+    XCTAssertFalse(collector.processing, "the outcome ends it")
   }
 
   func testOnlyAWisePad3AsksForATip() async {

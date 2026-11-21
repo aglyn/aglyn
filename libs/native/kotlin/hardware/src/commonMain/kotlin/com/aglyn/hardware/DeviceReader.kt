@@ -156,7 +156,13 @@ private val AUTHORIZED = setOf("requires_capture", "succeeded")
  * than charged twice, and an intent for another amount than the register
  * shows is refused before the card is asked for.
  */
-suspend fun collectCardPayment(port: TerminalPaymentPort, request: CardCollectRequest, reader: DeviceReader?): CardCollectOutcome {
+suspend fun collectCardPayment(
+  port: TerminalPaymentPort,
+  request: CardCollectRequest,
+  reader: DeviceReader?,
+  /** Fires once the card was read and before the confirm: from then until the outcome the register shows it processing (Apple 5.8). */
+  onRead: () -> Unit = {},
+): CardCollectOutcome {
   val id = request.paymentIntentId
   collectRequestProblem(id, request.clientSecret)?.let { return CardCollectOutcome.Failed(id, it) }
   if (reader == null) return CardCollectOutcome.Failed(id, "Connect Tap to Pay or a card reader first.")
@@ -179,6 +185,7 @@ suspend fun collectCardPayment(port: TerminalPaymentPort, request: CardCollectRe
     }
     is TerminalResult.Ok -> Unit
   }
+  onRead()
   return when (val result = port.confirm(id)) {
     is TerminalResult.Ok -> collected(result.intent)
     is TerminalResult.Error -> {
@@ -198,6 +205,19 @@ private fun collected(intent: TerminalIntent) =
 private fun failed(id: String, error: TerminalError, fallback: String) =
   CardCollectOutcome.Failed(id, collectErrorMessage(error, fallback), error.code)
 
+/**
+ * The SDK errors that mean no answer came in time: the reader waited for a card that never came, or the network did not
+ * answer. A payment that ends in one is told as timed out, apart from a decline (Apple 5.9). The Apple kit's
+ * `cardCollectTimeoutCodes` holds the same list.
+ */
+val CARD_COLLECT_TIMEOUT_CODES: Set<String> = setOf(
+  "CARD_READ_TIMED_OUT", "REQUEST_TIMED_OUT", "STRIPE_API_CONNECTION_ERROR", "NETWORK_ERROR", "NOT_CONNECTED_TO_INTERNET",
+  "TAP_TO_PAY_INTERNAL_NETWORK_ERROR",
+)
+
+/** Whether a failed collection timed out ([CARD_COLLECT_TIMEOUT_CODES]), rather than being declined or refused. */
+fun cardCollectTimedOut(code: String?): Boolean = code != null && code.uppercase() in CARD_COLLECT_TIMEOUT_CODES
+
 // ---- words
 
 /** An SDK payment error, as the cashier reads it. */
@@ -207,6 +227,7 @@ fun collectErrorMessage(error: TerminalError, fallback: String): String {
   val code = error.code.uppercase()
   return when {
     code.startsWith("DECLINED") -> "The card was declined. Ask for another card."
+    cardCollectTimedOut(code) -> "The payment timed out."
     code == "NOT_CONNECTED_TO_READER" -> "The card reader disconnected. Reconnect it and try again."
     code == "READER_BUSY" -> "The card reader is busy. Finish or cancel the other payment first."
     code == "TAP_TO_PAY_INSECURE_ENVIRONMENT" ->

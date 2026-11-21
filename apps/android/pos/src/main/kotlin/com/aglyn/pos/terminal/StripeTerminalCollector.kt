@@ -110,6 +110,8 @@ class StripeTerminalCollector(
   private val forwards: OfflineCardForwardLedger,
   /** Debug builds: a simulated reader goes offline with the register, so store and forward can be driven on an emulator. */
   private val mirrorOfflineToStripe: Boolean = false,
+  /** Debug builds: what an emulator drives on the simulated reader ([DebugCardDrive]); null in every other build. */
+  private val debugCardDrive: () -> DebugCardDrive? = { null },
 ) : CardCollector, DeviceReaderControls, OfflineCardCollector {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
   private val lock = Mutex()
@@ -122,6 +124,8 @@ class StripeTerminalCollector(
   override val connected: StateFlow<DeviceReader?> = mutableConnected
   private val mutablePrompt = MutableStateFlow<String?>(null)
   override val prompt: StateFlow<String?> = mutablePrompt
+  private val mutableProcessing = MutableStateFlow(false)
+  override val processing: StateFlow<Boolean> = mutableProcessing
   private val mutableUpdate = MutableStateFlow<ReaderUpdate?>(null)
   override val update: StateFlow<ReaderUpdate?> = mutableUpdate
 
@@ -205,10 +209,17 @@ class StripeTerminalCollector(
   override suspend fun collect(request: CardCollectRequest): CardCollectOutcome {
     if (collecting != null) return CardCollectOutcome.Failed(request.paymentIntentId, "A payment is already in progress.")
     return try {
-      collectCardPayment(SdkPaymentPort(terminal(), onCancelable = { collecting = it }), request, mutableConnected.value)
+      // Once the SDK's collect answers, the card was read: processing until the confirm answers (Apple 5.8).
+      val sdk = SdkPaymentPort(terminal(), onCancelable = { collecting = it })
+      val drive = debugCardDrive().takeIf { mutableConnected.value?.simulated == true }
+      collectCardPayment(drive?.let { DebugDrivenPort(sdk, it) } ?: sdk, request, mutableConnected.value) {
+        mutablePrompt.value = null
+        mutableProcessing.value = true
+      }
     } finally {
       collecting = null
       mutablePrompt.value = null
+      mutableProcessing.value = false
     }
   }
 

@@ -256,6 +256,9 @@
     2860: "OFFLINE_PAYMENTS_DATABASE_TOO_LARGE", 2890: "AMOUNT_EXCEEDS_MAX_OFFLINE_AMOUNT", 3971: "TAP_TO_PAY_READER_OFFLINE_MODE_NOT_ALLOWED",
     6901: "INTERAC_NOT_SUPPORTED_OFFLINE", 6902: "OFFLINE_AND_CARD_EXPIRED", 6903: "OFFLINE_TRANSACTION_DECLINED",
     6905: "ONLINE_PIN_NOT_SUPPORTED_OFFLINE", 10106: "NOT_CONNECTED_TO_INTERNET_AND_OFFLINE_BEHAVIOR_REQUIRE_ONLINE",
+    // No answer in time, from the reader or the network: told as a timeout (AglynHardware's `cardCollectTimedOut`, Apple 5.9).
+    2830: "CARD_READ_TIMED_OUT", 9000: "NOT_CONNECTED_TO_INTERNET", 9010: "REQUEST_TIMED_OUT", 9040: "NETWORK_ERROR",
+    9041: "TAP_TO_PAY_INTERNAL_NETWORK_ERROR",
     // Tap to Pay on iPhone: worded by AglynHardware's `tapToPayNotice`.
     2910: "UNSUPPORTED_MOBILE_DEVICE_CONFIGURATION", 2920: "PASSCODE_NOT_ENABLED",
     2960: "TAP_TO_PAY_READER_TOS_ACCEPTANCE_REQUIRES_ICLOUD_SIGN_IN", 2970: "TAP_TO_PAY_READER_TOS_ACCEPTANCE_CANCELED",
@@ -343,11 +346,14 @@
 
     private(set) var state: CardCollectorState = .disconnected
     fileprivate(set) var prompt: String?
+    /// The card was read and the payment is being confirmed (Apple 5.8): the register's card step shows it processing.
+    private(set) var processing = false
     let kinds: [CardCollectorKind]
     private(set) var discovery: ReaderDiscovery = .idle
     private(set) var connectedReader: DeviceReader?
     fileprivate(set) var update: ReaderUpdate?
-    /// Why Tap to Pay on iPhone could not connect last time (the checkout button says it).
+    /// Why Tap to Pay on iPhone could not connect last time, for what a screen shows. Never decides whether the SDK is
+    /// asked again: every press and every warm-up connects afresh, and Apple answers through the SDK (Apple 1.6).
     private(set) var tapToPayNotice: TapToPayNotice?
     /// Apple's terms were just accepted here; the register shows Apple's education, then clears it.
     private(set) var tapToPayTermsJustAccepted = false
@@ -608,15 +614,14 @@
 
     /// Gets the reader ready when the app opens or comes back to the front (Apple 1.5): the reader connected last
     /// time, else Tap to Pay on iPhone on an iPhone that can take it. Silent: no permission and no terms are asked for.
+    /// Whether the terms are accepted is asked of Apple at every warm-up, whatever it answered before (Apple 1.6).
     func warmUp(hostID: String, sessions: CardReaderSessionSource) async {
-      guard !state.isConnected, discovering == nil else { return }
+      guard !state.isConnected, !isConnecting, discovering == nil else { return }
       if defaults.string(forKey: Self.rememberedKind) != nil {
         await reconnectRemembered(hostID: hostID, sessions: sessions)
         return
       }
-      guard kinds.contains(.tapToPay), osMajor >= TapToPayIPhone.minimumOSMajor, location.allowed,
-        tapToPayNotice != .notTurnedOn
-      else { return }
+      guard kinds.contains(.tapToPay), osMajor >= TapToPayIPhone.minimumOSMajor, location.allowed else { return }
       silent = true
       defer { silent = false }
       guard await prepare(hostID: hostID, sessions: sessions, ask: false) else { return }
@@ -627,6 +632,11 @@
     }
 
     func permitTapToPayTerms(_ permitted: Bool) { termsPermitted = permitted }
+
+    private var isConnecting: Bool {
+      if case .connecting = state { return true }
+      return false
+    }
 
     func storeSetupChanged(hostID: String, sessions: CardReaderSessionSource) async {
       guard !state.isConnected else { return }
@@ -680,6 +690,8 @@
         tapToPayNotice = .needsUpdate
         return state
       }
+      // This press's answer is Apple's, read now through the SDK, never the last one kept here (Apple 1.6).
+      if kind == .tapToPay { tapToPayNotice = nil }
       guard await prepare(hostID: hostID, sessions: sessions, ask: true) else {
         if case .failed(let words) = discovery, !state.isConnected { state = .unavailable(words) }
         return state
@@ -794,12 +806,18 @@
 
     func collect(_ request: CardCollectRequest) async -> CardCollectOutcome {
       prompt = nil
+      processing = false
       defer {
         prompt = nil
+        processing = false
         intent = nil
         inFlight = nil
       }
-      return await collectCardPayment(self, request, readerDeviceType: state.isConnected ? deviceType : nil)
+      // Once the SDK's collect answers, the card was read: processing until the confirm answers (Apple 5.8).
+      return await collectCardPayment(self, request, readerDeviceType: state.isConnected ? deviceType : nil) {
+        self.prompt = nil
+        self.processing = true
+      }
     }
 
     func cancel() async {
@@ -936,6 +954,13 @@
       guard let intent, intent.stripeId == intentID else {
         return .failure(TerminalError(code: "INTENT_NOT_RETRIEVED"))
       }
+      #if DEBUG
+        // `-AglynSimulateCardTimeout YES`: a simulated reader's card read times out, so the timed-out outcome (Apple 5.9)
+        // can be driven on a simulator, where no real card read can time out.
+        if connectedReader?.simulated == true, UserDefaults.standard.bool(forKey: "AglynSimulateCardTimeout") {
+          return .failure(TerminalError(code: "CARD_READ_TIMED_OUT", message: "Reading a card timed out."))
+        }
+      #endif
       let config: CollectPaymentIntentConfiguration
       do {
         config = try CollectPaymentIntentConfigurationBuilder().setSkipTipping(skipTipping).build()
@@ -961,6 +986,12 @@
         return .failure(TerminalError(code: "INTENT_NOT_RETRIEVED"))
       }
       inFlight = nil
+      #if DEBUG
+        // `-AglynSimulateProcessingSeconds <n>`: a simulated reader holds the processing step (Apple 5.8) for n seconds
+        // before it confirms, so the step can be seen and recorded on a simulator, where the confirm answers at once.
+        let hold = UserDefaults.standard.integer(forKey: "AglynSimulateProcessingSeconds")
+        if connectedReader?.simulated == true, hold > 0 { try? await Task.sleep(for: .seconds(min(hold, 30))) }
+      #endif
       return await withCheckedContinuation { continuation in
         _ = Terminal.shared.confirmPaymentIntent(intent) { confirmed, error in
           Task { @MainActor in

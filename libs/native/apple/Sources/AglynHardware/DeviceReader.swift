@@ -71,10 +71,13 @@ private let authorized: Set<String> = ["requires_capture", "succeeded"]
 /// AUTHORIZES; the server captures after reading Stripe. An intent that is
 /// already authorized (a retry after a lost answer) is reported again rather
 /// than charged twice, and an intent for another amount than the register
-/// shows is refused before the card is asked for.
+/// shows is refused before the card is asked for. `onRead` fires once the card
+/// was read and before the payment is confirmed: from then until the outcome
+/// the register shows the payment processing (Apple 5.8).
 @MainActor
 public func collectCardPayment(
-  _ port: TerminalPaymentPort, _ request: CardCollectRequest, readerDeviceType: String?
+  _ port: TerminalPaymentPort, _ request: CardCollectRequest, readerDeviceType: String?,
+  onRead: @MainActor () -> Void = {}
 ) async -> CardCollectOutcome {
   let id = request.paymentIntentID
   if let problem = request.problem { return .failed(paymentIntentID: id, message: problem, code: nil) }
@@ -102,6 +105,7 @@ public func collectCardPayment(
     if error.canceled { return .canceled(paymentIntentID: id) }
     return failed(id, error, "The card could not be read. Try again.")
   }
+  onRead()
   switch await port.confirm(intentID: id) {
   case .success(let intent): return collected(intent)
   case .failure(let error):
@@ -124,6 +128,20 @@ private func nonBlank(_ text: String?) -> String? {
   return text
 }
 
+/// The SDK errors that mean no answer came in time: the reader waited for a card that never came, or the network did
+/// not answer (the SDK's names; Apple's and Android's SDKs name the same ones). A payment that ends in one is told as
+/// timed out, apart from a decline (Apple 5.9). The Kotlin kit's `cardCollectTimedOut` holds the same list.
+public let cardCollectTimeoutCodes: Set<String> = [
+  "CARD_READ_TIMED_OUT", "REQUEST_TIMED_OUT", "STRIPE_API_CONNECTION_ERROR", "NETWORK_ERROR", "NOT_CONNECTED_TO_INTERNET",
+  "TAP_TO_PAY_INTERNAL_NETWORK_ERROR",
+]
+
+/// Whether a failed collection timed out (`cardCollectTimeoutCodes`), rather than being declined or refused.
+public func cardCollectTimedOut(code: String?) -> Bool {
+  guard let code else { return false }
+  return cardCollectTimeoutCodes.contains(code.uppercased())
+}
+
 // MARK: - Words
 
 /// An SDK payment error, as the cashier reads it.
@@ -132,6 +150,7 @@ public func collectErrorMessage(_ error: TerminalError, fallback: String) -> Str
   if let api = nonBlank(error.apiMessage) { return api }
   let code = error.code.uppercased()
   if code.hasPrefix("DECLINED") { return "The card was declined. Ask for another card." }
+  if cardCollectTimedOut(code: code) { return "The payment timed out." }
   switch code {
   case "NOT_CONNECTED_TO_READER": return "The card reader disconnected. Reconnect it and try again."
   case "READER_BUSY": return "The card reader is busy. Finish or cancel the other payment first."

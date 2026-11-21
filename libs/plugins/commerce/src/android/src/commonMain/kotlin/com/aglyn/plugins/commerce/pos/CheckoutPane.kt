@@ -533,6 +533,17 @@ private fun CardStep(model: RegisterModel, checkout: Checkout, state: CheckoutSt
     (if (reader is DeviceReaderService) model.cardCollector?.deviceReaders?.prompt else null)
       ?: remember { MutableStateFlow<String?>(null) }
     ).collectAsState()
+  // The card was read; the payment is being confirmed (Apple 5.8, as on Apple). Nothing to cancel any more.
+  val processing by (
+    (if (reader is DeviceReaderService) model.cardCollector?.processing else null)
+      ?: remember { MutableStateFlow(false) }
+    ).collectAsState()
+  val settling by ((reader as? DeviceReaderService)?.settling ?: remember { MutableStateFlow(false) }).collectAsState()
+  // From the read until the outcome: the reader confirming, then the server recording the payment.
+  if (processing || settling) {
+    CardProcessing(state, fmt)
+    return
+  }
   Column(
     Modifier.fillMaxWidth().padding(vertical = space(3f)).testTag("pos-card-waiting"),
     horizontalAlignment = Alignment.CenterHorizontally,
@@ -568,6 +579,26 @@ private fun CardStep(model: RegisterModel, checkout: Checkout, state: CheckoutSt
       }
     }
     OutlinedButton(onClick = { reader?.let { model.act { checkout.cancelCard(it) } } }, enabled = step.paymentId != null) { Text("Cancel payment") }
+  }
+}
+
+/** The card was read and the payment is being confirmed (Apple 5.8). */
+@Composable
+private fun CardProcessing(state: CheckoutState, fmt: (Long) -> String) {
+  Column(
+    Modifier.fillMaxWidth().padding(vertical = space(3f)).semantics(mergeDescendants = true) {}.testTag("pos-card-processing"),
+    horizontalAlignment = Alignment.CenterHorizontally,
+    verticalArrangement = Arrangement.spacedBy(space(2f)),
+  ) {
+    CircularProgressIndicator()
+    Text("Processing payment…", style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+    Text(fmt(state.amountCents + state.tipCents), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+    Text(
+      "The card was read. This takes a moment.",
+      style = MaterialTheme.typography.bodyLarge,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      textAlign = TextAlign.Center,
+    )
   }
 }
 
