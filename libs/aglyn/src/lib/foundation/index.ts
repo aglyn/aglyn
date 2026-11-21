@@ -77,6 +77,8 @@ export type {
   OrgBrandingProfile,
   OrgCrmAssignmentRule,
   OrgCrmHostSettings,
+  OrgContractRates,
+  OrgContractTerms,
   OrgCrmRoundRobin,
   OrgCrmSettings,
   OrgDiscount,

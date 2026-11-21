@@ -156,6 +156,12 @@ export interface MeteredBackfillInput {
   canceled: boolean
   /** `current_period_start`, in SECONDS (Stripe's unit). */
   currentPeriodStart: number | null | undefined
+  /**
+   * Whether the workspace is a Custom contract that bills usage past its
+   * contract (AGL-4233, `readOrgContract(org)?.usageBilling`). Custom is not
+   * a catalog plan, so without this its subscription is never metered.
+   */
+  contractUsageBilling?: boolean
   mode?: MeteredBackfillMode
   /** Milliseconds, injectable so the boundary rule is testable. */
   now?: number
@@ -206,7 +212,8 @@ export function meteredBackfillDecision(
   const plan = (input.plan ||
     planFromPriceId(planItem?.price?.id) ||
     'free') as OrgPlan
-  if (!PAID_PLANS.includes(plan)) return no('not-a-paid-plan')
+  const contractMetered = plan === 'enterprise' && input.contractUsageBilling === true
+  if (!PAID_PLANS.includes(plan) && !contractMetered) return no('not-a-paid-plan')
 
   // Interval-agnostic on purpose: an item on the OTHER interval still means
   // this subscription meters, and a webhook is the wrong place to re-price it

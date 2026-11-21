@@ -644,6 +644,12 @@ export interface CoreOrgEntitlements {
    * it. Read through `readOrgPlanComp`, never directly.
    */
   planComp?: OrgPlanComp
+  /**
+   * A Custom deal's CONTRACT TERMS (AGL-4233) — see `OrgContractTerms`. Not a
+   * quota: the resolver's numeric loop skips it. Read through
+   * `readOrgContract`, never directly.
+   */
+  contract?: OrgContractTerms
 }
 
 /**
@@ -717,6 +723,72 @@ export interface OrgEntitlements
  * an `OrgOverrideReasonCode` (`app-utils/org-override-reason`), narrowed by
  * `readOrgPlanComp`.
  */
+/**
+ * The rates a Custom deal sells its additions and its usage past the
+ * contracted amounts at (AGL-4233). Every key is optional: an absent key is
+ * the public Pro rate read from code (`defaultContractRates`), so a deal
+ * stores only what it negotiated. `null` means "not sold on this deal".
+ */
+export interface OrgContractRates {
+  /** Monthly USD per extra site. */
+  extraHostMonthlyUsd?: number | null
+  /** Monthly USD per extra team (manager) seat. */
+  extraSeatMonthlyUsd?: number | null
+  /** Monthly USD per extra site collaborator seat. */
+  extraCollaboratorMonthlyUsd?: number | null
+  /** Monthly USD per extra dataset. */
+  extraDatasetMonthlyUsd?: number | null
+  /** Monthly USD per extra POS register. */
+  posRegisterMonthlyUsd?: number | null
+  /** Monthly USD per AI credit block (`AI_CREDITS_PER_BLOCK` credits). */
+  aiCreditBlockMonthlyUsd?: number | null
+  /** USD per GB-month of stored data past the contract. */
+  extraDataGbMonthlyUsd?: number | null
+  /** USD per 1,000 API requests past the contract. */
+  extraApiRequestsUsdPer1k?: number | null
+  /** USD per 1,000 AI credits past the contract. */
+  extraAssistCreditsUsdPer1k?: number | null
+  /** USD per 1,000 CRM records past the contract. */
+  extraContactsUsdPer1k?: number | null
+  /** USD per 1,000 marketing emails past the contract. */
+  extraEmailSendsUsdPer1k?: number | null
+  /** USD per 1,000 workflow and action runs past the contract. */
+  extraRunsUsdPer1k?: number | null
+  /**
+   * Page views, media storage and form submissions past the contract,
+   * passed through at cost + 30% — the same meter Pro carries.
+   */
+  meteredInfraPassThrough?: boolean
+}
+
+/**
+ * A Custom deal's contract terms (AGL-4233), stored at
+ * `orgs/{orgId}.entitlements.contract` and written only by the staff
+ * enterprise doors. Its presence is what makes a Custom workspace sell
+ * add-ons and (with `usageBilling`) bill usage past its contracted amounts;
+ * without it a Custom workspace sells nothing and refuses past its bands,
+ * exactly as before.
+ */
+export interface OrgContractTerms {
+  /** Per-deal rates; absent keys are the public Pro rates. */
+  rates?: OrgContractRates
+  /** Whether usage past the contracted amounts bills automatically. */
+  usageBilling?: boolean
+  /**
+   * The most usage billing one calendar month may add, in USD. At it, usage
+   * stops billing and the hard caps return until the month turns.
+   */
+  usageCeilingMonthlyUsd?: number
+  /** First month (`YYYY-MM`, UTC) usage billing applies to. */
+  usageBillingFrom?: string
+  /** The month (`YYYY-MM`, UTC) usage reached the ceiling, written by the rollup. */
+  ceilingReachedMonth?: string | null
+  /** The staff uid that last set the terms. */
+  setBy?: string
+  /** When the terms were last set, in epoch milliseconds. */
+  setAtMs?: number
+}
+
 export interface OrgPlanComp {
   /** The plan granted. A paid plan; a comp of `free` is not a comp. */
   plan: OrgPlan

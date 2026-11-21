@@ -559,10 +559,11 @@ already declared absent from the page.
 
 `PLAN_ENTITLEMENTS.enterprise` is a row of **finite fallbacks** — twice
 Agency's band on every axis Agency bounds, and `UNLIMITED` only where Agency
-already is (2026-09-07 decision). Enterprise meters nothing and every rate on
-it is the "not for sale" sentinel, so the fallbacks are **caps**: past one the
-quota gates refuse, exactly as Free's do. They are what an agreement gets
-before its numbers are written down.
+already is (2026-09-07 decision). Every rate on `PLAN_PRICING.enterprise` is
+the "not for sale" sentinel, so for a Custom deal **without a rate card** the
+fallbacks are **caps**: past one the quota gates refuse, exactly as Free's do,
+and no add-on is sold. They are what an agreement gets before its numbers are
+written down.
 
 The numbers are written as a **per-org `entitlements.*` override** on the org
 document — `resolveOrgEntitlements` honors a numeric override on every axis,
@@ -571,6 +572,43 @@ an Enterprise deal therefore has two halves: the plan, and the overrides its
 agreement names. A deal provisioned with the plan alone runs at the fallbacks,
 and the console's Enterprise card reads "does not currently enable everything
 Enterprise can include" for anything an override set below them.
+
+### A Custom deal with a rate card sells additions and meters usage (AGL-4233)
+
+Since 2026-11-16 a Custom deal can carry a **rate card**, stored at
+`org.entitlements.contract` (`OrgContractTerms`) and written only by the staff
+doors `/api/admin/enterprise-contract` and `/api/admin/enterprise-billing`
+(its optional `contract` body). With one:
+
+- **Additions** — extra site, team seat, collaborator, dataset, POS register,
+  AI credit block — are sold self-serve from Billing → Add-ons, as items on
+  the deal's own subscription, at the contract's rates. Each rate defaults to
+  the public Pro rate **read from code** (`defaultContractRates`:
+  `PLAN_PRICING.pro`, `POS_REGISTER_ADDON_MONTHLY_USD`,
+  `AI_CREDIT_BLOCK_MONTHLY_USD`), and the contract stores only the rates the
+  deal negotiated, so an unnegotiated rate follows the Pro price list. The
+  prices are per workspace (`aglyn_contract_{org}_{kind}_{interval}_{cents}`
+  lookup keys, tagged `metadata.aglynAddonKind`), minted on first purchase.
+  A card deal is charged now and granted once paid, as Pro is; an invoice
+  (net-terms) deal is prorated onto its next invoice and granted now.
+- **Usage past the contracted amounts** bills automatically when the card
+  turns `usageBilling` on: `resolvePlanPricing` returns the contract's usage
+  rates, so every quota gate meters instead of refusing, and the daily
+  rollup reports it on the existing metered item. It starts the calendar
+  month after it is turned on, and a month never bills more than
+  `usageCeilingMonthlyUsd` (default: the contract's base monthly price,
+  `DEFAULT_CONTRACT_USAGE_CEILING_SHARE_OF_BASE`). When a month reaches the
+  ceiling, `ceilingReachedMonth` is written, the hard caps return until the
+  month turns, and staff get a `billing.contractUsageCeiling` alert.
+- **The guard**: every rate must clear cost + 30% (`FULL_USE_QUOTE_MULTIPLE`)
+  net of Stripe's percentage fee against what one unit costs at full use on
+  that deal's own bands (`checkContractRates`); staff are refused below it,
+  with the figures. A customer's addition re-runs the whole contract against
+  the quote floor (`contractAdditionFloor`) and is held for staff, with a
+  `billing.contractAdditionHeld` alert, when it would miss it.
+
+Without a rate card nothing above applies: `readOrgContract` is null, and the
+deal sells nothing and refuses past its bands, as before.
 
 Workflow and action runs carry a cost since the same day —
 `ORG_COGS_UNIT_RATES_USD.perRun`, derived in its docblock — and reach

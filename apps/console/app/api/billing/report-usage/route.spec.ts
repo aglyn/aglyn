@@ -63,6 +63,8 @@
 // ---------------------------------------------------------------------------
 
 const mockDocs = new Map<string, Record<string, any>>()
+/** Every operator alert the route raised, by type (AGL-4233 asserts one). */
+const mockAlertCalls: Array<{ type: string; options: any }> = []
 
 /** Direct children of `path` — a collection read must not return grandchildren. */
 function mockChildPaths(path: string): string[] {
@@ -155,6 +157,18 @@ function mockDocRef(path: string): any {
         options?.merge ? { ...(mockDocs.get(path) ?? {}), ...value } : value,
       )
     },
+    // `update` with dotted field paths, the form the contract ceiling flag
+    // is written in (AGL-4233).
+    update: async (fields: Record<string, any>) => {
+      const doc = structuredClone(mockDocs.get(path) ?? {})
+      for (const [dotted, value] of Object.entries(fields)) {
+        const keys = dotted.split('.')
+        let cursor: any = doc
+        for (const key of keys.slice(0, -1)) cursor = cursor[key] ??= {}
+        cursor[keys[keys.length - 1]] = value
+      }
+      mockDocs.set(path, doc)
+    },
     collection: (name: string) => mockCollection(`${path}/${name}`),
   }
 }
@@ -184,7 +198,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   getServerReleaseFlagValues: async () => ({}),
   emailSendsOverage: () => 0,
   // The operator alert an unbillable closed month raises (AGL-3377).
-  raiseOperatorAlert: async () => ({ outcome: 'delivered' }),
+  raiseOperatorAlert: async (type: string, options: unknown) => {
+    mockAlertCalls.push({ type, options })
+    return { outcome: 'delivered' }
+  },
 }))
 
 jest.mock('@aglyn/aglyn/server', () => {
@@ -384,6 +401,7 @@ beforeAll(() => {
 })
 
 beforeEach(() => {
+  mockAlertCalls.length = 0
   meterEvents.length = 0
   subscriptionReads.length = 0
   fetchMock.mockClear()
@@ -1353,5 +1371,73 @@ describe('Starter API overage reaches the meter (AGL-4226)', () => {
     await runSweep(loadRoute())
     // The pipeline refused it at the band; the rollup agrees there is nothing to sell.
     expect(mockDocs.get(`orgs/org-1/usage/${CLOSED}`)!['apiOverageUsd']).toBe(0)
+  })
+})
+
+describe('a Custom contract bills usage past it, held to its terms (AGL-4233)', () => {
+  /** org-1 on Custom with a rate card, over its bands in both months. */
+  function seedContract(contract: Record<string, unknown> | null) {
+    seedOrg()
+    mockDocs.set('orgs/org-1', {
+      plan: 'enterprise',
+      subscription: { status: 'active' },
+      ...(contract ? { entitlements: { contract } } : {}),
+    })
+  }
+
+  it('a closed month bills its usage, never past the ceiling', async () => {
+    seedContract({ usageBilling: true, usageCeilingMonthlyUsd: 1, usageBillingFrom: CLOSED })
+    // A million API requests: far past Custom's band, at the Pro rate.
+    mockDocs.set(`orgs/org-1/apiUsage/${CLOSED}`, { count: 1_000_000 })
+    expect((await runSweep(loadRoute())).status).toBe(200)
+    const rollup = mockDocs.get(`orgs/org-1/usage/${CLOSED}`)!
+    expect(rollup['contractMeasuredCents']).toBeGreaterThan(100)
+    expect(rollup['contractCeilingCents']).toBe(100)
+    expect(rollup['billedCents']).toBe(100)
+    const event = meterEvents.find((params) => params.get('identifier') === `org-1-${CLOSED}`)
+    expect(event?.get('payload[value]')).toBe('100')
+  })
+
+  it('a month before usage billing started bills nothing', async () => {
+    seedContract({ usageBilling: true, usageCeilingMonthlyUsd: 1000, usageBillingFrom: OPEN })
+    mockDocs.set(`orgs/org-1/apiUsage/${CLOSED}`, { count: 1_000_000 })
+    await runSweep(loadRoute())
+    expect(mockDocs.get(`orgs/org-1/usage/${CLOSED}`)!['billedCents']).toBe(0)
+    expect(meterEvents).toHaveLength(0)
+  })
+
+  it('usage billing off bills nothing, as a Custom deal always has', async () => {
+    seedContract({ usageBilling: false, usageCeilingMonthlyUsd: 1000 })
+    mockDocs.set(`orgs/org-1/apiUsage/${CLOSED}`, { count: 1_000_000 })
+    await runSweep(loadRoute())
+    expect(mockDocs.get(`orgs/org-1/usage/${CLOSED}`)!['billedCents']).toBe(0)
+    expect(meterEvents).toHaveLength(0)
+  })
+
+  it('a Custom deal with NO rate card bills nothing, unchanged', async () => {
+    seedContract(null)
+    mockDocs.set(`orgs/org-1/apiUsage/${CLOSED}`, { count: 1_000_000 })
+    await runSweep(loadRoute())
+    const rollup = mockDocs.get(`orgs/org-1/usage/${CLOSED}`)!
+    expect(rollup['billedCents']).toBe(0)
+    expect(rollup['contractCeilingCents']).toBeUndefined()
+    expect(meterEvents).toHaveLength(0)
+  })
+
+  it('reaching the ceiling this month flags it once and alerts staff, and still bills to it', async () => {
+    seedContract({ usageBilling: true, usageCeilingMonthlyUsd: 1, usageBillingFrom: OPEN })
+    await runSweep(loadRoute(), { query: '?month=current' })
+    expect(mockDocs.get('orgs/org-1')!['entitlements']['contract']['ceilingReachedMonth']).toBe(OPEN)
+    expect(mockDocs.get(`orgs/org-1/usage/${OPEN}`)!['billedCents']).toBe(100)
+    expect(mockAlertCalls.map((call) => call.type)).toEqual(['billing.contractUsageCeiling'])
+    expect(mockAlertCalls[0].options.dedupeKey).toBe(`org-1:${OPEN}`)
+    expect(meterEvents).toHaveLength(0)
+
+    // The next sweep sees the flag: it prices with it set aside (the month
+    // still bills to the ceiling) and does not alert again.
+    mockAlertCalls.length = 0
+    await runSweep(loadRoute(), { query: '?month=current' })
+    expect(mockDocs.get(`orgs/org-1/usage/${OPEN}`)!['billedCents']).toBe(100)
+    expect(mockAlertCalls).toEqual([])
   })
 })
