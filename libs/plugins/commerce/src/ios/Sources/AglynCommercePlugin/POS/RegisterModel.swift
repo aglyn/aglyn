@@ -83,9 +83,11 @@ final class RegisterModel {
       })
   }
 
-  /// The card tender a payment step names by label, to cancel or to read what it asks for.
+  /// The card tender a payment step names by label, to cancel or to read what it asks for. Tap to Pay on iPhone has no
+  /// reader row (`readers`), so this device's own reader is looked at too.
   func cardService(labeled label: String) -> (any CardReaderService)? {
     if let reader = readers.first(where: { $0.label == label }) { return reader }
+    if let deviceService, deviceService.label == label { return deviceService }
     if let keyed = keyedCard, keyed.label == label { return keyed }
     return nil
   }
@@ -188,6 +190,9 @@ final class RegisterModel {
   func money(_ cents: Int) -> String { posMoney(cents, currency: currency) }
 
   func start() {
+    // Tap to Pay on iPhone (or the reader connected last time) starts getting ready first, before anything else loads:
+    // the app has a signed-in person and a store from here on (Apple 1.5). Silent; nothing is asked of the cashier.
+    Task { await warmUpReader() }
     // What the reader's SDK did with cards it stored, even while this register was closed (AGL-4039). Wired here,
     // on the register on screen, never in `init`: SwiftUI builds a screen's `@State` initial value each time the
     // screen is rebuilt, and a throwaway model that took the forwards (and synced them) left the visible register's
@@ -311,8 +316,8 @@ final class RegisterModel {
       context = loaded
       online = true
       smartReaders = loaded.readers.filter(\.online).map { SmartReaderService($0) }
-      // The reader connected last time comes back on its own; nothing is
-      // asked of the cashier here (connecting one is the readers screen's job).
+      // The reader connected last time comes back on its own (if the warm-up `start` began has not already done it);
+      // nothing is asked of the cashier here (connecting one is the readers screen's job).
       await warmUpReader()
       // The console answered: get the offline rules, then send whatever was rung while it did not.
       if offline.kitIsStale { await offline.refreshKit() }

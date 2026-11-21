@@ -73,6 +73,16 @@ final class ReceiptTests: XCTestCase {
       renderText(layoutDeclinedReceipt(fixture(), cardLabel: nil, ReceiptLayoutOptions(columns: 32))).contains("Card"))
   }
 
+  /// Apple 5.9: a payment that timed out says so on its receipt, never DECLINED.
+  func testATimedOutPaymentsReceiptSaysTimedOut() {
+    let text = renderText(
+      layoutDeclinedReceipt(fixture(), cardLabel: "Visa •••• 4242", ReceiptLayoutOptions(columns: 48), timedOut: true))
+    let line = text.split(separator: "\n").first { $0.hasPrefix("Visa **** 4242") }
+    XCTAssertEqual(line.map { $0.hasSuffix("TIMED OUT") && $0.count == 48 }, true)
+    XCTAssertFalse(text.contains("DECLINED"))
+    XCTAssertTrue(text.contains("Nothing was charged."))
+  }
+
   func testFits58mmPaperToo() {
     let text = renderText(layoutReceipt(fixture(), ReceiptLayoutOptions(columns: 32)))
     XCTAssertTrue(text.split(separator: "\n", omittingEmptySubsequences: false).allSatisfy { $0.count <= 32 })

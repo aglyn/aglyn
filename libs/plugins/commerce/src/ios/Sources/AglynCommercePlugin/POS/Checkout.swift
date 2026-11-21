@@ -155,21 +155,30 @@ final class Checkout {
     let outcome = await reader.charge(deps, amountCents: amount, tipCents: tip, attemptKey: key) { [weak self] id in
       self?.step = .card(readerLabel: reader.label, paymentID: id)
     }
-    // Only a card the reader was waiting for can be declined. A refusal before that (no card entry key, an amount that
-    // does not match the register) is not a declined card: it keeps its own notice.
-    if case .failed(let message, let answer) = outcome, case .card(_, .some) = step {
-      declined = DeclinedCard(
-        amountCents: amount + tip, readerLabel: reader.label, message: message, at: Date(),
-        cardLabel: declinedCardLabel(answer?.payment))
-      onCardNotApproved?(formatMoney(amount + tip))
+    // Only a card the reader was waiting for can be declined, or time out. A refusal before that (no card entry key, an
+    // amount that does not match the register) is not a declined card: it keeps its own notice.
+    if case .card(_, .some) = step {
+      switch outcome {
+      case .failed(let message, let answer):
+        declined = DeclinedCard(
+          amountCents: amount + tip, readerLabel: reader.label, message: message, at: Date(),
+          cardLabel: declinedCardLabel(answer?.payment))
+      case .timedOut(let answer):
+        // Told as a timeout, not a decline (Apple 5.9), on the same not-paid step.
+        declined = DeclinedCard(
+          amountCents: amount + tip, readerLabel: reader.label, message: "The payment timed out.", at: Date(),
+          cardLabel: declinedCardLabel(answer?.payment), timedOut: true)
+      default: break
+      }
+      if declined != nil { onCardNotApproved?(formatMoney(amount + tip)) }
     }
     await finish(outcome)
     // The declined card's own notice says what happened and what to do next; the processor's words stay on its receipt.
     if declined != nil { notice = nil }
   }
 
-  /// A card was just declined and the cashier has not moved on: the checkout shows it as not paid, with its receipt
-  /// (Figma iPhone POS 177:5163).
+  /// A card was just declined, or its payment timed out, and the cashier has not moved on: the checkout shows it as not
+  /// paid, with its receipt (Figma iPhone POS 177:5163).
   var showsDeclined: Bool {
     guard declined != nil, case .tender = step else { return false }
     return true
@@ -420,6 +429,10 @@ final class Checkout {
       if let answer { sale = answer.sale }
       step = .tender
       notice = CheckoutNotice(tone: .error, message: message)
+    case .timedOut(let answer):
+      if let answer { sale = answer.sale }
+      step = .tender
+      notice = CheckoutNotice(tone: .error, message: cardTimedOutNotice)
     case .unknown: break
     }
   }
@@ -554,10 +567,13 @@ struct DeclinedCard: Equatable {
   let at: Date
   /// The card as its receipt names it ("Visa •••• 4242"), when the processor said which card it was.
   var cardLabel: String? = nil
+  /// No answer came in time (the reader's or the network's), rather than a decline (Apple 5.9).
+  var timedOut = false
 
   /// What the checkout says about it: the card, that nothing was charged, and what the cashier can do.
   var notice: String {
-    "Card declined\(cardLabel.map { ": \($0)" } ?? ""). Nothing was charged. Send the customer a receipt, or take the payment another way."
+    if timedOut { return cardTimedOutNotice }
+    return "Card declined\(cardLabel.map { ": \($0)" } ?? ""). Nothing was charged. Send the customer a receipt, or take the payment another way."
   }
 
   /// The receipt the customer can be sent through the share sheet: confidential, nothing charged.
@@ -566,7 +582,7 @@ struct DeclinedCard: Equatable {
       store,
       at.formatted(date: .abbreviated, time: .shortened),
       "",
-      "Card payment not approved",
+      timedOut ? "Card payment timed out" : "Card payment not approved",
       cardLabel.map { "Card: \($0)" },
       "Amount: \(money(amountCents))",
       "Taken on: \(readerLabel)",

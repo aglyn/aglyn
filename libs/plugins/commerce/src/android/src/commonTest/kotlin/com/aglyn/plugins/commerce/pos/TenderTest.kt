@@ -94,6 +94,36 @@ class DeviceReaderTest {
     assertEquals(listOf("card-present-sdk", "status", "cancel"), held.actions)
   }
 
+  /** Apple 5.9 (as on Apple): a reader that timed out is its own outcome, and the payment Stripe still holds is released. */
+  @Test
+  fun aTimedOutReaderIsItsOwnOutcomeAndNothingIsCharged() = runTest {
+    val held = ScriptedSaleApi(
+      mapOf(
+        "card-present-sdk" to listOf(sale(listOf(pending), clientSecret = SECRET, paymentIntentId = INTENT)),
+        "status" to listOf(sale(listOf(pending))),
+        "cancel" to listOf(sale(listOf(pending.copy(status = "canceled")))),
+      ),
+    )
+    val outcome = DeviceReaderService(FakeCollector { CardCollectOutcome.Failed(INTENT, "The payment timed out.", "CARD_READ_TIMED_OUT") })
+      .charge(TenderDeps(held, "o1", noSleep), 1000, 150, "k")
+    assertIs<TenderOutcome.TimedOut>(outcome)
+    assertEquals(listOf("card-present-sdk", "status", "cancel"), held.actions)
+  }
+
+  /** A confirm whose answer timed out may still have gone through: the server's read of Stripe settles it as paid. */
+  @Test
+  fun aTimeoutTheServerReadsAsPaidIsPaid() = runTest {
+    val api = ScriptedSaleApi(
+      mapOf(
+        "card-present-sdk" to listOf(sale(listOf(pending), clientSecret = SECRET, paymentIntentId = INTENT)),
+        "status" to listOf(sale(listOf(pending.copy(status = "succeeded")), status = "paid", dueCents = 0, completed = true)),
+      ),
+    )
+    val outcome = DeviceReaderService(FakeCollector { CardCollectOutcome.Failed(INTENT, "The payment timed out.", "REQUEST_TIMED_OUT") })
+      .charge(TenderDeps(api, "o1", noSleep), 1000, 150, "k")
+    assertIs<TenderOutcome.Settled>(outcome)
+  }
+
   @Test
   fun refusesToCollectASecretForAnotherIntent() = runTest {
     val api = ScriptedSaleApi(mapOf("card-present-sdk" to listOf(sale(listOf(pending), clientSecret = "pi_999999999_secret_abcdefghij", paymentIntentId = INTENT))))

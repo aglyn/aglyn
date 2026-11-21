@@ -353,6 +353,85 @@ final class CheckoutTests: XCTestCase {
     XCTAssertEqual(checkout.dueCents, 1080)
   }
 
+  /// Apple 5.9: a reader that timed out is its own outcome on the not-paid step, worded as a timeout; nothing was charged
+  /// (the payment Stripe still held open is released).
+  func testADeviceReaderTimeoutIsToldAsATimeoutAndNothingIsCharged() async {
+    let api = ScriptedSaleAPI()
+    let card = PosSalePayment(
+      id: "pay1", method: "card_present", amountCents: 1080, tipCents: 0, status: "pending", cardBrand: nil,
+      last4: nil, changeCents: 0, readerID: nil, failureMessage: nil)
+    let canceled = PosSalePayment(
+      id: "pay1", method: "card_present", amountCents: 1080, tipCents: 0, status: "canceled", cardBrand: nil,
+      last4: nil, changeCents: 0, readerID: nil, failureMessage: nil)
+    api.answers = [
+      .success(answer(due: 1080, payment: card, secret: "pi_12345678abc_secret_abcdefgh", intent: "pi_12345678abc")),
+      .success(answer(due: 1080, payment: card)),
+      .success(answer(due: 1080, payment: canceled)),
+    ]
+    let collector = SimulatedCardCollector(delay: .zero) {
+      .failed(paymentIntentID: $0.paymentIntentID, message: "The payment timed out.", code: "CARD_READ_TIMED_OUT")
+    }
+    _ = await collector.connect(hostID: "h1", kind: .simulated, sessions: NoSessions())
+    let checkout = Checkout(api: api, opened: opened, settings: PosRegisterSettings(), sleep: { _ in })
+    var told: [String] = []
+    checkout.onCardNotApproved = { told.append($0) }
+    await checkout.payCard(DeviceReaderService(collector))
+    XCTAssertEqual(api.steps.map { $0.0.action }, ["card-present-sdk", "status", "cancel"])
+    XCTAssertTrue(checkout.showsDeclined)
+    XCTAssertEqual(checkout.declined?.timedOut, true)
+    XCTAssertEqual(
+      checkout.declined?.notice, "The payment timed out. Nothing was charged. Try again, or take the payment another way.")
+    XCTAssertTrue(
+      checkout.declined?.receipt(store: "S", money: { posMoney($0, currency: "usd") }).contains("Card payment timed out")
+        == true)
+    XCTAssertEqual(told, ["$10.80"], "told when away, as a decline is")
+    XCTAssertEqual(checkout.dueCents, 1080)
+    checkout.takePaymentAnotherWay()
+    XCTAssertTrue(checkout.canTender, "try again, or another tender")
+  }
+
+  /// A confirm whose answer timed out may still have gone through: the server's read of Stripe settles it as paid.
+  func testATimeoutTheServerReadsAsPaidIsPaid() async {
+    let api = ScriptedSaleAPI()
+    let card = PosSalePayment(
+      id: "pay1", method: "card_present", amountCents: 1080, tipCents: 0, status: "pending", cardBrand: nil,
+      last4: nil, changeCents: 0, readerID: nil, failureMessage: nil)
+    let settled = PosSalePayment(
+      id: "pay1", method: "card_present", amountCents: 1080, tipCents: 0, status: "succeeded", cardBrand: "visa",
+      last4: "4242", changeCents: 0, readerID: nil, failureMessage: nil)
+    api.answers = [
+      .success(answer(due: 1080, payment: card, secret: "pi_12345678abc_secret_abcdefgh", intent: "pi_12345678abc")),
+      .success(answer(due: 0, payment: settled, completed: true)),
+    ]
+    let collector = SimulatedCardCollector(delay: .zero) {
+      .failed(paymentIntentID: $0.paymentIntentID, message: "The payment timed out.", code: "REQUEST_TIMED_OUT")
+    }
+    _ = await collector.connect(hostID: "h1", kind: .simulated, sessions: NoSessions())
+    let checkout = Checkout(api: api, opened: opened, settings: PosRegisterSettings(), sleep: { _ in })
+    await checkout.payCard(DeviceReaderService(collector))
+    XCTAssertEqual(checkout.step, .receipt(changeCents: 0))
+    XCTAssertNil(checkout.declined)
+  }
+
+  /// Apple 5.8: the card step reads the device reader's processing, from the read until the outcome.
+  func testTheCardStepSeesTheReaderProcessingAfterTheRead() async {
+    let collector = SimulatedCardCollector(delay: .zero, processingDelay: .milliseconds(200))
+    _ = await collector.connect(hostID: "h1", kind: .simulated, sessions: NoSessions())
+    let service = DeviceReaderService(collector)
+    XCTAssertFalse(service.processing)
+    let request = CardCollectRequest(
+      paymentIntentID: "pi_12345678abc", clientSecret: "pi_12345678abc_secret_abcdefgh", amountCents: 1080)
+    let collecting = Task { await collector.collect(request) }
+    var seen = false
+    for _ in 0..<100 where !seen {
+      try? await Task.sleep(for: .milliseconds(5))
+      seen = service.processing
+    }
+    _ = await collecting.value
+    XCTAssertTrue(seen)
+    XCTAssertFalse(service.processing)
+  }
+
   func testAnIntentForAnotherAmountIsNeverCollected() async {
     let api = ScriptedSaleAPI()
     let card = PosSalePayment(

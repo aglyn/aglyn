@@ -122,6 +122,8 @@ class StripeTerminalCollector(
   override val connected: StateFlow<DeviceReader?> = mutableConnected
   private val mutablePrompt = MutableStateFlow<String?>(null)
   override val prompt: StateFlow<String?> = mutablePrompt
+  private val mutableProcessing = MutableStateFlow(false)
+  override val processing: StateFlow<Boolean> = mutableProcessing
   private val mutableUpdate = MutableStateFlow<ReaderUpdate?>(null)
   override val update: StateFlow<ReaderUpdate?> = mutableUpdate
 
@@ -205,10 +207,15 @@ class StripeTerminalCollector(
   override suspend fun collect(request: CardCollectRequest): CardCollectOutcome {
     if (collecting != null) return CardCollectOutcome.Failed(request.paymentIntentId, "A payment is already in progress.")
     return try {
-      collectCardPayment(SdkPaymentPort(terminal(), onCancelable = { collecting = it }), request, mutableConnected.value)
+      // Once the SDK's collect answers, the card was read: processing until the confirm answers (Apple 5.8).
+      collectCardPayment(SdkPaymentPort(terminal(), onCancelable = { collecting = it }), request, mutableConnected.value) {
+        mutablePrompt.value = null
+        mutableProcessing.value = true
+      }
     } finally {
       collecting = null
       mutablePrompt.value = null
+      mutableProcessing.value = false
     }
   }
 

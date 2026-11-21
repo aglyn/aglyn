@@ -104,6 +104,9 @@ fun interface CardReaderSessionSource {
 interface CardCollector {
   val state: StateFlow<CardCollectorState>
 
+  /** The card was read and the payment is being confirmed (Apple 5.8, as the Apple kit's `processing`): true from the read's end until the outcome. */
+  val processing: StateFlow<Boolean> get() = NOT_PROCESSING
+
   /**
    * Gets ready for one site; [sessions] mints the connection tokens. A
    * device reader reconnects the reader it last used, if it can.
@@ -147,12 +150,16 @@ class UnavailableCardCollector(private val reason: String = UNAVAILABLE) : CardC
  */
 class SimulatedCardCollector(
   private val delayMs: Long = 1_200,
+  /** The wait after the card, while the payment shows as processing. */
+  private val processingDelayMs: Long = 0,
   private val answer: (CardCollectRequest) -> CardCollectOutcome = {
     CardCollectOutcome.Collected(it.paymentIntentId, it.amountCents)
   },
 ) : CardCollector {
   private val mutableState = MutableStateFlow<CardCollectorState>(CardCollectorState.Disconnected)
   override val state: StateFlow<CardCollectorState> = mutableState
+  private val mutableProcessing = MutableStateFlow(false)
+  override val processing: StateFlow<Boolean> = mutableProcessing
   private var canceled = false
 
   override suspend fun connect(hostId: String, sessions: CardReaderSessionSource): CardCollectorState {
@@ -170,7 +177,13 @@ class SimulatedCardCollector(
     canceled = false
     delay(delayMs)
     if (canceled) return CardCollectOutcome.Canceled(request.paymentIntentId)
-    return answer(request)
+    mutableProcessing.value = true
+    try {
+      if (processingDelayMs > 0) delay(processingDelayMs)
+      return answer(request)
+    } finally {
+      mutableProcessing.value = false
+    }
   }
 
   override suspend fun cancel() {
@@ -181,3 +194,6 @@ class SimulatedCardCollector(
     const val LABEL = "Simulated reader"
   }
 }
+
+/** A collector that never shows a payment processing (one with no reader of its own). */
+private val NOT_PROCESSING: StateFlow<Boolean> = MutableStateFlow(false)
