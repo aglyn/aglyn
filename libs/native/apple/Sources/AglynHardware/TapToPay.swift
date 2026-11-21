@@ -102,6 +102,15 @@ public func tapToPayPress(
   return .connect
 }
 
+/// Whether Tap to Pay on iPhone discovery asks the SDK for its simulated reader. Only in Stripe test mode, and only where
+/// no real reader can answer (the Simulator) or a debug build asked for it (`-AglynSimulatedReader YES`). A physical
+/// iPhone uses its real reader in test mode too, so Apple's own screens (its terms, the tap screen) appear: a
+/// development build can then be filmed for Apple's review. In test mode Stripe declines a real card or wallet; only
+/// Stripe's physical test cards approve.
+public func tapToPayDiscoversSimulatedReader(testMode: Bool, onSimulator: Bool, askedForSimulated: Bool) -> Bool {
+  testMode && (onSimulator || askedForSimulated)
+}
+
 /// Whether this person may accept Apple's Tap to Pay on iPhone terms. Aglyn
 /// accepts them once for every store, so only Aglyn staff may; a store member
 /// is never shown them.

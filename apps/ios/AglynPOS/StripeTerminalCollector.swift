@@ -29,7 +29,10 @@
    *
    * Connection tokens come from `commerce/pos-terminal-connection-token` for
    * the site's Terminal Location. In test mode the SDK's simulated readers
-   * answer, so the register is exercised without hardware. Card-present
+   * answer, so the register is exercised without hardware; Tap to Pay on
+   * iPhone is the exception on a physical iPhone, which uses its real reader
+   * in test mode too (`tapToPayDiscoversSimulatedReader`), so Apple's own
+   * screens appear in a development build. Card-present
    * payments settle on the platform account: the connection never sets
    * `onBehalfOf`, and the server's intent alone decides where money goes.
    *
@@ -354,6 +357,21 @@
     /// The kind being connected, so Tap to Pay's setup reads as its own and not as a reader update.
     @ObservationIgnored private var connectingKind: CardCollectorKind?
     private var osMajor: Int { ProcessInfo.processInfo.operatingSystemVersion.majorVersion }
+    /// Tap to Pay on iPhone through the SDK's simulated reader: on the Simulator, or when a debug build asks with
+    /// `-AglynSimulatedReader YES`, in test mode only. A physical iPhone uses its real reader (Apple's screens).
+    private var tapToPaySimulated: Bool {
+      #if targetEnvironment(simulator)
+        let onSimulator = true
+      #else
+        let onSimulator = false
+      #endif
+      #if DEBUG
+        let asked = UserDefaults.standard.bool(forKey: "AglynSimulatedReader")
+      #else
+        let asked = false
+      #endif
+      return tapToPayDiscoversSimulatedReader(testMode: testMode, onSimulator: onSimulator, askedForSimulated: asked)
+    }
 
     @ObservationIgnored private let tokens = TerminalTokens()
     @ObservationIgnored private let events = TerminalEvents()
@@ -478,7 +496,7 @@
       do {
         config =
           kind == .tapToPay
-          ? try TapToPayDiscoveryConfigurationBuilder().setSimulated(testMode).build()
+          ? try TapToPayDiscoveryConfigurationBuilder().setSimulated(tapToPaySimulated).build()
           : try BluetoothScanDiscoveryConfigurationBuilder().setSimulated(testMode).setTimeout(30).build()
       } catch {
         discovery = .failed(friendlyDiscoveryError(code: terminalError(error).code, message: error.localizedDescription))
