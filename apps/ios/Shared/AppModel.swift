@@ -39,6 +39,9 @@ final class AppModel {
   @ObservationIgnored private var pendingLinkScope: (orgSlug: String, hostSlug: String?)?
   /// The signed-in token's claims: the staff section shows only when they say staff.
   private(set) var claims = TokenClaims()
+  /// The platform lockdown's notice while it applies to the person in use (never to staff), else nil: the console's
+  /// `PlatformLockdownGate`, which shows it in place of the app.
+  private(set) var lockdown: PlatformLockdownNotice?
   /// Bumped by Refresh (⌘R); live lists re-subscribe on it.
   private(set) var refreshToken = 0
   /// The screen this tablet was set up as instead of a register (a customer display or a self-service
@@ -243,6 +246,21 @@ final class AppModel {
       orgPermissions: orgAccess.workspacePermissions, sitePermissions: orgAccess.pickedSitePermissions,
       permissionsSiteID: orgAccess.pickedSiteID,
       enabledPlugins: workspace?.orgLogo.map { resolveEnabledPlugins($0.enabledPlugins) })
+  }
+
+  /// Asks whether the platform is locked for this person, once a session is in use (the console asks once per page
+  /// load). A failed read is open, and staff are never held, as the console's gate passes them.
+  func checkLockdown() async {
+    guard let api, let auth, auth.user != nil else {
+      lockdown = nil
+      return
+    }
+    guard let notice = await PlatformLockdownNotice.read(api, brand: brandName) else {
+      lockdown = nil
+      return
+    }
+    let staff = await auth.currentClaims(forceRefresh: false)?.isStaff ?? false
+    lockdown = staff ? nil : notice
   }
 
   func signOut() async {
