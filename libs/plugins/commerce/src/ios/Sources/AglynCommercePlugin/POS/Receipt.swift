@@ -178,15 +178,18 @@ func layoutReceipt(_ receipt: ReceiptData, _ options: ReceiptLayoutOptions) -> P
 }
 
 /// A declined card's receipt (Apple 5.10: a receipt whether approved or declined): the sale's own receipt with nothing
-/// paid on it, and under its total the card, DECLINED, and that nothing was charged (Figma iPhone POS 177:5163).
-func layoutDeclinedReceipt(_ receipt: ReceiptData, cardLabel: String?, _ options: ReceiptLayoutOptions) -> PrintDocument {
+/// paid on it, and under its total the card, DECLINED (TIMED OUT for a payment that timed out, Apple 5.9), and that
+/// nothing was charged (Figma iPhone POS 177:5163).
+func layoutDeclinedReceipt(
+  _ receipt: ReceiptData, cardLabel: String?, _ options: ReceiptLayoutOptions, timedOut: Bool = false
+) -> PrintDocument {
   var unpaid = receipt
   unpaid.tenders = nil
   unpaid.changeCents = nil
   let document = layoutReceipt(unpaid, options)
   var ops = document.ops
   var declined: [PrintOp] = [.feed(1)]
-  for text in twoColumnLines(declinedReceiptCard(cardLabel), "DECLINED", width: options.columns) { declined.append(.text(text)) }
+  for text in twoColumnLines(declinedReceiptCard(cardLabel), timedOut ? "TIMED OUT" : "DECLINED", width: options.columns) { declined.append(.text(text)) }
   declined.append(.text("Nothing was charged.", bold: true))
   // Under the TOTAL, the last double-size line, where a paid card's tender line would be.
   let total = ops.lastIndex { if case .text(_, align: _, bold: _, size: 2) = $0 { return true } else { return false } }

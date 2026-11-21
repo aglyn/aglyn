@@ -36,6 +36,32 @@ private val WISEPAD = M2.copy(id = "WP3", deviceType = "WISEPAD_3")
 private val REQUEST = CardCollectRequest(PI, SECRET, 1150)
 
 class DeviceReaderTest {
+  /** Apple 5.8 (as on Apple): once the card is read, and before the confirm, the register is told so it shows processing. */
+  @Test
+  fun theReadIsReportedBeforeTheConfirmAndNotWhenTheReadFails() = runTest {
+    val port = ScriptedPort()
+    var seen: List<String>? = null
+    collectCardPayment(port, REQUEST, M2) { seen = port.calls.toList() }
+    assertEquals(listOf("retrieve", "collect"), seen)
+    val unread = ScriptedPort(collected = TerminalResult.Error(TerminalError("CARD_READ_TIMED_OUT")))
+    var read = false
+    collectCardPayment(unread, REQUEST, M2) { read = true }
+    assertFalse(read)
+  }
+
+  /** Apple 5.9 (as on Apple): a reader or network timeout is worded as one, never as a decline. */
+  @Test
+  fun aTimeoutIsToldAsATimeoutNotADecline() = runTest {
+    for (code in listOf("CARD_READ_TIMED_OUT", "REQUEST_TIMED_OUT", "STRIPE_API_CONNECTION_ERROR", "NETWORK_ERROR")) {
+      assertTrue(cardCollectTimedOut(code), code)
+    }
+    assertFalse(cardCollectTimedOut("DECLINED_BY_STRIPE_API"))
+    assertFalse(cardCollectTimedOut("BLUETOOTH_SCAN_TIMED_OUT"))
+    assertFalse(cardCollectTimedOut(null))
+    val port = ScriptedPort(collected = TerminalResult.Error(TerminalError("CARD_READ_TIMED_OUT")))
+    assertEquals(CardCollectOutcome.Failed(PI, "The payment timed out.", "CARD_READ_TIMED_OUT"), collectCardPayment(port, REQUEST, M2))
+  }
+
   @Test
   fun retrievesCollectsThenConfirms() = runTest {
     val port = ScriptedPort()

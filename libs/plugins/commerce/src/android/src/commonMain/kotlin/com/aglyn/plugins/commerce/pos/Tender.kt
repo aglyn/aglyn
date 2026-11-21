@@ -8,9 +8,12 @@ import com.aglyn.hardware.CardCollectorState
 import com.aglyn.hardware.KeyedCardEntry
 import com.aglyn.hardware.KeyedCardOutcome
 import com.aglyn.hardware.KeyedCardRequest
+import com.aglyn.hardware.cardCollectTimedOut
 import com.aglyn.hardware.collectRequestProblem
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
@@ -24,6 +27,7 @@ import kotlin.uuid.Uuid
  *   balance, when this was a split);
  * - canceled: nobody was charged and the same tender can be tried again;
  * - failed: declined or refused, with words to read out;
+ * - timed out: this device's reader, or the network behind it, gave no answer in time; nobody was charged;
  * - unknown: the answer was lost. The cashier checks the sale again rather
  *   than pressing the tender twice; the attempt key makes even a second
  *   press safe, because the route finds the payment the first press started.
@@ -36,10 +40,16 @@ sealed interface TenderOutcome {
   data class Settled(val answer: PosPaymentAnswer, val payment: PosSalePayment?) : TenderOutcome
   data class Canceled(val answer: PosPaymentAnswer?) : TenderOutcome
   data class Failed(val message: String, val answer: PosPaymentAnswer?) : TenderOutcome
+
+  /** This device's reader timed out ([com.aglyn.hardware.cardCollectTimedOut]): the card was not charged (Apple 5.9). */
+  data class TimedOut(val answer: PosPaymentAnswer?) : TenderOutcome
   data class Unknown(val message: String) : TenderOutcome
 }
 
 const val LOST_ANSWER = "The connection dropped before the answer arrived. Check the sale before taking payment again."
+
+/** What the checkout says about a card payment that timed out (Apple 5.9), as the Apple register says it. */
+const val CARD_TIMED_OUT_NOTICE = "The payment timed out. Nothing was charged. Try again, or take the payment another way."
 
 /** A lost answer (no status: the network dropped) as opposed to the route's refusal. */
 fun isLostAnswer(error: Throwable): Boolean = error !is ConsoleApiError || error.status == 0
@@ -205,6 +215,11 @@ class SmartReaderService(
  * register asked for, so a mismatched intent is never collected.
  */
 class DeviceReaderService(private val collector: CardCollector) : CardReaderService {
+  private val mutableSettling = MutableStateFlow(false)
+
+  /** The card was read and confirmed on this device; the server is still recording the payment (Apple 5.8). */
+  val settling: StateFlow<Boolean> = mutableSettling
+
   override val id = "device"
   override val label: String
     get() = (collector.state.value as? CardCollectorState.Connected)?.label ?: "This device"
@@ -256,8 +271,24 @@ class DeviceReaderService(private val collector: CardCollector) : CardReaderServ
     return when (collected) {
       is CardCollectOutcome.Canceled -> TenderOutcome.Canceled(cancelCardPayment(deps, payment.id) ?: started)
       // Recorded as declined, with its card, as the console records a native reader's decline.
-      is CardCollectOutcome.Failed -> TenderOutcome.Failed(collected.message, recordDeclinedCardPayment(deps, payment.id) ?: started)
-      is CardCollectOutcome.Collected, null -> settleCardPayment(deps, payment.id)
+      is CardCollectOutcome.Failed -> {
+        val recorded = recordDeclinedCardPayment(deps, payment.id)
+        // The server's own read of Stripe has the last word: a confirm whose answer was lost may still have gone through.
+        val read = recorded?.let(::outcomeOfPayment)
+        when {
+          read is TenderOutcome.Settled -> read
+          cardCollectTimedOut(collected.code) -> TenderOutcome.TimedOut(recorded ?: started)
+          else -> TenderOutcome.Failed(collected.message, recorded ?: started)
+        }
+      }
+      is CardCollectOutcome.Collected, null -> {
+        mutableSettling.value = true
+        try {
+          settleCardPayment(deps, payment.id)
+        } finally {
+          mutableSettling.value = false
+        }
+      }
     }
   }
 

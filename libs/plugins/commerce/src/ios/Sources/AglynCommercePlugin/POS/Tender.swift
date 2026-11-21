@@ -4,17 +4,20 @@
 import AglynCore
 import AglynHardware
 import Foundation
+import Observation
 
 /*
  * TAKING ONE TENDER.
  *
  * Each tender is a short, resumable sequence against the open sale, and
- * every one ends in the same four outcomes the checkout acts on:
+ * every one ends in one of the outcomes the checkout acts on:
  *
  * - settled: the server recorded the payment (the sale may still have a
  *   balance, when this was a split);
  * - canceled: nobody was charged and the same tender can be tried again;
  * - failed: declined or refused, with words to read out;
+ * - timed out: this device's reader, or the network behind it, gave no answer
+ *   in time; nobody was charged (Apple 5.9 tells it apart from a decline);
  * - unknown: the answer was lost. The cashier checks the sale again rather
  *   than pressing the tender twice; the attempt key makes even a second
  *   press safe, because the route finds the payment the first press started.
@@ -27,10 +30,15 @@ enum TenderOutcome: Equatable {
   case settled(PosPaymentAnswer, PosSalePayment?)
   case canceled(PosPaymentAnswer?)
   case failed(String, PosPaymentAnswer?)
+  /// This device's reader timed out (`cardCollectTimedOut`): the card was not charged.
+  case timedOut(PosPaymentAnswer?)
   case unknown(String)
 }
 
 let lostAnswer = "The connection dropped before the answer arrived. Check the sale before taking payment again."
+
+/// What the checkout says about a card payment that timed out (Apple 5.9), as the declined card's notice says its own.
+let cardTimedOutNotice = "The payment timed out. Nothing was charged. Try again, or take the payment another way."
 
 /// A lost answer (no status: the network dropped) as opposed to the route's refusal.
 func isLostAnswer(_ error: Error) -> Bool {
@@ -113,6 +121,8 @@ protocol CardReaderService: AnyObject {
   var kind: CardReaderKind { get }
   /// What the reader asks for right now, while the customer is at it.
   var prompt: String? { get }
+  /// The card was read and the payment is being confirmed (Apple 5.8).
+  var processing: Bool { get }
   /// Takes `amountCents` plus `tipCents` by card. `onWaiting` fires once the
   /// customer is at the reader, with the payment the server opened.
   func charge(
@@ -182,6 +192,7 @@ final class SmartReaderService: CardReaderService {
 
 extension CardReaderService {
   var prompt: String? { nil }
+  var processing: Bool { false }
 }
 
 /// This device's own reader: the server makes the intent (`card-present-sdk`),
@@ -190,8 +201,11 @@ extension CardReaderService {
 /// the same intent, and the amount must be the amount plus the tip the
 /// register asked for, so a mismatched intent is never collected.
 @MainActor
+@Observable
 final class DeviceReaderService: CardReaderService {
-  let collector: CardCollector
+  @ObservationIgnored let collector: CardCollector
+  /// The card was read and confirmed on this device; the server is still recording the payment.
+  private(set) var settling = false
 
   init(_ collector: CardCollector) { self.collector = collector }
 
@@ -205,6 +219,8 @@ final class DeviceReaderService: CardReaderService {
     return .device
   }
   var prompt: String? { collector.prompt }
+  /// From the card's read until the outcome: the reader confirming it, then the server recording it (Apple 5.8).
+  var processing: Bool { collector.processing || settling }
 
   func charge(
     _ deps: TenderDeps, amountCents: Int, tipCents: Int, attemptKey: String,
@@ -238,10 +254,16 @@ final class DeviceReaderService: CardReaderService {
     switch await collector.collect(request) {
     case .canceled:
       return .canceled(await cancelCardPayment(deps, payment.id) ?? started)
-    case .failed(_, let message, _):
+    case .failed(_, let message, let code):
       // Recorded as declined, with its card, as the console records a native reader's decline.
-      return .failed(message, await recordDeclinedCardPayment(deps, payment.id) ?? started)
+      let recorded = await recordDeclinedCardPayment(deps, payment.id)
+      // The server's own read of Stripe has the last word: a confirm whose answer was lost may still have gone through.
+      if let recorded, let read = outcomeOfPayment(recorded), case .settled = read { return read }
+      if cardCollectTimedOut(code: code) { return .timedOut(recorded ?? started) }
+      return .failed(message, recorded ?? started)
     case .collected:
+      settling = true
+      defer { settling = false }
       return await settleCardPayment(deps, payment.id)
     }
   }
@@ -322,6 +344,7 @@ final class KeyedCardService: CardReaderService {
       case .settled: return .paid
       case .failed(let words, _): return .declined(words)
       case .canceled: return .declined("The card payment was canceled. Nobody was charged.")
+      case .timedOut: return .declined(cardTimedOutNotice)
       case .unknown(let words): return .lost(words)
       }
     }

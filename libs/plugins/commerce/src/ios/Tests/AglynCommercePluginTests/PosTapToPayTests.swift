@@ -146,8 +146,33 @@ final class PosTapToPayTests: XCTestCase {
     let notice = await model.readyTapToPay()
     XCTAssertEqual(notice, .notTurnedOn)
     XCTAssertEqual(notice?.message, "Contact support to turn it on. Take this payment another way for now.")
-    // Said again without another connect: a retry cannot fix it.
-    XCTAssertEqual(model.tapToPayPressNow, .explain(.notTurnedOn))
+  }
+
+  /// Apple 1.6: whether the terms are accepted is Apple's answer, asked through the SDK at every press. A refusal kept
+  /// from the last press never stops the next one from asking; once Apple says yes, the press takes the card.
+  func testEveryPressAsksTheSDKAgainAfterARefusal() async throws {
+    try XCTSkipIf(osMajor < TapToPayIPhone.minimumOSMajor, "the host OS is older than Tap to Pay on iPhone needs")
+    let reader = FakeIPhoneReader()
+    reader.connectFails = .notTurnedOn
+    let model = register(reader)
+    _ = await model.readyTapToPay()
+    XCTAssertEqual(model.tapToPayPressNow, .connect, "the refusal kept here does not decide the next press")
+    _ = await model.readyTapToPay()
+    XCTAssertEqual(reader.connects, [.tapToPay, .tapToPay], "asked again")
+    reader.connectFails = nil
+    let notice = await model.readyTapToPay()
+    XCTAssertNil(notice)
+    XCTAssertEqual(model.tapToPayPressNow, .collect)
+  }
+
+  /// Apple 1.6 for the warm-up too: a refusal last time never stops the next warm-up from asking.
+  func testAWarmUpAsksAgainAfterARefusal() async {
+    let reader = FakeIPhoneReader()
+    reader.tapToPayNotice = .notTurnedOn
+    let model = register(reader)
+    await model.warmUpReader()
+    await model.warmUpReader()
+    XCTAssertEqual(reader.warmUps, 2)
   }
 
   func testAPressWhileTheIPhoneIsBeingSetUpShowsItsProgress() throws {
@@ -176,6 +201,23 @@ final class PosTapToPayTests: XCTestCase {
     reader.state = .connected(label: "Tap to Pay on iPhone", kind: .tapToPay, testMode: true)
     await model.warmUpReader()
     XCTAssertEqual(reader.warmUps, 1, "a ready reader is left alone")
+    reader.state = .connecting("Getting Tap to Pay on iPhone ready…")
+    await model.warmUpReader()
+    XCTAssertEqual(reader.warmUps, 1, "one already getting ready is left alone")
+  }
+
+  /// Apple 1.5: the warm-up starts the moment the register has a store, before its first read of the console answers.
+  func testTheRegisterStartsTheWarmUpAtOnce() async {
+    let reader = FakeIPhoneReader()
+    // The console never answers here: the warm-up does not wait for it.
+    let api = ConsoleAPIClient(
+      origin: "https://console.test", getIDToken: { _ in "token" }, transport: OneAnswer(503, "{}"), sleep: { _ in },
+      maxAttempts: 1)
+    let model = RegisterModel(hostID: "h1", reader: NoDocuments(), api: api, collector: reader)
+    model.start()
+    for _ in 0..<50 where reader.warmUps == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+    XCTAssertGreaterThanOrEqual(reader.warmUps, 1)
+    model.stop()
   }
 
   func testADeclinedCardKeepsItsReceiptAndTellsTheCashierWhenAway() async {

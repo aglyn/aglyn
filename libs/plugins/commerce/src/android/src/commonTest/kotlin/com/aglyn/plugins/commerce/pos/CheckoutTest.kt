@@ -180,6 +180,18 @@ class CheckoutTest {
     assertEquals(CheckoutStep.Tender, checkout.state.value.step)
   }
 
+  /** Apple 5.9 (as on Apple): a card payment that timed out is told plainly, not as a decline, and the tenders open again. */
+  @Test
+  fun aTimedOutCardSaysSoAndOpensTheTendersAgain() = runTest {
+    val checkout = checkout(ScriptedSaleApi())
+    checkout.payCard(OneShotReader(TenderOutcome.TimedOut(null)))
+    assertEquals(
+      Notice(NoticeTone.ERROR, "The payment timed out. Nothing was charged. Try again, or take the payment another way."),
+      checkout.state.value.notice,
+    )
+    assertEquals(CheckoutStep.Tender, checkout.state.value.step)
+  }
+
   @Test
   fun voidsTheSaleAndReportsARefusal() = runTest {
     assertTrue(checkout(ScriptedSaleApi()).void())
