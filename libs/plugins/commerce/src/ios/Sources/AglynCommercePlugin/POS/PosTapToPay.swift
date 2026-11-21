@@ -3,6 +3,7 @@
 
 import AglynCore
 import AglynHardware
+import AglynPluginHost
 import AglynUI
 import Foundation
 import SwiftUI
@@ -41,6 +42,10 @@ import SwiftUI
 extension RegisterModel {
   /// The pinned "Tap to Pay on iPhone" button: on a device whose own reader can take Tap to Pay (an iPhone).
   var offersTapToPay: Bool { collector?.kinds.contains(.tapToPay) == true }
+
+  /// A sale under way: something in the basket, or checkout open. The Tap to Pay on iPhone announcement never
+  /// interrupts one.
+  var saleInProgress: Bool { !cart.isEmpty || checkout != nil }
 
   /// Whether this device's connected reader is Tap to Pay on iPhone.
   var deviceIsTapToPay: Bool {
@@ -302,5 +307,60 @@ struct TapToPayEnableSheet: View {
     .padding(AglynSpace.three)
     .presentationDetents([.medium])
     .accessibilityIdentifier("tap-to-pay-enable-sheet")
+  }
+}
+
+// MARK: The Tap to Pay on iPhone announcement (Apple 3.1 to 3.3, 6.2)
+
+/// Shows Apple's Hero announcement once to each signed-in person on this device, the first time the register is
+/// reached with nothing under way (AglynHardware's `TapToPayAnnouncement` holds the rule). "Enable now" opens Card
+/// readers and starts Set up Tap to Pay on iPhone.
+struct TapToPayAnnouncementOnRegister: ViewModifier {
+  let model: RegisterModel
+  let context: NativePluginContext
+  /// Anything else over the register (a sheet, the lock): it waits until the register is clear.
+  let covered: Bool
+  var announcement = TapToPayAnnouncement()
+  @State private var showing = false
+  @State private var enableAfterClose = false
+
+  func body(content: Content) -> some View {
+    content
+      .task(id: model.saleInProgress || covered) {
+        // A moment for the register to settle before anything covers it.
+        try? await Task.sleep(for: .milliseconds(600))
+        guard !Task.isCancelled, !showing,
+          announcement.shouldShow(
+            offered: model.offersTapToPay, uid: context.uid, saleInProgress: model.saleInProgress || covered)
+        else { return }
+        announcement.markShown(uid: context.uid)
+        showing = true
+      }
+      #if os(iOS)
+        .fullScreenCover(isPresented: $showing, onDismiss: enableIfAsked) { view }
+      #else
+        .sheet(isPresented: $showing, onDismiss: enableIfAsked) { view }
+      #endif
+  }
+
+  private var view: some View {
+    TapToPayAnnouncementView {
+      enableAfterClose = true
+      showing = false
+    } close: {
+      showing = false
+    }
+  }
+
+  private func enableIfAsked() {
+    guard enableAfterClose else { return }
+    enableAfterClose = false
+    context.navigate(commerceCardReadersScreen, TapToPaySetUpScreen.params)
+  }
+}
+
+extension View {
+  func tapToPayAnnouncement(_ model: RegisterModel, context: NativePluginContext, covered: Bool) -> some View {
+    modifier(TapToPayAnnouncementOnRegister(model: model, context: context, covered: covered))
   }
 }

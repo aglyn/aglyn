@@ -165,12 +165,19 @@ struct RegisterScreen: View {
       if phase == .active { Task { await model.warmUpReader() } }
     }
     .tapToPayEducationAfterTerms(model.collector)
+    .tapToPayAnnouncement(model, context: context, covered: registerCovered)
     .onDisappear {
       model.stop()
       offerDisplay(false)
     }
     // Another plugin's widget (a waiver to sign) can put its screen on the connected display.
     .onChange(of: model.display.connected, initial: true) { _, connected in offerDisplay(connected) }
+  }
+
+  /// Something already over the register, which the Tap to Pay on iPhone announcement waits behind.
+  private var registerCovered: Bool {
+    model.cashier.locked || model.sheet != nil || showBasket || showDiscount || showOps || showCheckIn || showToAttach
+      || showPrinters || showOfflineCash
   }
 
   @ToolbarContentBuilder
