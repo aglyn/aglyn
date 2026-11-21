@@ -46,6 +46,15 @@ final class TapToPayTests: XCTestCase {
     XCTAssertEqual(tapToPayPress(osMajor: 18, state: .unavailable("Tap to Pay on iPhone isn’t turned on yet"), progress: nil), .connect)
   }
 
+  /// A physical iPhone in test mode takes Tap to Pay on its real reader (Apple's screens appear); the Simulator, or a
+  /// debug build that asks for it, takes the SDK's simulated one; live mode never does.
+  func testOnlyTheSimulatorOrAnExplicitAskUsesTheSimulatedReader() {
+    XCTAssertFalse(tapToPayDiscoversSimulatedReader(testMode: true, onSimulator: false, askedForSimulated: false))
+    XCTAssertTrue(tapToPayDiscoversSimulatedReader(testMode: true, onSimulator: true, askedForSimulated: false))
+    XCTAssertTrue(tapToPayDiscoversSimulatedReader(testMode: true, onSimulator: false, askedForSimulated: true))
+    XCTAssertFalse(tapToPayDiscoversSimulatedReader(testMode: false, onSimulator: true, askedForSimulated: true))
+  }
+
   func testOnlyAglynStaffMayAcceptApplesTerms() {
     XCTAssertTrue(tapToPayTermsPermitted(isStaff: true))
     XCTAssertFalse(tapToPayTermsPermitted(isStaff: false))

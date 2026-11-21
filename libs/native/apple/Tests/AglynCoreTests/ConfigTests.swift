@@ -26,6 +26,41 @@ final class ConfigTests: XCTestCase {
     XCTAssertThrowsError(try AglynConfig.normalizeConsoleOrigin("ftp://app.aglyn.com"))
   }
 
+  /// A physical iPhone reaches the Mac's local stack over Wi-Fi: a DEBUG build takes a private-network console and
+  /// emulator hosts (the Mac's `.local` name or an RFC 1918 address) as a local stack. A Release build never compiles that
+  /// in, so plain http to a private address is refused there exactly as before.
+  func testAPrivateNetworkConsoleIsALocalStackInADebugBuildOnly() throws {
+    for host in ["192.168.1.20", "10.0.0.7", "172.16.4.2", "172.31.255.1", "studio-mac.local"] {
+      XCTAssertTrue(AglynConfig.isPrivateNetworkHost(host), host)
+    }
+    for host in ["172.32.0.1", "11.0.0.1", "8.8.8.8", "app.aglyn.com", "aglyn.local.example.com", "192.168.1", "999.168.1.1"] {
+      XCTAssertFalse(AglynConfig.isPrivateNetworkHost(host), host)
+    }
+    var env = base
+    env["AGLYN_CONSOLE_URL"] = "http://studio-mac.local:4610"
+    env["AGLYN_AUTH_EMULATOR_HOST"] = "studio-mac.local:26099"
+    env["AGLYN_FIRESTORE_EMULATOR_HOST"] = "studio-mac.local:26082"
+    #if DEBUG
+      XCTAssertTrue(AglynConfig.acceptsPrivateNetworkHosts)
+      let config = try AglynConfig.read(env, app: .pos)
+      XCTAssertEqual(config.consoleOrigin, "http://studio-mac.local:4610")
+      XCTAssertTrue(config.isLocalConsole)
+      XCTAssertEqual(config.problems, [], "the emulators go with a local console")
+      XCTAssertFalse(config.appCheck)
+      XCTAssertFalse(config.telemetry)
+      XCTAssertEqual(try AglynConfig.normalizeConsoleOrigin("http://192.168.1.20:4610"), "http://192.168.1.20:4610")
+    #else
+      XCTAssertFalse(AglynConfig.acceptsPrivateNetworkHosts)
+      XCTAssertThrowsError(try AglynConfig.read(env, app: .pos)) {
+        XCTAssertEqual($0 as? AglynConfigError, .insecureOrigin)
+      }
+    #endif
+    // Production is never a private-network host, in any build: http to it is refused.
+    XCTAssertThrowsError(try AglynConfig.normalizeConsoleOrigin("http://app.aglyn.com")) {
+      XCTAssertEqual($0 as? AglynConfigError, .insecureOrigin)
+    }
+  }
+
   func testEmulatorHostsAreHostPortOrNothing() throws {
     var env = base
     env["AGLYN_CONSOLE_URL"] = "http://localhost:4200"

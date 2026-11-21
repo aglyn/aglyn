@@ -120,9 +120,36 @@ public struct AglynConfig: Equatable, Sendable {
     "AGLYN_DOCS_ORIGIN", "AGLYN_TELEMETRY", "AGLYN_IN_APP_BILLING",
   ]
 
-  /// True for the hosts a local development stack runs on.
+  /// True for the hosts a local development stack runs on. A DEBUG build also takes a private-network host
+  /// (`acceptsPrivateNetworkHosts`), so a development build on a physical iPhone can reach the Mac's local stack over
+  /// Wi-Fi (apps/ios/README.md, "A physical iPhone"); a Release build never does.
   public static func isLocalHost(_ host: String) -> Bool {
-    host == "localhost" || host == "127.0.0.1" || host == "10.0.2.2" || host.hasSuffix(".localhost")
+    if host == "localhost" || host == "127.0.0.1" || host == "10.0.2.2" || host.hasSuffix(".localhost") { return true }
+    return acceptsPrivateNetworkHosts && isPrivateNetworkHost(host)
+  }
+
+  /// Whether this build takes a private-network host as a local stack: a DEBUG build only. Decided when the build is
+  /// compiled, so nothing at run time (a setting, a launch argument, a server's answer) can turn it on in a Release build.
+  public static var acceptsPrivateNetworkHosts: Bool {
+    #if DEBUG
+      true
+    #else
+      false
+    #endif
+  }
+
+  /// A host on a private network: an IPv4 address in 10/8, 172.16/12 or 192.168/16 (RFC 1918), or a Mac's own Bonjour
+  /// name (`<name>.local`). Never a public name or address, so a debug build still cannot be pointed at production over
+  /// plain http.
+  static func isPrivateNetworkHost(_ host: String) -> Bool {
+    let host = host.lowercased()
+    if host.range(of: "^[a-z0-9]([a-z0-9-]*[a-z0-9])?\\.local$", options: .regularExpression) != nil { return true }
+    let parts = host.split(separator: ".", omittingEmptySubsequences: false).map { Int($0) }
+    guard parts.count == 4, parts.allSatisfy({ ($0 ?? -1) >= 0 && ($0 ?? 256) <= 255 }),
+      host.range(of: "^[0-9.]+$", options: .regularExpression) != nil
+    else { return false }
+    let (first, second) = (parts[0] ?? 0, parts[1] ?? 0)
+    return first == 10 || (first == 172 && (16...31).contains(second)) || (first == 192 && second == 168)
   }
 
   private static func clean(_ value: String?) -> String {
