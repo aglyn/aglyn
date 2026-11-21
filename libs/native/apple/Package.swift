@@ -53,7 +53,8 @@ let package = Package(
     // contracts.generated.json is a link to libs/native/contracts, so the
     // bundled values are always the generated ones.
     .target(name: "AglynContracts", resources: [.copy("Resources/contracts.generated.json")]),
-    .target(name: "AglynHardware"),
+    // The Tap to Pay on iPhone announcement draws with the app's theme (TapToPayAnnouncementView).
+    .target(name: "AglynHardware", dependencies: ["AglynUI"]),
     .target(name: "AglynWebView", dependencies: ["AglynCore"]),
     .target(name: "AglynPluginHost", dependencies: ["AglynContracts", "AglynCore", "AglynUI", "AglynWebView"]),
     // Console screens drawn from specs (§13); Resources/screens links each

@@ -131,6 +131,8 @@ struct SmartReadersAPI {
 /// devices card (`commerce/pos-readers`).
 struct CardReadersScreen: View {
   let context: NativePluginContext
+  /// Opened by the Tap to Pay on iPhone announcement's "Enable now": Set up Tap to Pay on iPhone starts on arrival.
+  var startTapToPaySetUp = false
   @State private var readiness: Load<TerminalReadiness> = .loading
   @State private var list: PosReadersList?
   @State private var registers: [PosRegister] = []
@@ -198,7 +200,8 @@ struct CardReadersScreen: View {
         if collector.kinds.contains(.tapToPay) {
           TapToPaySection(
             collector: collector, controls: controls, hostID: hostID,
-            sessions: CommerceTerminalConnection(api: context.api), ready: readiness.value?.ready == true)
+            sessions: CommerceTerminalConnection(api: context.api), ready: readiness.value?.ready == true,
+            startSetUp: startTapToPaySetUp)
         }
         DeviceReaderSection(
           collector: collector, controls: controls, hostID: hostID,
@@ -760,7 +763,11 @@ private struct TapToPaySection: View {
   let hostID: String
   let sessions: CardReaderSessionSource
   let ready: Bool
+  /// Start the setup as soon as the store is ready, as a press of Set up Tap to Pay on iPhone does (the announcement's
+  /// "Enable now").
+  var startSetUp = false
   @State private var busy = false
+  @State private var startedSetUp = false
   @State private var guideError: String?
 
   private var connected: Bool {
@@ -823,6 +830,11 @@ private struct TapToPaySection: View {
         connected
           ? "Apple’s own guide opens from How to accept payments. \(TapToPayIPhone.title) needs iOS \(TapToPayIPhone.minimumOSMajor) or later."
           : "\(TapToPayIPhone.title) is ready to take cards as soon as setup finishes. Keep the app open.")
+    }
+    .task(id: ready) {
+      guard startSetUp, ready, !startedSetUp, !connected, progress == nil else { return }
+      startedSetUp = true
+      setUp()
     }
   }
 

@@ -318,3 +318,20 @@ final class PaymentsSetupTests: XCTestCase {
     }
   }
 }
+
+@MainActor
+final class TapToPayAnnouncementRegisterTests: XCTestCase {
+  func testABasketIsASaleInProgress() {
+    let api = ConsoleAPIClient(origin: "https://console.test", getIDToken: { _ in "token" }, sleep: { _ in }, maxAttempts: 1)
+    let model = RegisterModel(hostID: "h1", reader: NoDocuments(), api: api, collector: FakeIPhoneReader())
+    XCTAssertFalse(model.saleInProgress)
+    let mug = PosItem(
+      id: "p1", name: "Mug", imageURL: nil,
+      variants: [PosVariant(id: "default", label: nil, unitCents: 2400, sku: nil, barcode: nil, inventory: 5)], categoryIDs: [],
+      modifierGroups: [], quickKey: false, fromCents: 2400, toCents: 2400)
+    XCTAssertTrue(model.add(mug, mug.variants[0]))
+    XCTAssertTrue(model.saleInProgress)
+    model.clearCart()
+    XCTAssertFalse(model.saleInProgress)
+  }
+}

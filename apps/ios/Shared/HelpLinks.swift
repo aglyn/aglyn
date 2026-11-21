@@ -33,7 +33,11 @@ struct HelpLink: Identifiable, Equatable {
 struct HelpSection: View {
   @Environment(AppModel.self) private var model
   @Environment(\.openURL) private var openURL
+  @Environment(ShellNavigation.self) private var navigation: ShellNavigation?
   @State private var guideError: String?
+  /// The Tap to Pay on iPhone announcement, again (Apple 3.1), and whether its "Enable now" was pressed.
+  @State private var showAnnouncement = false
+  @State private var enableAfterAnnouncement = false
 
   var body: some View {
     Section {
@@ -50,6 +54,27 @@ struct HelpSection: View {
           }
           .buttonStyle(.aglynRow)
           .accessibilityIdentifier("help-tap-to-pay")
+          // The announcement the register shows once, here whenever it is wanted.
+          Button {
+            showAnnouncement = true
+          } label: {
+            AglynRow(TapToPayIPhone.title, subtitle: TapToPayAnnouncementCopy.helpRowSubtitle, systemImage: TapToPayIPhone.symbol) {
+              Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
+            }
+          }
+          .buttonStyle(.aglynRow)
+          .accessibilityIdentifier("help-tap-to-pay-announcement")
+          .fullScreenCover(isPresented: $showAnnouncement, onDismiss: enableTapToPay) {
+            TapToPayAnnouncementView(
+              enable: navigation != nil && TapToPaySetUpScreen.id != nil
+                ? {
+                  enableAfterAnnouncement = true
+                  showAnnouncement = false
+                } : nil
+            ) {
+              showAnnouncement = false
+            }
+          }
         }
       #endif
       ForEach(HelpLink.all(model.config)) { link in
@@ -68,6 +93,15 @@ struct HelpSection: View {
     } footer: {
       if let guideError { Text(guideError) }
     }
+  }
+}
+
+extension HelpSection {
+  /// "Enable now": Card readers, starting Set up Tap to Pay on iPhone.
+  fileprivate func enableTapToPay() {
+    guard enableAfterAnnouncement else { return }
+    enableAfterAnnouncement = false
+    if let screen = TapToPaySetUpScreen.id { navigation?.push(.screen(screen, TapToPaySetUpScreen.params)) }
   }
 }
 
