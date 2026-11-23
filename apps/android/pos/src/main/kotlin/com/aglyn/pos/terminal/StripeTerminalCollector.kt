@@ -346,6 +346,16 @@ class StripeTerminalCollector(
 
   // ---- setup
 
+  /** Android 13+: the notification permission, the first time a reader is set up here; empty after that. */
+  private fun notificationPermissionToAsk(): List<String> {
+    if (Build.VERSION.SDK_INT < 33) return emptyList()
+    if (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return emptyList()
+    val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    if (prefs.getBoolean(NOTIFICATIONS_ASKED, false)) return emptyList()
+    prefs.edit().putBoolean(NOTIFICATIONS_ASKED, true).apply()
+    return listOf(Manifest.permission.POST_NOTIFICATIONS)
+  }
+
   /**
    * Initializes the SDK (once) and points its tokens at [hostId]. False, with
    * the state saying why, when permissions are refused or the site is not
@@ -354,8 +364,17 @@ class StripeTerminalCollector(
    */
   private suspend fun prepare(hostId: String, sessions: CardReaderSessionSource, ask: Boolean): Boolean = lock.withLock {
     val needed = requiredPermissions().filter { context.checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+    // Asked once, with the reader's own, when a person sets a reader up, well before a sale: whether the app may say when
+    // a card was not approved while it was away (Apple 5.12, as Aglyn POS on iPhone asks when Tap to Pay is set up).
+    // It never blocks the reader.
+    val notify = if (ask) notificationPermissionToAsk() else emptyList()
+    if (needed.isEmpty() && notify.isNotEmpty()) permissions()?.request(notify)
     if (needed.isNotEmpty()) {
-      val granted = ask && (permissions()?.request(needed) ?: false)
+      // The reader's own permissions decide: a refused notification never stands in its way.
+      val granted = ask && run {
+        permissions()?.request(needed + notify)
+        needed.all { context.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
+      }
       if (!granted) {
         if (ask) mutableDiscovery.value = ReaderDiscovery.Failed(PERMISSIONS_NEEDED)
         return false
@@ -537,6 +556,8 @@ class StripeTerminalCollector(
      * Android 11; coarse location plus Bluetooth scan and connect from
      * Android 12.
      */
+    private const val NOTIFICATIONS_ASKED = "aglyn.pos.card-notifications.asked"
+
     fun requiredPermissions(): List<String> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
       listOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
     } else {

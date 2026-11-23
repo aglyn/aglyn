@@ -189,3 +189,24 @@ fun layoutReceipt(receipt: ReceiptData, options: ReceiptLayoutOptions): PrintDoc
   ops += PrintOp.Cut
   return PrintDocument(columns, ops)
 }
+
+/**
+ * A declined card's receipt (Apple 5.10: a receipt whether approved or declined), as on Apple: the sale's own receipt with
+ * nothing paid on it, and under its total the card, DECLINED (TIMED OUT for a payment that timed out, Apple 5.9), and that
+ * nothing was charged (Figma iPhone POS 177:5163).
+ */
+fun layoutDeclinedReceipt(receipt: ReceiptData, cardLabel: String?, options: ReceiptLayoutOptions, timedOut: Boolean = false): PrintDocument {
+  val document = layoutReceipt(receipt.copy(tenders = null, changeCents = null), options)
+  val ops = document.ops.toMutableList()
+  val declined = mutableListOf<PrintOp>(PrintOp.Feed(1))
+  for (text in twoColumnLines(declinedReceiptCard(cardLabel), if (timedOut) "TIMED OUT" else "DECLINED", options.columns)) declined += PrintOp.Text(text)
+  declined += PrintOp.Text("Nothing was charged.", bold = true)
+  // Under the TOTAL, the last double-size line, where a paid card's tender line would be.
+  val total = ops.indexOfLast { it is PrintOp.Text && it.size == 2 }
+  ops.addAll(if (total >= 0) total + 1 else ops.size, declined)
+  return PrintDocument(document.columns, ops)
+}
+
+/** The card as the paper names it: the brand and `**** 4242`, as a paid card's tender line reads. */
+private fun declinedReceiptCard(cardLabel: String?): String =
+  if (cardLabel.isNullOrEmpty()) "Card" else cardLabel.replace("••••", "****")
