@@ -11,6 +11,7 @@ import com.aglyn.core.FirestoreReader
 import com.aglyn.core.KeyValueStore
 import com.aglyn.hardware.CardCollector
 import com.aglyn.hardware.CardCollectorState
+import com.aglyn.hardware.CardNotApprovedNotification
 import com.aglyn.hardware.CardReaderSessionSource
 import com.aglyn.hardware.EscPosEncoder
 import com.aglyn.hardware.OfflineCardCollector
@@ -529,7 +530,14 @@ class RegisterModel(
   /** Applies the ledger of card forwards to the queue, then sends what became ready. */
   fun applyCardForwards(sync: Boolean = true) {
     val ledger = peripherals.offlineCardForwards ?: return
-    val applied = offline.applyForwards(ledger.all())
+    val forwards = ledger.all()
+    val applied = offline.applyForwards(forwards)
+    // A card the bank declined once it was sent, while the app was away, is notified (Apple 5.12, as on Apple).
+    for (forward in forwards) {
+      if (forward.saleKey !in applied || forward.status == com.aglyn.hardware.OfflineCardForward.Status.AUTHORIZED) continue
+      val entry = offline.queue.firstOrNull { it.id == forward.saleKey } ?: continue
+      peripherals.cardNotifier?.notifyIfAway(CardNotApprovedNotification(money(entry.totalCents, currency), register?.name))
+    }
     ledger.remove(applied)
     if (sync && applied.isNotEmpty() && online) offline.syncInBackground()
   }
@@ -611,7 +619,11 @@ class RegisterModel(
   }
 
   private fun startCheckout(opened: PosOpenedSale) {
-    checkout = Checkout(api, opened, context?.settings ?: PosRegisterSettings(), formatMoney = { money(it, currency) })
+    val currency = currency
+    val place = register?.name
+    checkout = Checkout(api, opened, context?.settings ?: PosRegisterSettings(), formatMoney = { money(it, currency) }).also { next ->
+      next.onCardNotApproved = { amount -> peripherals.cardNotifier?.notifyIfAway(CardNotApprovedNotification(amount, place)) }
+    }
   }
 
   /** A sale this register left open (the app closed mid-checkout): read it and pick up where it stopped. */
@@ -738,6 +750,20 @@ class RegisterModel(
     return SystemPrintResult.Printed
   }
 
+  /** Whether a declined card's receipt can be printed: this device's print sheet, as on Apple. */
+  val canPrintDeclinedReceipt: Boolean get() = peripherals.systemPrinter != null
+
+  /**
+   * Prints a declined card's receipt on this device's print sheet, as on Apple (the console never prints or sends a
+   * declined card's receipt, so it goes nowhere else). A person closing the sheet is not a failure.
+   */
+  suspend fun printDeclinedReceipt(declined: DeclinedCard): SystemPrintResult {
+    val sheet = peripherals.systemPrinter ?: return SystemPrintResult.Failed("No printer is set up on this register.")
+    val data = receipt ?: return SystemPrintResult.Failed("The receipt is still loading. Try again in a moment.")
+    val text = renderText(layoutDeclinedReceipt(data, declined.cardLabel, ReceiptLayoutOptions(columns = 48), declined.timedOut))
+    return sheet.printText(text, "Declined receipt ${data.orderNumber}")
+  }
+
   /** A store that always prints: the receipt goes to the register's printer as soon as the sale is paid, once. */
   suspend fun printReceiptByDefault(paid: Checkout) {
     if (context?.settings?.receiptDefault != ReceiptDefault.PRINT || paid.state.value.printed || !canPrintReceipt) return
@@ -759,6 +785,11 @@ class RegisterModel(
     register?.let { store.savePendingSale(it.id, null) }
     updateCart(Cart.EMPTY)
     checkout = null
+    receipt = null
+  }
+
+  /** A declined card's receipt is put away (the cashier takes the payment another way), so the paid receipt later reads the sale afresh. */
+  fun putAwayReceipt() {
     receipt = null
   }
 

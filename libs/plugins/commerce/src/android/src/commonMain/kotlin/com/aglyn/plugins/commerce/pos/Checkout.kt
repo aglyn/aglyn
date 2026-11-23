@@ -62,6 +62,8 @@ data class CheckoutState(
   val creditAccounts: List<PosCreditAccount>? = null,
   /** The receipt went to the register's printer. */
   val printed: Boolean = false,
+  /** The last card that was not approved, for its receipt (Apple 5.10); cleared by the next tender. */
+  val declined: DeclinedCard? = null,
 ) {
   /** What a tender may still take. */
   val dueCents: Long get() = sale.tenderableCents
@@ -80,6 +82,12 @@ data class CheckoutState(
 
   /** Card payments still at a reader (a sale reopened after a restart can hold one). */
   val inFlight: List<PosSalePayment> get() = sale.payments.filter { it.status == "pending" }
+
+  /**
+   * A card was just declined, or its payment timed out, and the cashier has not moved on: the checkout shows it as not
+   * paid, with its receipt (Figma iPhone POS 177:5163, as on Apple).
+   */
+  val showsDeclined: Boolean get() = declined != null && step == CheckoutStep.Tender
 
   /** Tenders are open: nothing in flight, nothing unknown, something to pay. */
   val canTender: Boolean get() = !busy && !lost && dueCents > 0 && step !is CheckoutStep.Receipt
@@ -104,11 +112,16 @@ class Checkout(
   private val sleep: suspend (Long) -> Unit = { delay(it) },
   /** A money string for the notices, in the store's currency. */
   private val formatMoney: (Long) -> String = { money(it, "usd") },
+  /** When a card was declined, for its receipt. */
+  private val now: () -> Long = { nowMs() },
 ) {
   private val mutable = MutableStateFlow(CheckoutState(opened, saleFromOpened(opened)))
   val state: StateFlow<CheckoutState> = mutable
 
   private val deps get() = TenderDeps(api, mutable.value.opened.orderId, sleep)
+
+  /** Tells the cashier about a card not approved while the app was not on screen (Apple 5.12): the amount, as money. */
+  var onCardNotApproved: ((amount: String) -> Unit)? = null
 
   /** The tip presets on what the next tender pays; none when the store does not ask. */
   fun tips(): List<TipChoice> =
@@ -133,7 +146,7 @@ class Checkout(
   private inline fun startTender(block: (CheckoutState) -> Unit) {
     val state = mutable.value
     if (!state.canTender) return
-    mutable.value = state.copy(busy = true, notice = null)
+    mutable.value = state.copy(busy = true, notice = null, declined = null)
     block(state)
   }
 
@@ -150,9 +163,28 @@ class Checkout(
       mutable.update { it.copy(busy = false) }
       throw error
     }
+    // Only a card the reader was waiting for can be declined, or time out. A refusal before that (no card entry key, an
+    // amount that does not match the register) is not a declined card: it keeps its own notice. A typed card is told in
+    // its own card form, and the Apple register's card fields never end on this step either.
+    val waited = reader.kind != CardReaderKind.KEYED && (mutable.value.step as? CheckoutStep.Card)?.paymentId != null
+    val charged = state.amountCents + state.tipCents
+    val declined = if (!waited) null else when (outcome) {
+      is TenderOutcome.Failed ->
+        DeclinedCard(charged, reader.label, outcome.message, now(), declinedCardLabel(outcome.answer?.payment))
+      // Told as a timeout, not a decline (Apple 5.9), on the same not-paid step.
+      is TenderOutcome.TimedOut ->
+        DeclinedCard(charged, reader.label, "The payment timed out.", now(), declinedCardLabel(outcome.answer?.payment), timedOut = true)
+      else -> null
+    }
+    if (declined != null) onCardNotApproved?.invoke(formatMoney(charged))
     finish(outcome)
+    // The declined card's own notice says what happened and what to do next; the processor's words stay on its receipt.
+    if (declined != null) mutable.update { it.copy(declined = declined, notice = null) }
     }
   }
+
+  /** Leaves the declined card's receipt for the tenders, to take the payment another way. */
+  fun takePaymentAnotherWay() = mutable.update { it.copy(declined = null, notice = null) }
 
   /** Stops the card payment the customer is at; nobody is charged. */
   suspend fun cancelCard(reader: CardReaderService) {
@@ -528,3 +560,43 @@ private val EMAIL = Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
 fun isReceiptEmail(text: String) = EMAIL.matches(text.trim())
 
 fun isReceiptPhone(text: String) = text.count { it.isDigit() } >= 7
+
+/** A card that was not approved: what its receipt says (Apple 5.10: a receipt whether approved or declined), as on Apple. */
+data class DeclinedCard(
+  val amountCents: Long,
+  val readerLabel: String,
+  val message: String,
+  val atMs: Long,
+  /** The card as its receipt names it ("Visa •••• 4242"), when the processor said which card it was. */
+  val cardLabel: String? = null,
+  /** No answer came in time (the reader's or the network's), rather than a decline (Apple 5.9). */
+  val timedOut: Boolean = false,
+) {
+  /** What the checkout says about it: the card, that nothing was charged, and what the cashier can do. */
+  val notice: String
+    get() = if (timedOut) {
+      CARD_TIMED_OUT_NOTICE
+    } else {
+      "Card declined${cardLabel?.let { ": $it" } ?: ""}. Nothing was charged. Send the customer a receipt, or take the payment another way."
+    }
+
+  /** The receipt the customer can be sent through the share sheet: confidential, nothing charged. */
+  fun receipt(store: String, money: (Long) -> String, timeZone: String? = null): String = listOfNotNull(
+    store,
+    com.aglyn.contracts.formatReceiptTime(atMs, timeZone),
+    "",
+    if (timedOut) "Card payment timed out" else "Card payment not approved",
+    cardLabel?.let { "Card: $it" },
+    "Amount: ${money(amountCents)}",
+    "Taken on: $readerLabel",
+    message,
+    "",
+    "Nothing was charged.",
+  ).joinToString("\n")
+}
+
+/** A declined payment's card as the checkout names it: its brand and last four ("Visa •••• 4242"); null when the processor did not say. */
+fun declinedCardLabel(payment: PosSalePayment?): String? {
+  if (payment == null || (payment.cardBrand.isNullOrEmpty() && payment.last4.isNullOrEmpty())) return null
+  return com.aglyn.hardware.offlineCardLabel(payment.cardBrand, payment.last4)
+}
