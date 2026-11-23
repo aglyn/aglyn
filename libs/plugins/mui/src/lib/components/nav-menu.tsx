@@ -19,7 +19,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import { mdiChevronDown, mdiFormDropdown, mdiViewGridOutline } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import Box, { type BoxProps } from '@mui/material/Box'
-import Button from '@mui/material/Button'
+import Button, { type ButtonProps } from '@mui/material/Button'
 import ClickAwayListener from '@mui/material/ClickAwayListener'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
@@ -37,8 +37,16 @@ import {
 } from 'react'
 import type { SxProps } from '@mui/material/styles'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { FIELD_COLOR, FIELD_SIZE } from '../constants/field-presets'
+import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { isLeafSelectedWithin, parseLeafNodeId } from './drawer'
+import {
+  FIELD_LINK_VARIANT,
+  PAGE_LINK_LOOK_DEFAULTS,
+  RENDER_AS_BUTTON_OPTION,
+  RENDER_AS_TEXT_LINK_OPTION,
+} from './screen-link'
 
 // Component ids are persisted in screen documents; never rename.
 export const NAV_MENU_ID: Aglyn.ComponentId = 'muiNavMenu'
@@ -49,7 +57,29 @@ export type MegaMenuPanelWidth = 'auto' | 'wide' | 'full'
 /** Hover close grace period so the pointer can cross into the panel. */
 const HOVER_CLOSE_DELAY_MS = 150
 
-export interface NavMenuProps {
+/**
+ * How the trigger looks (AGL-4239): the Page Link's own look attributes,
+ * under the same names, so a trigger set like the Page Links beside it is
+ * drawn by the same MUI Button with the same props.
+ *
+ * Persisted in screen documents; never rename a value. `undefined` must
+ * keep meaning `'link'` — the plain nav label of AGL-1198/AGL-2542 — because
+ * every menu authored before this existed is one, and most sit in a nav of
+ * plain text links. That is the one place this differs from a Page Link,
+ * whose unset value means Button; new inserts persist `'button'` explicitly.
+ */
+export interface MenuTriggerLookProps {
+  /** `'button'` wears the button look; `'link'` (or unset) is a plain label. */
+  renderAs?: 'button' | 'link' | null
+  /** Button variant, read only while `renderAs` is `'button'`. */
+  variant?: ButtonProps['variant'] | null
+  /** Button size, read only while `renderAs` is `'button'`. */
+  size?: ButtonProps['size'] | null
+  /** Theme color, read only while `renderAs` is `'button'`. */
+  color?: ButtonProps['color'] | null
+}
+
+export interface NavMenuProps extends MenuTriggerLookProps {
   /** Visible trigger text of the nav item. */
   label?: string
   /**
@@ -62,7 +92,7 @@ export interface NavMenuProps {
   children?: ReactNode
 }
 
-export interface MegaMenuProps {
+export interface MegaMenuProps extends MenuTriggerLookProps {
   label?: string
   /** Panel width preset: content-sized, wide (720px), or full-bleed. */
   panelWidth?: MegaMenuPanelWidth
@@ -130,7 +160,9 @@ export function megaMenuPanelSx(panelWidth: MegaMenuPanelWidth): SxProps {
  * it suppresses link navigation but runs interactions for real, so the menu
  * takes the live branch and opens on hover exactly like the tenant site.
  */
-interface MenuShellProps extends BoxProps {
+interface MenuShellProps
+  extends Omit<BoxProps, 'color'>,
+    MenuTriggerLookProps {
   label: string
   editorHint: string
   panelSx: SxProps
@@ -175,6 +207,11 @@ const TRIGGER_SHELL_SX = {
  * only as reachable as its trigger. It belongs on the WRAPPER now — which is
  * both what an author can actually edit and what `onMouseLeave` measures, so
  * padding added there enlarges the target instead of merely looking like it.
+ *
+ * This is the PLAIN look, the right one in a nav of text links and the one
+ * every unset trigger keeps. A nav made of button-style Page Links is the
+ * other real case; "Render as: Button" (AGL-4239) serves it with the Page
+ * Link's own Button instead of these overrides.
  */
 const TRIGGER_SX = {
   fontFamily: 'inherit',
@@ -188,6 +225,107 @@ const TRIGGER_SX = {
   padding: 0,
   '& .MuiButton-endIcon': { marginRight: 0 },
 } as const
+
+/**
+ * Where an element's styles go once its trigger is a button (AGL-4239).
+ *
+ * In the plain look the Button is a transparent label and every authored
+ * style lands on the wrapper, which the label inherits from. A real button
+ * cannot work that way: MUI's own class sets its font, transform, padding
+ * and color, and an inherited value loses to it. A Page Link has no such
+ * problem because its node styles land on the Button itself — so in the
+ * button look the trigger does the same, and only the keys that place the
+ * element in its parent stay on the wrapper, which is what the panel is
+ * positioned against and what pointer leave measures.
+ */
+const WRAPPER_SX_KEYS = new Set([
+  'display',
+  'position',
+  'top',
+  'right',
+  'bottom',
+  'left',
+  'inset',
+  'zIndex',
+  'flex',
+  'flexGrow',
+  'flexShrink',
+  'flexBasis',
+  'order',
+  'alignSelf',
+  'justifySelf',
+  'placeSelf',
+  'gridArea',
+  'gridColumn',
+  'gridRow',
+  'gridColumnStart',
+  'gridColumnEnd',
+  'gridRowStart',
+  'gridRowEnd',
+  'm',
+  'mt',
+  'mr',
+  'mb',
+  'ml',
+  'mx',
+  'my',
+  'margin',
+  'marginTop',
+  'marginRight',
+  'marginBottom',
+  'marginLeft',
+  'marginX',
+  'marginY',
+  'marginInline',
+  'marginInlineStart',
+  'marginInlineEnd',
+  'marginBlock',
+  'marginBlockStart',
+  'marginBlockEnd',
+  'width',
+  'minWidth',
+  'maxWidth',
+  'height',
+  'minHeight',
+  'maxHeight',
+  'visibility',
+  'transform',
+  'translate',
+  'rotate',
+  'scale',
+])
+
+/** Splits node styles into the wrapper's placement and the button's look. */
+export function splitTriggerSx(sx: readonly unknown[]): {
+  wrapper: unknown[]
+  trigger: unknown[]
+} {
+  const wrapper: unknown[] = []
+  const trigger: unknown[] = []
+  for (const entry of sx) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      // A theme callback or nested list cannot be split by key; it styles
+      // the thing an author sees, which is the button.
+      if (entry) trigger.push(entry)
+      continue
+    }
+    const outer: Record<string, unknown> = {}
+    const inner: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(entry as Record<string, unknown>)) {
+      ;(WRAPPER_SX_KEYS.has(key) ? outer : inner)[key] = value
+    }
+    if (Object.keys(outer).length) wrapper.push(outer)
+    if (Object.keys(inner).length) trigger.push(inner)
+  }
+  return { wrapper, trigger }
+}
+
+/**
+ * The button look's own trigger sx. `flexGrow` lets a width set on the
+ * element reach the button, as it would on a Page Link; with no width the
+ * wrapper shrink-wraps and it does nothing.
+ */
+const BUTTON_TRIGGER_SX = { flexGrow: 1 } as const
 
 /** How far a dropdown panel keeps from the window's edges, in px. */
 export const PANEL_EDGE_MARGIN = 16
@@ -229,10 +367,35 @@ export function fitPanel(
 }
 
 const MenuShell = forwardRef<HTMLDivElement, MenuShellProps>((props, ref) => {
-  const { label, editorHint, panelSx, sx, children, ...rest } = props
+  const {
+    label,
+    editorHint,
+    panelSx,
+    sx,
+    children,
+    renderAs,
+    variant,
+    size,
+    color,
+    ...rest
+  } = props
   // Node styles ride the sx prop the renderer merges; keep them by
   // composing with the shell's own layout sx (stack.ts pattern).
   const nodeSx = Array.isArray(sx) ? sx : sx ? [sx] : []
+  // The look (AGL-4239). Plain is today's label and the unset default; the
+  // button look is the Page Link's Button with the same props. A cleared
+  // attribute persists as null, which must not reach MUI (AGL-1226).
+  const asButton = renderAs === 'button'
+  const split = asButton
+    ? splitTriggerSx(nodeSx)
+    : { wrapper: nodeSx, trigger: [] as unknown[] }
+  const wrapperSx = [TRIGGER_SHELL_SX, ...split.wrapper] as SxProps
+  const triggerLook = asButton
+    ? {
+        ...dropClearedProps({ variant, size, color }),
+        sx: [BUTTON_TRIGGER_SX, ...split.trigger] as SxProps,
+      }
+    : { color: 'inherit' as const, sx: TRIGGER_SX }
   const { editorInert } = Aglyn.useScreenLink(undefined)
   const [open, setOpen] = useState(false)
   const panelRef = useRef<HTMLDivElement | null>(null)
@@ -330,13 +493,12 @@ const MenuShell = forwardRef<HTMLDivElement, MenuShellProps>((props, ref) => {
         // toolbar's flow, shoving and overlapping the other nav items in a
         // horizontal app bar; positioning it like the live popup keeps the
         // bar intact while the panel stays selectable and editable in place.
-        sx={[TRIGGER_SHELL_SX, ...nodeSx]}
+        sx={wrapperSx}
       >
         <Button
-          color="inherit"
+          {...triggerLook}
           aria-expanded={authoring || undefined}
           endIcon={<MdiIcon path={mdiChevronDown.path} />}
-          sx={TRIGGER_SX}
         >
           {label}
         </Button>
@@ -388,14 +550,13 @@ const MenuShell = forwardRef<HTMLDivElement, MenuShellProps>((props, ref) => {
         onKeyDown={(event: KeyboardEvent) => {
           if (event.key === 'Escape') closeNow()
         }}
-        sx={[TRIGGER_SHELL_SX, ...nodeSx]}
+        sx={wrapperSx}
       >
         <Button
-          color="inherit"
+          {...triggerLook}
           aria-haspopup="true"
           aria-expanded={open || undefined}
           endIcon={<MdiIcon path={mdiChevronDown.path} />}
-          sx={TRIGGER_SX}
           onClick={() => {
             // Zero-config default: the trigger click-toggles its menu;
             // a click also "pins" a hover-opened menu.
@@ -518,6 +679,51 @@ export const MegaMenu = forwardRef<HTMLDivElement, MegaMenuProps>(
 )
 MegaMenu.displayName = 'AglynMegaMenu'
 
+/** Shows the look controls only while the trigger wears the button look. */
+const TRIGGER_BUTTON_LOOK = { when: 'renderAs', is: 'button' }
+
+/**
+ * The trigger's look attributes (AGL-4239): the Page Link's own fields —
+ * same names, labels and options, from the same definitions — so the
+ * tutorial instruction is "set it the same as the links beside it".
+ * Full width is left out: a trigger is one item in a row.
+ */
+export const MENU_TRIGGER_LOOK_ATTRIBUTES: Aglyn.AglynAttributeSchema[] = [
+  {
+    name: 'renderAs',
+    description:
+      'How the nav item that opens the menu looks. Pick the same as the ' +
+      'Page Links beside it: Button draws it as a button (Variant, Size and ' +
+      'Theme color below), Text link as a plain label. Either way it opens ' +
+      'the menu and announces as a menu button. Menus added before this ' +
+      'option existed are plain labels until you pick one.',
+    component: Aglyn.FieldComponentType.SELECT,
+    label: 'Render as',
+    // Both values persist (AGL-1453), so a trigger switched to Button can
+    // always be switched back.
+    options: [RENDER_AS_BUTTON_OPTION, RENDER_AS_TEXT_LINK_OPTION],
+  },
+  { ...FIELD_COLOR, condition: TRIGGER_BUTTON_LOOK },
+  { ...FIELD_SIZE, condition: TRIGGER_BUTTON_LOOK },
+  {
+    ...FIELD_LINK_VARIANT,
+    description:
+      'How the nav item is drawn once Render as is Button: Contained is ' +
+      'filled, Outlined has a border, Text the lightest. Ignored while it ' +
+      'is a text link.',
+    condition: TRIGGER_BUTTON_LOOK,
+  },
+]
+
+/**
+ * What a newly inserted menu persists: the button look with the Page Link
+ * preset's own values, so it matches a newly inserted Page Link.
+ */
+const NEW_TRIGGER_LOOK = {
+  renderAs: 'button',
+  ...PAGE_LINK_LOOK_DEFAULTS,
+} as const
+
 export const navMenuSchema: Aglyn.ComponentSchema<NavMenuProps> = {
   $id: NAV_MENU_ID,
   pluginId: BUNDLE_ID,
@@ -535,6 +741,7 @@ export const navMenuSchema: Aglyn.ComponentSchema<NavMenuProps> = {
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Label',
     },
+    ...MENU_TRIGGER_LOOK_ATTRIBUTES,
   ],
 }
 
@@ -570,6 +777,7 @@ export const megaMenuSchema: Aglyn.ComponentSchema<MegaMenuProps> = {
         { value: 'full', label: 'Full width' },
       ],
     },
+    ...MENU_TRIGGER_LOOK_ATTRIBUTES,
   ],
 }
 
@@ -612,7 +820,7 @@ export const navMenuPresets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: NAV_MENU_ID,
       pluginId: BUNDLE_ID,
-      props: { label: 'More' },
+      props: { label: 'More', ...NEW_TRIGGER_LOOK },
       nodes: [navLink('About'), navLink('Blog'), navLink('Contact')],
     },
   },
@@ -723,7 +931,7 @@ export const navMenuPresets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: MEGA_MENU_ID,
       pluginId: BUNDLE_ID,
-      props: { label: 'Products', panelWidth: 'wide' },
+      props: { label: 'Products', panelWidth: 'wide', ...NEW_TRIGGER_LOOK },
       nodes: [
         {
           $id: null,

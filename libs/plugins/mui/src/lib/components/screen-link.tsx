@@ -243,6 +243,50 @@ ScreenLink.displayName = 'ScreenLink'
  */
 const BUTTON_STYLED = { when: 'renderAs', is: 'link', notMatch: true }
 
+/**
+ * The two "Render as" choices that are about LOOK rather than role. Shared
+ * with the Dropdown Menu and Mega Menu triggers (AGL-4239), which offer
+ * exactly these two so an author can set a trigger the same way as the
+ * Page Links beside it. A trigger always announces as a menu button, so the
+ * third, role-only choice has no meaning there.
+ */
+export const RENDER_AS_BUTTON_OPTION = { value: 'button', label: 'Button' } as const
+export const RENDER_AS_TEXT_LINK_OPTION = { value: 'link', label: 'Text link' } as const
+
+/**
+ * Button variant for every element that wears the Page Link's button look
+ * (AGL-4239): one definition, so the labels and options cannot drift
+ * between a Page Link and a menu trigger beside it. Callers add their own
+ * `condition`.
+ */
+export const FIELD_LINK_VARIANT: Aglyn.AglynAttributeSchema = {
+  name: 'variant',
+  description:
+    'How the link is drawn once its style is Button: Contained is a ' +
+    'filled call to action, Outlined a secondary one, Text the lightest. ' +
+    'Ignored while the link is styled as plain text.',
+  component: Aglyn.FieldComponentType.SELECT,
+  label: 'Variant',
+  // "Default" deleted (AGL-1453): unpersistable, and a second name for
+  // `text`, MUI Button's own default, already on the list.
+  options: [
+    { value: 'text', label: 'Text' },
+    { value: 'outlined', label: 'Outlined' },
+    { value: 'contained', label: 'Contained' },
+  ],
+}
+
+/**
+ * What a freshly inserted Page Link looks like. The menu presets seed the
+ * same values (AGL-4239), so a newly inserted Dropdown Menu matches a newly
+ * inserted Page Link; the default text color disappears against a same-hue
+ * appbar, hence `inherit`.
+ */
+export const PAGE_LINK_LOOK_DEFAULTS = {
+  variant: 'outlined',
+  color: 'inherit',
+} as const
+
 export const schema: Aglyn.ComponentSchema<ScreenLinkProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
@@ -306,8 +350,8 @@ export const schema: Aglyn.ComponentSchema<ScreenLinkProps> = {
       // also what keeps every link authored before AGL-1195 rendering
       // unchanged.
       options: [
-        { value: 'button', label: 'Button' },
-        { value: 'link', label: 'Text link' },
+        RENDER_AS_BUTTON_OPTION,
+        RENDER_AS_TEXT_LINK_OPTION,
         { value: 'linkButton', label: 'Link (button styling)' },
       ],
     },
@@ -320,23 +364,7 @@ export const schema: Aglyn.ComponentSchema<ScreenLinkProps> = {
     // shared.
     { ...FIELD_SIZE, condition: BUTTON_STYLED },
     { ...FIELD_FULL_WIDTH, condition: BUTTON_STYLED },
-    {
-      name: 'variant',
-      description:
-        'How the link is drawn once its style is Button: Contained is a ' +
-        'filled call to action, Outlined a secondary one, Text the lightest. ' +
-        'Ignored while the link is styled as plain text.',
-      component: Aglyn.FieldComponentType.SELECT,
-      label: 'Variant',
-      // "Default" deleted (AGL-1453): unpersistable, and a second name for
-      // `text`, MUI Button's own default, already on the list.
-      options: [
-        { value: 'text', label: 'Text' },
-        { value: 'outlined', label: 'Outlined' },
-        { value: 'contained', label: 'Contained' },
-      ],
-      condition: BUTTON_STYLED,
-    },
+    { ...FIELD_LINK_VARIANT, condition: BUTTON_STYLED },
   ],
 }
 
@@ -356,10 +384,8 @@ export const presets: Aglyn.PresetSchema[] = [
       pluginId: BUNDLE_ID,
       props: {
         children: 'Page Link',
-        // Same visible-on-any-surface defaults as the button preset; the
-        // default text color disappears against a same-hue appbar.
-        variant: 'outlined',
-        color: 'inherit',
+        // Same visible-on-any-surface defaults as the button preset.
+        ...PAGE_LINK_LOOK_DEFAULTS,
       },
     },
   },
