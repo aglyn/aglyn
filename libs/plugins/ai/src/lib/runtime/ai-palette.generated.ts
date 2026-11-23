@@ -3546,6 +3546,31 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
           type: 'string',
           enum: ['auto', 'wide', 'full'],
         },
+        renderAs: {
+          type: 'string',
+          enum: ['button', 'link'],
+        },
+        color: {
+          type: 'string',
+          enum: [
+            'inherit',
+            'primary',
+            'secondary',
+            'tertiary',
+            'success',
+            'error',
+            'info',
+            'warning',
+          ],
+        },
+        size: {
+          type: 'string',
+          enum: ['inherit', 'small', 'medium', 'large'],
+        },
+        variant: {
+          type: 'string',
+          enum: ['text', 'outlined', 'contained'],
+        },
       },
       required: [],
       additionalProperties: false,
@@ -3556,6 +3581,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     propFields: {
       label: 'text-field',
       panelWidth: 'select',
+      renderAs: 'select',
+      color: 'select',
+      size: 'select',
+      variant: 'select',
     },
     textLimits: {
       label: 200,
@@ -3576,6 +3605,31 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
           type: 'string',
           maxLength: 200,
         },
+        renderAs: {
+          type: 'string',
+          enum: ['button', 'link'],
+        },
+        color: {
+          type: 'string',
+          enum: [
+            'inherit',
+            'primary',
+            'secondary',
+            'tertiary',
+            'success',
+            'error',
+            'info',
+            'warning',
+          ],
+        },
+        size: {
+          type: 'string',
+          enum: ['inherit', 'small', 'medium', 'large'],
+        },
+        variant: {
+          type: 'string',
+          enum: ['text', 'outlined', 'contained'],
+        },
       },
       required: [],
       additionalProperties: false,
@@ -3585,6 +3639,10 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     },
     propFields: {
       label: 'text-field',
+      renderAs: 'select',
+      color: 'select',
+      size: 'select',
+      variant: 'select',
     },
     textLimits: {
       label: 200,

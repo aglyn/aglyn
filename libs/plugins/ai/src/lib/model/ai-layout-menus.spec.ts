@@ -22,6 +22,7 @@ import {
   aiMenuChangesOf,
   aiMenuNewRefs,
   aiMenusOf,
+  aiMenuTriggerLookFrom,
   type AiMenuChanges,
 } from './ai-layout-menus'
 
@@ -141,6 +142,8 @@ describe('a site’s menus, changed by code (AGL-3728)', () => {
     expect(labels(nodes, 'nav')).toEqual(['Home', '[About]', 'Blog'])
     const dropdown = nodes['nav'].nodes?.[1] as string
     expect(nodes[dropdown]).toMatchObject({ componentId: 'muiNavMenu', pluginId: 'mui', parentId: 'nav', props: { label: 'About' } })
+    // Beside text links it stays the plain label: no look of its own (AGL-4239).
+    expect(nodes[dropdown].props).toEqual({ label: 'About' })
     // The old About link is the dropdown's first entry, the new one after it.
     expect(labels(nodes, dropdown)).toEqual(['About', 'Our team'])
     expect(nodes['n-about'].parentId).toBe(dropdown)
@@ -293,5 +296,25 @@ describe('a starter’s header, which holds only the brand (AGL-3747)', () => {
   it('takes nothing of the brand for an item: it is never taken out or moved', () => {
     const result = aiLayoutWithMenuChanges(starter(), ['header'], { ...none(), remove: [{ parent: null, label: 'Hillside' }], order: ['Hillside'] })
     expect(result.nodes).toBeNull()
+  })
+})
+
+describe('a new dropdown is drawn like the links beside it (AGL-4239)', () => {
+  it('takes the button look, variant, size and color from a button-style link', () => {
+    expect(aiMenuTriggerLookFrom({ props: { children: 'Home', variant: 'outlined', color: 'inherit' } })).toEqual({
+      renderAs: 'button',
+      variant: 'outlined',
+      color: 'inherit',
+    })
+    expect(aiMenuTriggerLookFrom({ props: { renderAs: 'linkButton', variant: 'contained', size: 'small', color: null } })).toEqual({
+      renderAs: 'button',
+      variant: 'contained',
+      size: 'small',
+    })
+  })
+
+  it('takes nothing from a text link, or from no link, so the plain label stays', () => {
+    expect(aiMenuTriggerLookFrom({ props: { renderAs: 'link', color: 'inherit', variant: 'outlined' } })).toEqual({})
+    expect(aiMenuTriggerLookFrom(undefined)).toEqual({})
   })
 })
