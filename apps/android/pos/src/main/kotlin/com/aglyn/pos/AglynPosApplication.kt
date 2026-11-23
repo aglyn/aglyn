@@ -2,6 +2,7 @@ package com.aglyn.pos
 
 import android.app.Application
 import com.aglyn.core.AglynEnv
+import com.aglyn.hardware.AndroidCardNotifier
 import com.aglyn.hardware.AndroidSystemPrinter
 import com.aglyn.hardware.OfflineCardForwardLedger
 import com.aglyn.hardware.OfflineCardForwardStore
@@ -84,6 +85,13 @@ class AglynPosApplication : Application() {
         systemPrinter = AndroidSystemPrinter(this),
         // A card typed in at the register goes into Stripe's own card form, not through our code.
         keyedCardEntry = keyedCards,
+        // "Card not approved" while the app is away (Apple 5.12, as on Apple), on the app's own notification channel.
+        cardNotifier = AndroidCardNotifier(
+          this,
+          com.aglyn.shell.NOTIFICATION_CHANNEL,
+          MainActivity::class.java,
+          ensureChannel = { com.aglyn.shell.AglynMessagingService.ensureChannel(it) },
+        ),
       ),
     )
   }

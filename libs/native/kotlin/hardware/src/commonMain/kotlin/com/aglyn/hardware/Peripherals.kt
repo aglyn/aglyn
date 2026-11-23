@@ -62,6 +62,9 @@ interface Peripherals {
 
   /** What the card reader's SDK did with cards it stored offline (AGL-4039), shared by the collector and the register. */
   val offlineCardForwards: OfflineCardForwardLedger? get() = null
+
+  /** Tells the cashier about a card not approved while the app was not on screen (Apple 5.12, as on Apple). */
+  val cardNotifier: CardNotApprovedNotifier? get() = null
 }
 
 object NoPeripherals : Peripherals {
@@ -76,4 +79,5 @@ class StaticPeripherals(
   override val systemPrinter: SystemPrinter? = null,
   override val keyedCardEntry: KeyedCardEntry? = null,
   override val offlineCardForwards: OfflineCardForwardLedger? = null,
+  override val cardNotifier: CardNotApprovedNotifier? = null,
 ) : Peripherals
