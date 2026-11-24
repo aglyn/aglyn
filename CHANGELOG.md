@@ -9,6 +9,35 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.29.0 — 2026-11-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.28.0...v1.29.0)
+
+### Added
+
+- **commerce:** scan a product barcode with the camera at the Apple register, as on Android ([AGL-4238](https://linear.app/aglyn/issue/AGL-4238))
+- **besigner:** Dropdown Menu and Mega Menu triggers can wear the Page Link button look ([AGL-4239](https://linear.app/aglyn/issue/AGL-4239))
+
+### Fixed
+
+- **besigner:** Save & publish on a page that was never published gives it its address, so it no longer 404s on the live site ([AGL-4240](https://linear.app/aglyn/issue/AGL-4240))
+- **pos-android:** Wi-Fi hardware is optional, so Google Play keeps devices without it
+- **pos:** a declined card on Android ends on Not paid, as on iPhone ([AGL-4061](https://linear.app/aglyn/issue/AGL-4061))
+
+<details>
+<summary>Also in this release: 6 chore</summary>
+
+- **commerce:** Apple register camera scan, drive notes in the PR ([AGL-4238](https://linear.app/aglyn/issue/AGL-4238))
+- **deps-dev:** bump the linters group across 1 directory with 7 updates
+- **deps:** bump the firebase group with 2 updates
+- **deps:** bump the mui-emotion group with 2 updates
+- **deps-dev:** bump the functions-minor-patch group
+- **deps:** bump firebase-admin
+
+</details>
+
+7 commit(s) did not parse as conventional commits (merge commits and the like) and did not contribute to the version bump.
+
 ## v1.28.0 — 2026-11-20
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.27.0...v1.28.0)
