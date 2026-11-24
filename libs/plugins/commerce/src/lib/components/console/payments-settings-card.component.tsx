@@ -22,7 +22,8 @@ import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
 import { doc } from 'firebase/firestore'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import { useOrgPlan } from '@aglyn/tenant-feature-instance'
@@ -34,6 +35,50 @@ import { pluginDocsHelp } from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
 import { useCommerceEntitlement } from './entitlement-gate.component'
+import {
+  CONNECT_REFRESH_GUARD_MS,
+  CONNECT_RETURN_PARAM,
+  paymentsRequirementsNotice,
+  paymentsReturnResult,
+} from '../../model/payments-setup-status'
+
+/** Where the card remembers it already continued an expired Stripe link, so it never loops. */
+const REFRESH_GUARD_KEY = 'aglyn.commerce.connectRefreshAt'
+
+/** The connect return this page was opened with, read once and taken off the address. */
+function useConnectReturn(): 'done' | 'refresh' | null {
+  const searchParams = useSearchParams()
+  const [value] = useState<'done' | 'refresh' | null>(() => {
+    const raw = searchParams?.get(CONNECT_RETURN_PARAM)
+    return raw === 'done' || raw === 'refresh' ? raw : null
+  })
+  useEffect(() => {
+    // Off the address once read, so a reload or a copied link does not show
+    // the result again or mint another link.
+    if (!value || typeof window === 'undefined') return
+    try {
+      const url = new URL(window.location.href)
+      url.searchParams.delete(CONNECT_RETURN_PARAM)
+      window.history.replaceState(window.history.state, '', url.toString())
+    } catch {
+      // The result still shows; only the address keeps the parameter.
+    }
+  }, [value])
+  return value
+}
+
+/** Whether an expired link was already continued a moment ago (then the owner presses the button). */
+function refreshAlreadyContinued(now: number): boolean {
+  try {
+    const at = Number(window.sessionStorage.getItem(REFRESH_GUARD_KEY))
+    if (Number.isFinite(at) && at > 0 && now - at < CONNECT_REFRESH_GUARD_MS) return true
+    window.sessionStorage.setItem(REFRESH_GUARD_KEY, String(now))
+    return false
+  } catch {
+    // No storage: the in-page guard still stops a repeat in this page.
+    return false
+  }
+}
 
 export interface PaymentsSettingsCardProps {
   hostId: string
@@ -43,8 +88,8 @@ export interface PaymentsSettingsCardProps {
 export const PAYMENTS_SETTINGS_ANCHOR = 'store-payments'
 
 /**
- * Merchant payments card (AGL-284): Stripe Connect Express onboarding
- * status for the org owner + the plan's transaction-fee ladder so the
+ * Merchant payments card (AGL-284): Stripe setup status for the org
+ * owner (the store's own Stripe account for every new setup) + the plan's transaction-fee ladder so the
  * "upgrade to kill fees" motion (AGL-278) is visible where it matters.
  */
 export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
@@ -59,6 +104,10 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
    * stored one would be a button that fails the second time it is pressed.
    */
   const [dashboardUrl, setDashboardUrl] = useState<string | null>(null)
+  /** Back from Stripe (AGL-4245): `done` shows the result, `refresh` continues once. */
+  const connectReturn = useConnectReturn()
+  const [returnDismissed, setReturnDismissed] = useState(false)
+  const refreshHandled = useRef(false)
   const { org, ready: planReady } = useOrgPlan(hostId)
   /** Bumped by Retry to re-subscribe the profile listen (AGL-1380). */
   const [retryNonce, setRetryNonce] = useState(0)
@@ -128,7 +177,13 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
   const digitalPct = Aglyn.resolveTransactionFeePct(org, 'digital')
   const commerceEnabled = Aglyn.checkEntitlement(org, 'commerce')
 
-  const handleConnect = useCallback(async () => {
+  /**
+   * `continue`: the owner asked to go on with Stripe setup, so a link the
+   * route answers with is followed even for an account that can already
+   * take payments (Stripe asking for more before a deadline, AGL-4245).
+   * Without it this is the status check the button has always been.
+   */
+  const handleConnect = useCallback(async (intent?: 'continue') => {
     setBusy(true)
     try {
       const response = await authorizedFetch(user, '/api/commerce/connect', {
@@ -169,6 +224,9 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
         // them. Read three-valued, so only a literal `false` from Stripe
         // downgrades the claim; an absent flag means unasked, not off.
         const payoutsBlocked = payload.payoutsEnabled === false
+        if (intent === 'continue' && typeof payload.url === 'string' && payload.url) {
+          return void window.location.assign(payload.url)
+        }
         // A WARNING THAT NAMES A PROBLEM MUST OFFER THE FIX.
         //
         // Stripe is the only place payouts can be released — an Express
@@ -207,6 +265,54 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
       setBusy(false)
     }
   }, [user, hostId, chargesEnabled, enqueueSnackbar])
+
+  /**
+   * AN EXPIRED STRIPE LINK CONTINUES BY ITSELF, ONCE (AGL-4245). Stripe sends
+   * the owner to `?connect=refresh` when the onboarding link had expired or
+   * was already opened; the fix is a new link. Once per page and once per
+   * two minutes in this tab, so a link that keeps failing leaves the owner
+   * here with the button rather than bouncing between the two forever.
+   */
+  const ready = planReady && stripeState === 'loaded'
+  useEffect(() => {
+    if (connectReturn !== 'refresh' || !ready || !isOwner || refreshHandled.current) return
+    refreshHandled.current = true
+    if (refreshAlreadyContinued(Date.now())) return
+    void handleConnect('continue')
+  }, [connectReturn, ready, isOwner, handleConnect])
+
+  /** What Stripe still needs, as a standing notice (AGL-4245). */
+  const requirementsNotice =
+    stripeState === 'loaded' && !modeMismatch && !modeUnverified
+      ? paymentsRequirementsNotice(profile)
+      : null
+  /** The result of coming back from Stripe, from the live profile. */
+  const returnResult =
+    !returnDismissed &&
+    stripeState === 'loaded' &&
+    !modeMismatch &&
+    !modeUnverified &&
+    !requirementsNotice
+      ? connectReturn === 'done'
+        ? paymentsReturnResult(profile, chargesEnabled)
+        : connectReturn === 'refresh' && !chargesEnabled
+          ? {
+              severity: 'info' as const,
+              text: 'The Stripe page had expired. Continue setup to pick up where you left off.',
+              continueSetup: true,
+            }
+          : null
+      : null
+  const continueButton = isOwner ? (
+    <Button
+      color="inherit"
+      size="small"
+      disabled={busy}
+      onClick={() => void handleConnect('continue')}
+    >
+      {busy ? 'Opening Stripe…' : 'Continue setup'}
+    </Button>
+  ) : undefined
 
   return (
     <CardDisplay
@@ -442,6 +548,32 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
           "Payments are enabled" the whole time — the storefront looked healthy
           from every angle available to them.
         */}
+        {/*
+          BACK FROM STRIPE, AND WHAT IT STILL NEEDS (AGL-4245). The return
+          used to land on Catalog with nothing reading it, so finishing (or
+          leaving) Stripe's form showed nothing. Both read the live profile,
+          so the words change by themselves when Stripe's update lands. The
+          standing notice wins over the return result: one message, one
+          button.
+        */}
+        {requirementsNotice ? (
+          <Alert
+            severity={requirementsNotice.severity}
+            variant="outlined"
+            action={requirementsNotice.continueSetup ? continueButton : undefined}
+          >
+            {requirementsNotice.text}
+          </Alert>
+        ) : null}
+        {returnResult ? (
+          <Alert
+            severity={returnResult.severity}
+            onClose={returnResult.continueSetup ? undefined : () => setReturnDismissed(true)}
+            action={returnResult.continueSetup ? continueButton : undefined}
+          >
+            {returnResult.text}
+          </Alert>
+        ) : null}
         {stripeState === 'loaded' && profile?.lastPayoutFailureAtMs ? (
           <Alert severity="warning" variant="outlined">
             {`A payout of $${(
@@ -460,7 +592,7 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
               variant={chargesEnabled ? 'text' : 'contained'}
               color="primary"
               disabled={busy}
-              onClick={handleConnect}
+              onClick={() => void handleConnect()}
               sx={{ alignSelf: 'flex-start' }}
             >
               {chargesEnabled
