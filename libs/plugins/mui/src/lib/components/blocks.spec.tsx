@@ -308,12 +308,12 @@ describe('Social Links draws a TikTok profile', () => {
   it('links the profile as a labeled icon, in its place among the others', () => {
     const { getByLabelText, container } = render(
       <SocialLinks
-        instagram="https://instagram.com/undergroundmx"
-        tiktok=" https://www.tiktok.com/@undergroundmx "
+        instagram="https://instagram.com/examplepark"
+        tiktok=" https://www.tiktok.com/@examplepark "
       />,
     )
     const link = getByLabelText('TikTok')
-    expect(link.getAttribute('href')).toBe('https://www.tiktok.com/@undergroundmx')
+    expect(link.getAttribute('href')).toBe('https://www.tiktok.com/@examplepark')
     expect(link.getAttribute('target')).toBe('_blank')
     expect(link.querySelector('svg path')?.getAttribute('d')).toMatch(/^M12\.525/)
     const labels = Array.from(container.querySelectorAll('a')).map((anchor) =>
