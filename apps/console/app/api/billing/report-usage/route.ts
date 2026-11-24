@@ -53,7 +53,13 @@ import {
   type HostUsageSnapshot,
   meteredBands,
 } from '../../../../utils/usage-metering'
-import { emailSendsBillingBand } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import {
+  contractMonth,
+  contractUsageBill,
+  emailSendsBillingBand,
+  readOrgContract,
+  withoutContractCeilingFlag,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { measureScreenCaps } from '../../../../utils/screen-cap-reconciliation'
 import type { BillableScreenSource } from '../../hosts/resources/count-billable-screens'
 import { orgCounterTotals } from '../../../../utils/org-counter-totals'
@@ -777,7 +783,12 @@ async function handler(request: Request): Promise<Response> {
       ])
       // One read of the org doc for every quota decision below — the four
       // meters must agree about which plan they are pricing against.
-      const orgData = orgSnapshot.data() as any
+      //
+      // A Custom contract whose usage reached its ceiling this month (AGL-4233)
+      // is priced with that flag set aside: the month still bills UP TO the
+      // ceiling, which `contractUsageBill` holds it to below.
+      const storedOrgData = orgSnapshot.data() as any
+      const orgData = withoutContractCeilingFlag(storedOrgData)
       // The tier every release-flag verdict below is evaluated against
       // (AGL-2486), off the document already in hand — no extra read.
       //
@@ -1085,7 +1096,7 @@ async function handler(request: Request): Promise<Response> {
           ? Math.round(offlineFeeRaw)
           : 0
       const offlinePosFeeOrders = Number(offlineFeesSnap.get('orders') ?? 0)
-      const billedCents =
+      const measuredCents =
         billedEstimate.billedCents +
         Math.round(apiQuota.overageMonthlyUsd * 100) +
         Math.round(emailOverageUsd * 100) +
@@ -1097,6 +1108,44 @@ async function handler(request: Request): Promise<Response> {
           0,
         ) +
         offlinePosFeeCents
+      /*
+       * A CUSTOM CONTRACT'S USAGE, HELD TO ITS TERMS (AGL-4233). Its usage
+       * past the contract bills only for a month its contract bills (usage
+       * billing on, and started), and never past its monthly ceiling. The POS
+       * fee above is not usage past a contract and is left out of the hold.
+       * A workspace with no contract passes through unchanged.
+       */
+      const contractBill = contractUsageBill(
+        orgData,
+        month,
+        measuredCents - offlinePosFeeCents,
+      )
+      const billedCents = readOrgContract(orgData)
+        ? contractBill.billedCents + offlinePosFeeCents
+        : measuredCents
+      // The ceiling reached in the CURRENT month: flag it, so every band is
+      // a hard cap again until the month turns, and tell staff once.
+      if (
+        contractBill.ceilingReached &&
+        month === contractMonth() &&
+        storedOrgData?.entitlements?.contract?.ceilingReachedMonth !== month
+      ) {
+        try {
+          await orgRef.update({ 'entitlements.contract.ceilingReachedMonth': month })
+          await raiseOperatorAlert('billing.contractUsageCeiling', {
+            dedupeKey: `${orgId}:${month}`,
+            context: {
+              orgId,
+              orgName: String(orgData?.name ?? orgData?.displayName ?? '').trim(),
+              month,
+              ceiling: formatOperatorAlertAmount(contractBill.ceilingCents),
+            },
+            orgId,
+          })
+        } catch (error) {
+          console.error('[report-usage] contract ceiling flag failed', { orgId, month, error })
+        }
+      }
       // `usageRef` / `existing` come from the batch above (AGL-2399) — the
       // stock basis needs the same document this guard does, and reading it
       // twice per org bought nothing.
@@ -1392,6 +1441,15 @@ async function handler(request: Request): Promise<Response> {
           maxBillableScreens: screenCaps.maxBillable,
           screensOverCapHostIds: screenCaps.overCapHostIds,
           billedCents,
+          // A Custom contract's measured usage before its hold, and the
+          // ceiling it was held to (AGL-4233), so the audit doc shows what the
+          // ceiling withheld.
+          ...(readOrgContract(orgData)
+            ? {
+                contractMeasuredCents: Math.max(0, measuredCents - offlinePosFeeCents),
+                contractCeilingCents: contractBill.ceilingCents,
+              }
+            : {}),
           /**
            * WHY a closed month reached no invoice, and HOW MUCH went with it
            * (AGL-1878).

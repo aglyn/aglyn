@@ -20,6 +20,8 @@ import type {
   CoreOrgEntitlements,
   CoreOrgFeatureFlags,
   OrgBrandingProfile,
+  OrgContractRates,
+  OrgContractTerms,
   OrgDiscount,
   OrgEntitlements,
   OrgFeatureFlags,
@@ -246,7 +248,7 @@ type RetiredEntitlementKeys = 'totalSiteSizeMb'
  * staff plan comp rides the same staff-owned map, and is read through
  * `readOrgPlanComp` rather than resolved into a limit.
  */
-type NonQuotaEntitlementKeys = 'planComp'
+type NonQuotaEntitlementKeys = 'planComp' | 'contract'
 
 /**
  * Fully-resolved entitlements: every LIVE CORE quota present, the core
@@ -1911,7 +1913,334 @@ export function resolvePlanPricing(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): PlanPricing {
   const plan = resolveEffectivePlan(org)
-  return resolvePlanComp(org) ? PLAN_COMP_PRICING[plan] : PLAN_PRICING[plan]
+  if (resolvePlanComp(org)) return PLAN_COMP_PRICING[plan]
+  // A Custom deal with a rate card sells at its contract's rates (AGL-4233).
+  // Without one, `readOrgContract` is null and the all-null row stands.
+  const contract = readOrgContract(org)
+  if (contract) {
+    return contractPlanPricing(contract, contractUsageBillingOpen(contract))
+  }
+  return PLAN_PRICING[plan]
+}
+
+/*==========================================================================
+ * CUSTOM CONTRACT RATE CARDS (AGL-4233)
+ *
+ * A Custom deal is quoted per customer, and until AGL-4233 it could not grow
+ * by itself: every rate on the `enterprise` row is the "not for sale"
+ * sentinel, so no add-on was sold and usage past a band was refused. A deal
+ * that carries `entitlements.contract` now sells its additions, and (with
+ * `usageBilling`) bills usage past its contracted amounts, at the rates its
+ * contract names — the public Pro rates unless the deal negotiated others.
+ *
+ * Everything below is read through `resolvePlanPricing`, so every quota check
+ * and the metered rollup see the contract without a per-check change. A
+ * Custom workspace with NO rate card resolves exactly as before.
+ *=========================================================================*/
+
+/** The rate keys a contract may set, in the order the staff panel shows them. */
+export const CONTRACT_ADDITION_RATE_KEYS = [
+  'extraHostMonthlyUsd',
+  'extraSeatMonthlyUsd',
+  'extraCollaboratorMonthlyUsd',
+  'extraDatasetMonthlyUsd',
+  'posRegisterMonthlyUsd',
+  'aiCreditBlockMonthlyUsd',
+] as const satisfies ReadonlyArray<keyof OrgContractRates>
+
+/** The usage-past-the-contract rate keys, in the order the staff panel shows them. */
+export const CONTRACT_USAGE_RATE_KEYS = [
+  'extraDataGbMonthlyUsd',
+  'extraApiRequestsUsdPer1k',
+  'extraAssistCreditsUsdPer1k',
+  'extraContactsUsdPer1k',
+  'extraEmailSendsUsdPer1k',
+  'extraRunsUsdPer1k',
+] as const satisfies ReadonlyArray<keyof OrgContractRates>
+
+export type ContractNumericRateKey =
+  | (typeof CONTRACT_ADDITION_RATE_KEYS)[number]
+  | (typeof CONTRACT_USAGE_RATE_KEYS)[number]
+
+/** Every numeric rate key a contract carries. */
+export const CONTRACT_RATE_KEYS: readonly ContractNumericRateKey[] = [
+  ...CONTRACT_ADDITION_RATE_KEYS,
+  ...CONTRACT_USAGE_RATE_KEYS,
+]
+
+/** A contract's rates with every default filled in. */
+export type ResolvedContractRates = {
+  [K in ContractNumericRateKey]: number | null
+} & { meteredInfraPassThrough: boolean }
+
+/**
+ * The add-on a contract addition rate sells, as its `seatAddons` key. The
+ * kinds a contract never sells (the Event Calendar and Site Care, which a
+ * Custom agreement names itself) are absent.
+ */
+export const CONTRACT_ADDON_RATE_KEY: Readonly<
+  Partial<Record<keyof OrgSeatAddons, (typeof CONTRACT_ADDITION_RATE_KEYS)[number]>>
+> = {
+  hosts: 'extraHostMonthlyUsd',
+  managers: 'extraSeatMonthlyUsd',
+  members: 'extraCollaboratorMonthlyUsd',
+  datasets: 'extraDatasetMonthlyUsd',
+  posRegisters: 'posRegisterMonthlyUsd',
+  aiAddon: 'aiCreditBlockMonthlyUsd',
+}
+
+/**
+ * The public Pro rates, READ FROM CODE (AGL-4233): the default every contract
+ * sells at until a deal negotiates otherwise. Never retyped, so a Pro price
+ * change moves every contract that did not negotiate that rate — the reason
+ * a contract stores only the rates it changed.
+ */
+export function defaultContractRates(): ResolvedContractRates {
+  const pro = PLAN_PRICING.pro
+  return {
+    extraHostMonthlyUsd: pro.extraHostMonthlyUsd,
+    extraSeatMonthlyUsd: pro.extraSeatMonthlyUsd,
+    extraCollaboratorMonthlyUsd: pro.extraCollaboratorMonthlyUsd,
+    extraDatasetMonthlyUsd: pro.extraDatasetMonthlyUsd,
+    posRegisterMonthlyUsd: POS_REGISTER_ADDON_MONTHLY_USD,
+    aiCreditBlockMonthlyUsd: AI_CREDIT_BLOCK_MONTHLY_USD,
+    extraDataGbMonthlyUsd: pro.extraDataGbMonthlyUsd,
+    extraApiRequestsUsdPer1k: pro.extraApiRequestsUsdPer1k,
+    extraAssistCreditsUsdPer1k: pro.extraAssistCreditsUsdPer1k,
+    extraContactsUsdPer1k: pro.extraContactsUsdPer1k,
+    extraEmailSendsUsdPer1k: pro.extraEmailSendsUsdPer1k,
+    extraRunsUsdPer1k: pro.extraRunsUsdPer1k,
+    meteredInfraPassThrough: pro.meteredInfraPassThrough,
+  }
+}
+
+/**
+ * The default monthly ceiling on usage billing, as a share of the contract's
+ * base monthly price (AGL-4233): 1 means usage can add at most one more
+ * month's base price to a month's bill. A DEFAULT, not a decision — staff set
+ * a figure per deal, and this one constant moves every deal that did not.
+ */
+export const DEFAULT_CONTRACT_USAGE_CEILING_SHARE_OF_BASE = 1
+
+/** A contract's terms with every default filled in. */
+export interface ResolvedOrgContract {
+  rates: ResolvedContractRates
+  usageBilling: boolean
+  /** The month's ceiling in USD; 0 when there is none to bill under. */
+  usageCeilingMonthlyUsd: number
+  /** Whether the ceiling is the default rather than a figure staff set. */
+  usageCeilingIsDefault: boolean
+  usageBillingFrom: string | null
+  ceilingReachedMonth: string | null
+}
+
+/** The calendar month a moment falls in, `YYYY-MM`, in UTC. */
+export function contractMonth(nowMs: number = Date.now()): string {
+  return new Date(nowMs).toISOString().slice(0, 7)
+}
+
+/** The calendar month after `month` (`YYYY-MM`). */
+export function nextContractMonth(month: string): string {
+  const [year, mon] = month.split('-').map(Number)
+  const next = new Date(Date.UTC(year, mon, 1))
+  return next.toISOString().slice(0, 7)
+}
+
+function contractRate(value: unknown, fallback: number | null): number | null {
+  if (value === null) return null
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return value
+  return fallback
+}
+
+/** Fill a stored (possibly partial) rate card with the Pro defaults. */
+export function resolveContractRates(
+  stored: OrgContractRates | null | undefined,
+): ResolvedContractRates {
+  const defaults = defaultContractRates()
+  const resolved = { ...defaults }
+  for (const key of CONTRACT_RATE_KEYS) {
+    resolved[key] = contractRate(stored?.[key], defaults[key])
+  }
+  if (typeof stored?.meteredInfraPassThrough === 'boolean') {
+    resolved.meteredInfraPassThrough = stored.meteredInfraPassThrough
+  }
+  return resolved
+}
+
+/**
+ * A Custom deal's contract terms, or null when it has none (AGL-4233).
+ *
+ * Null for every workspace that is not on Custom, for a comp (a comp bills
+ * nothing), and for a Custom workspace staff have not given a rate card —
+ * which is every Custom workspace before AGL-4233, and the reason they keep
+ * selling nothing and refusing past their bands.
+ */
+export function readOrgContract(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): ResolvedOrgContract | null {
+  const stored = org?.entitlements?.contract as OrgContractTerms | undefined
+  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return null
+  if (resolvePlanComp(org)) return null
+  if (!isCustomPricedPlan(resolveEffectivePlan(org))) return null
+  const base = Number(org?.subscription?.customMonthlyUsd ?? 0)
+  const set = Number(stored.usageCeilingMonthlyUsd)
+  const hasSet = Number.isFinite(set) && set >= 0 && stored.usageCeilingMonthlyUsd != null
+  const ceiling = hasSet
+    ? set
+    : Number.isFinite(base) && base > 0
+      ? Math.round(base * DEFAULT_CONTRACT_USAGE_CEILING_SHARE_OF_BASE * 100) / 100
+      : 0
+  return {
+    rates: resolveContractRates(stored.rates),
+    usageBilling: stored.usageBilling === true,
+    usageCeilingMonthlyUsd: ceiling,
+    usageCeilingIsDefault: !hasSet,
+    usageBillingFrom:
+      typeof stored.usageBillingFrom === 'string' && /^\d{4}-\d{2}$/.test(stored.usageBillingFrom)
+        ? stored.usageBillingFrom
+        : null,
+    ceilingReachedMonth:
+      typeof stored.ceilingReachedMonth === 'string' ? stored.ceilingReachedMonth : null,
+  }
+}
+
+/**
+ * Whether a contract bills usage for `month` at all: usage billing on, a
+ * ceiling above zero, and the month at or after the one billing starts.
+ * The ceiling being REACHED is not asked here — see
+ * `contractUsageBillingOpen` — because a month that hit its ceiling still
+ * bills up to it.
+ */
+export function contractUsageBillsMonth(
+  contract: ResolvedOrgContract | null,
+  month: string = contractMonth(),
+): boolean {
+  if (!contract?.usageBilling) return false
+  if (!(contract.usageCeilingMonthlyUsd > 0)) return false
+  return !contract.usageBillingFrom || month >= contract.usageBillingFrom
+}
+
+/**
+ * Whether usage past the contract is SOLD right now: billed this month and
+ * the ceiling not yet reached. When this is false the contract's usage
+ * rates are withheld and every band is the hard cap it was before AGL-4233.
+ */
+export function contractUsageBillingOpen(
+  contract: ResolvedOrgContract | null,
+  month: string = contractMonth(),
+): boolean {
+  return contractUsageBillsMonth(contract, month) && contract!.ceilingReachedMonth !== month
+}
+
+/**
+ * The `PlanPricing` row a contract resolves to: its addition rates always,
+ * its usage rates only while usage billing is open.
+ */
+export function contractPlanPricing(
+  contract: ResolvedOrgContract,
+  usageOpen: boolean,
+): PlanPricing {
+  const rates = contract.rates
+  return {
+    ...PLAN_PRICING.enterprise,
+    extraHostMonthlyUsd: rates.extraHostMonthlyUsd,
+    extraSeatMonthlyUsd: rates.extraSeatMonthlyUsd,
+    extraCollaboratorMonthlyUsd: rates.extraCollaboratorMonthlyUsd,
+    extraDatasetMonthlyUsd: rates.extraDatasetMonthlyUsd,
+    extraDataGbMonthlyUsd: usageOpen ? rates.extraDataGbMonthlyUsd : null,
+    extraApiRequestsUsdPer1k: usageOpen ? rates.extraApiRequestsUsdPer1k : null,
+    extraAssistCreditsUsdPer1k: usageOpen ? rates.extraAssistCreditsUsdPer1k : null,
+    extraContactsUsdPer1k: usageOpen ? rates.extraContactsUsdPer1k : null,
+    extraEmailSendsUsdPer1k: usageOpen ? rates.extraEmailSendsUsdPer1k : null,
+    extraRunsUsdPer1k: usageOpen ? rates.extraRunsUsdPer1k : null,
+    meteredInfraPassThrough: usageOpen && rates.meteredInfraPassThrough,
+  }
+}
+
+/**
+ * The monthly USD a contract sells one unit of an add-on at, or null when
+ * the contract does not sell that kind (AGL-4233).
+ */
+export function contractAddonUnitUsd(
+  contract: ResolvedOrgContract | null,
+  kind: keyof OrgSeatAddons,
+): number | null {
+  if (!contract) return null
+  const key = CONTRACT_ADDON_RATE_KEY[kind]
+  return key ? contract.rates[key] : null
+}
+
+/** The add-ons a contract has bought, priced at its own rates, per month. */
+export function contractAddonsMonthlyUsd(
+  contract: ResolvedOrgContract,
+  addons: OrgSeatAddons | null | undefined,
+): number {
+  let total = 0
+  for (const kind of Object.keys(CONTRACT_ADDON_RATE_KEY) as Array<keyof OrgSeatAddons>) {
+    const quantity =
+      kind === 'aiAddon'
+        ? aiAddonUnits(addons)
+        : Math.max(0, Math.floor(Number(addons?.[kind] ?? 0)) || 0)
+    const rate = contractAddonUnitUsd(contract, kind)
+    if (quantity > 0 && rate) total += quantity * rate
+  }
+  return Math.round(total * 100) / 100
+}
+
+/** What a contract month's usage figure bills, held to its ceiling. */
+export interface ContractUsageBill {
+  /** The cents that reach the invoice. */
+  billedCents: number
+  /** The ceiling in cents; 0 when the month bills no usage. */
+  ceilingCents: number
+  /** Whether the month's measured usage reached the ceiling. */
+  ceilingReached: boolean
+}
+
+/**
+ * Hold a month's measured usage cents to a contract's terms (AGL-4233): zero
+ * for a month the contract does not bill (usage billing off, or not started
+ * yet), and never more than the ceiling. A workspace with no contract is
+ * returned unchanged — this is only ever a contract's limit.
+ */
+export function contractUsageBill(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  month: string,
+  measuredCents: number,
+): ContractUsageBill {
+  const contract = readOrgContract(org)
+  const cents = Math.max(0, Math.round(Number(measuredCents) || 0))
+  if (!contract) return { billedCents: cents, ceilingCents: 0, ceilingReached: false }
+  if (!contractUsageBillsMonth(contract, month)) {
+    return { billedCents: 0, ceilingCents: 0, ceilingReached: false }
+  }
+  const ceilingCents = Math.round(contract.usageCeilingMonthlyUsd * 100)
+  return {
+    billedCents: Math.min(cents, ceilingCents),
+    ceilingCents,
+    ceilingReached: cents >= ceilingCents,
+  }
+}
+
+/**
+ * The org as the usage rollup must price it (AGL-4233): a contract whose
+ * ceiling was reached this month still bills UP TO the ceiling, so the
+ * rollup prices its usage with the ceiling flag set aside and lets
+ * `contractUsageBill` hold the figure. Pricing it with the flag would read
+ * every rate as withheld and bill less than the usage the ceiling allowed.
+ */
+export function withoutContractCeilingFlag<T extends Partial<AglynOrgBilling> | null | undefined>(
+  org: T,
+): T {
+  const contract = org?.entitlements?.contract
+  if (!contract?.ceilingReachedMonth) return org
+  return {
+    ...org,
+    entitlements: {
+      ...org!.entitlements,
+      contract: { ...contract, ceilingReachedMonth: null },
+    },
+  } as T
 }
 
 /**
@@ -2366,7 +2695,11 @@ export function orgListPriceMonthlyUsd(
   // Stored monthly-normalized, so it is used as-is.
   const custom = org?.subscription?.customMonthlyUsd
   if (typeof custom === 'number' && custom > 0) {
-    return Math.round(custom * 100) / 100
+    // A contract's own additions (AGL-4233) bill on top of the quote, at the
+    // contract's rates; a deal with no rate card has none, so this is 0.
+    const contract = readOrgContract(org)
+    const additions = contract ? contractAddonsMonthlyUsd(contract, org?.seatAddons) : 0
+    return Math.round((custom + additions) * 100) / 100
   }
   const pricing = PLAN_PRICING[org?.plan as OrgPlan]
   if (!pricing) return 0
@@ -3543,7 +3876,7 @@ export function hasAiAddon(
 export function resolveAiCreditBlocks(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): number {
-  if (!planSellsAiCredits(resolveEffectivePlan(org))) return 0
+  if (!orgSellsAiCreditBlocks(org)) return 0
   return aiAddonUnits(resolvePurchasedAddons(org))
 }
 
@@ -3568,6 +3901,11 @@ export function aiCreditsQuotaPerUnit(
   _org: Partial<AglynOrgBilling> | null | undefined,
   plan: OrgPlan,
 ): number {
+  // A contract that sells AI credit blocks (AGL-4233) sells the same block
+  // every paid plan does, at its own rate.
+  if (plan === 'enterprise' && contractAddonUnitUsd(readOrgContract(_org), 'aiAddon') != null) {
+    return AI_CREDITS_PER_BLOCK
+  }
   if (plan === 'enterprise') return ENTERPRISE_AI_ADDON_CREDITS_PER_MONTH
   return planSellsAiCredits(plan) ? AI_CREDITS_PER_BLOCK : 0
 }
@@ -3594,7 +3932,18 @@ export function aiCreditBlocksCreditsPerMonth(
 export function orgCanBuyAiCredits(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): boolean {
-  return !resolvePlanComp(org) && planSellsAiCredits(resolveEffectivePlan(org))
+  return !resolvePlanComp(org) && orgSellsAiCreditBlocks(org)
+}
+
+/**
+ * Whether this workspace is sold Aglyn AI credit blocks: a paid self-serve
+ * plan, or a Custom contract whose rate card sells them (AGL-4233).
+ */
+export function orgSellsAiCreditBlocks(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): boolean {
+  if (planSellsAiCredits(resolveEffectivePlan(org))) return true
+  return contractAddonUnitUsd(readOrgContract(org), 'aiAddon') != null
 }
 
 /**

@@ -694,13 +694,21 @@ async function handler(request: Request): Promise<Response> {
     // give back: the org document and the row that explains it land together
     // or neither does. Anything added to this handler belongs INSIDE the
     // batch — a write appended after `commit()` reopens the gap.
+    const contractRemains = Boolean(
+      (orgData['entitlements'] as Record<string, unknown> | undefined)?.['contract'],
+    )
     const batch = firestore.batch()
     batch.set(
       orgRef,
       {
         ...planWrite,
+        // A Custom contract's rate card (AGL-4233) lives on this map and is
+        // written only by its own staff door: clearing every override must
+        // not delete it with the map.
         entitlements:
-          hasOverrides || compRemains ? entitlements : FieldValue.delete(),
+          hasOverrides || compRemains || contractRemains
+            ? entitlements
+            : FieldValue.delete(),
         releaseFlags: hasReleaseOverrides
           ? withInheritDeletes(explicitReleaseFlags, RELEASE_FLAG_KEYS)
           : FieldValue.delete(),

@@ -1351,6 +1351,9 @@ async function handler(request: Request): Promise<Response> {
             status: object?.status,
             canceled,
             currentPeriodStart: object?.current_period_start,
+            // A Custom contract that bills usage (AGL-4233) is metered too.
+            contractUsageBilling:
+              orgSnapshot?.get('entitlements')?.contract?.usageBilling === true,
           })
           if (decision.warning) {
             console.warn('[billing/webhook] metered usage item not attached', {

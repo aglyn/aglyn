@@ -1139,6 +1139,31 @@ its full-use floor, and provisioning is refused below the floor; see [Applying a
 coupon and quoting a custom price](#discount-floors). An organization already on a
 custom price shows it at the top of the card.
 
+#### Contract rates {#contract-rates}
+
+The rates a Custom contract sells its additions and its usage past the contract at.
+Without a rate card, a Custom organization buys no add-ons and is refused past its
+contracted amounts. With one, its owner can add sites, team seats, collaborators,
+datasets, POS registers and AI credit blocks from **Billing**, and usage past the
+contract can bill automatically.
+
+- **Contracted amounts** shows what the deal includes. Change those with the
+  entitlement overrides.
+- **Additions** and **Usage past the contract**: leave a field empty for the public
+  Pro rate, or enter the rate the deal negotiated.
+- **Bill usage past the contract automatically** turns usage billing on from the next
+  calendar month. The **Monthly ceiling** caps what usage can add to one month; at the
+  ceiling, usage stops billing, the contracted amounts become hard limits until the
+  month turns, and staff get an alert. Empty uses the contract's base monthly price.
+- A card-paid contract is charged for an addition when it is made. A contract paid by
+  invoice gets the addition on its next invoice.
+
+Saving checks every rate against cost + 30% at full use on this organization's own
+amounts, and refuses a rate under it with the figures. A customer's addition is also
+checked against the whole contract's floor; when it would fall under, it is held,
+nothing is charged, and staff get an alert. **Remove rate card** returns the
+organization to selling nothing past its contract.
+
 #### Recent admin actions on this organization {#org-recent-admin-actions}
 
 The staff audit entries that reference this organization, from the latest 200 in the

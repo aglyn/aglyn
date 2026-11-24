@@ -18,8 +18,13 @@
 // Imported from BOTH graphs — the staff pages (client) and the App Routes
 // that refuse a quote or a discount — so it may import neither entry barrel,
 // for the reason `margin-utilization.ts` states at its own head.
-import type { AglynOrgBilling, OrgDiscount, OrgPlan } from '../foundation'
+import type { AglynOrgBilling, OrgDiscount, OrgPlan, OrgSeatAddons } from '../foundation'
 import {
+  CONTRACT_ADDON_RATE_KEY,
+  CONTRACT_RATE_KEYS,
+  STRIPE_PROCESSOR_FEE_PCT,
+  type ContractNumericRateKey,
+  type ResolvedContractRates,
   ESTIMATED_PAGE_TRANSFER_BYTES,
   INFRA_COGS_PER_SITE_USD,
   METERED_MARKUP,
@@ -38,6 +43,7 @@ import {
   type OrgDiscountTerms,
   type ResolvedOrgEntitlements,
 } from './plan-entitlements'
+import { AI_CREDITS_PER_BLOCK } from './ai-credit-blocks'
 import { planQuotaOf } from '../plugin-manager/plugin-plan-entitlements'
 import {
   pluginCostAxes,
@@ -693,4 +699,201 @@ export function describeFullUseFloor(
 /** "Agency, annual" — how a coupon case names itself. */
 export function couponCaseLabel(one: Pick<CouponFullUseCase, 'plan' | 'interval'>): string {
   return `${PLAN_LABELS[one.plan] ?? one.plan}, ${one.interval === 'year' ? 'annual' : 'monthly'}`
+}
+
+/*==========================================================================
+ * THE CONTRACT RATE GUARD (AGL-4233)
+ *
+ * A Custom deal's additions and usage past its contract sell at the rates
+ * its rate card names. Each must clear what a quote clears: cost + 30%
+ * (`FULL_USE_QUOTE_MULTIPLE`) after Stripe's percentage fee, against what ONE
+ * unit of it costs at full use. A rate below that is refused for staff with
+ * the figures, the same way `orgFullUseFloor` refuses a quote.
+ *
+ * The fixed 30¢ of Stripe's fee is not spread over a per-unit rate: it is
+ * charged once per invoice, and the quote floor already carries it.
+ *=========================================================================*/
+
+/** One rate on a contract's card, rated against what a unit costs. */
+export interface ContractRateCheck {
+  key: ContractNumericRateKey
+  /** The rate, in its own unit (a month of one add-on, or 1,000 units / a GB-month). */
+  rateUsd: number
+  /** What one unit costs at full use, in the same unit. `Infinity` when it cannot be costed. */
+  unitCostUsd: number
+  /** `FULL_USE_QUOTE_MULTIPLE × unitCostUsd / (1 − Stripe's %)`: the lowest rate that clears. */
+  floorUsd: number
+  ok: boolean
+}
+
+export interface ContractRateVerdict {
+  ok: boolean
+  /** Every rate the card sells (a `null` rate sells nothing and is not rated). */
+  checks: ContractRateCheck[]
+  failures: ContractRateCheck[]
+}
+
+/**
+ * The cost of one unit of a usage rate, in the rate's own unit (per 1,000,
+ * or per GB-month), at the same unit rates `orgMonthlyCogsUsd` prices.
+ */
+function usageUnitCostUsd(key: ContractNumericRateKey): number | null {
+  const rates = ORG_COGS_UNIT_RATES_USD
+  switch (key) {
+    case 'extraDataGbMonthlyUsd':
+      return rates.dataStoragePerGbMonth
+    case 'extraApiRequestsUsdPer1k':
+      return rates.perApiRequest * 1000
+    case 'extraContactsUsdPer1k':
+      return rates.perContactMonth * 1000
+    case 'extraEmailSendsUsdPer1k':
+      return rates.perEmailSend * 1000
+    case 'extraRunsUsdPer1k':
+      return rates.perRun * 1000
+    case 'extraAssistCreditsUsdPer1k': {
+      // Read from the AI plugin's declared band, never restated here: core
+      // does not import a plugin. Unregistered, the rate cannot be costed,
+      // and an uncostable rate fails rather than passing at zero.
+      const band = pluginUsageBands().find(
+        (candidate) => candidate.entitlement === 'assistCreditsPerMonth',
+      )
+      return typeof band?.unitCostUsd === 'number'
+        ? band.unitCostUsd * 1000
+        : Number.POSITIVE_INFINITY
+    }
+    default:
+      return null
+  }
+}
+
+/** The org as it bills once its contract is live: Custom, on a live subscription. */
+function contractPricedOrg(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  seatAddons?: OrgSeatAddons,
+): Partial<AglynOrgBilling> {
+  return {
+    ...(org ?? {}),
+    plan: 'enterprise',
+    seatAddons: seatAddons ?? org?.seatAddons ?? {},
+    subscription: {
+      ...(org?.subscription ?? {}),
+      status: 'active',
+    },
+    billingStatus: 'active',
+  } as Partial<AglynOrgBilling>
+}
+
+/**
+ * What one more unit of an add-on costs at full use on THIS org — the
+ * difference its bands make when the purchase resolves, so a site carries
+ * every per-site band the contract sets and a seat costs what a seat does.
+ * The per-site floor counts too: whichever of the measured cost and the
+ * floor moves more is the unit's cost.
+ */
+export function contractAdditionUnitCostUsd(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  kind: keyof OrgSeatAddons,
+): number {
+  const base = contractPricedOrg(org)
+  const addons = { ...(base.seatAddons ?? {}) } as Record<string, number>
+  const before = orgFullUseCogs(base)
+  addons[kind] = Math.max(0, Number(addons[kind] ?? 0) || 0) + 1
+  const after = orgFullUseCogs(contractPricedOrg(org, addons as OrgSeatAddons))
+  const measured = after.measuredUsd - before.measuredUsd
+  const floor = after.floorUsd - before.floorUsd
+  // A block of AI credits costs its credits, whether or not the AI plugin's
+  // seat add-on is registered to fold them into the band where this runs.
+  const credits =
+    kind === 'aiAddon'
+      ? (AI_CREDITS_PER_BLOCK * (usageUnitCostUsd('extraAssistCreditsUsdPer1k') ?? Infinity)) / 1000
+      : 0
+  const cost = Math.max(measured, floor, credits)
+  return Number.isFinite(cost) ? Math.max(0, cost) : Number.POSITIVE_INFINITY
+}
+
+/** The lowest rate that clears cost + 30% net of Stripe's percentage fee. */
+function contractRateFloorUsd(unitCostUsd: number): number {
+  return (FULL_USE_QUOTE_MULTIPLE * unitCostUsd) / (1 - STRIPE_PROCESSOR_FEE_PCT)
+}
+
+/**
+ * Rate every rate on a contract's card against what a unit costs (AGL-4233).
+ * `org` is the workspace the card is for, with its contracted overrides —
+ * an extra site costs what that contract's per-site bands cost.
+ */
+export function checkContractRates(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  rates: ResolvedContractRates,
+): ContractRateVerdict {
+  const kindByKey = new Map(
+    (Object.entries(CONTRACT_ADDON_RATE_KEY) as Array<[keyof OrgSeatAddons, ContractNumericRateKey]>)
+      .map(([kind, key]) => [key, kind]),
+  )
+  const checks: ContractRateCheck[] = []
+  for (const key of CONTRACT_RATE_KEYS) {
+    const rateUsd = rates[key]
+    if (rateUsd === null || rateUsd === undefined) continue
+    const kind = kindByKey.get(key)
+    const unitCostUsd = kind
+      ? contractAdditionUnitCostUsd(org, kind)
+      : (usageUnitCostUsd(key) ?? Number.POSITIVE_INFINITY)
+    const floorUsd = contractRateFloorUsd(unitCostUsd)
+    checks.push({
+      key,
+      rateUsd,
+      unitCostUsd,
+      floorUsd,
+      ok: Number.isFinite(floorUsd) && rateUsd >= floorUsd - 1e-9,
+    })
+  }
+  const failures = checks.filter((check) => !check.ok)
+  return { ok: failures.length === 0, checks, failures }
+}
+
+/** How a rate key reads to staff. */
+export const CONTRACT_RATE_LABELS: Readonly<Record<ContractNumericRateKey, string>> = {
+  extraHostMonthlyUsd: 'Extra site (per month)',
+  extraSeatMonthlyUsd: 'Team seat (per month)',
+  extraCollaboratorMonthlyUsd: 'Collaborator (per month)',
+  extraDatasetMonthlyUsd: 'Dataset (per month)',
+  posRegisterMonthlyUsd: 'POS register (per month)',
+  aiCreditBlockMonthlyUsd: 'AI credit block (per month)',
+  extraDataGbMonthlyUsd: 'Stored data (per GB-month)',
+  extraApiRequestsUsdPer1k: 'API requests (per 1,000)',
+  extraAssistCreditsUsdPer1k: 'AI credits (per 1,000)',
+  extraContactsUsdPer1k: 'CRM records (per 1,000)',
+  extraEmailSendsUsdPer1k: 'Marketing email (per 1,000)',
+  extraRunsUsdPer1k: 'Workflow and action runs (per 1,000)',
+}
+
+/** The staff sentence a refused rate card states. Staff-facing: it names Aglyn's cost. */
+export function describeContractRateFailures(verdict: ContractRateVerdict): string {
+  return verdict.failures
+    .map((check) =>
+      Number.isFinite(check.floorUsd)
+        ? `${CONTRACT_RATE_LABELS[check.key]} at ${usd(check.rateUsd)} is under ` +
+          `${usd(check.floorUsd)} (${FULL_USE_QUOTE_MULTIPLE.toFixed(2)}× a unit's full-use cost of ` +
+          `${usd(check.unitCostUsd)}, net of Stripe)`
+        : `${CONTRACT_RATE_LABELS[check.key]} cannot be rated — a unit's full-use cost is unbounded. ` +
+          'Bound its band with an entitlement override first',
+    )
+    .join('; ')
+}
+
+/**
+ * The whole contract after an addition, against the quote floor (AGL-4233):
+ * the negotiated base plus every addition at the contract's rates, against
+ * `FULL_USE_QUOTE_MULTIPLE` × the full-use cost of everything it then sells.
+ */
+export function contractAdditionFloor(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  seatAddons: OrgSeatAddons,
+): FullUseFloorResult {
+  return orgFullUseFloor(
+    {
+      ...(org ?? {}),
+      seatAddons,
+    },
+    { multiple: FULL_USE_QUOTE_MULTIPLE },
+  )
 }

@@ -113,6 +113,7 @@ import { isLiveSubscriptionStatus } from '@aglyn/aglyn/app-utils/org-billing-doc
 import { countManagerSeats, isStaffSeat } from '@aglyn/aglyn/app-utils/organizations'
 import { StaffSiteRowActions } from '../../../../../components/staff-site-row-actions.component'
 import StaffOrgRefundCard from '../../../../../components/staff-org-refund-card.component'
+import StaffOrgContractCard from '../../../../../components/staff-org-contract-card.component'
 import StaffSiteCareMonthCard from '../../../../../components/site-care/staff-site-care-month-card.component'
 import StaffSiteCareProjectsCard from '../../../../../components/site-care/staff-site-care-projects-card.component'
 import StaffOrgSubscriptionCard from '../../../../../components/staff-org-subscription-card.component'
@@ -2344,6 +2345,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                       </Stack>
                     </CardDisplay>
                   ),
+                },
+                {
+                  // A Custom contract's rate card (AGL-4233): what its
+                  // additions and its usage past the contract sell at.
+                  children: <StaffOrgContractCard orgId={orgId} />,
                 },
                 {
                   children: (

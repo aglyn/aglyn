@@ -33,6 +33,12 @@ import {
   orgFullUseFloor,
 } from '@aglyn/aglyn/app-utils/full-use-cost'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import { parseContractTerms } from '@aglyn/aglyn/app-utils/contract-terms'
+import {
+  checkContractRates,
+  describeContractRateFailures,
+} from '@aglyn/aglyn/app-utils/full-use-cost'
+import type { OrgContractTerms } from '@aglyn/aglyn/foundation'
 
 /**
  * Enterprise custom-billing provisioning (AGL-1110) — the staff door that
@@ -276,6 +282,43 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
+    // THE CONTRACT'S RATE CARD (AGL-4233), when the deal is provisioned with
+    // one: the rates its additions and its usage past the contract sell at,
+    // each held to cost + 30% at full use. Refused here, before anything is
+    // created, exactly like the quote floor above.
+    let contractTerms: OrgContractTerms | null = null
+    if (plan === 'enterprise' && body?.contract && typeof body.contract === 'object') {
+      const parsed = parseContractTerms(body.contract, {
+        previous: (orgData?.entitlements?.contract ?? null) as OrgContractTerms | null,
+        baseMonthlyUsd: amountMonthlyUsd,
+        setBy: decoded.uid,
+      })
+      if (!parsed.ok) {
+        return Response.json({ error: parsed.error, code: 'invalid_contract' }, { status: 400 })
+      }
+      const rateCheck = checkContractRates(
+        {
+          ...orgData,
+          ...billing,
+          plan,
+          entitlements: { ...(orgData?.entitlements ?? {}), contract: parsed.terms },
+          subscription: { status: 'active', interval, customMonthlyUsd: amountMonthlyUsd },
+        } as never,
+        parsed.rates,
+      )
+      if (!rateCheck.ok) {
+        return Response.json(
+          {
+            error: `These rates are under the contract floor: ${describeContractRateFailures(rateCheck)}.`,
+            code: 'contract_rate_floor',
+            check: rateCheck,
+          },
+          { status: 400 },
+        )
+      }
+      contractTerms = parsed.terms
+    }
+
     // POINT OF NO RETURN (AGL-1714). Everything above is a deterministic
     // refusal — bad plan, bad amount, no such org, not staff, already
     // subscribed — and staff fixes those and presses the same button, so none
@@ -516,6 +559,14 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
+    // The rate card rides the deal (AGL-4233). Written in either mode: it is
+    // in force only once the workspace is on Custom with a live subscription
+    // (`readOrgContract`), which checkout mode reaches through the webhook.
+    if (contractTerms) {
+      await orgRef.update({ 'entitlements.contract': contractTerms })
+      result = { ...result, contract: contractTerms }
+    }
+
     await addAdminAudit(firestore, {
       actorUid: decoded.uid,
       action: 'org.enterprise.provision',
@@ -528,6 +579,7 @@ async function handler(request: Request): Promise<Response> {
         mode,
         priceId,
         customerId,
+        ...(contractTerms ? { contract: contractTerms } : {}),
       },
       at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     })
