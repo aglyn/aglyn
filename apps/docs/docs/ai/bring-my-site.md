@@ -382,8 +382,16 @@ redirected to that page too. No other page that was left out gets a redirect, be
 the import doesn't know where it went.
 
 **Redirects from your old addresses** on the import's page counts them. **Open Redirects**
-shows every rule, where you can change or remove any of them. An address left out is tried
-again when the next wave is in, so a page you publish in the meantime gets its redirect then.
+shows every rule, where you can change or remove any of them.
+
+**Pages you publish later.** Redirects are added when a wave is in, for the pages already
+published then. If your site isn't in preview, its pages come in as drafts, so they have no
+redirect yet. Once you publish them, open the import's page again and choose **Add redirects
+for published pages** under **Redirects from your old addresses**. It adds the redirects
+those pages are missing, and you can choose it again whenever you publish more. Choose it
+too after you upgrade for more redirects, or turn Redirects on for the site. It uses no AI
+credits. The button shows while an old address is still waiting for one of these reasons.
+An address left out is also tried again whenever another wave is in.
 
 Redirects are included from the Starter plan, up to your plan's number of redirects.
 
