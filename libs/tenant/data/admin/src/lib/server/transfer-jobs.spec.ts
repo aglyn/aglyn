@@ -109,6 +109,7 @@ import {
   discardTransferJob,
   listUnfinishedTransferJobs,
   planTransferJob,
+  mergeUndoNotes,
   planTransferJobUndo,
   readTransferJobStatus,
   readTransferPlanRows,
@@ -1377,5 +1378,14 @@ describe('what a resource’s hooks are handed (AGL-3529)', () => {
     await plan({ 'cellar-step': { ok: true } })
     await plan()
     expect(seen.map((entry) => entry['extras'])).toEqual([{ 'cellar-step': { ok: true } }, undefined])
+  })
+})
+
+describe("an undo's notes (AGL-4245)", () => {
+  it('keeps what a chunk says, clears a note a later chunk answers with null, and holds at most 50', () => {
+    const first = mergeUndoNotes(undefined, { 'photo:a': 'A photo stays: it is on Home.', 'photo:b': 'A photo stays.' })
+    expect(mergeUndoNotes(first, { 'photo:a': null, 'photo:c': null })).toEqual({ 'photo:b': 'A photo stays.' })
+    const many = Object.fromEntries(Array.from({ length: 60 }, (_value, at) => [`n${at}`, `note ${at}`]))
+    expect(Object.keys(mergeUndoNotes({}, many))).toHaveLength(50)
   })
 })

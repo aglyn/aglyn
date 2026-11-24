@@ -228,6 +228,13 @@ export interface TransferField {
   custom?: boolean
   /** May be mapped on import to identify an existing record even when it is never written. */
   matchKey?: boolean
+  /**
+   * Read from a file on import and never offered on export (AGL-4245): a
+   * column another product's file carries that the record does not keep,
+   * such as a sale price folded into the price, so an export would only
+   * ever write it blank.
+   */
+  importOnly?: boolean
   /** Header spellings that mean this field, beside its label and id. */
   aliases?: readonly string[]
   /** The picklist whose values a `picklist` or `multiPicklist` field holds. */
@@ -266,6 +273,11 @@ export function isTransferLookupField(
 /** Whether a file's cell may be WRITTEN to `field`. */
 export function isTransferFieldWritable(field: TransferField): boolean {
   return !field.readOnly && !field.derived && !field.system
+}
+
+/** Whether `field` is offered on export: every field but an import-only one. */
+export function isTransferFieldExportable(field: TransferField): boolean {
+  return !field.importOnly
 }
 
 /** Whether a file's column may be MAPPED to `field` on import — written, or read to match. */

@@ -350,6 +350,13 @@ export interface TransferRevertResult {
   done: TransferUndoStep[]
   /** The records edited since the import, waiting on a decision. */
   conflicts: TransferUndoStep[]
+  /**
+   * What the person should know about this chunk's undo beyond its records,
+   * by a key of the resource's choosing (AGL-4245): a photo kept because it
+   * is still in use, say. A later chunk's `null` under the same key clears
+   * it, when what kept it is undone too.
+   */
+  notes?: Record<string, string | null>
 }
 
 /**

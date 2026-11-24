@@ -185,6 +185,15 @@ export async function register(): Promise<void> {
         const { consoleMediaIngest } = await import('./utils/server/media-ingest')
         return await consoleMediaIngest.findImportedPhoto(input)
       },
+      // The folder a product import files its photos in, and an undo's delete (AGL-4245).
+      ensureFolder: async (input) => {
+        const { consoleMediaIngest } = await import('./utils/server/media-ingest')
+        return await consoleMediaIngest.ensureFolder(input)
+      },
+      removeImportedPhotos: async (input) => {
+        const { consoleMediaIngest } = await import('./utils/server/media-ingest')
+        return await consoleMediaIngest.removeImportedPhotos(input)
+      },
     },
     { pluginId: 'console' },
   )

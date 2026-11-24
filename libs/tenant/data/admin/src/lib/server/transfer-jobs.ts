@@ -2182,6 +2182,25 @@ export interface ApplyTransferUndoInput {
   driver: string
 }
 
+/** The most notes an undo keeps on its job. */
+const UNDO_NOTES_MAX = 50
+
+/**
+ * An undo's notes with one chunk's merged in (AGL-4245): a `null` clears a
+ * note an earlier chunk left, and at most {@link UNDO_NOTES_MAX} are kept.
+ */
+export function mergeUndoNotes(
+  current: Readonly<Record<string, string>> | undefined,
+  next: Readonly<Record<string, string | null>>,
+): Record<string, string> {
+  const out: Record<string, string> = { ...(current ?? {}) }
+  for (const [key, note] of Object.entries(next)) {
+    if (note === null) delete out[key]
+    else if (typeof note === 'string' && note && (key in out || Object.keys(out).length < UNDO_NOTES_MAX)) out[key] = note.slice(0, 500)
+  }
+  return out
+}
+
 /**
  * Carries undo out, chunk by chunk, through the plugin's `revert`, each
  * record with the person's decision (`otherwise` for one the decisions do
@@ -2242,6 +2261,7 @@ export async function applyTransferJobUndo(
         const reverted = await hooks.revert(ctx, snapshot, chosen)
         for (const step of reverted.done) counts[step.action] += 1
         counts.conflict += reverted.conflicts.length
+        if (reverted.notes) undo = { ...undo, notes: mergeUndoNotes(undo.notes, reverted.notes) }
       }
       undo = { ...undo, chunk: undo.chunk + 1, counts }
       job = { ...job, undo, updatedAt: clock(deps) }

@@ -241,7 +241,7 @@ export const DOCS_HELP_EXCERPTS = {
   staffConsole: 'Aglyn-staff tools for managing organizations, entitlements, users, and audits.',
   startWithAi: 'Answer a few questions when you create a site and Aglyn AI plans, writes and publishes it: its look, header and footer, contact form and pages, plus a store or a blog when that is what the site is.',
   stockPhotos: 'Pages Aglyn AI writes for a new site use free stock photos from Pixabay, copied into your own media library at no AI credit cost, with the photographer\'s credit kept on each picture.',
-  storeImportAndExport: 'Import products from a file or Shopify, update them by handle or SKU, issue gift cards, record shipments from a tracking file, and export store data with the fields you choose.',
+  storeImportAndExport: 'Import products from a file or from Shopify, Wix or Squarespace with their photos, update them by handle or SKU, issue gift cards, record shipments from a tracking file, and export store data with the fields you choose.',
   supportAndCommunity: 'Open a support ticket with the Aglyn team, and ask other builders in the community forum.',
   supportQueue: 'Triage customer support tickets from the staff console — filter, reply as Aglyn, and close or reopen.',
   supportTiers: 'The first-response commitment attached to each plan, why the Custom plan is quoted in clock hours, and where ticket support starts.',
