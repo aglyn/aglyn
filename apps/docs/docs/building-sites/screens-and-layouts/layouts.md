@@ -24,6 +24,25 @@ Because the chrome lives in one document, changing it changes every page bound t
 once. That is the point, and it is also the thing to keep in mind before you publish: see
 [Versions & scheduled publishing](versions-and-publishing.md).
 
+## A new page starts with the site's layout {#a-new-page-starts-with-the-sites-layout}
+
+A new site comes with a layout called **Site header and footer**, and its Home page is
+bound to it. A page you add with **Pages → Create new page** starts inside the same
+layout, so it has the site's header and footer from the start. The drawer's **Shared
+layout** field shows which layout that is; pick another one, or **None** for a page with
+no header or footer.
+
+The layout a new page starts with is the first of these that the site has:
+
+1. The layout chosen under **Setup → Built-in page layout**.
+2. The layout the home page uses.
+3. The site's only layout, when it has exactly one.
+
+When none of these applies (the site has no layout, or has several and nothing names
+one), the page starts with no layout. Pages that already exist keep the layout they have.
+You can change a page's layout at any time in the Besigner under **Properties → Shared
+layout**.
+
 ## Find a layout {#find-a-layout}
 
 The site's **Layouts** page lists every layout. **Filters** in the table's toolbar

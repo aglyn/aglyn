@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn/server'
+import {
+  homeScreenIdOf,
+  screenLayoutBinding,
+} from '@aglyn/aglyn/app-utils/new-page-layout'
 import getScreen from './get-screen'
 import getScreenVersion from './get-screen-version'
 
@@ -81,32 +84,29 @@ export async function resolveBuiltInPageLayoutId(options: {
       `null` on the version is a deliberate "no layout" and is honoured as
       such rather than falling through to the screen — same as composition.
     */
-    const screensMap = (host?.screens ?? {}) as Record<string, string>
-    const homeEntry = Object.entries(screensMap).find(
-      ([, path]) => path === Aglyn.SCREEN_ROOT_PATH,
-    )
-    if (!homeEntry) return undefined
-    const homeRes = await getScreen({ hostId, screenId: homeEntry[0] })
+    const homeId = homeScreenIdOf(host?.screens)
+    if (!homeId) return undefined
+    const homeRes = await getScreen({ hostId, screenId: homeId })
     const screen = homeRes.screen as
       | { layoutId?: string | null; versionId?: string }
       | undefined
     if (!screen) return undefined
-    if (screen.versionId) {
-      // Fail-open to the screen's own binding, exactly as composition does:
-      // a version read that throws must not cost the page its chrome.
-      const versionRes = await getScreenVersion({
-        hostId: hostId as never,
-        screenId: homeEntry[0] as never,
-        versionId: screen.versionId as never,
-      }).catch(() => null)
-      const version = versionRes?.version as
-        | { layoutId?: string | null }
-        | undefined
-      if (version && 'layoutId' in version) {
-        return version.layoutId ? String(version.layoutId) : undefined
-      }
-    }
-    return screen.layoutId ? String(screen.layoutId) : undefined
+    // Fail-open to the screen's own binding, exactly as composition does:
+    // a version read that throws must not cost the page its chrome.
+    const versionRes = screen.versionId
+      ? await getScreenVersion({
+          hostId: hostId as never,
+          screenId: homeId as never,
+          versionId: screen.versionId as never,
+        }).catch(() => null)
+      : null
+    // The same reading a new page's default takes (AGL-4241).
+    return (
+      screenLayoutBinding(
+        screen,
+        versionRes?.version as { layoutId?: string | null } | undefined,
+      ) ?? undefined
+    )
   } catch (error) {
     console.error('built-in page layout lookup failed', error)
     return undefined

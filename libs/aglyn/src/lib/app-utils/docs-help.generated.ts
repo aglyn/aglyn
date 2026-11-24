@@ -611,7 +611,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   aiImport: ['#start', '#your-current-website', '#prove-it-is-yours', '#read-my-site', '#not-brought-in', '#keep-or-improve', '#improve-planned', '#waves', '#your-sites-preview', '#review-a-wave', '#photos', '#never-brought-in', '#when-an-import-waits', '#turned-away'],
   aiInsights: ['#asking-a-question', '#how-an-answer-is-made', '#asking-about-datasets', '#weekly-insights', '#privacy'],
   aiJobs: ['#the-ai-jobs-page', '#statuses', '#one-jobs-page', '#ai-jobs-in-assist', '#cancel-a-job', '#cancel-a-new-site', '#ai-activity', '#how-long-jobs-are-kept', '#related'],
-  aiLayout: ['#what-a-layout-is', '#find-a-layout', '#nested-layouts', '#layout-properties', '#restyle-the-layout-on-one-page', '#duplicate', '#generate-a-layout-with-aglyn-ai', '#used-by', '#layouts-vs-reusable-components', '#related'],
+  aiLayout: ['#what-a-layout-is', '#a-new-page-starts-with-the-sites-layout', '#find-a-layout', '#nested-layouts', '#layout-properties', '#restyle-the-layout-on-one-page', '#duplicate', '#generate-a-layout-with-aglyn-ai', '#used-by', '#layouts-vs-reusable-components', '#related'],
   aiLogic: ['#function', '#variable', '#change', '#broken-references', '#what-is-sent', '#who-can-use-it', '#related'],
   aiMarketing: ['#write-overlay-copy', '#create-an-overlay', '#create-a-campaign', '#ask-about-these-numbers', '#what-is-sent', '#who-can-use-it', '#related'],
   aiMonitoring: ['#the-ai-card', '#compensating-credits', '#ai-conversations', '#where-else', '#one-account', '#the-spend-leaderboard', '#alerts', '#related'],

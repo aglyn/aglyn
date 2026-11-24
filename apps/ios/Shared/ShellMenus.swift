@@ -99,12 +99,15 @@ enum StaffConsole {
   /// Only a token with the staff claim is offered it; every staff route checks the claim again on the server.
   static func offered(_ claims: TokenClaims) -> Bool { claims.isStaff }
 
-  /// Opens the staff list: on iPad and the Mac as the sidebar's mode, on its first row; on a phone as its list pushed on
-  /// Home, the way a settings tile opens its mode. Its header leads back to the everyday list.
+  /// Opens the staff list: on iPad and the Mac as the sidebar's mode, on its first row; on a phone as its list pushed over
+  /// the screen you are on, so Back returns there. A settings list already on that stack gives way to it (one list in one
+  /// mode at a time). Its header leads back to the everyday list.
   static func open(_ navigation: ShellNavigation, first: ShellSection?) {
     if navigation.compact {
       navigation.mode = .admin
-      navigation.land(.home, stack: [.modeList])
+      var stack = navigation.paths[navigation.section] ?? []
+      if let settings = stack.firstIndex(of: .modeList) { stack.removeSubrange(settings...) }
+      navigation.paths[navigation.section] = stack + [.modeList]
     } else {
       navigation.enter(.admin, first: first)
     }
@@ -113,6 +116,18 @@ enum StaffConsole {
   static func open(model: AppModel, navigation: ShellNavigation) {
     open(navigation, first: ShellScope(model: model, navigation: navigation).firstSection(of: .admin))
   }
+}
+
+/// The workspace directory: every workspace you belong to, pinned and recent first (the switcher's workspace step), which
+/// the rail's "All workspaces" tile opens on iPad and the Mac. A phone has no rail, so its account sheet carries the same
+/// place as a row, one tap from your photo on every screen (AGL-4242).
+@MainActor
+enum AllWorkspaces {
+  static let title = "All workspaces"
+  /// The rail tile's grid, on the row too: one mark for one place.
+  static let systemImage = "square.grid.2x2"
+
+  static func open(_ navigation: ShellNavigation) { navigation.picker = .workspace }
 }
 
 /// The account menu (Figma Mac / Popover / Account 16:142, dark 311:2829), drawn as a popover's content so it can hold

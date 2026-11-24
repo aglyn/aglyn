@@ -38,13 +38,13 @@ struct WorkspaceRail: View {
           if rail.allTile {
             if !rail.pinned.isEmpty || !rail.recent.isEmpty { railDivider }
             Button {
-              navigation.picker = .workspace
+              AllWorkspaces.open(navigation)
             } label: {
-              AglynRailButton(systemImage: "square.grid.2x2", caption: "\(rail.total)", size: AglynShellMetrics.tile)
+              AglynRailButton(systemImage: AllWorkspaces.systemImage, caption: "\(rail.total)", size: AglynShellMetrics.tile)
             }
             .buttonStyle(.plain)
-            .aglynRailTooltip("All workspaces", id: "rail-all-workspaces", state: tooltip)
-            .accessibilityLabel("All workspaces, \(rail.total)")
+            .aglynRailTooltip(AllWorkspaces.title, id: "rail-all-workspaces", state: tooltip)
+            .accessibilityLabel("\(AllWorkspaces.title), \(rail.total)")
             .accessibilityIdentifier("rail-all-workspaces")
           }
         }

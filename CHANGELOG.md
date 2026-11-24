@@ -9,6 +9,16 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.29.1 — 2026-11-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.29.0...v1.29.1)
+
+### Fixed
+
+- **besigner:** a closed Hierarchy sheet paints nothing over the canvas on a phone ([AGL-4243](https://linear.app/aglyn/issue/AGL-4243))
+- **besigner:** a new page starts with the site's shared layout ([AGL-4241](https://linear.app/aglyn/issue/AGL-4241))
+- **native:** on a phone, All workspaces and Staff console are one tap from your photo on every screen ([AGL-4242](https://linear.app/aglyn/issue/AGL-4242))
+
 ## v1.29.0 — 2026-11-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.28.0...v1.29.0)
