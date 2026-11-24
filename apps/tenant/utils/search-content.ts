@@ -24,6 +24,10 @@ import {
   type RepeatRowsAnswer,
 } from '@aglyn/aglyn/plugin-manager/repeat-rows'
 import {
+  listPluginSiteSearchSources,
+  type RegisteredPluginSiteSearchSource,
+} from '@aglyn/aglyn/plugin-manager/plugin-site-search'
+import {
   PUBLISHED_SITE_DATA_TTL_SECONDS,
   tenantDataTag,
   withRenderCache,
@@ -66,6 +70,17 @@ const SEARCH_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 const RESULTS_PER_REPEAT = 5
 
 /**
+ * Candidates one plugin source (a store's products) is asked for, and the
+ * results it may add. The candidates bound the reads; the results keep one
+ * busy catalog from pushing every page off the list.
+ */
+const PLUGIN_CANDIDATE_LIMIT = 300
+const RESULTS_PER_PLUGIN_SOURCE = 24
+
+/** Every result the page lists. */
+const RESULTS_LIMIT = 50
+
+/**
  * Site search (AGL-88), cached per query (AGL-1525).
  *
  * The uncached read below costs on the order of forty Firestore round trips
@@ -89,30 +104,138 @@ export async function searchContent(options: {
   query: string
   /** The site's zone (AGL-3237); UTC when a site has not named one. */
   timeZone?: string
+  /**
+   * The plugins on for this site, as its pages load them. A plugin's own
+   * results (a store's products) are searched only when it is on; absent,
+   * none are.
+   */
+  enabledPlugins?: readonly string[]
 }): Promise<SearchResult[]> {
   const needle = options.query.trim().toLowerCase()
   if (!needle || needle.length > 100) return []
+  const sources = await listPluginSiteSearchSources(
+    options.enabledPlugins ?? [],
+  ).catch((error) => {
+    console.error(error)
+    return [] as RegisteredPluginSiteSearchSource[]
+  })
+  const read = () => readSearchContent({ ...options, sources })
   try {
     return await withRenderCache({
       // The zone is part of the KEY (AGL-3237): it decides the dates in the
       // rows below, so a cache entry written under one must not be served
-      // under another.
+      // under another. So are the plugin sources in force: a site that turns
+      // its store on or off must not be answered from the other state. A site
+      // with none keeps the key it always had.
       key: [
         'tenant-site-search',
         options.host.$id,
         needle,
         options.timeZone ?? 'UTC',
+        ...(sources.length
+          ? [`sources:${sources.map(({ source }) => source.key).join(',')}`]
+          : []),
       ],
       revalidate: SEARCH_TTL_SECONDS,
       tags: [tenantDataTag(options.host.$id)],
-      read: () => readSearchContent(options),
+      read,
     })
   } catch (error) {
     // Fail OPEN, the same shape `getPublishedCollectionSource` uses: a cache
     // fault must degrade search to "slower", never to "broken".
     console.error(error)
-    return readSearchContent(options)
+    return read()
   }
+}
+
+/**
+ * Pages, entries and rows, with what each plugin source adds around them.
+ *
+ * A plugin result whose TITLE the fuzzy matcher found (a product by its
+ * name) leads the list: a visitor who typed a product's name is looking for
+ * the product, not for the page that mentions it. One found only by a
+ * substring of its other words (a description, a SKU, a tag) follows
+ * everything else.
+ */
+async function readSearchContent(options: {
+  host: Aglyn.AglynHost
+  query: string
+  timeZone?: string
+  sources: readonly RegisteredPluginSiteSearchSource[]
+}): Promise<SearchResult[]> {
+  const needle = options.query.trim().toLowerCase()
+  if (!needle || needle.length > 100) return []
+  const [platform, plugins] = await Promise.all([
+    readPlatformResults(options),
+    readPluginResults(options.host.$id, needle, options.sources),
+  ])
+  return [...plugins.byTitle, ...platform, ...plugins.byTerms].slice(
+    0,
+    RESULTS_LIMIT,
+  )
+}
+
+/**
+ * What the plugin sources offer for this query, matched here rather than by
+ * the source, with the matcher a collection entry's title goes through: so a
+ * typo the entries forgive ("hodie") is forgiven on a product too.
+ *
+ * A source that fails costs the page its group, never the page.
+ */
+async function readPluginResults(
+  hostId: string,
+  needle: string,
+  sources: readonly RegisteredPluginSiteSearchSource[],
+): Promise<{ byTitle: SearchResult[]; byTerms: SearchResult[] }> {
+  const byTitle: SearchResult[] = []
+  const byTerms: SearchResult[] = []
+  const answers = await Promise.all(
+    sources.map(({ source }) =>
+      source
+        .items({ hostId, query: needle, limit: PLUGIN_CANDIDATE_LIMIT })
+        .catch((error) => {
+          console.error(error)
+          return []
+        }),
+    ),
+  )
+  sources.forEach(({ source }, index) => {
+    const items = answers[index] ?? []
+    const fuzzy = new Fuse(
+      items.map((item) => ({ title: String(item.title ?? ''), excerpt: '' })),
+      { ...Aglyn.COLLECTION_SEARCH_FUSE_OPTIONS },
+    )
+    // Fuse answers best first, so the closest name leads the group.
+    const titleHits = fuzzy.search(needle).map((result) => result.refIndex)
+    const titled = new Set(titleHits)
+    const termHits = items.flatMap((item, position) =>
+      !titled.has(position) &&
+      (item.terms ?? []).some((term) => matches(term, needle))
+        ? [position]
+        : [],
+    )
+    const group = { key: source.key, label: source.label }
+    const toResult = (position: number): SearchResult => {
+      const item = items[position]
+      return {
+        title: item.title,
+        url: item.url,
+        snippet: item.snippet ?? '',
+        kind: 'product',
+        group,
+        ...(item.imageUrl ? { imageUrl: item.imageUrl } : {}),
+        ...(item.caption ? { caption: item.caption } : {}),
+      }
+    }
+    const taken = [...titleHits, ...termHits].slice(
+      0,
+      RESULTS_PER_PLUGIN_SOURCE,
+    )
+    for (const position of taken) {
+      ;(titled.has(position) ? byTitle : byTerms).push(toResult(position))
+    }
+  })
+  return { byTitle, byTerms }
 }
 
 /**
@@ -122,7 +245,7 @@ export async function searchContent(options: {
  * test on the body — and the rows those screens repeat over. Deliberately no
  * external search infrastructure; result set is small and cache-friendly.
  */
-async function readSearchContent(options: {
+async function readPlatformResults(options: {
   host: Aglyn.AglynHost
   query: string
   /** The site's zone (AGL-3237); UTC when a site has not named one. */
@@ -286,7 +409,7 @@ async function readSearchContent(options: {
   const repeats = walked.filter(
     (repeat): repeat is { path: string; keys: string[] } => repeat !== null,
   )
-  if (!repeats.length) return results.slice(0, 50)
+  if (!repeats.length) return results
 
   // One question for every key the site repeats over. A reader may cache its
   // answer on the site and the key set, and that is the same for every query
@@ -302,7 +425,7 @@ async function readSearchContent(options: {
     // A reader that is declared and missing makes a page refuse to render;
     // search is not where that is loud. Pages and entries still answer.
     console.error(error)
-    return results.slice(0, 50)
+    return results
   }
 
   // The first screen to repeat a key is the one its rows link to, and a row
@@ -336,7 +459,7 @@ async function readSearchContent(options: {
     }
   }
 
-  return results.slice(0, 50)
+  return results
 }
 
 export default searchContent

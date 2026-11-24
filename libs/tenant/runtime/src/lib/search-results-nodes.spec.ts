@@ -165,6 +165,45 @@ describe('buildSearchResultsNodes (AGL-2513)', () => {
     expect(metas[0].props.children).toBe('Blog · 12 August 2026')
   })
 
+  it('draws a product beside its photo, with its group and price in the meta line', () => {
+    const nodes = build({
+      results: [
+        {
+          title: 'Team Hoodie',
+          url: '/products/team-hoodie',
+          snippet: 'Heavyweight fleece.',
+          group: { key: 'products', label: 'Products' },
+          imageUrl: 'https://cdn.example.com/hoodie.jpg',
+          caption: 'From $45',
+        },
+      ],
+    })
+
+    const item = nodes['srx__item-0'] as any
+    expect(item.props).toMatchObject({ direction: 'row', component: 'li' })
+    expect(item.nodes).toEqual(['srx__item-0-image', 'srx__item-0-body'])
+    expect(nodes['srx__item-0-image']).toMatchObject({
+      componentId: 'image',
+      pluginId: 'mui',
+      props: {
+        src: 'https://cdn.example.com/hoodie.jpg',
+        href: '/products/team-hoodie',
+      },
+    })
+    expect((nodes['srx__item-0-body'] as any).nodes).toEqual([
+      'srx__item-0-link',
+      'srx__item-0-meta',
+      'srx__item-0-snippet',
+    ])
+    expect((nodes['srx__item-0-meta'] as any).props.children).toBe(
+      'Products · From $45',
+    )
+    for (const [nodeId, node] of Object.entries(nodes)) {
+      if (nodeId === Aglyn.NODE_ROOT_ID) continue
+      expect(nodes[(node as any).parentId]).toBeDefined()
+    }
+  })
+
   it('gives every node a parent inside the tree', () => {
     // The graft walks parents; an orphan is how a node ends up rendering
     // nowhere while the tree still looks complete.

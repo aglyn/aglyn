@@ -112,6 +112,17 @@ export default async function SearchPage({
   // site's zone (AGL-3237) rather than the server's. The host is passed with
   // it because a site may override its workspace's zone (AGL-3252).
   const searchOrg = query ? await getOrgBilling({ hostId: hostRes.host.$id }) : null
+  // The plugins on for this site, decided as its pages decide them: a store's
+  // products are searched only where the store is on.
+  const searchPlugins = searchOrg
+    ? await filterEnabledPluginsByReleaseFlags(
+        Aglyn.resolveHostEnabledPlugins(
+          searchOrg.org as never,
+          hostRes.host as never,
+        ),
+        { orgId: (searchOrg.org as { $id?: string })?.$id ?? null },
+      )
+    : []
   const results = query
     ? await searchContent({
         host: hostRes.host,
@@ -120,6 +131,7 @@ export default async function SearchPage({
           searchOrg?.org as never,
           hostRes.host as never,
         ),
+        enabledPlugins: searchPlugins,
       })
     : []
   const facets = searchResultFacets(results)

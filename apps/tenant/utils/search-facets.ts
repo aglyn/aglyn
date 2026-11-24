@@ -35,20 +35,37 @@ export interface SearchResult {
   title: string
   url: string
   snippet: string
-  kind: 'page' | 'entry' | 'data'
+  kind: 'page' | 'entry' | 'data' | 'product'
   /**
    * Which content collection this entry came from (AGL-1525) — the results
    * page groups its count tabs by it ("Blog · 4", "Changelog · 1"). Absent
    * on pages and dataset records, which belong to no collection.
    */
   collection?: { slug: string; title: string }
+  /**
+   * The plugin group a result came from, such as a store's products: its tab
+   * is `group.key` ("Products · 3"). Absent on everything the platform finds
+   * itself.
+   */
+  group?: { key: string; label: string }
   /** Published date, for the result card (AGL-1525). */
   date?: string
+  /** A thumbnail, for a result that has one (a product's photo). */
+  imageUrl?: string
+  /** A short caption beside the result: a product's "From $45". */
+  caption?: string
 }
 
 /** The unfiltered tab, and the bucket every non-collection result falls in. */
 export const SEARCH_FACET_ALL = 'all'
 export const SEARCH_FACET_PAGES = 'pages'
+/** The tab one result counts under: its group, its collection, else Pages. */
+export function searchResultFacetKey(result: SearchResult): string {
+  return result.group?.key ?? result.collection?.slug ?? SEARCH_FACET_PAGES
+}
+
+const facetLabel = (result: SearchResult): string =>
+  result.group?.label ?? result.collection?.title ?? 'Pages'
 
 export interface SearchFacet {
   /** `?in=` value; `all` is the unfiltered default. */
@@ -71,8 +88,8 @@ export interface SearchFacet {
 export function searchResultFacets(results: SearchResult[]): SearchFacet[] {
   const byKey = new Map<string, SearchFacet>()
   for (const result of results) {
-    const key = result.collection?.slug ?? SEARCH_FACET_PAGES
-    const label = result.collection?.title ?? 'Pages'
+    const key = searchResultFacetKey(result)
+    const label = facetLabel(result)
     const existing = byKey.get(key)
     if (existing) existing.count += 1
     else byKey.set(key, { key, label, count: 1 })
@@ -93,14 +110,10 @@ export function filterSearchResults(
   facetKey: string | undefined,
 ): SearchResult[] {
   if (!facetKey || facetKey === SEARCH_FACET_ALL) return results
-  const known = new Set(
-    results.map((result) => result.collection?.slug ?? SEARCH_FACET_PAGES),
-  )
+  const known = new Set(results.map(searchResultFacetKey))
   // An unknown `?in=` shows everything rather than an empty page: the tab is
   // a view of a result set, and a stale or hand-edited URL must not be able
   // to make a site with matches look like a site with none.
   if (!known.has(facetKey)) return results
-  return results.filter(
-    (result) => (result.collection?.slug ?? SEARCH_FACET_PAGES) === facetKey,
-  )
+  return results.filter((result) => searchResultFacetKey(result) === facetKey)
 }

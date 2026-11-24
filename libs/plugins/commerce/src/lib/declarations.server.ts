@@ -36,6 +36,10 @@ import {
   type PluginProductCatalog,
 } from '@aglyn/aglyn/plugin-manager/plugin-product-catalog'
 import {
+  registerPluginSiteSearchSource,
+  type PluginSiteSearchSource,
+} from '@aglyn/aglyn/plugin-manager/plugin-site-search'
+import {
   registerPluginStockLevels,
   type PluginStockLevels,
 } from '@aglyn/aglyn/plugin-manager/plugin-stock-levels'
@@ -106,6 +110,9 @@ export function registerCommerceServerDeclarations(): void {
   )
   // The store's catalog, as a shopping-channel feed reads it (AGL-3637).
   registerPluginProductCatalog(lazyCatalog, { pluginId: BUNDLE_ID })
+  // The store's products in the site's own search page: what the storefront
+  // lists, linked to each product's page. The reads load with the first search.
+  registerPluginSiteSearchSource(lazySiteSearch, { pluginId: BUNDLE_ID })
   // Counts another warehouse keeps, applied as a stock-take (AGL-3634): a
   // fulfillment network says how many it can ship and the products say so.
   registerPluginStockLevels(lazyStockLevels, { pluginId: BUNDLE_ID })
@@ -158,6 +165,13 @@ const lazyLocalDeliveries: PluginLocalDeliveryRecords = {
 const lazyCatalog: PluginProductCatalog = {
   store: async (hostId) => (await import('./server/product-catalog')).productCatalog.store(hostId),
   page: async (request) => (await import('./server/product-catalog')).productCatalog.page(request),
+}
+
+/** Site search, with the Admin SDK and the model arriving on the first search. */
+const lazySiteSearch: PluginSiteSearchSource = {
+  key: 'products',
+  label: 'Products',
+  items: async (request) => (await import('./server/site-search')).commerceSiteSearch.items(request),
 }
 
 type IndexName = 'productRecordIndex' | 'productCategoryRecordIndex'
