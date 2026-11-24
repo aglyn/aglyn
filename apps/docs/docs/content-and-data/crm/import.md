@@ -146,10 +146,11 @@ site held is deleted (keeping any refusal they made); one another site holds
 too stays theirs. A record edited since the import is listed with what it
 holds now and what undo would restore, and you choose for each.
 
-Marketing email choices a store's file brought in are put back as they
-were, and an unsubscribe the import added to your site's unsubscribe list is
-taken off it. A choice the person has made since, such as unsubscribing from
-an email, stays theirs.
+Undo takes back a marketing email opt-in a store's file brought in. It never
+takes back an unsubscribe: that is the person's own choice, made at your old
+store. The contact stays unsubscribed, the entry on your site's unsubscribe
+list stays, and a person the undo removes has their refusal kept, as any
+removed contact does. Undo still puts back every other field it changed.
 
 ## Switching from an online store {#switching-from-an-online-store}
 
@@ -180,7 +181,7 @@ marketing choice**, and are carried like this:
 | **yes**, **true** or **Subscribed**, and you confirmed on **Permission** | The contact is opted in to marketing email from the site you import under. The record says it came from your store's file, on which date, in which import, and that you confirmed these people agreed to hear from you. |
 | **yes**, **true** or **Subscribed**, and you did not confirm | Nobody is opted in. The dry run counts these people so you can decide. |
 | **yes** for somebody who unsubscribed here | They stay unsubscribed. Nothing in a file opts anyone back in. |
-| **no**, **false** or **Unsubscribed** | Always kept, whatever you chose on **Permission**: the contact is recorded as having said no. A contact who was subscribed here is unsubscribed, and added to the site's unsubscribe list. |
+| **no**, **false** or **Unsubscribed** | Always kept, whatever you chose on **Permission**: the contact is recorded as having said no. A contact who was subscribed here is unsubscribed, and added to the site's unsubscribe list. Undoing the import keeps it. |
 | **Never subscribed**, **Pending**, blank, or a word the import does not know | Nothing changes. |
 
 Opt-ins come in only under a site, since a person agrees to hear from a
