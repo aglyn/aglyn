@@ -78,7 +78,9 @@ export interface TransferImportWizardProps {
    * import takes, before the upload step shows it (AGL-4245); the owning
    * plugin's `readText`. `null` leaves the text as it is.
    */
-  readText?: (text: string) => PluginTransferTextRead | null
+  readText?: (
+    text: string,
+  ) => PluginTransferTextRead | null | Promise<PluginTransferTextRead | null>
   storage?: TransferWizardStorage
   /** Called from the results step's Done. */
   onDone?(): void

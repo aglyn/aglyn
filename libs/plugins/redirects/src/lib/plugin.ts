@@ -23,7 +23,6 @@ import { BUNDLE_ID } from './constants/bundle-common'
 import { registerRedirectsRecordRoutes } from './model/redirects-record-routes'
 import { REDIRECTS_SEARCH_SOURCES } from './model/redirects-search-sources'
 import { REDIRECTS_TRANSFER_KEY } from './transfer/redirects-transfer-fields'
-import { squarespaceUrlMappingsCsv } from './transfer/squarespace-url-mappings'
 
 /** Code-split: the Redirects console page only loads when opened. */
 const RedirectsConsolePage = lazy(
@@ -70,7 +69,10 @@ export function registerRedirectsConsole(): void {
   // Mappings box, pasted or as a .txt file, is read into the import's CSV.
   registerPluginTransferResourceUi(
     REDIRECTS_TRANSFER_KEY,
-    { label: 'Redirects', icon: { path: mdiSignDirection.path }, readText: squarespaceUrlMappingsCsv },
+    { label: 'Redirects', icon: { path: mdiSignDirection.path }, readText: async (text: string) =>
+        // The Squarespace parser loads only when a file is read, not with
+        // the plugin on every console screen (check:plugin-budgets).
+        (await import('./transfer/squarespace-url-mappings')).squarespaceUrlMappingsCsv(text) },
     { pluginId: BUNDLE_ID },
   )
 }

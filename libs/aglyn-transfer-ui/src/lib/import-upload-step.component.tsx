@@ -80,17 +80,43 @@ interface Chosen {
 }
 
 /**
+ * A resource's reader for a list format of its own. It may answer later, so
+ * a plugin can load its parser only when a file is read (AGL-436 budgets).
+ */
+type TransferTextReader = (
+  text: string,
+) => PluginTransferTextRead | null | Promise<PluginTransferTextRead | null>
+
+/**
  * The text as the step reads it: the resource's own reader's CSV when the
  * text is in its format (AGL-4245), else the text itself.
  */
-function readChosenText(
+function chosenText(
   text: string,
-  readText: ((text: string) => PluginTransferTextRead | null) | undefined,
+  read: PluginTransferTextRead | null,
 ): { text: string; readAs?: Chosen['readAs'] } {
-  const read = readText?.(text) ?? null
   return read
     ? { text: read.text, readAs: { source: read.source, notes: read.notes } }
     : { text }
+}
+
+/**
+ * Hands `then` the text as read. Synchronously when the reader answers at
+ * once (or there is none), so a step that needs no parser never waits a tick;
+ * after the promise when the reader loads one.
+ */
+function readChosenText(
+  text: string,
+  readText: TransferTextReader | undefined,
+  then: (read: { text: string; readAs?: Chosen['readAs'] }) => void,
+): void | Promise<void> {
+  const answer = readText?.(text) ?? null
+  if (answer && typeof (answer as Promise<unknown>).then === 'function') {
+    return (answer as Promise<PluginTransferTextRead | null>).then((read) =>
+      then(chosenText(text, read)),
+    )
+  }
+  then(chosenText(text, answer as PluginTransferTextRead | null))
 }
 
 export function ImportUploadStep({
@@ -99,7 +125,7 @@ export function ImportUploadStep({
 }: {
   wizard: TransferImportWizardController
   /** The resource's reader for a list format of its own (AGL-4245). */
-  readText?: (text: string) => PluginTransferTextRead | null
+  readText?: TransferTextReader
 }) {
   const resource = wizard.info?.resource
   const maxBytes = resource?.limits?.maxBytes ?? CSV_UPLOAD_MAX_CHARACTERS
@@ -137,19 +163,20 @@ export function ImportUploadStep({
     try {
       const raw = await readFileBytes(file)
       const encoding = detectEncoding(raw)
-      const read = readChosenText(decodeBytes(raw, encoding), readText)
-      setChosen({
-        fileName: file.name,
-        bytes: file.size,
-        // A text read into CSV is sent as that CSV: its bytes are not tried again.
-        raw: read.readAs ? null : raw,
-        ...read,
-        settings: detectTransferFileSettings(
-          read.readAs ? `${file.name}.csv` : file.name,
-          read.text,
-          encoding,
-        ),
-      })
+      await readChosenText(decodeBytes(raw, encoding), readText, (read) =>
+        setChosen({
+          fileName: file.name,
+          bytes: file.size,
+          // A text read into CSV is sent as that CSV: its bytes are not tried again.
+          raw: read.readAs ? null : raw,
+          ...read,
+          settings: detectTransferFileSettings(
+            read.readAs ? `${file.name}.csv` : file.name,
+            read.text,
+            encoding,
+          ),
+        }),
+      )
     } catch {
       setReadError('This file could not be read.')
     }
@@ -157,14 +184,15 @@ export function ImportUploadStep({
 
   const readPaste = () => {
     const bytes = new TextEncoder().encode(paste).length
-    const read = readChosenText(paste, readText)
-    setChosen({
-      fileName: 'Pasted rows',
-      bytes,
-      raw: null,
-      ...read,
-      settings: detectTransferFileSettings('', read.text),
-    })
+    return readChosenText(paste, readText, (read) =>
+      setChosen({
+        fileName: 'Pasted rows',
+        bytes,
+        raw: null,
+        ...read,
+        settings: detectTransferFileSettings('', read.text),
+      }),
+    )
   }
 
   const setSettings = (patch: Partial<TransferFileSettings>) => {
@@ -248,7 +276,7 @@ export function ImportUploadStep({
           onChange={(event) => setPaste(event.target.value)}
         />
         <Box>
-          <Button onClick={readPaste} disabled={!paste.trim()}>
+          <Button onClick={() => void readPaste()} disabled={!paste.trim()}>
             Read pasted rows
           </Button>
         </Box>

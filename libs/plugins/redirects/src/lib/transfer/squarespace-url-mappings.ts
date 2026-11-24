@@ -42,16 +42,12 @@ import { compileRedirectRegex } from '../model/redirects'
  * not imported, and the read lists it with why.
  *=========================================*/
 
-/** The headers the read CSV carries; the alias dictionary maps each. */
-export const SQUARESPACE_URL_MAPPING_HEADERS = {
-  source: 'URL mapping from',
-  destination: 'URL mapping to',
-  statusCode: 'URL mapping type',
-  kind: 'URL mapping match',
-} as const
+import {
+  SQUARESPACE_URL_MAPPING_HEADERS,
+  SQUARESPACE_URL_MAPPINGS_SOURCE,
+} from './squarespace-url-mapping-headers'
 
-/** The dictionary's name, as the mapping step shows it. */
-export const SQUARESPACE_URL_MAPPINGS_SOURCE = 'Squarespace URL mappings'
+export { SQUARESPACE_URL_MAPPING_HEADERS, SQUARESPACE_URL_MAPPINGS_SOURCE }
 
 /** One rule line, its spaces folded: a from, an arrow, a to, and an optional status code. */
 const RULE_LINE = /^(\S+) ?-> ?(\S+)(?: (\d{3}))?$/

@@ -23,7 +23,7 @@ import type {
   TransferPolicyDefaults,
 } from '@aglyn/aglyn/data-transfer'
 import { REDIRECT_KINDS, normalizeRedirectDestination, normalizeRedirectSource } from '../model/redirects'
-import { SQUARESPACE_URL_MAPPINGS_SOURCE, SQUARESPACE_URL_MAPPING_HEADERS } from './squarespace-url-mappings'
+import { SQUARESPACE_URL_MAPPINGS_SOURCE, SQUARESPACE_URL_MAPPING_HEADERS } from './squarespace-url-mapping-headers'
 
 /**
  * What the redirects resource is made of, without reading anything: its key,

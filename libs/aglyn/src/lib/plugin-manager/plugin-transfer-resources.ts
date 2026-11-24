@@ -1214,10 +1214,12 @@ export interface PluginTransferResourceUi {
    * Reads a chosen file's or pasted text that is in a list format of the
    * plugin's choosing into the CSV the import takes, in the browser, before
    * the upload step shows it (AGL-4245). `null` when the text is not in that
-   * format, and the step reads it as it always did. Pure: no I/O. The server
+   * format, and the step reads it as it always did. It may answer with a
+   * promise, so a plugin can load its parser only when a file is read; it
+   * does no other I/O. The server
    * half then reads the CSV it is sent like any other.
    */
-  readText?(text: string): PluginTransferTextRead | null
+  readText?(text: string): PluginTransferTextRead | null | Promise<PluginTransferTextRead | null>
   /**
    * For a resource declared with `instances`: the record list kind
    * (`registerPluginRecordListSource`) its instances are listed from, so the
