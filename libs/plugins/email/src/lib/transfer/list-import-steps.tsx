@@ -175,7 +175,17 @@ export function ListConsentStep(props: TransferWizardStepProps) {
             'by people signing up. They are added if you go ahead.'}
         </Alert>
       ) : null}
-      {sample && sample.size ? (
+      {screening?.saidNo ? (
+        <Alert severity="info">
+          <AlertTitle>
+            {`${screening.saidNo} ${screening.saidNo === 1 ? 'person' : 'people'} said no in the file`}
+          </AlertTitle>
+          {'Your file says they said no to marketing email, so they are not ' +
+            'added, whatever you choose below. Their addresses go on your ' +
+            'site’s suppression list.'}
+        </Alert>
+      ) : null}
+            {sample && sample.size ? (
         <Alert severity={sample.needAttestation ? 'warning' : 'success'}>
           <AlertTitle>
             {sample.size < sample.of

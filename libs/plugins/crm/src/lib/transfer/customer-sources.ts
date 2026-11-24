@@ -293,28 +293,8 @@ export function customerFileSource(headers: readonly string[] | undefined): Cust
  * Reading a marketing choice
  *-----------------------------------------*/
 
-/** What a file's marketing cell records. */
-export type MarketingChoice = 'optIn' | 'optOut' | 'none'
-
-const OPT_IN_WORDS = ['yes', 'y', 'true', '1', 'subscribed', 'opted in', 'opt in', 'opted-in', 'opt-in']
-const OPT_OUT_WORDS = ['no', 'n', 'false', '0', 'unsubscribed', 'opted out', 'opt out', 'opted-out', 'opt-out']
-const NO_CHOICE_WORDS = ['', 'never subscribed', 'not subscribed', 'pending', 'none', 'n/a', '-', 'not set']
-
-/**
- * A marketing cell as a choice, case-insensitively. `read` is false for a
- * word none of the lists names, which counts as no choice — never as an
- * opt-in.
- */
-export function readMarketingChoice(value: unknown): { choice: MarketingChoice; read: boolean } {
-  if (typeof value === 'boolean') return { choice: value ? 'optIn' : 'optOut', read: true }
-  const text = String(value ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-  if (OPT_OUT_WORDS.includes(text)) return { choice: 'optOut', read: true }
-  if (OPT_IN_WORDS.includes(text)) return { choice: 'optIn', read: true }
-  return { choice: 'none', read: NO_CHOICE_WORDS.includes(text) }
-}
+/** A marketing cell as a choice: the platform's reader, shared with the email list import. */
+export { readMarketingChoice, type MarketingChoice } from '@aglyn/aglyn/app-utils/marketing-choice'
 
 /*------------------------------------------
  * The Permission step's answer
