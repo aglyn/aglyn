@@ -159,15 +159,18 @@ photo you add in the product editor.
   media storage.
 - **The same photo is copied once.** Two products that share a photo share
   one copy. Import the same file again and it uses the photos it already
-  copied.
+  copied, so the **Review** step shows those photos as unchanged.
 - **A photo that can't be copied never stops the product.** Say the old store
   no longer has it, or doesn't answer in time. The product is saved without
   that photo. The **Results** step lists each product it happened to, with
   the photo's address and the reason, so you can add it on the product. The
   result file has the same list.
 - A **Variant image** goes on that variant, and is copied the same way.
-- **Undo** also removes the photos this import copied. A photo that's still
-  on a product you keep stays in your media library.
+- **Undo** also removes the photos this import copied, and only those. A
+  photo that's still in use stays in your media library: on a product or
+  variant you keep, on a page, or anywhere else on the site. The
+  **Results** step says which photos stayed and where they're used. A
+  removed photo can be restored from the media library for seven days.
 
 A large import can take a while, because each photo is downloaded. The import
 keeps going if you close the tab, and you can pause it and pick it up later.
@@ -185,7 +188,8 @@ the file from its column names and maps each column for you.
   stock** isn't counted, and **Out of stock** is zero. A percent or amount
   discount makes the discounted price the price, and the full price the
   compare-at price. Wix doesn't export product addresses, so each product's
-  handle is made from its name. A product with choices but no variant rows
+  handle is made from its name. When you import a Wix file again, products
+  are matched by **SKU**, so keep the SKUs the same. A product with choices but no variant rows
   comes in as one variant, and the **Review** step tells you to add its
   choices.
 - **Squarespace**: rows are grouped into products by their product ID. The
