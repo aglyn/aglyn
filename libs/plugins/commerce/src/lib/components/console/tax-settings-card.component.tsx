@@ -47,6 +47,11 @@ import {
   useHeldSave,
   useSeedEdits,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
+import {
+  refusedOnText,
+  StripeTaxReadinessPanel,
+  useStoreTaxReadiness,
+} from './stripe-tax-readiness.component'
 
 export interface TaxSettingsCardProps {
   hostId: string
@@ -98,6 +103,17 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
     storeStatus !== 'loading' && typeof store?.tax?.mode === 'string'
   const update = (patch: Partial<CommerceModel.TaxSettings>) =>
     form.edit(patch)
+  /**
+   * Whether the tax choice lets shoppers check out (AGL-4245): the store's own
+   * Stripe Tax, read live, and when a shopper was last turned away. Re-read
+   * when the saved mode changes, which also clears the owner's alert once the
+   * store is no longer blocked.
+   */
+  const savedMode = decided ? (store?.tax?.mode as string) : null
+  const readiness = useStoreTaxReadiness(hostId, savedMode)
+  const stripeTaxOff = Boolean(
+    readiness.data?.direct && readiness.data.stripeTax && !readiness.data.stripeTax.active,
+  )
   const updateRate = (
     index: number,
     patch: Partial<CommerceModel.TaxRate> | null,
@@ -202,6 +218,9 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
             {'Choose how this store handles sales tax and save. Until you ' +
               'do, checkout is turned off — we won’t take an order we can’t ' +
               'tax correctly.'}
+            {readiness.data?.blocked === 'tax-undecided' && refusedOnText(readiness.data.refusedAtMs)
+              ? ` ${refusedOnText(readiness.data.refusedAtMs)}`
+              : null}
           </Alert>
         )}
         <TextField
@@ -217,7 +236,11 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
           sx={{ maxWidth: 280 }}
         >
           <MenuItem value="manual">{'Manual rates (below)'}</MenuItem>
-          <MenuItem value="stripe">{'Stripe Tax (automatic)'}</MenuItem>
+          <MenuItem value="stripe">
+            {stripeTaxOff
+              ? 'Stripe Tax (automatic): not on in Stripe yet'
+              : 'Stripe Tax (automatic)'}
+          </MenuItem>
           {/* An explicit decision, not an omission (AGL-1999) — the option a
               merchant under a nexus threshold, or selling non-taxable goods,
               needs in order to sell at all. */}
@@ -229,10 +252,11 @@ export function TaxSettingsCard(props: TaxSettingsCardProps) {
               'through — the decision is recorded, not the tax.'}
           </Typography>
         ) : current.mode === 'stripe' ? (
-          <Typography variant="body2" color="text.secondary">
-            {'Stripe Tax calculates per buyer location at checkout. ' +
-              'Activate Stripe Tax in your Stripe dashboard first.'}
-          </Typography>
+          <StripeTaxReadinessPanel
+            readiness={readiness}
+            savedMode={savedMode}
+            onChooseMode={(mode) => update({ mode })}
+          />
         ) : (
           <>
             <FormControlLabel

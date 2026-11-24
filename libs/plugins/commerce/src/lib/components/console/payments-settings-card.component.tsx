@@ -35,6 +35,7 @@ import { pluginDocsHelp } from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
 import { useCommerceEntitlement } from './entitlement-gate.component'
+import CheckoutTaxBlockedNotice from './checkout-tax-blocked-notice.component'
 import {
   CONNECT_REFRESH_GUARD_MS,
   CONNECT_RETURN_PARAM,
@@ -574,6 +575,7 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
             {returnResult.text}
           </Alert>
         ) : null}
+        <CheckoutTaxBlockedNotice hostId={hostId} />
         {stripeState === 'loaded' && profile?.lastPayoutFailureAtMs ? (
           <Alert severity="warning" variant="outlined">
             {`A payout of $${(

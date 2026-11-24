@@ -48,7 +48,13 @@ export interface SearchResultsNode {
   url: string
   snippet: string
   collection?: { slug: string; title: string }
+  /** The plugin group a result came from (a store's products). */
+  group?: { key: string; label: string }
   date?: string
+  /** A thumbnail, drawn beside the result (a product's photo). */
+  imageUrl?: string
+  /** A short caption in the meta line (a product's "From $45"). */
+  caption?: string
 }
 
 export interface SearchFacetNode {
@@ -227,13 +233,52 @@ export function buildSearchResultsNodes(
     const itemId = id(`item-${index}`)
     const children = [id(`item-${index}-link`)]
     resultIds.push(itemId)
-    push(itemId, id('results'), {
-      componentId: 'muiStack',
-      pluginId: 'mui',
-      props: { spacing: 0.5, component: 'li' },
-      nodes: children,
-    })
-    push(id(`item-${index}-link`), itemId, {
+    // A result with a photo (a product) is a row: the photo, then the words.
+    // Without one it is the words alone, as it always was.
+    const bodyId = result.imageUrl ? id(`item-${index}-body`) : itemId
+    if (result.imageUrl) {
+      const imageId = id(`item-${index}-image`)
+      push(itemId, id('results'), {
+        componentId: 'muiStack',
+        pluginId: 'mui',
+        props: {
+          direction: 'row',
+          spacing: 2,
+          component: 'li',
+          sx: { alignItems: 'flex-start' },
+        },
+        nodes: [imageId, bodyId],
+      })
+      push(imageId, itemId, {
+        componentId: 'image',
+        pluginId: 'mui',
+        props: {
+          src: result.imageUrl,
+          // The title beside it says what it is.
+          alt: '',
+          href: result.url,
+          objectFit: 'cover',
+          loading: 'lazy',
+          width: '64px',
+          height: '64px',
+          sx: { flexShrink: 0, borderRadius: 1 },
+        },
+      })
+      push(bodyId, itemId, {
+        componentId: 'muiStack',
+        pluginId: 'mui',
+        props: { spacing: 0.5, sx: { minWidth: 0 } },
+        nodes: children,
+      })
+    } else {
+      push(itemId, id('results'), {
+        componentId: 'muiStack',
+        pluginId: 'mui',
+        props: { spacing: 0.5, component: 'li' },
+        nodes: children,
+      })
+    }
+    push(id(`item-${index}-link`), bodyId, {
       componentId: 'muiScreenLink',
       pluginId: 'mui',
       props: {
@@ -257,13 +302,17 @@ export function buildSearchResultsNodes(
     // The meta line is one string rather than a row of nodes: it is read as a
     // sentence ("Blog · 12 August 2026"), and a wrapping row of separate
     // elements breaks it in the middle on a phone.
-    const meta = [result.collection?.title, result.date]
+    const meta = [
+      result.collection?.title ?? result.group?.label,
+      result.caption,
+      result.date,
+    ]
       .filter(Boolean)
       .join(' · ')
     if (meta) {
       const metaId = id(`item-${index}-meta`)
       children.push(metaId)
-      push(metaId, itemId, {
+      push(metaId, bodyId, {
         componentId: 'muiTypography',
         pluginId: 'mui',
         props: {
@@ -276,7 +325,7 @@ export function buildSearchResultsNodes(
     if (result.snippet) {
       const snippetId = id(`item-${index}-snippet`)
       children.push(snippetId)
-      push(snippetId, itemId, {
+      push(snippetId, bodyId, {
         componentId: 'muiTypography',
         pluginId: 'mui',
         props: {

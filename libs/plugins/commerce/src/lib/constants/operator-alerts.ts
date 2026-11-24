@@ -295,6 +295,30 @@ export const COMMERCE_POS_CELLULAR_TURNED_OFF_UNPAID: OperatorAlertDefinition = 
   defaultEnabled: true,
 }
 
+/**
+ * A shopper was refused at checkout because the store's sales tax is not set
+ * up (AGL-4245): no tax option was ever chosen, or the store chose Stripe Tax
+ * on its own Stripe account and Stripe Tax is not on there. Raised once per
+ * store until the store fixes it (`server/checkout-tax-refusal.ts`); the
+ * store's managers are told too, which is the notice that matters. This one
+ * is for support, so it rides the daily digest.
+ */
+export const COMMERCE_CHECKOUT_TAX_SETUP_REFUSED: OperatorAlertDefinition = {
+  type: 'commerce.checkoutTaxSetupRefused',
+  pluginId: BUNDLE_ID,
+  label: 'Checkout refused for unfinished sales tax setup',
+  description:
+    'A shopper could not check out because the store has not finished its sales tax setup: no tax option chosen, or Stripe Tax chosen but not on in the store’s own Stripe account. The store’s managers are told too, once until it is fixed.',
+  tier: 'should',
+  category: 'payments',
+  title: 'Checkout refused on {{site}}: {{reason}}',
+  body:
+    'A shopper could not check out on site {{site}} because {{reason}}. The store’s managers were told and pointed to Products → Taxes. Every checkout there is refused until it is fixed.',
+  delivery: 'digest',
+  dedupeWindowMinutes: 30 * DAY,
+  defaultEnabled: true,
+}
+
 export const COMMERCE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
   COMMERCE_CHARGEBACK_UNROUTABLE,
   COMMERCE_TAX_NOT_REVERSED,
@@ -309,4 +333,5 @@ export const COMMERCE_OPERATOR_ALERTS: readonly OperatorAlertDefinition[] = [
   COMMERCE_POS_CELLULAR_CHARGE_FAILED,
   COMMERCE_POS_CELLULAR_TURN_OFF_FAILED,
   COMMERCE_POS_CELLULAR_TURNED_OFF_UNPAID,
+  COMMERCE_CHECKOUT_TAX_SETUP_REFUSED,
 ]

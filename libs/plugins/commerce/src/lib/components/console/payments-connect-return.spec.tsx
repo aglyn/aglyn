@@ -40,6 +40,9 @@ const orgPlan = {
   ready: true,
 }
 
+// The card's sales tax notice (AGL-4245) makes its own readiness read; this
+// spec counts the connect route's calls only.
+jest.mock('./checkout-tax-blocked-notice.component', () => ({ __esModule: true, default: () => null }))
 jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(mockSearch),
 }))

@@ -172,41 +172,74 @@ export function SearchResults({
         ) : (
           <Stack spacing={3} component="ul" sx={{ p: 0, listStyle: 'none' }}>
             {results.map((result) => (
-              <Stack key={result.url} spacing={0.75} component="li">
-                <AppLink href={result.url} variant="h6" underline="hover">
-                  {result.title}
-                </AppLink>
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}
-                >
-                  {result.collection ? (
-                    <Chip label={result.collection.title} size="small" />
-                  ) : null}
-                  {result.date ? (
+              <Stack
+                key={result.url}
+                direction="row"
+                spacing={2}
+                component="li"
+                sx={{ alignItems: 'flex-start' }}
+              >
+                {/* A product's photo, beside the words that name it. */}
+                {result.imageUrl ? (
+                  <Box
+                    component="img"
+                    src={result.imageUrl}
+                    alt=""
+                    loading="lazy"
+                    sx={{
+                      width: 64,
+                      height: 64,
+                      flexShrink: 0,
+                      objectFit: 'cover',
+                      borderRadius: 1,
+                      bgcolor: 'action.hover',
+                    }}
+                  />
+                ) : null}
+                <Stack spacing={0.75} sx={{ minWidth: 0 }}>
+                  <AppLink href={result.url} variant="h6" underline="hover">
+                    {result.title}
+                  </AppLink>
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}
+                  >
+                    {result.collection ? (
+                      <Chip label={result.collection.title} size="small" />
+                    ) : null}
+                    {result.group ? (
+                      <Chip label={result.group.label} size="small" />
+                    ) : null}
+                    {result.caption ? (
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {result.caption}
+                      </Typography>
+                    ) : null}
+                    {result.date ? (
+                      <Typography
+                        variant="caption"
+                        sx={{ color: 'text.secondary' }}
+                      >
+                        {result.date}
+                      </Typography>
+                    ) : null}
                     <Typography
                       variant="caption"
                       sx={{ color: 'text.secondary' }}
                     >
-                      {result.date}
+                      {result.url}
+                    </Typography>
+                  </Stack>
+                  {result.snippet ? (
+                    <Typography
+                      variant="body2"
+                      sx={{ color: 'text.secondary', lineHeight: 1.6 }}
+                    >
+                      {result.snippet}
                     </Typography>
                   ) : null}
-                  <Typography
-                    variant="caption"
-                    sx={{ color: 'text.secondary' }}
-                  >
-                    {result.url}
-                  </Typography>
                 </Stack>
-                {result.snippet ? (
-                  <Typography
-                    variant="body2"
-                    sx={{ color: 'text.secondary', lineHeight: 1.6 }}
-                  >
-                    {result.snippet}
-                  </Typography>
-                ) : null}
               </Stack>
             ))}
           </Stack>

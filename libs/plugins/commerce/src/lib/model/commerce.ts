@@ -961,6 +961,23 @@ export function productPriceRange(
   return [Math.min(...prices), Math.max(...prices)]
 }
 
+/**
+ * What a product's price says to a shopper: the price, "From" the lowest
+ * where variants differ, or "Price coming soon" for a product listed before
+ * any variant has one (AGL-3676) — never "$0". `{{product.price}}` on the
+ * product page, and the caption on a site search result.
+ */
+export function productPriceText(
+  product: Pick<HostProduct, 'variants'>,
+  minPrice: number,
+  maxPrice: number,
+): string {
+  if (!(product.variants ?? []).some((variant) => variantHasPrice(variant))) {
+    return 'Price coming soon'
+  }
+  return minPrice === maxPrice ? `$${minPrice}` : `From $${minPrice}`
+}
+
 /** Sum of tracked inventory; null when every variant is untracked. */
 export function productInventory(
   product: Pick<HostProduct, 'variants'>,
