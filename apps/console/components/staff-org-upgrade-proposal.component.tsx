@@ -18,6 +18,8 @@
 
 import type { AglynOrgBilling } from '@aglyn/aglyn'
 import { describeBundle } from '@aglyn/aglyn/app-utils/bundle-intent'
+import { buildFeeDraftProblem, withBuildFee } from '@aglyn/aglyn/app-utils/build-fee'
+import { isLiveSubscriptionStatus } from '@aglyn/aglyn/app-utils/org-billing-doc'
 import {
   readUpgradeProposal,
   UPGRADE_PROPOSAL_NOTE_MAX,
@@ -44,6 +46,7 @@ import {
   StaffBundleFields,
   type BundleDraft,
 } from './staff-bundle-fields.component'
+import { StaffBuildFeeFields } from './staff-build-fee-fields.component'
 
 export interface StaffOrgUpgradeProposalProps {
   orgId: string
@@ -76,6 +79,9 @@ export function StaffOrgUpgradeProposal(props: StaffOrgUpgradeProposalProps) {
   const [draft, setDraft] = useState<BundleDraft>(DEFAULT_BUNDLE_DRAFT)
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
+  // A subscriber is asked to CHANGE plan (AGL-4160): its first invoice is
+  // behind it, so no build fee can ride the proposal (AGL-4244).
+  const subscriptionLive = isLiveSubscriptionStatus(org?.billingStatus)
 
   const call = async (body: Record<string, unknown>): Promise<Record<string, unknown> | null> => {
     setBusy(true)
@@ -100,10 +106,13 @@ export function StaffOrgUpgradeProposal(props: StaffOrgUpgradeProposalProps) {
   }
 
   const propose = async () => {
-    const bundle = bundleDraftBody(draft)
+    const drafted = bundleDraftBody(draft)
+    // A paying workspace's fee is refused by the server; it is never sent.
+    const { buildFee, ...rest } = drafted
+    const bundle = subscriptionLive ? rest : drafted
     const payload = await call({ action: 'propose', ...bundle, note })
     if (!payload) return
-    const what = describeBundle(bundle)
+    const what = withBuildFee(describeBundle(bundle), subscriptionLive ? null : (buildFee ?? null))
     enqueueSnackbar(
       payload['emailed']
         ? `Proposed ${what} — the owner was emailed`
@@ -126,7 +135,7 @@ export function StaffOrgUpgradeProposal(props: StaffOrgUpgradeProposalProps) {
       {standing ? (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Typography variant="body2" sx={{ flexGrow: 1 }}>
-            {`Proposed: ${upgradeProposalSummary(standing)}` +
+            {`Proposed: ${withBuildFee(upgradeProposalSummary(standing), standing.buildFee)}` +
               (standing.proposedAt
                 ? ` (${new Date(standing.proposedAt).toLocaleDateString()})`
                 : '')}
@@ -165,6 +174,13 @@ export function StaffOrgUpgradeProposal(props: StaffOrgUpgradeProposalProps) {
                 'are bought from Billing’s add-ons card as usual.'}
             </DialogContentText>
             <StaffBundleFields value={draft} onChange={setDraft} disabled={busy} />
+            <StaffBuildFeeFields
+              orgId={orgId}
+              draft={draft}
+              onChange={setDraft}
+              disabled={busy}
+              subscriptionLive={subscriptionLive}
+            />
             <TextField
               size="small"
               label="Note to the owner (optional)"
@@ -181,7 +197,11 @@ export function StaffOrgUpgradeProposal(props: StaffOrgUpgradeProposalProps) {
           <Button disabled={busy} onClick={() => setOpen(false)}>
             {'Cancel'}
           </Button>
-          <Button variant="contained" disabled={busy} onClick={() => void propose()}>
+          <Button
+            variant="contained"
+            disabled={busy || (!subscriptionLive && !!buildFeeDraftProblem(draft.buildFee))}
+            onClick={() => void propose()}
+          >
             {busy ? 'Sending…' : 'Propose plan'}
           </Button>
         </DialogActions>

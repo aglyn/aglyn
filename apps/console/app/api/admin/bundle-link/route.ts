@@ -84,6 +84,8 @@ async function handler(request: Request): Promise<Response> {
       // it (AGL-4144): credits are blocks in `addons` now.
       aiTier: body?.aiTier,
       domain: body?.domain && typeof body.domain === 'object' ? body.domain : null,
+      // A one-time build fee (AGL-4244), charged on the first invoice.
+      buildFee: body?.buildFee,
     })
     return Response.json({ ok: true, ...minted }, { status: 200 })
   } catch (error) {

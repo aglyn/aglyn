@@ -86,7 +86,27 @@ interface QuoteState {
   promotionCodeBasePriceOnly?: boolean | null
   needsBillingDetails?: boolean
   needsBillingAddress?: boolean
+  /**
+   * A one-time website build fee on the first invoice (AGL-4244), read by
+   * the server from the proposal or the link. Inside the Stripe figures
+   * above when they are there; added to the list total when they are not.
+   */
+  buildFee?: { amountCents: number; label: string } | null
 }
+
+/** The fee's own row: "Website build · one time". */
+function BuildFeeRow({ fee, currency }: { fee: { amountCents: number; label: string }; currency: string }) {
+  return (
+    <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
+      <Typography variant="body2">{`${fee.label} · one time`}</Typography>
+      <Typography variant="body2">{money(fee.amountCents, currency)}</Typography>
+    </Stack>
+  )
+}
+
+/** Said under a total that carries a build fee. */
+export const BUILD_FEE_QUOTE_CAPTION =
+  'The build fee is charged once, with this first payment. The plan renews without it.'
 
 export interface BillingPlanQuoteProps {
   orgId?: string | null
@@ -144,6 +164,11 @@ export interface BillingPlanQuoteProps {
   linkNotice?: string | null
   /** A line under the total: the bundle's domain, bought after subscribing. */
   footer?: ReactNode
+  /**
+   * The staff bundle link the owner opened (AGL-4244), sent with each quote
+   * so the server prices the build fee its record carries.
+   */
+  bundleLinkId?: string | null
   /** The priced total each time the quote lands, or null while there is none. */
   onQuoted?: (preview: { totalCents: number; currency: string } | null) => void
 }
@@ -299,6 +324,7 @@ export default function BillingPlanQuoteComponent({
   linkNotice,
   footer,
   onQuoted,
+  bundleLinkId,
 }: BillingPlanQuoteProps) {
   const knownPlan = plan ? (plan as OrgPlan) : null
   const quotedAddons = knownPlan ? fitBundleAddonsToPlan(addons, knownPlan).addons : {}
@@ -364,6 +390,8 @@ export default function BillingPlanQuoteComponent({
             // Quoted on the same invoice as the plan, so the total shown is
             // the total charged (AGL-3955).
             ...(addonsKey ? { addons: quotedAddons } : {}),
+            // The link's build fee is read from its record (AGL-4244).
+            ...(bundleLinkId ? { bundleLinkId } : {}),
           }),
         })
         const payload = await response.json().catch(() => ({}))
@@ -427,7 +455,7 @@ export default function BillingPlanQuoteComponent({
     },
     // `quotedAddons` is keyed by `addonsKey`: a fresh object every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [orgId, plan, interval, addonsKey, user, enqueueSnackbar, onAppliedCodeChange, onQuoted],
+    [orgId, plan, interval, addonsKey, bundleLinkId, user, enqueueSnackbar, onAppliedCodeChange, onQuoted],
   )
   const fetchQuoteRef = useRef<
     ((code: string, fromLink?: boolean, carried?: boolean) => Promise<void>) | null
@@ -628,10 +656,12 @@ export default function BillingPlanQuoteComponent({
               : undefined,
         })
       : 0
-    // A discount that ends makes the total the first charge, not the price
-    // per period, so it carries no "/yr".
+    // A build fee is charged once, with this first payment (AGL-4244).
+    const listFee = !failed && quote?.buildFee ? quote.buildFee : null
+    // A discount that ends, or a one-time fee, makes the total the first
+    // charge, not the price per period, so it carries no "/yr".
     const totalPer =
-      listDiscount > 0 && quote?.promotionCodeDuration !== 'forever' ? '' : per
+      listFee || (listDiscount > 0 && quote?.promotionCodeDuration !== 'forever') ? '' : per
     const codeSentence =
       listDiscount > 0
         ? codeDurationSentence(
@@ -649,6 +679,15 @@ export default function BillingPlanQuoteComponent({
         {addonRows}
         {knownPlan ? (
           <Stack spacing={0.5}>
+            {listFee ? (
+              <>
+                <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
+                  <Typography variant="body2">{'Plan'}</Typography>
+                  <Typography variant="body2">{money(listCents, 'usd') + per}</Typography>
+                </Stack>
+                <BuildFeeRow fee={listFee} currency="usd" />
+              </>
+            ) : null}
             {listDiscount > 0 ? (
               <>
                 <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
@@ -668,12 +707,17 @@ export default function BillingPlanQuoteComponent({
                 {'Total before tax'}
               </Typography>
               <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                {money(listCents - listDiscount, 'usd') + totalPer}
+                {money(listCents - listDiscount + (listFee?.amountCents ?? 0), 'usd') + totalPer}
               </Typography>
             </Stack>
             {codeSentence ? (
               <Typography variant="caption" color="success.main">
                 {codeSentence}
+              </Typography>
+            ) : null}
+            {listFee ? (
+              <Typography variant="caption" color="text.secondary">
+                {BUILD_FEE_QUOTE_CAPTION}
               </Typography>
             ) : null}
             <Typography variant="caption" color={failed ? 'warning.main' : 'text.secondary'}>
@@ -711,6 +755,9 @@ export default function BillingPlanQuoteComponent({
       {notices}
       {cadence}
       {addonRows}
+      {/* The build fee as its own line (AGL-4244). It is inside Stripe's
+          subtotal below, which is why it is named rather than added. */}
+      {quote?.buildFee ? <BuildFeeRow fee={quote.buildFee} currency={preview.currency} /> : null}
       <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
         <Typography variant="body2">{'Subtotal'}</Typography>
         <Typography variant="body2">
@@ -756,6 +803,11 @@ export default function BillingPlanQuoteComponent({
       >
         {tax.sentence}
       </Typography>
+      {quote?.buildFee ? (
+        <Typography variant="caption" color="text.secondary">
+          {BUILD_FEE_QUOTE_CAPTION}
+        </Typography>
+      ) : null}
 
       {/*
         The tax ID prompt, positioned where it can still change the outcome.

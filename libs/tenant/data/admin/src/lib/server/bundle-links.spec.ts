@@ -286,3 +286,47 @@ describe('the Billing page’s domain line (AGL-3955)', () => {
     expect((await readBundleLinkDomain(ORG, minted.id, NOW + 1)).available).toBe(false)
   })
 })
+
+describe('a bundle link with a website build fee (AGL-4244)', () => {
+  it('stores the fee on the record and its audit row, and names the record on the link', async () => {
+    const minted = await mint({ buildFee: { amountCents: 35000, label: '' } })
+    expect(minted.buildFee).toEqual({ amountCents: 35000, label: 'Website build' })
+    expect(minted.url).toContain(`&bundle=${minted.id}`)
+    expect(links()[0]).toMatchObject({ buildFee: { amountCents: 35000, label: 'Website build' } })
+    expect(audits()[0]).toMatchObject({ after: { buildFee: { amountCents: 35000 } } })
+    // No fee and no domain: the plain Billing link, as before.
+    expect((await mint()).url).not.toContain('&bundle=')
+  })
+
+  it('refuses a fee outside $1 to $50,000 before anything is written', async () => {
+    await expect(mint({ buildFee: { amountCents: 50 } })).rejects.toBeInstanceOf(BundleLinkError)
+    await expect(mint({ buildFee: { amountCents: 5_000_001 } })).rejects.toBeInstanceOf(BundleLinkError)
+    expect(links()).toEqual([])
+    expect(audits()).toEqual([])
+  })
+
+  it('refuses a fee for a workspace that already pays, and says to use Charge for work', async () => {
+    store.set(`orgs/${ORG}/billing/stripe`, { subscription: { status: 'active' } })
+    await expect(mint({ buildFee: { amountCents: 35000 } })).rejects.toMatchObject({
+      status: 409,
+      message: 'This workspace already pays; bill the build with Charge for work.',
+    })
+    expect(links()).toEqual([])
+  })
+
+  it('shows Billing the fee while it is due, past the 24 hours, and not once it is paid', async () => {
+    const minted = await mint({ buildFee: { amountCents: 35000, label: 'E-commerce build' } })
+    const later = NOW + BUNDLE_LINK_TTL_MS + 1
+    expect(await readBundleLinkDomain(ORG, minted.id, later)).toMatchObject({
+      domain: null,
+      buildFee: { amountCents: 35000, label: 'E-commerce build' },
+    })
+    expect(await readBundleLinkDomain('org-2', minted.id, NOW)).not.toHaveProperty('buildFee')
+    const path = `bundleLinks/${minted.id}`
+    store.set(path, {
+      ...(store.get(path) as Doc),
+      buildFee: { amountCents: 35000, label: 'E-commerce build', paidInvoiceId: 'in_1', paidAt: NOW },
+    })
+    expect(await readBundleLinkDomain(ORG, minted.id, NOW)).not.toHaveProperty('buildFee')
+  })
+})

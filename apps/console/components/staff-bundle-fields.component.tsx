@@ -34,6 +34,7 @@ import {
   type AddonKind,
   type BundleAddons,
 } from '@aglyn/aglyn/app-utils/bundle-intent'
+import { buildFeeCentsFromDollars } from '@aglyn/aglyn/app-utils/build-fee'
 import type { ClientBuildIntent } from '@aglyn/aglyn/app-utils/client-build'
 import { PLAN_LABELS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { UPGRADE_PROPOSAL_PLANS } from '@aglyn/aglyn/app-utils/upgrade-proposal'
@@ -54,6 +55,28 @@ export interface BundleDraft {
   addons: BundleAddons
   interval: 'month' | 'year'
   coupon: string
+  /**
+   * A one-time website build fee (AGL-4244), as staff type it: dollars and
+   * a line. Absent or blank charges none.
+   */
+  buildFee?: BuildFeeDraft
+}
+
+/** A build fee as staff type it. */
+export interface BuildFeeDraft {
+  /** Dollars, as typed: "350", "$1,250.50". */
+  amount: string
+  /** The line the owner sees; blank reads "Website build". */
+  label: string
+}
+
+/** The fee as the routes take it, or null when the amount is blank. NaN cents are the server's to refuse. */
+export function buildFeeDraftBody(
+  fee: BuildFeeDraft | null | undefined,
+): { amountCents: number; label: string } | null {
+  const amountCents = buildFeeCentsFromDollars(fee?.amount ?? '')
+  if (amountCents === null) return null
+  return { amountCents, label: (fee?.label ?? '').trim() }
 }
 
 /**
@@ -76,14 +99,17 @@ export function bundleDraftBody(draft: BundleDraft): {
   addons: BundleAddons
   interval: 'month' | 'year'
   coupon?: string
+  buildFee?: { amountCents: number; label: string }
 } {
   const coupon = draft.coupon.trim()
   const addons = fitBundleAddonsToPlan(draft.addons, draft.plan).addons
+  const buildFee = buildFeeDraftBody(draft.buildFee)
   return {
     plan: draft.plan,
     addons,
     interval: draft.interval,
     ...(coupon ? { coupon } : {}),
+    ...(buildFee ? { buildFee } : {}),
   }
 }
 

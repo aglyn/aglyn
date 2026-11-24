@@ -142,6 +142,7 @@ export const STAFF_AUDIT_ACTION_LABELS: Readonly<Record<string, string>> = {
   'billing.assistOverage.setHardCap': 'Set the AI stop-at-band switch',
   'billing.autoLocked': 'Locked automatically for billing',
   'billing.bundle-link-minted': 'Made a bundle checkout link',
+  'billing.build-fee-paid': 'Website build fee paid',
   'billing.collaboratorAllocation': 'Changed collaborator seats',
   'billing.dispute.opened': 'Payment dispute opened',
   'billing.disputeClosed': 'Payment dispute closed',
