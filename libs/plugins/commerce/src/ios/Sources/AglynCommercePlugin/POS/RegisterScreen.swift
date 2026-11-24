@@ -33,7 +33,17 @@ struct RegisterScreen: View {
   @State private var query = ""
   @State private var showBasket = false
   @State private var showDiscount = false
+  /// "Enter a barcode or SKU": the typed code (Android's code dialog).
+  @State private var showCode = false
   @State private var scanCode = ""
+  /// The camera scan sheet (iPhone and iPad with a camera), its last line and its filter of repeated reads.
+  @State private var showCamera = false
+  @State private var scanStatus: String?
+  @State private var scanFilter = CameraScanFilter()
+  /// The item sheet a scanned product opened, shown once the camera sheet has made way for it.
+  @State private var pendingItemSheet: ItemSheet?
+  /// A USB or Bluetooth scanner types its code into the search field, faster than a person, then Return.
+  @State private var burst = HIDScanDetector()
   @State private var showOps = false
   /// Check-in at the window (AGL-4043).
   @State private var showCheckIn = false
@@ -102,7 +112,8 @@ struct RegisterScreen: View {
     .background(AglynColor.page)
     .navigationTitle(model.storeName)
     .toolbar { toolbar }
-    .aglynSearchable(text: $query, prompt: "Search products", onSubmit: { model.search(query) }, alwaysShown: true)
+    .aglynSearchable(text: $query, prompt: "Search products", onSubmit: submitSearch, alwaysShown: true)
+    .onChange(of: query) { old, new in burst.feedEdit(from: old, to: new, at: ProcessInfo.processInfo.systemUptime) }
     // As the cashier types, as on Android and in the console: a short pause, then the grid narrows. Return searches at once.
     .task(id: query) {
       if !query.isEmpty { try? await Task.sleep(for: .milliseconds(300)) }
@@ -122,6 +133,42 @@ struct RegisterScreen: View {
     }
     .sheet(isPresented: $showPrinters) { RegisterPrintersSheet(model: model) }
     .sheet(isPresented: $showOfflineCash) { OfflineSaleSheet(model: model) }
+    .sheet(
+      isPresented: $showCamera,
+      onDismiss: {
+        if let pending = pendingItemSheet {
+          pendingItemSheet = nil
+          model.sheet = pending
+        }
+      }
+    ) {
+      AglynBarcodeScanSheet(
+        status: scanStatus,
+        accept: { scanFilter.accept($0, at: ProcessInfo.processInfo.systemUptime) },
+        onCode: { code in
+          model.lookUp(code) { answer in
+            scanStatus = answer.words
+            // An item with options opens its sheet; the camera makes way for it.
+            if answer.needsSheet {
+              pendingItemSheet = model.sheet
+              model.sheet = nil
+              showCamera = false
+            }
+          }
+        },
+        onDone: { showCamera = false })
+    }
+    .alert("Barcode or SKU", isPresented: $showCode) {
+      TextField("Code", text: $scanCode)
+        .autocorrectionDisabled()
+        #if os(iOS)
+          .textInputAutocapitalization(.never)
+        #endif
+        .accessibilityIdentifier("pos-code-field")
+      Button("Look up") { lookUpOnceTheAlertHasGone(scanCode) }
+        .disabled(scanCode.trimmingCharacters(in: .whitespaces).isEmpty)
+      Button("Cancel", role: .cancel) {}
+    }
     .overlay { if model.cashier.locked { LockedRegister(model: model) } }
     // Any touch is the register in use: it keeps the idle lock away.
     .simultaneousGesture(TapGesture().onEnded { model.cashier.touch() })
@@ -165,6 +212,7 @@ struct RegisterScreen: View {
       if phase == .active { Task { await model.warmUpReader() } }
     }
     .tapToPayEducationAfterTerms(model.collector)
+    .tapToPayAnnouncement(model, context: context, covered: registerCovered)
     .onDisappear {
       model.stop()
       offerDisplay(false)
@@ -173,8 +221,56 @@ struct RegisterScreen: View {
     .onChange(of: model.display.connected, initial: true) { _, connected in offerDisplay(connected) }
   }
 
+  /// Something already over the register, which the Tap to Pay on iPhone announcement waits behind.
+  private var registerCovered: Bool {
+    model.cashier.locked || model.sheet != nil || showBasket || showDiscount || showOps || showCheckIn || showToAttach
+      || showPrinters || showOfflineCash || showCamera || showCode
+  }
+
+  /// A typed code is looked up once the alert has finished going away: a product with options opens its item sheet,
+  /// and a sheet asked for while the alert is still leaving is never shown (iPad simulator, 2026-11-23).
+  private func lookUpOnceTheAlertHasGone(_ code: String) {
+    Task { @MainActor in
+      try? await Task.sleep(for: .milliseconds(450))
+      model.lookUp(code)
+    }
+  }
+
+  /// Return in the search field: a scanner's burst is a code to look up, taken back out of the search; a person's
+  /// words search the grid (Android's register).
+  private func submitSearch() {
+    if let code = burst.feed("\r", at: ProcessInfo.processInfo.systemUptime), query.hasSuffix(code) {
+      query.removeLast(code.count)
+      model.search(query)
+      model.lookUp(code)
+    } else {
+      model.search(query)
+    }
+  }
+
   @ToolbarContentBuilder
   private var toolbar: some ToolbarContent {
+    // Beside the search, as on Android: the camera where this device has one that reads barcodes (not a Mac, not the
+    // Simulator), and a typed code everywhere.
+    if AglynBarcodeScanner.isSupported {
+      ToolbarItem(placement: .primaryAction) {
+        Button("Scan barcodes with the camera", systemImage: "camera") {
+          scanStatus = nil
+          scanFilter.reset()
+          showCamera = true
+        }
+        .help("Scan barcodes with the camera")
+        .accessibilityIdentifier("pos-scan-camera")
+      }
+    }
+    ToolbarItem(placement: .primaryAction) {
+      Button("Enter a barcode or SKU", systemImage: "barcode") {
+        scanCode = ""
+        showCode = true
+      }
+      .help("Enter a barcode or SKU")
+      .accessibilityIdentifier("pos-enter-code")
+    }
     ToolbarItem(placement: .primaryAction) {
       Menu {
         if let registers = model.registers.value, registers.count > 1 {

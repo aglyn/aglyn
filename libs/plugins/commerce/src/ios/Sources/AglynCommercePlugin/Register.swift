@@ -43,9 +43,11 @@ public func registerCommerceNative(_ r: NativePluginRegistrar) {
   r.screen(
     commerceCardReadersScreen, title: "Card readers", requiresSite: true, apps: [.pos], icon: "creditcard",
     placement: .menu
-  ) { context, _ in
-    CardReadersScreen(context: context)
+  ) { context, params in
+    CardReadersScreen(context: context, startTapToPaySetUp: TapToPaySetUpScreen.startsSetUp(params))
   }
+  // Where the Tap to Pay on iPhone announcement's "Enable now" goes, from the register or Settings › Help.
+  TapToPaySetUpScreen.id = commerceCardReadersScreen
   // The console's Hardware card and Card readers to set up (AGL-4038): buying card readers for this store, in both
   // apps (the POS menu; the Aglyn app's Store › Settings). Physical goods paid on Stripe's page, never in-app purchase.
   r.screen(

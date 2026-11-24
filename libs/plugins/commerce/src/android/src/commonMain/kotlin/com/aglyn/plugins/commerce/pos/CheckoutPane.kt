@@ -75,6 +75,9 @@ internal fun CheckoutPane(model: RegisterModel, checkout: Checkout, onOpenReader
   val fmt = { cents: Long -> money(cents, model.currency) }
   val receiptStep = state.step as? CheckoutStep.Receipt
   LaunchedEffect(receiptStep != null) { if (receiptStep != null) model.loadReceipt(state.opened.orderId) }
+  // A declined card's receipt reads the sale as stored, with the declined payment on it (Apple 5.10, as on Apple).
+  val declined = state.declined?.takeIf { state.showsDeclined }
+  LaunchedEffect(declined) { if (declined != null) model.loadReceipt(state.opened.orderId) }
 
   // The heading, and once paid the total and the change to hand back, stay put above what scrolls: the change due is what
   // the cashier reads while counting it out, so it never scrolls away under the header.
@@ -84,7 +87,11 @@ internal fun CheckoutPane(model: RegisterModel, checkout: Checkout, onOpenReader
       verticalArrangement = Arrangement.spacedBy(space(1f)),
     ) {
       Text(
-        if (receiptStep != null) "Paid" else "Checkout",
+        when {
+          declined != null -> "Not paid"
+          receiptStep != null -> "Paid"
+          else -> "Checkout"
+        },
         style = MaterialTheme.typography.titleLarge,
         modifier = Modifier.semantics { heading() },
       )
@@ -121,17 +128,27 @@ private fun androidx.compose.foundation.layout.ColumnScope.CheckoutBody(
   fmt: (Long) -> String,
   onOpenReaders: () -> Unit,
 ) {
+    val declined = state.declined?.takeIf { state.showsDeclined }
     if (receiptStep == null) {
       SectionCard(null, Modifier.fillMaxWidth()) {
         state.opened.subtotalCents?.let { AmountRow("Subtotal", fmt(it), muted = true) }
         state.opened.discountCents?.takeIf { it > 0 }?.let { AmountRow("Discount", "-${fmt(it)}", muted = true) }
         state.opened.taxCents?.let { AmountRow("Tax", fmt(it), muted = true) }
-        AmountRow("Total", fmt(state.sale.totalCents))
+        if (declined == null) AmountRow("Total", fmt(state.sale.totalCents))
         if (state.tipCents > 0) AmountRow("Tip", fmt(state.tipCents), muted = true, modifier = Modifier.testTag("pos-tip"))
         if (state.sale.paidCents > 0) AmountRow("Paid", fmt(state.sale.paidCents), muted = true)
         HorizontalDivider()
-        AmountRow("Due", fmt(state.dueWithTipCents), emphasized = true, modifier = Modifier.testTag("pos-due"))
+        // A card just declined: the sale's total (Figma 177:5163, as on Apple); otherwise what is left to pay.
+        if (declined != null) {
+          AmountRow("Total", fmt(state.sale.totalCents), emphasized = true, modifier = Modifier.testTag("pos-declined-total"))
+        } else {
+          AmountRow("Due", fmt(state.dueWithTipCents), emphasized = true, modifier = Modifier.testTag("pos-due"))
+        }
       }
+    }
+    if (declined != null) {
+      DeclinedStep(model, checkout, declined)
+      return
     }
     state.notice?.let { notice ->
       NoticeBanner(
@@ -155,6 +172,65 @@ private fun androidx.compose.foundation.layout.ColumnScope.CheckoutBody(
       is CheckoutStep.Card -> CardStep(model, checkout, state, step, fmt)
       is CheckoutStep.Receipt -> ReceiptStep(model, checkout, state, step, fmt)
     }
+}
+
+/**
+ * A card that was not approved, or whose payment timed out (Figma iPhone POS 177:5163, as on Apple; the timeout is its own
+ * outcome, Apple 5.9): what happened, its receipt to send or print (Apple 5.10), and the way on to another tender. No
+ * email or "No receipt" (the 2026-11-13 decision): the receipt goes through the share sheet and the print sheet, since
+ * the console sends a paid sale's receipt, never a declined card's.
+ */
+@Composable
+private fun DeclinedStep(model: RegisterModel, checkout: Checkout, declined: DeclinedCard) {
+  val exporter = com.aglyn.ui.LocalFileExporter.current
+  var problem by remember(declined) { mutableStateOf<String?>(null) }
+  NoticeBanner(declined.notice, StatusTone.ERROR, Modifier.testTag(if (declined.timedOut) "timed-out-notice" else "declined-notice"))
+  val receipt = model.receipt
+  SectionCard("Receipt", Modifier.fillMaxWidth()) {
+    if (receipt == null) {
+      repeat(4) { Skeleton(Modifier.fillMaxWidth(), 14.dp) }
+    } else {
+      Text(
+        renderText(layoutDeclinedReceipt(receipt, declined.cardLabel, ReceiptLayoutOptions(columns = 40), declined.timedOut)).trimEnd(),
+        fontFamily = FontFamily.Monospace,
+        style = MaterialTheme.typography.bodySmall,
+        softWrap = false,
+        modifier = Modifier.horizontalScroll(rememberScrollState()).testTag("declined-receipt-preview"),
+      )
+    }
+  }
+  problem?.let { NoticeBanner(it, StatusTone.ERROR) }
+  Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
+    if (model.canPrintDeclinedReceipt && receipt != null) {
+      OutlinedButton(
+        onClick = { model.act { (model.printDeclinedReceipt(declined) as? SystemPrintResult.Failed)?.let { problem = it.message } } },
+        modifier = Modifier.heightIn(min = 52.dp).testTag("declined-receipt-print"),
+      ) {
+        Icon(AglynIcons.named("print"), null)
+        Spacer(Modifier.width(space(0.5f)))
+        Text("Print receipt")
+      }
+    }
+    Spacer(Modifier.weight(1f))
+    if (exporter != null) {
+      Button(
+        onClick = {
+          val text = declined.receipt(model.storeName, { cents -> money(cents, model.currency) }, model.timeZone)
+          val name = "Declined receipt${receipt?.orderNumber?.let { " $it" } ?: ""}.txt"
+          model.act { exporter.export(name, "text/plain", text.encodeToByteArray()) }
+        },
+        modifier = Modifier.heightIn(min = 52.dp).testTag("declined-receipt-share"),
+      ) { Text("Send receipt") }
+    }
+  }
+  Button(
+    onClick = {
+      // Put away with it, so the paid receipt later reads the sale afresh.
+      model.putAwayReceipt()
+      checkout.takePaymentAnotherWay()
+    },
+    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("declined-take-another-way"),
+  ) { Text("Take payment another way") }
 }
 
 @Composable
@@ -533,6 +609,17 @@ private fun CardStep(model: RegisterModel, checkout: Checkout, state: CheckoutSt
     (if (reader is DeviceReaderService) model.cardCollector?.deviceReaders?.prompt else null)
       ?: remember { MutableStateFlow<String?>(null) }
     ).collectAsState()
+  // The card was read; the payment is being confirmed (Apple 5.8, as on Apple). Nothing to cancel any more.
+  val processing by (
+    (if (reader is DeviceReaderService) model.cardCollector?.processing else null)
+      ?: remember { MutableStateFlow(false) }
+    ).collectAsState()
+  val settling by ((reader as? DeviceReaderService)?.settling ?: remember { MutableStateFlow(false) }).collectAsState()
+  // From the read until the outcome: the reader confirming, then the server recording the payment.
+  if (processing || settling) {
+    CardProcessing(state, fmt)
+    return
+  }
   Column(
     Modifier.fillMaxWidth().padding(vertical = space(3f)).testTag("pos-card-waiting"),
     horizontalAlignment = Alignment.CenterHorizontally,
@@ -568,6 +655,26 @@ private fun CardStep(model: RegisterModel, checkout: Checkout, state: CheckoutSt
       }
     }
     OutlinedButton(onClick = { reader?.let { model.act { checkout.cancelCard(it) } } }, enabled = step.paymentId != null) { Text("Cancel payment") }
+  }
+}
+
+/** The card was read and the payment is being confirmed (Apple 5.8). */
+@Composable
+private fun CardProcessing(state: CheckoutState, fmt: (Long) -> String) {
+  Column(
+    Modifier.fillMaxWidth().padding(vertical = space(3f)).semantics(mergeDescendants = true) {}.testTag("pos-card-processing"),
+    horizontalAlignment = Alignment.CenterHorizontally,
+    verticalArrangement = Arrangement.spacedBy(space(2f)),
+  ) {
+    CircularProgressIndicator()
+    Text("Processing payment…", style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+    Text(fmt(state.amountCents + state.tipCents), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+    Text(
+      "The card was read. This takes a moment.",
+      style = MaterialTheme.typography.bodyLarge,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      textAlign = TextAlign.Center,
+    )
   }
 }
 

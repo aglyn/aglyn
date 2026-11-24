@@ -3,6 +3,7 @@
 
 import AglynCore
 import AglynHardware
+import AglynPluginHost
 import AglynUI
 import Foundation
 import SwiftUI
@@ -19,8 +20,16 @@ import SwiftUI
  * (requirements 1.5, 3.7, 4.2, 5.1 to 5.3, 5.7, 5.12). The rules are
  * AglynHardware's `TapToPay.swift`; this file wires them to the register:
  *
- * - The reader gets ready on its own when the register opens and whenever the
- *   app comes back to the front (`warmUpReader`).
+ * - The reader gets ready on its own as soon as the app has a signed-in person
+ *   and a store (the register is the first screen then, so its `start` begins
+ *   the warm-up before anything else loads), and again whenever the app comes
+ *   back to the front (`warmUpReader`). Neither asks for a permission or shows
+ *   Apple's terms.
+ * - Whether Apple's terms are accepted is asked of Apple, through the SDK, at
+ *   every press and every warm-up; an earlier answer only shapes what a screen
+ *   shows (Apple 1.6).
+ * - Once the card is read the card step shows the payment processing, and a
+ *   payment that timed out is told as its own outcome (Apple 5.8, 5.9).
  * - Checkout pins one "Tap to Pay on iPhone" button at its top on an iPhone,
  *   never greyed out. A press takes the card when the reader is ready,
  *   connects it first when it is not, waits out a setup already under way
@@ -34,29 +43,34 @@ extension RegisterModel {
   /// The pinned "Tap to Pay on iPhone" button: on a device whose own reader can take Tap to Pay (an iPhone).
   var offersTapToPay: Bool { collector?.kinds.contains(.tapToPay) == true }
 
+  /// A sale under way: something in the basket, or checkout open. The Tap to Pay on iPhone announcement never
+  /// interrupts one.
+  var saleInProgress: Bool { !cart.isEmpty || checkout != nil }
+
   /// Whether this device's connected reader is Tap to Pay on iPhone.
   var deviceIsTapToPay: Bool {
     if case .connected(_, .tapToPay, _) = collector?.state { return true }
     return false
   }
 
-  /// What a press of the button does right now.
+  /// What a press of the button does right now. Never decided by what the SDK answered last time (Apple 1.6): a press
+  /// that is not ready connects, and the SDK asks Apple again.
   var tapToPayPressNow: TapToPayPress {
     guard let collector else { return .explain(.failed("This device cannot take Tap to Pay on iPhone.")) }
-    let connecting: Bool = {
-      if case .connecting = collector.state { return true }
-      return false
-    }()
     return tapToPayPress(
       osMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion, state: collector.state,
-      progress: connecting ? collector.deviceReaders?.update?.progress : nil,
-      notice: collector.deviceReaders?.tapToPayNotice)
+      progress: readerIsConnecting ? collector.deviceReaders?.update?.progress : nil)
   }
 
-  /// Gets the reader ready without asking for anything (Apple 1.5): when the register opens and whenever the app
-  /// comes back to the front.
+  private var readerIsConnecting: Bool {
+    if case .connecting = collector?.state { return true }
+    return false
+  }
+
+  /// Gets the reader ready without asking for anything (Apple 1.5): as soon as the register has a store (`start`), and
+  /// whenever the app comes back to the front. A reader already connected, or connecting, is left alone.
   func warmUpReader() async {
-    guard let controls = collector?.deviceReaders, collector?.state.isConnected == false else { return }
+    guard let controls = collector?.deviceReaders, collector?.state.isConnected == false, !readerIsConnecting else { return }
     await controls.warmUp(hostID: hostID, sessions: terminal)
   }
 
@@ -293,5 +307,60 @@ struct TapToPayEnableSheet: View {
     .padding(AglynSpace.three)
     .presentationDetents([.medium])
     .accessibilityIdentifier("tap-to-pay-enable-sheet")
+  }
+}
+
+// MARK: The Tap to Pay on iPhone announcement (Apple 3.1 to 3.3, 6.2)
+
+/// Shows Apple's Hero announcement once to each signed-in person on this device, the first time the register is
+/// reached with nothing under way (AglynHardware's `TapToPayAnnouncement` holds the rule). "Enable now" opens Card
+/// readers and starts Set up Tap to Pay on iPhone.
+struct TapToPayAnnouncementOnRegister: ViewModifier {
+  let model: RegisterModel
+  let context: NativePluginContext
+  /// Anything else over the register (a sheet, the lock): it waits until the register is clear.
+  let covered: Bool
+  var announcement = TapToPayAnnouncement()
+  @State private var showing = false
+  @State private var enableAfterClose = false
+
+  func body(content: Content) -> some View {
+    content
+      .task(id: model.saleInProgress || covered) {
+        // A moment for the register to settle before anything covers it.
+        try? await Task.sleep(for: .milliseconds(600))
+        guard !Task.isCancelled, !showing,
+          announcement.shouldShow(
+            offered: model.offersTapToPay, uid: context.uid, saleInProgress: model.saleInProgress || covered)
+        else { return }
+        announcement.markShown(uid: context.uid)
+        showing = true
+      }
+      #if os(iOS)
+        .fullScreenCover(isPresented: $showing, onDismiss: enableIfAsked) { view }
+      #else
+        .sheet(isPresented: $showing, onDismiss: enableIfAsked) { view }
+      #endif
+  }
+
+  private var view: some View {
+    TapToPayAnnouncementView {
+      enableAfterClose = true
+      showing = false
+    } close: {
+      showing = false
+    }
+  }
+
+  private func enableIfAsked() {
+    guard enableAfterClose else { return }
+    enableAfterClose = false
+    context.navigate(commerceCardReadersScreen, TapToPaySetUpScreen.params)
+  }
+}
+
+extension View {
+  func tapToPayAnnouncement(_ model: RegisterModel, context: NativePluginContext, covered: Bool) -> some View {
+    modifier(TapToPayAnnouncementOnRegister(model: model, context: context, covered: covered))
   }
 }

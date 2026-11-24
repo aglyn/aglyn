@@ -17,6 +17,10 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { act, fireEvent, render, screen } from '@testing-library/react'
+import ScreenLink, {
+  presets as screenLinkPresets,
+  schema as screenLinkSchema,
+} from './screen-link'
 import NavMenu, {
   fitPanel,
   MegaMenu,
@@ -24,6 +28,7 @@ import NavMenu, {
   megaMenuSchema,
   navMenuPresets,
   navMenuSchema,
+  splitTriggerSx,
 } from './nav-menu'
 
 const command = (
@@ -415,11 +420,13 @@ describe('nav menu schemas & presets (AGL-562)', () => {
   it('exposes only content attributes — no "Open on" (AGL-568)', () => {
     // Open/close behavior rides the interactions system; a bespoke
     // trigger attribute must never come back.
+    // The look attributes (AGL-4239) are appearance, not behavior.
+    const look = ['renderAs', 'color', 'size', 'variant']
     expect((navMenuSchema.attributes ?? []).map((attr) => attr.name)).toEqual(
-      ['label'],
+      ['label', ...look],
     )
     expect((megaMenuSchema.attributes ?? []).map((attr) => attr.name)).toEqual(
-      ['label', 'panelWidth'],
+      ['label', 'panelWidth', ...look],
     )
     const megaByName = Object.fromEntries(
       (megaMenuSchema.attributes ?? []).map((attr) => [attr.name, attr]),
@@ -602,5 +609,190 @@ describe('a menu panel does not inherit its trigger’s text styles (AGL-4200)',
     expect(style.textTransform).toBe('none')
     expect(style.whiteSpace).toBe('normal')
     expect(style.letterSpacing).toBe('normal')
+  })
+})
+
+/**
+ * AGL-4239: in a nav of button-style Page Links the plain trigger was the
+ * one item that did not match. "Render as: Button" draws it with the Page
+ * Link's own Button and props; unset keeps the plain label every existing
+ * menu has.
+ */
+describe('the trigger can wear the Page Link button look (AGL-4239)', () => {
+  const trigger = () => screen.getByRole('button', { name: /Services/ })
+  /** The properties a nav reader actually sees differ on. */
+  const LOOK = [
+    'text-transform',
+    'font-size',
+    'font-weight',
+    'letter-spacing',
+    'line-height',
+    'padding-top',
+    'padding-right',
+    'padding-bottom',
+    'padding-left',
+    'min-width',
+    'border-top-width',
+    'border-top-style',
+    'border-radius',
+    'color',
+    'background-color',
+  ]
+  const lookOf = (element: Element) => {
+    const style = getComputedStyle(element)
+    return Object.fromEntries(LOOK.map((css) => [css, style.getPropertyValue(css)]))
+  }
+
+  it.each([
+    ['text', 'inherit', undefined],
+    ['outlined', 'inherit', undefined],
+    ['contained', 'primary', 'small'],
+  ] as const)(
+    'is drawn exactly like a Page Link set to %s / %s / %s',
+    (variant, color, size) => {
+      // Both on the canvas, where a Page Link renders the same MUI Button.
+      renderEditor(
+        <>
+          <ScreenLink variant={variant} color={color} size={size}>
+            {'Home'}
+          </ScreenLink>
+          <NavMenu
+            label="Services"
+            renderAs="button"
+            variant={variant}
+            color={color}
+            size={size}
+          />
+        </>,
+      )
+      const link = screen.getByText('Home')
+      expect(lookOf(trigger())).toEqual(lookOf(link))
+      const variantClass = `MuiButton-${variant}`
+      expect(link.className).toContain(variantClass)
+      expect(trigger().className).toContain(variantClass)
+    },
+  )
+
+  it('is a real comparison: the plain trigger does NOT match a button Page Link', () => {
+    // Control for the parity rows above, so they cannot pass on empty reads.
+    renderEditor(
+      <>
+        <ScreenLink variant="outlined" color="inherit">
+          {'Home'}
+        </ScreenLink>
+        <NavMenu label="Services" />
+      </>,
+    )
+    const link = lookOf(screen.getByText('Home'))
+    const plain = lookOf(trigger())
+    expect(link['text-transform']).toBe('uppercase')
+    expect(plain).not.toEqual(link)
+  })
+
+  it('matches on the live site too, and still opens its menu', () => {
+    renderLive(
+      <NavMenu label="Services" renderAs="button" variant="outlined" color="inherit">
+        <a href="/design">{'Design'}</a>
+      </NavMenu>,
+    )
+    expect(trigger().className).toContain('MuiButton-outlined')
+    expect(trigger().getAttribute('aria-haspopup')).toBe('true')
+    fireEvent.click(trigger())
+    expect(screen.getByText('Design')).toBeTruthy()
+  })
+
+  it('keeps the plain label when unset or set to Text link', () => {
+    for (const renderAs of [undefined, 'link'] as const) {
+      const { unmount } = renderLive(
+        <NavMenu label="Services" renderAs={renderAs} variant="outlined" />,
+      )
+      // The look props are ignored in the plain look, as a Page Link drops
+      // them in Text link mode.
+      expect(trigger().className).not.toContain('MuiButton-outlined')
+      expect(getComputedStyle(trigger()).fontSize).toBe('inherit')
+      expect(parseFloat(getComputedStyle(trigger()).minWidth)).toBe(0)
+      unmount()
+    }
+  })
+
+  it('lets STYLES → Typography reach the button label', () => {
+    renderLive(
+      <MegaMenu
+        label="Services"
+        renderAs="button"
+        sx={{ textTransform: 'none', fontSize: '17px', flexShrink: 0, ml: 2 }}
+      />,
+    )
+    const style = getComputedStyle(trigger())
+    expect(style.textTransform).toBe('none')
+    expect(style.fontSize).toBe('17px')
+  })
+
+  it('keeps placement on the wrapper, so the panel and hover surface stay with it', () => {
+    const { container } = renderLive(
+      <NavMenu label="Services" renderAs="button" sx={{ flexShrink: 0, marginLeft: '24px' }} />,
+    )
+    const root = container.firstElementChild as HTMLElement
+    expect(getComputedStyle(root).marginLeft).toBe('24px')
+    expect(getComputedStyle(trigger()).marginLeft).not.toBe('24px')
+  })
+
+  it('never hands a cleared (null) look prop to MUI (AGL-1226)', () => {
+    renderLive(
+      <NavMenu label="Services" renderAs="button" variant={null} size={null} color={null} />,
+    )
+    // MUI's own defaults, as an unset Page Link gets.
+    expect(trigger().className).toContain('MuiButton-text')
+  })
+
+  it('never leaks a look prop onto the wrapper DOM', () => {
+    const { container } = renderLive(
+      <NavMenu label="Services" renderAs="link" variant="outlined" size="small" color="primary" />,
+    )
+    const root = container.firstElementChild as HTMLElement
+    for (const name of ['renderas', 'variant', 'size', 'color']) {
+      expect(root.getAttribute(name)).toBeNull()
+    }
+  })
+
+  it('splits styles by key: placement to the wrapper, the rest to the button', () => {
+    const theme = () => ({})
+    expect(
+      splitTriggerSx([{ flexShrink: 0, mx: 1, fontSize: 14, color: 'red' }, theme]),
+    ).toEqual({
+      wrapper: [{ flexShrink: 0, mx: 1 }],
+      trigger: [{ fontSize: 14, color: 'red' }, theme],
+    })
+  })
+
+  it('offers the Page Link\'s own look fields, with the same labels and options', () => {
+    const byName = (schema: { attributes?: any[] }) =>
+      Object.fromEntries((schema.attributes ?? []).map((attr) => [attr.name, attr]))
+    const link = byName(screenLinkSchema)
+    for (const menu of [byName(navMenuSchema), byName(megaMenuSchema)]) {
+      for (const name of ['color', 'size', 'variant']) {
+        expect(menu[name].label).toBe(link[name].label)
+        expect(menu[name].options).toEqual(link[name].options)
+        expect(menu[name].condition).toEqual({ when: 'renderAs', is: 'button' })
+      }
+      expect(menu['renderAs'].label).toBe(link['renderAs'].label)
+      expect(menu['renderAs'].options).toEqual(
+        link['renderAs'].options.filter((o: any) => o.value !== 'linkButton'),
+      )
+    }
+  })
+
+  it('new inserts match a newly inserted Page Link; existing nodes keep their look', () => {
+    const pageLink = screenLinkPresets[0].data.props as Record<string, unknown>
+    const inserts = navMenuPresets.filter((preset) =>
+      ['muiNavMenu', 'muiMegaMenu'].includes(preset.data.componentId as string),
+    )
+    expect(inserts).toHaveLength(2)
+    for (const preset of inserts) {
+      const props = preset.data.props as Record<string, unknown>
+      expect(props['renderAs']).toBe('button')
+      expect(props['variant']).toBe(pageLink['variant'])
+      expect(props['color']).toBe(pageLink['color'])
+    }
   })
 })

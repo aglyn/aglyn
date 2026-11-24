@@ -83,9 +83,11 @@ final class RegisterModel {
       })
   }
 
-  /// The card tender a payment step names by label, to cancel or to read what it asks for.
+  /// The card tender a payment step names by label, to cancel or to read what it asks for. Tap to Pay on iPhone has no
+  /// reader row (`readers`), so this device's own reader is looked at too.
   func cardService(labeled label: String) -> (any CardReaderService)? {
     if let reader = readers.first(where: { $0.label == label }) { return reader }
+    if let deviceService, deviceService.label == label { return deviceService }
     if let keyed = keyedCard, keyed.label == label { return keyed }
     return nil
   }
@@ -188,6 +190,9 @@ final class RegisterModel {
   func money(_ cents: Int) -> String { posMoney(cents, currency: currency) }
 
   func start() {
+    // Tap to Pay on iPhone (or the reader connected last time) starts getting ready first, before anything else loads:
+    // the app has a signed-in person and a store from here on (Apple 1.5). Silent; nothing is asked of the cashier.
+    Task { await warmUpReader() }
     // What the reader's SDK did with cards it stored, even while this register was closed (AGL-4039). Wired here,
     // on the register on screen, never in `init`: SwiftUI builds a screen's `@State` initial value each time the
     // screen is rebuilt, and a throwaway model that took the forwards (and synced them) left the visible register's
@@ -311,8 +316,8 @@ final class RegisterModel {
       context = loaded
       online = true
       smartReaders = loaded.readers.filter(\.online).map { SmartReaderService($0) }
-      // The reader connected last time comes back on its own; nothing is
-      // asked of the cashier here (connecting one is the readers screen's job).
+      // The reader connected last time comes back on its own (if the warm-up `start` began has not already done it);
+      // nothing is asked of the cashier here (connecting one is the readers screen's job).
       await warmUpReader()
       // The console answered: get the offline rules, then send whatever was rung while it did not.
       if offline.kitIsStale { await offline.refreshKit() }
@@ -345,33 +350,51 @@ final class RegisterModel {
     }
   }
 
-  /// A scan or a typed code, looked up across the catalog: barcode first, then SKU.
-  func lookUp(_ raw: String) {
+  /// A scan or a typed code, looked up across the catalog: barcode first, then SKU (Android's `RegisterModel.lookUp`,
+  /// same words). `onAnswer` hears the outcome in words, for a camera sheet that stays open between scans; it is told
+  /// `ScanAnswer.needsSheet` when the item opened the item sheet, which the camera sheet must then make way for.
+  /// Without it, a miss or a problem is the register's toast.
+  func lookUp(_ raw: String, onAnswer: (@MainActor (ScanAnswer) -> Void)? = nil) {
+    guard checkout == nil else { return }
     guard let code = scannedProductCode(raw) else {
-      toast = CheckoutNotice(tone: .warning, message: "That code could not be read. Scan it again.")
-      return
+      return answer("That code could not be read. Try again.", tone: .warning, onAnswer)
     }
-    lookUp(code, fields: ["barcodes", "skus"])
+    lookUp(code, fields: ["barcodes", "skus"], onAnswer: onAnswer)
   }
 
-  private func lookUp(_ code: String, fields: [String]) {
+  private func lookUp(_ code: String, fields: [String], onAnswer: (@MainActor (ScanAnswer) -> Void)?) {
     guard let field = fields.first else {
-      toast = CheckoutNotice(tone: .warning, message: "No product has the code \(code).")
-      return
+      return answer("No product has the code \(code).", tone: .warning, onAnswer)
     }
     var answered = false
-    listen("lookup", posCodeQuery(hostID, field: field, code: code), failed: { [weak self] in
-      self?.toast = CheckoutNotice(tone: .error, message: "The code could not be looked up. Check the connection.")
-    }) { [weak self] docs in
+    listen(
+      "lookup", posCodeQuery(hostID, field: field, code: code),
+      failed: { [weak self] in
+        guard let self, !answered else { return }
+        answered = true
+        answer("The lookup did not work. Check the connection and try again.", tone: .error, onAnswer)
+      }
+    ) { [weak self] docs in
       guard let self, !answered else { return }
       answered = true
       listeners["lookup"]?.remove()
       listeners["lookup"] = nil
-      guard let doc = docs.first else { return lookUp(code, fields: Array(fields.dropFirst())) }
+      guard let doc = docs.first else { return lookUp(code, fields: Array(fields.dropFirst()), onAnswer: onAnswer) }
       let item = posItem(doc)
       let variant = variantForCode(item, code) ?? item.variants[0]
-      if item.modifierGroups.isEmpty { add(item, variant) } else { open(item, variant) }
+      if item.modifierGroups.isEmpty {
+        let added = add(item, variant)
+        onAnswer?(ScanAnswer(words: added ? "Added \(item.name)" : toast?.message ?? "\(item.name) could not be added."))
+      } else {
+        open(item, variant)
+        onAnswer?(ScanAnswer(words: "Choose options for \(item.name)", needsSheet: true))
+      }
     }
+  }
+
+  /// A lookup's outcome: to the camera sheet when one is open, else the register's toast.
+  private func answer(_ words: String, tone: AglynTone, _ onAnswer: (@MainActor (ScanAnswer) -> Void)?) {
+    if let onAnswer { onAnswer(ScanAnswer(words: words)) } else { toast = CheckoutNotice(tone: tone, message: words) }
   }
 
   /// A tile tap: straight in, or the item sheet when there is something to choose.
@@ -389,7 +412,7 @@ final class RegisterModel {
       return false
     case .ok(let pick):
       updateCart(cart.adding(pick, quantity: quantity))
-      if variant.soldOut { toast = CheckoutNotice(tone: .warning, message: "\(item.name) shows as sold out.") }
+      if variant.soldOut { toast = CheckoutNotice(tone: .warning, message: "\(item.name) shows as sold out. The sale may refuse it.") }
       return true
     }
   }
@@ -709,3 +732,9 @@ final class RegisterModel {
 }
 
 func nowMs() -> Int64 { Int64(Date().timeIntervalSince1970 * 1000) }
+
+/// What a looked-up code did, for a scanner that stays open (Android's `ScanAnswer`).
+struct ScanAnswer: Equatable {
+  let words: String
+  var needsSheet = false
+}

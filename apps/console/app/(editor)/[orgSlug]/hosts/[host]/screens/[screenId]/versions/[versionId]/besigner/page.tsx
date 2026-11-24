@@ -235,6 +235,14 @@ const JsonEditor = dynamic<JsonEditorProps>(
   { ssr: false, loading: () => LOADING_OVERLAY_ELEMENT },
 )
 
+/**
+ * What Save & publish says when the save went through but the page has no
+ * route, so nothing on the live site serves it (AGL-4240). It used to say
+ * "Saved and published" here, over a page that answered 404.
+ */
+const NOT_LIVE_YET_MESSAGE =
+  'Saved. This page is not on the live site yet: it has no published address.'
+
 function BesignerPage(props) {
   const params = useParams<{
     host: string
@@ -1367,6 +1375,17 @@ function BesignerPage(props) {
         // Publish there is nothing of the page's own to refresh: the route
         // is what that click is about to make live (AGL-4209).
         if (!announce) return 'unchanged'
+        // A page with no route is not on the live site at all, so neither
+        // "already published" nor a cache drop is true of it (AGL-4240).
+        // Reached by a role that cannot publish: one that can goes through
+        // the first publish in `handleSaveAndPublish` instead.
+        if (!isEmailScreen && !publishedPath) {
+          enqueueSnackbar(NOT_LIVE_YET_MESSAGE, {
+            variant: 'info',
+            persist: false,
+          })
+          return 'unchanged'
+        }
         if (!isEmailScreen) {
           void revalidateLivePages({ user, hostId, screenId }).then(
             (result) => {
@@ -1451,7 +1470,7 @@ function BesignerPage(props) {
     // (AGL-4209): nothing is cached under an address that does not exist
     // yet, and the drop, racing the route write, reported a refusal over a
     // publish that had worked.
-    if (!isEmailScreen && announce) {
+    if (!isEmailScreen && announce && publishedPath) {
       void revalidateLivePages({ user, hostId, screenId }).then((result) => {
         const shortfall = describeRevalidateShortfall(result)
         if (shortfall) {
@@ -1493,7 +1512,11 @@ function BesignerPage(props) {
             // composer's preview read, so this names the readers a save
             // actually reaches — there is no live site to speak of.
             'Saved — campaigns and previews use this version now.'
-          : livePointer === versionId
+          : // No route, no live page (AGL-4240): the version is saved and
+            // promoted, and the page still has no address to serve it at.
+            !publishedPath
+            ? NOT_LIVE_YET_MESSAGE
+            : livePointer === versionId
             ? 'Saved and published — the live pages are refreshing now.'
             : 'Published this version — it is now what the live site serves.',
         { variant: 'success', persist: false },
@@ -1523,10 +1546,6 @@ function BesignerPage(props) {
     logActivity,
     enqueueSnackbar,
   ])
-
-  const handleSaveAndPublish = useCallback(async () => {
-    await saveAndPromote({ announce: true })
-  }, [saveAndPromote])
 
   /**
    * Does the canvas hold work the stored version does not (AGL-4209)?
@@ -1786,6 +1805,36 @@ function BesignerPage(props) {
     user,
     liveDescendantCount,
     carryCanvasIntoPublish,
+  ])
+
+  /**
+   * SAVE & PUBLISH ON A PAGE THAT WAS NEVER PUBLISHED (AGL-4240).
+   *
+   * Creating a page stores its slug and registers no route (AGL-3021), so a
+   * new page has no address until something writes its routing-map entry.
+   * `saveAndPromote` writes the version and the pointer, never the route:
+   * on its own it said "Saved and published" over a page that answered 404,
+   * while the header Publish on the same page worked.
+   *
+   * So a page with no route publishes through the header Publish's own
+   * handler: it carries the canvas into the version, writes the slug, the
+   * published date and the route, and says "Published at /…". With no slug
+   * it opens Page Properties and asks for one. A role that cannot publish
+   * stays on the save-and-promote, which says the page is not live yet. An
+   * email screen has no route to write.
+   */
+  const handleSaveAndPublish = useCallback(async () => {
+    if (!isEmailScreen && !publishedPath && canPublish) {
+      await handleTogglePublish()
+      return
+    }
+    await saveAndPromote({ announce: true })
+  }, [
+    isEmailScreen,
+    publishedPath,
+    canPublish,
+    handleTogglePublish,
+    saveAndPromote,
   ])
 
   /** Is there a typed slug the screen document has not been told about? */
