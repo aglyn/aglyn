@@ -25,6 +25,7 @@ content on the marketing site and is written separately.
 ### Fixes
 
 - Commerce: product photos show in the Edit product dialog again (#2873, AGL-4246).
+- Site search: product photos in search results resolve stored media references.
 - Page and email screen: a contact email address (Gmail, iCloud, Outlook and the like) no longer counts as naming that provider's brand, and Discord links count as ordinary social links, so a new business's contact, terms, sign-in and account pages are not held as phishing (#2869).
 
 ## v1.29.1 — 2026-11-24
