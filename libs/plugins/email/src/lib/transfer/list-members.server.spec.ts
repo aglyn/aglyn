@@ -151,6 +151,10 @@ const docHandle = (path: string): any => ({
   set: async (data: Record<string, any>, options?: { merge?: boolean }) => {
     store[path] = options?.merge ? mergeInto(store[path] ?? {}, data) : mergeInto({}, data)
   },
+  create: async (data: Record<string, any>) => {
+    if (store[path] !== undefined) throw Object.assign(new Error('already exists'), { code: 6 })
+    store[path] = mergeInto({}, data)
+  },
   delete: async () => {
     delete store[path]
   },
@@ -223,6 +227,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   filterSuppressedEmails: async (emails: string[]) => emails.filter((email) => !platformSuppressed.has(email)),
   getOrgForHost: async () => ({ orgId: ORG_ID, org: {} }),
   resolveOrgMembership: async () => membership,
+  emailSuppressionKey: (email: string) => jest.requireActual('@aglyn/aglyn/app-utils/person-key').personKey(email),
+  emailSearchTokens: () => [],
   orgDataCollectionForHost: async () => collectionHandle(`orgs/${ORG_ID}/contacts`),
   firebaseAdmin: {
     app: () => ({
@@ -429,6 +435,77 @@ describe('a suppressed address is never imported', () => {
     const { byRow } = await importRows([{ email: REFUSED }], attest(true))
     expect(byRow.get(0)).toMatchObject({ outcome: 'failed', reason: 'declined' })
     expect(memberFor(REFUSED)).toBeUndefined()
+  })
+})
+
+/*
+ * A store's customer file (AGL-4245): a row whose marketing column says no is
+ * never added, whatever the operator states, and its address goes on the
+ * site's suppression list as a suppression import adds one.
+ */
+describe('a store file’s marketing column', () => {
+  const NO = 'noa@lumen.co'
+  const UNSUB = 'uma@lumen.co'
+  const PENDING = 'pia@lumen.co'
+  const BLANK = 'bea@lumen.co'
+  const suppressionOf = (email: string) =>
+    store[`hosts/${HOST_ID}/suppressions/${jest.requireActual('@aglyn/aglyn/app-utils/person-key').personKey(email)}`]
+  const FILE = [
+    { email: UNKNOWN, marketingChoice: 'yes' },
+    { email: NO, marketingChoice: 'no' },
+    { email: UNSUB, marketingChoice: 'Unsubscribed' },
+    { email: PENDING, marketingChoice: 'Pending' },
+    { email: BLANK, marketingChoice: '' },
+  ]
+
+  it('leaves out everyone who said no even on the statement, and suppresses them', async () => {
+    const { plan, byRow } = await importRows(FILE, attest(true))
+    expect(memberFor(NO)).toBeUndefined()
+    expect(memberFor(UNSUB)).toBeUndefined()
+    expect(byRow.get(1)).toMatchObject({ outcome: 'skipped', message: 'Not added: they said no in the file, and are added to your site’s suppression list.' })
+    expect(suppressionOf(NO)).toMatchObject({ email: NO, reason: 'manual', importJobId: JOB_ID, suppressedByUid: 'editor-uid' })
+    expect(suppressionOf(UNSUB)).toMatchObject({ reason: 'manual' })
+    // Yes, Pending and blank follow the statement, as any row does.
+    expect(memberFor(UNKNOWN)).toBeDefined()
+    expect(memberFor(PENDING)).toBeDefined()
+    expect(memberFor(BLANK)).toBeDefined()
+    expect(suppressionOf(PENDING)).toBeUndefined()
+    // The dry run counts them, and the core never sees the column.
+    const screening = plan.warnings.find((warning) => warning.class === 'screening')
+    expect(screening?.samples.map((sample) => sample.detail)).toContain(
+      '2 people said no to marketing email in the file, so are not added to this list, whatever you state on Permission. Their addresses go on your site’s suppression list, and undo leaves them there.',
+    )
+    expect(store[LEDGER_PATH]?.['screening']).toMatchObject({ saidNo: 2, sample: { of: 3 } })
+  })
+
+  it('without the statement adds only opt-ins on record, and still suppresses the no rows', async () => {
+    const { byRow } = await importRows([...FILE, { email: OPTED_IN, marketingChoice: '' }], attest(false))
+    expect(memberFor(OPTED_IN)).toBeDefined()
+    for (const email of [UNKNOWN, NO, UNSUB, PENDING, BLANK]) expect(memberFor(email)).toBeUndefined()
+    expect(byRow.get(3)).toMatchObject({ outcome: 'failed', reason: 'no-basis' })
+    expect(suppressionOf(NO)).toBeDefined()
+    expect(suppressionOf(PENDING)).toBeUndefined()
+  })
+
+  it('leaves somebody already on the list who said no on it, suppressed', async () => {
+    store[`${MEMBERS_PATH}/m1`] = { email: NO }
+    const { plan, byRow, applied } = await importRows([{ email: NO, marketingChoice: 'no' }], attest(true))
+    expect(plan.summary).toMatchObject({ update: 1 })
+    expect(store[`${MEMBERS_PATH}/m1`]).toEqual({ email: NO })
+    expect(byRow.get(0)).toMatchObject({ outcome: 'updated', recordId: 'm1' })
+    expect(suppressionOf(NO)).toMatchObject({ reason: 'manual' })
+    expect(applied.undo).toEqual([])
+  })
+
+  it('leaves an existing suppression exactly as it is, and undo takes none away', async () => {
+    const key = jest.requireActual('@aglyn/aglyn/app-utils/person-key').personKey(NO)
+    store[`hosts/${HOST_ID}/suppressions/${key}`] = { email: NO, reason: 'bounce' }
+    const { applied, byRow } = await importRows([{ email: NO, marketingChoice: 'no' }, { email: UNSUB, marketingChoice: 'no' }], attest(true))
+    expect(byRow.get(0)?.message).toBe('Not added: they said no in the file, and are already on your site’s suppression list.')
+    expect(suppressionOf(NO)).toEqual({ email: NO, reason: 'bounce' })
+    expect(applied.undo).toEqual([])
+    await hooks.revert(context(), { jobId: JOB_ID, chunk: 0, entries: applied.undo })
+    expect(suppressionOf(UNSUB)).toBeDefined()
   })
 })
 

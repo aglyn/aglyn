@@ -19,6 +19,7 @@
 
 import { PageHeaderRecord } from '@aglyn/aglyn/app-utils/page-header-record-context'
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
+import { pluginRecordListHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import {
   mdiAlertCircle,
   mdiCheckCircle,
@@ -82,7 +83,16 @@ import {
   type AiSiteImportFinishField,
   type AiSiteImportRowState,
 } from '../model/ai-site-import-view'
+import {
+  AI_SITE_IMPORT_REDIRECT_RECORD,
+  AI_SITE_IMPORT_REDIRECTS_RETRY_COPY,
+  AI_SITE_IMPORT_REDIRECTS_WHEN,
+  aiSiteImportRedirectsRetryable,
+  aiSiteImportRedirectText,
+  aiSiteImportRedirectsSummary,
+} from '../model/ai-site-import-redirects'
 import { AiJobCancelButton } from './ai-job-cancel.component'
+import { addAiSiteImportRedirectsRequest } from './ai-job-requests'
 import { aiCreditsBillingHref, aiJobOutputHref } from './ai-job-links'
 import { AiSiteImportFinish } from './ai-site-import-finish.component'
 import { AiSiteImportPlanPanel, AiSiteImportWhatsNewList } from './ai-site-import-plan.component'
@@ -167,6 +177,11 @@ function WaveRows({ job, wave, orgSlug }: { job: AiJobSummary; wave: AiSiteImpor
               {row.pictures ? (
                 <Typography variant="body2" color="text.secondary">
                   {row.pictures}
+                </Typography>
+              ) : null}
+              {row.redirect ? (
+                <Typography variant="body2" color="text.secondary">
+                  {row.redirect}
                 </Typography>
               ) : null}
               {row.note && row.state !== 'done' ? (
@@ -268,6 +283,8 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
   const planFallBack = aiSiteImportPlanFellBackText(state)
   const held = aiSiteImportHeldCopy(job)
   const pagesHref = host && orgSlug ? buildRoute(Route.HOST_SCREENS, { orgSlug, host }) : null
+  // Where the redirects plugin says its rules are listed (AGL-4245); no link where it is not loaded.
+  const redirectsHref = host && orgSlug ? pluginRecordListHref(AI_SITE_IMPORT_REDIRECT_RECORD, { orgSlug, host }) : null
   const [claim, setClaim] = useState<AiSiteImportClaim | null>(null)
   const [claimNotice, setClaimNotice] = useState<string | null>(null)
   const verifyAgain = useCallback(async () => {
@@ -277,6 +294,18 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
     if (answer.claim) setClaim(answer.claim)
     else setClaimNotice(answer.message)
   }, [orgId, state, user])
+
+  const [addingRedirects, setAddingRedirects] = useState(false)
+  const [redirectsNotice, setRedirectsNotice] = useState<string | null>(null)
+  const addRedirects = useCallback(async () => {
+    if (!orgId) return
+    setAddingRedirects(true)
+    setRedirectsNotice(null)
+    const answer = await addAiSiteImportRedirectsRequest(user, orgId, job)
+    setAddingRedirects(false)
+    if (answer.job) onJob(answer.job)
+    if (answer.error) setRedirectsNotice(answer.error)
+  }, [orgId, user, job, onJob])
 
   const cancel = (
     <Box>
@@ -383,6 +412,57 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
               ) : null}
             </Box>
           ))}
+        </Stack>
+      </AccordionDetails>
+    </Accordion>
+  ) : null
+
+  // The redirects from the old addresses (AGL-4245): what was added, and the
+  // other addresses of a page, which have no row of their own.
+  const redirectsSummary = aiSiteImportRedirectsSummary(state)
+  // Pages published since a wave, or room or redirects since: the same pass again, on the person's say-so.
+  const redirectsRetry = Boolean(orgId) && aiSiteImportRedirectsRetryable(state) && job.status !== 'running' && job.status !== 'queued'
+  const otherAddresses = (state?.redirects ?? []).filter((entry) => !entry.slot && entry.outcome !== 'same')
+  const redirectsCard = redirectsSummary ? (
+    <Accordion variant="outlined" disableGutters slotProps={{ heading: { component: 'h2' } }} sx={{ borderRadius: 2, '&::before': { display: 'none' } }}>
+      <AccordionSummary expandIcon={<MdiIcon path={mdiChevronDown.path} />}>
+        <Typography variant="subtitle1" component="span">{'Redirects from your old addresses'}</Typography>
+      </AccordionSummary>
+      <AccordionDetails>
+        <Stack spacing={1.5}>
+          <Typography variant="body2">{redirectsSummary}</Typography>
+          <Typography variant="body2" color="text.secondary">
+            {AI_SITE_IMPORT_REDIRECTS_WHEN}
+          </Typography>
+          {otherAddresses.length ? (
+            <Stack component="ul" spacing={0.5} aria-label="Other old addresses" sx={{ m: 0, pl: 2.5 }}>
+              {otherAddresses.map((entry, index) => (
+                <Typography component="li" variant="body2" key={`${entry.from}-${index}`} sx={{ overflowWrap: 'anywhere' }}>
+                  {`${entry.from} · ${aiSiteImportRedirectText(entry) ?? ''}`}
+                </Typography>
+              ))}
+            </Stack>
+          ) : null}
+          {redirectsRetry ? (
+            <Stack spacing={0.5}>
+              <Typography variant="body2" color="text.secondary">
+                {AI_SITE_IMPORT_REDIRECTS_RETRY_COPY.help}
+              </Typography>
+              <Box>
+                <Button variant="outlined" size="small" disabled={addingRedirects} onClick={() => void addRedirects()}>
+                  {addingRedirects ? AI_SITE_IMPORT_REDIRECTS_RETRY_COPY.busy : AI_SITE_IMPORT_REDIRECTS_RETRY_COPY.action}
+                </Button>
+              </Box>
+            </Stack>
+          ) : null}
+          {redirectsNotice ? <Alert severity="warning">{redirectsNotice}</Alert> : null}
+          {redirectsHref ? (
+            <Box>
+              <Button size="small" component={AppLink} href={redirectsHref}>
+                {'Open Redirects'}
+              </Button>
+            </Box>
+          ) : null}
         </Stack>
       </AccordionDetails>
     </Accordion>
@@ -521,6 +601,7 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
         ) : null}
         {startButton}
         {waves}
+        {redirectsCard}
         {leftOutCard}
         {cancel}
       </Frame>
@@ -606,6 +687,7 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
             <AiSiteImportWhatsNewList state={state} wave={wave} />
           </Stack>
         ))}
+        {redirectsCard}
         {leftOutCard}
       </Frame>
     )
@@ -628,6 +710,7 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
       ) : null}
       {/* Which waves came in and which stopped (AGL-4107). */}
       {waves}
+      {redirectsCard}
     </Frame>
   )
 }

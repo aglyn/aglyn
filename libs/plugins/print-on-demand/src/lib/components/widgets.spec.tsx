@@ -70,6 +70,8 @@ const connection = (overrides: Partial<PodConnectionView> = {}): PodConnectionVi
   currency: 'USD',
   submitMode: 'automatic',
   syncPrices: false,
+  sendDelayHours: 0,
+  shippingMethod: 'standard',
   webhooks: 'registered',
   webhookDetail: null,
   lastError: null,
@@ -91,6 +93,8 @@ const LINK: PodProductLinkView = {
     { variantId: 'v0', sourceVariantId: '9001', name: 'Black / S', sku: 'S', costMinor: 1150, retailMinor: 2499, available: true },
     { variantId: 'v1', sourceVariantId: '9002', name: 'Black / M', sku: 'M', costMinor: 1250, retailMinor: 2599, available: false },
   ],
+  shippingCosts: [],
+  sourceGone: false,
   importedAtMs: 1,
   syncedAtMs: Date.UTC(2026, 9, 7),
   lastError: null,
@@ -265,10 +269,62 @@ describe('the product editor’s Print on demand section', () => {
     expect(within(row).getByText('$24.99')).toBeTruthy()
   })
 
+  it('shows what the service charges to ship it, and says when the service dropped it', async () => {
+    routes['print-on-demand/product-link'] = () => ({
+      body: {
+        link: {
+          ...LINK,
+          sourceGone: true,
+          lastError: 'Printful no longer has this product, so it was taken off sale.',
+          shippingCosts: [{ countries: ['US'], firstItemMinor: 475, additionalItemMinor: 240, currency: 'USD' }],
+        },
+      },
+    })
+    render(<ProductPodSource hostId="h" product={{ id: 'prod-1' }} />)
+    expect(await screen.findByText('Printful no longer has this product, so it was taken off sale.')).toBeTruthy()
+    const row = screen.getByText('United States').closest('tr') as HTMLElement
+    expect(within(row).getByText('$4.75')).toBeTruthy()
+    expect(within(row).getByText('$2.40')).toBeTruthy()
+  })
+
+  it('links a product the store already has to one at the service', async () => {
+    routes['print-on-demand/connections'] = () => ({
+      body: { available: true, storeCurrency: 'USD', providers: OFFERS, connections: [connection({ provider: 'printify', providerLabel: 'Printify' })] },
+    })
+    routes['print-on-demand/product-link'] = () => ({ body: { link: null } })
+    routes['print-on-demand/catalog'] = () => ({
+      body: {
+        products: [
+          { id: 'p1', name: 'Crew Hoodie', thumbnailUrl: null, variantCount: 4, importedProductId: null },
+          { id: 'p2', name: 'Crew Tee', thumbnailUrl: null, variantCount: 6, importedProductId: 'other' },
+        ],
+        nextCursor: null,
+        total: 2,
+      },
+    })
+    routes['print-on-demand/link'] = () => ({
+      body: { result: { matched: 3, offered: 4 }, link: { ...LINK, provider: 'printify', providerLabel: 'Printify', productId: 'prod-2' } },
+    })
+    render(<ProductPodSource hostId="h" product={{ id: 'prod-2', name: 'Hoodie' }} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Link to Printify product' }))
+    fireEvent.click(await screen.findByText('Crew Hoodie'))
+    fireEvent.click(screen.getByRole('button', { name: 'Link' }))
+    expect(await screen.findByText(/3 of 4 variants matched your product’s; 1 new one was added/)).toBeTruthy()
+    expect(sent.find((entry) => entry.route === 'print-on-demand/link')?.body).toEqual({
+      hostId: 'h',
+      provider: 'printify',
+      sourceProductId: 'p1',
+      productId: 'prod-2',
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    expect(await screen.findByText('Made and shipped by Printify')).toBeTruthy()
+  })
+
   it('draws nothing for a product no service makes, or one not saved yet', async () => {
     routes['print-on-demand/product-link'] = () => ({ body: { link: null } })
     const { container } = render(<ProductPodSource hostId="h" product={{ id: 'prod-2' }} />)
-    await waitFor(() => expect(sent).toHaveLength(1))
+    await waitFor(() => expect(sent.map((entry) => entry.route)).toContain('print-on-demand/product-link'))
+    await waitFor(() => expect(sent.map((entry) => entry.route)).toContain('print-on-demand/connections'))
     expect(container.innerHTML).toBe('')
     const unsaved = render(<ProductPodSource hostId="h" product={{ id: null }} />)
     expect(unsaved.container.innerHTML).toBe('')

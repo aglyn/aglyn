@@ -55,7 +55,18 @@ import { withoutUndefined } from '../transfer/server-common'
 type ProductDoc = Partial<HostProduct> & Record<string, unknown>
 
 /** The fields an update compares to tell a change from a repeat. */
-const COMPARED_KEYS = ['name', 'description', 'mediaUrls', 'tags', 'options', 'variants'] as const
+const COMPARED_KEYS = ['name', 'description', 'mediaUrls', 'tags', 'seo', 'options', 'variants'] as const
+
+/** The source's search words, only where the product has none of its own. */
+function seoFrom(
+  source: SourcedProductWrite['product']['seo'],
+  current: HostProduct['seo'] | undefined,
+): HostProduct['seo'] | undefined {
+  const title = current?.title?.trim() ? current.title : source?.title?.trim().slice(0, 60)
+  const description = current?.description?.trim() ? current.description : source?.description?.trim().slice(0, 155)
+  if (!title && !description && !current) return undefined
+  return { ...(current ?? {}), ...(title ? { title } : {}), ...(description ? { description } : {}) }
+}
 
 /** How many suffixed addresses a new product tries before it gives up. */
 const SLUG_TRIES = 30
@@ -94,6 +105,108 @@ function variantFrom(
     delete next.compareAtPriceUsd
   }
   return next
+}
+
+const norm = (value: unknown) => String(value ?? '').trim().toLowerCase()
+
+/**
+ * Pairs each sourced configuration that names no variant id with one the
+ * product already has (AGL-3641 linking): first by SKU, then by the same
+ * choices whatever the options are called. This is what lets a merchant
+ * link a product they made by hand, or copied from another store, to the
+ * source without losing its variants, their ids or the orders that name
+ * them. A current variant is claimed once.
+ */
+export function matchSourcedVariants(
+  source: SourcedProductWrite['product']['variants'],
+  current: readonly ProductVariant[],
+): Array<string | undefined> {
+  const known = new Set(current.map((variant) => variant.id))
+  const claimed = new Set(source.map((variant) => variant.variantId).filter((id): id is string => Boolean(id && known.has(id))))
+  const free = () => current.filter((variant) => !claimed.has(variant.id))
+  const choices = (options: Record<string, string> | undefined) =>
+    Object.values(options ?? {})
+      .map(norm)
+      .filter(Boolean)
+      .sort()
+      .join('|')
+  const ids: Array<string | undefined> = source.map((variant) =>
+    variant.variantId && known.has(variant.variantId) ? variant.variantId : undefined,
+  )
+  const claim = (index: number, found: ProductVariant | undefined) => {
+    if (!found) return
+    ids[index] = found.id
+    claimed.add(found.id)
+  }
+  source.forEach((variant, index) => {
+    if (ids[index] || !variant.sku) return
+    claim(index, free().find((candidate) => candidate.sku && norm(candidate.sku) === norm(variant.sku)))
+  })
+  source.forEach((variant, index) => {
+    if (ids[index]) return
+    const wanted = choices(variant.options)
+    claim(index, free().find((candidate) => choices(candidate.options) === wanted))
+  })
+  // A product with one configuration on both sides is the same one.
+  if (source.length === 1 && current.length === 1 && !ids[0] && !claimed.has(current[0].id)) ids[0] = current[0].id
+  return ids
+}
+
+/**
+ * The merchant's own words for the options, kept across a re-sync (AGL-3641):
+ * a variant the product already had says what each of the source's option
+ * names and values is called here, so a store that renamed "Colors" to
+ * "Color" or "Heather Grey" to "Grey" keeps its labels. A name or value with
+ * no consistent counterpart keeps the source's word.
+ */
+export function keepMerchantLabels(
+  source: SourcedProductWrite['product'],
+  current: HostProduct,
+  ids: ReadonlyArray<string | undefined>,
+): { options: SourcedProductWrite['product']['options']; variants: Array<Record<string, string>> } {
+  const byId = new Map(current.variants.map((variant) => [variant.id, variant]))
+  const currentNames = current.options.map((option) => option.name)
+  const sameShape = currentNames.length === source.options.length
+  const nameFor = (index: number) => (sameShape && currentNames[index] ? currentNames[index] : source.options[index].name)
+  // Per option position: source value -> merchant value, only where every pair agrees.
+  const valueMaps = source.options.map(() => new Map<string, string | null>())
+  if (sameShape) {
+    source.variants.forEach((variant, at) => {
+      const id = ids[at]
+      const existing = id ? byId.get(id) : undefined
+      if (!existing) return
+      source.options.forEach((option, index) => {
+        const from = variant.options[option.name]
+        const to = existing.options?.[currentNames[index]]
+        if (!from || !to) return
+        const map = valueMaps[index]
+        if (!map.has(from)) map.set(from, to)
+        else if (map.get(from) !== to) map.set(from, null)
+      })
+    })
+    // Two source values renamed to one label would merge choices: keep the source's words for those.
+    valueMaps.forEach((map) => {
+      const seen = new Map<string, number>()
+      for (const to of map.values()) if (to) seen.set(to, (seen.get(to) ?? 0) + 1)
+      for (const [from, to] of map) if (to && (seen.get(to) ?? 0) > 1) map.set(from, null)
+    })
+  }
+  const label = (index: number, value: string) => valueMaps[index]?.get(value) || value
+  return {
+    options: source.options.map((option, index) => ({
+      name: nameFor(index),
+      values: [...new Set(option.values.map((value) => label(index, value)))],
+    })),
+    variants: source.variants.map((variant) => {
+      if (source.options.length === 0) return { ...variant.options }
+      const out: Record<string, string> = {}
+      source.options.forEach((option, index) => {
+        const value = variant.options[option.name]
+        if (value) out[nameFor(index)] = label(index, value)
+      })
+      return out
+    }),
+  }
 }
 
 async function freeSlug(products: FirebaseFirestore.CollectionReference, name: string): Promise<string | null> {
@@ -136,6 +249,7 @@ export async function upsertSourcedProduct(
     // An update, when the product is still there.
     if (write.productId && isDocumentId(write.productId)) {
       const ref = products.doc(write.productId)
+      let matched = 0
       const updated = await firestore.runTransaction(async (tx) => {
         const snapshot = await tx.get(ref)
         const data = snapshot.data() as ProductDoc | undefined
@@ -143,11 +257,32 @@ export async function upsertSourcedProduct(
         const current = liftLegacyProduct(data as ProductDoc)
         const flags = { prices: write.prices === true, content: write.content === true }
         const byId = new Map(current.variants.map((variant) => [variant.id, variant]))
+        // Pair by SKU and plain choices, learn the merchant's labels from those pairs,
+        // then pair the rest by their choices in the merchant's words.
+        const first = matchSourcedVariants(source.variants, current.variants)
+        const learned = keepMerchantLabels(source, current, first)
+        const ids = matchSourcedVariants(
+          source.variants.map((variant, index) => ({
+            ...variant,
+            options: learned.variants[index],
+            ...(first[index] ? { variantId: first[index] } : {}),
+          })),
+          current.variants,
+        )
+        matched = ids.filter(Boolean).length
+        const labels = flags.content
+          ? {
+              options: source.options.map((option) => ({ name: option.name, values: [...option.values] })),
+              variants: source.variants.map((variant) => ({ ...variant.options })),
+            }
+          : keepMerchantLabels(source, current, ids)
+        const seo = seoFrom(source.seo, current.seo)
         const next: HostProduct = {
           ...current,
-          options: source.options.map((option) => ({ name: option.name, values: [...option.values] })),
-          variants: source.variants.map((variant) =>
-            variantFrom(variant, variant.variantId ? byId.get(variant.variantId) : undefined, flags),
+          ...(seo ? { seo } : {}),
+          options: labels.options.map((option) => ({ name: option.name, values: [...option.values] })),
+          variants: source.variants.map((variant, index) =>
+            variantFrom({ ...variant, options: labels.variants[index] }, ids[index] ? byId.get(ids[index] as string) : undefined, flags),
           ),
           ...(flags.content
             ? {
@@ -190,6 +325,7 @@ export async function upsertSourcedProduct(
           outcome: updated.changed ? 'updated' : 'unchanged',
           productId: write.productId,
           variants: mapping(updated.next),
+          matched,
         }
       }
     }
@@ -208,6 +344,7 @@ export async function upsertSourcedProduct(
       status: write.status === 'active' ? 'active' : 'draft',
       mediaUrls: [...source.mediaUrls],
       ...(source.tags?.length ? { tags: [...source.tags] } : {}),
+      ...(seoFrom(source.seo, undefined) ? { seo: seoFrom(source.seo, undefined) } : {}),
       options: source.options.map((option) => ({ name: option.name, values: [...option.values] })),
       variants: source.variants.map((variant) => variantFrom(variant, undefined, { prices: true, content: true })),
       oversellPolicy: 'deny',
@@ -243,6 +380,32 @@ export async function upsertSourcedProduct(
   }
 }
 
+/** A sourced product whose source dropped it, back to a draft (AGL-3641). */
+export async function unlistSourcedProduct(
+  input: { hostId: string; productId: string; actorUid?: string },
+  firestore: FirebaseFirestore.Firestore = firebaseAdmin.app().firestore(),
+): Promise<'unlisted' | 'unchanged' | 'missing'> {
+  if (!isDocumentId(input.hostId) || !isDocumentId(input.productId)) return 'missing'
+  const ref = firestore.collection('hosts').doc(input.hostId).collection('products').doc(input.productId)
+  const outcome = await firestore.runTransaction(async (tx) => {
+    const snapshot = await tx.get(ref)
+    const data = snapshot.data() as ProductDoc | undefined
+    if (!snapshot.exists || (data?.['deletedAt'] !== null && data?.['deletedAt'] !== undefined)) return { result: 'missing' as const }
+    if (data?.status !== 'active') return { result: 'unchanged' as const }
+    tx.update(ref, { status: 'draft', updatedAtMs: Date.now(), updatedAt: firebaseAdmin.firestore.Timestamp.now() })
+    return { result: 'unlisted' as const, name: String(data?.name ?? '') }
+  })
+  if (outcome.result === 'unlisted') {
+    await logHostActivity(input.hostId, { uid: input.actorUid ?? 'import', email: null }, 'Took product off sale: its source no longer offers it', {
+      type: 'content',
+      id: input.productId,
+      name: outcome.name,
+    })
+  }
+  return outcome.result
+}
+
 export const commerceProductWriter: PluginProductWriter = {
   upsertSourced: (write) => upsertSourcedProduct(write),
+  unlistSourced: (input) => unlistSourcedProduct(input),
 }

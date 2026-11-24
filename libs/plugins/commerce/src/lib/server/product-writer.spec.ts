@@ -20,7 +20,7 @@
 
 import type { SourcedProduct } from '@aglyn/aglyn/plugin-manager/plugin-product-writer'
 import { MemoryFirestore } from '../testing/memory-firestore'
-import { upsertSourcedProduct } from './product-writer'
+import { unlistSourcedProduct, upsertSourcedProduct } from './product-writer'
 
 /**
  * Products another plugin brings from its own source (AGL-3641), through the
@@ -227,5 +227,112 @@ describe('upsertSourcedProduct', () => {
     const second = await upsertSourcedProduct({ hostId: HOST, product: tee(), productId: first.productId }, db as never)
     expect(second.outcome).toBe('created')
     if (second.outcome === 'created') expect(second.productId).not.toBe(first.productId)
+  })
+
+  it('links a product made by hand: variants paired by SKU, then by choices, the merchant’s words and labels kept', async () => {
+    // A product copied from another store: its own name, words, SEO, prices and option labels.
+    const productId = 'handmade0000000000001'
+    const path = `hosts/${HOST}/products/${productId}`
+    db.write(path, {
+      name: 'Crew Hoodie',
+      slug: 'crew-hoodie',
+      description: 'Our hoodie.',
+      type: 'physical',
+      status: 'active',
+      mediaUrls: ['media:host-tees/hoodie'],
+      seo: { title: 'Crew Hoodie | Crew Racewear', description: '' },
+      deletedAt: null,
+      options: [
+        { name: 'Color', values: ['Grey'] },
+        { name: 'Size', values: ['S', 'M'] },
+      ],
+      variants: [
+        { id: 'vhand1', options: { Color: 'Grey', Size: 'S' }, sku: 'HOOD-GRY-S', priceUsd: 55, inventory: null },
+        { id: 'vhand2', options: { Color: 'Grey', Size: 'M' }, priceUsd: 55, inventory: null },
+        { id: 'vhand3', options: { Color: 'Grey', Size: 'XXL' }, priceUsd: 60, inventory: null },
+      ],
+    })
+    const source: SourcedProduct = {
+      sourceKey: 'printify:p1',
+      name: 'Unisex Heavy Blend Hoodie',
+      description: 'Printify words.',
+      mediaUrls: [],
+      seo: { title: 'Unisex Heavy Blend Hoodie', description: 'A cozy hoodie.' },
+      options: [
+        { name: 'Colors', values: ['Sport Grey'] },
+        { name: 'Sizes', values: ['S', 'M', 'L'] },
+      ],
+      variants: [
+        // A SKU match, whatever the choices are called.
+        { key: '1', options: { Colors: 'Sport Grey', Sizes: 'S' }, sku: 'hood-gry-s', priceMinor: 4500, available: true },
+        // No SKU at the store: paired by its choices once the S pair taught that Sport Grey is Grey here.
+        { key: '2', options: { Colors: 'Sport Grey', Sizes: 'M' }, sku: 'P-2', priceMinor: 4500, available: true },
+        { key: '3', options: { Colors: 'Sport Grey', Sizes: 'L' }, sku: 'P-3', priceMinor: 4700, available: true },
+      ],
+    }
+    const linked = await upsertSourcedProduct({ hostId: HOST, product: source, productId, recreate: false }, db as never)
+    expect(linked.outcome).toBe('updated')
+    if (linked.outcome !== 'updated') return
+    expect(linked.matched).toBe(2)
+    const after = db.read(path) as Record<string, any>
+    expect(after.name).toBe('Crew Hoodie')
+    expect(after.description).toBe('Our hoodie.')
+    expect(after.seo).toEqual({ title: 'Crew Hoodie | Crew Racewear', description: 'A cozy hoodie.' })
+    expect(after.options).toEqual([
+      { name: 'Color', values: ['Grey'] },
+      { name: 'Size', values: ['S', 'M', 'L'] },
+    ])
+    expect(after.variants.map((variant: any) => [variant.id, variant.options, variant.priceUsd])).toEqual([
+      ['vhand1', { Color: 'Grey', Size: 'S' }, 55],
+      ['vhand2', { Color: 'Grey', Size: 'M' }, 55],
+      [linked.variants[2].variantId, { Color: 'Grey', Size: 'L' }, 47],
+    ])
+    expect(after.variants.map((variant: any) => variant.id)).not.toContain('vhand3')
+  })
+
+  it('pairs by the same choices when the SKUs do not match', async () => {
+    const productId = 'handmade0000000000002'
+    const path = `hosts/${HOST}/products/${productId}`
+    db.write(path, {
+      ...tee(),
+      slug: 'ocean-tee',
+      type: 'physical',
+      status: 'active',
+      deletedAt: null,
+      variants: [
+        { id: 'vs', options: { Size: 'S' }, priceUsd: 20, inventory: null },
+        { id: 'vm', options: { Size: 'M' }, priceUsd: 21, inventory: null },
+      ],
+    })
+    const outcome = await upsertSourcedProduct({ hostId: HOST, product: tee(), productId, recreate: false }, db as never)
+    if (outcome.outcome !== 'updated') throw new Error(outcome.outcome)
+    expect(outcome.matched).toBe(2)
+    expect(outcome.variants.map((variant) => variant.variantId)).toEqual(['vs', 'vm'])
+    expect((db.read(path) as any).variants.map((variant: any) => variant.priceUsd)).toEqual([20, 21])
+  })
+
+  it('keeps the merchant’s renamed option labels across a daily re-sync', async () => {
+    const first = await upsertSourcedProduct({ hostId: HOST, product: tee() }, db as never)
+    if (first.outcome !== 'created') throw new Error('not created')
+    const path = `hosts/${HOST}/products/${first.productId}`
+    const stored = db.read(path) as Record<string, any>
+    db.write(path, {
+      ...stored,
+      options: [{ name: 'Fit', values: ['Small', 'Medium'] }],
+      variants: stored.variants.map((variant: any, index: number) => ({ ...variant, options: { Fit: index ? 'Medium' : 'Small' } })),
+    })
+    const again = tee({ variants: tee().variants.map((variant, index) => ({ ...variant, variantId: first.variants[index].variantId })) })
+    const outcome = await upsertSourcedProduct({ hostId: HOST, product: again, productId: first.productId }, db as never)
+    expect(outcome.outcome).toBe('unchanged')
+    expect((db.read(path) as any).options).toEqual([{ name: 'Fit', values: ['Small', 'Medium'] }])
+  })
+
+  it('takes a product off sale when its source dropped it', async () => {
+    const first = await upsertSourcedProduct({ hostId: HOST, product: tee(), status: 'active' }, db as never)
+    if (first.outcome !== 'created') throw new Error('not created')
+    expect(await unlistSourcedProduct({ hostId: HOST, productId: first.productId }, db as never)).toBe('unlisted')
+    expect((db.read(`hosts/${HOST}/products/${first.productId}`) as any).status).toBe('draft')
+    expect(await unlistSourcedProduct({ hostId: HOST, productId: first.productId }, db as never)).toBe('unchanged')
+    expect(await unlistSourcedProduct({ hostId: HOST, productId: 'nothere000000000000' }, db as never)).toBe('missing')
   })
 })

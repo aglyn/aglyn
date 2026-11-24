@@ -67,6 +67,7 @@ import {
   CRM_PIPELINES_RESOURCE,
   CRM_TASKS_RESOURCE,
 } from './resource-keys'
+import { CUSTOMER_SOURCE_FIELDS, CUSTOMER_SWITCHING_GROUP } from './customer-sources'
 
 /** The CRM's resource keys, as `plugins.config.json` declares them. */
 export {
@@ -173,6 +174,7 @@ export const CONTACT_TRANSFER_GROUPS: readonly TransferFieldGroup[] = [
   { id: 'otherAddress', label: 'Other address' },
   { id: 'crm', label: 'CRM' },
   { id: 'activity', label: 'Activity' },
+  CUSTOMER_SWITCHING_GROUP,
 ]
 
 /** A contact's own fields, in the order the picker lists them. */
@@ -277,8 +279,10 @@ export const CONTACT_TRANSFER_FIELDS: readonly TransferField[] = [
     group: 'crm',
     type: 'boolean',
     aliases: ['consent', 'opt in', 'opted in', 'subscribed', 'email consent', 'email opt in'],
-    description: 'Exported as it stands; never set from a file.',
+    description: 'Exported as it stands; never set from this column. A store’s marketing choice goes to Email marketing choice.',
   },
+  // Read from a store's customer file (AGL-4245, `customer-sources.ts`); never stored, so import-only.
+  ...CUSTOMER_SOURCE_FIELDS,
 ]
 
 /** What only the platform writes about a contact: exported, never imported. */

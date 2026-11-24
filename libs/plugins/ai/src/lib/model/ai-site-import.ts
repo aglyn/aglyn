@@ -1231,6 +1231,56 @@ export interface AiSiteImportState {
    * Kept past each page, and written only by a generative wave.
    */
   said?: string[] | null
+  /**
+   * The redirects from the old site's addresses to the new pages (AGL-4245),
+   * one per old address, in the site's order: written as each wave closes,
+   * through the redirects plugin's own writer. Absent until a wave closes.
+   */
+  redirects?: AiSiteImportRedirect[] | null
+}
+
+/** What became of an old address's redirect (AGL-4245). */
+export type AiSiteImportRedirectOutcome =
+  /** A permanent redirect from the old address to the new page was created by this import. */
+  | 'created'
+  /** The site already had a redirect from the old address, the owner's own: it was kept as it is. */
+  | 'kept'
+  /** The new page is at the same address: nothing to redirect. */
+  | 'same'
+  /** No redirect was made; `reason` says why. */
+  | 'left-out'
+
+/** Why an old address got no redirect (AGL-4245). */
+export type AiSiteImportRedirectReason =
+  /** The new page is not published, so there is nowhere live to send visitors yet. */
+  | 'unpublished'
+  /** A page of the new site is, or will be, at the old address: a redirect there would hide it. */
+  | 'page-there'
+  /** Another old address is the same once what follows a `?` is dropped, and it already has the redirect. */
+  | 'shared-address'
+  /** The old address is not one a redirect can match. */
+  | 'unusable'
+  /** The plan's redirect allowance is used up. */
+  | 'plan-limit'
+  /** Redirects are not available on the site: switched off, not in the plan, or not the member's to make. */
+  | 'off'
+  /** The redirects plugin refused it for another reason; `note` is its sentence. */
+  | 'refused'
+
+/** One old address and its redirect (AGL-4245). */
+export interface AiSiteImportRedirect {
+  /** The old address as the redirect matches it: lowercase, no trailing slash, no query. */
+  from: string
+  /** Where it sends visitors: the new page's address, or where an existing redirect of that address leads. */
+  to: string | null
+  outcome: AiSiteImportRedirectOutcome
+  reason?: AiSiteImportRedirectReason | null
+  /** The redirects plugin's own sentence, where it gave one. */
+  note?: string | null
+  /** The page's slot; absent for another address of a page (a `duplicate` left out). */
+  slot?: string | null
+  /** The rule's id in the site's redirects, where this import created it: `<job id>-<hash of from>`. */
+  ruleId?: string | null
 }
 
 /** The most characters of what the site's pages say an import keeps for its redesigns' facts (AGL-4152). */

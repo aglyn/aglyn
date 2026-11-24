@@ -20,7 +20,8 @@
 
 import type { ProviderFetch } from './http'
 import { createPrintfulProvider, PRINTFUL_WEBHOOK_TYPES } from './printful'
-import { createPrintifyProvider, printifyStatus, PRINTIFY_WEBHOOK_TOPICS } from './printify'
+import { createPrintifyProvider, printifyStatus, PRINTIFY_WEBHOOK_TOPICS, readPrintifyShipping } from './printify'
+import { htmlToPlainText, podSeoFor } from '../model/print-on-demand'
 
 /**
  * Every call each adapter makes, against a recorded service (AGL-3641): the
@@ -424,6 +425,7 @@ describe('Printify', () => {
       id: 'p1',
       name: 'Wave Mug',
       description: 'A sturdy mug.\n\n• 11 oz',
+      shippingRef: null,
       tags: ['Mugs', 'Home'],
       currency: 'USD',
       imageUrls: ['https://images-api.printify.com/w11.png', 'https://images-api.printify.com/w15.png'],
@@ -552,6 +554,46 @@ describe('Printify', () => {
     expect(calls.some((call) => call.path.endsWith('send_to_production.json'))).toBe(false)
   })
 
+  it('ships by the method the store chose', async () => {
+    reply = (call) =>
+      call.method === 'POST' ? { status: 200, body: { id: 'o3' } } : { status: 200, body: { id: 'o3', status: 'on-hold', line_items: [] } }
+    await printify.createOrder(SHOP, {
+      externalId: 'ag3',
+      label: '#3',
+      recipient: { name: 'A', line1: '1', city: 'B', postalCode: '1', country: 'US' },
+      lines: [],
+      retailCurrency: 'USD',
+      confirm: false,
+      shippingMethod: 'express',
+    })
+    expect(calls.find((call) => call.method === 'POST')?.body.shipping_method).toBe(3)
+  })
+
+  it('reads what shipping costs, the widest of the product’s variants, US first', async () => {
+    reply = () => ({
+      status: 200,
+      body: {
+        handling_time: { value: 5, unit: 'day' },
+        profiles: [
+          { variant_ids: [100], first_item: { cost: 475, currency: 'USD' }, additional_items: { cost: 240, currency: 'USD' }, countries: ['US'] },
+          { variant_ids: [101], first_item: { cost: 525, currency: 'USD' }, additional_items: { cost: 260, currency: 'USD' }, countries: ['US'] },
+          { variant_ids: [999], first_item: { cost: 9999, currency: 'USD' }, additional_items: { cost: 1, currency: 'USD' }, countries: ['US'] },
+          { variant_ids: [100, 101], first_item: { cost: 1200, currency: 'USD' }, additional_items: { cost: 600, currency: 'USD' }, countries: ['REST_OF_THE_WORLD'] },
+        ],
+      },
+    })
+    const costs = await printify.getShippingCosts?.(SHOP, {
+      id: 'p1', name: 'Mug', description: '', tags: [], currency: 'USD', imageUrls: [], options: [], shippingRef: '68:1',
+      variants: [100, 101].map((id) => ({ id: String(id), name: '', sku: null, options: {}, retailMinor: 0, costMinor: null, available: true, imageUrl: null, weightGrams: null })),
+    })
+    expect(calls[0].path).toBe('/v1/catalog/blueprints/68/print_providers/1/shipping.json')
+    expect(costs).toEqual([
+      { countries: ['US'], firstItemMinor: 525, additionalItemMinor: 260, currency: 'USD' },
+      { countries: ['REST_OF_THE_WORLD'], firstItemMinor: 1200, additionalItemMinor: 600, currency: 'USD' },
+    ])
+    expect(readPrintifyShipping({})).toEqual([])
+  })
+
   it('finds an order by the store’s key among the shop’s recent orders', async () => {
     reply = (call) =>
       call.search === '?limit=50&page=1'
@@ -621,5 +663,19 @@ describe('Printify', () => {
   it('says a refused token in words', async () => {
     reply = () => ({ status: 401, body: { message: 'Unauthenticated.' } })
     await expect(printify.listStores('bad')).rejects.toThrow('Printify refused the token.')
+  })
+})
+
+describe('words a service wrote in HTML', () => {
+  it('keeps a size chart readable and headings on their own lines', () => {
+    const html = '<h3>Size chart</h3><table><tr><th>Size</th><th>Chest</th></tr><tr><td>S</td><td>20"</td></tr></table><p>Soft &amp; warm.</p><ul><li>100% cotton</li></ul>'
+    expect(htmlToPlainText(html)).toBe('Size chart\n\nSize · Chest\nS · 20"\n\nSoft & warm.\n\n• 100% cotton')
+  })
+
+  it('writes a search title and description within the editor’s limits', () => {
+    const seo = podSeoFor('A'.repeat(80), 'Size · Chest\n• Heavy fleece\nMade for the track and the pits, with a lot more words than a search listing can ever show to anybody reading it today.')
+    expect(seo.title.length).toBeLessThanOrEqual(60)
+    expect(seo.description.length).toBeLessThanOrEqual(155)
+    expect(seo.description.startsWith('Heavy fleece Made for the track')).toBe(true)
   })
 })

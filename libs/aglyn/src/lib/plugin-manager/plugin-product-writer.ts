@@ -57,7 +57,9 @@ import {
  * The merchant edits an imported product like any other. An update rewrites
  * only what the caller names: prices when `prices` is set, the description
  * and photos when `content` is set, and always the configurations and their
- * availability, because those are what an order can be filled from.
+ * availability, because those are what an order can be filled from. Without
+ * `content` the merchant's own option names and values are kept wherever a
+ * variant the product already had says what the source's are called here.
  *
  * ## One owner
  *
@@ -81,7 +83,12 @@ export interface SourcedProductOption {
 export interface SourcedProductVariant {
   /** The source's own stable id for it. */
   key: string
-  /** The owner's id, when an earlier write returned one. */
+  /**
+   * The owner's id, when an earlier write returned one. On an update, a
+   * variant without one is paired with a variant the product already has by
+   * SKU, then by the same choices, so linking a product made by hand keeps
+   * its variants; only one with no match is new.
+   */
   variantId?: string
   /** Choices by option name; `{}` for a product with one configuration. */
   options: Record<string, string>
@@ -109,6 +116,11 @@ export interface SourcedProduct {
   /** Photos the owner already holds (media-library URLs), first is primary. */
   mediaUrls: string[]
   tags?: string[]
+  /**
+   * A search title and description. Set on a new product, and on an update
+   * only where the product has none: the merchant's own always win.
+   */
+  seo?: { title?: string; description?: string }
   options: SourcedProductOption[]
   variants: SourcedProductVariant[]
 }
@@ -140,6 +152,8 @@ export type SourcedProductWriteOutcome =
       productId: string
       /** Every variant passed, with the owner's id for it. */
       variants: Array<{ key: string; variantId: string }>
+      /** On an update: how many passed variants were paired with one the product already had. */
+      matched?: number
     }
   /** The plan's product allowance is used up; nothing was written. */
   | { outcome: 'plan_limit'; limit: number }
@@ -157,6 +171,13 @@ export interface PluginProductWriter {
    * unless `recreate` is false.
    */
   upsertSourced(write: SourcedProductWrite): Promise<SourcedProductWriteOutcome>
+  /**
+   * Takes a sourced product off sale (back to a draft) because its source no
+   * longer offers it, so no shopper buys what cannot be made. Optional: an
+   * owner without it leaves the product as it is. Answers `unlisted`, or
+   * `unchanged` for one already off sale, or `missing`.
+   */
+  unlistSourced?(input: { hostId: string; productId: string; actorUid?: string }): Promise<'unlisted' | 'unchanged' | 'missing'>
 }
 
 export const PLUGIN_PRODUCT_WRITER = definePluginServiceContract<PluginProductWriter>(

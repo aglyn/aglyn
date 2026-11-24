@@ -23,6 +23,7 @@ import type {
   TransferPolicyDefaults,
 } from '@aglyn/aglyn/data-transfer'
 import { REDIRECT_KINDS, normalizeRedirectDestination, normalizeRedirectSource } from '../model/redirects'
+import { SQUARESPACE_URL_MAPPINGS_SOURCE, SQUARESPACE_URL_MAPPING_HEADERS } from './squarespace-url-mappings'
 
 /**
  * What the redirects resource is made of, without reading anything: its key,
@@ -211,6 +212,17 @@ export const REDIRECTS_ALIAS_DICTIONARIES: readonly TransferAliasDictionary[] = 
     aliases: {
       [REDIRECT_FIELD.source]: ['Old path'],
       [REDIRECT_FIELD.destination]: ['Redirect to path'],
+    },
+  },
+  {
+    // No export: the text of Settings → URL Mappings, which the upload step
+    // reads into these columns (`squarespace-url-mappings.ts`).
+    source: SQUARESPACE_URL_MAPPINGS_SOURCE,
+    aliases: {
+      [REDIRECT_FIELD.source]: [SQUARESPACE_URL_MAPPING_HEADERS.source],
+      [REDIRECT_FIELD.destination]: [SQUARESPACE_URL_MAPPING_HEADERS.destination],
+      [REDIRECT_FIELD.statusCode]: [SQUARESPACE_URL_MAPPING_HEADERS.statusCode],
+      [REDIRECT_FIELD.kind]: [SQUARESPACE_URL_MAPPING_HEADERS.kind],
     },
   },
   {

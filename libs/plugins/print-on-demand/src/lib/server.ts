@@ -43,6 +43,7 @@ export function registerPrintOnDemandConsoleApi(): void {
     [POD_API_ROUTES.disconnect, (routes) => routes.disconnectRoute],
     [POD_API_ROUTES.catalog, (routes) => routes.catalogRoute],
     [POD_API_ROUTES.importProducts, (routes) => routes.importRoute],
+    [POD_API_ROUTES.linkProduct, (routes) => routes.linkRoute],
     [POD_API_ROUTES.imported, (routes) => routes.importedRoute],
     [POD_API_ROUTES.unlink, (routes) => routes.unlinkRoute],
     [POD_API_ROUTES.productLink, (routes) => routes.productLinkRoute],

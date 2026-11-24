@@ -98,6 +98,14 @@ export interface PluginDraftRefusal {
   status: 400 | 403 | 404 | 409
   /** Customer-safe: a caller shows it as it stands. */
   error: string
+  /**
+   * Which of the writer's refusals this is, in the vocabulary its writer
+   * documents, for a caller that treats them differently (AGL-4245): a site
+   * import keeps an owner's own redirect where a rule already exists, and
+   * leaves one out where the plan has no room. Absent where the writer names
+   * none; the `error` stands either way.
+   */
+  code?: string
 }
 
 /** A draft that exists. */

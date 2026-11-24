@@ -172,24 +172,44 @@ async function addSuppression(
   const note = String(value('note') ?? '')
     .trim()
     .slice(0, SUPPRESSION_NOTE_MAX)
+  const added = await addImportedSuppression(ctx, suppressions, email, note)
+  return added === 'created'
+    ? { row: row.index, outcome: 'created', recordId: key }
+    : // Suppressed since the dry run: the entry that is there stays as it is.
+      { row: row.index, outcome: 'unchanged', recordId: key, message: 'Already suppressed; left as it was.' }
+}
+
+/**
+ * Adds one address to a site's suppression list as an import does — reason
+ * `manual`, who and which import — or leaves the entry already there exactly
+ * as it is. Shared with the list import, which files a store file's "no"
+ * this way (AGL-4245). Nothing removes what this adds but a person, by hand.
+ */
+export async function addImportedSuppression(
+  ctx: TransferResourceContext,
+  suppressions: FirebaseFirestore.CollectionReference,
+  email: string,
+  note: string,
+): Promise<'created' | 'exists'> {
+  const key = emailSuppressionKey(email)
+  if (!key) return 'exists'
   try {
     await suppressions.doc(key).create({
       email,
       // What the list's search and Address filter query (AGL-3321).
       emailTokens: emailSearchTokens(email),
       reason: MANUAL_SUPPRESSION_REASON,
-      ...(note ? { note } : {}),
+      ...(note ? { note: note.slice(0, SUPPRESSION_NOTE_MAX) } : {}),
       // WHO recorded it, and from which import: a suppression is evidence.
       suppressedByUid: ctx.actorUid ?? null,
       ...(ctx.jobId ? { importJobId: ctx.jobId } : {}),
       createdAt: FieldValue.serverTimestamp(),
       suppressedAt: FieldValue.serverTimestamp(),
     })
-    return { row: row.index, outcome: 'created', recordId: key }
+    return 'created'
   } catch (error) {
-    // Suppressed since the dry run: the entry that is there stays as it is.
     if ((error as { code?: unknown })?.code === 6 || /already exists/i.test(String((error as Error)?.message))) {
-      return { row: row.index, outcome: 'unchanged', recordId: key, message: 'Already suppressed; left as it was.' }
+      return 'exists'
     }
     throw error
   }

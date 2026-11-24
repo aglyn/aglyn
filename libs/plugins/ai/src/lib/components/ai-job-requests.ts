@@ -230,3 +230,29 @@ export async function cancelAiJobRequest(
     return { job: null, error: 'The job could not be canceled — try again.' }
   }
 }
+
+/**
+ * Adds the redirects a Bring my site import's old addresses are missing
+ * (AGL-4245): for pages published since its waves, or once the plan has room
+ * or redirects are on. Spends nothing; safe to ask again.
+ */
+export async function addAiSiteImportRedirectsRequest(
+  user: MaybeTokenSource,
+  orgId: string,
+  job: Pick<AiJobSummary, 'id' | 'hostId'>,
+): Promise<AiJobDecision> {
+  const failed = 'The redirects could not be added. Try again.'
+  try {
+    const response = await authorizedFetch(user, `/api/ai/jobs/${encodeURIComponent(job.id)}/redirects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orgId, hostId: job.hostId }),
+    })
+    const payload = await response.json().catch(() => null)
+    const next = (payload?.job as AiJobSummary | undefined) ?? null
+    publishAiJob(next)
+    return { job: next, error: response.ok ? null : String(payload?.error ?? failed) }
+  } catch {
+    return { job: null, error: failed }
+  }
+}
