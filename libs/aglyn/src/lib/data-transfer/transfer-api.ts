@@ -176,6 +176,8 @@ export interface TransferUndoState {
   /** The person's decision per record id, kept so the sweep can finish an undo the browser left. */
   decisions?: Record<string, TransferUndoDecision>
   counts: TransferUndoCounts
+  /** What the resource's undo left for the person to know, by its own key (AGL-4245). */
+  notes?: Record<string, string>
 }
 
 /**

@@ -53,6 +53,7 @@ import {
   TRANSFER_EXPORT_SELECTION_MAX,
   TRANSFER_PREFS_COLLECTION,
   normalizeTransferPrefs,
+  isTransferFieldExportable,
   resolveTransferFieldSelection,
   transferContentType,
   transferExportCsvHeader,
@@ -166,7 +167,11 @@ export async function streamTransferExport(
       unknown: selection.unknown,
     })
   }
-  const fieldIds = selection.fieldIds
+  // An import-only field is never written to a file (AGL-4245).
+  const fieldIds = selection.fieldIds.filter((id) => {
+    const field = catalog.byId.get(id)
+    return !field || isTransferFieldExportable(field)
+  })
   if (!fieldIds.length) throw new TransferEngineError('invalid', 400, 'Choose at least one field to export.')
   const hooks = transferRecordsHooks(resource)
 

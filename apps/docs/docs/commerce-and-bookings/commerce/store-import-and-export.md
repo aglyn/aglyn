@@ -1,7 +1,7 @@
 ---
 sidebar_position: 5
 title: Import and export store data
-description: Import products from a file or Shopify, update them by handle or SKU, issue gift cards, record shipments from a tracking file, and export store data with the fields you choose.
+description: Import products from a file or from Shopify, Wix or Squarespace with their photos, update them by handle or SKU, issue gift cards, record shipments from a tracking file, and export store data with the fields you choose.
 ---
 
 # Import and export store data
@@ -75,8 +75,8 @@ tool. See [Use Pirate Ship with Aglyn](use-pirate-ship.md).
 1. **Upload** a CSV, JSON or NDJSON file. The separator, encoding and header
    row are detected, and you can change any of them.
 2. **Columns**: each column is matched to a field, with how sure the match is
-   and why. A Shopify product export is recognized column for column. Remap
-   or ignore any column.
+   and why. A Shopify, Wix or Squarespace product export is recognized column
+   for column, so there is nothing to pick. Remap or ignore any column.
 3. **Values**: list values the store does not hold. For a product's
    **Kind**, **Status** or **When sold out**, map each unknown value to one
    the store has, leave it blank, or refuse the rows. For **Categories**, you
@@ -94,6 +94,8 @@ tool. See [Use Pirate Ship with Aglyn](use-pirate-ship.md).
 7. **Import** writes in chunks. You can pause and resume it.
 8. **Results**: a result file of every row, and **Undo** for seven days. A
    record edited since the import is shown to you rather than overwritten.
+   A row that was saved but left you something to do, such as a product saved
+   without a photo that could not be copied, is listed here with what to do.
 
 By default an import **fills blank fields and never overwrites** what a record
 already has. To change prices, stock or anything else that is set, choose
@@ -122,6 +124,7 @@ its own, and its handle is made from its title.
 - **Prices** are in US dollars. A price in another currency is not converted;
   the cell is dropped and the dry run says so.
 - **Tags** keep their case. Smart collections match a tag exactly.
+- **Descriptions** are kept as the file has them, formatting included.
 
 What a file does not change:
 
@@ -135,6 +138,71 @@ What a file does not change:
 - **Products the store would refuse**, such as a compare-at price at or below
   the price, or more than 100 variants. The dry run fails those rows and gives
   the reason.
+
+### Photos are copied into your media library
+
+A product file from another store names each photo by its address on that
+store. When you import, each photo is copied into your site's media library,
+in a folder named **Imported products**, and the product uses the copy. Your
+photos keep showing after your old store closes, and they look the same as a
+photo you add in the product editor.
+
+- The **Review** step says how many photos will be copied. It also lists each
+  photo that won't be, and why.
+- **Copied**: web addresses that start with `https://`. A photo that is
+  already in your media library, such as one in a file exported from Aglyn,
+  is kept as it is.
+- **Not copied**: an address that starts with `http://`, a cell that names a
+  photo but not where it is online (Wix files often do this), a file that
+  isn't a JPEG, PNG, WebP or GIF photo, a photo larger than 15 MB, and every
+  photo past 2,000 in one import. Each photo also counts toward your plan's
+  media storage.
+- **The same photo is copied once.** Two products that share a photo share
+  one copy. Import the same file again and it uses the photos it already
+  copied, so the **Review** step shows those photos as unchanged.
+- **A photo that can't be copied never stops the product.** Say the old store
+  no longer has it, or doesn't answer in time. The product is saved without
+  that photo. The **Results** step lists each product it happened to, with
+  the photo's address and the reason, so you can add it on the product. The
+  result file has the same list.
+- A **Variant image** goes on that variant, and is copied the same way.
+- **Undo** also removes the photos this import copied, and only those. A
+  photo that's still in use stays in your media library: on a product or
+  variant you keep, on a page, or anywhere else on the site. The
+  **Results** step says which photos stayed and where they're used. A
+  removed photo can be restored from the media library for seven days.
+
+A large import can take a while, because each photo is downloaded. The import
+keeps going if you close the tab, and you can pause it and pick it up later.
+
+### Moving from Shopify, Wix or Squarespace
+
+Upload the product export from your old store as it is. The wizard recognizes
+the file from its column names and maps each column for you.
+
+- **Shopify**: Shopify's product CSV is laid out the same way as Aglyn's, so
+  every column maps across.
+- **Wix**: the product rows and their variant rows become one product, with
+  each variant's choice, SKU and stock. A variant's extra charge is added to
+  the product's price. A colour choice keeps its name. Stock written as **In
+  stock** isn't counted, and **Out of stock** is zero. A percent or amount
+  discount makes the discounted price the price, and the full price the
+  compare-at price. Wix doesn't export product addresses, so each product's
+  handle is made from its name. When you import a Wix file again, products
+  are matched by **SKU**, so keep the SKUs the same. A product with choices but no variant rows
+  comes in as one variant, and the **Review** step tells you to add its
+  choices.
+- **Squarespace**: rows are grouped into products by their product ID. The
+  product's address from Squarespace becomes its handle, so it stays the same
+  where it can. **Unlimited** stock isn't counted. A product on sale gets the
+  sale price as its price, and the regular price as its compare-at price.
+  Physical, digital and service products keep their kind. Gift cards are
+  skipped with a note. Bring them in with a [gift card import](#gift-cards)
+  instead.
+- **Not brought in from Wix or Squarespace**: weights, because the file
+  doesn't say if they're in pounds or kilograms (set them on each product),
+  options past the third, and columns Aglyn has no field for, such as a
+  ribbon or a cost. A file with missing or extra columns still imports.
 
 ### Add-ons, check-in and quick keys
 

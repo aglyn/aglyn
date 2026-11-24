@@ -42,6 +42,8 @@ import type {
   TransferRevertResult,
 } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { firebaseAdmin, getOrgForHost, logHostActivity } from '@aglyn/tenant-data-admin'
+import { pluginMediaIngest } from '@aglyn/aglyn/plugin-manager/plugin-media-ingest'
+import { parseMediaRef } from '@aglyn/aglyn/app-utils/media-ref'
 import { PRODUCT_LIST_QUERY } from '../constants/product-list-query'
 import {
   commerceSlug,
@@ -69,7 +71,17 @@ import {
   productRowChanges,
   productVariantKey,
   type ProductPlannedRow,
+  type ProductRowPlan,
 } from './product-transfer'
+import { PRODUCT_IMPORT_FOLDER_NAME, PRODUCT_IMPORT_IMAGE_SLOT_MS, productImageCell } from './product-images'
+import {
+  productImageCopier,
+  productImageKey,
+  type CopiedProductImage,
+  type ProductImageCopier,
+  type ProductImageCopierDeps,
+} from './product-image-copy.server'
+import { productFileSource } from './product-sources'
 import {
   NOTHING,
   ROW_BUDGET_MS,
@@ -342,6 +354,45 @@ const newId = () => Aglyn.createResourceUid()
 const newVariantId = () => `v${Aglyn.createResourceUid().slice(0, 10)}`
 
 /**
+ * The photos the matched products already show that an earlier import
+ * copied (AGL-4245), by the photo's key: each library file a product names
+ * is read once (a Firestore read, no file and no network), and one carrying
+ * an `importedFrom` key answers for the address that key was made from. So
+ * the same file imported again plans its photos as the files they already
+ * are. A photo a product does not show, or whose file was deleted since,
+ * is copied again.
+ */
+async function copiedPhotosOf(
+  firestore: Firestore,
+  ctx: TransferResourceContext,
+  existing: BuildTransferPlanInput['existing'],
+): Promise<(url: string) => string | null> {
+  const hostId = ctx.hostId as string
+  const named = new Map<string, string>()
+  for (const record of existing.values()) {
+    const values: unknown[] = [...((record[PRODUCT_FIELD.image] as unknown[] | undefined) ?? [])]
+    for (const variantId of (record[PRODUCT_VARIANT_ORDER] as string[] | undefined) ?? []) {
+      values.push((record[productVariantKey(variantId)] as Record<string, unknown> | undefined)?.[PRODUCT_FIELD.variantImage])
+    }
+    for (const value of values) {
+      const ref = parseMediaRef(value)
+      if (ref && ref.scope === hostId && !named.has(ref.mediaId)) named.set(ref.mediaId, String(value))
+    }
+  }
+  const byKey = new Map<string, string>()
+  const media = hostRefOf(firestore, ctx).collection('media')
+  const ids = [...named.keys()]
+  for (let at = 0; at < ids.length; at += ID_IN_MAX) {
+    const docs = await firestore.getAll(...ids.slice(at, at + ID_IN_MAX).map((id) => media.doc(id)))
+    for (const doc of docs) {
+      const key = doc.exists ? doc.get('importedFrom.key') : null
+      if (typeof key === 'string' && key && !doc.get('deletedAt')) byKey.set(key, named.get(doc.id) as string)
+    }
+  }
+  return (url) => (byKey.size ? (byKey.get(productImageKey(url)) ?? null) : null)
+}
+
+/**
  * The dry run: the slugs a new product would collide with (a deleted
  * product's included, which still holds its address) and the plan's room
  * for new products, then the fold of `planProductTransfer`.
@@ -369,6 +420,9 @@ export async function planProducts(
     newVariantId,
     slugTaken: (slug) => taken.has(slug),
     maxCreates,
+    // A Wix or Squarespace file, by its headers (AGL-4245).
+    source: productFileSource(ctx.headers, input.rows),
+    copiedPhoto: await copiedPhotosOf(firestore, ctx, input.existing),
   })
 }
 
@@ -386,12 +440,148 @@ class RowRefusal extends Error {
   }
 }
 
+/*------------------------------------------
+ * Photos (AGL-4245)
+ *-----------------------------------------*/
+
+/** The photo addresses a planned row copies: a new product's, or the photos a row changes. */
+export function rowPhotoUrls(row: ProductPlannedRow): string[] {
+  const plan = row.commerce
+  const values: unknown[] = []
+  if (plan?.role === 'create' && plan.create) {
+    values.push(...((plan.create.values[PRODUCT_FIELD.image] as unknown[] | undefined) ?? []))
+    for (const variant of plan.create.variants) values.push(variant.values[PRODUCT_FIELD.variantImage])
+  } else if (plan?.role === 'update') {
+    for (const change of row.diff) {
+      if (change.fieldId === PRODUCT_FIELD.image && Array.isArray(change.after)) values.push(...change.after)
+      if (change.fieldId === PRODUCT_FIELD.variantImage) values.push(change.after)
+    }
+  }
+  const urls: string[] = []
+  for (const value of values) {
+    const cell = productImageCell(value)
+    if (cell?.kind === 'copy' && !urls.includes(cell.url)) urls.push(cell.url)
+  }
+  return urls
+}
+
+/**
+ * A library file a row's write named for a copied photo, kept with its undo
+ * entry. Undo asks the library to remove each, and the library removes only
+ * the ones this job stored and nothing still uses.
+ */
+export interface ImportedProductMedia {
+  mediaId: string
+  src: string
+  key: string
+  /** The photo's address in the file. */
+  url: string
+}
+
+interface SettledPhotos {
+  row: ProductPlannedRow
+  failed: Array<{ url: string; reason: string }>
+  created: ImportedProductMedia[]
+}
+
+/**
+ * The row with each address it names swapped for the library file it was
+ * copied to: a photo that was not copied is left out (a product whose every
+ * new photo failed keeps the ones it has), and why is kept for its result.
+ * Every library file it names is listed for its undo.
+ */
+function settlePhotos(row: ProductPlannedRow, copier: ProductImageCopier): SettledPhotos {
+  const failed: SettledPhotos['failed'] = []
+  const created: ImportedProductMedia[] = []
+  const swap = (value: unknown): string | null => {
+    const cell = productImageCell(value)
+    if (!cell) return null
+    if (cell.kind === 'stored') return cell.value
+    if (cell.kind === 'skip') return null
+    const answer = copier.result(cell.url) as (CopiedProductImage & { src?: string; mediaId?: string; created?: boolean; key?: string; reason?: string }) | undefined
+    if (!answer?.ok) {
+      if (!failed.some((entry) => entry.url === cell.url)) failed.push({ url: cell.url, reason: answer?.reason ?? 'it could not be copied' })
+      return null
+    }
+    if (!created.some((entry) => entry.mediaId === answer.mediaId)) {
+      created.push({ mediaId: answer.mediaId as string, src: answer.src as string, key: answer.key as string, url: cell.url })
+    }
+    return answer.src as string
+  }
+  const swapList = (value: unknown): string[] => {
+    const out: string[] = []
+    for (const entry of Array.isArray(value) ? value : []) {
+      const next = swap(entry)
+      if (next && !out.includes(next)) out.push(next)
+    }
+    return out
+  }
+  const plan = row.commerce as ProductRowPlan
+  if (plan.role === 'create' && plan.create) {
+    const values = { ...plan.create.values }
+    if (PRODUCT_FIELD.image in values) {
+      const list = swapList(values[PRODUCT_FIELD.image])
+      if (list.length) values[PRODUCT_FIELD.image] = list
+      else delete values[PRODUCT_FIELD.image]
+    }
+    const variants = plan.create.variants.map((variant) => {
+      if (!(PRODUCT_FIELD.variantImage in variant.values)) return variant
+      const next = { ...variant.values }
+      const image = swap(next[PRODUCT_FIELD.variantImage])
+      if (image) next[PRODUCT_FIELD.variantImage] = image
+      else delete next[PRODUCT_FIELD.variantImage]
+      return { ...variant, values: next }
+    })
+    return { row: { ...row, commerce: { ...plan, create: { ...plan.create, values, variants } } }, failed, created }
+  }
+  if (plan.role !== 'update') return { row, failed, created }
+  const diff = row.diff.flatMap((change) => {
+    if (change.fieldId === PRODUCT_FIELD.image && Array.isArray(change.after)) {
+      const list = swapList(change.after)
+      return list.length ? [{ ...change, after: list }] : []
+    }
+    if (change.fieldId === PRODUCT_FIELD.variantImage && !isBlankCell(change.after)) {
+      const image = swap(change.after)
+      return image ? [{ ...change, after: image }] : []
+    }
+    return [change]
+  })
+  return { row: { ...row, diff }, failed, created }
+}
+
+const isBlankCell = (value: unknown) => value === null || value === undefined || String(value).trim() === ''
+
+/** A row's result sentence for the photos that were not copied, naming the product. */
+export function photoFailureMessage(name: string, failed: SettledPhotos['failed']): string | undefined {
+  if (!failed.length) return undefined
+  const count = failed.length
+  const listed = failed
+    .slice(0, 3)
+    .map((entry) => `${entry.url} (${entry.reason})`)
+    .join('; ')
+  const more = count > 3 ? `; and ${count - 3} more` : ''
+  return (
+    `${count} photo${count === 1 ? '' : 's'} of "${name || 'this product'}" could not be copied: ${listed}${more}. ` +
+    `The product was saved without ${count === 1 ? 'it' : 'them'}; add ${count === 1 ? 'it' : 'them'} on the product.`
+  )
+}
+
+/** The library files an undo entry's write stored. */
+function importedMediaOf(entry: TransferUndoEntry): ImportedProductMedia[] {
+  const list = (entry.extras?.['importedMedia'] as unknown[] | undefined) ?? []
+  return list.filter(
+    (item): item is ImportedProductMedia =>
+      Boolean(item) && typeof (item as ImportedProductMedia).mediaId === 'string' && typeof (item as ImportedProductMedia).key === 'string',
+  )
+}
+
 /** Writes one chunk of planned product rows through the product write path. */
 export async function applyProducts(
   ctx: TransferResourceContext,
   chunk: TransferChunk<ProductPlannedRow>,
   writer: TransferApplyWriter,
   firestore: Firestore = firestoreOf(),
+  images: ProductImageCopierDeps = { ingest: pluginMediaIngest() },
 ): Promise<TransferApplyResult> {
   const results: TransferRowResult[] = []
   const undo: TransferUndoEntry[] = []
@@ -406,6 +596,8 @@ export async function applyProducts(
   const actor = { uid: ctx.actorUid ?? 'import', email: null }
   const logged = new Set<string>()
   const adjustments: Array<{ productId: string; variantId: string; delta: number }> = []
+  // The chunk's photos (AGL-4245): copied before the row that names them is written.
+  const copier = productImageCopier({ hostId, uid: ctx.actorUid, ...(ctx.jobId ? { jobId: ctx.jobId } : {}) }, images)
 
   const done = async (result: TransferRowResult, entry?: TransferUndoEntry) => {
     results.push(result)
@@ -420,11 +612,22 @@ export async function applyProducts(
       continue
     }
     if (writer.timeLeftMs() < ROW_BUDGET_MS) break
-    const plan = row.commerce
-    if (!plan) {
+    if (!row.commerce) {
       await done({ row: row.index, outcome: 'failed', message: 'The dry run carried nothing to write for this row.' })
       continue
     }
+    // A row's photos are copied first, never starting one that could not
+    // finish in this pass; a row whose photos run out of time is written on
+    // the next pass, which finds every photo this one stored.
+    const photoUrls = rowPhotoUrls(row)
+    if (copier.pending(photoUrls).length) {
+      if (writer.timeLeftMs() < ROW_BUDGET_MS + PRODUCT_IMPORT_IMAGE_SLOT_MS) break
+      const finished = await copier.copy(photoUrls, Date.now() + writer.timeLeftMs() - ROW_BUDGET_MS)
+      if (!finished) break
+    }
+    const settled = photoUrls.length ? settlePhotos(row, copier) : { row, failed: [], created: [] }
+    const plan = settled.row.commerce as ProductRowPlan
+    const extras = settled.created.length ? { extras: { importedMedia: settled.created } } : {}
     const ref = products.doc(plan.productId)
     try {
       if (plan.role === 'create') {
@@ -456,13 +659,15 @@ export async function applyProducts(
           logged.add(plan.productId)
           await logHostActivity(hostId, actor, 'Imported product', { type: 'content', id: plan.productId, name: product.name })
         }
+        const message = photoFailureMessage(product.name, settled.failed)
         await done(
-          { row: row.index, outcome: 'created', recordId: plan.productId },
+          { row: row.index, outcome: 'created', recordId: plan.productId, ...(message ? { message } : {}) },
           {
             row: row.index,
             recordId: plan.productId,
             action: 'created',
             written: undoKeys(productRecord(product, names)),
+            ...extras,
           },
         )
         continue
@@ -485,7 +690,7 @@ export async function applyProducts(
       }
 
       // An existing product: this row's changes, read and written in one transaction.
-      const changes = productRowChanges(row)
+      const changes = productRowChanges(settled.row)
       const outcome = await firestore.runTransaction(async (tx) => {
         const snapshot = await tx.get(ref)
         const data = snapshot.data() as ProductDoc | undefined
@@ -536,14 +741,16 @@ export async function applyProducts(
           name: outcome.next.name,
         })
       }
+      const message = photoFailureMessage(outcome.next.name, settled.failed)
       await done(
-        { row: row.index, outcome: 'updated', recordId: plan.productId },
+        { row: row.index, outcome: 'updated', recordId: plan.productId, ...(message ? { message } : {}) },
         {
           row: row.index,
           recordId: plan.productId,
           action: 'updated',
           previous: undoKeys(before, touched),
           written: undoKeys(afterRecord, touched),
+          ...extras,
         },
       )
     } catch (error) {
@@ -564,19 +771,63 @@ export async function applyProducts(
  * Undo
  *-----------------------------------------*/
 
-/** Reverses one chunk: a created product deleted, an updated one's fields and variants put back. */
+/**
+ * The library files an undone chunk's writes named (AGL-4245), handed to the
+ * library to remove once this chunk's own products are put back: a record
+ * kept on undo keeps its files, and the library removes only what this job
+ * stored and its usage scan finds nowhere, a page or another product's
+ * variant included. A file kept for being in use is a note on the undo,
+ * cleared when a later chunk removes it.
+ */
+async function removeImportedProductMedia(
+  ctx: TransferResourceContext,
+  snapshot: TransferUndoSnapshot,
+  kept: ReadonlySet<string>,
+  ingest: ProductImageCopierDeps['ingest'],
+): Promise<Record<string, string | null>> {
+  const notes: Record<string, string | null> = {}
+  if (!ingest?.removeImportedPhotos || !ctx.hostId || !ctx.actorUid) return notes
+  const media = new Map<string, ImportedProductMedia>()
+  for (const entry of snapshot.entries) {
+    if (kept.has(entry.recordId)) continue
+    for (const item of importedMediaOf(entry)) media.set(item.mediaId, item)
+  }
+  if (!media.size) return notes
+  try {
+    const answer = await ingest.removeImportedPhotos({
+      hostId: ctx.hostId,
+      uid: ctx.actorUid,
+      jobId: snapshot.jobId,
+      photos: [...media.values()].map((item) => ({ mediaId: item.mediaId, sourceKey: item.key })),
+    })
+    for (const mediaId of answer.removed) notes[`photo:${mediaId}`] = null
+    const where = answer.usedBy.slice(0, 3).join(', ') + (answer.usedBy.length > 3 ? ` and ${answer.usedBy.length - 3} more` : '')
+    for (const mediaId of answer.kept) {
+      const url = media.get(mediaId)?.url
+      notes[`photo:${mediaId}`] =
+        `A photo this import copied${url ? ` (${url})` : ''} stays in your media library, in the "${PRODUCT_IMPORT_FOLDER_NAME}" folder, because it is still in use${where ? `: ${where}` : ''}.`
+    }
+  } catch (error) {
+    // A file left behind is a file the owner can delete; the undo of the products stands.
+    console.warn('[commerce] imported photos could not be removed on undo', { hostId: ctx.hostId, error })
+  }
+  return notes
+}
+
+/** Reverses one chunk: a created product deleted, an updated one's fields and variants put back, and the photos it stored removed. */
 export async function revertProducts(
   ctx: TransferResourceContext,
   snapshot: TransferUndoSnapshot,
   decisions?: TransferRevertDecisions,
   firestore: Firestore = firestoreOf(),
+  images: Pick<ProductImageCopierDeps, 'ingest'> = { ingest: pluginMediaIngest() },
 ): Promise<TransferRevertResult> {
   const products = productsOf(firestore, ctx)
   const names = await readCategoryNames(firestore, ctx)
   const categoryIdsOf = categoryIdsBy(names)
   const smart = await readSmartCollections(firestore, ctx)
   const { Timestamp, FieldValue } = firebaseAdmin.firestore
-  return revertEntries(snapshot, decisions, {
+  const reverted = await revertEntries(snapshot, decisions, {
     async current(entry) {
       const doc = await products.doc(entry.recordId).get()
       return doc.exists && isLive(doc.data()) ? productRecord(liftLegacyProduct(doc.data() as ProductDoc), names) : null
@@ -619,4 +870,7 @@ export async function revertProducts(
       })
     },
   })
+  const kept = new Set(reverted.conflicts.map((step) => step.recordId))
+  const notes = await removeImportedProductMedia(ctx, snapshot, kept, images.ingest)
+  return Object.keys(notes).length ? { ...reverted, notes } : reverted
 }

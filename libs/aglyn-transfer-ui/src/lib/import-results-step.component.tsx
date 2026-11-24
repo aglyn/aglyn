@@ -66,6 +66,20 @@ import {
 } from './transfer-words'
 import type { TransferImportWizardController } from './use-transfer-import-wizard'
 
+/** How many written rows' notes the step lists before pointing at the result file. */
+const NOTES_SHOWN = 10
+
+/**
+ * The rows that were written and still carry a sentence for the person
+ * (AGL-4245): a product created without the photos that could not be
+ * copied, say. A failed row's reason is already counted under Failed.
+ */
+export function transferWrittenNotes(rows: readonly TransferRowResult[]): TransferRowResult[] {
+  return rows.filter(
+    (row) => (row.outcome === 'created' || row.outcome === 'updated') && Boolean(row.message),
+  )
+}
+
 const OUTCOMES: readonly TransferRowOutcome[] = [
   'created',
   'updated',
@@ -114,6 +128,8 @@ export function ImportResultsStep({
   >({})
   const [undoError, setUndoError] = useState<string | null>(null)
   const [undoing, setUndoing] = useState(false)
+  // What the undo left for the person to know, such as a photo kept because it is still in use (AGL-4245).
+  const [undoNotes, setUndoNotes] = useState<string[]>([])
   const expires = job ? transferUndoExpiresAt(job) : null
   const undone = job?.status === 'undone'
 
@@ -151,6 +167,7 @@ export function ImportResultsStep({
           otherwise: 'keep',
         })
       }
+      setUndoNotes(step.notes ?? [])
       setPreview(null)
       await wizard.refreshResults()
     } catch (reason) {
@@ -159,6 +176,8 @@ export function ImportResultsStep({
       setUndoing(false)
     }
   }
+  const notes = results ? transferWrittenNotes(results.rows) : []
+
   const unresolved = preview
     ? preview.conflicts.filter((conflict) => !resolutions[conflict.recordId])
         .length
@@ -209,6 +228,42 @@ export function ImportResultsStep({
           </Stack>
         </CardContent>
       </Card>
+      {notes.length && !undone ? (
+        <Alert severity="warning" aria-label="Rows that need a look">
+          <Typography variant="subtitle2">
+            {countOf(notes.length, 'row')} {notes.length === 1 ? 'was' : 'were'}{' '}
+            written with something left for you to do
+          </Typography>
+          <Stack component="ul" spacing={0.5} sx={{ pl: 2, my: 1 }}>
+            {notes.slice(0, NOTES_SHOWN).map((row) => (
+              <Typography component="li" variant="body2" key={row.row}>
+                {`Row ${rowNumber(row.row)}: ${row.message}`}
+              </Typography>
+            ))}
+          </Stack>
+          {notes.length > NOTES_SHOWN ? (
+            <Typography variant="body2">
+              {`And ${(notes.length - NOTES_SHOWN).toLocaleString()} more. Download results for the full list.`}
+            </Typography>
+          ) : null}
+        </Alert>
+      ) : null}
+      {undoNotes.length ? (
+        <Alert severity="info" aria-label="What the undo kept">
+          <Stack component="ul" spacing={0.5} sx={{ pl: 2, my: 0 }}>
+            {undoNotes.slice(0, NOTES_SHOWN).map((note) => (
+              <Typography component="li" variant="body2" key={note}>
+                {note}
+              </Typography>
+            ))}
+          </Stack>
+          {undoNotes.length > NOTES_SHOWN ? (
+            <Typography variant="body2">
+              {`And ${(undoNotes.length - NOTES_SHOWN).toLocaleString()} more.`}
+            </Typography>
+          ) : null}
+        </Alert>
+      ) : null}
       {!undone ? (
         <Card variant="outlined">
           <CardHeader

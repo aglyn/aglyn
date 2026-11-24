@@ -212,6 +212,11 @@ export interface TransferUndoResponse {
   conflicts: TransferUndoConflict[]
   /** Undo has finished (apply only). */
   done: boolean
+  /**
+   * What the undo left for the person to know beyond its records, such as a
+   * photo kept because it is still in use (apply only, AGL-4245).
+   */
+  notes?: string[]
 }
 
 /*------------------------------------------
