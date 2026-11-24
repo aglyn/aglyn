@@ -72,6 +72,7 @@ import {
   SELLER_STRIPE_TAX_NOT_SET_UP_MESSAGE,
   sellerStripeTaxActive,
 } from './seller-stripe-account'
+import { tellCheckoutTaxRefusal } from './checkout-tax-refusal'
 
 /**
  * Commerce Starter checkout (AGL-90): a site visitor buys a product. The
@@ -601,7 +602,9 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     })
     if (taxDecision.kind === 'undecided') {
       // Above the attempt claim, like every other deterministic refusal on
-      // this path — there is no claim to release yet.
+      // this path — there is no claim to release yet. The owner is told once
+      // (AGL-4245), not the shopper alone.
+      tellCheckoutTaxRefusal(hostId, 'tax-undecided')
       return res
         .status(409)
         .json({ error: CommerceModel.STOREFRONT_TAX_UNDECIDED_MESSAGE })
@@ -623,6 +626,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       useStripeTax &&
       !(await sellerStripeTaxActive(String(accountId)))
     ) {
+      tellCheckoutTaxRefusal(hostId, 'stripe-tax-not-active')
       return res.status(409).json({ error: SELLER_STRIPE_TAX_NOT_SET_UP_MESSAGE })
     }
     let taxCents = 0

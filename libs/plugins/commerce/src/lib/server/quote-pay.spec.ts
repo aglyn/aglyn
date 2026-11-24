@@ -104,6 +104,8 @@ let expiry: Awaited<ReturnType<QuotePayDeps['expireSession']>> = 'expired'
 let sessionCount = 0
 let sellerTaxActive = true
 const taxRateId = jest.fn<Promise<string | null>, [unknown]>(async () => 'txr_store')
+/** The store's managers told a customer was refused for tax (AGL-4245). */
+const tellTaxRefusal = jest.fn()
 
 const deps: QuotePayDeps = {
   firestore: () => firestore,
@@ -126,6 +128,7 @@ const deps: QuotePayDeps = {
     return expiry
   },
   sellerTaxActive: async () => sellerTaxActive,
+  tellTaxRefusal: (...args) => tellTaxRefusal(...args),
   ensureDomain: async () => null,
   now: () => 10_000,
 }
@@ -198,6 +201,7 @@ beforeEach(() => {
   sessionCount = 0
   sellerTaxActive = true
   taxRateId.mockClear()
+  tellTaxRefusal.mockClear()
   docs.set('hosts/site1', { subdomain: 'acme', displayName: 'Acme Tents', businessName: 'Acme Tents' })
   docs.set('hosts/site1/settings/store', {
     currency: 'USD',
@@ -479,6 +483,8 @@ describe('Pay', () => {
     docs.set('hosts/site1/settings/store', { currency: 'USD', tax: {} })
     expect(await press()).toMatchObject({ status: 409, body: { reason: 'tax-undecided' } })
     expect(created).toHaveLength(0)
+    // The store is told, not just the customer (AGL-4245).
+    expect(tellTaxRefusal).toHaveBeenCalledWith('site1', 'tax-undecided')
   })
 
   it('asks Stripe Tax at payment, keeping the tax out of the merchant’s transfer', async () => {
@@ -864,6 +870,7 @@ describe('a direct charge on the seller’s own account', () => {
     expect(outcome).toMatchObject({ status: 409, body: { reason: 'seller-tax' } })
     expect(String(outcome.body['error'])).toContain('sales tax')
     expect(created).toHaveLength(0)
+    expect(tellTaxRefusal).toHaveBeenCalledWith('site1', 'stripe-tax-not-active')
     sellerTaxActive = true
     expect((await press()).status).toBe(200)
   })

@@ -19,6 +19,7 @@ import {
   SELLER_STRIPE_TAX_NOT_SET_UP_MESSAGE,
   sellerStripeTaxActive,
 } from './seller-stripe-account'
+import { tellCheckoutTaxRefusal } from './checkout-tax-refusal'
 import { randomUUID } from 'crypto'
 import { readSiteReturnHost, siteReturnUrl } from '@aglyn/aglyn/app-utils/site-return-url'
 import type { AttemptClaim, PluginApiHandler } from '@aglyn/aglyn/server'
@@ -1299,6 +1300,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       await releasePromotionHolds()
       await releaseStock()
       await claim.release()
+      tellCheckoutTaxRefusal(hostId, 'tax-undecided')
       return res
         .status(409)
         .json({ error: CommerceModel.STOREFRONT_TAX_UNDECIDED_MESSAGE })
@@ -1330,6 +1332,7 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       await releasePromotionHolds()
       await releaseStock()
       await claim.release()
+      tellCheckoutTaxRefusal(hostId, 'stripe-tax-not-active')
       return res.status(409).json({ error: SELLER_STRIPE_TAX_NOT_SET_UP_MESSAGE })
     }
     if (taxDecision.kind === 'stripe-automatic') {
