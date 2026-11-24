@@ -842,7 +842,7 @@ describe('org docs', () => {
       updateDoc(doc(authed(EDITOR), 'orgs', ORG), { name: 'Nope' }),
     )
     await assertFails(
-      updateDoc(doc(authed(OWNER), 'orgs', ORG), { plan: 'pro' }),
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), { plan: 'enterprise' }),
     )
     await assertFails(
       updateDoc(doc(authed(OWNER), 'orgs', ORG), { slug: 'stolen' }),
@@ -5782,7 +5782,7 @@ describe('staff RBAC on org billing keys (AGL-206/238)', () => {
     )
     await mustDeny(
       'billing staff writing orgs/{orgId}.plan from the client (AGL-1795)',
-      updateDoc(doc(billingStaffDb, 'orgs', ORG), { plan: 'pro' }),
+      updateDoc(doc(billingStaffDb, 'orgs', ORG), { plan: 'enterprise' }),
     )
     await assertFails(
       updateDoc(doc(billingStaffDb, 'orgs', ORG), {
@@ -5807,7 +5807,7 @@ describe('staff RBAC on org billing keys (AGL-206/238)', () => {
     await assertSucceeds(getDoc(doc(supportStaffDb, 'orgs', ORG)))
     await mustDeny(
       'support staff writing orgs/{orgId}.plan',
-      updateDoc(doc(supportStaffDb, 'orgs', ORG), { plan: 'pro' }),
+      updateDoc(doc(supportStaffDb, 'orgs', ORG), { plan: 'enterprise' }),
     )
     // `plan` alone stopped isolating the ROLE when AGL-1795 denied it to every
     // client: that case now passes for a support token, a billing token and a
