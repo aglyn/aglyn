@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import * as Aglyn from '@aglyn/aglyn/server'
 import { Fuse } from '@aglyn/shared-util-vendor/fuse'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
@@ -217,13 +218,16 @@ async function readPluginResults(
     const group = { key: source.key, label: source.label }
     const toResult = (position: number): SearchResult => {
       const item = items[position]
+      // A product photo is stored as a media reference or a URL; resolved
+      // here, where the host is known, so the results page renders a URL.
+      const imageUrl = resolveMediaSrc(item.imageUrl, { hostId })
       return {
         title: item.title,
         url: item.url,
         snippet: item.snippet ?? '',
         kind: 'product',
         group,
-        ...(item.imageUrl ? { imageUrl: item.imageUrl } : {}),
+        ...(imageUrl ? { imageUrl } : {}),
         ...(item.caption ? { caption: item.caption } : {}),
       }
     }
