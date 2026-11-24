@@ -676,7 +676,7 @@ describe('media embeds and a workspace’s own brand (2026-09-28 aglyn.com outag
 })
 
 describe('a shop’s own Gmail address and Discord server', () => {
-  /** A young racewear shop: its contact address is on Gmail, its community on Discord. */
+  /** A young racewear shop: its contact address is on Gmail, its group chat on Discord. */
   const SHOP = {
     ownNames: ['Northline Racewear', 'northline-racewear'],
     ownDomains: ['northline-racewear.aglyn.app'],
