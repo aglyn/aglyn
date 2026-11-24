@@ -20,6 +20,7 @@ import type { AiSiteImportPage, AiSiteImportState } from './ai-site-import'
 import {
   aiSiteImportRedirectPlan,
   aiSiteImportRedirectText,
+  aiSiteImportRedirectsRetryable,
   aiSiteImportRedirectsSummary,
 } from './ai-site-import-redirects'
 import { aiSiteImportWaveRows } from './ai-site-import-view'
@@ -199,5 +200,21 @@ describe('what the import’s page says of them', () => {
     expect(aiSiteImportRedirectsSummary(state([]))).toBeNull()
     const [row] = aiSiteImportWaveRows({ items: [done('p0')], siteImport: imported, status: 'needs_review' } as never, imported.waves[0]!)
     expect(row).toMatchObject({ from: '/old', to: '/new', redirect: 'Redirect added: visitors to the old address go to /new' })
+  })
+})
+
+describe('when the import offers to add its missing redirects (AGL-4245)', () => {
+  it('offers it only for an address left out for a reason that can clear', () => {
+    const with_ = (reason: string) =>
+      aiSiteImportRedirectsRetryable({ redirects: [{ from: '/a', to: '/b', outcome: 'left-out', reason: reason as never }] })
+    expect(with_('unpublished')).toBe(true)
+    expect(with_('plan-limit')).toBe(true)
+    expect(with_('off')).toBe(true)
+    expect(with_('page-there')).toBe(false)
+    expect(with_('shared-address')).toBe(false)
+    expect(with_('unusable')).toBe(false)
+    expect(with_('refused')).toBe(false)
+    expect(aiSiteImportRedirectsRetryable({ redirects: [{ from: '/a', to: '/b', outcome: 'created' }] })).toBe(false)
+    expect(aiSiteImportRedirectsRetryable(null)).toBe(false)
   })
 })

@@ -115,6 +115,8 @@ export async function aiSiteImportWriteRedirects(
     items: readonly AiJobItemLedger[]
     org: Readonly<Record<string, unknown>> | null
     now: Date
+    /** The member the rules are written as; the member who started the import otherwise. */
+    actorUid?: string
   },
   deps: AiSiteImportRedirectsDeps = {},
 ): Promise<AiSiteImportRedirect[] | null> {
@@ -142,7 +144,7 @@ export async function aiSiteImportWriteRedirects(
   if (!writer || !owner || !(await pluginOn({ orgId: job.orgId, pluginId: owner, org: input.org, host }))) {
     return leaveAll('off', 'Redirects is turned off for this site, so no redirects were added. Turn it on to add them.')
   }
-  const context = { orgId: job.orgId, hostId, uid: job.createdBy, org: input.org, now: input.now }
+  const context = { orgId: job.orgId, hostId, uid: input.actorUid ?? job.createdBy, org: input.org, now: input.now }
   const refusal = await writer.refusal(context)
   if (refusal) return leaveAll('off', refusal.error)
 

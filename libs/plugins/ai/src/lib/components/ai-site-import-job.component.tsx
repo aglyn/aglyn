@@ -85,11 +85,14 @@ import {
 } from '../model/ai-site-import-view'
 import {
   AI_SITE_IMPORT_REDIRECT_RECORD,
+  AI_SITE_IMPORT_REDIRECTS_RETRY_COPY,
   AI_SITE_IMPORT_REDIRECTS_WHEN,
+  aiSiteImportRedirectsRetryable,
   aiSiteImportRedirectText,
   aiSiteImportRedirectsSummary,
 } from '../model/ai-site-import-redirects'
 import { AiJobCancelButton } from './ai-job-cancel.component'
+import { addAiSiteImportRedirectsRequest } from './ai-job-requests'
 import { aiCreditsBillingHref, aiJobOutputHref } from './ai-job-links'
 import { AiSiteImportFinish } from './ai-site-import-finish.component'
 import { AiSiteImportPlanPanel, AiSiteImportWhatsNewList } from './ai-site-import-plan.component'
@@ -292,6 +295,18 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
     else setClaimNotice(answer.message)
   }, [orgId, state, user])
 
+  const [addingRedirects, setAddingRedirects] = useState(false)
+  const [redirectsNotice, setRedirectsNotice] = useState<string | null>(null)
+  const addRedirects = useCallback(async () => {
+    if (!orgId) return
+    setAddingRedirects(true)
+    setRedirectsNotice(null)
+    const answer = await addAiSiteImportRedirectsRequest(user, orgId, job)
+    setAddingRedirects(false)
+    if (answer.job) onJob(answer.job)
+    if (answer.error) setRedirectsNotice(answer.error)
+  }, [orgId, user, job, onJob])
+
   const cancel = (
     <Box>
       <AiJobCancelButton job={job} user={user} orgId={orgId} onJob={onJob} variant="text" size="small" />
@@ -405,6 +420,8 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
   // The redirects from the old addresses (AGL-4245): what was added, and the
   // other addresses of a page, which have no row of their own.
   const redirectsSummary = aiSiteImportRedirectsSummary(state)
+  // Pages published since a wave, or room or redirects since: the same pass again, on the person's say-so.
+  const redirectsRetry = Boolean(orgId) && aiSiteImportRedirectsRetryable(state) && job.status !== 'running' && job.status !== 'queued'
   const otherAddresses = (state?.redirects ?? []).filter((entry) => !entry.slot && entry.outcome !== 'same')
   const redirectsCard = redirectsSummary ? (
     <Accordion variant="outlined" disableGutters slotProps={{ heading: { component: 'h2' } }} sx={{ borderRadius: 2, '&::before': { display: 'none' } }}>
@@ -426,6 +443,19 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
               ))}
             </Stack>
           ) : null}
+          {redirectsRetry ? (
+            <Stack spacing={0.5}>
+              <Typography variant="body2" color="text.secondary">
+                {AI_SITE_IMPORT_REDIRECTS_RETRY_COPY.help}
+              </Typography>
+              <Box>
+                <Button variant="outlined" size="small" disabled={addingRedirects} onClick={() => void addRedirects()}>
+                  {addingRedirects ? AI_SITE_IMPORT_REDIRECTS_RETRY_COPY.busy : AI_SITE_IMPORT_REDIRECTS_RETRY_COPY.action}
+                </Button>
+              </Box>
+            </Stack>
+          ) : null}
+          {redirectsNotice ? <Alert severity="warning">{redirectsNotice}</Alert> : null}
           {redirectsHref ? (
             <Box>
               <Button size="small" component={AppLink} href={redirectsHref}>
@@ -680,6 +710,7 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
       ) : null}
       {/* Which waves came in and which stopped (AGL-4107). */}
       {waves}
+      {redirectsCard}
     </Frame>
   )
 }

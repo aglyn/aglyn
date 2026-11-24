@@ -191,6 +191,36 @@ describe('an import job’s page', () => {
     expect(screen.queryByText('Open Redirects')).toBeNull()
   })
 
+  it('adds the redirects of pages published since, on the person’s say-so, and shows what came of it (AGL-4245)', async () => {
+    let state = harbor()
+    state = aiSiteImportWaveClosed(aiSiteImportWaveStarted(state, 0, 'x', new Map()), 0, 'y')
+    state = { ...state, redirects: [{ from: '/about-us', to: null, outcome: 'left-out', reason: 'unpublished', slot: 'p1' }] }
+    const items = aiSiteImportLedger(state).map((row): AiJobItemLedger => (row.slot === 'p1' ? { ...row, status: 'succeeded', outputs: ['out-p1'] } : row))
+    const job = summary({ siteImport: state, items, review: { reason: 'wave', message: 'Main pages is in.', findings: [] } })
+    const after = { ...state, redirects: [{ from: '/about-us', to: '/about', outcome: 'created' as const, slot: 'p1' }] }
+    mockFetch.mockResolvedValueOnce(json({ job: { ...job, siteImport: after }, changed: true }))
+    const onJob = jest.fn()
+    render(
+      <AiSiteImportJob job={job} orgId="org-1" orgSlug="acme" host="harbor" siteName="Harbor Dental" user={user} busy={false} notice={null} onResume={jest.fn()} onJob={onJob} />,
+    )
+    expect(screen.getByText('No redirect: the new page is not published yet. Add one in Redirects once it is.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Redirects from your old addresses' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add redirects for published pages' }))
+    await waitFor(() => expect(onJob).toHaveBeenCalled())
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('/api/ai/jobs/job-1/redirects')
+    expect(JSON.parse(String(init.body))).toEqual({ orgId: 'org-1', hostId: 'host-1' })
+    expect((onJob.mock.calls[0]?.[0] as AiJobSummary).siteImport?.redirects?.[0]?.outcome).toBe('created')
+  })
+
+  it('offers no such button when nothing left out can clear', () => {
+    let state = harbor()
+    state = aiSiteImportWaveClosed(aiSiteImportWaveStarted(state, 0, 'x', new Map()), 0, 'y')
+    state = { ...state, redirects: [{ from: '/about-us', to: '/about', outcome: 'left-out', reason: 'page-there', slot: 'p1' }] }
+    view(summary({ siteImport: state, items: aiSiteImportLedger(state), review: { reason: 'wave', message: 'Main pages is in.', findings: [] } }))
+    expect(screen.queryByText('Add redirects for published pages')).toBeNull()
+  })
+
   it('opens Redirects where the redirects plugin says its rules are listed (AGL-4245)', () => {
     registerPluginRecordRoute(
       'redirect',

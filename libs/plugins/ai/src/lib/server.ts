@@ -57,6 +57,7 @@ import { GET as aiJobEvents } from './server/ai-jobs-events-route'
 import { POST as createAiSiteBatch } from './server/ai-jobs-batch'
 import { GET as listAiJobs, POST as createAiJob } from './server/ai-jobs-route'
 import { GET as aiCreateDoor, GET_FOLLOW as aiCreateFollow } from './server/ai-create-route'
+import { POST as aiJobRedirects } from './server/ai-jobs-redirects'
 import { POST as resumeAiJob } from './server/ai-jobs-resume'
 import { POST as aiGenerateComponent } from './server/ai-generate-component'
 import { POST as createAiMediaImages } from './server/ai-media-image'
@@ -226,6 +227,12 @@ export function registerAiConsoleApi(): void {
   registerPluginApiRoute('ai/jobs/:jobId/resume', {
     web: (request, context) =>
       resumeAiJob(request, { params: Promise.resolve({ jobId: String(context.params['jobId']) }) }),
+  })
+  // Bring my site (AGL-4245): the redirects from an import's old addresses,
+  // added again for pages published since its waves. Spends nothing.
+  registerPluginApiRoute('ai/jobs/:jobId/redirects', {
+    web: (request, context) =>
+      aiJobRedirects(request, { params: Promise.resolve({ jobId: String(context.params['jobId']) }) }),
   })
   // An insight job's answer (AGL-2915), which is kept off the job document
   // and served only to the member who asked, or for a digest to the site's

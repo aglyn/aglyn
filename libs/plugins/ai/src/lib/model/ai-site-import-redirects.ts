@@ -201,6 +201,21 @@ export function aiSiteImportRedirectOf(state: Pick<AiSiteImportState, 'redirects
   return (state?.redirects ?? []).find((entry) => entry.slot === slot) ?? null
 }
 
+/** The reasons an address is left out that can clear later: a page published, room in the plan, redirects turned on. */
+export const AI_SITE_IMPORT_REDIRECT_RETRYABLE: ReadonlySet<AiSiteImportRedirectReason> = new Set(['unpublished', 'plan-limit', 'off'])
+
+/** Whether "Add redirects for published pages" has anything to try: an address left out for a reason that can clear. */
+export function aiSiteImportRedirectsRetryable(state: Pick<AiSiteImportState, 'redirects'> | null | undefined): boolean {
+  return (state?.redirects ?? []).some((entry) => entry.outcome === 'left-out' && AI_SITE_IMPORT_REDIRECT_RETRYABLE.has(entry.reason ?? 'refused'))
+}
+
+/** The button that runs the pass again, and what it says beside it. */
+export const AI_SITE_IMPORT_REDIRECTS_RETRY_COPY = {
+  action: 'Add redirects for published pages',
+  busy: 'Adding redirects…',
+  help: 'Published more of your pages, or made room in your plan? Add the redirects their old addresses are missing.',
+} as const
+
 /** The import's redirects, counted, for the card that lists them. */
 export function aiSiteImportRedirectCounts(state: Pick<AiSiteImportState, 'redirects'> | null | undefined): {
   created: number
