@@ -51,6 +51,7 @@ import {
   type BuildFeeSource,
   type StandingBuildFee,
 } from '@aglyn/aglyn/app-utils/build-fee'
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { readUpgradeProposal } from '@aglyn/aglyn/app-utils/upgrade-proposal'
 import {
   isLiveSubscriptionStatus,
@@ -181,7 +182,7 @@ async function findOrCreateBuildFeeProduct(
     'products',
     {
       name: 'Website build',
-      description: 'A one-time website build by the Aglyn team.',
+      description: `A one-time website build by the ${PLATFORM_BRAND_NAME} team.`,
       tax_code: BUILD_FEE_TAX_CODE,
       [`metadata[${BUILD_FEE_PRODUCT_METADATA_KEY}]`]: BUILD_FEE_PRODUCT_METADATA_VALUE,
     },
