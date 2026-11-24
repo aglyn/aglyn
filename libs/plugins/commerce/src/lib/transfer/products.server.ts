@@ -43,7 +43,7 @@ import type {
 } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { firebaseAdmin, getOrgForHost, logHostActivity } from '@aglyn/tenant-data-admin'
 import { pluginMediaIngest } from '@aglyn/aglyn/plugin-manager/plugin-media-ingest'
-import { TRANSFER_WRITE_CONCURRENCY } from '@aglyn/aglyn/data-transfer'
+import { parseMediaRef } from '@aglyn/aglyn/app-utils/media-ref'
 import { PRODUCT_LIST_QUERY } from '../constants/product-list-query'
 import {
   commerceSlug,
@@ -73,9 +73,10 @@ import {
   type ProductPlannedRow,
   type ProductRowPlan,
 } from './product-transfer'
-import { PRODUCT_IMPORT_IMAGE_SLOT_MS, productImageCell } from './product-images'
+import { PRODUCT_IMPORT_FOLDER_NAME, PRODUCT_IMPORT_IMAGE_SLOT_MS, productImageCell } from './product-images'
 import {
   productImageCopier,
+  productImageKey,
   type CopiedProductImage,
   type ProductImageCopier,
   type ProductImageCopierDeps,
@@ -353,6 +354,45 @@ const newId = () => Aglyn.createResourceUid()
 const newVariantId = () => `v${Aglyn.createResourceUid().slice(0, 10)}`
 
 /**
+ * The photos the matched products already show that an earlier import
+ * copied (AGL-4245), by the photo's key: each library file a product names
+ * is read once (a Firestore read, no file and no network), and one carrying
+ * an `importedFrom` key answers for the address that key was made from. So
+ * the same file imported again plans its photos as the files they already
+ * are. A photo a product does not show, or whose file was deleted since,
+ * is copied again.
+ */
+async function copiedPhotosOf(
+  firestore: Firestore,
+  ctx: TransferResourceContext,
+  existing: BuildTransferPlanInput['existing'],
+): Promise<(url: string) => string | null> {
+  const hostId = ctx.hostId as string
+  const named = new Map<string, string>()
+  for (const record of existing.values()) {
+    const values: unknown[] = [...((record[PRODUCT_FIELD.image] as unknown[] | undefined) ?? [])]
+    for (const variantId of (record[PRODUCT_VARIANT_ORDER] as string[] | undefined) ?? []) {
+      values.push((record[productVariantKey(variantId)] as Record<string, unknown> | undefined)?.[PRODUCT_FIELD.variantImage])
+    }
+    for (const value of values) {
+      const ref = parseMediaRef(value)
+      if (ref && ref.scope === hostId && !named.has(ref.mediaId)) named.set(ref.mediaId, String(value))
+    }
+  }
+  const byKey = new Map<string, string>()
+  const media = hostRefOf(firestore, ctx).collection('media')
+  const ids = [...named.keys()]
+  for (let at = 0; at < ids.length; at += ID_IN_MAX) {
+    const docs = await firestore.getAll(...ids.slice(at, at + ID_IN_MAX).map((id) => media.doc(id)))
+    for (const doc of docs) {
+      const key = doc.exists ? doc.get('importedFrom.key') : null
+      if (typeof key === 'string' && key && !doc.get('deletedAt')) byKey.set(key, named.get(doc.id) as string)
+    }
+  }
+  return (url) => (byKey.size ? (byKey.get(productImageKey(url)) ?? null) : null)
+}
+
+/**
  * The dry run: the slugs a new product would collide with (a deleted
  * product's included, which still holds its address) and the plan's room
  * for new products, then the fold of `planProductTransfer`.
@@ -382,6 +422,7 @@ export async function planProducts(
     maxCreates,
     // A Wix or Squarespace file, by its headers (AGL-4245).
     source: productFileSource(ctx.headers, input.rows),
+    copiedPhoto: await copiedPhotosOf(firestore, ctx, input.existing),
   })
 }
 
@@ -424,11 +465,17 @@ export function rowPhotoUrls(row: ProductPlannedRow): string[] {
   return urls
 }
 
-/** A media library file a row's write stored, kept with its undo entry so undo removes only those. */
+/**
+ * A library file a row's write named for a copied photo, kept with its undo
+ * entry. Undo asks the library to remove each, and the library removes only
+ * the ones this job stored and nothing still uses.
+ */
 export interface ImportedProductMedia {
   mediaId: string
   src: string
   key: string
+  /** The photo's address in the file. */
+  url: string
 }
 
 interface SettledPhotos {
@@ -441,9 +488,9 @@ interface SettledPhotos {
  * The row with each address it names swapped for the library file it was
  * copied to: a photo that was not copied is left out (a product whose every
  * new photo failed keeps the ones it has), and why is kept for its result.
- * A file stored for it counts as this row's only once in a chunk.
+ * Every library file it names is listed for its undo.
  */
-function settlePhotos(row: ProductPlannedRow, copier: ProductImageCopier, attributed: Set<string>): SettledPhotos {
+function settlePhotos(row: ProductPlannedRow, copier: ProductImageCopier): SettledPhotos {
   const failed: SettledPhotos['failed'] = []
   const created: ImportedProductMedia[] = []
   const swap = (value: unknown): string | null => {
@@ -456,9 +503,8 @@ function settlePhotos(row: ProductPlannedRow, copier: ProductImageCopier, attrib
       if (!failed.some((entry) => entry.url === cell.url)) failed.push({ url: cell.url, reason: answer?.reason ?? 'it could not be copied' })
       return null
     }
-    if (answer.created && !attributed.has(answer.mediaId as string)) {
-      attributed.add(answer.mediaId as string)
-      created.push({ mediaId: answer.mediaId as string, src: answer.src as string, key: answer.key as string })
+    if (!created.some((entry) => entry.mediaId === answer.mediaId)) {
+      created.push({ mediaId: answer.mediaId as string, src: answer.src as string, key: answer.key as string, url: cell.url })
     }
     return answer.src as string
   }
@@ -529,16 +575,6 @@ function importedMediaOf(entry: TransferUndoEntry): ImportedProductMedia[] {
   )
 }
 
-/** Runs `task` over `items`, `limit` at a time. */
-async function eachLimited<T>(items: readonly T[], limit: number, task: (item: T) => Promise<void>): Promise<void> {
-  const queue = [...items]
-  await Promise.all(
-    Array.from({ length: Math.min(limit, queue.length) }, async () => {
-      while (queue.length) await task(queue.shift() as T)
-    }),
-  )
-}
-
 /** Writes one chunk of planned product rows through the product write path. */
 export async function applyProducts(
   ctx: TransferResourceContext,
@@ -561,8 +597,7 @@ export async function applyProducts(
   const logged = new Set<string>()
   const adjustments: Array<{ productId: string; variantId: string; delta: number }> = []
   // The chunk's photos (AGL-4245): copied before the row that names them is written.
-  const copier = productImageCopier({ hostId, uid: ctx.actorUid }, images)
-  const attributed = new Set<string>()
+  const copier = productImageCopier({ hostId, uid: ctx.actorUid, ...(ctx.jobId ? { jobId: ctx.jobId } : {}) }, images)
 
   const done = async (result: TransferRowResult, entry?: TransferUndoEntry) => {
     results.push(result)
@@ -590,7 +625,7 @@ export async function applyProducts(
       const finished = await copier.copy(photoUrls, Date.now() + writer.timeLeftMs() - ROW_BUDGET_MS)
       if (!finished) break
     }
-    const settled = photoUrls.length ? settlePhotos(row, copier, attributed) : { row, failed: [], created: [] }
+    const settled = photoUrls.length ? settlePhotos(row, copier) : { row, failed: [], created: [] }
     const plan = settled.row.commerce as ProductRowPlan
     const extras = settled.created.length ? { extras: { importedMedia: settled.created } } : {}
     const ref = products.doc(plan.productId)
@@ -737,39 +772,46 @@ export async function applyProducts(
  *-----------------------------------------*/
 
 /**
- * The library files an undone chunk's writes stored (AGL-4245), removed
- * once nothing in the store still shows them: never one a record kept on
- * undo stored, nor one a live product's photos still name, and only through
- * the library's own delete, which checks the file is the import's.
+ * The library files an undone chunk's writes named (AGL-4245), handed to the
+ * library to remove once this chunk's own products are put back: a record
+ * kept on undo keeps its files, and the library removes only what this job
+ * stored and its usage scan finds nowhere, a page or another product's
+ * variant included. A file kept for being in use is a note on the undo,
+ * cleared when a later chunk removes it.
  */
 async function removeImportedProductMedia(
   ctx: TransferResourceContext,
   snapshot: TransferUndoSnapshot,
   kept: ReadonlySet<string>,
-  products: FirebaseFirestore.CollectionReference,
   ingest: ProductImageCopierDeps['ingest'],
-): Promise<void> {
-  if (!ingest?.removeImportedPhoto || !ctx.hostId || !ctx.actorUid) return
+): Promise<Record<string, string | null>> {
+  const notes: Record<string, string | null> = {}
+  if (!ingest?.removeImportedPhotos || !ctx.hostId || !ctx.actorUid) return notes
   const media = new Map<string, ImportedProductMedia>()
   for (const entry of snapshot.entries) {
     if (kept.has(entry.recordId)) continue
     for (const item of importedMediaOf(entry)) media.set(item.mediaId, item)
   }
-  await eachLimited([...media.values()], TRANSFER_WRITE_CONCURRENCY, async (item) => {
-    try {
-      const users = await products.where('mediaUrls', 'array-contains', item.src).limit(5).get()
-      if (users.docs.some((doc) => isLive(doc.data()))) return
-      await ingest.removeImportedPhoto?.({
-        hostId: ctx.hostId as string,
-        uid: ctx.actorUid as string,
-        mediaId: item.mediaId,
-        sourceKey: item.key,
-      })
-    } catch (error) {
-      // A file left behind is a file the owner can delete; the undo of the products stands.
-      console.warn('[commerce] an imported photo could not be removed on undo', { hostId: ctx.hostId, error })
+  if (!media.size) return notes
+  try {
+    const answer = await ingest.removeImportedPhotos({
+      hostId: ctx.hostId,
+      uid: ctx.actorUid,
+      jobId: snapshot.jobId,
+      photos: [...media.values()].map((item) => ({ mediaId: item.mediaId, sourceKey: item.key })),
+    })
+    for (const mediaId of answer.removed) notes[`photo:${mediaId}`] = null
+    const where = answer.usedBy.slice(0, 3).join(', ') + (answer.usedBy.length > 3 ? ` and ${answer.usedBy.length - 3} more` : '')
+    for (const mediaId of answer.kept) {
+      const url = media.get(mediaId)?.url
+      notes[`photo:${mediaId}`] =
+        `A photo this import copied${url ? ` (${url})` : ''} stays in your media library, in the "${PRODUCT_IMPORT_FOLDER_NAME}" folder, because it is still in use${where ? `: ${where}` : ''}.`
     }
-  })
+  } catch (error) {
+    // A file left behind is a file the owner can delete; the undo of the products stands.
+    console.warn('[commerce] imported photos could not be removed on undo', { hostId: ctx.hostId, error })
+  }
+  return notes
 }
 
 /** Reverses one chunk: a created product deleted, an updated one's fields and variants put back, and the photos it stored removed. */
@@ -829,6 +871,6 @@ export async function revertProducts(
     },
   })
   const kept = new Set(reverted.conflicts.map((step) => step.recordId))
-  await removeImportedProductMedia(ctx, snapshot, kept, products, images.ingest)
-  return reverted
+  const notes = await removeImportedProductMedia(ctx, snapshot, kept, images.ingest)
+  return Object.keys(notes).length ? { ...reverted, notes } : reverted
 }

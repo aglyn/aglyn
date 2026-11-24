@@ -507,19 +507,28 @@ export const PRODUCT_STANDARD_FIELDS: readonly TransferField[] = [
     aliases: ['add ons', 'addons', 'modifiers', 'modifier groups'],
     description: 'Groups split by semicolons: Milk (at least 1): Whole, Oat +$0.75; Extras (at most 3, register only): Extra shot +$1.00.',
   },
-  // Read from another store's file (AGL-4245, `product-sources.ts`); never stored, so blank on export.
+  // Read from another store's file (AGL-4245, `product-sources.ts`); never stored, so import-only.
   {
     id: F.salePrice,
     label: 'Sale price',
     group: 'switching',
+    importOnly: true,
     type: 'currency',
     description: 'Below the price, it becomes the price and the price becomes the compare-at price. With On sale, only when On sale is yes.',
   },
-  { id: F.onSale, label: 'On sale', group: 'switching', type: 'boolean', description: 'Whether Sale price is used.' },
+  {
+    id: F.onSale,
+    label: 'On sale',
+    group: 'switching',
+    importOnly: true,
+    type: 'boolean',
+    description: 'Whether Sale price is used.',
+  },
   {
     id: F.sourceProductId,
     label: 'Old store product ID',
     group: 'switching',
+    importOnly: true,
     type: 'text',
     description: 'Puts the rows of one product together in a Wix or Squarespace file. Not stored.',
   },
@@ -527,14 +536,23 @@ export const PRODUCT_STANDARD_FIELDS: readonly TransferField[] = [
     id: F.sourceType,
     label: 'Old store product type',
     group: 'switching',
+    importOnly: true,
     type: 'text',
     description: 'Physical, Digital, Service or Gift card, in a Squarespace file. Gift cards are skipped.',
   },
-  { id: F.rowType, label: 'Row type', group: 'switching', type: 'text', description: 'Product or Variant, in a Wix file.' },
+  {
+    id: F.rowType,
+    label: 'Row type',
+    group: 'switching',
+    importOnly: true,
+    type: 'text',
+    description: 'Product or Variant, in a Wix file.',
+  },
   {
     id: F.priceSurcharge,
     label: 'Price surcharge',
     group: 'switching',
+    importOnly: true,
     type: 'currency',
     description: 'What a Wix variant adds to the product’s price.',
   },
@@ -542,10 +560,18 @@ export const PRODUCT_STANDARD_FIELDS: readonly TransferField[] = [
     id: F.discountType,
     label: 'Discount type',
     group: 'switching',
+    importOnly: true,
     type: 'text',
     description: 'Percent or Amount, in a Wix file: the discounted price becomes the price, and the full price the compare-at price.',
   },
-  { id: F.discountAmount, label: 'Discount', group: 'switching', type: 'number', description: 'The Wix discount, with Discount type.' },
+  {
+    id: F.discountAmount,
+    label: 'Discount',
+    group: 'switching',
+    importOnly: true,
+    type: 'number',
+    description: 'The Wix discount, with Discount type.',
+  },
 ]
 
 export const PRODUCT_DERIVED_FIELDS: readonly TransferField[] = [
@@ -869,6 +895,13 @@ export interface ProductPlanContext {
   maxCreates?: number
   /** The other store the file came from, by its headers (`productFileSource`); `null` for Shopify's or any other. */
   source?: ProductFileSource | null
+  /**
+   * The library file an earlier import already copied a photo address to,
+   * as the products the file matched store it (AGL-4245); `null` for one
+   * not copied yet. A photo already copied plans as that file, so a file
+   * imported again shows its photos unchanged.
+   */
+  copiedPhoto?(url: string): string | null
 }
 
 const text = (value: unknown): string => (value === null || value === undefined ? '' : String(value).trim())
@@ -1141,6 +1174,8 @@ function imageCellsOf(values: Readonly<Record<string, unknown>>): string[] {
  * cell left out is kept to report.
  */
 class PhotoPlan {
+  constructor(private readonly copied?: (url: string) => string | null) {}
+
   readonly copying = new Set<string>()
   readonly skipped: Array<{ row: number; fieldId: string; value: string; skip: ProductImageSkip }> = []
 
@@ -1153,6 +1188,8 @@ class PhotoPlan {
       this.skipped.push({ row, fieldId, value: cell.value, skip: cell.skip })
       return null
     }
+    const stored = this.copied?.(cell.url)
+    if (stored) return stored
     if (!this.copying.has(cell.url) && this.copying.size >= PRODUCT_IMPORT_IMAGES_MAX) {
       this.skipped.push({ row, fieldId, value: cell.url, skip: 'overLimit' })
       return null
@@ -1244,7 +1281,7 @@ const VARIANT_PLAN_FIELDS = (fields: readonly TransferField[]) =>
 export function planProductTransfer(input: BuildTransferPlanInput, context: ProductPlanContext): TransferPlan {
   // Another store's file is read into this layout first (AGL-4245, `product-sources.ts`).
   const adapted = adaptProductSourceRows(input.rows, context.source ?? null)
-  const photos = new PhotoPlan()
+  const photos = new PhotoPlan(context.copiedPhoto?.bind(context))
   const rows = adapted.rows.map(normalizeRow).map((row): TransferPlanRow => {
     if (isBlankTransferValue(row.values[F.variantImage])) return row
     const values = { ...row.values }

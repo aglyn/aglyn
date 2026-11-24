@@ -28,6 +28,7 @@ import {
   buildTransferFieldCatalog,
   createTransferPolicy,
   deriveTransferRow,
+  isTransferFieldExportable,
   isTransferFieldImportable,
   mapTransferRow,
   matchHeaders,
@@ -277,6 +278,15 @@ describe('recognizing the file', () => {
       'Variant Image': PRODUCT_FIELD.variantImage,
     })
     for (const fieldId of [...SOURCE_ONLY_FIELDS, PRODUCT_FIELD.images]) expect(Object.values(mapped)).not.toContain(fieldId)
+  })
+
+  it("offers the fields that only read another store's file on import, never on export", () => {
+    const exported = catalog.fields.filter(isTransferFieldExportable).map((field) => field.id)
+    for (const fieldId of SOURCE_ONLY_FIELDS) {
+      expect(importable.map((field) => field.id)).toContain(fieldId)
+      expect(exported).not.toContain(fieldId)
+    }
+    expect(exported).toContain(PRODUCT_FIELD.images)
   })
 
   it('uses the same field ids as the products resource', () => {

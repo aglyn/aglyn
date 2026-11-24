@@ -244,7 +244,7 @@ export interface ProductImageCopier {
 
 /** A copier for one chunk of one import: its answers are kept, so a photo two rows share is copied once. */
 export function productImageCopier(
-  input: { hostId: string; uid: string | null },
+  input: { hostId: string; uid: string | null; jobId?: string },
   deps: ProductImageCopierDeps,
 ): ProductImageCopier {
   const now = deps.now ?? Date.now
@@ -286,7 +286,7 @@ export function productImageCopier(
         contentType: fetched.contentType,
         bytes: fetched.data,
         folderId: into,
-        importedFrom: { key, url, domain },
+        importedFrom: { key, url, domain, ...(input.jobId ? { jobId: input.jobId } : {}) },
       })
       // A union does not narrow across this repo's library boundaries (`strictNullChecks` is off).
       if (!stored.ok) {
