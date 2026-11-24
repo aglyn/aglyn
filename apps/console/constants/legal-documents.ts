@@ -72,7 +72,7 @@
 
 import { LEGAL_URLS } from './shared'
 
-export const LEGAL_DOCUMENT_VERSION = 'v26'
+export const LEGAL_DOCUMENT_VERSION = 'v27'
 
 export interface LegalDocumentManifestEntry {
   /** Stable key, and the snapshot's filename under `legal/{version}/`. */
@@ -1217,6 +1217,30 @@ export interface LegalDocumentManifestEntry {
  * and privacy reproduced its `v25` pin (38630 bytes / `b315fe…`)
  * before.
  *
+ * v27 (2026-11-24): a website build fee billed with the first plan invoice.
+ *
+ *   - Terms §4.24 (Projects) gains three sentences after "We do not start a
+ *     project until the amount due up front has been paid.": a website build
+ *     we quote when we hand someone an Organization we built for them is also
+ *     a project; instead of a separate invoice its price may be billed once,
+ *     with the first invoice of the plan we propose, and the work may be
+ *     finished before it is paid; nothing is owed for it unless the proposal
+ *     is accepted and that first invoice is paid (AGL-4244). "Last updated"
+ *     moves to November 24, 2026, and so does the `/legal` index's Terms card.
+ *   - Privacy unchanged, so its pin is unchanged and it is the control.
+ *
+ * The record is `Platform Docs/Legal/Proposed/2026-11-24-build-fee-on-first-invoice/`.
+ *
+ * Publication-first: the Terms master was edited and verified through the
+ * Docs API (revision 28 to 29: the date and the new §4.24 sentences, nothing
+ * else), the version was published, the live page confirmed serving the new
+ * text on two consecutive checks, and only then was terms captured:
+ * 74800 bytes (`eaf779…`), identical across the capture's requests, and
+ * archived in `Acceptance-Snapshots/v27`. Privacy reproduced its pin, 40050
+ * bytes / `a24bd7…`, byte for byte both before and after publication,
+ * and terms reproduced its `v26` pin (74456 bytes / `0e04be…`)
+ * before.
+ *
  * ## ONE snapshot in the tree, and why that is enough
  *
  * Only the CURRENT version is checked out. Superseded text is not deleted —
@@ -1276,8 +1300,8 @@ export const LEGAL_DOCUMENTS: LegalDocumentManifestEntry[] = [
     key: 'terms',
     url: LEGAL_URLS.TERMS,
     sha256:
-      '0e04be9ee6990bc805c34d919084dc07c512ab2190a3a8360dff39ae34a52553',
-    bytes: 74456,
+      'eaf779e421c3104ee01954bed929ca6707da91b279a6d2395176a8aa21171eb9',
+    bytes: 74800,
   },
   {
     key: 'privacy',
