@@ -37,9 +37,13 @@
  *   it: `marketingConsentSource` with the kind {@link CONTACT_IMPORT_CONSENT_KIND},
  *   who, when, the store and the import job, and a sentence saying so.
  *
- * Undo puts back exactly the entry that stood before, and lifts the
- * unsubscribe row the import filed — only while the entry is still the
- * import's own; a choice the person made since is theirs and stays.
+ * Undo takes back an opt-IN the import wrote — putting back exactly the
+ * entry that stood before, only while the entry is still the import's own;
+ * a choice the person made since is theirs and stays. It never takes back a
+ * refusal: an unsubscribe the file carried is the person's own choice, made
+ * at their old store, so the entry and its unsubscribe-list row stay through
+ * an undo, and a contact the undo removes keeps it in the retained-refusals
+ * store like any other refusal (`removeContactKeepingRefusals`).
  *=========================================*/
 
 import {
@@ -50,7 +54,7 @@ import {
 } from '@aglyn/aglyn/app-utils/marketing-consent'
 import type { ConsentGroup } from '@aglyn/aglyn/app-utils/consent-groups'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
-import { recordSiteUnsubscribe, releaseSiteUnsubscribe } from '@aglyn/tenant-data-admin/server/site-marketing-sync'
+import { recordSiteUnsubscribe } from '@aglyn/tenant-data-admin/server/site-marketing-sync'
 import { FieldValue } from 'firebase-admin/firestore'
 import type { ImportedConsentDetail } from './customer-consent-plan'
 import { CUSTOMER_FILE_SOURCE_NAMES } from './customer-sources'
@@ -90,14 +94,12 @@ export async function readSuppressedAddresses(
   return out
 }
 
-/** What undo needs to put one contact's consent back. */
+/** What undo needs to take back one opt-in the import wrote. */
 export interface ImportedConsentUndo {
   /** Field path → the value before the import, or `null` for none. */
   fields: Record<string, unknown>
   /** The provenance's `atMs`: the entry is still the import's while it reads this. */
   atMs: number
-  /** The unsubscribe row the import filed, when it filed one. */
-  suppression: { hostId: string; email: string; via: string } | null
 }
 
 /** A stored value as plain data an undo snapshot can hold: a timestamp as its epoch ms. */
@@ -122,7 +124,8 @@ function provenanceReason(detail: ImportedConsentDetail, atMs: number): string {
 
 /** What one row's consent write did. */
 export type ImportedConsentOutcome =
-  | { written: true; value: boolean; undo: ImportedConsentUndo }
+  /** `undo` for an opt-in; `null` for a refusal, which no undo takes back. */
+  | { written: true; value: boolean; undo: ImportedConsentUndo | null }
   | { written: false; message?: string }
 
 /**
@@ -201,20 +204,18 @@ export async function writeImportedConsent(input: {
   }
   await input.contactRef.update({ ...update, updatedAt: FieldValue.serverTimestamp() })
 
-  let suppression: ImportedConsentUndo['suppression'] = null
   if (!granted && hostId && basis === 'granted') {
     const via = importedConsentVia(detail.source)
     const name = detail.source === 'file' ? 'customer file' : `${CUSTOMER_FILE_SOURCE_NAMES[detail.source]} customer file`
-    const filed = await recordSiteUnsubscribe({
+    await recordSiteUnsubscribe({
       hostId,
       email,
       via,
       detail: `Unsubscribed, as your ${name} records.`,
       firestore: input.firestore,
     })
-    if (filed.created) suppression = { hostId, email, via }
   }
-  return { written: true, value: granted, undo: { fields, atMs: input.atMs, suppression } }
+  return { written: true, value: granted, undo: granted ? { fields, atMs: input.atMs } : null }
 }
 
 /** Whether the consent at `path` on `contact` is still the one this import wrote. */
@@ -228,11 +229,11 @@ function stillImported(contact: Record<string, unknown>, path: string, atMs: num
 }
 
 /**
- * Puts back the consent one contact held before the import, and lifts the
- * unsubscribe row the import filed. Nothing changes when the person's
- * consent has moved since: the choice they made since is theirs.
+ * Takes back an opt-in the import wrote, putting back the consent the
+ * contact held before it. Nothing changes when the person's consent has
+ * moved since: the choice they made since is theirs.
  *
- * @returns whether the import's consent was taken back.
+ * @returns whether the import's opt-in was taken back.
  */
 export async function revertImportedConsent(input: {
   firestore: FirebaseFirestore.Firestore
@@ -251,10 +252,6 @@ export async function revertImportedConsent(input: {
     update[path] = previous === null || previous === undefined ? FieldValue.delete() : previous
   }
   await input.contactRef.update({ ...update, updatedAt: FieldValue.serverTimestamp() })
-  const filed = input.undo.suppression
-  if (filed) {
-    await releaseSiteUnsubscribe({ hostId: filed.hostId, email: filed.email, via: filed.via, firestore: input.firestore })
-  }
   return true
 }
 
@@ -264,5 +261,5 @@ export function readImportedConsentUndo(extras: Readonly<Record<string, unknown>
   if (!value || typeof value !== 'object' || typeof value.atMs !== 'number' || !value.fields || typeof value.fields !== 'object') {
     return null
   }
-  return { fields: value.fields, atMs: value.atMs, suppression: value.suppression ?? null }
+  return { fields: value.fields, atMs: value.atMs }
 }

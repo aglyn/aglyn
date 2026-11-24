@@ -52,7 +52,8 @@
  * carried by `customer-consent-plan.ts` (the plan) and
  * `imported-consent.server.ts` (the write and its undo): an opt-in only on
  * the Permission step's statement, an opt-out always, and never an opt-in
- * over somebody who unsubscribed here.
+ * over somebody who unsubscribed here. Undo takes back the opt-ins and never
+ * the opt-outs: those are the person's own choice, and outlive the import.
  *=========================================*/
 
 import {
@@ -519,6 +520,19 @@ function consentMessage(outcome: ImportedConsentOutcome | null): string | undefi
   return outcome && 'message' in outcome ? outcome.message : undefined
 }
 
+/**
+ * The fields undo may take back: every changed one, but a refusal the file
+ * carried only stays. An unsubscribe is the person's own choice (AGL-4245).
+ */
+function undoableFields(changed: readonly string[], consent: ImportedConsentOutcome | null): string[] {
+  return consent && 'value' in consent && consent.value === false ? changed.filter((fieldId) => fieldId !== MARKETING_CONSENT_FIELD_ID) : [...changed]
+}
+
+/** What undo needs to take back an opt-in the import wrote. */
+function consentUndoExtras(consent: ImportedConsentOutcome | null): { extras?: Record<string, unknown> } {
+  return consent && 'undo' in consent && consent.undo ? { extras: { consent: consent.undo } } : {}
+}
+
 /** Two result sentences as one. */
 function joinMessages(...parts: Array<string | undefined>): string | undefined {
   const text = parts.filter(Boolean).join(' ')
@@ -781,14 +795,17 @@ export function contactsTransferResource(): TransferRecordsHooks {
             const after = (await readContacts(env, [row.recordId], run.definitions)).get(row.recordId) ?? {}
             const message = joinMessages(skippedMessage(skipped), consentMessage(consent))
             result = { row: row.index, outcome: 'updated', recordId: row.recordId, ...(message ? { message } : {}) }
-            entry = {
-              row: row.index,
-              recordId: row.recordId,
-              action: 'updated',
-              previous: pickValues(before, changed),
-              written: pickValues(after, changed),
-              ...(consent?.written ? { extras: { consent: consent.undo } } : {}),
-            }
+            const undoable = undoableFields(changed, consent)
+            entry = undoable.length
+              ? {
+                  row: row.index,
+                  recordId: row.recordId,
+                  action: 'updated',
+                  previous: pickValues(before, undoable),
+                  written: pickValues(after, undoable),
+                  ...(consentUndoExtras(consent)),
+                }
+              : undefined
           } else {
             const made = await createContact(run, values, batch)
             const consent = consentChange ? await writeConsent(run, made.contactId, consentChange.consent) : null
@@ -809,8 +826,8 @@ export function contactsTransferResource(): TransferRecordsHooks {
                   row: row.index,
                   recordId: made.contactId,
                   action: 'created',
-                  written: pickValues(after, changed),
-                  ...(consent?.written ? { extras: { consent: consent.undo } } : {}),
+                  written: pickValues(after, undoableFields(changed, consent)),
+                  ...(consentUndoExtras(consent)),
                 }
               : undefined
           }
@@ -864,7 +881,8 @@ export function contactsTransferResource(): TransferRecordsHooks {
           // person only this import's site held is deleted, keeping every
           // refusal they made; one another site holds too stays theirs.
           const contactRef = contactsOf(env).doc(entry.recordId)
-          // The marketing choice the file brought is not one they made here (AGL-4245).
+          // An opt-in the file brought goes with them; a refusal it brought
+          // is kept in the retained-refusals store by the removal (AGL-4245).
           if (consentUndo) await revertImportedConsent({ firestore: env.firestore, contactRef, undo: consentUndo })
           let holders: string[] = []
           const removal = await removeContactKeepingRefusals({

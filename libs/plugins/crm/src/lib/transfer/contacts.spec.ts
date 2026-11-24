@@ -94,6 +94,22 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       const decided = input.decide(snapshot.data())
       if ('refused' in decided) return { outcome: 'refused', error: decided.refused }
       if (decided.action === 'delete') {
+        // The retention as the real door keeps it: every refusal the record
+        // holds, filed under the person, before the document goes.
+        const data = snapshot.data() as Record<string, any>
+        const refusals = Object.fromEntries(
+          Object.entries((data['marketingConsentByHost'] ?? {}) as Record<string, any>).filter(
+            ([, entry]) => entry?.marketingConsent === false,
+          ),
+        )
+        if (Object.keys(refusals).length && data['email']) {
+          await mockMemory.firestore
+            .collection('orgs')
+            .doc('org-1')
+            .collection('retainedRefusals')
+            .doc(String(data['email']))
+            .set({ marketingConsentByHost: refusals })
+        }
         await input.contactRef.delete()
         return { outcome: 'deleted' }
       }
@@ -472,7 +488,7 @@ describe('a Shopify customers file', () => {
     expect(screening?.samples.map((sample) => sample.detail)).toEqual(
       expect.arrayContaining([
         'Nobody will be opted in to marketing email from this file.',
-        '2 unsubscribes from your Shopify file will be kept, and 1 person subscribed here will be unsubscribed.',
+        '2 unsubscribes from your Shopify file will be kept, and 1 person subscribed here will be unsubscribed. Undoing the import keeps these unsubscribes, because they are each person’s own choice.',
         '1 person has no marketing choice recorded, and nothing about their marketing email changes.',
         expect.stringContaining('1 person said yes in your Shopify file but will not be opted in, because you did not confirm'),
         '1 person said yes in your Shopify file but unsubscribed here, so they stay unsubscribed.',
@@ -502,7 +518,7 @@ describe('a Shopify customers file', () => {
     expect(entryOf(newId('pat@example.com'))).toBeUndefined()
   })
 
-  it('on the statement opts the yes people in, never over an unsubscribe, and undo puts back what stood', async () => {
+  it('on the statement opts the yes people in, never over an unsubscribe; undo takes back the opt-ins and keeps every unsubscribe', async () => {
     const { job, plan } = await planned(true)
     expect(plan.warnings.find((warning) => warning.class === 'screening')?.samples[0]?.detail).toBe(
       '1 person will be opted in to marketing email, as your Shopify file records and as you confirmed they agreed to hear from you.',
@@ -515,7 +531,9 @@ describe('a Shopify customers file', () => {
     })
     expect(rae.marketingConsentSource.reason).toMatch(/confirmed these people agreed to hear from this business\.$/)
     expect(entryOf('unsub')).toEqual({ marketingConsent: false, marketingConsentAtMs: 6 })
-    expect(mockMemory.read(SITE_PATH('sub'))).toBeUndefined()
+    expect(entryOf('sub')).toMatchObject({ marketingConsent: false })
+    const subRow = [...mockMemory.docs.keys()].find((path) => path.startsWith(`hosts/${SITE}/suppressions/`))
+    expect(subRow).toBeDefined()
 
     const preview = await planTransferJobUndo(deps, { orgId: ORG, jobId: job.id, actorUid: ME })
     expect(preview.counts).toMatchObject({ conflict: 0 })
@@ -527,10 +545,39 @@ describe('a Shopify customers file', () => {
       deadlineMs: Date.now() + 120_000,
       driver: 'spec',
     })
-    // Sub is subscribed again, as before, and off the site's list.
-    expect(entryOf('sub')).toEqual({ marketingConsent: true, marketingConsentAtMs: 5 })
-    expect(mockUnsubscribes.map((entry) => entry.action)).toEqual(['record', 'release'])
+    // Rae's opt-in went with her.
     expect(mockMemory.read(`${CONTACTS}/${newId('rae@example.com')}`)).toBeUndefined()
+    expect(mockMemory.read(`orgs/${ORG}/retainedRefusals/rae@example.com`)).toBeUndefined()
+    // Sub's unsubscribe is their own choice: it stays, and so does the list row.
+    expect(entryOf('sub')).toMatchObject({ marketingConsent: false, marketingConsentSource: { kind: 'contact-import' } })
+    expect(mockMemory.read(subRow as string)).toBeDefined()
+    expect(mockUnsubscribes.map((entry) => entry.action)).toEqual(['record'])
+    // Noa is let go, and her refusal is kept as a deleted contact's is.
+    expect(mockMemory.read(`${CONTACTS}/${newId('noa@example.com')}`)).toBeUndefined()
+    expect(mockMemory.read(`orgs/${ORG}/retainedRefusals/noa@example.com`)).toMatchObject({
+      marketingConsentByHost: { [SITE]: { marketingConsent: false, marketingConsentSource: { kind: 'contact-import' } } },
+    })
+  })
+
+  it('undo restores every other field of an existing contact and leaves the unsubscribe in place', async () => {
+    const job = await uploaded('Email,Job title,Accepts Email Marketing\nsub@example.com,Buyer,no')
+    const { match } = await analyzeTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME })
+    const plan = await planTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME, choices: { mapping: match.mapping } })
+    await applied(job.id, plan.acknowledgementsRequired)
+    expect((mockMemory.read(`${CONTACTS}/sub`)?.['facets'] as Record<string, any>)[SITE].jobTitle).toBe('Buyer')
+    const preview = await planTransferJobUndo(deps, { orgId: ORG, jobId: job.id, actorUid: ME })
+    expect(preview.counts).toMatchObject({ restore: 1, conflict: 0 })
+    await applyTransferJobUndo(deps, {
+      orgId: ORG,
+      jobId: job.id,
+      actorUid: ME,
+      otherwise: 'keep',
+      deadlineMs: Date.now() + 120_000,
+      driver: 'spec',
+    })
+    expect((mockMemory.read(`${CONTACTS}/sub`)?.['facets'] as Record<string, any>)[SITE].jobTitle).toBeUndefined()
+    expect(entryOf('sub')).toMatchObject({ marketingConsent: false })
+    expect(mockUnsubscribes.map((entry) => entry.action)).toEqual(['record'])
   })
 
   it('checks again at the write: somebody who unsubscribed after the dry run is not opted in', async () => {

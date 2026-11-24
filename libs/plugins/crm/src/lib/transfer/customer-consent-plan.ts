@@ -188,7 +188,8 @@ export function contactConsentSamples(
           ? `${n(counts.unsubscribes)} ${counts.unsubscribes === 1 ? 'unsubscribe' : 'unsubscribes'} from ${where} will be kept` +
               (counts.unsubscribedFromSubscribed
                 ? `, and ${people(counts.unsubscribedFromSubscribed)} subscribed here will be unsubscribed.`
-                : '.')
+                : '.') +
+              ' Undoing the import keeps these unsubscribes, because they are each person’s own choice.'
           : 'No unsubscribes in this file change anything here.',
       ),
       line(

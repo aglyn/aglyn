@@ -288,7 +288,7 @@ describe('the plan of a store file’s marketing choices', () => {
     expect(screening?.samples.map((sample) => sample.detail)).toEqual(
       expect.arrayContaining([
         'Nobody will be opted in to marketing email from this file.',
-        '2 unsubscribes from your Shopify file will be kept, and 1 person subscribed here will be unsubscribed.',
+        '2 unsubscribes from your Shopify file will be kept, and 1 person subscribed here will be unsubscribed. Undoing the import keeps these unsubscribes, because they are each person’s own choice.',
         '2 people have no marketing choice recorded, and nothing about their marketing email changes.',
         '1 person said yes in your Shopify file but will not be opted in, because you did not confirm on the Permission step that they agreed to hear from you.',
         '1 person said yes in your Shopify file but unsubscribed here, so they stay unsubscribed.',
