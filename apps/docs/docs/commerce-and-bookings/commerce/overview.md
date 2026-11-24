@@ -67,6 +67,9 @@ and **View payouts in Stripe** opens the Express dashboard. The kind of account
 can't be changed once it is created.
 :::
 
+Moving a store from Shopify, Wix or Squarespace? See
+[Switching to Aglyn](../../guides/switching-to-aglyn/before-you-switch.md).
+
 ![The products hub](/img/commerce/products-page.png)
 
 ## Products hub

@@ -24,6 +24,10 @@ start the next.
 It is included on every paid plan. On the Free plan the card is shown but turned off,
 with a link to upgrade.
 
+Moving a store from Shopify, Wix or Squarespace? The
+[Switching to Aglyn](../guides/switching-to-aglyn/before-you-switch.md) guides take you through
+the rest of the move: products, customers, payments, your books and your domain.
+
 ## Start {#start}
 
 1. Open **Sites** and choose **Create site**.
@@ -359,6 +363,47 @@ the next wave's **Start** button. Nothing starts the next wave except you, unles
 **Cancel** stops the import. The pages already brought in stay where they are: in the
 preview, or as drafts. Under **Every wave**, a wave that was running reads **stopped**, and a
 wave that had not started reads **not started**.
+
+## Redirects from your old addresses {#redirects}
+
+Your old site's page addresses are in search results, bookmarks and links on other sites.
+So when a wave is in, Aglyn adds a permanent redirect from each page's old address to its
+new one: someone who opens `example.com/about-us.html` lands on your new **About us** page,
+and search engines move the page's ranking to the new address. There is nothing to set up.
+
+Each page's row says what happened to its old address:
+
+- **Redirect added**, with the new address visitors go to.
+- **You already had a redirect from the old address, so it was kept.** A redirect you made
+  is never changed or doubled.
+- **No redirect**, with why. For example, the new page is not published yet (your site is
+  not in preview, or another page already had its address), a page on your new site uses
+  the old address, or your plan has no room for more redirects.
+
+A page whose address did not change needs no redirect, so its row says nothing about it.
+A second address of a page already found, such as `/index.html` for your home page, is
+redirected to that page too. No other page that was left out gets a redirect, because
+the import doesn't know where it went.
+
+**Redirects from your old addresses** on the import's page counts them. **Open Redirects**
+shows every rule, where you can change or remove any of them.
+
+**Pages you publish later.** Redirects are added when a wave is in, for the pages already
+published then. If your site isn't in preview, its pages come in as drafts, so they have no
+redirect yet. Once you publish them, open the import's page again and choose **Add redirects
+for published pages** under **Redirects from your old addresses**. It adds the redirects
+those pages are missing, and you can choose it again whenever you publish more. Choose it
+too after you upgrade for more redirects, or turn Redirects on for the site. It uses no AI
+credits. The button shows while an old address is still waiting for one of these reasons.
+An address left out is also tried again whenever another wave is in.
+
+Redirects are included from the Starter plan, up to your plan's number of redirects.
+
+:::info When they work
+The redirects answer on your new site right away, but your old addresses only reach them
+once your own domain points at your new Aglyn site. Until then, visitors who use your domain
+still reach your old site. See [Connect a domain](../building-sites/custom-domains/connect-a-domain.md).
+:::
 
 ## Photos and videos {#photos}
 

@@ -26,6 +26,7 @@
 
 import { CSV_UPLOAD_MAX_CHARACTERS } from '@aglyn/aglyn/app-utils/csv-upload'
 import type { TransferFormat } from '@aglyn/aglyn/data-transfer'
+import type { PluginTransferTextRead } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   Alert,
@@ -74,12 +75,57 @@ interface Chosen {
   raw: Uint8Array | null
   text: string
   settings: TransferFileSettings
+  /** What the resource's own reader read the text as, with what it says about it (AGL-4245). */
+  readAs?: { source: string; notes: readonly string[] }
+}
+
+/**
+ * A resource's reader for a list format of its own. It may answer later, so
+ * a plugin can load its parser only when a file is read (AGL-436 budgets).
+ */
+type TransferTextReader = (
+  text: string,
+) => PluginTransferTextRead | null | Promise<PluginTransferTextRead | null>
+
+/**
+ * The text as the step reads it: the resource's own reader's CSV when the
+ * text is in its format (AGL-4245), else the text itself.
+ */
+function chosenText(
+  text: string,
+  read: PluginTransferTextRead | null,
+): { text: string; readAs?: Chosen['readAs'] } {
+  return read
+    ? { text: read.text, readAs: { source: read.source, notes: read.notes } }
+    : { text }
+}
+
+/**
+ * Hands `then` the text as read. Synchronously when the reader answers at
+ * once (or there is none), so a step that needs no parser never waits a tick;
+ * after the promise when the reader loads one.
+ */
+function readChosenText(
+  text: string,
+  readText: TransferTextReader | undefined,
+  then: (read: { text: string; readAs?: Chosen['readAs'] }) => void,
+): void | Promise<void> {
+  const answer = readText?.(text) ?? null
+  if (answer && typeof (answer as Promise<unknown>).then === 'function') {
+    return (answer as Promise<PluginTransferTextRead | null>).then((read) =>
+      then(chosenText(text, read)),
+    )
+  }
+  then(chosenText(text, answer as PluginTransferTextRead | null))
 }
 
 export function ImportUploadStep({
   wizard,
+  readText,
 }: {
   wizard: TransferImportWizardController
+  /** The resource's reader for a list format of its own (AGL-4245). */
+  readText?: TransferTextReader
 }) {
   const resource = wizard.info?.resource
   const maxBytes = resource?.limits?.maxBytes ?? CSV_UPLOAD_MAX_CHARACTERS
@@ -117,14 +163,20 @@ export function ImportUploadStep({
     try {
       const raw = await readFileBytes(file)
       const encoding = detectEncoding(raw)
-      const text = decodeBytes(raw, encoding)
-      setChosen({
-        fileName: file.name,
-        bytes: file.size,
-        raw,
-        text,
-        settings: detectTransferFileSettings(file.name, text, encoding),
-      })
+      await readChosenText(decodeBytes(raw, encoding), readText, (read) =>
+        setChosen({
+          fileName: file.name,
+          bytes: file.size,
+          // A text read into CSV is sent as that CSV: its bytes are not tried again.
+          raw: read.readAs ? null : raw,
+          ...read,
+          settings: detectTransferFileSettings(
+            read.readAs ? `${file.name}.csv` : file.name,
+            read.text,
+            encoding,
+          ),
+        }),
+      )
     } catch {
       setReadError('This file could not be read.')
     }
@@ -132,13 +184,15 @@ export function ImportUploadStep({
 
   const readPaste = () => {
     const bytes = new TextEncoder().encode(paste).length
-    setChosen({
-      fileName: 'Pasted rows',
-      bytes,
-      raw: null,
-      text: paste,
-      settings: detectTransferFileSettings('', paste),
-    })
+    return readChosenText(paste, readText, (read) =>
+      setChosen({
+        fileName: 'Pasted rows',
+        bytes,
+        raw: null,
+        ...read,
+        settings: detectTransferFileSettings('', read.text),
+      }),
+    )
   }
 
   const setSettings = (patch: Partial<TransferFileSettings>) => {
@@ -222,7 +276,7 @@ export function ImportUploadStep({
           onChange={(event) => setPaste(event.target.value)}
         />
         <Box>
-          <Button onClick={readPaste} disabled={!paste.trim()}>
+          <Button onClick={() => void readPaste()} disabled={!paste.trim()}>
             Read pasted rows
           </Button>
         </Box>
@@ -230,6 +284,17 @@ export function ImportUploadStep({
       {readError ? <Alert severity="error">{readError}</Alert> : null}
       {chosen && !tooBig ? (
         <Stack spacing={2}>
+          {chosen.readAs ? (
+            <Alert severity="info">
+              <Stack spacing={0.5}>
+                {chosen.readAs.notes.map((note, index) => (
+                  <Typography key={index} variant="body2">
+                    {note}
+                  </Typography>
+                ))}
+              </Stack>
+            </Alert>
+          ) : null}
           <Typography variant="subtitle2">
             {chosen.fileName} · {formatBytes(chosen.bytes)}
             {parsed && !parsed.error

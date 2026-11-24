@@ -1,4 +1,5 @@
 {
+  "apps/docs/docs/commerce-and-bookings/commerce/print-on-demand.md": 2,
   "libs/plugins/accounting/src/lib/server/providers/xero.ts": 3,
   "libs/plugins/ai/src/lib/jobs/ai-layout-stock-photos.ts": 8,
   "libs/plugins/ai/src/lib/jobs/fixtures/ai-stock-photo-agl3769-recordings.ts": 3,

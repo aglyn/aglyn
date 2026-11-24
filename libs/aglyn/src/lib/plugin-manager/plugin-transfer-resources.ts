@@ -1190,12 +1190,36 @@ export interface TransferWizardStep {
   component: ComponentType<TransferWizardStepProps>
 }
 
+/**
+ * A text in another product's own list format, read into the CSV an import
+ * takes (AGL-4245): a block a person copies out of that product's settings
+ * because it has no export, such as Squarespace's URL mappings.
+ */
+export interface PluginTransferTextRead {
+  /** The CSV the upload step shows and sends: a header and its rows. */
+  text: string
+  /** What the text was read as, named in the step: "Squarespace URL mappings". */
+  source: string
+  /** Sentences shown above the preview: what was read, and each line left out with why. */
+  notes: readonly string[]
+}
+
 /** How the hub and the wizard show a resource. */
 export interface PluginTransferResourceUi {
   /** The name on the hub and the wizard's title; the declaration's label is the fallback. */
   label: string
   icon?: MdiIconProps
   extraSteps?: readonly TransferWizardStep[]
+  /**
+   * Reads a chosen file's or pasted text that is in a list format of the
+   * plugin's choosing into the CSV the import takes, in the browser, before
+   * the upload step shows it (AGL-4245). `null` when the text is not in that
+   * format, and the step reads it as it always did. It may answer with a
+   * promise, so a plugin can load its parser only when a file is read; it
+   * does no other I/O. The server
+   * half then reads the CSV it is sent like any other.
+   */
+  readText?(text: string): PluginTransferTextRead | null | Promise<PluginTransferTextRead | null>
   /**
    * For a resource declared with `instances`: the record list kind
    * (`registerPluginRecordListSource`) its instances are listed from, so the

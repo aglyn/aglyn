@@ -154,6 +154,9 @@ removed contact does. Undo still puts back every other field it changed.
 
 ## Switching from an online store {#switching-from-an-online-store}
 
+The [Switching to Aglyn](../../guides/switching-to-aglyn/before-you-switch.md) guides cover
+the rest of the move, in order.
+
 A store moving from **Shopify**, **Wix** or **Squarespace** brings its
 customers in as contacts. Export the customers file from your old store and
 import it here: the columns map themselves, with nothing to pick.
@@ -171,10 +174,10 @@ products come across separately, from the store's product file — see
 
 ### Marketing email choices
 
-Each file says whether a customer agreed to marketing email: Shopify's
-*Accepts Email Marketing* (*Accepts Marketing* in older files), Wix's *Email
-subscriber status*, Squarespace's *Accepts Marketing*. They map to **Email
-marketing choice**, and are carried like this:
+Shopify's and Wix's files say whether a customer agreed to marketing email:
+Shopify's *Accepts Email Marketing* (*Accepts Marketing* in older files) and
+Wix's *Email subscriber status*. They map to **Email marketing choice**, and are
+carried like this:
 
 | The file says | What the import does |
 | --- | --- |
@@ -183,6 +186,15 @@ marketing choice**, and are carried like this:
 | **yes** for somebody who unsubscribed here | They stay unsubscribed. Nothing in a file opts anyone back in. |
 | **no**, **false** or **Unsubscribed** | Always kept, whatever you chose on **Permission**: the contact is recorded as having said no. A contact who was subscribed here is unsubscribed, and added to the site's unsubscribe list. Undoing the import keeps it. |
 | **Never subscribed**, **Pending**, blank, or a word the import does not know | Nothing changes. |
+
+A Squarespace customers file has no marketing column, so those customers
+arrive with no marketing choice recorded. Your Squarespace subscribers are in
+its mailing lists instead: export a list from Squarespace's **Lists & Segments**
+panel, which downloads a .zip of three CSV files (subscribed, unsubscribed and
+cleaned), and bring them in with the
+[email list import](../../marketing-and-automation/email-campaigns/overview.md#import-a-list).
+A file that does have an *Accepts Marketing* column is still read the same way
+as the files above.
 
 Opt-ins come in only under a site, since a person agrees to hear from a
 business, not from a workspace. An import that names no site still keeps

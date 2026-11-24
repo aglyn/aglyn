@@ -65,9 +65,14 @@ export function registerRedirectsConsole(): void {
   // The client half of the `redirects` transfer resource: how the import
   // wizard and the export dialog name it. The server half is registered from
   // `declarations.console-server.ts`.
+  // Squarespace has no redirect export (AGL-4245): the text of its URL
+  // Mappings box, pasted or as a .txt file, is read into the import's CSV.
   registerPluginTransferResourceUi(
     REDIRECTS_TRANSFER_KEY,
-    { label: 'Redirects', icon: { path: mdiSignDirection.path } },
+    { label: 'Redirects', icon: { path: mdiSignDirection.path }, readText: async (text: string) =>
+        // The Squarespace parser loads only when a file is read, not with
+        // the plugin on every console screen (check:plugin-budgets).
+        (await import('./transfer/squarespace-url-mappings')).squarespaceUrlMappingsCsv(text) },
     { pluginId: BUNDLE_ID },
   )
 }

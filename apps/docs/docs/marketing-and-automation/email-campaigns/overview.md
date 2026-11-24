@@ -827,10 +827,14 @@ column. Undo leaves contact details as they are.
 
 #### Customer files from an online store
 
-A Shopify, Wix or Squarespace customer file is recognized by its columns, and its
-marketing column (*Accepts Email Marketing*, *Email subscriber status* or *Accepts
-Marketing*) maps to **Marketing choice in the file**. It is read for the people who
-said no:
+A Shopify, Wix or Squarespace customer file is recognized by its columns. Shopify's
+and Wix's files carry a marketing column (*Accepts Email Marketing* or *Email
+subscriber status*), which maps to **Marketing choice in the file**. A Squarespace
+customers file has none, so its people arrive with no marketing choice recorded;
+Squarespace keeps its subscribers in mailing lists, which it exports from the
+**Lists & Segments** panel as a .zip of three CSV files (subscribed, unsubscribed and
+cleaned). A file that does have an *Accepts Marketing* column is read the same way.
+The marketing column is read for the people who said no:
 
 - Anyone the file says said **no**, **false** or **Unsubscribed** is never added to the
   list, whatever you state on **Permission**. Their address goes on your site's

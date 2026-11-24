@@ -36,6 +36,7 @@ import {
   REDIRECT_DEFAULT_PRIORITY,
   findDuplicateRedirect,
   isExternalRedirectDestination,
+  normalizeRedirectDestination,
   normalizeRedirectSource,
   redirectSourceIsLivePage,
   walkRedirectChain,
@@ -92,7 +93,24 @@ import { REDIRECT_FIELD } from '../transfer/redirects-transfer-fields'
  * Asked again for the same change, it answers with what it already did: a
  * create finds the rule written under the request's id, an update whose values
  * already hold changes nothing, and a remove of a rule already deleted is done.
+ *
+ * A create may ask to `followChain` (AGL-4245, a site import's redirects): a
+ * destination the site's rules already send elsewhere is replaced by the
+ * on-site address the chain ends at, so the new rule is one hop. A refusal
+ * a caller may act on carries its `code` (`REDIRECT_AI_REFUSAL_CODES`).
  *=========================================*/
+
+/**
+ * The `code` on a create's refusal (AGL-4245): a rule already redirects that
+ * from-path; a published page answers at it; the destination leads back or
+ * into a loop; the plan has no room for another rule.
+ */
+export const REDIRECT_AI_REFUSAL_CODES = {
+  duplicate: 'duplicate',
+  livePage: 'live-page',
+  loop: 'loop',
+  planLimit: 'plan-limit',
+} as const
 
 type Firestore = FirebaseFirestore.Firestore
 type StoredRule = Record<string, unknown>
@@ -207,12 +225,30 @@ export function createRedirectAiWriter(deps: RedirectAiWriterDeps): PluginResour
   function setProblem(
     rows: readonly RedirectRuleRow[],
     rule: { $id: string; source: string; destination: string; kind: string },
-  ): string | null {
-    if (findDuplicateRedirect(rows, rule)) return `A rule for ${rule.source} already exists`
+  ): { error: string; code: string } | null {
+    if (findDuplicateRedirect(rows, rule)) {
+      return { error: `A rule for ${rule.source} already exists`, code: REDIRECT_AI_REFUSAL_CODES.duplicate }
+    }
     const walk = walkRedirectChain(rows, rule)
-    if (walk.loop) return 'That destination chains back to this rule — a redirect loop'
-    if (walk.cycle) return 'That destination leads into a redirect loop other rules already make'
+    if (walk.loop) {
+      return { error: 'That destination chains back to this rule — a redirect loop', code: REDIRECT_AI_REFUSAL_CODES.loop }
+    }
+    if (walk.cycle) {
+      return { error: 'That destination leads into a redirect loop other rules already make', code: REDIRECT_AI_REFUSAL_CODES.loop }
+    }
     return null
+  }
+
+  /**
+   * Where a chain from `destination` ends on the site (AGL-4245): the last
+   * on-site address the rules pass it through, or `destination` itself when
+   * no rule redirects it. An off-site hop ends the walk before it.
+   */
+  function chainEnd(rows: readonly RedirectRuleRow[], rule: { $id: string; source: string; destination: string }): string {
+    const walk = walkRedirectChain(rows, rule)
+    if (walk.loop || walk.cycle) return rule.destination
+    const onSite = walk.hops.filter((hop) => hop.startsWith('/') && !hop.startsWith('//'))
+    return onSite[onSite.length - 1] ?? rule.destination
   }
 
   function livePageProblem(host: StoredRule, source: string, kind: string, asked: boolean | undefined): string | null {
@@ -227,7 +263,12 @@ export function createRedirectAiWriter(deps: RedirectAiWriterDeps): PluginResour
     if (unique.length && deps.announcePaths) await deps.announcePaths(hostId, unique).catch(() => undefined)
   }
 
-  const refuse = (status: PluginDraftRefusal['status'], error: string): PluginDraftWrite => ({ ok: false, status, error })
+  const refuse = (status: PluginDraftRefusal['status'], error: string, code?: string): PluginDraftWrite => ({
+    ok: false,
+    status,
+    error,
+    ...(code ? { code } : {}),
+  })
 
   return {
     refusal: async (context) => refusalFor(await hostRef(context.hostId).get(), context),
@@ -281,9 +322,20 @@ export function createRedirectAiWriter(deps: RedirectAiWriterDeps): PluginResour
         const source = String(fields['source'])
         const kind = String(fields['kind'] ?? 'exact')
         const shadow = livePageProblem(host, source, kind, change.replacesLivePage)
-        if (shadow) return refuse(409, shadow)
+        if (shadow) return refuse(409, shadow, REDIRECT_AI_REFUSAL_CODES.livePage)
+        if (findDuplicateRedirect(rows, { $id: request.id, source, kind })) {
+          return refuse(409, `A rule for ${source} already exists`, REDIRECT_AI_REFUSAL_CODES.duplicate)
+        }
+        if (change.followChain) {
+          const end = chainEnd(rows, { $id: request.id, source, destination: String(fields['destination']) })
+          if (end !== fields['destination']) {
+            // The chain's end, held to the page's rules again as the new destination.
+            const followed = ruleProblem({ ...rule, destination: end }, host)
+            if (!followed) fields['destination'] = normalizeRedirectDestination(end) ?? end
+          }
+        }
         const clash = setProblem(rows, { $id: request.id, source, destination: String(fields['destination']), kind })
-        if (clash) return refuse(409, clash)
+        if (clash) return refuse(409, clash.error, clash.code)
         const stamp = stampFor(fields['destination'])
         const written = { ...fields, ...(stamp ? { [approvalField]: stamp } : {}) }
         const db = deps.firestore()
@@ -299,7 +351,7 @@ export function createRedirectAiWriter(deps: RedirectAiWriterDeps): PluginResour
           tx.create(ref, { ...written, createdAt: at, updatedAt: at, createdBy: request.uid })
           return {}
         })
-        if (outcome.refusal) return refuse(403, outcome.refusal)
+        if (outcome.refusal) return refuse(403, outcome.refusal, REDIRECT_AI_REFUSAL_CODES.planLimit)
         if (outcome.existed) return { ok: true, replayed: true, ...recordOf(request.id, 'create', outcome.existed) }
         if (deps.logCreated) {
           await deps.logCreated(request.hostId, request.uid, ref.id, declared).catch(() => undefined)
@@ -349,10 +401,10 @@ export function createRedirectAiWriter(deps: RedirectAiWriterDeps): PluginResour
       const kind = String(fields['kind'] ?? 'exact')
       if (source !== current['source']) {
         const shadow = livePageProblem(host, source, kind, change.replacesLivePage)
-        if (shadow) return refuse(409, shadow)
+        if (shadow) return refuse(409, shadow, REDIRECT_AI_REFUSAL_CODES.livePage)
       }
       const clash = setProblem(rows, { $id: target.id, source, destination: String(fields['destination']), kind })
-      if (clash) return refuse(409, clash)
+      if (clash) return refuse(409, clash.error, clash.code)
       const stamp = stampFor(fields['destination'])
       const unchanged =
         Object.entries(fields).every(([key, value]) => current[key] === value) &&

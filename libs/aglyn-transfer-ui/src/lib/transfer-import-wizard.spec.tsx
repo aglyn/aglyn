@@ -145,6 +145,53 @@ function acknowledgeAll() {
 }
 
 describe('TransferImportWizard', () => {
+  it('reads a pasted list in the resource’s own format into the CSV it shows and sends (AGL-4245)', async () => {
+    const readText = jest.fn((text: string) =>
+      text.includes('->')
+        ? { text: PEOPLE_CSV, source: 'A list', notes: ['Read as A list: 4 rows.', 'Line 9 is not imported: why.'] }
+        : null,
+    )
+    renderWizard(undefined, { readText })
+    fireEvent.change(await screen.findByLabelText('Or paste rows'), {
+      target: { value: '/a -> /b 301' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Read pasted rows' }))
+    expect(readText).toHaveBeenCalledWith('/a -> /b 301')
+    expect(screen.getByText('Read as A list: 4 rows.')).toBeTruthy()
+    expect(screen.getByText('Line 9 is not imported: why.')).toBeTruthy()
+    expect(screen.getByText(/4 rows, 7 columns/)).toBeTruthy()
+    next('Upload and continue')
+    await screen.findByRole('table', { name: 'Column matching' })
+  })
+
+  it('waits for a reader that loads its parser on demand, then shows what it read', async () => {
+    const readText = jest.fn(async (text: string) =>
+      text.includes('->')
+        ? { text: PEOPLE_CSV, source: 'A list', notes: ['Read as A list: 4 rows.'] }
+        : null,
+    )
+    renderWizard(undefined, { readText })
+    fireEvent.change(await screen.findByLabelText('Or paste rows'), {
+      target: { value: '/a -> /b 301' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Read pasted rows' }))
+    expect(readText).toHaveBeenCalledWith('/a -> /b 301')
+    expect(await screen.findByText('Read as A list: 4 rows.')).toBeTruthy()
+    expect(screen.getByText(/4 rows, 7 columns/)).toBeTruthy()
+  })
+
+  it('reads any other text as it always did when the resource’s reader declines it (AGL-4245)', async () => {
+    const readText = jest.fn(() => null)
+    renderWizard(undefined, { readText })
+    fireEvent.change(await screen.findByLabelText('Or paste rows'), {
+      target: { value: PEOPLE_CSV },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Read pasted rows' }))
+    expect(readText).toHaveBeenCalled()
+    expect(screen.getByText(/4 rows, 7 columns/)).toBeTruthy()
+    expect(screen.queryByText(/^Read as/)).toBeNull()
+  })
+
   it('reads a pasted file and proposes a field for every column, with why', async () => {
     const { onJobChange } = await toMapping()
     expect(onJobChange).toHaveBeenCalledWith('job-1')
