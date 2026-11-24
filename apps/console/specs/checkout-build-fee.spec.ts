@@ -246,6 +246,14 @@ beforeEach(() => {
         }),
       }
     }
+    // The fee's own "Website build" product (never Site Care's): found by
+    // its metadata, then read for its tax code.
+    if (/\/products\/search/.test(href)) {
+      return { ok: true, json: async () => ({ data: [{ id: 'prod_website_build' }] }) }
+    }
+    if (/\/products\/prod_website_build/.test(href)) {
+      return { ok: true, json: async () => ({ id: 'prod_website_build', tax_code: productTaxCode }) }
+    }
     if (/\/prices\/price_site_care/.test(href)) {
       return {
         ok: true,
@@ -300,7 +308,7 @@ describe('the build fee is quoted with the plan (AGL-4244)', () => {
     expect(payload.preview).toMatchObject({ subtotalCents: 40400, taxCents: 2660, totalCents: 43060 })
     const query = previewQuery()
     expect(query?.get('automatic_tax[enabled]')).toBe('true')
-    expect(query?.get('invoice_items[0][price_data][product]')).toBe('prod_site_care')
+    expect(query?.get('invoice_items[0][price_data][product]')).toBe('prod_website_build')
     expect(query?.get('invoice_items[0][price_data][unit_amount]')).toBe('35000')
     expect(query?.get('invoice_items[0][price_data][tax_behavior]')).toBe('exclusive')
   })
@@ -352,7 +360,7 @@ describe('the build fee is charged once, on the first invoice (AGL-4244)', () =>
     expect(response.status).toBe(200)
     const body = subscribeBody()
     expect(body?.get('items[0][price]')).toBe('price_starter_monthly')
-    expect(body?.get('add_invoice_items[0][price_data][product]')).toBe('prod_site_care')
+    expect(body?.get('add_invoice_items[0][price_data][product]')).toBe('prod_website_build')
     expect(body?.get('add_invoice_items[0][price_data][unit_amount]')).toBe('35000')
     expect(body?.get('add_invoice_items[0][price_data][currency]')).toBe('usd')
     expect(body?.get('add_invoice_items[0][price_data][tax_behavior]')).toBe('exclusive')
@@ -361,7 +369,7 @@ describe('the build fee is charged once, on the first invoice (AGL-4244)', () =>
     expect(body?.get('metadata[buildFeeCents]')).toBe('35000')
     expect(body?.get('metadata[buildFeeSource]')).toBe('proposal')
     // Never as a recurring item: it would bill every renewal.
-    expect([...(body?.keys() ?? [])].filter((key) => key.startsWith('items[') && body?.get(key) === 'prod_site_care')).toEqual([])
+    expect([...(body?.keys() ?? [])].filter((key) => key.startsWith('items[') && body?.get(key) === 'prod_website_build')).toEqual([])
     // The first invoice is stamped on the proposal's fee.
     expect(mockUpdates).toEqual([
       {
