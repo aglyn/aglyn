@@ -16,7 +16,9 @@ Export these from Squarespace and keep them together:
 
 - [ ] **Products** (CSV). Squarespace leaves out variant images, and doesn't export download
       products or gift cards, so list those to set up again.
-- [ ] **Customers** (CSV).
+- [ ] **Customers** (CSV). It has no marketing column.
+- [ ] Your **mailing lists**, from the **Lists & Segments** panel. Each list downloads as a
+      .zip of three CSV files: subscribed, unsubscribed and cleaned.
 - [ ] **Gift cards** (CSV), if you sell them. The file has each card's full code, so keep it
       as safe as the cards themselves.
 - [ ] **Orders** (CSV), for your records and your accountant. Aglyn can't import orders.
@@ -72,14 +74,13 @@ See [Moving from Shopify, Wix or Squarespace](../../commerce-and-bookings/commer
 1. In the CRM, open **Contacts** and choose **Import**.
 2. Upload the Squarespace customers file. The columns map themselves: shipping details
    become the mailing address, billing details the other address.
-3. If the file has an **Accepts Marketing** column, confirm on **Permission** only if these
-   people really agreed to hear from your business. A customer the file says no for is
-   always kept unsubscribed.
 
-Squarespace's help lists no marketing column in this file, so your customers may arrive with
-no marketing choice recorded. If your subscribers are on a separate mailing list, bring that
-list into an email audience with its own import: see
-[Import a list you already have](../../marketing-and-automation/email-campaigns/overview.md#import-a-list).
+The customers file has no marketing column, so your customers arrive with no marketing
+choice recorded. Bring your subscribers in from your mailing list export instead: import the
+subscribed file into an email audience with the
+[email list import](../../marketing-and-automation/email-campaigns/overview.md#import-a-list),
+and keep your unsubscribed people out of your email with a
+[suppression import](../../marketing-and-automation/email-campaigns/overview.md#import-export-suppressions).
 
 Total spent and order counts are read and not kept. Passwords aren't in any export, so
 customers make a new account on your site. See
