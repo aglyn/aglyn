@@ -371,6 +371,15 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           sample: 'Great meeting you at the booth.',
         },
         {
+          name: 'proposal.buildFee',
+          description:
+            'The one-time website build fee charged with the first payment, with how it is ' +
+            'taxed, or nothing when no fee was set',
+          sample:
+            'Website build, $350 one time, charged with your first payment. Sales tax is ' +
+            'added from your billing address, and Billing shows the total due today before you pay.',
+        },
+        {
           name: 'billingUrl',
           description:
             'Billing page with the bundle preselected; signing in with this ' +
@@ -385,6 +394,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         { block: 'text', text: 'You\'ve been invited to take over {{org.name}} as its owner. The owner holds the workspace, every site in it, and its billing. {{handoff.previousOwner}}', variant: 'body' },
         { block: 'text', text: '{{proposal.note}}', variant: 'body' },
         { block: 'text', text: 'Your plan: {{proposal.summary}}', variant: 'details' },
+        { block: 'text', text: '{{proposal.buildFee}}', variant: 'details' },
         { block: 'button', label: 'Start the {{plan.name}} plan', href: '{{billingUrl}}' },
         { block: 'text', text: 'Sign in or create your account with this email address, and Billing opens with everything already chosen. Nothing is charged until you confirm.', variant: 'caption' },
       ],
@@ -543,6 +553,15 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           sample: 'Starter with Site Care, billed yearly, code BOOTH25',
         },
         {
+          name: 'proposal.buildFee',
+          description:
+            'The one-time website build fee charged with the first payment, with how it is ' +
+            'taxed, or nothing when no fee was set',
+          sample:
+            'Website build, $350 one time, charged with your first payment. Sales tax is ' +
+            'added from your billing address, and Billing shows the total due today before you pay.',
+        },
+        {
           name: 'billingUrl',
           description: 'Billing page with the proposed plan, add-ons, cadence and coupon preselected',
           sample: `${SAMPLE_CONSOLE_ORIGIN}/test-org/billing?plan=starter&interval=year&addons=siteCare`,
@@ -568,6 +587,7 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         { block: 'text', text: 'The {{plan.name}} plan, proposed for {{org.name}}', variant: 'heading' },
         { block: 'text', text: 'Your {{brand.productName}} team proposed moving {{org.name}} to the {{plan.name}} plan.', variant: 'body' },
         { block: 'text', text: '{{proposal.summary}}', variant: 'details' },
+        { block: 'text', text: '{{proposal.buildFee}}', variant: 'details' },
         { block: 'text', text: '{{proposal.note}}', variant: 'body' },
         { block: 'text', text: '{{proposal.nextStep}}', variant: 'body' },
         { block: 'button', label: 'Review the {{plan.name}} plan', href: '{{billingUrl}}' },

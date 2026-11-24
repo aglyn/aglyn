@@ -40,6 +40,11 @@ import type {
   OrgPlan,
   OrgUpgradeProposal,
 } from '@aglyn/aglyn/server'
+import {
+  BUILD_FEE_PAYING_WORKSPACE_REFUSAL,
+  describeBuildFee,
+  normalizeBuildFee,
+} from '@aglyn/aglyn/app-utils/build-fee'
 import { PLAN_LABELS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import {
@@ -99,6 +104,12 @@ export interface ProposeOrgUpgradeOptions {
    * refused rather than stored with a price nobody sells.
    */
   aiTier?: unknown
+  /**
+   * A one-time website build fee (AGL-4244), `{ amountCents, label }`,
+   * charged on the first invoice of the subscription the proposal starts.
+   * Refused for a workspace that already pays.
+   */
+  buildFee?: unknown
   /** The staff member proposing. */
   actor: { uid: string; email?: string | null }
   /** The console origin the email's link is built on. */
@@ -133,6 +144,11 @@ export async function proposeOrgUpgrade(
   const orgRef = db.collection('orgs').doc(orgId)
   const { org, proposal } = await db.runTransaction(async (tx) => {
     const target = await readUpgradeProposalChange(tx, orgRef, built)
+    // A subscriber's first invoice is behind it: its build is billed with
+    // Charge for work instead (AGL-4244).
+    if (target.live && built.buildFee) {
+      throw new UpgradeProposalError(BUILD_FEE_PAYING_WORKSPACE_REFUSAL, 409)
+    }
     const staged: OrgUpgradeProposal = target.live ? { ...built, forSubscriber: true } : built
     stageUpgradeProposal(tx, db, {
       orgId,
@@ -155,7 +171,7 @@ export async function proposeOrgUpgrade(
 export function buildUpgradeProposal(
   options: Pick<
     ProposeOrgUpgradeOptions,
-    'plan' | 'note' | 'addons' | 'interval' | 'coupon' | 'aiTier' | 'actor'
+    'plan' | 'note' | 'addons' | 'interval' | 'coupon' | 'aiTier' | 'buildFee' | 'actor'
   > & {
     now?: number
   },
@@ -172,12 +188,15 @@ export function buildUpgradeProposal(
     )
   }
   const note = normalizeUpgradeProposalNote(options.note)
+  const buildFee = normalizeBuildFee(options.buildFee as never)
+  if ('error' in buildFee) throw new UpgradeProposalError(buildFee.error)
   return {
     plan,
     proposedBy: options.actor.uid,
     proposedAt: options.now ?? Date.now(),
     ...(note ? { note } : {}),
     ...normalizeUpgradeProposalBundle(plan, options),
+    ...(buildFee.fee ? { buildFee: buildFee.fee } : {}),
   }
 }
 
@@ -274,9 +293,10 @@ export function stageUpgradeProposal(
 export function proposalActivityLine(proposal: OrgUpgradeProposal): string {
   const label = planName(proposal.plan)
   const summary = upgradeProposalSummary(proposal)
-  return summary === label
+  const line = summary === label
     ? `Proposed the ${label} plan`
     : `Proposed the ${label} plan (${summary})`
+  return proposal.buildFee ? `${line}, with ${describeBuildFee(proposal.buildFee)}` : line
 }
 
 /** The workspace's feed line for a proposal, after it commits. */
@@ -501,6 +521,7 @@ async function emailUpgradeProposal(options: {
         'proposal.summary': summary === label ? '' : summary,
         'proposal.nextStep': nextStep,
         'proposal.unchanged': unchanged,
+        'proposal.buildFee': buildFeeEmailLine(proposal),
         billingUrl,
       },
       brand,
@@ -513,6 +534,7 @@ async function emailUpgradeProposal(options: {
             ? 'When you are ready, switch to it from Billing, '
             : 'When you are ready, start the subscription from Billing, ') +
           `where the plan is already selected:\n\n${billingUrl}` +
+          (proposal.buildFee ? `\n\n${buildFeeEmailLine(proposal)}` : '') +
           (proposal.note ? `\n\n${proposal.note}` : ''),
       },
     )
@@ -530,6 +552,20 @@ async function emailUpgradeProposal(options: {
     console.error('[upgrade-proposal] owner email failed', error)
     return false
   }
+}
+
+/**
+ * The fee's own line in the owner's email (AGL-4244), or '' when there is
+ * none. Tax is worked out by Stripe from the billing address, so the email
+ * says it is added rather than guessing a figure; Billing shows the total.
+ */
+export function buildFeeEmailLine(proposal: Pick<OrgUpgradeProposal, 'buildFee'>): string {
+  const fee = proposal.buildFee
+  if (!fee || fee.paidInvoiceId) return ''
+  return (
+    `${describeBuildFee(fee)}, charged with your first payment. Sales tax is added ` +
+    'from your billing address, and Billing shows the total due today before you pay.'
+  )
 }
 
 function planName(plan: unknown): string {

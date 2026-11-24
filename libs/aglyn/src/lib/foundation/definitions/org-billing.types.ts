@@ -1394,6 +1394,32 @@ export interface OrgUpgradeProposal {
    * a proposal made before the workspace bought anything.
    */
   forSubscriber?: boolean
+  /**
+   * A one-time website build fee charged with the plan (AGL-4244), on the
+   * first invoice of the subscription the proposal starts. Never on a
+   * proposal made to a workspace that already subscribes.
+   */
+  buildFee?: OrgBuildFee
+}
+
+/**
+ * A ONE-TIME WEBSITE BUILD FEE (AGL-4244): what staff charge a client for the
+ * site they built, added to the first invoice of the subscription a proposal
+ * or a staff bundle link starts, taxed like every Aglyn service. Only staff
+ * set it, through the Admin SDK; Stripe's webhook records it paid.
+ */
+export interface OrgBuildFee {
+  /** Before tax, in cents: $1 to $50,000. */
+  amountCents: number
+  /** The line the owner sees, "Website build" unless staff named it. */
+  label: string
+  /** The first invoice that carried it, stamped when the subscription was made. */
+  invoiceId?: string
+  subscriptionId?: string
+  /** The paid invoice, once Stripe reports it paid: the fee is then no longer due. */
+  paidInvoiceId?: string
+  /** Epoch millis it was recorded paid. */
+  paidAt?: number
 }
 
 /**

@@ -80,6 +80,8 @@ async function handler(request: Request): Promise<Response> {
         interval: body?.interval,
         coupon: body?.coupon,
         aiTier: body?.aiTier,
+        // A one-time build fee (AGL-4244), refused on a workspace that pays.
+        buildFee: body?.buildFee,
         actor,
         origin,
       })
