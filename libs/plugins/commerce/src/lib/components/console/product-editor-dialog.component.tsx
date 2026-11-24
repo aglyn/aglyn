@@ -65,6 +65,7 @@ import {
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
 import { seedEditsBetween } from '@aglyn/tenant-feature-instance/hooks/use-seed-draft'
 import { type PickedMedia, useMediaPicker } from '@aglyn/aglyn'
+import { resolveMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import {
   type ConsoleWidgetSlotRenderer,
   useConsoleWidgetSlot,
@@ -447,20 +448,28 @@ const ProductBasicsFields = memo(function ProductBasicsFields(
   )
 })
 
-/** The product's images, each removable, and the button that adds one. */
+/**
+ * The product's images, each removable, and the button that adds one.
+ *
+ * What is stored is a library reference (`media:org:<orgId>/<mediaId>`), and
+ * a browser cannot load that, so each thumbnail is drawn through the shared
+ * `resolveMediaSrc` with the product's host, as the POS grid and the site
+ * draw the same value (AGL-4246). The stored list is never rewritten.
+ */
 const ProductMediaFields = memo(function ProductMediaFields(props: {
+  hostId: string
   mediaUrls: readonly string[]
   update: ProductUpdate
   pick: MediaPick
 }) {
-  const { mediaUrls, update, pick } = props
+  const { hostId, mediaUrls, update, pick } = props
   return (
     <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
       {mediaUrls.map((url, index) => (
         <Box key={`${url}-${index}`} sx={{ position: 'relative' }}>
           <Box
             component="img"
-            src={url}
+            src={resolveMediaSrc(url, { hostId })}
             alt=""
             sx={{
               width: 72,
@@ -1845,6 +1854,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
 
         <Divider textAlign="left">{'Media'}</Divider>
         <ProductMediaFields
+          hostId={hostId}
           mediaUrls={current.mediaUrls ?? NO_ITEMS}
           update={update}
           pick={pick}
