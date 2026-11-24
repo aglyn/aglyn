@@ -28,6 +28,7 @@ jest.mock('next/navigation', () => ({
 }))
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { registerPluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import axe from 'axe-core'
 import type { AiJobItemLedger, AiJobSummary } from '../model/ai-jobs.types'
 import {
@@ -186,8 +187,22 @@ describe('an import job’s page', () => {
     expect(screen.getByText('1 redirect added from your old addresses, 1 of yours kept.')).toBeTruthy()
     expect(screen.getByText(/once your own domain points at your new site/)).toBeTruthy()
     expect(screen.getByText('/index.html · Redirect added: visitors to the old address go to /')).toBeTruthy()
+    // No link where the redirects plugin publishes no address for its rules.
+    expect(screen.queryByText('Open Redirects')).toBeNull()
+  })
+
+  it('opens Redirects where the redirects plugin says its rules are listed (AGL-4245)', () => {
+    registerPluginRecordRoute(
+      'redirect',
+      { list: (context) => `/${context.orgSlug}/hosts/${context.host}/p/redirects`, record: () => null },
+      { pluginId: 'spec-redirects' },
+    )
+    let state = harbor()
+    state = aiSiteImportWaveClosed(aiSiteImportWaveStarted(state, 0, 'x', new Map()), 0, 'y')
+    state = { ...state, redirects: [{ from: '/index.html', to: '/', outcome: 'created', slot: null }] }
+    view(summary({ siteImport: state, items: aiSiteImportLedger(state), review: { reason: 'wave', message: 'Main pages is in.', findings: [] } }))
     fireEvent.click(screen.getByRole('button', { name: 'Redirects from your old addresses' }))
-    expect(screen.getByRole('link', { name: 'Open Redirects' }).getAttribute('href')).toBe('/acme/hosts/harbor/redirects')
+    expect(screen.getByRole('link', { name: 'Open Redirects' }).getAttribute('href')).toBe('/acme/hosts/harbor/p/redirects')
   })
 
   it('says a wave is in the site’s preview, not drafts, where its pages went live there (AGL-4084)', () => {

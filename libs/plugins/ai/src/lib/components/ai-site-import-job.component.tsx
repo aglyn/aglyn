@@ -19,6 +19,7 @@
 
 import { PageHeaderRecord } from '@aglyn/aglyn/app-utils/page-header-record-context'
 import { buildRoute, Route } from '@aglyn/aglyn/app-utils/console-routes'
+import { pluginRecordListHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import {
   mdiAlertCircle,
   mdiCheckCircle,
@@ -83,6 +84,7 @@ import {
   type AiSiteImportRowState,
 } from '../model/ai-site-import-view'
 import {
+  AI_SITE_IMPORT_REDIRECT_RECORD,
   AI_SITE_IMPORT_REDIRECTS_WHEN,
   aiSiteImportRedirectText,
   aiSiteImportRedirectsSummary,
@@ -278,7 +280,8 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
   const planFallBack = aiSiteImportPlanFellBackText(state)
   const held = aiSiteImportHeldCopy(job)
   const pagesHref = host && orgSlug ? buildRoute(Route.HOST_SCREENS, { orgSlug, host }) : null
-  const redirectsHref = host && orgSlug ? buildRoute(Route.HOST_REDIRECTS, { orgSlug, host }) : null
+  // Where the redirects plugin says its rules are listed (AGL-4245); no link where it is not loaded.
+  const redirectsHref = host && orgSlug ? pluginRecordListHref(AI_SITE_IMPORT_REDIRECT_RECORD, { orgSlug, host }) : null
   const [claim, setClaim] = useState<AiSiteImportClaim | null>(null)
   const [claimNotice, setClaimNotice] = useState<string | null>(null)
   const verifyAgain = useCallback(async () => {

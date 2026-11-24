@@ -228,6 +228,9 @@ export function aiSiteImportRedirectsSummary(state: Pick<AiSiteImportState, 'red
   return `${parts.join(', ')}.`
 }
 
+/** The record kind the redirects plugin publishes its rules' addresses under (`plugin-record-routes`). */
+export const AI_SITE_IMPORT_REDIRECT_RECORD = 'redirect'
+
 /** When the redirects take effect, said beside them. */
 export const AI_SITE_IMPORT_REDIRECTS_WHEN =
   'They send visitors and search engines from your old page addresses to the new pages once your own domain points at your new site. You can change or remove any of them in Redirects.'

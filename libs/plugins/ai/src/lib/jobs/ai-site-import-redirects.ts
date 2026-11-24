@@ -25,7 +25,7 @@ import type {
 import { filterEnabledPluginsByReleaseFlags } from '@aglyn/tenant-data-admin/server/release-flags'
 import type { AiJob, AiJobItemLedger } from '../model/ai-jobs.types'
 import type { AiSiteImportRedirect, AiSiteImportRedirectReason, AiSiteImportState } from '../model/ai-site-import'
-import { aiSiteImportRedirectPlan } from '../model/ai-site-import-redirects'
+import { AI_SITE_IMPORT_REDIRECT_RECORD, aiSiteImportRedirectPlan } from '../model/ai-site-import-redirects'
 import { aiPluginDraftOwner, aiPluginDraftWriter, type AiPluginDraftOwnerLookup, type AiPluginDraftWriterLookup } from './ai-job-plugin-drafts'
 
 /*==========================================
@@ -52,8 +52,8 @@ import { aiPluginDraftOwner, aiPluginDraftWriter, type AiPluginDraftOwnerLookup,
  * the new page's address to where it ends, and refuses a loop.
  *=========================================*/
 
-/** The resource the redirects plugin registers its writer under. */
-export const AI_SITE_IMPORT_REDIRECT_RESOURCE = 'redirect'
+/** The resource the redirects plugin registers its writer under: the same name its rules' addresses are published by. */
+export const AI_SITE_IMPORT_REDIRECT_RESOURCE = AI_SITE_IMPORT_REDIRECT_RECORD
 
 /** The status code an import's redirects carry: the move is permanent. */
 export const AI_SITE_IMPORT_REDIRECT_STATUS = 301
