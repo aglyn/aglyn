@@ -23,11 +23,17 @@ content on the marketing site and is written separately.
 - Billing: lower per-sale platform fees, Starter 1% / 3% and Pro 0% / 1% (#2876, AGL-4245).
 - Legal: pins Legal v27; the terms (4.24) say a hand-off website build is billed with the first plan invoice (#2875).
 
+- Contacts: contact and list imports read Shopify, Wix and Squarespace customer files, and a file's marketing "no" is always kept (#2879, AGL-4245).
+- Print on demand: link existing products to Printify, keeping labels, photos, send delay and shipping (#2880, AGL-3641).
+- AI: Bring my site redirects each old page address to its new page, also for pages published later; the redirects import reads Squarespace URL mappings (#2881, AGL-4245).
+- Guides: switching from Shopify, Wix or Squarespace (#2882, AGL-4245).
+
 ### Fixes
 
 - Commerce: product photos show in the Edit product dialog again (#2873, AGL-4246).
 - Site search: product photos in search results resolve stored media references.
 - Page and email screen: a contact email address (Gmail, iCloud, Outlook and the like) no longer counts as naming that provider's brand, and Discord links count as ordinary social links, so a new business's contact, terms, sign-in and account pages are not held as phishing (#2869).
+- Site header: an App Bar set to Shrink when scrolled no longer pulses when the visitor scrolls just past the top (#2883).
 
 ## v1.29.1 — 2026-11-24
 
