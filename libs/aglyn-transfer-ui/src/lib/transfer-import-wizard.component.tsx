@@ -33,6 +33,7 @@
  * the person left off.
  */
 
+import type { PluginTransferTextRead } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import {
   Alert,
   Box,
@@ -72,6 +73,12 @@ export interface TransferImportWizardProps {
   importMappingZone?: TransferImportMappingZone
   /** Steps the owning plugin adds. Registered steps for the resource are added too. */
   extraSteps?: readonly TransferWizardExtraStep[]
+  /**
+   * Reads a text in another product's own list format into the CSV the
+   * import takes, before the upload step shows it (AGL-4245); the owning
+   * plugin's `readText`. `null` leaves the text as it is.
+   */
+  readText?: (text: string) => PluginTransferTextRead | null
   storage?: TransferWizardStorage
   /** Called from the results step's Done. */
   onDone?(): void
@@ -126,7 +133,12 @@ export function TransferImportWizard(props: TransferImportWizardProps) {
   let body
   switch (draft.step) {
     case 'upload':
-      body = <ImportUploadStep wizard={wizard} />
+      body = (
+        <ImportUploadStep
+          wizard={wizard}
+          {...(props.readText ? { readText: props.readText } : {})}
+        />
+      )
       break
     case 'mapping':
       body = (

@@ -26,6 +26,7 @@
 
 import { CSV_UPLOAD_MAX_CHARACTERS } from '@aglyn/aglyn/app-utils/csv-upload'
 import type { TransferFormat } from '@aglyn/aglyn/data-transfer'
+import type { PluginTransferTextRead } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import {
   Alert,
@@ -74,12 +75,31 @@ interface Chosen {
   raw: Uint8Array | null
   text: string
   settings: TransferFileSettings
+  /** What the resource's own reader read the text as, with what it says about it (AGL-4245). */
+  readAs?: { source: string; notes: readonly string[] }
+}
+
+/**
+ * The text as the step reads it: the resource's own reader's CSV when the
+ * text is in its format (AGL-4245), else the text itself.
+ */
+function readChosenText(
+  text: string,
+  readText: ((text: string) => PluginTransferTextRead | null) | undefined,
+): { text: string; readAs?: Chosen['readAs'] } {
+  const read = readText?.(text) ?? null
+  return read
+    ? { text: read.text, readAs: { source: read.source, notes: read.notes } }
+    : { text }
 }
 
 export function ImportUploadStep({
   wizard,
+  readText,
 }: {
   wizard: TransferImportWizardController
+  /** The resource's reader for a list format of its own (AGL-4245). */
+  readText?: (text: string) => PluginTransferTextRead | null
 }) {
   const resource = wizard.info?.resource
   const maxBytes = resource?.limits?.maxBytes ?? CSV_UPLOAD_MAX_CHARACTERS
@@ -117,13 +137,18 @@ export function ImportUploadStep({
     try {
       const raw = await readFileBytes(file)
       const encoding = detectEncoding(raw)
-      const text = decodeBytes(raw, encoding)
+      const read = readChosenText(decodeBytes(raw, encoding), readText)
       setChosen({
         fileName: file.name,
         bytes: file.size,
-        raw,
-        text,
-        settings: detectTransferFileSettings(file.name, text, encoding),
+        // A text read into CSV is sent as that CSV: its bytes are not tried again.
+        raw: read.readAs ? null : raw,
+        ...read,
+        settings: detectTransferFileSettings(
+          read.readAs ? `${file.name}.csv` : file.name,
+          read.text,
+          encoding,
+        ),
       })
     } catch {
       setReadError('This file could not be read.')
@@ -132,12 +157,13 @@ export function ImportUploadStep({
 
   const readPaste = () => {
     const bytes = new TextEncoder().encode(paste).length
+    const read = readChosenText(paste, readText)
     setChosen({
       fileName: 'Pasted rows',
       bytes,
       raw: null,
-      text: paste,
-      settings: detectTransferFileSettings('', paste),
+      ...read,
+      settings: detectTransferFileSettings('', read.text),
     })
   }
 
@@ -230,6 +256,17 @@ export function ImportUploadStep({
       {readError ? <Alert severity="error">{readError}</Alert> : null}
       {chosen && !tooBig ? (
         <Stack spacing={2}>
+          {chosen.readAs ? (
+            <Alert severity="info">
+              <Stack spacing={0.5}>
+                {chosen.readAs.notes.map((note, index) => (
+                  <Typography key={index} variant="body2">
+                    {note}
+                  </Typography>
+                ))}
+              </Stack>
+            </Alert>
+          ) : null}
           <Typography variant="subtitle2">
             {chosen.fileName} · {formatBytes(chosen.bytes)}
             {parsed && !parsed.error

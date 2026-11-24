@@ -161,6 +161,7 @@ export function TransferLauncherSurface({ state, orgId, getIdToken, onClose }: T
           resource={launch.resource}
           jobId={launch.jobId ?? null}
           extraSteps={extraSteps}
+          {...(ui?.readText ? { readText: ui.readText } : {})}
           {...(launch.mappingZone
             ? { importMappingZone: { collection: launch.mappingZone, hostId, orgId } }
             : {})}
