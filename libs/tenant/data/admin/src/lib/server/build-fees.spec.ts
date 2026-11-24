@@ -219,14 +219,23 @@ describe('the fee is priced against a product with the Aglyn service tax code', 
     expect(await buildFeeProduct({ ...stripe, productId: 'prod_wrong' })).toMatchObject({ ok: false })
   })
 
-  it('falls back to the Site Care product Charge for work bills on, its code checked', async () => {
-    stripeAnswers['prices/price_care'] = {
-      body: { id: 'price_care', product: { id: 'prod_care', tax_code: 'txcd_10103001' } },
-    }
-    expect(await buildFeeProduct({ ...stripe, productId: '', priceId: 'price_care' } as never)).toEqual({
-      ok: true,
-      productId: 'prod_care',
-    })
+  it('finds the Aglyn "Website build" product by its metadata, never the Site Care product', async () => {
+    stripeAnswers['products/search'] = { body: { data: [{ id: 'prod_website_build' }] } }
+    stripeAnswers['products/prod_website_build'] = { body: { id: 'prod_website_build', tax_code: 'txcd_10103001' } }
+    expect(await buildFeeProduct({ ...stripe, productId: '' })).toEqual({ ok: true, productId: 'prod_website_build' })
+    expect(stripeCalls.some((href) => href.includes('/prices/'))).toBe(false)
+  })
+
+  it('makes the "Website build" product once, with the service tax code, when none exists', async () => {
+    stripeAnswers['products/search'] = { body: { data: [] } }
+    stripeAnswers['products'] = { body: { id: 'prod_new_build' } }
+    stripeAnswers['products/prod_new_build'] = { body: { id: 'prod_new_build', tax_code: 'txcd_10103001' } }
+    expect(await buildFeeProduct({ ...stripe, productId: '' })).toEqual({ ok: true, productId: 'prod_new_build' })
+  })
+
+  it('charges nothing when the product cannot be found or made', async () => {
+    stripeAnswers['products/search'] = { ok: false, body: { error: { message: 'Stripe is down' } } }
+    expect(await buildFeeProduct({ ...stripe, productId: '' })).toEqual({ ok: false, error: 'Stripe is down' })
   })
 
   it('is a tax-exclusive one-time line of one', () => {

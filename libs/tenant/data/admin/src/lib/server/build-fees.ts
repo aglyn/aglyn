@@ -59,7 +59,6 @@ import {
 } from '@aglyn/aglyn/app-utils/org-billing-doc'
 import { setAdminAudit } from './admin-audit-write'
 import {
-  siteCareExtraTimeProduct,
   siteCareStripeCall,
   siteCareStripeMessage,
   type SiteCareStripeOptions,
@@ -152,17 +151,62 @@ async function invoiceWasPaid(invoiceId: string, stripe: SiteCareStripeOptions):
   return answer.body['status'] === 'paid'
 }
 
+/** Metadata that marks Aglyn's own "Website build" product in Stripe. */
+export const BUILD_FEE_PRODUCT_METADATA_KEY = 'aglyn_product'
+export const BUILD_FEE_PRODUCT_METADATA_VALUE = 'website-build'
+
+let cachedBuildFeeProductId: string | null = null
+
 /**
- * The product the fee is priced against, its tax code checked. A product
- * of its own (`STRIPE_PRODUCT_WEBSITE_BUILD`) names the line "Website build"
- * on the invoice; without one, the Site Care product, which Charge for work
- * already bills builds on under the same code.
+ * Aglyn's own "Website build" product: found by its metadata, or made once
+ * with the build fee's tax code (the create carries a fixed idempotency key,
+ * so two first purchases at once still make one product). Never the Site
+ * Care product: the invoice line must read "Website build", and a coupon
+ * limited to Site Care must not reach the fee.
+ */
+async function findOrCreateBuildFeeProduct(
+  stripe: SiteCareStripeOptions,
+): Promise<SiteCareStripeResult<{ productId: string }>> {
+  if (cachedBuildFeeProductId) return { ok: true, productId: cachedBuildFeeProductId }
+  const found = await siteCareStripeCall(stripe, 'GET', 'products/search', {
+    query: `metadata['${BUILD_FEE_PRODUCT_METADATA_KEY}']:'${BUILD_FEE_PRODUCT_METADATA_VALUE}' AND active:'true'`,
+    limit: '1',
+  })
+  if (!found.ok) return { ok: false, error: siteCareStripeMessage(found, 'Finding the website build product failed') }
+  const first = ((found.body['data'] as Array<Record<string, unknown>> | undefined) ?? [])[0]
+  if (first && typeof first['id'] === 'string') return { ok: true, productId: first['id'] }
+  const created = await siteCareStripeCall(
+    stripe,
+    'POST',
+    'products',
+    {
+      name: 'Website build',
+      description: 'A one-time website build by the Aglyn team.',
+      tax_code: BUILD_FEE_TAX_CODE,
+      [`metadata[${BUILD_FEE_PRODUCT_METADATA_KEY}]`]: BUILD_FEE_PRODUCT_METADATA_VALUE,
+    },
+    'aglyn-website-build-product-v1',
+  )
+  if (!created.ok || typeof created.body['id'] !== 'string') {
+    return { ok: false, error: siteCareStripeMessage(created, 'Creating the website build product failed') }
+  }
+  return { ok: true, productId: created.body['id'] }
+}
+
+/**
+ * The product the fee is priced against, its tax code checked:
+ * `STRIPE_PRODUCT_WEBSITE_BUILD` when set, else Aglyn's own "Website build"
+ * product, found or made once.
  */
 export async function buildFeeProduct(
   stripe: SiteCareStripeOptions & { productId?: string | null } = {},
 ): Promise<SiteCareStripeResult<{ productId: string }>> {
-  const own = String(stripe.productId ?? process.env['STRIPE_PRODUCT_WEBSITE_BUILD'] ?? '').trim()
-  if (!own) return siteCareExtraTimeProduct(stripe)
+  let own = String(stripe.productId ?? process.env['STRIPE_PRODUCT_WEBSITE_BUILD'] ?? '').trim()
+  if (!own) {
+    const made = await findOrCreateBuildFeeProduct(stripe)
+    if (!made.ok) return made
+    own = made.productId
+  }
   const answer = await siteCareStripeCall(stripe, 'GET', `products/${encodeURIComponent(own)}`)
   if (!answer.ok) return { ok: false, error: siteCareStripeMessage(answer, 'Reading the website build product failed') }
   const code = answer.body['tax_code']
@@ -174,6 +218,7 @@ export async function buildFeeProduct(
       error: `The website build product carries tax code ${taxCode || 'none'}, not ${BUILD_FEE_TAX_CODE}; nothing was charged.`,
     }
   }
+  if (!stripe.fetchImpl) cachedBuildFeeProductId = own
   return { ok: true, productId: own }
 }
 
