@@ -88,8 +88,32 @@ describe('the redirect change content', () => {
   it('checks with what it says about the change, live', () => {
     expect(checkRedirectDraftContent({ action: 'create', source: '/a', destination: '/b' })).toEqual({
       ok: true,
-      facts: { action: 'create', source: '/a', destination: '/b', kind: 'exact', live: true },
+      facts: { action: 'create', source: '/a', storedSource: '/a', destination: '/b', kind: 'exact', live: true },
     })
     expect(checkRedirectDraftContent({ action: 'remove' }).ok).toBe(false)
+  })
+
+  it('says how a from-path is stored, the page’s way, so a caller compares addresses as the plugin does (AGL-4245)', () => {
+    const stored = (source: string, kind?: string) => {
+      const checked = checkRedirectDraftContent({ action: 'create', source, destination: '/', ...(kind ? { kind } : {}) })
+      return checked.ok ? checked.facts['storedSource'] : null
+    }
+    expect(stored('/About-Us/')).toBe('/about-us')
+    expect(stored('/menu.html?ref=home#top')).toBe('/menu.html')
+    expect(stored('services')).toBe('/services')
+    expect(stored('^/blog/([^/]+)$', 'regex')).toBe('^/blog/([^/]+)$')
+    expect(stored('/has space')).toBeNull()
+  })
+
+  it('takes followChain on a create only (AGL-4245)', () => {
+    expect(readRedirectDraftContent({ action: 'create', source: '/a', destination: '/b', followChain: true })).toEqual({
+      ok: true,
+      value: { action: 'create', source: '/a', destination: '/b', followChain: true },
+    })
+    expect(readRedirectDraftContent({ action: 'update', source: '/a', destination: '/b', followChain: true })).toMatchObject({
+      ok: false,
+      problems: ['Only a new redirect follows a chain'],
+    })
+    expect(readRedirectDraftContent({ action: 'create', source: '/a', destination: '/b', followChain: 'yes' }).ok).toBe(false)
   })
 })
