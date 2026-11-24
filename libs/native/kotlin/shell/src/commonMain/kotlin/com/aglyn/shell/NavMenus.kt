@@ -83,6 +83,8 @@ internal class ShellActions(
   val staffConsole: (() -> Unit)? = null,
   /** "Your Privacy Choices": the analytics switch for this device. */
   val privacyChoices: () -> Unit = {},
+  /** The workspace directory (the picker's workspace step), on a phone's account sheet; null hides the row (the rail has it). */
+  val allWorkspaces: (() -> Unit)? = null,
 )
 
 /** The workspace menu (its name ▾): who it is, then Invite people, Workspace settings, Billing and usage, Workspace color. */
@@ -201,6 +203,7 @@ internal fun AccountMenuItems(services: ShellServices, user: AuthUser?, close: (
   }
   MenuRow("Settings", "settings", tag = "account-menu-settings") { close(); actions.accountSettings() }
   HorizontalDivider()
+  actions.allWorkspaces?.let { open -> MenuRow(ALL_WORKSPACES_TITLE, "grid_view", tag = "account-menu-all-workspaces") { close(); open() } }
   MenuRow("Marketplace", "storefront", tag = "account-menu-marketplace") { close(); actions.openScreen("marketplace.sell", emptyMap()) }
   actions.staffConsole?.let { open -> MenuRow(STAFF_CONSOLE_TITLE, "shield", tag = "account-menu-staff-console") { close(); open() } }
   MenuRow("Documentation", "article", tag = "account-menu-docs") { close(); actions.openWeb(helpLinks(services.config).first { it.id == "docs" }.url) }

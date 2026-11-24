@@ -1538,14 +1538,7 @@ struct PhoneTopBar: ViewModifier {
             if AssistSlot.available(model) {
               PhoneAssistButton()
             }
-            Button {
-              navigation.showAccount = true
-            } label: {
-              let identity = AccountIdentity(model: model)
-              AglynAccountAvatar(initials: identity.initials, photoURL: identity.photoURL, size: 28)
-            }
-            .accessibilityLabel("Your account")
-            .accessibilityIdentifier("topbar-account")
+            PhoneAccountButton()
           }
           .labelStyle(.iconOnly)
         }
@@ -1561,8 +1554,8 @@ extension View {
   /// The phone's top bar, on a tab's first screen.
   func phoneTopBar() -> some View { modifier(PhoneTopBar()) }
 
-  /// Your AI on a phone's pushed screen (Figma Phone/Top bar, Pushed): on the navigation bar's trailing edge, after the
-  /// screen's own actions, so it is one tap away wherever you are.
+  /// Your AI and your photo on a phone's pushed screen (Figma Phone/Top bar, Pushed): on the navigation bar's trailing
+  /// edge, after the screen's own actions, so both are one tap away wherever you are.
   func phoneAssistOnPushed(_ route: Route) -> some View { modifier(PhoneAssistOnPushed(route: route)) }
 }
 
@@ -1599,24 +1592,49 @@ private struct PhoneAssistOnPushed: ViewModifier {
   #endif
   let route: Route
 
-  /// The in-app browser keeps its own bar (Figma 22:712): its page is not a screen the AI reads.
-  private var shown: Bool {
+  /// The in-app browser keeps its own bar (Figma 22:712), and the Besigner its own bars and back (AGL-4056, AGL-4057):
+  /// neither is a screen the AI reads, nor one that carries the shell's photo.
+  private var shellBar: Bool {
     if case .web = route { return false }
-    // The Besigner's own Assist is its AI, and it has no bar to hold the button (AGL-4056, AGL-4057).
-    if route.isBesigner { return false }
-    return AssistSlot.available(model)
+    return !route.isBesigner
   }
 
   func body(content: Content) -> some View {
     #if os(iOS)
       content.toolbar {
-        if sizeClass == .compact && shown {
-          ToolbarItem(placement: .topBarTrailing) { PhoneAssistButton() }
+        if sizeClass == .compact && shellBar {
+          // One item, as on a tab's first screen, so the bar never folds your photo into a "More" menu.
+          ToolbarItem(placement: .topBarTrailing) {
+            HStack(spacing: AglynSpace.one) {
+              if AssistSlot.available(model) { PhoneAssistButton() }
+              // Your photo on every pushed screen too, as Android's top app bar has it: your account sheet, with All
+              // workspaces and (for staff) Staff console, is one tap away wherever you are.
+              PhoneAccountButton()
+            }
+            .labelStyle(.iconOnly)
+          }
         }
       }
     #else
       content
     #endif
+  }
+}
+
+/// Your photo at the trailing end of a phone's top bar: opens your account sheet.
+struct PhoneAccountButton: View {
+  @Environment(AppModel.self) private var model
+  @Environment(ShellNavigation.self) private var navigation
+
+  var body: some View {
+    Button {
+      navigation.showAccount = true
+    } label: {
+      let identity = AccountIdentity(model: model)
+      AglynAccountAvatar(initials: identity.initials, photoURL: identity.photoURL, size: 28)
+    }
+    .accessibilityLabel("Your account")
+    .accessibilityIdentifier("topbar-account")
   }
 }
 
@@ -1791,6 +1809,15 @@ struct AccountSheet: View {
             }
           #endif
           row("Settings", "gearshape") { navigation.push(.settings) }
+          // The workspace directory, from your photo on every screen of a phone (the rail's All workspaces tile on iPad
+          // and the Mac): the switcher opens once this sheet has gone.
+          row(AllWorkspaces.title, AllWorkspaces.systemImage) {
+            Task { @MainActor in
+              try? await Task.sleep(nanoseconds: 350_000_000)
+              AllWorkspaces.open(navigation)
+            }
+          }
+          .accessibilityIdentifier("account-all-workspaces")
           if model.registry.screen(AccountPlaces.marketplaceScreen) != nil {
             row("Marketplace", "storefront") { navigation.push(.screen(AccountPlaces.marketplaceScreen, [:])) }
           }
