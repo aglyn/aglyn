@@ -479,7 +479,7 @@ const COMMON_LINK_DOMAINS: ReadonlySet<string> = new Set([
   'tripadvisor.com',
   'wa.me',
   'whatsapp.com',
-  // A shop's or a team's community server, linked from its footer the way
+  // A shop's or a team's Discord server, linked from its footer the way
   // its Instagram is.
   'discord.gg',
   'discord.com',
