@@ -275,6 +275,11 @@ on their phone. Never build a project invoice by hand in the Stripe dashboard.
    smaller one in full up front, and the quote says which. **Send deposit
    invoice** (or **Send invoice**) makes the invoice and emails the owner the pay link.
    The card shows the link and a QR code: the owner can scan it and pay on the spot.
+   If the workspace's upgrade proposal or a bundle link already carries a **Website
+   build fee**, paid or not, a warning above the button names it: if this project is
+   the same build, don't send the invoice, so the client is not billed twice. A build
+   for a client who has not subscribed yet is usually billed that way instead, with
+   their plan. See [Build a site for a client](overview.md#build-for-a-client).
 4. **Paid.** The project records the payment by itself and emails the owner a receipt.
    If it still shows the invoice as waiting after they paid, press **Check payments**.
 5. **Launch.** When the work is live, press **Mark launched**. A half-and-half project

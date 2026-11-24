@@ -480,6 +480,18 @@ at any step: staff take none of a workspace's seats.
    For a workspace made with **Build for a client**, the dialog opens on what the
    build recorded: its plan, Site Care, monthly billing, and the domain from its
    Domain step. Change any of it before you send.
+   **Website build fee** is optional: the amount you agreed with the client for the
+   build, from $1 to $50,000, and the line they see (**Website build** unless you name
+   it, for example "E-commerce website build"). It starts empty, including for a
+   workspace made with **Build for a client**. **What the owner sees** under it shows the
+   bundle and the fee as the owner will read them. The client pays the fee once, with
+   their first payment for the plan: it is added to that first invoice, taxed under
+   the same tax code as Site Care and Charge for work, with sales tax from their
+   billing address, and the plan renews without it. When it is paid, the proposal and
+   every bundle link for the workspace record it as paid, and it is never charged
+   again. If the workspace already has an open **Charge for work** quote (quoted or
+   accepted, not invoiced), the dialog warns you and names it. If it is the same build,
+   withdraw that quote so the client is not billed twice.
    **Hand off and propose** sends one invitation and records the proposal together,
    so a refused invitation leaves no proposal behind. The client's email carries a
    link to Billing with the bundle chosen. When they sign in, or sign up, with that
@@ -490,7 +502,7 @@ at any step: staff take none of a workspace's seats.
    bundle link** and **QR**: show the QR on your screen and the owner scans it with
    their phone. See [Bundle checkout link](#bundle-link).
 5. **Ask to upgrade** is for an owner who already has the workspace: pick the same
-   bundle and add a note if you like. The owner gets an email, and the workspace's
+   bundle, a **Website build fee** if one is owed, and a note if you like. The owner gets an email, and the workspace's
    billing managers see a card on the workspace's home and on Billing with the
    bundle preselected. **Withdraw proposal** takes it back. A workspace that already
    subscribes can be asked to **change**: another plan, or another billing cadence,
@@ -499,8 +511,15 @@ at any step: staff take none of a workspace's seats.
    cadence, and the coupon replaces the workspace's current discount when they switch.
    Proposing the plan and cadence it already has is refused. See [Changing plans with
    a promotion code](../workspace-and-billing/billing-and-plans/overview.md#switch-with-a-code).
+   A build fee is never added to a workspace that already pays, because there is no
+   first invoice left to carry it: the dialog says *This workspace already pays; bill the
+   build with Charge for work*, and the server refuses one from the hand-off, the
+   proposal and the bundle link alike. Bill that build from the organization's
+   [Charge for work](support-triage.md#site-care-projects) card instead. Withdrawing
+   a proposal withdraws its build fee too.
 6. **The owner subscribes from Billing.** The **What you will pay** card comes first,
-   with the bundle and its total; its **Pay** button pays with the card on file and
+   with the bundle, the build fee as its own **one time** line, and the total due today
+   with tax; its **Pay** button pays with the card on file and
    asks for a card and billing address first if there are none. The comped tier's
    card in the plan grid still offers **Start your *plan* subscription**.
 7. **It cleans up after itself.** When the subscription goes live, the proposal and
@@ -594,8 +613,20 @@ site's **Custom Domain** page, since the link carries no domain to buy.
   domain purchase in that workspace within its 24 hours, because you met the owner and
   your name is on the audit row. The brand-lookalike check and the per-workspace limits
   still apply.
+- **A website build fee (optional).** The same **Website build fee** field as the
+  **Hand off** dialog, with **What the owner sees** under it. The link, the QR and the
+  QR's summary carry the fee, and the owner's Billing page adds it to the total due
+  today as a one-time line. The fee does not lapse with the link's 24 hours: it is owed
+  until it is paid, and paying it from any link marks the fee on every link for that
+  workspace, and on its proposal, as paid. The same warning about an open **Charge for
+  work** quote appears here.
 - A workspace that already has a live subscription gets no link: it changes plans
   from Billing.
+
+The warning works the other way too. On the organization's **Charge for work** card,
+**Send invoice** on a Charge for work project warns you when the proposal or a bundle
+link already carries a build fee, paid or not, so the same build is not invoiced twice.
+It is a warning, not a refusal, because the project may be for other work.
 
 ### Site management {#sites-admin}
 
