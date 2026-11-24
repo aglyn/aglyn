@@ -81,6 +81,7 @@ import {
   linkUrlsIn,
   isBrandsOwnDomain,
   lookalikeBrandForHost,
+  mentionsBrand,
   PHISHING_LURE_PATTERNS,
   PHISHING_SCREEN_BRANDS,
   type PhishingScreenBrand,
@@ -484,7 +485,7 @@ export function screenHostedPage(input: HostedPageScreenInput): HostedPageScreen
       const action = firstMatch(actions, text)
       if (!action) continue
       for (const brand of PHISHING_SCREEN_BRANDS) {
-        if (isOthersBrand(brand) && brand.mention.test(text)) {
+        if (isOthersBrand(brand) && mentionsBrand(brand, text)) {
           named.add(brand.id)
           signals.push({ code: 'brand-action-page', brand: brand.id, action: action.slice(0, 80) })
         }
@@ -505,7 +506,7 @@ export function screenHostedPage(input: HostedPageScreenInput): HostedPageScreen
   if (foreign && brandLure) {
     const host = (wordedLeaving ?? leaving[0])?.host ?? foreign
     for (const brand of PHISHING_SCREEN_BRANDS) {
-      if (isOthersBrand(brand) && brand.mention.test(prose)) {
+      if (isOthersBrand(brand) && mentionsBrand(brand, prose)) {
         named.add(brand.id)
         signals.push({ code: 'brand-lure-page', brand: brand.id, lure: brandLure.slice(0, 120), host })
       }
@@ -647,7 +648,7 @@ export function screenSiteRedirect(input: SiteRedirectScreenInput): HostedPageSc
   if (anyLure) {
     const brand = PHISHING_SCREEN_BRANDS.find(
       (candidate) =>
-        candidate.mention.test(words) && !isWorkspaceOwnBrand(candidate, ownNames, ownRegistrables),
+        mentionsBrand(candidate, words) && !isWorkspaceOwnBrand(candidate, ownNames, ownRegistrables),
     )
     if (brand) {
       signals.push({ code: 'brand-lure-link', brand: brand.id, lure: anyLure.slice(0, 120), host })

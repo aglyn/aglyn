@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.29.2 — 2026-11-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.29.1...v1.29.2)
+
+### Fixes
+
+- Page and email screen: an email address on gmail.com no longer counts as naming Google, and Discord links count as ordinary community links, so a young shop's contact, policy and account pages are not held as phishing (#2869).
+
 ## v1.29.1 — 2026-11-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.29.0...v1.29.1)
