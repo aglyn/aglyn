@@ -87,7 +87,10 @@ import {
  * An order paid in test mode is sent as a DRAFT and never confirmed: the
  * merchant sees it at the service, and nothing is made or charged. A live
  * order is confirmed for production at once, or left a draft for the
- * merchant to confirm when the connection says `review`.
+ * merchant to confirm when the connection says `review`. With `automatic`
+ * and a send delay, it is sent as a draft and confirmed by the job once the
+ * delay has passed since it was paid (`work: 'confirm'`), so a buyer who
+ * cancels within it is cancelled before anything is made.
  *
  * ## Failures
  *
@@ -116,6 +119,16 @@ const POLL_MS: Partial<Record<PodOrderStatus, number>> = {
   partially_shipped: 3 * 3_600_000,
   shipped: 12 * 3_600_000,
 }
+
+/**
+ * How often an open part is asked after when the service sends the store no
+ * notices (the connection is `polling`): often enough that a parcel reaches
+ * the order, and the buyer's shipping email goes, within the half hour.
+ */
+export const POD_POLLING_MS = 15 * 60_000
+
+/** The statuses asked after at {@link POD_POLLING_MS} on a polling connection. */
+const POLLED_OFTEN: readonly PodOrderStatus[] = ['submitted', 'on_hold', 'in_production', 'partially_shipped']
 
 /** A part is no longer asked after once it is this old. */
 const POLL_HORIZON_MS = 60 * 24 * 3_600_000
@@ -146,8 +159,13 @@ function errorText(error: unknown): string {
   return String((error as Error)?.message ?? error).slice(0, 400)
 }
 
-function nextPoll(status: PodOrderStatus, createdAtMs: number, now: number): { work: PodOrderWork; dueAtMs: number } {
-  const interval = POLL_MS[status]
+function nextPoll(
+  status: PodOrderStatus,
+  createdAtMs: number,
+  now: number,
+  webhooks: 'registered' | 'polling' = 'registered',
+): { work: PodOrderWork; dueAtMs: number } {
+  const interval = webhooks === 'polling' && POLLED_OFTEN.includes(status) ? POD_POLLING_MS : POLL_MS[status]
   if (!interval || now - createdAtMs > POLL_HORIZON_MS) return { work: null, dueAtMs: 0 }
   return { work: 'poll', dueAtMs: now + interval }
 }
@@ -410,7 +428,10 @@ export async function sendPodOrder(
     const credentials = openCredentials(connection, keyring)
     const provider = podProviderFor(order.provider)
     const existing = await provider.findOrder(credentials, order.externalId)
-    const confirm = !testMode && connection.submitMode === 'automatic'
+    const automatic = !testMode && connection.submitMode === 'automatic'
+    const confirmAtMs = order.createdAtMs + connection.sendDelayHours * 3_600_000
+    const waits = automatic && connection.sendDelayHours > 0 && now < confirmAtMs
+    const confirm = automatic && !waits
     const source =
       existing ??
       (await provider.createOrder(credentials, {
@@ -427,6 +448,7 @@ export async function sendPodOrder(
         })),
         retailCurrency: order.retailCurrency,
         confirm,
+        shippingMethod: connection.shippingMethod,
       }))
     const after = { ...order, ...sourcePatch(order, source) } as StoredPodOrder
     await release(id, {
@@ -434,7 +456,9 @@ export async function sendPodOrder(
       testMode,
       attempts,
       lastError: null,
-      ...nextPoll(after.status, order.createdAtMs, now),
+      ...(waits && after.status === 'draft'
+        ? { work: 'confirm' as const, dueAtMs: confirmAtMs }
+        : nextPoll(after.status, order.createdAtMs, now, connection.webhooks)),
     })
     return existing ? 'found' : 'sent'
   } catch (error) {
@@ -575,7 +599,7 @@ export async function refreshPodOrder(
     ...sourcePatch(order, source),
     shipments,
     lastError: shipments.find((entry) => entry.refusal)?.refusal ?? null,
-    ...(settled ? { work: null, dueAtMs: 0 } : nextPoll(after.status, order.createdAtMs, now)),
+    ...(settled ? { work: null, dueAtMs: 0 } : nextPoll(after.status, order.createdAtMs, now, connection.webhooks)),
   })
   return 'refreshed'
 }
@@ -611,7 +635,11 @@ export async function confirmPodOrder(id: string, keyring: SecretBoxKeyring): Pr
   try {
     const source = await podProviderFor(order.provider).confirmOrder(openCredentials(connection, keyring), String(order.sourceOrderId))
     const after = { ...order, ...sourcePatch(order, source) } as StoredPodOrder
-    await release(id, { ...sourcePatch(order, source), lastError: null, ...nextPoll(after.status, order.createdAtMs, now) })
+    await release(id, {
+      ...sourcePatch(order, source),
+      lastError: null,
+      ...nextPoll(after.status, order.createdAtMs, now, connection.webhooks),
+    })
     return { ok: true }
   } catch (error) {
     await release(id, { lastError: errorText(error) })
@@ -738,12 +766,42 @@ export async function runPodOrderTick(context: { nowMs: number; deadlineMs: numb
     const outcome = await cancelPodOrder(id, keyring, 'The order was canceled in the store.').catch(() => null)
     if (outcome?.ok) counts['canceled'] += 1
   }
+  for (const id of await due('confirm', now)) {
+    if (Date.now() >= context.deadlineMs) return counts
+    const outcome = await confirmWhenDue(id, keyring, now).catch(() => null)
+    if (outcome) counts['confirmed'] = (counts['confirmed'] ?? 0) + 1
+  }
   for (const id of await due('poll', now)) {
     if (Date.now() >= context.deadlineMs) return counts
     const outcome = await refreshPodOrder(id, { keyring, now }).catch(() => 'failed' as const)
     if (outcome === 'refreshed') counts['refreshed'] += 1
   }
   return counts
+}
+
+/**
+ * A delayed automatic send whose delay is up: confirmed for production, as
+ * long as the connection still says `automatic`; otherwise left a draft for
+ * the merchant, asked after like any other.
+ */
+async function confirmWhenDue(id: string, keyring: SecretBoxKeyring, now: number): Promise<boolean> {
+  const order = readStoredPodOrder((await podOrderRef(id).get()).data())
+  if (!order || order.work !== 'confirm') return false
+  const connection = await readConnection(order.hostId, order.provider)
+  if (!connection || connection.submitMode !== 'automatic' || order.status !== 'draft') {
+    await podOrderRef(id).set(
+      { ...nextPoll(order.status, order.createdAtMs, now, connection?.webhooks), updatedAtMs: now },
+      { merge: true },
+    )
+    return false
+  }
+  const outcome = await confirmPodOrder(id, keyring)
+  if (!outcome.ok) {
+    // Asked again in an hour; the order shows the service's sentence meanwhile.
+    await podOrderRef(id).set({ work: 'confirm', dueAtMs: now + 3_600_000, updatedAtMs: now }, { merge: true })
+    if (outcome.message && !order.lastError) await tell(order.hostId, `Order ${order.orderRef} was not sent for production`, outcome.message)
+  }
+  return outcome.ok
 }
 
 /* ------------------------------------------------------------------ holds */

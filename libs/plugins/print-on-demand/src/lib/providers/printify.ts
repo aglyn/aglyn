@@ -16,7 +16,7 @@
  */
 
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
-import { htmlToPlainText, type PodOrderStatus } from '../model/print-on-demand'
+import { htmlToPlainText, type PodOrderStatus, type PodShippingCost, type PodShippingMethod } from '../model/print-on-demand'
 import { PodProviderError, sendProviderRequest, type ProviderFetch } from './http'
 import type {
   PodCatalogPage,
@@ -52,6 +52,43 @@ const FIND_PAGES = 2
 
 export const PRINTIFY_CURRENCY = 'USD'
 
+/** Printify's codes for its shipping methods on an order. */
+export const PRINTIFY_SHIPPING_METHOD_CODES: Record<PodShippingMethod, number> = {
+  standard: 1,
+  priority: 2,
+  express: 3,
+  economy: 4,
+}
+
+/**
+ * Printify's shipping table for a blueprint and print provider, one row per
+ * destination: the widest first-item and additional-item charge across the
+ * product's variants, so a rate set from it covers every size and color.
+ */
+export function readPrintifyShipping(body: any, variantIds?: readonly string[]): PodShippingCost[] {
+  const wanted = variantIds && variantIds.length > 0 ? new Set(variantIds.map(String)) : null
+  const byDestination = new Map<string, PodShippingCost>()
+  for (const profile of Array.isArray(body?.profiles) ? body.profiles : []) {
+    const ids = (Array.isArray(profile?.variant_ids) ? profile.variant_ids : []).map(String)
+    if (wanted && ids.length > 0 && !ids.some((id: string) => wanted.has(id))) continue
+    const countries = (Array.isArray(profile?.countries) ? profile.countries : []).map(String).filter(Boolean).sort()
+    if (countries.length === 0) continue
+    const key = countries.join(',')
+    const first = cents(profile?.first_item?.cost)
+    const additional = cents(profile?.additional_items?.cost)
+    const currency = text(profile?.first_item?.currency || PRINTIFY_CURRENCY).toUpperCase()
+    const seen = byDestination.get(key)
+    byDestination.set(key, {
+      countries,
+      firstItemMinor: Math.max(first, seen?.firstItemMinor ?? 0),
+      additionalItemMinor: Math.max(additional, seen?.additionalItemMinor ?? 0),
+      currency,
+    })
+  }
+  return [...byDestination.values()].sort(
+    (left, right) => Number(right.countries.includes('US')) - Number(left.countries.includes('US')) || left.countries[0].localeCompare(right.countries[0]),
+  )
+}
 /** The notices a store asks Printify for. */
 export const PRINTIFY_WEBHOOK_TOPICS = [
   'order:updated',
@@ -277,7 +314,17 @@ export function createPrintifyProvider(fetchImpl: ProviderFetch): PodProvider {
         imageUrls: [...new Set(ordered.map((image) => text(image?.src)).filter(Boolean))],
         options: variants.length <= 1 ? [] : options,
         variants,
+        shippingRef:
+          product?.blueprint_id && product?.print_provider_id ? `${text(product.blueprint_id)}:${text(product.print_provider_id)}` : null,
       }
+    },
+
+    async getShippingCosts(credentials, product) {
+      const [blueprint, printProvider] = String(product.shippingRef ?? '').split(':')
+      if (!/^\d+$/.test(blueprint ?? '') || !/^\d+$/.test(printProvider ?? '')) return []
+      // Printify's variant ids on a shop product are its catalog's, so the table names the same ones.
+      const body = await ok(credentials.token, 'GET', `catalog/blueprints/${blueprint}/print_providers/${printProvider}/shipping.json`)
+      return readPrintifyShipping(body, product.variants.map((variant) => variant.id))
     },
 
     async findOrder(credentials, externalId) {
@@ -301,7 +348,7 @@ export function createPrintifyProvider(fetchImpl: ProviderFetch): PodProvider {
           variant_id: Number(line.sourceVariantId),
           quantity: line.quantity,
         })),
-        shipping_method: 1,
+        shipping_method: PRINTIFY_SHIPPING_METHOD_CODES[request.shippingMethod ?? 'standard'] ?? 1,
         send_shipping_notification: false,
         address_to: {
           ...splitName(recipient.name),
