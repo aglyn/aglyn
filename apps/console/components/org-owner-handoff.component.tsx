@@ -42,6 +42,8 @@ import {
 } from '@mui/material'
 import { useState } from 'react'
 import { bundleDraftBody, StaffBundleFields } from './staff-bundle-fields.component'
+import { StaffBuildFeeFields } from './staff-build-fee-fields.component'
+import { buildFeeDraftProblem, withBuildFee } from '@aglyn/aglyn/app-utils/build-fee'
 import {
   ClientBuildOwnDomainNote,
   StaffBundleDomainFields,
@@ -199,7 +201,10 @@ export function StaffOrgOwnerHandoff(props: StaffOrgOwnerHandoffProps) {
         enqueueSnackbar(result.error, { variant: 'warning', persist: false })
         return
       }
-      const what = subscriptionLive ? 'Handoff' : `Handoff with ${describeBundle(bundleDraftBody(draft))}`
+      const body = bundleDraftBody(draft)
+      const what = subscriptionLive
+        ? 'Handoff'
+        : `Handoff with ${withBuildFee(describeBundle(body), body.buildFee ?? null)}`
       enqueueSnackbar(
         result.emailed
           ? `${what} sent to ${email.trim()} — email sent`
@@ -299,6 +304,7 @@ export function StaffOrgOwnerHandoff(props: StaffOrgOwnerHandoffProps) {
                   disabled={busy}
                 />
                 <ClientBuildOwnDomainNote build={build} />
+                <StaffBuildFeeFields orgId={orgId} draft={draft} onChange={setDraft} disabled={busy} />
               </>
             )}
           </Stack>
@@ -309,7 +315,7 @@ export function StaffOrgOwnerHandoff(props: StaffOrgOwnerHandoffProps) {
           </Button>
           <Button
             variant="contained"
-            disabled={busy || !emailValid}
+            disabled={busy || !emailValid || (!subscriptionLive && !!buildFeeDraftProblem(draft.buildFee))}
             onClick={() => void send()}
           >
             {busy ? 'Sending…' : subscriptionLive ? 'Send handoff' : 'Hand off and propose'}

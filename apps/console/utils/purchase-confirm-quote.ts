@@ -70,6 +70,14 @@ export interface PurchaseConfirmQuoteInput {
   promotionDuration: string | null
   /** Stripe's `coupon.duration_in_months`, set only for `repeating`. */
   promotionDurationInMonths: number | null
+  /**
+   * A one-time website build fee on this first invoice (AGL-4244), before
+   * tax; 0 or absent when there is none. It is inside `subtotalCents` and
+   * `totalCents`, and never inside what the plan renews at.
+   */
+  buildFeeCents?: number
+  /** The fee's line, "Website build". */
+  buildFeeLabel?: string
 }
 
 export interface PurchaseConfirmQuote {
@@ -103,7 +111,14 @@ export function purchaseConfirmQuote(
   const period = interval === 'year' ? 'year' : 'month'
   const cadence = interval === 'year' ? 'billed yearly' : 'billed monthly'
   const total = money(totalCents, currency)
-  const undiscounted = money(subtotalCents, currency)
+  const feeCents = Math.max(0, Math.round(Number(input.buildFeeCents ?? 0)))
+  // The renewal never carries the build fee: it is on this invoice alone.
+  const undiscounted = money(Math.max(0, subtotalCents - feeCents), currency)
+  const feeLine =
+    feeCents > 0
+      ? ` That includes ${input.buildFeeLabel || 'Website build'}, ` +
+        `${money(feeCents, currency)} one time, charged only on this first payment.`
+      : ''
 
   // The charge, stated first and as a fact about TODAY.
   //
@@ -130,11 +145,17 @@ export function purchaseConfirmQuote(
   // today costs the moment a discount is not permanent.
   let renewal: string
   if (discountCents <= 0) {
-    renewal = ` It renews at ${total} per ${period} until you cancel.`
+    renewal =
+      feeCents > 0
+        ? ` After it, ${planLabel} renews at ${undiscounted} per ${period} plus tax, until you cancel.`
+        : ` It renews at ${total} per ${period} until you cancel.`
   } else if (promotionDuration === 'forever') {
     renewal =
-      ` Code ${promotionCode} applies to every invoice, so it renews at ` +
-      `${total} per ${period} until you cancel.`
+      feeCents > 0
+        ? ` Code ${promotionCode} applies to every invoice; after this one, ${planLabel} renews ` +
+          `at ${undiscounted} per ${period} before the code and tax, until you cancel.`
+        : ` Code ${promotionCode} applies to every invoice, so it renews at ` +
+          `${total} per ${period} until you cancel.`
   } else if (promotionDuration === 'once') {
     renewal =
       ` Code ${promotionCode} applies to this first invoice only — after it, ` +
@@ -187,7 +208,7 @@ export function purchaseConfirmQuote(
 
   return {
     title: `Subscribe to ${planLabel}?`,
-    description: `${planLabel}, ${cadence}. ${charge}${discountLine}${renewal}${overage}`,
+    description: `${planLabel}, ${cadence}. ${charge}${feeLine}${discountLine}${renewal}${overage}`,
     // The amount on the BUTTON, so the last thing under the cursor is the
     // figure and not a verb. Dropped to a plain label when the total is not
     // final, because a button that names a price is a promise about it.

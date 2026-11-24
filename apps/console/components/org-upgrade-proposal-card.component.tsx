@@ -23,6 +23,7 @@ import {
   upgradeProposalSummary,
 } from '@aglyn/aglyn/app-utils/upgrade-proposal'
 import { PLAN_LABELS } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { buildFeeIsDue, describeBuildFee } from '@aglyn/aglyn/app-utils/build-fee'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Button, Typography } from '@mui/material'
 import { docsHelp } from '../constants/docs-links'
@@ -93,6 +94,14 @@ export function OrgUpgradeProposalCard() {
           (bundled ? 'whole bundle is' : 'plan is') +
           ' already selected. Nothing changes until you do.'}
       </Typography>
+      {/* The build fee as its own line (AGL-4244), charged with the first
+          payment; Billing shows it with tax in the total due today. */}
+      {buildFeeIsDue(proposal.buildFee) ? (
+        <Typography variant="body2" sx={{ mt: 1 }}>
+          {`${describeBuildFee(proposal.buildFee)}, charged with your first payment. ` +
+            'Billing shows it with sales tax in the total due today.'}
+        </Typography>
+      ) : null}
       {proposal.note ? (
         <Typography variant="body2" sx={{ mt: 1 }}>
           {proposal.note}

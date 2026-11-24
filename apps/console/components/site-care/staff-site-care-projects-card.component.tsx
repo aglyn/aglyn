@@ -23,6 +23,7 @@ import {
   type OwnerApprovalChannel,
 } from '@aglyn/aglyn/app-utils/owner-approval-record'
 import { formatSiteCareDate, formatSiteCareUsd } from '@aglyn/aglyn/app-utils/site-care'
+import { buildFeeOverlapWarning, type StandingBuildFee } from '@aglyn/aglyn/app-utils/build-fee'
 import {
   readSiteCareProjectScope,
   SITE_CARE_PROJECT_FLOOR_USD,
@@ -69,6 +70,11 @@ interface ProjectView {
 interface ProjectsAnswer {
   projects: ProjectView[]
   canInvoice: boolean
+  /**
+   * The website build fees the workspace's proposal and bundle links carry
+   * (AGL-4244), paid or not, for the warning before an invoice is sent.
+   */
+  buildFees?: StandingBuildFee[]
 }
 
 type Post = (body: Record<string, unknown>, success: string) => Promise<boolean>
@@ -429,11 +435,14 @@ function ProjectRow({
   busy,
   canInvoice,
   post,
+  buildFeeWarning,
 }: {
   view: ProjectView
   busy: boolean
   canInvoice: boolean
   post: Post
+  /** Said before an invoice goes out when a build fee already rides the plan (AGL-4244). */
+  buildFeeWarning?: string | null
 }) {
   const { project } = view
   const [form, setForm] = useState<'accept' | 'edit' | null>(null)
@@ -482,6 +491,11 @@ function ProjectRow({
             <Button size="small" disabled={busy} onClick={() => setForm(form === 'edit' ? null : 'edit')}>
               {'Edit quote'}
             </Button>
+          ) : null}
+          {next.ok && next.kind !== 'final' && buildFeeWarning ? (
+            <Alert severity="warning" sx={{ width: '100%' }}>
+              {buildFeeWarning}
+            </Alert>
           ) : null}
           {next.ok && next.kind !== 'final' ? (
             <Button
@@ -671,7 +685,14 @@ export function StaffSiteCareProjectsCard({ orgId }: StaffSiteCareProjectsCardPr
             </Typography>
           ) : null}
           {(data?.projects ?? []).map((view) => (
-            <ProjectRow key={view.projectId} view={view} busy={busy} canInvoice={data?.canInvoice ?? false} post={post} />
+            <ProjectRow
+              key={view.projectId}
+              view={view}
+              busy={busy}
+              canInvoice={data?.canInvoice ?? false}
+              post={post}
+              buildFeeWarning={buildFeeOverlapWarning(data?.buildFees)}
+            />
           ))}
         </Stack>
       </CardDisplay>

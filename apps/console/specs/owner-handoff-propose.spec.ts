@@ -149,14 +149,20 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
             'AI tiers were replaced by AI credit blocks. Propose a number of blocks instead.',
           )
         }
+        // The build fee (AGL-4244), through the real check.
+        const fee = jest.requireActual('@aglyn/aglyn/app-utils/build-fee').normalizeBuildFee(options['buildFee'])
+        if ('error' in fee) throw new UpgradeProposalError(fee.error)
         return {
           plan: options['plan'],
           proposedBy: options['actor'].uid,
           proposedAt: 1,
           ...(options['note'] ? { note: options['note'] } : {}),
           ...normalizeUpgradeProposalBundle(options['plan'], options),
+          ...(fee.fee ? { buildFee: fee.fee } : {}),
         }
       },
+      buildFeeEmailLine: (proposal: Record<string, any>) =>
+        proposal?.['buildFee'] ? `${proposal['buildFee'].label}, charged with your first payment.` : '',
       readUpgradeProposalTarget: async (tx: any, orgRef: any) => {
         const snapshot = await tx.get(orgRef)
         if (!snapshot.exists) throw new UpgradeProposalError('Unknown organization', 404)
@@ -357,6 +363,40 @@ describe('hand off and propose, one act (AGL-3956)', () => {
     expect(mockStore.has('orgs/org-1/invites/invite-new')).toBe(true)
     expect(mockStore.get('orgs/org-1')?.['upgradeProposal']).toBeUndefined()
     expect(mockRecordProposalActivity).not.toHaveBeenCalled()
+  })
+
+  it('a website build fee rides the proposal the hand-off records (AGL-4244)', async () => {
+    signedInAs('staff', 'zed@aglyn.test', STAFF_CLAIMS)
+    const response = await post(
+      handoffAndPropose({ ...BUNDLE, buildFee: { amountCents: 35000, label: 'E-commerce website build' } }),
+    )
+    expect(response.status).toBe(200)
+    expect((await response.json()).proposal).toMatchObject({
+      buildFee: { amountCents: 35000, label: 'E-commerce website build' },
+    })
+    expect(mockStore.get('orgs/org-1')?.['upgradeProposal']).toMatchObject({
+      buildFee: { amountCents: 35000, label: 'E-commerce website build' },
+    })
+  })
+
+  it('a build fee outside $1 to $50,000 is refused, and nothing is sent (AGL-4244)', async () => {
+    signedInAs('staff', 'zed@aglyn.test', STAFF_CLAIMS)
+    const response = await post(handoffAndPropose({ ...BUNDLE, buildFee: { amountCents: 99 } }))
+    expect(response.status).toBe(400)
+    expect(mockStore.get('orgs/org-1/invites/invite-new')).toBeUndefined()
+    expect(mockStore.get('orgs/org-1')?.['upgradeProposal']).toBeUndefined()
+  })
+
+  it('a build fee for a workspace that already pays is refused, not dropped (AGL-4244)', async () => {
+    mockStore.set('orgs/org-1', { ...mockStore.get('orgs/org-1'), billingStatus: 'active' })
+    signedInAs('staff', 'zed@aglyn.test', STAFF_CLAIMS)
+    const response = await post(handoffAndPropose({ ...BUNDLE, buildFee: { amountCents: 35000 } }))
+    expect(response.status).toBe(409)
+    expect((await response.json()).error).toBe(
+      'This workspace already pays; bill the build with Charge for work.',
+    )
+    expect(mockStore.has('orgs/org-1/invites/invite-new')).toBe(false)
+    expect(mockStore.get('orgs/org-1')?.['upgradeProposal']).toBeUndefined()
   })
 
   it('a subscription that goes live mid-request still leaves the hand-off, alone', async () => {

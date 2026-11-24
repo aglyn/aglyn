@@ -338,8 +338,12 @@ describe('Aglyn AI credit blocks on the staff bundle (AGL-4144)', () => {
     await act(async () => {
       fireEvent.click(within(card()).getByRole('button', { name: 'QR' }))
     })
+    // In the QR dialog: the card's own "What the owner sees" (AGL-4244)
+    // names the same bundle.
     expect(
-      screen.getByText('Starter with 3 × Aglyn AI credit block and Site Care, billed yearly'),
+      within(screen.getByRole('dialog')).getByText(
+        'Starter with 3 × Aglyn AI credit block and Site Care, billed yearly',
+      ),
     ).toBeTruthy()
   })
 

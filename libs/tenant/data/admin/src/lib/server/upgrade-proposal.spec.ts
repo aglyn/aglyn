@@ -438,3 +438,91 @@ describe('a live subscription settles the proposal and the trial comp (AGL-3466)
     })
   })
 })
+
+describe('a website build fee on the proposal (AGL-4244)', () => {
+  const proposeWithFee = (buildFee: unknown) =>
+    proposeOrgUpgrade({
+      orgId: ORG,
+      plan: 'starter',
+      addons: 'siteCare',
+      interval: 'month',
+      buildFee,
+      actor: { uid: 'staff', email: 'zed@aglyn.test' },
+      origin: 'https://app.aglyn.test',
+    })
+
+  it('is stored with the proposal, named in its activity line, and given its own line in the email', async () => {
+    seedTrial()
+    const result = await proposeWithFee({ amountCents: 35000, label: 'E-commerce website build' })
+    expect(result.proposal.buildFee).toEqual({ amountCents: 35000, label: 'E-commerce website build' })
+    expect(org()['upgradeProposal']).toMatchObject({
+      buildFee: { amountCents: 35000, label: 'E-commerce website build' },
+    })
+    expect(audits()[0]).toMatchObject({
+      after: { upgradeProposal: { buildFee: { amountCents: 35000 } } },
+    })
+    expect(mockActivity.map((row) => JSON.stringify(row)).join(' ')).toContain(
+      'with E-commerce website build, $350 one time',
+    )
+    const text = String(mockSent[0]['text'])
+    expect(text).toContain('E-commerce website build, $350 one time, charged with your first payment.')
+    expect(text).toContain('Sales tax is added from your billing address')
+  })
+
+  it('refuses a fee outside $1 to $50,000, writing nothing', async () => {
+    seedTrial()
+    for (const amountCents of [50, 5_000_001, 350.25]) {
+      await expect(proposeWithFee({ amountCents })).rejects.toBeInstanceOf(UpgradeProposalError)
+    }
+    expect(org()['upgradeProposal']).toBeUndefined()
+    expect(audits()).toHaveLength(0)
+    expect(mockSent).toHaveLength(0)
+  })
+
+  it('refuses a fee for a workspace that already pays: bill the build with Charge for work', async () => {
+    seedTrial({ plan: 'starter', entitlements: undefined })
+    store.set(`orgs/${ORG}/billing/stripe`, { subscription: { status: 'active', interval: 'month' } })
+    await expect(
+      proposeOrgUpgrade({
+        orgId: ORG,
+        plan: 'pro',
+        interval: 'year',
+        buildFee: { amountCents: 35000 },
+        actor: { uid: 'staff' },
+        origin: 'https://app.aglyn.test',
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: 'This workspace already pays; bill the build with Charge for work.',
+    })
+    expect(org()['upgradeProposal']).toBeUndefined()
+    expect(audits()).toHaveLength(0)
+    expect(mockSent).toHaveLength(0)
+  })
+
+  it('goes with the proposal when it is withdrawn', async () => {
+    seedTrial({
+      upgradeProposal: {
+        plan: 'starter',
+        proposedBy: 'staff',
+        proposedAt: 1,
+        buildFee: { amountCents: 35000, label: 'Website build' },
+      },
+    })
+    expect(await withdrawOrgUpgrade({ orgId: ORG, actor: { uid: 'staff' } })).toBe(true)
+    expect(org()['upgradeProposal']).toBeUndefined()
+    expect(audits()[0]).toMatchObject({
+      before: { upgradeProposal: { buildFee: { amountCents: 35000 } } },
+      after: { upgradeProposal: null },
+    })
+  })
+
+  it('is checked by the builder the hand-off uses, before anything is read', () => {
+    expect(
+      buildUpgradeProposal({ plan: 'starter', buildFee: { amountCents: 10000 }, actor: { uid: 'staff' }, now: 5 }),
+    ).toMatchObject({ buildFee: { amountCents: 10000, label: 'Website build' } })
+    expect(() =>
+      buildUpgradeProposal({ plan: 'starter', buildFee: { amountCents: 1 }, actor: { uid: 'staff' } }),
+    ).toThrow('between $1 and $50,000')
+  })
+})

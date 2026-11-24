@@ -167,6 +167,17 @@ If the team built your site and handed the workspace to you, the plan comes with
 invitation: the email's button opens Billing, and once you accept the invitation you
 land there with the plan and add-ons already chosen.
 
+#### A website build fee {#build-fee}
+
+When the Aglyn team builds your site for an agreed price, the proposal can carry a
+**website build fee**, such as "Website build, $350 one time". The email and the card
+name it on its own line. You pay it once, together with the first payment for your
+plan: Billing adds it to the total due today, sales tax is worked out from your billing
+address the same way it is for the plan, and the plan renews without it. The fee shows
+on that first invoice as its own line. Once it is paid it no longer shows as due, and
+nothing charges it again, even if you cancel and later subscribe again. If the team
+withdraws the proposal, the fee goes with it.
+
 ### Custom {#enterprise}
 
 **Custom**, the plan once labeled Enterprise, is the one plan you cannot buy from the
@@ -706,7 +717,12 @@ chose, and only that:
   counts you can change;
 - the promotion code, already applied.
 
-Whatever you change, the total changes with it. Until your billing address is on file, the card shows
+- a website build fee, if the team set one, as its own line marked **one time**. See [A
+  website build fee](#build-fee).
+
+Whatever you change, the total changes with it. A build fee is part of **Total today**
+and is charged only with this first payment; the confirmation names it and says what
+the plan renews at without it. Until your billing address is on file, the card shows
 the **Total before tax**; with an address, it shows Stripe's total with tax. The button in the card's header shows the total,
 and pressing it pays with the card on file. If you have no card or billing address yet,
 it asks for them first. An add-on your plan does not include, or a code that has

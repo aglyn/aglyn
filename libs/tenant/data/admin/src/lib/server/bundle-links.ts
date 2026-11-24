@@ -43,7 +43,13 @@
  * writes them; the rules deny every client, staff included.
  */
 
-import type { OrgPlan } from '@aglyn/aglyn/server'
+import type { OrgBuildFee, OrgPlan } from '@aglyn/aglyn/server'
+import {
+  BUILD_FEE_PAYING_WORKSPACE_REFUSAL,
+  buildFeeIsDue,
+  normalizeBuildFee,
+  readBuildFee,
+} from '@aglyn/aglyn/app-utils/build-fee'
 import {
   fitBundleAddonsToPlan,
   normalizeBundleDomain,
@@ -122,6 +128,13 @@ export interface BundleLinkDoc {
     coupon?: string
   }
   domain?: BundleLinkDomain
+  /**
+   * A one-time website build fee (AGL-4244), charged on the first invoice of
+   * the subscription the link starts. Unlike the domain gate, it does not
+   * lapse with the link's 24 hours: the owner owes it until it is paid, and
+   * paying it marks every fee the workspace's links carry as paid.
+   */
+  buildFee?: OrgBuildFee
 }
 
 /** A mint refused before anything was written. */
@@ -149,6 +162,8 @@ export interface MintBundleLinkOptions {
    * AGL-4144 (`ai:<blocks>` in `addons`), so a link naming a tier is refused.
    */
   aiTier?: unknown
+  /** A one-time website build fee, `{ amountCents, label }`; optional (AGL-4244). */
+  buildFee?: unknown
   /** The chosen domain, quoted from the registrar's search; optional. */
   domain?: {
     name?: unknown
@@ -166,6 +181,7 @@ export interface MintedBundleLink {
   expiresAt: number
   intent: BundleLinkDoc['intent']
   domain: BundleLinkDomain | null
+  buildFee: OrgBuildFee | null
   /** Add-ons asked for that the plan does not sell, left off the link. */
   droppedAddons: Array<AddonKind | string>
 }
@@ -207,6 +223,9 @@ export async function mintBundleLink(options: MintBundleLinkOptions): Promise<Mi
     coupon: options.coupon,
   })
   const intent: BundleLinkDoc['intent'] = { plan, ...bundle }
+  const checkedFee = normalizeBuildFee(options.buildFee as never)
+  if ('error' in checkedFee) throw new BundleLinkError(checkedFee.error)
+  const buildFee = checkedFee.fee
 
   const db = firestore()
   const orgRef = db.collection('orgs').doc(orgId)
@@ -224,7 +243,9 @@ export async function mintBundleLink(options: MintBundleLinkOptions): Promise<Mi
     orgSnapshot.get('billingStatus')
   if (isLiveSubscriptionStatus(status)) {
     throw new BundleLinkError(
-      'This workspace already has a live subscription; change its plan from Billing instead',
+      buildFee
+        ? BUILD_FEE_PAYING_WORKSPACE_REFUSAL
+        : 'This workspace already has a live subscription; change its plan from Billing instead',
       409,
     )
   }
@@ -260,6 +281,7 @@ export async function mintBundleLink(options: MintBundleLinkOptions): Promise<Mi
     preclearsDomainGate: true,
     intent,
     ...(domain ? { domain } : {}),
+    ...(buildFee ? { buildFee } : {}),
   }
   const batch = db.batch()
   batch.set(ref, doc)
@@ -272,6 +294,7 @@ export async function mintBundleLink(options: MintBundleLinkOptions): Promise<Mi
       bundleLinkId: ref.id,
       intent,
       domain,
+      buildFee,
       expiresAt: doc.expiresAt,
       preclearsDomainGate: true,
     },
@@ -280,13 +303,16 @@ export async function mintBundleLink(options: MintBundleLinkOptions): Promise<Mi
   await batch.commit()
 
   const path = onboardingDestination(slug, upgradeProposalIntent(intent))
-  const url = `${origin}${path}${domain ? `&${BUNDLE_LINK_PARAM}=${ref.id}` : ''}`
+  // The record's id rides the link whenever the record holds something the
+  // URL cannot carry honestly: a domain, or a build fee (AGL-4244).
+  const url = `${origin}${path}${domain || buildFee ? `&${BUNDLE_LINK_PARAM}=${ref.id}` : ''}`
   return {
     id: ref.id,
     url,
     expiresAt: doc.expiresAt,
     intent,
     domain,
+    buildFee,
     droppedAddons: [...parsed.dropped, ...fitted.notSold],
   }
 }
@@ -352,6 +378,12 @@ export function bundleLinkPreclearance(options: { now?: () => number } = {}): Pu
   }
 }
 
+/** A link's build fee as Billing shows it, while it is still due (AGL-4244). */
+export interface BundleLinkBuildFeeLine {
+  amountCents: number
+  label: string
+}
+
 export interface BundleLinkDomainLine {
   name: string
   firstYearCents: number
@@ -371,21 +403,33 @@ export async function readBundleLinkDomain(
   orgId: string,
   linkId: string,
   now: number = Date.now(),
-): Promise<{ domain: BundleLinkDomainLine | null; available: boolean }> {
+): Promise<{
+  domain: BundleLinkDomainLine | null
+  available: boolean
+  /** Present only while the link's build fee is due (AGL-4244). */
+  buildFee?: BundleLinkBuildFeeLine
+}> {
   const available = domainsRegistrarConfigured()
   const id = String(linkId ?? '').trim()
   if (!orgId || !id || id.includes('/')) return { domain: null, available }
   const db = firestore()
   const snapshot = await db.collection(BUNDLE_LINKS_COLLECTION).doc(id).get()
   const doc = snapshot.data() as Partial<BundleLinkDoc> | undefined
-  if (!snapshot.exists || doc?.workspaceId !== orgId || !doc?.domain) {
+  if (!snapshot.exists || doc?.workspaceId !== orgId) {
     return { domain: null, available }
   }
-  if (!bundleLinkIsLive(doc, now)) return { domain: null, available }
+  // The fee is owed until it is paid, whether or not the link's 24 hours
+  // have run (AGL-4244); a paid one is no longer shown as due.
+  const fee = readBuildFee(doc.buildFee)
+  const feePart = buildFeeIsDue(fee)
+    ? { buildFee: { amountCents: fee.amountCents, label: fee.label } }
+    : {}
+  if (!doc.domain || !bundleLinkIsLive(doc, now)) return { domain: null, available, ...feePart }
   const host = await db.collection('hosts').doc(doc.domain.hostId).get()
-  if (!host.exists || host.get('orgId') !== orgId) return { domain: null, available }
+  if (!host.exists || host.get('orgId') !== orgId) return { domain: null, available, ...feePart }
   return {
     available,
+    ...feePart,
     domain: {
       name: doc.domain.name,
       firstYearCents: doc.domain.firstYearCents,

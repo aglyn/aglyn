@@ -45,6 +45,7 @@ import {
   upgradeProposalSummary,
 } from '@aglyn/aglyn/app-utils/upgrade-proposal'
 import type { OrgUpgradeProposal } from '@aglyn/aglyn/server'
+import { BUILD_FEE_PAYING_WORKSPACE_REFUSAL } from '@aglyn/aglyn/app-utils/build-fee'
 import { PLAN_LABELS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { renderSystemEmail } from '../../_lib/render-system-email'
 import {
@@ -53,6 +54,7 @@ import {
 } from '../../../../utils/invite-order'
 import {
   acceptOwnerHandoff,
+  buildFeeEmailLine,
   buildUpgradeProposal,
   readUpgradeProposalTarget,
   recordUpgradeProposalActivity,
@@ -510,11 +512,14 @@ async function handler(request: Request): Promise<Response> {
       const proposalSummary = billingUrl && proposal
         ? upgradeProposalSummary(proposal, { brand: branding.productName })
         : ''
+      // The build fee's own line (AGL-4244), or '' when none was set.
+      const buildFeeLine = billingUrl && proposal?.buildFee ? buildFeeEmailLine(proposal) : ''
       const planLabel = proposal ? (PLAN_LABELS[proposal.plan] ?? proposal.plan) : ''
       const fallbackText = billingUrl
         ? `You've been invited to take over ${orgName} as its owner. ` +
           `${previousOwnerLine}\n\n` +
           `Your plan: ${proposalSummary}.` +
+          (buildFeeLine ? `\n\n${buildFeeLine}` : '') +
           (proposal?.note ? `\n\n${proposal.note}` : '') +
           '\n\nSign in or create your account with this email address, and ' +
           `Billing opens with everything already chosen:\n\n${billingUrl}\n\n` +
@@ -547,6 +552,7 @@ async function handler(request: Request): Promise<Response> {
                 'plan.name': planLabel,
                 'proposal.summary': proposalSummary,
                 'proposal.note': proposal?.note ?? '',
+                'proposal.buildFee': buildFeeLine,
                 billingUrl,
               }
             : {}),
@@ -697,12 +703,25 @@ async function handler(request: Request): Promise<Response> {
             interval: proposalInput['interval'],
             coupon: proposalInput['coupon'],
             aiTier: proposalInput['aiTier'],
+            // A one-time build fee (AGL-4244), checked here and charged on the
+            // first invoice of the subscription the proposal starts.
+            buildFee: proposalInput['buildFee'],
             actor: { uid: decoded.uid, email: decoded.email ?? null },
           })
           // Checked before anything is written, and again in the transaction.
           const orgRef = firestore.collection('orgs').doc(orgId)
           await firestore.runTransaction((tx) => readUpgradeProposalTarget(tx, orgRef))
         } catch (error) {
+          // A workspace that already pays goes without a proposal, but a
+          // build fee asked of it is refused rather than dropped (AGL-4244):
+          // its build is billed with Charge for work.
+          if (
+            error instanceof UpgradeProposalError &&
+            error.status === 409 &&
+            proposal?.buildFee
+          ) {
+            return Response.json({ error: BUILD_FEE_PAYING_WORKSPACE_REFUSAL }, { status: 409 })
+          }
           if (error instanceof UpgradeProposalError && error.status === 409) {
             proposal = null
             proposalSkipped = true
