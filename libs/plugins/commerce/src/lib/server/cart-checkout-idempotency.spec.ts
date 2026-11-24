@@ -187,7 +187,10 @@ const fakeFirestore = {
 const mockOrg: any = {
   org: {
     id: 'org-1',
-    plan: 'business',
+    plan: 'pro',
+    // Business's 2% digital rate, which every fee below is cut against, as
+    // an override: the plan itself was removed (AGL-4245).
+    entitlements: { transactionFeeDigitalPct: 2 },
     subscriptionStatus: 'active',
     ownerUid: 'owner-1',
     slug: 'acme',
@@ -683,13 +686,17 @@ describe('a product doc with no type (AGL-2251)', () => {
  */
 describe('a platform fee that rounds to zero (AGL-2256)', () => {
   const realPlan = mockOrg.org.plan
+  const realEntitlements = mockOrg.org.entitlements
 
   afterEach(() => {
     mockOrg.org.plan = realPlan
+    mockOrg.org.entitlements = realEntitlements
   })
 
   beforeEach(() => {
-    mockOrg.org.plan = 'scale'
+    // Pro is 1% digital, the rate the retired Scale plan carried (AGL-4245).
+    mockOrg.org.plan = 'pro'
+    mockOrg.org.entitlements = {}
     // TWO lines, because the rounding is PER LINE and a single line big
     // enough to matter rounds up. 1% of 49c is 0.49c, which rounds to 0 —
     // twice — while the basket itself is 98c and well over Stripe's own 50c
@@ -732,7 +739,9 @@ describe('a platform fee that rounds to zero (AGL-2256)', () => {
    * balance whatever the take rate is.
    */
   it('takes no margin on a plan whose rate is a real zero', async () => {
-    mockOrg.org.plan = 'advanced'
+    // Custom is 0%, as the retired Advanced plan was (AGL-4245).
+    mockOrg.org.plan = 'enterprise'
+    mockOrg.org.entitlements = {}
     await post()
     const sent = Number(
       sessionCalls()[0].params.get(

@@ -26,7 +26,7 @@
  * Production, 2026-09-26: an org paid $56 for Pro and switched Pro → Business
  * → Scale → Advanced the same day. Every switch was `create_prorations`, so
  * each difference was filed as a pending invoice item for the renewal a month
- * out, while this route wrote `plan: 'advanced'` onto the org the moment the
+ * out, while this route wrote `plan: 'enterprise'` onto the org the moment the
  * Stripe update returned. $337.55 of Advanced was used before any of it was
  * billed — and the account was a fraudster, so "pay for the cheapest plan once,
  * switch to the top one" was a free month of the top plan.

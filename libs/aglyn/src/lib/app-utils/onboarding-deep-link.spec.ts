@@ -21,6 +21,7 @@ import {
   onboardingSignupHref,
   parseOnboardingPlanIntent,
 } from './onboarding-deep-link'
+import type { OrgPlan } from '../foundation/definitions/org-billing.types'
 
 const query = (search: string) => new URLSearchParams(search)
 
@@ -209,9 +210,9 @@ describe('onboardingSignupHref — the CTA the marketing site publishes (AGL-198
         })
       }
     }
-    // …and a retired tier's old link carries no intent at all (pricing v4).
-    for (const plan of ['scale', 'advanced', 'agency', 'business'] as const) {
-      const href = onboardingSignupHref(SIGNUP, plan, 'year')
+    // …and a removed tier's old link carries no intent at all (AGL-4245).
+    for (const plan of ['scale', 'advanced', 'agency', 'business']) {
+      const href = onboardingSignupHref(SIGNUP, plan as OrgPlan, 'year')
       expect(parseOnboardingPlanIntent(new URL(href).searchParams)).toBeNull()
     }
   })

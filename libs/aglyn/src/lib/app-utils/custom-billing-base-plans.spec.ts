@@ -18,7 +18,6 @@ import {
   CUSTOM_BILLING_BASE_PLANS,
   PLAN_LABELS,
   planLabelGrantingFeature,
-  RETIRED_PLANS,
 } from './plan-entitlements'
 
 /**
@@ -36,9 +35,9 @@ describe('the staff custom-billing base plans (AGL-4158)', () => {
     ])
   })
 
-  it('never offers a retired plan or Free', () => {
-    for (const plan of [...RETIRED_PLANS, 'free' as const]) {
-      expect([plan, CUSTOM_BILLING_BASE_PLANS.includes(plan)]).toEqual([plan, false])
+  it('never offers a removed plan id or Free', () => {
+    for (const plan of ['business', 'scale', 'advanced', 'agency', 'free']) {
+      expect([plan, (CUSTOM_BILLING_BASE_PLANS as readonly string[]).includes(plan)]).toEqual([plan, false])
     }
   })
 })

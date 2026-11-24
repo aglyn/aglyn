@@ -76,7 +76,7 @@ const EMPTY_DRAFT: BrandingDraft = {
  * these back through the one shared `resolveBrandingProfile`, so what an admin
  * sets here is exactly what recipients see.
  *
- * Gated on the `whiteLabel` entitlement (Agency tier, or an Enterprise per-org
+ * Gated on the `whiteLabel` entitlement (the Custom plan, or a per-org
  * override): a non-entitled org sees an upgrade prompt instead of the editor,
  * mirroring the API keys card.
  */

@@ -26,9 +26,8 @@ import {
   type OrgPlan,
 } from '@aglyn/aglyn/server'
 // By its own module, not the server barrel route specs stub with a partial
-// object: a retired plan (pricing v4) is refused by name.
+// object.
 import {
-  isRetiredPlan,
   PLAN_LABELS,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
@@ -91,10 +90,10 @@ import {
 
 /**
  * The plans checkout sells, by price (pricing v4, AGL-4126): Starter and Pro.
- * Business, Scale, Advanced and Agency are retired and never sold again, so
- * their `STRIPE_PRICE_*` env (and the per-plan add-on env beside it, which
- * `billing-addons.ts` derives from `SELF_SERVE_PLANS`) is no longer read; a
- * request naming one finds no price and is refused.
+ * The plans v4 retired were removed outright (AGL-4245), so their
+ * `STRIPE_PRICE_*` env (and the per-plan add-on env beside it, which
+ * `billing-addons.ts` derives from `SELF_SERVE_PLANS`) is not read; a request
+ * naming one finds no price.
  */
 const PRICE_ENV: Record<string, string | undefined> = {
   starter: process.env.STRIPE_PRICE_STARTER,
@@ -297,20 +296,6 @@ async function handler(request: Request): Promise<Response> {
   if (isCustomPricedPlan(plan as OrgPlan)) {
     return Response.json(
       { error: `${PLAN_LABELS.enterprise} is custom-priced — contact sales.` },
-      { status: 400 },
-    )
-  }
-  // A retired plan (pricing v4, AGL-4126) is refused for what it is, for the
-  // reason Enterprise is above: it has no price any more, and falling through
-  // would answer the "billing is not configured" 501.
-  if (isRetiredPlan(plan)) {
-    return Response.json(
-      {
-        error:
-          `${PLAN_LABELS[plan as OrgPlan]} is no longer offered — choose ` +
-          `${PLAN_LABELS.starter} or ${PLAN_LABELS.pro}.`,
-        code: 'plan_retired',
-      },
       { status: 400 },
     )
   }

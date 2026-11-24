@@ -56,7 +56,7 @@ const paying = (extra: Record<string, unknown> = {}) =>
   ({ plan: 'starter', billingStatus: 'active', ...extra }) as never
 
 describe('1 · the workspace rate limit is an entitlement, tiered by plan', () => {
-  const LADDER: OrgPlan[] = ['free', 'starter', 'pro', 'business', 'scale', 'advanced', 'agency', 'enterprise']
+  const LADDER: OrgPlan[] = ['free', 'starter', 'pro', 'enterprise']
 
   it('is 120 on Starter (one key), 600 on Pro, and unlimited on Custom', () => {
     expect(PLAN_ENTITLEMENTS.starter.apiRequestsPerMinutePerOrg).toBe(120)
@@ -96,7 +96,7 @@ describe('1 · the workspace rate limit is an entitlement, tiered by plan', () =
 describe('2 · Starter has a hard monthly ceiling; Pro and up have none', () => {
   it('is written once, on the Starter row, and Pro and above are uncapped', () => {
     expect(STARTER_CEILING).toBe(20_000)
-    for (const plan of ['pro', 'business', 'scale', 'advanced', 'agency', 'enterprise'] as OrgPlan[]) {
+    for (const plan of ['pro', 'enterprise'] as OrgPlan[]) {
       expect(`${plan}: ${PLAN_ENTITLEMENTS[plan].maxApiRequestsPerMonth}`).toBe(`${plan}: ${UNLIMITED}`)
     }
     expect(cheapestPlanWithoutApiCeiling()).toBe('pro')

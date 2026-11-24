@@ -67,7 +67,7 @@ const PAGING_MODEL = {
 
 jest.setTimeout(30_000)
 
-const ORG = { $id: 'org-1', plan: 'scale' } as any
+const ORG = { $id: 'org-1', plan: 'pro' } as any
 
 /**
  * Big enough that one page is a small fraction of it, and small enough to

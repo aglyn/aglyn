@@ -71,7 +71,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   useConfirmationContext: () => ({ confirm: jest.fn().mockResolvedValue(undefined) }),
 }))
 
-const ORG = { plan: 'business' } as never
+const ORG = { plan: 'pro' } as never
 
 /** Every zone call, by slot, with the props it was handed. */
 const zoneCalls: Array<{ slot: string } & Record<string, any>> = []

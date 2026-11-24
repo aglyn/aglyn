@@ -188,7 +188,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 
 import StaffOrgActions from './staff-org-actions.component'
 
-const ORG = { $id: 'org-1', plan: 'business', entitlements: { hostLimit: 5 } }
+const ORG = { $id: 'org-1', plan: 'pro', entitlements: { hostLimit: 5 } }
 
 const orgWrites = () =>
   mockApplied.filter((write) => write.path === 'orgs/org-1')

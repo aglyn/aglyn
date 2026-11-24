@@ -64,7 +64,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       }),
     }),
   },
-  getOrgForHost: async () => ({ org: { plan: 'business' } }),
+  getOrgForHost: async () => ({ org: { plan: 'pro' } }),
   logHostActivity: async () => undefined,
   hostSendingIdentity: async () => ({ from: 'hello@northwind.example' }),
   meterHostEmail: async () => undefined,

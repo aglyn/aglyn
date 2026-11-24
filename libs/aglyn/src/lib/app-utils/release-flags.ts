@@ -493,12 +493,11 @@ const clampPercent = (value: unknown): number => {
 
 /**
  * Every plan a flag may target, cheapest first — `PLAN_LADDER`: the
- * self-serve plans, the plans pricing v4 retired (AGL-4126) in their old
- * place, then `enterprise`. Derived, never re-typed: pricing v3 inserted
- * `scale` mid-ladder and added `agency`, and a second hand-written tier list
- * here would have missed both. The retired plans stay targetable because a
- * workspace can still be ON one, and a flag aimed at "Pro and above" must
- * reach it; a stored list naming one must not lose it on the next save.
+ * self-serve plans, then `enterprise`. Derived, never re-typed: pricing v3
+ * inserted tiers mid-ladder, and a second hand-written tier list here would
+ * have missed them. The plans pricing v4 retired were removed on 2026-11-24
+ * (AGL-4245) when no flag targeted one, so a stored list naming one drops it
+ * on read like any other unknown tier.
  */
 export const RELEASE_FLAG_PLAN_LADDER: readonly OrgPlan[] = PLAN_LADDER
 

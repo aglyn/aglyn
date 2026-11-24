@@ -198,7 +198,7 @@ beforeEach(() => {
   mockScopes = ['contacts:read', 'contacts:write']
   mockLogHostActivity.mockClear()
   mockOrg = {
-    plan: 'business',
+    plan: 'pro',
     subscription: { status: 'active' },
     hosts: { 'host-1': true, 'host-2': true },
   }

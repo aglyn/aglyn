@@ -46,7 +46,7 @@ const MOCK_ORG_ID = 'org-1'
 /** Every document, by full path. */
 let store: Record<string, Record<string, any>> = {}
 /** The owning org's billing doc — the plan both halves read. */
-let mockOrg: Record<string, any> = { plan: 'business' }
+let mockOrg: Record<string, any> = { plan: 'pro' }
 
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
@@ -207,7 +207,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   store = {}
-  mockOrg = { plan: 'business' }
+  mockOrg = { plan: 'pro' }
   store[`hosts/${HOST_ID}`] = { orgId: MOCK_ORG_ID }
   store[`orgs/${MOCK_ORG_ID}/datasets/leads`] = {
     displayName: 'Leads',
@@ -258,7 +258,7 @@ describe('a dataset step dispatched from a page', () => {
   })
 
   it('records the data plugin’s refusal as the run’s error, and writes nothing', async () => {
-    mockOrg = { plan: 'business', entitlements: { recordsPerDataset: 0 } }
+    mockOrg = { plan: 'pro', entitlements: { recordsPerDataset: 0 } }
     await dispatchHostAutomation(HOST_ID, 'capture', 'elementClick', {
       email: 'ada@example.com',
     })

@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { PLAN_PRICING, RETIRED_PLANS, SELF_SERVE_PLANS } from './plan-entitlements'
+import { PLAN_PRICING, SELF_SERVE_PLANS } from './plan-entitlements'
+import type { OrgPlan } from '../foundation/definitions/org-billing.types'
 import {
   AI_CREDIT_BLOCK_MONTHLY_USD,
   AI_CREDIT_BLOCK_YEARLY_USD,
@@ -116,8 +117,8 @@ describe('the bundle link’s add-ons (AGL-3955)', () => {
       expect(addonMaxForPlan('aiAddon', plan)).toBe(AI_CREDIT_BLOCKS_MAX)
       expect(planSellsAddon('aiAddon', plan)).toBe(true)
     }
-    // A plan pricing v4 retired sells no blocks.
-    for (const plan of RETIRED_PLANS) {
+    // A removed plan id (AGL-4245) sells no blocks.
+    for (const plan of ['business', 'scale', 'advanced', 'agency'] as unknown as OrgPlan[]) {
       expect(addonUnitUsd('aiAddon', plan)).toBeNull()
       expect(addonMaxForPlan('aiAddon', plan)).toBe(0)
       expect(planSellsAddon('aiAddon', plan)).toBe(false)
@@ -130,7 +131,7 @@ describe('the bundle link’s add-ons (AGL-3955)', () => {
 
   it('names the smallest plan that sells an add-on, for one the chosen plan does not (AGL-4025)', () => {
     expect(planSellsAddon('posRegisters', 'starter')).toBe(false)
-    expect(firstPlanSellingAddon('posRegisters', ['starter', 'pro', 'business'])).toBe('pro')
+    expect(firstPlanSellingAddon('posRegisters', ['starter', 'pro', 'enterprise'])).toBe('pro')
     expect(firstPlanSellingAddon('posRegisters', ['starter'])).toBeNull()
     expect(firstPlanSellingAddon('siteCare', ['starter', 'pro'])).toBe('starter')
   })

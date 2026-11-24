@@ -44,7 +44,7 @@
  *   2. replay — this spec again: under the launcher every request whose
  *      bytes were answered before is replayed from `.cache/ai-replay` for
  *      nothing, and only a CHANGED prompt goes to the provider;
- *   3. one live run per plan (Free, then `AGLYN_LIVE_AI_ORG_PLAN=business`)
+ *   3. one live run per plan (Free, then `AGLYN_LIVE_AI_ORG_PLAN=pro`)
  *      for the prompts you changed — read `run.live` in the table: 0 means
  *      nothing new was asked and the run proves nothing;
  *   4. the full live sweep, only before landing: `AGLYN_AI_REPLAY=refresh`
@@ -119,13 +119,13 @@ const LIVE = process.env['AGLYN_LIVE_AI'] === '1' && Boolean(process.env['ANTHRO
 const NOW = new Date('2026-10-14T12:00:00Z')
 /**
  * The workspace the plans are made on: Free, as a guided start makes most of
- * them, or a paid one with `AGLYN_LIVE_AI_ORG_PLAN=business` (AGL-3660) — a
+ * them, or a paid one with `AGLYN_LIVE_AI_ORG_PLAN=pro` (AGL-3660) — a
  * Free site plans on the fast tier, so only a paid one exercises the balanced
  * default's plan.
  */
-const ORG_PLAN = process.env['AGLYN_LIVE_AI_ORG_PLAN'] === 'business' ? 'business' : 'free'
+const ORG_PLAN = process.env['AGLYN_LIVE_AI_ORG_PLAN'] === 'pro' ? 'pro' : 'free'
 /** The pages the guided start asks for: Free's most, or a paid start's default of five. */
-const PAGES = ORG_PLAN === 'business' ? 5 : 2
+const PAGES = ORG_PLAN === 'pro' ? 5 : 2
 const ORG: Partial<AglynOrgBilling> & { ownerUid: string } = { plan: ORG_PLAN, ownerUid: 'owner-1' }
 
 /**

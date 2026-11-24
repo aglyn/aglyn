@@ -106,18 +106,18 @@ beforeEach(() => {
 
 describe('the assist credit odometer', () => {
   it('answers in CREDITS and ships no dollar figure at all', async () => {
-    mockDocs.set('orgs/org-1', { plan: 'business' })
-    mockDocs.set(`orgs/org-1/assistUsage/${MONTH}`, { estCostUsd: 4.5 })
+    mockDocs.set('orgs/org-1', { plan: 'pro' })
+    mockDocs.set(`orgs/org-1/assistUsage/${MONTH}`, { estCostUsd: 1.5 })
     const response = await GET(get())
     expect(response.status).toBe(200)
     const payload = await response.json()
     expect(payload.credits).toEqual({
-      used: 4_500,
-      limit: 7_500,
-      remaining: 3_000,
+      used: 1_500,
+      limit: 2_750,
+      remaining: 1_250,
     })
     const wire = JSON.stringify(payload)
-    for (const leak of ['estCostUsd', 'costUsd', 'Usd', '4.5']) {
+    for (const leak of ['estCostUsd', 'costUsd', 'Usd', '1.5']) {
       expect(wire).not.toContain(leak)
     }
   })
@@ -149,13 +149,13 @@ describe('the assist credit odometer', () => {
 
   it('reads ZERO drawn for an org that has not used the assistant', async () => {
     // The negative control for the first test: without it, a build that
-    // hardcoded 4,500 would pass both.
-    mockDocs.set('orgs/org-1', { plan: 'business' })
+    // hardcoded 1,500 would pass both.
+    mockDocs.set('orgs/org-1', { plan: 'pro' })
     const payload = await (await GET(get())).json()
     expect(payload.credits).toEqual({
       used: 0,
-      limit: 7_500,
-      remaining: 7_500,
+      limit: 2_750,
+      remaining: 2_750,
     })
   })
 
@@ -201,7 +201,7 @@ describe('the assist credit odometer', () => {
   })
 
   it('refuses the request before it reads anything', async () => {
-    mockDocs.set('orgs/org-1', { plan: 'business' })
+    mockDocs.set('orgs/org-1', { plan: 'pro' })
     expect(
       (await GET(new Request('https://app.aglyn.com/x', { method: 'POST' })))
         .status,

@@ -45,7 +45,7 @@ const countedPaths: string[] = []
 const mockCountFor: Record<string, number> = {}
 const scope = { orgWide: true, loaded: false }
 const currentOrg: { org: Record<string, unknown>; orgId: string } = {
-  org: { plan: 'business' },
+  org: { plan: 'pro' },
   orgId: 'org-1',
 }
 
@@ -161,7 +161,7 @@ beforeEach(() => {
   mockStorageBody = null
   scope.orgWide = true
   scope.loaded = false
-  currentOrg.org = { plan: 'business' }
+  currentOrg.org = { plan: 'pro' }
   routeScope.namesOrg = true
   routeScope.pathOrgSlug = 'acme'
   routeScope.currentOrg = { $id: 'org-1', slug: 'acme' }
@@ -339,7 +339,7 @@ describe('QuotaWarningsBanner actions for a scoped viewer (AGL-1072)', () => {
   it('sends a site collaborator to an admin when payment is past due', async () => {
     scope.loaded = true
     scope.orgWide = false
-    currentOrg.org = { plan: 'business', subscription: { status: 'past_due' } }
+    currentOrg.org = { plan: 'pro', subscription: { status: 'past_due' } }
     render(<QuotaWarningsBanner />)
     await screen.findByText(/A workspace admin needs to update the payment/)
     expect(billingLinks()).toEqual([])
@@ -350,7 +350,7 @@ describe('QuotaWarningsBanner actions for a scoped viewer (AGL-1072)', () => {
     // it and lands on the Billing button that does it (AGL-3442).
     scope.loaded = true
     scope.orgWide = true
-    currentOrg.org = { plan: 'business', subscription: { status: 'past_due' } }
+    currentOrg.org = { plan: 'pro', subscription: { status: 'past_due' } }
     render(<QuotaWarningsBanner />)
     await screen.findByText(/Update your payment method/)
     expect(billingLinks()).toHaveLength(1)
@@ -364,7 +364,7 @@ describe('QuotaWarningsBanner actions for a scoped viewer (AGL-1072)', () => {
     // Control for the case above: the anchor is the past-due answer only.
     scope.loaded = true
     scope.orgWide = true
-    currentOrg.org = { plan: 'business', subscription: { status: 'unpaid' } }
+    currentOrg.org = { plan: 'pro', subscription: { status: 'unpaid' } }
     render(<QuotaWarningsBanner />)
     await screen.findByText(/your plan has stopped/)
     expect(billingLinks()[0].textContent).toBe('Fix billing')
@@ -423,7 +423,7 @@ describe('QuotaWarningsBanner off an org-scoped route (AGL-1916)', () => {
     // Suspension outranks plan and dismissal by design (AGL-202). It does not
     // outrank knowing which workspace it is about.
     onThePicker()
-    currentOrg.org = { plan: 'business', suspendedAt: 1 }
+    currentOrg.org = { plan: 'pro', suspendedAt: 1 }
     const { container } = render(<QuotaWarningsBanner />)
     await waitFor(() => expect(seatFetches).toEqual([]))
     expect(screen.queryByText(/This account is suspended/)).toBeNull()
@@ -432,7 +432,7 @@ describe('QuotaWarningsBanner off an org-scoped route (AGL-1916)', () => {
 
   it('renders no DUNNING banner on the picker', async () => {
     onThePicker()
-    currentOrg.org = { plan: 'business', billingStatus: 'past_due' }
+    currentOrg.org = { plan: 'pro', billingStatus: 'past_due' }
     const { container } = render(<QuotaWarningsBanner />)
     await waitFor(() => expect(seatFetches).toEqual([]))
     expect(screen.queryByText(/last payment failed/)).toBeNull()
@@ -654,7 +654,7 @@ describe('a subscription whose first payment never completed', () => {
   it('says so, rather than showing nothing', async () => {
     scope.loaded = true
     scope.orgWide = true
-    currentOrg.org = { plan: 'business', billingStatus: 'incomplete' }
+    currentOrg.org = { plan: 'pro', billingStatus: 'incomplete' }
     render(<QuotaWarningsBanner />)
     await screen.findByText(/never completed/i)
     // And gives them the way back.
@@ -666,7 +666,7 @@ describe('a subscription whose first payment never completed', () => {
     // viewer cannot take must not be offered to them.
     scope.loaded = true
     scope.orgWide = false
-    currentOrg.org = { plan: 'business', billingStatus: 'incomplete' }
+    currentOrg.org = { plan: 'pro', billingStatus: 'incomplete' }
     render(<QuotaWarningsBanner />)
     await screen.findByText(/A workspace admin needs to finish it/)
     expect(billingLinks()).toEqual([])
@@ -677,7 +677,7 @@ describe('a subscription whose first payment never completed', () => {
     // retrying an incomplete first payment, and there is no access to
     // continue — the plan never started.
     scope.loaded = true
-    currentOrg.org = { plan: 'business', billingStatus: 'incomplete' }
+    currentOrg.org = { plan: 'pro', billingStatus: 'incomplete' }
     render(<QuotaWarningsBanner />)
     await screen.findByText(/never completed/i)
     const said = screen.getByRole('alert').textContent ?? ''
@@ -688,7 +688,7 @@ describe('a subscription whose first payment never completed', () => {
   it('does NOT borrow the unpaid sentence', async () => {
     // `unpaid` says the plan "has stopped". It never began.
     scope.loaded = true
-    currentOrg.org = { plan: 'business', billingStatus: 'incomplete' }
+    currentOrg.org = { plan: 'pro', billingStatus: 'incomplete' }
     render(<QuotaWarningsBanner />)
     await screen.findByText(/never completed/i)
     expect(screen.getByRole('alert').textContent ?? '').not.toMatch(
@@ -710,7 +710,7 @@ describe('a subscription whose first payment never completed', () => {
     // Without this, a banner that showed the incomplete copy for everything
     // would pass every assertion above.
     scope.loaded = true
-    currentOrg.org = { plan: 'business', billingStatus: 'past_due' }
+    currentOrg.org = { plan: 'pro', billingStatus: 'past_due' }
     render(<QuotaWarningsBanner />)
     await screen.findByText(/while Stripe retries/i)
     const said = screen.getByRole('alert').textContent ?? ''
@@ -818,7 +818,7 @@ describe('QuotaWarningsBanner AI credits row (AGL-2898)', () => {
   })
 
   it('at the band with the org’s own switch on: AI stops, nothing billed', async () => {
-    currentOrg.org = { plan: 'business', assistOverage: { hardCap: true } }
+    currentOrg.org = { plan: 'pro', assistOverage: { hardCap: true } }
     answerCredits({ used: 2_800, limit: 2_750 }, true)
     render(<QuotaWarningsBanner />)
     await screen.findByText(/AI assist stops until next month or an upgrade, and nothing is billed/)

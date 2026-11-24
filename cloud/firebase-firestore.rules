@@ -288,11 +288,11 @@ service cloud.firestore {
       return crmSuiteOverride(org) == true ||
         (crmSuiteOverride(org) == null &&
           ((org.get('plan', 'free') in
-              ['starter', 'pro', 'business', 'scale', 'advanced', 'agency', 'enterprise'] &&
+              ['starter', 'pro', 'enterprise'] &&
             !(orgSubscriptionStatus(org) in
               ['canceled', 'unpaid', 'incomplete', 'incomplete_expired'])) ||
           (orgPlanComp(org) in
-              ['starter', 'pro', 'business', 'scale', 'advanced', 'agency', 'enterprise'] &&
+              ['starter', 'pro', 'enterprise'] &&
             orgSubscriptionStatus(org) in
               ['', 'canceled', 'unpaid', 'incomplete', 'incomplete_expired'])));
     }

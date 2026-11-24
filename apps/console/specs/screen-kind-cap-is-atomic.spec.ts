@@ -457,11 +457,11 @@ describe('CONCURRENTLY: promotion cannot be laundered', () => {
   it('an UNLIMITED plan lands all of them', async () => {
     // The other half of every cap assertion above: a gate that refused
     // everything would pass all of them and fail only this.
-    expect(PLAN_ENTITLEMENTS.business.screensPerHost).toBe(
+    expect(PLAN_ENTITLEMENTS.pro.screensPerHost).toBe(
       Number.POSITIVE_INFINITY,
     )
     const attempts = 20
-    mockState.org = { plan: 'business' }
+    mockState.org = { plan: 'pro' }
     seed(0, attempts)
     const responses = await Promise.all(
       Array.from({ length: attempts }, (_unused, index) =>

@@ -65,10 +65,10 @@ export type { OrgUid } from './platform.types'
 
 /** Hosted in master catalog */
 /**
- * SaaS subscription tiers (Tenant Billing & SaaS Plans, AGL-38..41).
- * Pricing v3 (2026-07) inserted `scale` between business and advanced to
- * fill the $139→$399 gap, and added `agency` above advanced for
- * high-volume multi-site orgs — see the Pricing Decision Log.
+ * SaaS subscription tiers (Tenant Billing & SaaS Plans, AGL-38..41): Free,
+ * Starter, Pro and Custom (`enterprise`). The plans pricing v4 retired
+ * (Business, Scale, Advanced, Agency) were removed outright on 2026-11-24
+ * (AGL-4245); an old id read from storage goes through `normalizeStoredPlan`.
  *
  * `enterprise` (AGL-1118) is a REAL plan, not a display label: it tops the
  * ladder with unlimited capacity plus white-label and SSO, and it is the ONE
@@ -81,10 +81,6 @@ export type OrgPlan =
   | 'free'
   | 'starter'
   | 'pro'
-  | 'business'
-  | 'scale'
-  | 'advanced'
-  | 'agency'
   | 'enterprise'
 
 /**

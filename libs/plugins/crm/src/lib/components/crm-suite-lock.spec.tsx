@@ -112,7 +112,7 @@ describe('crmSuiteIncluded', () => {
       crmSuiteIncluded({ plan: 'free', entitlements: { features: { crm: true } } }),
     ).toBe(true)
     expect(
-      crmSuiteIncluded({ plan: 'agency', entitlements: { features: { crm: false } } }),
+      crmSuiteIncluded({ plan: 'enterprise', entitlements: { features: { crm: false } } }),
     ).toBe(false)
   })
 })

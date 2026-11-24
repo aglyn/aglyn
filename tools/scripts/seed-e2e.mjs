@@ -269,7 +269,7 @@ await put(firestore.collection('orgs').doc(orgId), {
   ...displayNameSearchFields('E2E Bakery Co'),
   slug: E2E_ORG_SLUG,
   ownerUid: E2E_UID,
-  plan: 'business',
+  plan: 'pro',
   // Plugin switchboard (AGL-416): explicit so the e2e exercises the
   // org-gated loader; keep in sync with FIRST_PARTY_PLUGINS defaults.
   enabledPlugins: [
@@ -464,7 +464,7 @@ await putHostMembership(
 await put(firestore.collection('orgs').doc(ownerOrgId), {
   name: 'E2E Client Co',
   ownerUid: E2E_OWNER_UID,
-  plan: 'business',
+  plan: 'pro',
   subscription: { status: 'active' },
   createdAt: now,
 })
@@ -497,7 +497,7 @@ await put(
 await put(firestore.collection('orgs').doc(unverifiedOwnerOrgId), {
   name: 'E2E Unverified Co',
   ownerUid: E2E_UNVERIFIED_OWNER_UID,
-  plan: 'business',
+  plan: 'pro',
   subscription: { status: 'active' },
   createdAt: now,
 })

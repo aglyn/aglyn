@@ -200,7 +200,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     // the REAL `checkEntitlement` decides it, so a plan that did not carry the
     // feature would make every case below vacuously green.
     getOrgForHost: async () => ({
-      org: { id: 'org-1', plan: 'business', ownerUid: 'owner-1' },
+      org: { id: 'org-1', plan: 'pro', ownerUid: 'owner-1' },
     }),
     meterHostEmail: async () => undefined,
     notifyHostManagers: async () => undefined,

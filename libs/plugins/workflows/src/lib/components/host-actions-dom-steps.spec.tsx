@@ -95,7 +95,7 @@ jest.mock('./host-activity-card.component', () => ({
   default: () => null,
 }))
 
-const ORG = { plan: 'business' } as never
+const ORG = { plan: 'pro' } as never
 const TARGET = '[data-aglyn="leaf:film"]'
 
 beforeEach(() => {

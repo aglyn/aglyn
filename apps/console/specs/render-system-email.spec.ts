@@ -358,7 +358,7 @@ describe('renderSystemEmail', () => {
 
     it('wears a white-label org’s header and footer, and nothing of Aglyn (AGL-3322)', async () => {
       const branding = resolveBrandingProfile({
-        plan: 'agency',
+        plan: 'enterprise',
         brandingProfile: {
           productName: 'Acme Sites',
           emailLogoUrl: 'https://cdn.example.com/acme.png',
@@ -513,7 +513,7 @@ describe('renderSystemEmail', () => {
         {
           ...brandMergeTokens(
             resolveBrandingProfile({
-              plan: 'agency',
+              plan: 'enterprise',
               brandingProfile: { productName: 'Acme Sites' },
             } as never),
           ),
@@ -574,7 +574,7 @@ describe('renderSystemEmail', () => {
       const whiteLabelled = renderLoadedSystemEmail(loaded!, {
         ...brandMergeTokens(
           resolveBrandingProfile({
-            plan: 'agency',
+            plan: 'enterprise',
             brandingProfile: { productName: 'Acme Sites' },
           } as never),
         ),
@@ -588,7 +588,7 @@ describe('renderSystemEmail', () => {
       const configured = renderLoadedSystemEmail(loaded!, {
         ...brandMergeTokens(
           resolveBrandingProfile({
-            plan: 'agency',
+            plan: 'enterprise',
             brandingProfile: { supportUrl: 'https://acme.test/help' },
           } as never),
         ),
@@ -656,7 +656,7 @@ describe('renderSystemEmail', () => {
     /** An agency's brand with no support URL, which never inherits Aglyn's. */
     const WHITE_LABEL = brandMergeTokens(
       resolveBrandingProfile({
-        plan: 'agency',
+        plan: 'enterprise',
         brandingProfile: { productName: 'Acme Sites' },
       } as never),
     )
@@ -852,7 +852,7 @@ describe('renderSystemEmail', () => {
       // color alone leaves every NAME the platform's, which is what makes the
       // support URL the only difference left to read.
       const branding = resolveBrandingProfile({
-        plan: 'agency',
+        plan: 'enterprise',
         brandingProfile: { primaryColor: '#ff5a00' },
       } as never)
       expect(branding.productName).toBe(PLATFORM_BRANDING_PROFILE.productName)
@@ -869,8 +869,8 @@ describe('renderSystemEmail', () => {
       // no brand of its own to conceal the platform behind.
       for (const org of [
         { plan: 'enterprise' },
-        { plan: 'agency', brandingProfile: {} },
-        { plan: 'agency', brandingProfile: { productName: '  ', supportUrl: '' } },
+        { plan: 'enterprise', brandingProfile: {} },
+        { plan: 'enterprise', brandingProfile: { productName: '  ', supportUrl: '' } },
       ]) {
         const branding = resolveBrandingProfile(org as never)
         expect(
@@ -883,7 +883,7 @@ describe('renderSystemEmail', () => {
 
     it('is false for a white-label org with its own support URL', () => {
       const branding = resolveBrandingProfile({
-        plan: 'agency',
+        plan: 'enterprise',
         brandingProfile: { supportUrl: 'https://acme.test/help' },
       } as never)
       expect(isPlatformBrandedSend(withDefaults(brandMergeTokens(branding)))).toBe(

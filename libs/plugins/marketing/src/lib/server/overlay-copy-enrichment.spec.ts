@@ -69,7 +69,7 @@ const SITE = {
 }
 
 /** An org with every marketing entitlement, so nothing is gated off here. */
-const ORG = { $id: 'org-1', plan: 'business', subscriptionStatus: 'active' }
+const ORG = { $id: 'org-1', plan: 'pro', subscriptionStatus: 'active' }
 
 const context = (overrides: Record<string, unknown> = {}) =>
   ({

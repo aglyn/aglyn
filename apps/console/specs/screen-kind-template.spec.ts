@@ -471,7 +471,7 @@ describe('the asymmetry (AGL-1400)', () => {
   })
 
   it('promotes freely on an unlimited plan', async () => {
-    seed({ plan: 'business', screens: ['s1', 's2', 's3', 's4', 's5', 's6'] })
+    seed({ plan: 'pro', screens: ['s1', 's2', 's3', 's4', 's5', 's6'] })
     await convert('s1', 'template')
     expect((await convert('s1', 'page')).status).toBe(200)
   })

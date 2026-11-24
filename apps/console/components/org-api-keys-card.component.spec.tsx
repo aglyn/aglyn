@@ -40,7 +40,7 @@ import {
 
 /** Swapped per case; the card reads it through `useCurrentOrg`. */
 const mockOrgState: { org: Record<string, unknown>; ready: boolean } = {
-  org: { plan: 'business' },
+  org: { plan: 'pro' },
   ready: true,
 }
 let mockEntitled = true
@@ -149,7 +149,7 @@ const jsonResponse = (body: unknown, status = 200) =>
 const UPGRADE_COPY = /The REST API and API keys are included on the/
 
 beforeEach(() => {
-  mockOrgState.org = { plan: 'business' }
+  mockOrgState.org = { plan: 'pro' }
   mockOrgState.ready = true
   mockEntitled = true
 })

@@ -97,7 +97,7 @@ describe('the verdict targets its release flag from the org it already holds (AG
 
   it('answers an explicit override off, even where the default would differ', async () => {
     mockGetOrgBilling.mockResolvedValue({
-      org: { plan: 'business', releaseFlags: { release_video_embed_posters: false } },
+      org: { plan: 'pro', releaseFlags: { release_video_embed_posters: false } },
     })
     expect((await verdict())['videoEmbedPosters']).toBe(false)
   })

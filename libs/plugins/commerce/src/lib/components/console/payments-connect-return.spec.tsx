@@ -36,7 +36,7 @@ const profile: { data: unknown; status: string } = {
 }
 
 const orgPlan = {
-  org: { plan: 'business', ownerUid: 'uid-owner' } as unknown,
+  org: { plan: 'pro', ownerUid: 'uid-owner' } as unknown,
   ready: true,
 }
 

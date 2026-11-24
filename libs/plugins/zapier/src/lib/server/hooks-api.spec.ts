@@ -31,7 +31,7 @@ import type { ZapierHook } from './store'
 const NOW = Date.UTC(2026, 9, 7, 12)
 const TARGET = 'https://hooks.zapier.com/hooks/standard/123/abc/'
 
-const BUSINESS = { plan: 'business' }
+const BUSINESS = { plan: 'pro' }
 
 const ctx = (overrides: Partial<ApiV1Context> = {}): ApiV1Context =>
   ({
@@ -162,7 +162,7 @@ describe('POST /v1/sites/{siteId}/hooks (AGL-3643)', () => {
       '/v1/sites/h1/hooks',
       { targetUrl: TARGET, events: ['form.submitted'] },
       ctx({
-        org: { plan: 'business', entitlements: { features: { webhooks: false } } } as never,
+        org: { plan: 'pro', entitlements: { features: { webhooks: false } } } as never,
       }),
     )
     expect(response.status).toBe(403)

@@ -69,7 +69,7 @@ import StaffChurnReportCard from '../components/staff-churn-report-card.componen
 const REPORT = {
   byReason: { too_expensive: 1, missing_feature: 1 },
   bySurface: { cancel: 2 },
-  byPlan: { pro: 1, business: 1 },
+  byPlan: { pro: 1, starter: 1 },
   surveys: 2,
   cancels: { total: 2, funnelSkipped: 0 },
   winbacks: { reserved: 0, applied: 0 },
@@ -82,7 +82,7 @@ const REPORT = {
       atMs: 1_760_000_000_000,
       reason: 'missing_feature',
       surface: 'cancel',
-      plan: 'business',
+      plan: 'starter',
     },
     {
       id: 'c-2',
@@ -134,8 +134,8 @@ describe('the staff churn card shows what people wrote', () => {
     expect(within(comments).getByText('Missing feature')).toBeTruthy()
     expect(within(comments).getByText('Too expensive')).toBeTruthy()
     // And each sentence sits beside its own reason, not merely somewhere on
-    // the page: `business`/`pro` came off the same two rows.
-    expect(within(comments).getByText(/business/)).toBeTruthy()
+    // the page: `starter`/`pro` came off the same two rows.
+    expect(within(comments).getByText(/starter/)).toBeTruthy()
     expect(within(comments).getByText(/pro/)).toBeTruthy()
   })
 

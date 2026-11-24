@@ -495,7 +495,7 @@ export async function seedClientSite({
     ownerUid: F.ownerUid,
     // A paying site: no attribution badge, no limits notice — the page a
     // client's visitor actually gets.
-    plan: 'business',
+    plan: 'pro',
     subscription: { status: 'active' },
     // The primary e2e org's switchboard (seed-e2e.mjs), so the same plugin
     // bundles load for this site's pages as for the demo's.

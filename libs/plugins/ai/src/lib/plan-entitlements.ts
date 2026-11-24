@@ -98,11 +98,10 @@ declare module '@aglyn/aglyn/plugin-manager/plugin-entitlement-keys' {
  * Enterprise carries no list price, so the band cannot be sized the way every
  * self-serve tier's is — against what that tier's other cost terms leave out
  * of a known price. It is anchored to the top of the ladder instead: 116,000
- * credits is twice Agency's band, the rule every Enterprise fallback follows
- * since the 2026-09-07 pricing decision (see the `enterprise` row of
- * `PLAN_ENTITLEMENTS`). In cost that is $116 of provider spend a month, or
- * under 9% of any deal priced at or above the self-serve top. A deal below
- * that is sold as Agency, not written as an Enterprise agreement.
+ * credits was twice the band of the old top self-serve tier (removed with
+ * the other retired plans, AGL-4245), the rule every Enterprise fallback
+ * followed since the 2026-09-07 pricing decision (see the `enterprise` row of
+ * `PLAN_ENTITLEMENTS`). In cost that is $116 of provider spend a month.
  *
  * ## It is a DEFAULT, and a contract raises it
  *
@@ -200,16 +199,6 @@ export const AI_CREDITS_BY_PLAN: Readonly<Record<OrgPlan, number>> = {
   // terms leave out of $56. See the key's docblock for why the remainder and
   // not the price is what sizes this.
   pro: 2_750,
-  // $7.50, against the $22.69 the other seven terms leave out of $139.
-  business: 7_500,
-  // $10.00, against the $30.62 the other seven terms leave out of $249.
-  scale: 10_000,
-  // $13.00, against the $39.74 the other seven terms leave out of $399 — the
-  // thinnest remainder on the ladder, and the tier that binds the whole
-  // assist ladder's share of it.
-  advanced: 13_000,
-  // $58.00, against the $176.71 the other seven terms leave out of $1,299.
-  agency: 58_000,
   enterprise: ENTERPRISE_ASSIST_CREDITS_PER_MONTH,
 }
 

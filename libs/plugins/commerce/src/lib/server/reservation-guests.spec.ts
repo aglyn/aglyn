@@ -128,7 +128,7 @@ const unitCounts = (reservationId: string, dayKey = '2027-01-15') =>
 beforeEach(() => {
   h = posOpsHarness()
   h.clock.now = Date.UTC(2027, 0, 15, 8)
-  org = { plan: 'business' }
+  org = { plan: 'pro' }
   activity = jest.fn()
   h.memory.seed('hosts/shop', {
     memberRoles: { owner: 'admin', cashier: 'editor', viewer: 'viewer' },

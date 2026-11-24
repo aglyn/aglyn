@@ -36,7 +36,7 @@
  *     node --env-file=.env node_modules/jest/bin/jest.js -c libs/plugins/ai/jest.config.ts \
  *     libs/plugins/ai/src/lib/jobs/ai-job-layout-language-live.spec.ts
  *
- * `AGLYN_LIVE_AI_ORG_PLAN=business` builds them on a paid workspace;
+ * `AGLYN_LIVE_AI_ORG_PLAN=pro` builds them on a paid workspace;
  * `AGLYN_LIVE_AI_MODEL` names another catalog model (a Free tier on the fast
  * one, say); `AGLYN_LIVE_AI_OUT=<dir>` writes each compiled page and layout
  * there for `render-layout-shots.mts`.
@@ -50,7 +50,7 @@
  *   2. replay — this spec again: under the launcher every request whose
  *      bytes were answered before is replayed from `.cache/ai-replay` for
  *      nothing, and only a CHANGED prompt goes to the provider;
- *   3. one live run per plan (Free, then `AGLYN_LIVE_AI_ORG_PLAN=business`)
+ *   3. one live run per plan (Free, then `AGLYN_LIVE_AI_ORG_PLAN=pro`)
  *      for the prompts you changed — read `run.live` in the table: 0 means
  *      nothing new was asked and the run proves nothing;
  *   4. the full live sweep, only before landing: `AGLYN_AI_REPLAY=refresh`
@@ -140,7 +140,7 @@ import { aiPageCheckContext, aiPageLinkablePages, aiPageSectionNodeId } from './
 import { aiLiveTimeoutMs } from '../runtime/ai-dev-env'
 
 const LIVE = process.env['AGLYN_LIVE_AI'] === '1' && Boolean(process.env['ANTHROPIC_API_KEY'])
-const ORG_PLAN = process.env['AGLYN_LIVE_AI_ORG_PLAN'] === 'business' ? 'business' : 'free'
+const ORG_PLAN = process.env['AGLYN_LIVE_AI_ORG_PLAN'] === 'pro' ? 'pro' : 'free'
 const MODEL = process.env['AGLYN_LIVE_AI_MODEL'] || null
 const OUT = process.env['AGLYN_LIVE_AI_OUT'] || null
 // A fixed day (AGL-3781): a build's or an events plan's prompt states today's
@@ -321,7 +321,7 @@ function inventory(): AiSiteInventory {
     ...emptyAiSiteInventory('host-live'),
     layouts: [{ id: LAYOUT_ID, name: 'Main Layout', parentId: null }],
     forms: [{ id: FORM_ID, name: 'Contact Request Form', fields: ['Name', 'Email', 'Phone', 'Message'] }],
-    components: ORG_PLAN === 'business' ? [{ id: CARD_ID, name: 'Card', props: { title: 'text', summary: 'text' } }] : [],
+    components: ORG_PLAN === 'pro' ? [{ id: CARD_ID, name: 'Card', props: { title: 'text', summary: 'text' } }] : [],
   }
 }
 
@@ -439,7 +439,7 @@ async function buildPage(brief: Brief, index: number): Promise<Result> {
     nav: true,
     seoTitle: page.title,
     seoDescription: page.title,
-    sections: page.sections.map((section) => (ORG_PLAN === 'business' && section.items ? { ...section, uses: [CARD_ID] } : section)),
+    sections: page.sections.map((section) => (ORG_PLAN === 'pro' && section.items ? { ...section, uses: [CARD_ID] } : section)),
     record: null,
   } as unknown as AiBuildPlanScreen
   const unit = job(brief, 'page', `job-live-${screen.id}`, screen)

@@ -94,7 +94,7 @@ const firestore: any = {
     }),
 }
 
-const ORG = { id: 'org-1', plan: 'business', billingStatus: 'active', ownerUid: 'owner-1', slug: 'acme' }
+const ORG = { id: 'org-1', plan: 'pro', billingStatus: 'active', ownerUid: 'owner-1', slug: 'acme' }
 const quoteTax = jest.fn<ReturnType<QuoteDeps['quoteTax']>, Parameters<QuoteDeps['quoteTax']>>(async () => ({
   quote: null,
   stamp: null,

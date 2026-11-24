@@ -119,7 +119,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     consumeRateLimit: async () => ({ allowed: true }),
     getOrgForHost: async () => ({
       orgId: 'org-1',
-      org: { id: 'org-1', plan: 'business', subscriptionStatus: 'active', ownerUid: 'owner-1', slug: 'acme' },
+      org: { id: 'org-1', plan: 'pro', subscriptionStatus: 'active', ownerUid: 'owner-1', slug: 'acme' },
     }),
     getPluginConfig: async () => ({ posTippingEnabled: true, posTipPercentages: '15,20,25' }),
     meterHostEmail: async () => undefined,

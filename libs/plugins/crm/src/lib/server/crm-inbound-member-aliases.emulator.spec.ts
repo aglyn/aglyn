@@ -190,7 +190,7 @@ describeEmulated('a BCC from a member’s send-as alias (AGL-2975)', () => {
     await purge()
 
     for (const orgId of [ORG, OTHER_ORG]) {
-      await db.collection('orgs').doc(orgId).set({ name: orgId, ownerUid: OWNER, plan: 'agency' })
+      await db.collection('orgs').doc(orgId).set({ name: orgId, ownerUid: OWNER, plan: 'enterprise' })
       await seedMember(orgId, OWNER, 'owner@workspace.example', 'Owner', 'owner')
     }
     await seedMember(ORG, REP, 'rep@workspace.example', 'Rep Person')

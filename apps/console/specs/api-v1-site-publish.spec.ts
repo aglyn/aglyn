@@ -55,7 +55,7 @@
 
 const mockDocs = new Map<string, Record<string, unknown>>()
 let mockOrg: Record<string, unknown> = {
-  plan: 'business',
+  plan: 'pro',
   hosts: { 'host-1': true },
 }
 let mockScopes: string[] = ['sites:read', 'sites:publish']
@@ -194,7 +194,7 @@ const publish = (hostId = 'host-1') =>
 
 beforeEach(() => {
   mockDocs.clear()
-  mockOrg = { plan: 'business', hosts: { 'host-1': true } }
+  mockOrg = { plan: 'pro', hosts: { 'host-1': true } }
   mockScopes = ['sites:read', 'sites:publish']
   mockRateCalls = []
   mockRateRefuse = new Set()

@@ -71,10 +71,6 @@ const STRIPE_MIN_CHARGE_CENTS = 50
 const PAID_PLANS: OrgPlan[] = [
   'starter',
   'pro',
-  'business',
-  'scale',
-  'advanced',
-  'agency',
   'enterprise',
 ]
 
@@ -177,13 +173,13 @@ describe('storefront processing recovery (AGL-2152)', () => {
     const goodsCents = 3000
     const chargeCents = 3000 + 300 + 1999
     const onGoods = resolveTransactionFeeCents(
-      orgOn('business'),
+      orgOn('pro'),
       'physical',
       goodsCents,
       goodsCents,
     )
     const onCharge = resolveTransactionFeeCents(
-      orgOn('business'),
+      orgOn('pro'),
       'physical',
       goodsCents,
       chargeCents,
@@ -203,10 +199,10 @@ describe('storefront processing recovery (AGL-2152)', () => {
    * order — asserted from 50¢ up.
    */
   it('never returns more than the charge, and never clamps an order of $1 or more', () => {
-    expect(resolveTransactionFeeCents(orgOn('business'), 'physical', 10, 10)).toBe(10)
+    expect(resolveTransactionFeeCents(orgOn('pro'), 'physical', 10, 10)).toBe(10)
     // Below about 57¢ the fee is the whole charge: Stripe's 50¢ minimum with
     // its 30¢ and the payout's 25¢ cannot be covered by any fee.
-    expect(resolveTransactionFeeCents(orgOn('business'), 'physical', 50, 50)).toBe(50)
+    expect(resolveTransactionFeeCents(orgOn('pro'), 'physical', 50, 50)).toBe(50)
     for (const cents of ORDER_SIZES_CENTS.filter((size) => size >= 100)) {
       const fee = resolveTransactionFeeCents(orgOn('starter'), 'physical', cents, cents)
       expect(fee).toBeLessThanOrEqual(cents)
@@ -225,13 +221,13 @@ describe('storefront processing recovery (AGL-2152)', () => {
   /** Degenerate inputs must not manufacture a fee on a charge that is not one. */
   it('answers zero for a charge that is not a charge', () => {
     for (const bad of [0, -1, NaN, Infinity]) {
-      expect(resolveTransactionFeeCents(orgOn('business'), 'physical', 1000, bad)).toBe(0)
+      expect(resolveTransactionFeeCents(orgOn('pro'), 'physical', 1000, bad)).toBe(0)
     }
     // `undefined` is NOT a degenerate input — it is the documented default,
     // for the paths where the goods and the charge are the same number.
     expect(
-      resolveTransactionFeeCents(orgOn('business'), 'physical', 1000, undefined),
-    ).toBe(resolveTransactionFeeCents(orgOn('business'), 'physical', 1000, 1000))
+      resolveTransactionFeeCents(orgOn('pro'), 'physical', 1000, undefined),
+    ).toBe(resolveTransactionFeeCents(orgOn('pro'), 'physical', 1000, 1000))
     expect(saleProcessingCostCents(0)).toBe(0)
     expect(saleProcessingCostCents(NaN)).toBe(0)
   })

@@ -63,9 +63,7 @@ import { DocsHelpTip } from '../docs-help-tip.component'
  * gets its own contact-sales card below the grid instead of an Upgrade button.
  *
  * Since pricing v4 (AGL-4126) that is Free, Starter and Pro, with the custom
- * plan (labelled `PLAN_LABELS.enterprise`, "Custom") above them. A workspace
- * still on a retired plan finds no card of its own here and is shown the
- * ladder as a prospect is.
+ * plan (labelled `PLAN_LABELS.enterprise`, "Custom") above them.
  */
 export const PLAN_ORDER: OrgPlan[] = SELF_SERVE_PLANS
 
@@ -75,10 +73,6 @@ const planTaglines = (brand: string): Record<OrgPlan, string> => ({
   free: `Try ${brand} and publish your first site.`,
   starter: 'Everything a single production site needs.',
   pro: 'The full platform for growing businesses, priced by what you use.',
-  business: 'Subscriptions, scheduling, and priority limits.',
-  scale: 'Room to grow — 15 sites and a 1% platform fee.',
-  advanced: 'High-volume commerce with zero platform fees.',
-  agency: 'Run many sites under one org at agency scale.',
   enterprise: 'More sites and capacity by agreement, white-label, SSO, and a dedicated contract.',
 })
 
@@ -148,16 +142,16 @@ export const ENTERPRISE_HIGHLIGHTS: Array<{
   holds: (org: Partial<AglynOrgBilling> | null | undefined) => boolean
 }> = [
   {
-    // The plan row is a FINITE fallback since 2026-09-07 — twice Agency's
-    // band on every axis Agency bounds — and an agreement raises it through
+    // The plan row is a FINITE fallback since 2026-09-07 — set at twice the
+    // old top self-serve tier's bands — and an agreement raises it through
     // the per-org override. So the claim is "at least the fallback": an
     // Enterprise org holds it from the plan alone, a comped marker on a
     // lower base plan does not, and an agreement written BELOW the default
     // reads as one that does not enable everything Enterprise can.
     //
     // Named in the row's own figures since pricing v4 (AGL-4126): it read
-    // "Twice Agency's", and Agency is a retired plan no reader can compare
-    // against. The figures are the same — the fallback is Agency's × 2.
+    // "Twice Agency's", a plan since removed (AGL-4245) that no reader can
+    // compare against.
     label:
       `Up to ${PLAN_ENTITLEMENTS.enterprise.hostLimit} sites, ` +
       `${PLAN_ENTITLEMENTS.enterprise.managersPerOrg} team seats and ` +

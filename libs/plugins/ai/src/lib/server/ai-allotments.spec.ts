@@ -183,7 +183,7 @@ const ORG = 'org-allot'
 const OTHER_ORG = 'org-other'
 const MODEL = AI_MODEL_CATALOG[0].id
 
-function seed(plan = 'agency') {
+function seed(plan = 'enterprise') {
   mockDocs = new Map<string, Doc>([
     [`orgs/${ORG}`, { name: 'Allot', slug: 'allot', plan }],
     [`orgs/${ORG}/members/manager-1`, { role: 'admin', allHosts: true, email: 'manager@example.test' }],
@@ -319,7 +319,7 @@ describe('the same for every client site', () => {
 })
 
 describe('the org-wide model restriction', () => {
-  it('is set on Agency and Enterprise, carries models and never credits', async () => {
+  it('is set on Enterprise, carries models and never credits', async () => {
     expect((await post({ set: [{ subject: 'org', models: [MODEL] }] })).status).toBe(200)
     expect(allotmentDoc('org')).toMatchObject({ scope: 'org', credits: null, models: [MODEL] })
     expect((await post({ set: [{ subject: 'org', credits: 10, models: [MODEL] }] })).status).toBe(400)

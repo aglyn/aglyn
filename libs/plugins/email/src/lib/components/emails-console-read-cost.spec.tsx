@@ -234,7 +234,7 @@ const mockOrgId = { orgId: 'org1', ready: true }
  */
 const mockScope = { orgId: 'org1', ready: true, scope: ['orgs', 'org1'] }
 const mockHostRoute = { orgSlug: 'acme', subdomain: 'site', base: '/acme/hosts/site' }
-const mockPlan = { org: { plan: 'business', features: {} }, ready: true }
+const mockPlan = { org: { plan: 'pro', features: {} }, ready: true }
 const mockResourceApi = { data: undefined, loading: false }
 /*
  * The provider the data hooks read their services out of.
@@ -405,7 +405,7 @@ async function renderConsole(section: string, detail: string[] = []) {
     <EmailsConsolePage
       hostId="site1"
       entitled
-      org={{ plan: 'business' } as never}
+      org={{ plan: 'pro' } as never}
       permissions={{} as never}
       basePath={BASE_PATH}
       sections={shellSections()}
@@ -656,7 +656,7 @@ describe('the organization’s Emails page read cost', () => {
   async function renderOrgConsole(
     section: string,
     detail: string[] = [],
-    org: Record<string, unknown> = { plan: 'business' },
+    org: Record<string, unknown> = { plan: 'pro' },
   ) {
     mockSection = [section, ...detail].filter(Boolean).join('/')
     mockListens.length = 0
@@ -756,7 +756,7 @@ describe('the organization’s Emails page read cost', () => {
    * reader who may drive it, that change's one job document.
    *=========================================*/
   const DECLARED = {
-    plan: 'business',
+    plan: 'pro',
     consentGroups: {
       acme: { name: 'Acme', hostIds: ['site01', 'site02', 'site03'] },
     },

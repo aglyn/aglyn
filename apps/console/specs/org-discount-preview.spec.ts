@@ -66,7 +66,7 @@ const BUSY_ROLLUP = {
 
 /** Two sites, so the flat floor is $4 — `orgSiteCount` counts `hosts` keys. */
 const BUSY_ORG = {
-  plan: 'business',
+  plan: 'pro',
   subscription: { status: 'active', interval: 'month' },
   hosts: { siteOne: true, siteTwo: true },
 } as never

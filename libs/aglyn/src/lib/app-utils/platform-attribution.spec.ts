@@ -38,17 +38,10 @@ import {
   showsPlatformAttribution,
 } from './plan-entitlements'
 
-/** Agency and enterprise are the two plans that grant `whiteLabel`. */
-const WHITE_LABEL_PLANS = ['agency', 'enterprise'] as const
-/** Everything below them, which is where the corpus comes from. */
-const ATTRIBUTED_PLANS = [
-  'free',
-  'starter',
-  'pro',
-  'business',
-  'scale',
-  'advanced',
-] as const
+/** Enterprise is the one plan that grants `whiteLabel`. */
+const WHITE_LABEL_PLANS = ['enterprise'] as const
+/** Everything below it, which is where the corpus comes from. */
+const ATTRIBUTED_PLANS = ['free', 'starter', 'pro'] as const
 
 describe('showsPlatformAttribution', () => {
   it('CONTROL — the fixtures actually differ on `whiteLabel`', () => {

@@ -707,311 +707,6 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
       ssoEnabled: false,
     },
   },
-  business: {
-    hostLimit: 10,
-    screensPerHost: UNLIMITED,
-    sharedLayoutsPerHost: UNLIMITED,
-    templatesPerHost: UNLIMITED,
-    storagePerHostMb: 10240,
-    membersPerHost: 5,
-    managersPerOrg: 5,
-    maxManagersPerOrg: 100,
-    maxMembersPerHost: 100,
-    // Sized by the same annual-price invariant as Pro's — see that band.
-    bandwidthGb: 45,
-    formsPerHost: 100,
-    componentsPerHost: UNLIMITED,
-    variablesPerHost: 1000,
-    functionsPerHost: 250,
-    workflowsPerHost: 100,
-    servicesPerHost: UNLIMITED,
-    redirectsPerHost: UNLIMITED,
-    contactsPerHost: 30000,
-    maxCrmRecords: UNLIMITED,
-    emailSendsPerMonth: 15000,
-    actionRunsPerMonth: 50000,
-    apiRequestsPerMonth: 1_500,
-    apiRequestsPerMinutePerOrg: 600,
-    maxApiRequestsPerMonth: UNLIMITED,
-    datasetsPerOrg: 10,
-    maxDatasetsPerOrg: 250,
-    recordsPerDataset: 100000,
-    dataStorageMbPerOrg: 10240,
-    productsPerHost: 10000,
-    inventoryLocations: 4,
-    posRegisters: 2,
-    transactionFeePhysicalPct: 0,
-    transactionFeeDigitalPct: 2,
-    features: {
-      abTesting: true,
-      versioning: true,
-      reusableComponents: true,
-      customDomain: true,
-      customSendingDomain: true,
-      dedicatedSendingDomain: true,
-      removeBranding: true,
-      scheduledPublishing: true,
-      aiAssist: true,
-      aiGenerative: true,
-      workflows: true,
-      dataStore: true,
-      videoMedia: true,
-      bookings: true,
-      crm: true,
-      outreach: false,
-      interactions: true,
-      actions: true,
-      webhooks: true,
-      apiAccess: true,
-      siteExport: true,
-      multilingual: true,
-      eventCalendar: false,
-      siteCare: false,
-      redirects: true,
-      screenAnalytics: true,
-      mediaCdn: true,
-      marketingOverlays: true,
-      commerce: true,
-      pos: true,
-      contentGating: true,
-      productReviews: true,
-      abandonedCart: true,
-      dropshipRouting: true,
-      whiteLabel: false,
-      ssoEnabled: false,
-    },
-  },
-  // Scale (Pricing v3, 2026-07): fills the $139→$399 gap. Feature set equals
-  // Business/Advanced (all commerce features); limits interpolate between
-  // Business and Advanced; digital platform fee drops to 1%.
-  scale: {
-    hostLimit: 15,
-    screensPerHost: UNLIMITED,
-    sharedLayoutsPerHost: UNLIMITED,
-    templatesPerHost: UNLIMITED,
-    storagePerHostMb: 15360,
-    membersPerHost: 5,
-    managersPerOrg: 5,
-    maxManagersPerOrg: 150,
-    maxMembersPerHost: 150,
-    // Sized by the same annual-price invariant as Pro's — see that band.
-    bandwidthGb: 70,
-    formsPerHost: FORMS_PER_HOST_CEILING,
-    componentsPerHost: UNLIMITED,
-    variablesPerHost: 5000,
-    functionsPerHost: 500,
-    workflowsPerHost: 250,
-    servicesPerHost: UNLIMITED,
-    redirectsPerHost: UNLIMITED,
-    contactsPerHost: 100000,
-    maxCrmRecords: UNLIMITED,
-    emailSendsPerMonth: 25000,
-    actionRunsPerMonth: 100000,
-    apiRequestsPerMonth: 5_000,
-    apiRequestsPerMinutePerOrg: 1_200,
-    maxApiRequestsPerMonth: UNLIMITED,
-    datasetsPerOrg: 15,
-    maxDatasetsPerOrg: 500,
-    recordsPerDataset: 500000,
-    dataStorageMbPerOrg: 25600,
-    productsPerHost: 25000,
-    inventoryLocations: 6,
-    posRegisters: 3,
-    transactionFeePhysicalPct: 0,
-    transactionFeeDigitalPct: 1,
-    features: {
-      abTesting: true,
-      versioning: true,
-      reusableComponents: true,
-      customDomain: true,
-      customSendingDomain: true,
-      dedicatedSendingDomain: true,
-      removeBranding: true,
-      scheduledPublishing: true,
-      aiAssist: true,
-      aiGenerative: true,
-      workflows: true,
-      dataStore: true,
-      videoMedia: true,
-      bookings: true,
-      crm: true,
-      outreach: false,
-      interactions: true,
-      actions: true,
-      webhooks: true,
-      apiAccess: true,
-      siteExport: true,
-      multilingual: true,
-      eventCalendar: false,
-      siteCare: false,
-      redirects: true,
-      screenAnalytics: true,
-      mediaCdn: true,
-      marketingOverlays: true,
-      commerce: true,
-      pos: true,
-      contentGating: true,
-      productReviews: true,
-      abandonedCart: true,
-      dropshipRouting: true,
-      whiteLabel: false,
-      ssoEnabled: false,
-    },
-  },
-  advanced: {
-    hostLimit: 25,
-    screensPerHost: UNLIMITED,
-    sharedLayoutsPerHost: UNLIMITED,
-    templatesPerHost: UNLIMITED,
-    storagePerHostMb: 20480,
-    membersPerHost: 5,
-    managersPerOrg: 10,
-    maxManagersPerOrg: 250,
-    maxMembersPerHost: 250,
-    // Sized by the same annual-price invariant as Pro's — see that band.
-    bandwidthGb: 80,
-    formsPerHost: FORMS_PER_HOST_CEILING,
-    componentsPerHost: UNLIMITED,
-    variablesPerHost: UNLIMITED,
-    functionsPerHost: 1000,
-    workflowsPerHost: 500,
-    servicesPerHost: UNLIMITED,
-    redirectsPerHost: UNLIMITED,
-    contactsPerHost: 150000,
-    maxCrmRecords: UNLIMITED,
-    emailSendsPerMonth: 65000,
-    actionRunsPerMonth: 250000,
-    apiRequestsPerMonth: 17_000,
-    apiRequestsPerMinutePerOrg: 2_400,
-    maxApiRequestsPerMonth: UNLIMITED,
-    datasetsPerOrg: 25,
-    maxDatasetsPerOrg: 1000,
-    recordsPerDataset: 1000000,
-    dataStorageMbPerOrg: 51200,
-    productsPerHost: UNLIMITED,
-    inventoryLocations: 10,
-    posRegisters: 5,
-    transactionFeePhysicalPct: 0,
-    transactionFeeDigitalPct: 0,
-    features: {
-      abTesting: true,
-      versioning: true,
-      reusableComponents: true,
-      customDomain: true,
-      customSendingDomain: true,
-      dedicatedSendingDomain: true,
-      removeBranding: true,
-      scheduledPublishing: true,
-      aiAssist: true,
-      aiGenerative: true,
-      workflows: true,
-      dataStore: true,
-      videoMedia: true,
-      bookings: true,
-      crm: true,
-      outreach: false,
-      interactions: true,
-      actions: true,
-      webhooks: true,
-      apiAccess: true,
-      siteExport: true,
-      multilingual: true,
-      eventCalendar: false,
-      siteCare: false,
-      redirects: true,
-      screenAnalytics: true,
-      mediaCdn: true,
-      marketingOverlays: true,
-      commerce: true,
-      pos: true,
-      contentGating: true,
-      productReviews: true,
-      abandonedCart: true,
-      dropshipRouting: true,
-      whiteLabel: false,
-      ssoEnabled: false,
-    },
-  },
-  // Agency (Pricing v3, 2026-07): high-volume multi-site tier above Advanced.
-  // 100 sites, 0% fees, top-of-ladder capacity. Positioned for agencies /
-  // resellers — white-label, SSO, and an SLA are the follow-on product work
-  // that will further differentiate it (see the Pricing Decision Log).
-  agency: {
-    hostLimit: 100,
-    screensPerHost: UNLIMITED,
-    sharedLayoutsPerHost: UNLIMITED,
-    templatesPerHost: UNLIMITED,
-    storagePerHostMb: 20480,
-    membersPerHost: 5,
-    managersPerOrg: 10,
-    maxManagersPerOrg: 500,
-    maxMembersPerHost: 1000,
-    // Sized by the same annual-price invariant as Pro's — see that band.
-    bandwidthGb: 395,
-    formsPerHost: FORMS_PER_HOST_CEILING,
-    componentsPerHost: UNLIMITED,
-    variablesPerHost: UNLIMITED,
-    functionsPerHost: UNLIMITED,
-    workflowsPerHost: UNLIMITED,
-    servicesPerHost: UNLIMITED,
-    redirectsPerHost: UNLIMITED,
-    contactsPerHost: 500000,
-    maxCrmRecords: UNLIMITED,
-    emailSendsPerMonth: 130000,
-    actionRunsPerMonth: 1000000,
-    apiRequestsPerMonth: 85_000,
-    apiRequestsPerMinutePerOrg: 6_000,
-    maxApiRequestsPerMonth: UNLIMITED,
-    datasetsPerOrg: 50,
-    maxDatasetsPerOrg: 5000,
-    recordsPerDataset: UNLIMITED,
-    dataStorageMbPerOrg: 204800,
-    productsPerHost: UNLIMITED,
-    inventoryLocations: 50,
-    posRegisters: 20,
-    transactionFeePhysicalPct: 0,
-    transactionFeeDigitalPct: 0,
-    features: {
-      abTesting: true,
-      versioning: true,
-      reusableComponents: true,
-      customDomain: true,
-      customSendingDomain: true,
-      dedicatedSendingDomain: true,
-      removeBranding: true,
-      scheduledPublishing: true,
-      aiAssist: true,
-      aiGenerative: true,
-      workflows: true,
-      dataStore: true,
-      videoMedia: true,
-      bookings: true,
-      crm: true,
-      outreach: false,
-      interactions: true,
-      actions: true,
-      webhooks: true,
-      apiAccess: true,
-      siteExport: true,
-      multilingual: true,
-      eventCalendar: false,
-      siteCare: false,
-      redirects: true,
-      screenAnalytics: true,
-      mediaCdn: true,
-      marketingOverlays: true,
-      commerce: true,
-      pos: true,
-      contentGating: true,
-      productReviews: true,
-      abandonedCart: true,
-      dropshipRouting: true,
-      // White-Label Phase 1: the Agency-tier ($1,299) differentiator. Only
-      // this tier and Enterprise ship white-label by default.
-      whiteLabel: true,
-      ssoEnabled: false,
-    },
-  },
   // Enterprise (AGL-1118): the top of the ladder and the ONLY custom-priced
   // tier — staff-provisioned per deal (AGL-1110), never sold self-serve, so it
   // is excluded from `SELF_SERVE_PLANS` and carries no list price in
@@ -1030,11 +725,12 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
   // case unbounded on every axis. A default that a contract must OVERRIDE to
   // become finite is the wrong way round.
   //
-  // So the rule is Agency's band × 2 on every axis Agency bounds, and
-  // UNLIMITED only where Agency is already UNLIMITED (screens, layouts,
-  // templates, variables, functions, workflows, services, redirects, records
-  // per dataset, products). `plan-entitlements.spec.ts` holds that relation
-  // key by key, so moving an Agency band without moving this one goes red.
+  // So the rule was the old top self-serve tier's band × 2 on every axis it
+  // bounded, and UNLIMITED only where that tier was already UNLIMITED
+  // (screens, layouts, templates, variables, functions, workflows, services,
+  // redirects, records per dataset, products). That tier was removed with the
+  // other retired plans (AGL-4245); the figures it produced stay as written
+  // and `plan-entitlements.spec.ts` holds every band at or above Pro's.
   //
   // A contracted per-org `entitlements.*` value still wins on every one of
   // these — `resolveOrgEntitlements` honors a numeric override on every
@@ -1169,55 +865,90 @@ fillPluginPlanEntitlements(PLAN_ENTITLEMENTS)
  * show a self-serve Upgrade button or a $0 headline price.
  *
  * Pricing v4 (2026-11-03, AGL-4126): three self-serve plans and Custom above
- * them. Business, Scale, Advanced and Agency are RETIRED_PLANS: never sold
- * again, their rows kept so a stored `plan`, a comp and an old record still
- * resolve and type-check.
+ * them. The plans v4 retired were removed from the product outright on
+ * 2026-11-24 (AGL-4245); see `normalizeStoredPlan` for the one place an old
+ * id is still recognised.
  */
 export const SELF_SERVE_PLANS: OrgPlan[] = ['free', 'starter', 'pro']
 
 /**
- * The plans pricing v4 retired (2026-11-03, AGL-4126). Nothing offers them:
- * no plan card, no checkout price, no comp picker, no sign-up link. Their
- * `PLAN_ENTITLEMENTS` and `PLAN_PRICING` rows stay, read-only, so an org whose
- * stored `plan` still names one resolves exactly as it always did. When v4
- * shipped no subscription was on any of them.
+ * Every plan a workspace can be ON, cheapest first: the self-serve ladder,
+ * then the custom plan. The ORDER question ("is this move down?", "what is
+ * the plan below this one?") reads this; the SALE question ("what may be
+ * bought?") reads `SELF_SERVE_PLANS`.
  */
-export const RETIRED_PLANS: readonly OrgPlan[] = [
-  'business',
-  'scale',
-  'advanced',
-  'agency',
-]
+export const PLAN_LADDER: readonly OrgPlan[] = [...SELF_SERVE_PLANS, 'enterprise']
 
 /**
- * Every plan a workspace can be ON, cheapest first: the self-serve ladder,
- * the retired plans in their old place above it, then the custom plan. The
- * ORDER question ("is this move down?", "what is the plan below this one?")
- * reads this, so a workspace left on a retired plan is still placed on the
- * ladder; the SALE question ("what may be bought?") reads `SELF_SERVE_PLANS`.
+ * The ids of the plans removed from the product on 2026-11-24 (AGL-4245):
+ * Business, Scale, Advanced and Agency, retired from sale by pricing v4
+ * (AGL-4126). They are NOT plans any more — no entitlement row, no price, no
+ * label row — and nothing may offer, store or bill one.
+ *
+ * They are kept here, frozen, for one reason: a document written before the
+ * removal (a stored `plan`, a staff comp, a Stripe subscription's
+ * `metadata.plan`, an audit note) could still carry one. When the plans were
+ * removed no workspace stored one, but the read side must not fall a paying
+ * customer to Free on an id it once wrote. Only `normalizeStoredPlan` and
+ * `storedPlanLabel` read this; anything else that needs it is a bug.
  */
-export const PLAN_LADDER: readonly OrgPlan[] = [
-  ...SELF_SERVE_PLANS,
-  ...RETIRED_PLANS,
-  'enterprise',
-]
+const REMOVED_PLAN_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  business: 'Business',
+  scale: 'Scale',
+  advanced: 'Advanced',
+  agency: 'Agency',
+})
+
+/**
+ * A plan id read from storage or Stripe, as a current plan (AGL-4245). The
+ * one read-time safety net for the removed plans:
+ *
+ * - a current plan id is returned as it is;
+ * - one of the removed ids (`business`, `scale`, `advanced`, `agency`) reads
+ *   as `pro`, the plan every one of their features moved into;
+ * - anything else is `null`, and the caller keeps the fallback it always had
+ *   (`resolveEffectivePlan` reads Free, `readOrgPlanComp` reads no comp).
+ *
+ * Applied where a plan id ENTERS from outside the type system: the effective
+ * plan resolver, the comp reader and the billing webhook's `metadata.plan`.
+ */
+export function normalizeStoredPlan(value: unknown): OrgPlan | null {
+  if (typeof value !== 'string') return null
+  if (Object.prototype.hasOwnProperty.call(PLAN_ENTITLEMENTS, value)) {
+    return value as OrgPlan
+  }
+  if (Object.prototype.hasOwnProperty.call(REMOVED_PLAN_LABELS, value)) return 'pro'
+  return null
+}
+
+/**
+ * A plan's human name from any stored string (AGL-4245): a current plan's
+ * `PLAN_LABELS` entry, "Business (retired)" for a removed id an old audit
+ * note or record still carries, and the raw string otherwise. For a value
+ * typed `OrgPlan`, read `PLAN_LABELS` directly.
+ */
+export function storedPlanLabel(value: string | null | undefined): string {
+  if (!value) return ''
+  if (Object.prototype.hasOwnProperty.call(PLAN_LABELS, value)) {
+    return PLAN_LABELS[value as OrgPlan]
+  }
+  if (Object.prototype.hasOwnProperty.call(REMOVED_PLAN_LABELS, value)) {
+    return `${REMOVED_PLAN_LABELS[value]} (retired)`
+  }
+  return value
+}
 
 /**
  * The plans a staff custom-billing deal may ride on (AGL-4158): Custom first,
  * the default a negotiated deal lands on, then the paid self-serve plans from
  * the top down (Pro, Starter) for a deal scoped to that plan's capability.
- * Built from `SELF_SERVE_PLANS`, so a retired plan is never offered and the
+ * Built from `SELF_SERVE_PLANS`, so the
  * staff "Base plan" picker and the provisioning route agree by construction.
  */
 export const CUSTOM_BILLING_BASE_PLANS: readonly OrgPlan[] = [
   'enterprise',
   ...SELF_SERVE_PLANS.filter((plan) => plan !== 'free').reverse(),
 ]
-
-/** Whether a plan is one pricing v4 retired (`RETIRED_PLANS`). */
-export function isRetiredPlan(plan: OrgPlan | string | undefined | null): boolean {
-  return RETIRED_PLANS.includes(plan as OrgPlan)
-}
 
 /**
  * Whether the plan has no list price and is quoted per deal (AGL-1118).
@@ -1247,10 +978,6 @@ export const PLAN_LABELS: Record<OrgPlan, string> = {
   free: 'Free',
   starter: 'Starter',
   pro: 'Pro',
-  business: 'Business',
-  scale: 'Scale',
-  advanced: 'Advanced',
-  agency: 'Agency',
   // The top plan reads "Custom" since pricing v4 (2026-11-03, AGL-4126); its
   // code id stays `enterprise`, and `ENTERPRISE_PLAN_LABEL` reads this.
   enterprise: 'Custom',
@@ -1726,112 +1453,6 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraRunsUsdPer1k: RUN_OVERAGE_USD_PER_1K,
     meteredInfraPassThrough: true,
   },
-  business: {
-    basePriceMonthlyUsd: 139,
-    basePriceAnnualMonthlyUsd: 99,
-    extraHostMonthlyUsd: 20,
-    extraSeatMonthlyUsd: 3,
-    extraCollaboratorMonthlyUsd: 1,
-    extraDatasetMonthlyUsd: 1,
-    extraDataGbMonthlyUsd: 0.36,
-    extraApiRequestsUsdPer1k: 0.5,
-    extraAssistCreditsUsdPer1k: 2.75,
-    extraContactsUsdPer1k: 0.5,
-    extraEmailSendsUsdPer1k: 2,
-    // A runs band and the pass-through: the rate every such plan carries
-    // since v4. Retired with the plan; kept so the row reads whole.
-    extraRunsUsdPer1k: RUN_OVERAGE_USD_PER_1K,
-    meteredInfraPassThrough: true,
-  },
-  scale: {
-    basePriceMonthlyUsd: 249,
-    basePriceAnnualMonthlyUsd: 179,
-    extraHostMonthlyUsd: 20,
-    extraSeatMonthlyUsd: 2,
-    extraCollaboratorMonthlyUsd: 1,
-    extraDatasetMonthlyUsd: 1,
-    extraDataGbMonthlyUsd: 0.36,
-    // Pro's $0.50 (AGL-4227): a page of 100 records costs $0.34 per 1,000,
-    // and $0.35 kept nothing on it. Retired; no workspace can subscribe.
-    extraApiRequestsUsdPer1k: 0.5,
-    extraAssistCreditsUsdPer1k: 2.5,
-    extraContactsUsdPer1k: 0.4,
-    extraEmailSendsUsdPer1k: 1.9,
-    extraRunsUsdPer1k: RUN_OVERAGE_USD_PER_1K,
-    meteredInfraPassThrough: true,
-  },
-  advanced: {
-    basePriceMonthlyUsd: 399,
-    basePriceAnnualMonthlyUsd: 299,
-    extraHostMonthlyUsd: 20,
-    extraSeatMonthlyUsd: 2,
-    extraCollaboratorMonthlyUsd: 1,
-    extraDatasetMonthlyUsd: 1,
-    extraDataGbMonthlyUsd: 0.36,
-    // Pro's $0.50 (AGL-4227). It was $0.25, floored at the 50% retail margin
-    // on a default request (AGL-3444), which lost money on a page of 100
-    // records ($0.34 per 1,000). Retired; no workspace can subscribe.
-    extraApiRequestsUsdPer1k: 0.5,
-    extraAssistCreditsUsdPer1k: 2.25,
-    // FLOORED at the 50% retail margin, not stepped down again. The ladder
-    // above it descends $1.00 → $0.75 → $0.50 → $0.40, and one more step
-    // would have reached $0.25 against a `perContactMonth` cost of $0.20 per
-    // 1,000 — a 20% line margin on a retail price, thinner than the 23% the
-    // infrastructure pass-through earns while being sold as cost recovery.
-    extraContactsUsdPer1k: 0.4,
-    extraEmailSendsUsdPer1k: 1.85,
-    extraRunsUsdPer1k: RUN_OVERAGE_USD_PER_1K,
-    meteredInfraPassThrough: true,
-  },
-  // Agency is the one tier whose PRICE moved. It included 100 hosts, 20 TB of
-  // bandwidth and an unbounded form-submission band against $799, which made
-  // it both the worst margin on the ladder and the most underpriced against
-  // the field: Duda charges ~$1,396-1,493/mo for 100 sites, BigCommerce
-  // Enterprise starts at $1,499 and Shopify Plus at $2,300. $1,299 still
-  // undercuts all three for the buyer this architecture is built for.
-  agency: {
-    basePriceMonthlyUsd: 1299,
-    // $1,049/mo is $12,588 a year, which is what the live Stripe yearly price
-    // charges. Stripe prices are immutable, so the constant every surface
-    // quotes has to match the one a customer is actually billed by — a
-    // ratio-derived figure that no price object backs would quote one number
-    // and charge another. It lands within a dollar of holding the previous
-    // 18.8% annual discount across the rise, which is what stops the annual
-    // interval becoming the cheap way past a repricing.
-    basePriceAnnualMonthlyUsd: 1049,
-    extraHostMonthlyUsd: 20,
-    extraSeatMonthlyUsd: 2,
-    extraCollaboratorMonthlyUsd: 1,
-    extraDatasetMonthlyUsd: 1,
-    extraDataGbMonthlyUsd: 0.36,
-    // Pro's $0.50 (AGL-4227) — see Advanced's.
-    extraApiRequestsUsdPer1k: 0.5,
-    extraAssistCreditsUsdPer1k: 2,
-    // $0.40, because the band it meters is now FINITE.
-    //
-    // This row has been wrong in both directions. It shipped $0.20 against an
-    // UNLIMITED band, advertising a fee that could not be charged —
-    // `checkContactQuota` computes `Math.max(0, used - Infinity)`, which is 0
-    // at every usage level (AGL-2439) — and was corrected to `null` to stop
-    // publishing a claim the code could not honour. Bounding the band inverts
-    // the problem: a finite band with no rate is usage past a bound that is
-    // silently free, and the bound achieves nothing.
-    //
-    // $0.40 rather than a further step down the ladder because that is the
-    // 50% retail floor against a `perContactMonth` cost of $0.20 per 1,000 —
-    // the same figure Scale and Advanced carry, and the same floor that moved
-    // Advanced off $0.25.
-    //
-    // It METERS rather than walls: a rate is what makes `checkContactQuota`
-    // return `allowed: true` past the band, so a growing audience is billed
-    // and never dropped. That is what makes bounding this band safe here and
-    // NOT safe on enterprise, whose every rate is the "not for sale"
-    // sentinel.
-    extraContactsUsdPer1k: 0.4,
-    extraEmailSendsUsdPer1k: 1.8,
-    extraRunsUsdPer1k: RUN_OVERAGE_USD_PER_1K,
-    meteredInfraPassThrough: true,
-  },
   // Enterprise (AGL-1118) has NO list price — every figure here is the
   // "not for sale" sentinel, not a $0 offer (`isCustomPricedPlan`). The org's
   // real price is the negotiated `subscription.customMonthlyUsd` the
@@ -2069,17 +1690,12 @@ export function readOrgPlanComp(
     entitlements && typeof entitlements === 'object' ? entitlements.planComp : undefined
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
   const record = raw as Record<string, unknown>
-  const plan = record['plan']
-  if (
-    typeof plan !== 'string' ||
-    plan === 'free' ||
-    !Object.prototype.hasOwnProperty.call(PLAN_ENTITLEMENTS, plan)
-  ) {
-    return null
-  }
+  // A comp written on a removed plan reads as Pro (AGL-4245).
+  const plan = normalizeStoredPlan(record['plan'])
+  if (!plan || plan === 'free') return null
   const reason = record['reason']
   return {
-    plan: plan as OrgPlan,
+    plan,
     uncapped: record['uncapped'] === true,
     reason: isOrgOverrideReasonCode(reason) ? reason : null,
     note: trimmedOrNull(record['note']),
@@ -3491,8 +3107,9 @@ export function resolveEffectivePlan(
 ): OrgPlan {
   const comp = resolvePlanComp(org)
   if (comp) return comp.plan
-  const plan = org?.plan
-  if (!plan || !(plan in PLAN_ENTITLEMENTS)) return 'free'
+  // A removed plan's id reads as Pro, anything unknown as Free (AGL-4245).
+  const plan = normalizeStoredPlan(org?.plan)
+  if (!plan) return 'free'
   const status = subscriptionStatusOf(org)
   if (plan !== 'free' && status && DEAD_SUBSCRIPTION_STATUSES.has(status)) {
     return 'free'
@@ -4791,7 +4408,7 @@ function cleanBrandString(value: string | undefined): string | undefined {
  * never partly-render as Aglyn (the multi-surface drift that dogged
  * `removeBranding`, which each surface re-derived on its own).
  *
- * When the org carries the `whiteLabel` entitlement (Agency tier, or an
+ * When the org carries the `whiteLabel` entitlement (the Custom plan, or an
  * Enterprise per-org override), the org's `brandingProfile` values win and
  * any field it leaves blank falls back to the Aglyn default. Without the
  * entitlement the stored profile is ignored entirely and the full Aglyn

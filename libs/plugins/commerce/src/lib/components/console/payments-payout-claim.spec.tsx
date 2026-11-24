@@ -51,7 +51,7 @@ const profile: { data: unknown; status: string } = {
 }
 
 const orgPlan = {
-  org: { plan: 'business', ownerUid: 'uid-owner' } as unknown,
+  org: { plan: 'pro', ownerUid: 'uid-owner' } as unknown,
   ready: true,
 }
 
@@ -105,7 +105,7 @@ beforeEach(() => {
   enqueueSnackbar.mockClear()
   profile.data = { stripeChargesEnabled: false }
   profile.status = 'success'
-  orgPlan.org = { plan: 'business', ownerUid: 'uid-owner' }
+  orgPlan.org = { plan: 'pro', ownerUid: 'uid-owner' }
   orgPlan.ready = true
 })
 

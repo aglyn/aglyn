@@ -165,8 +165,8 @@ import { personKey } from '@aglyn/aglyn/server'
 import { BUNDLE_ID, CRM_STEP_TYPES } from '../constants/bundle-common'
 import { prepareCrmRecordEmail, runCrmAutomationStep } from './automation-steps'
 
-const BUSINESS = { plan: 'business' }
-const WITHDRAWN = { plan: 'business', entitlements: { features: { crm: false } } }
+const BUSINESS = { plan: 'pro' }
+const WITHDRAWN = { plan: 'pro', entitlements: { features: { crm: false } } }
 
 const stepRequest = (
   step: Record<string, unknown> & { type: string },

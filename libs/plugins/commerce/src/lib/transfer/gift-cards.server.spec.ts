@@ -62,7 +62,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // Business carries `giftCards`, so the plan is never what refuses below.
   getOrgForHost: async () => ({
     orgId: 'org-1',
-    org: { id: 'org-1', plan: 'business', subscriptionStatus: 'active', slug: 'acme' },
+    org: { id: 'org-1', plan: 'pro', subscriptionStatus: 'active', slug: 'acme' },
   }),
   logHostActivity: (...args: unknown[]) => mockActivity(...args),
   hostSendingIdentity: async () => ({ from: 'hello@acme.example' }),

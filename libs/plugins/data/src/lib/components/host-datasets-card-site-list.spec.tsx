@@ -223,7 +223,7 @@ beforeEach(() => {
 
 const mountCard = async (props: Record<string, unknown>) => {
   // On the bare page, as the rail draws it (AGL-4047).
-  render(<HostDatasetsCard org={{ $id: 'org-1', plan: 'scale' } as any} basePath="/acme/data" {...props} />, {
+  render(<HostDatasetsCard org={{ $id: 'org-1', plan: 'pro' } as any} basePath="/acme/data" {...props} />, {
     wrapper: WithPageHeader,
   })
   await act(async () => {

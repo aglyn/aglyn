@@ -179,7 +179,7 @@ const activities = () => children(`orgs/${ORG}/crmActivities`).map((key) => stor
 beforeEach(() => {
   store.clear()
   autoId = 0
-  store.set(`orgs/${ORG}`, { name: 'Acme', plan: 'agency' })
+  store.set(`orgs/${ORG}`, { name: 'Acme', plan: 'enterprise' })
   store.set(`orgs/${ORG}/contacts/con-1`, {
     email: 'ada@example.com',
     hostId: 'site-1',
@@ -313,7 +313,7 @@ describe('filing a message', () => {
 
   it("files a member's copied send to a lead as outbound, on the lead, stamped with the member and the site's scope when the org keeps its sites apart", async () => {
     // The agency's opt-in, which is what keeps this lead on the second site.
-    store.set(`orgs/${ORG}`, { name: 'Acme', plan: 'agency', crm: { defaultRecordScope: 'host' } })
+    store.set(`orgs/${ORG}`, { name: 'Acme', plan: 'enterprise', crm: { defaultRecordScope: 'host' } })
     const result = await file(
       message({
         from: 'Sam Rep <sam@acme.com>',

@@ -113,7 +113,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 // model are the code under test here, and staging them would test the mock.
 import StaffOrgActions from './staff-org-actions.component'
 
-const ORG = { $id: 'org-1', plan: 'business' }
+const ORG = { $id: 'org-1', plan: 'pro' }
 
 /** Open the Override dialog and hand back its container. */
 const openOverride = (): HTMLElement => {

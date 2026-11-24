@@ -438,7 +438,7 @@ describe('a subscription naming no workspace (AGL-1763)', () => {
     seedOrg()
     const response = await post(
       signed(
-        subscriptionEvent({ metadata: { orgId: 'org-typo', plan: 'business' } }),
+        subscriptionEvent({ metadata: { orgId: 'org-typo', plan: 'pro' } }),
       ),
     )
 
@@ -473,7 +473,7 @@ describe('a subscription naming no workspace (AGL-1763)', () => {
     const response = await post(
       signed(
         subscriptionEvent(
-          { metadata: { orgId: 'org-typo', plan: 'business' } },
+          { metadata: { orgId: 'org-typo', plan: 'pro' } },
           'customer.subscription.created',
         ),
       ),
@@ -492,7 +492,7 @@ describe('a subscription naming no workspace (AGL-1763)', () => {
     expect(after['eventType']).toBe('customer.subscription.created')
     expect(after['subscriptionId']).toBe('sub_1')
     expect(after['stripeCustomerId']).toBe('cus_1')
-    expect(after['plan']).toBe('business')
+    expect(after['plan']).toBe('pro')
     // ...and tells the operator, who is the only one who can cancel it
     // (AGL-3377).
     expect(mockRaiseOperatorAlert).toHaveBeenCalledWith('billing.orphanedSubscription', {
@@ -501,7 +501,7 @@ describe('a subscription naming no workspace (AGL-1763)', () => {
         orgId: 'org-typo',
         subscriptionId: 'sub_1',
         customerId: 'cus_1',
-        plan: 'business',
+        plan: 'pro',
         eventType: 'customer.subscription.created',
         reason: 'does not exist',
       },

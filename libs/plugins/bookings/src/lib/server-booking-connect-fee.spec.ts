@@ -488,11 +488,7 @@ describe('the take rate is the storefront ladder’s (AGL-2315)', () => {
   const LADDER: Array<[string, number | null]> = [
     ['starter', 225], // 3% of $75.00
     ['pro', 75], // 1%
-    ['business', 150], // 2%
-    ['scale', 75], // 1%
-    ['advanced', null], // 0% — no fee at all
-    ['agency', null], // 0%
-    ['enterprise', null], // 0%
+    ['enterprise', null], // 0% — no fee at all
   ]
 
   it.each(LADDER)(
@@ -506,8 +502,7 @@ describe('the take rate is the storefront ladder’s (AGL-2315)', () => {
       const params = await book()
 
       // THE MERCHANT IS PAID AT EVERY TIER. This is the assertion the
-      // fee-shaped tests cannot make: on Advanced, Agency and Enterprise the
-      // take rate is zero, and a wiring that only attached `transfer_data`
+      // fee-shaped tests cannot make: on Enterprise the take rate is zero, and a wiring that only attached `transfer_data`
       // when there was a fee to take would pay nobody on exactly the tiers
       // that pay Aglyn the most in subscription. Two payment paths have
       // already shipped that bug here.
@@ -551,7 +546,7 @@ describe('the take rate is the storefront ladder’s (AGL-2315)', () => {
     // a booking's fee must equal a storefront SERVICE sale's fee for the same
     // org, tier for tier. If someone later introduces a bookings-specific
     // constant, this is where the two stop agreeing.
-    for (const plan of ['starter', 'pro', 'business', 'scale']) {
+    for (const plan of ['starter', 'pro']) {
       mockAdmin.__state.org = { id: 'org-1', ownerUid: 'owner-1', plan }
       const params = await book()
       const storefrontPct = resolveTransactionFeePct({ plan } as never, 'service')
@@ -572,7 +567,7 @@ describe('the take rate is the storefront ladder’s (AGL-2315)', () => {
     // exactly this way. 60¢ rather than 10¢ because Stripe will not process a
     // charge under 50¢, and the clamp asserted below owns that case.
     mockAdmin.__state.service['priceUsd'] = 0.6
-    mockAdmin.__state.org = { id: 'org-1', ownerUid: 'owner-1', plan: 'scale' }
+    mockAdmin.__state.org = { id: 'org-1', ownerUid: 'owner-1', plan: 'pro' }
     const params = await book()
     expect(params.get('payment_intent_data[application_fee_amount]')).toBe(
       String(saleApplicationFeeCents(1, 60)),
@@ -592,7 +587,7 @@ describe('the take rate is the storefront ladder’s (AGL-2315)', () => {
    */
   it('never asks Stripe for a fee larger than the charge', async () => {
     mockAdmin.__state.service['priceUsd'] = 0.1
-    mockAdmin.__state.org = { id: 'org-1', ownerUid: 'owner-1', plan: 'scale' }
+    mockAdmin.__state.org = { id: 'org-1', ownerUid: 'owner-1', plan: 'pro' }
     const params = await book()
     expect(params.get('payment_intent_data[application_fee_amount]')).toBe('10')
     expect(params.get('line_items[0][price_data][unit_amount]')).toBe('10')
@@ -752,7 +747,7 @@ describe('a DIRECT-charge seller is charged on their own account', () => {
   })
 
   it('sends no application fee at all on a 0% tier', async () => {
-    mockAdmin.__state.org = { id: 'org-1', ownerUid: 'owner-1', plan: 'advanced' }
+    mockAdmin.__state.org = { id: 'org-1', ownerUid: 'owner-1', plan: 'enterprise' }
     const params = await book()
     expect(params.has('payment_intent_data[application_fee_amount]')).toBe(false)
     expect(params.get('metadata[feeCents]')).toBe('0')

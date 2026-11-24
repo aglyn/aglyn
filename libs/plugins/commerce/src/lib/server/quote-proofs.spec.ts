@@ -143,7 +143,7 @@ const uploads: QuoteUploadCalls = {
 }
 
 /** A workspace whose plan sells, with its owner's payment account taking charges. */
-const ORG = { id: 'org-1', plan: 'business', billingStatus: 'active', ownerUid: 'owner-1' }
+const ORG = { id: 'org-1', plan: 'pro', billingStatus: 'active', ownerUid: 'owner-1' }
 
 const deps: QuoteProofDeps = {
   firestore: () => firestore,

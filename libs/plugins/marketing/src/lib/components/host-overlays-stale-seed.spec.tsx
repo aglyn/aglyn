@@ -107,7 +107,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 }))
 
 /** A plan that entitles overlays, so nothing is refused for that reason. */
-const ORG = { plan: 'business' } as never
+const ORG = { plan: 'pro' } as never
 
 beforeEach(() => {
   jest.clearAllMocks()

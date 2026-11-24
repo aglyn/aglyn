@@ -128,7 +128,7 @@ const HOST_ID = 'DXnRbPH4CQ'
 /** Free plan: platform attribution applies, so the tab may carry our mark. */
 const FREE_ORG = { org: { $id: 'org-free', plan: 'free' } }
 /** Agency: carries `whiteLabel`, so it may not. */
-const AGENCY_ORG = { org: { $id: 'org-agency', plan: 'agency' } }
+const AGENCY_ORG = { org: { $id: 'org-agency', plan: 'enterprise' } }
 
 /**
  * Every `<link rel="icon">` the layout returns, as plain props.

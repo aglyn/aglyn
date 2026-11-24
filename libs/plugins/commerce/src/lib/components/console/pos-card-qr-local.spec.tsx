@@ -154,7 +154,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     .listFilterConstraints,
   useFirestore: () => ({}),
   useUser: () => ({ data: { uid: 'uid-1', getIdToken: async () => 'token' } }),
-  useOrgPlan: () => ({ org: { plan: 'business' }, ready: true }),
+  useOrgPlan: () => ({ org: { plan: 'pro' }, ready: true }),
   useFirestoreCollection: (build: () => string) => {
     const path = build()
     if (path.endsWith('/products')) return { data: [PRODUCT] }

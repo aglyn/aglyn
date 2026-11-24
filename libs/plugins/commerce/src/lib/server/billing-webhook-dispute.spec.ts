@@ -336,7 +336,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     },
     findUserByUidAcrossPools: async () => null,
     getOrgForHost: async () => ({
-      org: { id: 'org-1', slug: 'acme', plan: 'business', ownerUid: 'owner-1' },
+      org: { id: 'org-1', slug: 'acme', plan: 'pro', ownerUid: 'owner-1' },
     }),
     meterHostEmail: async () => undefined,
     notifyHostManagers: async (hostId: string, payload: any) => {

@@ -279,7 +279,7 @@ describe('marketplace component install meets the component allowance (AGL-2072,
   })
 
   it('installs for a BUSINESS org', async () => {
-    state.org = { id: 'buyer-org', plan: 'business' }
+    state.org = { id: 'buyer-org', plan: 'pro' }
     const res = makeRes()
 
     await installHandler(makeReq(), res)

@@ -267,8 +267,8 @@ function vercelPosts(): string[] {
 
 /** An org on a plan that grants `whiteLabel`, and one that does not. */
 function seedOrgs(): void {
-  store.set('orgs/' + ORG, { name: 'Acme', plan: 'agency' })
-  store.set('orgs/' + OTHER_ORG, { name: 'Rival', plan: 'agency' })
+  store.set('orgs/' + ORG, { name: 'Acme', plan: 'enterprise' })
+  store.set('orgs/' + OTHER_ORG, { name: 'Rival', plan: 'enterprise' })
   store.set('orgs/org_free', { name: 'Thrifty', plan: 'free' })
 }
 
@@ -1036,7 +1036,7 @@ describe('resolveConsoleDomain — one org per host, fail closed on downgrade', 
   }
 
   beforeEach(() => {
-    store.set('orgs/' + ORG, { name: 'Acme', plan: 'agency', slug: 'acme' })
+    store.set('orgs/' + ORG, { name: 'Acme', plan: 'enterprise', slug: 'acme' })
     store.set('orgs/org_free', { name: 'Thrifty', plan: 'free', slug: 'thrifty' })
   })
 
@@ -1079,7 +1079,7 @@ describe('resolveConsoleDomain — one org per host, fail closed on downgrade', 
     await activeClaim()
     store.set('orgs/' + ORG, {
       name: 'Acme',
-      plan: 'agency',
+      plan: 'enterprise',
       slug: 'acme',
       billingStatus: 'canceled',
     })
@@ -1117,7 +1117,7 @@ describe('resolveConsoleDomain — one org per host, fail closed on downgrade', 
     await activeClaim()
     store.set('orgs/' + ORG, { name: 'Acme', plan: 'free', slug: 'acme' })
     await resolveConsoleDomain('console.acme.com')
-    store.set('orgs/' + ORG, { name: 'Acme', plan: 'agency', slug: 'acme' })
+    store.set('orgs/' + ORG, { name: 'Acme', plan: 'enterprise', slug: 'acme' })
 
     const verdict = await resolveConsoleDomain('console.acme.com')
     expect(verdict.servable).toBe(false)

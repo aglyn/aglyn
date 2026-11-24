@@ -228,7 +228,7 @@ const ROLLUP = `orgs/org-1/usage/${MONTH}`
  */
 function seedOrg(
   assistEstCostUsd: number | undefined,
-  billing: Record<string, unknown> = { plan: 'business' },
+  billing: Record<string, unknown> = { plan: 'pro' },
 ) {
   mockDocs.clear()
   mockDocs.set('hosts/host-1', { orgId: 'org-1', screens: {} })
@@ -335,10 +335,10 @@ describe('report-usage records Assist provider spend (AGL-2280)', () => {
 
   it('charges past the band and only there — inside it billedCents is unchanged by Assist', async () => {
     /*
-      The boundary, asserted in both directions. Business includes 7,500
-      credits ($7.50 of provider spend). Inside that band Assist enters COGS
+      The boundary, asserted in both directions. Pro includes 2,750
+      credits ($2.75 of provider spend). Inside that band Assist enters COGS
       because it is what an org costs us, and it must not enter the invoice:
-      same org, one with $6.50 of Assist and one with none, and the meter
+      same org, one with $2.00 of Assist and one with none, and the meter
       event that reaches Stripe has to be identical. Past the band the org
       has agreed to the plan's per-1,000-credit rate (AGL-2653), so the
       overage — and nothing but the overage — is what `billedCents` grows by.
@@ -347,7 +347,7 @@ describe('report-usage records Assist provider spend (AGL-2280)', () => {
     */
     const none = await rollupFor(undefined)
     const noneEvents = meterEvents.map((event) => event.get('payload[value]'))
-    const inside = await rollupFor(6.5)
+    const inside = await rollupFor(2)
     const insideEvents = meterEvents.map((event) => event.get('payload[value]'))
 
     expect(inside['billedCents']).toBe(none['billedCents'])
@@ -355,14 +355,14 @@ describe('report-usage records Assist provider spend (AGL-2280)', () => {
     expect(inside['costUsd']).toBeCloseTo(none['costUsd'], 10)
 
     const huge = await rollupFor(1_204.5)
-    // $1,204.50 of billed spend is 1,204,500 credits; Business includes
-    // 7,500 and sells the rest at its per-1,000 rate.
-    const band = PLAN_ENTITLEMENTS.business.assistCreditsPerMonth
-    expect(band).toBe(7_500)
+    // $1,204.50 of billed spend is 1,204,500 credits; Pro includes
+    // 2,750 and sells the rest at its per-1,000 rate.
+    const band = PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth
+    expect(band).toBe(2_750)
     expect(huge['assistCreditsOverage']).toBe(1_204_500 - band)
     const overageUsd =
       ((1_204_500 - band) / 1000) *
-      (PLAN_PRICING.business.extraAssistCreditsUsdPer1k as number)
+      (PLAN_PRICING.pro.extraAssistCreditsUsdPer1k as number)
     expect(overageUsd).toBeGreaterThan(0)
     expect(huge['assistOverageUsd']).toBeCloseTo(overageUsd, 2)
     expect(huge['billedCents']).toBe(

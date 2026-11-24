@@ -129,7 +129,7 @@ const mockFirestore = { __firestore: true }
 const mockUser = { data: { uid: 'u1' }, status: 'success' }
 const mockOrgId = { orgId: 'org1', ready: true }
 const mockHostRoute = { orgSlug: 'acme', href: '/acme' }
-const mockPlan = { org: { plan: 'business', features: {} }, ready: true }
+const mockPlan = { org: { plan: 'pro', features: {} }, ready: true }
 const mockResourceApi = { data: undefined, loading: false }
 
 // The console-app hooks a plugin page reaches through. Only the ones that
@@ -246,7 +246,7 @@ async function renderConsole(section: string) {
     <CommerceConsolePage
       hostId="site1"
       entitled
-      org={{ plan: 'business' } as never}
+      org={{ plan: 'pro' } as never}
       permissions={{ managePos: true } as never}
       basePath={BASE_PATH}
       sections={shellSections()}

@@ -94,11 +94,11 @@ describe('fullUseCogs', () => {
   })
 
   it('prices an unbounded band as Infinity, names it, and never reads it as free', () => {
-    const result = fullUseCogs({ ...PLAN_ENTITLEMENTS.business, apiRequestsPerMonth: UNLIMITED })
+    const result = fullUseCogs({ ...PLAN_ENTITLEMENTS.enterprise, apiRequestsPerMonth: UNLIMITED })
     expect(result.cogsUsd).toBe(Number.POSITIVE_INFINITY)
     expect(result.unbounded).toEqual(['apiRequests'])
     // Zero meeting an infinity is not zero either.
-    const noHosts = fullUseCogs({ ...PLAN_ENTITLEMENTS.business, hostLimit: UNLIMITED })
+    const noHosts = fullUseCogs({ ...PLAN_ENTITLEMENTS.enterprise, hostLimit: UNLIMITED })
     expect(noHosts.cogsUsd).toBe(Number.POSITIVE_INFINITY)
   })
 
@@ -324,25 +324,26 @@ describe('the coupon warning — judged on the charges a coupon reaches, never a
 })
 
 describe('the measured contribution check beside it is unchanged', () => {
-  it('still rates Agency at 20% off, annual, on 100 sites as ok at 75.5%', () => {
+  // Pinned on Agency's $1,049 annual price until that plan was removed
+  // (AGL-4245); the same deal shape on Pro, the top list-priced plan now.
+  it('still rates Pro at 20% off, annual, on its 3 sites as ok', () => {
     const hosts = Object.fromEntries(
-      Array.from({ length: 100 }, (_, index) => [`h${index}`, {}]),
+      Array.from({ length: 3 }, (_, index) => [`h${index}`, {}]),
     )
     const org = {
-      plan: 'agency',
+      plan: 'pro',
       subscription: { status: 'active', interval: 'year' },
       hosts,
     } as never
     const rating = checkDiscountMargin(org, { percentOff: 20 })
     expect(NET_MARGIN_FLOOR_PCT).toBe(0.75)
-    // The figures the guardrail has always produced for this deal: $1,049 a
-    // month annual, 20% off, net of Stripe, against $2 × 100 sites.
+    // $49 a month annual, 20% off, net of Stripe, against $2 × 3 sites.
     expect(rating).toMatchObject({
-      grossUsd: 1049,
-      netUsd: 814.84,
-      infraCogsUsd: 200,
+      grossUsd: 49,
+      netUsd: 38.04,
+      infraCogsUsd: 6,
       cogsMeasured: false,
-      marginPct: 0.7546,
+      marginPct: 0.8423,
       rating: 'ok',
       reason: 'none',
     })
@@ -353,6 +354,6 @@ describe('the measured contribution check beside it is unchanged', () => {
       discount: { percentOff: 20 },
     })
     expect(floor.netUsd).toBe(rating.netUsd)
-    expect(floor.fullUseCogsUsd).toBe(fullUseMonthlyCogsUsd(PLAN_ENTITLEMENTS.agency))
+    expect(floor.fullUseCogsUsd).toBe(fullUseMonthlyCogsUsd(PLAN_ENTITLEMENTS.pro))
   })
 })

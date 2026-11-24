@@ -174,7 +174,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     status: 'success',
     fromCache: false,
   }),
-  useOrgPlan: () => ({ org: { plan: 'business' }, ready: true }),
+  useOrgPlan: () => ({ org: { plan: 'pro' }, ready: true }),
   useHostResourceApi: () => mockCreateResource,
   useUser: () => ({ data: { uid: 'uid-owner', getIdToken: jest.fn() } }),
   useFirestoreDoc: () => ({ data: undefined }),

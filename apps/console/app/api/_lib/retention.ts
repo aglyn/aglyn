@@ -234,10 +234,11 @@ export function assertBoundedWinbackCoupon(coupon: WinbackCouponShape): void {
  * list price covers its own floor, so any answer this returns is an org we
  * keep without losing money on.
  *
- * Sold-only since pricing v4 (AGL-4126): a workspace still on a retired plan
- * is placed by `PLAN_LADDER` and offered the highest plan SOLD below it —
- * Pro, from any of the four — never another retired one. A custom agreement
- * is changed by talking to us, so it is offered nothing here, as before.
+ * Sold-only since pricing v4 (AGL-4126): the plan is placed by `PLAN_LADDER`
+ * and offered the highest plan SOLD below it. An id that is not a plan (the
+ * plans v4 retired were removed, AGL-4245) is offered nothing. A custom
+ * agreement is changed by talking to us, so it is offered nothing here, as
+ * before.
  */
 export function downsellTargetPlan(plan: string | null | undefined): OrgPlan | null {
   if (!plan || plan === 'enterprise') return null

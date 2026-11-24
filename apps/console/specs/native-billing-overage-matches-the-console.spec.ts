@@ -44,7 +44,7 @@ const derived = (name: string) => screen.derive?.find((entry) => entry.name === 
 
 describe('native billing overage', () => {
   it('prices a plan as the console does', () => {
-    for (const plan of ['free', 'starter', 'pro', 'business', 'advanced', 'enterprise'] as const) {
+    for (const plan of ['free', 'starter', 'pro', 'enterprise'] as const) {
       const pricing = resolvePlanPricing({ plan } as never)
       expect(screen.constants?.pricing?.[plan]).toEqual({
         extraApiRequestsUsdPer1k: pricing.extraApiRequestsUsdPer1k,

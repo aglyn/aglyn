@@ -111,14 +111,14 @@ class FirestoreLoadsTest {
 
   @Test
   fun anEntitlementReadsTheWorkspaceDocumentAndNamesThePlanThatHasTheFeature() {
-    val business = Reader(docs = mapOf("orgs/o1" to mapOf("plan" to "business")))
+    val pro = Reader(docs = mapOf("orgs/o1" to mapOf("plan" to "pro")))
     val free = Reader(docs = mapOf("orgs/o1" to mapOf("plan" to "free")))
     val override = Reader(docs = mapOf("orgs/o1" to mapOf("plan" to "free", "entitlements" to mapOf("features" to mapOf("giftCards" to true)))))
     fun gate(reader: Reader) = runBlocking { FirestoreLoads.entitlement(reader, "giftCards", "o1") }.jsonObject
-    assertEquals("true", (gate(business)["carried"] as JsonPrimitive).content)
+    assertEquals("true", (gate(pro)["carried"] as JsonPrimitive).content)
     assertEquals("false", (gate(free)["carried"] as JsonPrimitive).content)
     assertEquals("true", (gate(override)["carried"] as JsonPrimitive).content, "a per-workspace override wins over the plan")
-    // The cheapest plan that carries gift cards: Pro since pricing v4 (Business is retired).
+    // The cheapest plan that carries gift cards: Pro since pricing v4.
     assertEquals("Pro", (gate(free)["label"] as JsonPrimitive).content)
     assertEquals(JsonNull, gate(free).let { runBlocking { FirestoreLoads.entitlement(free, "nothingLikeIt", "o1") }.jsonObject["label"] })
   }

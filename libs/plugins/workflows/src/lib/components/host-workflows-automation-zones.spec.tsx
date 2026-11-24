@@ -103,7 +103,7 @@ jest.mock('@aglyn/aglyn/app-utils/where-used', () => ({
   summarizeDependents: () => '',
 }))
 
-const ORG = { $id: 'org-1', plan: 'business' } as never
+const ORG = { $id: 'org-1', plan: 'pro' } as never
 
 let drawn: Array<{ slot: string; props: Record<string, unknown> }> = []
 

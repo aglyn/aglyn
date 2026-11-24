@@ -2068,10 +2068,6 @@ export const PLUGIN_PLAN_QUOTAS_DECLARED: readonly ResolvedPluginPlanQuota[] = [
       "free": 20,
       "starter": 200,
       "pro": 1000,
-      "business": 5000,
-      "scale": 10000,
-      "advanced": 10000,
-      "agency": 10000,
       "enterprise": 20000
     }
   },
@@ -2084,10 +2080,6 @@ export const PLUGIN_PLAN_QUOTAS_DECLARED: readonly ResolvedPluginPlanQuota[] = [
       "free": 30,
       "starter": 20,
       "pro": 20,
-      "business": 20,
-      "scale": 20,
-      "advanced": 20,
-      "agency": 20,
       "enterprise": 20
     }
   },
@@ -2099,10 +2091,6 @@ export const PLUGIN_PLAN_QUOTAS_DECLARED: readonly ResolvedPluginPlanQuota[] = [
       "free": 0,
       "starter": 35,
       "pro": 150,
-      "business": 200,
-      "scale": 300,
-      "advanced": 500,
-      "agency": 1000,
       "enterprise": 2000
     }
   },
@@ -2114,10 +2102,6 @@ export const PLUGIN_PLAN_QUOTAS_DECLARED: readonly ResolvedPluginPlanQuota[] = [
       "free": 0,
       "starter": 500,
       "pro": 5000,
-      "business": 50000,
-      "scale": 150000,
-      "advanced": 500000,
-      "agency": 2000000,
       "enterprise": 4000000
     }
   },
@@ -2129,10 +2113,6 @@ export const PLUGIN_PLAN_QUOTAS_DECLARED: readonly ResolvedPluginPlanQuota[] = [
       "free": 300,
       "starter": 750,
       "pro": 2750,
-      "business": 7500,
-      "scale": 10000,
-      "advanced": 13000,
-      "agency": 58000,
       "enterprise": 116000
     }
   },
@@ -2151,10 +2131,6 @@ export const PLUGIN_PLAN_FEATURES_DECLARED: readonly ResolvedPluginPlanFeature[]
       "free": false,
       "starter": false,
       "pro": true,
-      "business": true,
-      "scale": true,
-      "advanced": true,
-      "agency": true,
       "enterprise": true
     }
   },
@@ -2166,10 +2142,6 @@ export const PLUGIN_PLAN_FEATURES_DECLARED: readonly ResolvedPluginPlanFeature[]
       "free": false,
       "starter": false,
       "pro": true,
-      "business": true,
-      "scale": true,
-      "advanced": true,
-      "agency": true,
       "enterprise": true
     }
   },
@@ -2181,10 +2153,6 @@ export const PLUGIN_PLAN_FEATURES_DECLARED: readonly ResolvedPluginPlanFeature[]
       "free": false,
       "starter": false,
       "pro": true,
-      "business": true,
-      "scale": true,
-      "advanced": true,
-      "agency": true,
       "enterprise": true
     }
   },
@@ -2196,10 +2164,6 @@ export const PLUGIN_PLAN_FEATURES_DECLARED: readonly ResolvedPluginPlanFeature[]
       "free": false,
       "starter": false,
       "pro": true,
-      "business": true,
-      "scale": true,
-      "advanced": true,
-      "agency": true,
       "enterprise": true
     }
   },

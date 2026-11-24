@@ -167,7 +167,7 @@ beforeEach(() => {
   // under a declared consent group, so a write through host-3 lands on the
   // GROUP's facet and not on a facet of its own.
   mockOrg = {
-    plan: 'business',
+    plan: 'pro',
     subscription: { status: 'active' },
     hosts: { 'host-1': true, 'host-2': true, 'host-3': true },
     consentGroups: { 'grp-a': { name: 'Group A', hostIds: ['host-1', 'host-3'] } },

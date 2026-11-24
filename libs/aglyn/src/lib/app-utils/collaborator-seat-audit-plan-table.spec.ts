@@ -101,7 +101,7 @@ describe('the collaborator audit script tracks PLAN_ENTITLEMENTS (AGL-2439)', ()
     // Without this, a regex that stopped matching would yield `{}` and the
     // per-plan loop above would assert nothing at all.
     const table = auditTable()
-    expect(Object.keys(table).length).toBeGreaterThanOrEqual(8)
+    expect(Object.keys(table).length).toBeGreaterThanOrEqual(4)
     expect(table['free'].membersPerHost).toBe(1)
     expect(table['enterprise'].membersPerHost).toBe(10)
     // The sentinel is still parsed where a transcription carries one.

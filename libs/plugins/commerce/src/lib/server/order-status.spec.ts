@@ -95,7 +95,7 @@ beforeEach(() => {
   clearOrderStatusActions()
   docs.set(`hosts/${HOST}`, { displayName: 'Northwind Coffee', subdomain: 'northwind' })
   docs.set(`hosts/${HOST}/settings/store`, { currency: 'USD', tax: { mode: 'none' } })
-  mockOrg = { plan: 'business', billingStatus: 'active', ownerUid: 'owner-1' }
+  mockOrg = { plan: 'pro', billingStatus: 'active', ownerUid: 'owner-1' }
   docs.set('profiles/owner-1', { stripeAccountId: 'acct_merchant', stripeChargesEnabled: true, stripeAccountLivemode: false })
   docs.set(`hosts/${HOST}/orders/${ORDER}`, {
     number: 1042,

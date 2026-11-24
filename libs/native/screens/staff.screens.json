@@ -472,22 +472,6 @@
             "label": "Pro"
           },
           {
-            "value": "business",
-            "label": "Business"
-          },
-          {
-            "value": "scale",
-            "label": "Scale"
-          },
-          {
-            "value": "advanced",
-            "label": "Advanced"
-          },
-          {
-            "value": "agency",
-            "label": "Agency"
-          },
-          {
             "value": "enterprise",
             "label": "Custom"
           }
@@ -8204,22 +8188,6 @@
           {
             "value": "pro",
             "label": "Pro"
-          },
-          {
-            "value": "business",
-            "label": "Business"
-          },
-          {
-            "value": "scale",
-            "label": "Scale"
-          },
-          {
-            "value": "advanced",
-            "label": "Advanced"
-          },
-          {
-            "value": "agency",
-            "label": "Agency"
           },
           {
             "value": "enterprise",
@@ -22658,22 +22626,6 @@
                   "label": "Pro"
                 },
                 {
-                  "value": "business",
-                  "label": "Business"
-                },
-                {
-                  "value": "scale",
-                  "label": "Scale"
-                },
-                {
-                  "value": "advanced",
-                  "label": "Advanced"
-                },
-                {
-                  "value": "agency",
-                  "label": "Agency"
-                },
-                {
                   "value": "enterprise",
                   "label": "Custom"
                 }
@@ -22704,22 +22656,6 @@
                 {
                   "value": "pro",
                   "label": "Pro"
-                },
-                {
-                  "value": "business",
-                  "label": "Business"
-                },
-                {
-                  "value": "scale",
-                  "label": "Scale"
-                },
-                {
-                  "value": "advanced",
-                  "label": "Advanced"
-                },
-                {
-                  "value": "agency",
-                  "label": "Agency"
                 },
                 {
                   "value": "enterprise",

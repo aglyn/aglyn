@@ -98,7 +98,7 @@ const page = (
   <BookingsConsolePage
     hostId="host-1"
     entitled
-    org={{ plan: 'business' } as never}
+    org={{ plan: 'pro' } as never}
     basePath="/acme/hosts/shop/bookings"
   />
 )

@@ -168,8 +168,9 @@ describe('the intent the hand-off carries (AGL-3958)', () => {
       existingDomain: 'example.com',
     })
     expect(readClientBuildIntent({ plan: 'platinum' })).toBeNull()
-    // A build proposes only a plan that is sold: pricing v4 (AGL-4126)
-    // retired Business, so a stored intent naming it is not one.
+    // A build proposes only a plan that is sold: Business was retired by
+    // pricing v4 (AGL-4126) and removed (AGL-4245), so a stored intent
+    // naming it is not one.
     expect(readClientBuildIntent({ plan: 'business' })).toBeNull()
     expect(readClientBuildIntent(null)).toBeNull()
   })

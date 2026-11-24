@@ -71,7 +71,7 @@ interface Doc {
 }
 
 const mockDocs = new Map<string, Record<string, unknown>>()
-let mockOrg: Record<string, unknown> = { plan: 'business', hosts: {} }
+let mockOrg: Record<string, unknown> = { plan: 'pro', hosts: {} }
 let mockScopes: string[] = ['sites:write']
 let mockRateCalls: Array<{ key: string; limit?: number; windowMs?: number }> = []
 let mockRateRefuse = new Set<string>()
@@ -327,13 +327,13 @@ const good = { displayName: 'Demo Bakery', subdomain: 'demo-bakery' }
 
 beforeEach(() => {
   mockDocs.clear()
-  mockOrg = { plan: 'business', hosts: {} }
+  mockOrg = { plan: 'pro', hosts: {} }
   mockScopes = ['sites:write']
   mockRateCalls = []
   mockRateRefuse = new Set()
   mockRegisterCalls = []
   mockBeforeTransaction = null
-  mockDocs.set('orgs/org-1', { plan: 'business', hosts: {} })
+  mockDocs.set('orgs/org-1', { plan: 'pro', hosts: {} })
 })
 
 /** A competitor commits the same subdomain inside the race window. */
@@ -513,35 +513,35 @@ describe('which refusals take the key, and which give it back (AGL-2465)', () =>
   })
 
   it('releases the key on a quota refusal, so the added-sites retry succeeds', async () => {
-    // A BUSINESS org — it must keep API access throughout, or the 403 under
+    // A PRO org — it must keep API access throughout, or the 403 under
     // test is the `apiAccess` entitlement gate rather than the site quota,
-    // and the retry would fail for the wrong reason. Business `hostLimit` is
-    // 10, so ten existing sites is exactly at the ceiling.
+    // and the retry would fail for the wrong reason. Pro `hostLimit` is
+    // 3, so three existing sites is exactly at the ceiling.
     const hosts: Record<string, boolean> = {}
-    for (let index = 0; index < 10; index += 1) {
+    for (let index = 0; index < 3; index += 1) {
       hosts[`host-${index}`] = true
       mockDocs.set(`hosts/host-${index}`, {
         orgId: 'org-1',
         subdomain: `taken-${index}`,
       })
     }
-    mockOrg = { plan: 'business', hosts }
+    mockOrg = { plan: 'pro', hosts }
     mockDocs.set('orgs/org-1', mockOrg)
 
     const refused = await create(good, 'key-a')
     expect(refused.status).toBe(403)
     const refusedBody = await refused.json()
     expect(refusedBody.error.code).toBe('site_quota')
-    expect(refusedBody.error.message).toMatch(/Site limit reached \(10\)/)
-    expect(hostDocs()).toHaveLength(10)
+    expect(refusedBody.error.message).toMatch(/Site limit reached \(3\)/)
+    expect(hostDocs()).toHaveLength(3)
 
     // Extra sites bought (`seatAddons.hosts`, the add-on the Billing page
     // sells). The same key must now CREATE, not replay the 403.
-    mockOrg = { plan: 'business', hosts, seatAddons: { hosts: 5 } }
+    mockOrg = { plan: 'pro', hosts, seatAddons: { hosts: 5 } }
     mockDocs.set('orgs/org-1', mockOrg)
     const after = await create(good, 'key-a')
     expect(after.status).toBe(201)
-    expect(hostDocs()).toHaveLength(11)
+    expect(hostDocs()).toHaveLength(4)
   })
 
   it('releases the key when the subdomain is taken, and names alternatives', async () => {
@@ -618,7 +618,7 @@ describe('the scope gate is wired (AGL-2465)', () => {
 
   it('still lists with sites:read, so the write gate did not break the read', async () => {
     mockScopes = ['sites:read']
-    mockOrg = { plan: 'business', hosts: { 'host-1': true } }
+    mockOrg = { plan: 'pro', hosts: { 'host-1': true } }
     mockDocs.set('hosts/host-1', { subdomain: 'demo', displayName: 'Demo' })
 
     const res = await GET(

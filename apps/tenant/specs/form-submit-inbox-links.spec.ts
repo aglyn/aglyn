@@ -123,7 +123,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     resetMs: Date.now() + 30_000,
     degraded: false,
   }),
-  getOrgForHost: async () => ({ org: { plan: 'business' } }),
+  getOrgForHost: async () => ({ org: { plan: 'pro' } }),
   notifyHostManagers: async (
     _hostId: string,
     payload: Record<string, any>,

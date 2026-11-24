@@ -229,7 +229,10 @@ let mockPluginSettings: Record<string, unknown> | undefined
 const mockOrg: any = {
   org: {
     id: 'org-1',
-    plan: 'business',
+    plan: 'pro',
+    // Business's 2% digital rate, which every fee below is cut against, as
+    // an override: the plan itself was removed (AGL-4245).
+    entitlements: { transactionFeeDigitalPct: 2 },
     subscriptionStatus: 'active',
     ownerUid: 'owner-1',
     slug: 'acme',
@@ -2198,14 +2201,18 @@ describe('a POS card sale records its Stripe session (AGL-2244)', () => {
  */
 describe('a POS platform fee that rounds to zero (AGL-2256)', () => {
   const realPlan = mockOrg.org.plan
+  const realEntitlements = mockOrg.org.entitlements
 
   afterEach(() => {
     mockOrg.org.plan = realPlan
+    mockOrg.org.entitlements = realEntitlements
   })
 
   beforeEach(() => {
     // Scale: 1% digital. One $0.30 sticker pack is 0.3c of fee.
-    mockOrg.org.plan = 'scale'
+    // Pro is 1% digital, the rate the retired Scale plan carried (AGL-4245).
+    mockOrg.org.plan = 'pro'
+    mockOrg.org.entitlements = {}
     docs.set('hosts/host-1/products/product-1', {
       name: 'Sticker pack',
       type: 'digital',
@@ -2252,7 +2259,9 @@ describe('a POS platform fee that rounds to zero (AGL-2256)', () => {
    * what must be zero is the margin, and that is what this asserts.
    */
   it('takes no margin on a plan whose rate is a real zero', async () => {
-    mockOrg.org.plan = 'advanced'
+    // Custom is 0%, as the retired Advanced plan was (AGL-4245).
+    mockOrg.org.plan = 'enterprise'
+    mockOrg.org.entitlements = {}
     const result = await post({ payment: 'link' })
     expect(result.status).toBe(200)
     const sent = Number(

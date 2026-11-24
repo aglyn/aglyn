@@ -75,7 +75,7 @@ import {
 } from '@aglyn/aglyn/app-utils/margin-utilization'
 
 /** The paid tiers — the only ones with both a band set and a price. */
-const PAID: OrgPlan[] = ['starter', 'pro', 'business', 'scale', 'advanced', 'agency']
+const PAID: OrgPlan[] = ['starter', 'pro']
 
 /** Page views one GB of bandwidth buys, from the constant the meter is priced on. */
 const VIEWS_PER_GB = (1024 * 1024 * 1024) / ESTIMATED_PAGE_TRANSFER_BYTES
@@ -208,10 +208,6 @@ describe('the bands are real, and the plan is what selects them', () => {
       // tier that carries that cost.
       starter: ['emailSends', 'actionRuns'],
       pro: [],
-      business: [],
-      scale: [],
-      advanced: [],
-      agency: [],
       enterprise: [],
     })
   })
@@ -242,18 +238,18 @@ describe('the bands are real, and the plan is what selects them', () => {
 
   it('measures those two bands against the plan’s allowance, and costs them', () => {
     const row = orgMarginRow({
-      orgId: 'business-1',
-      org: orgOn('business') as never,
+      orgId: 'pro-1',
+      org: orgOn('pro') as never,
       month: '2026-07',
-      rollup: { workflowRuns: 25_000, actionRuns: 5_000 },
+      rollup: { workflowRuns: 2_500, actionRuns: 500 },
     })
-    // Business sells 50,000 workflow runs and 50,000 action runs.
+    // Pro sells 5,000 workflow runs and 5,000 action runs.
     expect(row.bands.workflowRuns.fraction).toBeCloseTo(0.5, 9)
     expect(row.bands.actionRuns.fraction).toBeCloseTo(0.1, 9)
-    // …and contributed 39¢ to what the org cost — under the $2 per-site
+    // …and contributed 3.9¢ to what the org cost — under the $2 per-site
     // floor, so the floor is still the figure, but the meter is no longer
     // reading as free.
-    expect(row.cogs.measuredUsd).toBeCloseTo(0.39, 6)
+    expect(row.cogs.measuredUsd).toBeCloseTo(0.039, 6)
     expect(row.cogs.basis).toBe('floor')
   })
 
@@ -375,12 +371,12 @@ describe('the bands are real, and the plan is what selects them', () => {
     // utilization surface that kept measuring against the plan field would
     // report a churned org as comfortably inside bands it no longer has.
     const canceled = {
-      plan: 'business',
+      plan: 'pro',
       subscription: { status: 'canceled', interval: 'month' },
       hosts: { one: true },
     }
     expect(orgIncludedBands(canceled as never).contactsCount).toBe(100)
-    expect(orgIncludedBands(orgOn('business') as never).contactsCount).toBe(30000)
+    expect(orgIncludedBands(orgOn('pro') as never).contactsCount).toBe(10000)
   })
 
   it('applies a purchased host add-on to the per-host bands', () => {
@@ -502,14 +498,14 @@ describe('the cost model here is the cost model the margin floor uses', () => {
     // whose uncapped band once made it read as the cheapest.
     //
     // The bandwidth axis is what moves this figure, and it moves through the
-    // COST OF A GIGABYTE rather than through `perPageView` alone: Agency's
-    // 395 GB band converts to 408,953 included page views at
+    // COST OF A GIGABYTE rather than through `perPageView` alone: Pro's
+    // 25 GB band converts to included page views at
     // `ESTIMATED_PAGE_TRANSFER_BYTES`, and each weighs $0.00039902751 with
     // its transfer at Vercel's dearest region and its reads at nam5, which is
-    // $0.41312 a gigabyte and $163.18 of the total.
-    const cogs = orgMonthlyCogsUsd(rollupAt('agency', 1) as never, PLAN_ENTITLEMENTS.agency.hostLimit)
-    // $578.92 since AGL-4226 re-derived the API request ($0.000117 → $0.00012).
-    expect(cogs.cogsUsd).toBeCloseTo(578.92, 2)
+    // $0.41312 a gigabyte. (Pinned on Agency, the dearest tier, until that
+    // plan was removed, AGL-4245; Pro is the dearest self-serve tier now.)
+    const cogs = orgMonthlyCogsUsd(rollupAt('pro', 1) as never, PLAN_ENTITLEMENTS.pro.hostLimit)
+    expect(cogs.cogsUsd).toBeCloseTo(tierBandCostUsd('pro'), 2)
     expect(cogs.basis).toBe('measured')
   })
 
@@ -523,23 +519,23 @@ describe('the cost model here is the cost model the margin floor uses', () => {
 
   it('MUTATION: pricing the band table against ONE wrong rate separates them', () => {
     // The comparison above is only meaningful if the two derivations CAN
-    // disagree. Restore Advanced's pre-resize contact band — 1,000,000 at
-    // $0.0002 is $200 against a $399 subscription — and they must not match.
+    // disagree. Give Pro the old top tiers' contact band — 1,000,000 at
+    // $0.0002 is $200 against a $69 subscription — and they must not match.
     const wrong =
-      tierBandCostUsd('advanced') -
-      PLAN_ENTITLEMENTS.advanced.contactsPerHost * ORG_COGS_UNIT_RATES_USD.perContactMonth +
+      tierBandCostUsd('pro') -
+      PLAN_ENTITLEMENTS.pro.contactsPerHost * ORG_COGS_UNIT_RATES_USD.perContactMonth +
       1_000_000 * ORG_COGS_UNIT_RATES_USD.perContactMonth
-    const measured = orgMonthlyCogsUsd(rollupAt('advanced', 1) as never, 0).measuredUsd
+    const measured = orgMonthlyCogsUsd(rollupAt('pro', 1) as never, 0).measuredUsd
     expect(measured).not.toBeCloseTo(wrong, 2)
-    expect(measured).toBeCloseTo(tierBandCostUsd('advanced'), 4)
+    expect(measured).toBeCloseTo(tierBandCostUsd('pro'), 4)
   })
 
   it('MUTATION: reading dataset storage as GIGABYTES doubles nothing quietly', () => {
     // `dataStorageMbPerOrg` is megabytes and `dataStoragePerGbMonth` is a
     // gigabyte rate. The conversion lives inside `orgMonthlyCogsUsd`, and a
     // band table that pre-divided would understate by 1024×.
-    const bands = orgIncludedBands(orgOn('advanced') as never)
-    expect(bands.dataStorageMb).toBe(PLAN_ENTITLEMENTS.advanced.dataStorageMbPerOrg)
+    const bands = orgIncludedBands(orgOn('pro') as never)
+    expect(bands.dataStorageMb).toBe(PLAN_ENTITLEMENTS.pro.dataStorageMbPerOrg)
     const asGb = orgMonthlyCogsUsd({ dataStorageMb: bands.dataStorageMb / 1024 } as never, 0)
     const asMb = orgMonthlyCogsUsd({ dataStorageMb: bands.dataStorageMb } as never, 0)
     expect(asMb.measuredUsd / asGb.measuredUsd).toBeCloseTo(1024, 6)
@@ -662,9 +658,9 @@ describe('the fleet distribution', () => {
     const rows = [
       rowFor('starter', 0.1, 'a'),
       rowFor('pro', 0.2, 'b'),
-      rowFor('business', 0.4, 'c'),
-      rowFor('scale', 0.8, 'd'),
-      rowFor('agency', 0.9, 'e'),
+      rowFor('pro', 0.4, 'c'),
+      rowFor('starter', 0.8, 'd'),
+      rowFor('enterprise', 0.9, 'e'),
     ]
     const fleet = fleetUtilization(rows)
     const pageViews = fleet.distributions.find((d) => d.band === 'pageViews')
@@ -680,9 +676,9 @@ describe('the fleet distribution', () => {
     // were folded in as 0 it would drag the median down by a quarter of the
     // sample.
     const rows = [
-      rowFor('business', 0.5, 'a'),
-      rowFor('scale', 0.5, 'b'),
-      rowFor('advanced', 0.5, 'c'),
+      rowFor('pro', 0.5, 'a'),
+      rowFor('starter', 0.5, 'b'),
+      rowFor('pro', 0.5, 'c'),
       orgMarginRow({
         orgId: 'ent',
         org: contractedEnterprise() as never,
@@ -773,7 +769,7 @@ describe('the fleet distribution', () => {
   })
 
   it('answers a ONE-ORG fleet with that org’s own figure', () => {
-    const fleet = fleetUtilization([rowFor('business', 0.37, 'only')])
+    const fleet = fleetUtilization([rowFor('pro', 0.37, 'only')])
     expect(fleet.distributions.find((d) => d.band === 'pageViews')?.p50).toBeCloseTo(
       0.37,
       9,
@@ -797,8 +793,8 @@ describe('the fleet distribution', () => {
     // be stuck on a verdict.
     const fleet = fleetUtilization([
       rowFor('pro', 0.03, 'a'),
-      rowFor('business', 0.03, 'b'),
-      rowFor('scale', 0.03, 'c'),
+      rowFor('starter', 0.03, 'b'),
+      rowFor('pro', 0.03, 'c'),
     ])
     expect(fleet.orgsUnderFloor).toBe(0)
     expect(fleet.orgsUnderwater).toBe(0)

@@ -57,8 +57,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 import '../declarations'
 import AiCreditsCard from './ai-credits-card.component'
 
-/** Business: 7,500 credits included. */
-const BUSINESS = { $id: 'org-1', plan: 'business' } as any
+/** Pro: 2,750 credits included. */
+const BUSINESS = { $id: 'org-1', plan: 'pro' } as any
 /** Starter: 750 credits included since AGL-3203, sold past at $3.00/1k. */
 const STARTER = { $id: 'org-1', plan: 'starter' } as any
 /**
@@ -108,8 +108,8 @@ beforeEach(() => {
 })
 
 describe('the fixture is a plan that really sells a band', () => {
-  it('Business includes 7,500, Starter 750, and Free carries the taste', () => {
-    expect(PLAN_ENTITLEMENTS.business.assistCreditsPerMonth).toBe(7_500)
+  it('Pro includes 2,750, Starter 750, and Free carries the taste', () => {
+    expect(PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth).toBe(2_750)
     // Starter includes 750 since AGL-3203, and sells past them.
     expect(PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth).toBe(750)
     // The Free taste (AGL-2925): a real band, so the meter renders for it.
@@ -142,7 +142,7 @@ describe('a workspace with a band can see how much of it is left', () => {
     // sent, including one no plan includes.
     const row = screen.getByText(METER).parentElement?.parentElement
     expect(row?.textContent).toContain(
-      String(PLAN_ENTITLEMENTS.business.assistCreditsPerMonth),
+      String(PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth),
     )
     // And nothing on the page quotes our provider bill. 4,500 credits is
     // $4.50 of model spend; that figure must appear nowhere.

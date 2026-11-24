@@ -148,7 +148,7 @@ const firestoreHandle: any = {
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: { app: () => ({ firestore: () => firestoreHandle }) },
-  getOrgForHost: async () => ({ orgId: ORG_ID, org: { plan: 'business' } }),
+  getOrgForHost: async () => ({ orgId: ORG_ID, org: { plan: 'pro' } }),
 }))
 
 import {
@@ -202,7 +202,7 @@ describe('a step another plugin runs', () => {
     expect(requests).toEqual([
       {
         hostId: HOST_ID,
-        org: { plan: 'business' },
+        org: { plan: 'pro' },
         orgId: ORG_ID,
         run: { kind: 'action', id: 'act-1', name: 'Action act-1' },
         event: 'quoteRequested',

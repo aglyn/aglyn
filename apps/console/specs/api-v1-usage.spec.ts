@@ -34,7 +34,7 @@
  */
 
 const mockDocs = new Map<string, Record<string, unknown>>()
-let mockOrg: Record<string, unknown> = { plan: 'business' }
+let mockOrg: Record<string, unknown> = { plan: 'pro' }
 let mockScopes: string[] = ['datasets:read']
 
 const mockMonth = new Date().toISOString().slice(0, 7)
@@ -221,7 +221,7 @@ beforeAll(() => registerPluginServerDeclarations())
 beforeEach(() => {
   mockDocs.clear()
   mockScopes = ['datasets:read']
-  mockOrg = { plan: 'business', subscription: { status: 'active' } }
+  mockOrg = { plan: 'pro', subscription: { status: 'active' } }
 })
 
 describe('every number is MEASURED, not a plausible constant', () => {
@@ -264,7 +264,7 @@ describe('every number is MEASURED, not a plausible constant', () => {
     // hand-overridden band and check the endpoint's own arithmetic matches
     // `checkApiRequestQuota`, which is what `refuseIfApiQuotaExhausted` calls.
     mockOrg = {
-      plan: 'business',
+      plan: 'pro',
       entitlements: { apiRequestsPerMonth: 50 },
     }
     mockDocs.set(`orgs/org-1/apiUsage/${mockMonth}`, { count: 30 })
@@ -278,7 +278,7 @@ describe('every number is MEASURED, not a plausible constant', () => {
 
 describe('remaining is pinned on both sides of a band', () => {
   beforeEach(() => {
-    mockOrg = { plan: 'business', entitlements: { contactsPerHost: 5 } }
+    mockOrg = { plan: 'pro', entitlements: { contactsPerHost: 5 } }
   })
 
   it('counts down inside the band', async () => {
@@ -360,7 +360,7 @@ describe('the datasets band is the EFFECTIVE limit, add-ons included', () => {
     // `datasetsPerOrg` instead would tell a customer who bought slots that
     // they are full when they are not.
     mockOrg = {
-      plan: 'business',
+      plan: 'pro',
       entitlements: { datasetsPerOrg: 2, maxDatasetsPerOrg: 10 },
       // The field `resolvePurchasedAddons` actually reads. A test that named
       // it wrong would silently assert the un-bought limit.

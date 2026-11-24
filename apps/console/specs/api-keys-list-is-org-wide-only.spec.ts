@@ -79,7 +79,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       auth: () => ({ verifyIdToken: (...a: unknown[]) => mockVerifyIdToken(...a) }),
       firestore: () => ({
         collection: () => ({
-          doc: () => ({ get: async () => ({ data: () => ({ plan: 'business' }) }) }),
+          doc: () => ({ get: async () => ({ data: () => ({ plan: 'pro' }) }) }),
         }),
       }),
     }),

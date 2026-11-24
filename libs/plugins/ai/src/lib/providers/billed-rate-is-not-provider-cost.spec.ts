@@ -412,7 +412,7 @@ describe('the margin the split corrects', () => {
     // is at or above what a credit costs us — so the ladder's margins are a
     // lower bound and the split can only widen them. Asserted as the reason
     // the floor stays checkable against one constant.
-    const plans = ['pro', 'business', 'scale', 'advanced', 'agency'] as const
+    const plans = ['starter', 'pro'] as const
     for (const plan of plans) {
       const rate = PLAN_PRICING[plan].extraAssistCreditsUsdPer1k
       const floorMargin = assistCreditRateMarginPct(rate)

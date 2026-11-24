@@ -109,7 +109,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 
 /** A plan that clears the redirect cap, so nothing is refused for that
  * reason instead of the one under test. */
-const ORG = { plan: 'business' } as never
+const ORG = { plan: 'pro' } as never
 
 describe('the Redirects surface leaves plan refusal to the shell (AGL-2484)', () => {
   /**

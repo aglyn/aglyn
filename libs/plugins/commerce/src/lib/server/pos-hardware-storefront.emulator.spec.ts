@@ -216,7 +216,7 @@ run('a stranger buys card readers online from the platform’s own store (emulat
     jest.spyOn(console, 'warn').mockImplementation(() => undefined)
     await clear()
     const db = firestore()
-    await db.doc(`orgs/${SELLER_ORG}`).set({ name: 'Seller', ownerUid: 'owner-seller', plan: 'business', subscriptionStatus: 'active' })
+    await db.doc(`orgs/${SELLER_ORG}`).set({ name: 'Seller', ownerUid: 'owner-seller', plan: 'pro', subscriptionStatus: 'active' })
     await db.doc(`hosts/${SELLER_HOST}`).set({ name: 'Our store', orgId: SELLER_ORG })
     await db.doc('profiles/owner-seller').set({ stripeAccountId: 'acct_seller', stripeChargesEnabled: true })
     // The store charges its own Texas rate, so the sale files a storefront row.

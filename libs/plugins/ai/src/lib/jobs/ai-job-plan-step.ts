@@ -1590,7 +1590,7 @@ export function aiSitePlanCapabilities(
 /**
  * The effort a paid site's plan asks (AGL-3781). The live round of 2026-10-14
  * planned the paid site briefs (`ai-job-site-plan-live.spec.ts` with
- * `AGLYN_LIVE_AI_ORG_PLAN=business`) at the model's default and at medium:
+ * `AGLYN_LIVE_AI_ORG_PLAN=pro`) at the model's default and at medium:
  * both planned 11 of 11 with no refusal and no rule broken, and medium took
  * 16 attempts to the default's 22, for $0.129 to $0.164. Scoped to a paid
  * site's plan, which is all that arm planned: the `job.plan` row's effort,

@@ -23,8 +23,9 @@
  * The listener is `limit(25)` and the stock `posRegisters` bands top out at
  * agency's 20 — under the window — but the $89/mo register add-on is sold
  * flat up to `POS_REGISTERS_ADDON_MAX` (50) on any plan carrying `pos`, so
- * an agency org's effective limit reaches 70. This fixture is agency + 30
- * purchased registers (limit 50) with 60 registers on the site: before the
+ * an org's effective limit reaches its band + 50. This fixture is Pro's 1 +
+ * 49 purchased registers (limit 50; it was Agency's 20 + 30 until that plan
+ * was removed, AGL-4245) with 60 registers on the site: before the
  * fix the card read "25/50 registers on your plan" and offered the add,
  * while `api/hosts/resources` counted the collection and refused it.
  *
@@ -82,9 +83,9 @@ const mockCreateResource = jest.fn().mockResolvedValue({ id: 'reg-new' })
 const ORG_PLAN = {
   org: {
     $id: 'org-1',
-    plan: 'agency',
-    seatAddons: { posRegisters: 30 },
-    registerAllocations: { 'host-1': 30 },
+    plan: 'pro',
+    seatAddons: { posRegisters: 49 },
+    registerAllocations: { 'host-1': 49 },
   },
   ready: true,
 }

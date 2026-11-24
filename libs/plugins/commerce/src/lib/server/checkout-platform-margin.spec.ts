@@ -173,7 +173,7 @@ const fakeFirestore = {
 const mockOrg: any = {
   org: {
     id: 'org-1',
-    plan: 'business',
+    plan: 'pro',
     subscriptionStatus: 'active',
     ownerUid: 'owner-1',
     slug: 'acme',
@@ -282,7 +282,7 @@ interface Scenario {
 
 /** Seeds a host that can sell one 400g $30 physical product. */
 async function runCheckout(scenario: Scenario = {}) {
-  mockOrg.org.plan = scenario.plan ?? 'business'
+  mockOrg.org.plan = scenario.plan ?? 'pro'
   docs.clear()
   docs.set('hosts/host-1', { name: 'Acme' })
   docs.set('profiles/owner-1', {
@@ -376,7 +376,7 @@ describe('a storefront sale is never a loss to the platform (AGL-2152)', () => {
   afterAll(() => {
     global.fetch = realFetch
     process.env.STRIPE_SECRET_KEY = realKey as string
-    mockOrg.org.plan = 'business'
+    mockOrg.org.plan = 'pro'
   })
 
   beforeEach(() => {
@@ -393,7 +393,7 @@ describe('a storefront sale is never a loss to the platform (AGL-2152)', () => {
    */
   it('a 0%-physical tier still covers Stripe on a plain order', async () => {
     const { result, body } = await runCheckout({
-      plan: 'business',
+      plan: 'pro',
       priceUsd: 30,
       settings: { tax: { mode: 'none' } },
     })
@@ -443,7 +443,7 @@ describe('a storefront sale is never a loss to the platform (AGL-2152)', () => {
    */
   it('covers the manual tax line and the dearest shipping option too', async () => {
     const { result, body } = await runCheckout({
-      plan: 'business',
+      plan: 'pro',
       priceUsd: 30,
       shippingCountry: 'US',
       settings: {

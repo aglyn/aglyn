@@ -340,7 +340,7 @@ describe('a white-label send', () => {
   ) {
     const { chrome, entitlements } = loadWith({})
     const branding = entitlements.resolveBrandingProfile({
-      plan: 'agency',
+      plan: 'enterprise',
       brandingProfile,
     } as never)
     const merged = {

@@ -517,7 +517,7 @@ beforeEach(() => {
   mockNav.pushed = []
   mockNav.replaced = []
   // Business + ready is the ordinary case; the gate cases below set their own.
-  mockOrg.org = { plan: 'business' }
+  mockOrg.org = { plan: 'pro' }
   mockOrg.ready = true
 })
 

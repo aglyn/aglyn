@@ -139,7 +139,7 @@ class ScreenBillingOverageTest {
 
   @Test
   fun aStaffCompBillsNothingAndSoQuotesNothing() {
-    val base = """"ent":{"plan":"business","quotas":{"contactsPerHost":10,"apiRequestsPerMonth":10,"emailSendsPerMonth":10,"hostLimit":1}},
+    val base = """"ent":{"plan":"pro","quotas":{"contactsPerHost":10,"apiRequestsPerMonth":10,"emailSendsPerMonth":10,"hostLimit":1}},
       "contacts":{"count":100},"companies":{"count":0},"deals":{"count":0},"api":{"count":100},"emails":{"2026-10":100},"collab":{"sites":[]},"siteTraffic":[]"""
     fun warnings(org: String, sites: String = "[]"): Int {
       val model = seeded(json("""{$base,"org":$org}""".replace(""""collab":{"sites":[]}""", """"collab":{"sites":$sites}""")), "2026-10")
@@ -147,11 +147,11 @@ class ScreenBillingOverageTest {
     }
     assertEquals(3, warnings("""{"subscription":{"status":"active"}}"""))
     // A comp grants the plan with nothing for sale; a live subscription wins over it.
-    assertEquals(0, warnings("""{"entitlements":{"planComp":{"plan":"business"}}}"""))
-    assertEquals(0, warnings("""{"entitlements":{"planComp":{"plan":"business"}},"subscription":{"status":"canceled"}}"""))
-    assertEquals(3, warnings("""{"entitlements":{"planComp":{"plan":"business"}},"subscription":{"status":"active"}}"""))
+    assertEquals(0, warnings("""{"entitlements":{"planComp":{"plan":"pro"}}}"""))
+    assertEquals(0, warnings("""{"entitlements":{"planComp":{"plan":"pro"}},"subscription":{"status":"canceled"}}"""))
+    assertEquals(3, warnings("""{"entitlements":{"planComp":{"plan":"pro"}},"subscription":{"status":"active"}}"""))
     // The metered estimate follows the same rule.
-    val comped = seeded(json("""{$base,"org":{"entitlements":{"planComp":{"plan":"business"}}}}""".replace(""""collab":{"sites":[]}""", """"collab":{"sites":[{"hostId":"h0"}]}""")), "2026-10")
+    val comped = seeded(json("""{$base,"org":{"entitlements":{"planComp":{"plan":"pro"}}}}""".replace(""""collab":{"sites":[]}""", """"collab":{"sites":[{"hostId":"h0"}]}""")), "2026-10")
     assertEquals(JsonPrimitive(true), ScreenValues.lookup("is.comp", comped.context))
     assertEquals(JsonPrimitive(false), ScreenValues.lookup("is.billed", comped.context))
   }

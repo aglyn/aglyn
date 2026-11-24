@@ -150,10 +150,10 @@ jest.mock('@aglyn/tenant-runtime/get-variables', () => ({
   ),
 }))
 
-const ORG = { plan: 'business' } as never
+const ORG = { plan: 'pro' } as never
 const PUBLISHED_ORG = {
   $id: 'org-1',
-  plan: 'business',
+  plan: 'pro',
   subscriptionStatus: 'active',
 }
 

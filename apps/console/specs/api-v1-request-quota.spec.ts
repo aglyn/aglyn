@@ -138,30 +138,30 @@ beforeEach(() => {
     keyId: 'key-1',
     scopes: ['read'],
   })
-  mockGetOrgDoc.mockResolvedValue({ plan: 'business', billingStatus: 'active' })
+  mockGetOrgDoc.mockResolvedValue({ plan: 'pro', billingStatus: 'active' })
   mockLockdownRefusal.mockResolvedValue(null)
 })
 
 describe('the /api/v1 chokepoint enforces the monthly request quota (AGL-2163)', () => {
   it('THE NEGATIVE CONTROL: a metered plan stays allowed and is NOT refused', async () => {
-    // Business carries `extraApiRequestsUsdPer1k: 0.5`, so the overage BILLS.
-    // Ten million requests against a 100,000 band — a hundredfold overage —
+    // Pro carries `extraApiRequestsUsdPer1k: 0.5`, so the overage BILLS.
+    // Ten million requests against a 1,500 band — a hundredfold overage —
     // and the answer is still 200. This is the assertion that would have
     // caught the naive version of this fix.
     mockApiUsageCount = 10_000_000
-    expect(checkApiRequestQuota({ plan: 'business', billingStatus: 'active' } as never, 10_000_000).allowed).toBe(true)
+    expect(checkApiRequestQuota({ plan: 'pro', billingStatus: 'active' } as never, 10_000_000).allowed).toBe(true)
     const response = await call()
     expect(response.status).toBe(200)
     // …and it did not even look: a paying customer pays no read for a check
     // whose answer their plan already determines.
     expect(mockApiUsageReads).toBe(0)
-    expect(apiRequestEnforcementShape({ plan: 'business', billingStatus: 'active' } as never)).toBe(
+    expect(apiRequestEnforcementShape({ plan: 'pro', billingStatus: 'active' } as never)).toBe(
       'never-blocks',
     )
   })
 
   it('every self-serve plan that ships with API access is never-blocks', async () => {
-    for (const plan of ['business', 'scale', 'advanced', 'agency']) {
+    for (const plan of ['pro']) {
       expect(apiRequestEnforcementShape({ plan, billingStatus: 'active' } as never)).toBe('never-blocks')
     }
     // Enterprise publishes no rate, and since 2026-09-07 its band is a finite

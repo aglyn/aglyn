@@ -339,7 +339,7 @@ function seedPlatform() {
   seed('orgs/org-a', {
     name: 'Acme',
     slug: 'acme',
-    plan: 'business',
+    plan: 'pro',
     entitlements: { features: { crm: true } },
   })
   seed('orgs/org-a/members/ann', { role: 'admin', email: 'Ann@Acme.com', displayName: 'Ann' })
@@ -407,7 +407,7 @@ function seedPlatform() {
   seed('orgs/org-off', {
     name: 'Off',
     slug: 'off',
-    plan: 'business',
+    plan: 'pro',
     entitlements: { features: { crm: true } },
     releaseFlags: { release_crm: false },
   })
@@ -617,7 +617,7 @@ describe('POST /api/crm/task-reminders (AGL-2659)', () => {
     /** A dozen orgs with nothing owed: none due, one already told, one done. */
     const seedQuietOrgs = () => {
       for (let index = 0; index < 12; index += 1) {
-        seed(`orgs/quiet-${index}`, { name: 'Quiet', plan: 'business', entitlements: { features: { crm: true } } })
+        seed(`orgs/quiet-${index}`, { name: 'Quiet', plan: 'pro', entitlements: { features: { crm: true } } })
       }
       seed('orgs/quiet-1/crmTasks/later', { status: 'open', remindAtMs: NOW + DAY })
       seed('orgs/quiet-2/crmTasks/told', { status: 'open', remindAtMs: NOW - DAY, reminderSentAtMs: NOW - DAY })
@@ -657,11 +657,11 @@ describe('POST /api/crm/task-reminders (AGL-2659)', () => {
 
     it('reads every page: a busy org’s handled reminders never bury a quiet org', async () => {
       mockStore.clear()
-      seed('orgs/org-a', { name: 'Acme', slug: 'acme', plan: 'business', entitlements: { features: { crm: true } } })
+      seed('orgs/org-a', { name: 'Acme', slug: 'acme', plan: 'pro', entitlements: { features: { crm: true } } })
       seed('orgs/org-a/members/ann', { role: 'admin', email: 'ann@acme.com' })
       seed('users/ann', {})
       seed('orgs/org-a/crmTasks/oldest', { status: 'open', remindAtMs: NOW - 2 * DAY, assigneeUid: 'ann', title: 'Oldest' })
-      seed('orgs/org-busy', { name: 'Busy', plan: 'business', entitlements: { features: { crm: true } } })
+      seed('orgs/org-busy', { name: 'Busy', plan: 'pro', entitlements: { features: { crm: true } } })
       for (let index = 0; index < 500; index += 1) {
         seed(`orgs/org-busy/crmTasks/t${index}`, {
           status: 'open',

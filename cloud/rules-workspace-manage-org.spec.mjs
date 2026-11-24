@@ -155,7 +155,7 @@ const check = async (label, fn) => {
 const allow = (label, fn) => check(label, () => assertSucceeds(fn()))
 const deny = (label, fn) => check(label, () => assertFails(fn()))
 
-const ORG_DOC = { name: 'Manage Org Keys', slug: 'manage-org-keys', plan: 'agency', ownerUid: uidOf('owner') }
+const ORG_DOC = { name: 'Manage Org Keys', slug: 'manage-org-keys', plan: 'enterprise', ownerUid: uidOf('owner') }
 
 /** The workspace document as it stood before each write, so every row starts from the same fields. */
 const resetOrg = () =>
@@ -166,7 +166,7 @@ const resetOrg = () =>
 await env.withSecurityRulesDisabled(async (context) => {
   const db = context.firestore()
   await setDoc(doc(db, 'orgs', ORG), ORG_DOC)
-  await setDoc(doc(db, 'orgs', OTHER_ORG), { name: 'Other', slug: 'manage-org-keys-other', plan: 'agency' })
+  await setDoc(doc(db, 'orgs', OTHER_ORG), { name: 'Other', slug: 'manage-org-keys-other', plan: 'enterprise' })
   await setDoc(doc(db, 'orgs', OTHER_ORG, 'members', OUTSIDER), { role: 'owner', allHosts: true })
   for (const [name, member] of Object.entries(MEMBERS)) {
     await setDoc(doc(db, 'orgs', ORG, 'members', uidOf(name)), member)

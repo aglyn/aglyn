@@ -71,7 +71,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
             // The org doc for the POST branch.
             get: async () => ({
               exists: true,
-              data: () => ({ ownerUid: 'owner-uid', plan: 'agency' }),
+              data: () => ({ ownerUid: 'owner-uid', plan: 'enterprise' }),
               get: (field: string) =>
                 ({ slug: 'aglyn-org', name: 'Aglyn' })[field],
             }),

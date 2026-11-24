@@ -266,10 +266,15 @@ describe('DIMENSION BY DIMENSION: every band blown, every charge zero', () => {
     // POSITIVE CONTROL: at the count that contains a free site — the floor
     // itself — a paid plan whose band sits above the floor is not contained,
     // because its ceiling is three times that band, and its overage bills,
-    // which is the whole difference. Business, because Starter's 20 GB and
-    // Pro's 30 GB are under the floor and share Free's ceiling — where they
+    // which is the whole difference. A 45 GB band (the removed Business
+    // plan's, as an override on Pro; AGL-4245), because Starter's and Pro's
+    // own bands are under the floor and share Free's ceiling — where they
     // are still not DEGRADED.
-    const businessOrg = { plan: 'business', subscription: { status: 'active' } } as any
+    const businessOrg = {
+      plan: 'pro',
+      subscription: { status: 'active' },
+      entitlements: { bandwidthGb: 45 },
+    } as any
     expect(
       checkBandwidthAbuseCeiling(freeOrg(), BANDWIDTH_ABUSE_CEILING_FLOOR).exceeded,
     ).toBe(true)

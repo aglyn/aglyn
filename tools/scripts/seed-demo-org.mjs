@@ -282,7 +282,7 @@ async function createEmulatorOrg() {
       // Business: hostLimit 10, which is both what the pitch quotes
       // ("10 sites in one org for $99/mo flat") and enough headroom that
       // the demo's fourth site does not trip a quota banner on screen.
-      plan: 'business',
+      plan: 'pro',
       subscription: { status: 'active' },
       enabledPlugins: [
         'mui',

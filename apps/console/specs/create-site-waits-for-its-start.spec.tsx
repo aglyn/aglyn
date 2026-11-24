@@ -81,7 +81,7 @@ jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
 }))
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
-  default: () => ({ org: { plan: 'business', slug: 'acme' }, orgId: 'org-1', ready: true }),
+  default: () => ({ org: { plan: 'pro', slug: 'acme' }, orgId: 'org-1', ready: true }),
 }))
 jest.mock('../hooks/use-org-permissions', () => ({
   __esModule: true,

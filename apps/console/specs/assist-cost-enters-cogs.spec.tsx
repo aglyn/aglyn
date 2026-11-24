@@ -150,7 +150,7 @@ const QUIET_ROLLUP = {
 
 /** Two sites, so `checkDiscountMargin`'s flat floor is $4. */
 const ORG_DOC = {
-  plan: 'business',
+  plan: 'pro',
   subscription: { status: 'active', interval: 'month' },
   hosts: { siteOne: true, siteTwo: true },
 } as never

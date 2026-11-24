@@ -63,7 +63,12 @@ const aggregate: { count: number | null } = { count: SERVER_LOCATIONS }
 const FIRESTORE = {}
 const mockCreateResource = jest.fn().mockResolvedValue({ id: 'loc-new' })
 /** Stock `agency`: `inventoryLocations: 50`, the only band above the window. */
-const ORG_PLAN = { org: { $id: 'org-1', plan: 'agency' }, ready: true }
+// Agency's 50 until that plan was removed (AGL-4245): the same band as an
+// override on Pro, whose own is 2.
+const ORG_PLAN = {
+  org: { $id: 'org-1', plan: 'pro', entitlements: { inventoryLocations: 50 } },
+  ready: true,
+}
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,

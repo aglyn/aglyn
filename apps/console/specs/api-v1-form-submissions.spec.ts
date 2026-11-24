@@ -157,7 +157,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     }),
     // The site must be one the org owns, or `handleSites` 404s before the
     // sub-resource is reached at all.
-    getOrgDoc: async () => ({ plan: 'business', hosts: { 'host-1': true } }),
+    getOrgDoc: async () => ({ plan: 'pro', hosts: { 'host-1': true } }),
     lockdownRefusal: async () => null,
     consumeRateLimit: async () => ({
       allowed: true,

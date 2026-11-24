@@ -40,11 +40,8 @@ export const WORKFLOW_RUNS_PER_MONTH_BY_PLAN: Readonly<Record<OrgPlan, number>> 
   free: 0,
   starter: 500,
   pro: 5000,
-  business: 50000,
-  scale: 150000,
-  advanced: 500000,
-  agency: 2000000,
-  // Agency's band × 2, the rule every Enterprise fallback follows.
+  // Twice the old top self-serve tier's band, the rule every Enterprise
+  // fallback followed (that tier was removed, AGL-4245).
   enterprise: 4_000_000,
 }
 

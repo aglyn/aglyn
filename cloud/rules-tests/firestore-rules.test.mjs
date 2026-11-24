@@ -842,7 +842,7 @@ describe('org docs', () => {
       updateDoc(doc(authed(EDITOR), 'orgs', ORG), { name: 'Nope' }),
     )
     await assertFails(
-      updateDoc(doc(authed(OWNER), 'orgs', ORG), { plan: 'business' }),
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), { plan: 'pro' }),
     )
     await assertFails(
       updateDoc(doc(authed(OWNER), 'orgs', ORG), { slug: 'stolen' }),
@@ -5782,7 +5782,7 @@ describe('staff RBAC on org billing keys (AGL-206/238)', () => {
     )
     await mustDeny(
       'billing staff writing orgs/{orgId}.plan from the client (AGL-1795)',
-      updateDoc(doc(billingStaffDb, 'orgs', ORG), { plan: 'business' }),
+      updateDoc(doc(billingStaffDb, 'orgs', ORG), { plan: 'pro' }),
     )
     await assertFails(
       updateDoc(doc(billingStaffDb, 'orgs', ORG), {
@@ -5807,7 +5807,7 @@ describe('staff RBAC on org billing keys (AGL-206/238)', () => {
     await assertSucceeds(getDoc(doc(supportStaffDb, 'orgs', ORG)))
     await mustDeny(
       'support staff writing orgs/{orgId}.plan',
-      updateDoc(doc(supportStaffDb, 'orgs', ORG), { plan: 'business' }),
+      updateDoc(doc(supportStaffDb, 'orgs', ORG), { plan: 'pro' }),
     )
     // `plan` alone stopped isolating the ROLE when AGL-1795 denied it to every
     // client: that case now passes for a support token, a billing token and a
@@ -12451,9 +12451,9 @@ describe('the CRM suite collections answer to the plan (AGL-2801)', () => {
       setDoc(record(OWNER, 'crmTasks', 'comped'), payload('crmTasks', OWNER)),
     )
     // No subscription at all, nothing stored, comped.
-    await replaceOrg({ entitlements: comp('business') })
+    await replaceOrg({ entitlements: comp('enterprise') })
     await mustAllow(
-      'the owner creating a deal on a never-subscribed workspace comped to Business',
+      'the owner creating a deal on a never-subscribed workspace comped to Custom',
       setDoc(record(OWNER, 'deals', 'comped'), payload('deals', OWNER)),
     )
     // A live subscription on Free outranks a comp.

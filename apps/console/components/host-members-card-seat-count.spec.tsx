@@ -162,7 +162,7 @@ jest.mock('../hooks/use-current-org', () => ({
   default: () => ({
     org: {
       $id: 'org-1',
-      plan: 'business',
+      plan: 'pro',
       ownerUid: 'owner-1',
       entitlements: { membersPerHost: 50 },
     },

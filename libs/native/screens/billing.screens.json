@@ -18,10 +18,6 @@
           "free": "Free",
           "starter": "Starter",
           "pro": "Pro",
-          "business": "Business",
-          "scale": "Scale",
-          "advanced": "Advanced",
-          "agency": "Agency",
           "enterprise": "Custom"
         }
       },
@@ -609,10 +605,6 @@
           "free": "Free",
           "starter": "Starter",
           "pro": "Pro",
-          "business": "Business",
-          "scale": "Scale",
-          "advanced": "Advanced",
-          "agency": "Agency",
           "enterprise": "Custom"
         },
         "limits": {
@@ -630,26 +622,6 @@
             "hostLimit": 3,
             "managersPerOrg": 3,
             "datasetsPerOrg": 5
-          },
-          "business": {
-            "hostLimit": 10,
-            "managersPerOrg": 5,
-            "datasetsPerOrg": 10
-          },
-          "scale": {
-            "hostLimit": 15,
-            "managersPerOrg": 5,
-            "datasetsPerOrg": 15
-          },
-          "advanced": {
-            "hostLimit": 25,
-            "managersPerOrg": 10,
-            "datasetsPerOrg": 25
-          },
-          "agency": {
-            "hostLimit": 100,
-            "managersPerOrg": 10,
-            "datasetsPerOrg": 50
           },
           "enterprise": {
             "hostLimit": 200,

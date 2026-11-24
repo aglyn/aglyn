@@ -40,7 +40,7 @@ const mockInstalled = jest.fn(async () => undefined)
 const mockAnnounceNewSite = jest.fn(async (_site: Record<string, unknown>) => undefined)
 let mockSourceRegistered = true
 let mockStaff = false
-let mockOrg: Record<string, unknown> = { plan: 'business', slug: 'acme' }
+let mockOrg: Record<string, unknown> = { plan: 'pro', slug: 'acme' }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
@@ -124,7 +124,7 @@ beforeEach(() => {
   mockFlagOn.mockResolvedValue(true)
   mockSourceRegistered = true
   mockStaff = false
-  mockOrg = { plan: 'business', slug: 'acme' }
+  mockOrg = { plan: 'pro', slug: 'acme' }
 })
 
 describe('POST /api/hosts/create: Start in preview (AGL-4086)', () => {

@@ -117,7 +117,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     resetMs: Date.now() + 30_000,
     degraded: false,
   }),
-  getOrgForHost: async () => ({ org: { plan: 'business' } }),
+  getOrgForHost: async () => ({ org: { plan: 'pro', entitlements: { recordsPerDataset: 100_000 } } }),
   notifyHostManagers: async () => undefined,
   orgDataCollectionForHost: async () => mockCollectionHandle('orgs/org-1/datasets'),
   upsertHostContact: async () => undefined,
@@ -346,7 +346,7 @@ describe('AGL-2168 · dataset provenance on a submission', () => {
   })
 
   it('stamps nothing when the record quota refused the append', async () => {
-    // Business allows 100,000 records per dataset; a full one drops the
+    // A 100,000-record band (Business's, as an override; AGL-4245); a full one drops the
     // append silently so the lead is still captured in the Inbox.
     mockRecordCount = 10_000_000
     const response = await submit()

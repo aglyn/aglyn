@@ -48,7 +48,7 @@
  */
 
 const mockDocs = new Map<string, Record<string, unknown>>()
-let mockOrg: Record<string, unknown> = { plan: 'business' }
+let mockOrg: Record<string, unknown> = { plan: 'pro' }
 /** Reads of `orgs/{id}/usage/{month}`, so "costs nothing" is measured. */
 let mockUsageReads = 0
 let mockUidSeq = 0
@@ -219,6 +219,7 @@ beforeAll(() => registerPluginServerDeclarations())
 import {
   dataStorageEnforcementShape,
   PLAN_ENTITLEMENTS,
+  UNLIMITED,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 
 const postRecord = (idempotencyKey?: string) =>
@@ -270,15 +271,15 @@ beforeEach(() => {
   mockDocs.clear()
   mockUsageReads = 0
   mockUidSeq = 0
-  mockOrg = { plan: 'business', subscription: { status: 'active' } }
+  mockOrg = { plan: 'pro', subscription: { status: 'active' } }
   mockDocs.set('orgs/org-1/datasets/ds-1', { displayName: 'Leads' })
 })
 
 describe('the premise', () => {
-  it('business meters both dimensions, so neither cap may ever refuse it', () => {
-    expect(PLAN_ENTITLEMENTS.business.features.apiAccess).toBe(true)
-    expect(PLAN_ENTITLEMENTS.business.recordsPerDataset).toBe(100_000)
-    expect(dataStorageEnforcementShape({ plan: 'business' } as never)).toBe(
+  it('pro meters both dimensions, so neither cap may ever refuse it', () => {
+    expect(PLAN_ENTITLEMENTS.pro.features.apiAccess).toBe(true)
+    expect(PLAN_ENTITLEMENTS.pro.recordsPerDataset).toBe(UNLIMITED)
+    expect(dataStorageEnforcementShape({ plan: 'pro' } as never)).toBe(
       'never-blocks',
     )
   })
@@ -298,8 +299,8 @@ describe('NEGATIVE CONTROL: a paying customer is never refused, and pays no read
 
   it('creates the 100,000th row and would create the next', async () => {
     // Not seeded to 100k — that would be 100k map entries. The point is that
-    // business's band is far above anything this suite writes, so no refusal
-    // below can be business's own cap wearing a different coat.
+    // Pro's band is unlimited, so no refusal below can be the plan's own cap
+    // wearing a different coat.
     seedRecords(50)
     expect((await postRecord()).status).toBe(201)
     expect(recordCount()).toBe(51)

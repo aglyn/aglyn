@@ -276,7 +276,7 @@ const fakeFirestore = {
 const mockOrg: any = {
   org: {
     id: 'org-1',
-    plan: 'business',
+    plan: 'pro',
     // `billingStatus`, not `subscriptionStatus` — see the note in
     // draft-order-idempotency.spec.ts. Only this key downgrades a paid plan.
     billingStatus: 'active',
@@ -772,7 +772,7 @@ describe('a guest count on the booking (AGL-4043)', () => {
 
 describe('the commerce entitlement gates the reservation door (AGL-1873)', () => {
   afterEach(() => {
-    mockOrg.org.plan = 'business'
+    mockOrg.org.plan = 'pro'
     mockOrg.org.billingStatus = 'active'
   })
 
@@ -797,7 +797,7 @@ describe('the commerce entitlement gates the reservation door (AGL-1873)', () =>
     const refused = await post({}, { 'idempotency-key': 'attempt-back' })
     expect(refused.status).toBe(403)
     expect(claimDocs()).toHaveLength(0)
-    mockOrg.org.plan = 'business'
+    mockOrg.org.plan = 'pro'
     const retry = await post({}, { 'idempotency-key': 'attempt-back' })
     expect(retry.status).toBe(200)
     expect(holdDocs()).toHaveLength(1)

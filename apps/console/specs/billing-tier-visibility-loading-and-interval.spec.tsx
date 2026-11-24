@@ -398,8 +398,8 @@ describe('the grid holds until the plan is KNOWN (AGL-1864 · AGL-1422)', () => 
       Object.values(PLAN_LABELS).filter((label) => Boolean(cardFor(label)))
         .length,
     ).toBe(4)
-    // None of them is a retired plan: those are never drawn for sale.
-    expect(cardFor(PLAN_LABELS.business)).toBeNull()
+    // None of them is a removed plan: those are never drawn for sale.
+    expect(cardFor('Business')).toBeNull()
   })
 
   it('and the ones the fold was holding are quiet, not promoted', () => {

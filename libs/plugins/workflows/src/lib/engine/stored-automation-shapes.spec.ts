@@ -45,7 +45,7 @@ let store: Record<string, Record<string, any>> = {}
 let updates: { path: string; data: Record<string, any> }[] = []
 let minted = 0
 /** The owning org's billing doc — the plan every gate reads. */
-let mockOrg: Record<string, any> = { plan: 'business' }
+let mockOrg: Record<string, any> = { plan: 'pro' }
 /** Every message handed to the mail provider. */
 let sentMessages: Record<string, any>[] = []
 /** Every manager notification. */
@@ -453,7 +453,7 @@ beforeEach(() => {
   store = {}
   updates = []
   minted = 0
-  mockOrg = { plan: 'business' }
+  mockOrg = { plan: 'pro' }
   sentMessages = []
   notices = []
   seed(hostPath, { name: 'Site' })

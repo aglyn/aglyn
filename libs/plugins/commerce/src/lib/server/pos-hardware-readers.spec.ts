@@ -226,7 +226,7 @@ beforeEach(() => {
   fakeDocs.set('hosts/host-pat-2', { name: 'Pop-up', orgId: 'org-pat' })
   fakeDocs.set('hosts/host-other', { name: 'Elsewhere', orgId: 'org-other' })
   fakeDocs.set('hosts/host-other/terminal/config', { stripeLocationId: 'tml_other' })
-  fakeDocs.set('orgs/org-pat', { name: 'Acme Builders', plan: 'business', subscriptionStatus: 'active' })
+  fakeDocs.set('orgs/org-pat', { name: 'Acme Builders', plan: 'pro', subscriptionStatus: 'active' })
 })
 
 afterAll(() => {

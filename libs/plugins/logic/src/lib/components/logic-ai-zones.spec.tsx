@@ -105,7 +105,7 @@ const lastDrawn = (slot: string) => [...drawn].reverse().find((entry) => entry.s
 const inShell = (node: ReactNode) =>
   render(<ConsoleWidgetSlotContext.Provider value={ShellSlot}>{node}</ConsoleWidgetSlotContext.Provider>)
 
-const ORG = { $id: 'org-1', plan: 'business' } as never
+const ORG = { $id: 'org-1', plan: 'pro' } as never
 const FREE = { $id: 'org-1', plan: 'free' } as never
 
 const PROPOSED: LogicProposal = {

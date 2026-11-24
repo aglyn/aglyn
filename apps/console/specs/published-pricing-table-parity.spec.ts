@@ -106,7 +106,6 @@ import {
   PLAN_PRICING,
   planSellsAiCredits,
   RELEASE_FLAGS,
-  RETIRED_PLANS,
   SELF_SERVE_PLANS,
   SITE_CARE_ADDON_MONTHLY_USD,
   UNLIMITED,
@@ -167,11 +166,12 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
   // would pass by comparing nothing to nothing. Assert the shape first.
   // ---------------------------------------------------------------------
   describe('premise — the sources exist and have the published shape', () => {
-    it('publishes a column for every plan sold, and none for a retired one', () => {
+    it('publishes a column for every plan, and the plans are exactly those', () => {
       // Since pricing v4 (AGL-4126) the columns are the plans SOLD, then
-      // Custom; the four retired plans keep their rows and no column.
+      // Custom; the four plans it retired were removed outright (AGL-4245),
+      // so there is no plan row without a column.
       expect(Object.keys(PLAN_ENTITLEMENTS).sort()).toEqual(
-        [...PUBLISHED_COLUMNS, ...RETIRED_PLANS, 'enterprise'].sort(),
+        [...PUBLISHED_COLUMNS, 'enterprise'].sort(),
       )
       expect(SELF_SERVE_PLANS).toEqual(PUBLISHED_COLUMNS)
       expect(SELF_SERVE_PLANS).toEqual(['free', 'starter', 'pro'])
@@ -1027,13 +1027,15 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
        * mirror image: usage past a bound that is silently free, so the bound
        * achieves nothing. The pair is only ever correct together.
        */
-      // Agency is retired (pricing v4) and publishes no column, but its row
-      // still bills the workspaces on it, so the pair is still held.
-      expect(Number.isFinite(PLAN_ENTITLEMENTS.agency.contactsPerHost)).toBe(true)
-      expect(PLAN_PRICING.agency.extraContactsUsdPer1k).toBe(0.4)
+      // Agency was removed with the other retired plans (AGL-4245); the pair
+      // is held on every plan that publishes a rate.
+      for (const plan of PUBLISHED_COLUMNS.filter((p) => p !== 'free')) {
+        expect(Number.isFinite(PLAN_ENTITLEMENTS[plan].contactsPerHost)).toBe(true)
+        expect(PLAN_PRICING[plan].extraContactsUsdPer1k).not.toBeNull()
+      }
       // Custom publishes no rate and, since 2026-09-07, no unbounded band
-      // either: its row is a finite fallback of twice Agency's that a
-      // contract raises, and the page still reads "Talk to us" for it.
+      // either: its row is a finite fallback that a contract raises, and the
+      // page still reads "Talk to us" for it.
       expect(PLAN_ENTITLEMENTS.enterprise.contactsPerHost).toBe(1_000_000)
       expect(PLAN_PRICING.enterprise.extraContactsUsdPer1k).toBeNull()
     })
@@ -1075,11 +1077,11 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
         expect(AI_CREDITS_PER_BLOCK).toBe(5000)
         expect(PAID.every((p) => planSellsAiCredits(p))).toBe(true)
         // On any paid plan that is SOLD; Free and Enterprise sell none, and
-        // nor do the plans pricing v4 retired (AGL-4126).
+        // nor does a removed plan id (AGL-4245).
         expect(
           SELF_SERVE_PLANS.filter((p) => p !== 'free').every((p) => planSellsAiCredits(p)),
         ).toBe(true)
-        expect(RETIRED_PLANS.some((p) => planSellsAiCredits(p))).toBe(false)
+        expect(['business', 'scale', 'advanced', 'agency'].some((p) => planSellsAiCredits(p))).toBe(false)
         expect(planSellsAiCredits('free')).toBe(false)
         expect(planSellsAiCredits('enterprise')).toBe(false)
       })

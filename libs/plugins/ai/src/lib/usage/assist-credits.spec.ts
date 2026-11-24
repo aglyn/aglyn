@@ -67,7 +67,6 @@ import {
   PLAN_LABELS,
   PLAN_PRICING,
   resolveEffectivePlan,
-  RETIRED_PLANS,
   SELF_SERVE_PLANS,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { registerPluginEntitlements } from '@aglyn/aglyn/plugin-manager/plugin-entitlements'
@@ -102,7 +101,8 @@ const ENTERPRISE_ASSIST_CREDITS_PER_MONTH = Number(
 const A_QUESTION_USD = 0.01287
 const A_SCREEN_BUILD_USD = 0.2292
 
-const PAID_TIERS = ['pro', 'business', 'scale', 'advanced', 'agency'] as const
+/** The paid tiers above Starter (the plans pricing v4 retired were removed, AGL-4245). */
+const PAID_TIERS = ['pro'] as const
 
 describe('the credit is a unit of COST, which is the whole design', () => {
   it('draws an expensive action down FAR harder than a cheap one', () => {
@@ -249,23 +249,17 @@ describe('Enterprise resolves to a finite number, never Infinity', () => {
 
   it('is anchored to the TOP OF THE LADDER, not to a price it does not have', () => {
     // Enterprise carries no list price, so the band cannot be sized against
-    // what a tier's other cost terms leave out of one. It is twice Agency's
-    // band instead — the rule every Enterprise fallback follows since the
-    // 2026-09-07 decision — and that relation is asserted rather than
-    // described, so moving Agency's band without moving this one goes red
-    // instead of quietly flattening the top of the ladder.
-    expect(ENTERPRISE_ASSIST_CREDITS_PER_MONTH).toBe(
-      PLAN_ENTITLEMENTS.agency.assistCreditsPerMonth * 2,
+    // what a tier's other cost terms leave out of one. It was set at twice
+    // the old top self-serve tier's band by the 2026-09-07 decision, and is
+    // pinned at that figure since that tier was removed (AGL-4245), so it
+    // still tops the ladder by a wide margin.
+    expect(ENTERPRISE_ASSIST_CREDITS_PER_MONTH).toBe(116_000)
+    expect(ENTERPRISE_ASSIST_CREDITS_PER_MONTH).toBeGreaterThan(
+      PLAN_ENTITLEMENTS.pro.assistCreditsPerMonth * 10,
     )
-    // As provider spend: $116 a month, under 9% of the cheapest deal that is
-    // sold as Enterprise — the Agency price is the floor a deal is written
-    // above — and a figure a contract raises rather than a share it is held
-    // to.
+    // As provider spend: $116 a month, a figure a contract raises rather
+    // than a share it is held to.
     expect(assistUsdFromCredits(ENTERPRISE_ASSIST_CREDITS_PER_MONTH)).toBe(116)
-    const agencyPrice = PLAN_PRICING.agency.basePriceMonthlyUsd
-    expect(
-      assistUsdFromCredits(ENTERPRISE_ASSIST_CREDITS_PER_MONTH) / agencyPrice,
-    ).toBeLessThan(0.09)
   })
 
   it('takes a CONTRACTED per-org value over the fallback', () => {
@@ -319,7 +313,7 @@ describe('ANTI-VACUITY: a zero band is "no band", never a budget of zero', () =>
     // The exact shape a stub produces, on a tier that sells a larger band.
     expect(
       resolveAssistCreditBudget({
-        plan: 'business',
+        plan: 'pro',
         entitlements: { assistCreditsPerMonth: 0 },
       }),
     ).toBeNull()
@@ -338,14 +332,15 @@ describe('ANTI-VACUITY: a zero band is "no band", never a budget of zero', () =>
     // band to null and therefore never enforces anything.
     expect(resolveAssistCreditBudget({ plan: 'pro' })).toBe(2_750)
     expect(resolveAssistBudgetUsd({ plan: 'pro' })).toBe(2.75)
-    expect(resolveAssistCreditBudget({ plan: 'agency' })).toBe(58_000)
+    expect(resolveAssistCreditBudget({ plan: 'starter' })).toBe(750)
   })
 
   it('a dead subscription drops to free, and so drops to the taste', () => {
-    // Fifty-eight thousand credits become three hundred, behind a wall.
+    // A hundred and sixteen thousand credits become three hundred, behind a
+    // wall.
     expect(
       resolveAssistCreditBudget({
-        plan: 'agency',
+        plan: 'enterprise',
         subscription: { status: 'canceled' },
       } as never),
     ).toBe(FREE_AI_TASTE_CREDITS_PER_MONTH)
@@ -367,17 +362,18 @@ describe('the retail overage rate', () => {
     // 1,000 credits cost exactly $1.00, which is what makes the per-1,000
     // rate read as the multiplier.
     expect(ASSIST_CREDIT_COST_USD * 1000).toBe(1)
-    const ladder = PAID_TIERS.map(
+    const ladder = (['starter', ...PAID_TIERS] as const).map(
       (plan) => PLAN_PRICING[plan].extraAssistCreditsUsdPer1k as number,
     )
-    // Descends with the tier the way contacts and API requests do...
+    // Never rises with the tier...
     for (let i = 1; i < ladder.length; i += 1) {
-      expect(ladder[i]).toBeLessThan(ladder[i - 1])
+      expect(ladder[i]).toBeLessThanOrEqual(ladder[i - 1])
     }
-    // ...and stops at cost x2 rather than running past it.
+    // ...and never runs past cost x2. The rung that sat AT the floor was the
+    // old top self-serve tier, removed with the retired plans (AGL-4245).
     const floor = (ASSIST_CREDIT_COST_USD * 1000) / (1 - ASSIST_CREDIT_MIN_MARGIN_PCT)
     expect(floor).toBe(2)
-    expect(Math.min(...ladder)).toBe(floor)
+    expect(Math.min(...ladder)).toBeGreaterThanOrEqual(floor)
     expect(assistCreditRateMarginPct(floor)).toBe(ASSIST_CREDIT_MIN_MARGIN_PCT)
   })
 
@@ -446,13 +442,13 @@ describe('what a customer may be shown is credits, never our provider bill', () 
 
 describe('the overage is SOLD past the band at the plan rate, unless the org asks to be stopped (AGL-2653)', () => {
   /**
-   * Pro: 2,750 credits at $3.00 per 1,000; Agency: 58,000 at $2.00. Each
+   * Starter: 750 credits at $3.00 per 1,000; Pro: 2,750 at $3.00. Each
    * fixture is the month's measured spend as `report-usage` reads it, built
    * from the credit count so the band edge is exact.
    */
   const BILLED = [
     { plan: 'pro' as const, band: 2_750, rate: 3, plus2500Usd: 7.5 },
-    { plan: 'agency' as const, band: 58_000, rate: 2, plus2500Usd: 5 },
+    { plan: 'starter' as const, band: 750, rate: 3, plus2500Usd: 7.5 },
   ]
 
   describe.each(BILLED)('assistMonthOverage on $plan', ({ plan, band, rate, plus2500Usd }) => {
@@ -594,7 +590,6 @@ describe('the overage is SOLD past the band at the plan rate, unless the org ask
       expect(text).toContain(`"${ASSIST_HARD_CAP_CONTROL_LABEL}"`)
       expect(text).toContain(ASSIST_HARD_CAP_CONTROL_LOCATION)
       expect(text).toContain('$3.00 per 1,000 credits')
-      expect(assistHardCapRefusalText({ plan: 'agency' })).toContain('$2.00 per 1,000 credits')
     })
 
     it('ships no dollar figure of OURS — only the retail rate', () => {
@@ -651,12 +646,6 @@ describe('Aglyn AI credit blocks widen the ONE pool and sell past it (AGL-2896, 
           resolveAssistOverageRateUsdPer1k({ plan }),
         )
       }
-    }
-    // A retired plan sells no blocks, so a quantity on one widens nothing.
-    for (const plan of RETIRED_PLANS) {
-      expect(resolveAssistCreditBudget({ plan, seatAddons: { aiAddon: 3 } })).toBe(
-        PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth,
-      )
     }
   })
 

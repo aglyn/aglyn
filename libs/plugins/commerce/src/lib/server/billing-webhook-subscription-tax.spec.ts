@@ -127,7 +127,7 @@ const fakeFirestore = {
     }),
 }
 
-let orgFixture: any = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+let orgFixture: any = { id: 'org-1', plan: 'pro', ownerUid: 'owner-1' }
 const staffNotifications: any[] = []
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
@@ -508,7 +508,7 @@ beforeEach(() => {
     ],
   })
   docs.set('hosts/host-1/subscriptions/sub_1', SOLD_SUBSCRIPTION)
-  orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+  orgFixture = { id: 'org-1', plan: 'pro', ownerUid: 'owner-1' }
   process.env.STRIPE_SECRET_KEY = 'sk_test_subscription_tax_spec'
 })
 

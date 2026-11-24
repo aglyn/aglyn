@@ -36,7 +36,7 @@ let mockStore: Record<string, Record<string, any>> = {}
 let mockAdds: Array<{ path: string; data: Record<string, any> }> = []
 let mockSets: string[] = []
 let mockLeads: Record<string, any>[] = []
-let mockOrg: Record<string, any> = { plan: 'business' }
+let mockOrg: Record<string, any> = { plan: 'pro' }
 
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
@@ -213,7 +213,7 @@ beforeEach(() => {
   mockAdds = []
   mockSets = []
   mockLeads = []
-  mockOrg = { plan: 'business' }
+  mockOrg = { plan: 'pro' }
 })
 
 describe('a site that switched Forms off', () => {
@@ -280,7 +280,7 @@ describe('a site that never switched Forms off — on by default', () => {
   })
 
   it('accepts one from a workspace whose switchboard list never named Forms', async () => {
-    mockOrg = { plan: 'business', enabledPlugins: ['mui', 'commerce'] }
+    mockOrg = { plan: 'pro', enabledPlugins: ['mui', 'commerce'] }
     const response = await submit()
     expect(response.status).toBe(200)
   })

@@ -73,7 +73,7 @@ const FIRESTORE = {}
 const USER = { uid: 'uid-test' }
 
 /** Stock `scale`: datasets included and far more of them than two. */
-const ORG = { $id: 'org-1', plan: 'scale' }
+const ORG = { $id: 'org-1', plan: 'pro' }
 
 /** What the org Data page's lookup would answer — every mount is org-1's. */
 const useOrgDataScopeSpy = jest.fn((_options: unknown) => DATA_SCOPE)

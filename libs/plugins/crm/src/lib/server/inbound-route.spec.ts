@@ -248,7 +248,7 @@ beforeEach(() => {
   })
   mockStore.set(`orgs/${ORG}`, {
     name: 'Acme',
-    plan: 'agency',
+    plan: 'enterprise',
     crmInbound: { token: TOKEN, createdAtMs: 1 },
   })
   mockStore.set(`orgs/${ORG}/members/u-sam`, { role: 'editor', email: 'sam@acme.com', displayName: 'Sam Rep' })

@@ -95,7 +95,7 @@ const firestore: any = {
     }),
 }
 
-const ORG = { id: 'org-1', plan: 'business', billingStatus: 'active', ownerUid: 'owner-1', slug: 'acme' }
+const ORG = { id: 'org-1', plan: 'pro', billingStatus: 'active', ownerUid: 'owner-1', slug: 'acme' }
 let native = false
 let rateAllowed = true
 const created: Array<{ params: URLSearchParams; headers: Record<string, string> }> = []

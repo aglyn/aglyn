@@ -91,13 +91,17 @@ jest.setTimeout(30_000)
 
 
 /**
- * `scale` with a staff-granted `datasetsPerOrg: 250` against
- * `maxDatasetsPerOrg: 500` (so the effective dataset limit is 250, above the
- * picker window — the plan itself includes 15), `recordsPerDataset: 500000`,
- * `features.dataStore` on. Real `checkQuota`, real `checkDatasetQuota` — only
- * the counts are staged.
+ * `pro` with staff-granted `datasetsPerOrg: 250` (so the effective dataset
+ * limit is 250, above the picker window) and `recordsPerDataset: 500000` —
+ * the figures the retired Scale plan carried before it was removed
+ * (AGL-4245), as overrides — and `features.dataStore` on. Real `checkQuota`,
+ * real `checkDatasetQuota` — only the counts are staged.
  */
-const ORG = { $id: 'org-1', plan: 'scale', entitlements: { datasetsPerOrg: 250 } } as any
+const ORG = {
+  $id: 'org-1',
+  plan: 'pro',
+  entitlements: { datasetsPerOrg: 250, recordsPerDataset: 500000 },
+} as any
 
 /** What the server says the org actually has. */
 const SERVER_DATASETS = 300

@@ -63,7 +63,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     },
     getOrgForHost: async (hostId: string) => ({
       orgId: mockOwners[hostId],
-      org: { id: mockOwners[hostId], plan: 'business', subscriptionStatus: 'active', ownerUid: `owner-${hostId}` },
+      org: { id: mockOwners[hostId], plan: 'pro', subscriptionStatus: 'active', ownerUid: `owner-${hostId}` },
     }),
     emailUnverifiedResponse: () => Response.json({ error: 'Verify your email' }, { status: 403 }),
     isImpersonationSession: () => false,

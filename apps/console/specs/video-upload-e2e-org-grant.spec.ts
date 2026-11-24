@@ -171,7 +171,7 @@ const GRANT: Record<string, unknown> = JSON.parse(
 
 /** An org document on the e2e org's plan, with or without an override map. */
 const orgDocument = (releaseFlags?: Record<string, unknown>) => ({
-  plan: 'business',
+  plan: 'pro',
   subscription: { status: 'active' },
   ...(releaseFlags ? { releaseFlags } : {}),
 })

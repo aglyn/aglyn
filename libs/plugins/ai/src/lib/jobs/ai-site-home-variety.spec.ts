@@ -56,7 +56,7 @@ import {
 
 const NOW = new Date('2026-10-16T12:00:00Z')
 const FREE_ORG: Partial<AglynOrgBilling> & { ownerUid: string } = { plan: 'free', ownerUid: 'owner-1' }
-const PAID_ORG: Partial<AglynOrgBilling> & { ownerUid: string } = { plan: 'business', ownerUid: 'owner-1' }
+const PAID_ORG: Partial<AglynOrgBilling> & { ownerUid: string } = { plan: 'pro', ownerUid: 'owner-1' }
 
 /** A site as provisioning leaves it (AGL-3497): its layout and its untouched starter home. */
 const PROVISIONED: AiSiteInventory = {

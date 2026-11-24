@@ -88,7 +88,7 @@ jest.mock('../hooks/use-org-scope', () => ({
 
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
-  default: () => ({ org: { plan: 'business' }, ready: true }),
+  default: () => ({ org: { plan: 'pro' }, ready: true }),
 }))
 
 jest.mock('../hooks/use-firestore-collection', () => ({

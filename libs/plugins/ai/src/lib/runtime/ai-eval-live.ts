@@ -318,7 +318,7 @@ function totalUsage(steps: readonly AiEvalRecordedStep[]): AiUsage {
 function evalOrgDocument(evalCase: AiEvalCase): Record<string, unknown> {
   return evalCase.capabilities?.reusableComponents === false
     ? { plan: 'free' }
-    : { plan: 'business', billingStatus: 'active' }
+    : { plan: 'pro', billingStatus: 'active' }
 }
 
 /**

@@ -56,19 +56,11 @@ export const NON_PURCHASABLE_PLANS = Object.freeze(['free', 'enterprise'])
 export const SELF_SERVE_PLANS = Object.freeze(['starter', 'pro'])
 
 /**
- * The plans pricing v4 retired (2026-11-03, AGL-4126). Their rows stay in
- * `PLAN_PRICING` for reading and are parsed like any other, but they are
- * never sold again, so their Stripe prices are not held to the code: the end
- * state is archived, and an archived price is not drift.
+ * Every plan (Free, Starter, Pro, Custom). The plans pricing v4 retired were
+ * removed from the product on 2026-11-24 (AGL-4245) and their Stripe products
+ * archived, so there is nothing left of them to compare.
  */
-export const RETIRED_PLANS = Object.freeze(['business', 'scale', 'advanced', 'agency'])
-
-export const ALL_PLANS = Object.freeze([
-  'free',
-  ...SELF_SERVE_PLANS,
-  ...RETIRED_PLANS,
-  'enterprise',
-])
+export const ALL_PLANS = Object.freeze(['free', ...SELF_SERVE_PLANS, 'enterprise'])
 
 /**
  * The lookup-key generation each plan's BASE price is minted under. A price
@@ -256,16 +248,6 @@ export function comparePlansToStripe(planPricing, stripe) {
   for (const plan of ALL_PLANS) {
     const fields = planPricing[plan]
     if (!fields) continue
-    // A retired plan (pricing v4) is sold by nothing, so its prices are not
-    // held to the code: stated once, so the report says why they are absent.
-    if (RETIRED_PLANS.includes(plan)) {
-      verdicts.push({
-        status: 'in-sync',
-        key: `retired:${plan}`,
-        detail: 'retired in pricing v4 — never sold again, so its Stripe prices are not compared',
-      })
-      continue
-    }
     for (const { field, key, mult, unminted } of PRICE_FIELD_MAP) {
       const lookupKey = key(plan)
       const codeValue = fields[field]

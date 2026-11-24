@@ -145,7 +145,7 @@ async function renderCard(hosts: Site[]): Promise<void> {
           basePath: '/acme/marketing',
         }}
       >
-        <OrgOverlaysCard org={{ plan: 'business' } as never} />
+        <OrgOverlaysCard org={{ plan: 'pro' } as never} />
       </MarketingOrgMountProvider>
     ) as ReactNode as never,
   )

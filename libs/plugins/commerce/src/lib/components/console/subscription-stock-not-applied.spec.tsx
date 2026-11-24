@@ -121,7 +121,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     .listFilterConstraints,
   // A paying, settled plan, so the entitlement gate never refuses for the
   // AGL-1064 reason instead of the subscription-stock one under test.
-  useOrgPlan: () => ({ org: { plan: 'business' }, ready: true }),
+  useOrgPlan: () => ({ org: { plan: 'pro' }, ready: true }),
   useFirestore: () => ({}),
   /*
    * The product editor asks for its pickers through the shared builders, and

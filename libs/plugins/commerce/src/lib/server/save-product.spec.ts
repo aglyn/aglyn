@@ -57,7 +57,7 @@ function setup() {
     productId: 'p2',
     create: true,
     product: { name: 'Mocha', slug: 'mocha', type: 'physical', status: 'draft', variants: [{ id: 'default', priceUsd: 4 }] },
-    org: { plan: 'business' },
+    org: { plan: 'pro' },
     createdBy: 'u-1',
     nowMs: 9_000,
     dropCache,
@@ -102,7 +102,7 @@ describe('saveProduct', () => {
   it('refuses a create the plan does not include, and one past the allowance, counted in the transaction', async () => {
     const { memory, base } = setup()
     expect(await saveProduct(base({ org: { plan: 'free' } }))).toMatchObject({ ok: false, status: 403, code: 'plan' })
-    expect(await saveProduct(base({ org: { plan: 'business', entitlements: { productsPerHost: 1 } } }))).toMatchObject({
+    expect(await saveProduct(base({ org: { plan: 'pro', entitlements: { productsPerHost: 1 } } }))).toMatchObject({
       ok: false,
       status: 403,
       code: 'quota',
