@@ -86,6 +86,9 @@ const AI_CREDIT_BLOCKS_TS = 'libs/aglyn/src/lib/app-utils/ai-credit-blocks.ts'
  * also retired Business, Scale, Advanced and Agency: their rows stay pinned
  * at the figures they were last sold at, because the code keeps them for
  * reading and a retired row that moved would be a change nobody decided.
+ * The fee ladder came down on 2026-11-24 — Starter 5/2 → 3/1 and Pro 3/0.5 →
+ * 1/0 (digital/physical) — recorded in "2026-11-24 — Per-sale platform fees
+ * come down …" (AGL-4245); the retired rows did not move.
  * Each is pinned here because the decision is written down, not because the
  * check was red: a pin moved to silence a failure records nothing and can
  * catch nothing afterwards. Every other column is where Sept 1 put it.
@@ -95,8 +98,8 @@ const LOCKED = {
   annualPerMonth: { free: 0, starter: 16, pro: 49, business: 99, scale: 179, advanced: 299, agency: 1049 },
   ladder: {
     free: { digital: 0, physical: 0 },
-    starter: { digital: 5, physical: 2 },
-    pro: { digital: 3, physical: 0.5 },
+    starter: { digital: 3, physical: 1 },
+    pro: { digital: 1, physical: 0 },
     business: { digital: 2, physical: 0 },
     scale: { digital: 1, physical: 0 },
     advanced: { digital: 0, physical: 0 },

@@ -86,7 +86,8 @@ import { tellCheckoutTaxRefusal } from './checkout-tax-refusal'
  *
  *  - The fee is NOT "2%". It is `resolveTransactionFeePct(org, productType)`
  *    — a per-plan, per-product-type ladder with per-org staff overrides,
- *    resolved per request. 2% is one cell of sixteen (Starter, physical).
+ *    resolved per request. 2% was one cell of sixteen (Starter, physical)
+ *    when this was written, and the ladder has moved since.
  *  - Selling is gated on `commerce`, not on `marketplaceSelling` (AGL-470).
  *    They are different entitlements on different plans: `marketplaceSelling`
  *    gates the marketplace, and reading this comment as current would gate a

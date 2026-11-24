@@ -274,12 +274,37 @@ describe('every site sale covers what the platform pays for it (AGL-4198)', () =
     expect(SALE_PROCESSING_PERCENT).toBe(CARD_PROCESSING_PERCENT)
     expect(SALE_PROCESSING_FIXED_CENTS).toBe(30)
     expect(SALE_PROCESSING_PERCENT).toBeLessThan(BNPL_PROCESSING_PERCENT)
+    const starter = orgOn('starter')
+    // Starter's 1% on physical goods covers the payout at $4,000: $40 + $116.30.
+    expect(resolveTransactionFeeCents(starter, 'physical', 400_000)).toBe(4_000 + 11_630)
+    expect(resolveTransactionFeeCents(starter, 'physical', 400_000, 400_000, { inPerson: true })).toBe(
+      4_000 + 11_630,
+    )
+    // Starter's 3% on services and digital (AGL-4245).
+    expect(resolveTransactionFeeCents(starter, 'service', 400_000)).toBe(12_000 + 11_630)
+    expect(resolveTransactionFeeCents(starter, 'physical', 50_000)).toBe(500 + 1_480)
+    // Pro's 1% on services and digital.
+    expect(resolveTransactionFeeCents(orgOn('pro'), 'service', 400_000)).toBe(4_000 + 11_630)
+  })
+
+  it('a 0% take on a destination sale still recovers what the platform pays (AGL-4245)', () => {
+    // Pro takes 0% on physical goods since 2026-11-24. On a destination
+    // charge the fee is what Stripe charges the platform: card 11,630 +
+    // payout 1,025 at $4,000, and the same floor in person and under Tax.
     const pro = orgOn('pro')
-    // Pro's 0.5% on physical goods covers the payout at $4,000: $20 + $116.30.
-    expect(resolveTransactionFeeCents(pro, 'physical', 400_000)).toBe(2_000 + 11_630)
-    expect(resolveTransactionFeeCents(pro, 'physical', 400_000, 400_000, { inPerson: true })).toBe(2_000 + 11_630)
-    expect(resolveTransactionFeeCents(pro, 'service', 400_000)).toBe(12_000 + 11_630)
-    expect(resolveTransactionFeeCents(pro, 'physical', 50_000)).toBe(250 + 1_480)
+    expect(resolveTransactionFeePct(pro, 'physical')).toBe(0)
+    for (const cents of [100, 999, 5_000, 50_000, 400_000]) {
+      for (const options of [{}, { stripeTax: true }, { inPerson: true }]) {
+        expect(resolveTransactionFeeCents(pro, 'physical', cents, cents, options)).toBe(
+          Math.min(cents, salePlatformCostCents(cents, options)),
+        )
+      }
+    }
+    expect(resolveTransactionFeeCents(pro, 'physical', 400_000)).toBe(11_630 + 1_025)
+    // On the store's own account (a direct charge) Stripe bills the store and
+    // the platform pays nothing, so a 0% take sends no fee at all.
+    expect(resolveTransactionFeeCents(pro, 'physical', 400_000, 400_000, { direct: true })).toBe(0)
+    expect(resolveTransactionFeeCents(pro, 'service', 400_000, 400_000, { direct: true })).toBe(4_000)
   })
 
   it('tops a take too small to cover the payout up to break even, never more', () => {
@@ -289,8 +314,8 @@ describe('every site sale covers what the platform pays for it (AGL-4198)', () =
     expect(saleApplicationFeeCents(0, 400_000)).toBe(salePlatformCostCents(400_000))
     // Pro at $50: 25¢ take < 38¢ payout, so the fee is the cost: 175 + 38.
     expect(resolveTransactionFeeCents(orgOn('pro'), 'physical', 5_000)).toBe(175 + 38)
-    // Stripe Tax's 0.5% comes out of the take first: Pro 0.5% at $4,000 is
-    // $20 against $10.25 + $20 of costs, so the fee becomes the cost.
+    // Stripe Tax's 0.5% comes out of the take first: Pro's 0% physical at
+    // $4,000 is nothing against $10.25 + $20 of costs, so the fee is the cost.
     expect(resolveTransactionFeeCents(orgOn('pro'), 'physical', 400_000, 400_000, { stripeTax: true })).toBe(
       11_630 + 1_025 + 2_000,
     )
