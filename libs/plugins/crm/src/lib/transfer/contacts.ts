@@ -39,11 +39,20 @@
  *
  * ## What a file may not do
  *
- * The locked rules: an existing contact's email is who they are; consent is
- * never taken from a file; a stage moves forward only; Do not call is
+ * The locked rules: an existing contact's email is who they are; the
+ * Marketing consent column is never read as consent; a stage moves forward only; Do not call is
  * turned on by a file and never off; the full name follows the first and
  * last names once either is set. The plan holds each one back by row and
  * names it, so the person acknowledges it before anything is written.
+ *
+ * ## A store's marketing choices (AGL-4245)
+ *
+ * A Shopify, Wix or Squarespace customer file records whether each person
+ * agreed to marketing email. Its column is read into an import-only field and
+ * carried by `customer-consent-plan.ts` (the plan) and
+ * `imported-consent.server.ts` (the write and its undo): an opt-in only on
+ * the Permission step's statement, an opt-out always, and never an opt-in
+ * over somebody who unsubscribed here.
  *=========================================*/
 
 import {
@@ -99,6 +108,20 @@ import {
 import { contactPatch, settleCompanyCounts } from '../server/contact-update'
 import { sweepDealContactRoles } from '../server/deal-contact-roles'
 import { CONTACT_ALIASES } from './aliases'
+import {
+  consentOptInEmails,
+  importedConsentChange,
+  planContactConsent,
+  withoutCustomerSourceFields,
+} from './customer-consent-plan'
+import { CUSTOMER_FIELD, customerFileSource, MARKETING_CONSENT_FIELD_ID, readContactConsentAnswer } from './customer-sources'
+import {
+  readImportedConsentUndo,
+  readSuppressedAddresses,
+  revertImportedConsent,
+  writeImportedConsent,
+  type ImportedConsentOutcome,
+} from './imported-consent.server'
 import {
   addCrmPicklistValues,
   addressFromValues,
@@ -248,6 +271,8 @@ interface CompanyLink {
 /** Everything one apply call shares across its rows. */
 interface ApplyRun {
   env: CrmTransferEnv
+  /** The job's Permission answer, as the plan was made with it. */
+  attested: boolean
   /** The Source site, or `null` for a file with none (AGL-4122). */
   hostId: string | null
   group: ConsentGroup
@@ -489,6 +514,35 @@ async function createContact(
   return { contactId: verdict.contactId, created: verdict.created, skipped }
 }
 
+/** Why a row's marketing choice was not written, when the write says. */
+function consentMessage(outcome: ImportedConsentOutcome | null): string | undefined {
+  return outcome && 'message' in outcome ? outcome.message : undefined
+}
+
+/** Two result sentences as one. */
+function joinMessages(...parts: Array<string | undefined>): string | undefined {
+  const text = parts.filter(Boolean).join(' ')
+  return text || undefined
+}
+
+/** Writes a row's marketing choice through the import's site (AGL-4245). */
+async function writeConsent(
+  run: ApplyRun,
+  contactId: string,
+  detail: Parameters<typeof writeImportedConsent>[0]['detail'],
+): Promise<ImportedConsentOutcome> {
+  return writeImportedConsent({
+    firestore: run.env.firestore,
+    contactRef: contactsOf(run.env).doc(contactId),
+    hostId: run.hostId,
+    group: run.group,
+    detail,
+    attestedNow: run.attested,
+    fallbackBy: run.actorUid,
+    atMs: Date.now(),
+  })
+}
+
 /** The `crm.contacts` hooks. */
 export function contactsTransferResource(): TransferRecordsHooks {
   return {
@@ -611,7 +665,7 @@ export function contactsTransferResource(): TransferRecordsHooks {
       {
         fieldId: 'marketingConsent',
         reason:
-          'Consent is never taken from a file: a person gives it on a form, or a team member records how it was given on the contact’s page.',
+          'This column is never read as consent: a person gives it on a form, or a team member records how it was given on the contact’s page. A store’s customer file carries its marketing choices through Email marketing choice instead.',
         refuseValues: true,
       },
       {
@@ -628,14 +682,23 @@ export function contactsTransferResource(): TransferRecordsHooks {
         fieldId: 'name',
         reason: 'The full name is built from the first and last names once either is set.',
       },
+      // A store's customer file (AGL-4245): read under their own rules, never as a field value.
+      {
+        fieldId: CUSTOMER_FIELD.emailMarketing,
+        reason:
+          'An unsubscribe is always kept. An opt-in comes in only when you confirm on the Permission step, and never for somebody who unsubscribed here.',
+      },
+      ...[CUSTOMER_FIELD.smsMarketing, CUSTOMER_FIELD.totalSpent, CUSTOMER_FIELD.orderCount, CUSTOMER_FIELD.customerId].map(
+        (fieldId) => ({ fieldId, reason: 'Read from your old store’s file and not kept. The dry run says so.' }),
+      ),
     ],
 
     async plan(ctx, input) {
       const env = await crmTransferEnv(ctx)
       requireCrmSuite(env, SUITE_ACT)
-      contactImportSite(env)
-      const plan = buildTransferPlan(input)
-      return holdBackChanges(plan, (row, change) => {
+      const site = contactImportSite(env)
+      // The store file's own columns are read below, never by the core (AGL-4245).
+      const plan = holdBackChanges(buildTransferPlan({ ...input, rows: withoutCustomerSourceFields(input.rows) }), (row, change) => {
         const before = row.recordId ? input.existing.get(row.recordId) : undefined
         if (change.fieldId === 'lifecycleStage' && before) {
           const from = crmLifecycleStageRank(before['lifecycleStage'])
@@ -653,6 +716,18 @@ export function contactsTransferResource(): TransferRecordsHooks {
         }
         return null
       })
+      const optIns = site.hostId ? consentOptInEmails(plan, input.rows, input.existing) : []
+      const suppressed = optIns.length
+        ? await readSuppressedAddresses(env.firestore, site.group.hostIds.length ? site.group.hostIds : [site.hostId as string], optIns)
+        : new Set<string>()
+      return planContactConsent(plan, input.rows, input.existing, {
+        hostId: site.hostId,
+        attested: readContactConsentAnswer(ctx.extras).attest,
+        recordedBy: ctx.actorUid,
+        jobId: ctx.jobId ?? null,
+        source: customerFileSource(ctx.headers),
+        suppressed,
+      }).plan
     },
 
     async apply(ctx, chunk, writer) {
@@ -661,6 +736,7 @@ export function contactsTransferResource(): TransferRecordsHooks {
       const { hostId, group } = contactImportSite(env)
       const run: ApplyRun = {
         env,
+        attested: readContactConsentAnswer(ctx.extras).attest,
         hostId,
         group,
         actorUid: ctx.actorUid,
@@ -694,12 +770,16 @@ export function contactsTransferResource(): TransferRecordsHooks {
         let entry: TransferUndoEntry | undefined
         try {
           const values = plannedValues(row)
+          // The store file's marketing choice is written on its own, checked again (AGL-4245).
+          const consentChange = importedConsentChange(row)
+          delete values[MARKETING_CONSENT_FIELD_ID]
           if (row.verdict === 'update' && row.recordId) {
             const before = (await readContacts(env, [row.recordId], run.definitions)).get(row.recordId)
             if (!before) throw new TransferEngineError('notFound', 404, 'That contact no longer exists.')
             const { skipped } = await writeContact(run, row.recordId, values)
+            const consent = consentChange ? await writeConsent(run, row.recordId, consentChange.consent) : null
             const after = (await readContacts(env, [row.recordId], run.definitions)).get(row.recordId) ?? {}
-            const message = skippedMessage(skipped)
+            const message = joinMessages(skippedMessage(skipped), consentMessage(consent))
             result = { row: row.index, outcome: 'updated', recordId: row.recordId, ...(message ? { message } : {}) }
             entry = {
               row: row.index,
@@ -707,12 +787,14 @@ export function contactsTransferResource(): TransferRecordsHooks {
               action: 'updated',
               previous: pickValues(before, changed),
               written: pickValues(after, changed),
+              ...(consent?.written ? { extras: { consent: consent.undo } } : {}),
             }
           } else {
             const made = await createContact(run, values, batch)
+            const consent = consentChange ? await writeConsent(run, made.contactId, consentChange.consent) : null
             const after = (await readContacts(env, [made.contactId], run.definitions)).get(made.contactId) ?? {}
             const message = made.created
-              ? skippedMessage(made.skipped)
+              ? joinMessages(skippedMessage(made.skipped), consentMessage(consent))
               : 'Merged into the contact already holding this email.'
             result = {
               row: row.index,
@@ -723,7 +805,13 @@ export function contactsTransferResource(): TransferRecordsHooks {
             // A merge into a person somebody else created meanwhile has no
             // "before" to put back, so undo leaves it alone.
             entry = made.created
-              ? { row: row.index, recordId: made.contactId, action: 'created', written: pickValues(after, changed) }
+              ? {
+                  row: row.index,
+                  recordId: made.contactId,
+                  action: 'created',
+                  written: pickValues(after, changed),
+                  ...(consent?.written ? { extras: { consent: consent.undo } } : {}),
+                }
               : undefined
           }
         } catch (error) {
@@ -747,6 +835,7 @@ export function contactsTransferResource(): TransferRecordsHooks {
       const { hostId, group } = contactImportSite(env)
       const run: ApplyRun = {
         env,
+        attested: false,
         hostId,
         group,
         actorUid: ctx.actorUid,
@@ -769,11 +858,14 @@ export function contactsTransferResource(): TransferRecordsHooks {
           done.push(step)
           continue
         }
+        const consentUndo = readImportedConsentUndo(entry.extras)
         if (entry.action === 'created') {
           // The site lets the person go, as "Remove from this site" does: a
           // person only this import's site held is deleted, keeping every
           // refusal they made; one another site holds too stays theirs.
           const contactRef = contactsOf(env).doc(entry.recordId)
+          // The marketing choice the file brought is not one they made here (AGL-4245).
+          if (consentUndo) await revertImportedConsent({ firestore: env.firestore, contactRef, undo: consentUndo })
           let holders: string[] = []
           const removal = await removeContactKeepingRefusals({
             contactRef,
@@ -799,7 +891,13 @@ export function contactsTransferResource(): TransferRecordsHooks {
           done.push({ action: 'delete', recordId: entry.recordId })
           continue
         }
-        const values = step.action === 'restore' || step.action === 'conflict' ? step.values : {}
+        const values = step.action === 'restore' || step.action === 'conflict' ? { ...step.values } : {}
+        if (MARKETING_CONSENT_FIELD_ID in values) {
+          delete values[MARKETING_CONSENT_FIELD_ID]
+          if (consentUndo) {
+            await revertImportedConsent({ firestore: env.firestore, contactRef: contactsOf(env).doc(entry.recordId), undo: consentUndo })
+          }
+        }
         await writeContact(run, entry.recordId, values)
         done.push(step)
       }
