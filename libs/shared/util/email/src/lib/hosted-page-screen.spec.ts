@@ -674,3 +674,54 @@ describe('media embeds and a workspace’s own brand (2026-09-28 aglyn.com outag
     ])
   })
 })
+
+describe('a shop’s own Gmail address and Discord server', () => {
+  /** A young racewear shop: its contact address is on Gmail, its community on Discord. */
+  const SHOP = {
+    ownNames: ['Northline Racewear', 'northline-racewear'],
+    ownDomains: ['northline-racewear.aglyn.app'],
+  }
+  const footer = [
+    text('Questions? Email us at northlineracewear@gmail.com.'),
+    button('Instagram', 'https://www.instagram.com/northlineracewear'),
+    button('Discord', 'https://discord.gg/northlineracewear'),
+  ]
+
+  it('a contact page with the shop’s Gmail address, its Discord and "sign in to your account" holds nothing', () => {
+    const verdict = screenHostedPage({
+      nodes: page(
+        text('Checking on an order? Use your order status link, or sign in to your account.'),
+        ...footer,
+      ),
+      ...SHOP,
+    })
+    expect(verdict.signals).toEqual([])
+    expect(signalsThatHold(verdict.signals, { ageDays: 0 })).toEqual([])
+  })
+
+  it('a Gmail address is not "Gmail", even beside a link that is foreign', () => {
+    const verdict = screenHostedPage({
+      nodes: page(
+        text('You can also sign in to your account to see your orders.'),
+        text('Write to northlineracewear@gmail.com.'),
+        button('Size chart', 'https://sizes.example.top/chart'),
+      ),
+      ...SHOP,
+    })
+    expect(verdict.signals.map((signal) => signal.code)).not.toContain('brand-lure-page')
+    expect(verdict.signals.map((signal) => signal.code)).not.toContain('brand-action-page')
+  })
+
+  it('a page that names Gmail itself, beside the lure and a foreign link, still holds', () => {
+    const verdict = screenHostedPage({
+      nodes: page(
+        text('Sign in to your Gmail account to view the shared invoice.'),
+        button('Continue', 'https://mail-verify.example.top/login'),
+      ),
+      ...SHOP,
+    })
+    expect(signalsThatHold(verdict.signals, { ageDays: 0 }).map((signal) => signal.code)).toContain(
+      'brand-action-page',
+    )
+  })
+})
