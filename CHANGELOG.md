@@ -16,6 +16,7 @@ content on the marketing site and is written separately.
 ### Features
 
 - Billing: staff can add a one-time website build fee to Hand off and propose, Ask to upgrade and the bundle link; the owner pays it once on the subscription's first invoice, with sales tax on top (#2871, AGL-4244).
+- Payments: Stripe setup from Products → Payments prefills the business profile, returns to Payments when done, and warns before Stripe deadlines (#2872, AGL-4245).
 
 ### Fixes
 
