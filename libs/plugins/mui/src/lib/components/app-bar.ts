@@ -110,8 +110,18 @@ function withOverHeroSx(sx: AppBarProps['sx']): AppBarProps['sx'] {
   return [overHeroSx, ...(Array.isArray(sx) ? sx : [sx])] as AppBarProps['sx']
 }
 
-/** Scroll distance before a shrinking bar compacts. */
-const SHRINK_THRESHOLD = 16
+/**
+ * A shrinking bar compacts past `SHRINK_AT` and restores only below
+ * `RESTORE_BELOW`. One threshold flickered: a Sticky bar sits in the page's
+ * flow, so compacting it pulls everything under it up by the height it lost
+ * (64px to 48px), and the browser's scroll anchoring takes the same amount
+ * off `scrollY`. Just past a single threshold that lands back under it, the
+ * bar restores, scrolling pushes it over again, and it pulses for as long as
+ * the visitor rests there. The gap between the two (56px) is wider than any
+ * toolbar's change in height, so neither switch can undo itself.
+ */
+export const SHRINK_AT = 64
+export const RESTORE_BELOW = 8
 /** Scroll distance before a hiding bar may slide away — past its own height. */
 const HIDE_THRESHOLD = 120
 
@@ -152,6 +162,28 @@ function renderAppBar(props: AppBarProps, ref: Ref<HTMLElement>) {
   })
 }
 
+/**
+ * Is a shrinking bar compacted? Past `SHRINK_AT` it compacts, and it stays
+ * compacted until the page is back within `RESTORE_BELOW` of the top; in
+ * between it keeps whatever it was. SSR and the first paint read "not yet".
+ */
+export function useShrunkOnScroll(enabled: boolean): boolean {
+  const [shrunk, setShrunk] = useState(false)
+  useEffect(() => {
+    if (!enabled || typeof window === 'undefined') return undefined
+    const read = () => {
+      const y = window.scrollY
+      setShrunk((was) =>
+        y > SHRINK_AT ? true : y < RESTORE_BELOW ? false : was,
+      )
+    }
+    read()
+    window.addEventListener('scroll', read, { passive: true })
+    return () => window.removeEventListener('scroll', read)
+  }, [enabled])
+  return enabled && shrunk
+}
+
 interface ScrollAwareAppBarProps extends AppBarProps {
   shrink: boolean
   hide: boolean
@@ -165,25 +197,26 @@ interface ScrollAwareAppBarProps extends AppBarProps {
  * trigger means by hysteresis.
  */
 const ScrollAwareAppBar = forwardRef<HTMLElement, ScrollAwareAppBarProps>(
-  ({ shrink, hide, ...props }, ref) =>
-    createElement(ScrollReaction, {
-      threshold: SHRINK_THRESHOLD,
+  ({ shrink, hide, ...props }, ref) => {
+    const shrunk = useShrunkOnScroll(shrink)
+    return createElement(ScrollReaction, {
+      threshold: HIDE_THRESHOLD,
       withHysteresis: { threshold: HIDE_THRESHOLD },
-      children: ({ activeWithHysteresis, activeWithoutHysteresis }) =>
+      children: ({ activeWithHysteresis }) =>
         renderAppBar(
           {
             ...props,
             sx: withScrollSx(props.sx),
             ...({
-              'data-scrolled':
-                shrink && activeWithoutHysteresis ? '' : undefined,
+              'data-scrolled': shrunk ? '' : undefined,
               'data-scroll-hidden':
                 hide && activeWithHysteresis ? '' : undefined,
             } as AppBarProps),
           },
           ref,
         ),
-    }),
+    })
+  },
 )
 ScrollAwareAppBar.displayName = 'AglynScrollAwareAppBar'
 
