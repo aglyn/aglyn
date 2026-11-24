@@ -16,7 +16,7 @@
  */
 
 import { firebaseAdmin } from './firebase-admin'
-import { accountChargeModel } from './payment-provider'
+import { accountChargeModel, merchantRequirementsSummary } from './payment-provider'
 import { sendGa4StripeConnected } from './ga4-measurement-protocol'
 import { updateExisting } from './update-existing'
 
@@ -62,6 +62,8 @@ export interface ConnectAccountStatusEvent {
   id?: unknown
   charges_enabled?: unknown
   payouts_enabled?: unknown
+  details_submitted?: unknown
+  requirements?: unknown
 }
 
 /**
@@ -88,7 +90,7 @@ export async function syncConnectAccountStatus(
 ): Promise<number> {
   const accountId = typeof account?.id === 'string' ? account.id.trim() : ''
   if (!accountId) return 0
-  const patch: Record<string, boolean | string> = {}
+  const patch: Record<string, boolean | string | number | null> = {}
   // The charge shape (direct or destination) is read off the account's
   // `controller`, the same rule the connect route applies, so an
   // `account.updated` keeps it true without anyone re-opening setup. Only a
@@ -96,6 +98,14 @@ export async function syncConnectAccountStatus(
   // destination charges.
   if (collection === 'profiles' && (account as any)?.controller) {
     patch['stripeChargeModel'] = accountChargeModel(account)
+  }
+  // What Stripe still needs (AGL-4245): a count, a deadline and Stripe's
+  // reason, so the Payments card can warn before a deadline stops payments
+  // or payouts. Storefront bindings only, like the charge shape, and only
+  // when the payload carries `requirements` at all.
+  if (collection === 'profiles') {
+    const summary = merchantRequirementsSummary(account)
+    if (summary) Object.assign(patch, summary)
   }
   if (typeof account?.charges_enabled === 'boolean') {
     patch['stripeChargesEnabled'] = account.charges_enabled

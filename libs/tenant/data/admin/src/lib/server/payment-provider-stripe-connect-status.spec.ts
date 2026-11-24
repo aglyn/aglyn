@@ -399,3 +399,62 @@ describe('syncConnectAccountStatus → stripe_connected (AGL-1580)', () => {
     expect(sendGa4StripeConnected).toHaveBeenCalledWith({ accountId: 'acct_9' })
   })
 })
+
+describe('what Stripe still needs, on account.updated (AGL-4245)', () => {
+  it('stores a count, a deadline and the reason, never Stripe’s keys', async () => {
+    await syncConnectAccountStatus('profiles', {
+      id: 'acct_1',
+      charges_enabled: true,
+      payouts_enabled: true,
+      details_submitted: true,
+      requirements: {
+        currently_due: ['individual.id_number', 'external_account'],
+        past_due: [],
+        current_deadline: 1_900_000_000,
+        disabled_reason: null,
+      },
+    })
+    const profile = read('profiles', 'merchant-1')
+    expect(profile).toMatchObject({
+      stripeDetailsSubmitted: true,
+      stripeRequirementsDueCount: 2,
+      stripeRequirementsPastDueCount: 0,
+      stripeRequirementsDeadlineMs: 1_900_000_000_000,
+      stripeDisabledReason: null,
+    })
+    expect(JSON.stringify(profile)).not.toContain('id_number')
+  })
+
+  it('clears the summary when the requirements are met', async () => {
+    store.get('profiles')?.set('merchant-1', {
+      stripeAccountId: 'acct_1',
+      stripeRequirementsDueCount: 3,
+      stripeRequirementsDeadlineMs: 1,
+    })
+    await syncConnectAccountStatus('profiles', {
+      id: 'acct_1',
+      requirements: { currently_due: [], past_due: [], current_deadline: null },
+    })
+    expect(read('profiles', 'merchant-1')).toMatchObject({
+      stripeRequirementsDueCount: 0,
+      stripeRequirementsDeadlineMs: null,
+    })
+  })
+
+  it('CONTROL: a payload without requirements writes no summary', async () => {
+    await syncConnectAccountStatus('profiles', { id: 'acct_1', charges_enabled: true })
+    expect(read('profiles', 'merchant-1')).not.toHaveProperty('stripeRequirementsDueCount')
+  })
+
+  it('CONTROL: a marketplace publisher binding gets no summary', async () => {
+    store.set('publisherProfiles', new Map([['seller-org', { stripeAccountId: 'acct_9' }]]))
+    await syncConnectAccountStatus('publisherProfiles', {
+      id: 'acct_9',
+      charges_enabled: true,
+      requirements: { currently_due: ['x'] },
+    })
+    expect(read('publisherProfiles', 'seller-org')).not.toHaveProperty(
+      'stripeRequirementsDueCount',
+    )
+  })
+})

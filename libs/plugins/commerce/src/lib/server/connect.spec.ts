@@ -45,6 +45,10 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     ownerUid: 'owner-1' as string | undefined,
     /** `release_direct_charges` for the merchant org. */
     directCharges: false,
+    /** `hosts/{hostId}`: the site's business details (AGL-4245). */
+    host: undefined as Record<string, unknown> | undefined,
+    /** Reading `hosts/{hostId}` fails. */
+    hostReadFails: false,
   }
   const profileRef = {
     get: async () => ({
@@ -59,6 +63,12 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   const hostIndexRef = {
     get: async () => ({ get: () => 'shop' }),
   }
+  const hostRef = {
+    get: async () => {
+      if (state.hostReadFails) throw new Error('permission denied')
+      return { exists: Boolean(state.host), data: () => state.host }
+    },
+  }
   return {
     __state: state,
     firebaseAdmin: {
@@ -71,7 +81,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
         }),
         firestore: () => ({
           collection: (name: string) => ({
-            doc: () => (name === 'hostIndex' ? hostIndexRef : profileRef),
+            doc: () =>
+              name === 'hostIndex' ? hostIndexRef : name === 'hosts' ? hostRef : profileRef,
           }),
         }),
       }),
@@ -94,6 +105,8 @@ const state = (
       profileWrites: Array<Record<string, unknown>>
       ownerUid: string | undefined
       directCharges: boolean
+      host: Record<string, unknown> | undefined
+      hostReadFails: boolean
     }
   }
 ).__state
@@ -147,6 +160,8 @@ beforeEach(() => {
   state.profile = {}
   state.profileWrites.length = 0
   state.ownerUid = 'owner-1'
+  state.host = undefined
+  state.hostReadFails = false
   accountState = { charges_enabled: false, payouts_enabled: false }
   global.fetch = jest.fn(
     async (url: unknown, init?: { method?: string; body?: unknown }) => {
@@ -614,5 +629,242 @@ describe('a test account on a live deployment (AGL-2471)', () => {
       'acct_older',
       TEST_ACCOUNT,
     ])
+  })
+})
+
+describe('Stripe setup prefill, return and requirements (AGL-4245)', () => {
+  const site = {
+    displayName: 'Acme Shop',
+    subdomain: 'acme',
+    seo: {
+      entity: {
+        name: 'Acme Goods LLC',
+        email: 'hello@acme.test',
+        telephone: '+1 512 555 0100',
+        address: {
+          streetAddress: '1 Main St',
+          addressLocality: 'Austin',
+          addressRegion: 'TX',
+          postalCode: '78701',
+          addressCountry: 'United States',
+        },
+      },
+    },
+  }
+
+  it('creates the account with the site business details filled in', async () => {
+    state.host = site
+    const res = makeRes()
+    await connectHandler(makeReq(), res)
+    expect(res.statusCode).toBe(200)
+    const params = creationCall()?.params
+    expect(params?.get('business_profile[name]')).toBe('Acme Goods LLC')
+    expect(params?.get('business_profile[url]')).toBe('https://acme.aglyn.app')
+    expect(params?.get('business_profile[support_email]')).toBe('hello@acme.test')
+    expect(params?.get('business_profile[support_phone]')).toBe('+1 512 555 0100')
+    // Nothing on the legal entity: a prefilled country or address would
+    // narrow which existing Stripe business the owner can reuse.
+    const entityKeys = [...(params?.keys() ?? [])].filter(
+      (key) =>
+        key === 'country' ||
+        key === 'business_type' ||
+        key.startsWith('company') ||
+        key.startsWith('individual') ||
+        key.includes('address'),
+    )
+    expect(entityKeys).toEqual([])
+    // The owner's sign-in email stays the account email.
+    expect(params?.get('email')).toBe('owner@example.com')
+  })
+
+  it('keeps the account shape exactly when it prefills', async () => {
+    state.host = site
+    state.directCharges = true
+    try {
+      await connectHandler(makeReq(), makeRes())
+      const params = creationCall()?.params
+      expect(params?.get('controller[fees][payer]')).toBe('account')
+      expect(params?.get('controller[losses][payments]')).toBe('stripe')
+      expect(params?.get('controller[requirement_collection]')).toBe('stripe')
+      expect(params?.get('controller[stripe_dashboard][type]')).toBe('full')
+      expect(params?.get('type')).toBeNull()
+    } finally {
+      state.directCharges = false
+    }
+  })
+
+  it('retries the create without the prefill when Stripe refuses a prefill field', async () => {
+    state.host = site
+    const realFetch = global.fetch
+    let creates = 0
+    global.fetch = jest.fn(async (url: unknown, init?: any) => {
+      if (String(url).endsWith('/accounts') && init?.method === 'POST') {
+        creates += 1
+        if (creates === 1) {
+          stripeCalls.push({
+            url: String(url),
+            method: 'POST',
+            params: new URLSearchParams(String(init?.body ?? '')),
+          })
+          return {
+            ok: false,
+            status: 400,
+            json: async () => ({ error: { message: 'Invalid phone number' } }),
+          }
+        }
+      }
+      return (realFetch as any)(url, init)
+    }) as unknown as typeof fetch
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const res = makeRes()
+    await connectHandler(makeReq(), res)
+    warn.mockRestore()
+    expect(res.statusCode).toBe(200)
+    expect(state.profile?.['stripeAccountId']).toBe('acct_new')
+    const creates2 = stripeCalls.filter(
+      (call) => call.url.endsWith('/accounts') && call.method === 'POST',
+    )
+    expect(creates2).toHaveLength(2)
+    expect(creates2[0]?.params.get('business_profile[name]')).toBe('Acme Goods LLC')
+    expect(creates2[1]?.params.get('business_profile[name]')).toBeNull()
+    expect(creates2[1]?.params.get('business_profile[url]')).toBeNull()
+    expect(creates2[1]?.params.get('capabilities[transfers][requested]')).toBe('true')
+  })
+
+  it('CONTROL: a refusal that is not a 400 is still the 502', async () => {
+    state.host = site
+    const realFetch = global.fetch
+    global.fetch = jest.fn(async (url: unknown, init?: any) => {
+      if (String(url).endsWith('/accounts') && init?.method === 'POST') {
+        return { ok: false, status: 500, json: async () => ({ error: { message: 'down' } }) }
+      }
+      return (realFetch as any)(url, init)
+    }) as unknown as typeof fetch
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    const res = makeRes()
+    await connectHandler(makeReq(), res)
+    error.mockRestore()
+    expect(res.statusCode).toBe(502)
+  })
+
+  it('sets up payments when the site cannot be read, with no prefill', async () => {
+    state.hostReadFails = true
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const res = makeRes()
+    await connectHandler(makeReq(), res)
+    warn.mockRestore()
+    expect(res.statusCode).toBe(200)
+    expect(creationCall()?.params.get('business_profile[name]')).toBeNull()
+  })
+
+  it('sends Stripe back to the Payments section, done and refresh', async () => {
+    await connectHandler(makeReq(), makeRes())
+    const link = stripeCalls.find((call) => call.url.includes('/account_links'))
+    expect(link?.params.get('return_url')).toBe(
+      'https://console.aglyn.com/acme/shop/products/payments?connect=done',
+    )
+    expect(link?.params.get('refresh_url')).toBe(
+      'https://console.aglyn.com/acme/shop/products/payments?connect=refresh',
+    )
+  })
+
+  it('records what Stripe still needs, as counts and a deadline', async () => {
+    accountState = {
+      charges_enabled: true,
+      payouts_enabled: true,
+      details_submitted: true,
+      requirements: {
+        currently_due: ['individual.verification.document', 'external_account'],
+        past_due: ['external_account'],
+        current_deadline: 1_900_000_000,
+        disabled_reason: null,
+      },
+    }
+    state.profile = { stripeAccountId: 'acct_new', stripeAccountLivemode: false }
+    const res = makeRes()
+    await connectHandler(makeReq(), res)
+    expect(state.profile).toMatchObject({
+      stripeDetailsSubmitted: true,
+      stripeRequirementsDueCount: 2,
+      stripeRequirementsPastDueCount: 1,
+      stripeRequirementsDeadlineMs: 1_900_000_000_000,
+      stripeDisabledReason: null,
+    })
+    // Stripe's own keys never reach the profile.
+    expect(JSON.stringify(state.profile)).not.toContain('verification.document')
+    // Payouts flowing and details due: the dashboard AND the link to continue.
+    expect(res.body).toMatchObject({
+      chargesEnabled: true,
+      payoutsEnabled: true,
+      needsDetails: true,
+      url: 'https://connect.stripe.com/setup/x',
+      dashboardUrl: 'https://connect.stripe.com/express/dash/y',
+    })
+  })
+
+  it('CONTROL: nothing due mints no onboarding link for a ready account', async () => {
+    accountState = {
+      charges_enabled: true,
+      payouts_enabled: true,
+      requirements: { currently_due: [], past_due: [], current_deadline: null },
+    }
+    state.profile = { stripeAccountId: 'acct_new', stripeAccountLivemode: false }
+    const res = makeRes()
+    await connectHandler(makeReq(), res)
+    expect(stripeCalls.some((call) => call.url.includes('/account_links'))).toBe(false)
+    expect(res.body).toMatchObject({ needsDetails: false })
+    expect((res.body as { url?: string }).url).toBeUndefined()
+  })
+
+  const updateCalls = () =>
+    stripeCalls.filter(
+      (call) => /\/accounts\/acct_[^/]+$/.test(call.url) && call.method === 'POST',
+    )
+
+  it('fills in the business profile on re-entry for an account mid-onboarding', async () => {
+    state.host = site
+    state.profile = { stripeAccountId: 'acct_old', stripeAccountLivemode: false }
+    accountState = {
+      charges_enabled: false,
+      payouts_enabled: false,
+      details_submitted: false,
+      business_profile: { name: 'Typed in Stripe', url: null },
+    }
+    const res = makeRes()
+    await connectHandler(makeReq(), res)
+    expect(res.statusCode).toBe(200)
+    const updates = updateCalls()
+    expect(updates).toHaveLength(1)
+    // Only what the account does not hold yet: the name typed in Stripe stays.
+    expect(updates[0]?.params.get('business_profile[name]')).toBeNull()
+    expect(updates[0]?.params.get('business_profile[url]')).toBe('https://acme.aglyn.app')
+    expect(updates[0]?.params.get('country')).toBeNull()
+  })
+
+  it('a refused re-entry update does not stop setup', async () => {
+    state.host = site
+    state.profile = { stripeAccountId: 'acct_old', stripeAccountLivemode: false }
+    accountState = { charges_enabled: false, payouts_enabled: false, details_submitted: false }
+    const realFetch = global.fetch
+    global.fetch = jest.fn(async (url: unknown, init?: any) => {
+      if (/\/accounts\/acct_old$/.test(String(url)) && init?.method === 'POST') {
+        return { ok: false, status: 400, json: async () => ({ error: { message: 'nope' } }) }
+      }
+      return (realFetch as any)(url, init)
+    }) as unknown as typeof fetch
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const res = makeRes()
+    await connectHandler(makeReq(), res)
+    warn.mockRestore()
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toMatchObject({ url: 'https://connect.stripe.com/setup/x' })
+  })
+
+  it('CONTROL: an account that finished onboarding is never updated', async () => {
+    state.host = site
+    state.profile = { stripeAccountId: 'acct_old', stripeAccountLivemode: false }
+    accountState = { charges_enabled: false, payouts_enabled: false, details_submitted: true }
+    await connectHandler(makeReq(), makeRes())
+    expect(updateCalls()).toHaveLength(0)
   })
 })
