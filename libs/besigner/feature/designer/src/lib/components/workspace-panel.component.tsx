@@ -206,7 +206,17 @@ export const WorkspacePanelComponent = forwardRef<
             'aria-label': ariaLabel,
             sx: sheet
               ? {
-                  height: '75dvh',
+                  // A fixed height, on every engine (AGL-4243). Closed, the
+                  // sheet waits below the screen at an offset measured from
+                  // its height when it last closed, and that offset is only
+                  // measured again on a window resize. A WebView older than
+                  // `dvh` (Chromium before 108, still shipped on Android
+                  // devices that do not update it) dropped the declaration,
+                  // so the sheet took its content's height: a canvas
+                  // selection that expanded the hierarchy grew the closed
+                  // sheet upward past that offset and onto the screen.
+                  height: '75vh',
+                  '@supports (height: 1dvh)': { height: '75dvh' },
                   borderTopLeftRadius: 12,
                   borderTopRightRadius: 12,
                 }

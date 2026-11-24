@@ -124,21 +124,28 @@ const TreeView = styled(MuiList)<MuiListProps>(({ theme }) => ({
     [`> .${classKey.treeListItem}`]: {
       borderTopLeftRadius: 4,
       borderBottomLeftRadius: 4,
+      // Every rule below that shows a row control does it with `inherit`,
+      // never `visible` (AGL-4243). `visible` overrides a hidden ancestor,
+      // and a hidden ancestor is how the panel itself is hidden: a closed
+      // phone or tablet sheet stays mounted under `visibility: hidden`, as
+      // does an open one during a drag. With `visible`, the grips, chevrons
+      // and ⋮ of every expanded row were drawn over the canvas through the
+      // closed sheet. `inherit` shows them exactly when the row is shown.
       [`& .${classKey.dragHandle}, & .${classKey.moreButton}`]: {
         visibility: 'hidden',
         // No hover on a touch screen to reveal them, and a hidden grip
         // cannot be touched: there every row carries both.
-        '@media (hover: none)': { visibility: 'visible' },
+        '@media (hover: none)': { visibility: 'inherit' },
       },
       // An open menu keeps its own button on screen — the pointer has left
       // the row to reach the menu, so the hover rule no longer holds it.
       [`& .${classKey.moreButton}[aria-expanded='true']`]: {
-        visibility: 'visible',
+        visibility: 'inherit',
       },
 
       [`&:hover, &.${classKey.itemHovered}`]: {
         [`& .${classKey.dragHandle}, & .${classKey.moreButton}`]: {
-          visibility: 'visible',
+          visibility: 'inherit',
         },
         backgroundColor: `rgba(${(theme as any).vars.palette.primary.darkChannel} / calc(${(theme as any).vars.palette.action.hoverOpacity} + 0.2))`,
         [`&:has(> .${listItemButtonClasses.focusVisible})`]: {
@@ -662,7 +669,8 @@ const NodeTreeItem = observer(
                 title={collapseIn ? 'Collapse children' : 'Expand children'}
                 sx={{
                   padding: '2px',
-                  visibility: !node?.hasNodes ? 'hidden' : 'visible',
+                  // `inherit`, not `visible`: see the row rules above.
+                  visibility: !node?.hasNodes ? 'hidden' : 'inherit',
                 }}
                 disabled={!node?.hasNodes}
                 onClick={(e) => onItemToggle(e, nodeId)}
