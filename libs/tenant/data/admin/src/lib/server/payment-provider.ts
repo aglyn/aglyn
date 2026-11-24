@@ -308,8 +308,10 @@ export function merchantAccountIsReady(
  *   - `destination`: the sale is created on AGLYN's account and transferred
  *     on. Kept for the Express accounts created before the switch (Stripe
  *     discourages direct charges on Express, whose dashboard cannot refund or
- *     answer a dispute), for the register and Tap to Pay, which stay on the
- *     platform account, and for plugin marketplace sales.
+ *     answer a dispute), and for plugin marketplace sales. On a store with
+ *     its own account the register and Tap to Pay charge directly on that
+ *     account like every other site sale; on an Express store they stay on
+ *     the platform account as destination charges.
  *
  * The shape is recorded on the profile as `stripeChargeModel` by the connect
  * route, which reads it off the account Stripe returns. An absent value is
@@ -329,6 +331,64 @@ export const DIRECT_CHARGE_ACCOUNT_PARAMS: Readonly<Record<string, string>> = {
   'controller[losses][payments]': 'stripe',
   'controller[requirement_collection]': 'stripe',
   'controller[stripe_dashboard][type]': 'full',
+}
+
+/**
+ * WHAT STRIPE STILL NEEDS FROM A SELLER, as the console shows it.
+ *
+ * Mirrored onto the owner's profile by the connect route on every status
+ * check and by `account.updated`, so the Payments card can warn BEFORE a
+ * deadline stops payments or payouts rather than after. Only counts, a
+ * deadline and Stripe's one-word reason are kept: Stripe's own requirement
+ * keys (`individual.verification.document` and the like) are not words a
+ * store owner should read, and Stripe's hosted onboarding already knows
+ * which of them to ask for.
+ *
+ * Every field is written every time it is computed, `0`/`null` included, so
+ * a requirement that was met clears its notice.
+ */
+export interface MerchantRequirementsSummary {
+  /** `details_submitted`: the owner finished Stripe's onboarding form at least once. */
+  stripeDetailsSubmitted: boolean
+  /** How many things are due now or past due (`currently_due` ∪ `past_due`). */
+  stripeRequirementsDueCount: number
+  /** How many of them are already past due. */
+  stripeRequirementsPastDueCount: number
+  /** `requirements.current_deadline` in milliseconds, or null when Stripe set none. */
+  stripeRequirementsDeadlineMs: number | null
+  /** `requirements.disabled_reason`, or null when nothing is disabled. */
+  stripeDisabledReason: string | null
+}
+
+/**
+ * The summary for a Stripe Account object, or null when the object carries
+ * no `requirements` at all (not an Account payload, or one Stripe trimmed):
+ * absent evidence writes nothing rather than a manufactured "all clear".
+ */
+export function merchantRequirementsSummary(
+  account: unknown,
+): MerchantRequirementsSummary | null {
+  const requirements = (account as any)?.requirements
+  if (!requirements || typeof requirements !== 'object') return null
+  const keys = (value: unknown): string[] =>
+    Array.isArray(value)
+      ? value.filter((key): key is string => typeof key === 'string' && key.length > 0)
+      : []
+  const pastDue = keys(requirements.past_due)
+  const due = new Set([...keys(requirements.currently_due), ...pastDue])
+  const deadline = Number(requirements.current_deadline)
+  const reason =
+    typeof requirements.disabled_reason === 'string'
+      ? requirements.disabled_reason.trim().slice(0, 120)
+      : ''
+  return {
+    stripeDetailsSubmitted: (account as any)?.details_submitted === true,
+    stripeRequirementsDueCount: due.size,
+    stripeRequirementsPastDueCount: pastDue.length,
+    stripeRequirementsDeadlineMs:
+      Number.isFinite(deadline) && deadline > 0 ? Math.round(deadline * 1000) : null,
+    stripeDisabledReason: reason || null,
+  }
 }
 
 /** The charge shape a Stripe Account object supports. */

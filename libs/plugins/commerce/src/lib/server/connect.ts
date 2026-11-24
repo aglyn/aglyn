@@ -25,10 +25,27 @@ import {
   DIRECT_CHARGE_ACCOUNT_PARAMS,
   merchantAccountInOtherMode,
   merchantAccountReplacement,
+  merchantRequirementsSummary,
   paymentProvider,
   PREVIOUS_MERCHANT_ACCOUNTS_FIELD,
 } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
+import { CONNECT_RETURN_PARAM } from '../model/payments-setup-status'
+import {
+  missingBusinessProfilePrefill,
+  stripeAccountPrefill,
+  type StripePrefillHost,
+} from './connect-prefill'
+
+/** A Stripe refusal, carrying the HTTP status so a caller can tell a bad parameter from an outage. */
+class StripeRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message)
+  }
+}
 
 async function stripe(path: string, params?: URLSearchParams) {
   const response = await fetch(`https://api.stripe.com/v1/${path}`, {
@@ -43,14 +60,19 @@ async function stripe(path: string, params?: URLSearchParams) {
   })
   const payload = await response.json()
   if (!response.ok) {
-    throw new Error(payload?.error?.message ?? `Stripe ${path} failed`)
+    throw new StripeRequestError(
+      payload?.error?.message ?? `Stripe ${path} failed`,
+      response.status,
+    )
   }
   return payload
 }
 
 /**
- * Merchant payments onboarding (AGL-284): Stripe Connect Express for
- * storefront selling. Same account storage the checkout reads
+ * Merchant payments onboarding (AGL-284): a Stripe account for storefront
+ * selling, the store's own full Stripe account for every new setup
+ * (`DIRECT_CHARGE_ACCOUNT_PARAMS`, AGL-4245 for the prefill). Same account
+ * storage the checkout reads
  * (`profiles/{ownerUid}.stripeAccountId`, AGL-46) but without the
  * marketplace-profile prerequisite — commerce merchants aren't necessarily
  * publishers. Only the owning org's owner may onboard (payouts land on
@@ -89,6 +111,31 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
     }
     const firestore = firebaseAdmin.app().firestore()
     const profileRef = firestore.collection('profiles').doc(decoded.uid)
+    // The site's platform SUBDOMAIN, read once: the return links below need
+    // it, and so does the prefill's site address.
+    let subdomainRead: Promise<string | undefined> | undefined
+    const hostSubdomain = () =>
+      (subdomainRead ??= firestore
+        .collection('hostIndex')
+        .doc(hostId)
+        .get()
+        .then((index) => index.get('subdomain') as string | undefined))
+    // WHAT THE OWNER ALREADY TOLD US (AGL-4245): the site's business details
+    // and public address as Stripe `business_profile` fields, so Stripe's form
+    // opens filled in. Read from the site the owner is setting up from; a read
+    // that fails is no prefill, never a failed setup.
+    const readPrefill = async (): Promise<Record<string, string>> => {
+      try {
+        const hostSnapshot = await firestore.collection('hosts').doc(hostId).get()
+        return stripeAccountPrefill(
+          (hostSnapshot?.exists ? hostSnapshot.data() : null) as StripePrefillHost | null,
+          { subdomain: await hostSubdomain() },
+        )
+      } catch (error) {
+        console.warn('[AGL-4245] Stripe prefill skipped: the site could not be read', error)
+        return {}
+      }
+    }
     const profileSnapshot = await profileRef.get()
 
     // This deployment's Stripe mode, asked first: whether the stored account
@@ -136,18 +183,39 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
         }
         replacedAccountId = accountId
       }
+      // RE-ENTRY BEFORE ONBOARDING IS FINISHED (AGL-4245). `business_profile`
+      // stays writable by the platform on this account shape after the first
+      // onboarding link, so an owner who left Stripe's form part way gets the
+      // site's details on the way back in. Only the fields the account does
+      // not hold yet, so nothing typed in Stripe is overwritten, and any
+      // failure is logged and setup carries on.
+      if (account && account.details_submitted !== true) {
+        const missing = missingBusinessProfilePrefill(await readPrefill(), account)
+        if (Object.keys(missing).length) {
+          try {
+            account = await stripe(`accounts/${accountId}`, new URLSearchParams(missing))
+          } catch (error) {
+            console.warn(
+              `[AGL-4245] Stripe refused the business profile update for ` +
+                `profiles/${decoded.uid} (${(error as Error)?.message}); ` +
+                `continuing setup without it.`,
+            )
+          }
+        }
+      }
     }
     if (!accountId || replacedAccountId) {
       // The seller's OWN Stripe account (direct charges): Stripe bills it,
       // underwrites it and gives it the full Stripe Dashboard, so the seller
       // is the merchant of record on every site sale and can refund, answer
       // a dispute and manage tax registrations there. See
-      // `DIRECT_CHARGE_ACCOUNT_PARAMS`. Behind `release_direct_charges` until
-      // the Terms say so; off, the platform-managed Express account and its
-      // destination charges, exactly as before. The shape cannot be changed
-      // once the account exists, so this is the one place it is decided.
-      // Any failure to read the flag is OFF: the account it would create is
-      // the one every store had before, never a shape nobody chose.
+      // `DIRECT_CHARGE_ACCOUNT_PARAMS`. `release_direct_charges` is on for
+      // every store (default on, and on in Remote Config), so this is the
+      // account every new setup gets. The flag is still read so it can be
+      // turned off: off, or unreadable, gives the platform-managed Express
+      // account and its destination charges, the shape stores had before.
+      // The shape cannot be changed once the account exists, so this is the
+      // one place it is decided.
       let ownsAccount = false
       try {
         ownsAccount = await isServerReleaseFlagOnForOrg(
@@ -157,26 +225,50 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
       } catch {
         ownsAccount = false
       }
-      const created = await stripe(
-        'accounts',
-        new URLSearchParams({
-          ...(ownsAccount
-            ? DIRECT_CHARGE_ACCOUNT_PARAMS
-            : { type: 'express' }),
-          // Explicit capabilities (AGL-1994): `card_payments` for the
-          // charges, and `transfers` because a destination charge (every
-          // sale on an Express account, and the register and Tap to Pay on
-          // either kind) requires the destination to hold it.
-          'capabilities[card_payments][requested]': 'true',
-          'capabilities[transfers][requested]': 'true',
-          'metadata[profileId]': decoded.uid,
-          'metadata[purpose]': 'commerce',
-          ...(replacedAccountId
-            ? { 'metadata[replacesAccount]': replacedAccountId }
-            : {}),
-          ...(decoded.email ? { email: decoded.email } : {}),
-        }),
-      )
+      // Everything the account is created with except the prefill: the
+      // shape, the capabilities and the bookkeeping. Kept apart so a create
+      // Stripe refuses over a prefill field can be sent again without it.
+      const accountParams: Record<string, string> = {
+        ...(ownsAccount ? DIRECT_CHARGE_ACCOUNT_PARAMS : { type: 'express' }),
+        // Explicit capabilities (AGL-1994): `card_payments` for the
+        // charges, and `transfers` because a destination charge (every sale
+        // on an Express account, and the register and Tap to Pay on one)
+        // requires the destination to hold it.
+        'capabilities[card_payments][requested]': 'true',
+        'capabilities[transfers][requested]': 'true',
+        'metadata[profileId]': decoded.uid,
+        'metadata[purpose]': 'commerce',
+        ...(replacedAccountId
+          ? { 'metadata[replacesAccount]': replacedAccountId }
+          : {}),
+        ...(decoded.email ? { email: decoded.email } : {}),
+      }
+      const prefill = await readPrefill()
+      let created: any
+      try {
+        created = await stripe(
+          'accounts',
+          new URLSearchParams({ ...prefill, ...accountParams }),
+        )
+      } catch (error) {
+        // A prefill field Stripe will not take (a phone it cannot parse, a
+        // site address it will not accept) must not stop setup: the owner can type
+        // it in Stripe's own form. Only a 400 with a prefill sent is retried;
+        // anything else is the 502 it always was.
+        if (
+          !Object.keys(prefill).length ||
+          !(error instanceof StripeRequestError) ||
+          error.status !== 400
+        ) {
+          throw error
+        }
+        console.warn(
+          `[AGL-4245] Stripe refused the account prefill for ` +
+            `profiles/${decoded.uid} (${error.message}); creating the ` +
+            `account without it.`,
+        )
+        created = await stripe('accounts', new URLSearchParams(accountParams))
+      }
       accountId = String(created.id)
       if (replacedAccountId) {
         console.warn(
@@ -230,8 +322,17 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
     // every time, so a re-onboarded seller can never inherit the last
     // account's answer.
     const chargeModel = accountChargeModel(account)
+    // What Stripe still needs, read off the same account (AGL-4245): the
+    // Payments card warns from it before a deadline stops anything.
+    const requirements = merchantRequirementsSummary(account)
+    const needsDetails = Boolean(
+      requirements &&
+        (requirements.stripeRequirementsDueCount > 0 ||
+          requirements.stripeRequirementsPastDueCount > 0),
+    )
     await profileRef.set(
       {
+        ...(requirements ?? {}),
         stripeChargesEnabled: chargesEnabled,
         stripeChargeModel: chargeModel,
         stripePayoutsEnabled: payoutsEnabled,
@@ -252,25 +353,33 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
     // (AGL-685). Console products is the plugin route under the org slug and
     // the host SUBDOMAIN, both of which have to be resolved here; the client
     // hook (useConsoleHostRoute) is not available to server code.
-    const index = await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('hostIndex')
-      .doc(hostId)
-      .get()
-    const subdomain = index.get('subdomain') as string | undefined
+    const subdomain = await hostSubdomain()
     const orgSlug = ownerOrg?.org?.slug as string | undefined
     // No slug/subdomain means no route to send them to; Stripe requires
     // both URLs, so fall back to the origin root rather than a fabricated
     // path that 404s.
-    const productsUrl =
+    //
+    // The PAYMENTS section, not bare `/products` (AGL-4245): the bare hub
+    // redirects to the first section, Catalog, where nothing read the
+    // parameter, so an owner back from Stripe saw no result at all.
+    const paymentsUrl =
       orgSlug && subdomain
         ? `${origin}${buildRoute(Route.HOST_PLUGIN, {
             orgSlug,
             host: subdomain,
             pluginSlug: 'products',
-          })}`
+          })}/payments`
         : origin
+    const onboardingLink = () =>
+      stripe(
+        'account_links',
+        new URLSearchParams({
+          account: accountId as string,
+          type: 'account_onboarding',
+          refresh_url: `${paymentsUrl}?${CONNECT_RETURN_PARAM}=refresh`,
+          return_url: `${paymentsUrl}?${CONNECT_RETURN_PARAM}=done`,
+        }),
+      )
     // A CONNECTED MERCHANT STILL NEEDS A DOOR INTO STRIPE.
     //
     // This route used to return here the moment `charges_enabled` was true,
@@ -289,21 +398,25 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
         // 200 with no link is precisely the dead end being closed here, so a
         // mint that fails surfaces as the handler's 502 and the merchant is
         // told to try again rather than left pressing a dead button.
-        const fix = await stripe(
-          'account_links',
-          new URLSearchParams({
-            account: accountId as string,
-            type: 'account_onboarding',
-            refresh_url: `${productsUrl}?connect=refresh`,
-            return_url: `${productsUrl}?connect=done`,
-          }),
-        )
+        const fix = await onboardingLink()
         return res.status(200).json({
           accountId,
           chargesEnabled: true,
           payoutsEnabled,
+          needsDetails,
           url: fix.url,
         })
+      }
+      // Payouts flowing, and Stripe asking for more before a deadline
+      // (AGL-4245): the same onboarding form fixes it, so the answer carries
+      // its link beside the dashboard. The card follows it only when the
+      // owner pressed "Continue setup"; a status check stays a status check.
+      const fixUrl = needsDetails
+        ? String((await onboardingLink())?.url ?? '') || undefined
+        : undefined
+      const detailsLink = {
+        needsDetails,
+        ...(fixUrl ? { url: fixUrl } : {}),
       }
       // Payouts are flowing, so this is the VIEW: balance, payout schedule,
       // and the reason a payout failed — none of which Aglyn records and none
@@ -318,6 +431,7 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
           accountId,
           chargesEnabled: true,
           payoutsEnabled,
+          ...detailsLink,
           dashboardUrl: 'https://dashboard.stripe.com/',
         })
       }
@@ -334,19 +448,12 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
         accountId,
         chargesEnabled: true,
         payoutsEnabled,
+        ...detailsLink,
         ...(dashboardUrl ? { dashboardUrl } : {}),
       })
     }
 
-    const link = await stripe(
-      'account_links',
-      new URLSearchParams({
-        account: accountId as string,
-        type: 'account_onboarding',
-        refresh_url: `${productsUrl}?connect=refresh`,
-        return_url: `${productsUrl}?connect=done`,
-      }),
-    )
+    const link = await onboardingLink()
     return res
       .status(200)
       .json({ accountId, chargesEnabled: false, url: link.url })
