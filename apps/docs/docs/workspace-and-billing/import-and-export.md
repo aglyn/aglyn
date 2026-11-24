@@ -26,6 +26,10 @@ Gift cards are stricter, because an import issues spendable money: importing the
 takes **Import gift cards**, which the workspace's owners and admins, and a site's admins,
 hold by default.
 
+Moving your store from Shopify, Wix or Squarespace? The
+[Switching to Aglyn](../guides/switching-to-aglyn/before-you-switch.md) guides take you
+through each file in order.
+
 ## What you can move
 
 The page lists every kind of data your workspace's plugins can move, grouped

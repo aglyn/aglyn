@@ -24,6 +24,10 @@ start the next.
 It is included on every paid plan. On the Free plan the card is shown but turned off,
 with a link to upgrade.
 
+Moving a store from Shopify, Wix or Squarespace? The
+[Switching to Aglyn](../guides/switching-to-aglyn/before-you-switch.md) guides take you through
+the rest of the move: products, customers, payments, your books and your domain.
+
 ## Start {#start}
 
 1. Open **Sites** and choose **Create site**.

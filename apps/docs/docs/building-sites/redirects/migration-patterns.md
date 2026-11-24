@@ -46,6 +46,9 @@ Bring your old site's URLs over in one go with **Import** on the redirects card:
 
 See [Import and export](overview.md#import-and-export) for every column and check.
 
+Moving a whole store? See [Switching to Aglyn](../../guides/switching-to-aglyn/before-you-switch.md)
+for every step in order.
+
 Brought your site in with [Bring my site](../../ai/bring-my-site.md)? Its old page addresses
 already redirect to the new pages. See
 [Redirects from your old addresses](../../ai/bring-my-site.md#redirects).
@@ -54,7 +57,7 @@ already redirect to the new pages. See
 
 Squarespace has no redirect export. Its redirects are a list you can copy:
 
-1. In Squarespace, open **Settings**, then **URL Mappings**. Select all of the text in the
+1. In Squarespace, open **Settings**, then **Developer tools**, then **URL mappings**. Select all of the text in the
    box and copy it.
 2. In Aglyn, choose **Import** on the redirects card.
 3. Paste the text into **Or paste rows** and choose **Read pasted rows**. You can also save

@@ -154,6 +154,9 @@ removed contact does. Undo still puts back every other field it changed.
 
 ## Switching from an online store {#switching-from-an-online-store}
 
+The [Switching to Aglyn](../../guides/switching-to-aglyn/before-you-switch.md) guides cover
+the rest of the move, in order.
+
 A store moving from **Shopify**, **Wix** or **Squarespace** brings its
 customers in as contacts. Export the customers file from your old store and
 import it here: the columns map themselves, with nothing to pick.
