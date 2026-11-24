@@ -23,6 +23,7 @@ import type {
 } from '@aglyn/aglyn/plugin-manager/plugin-media-ingest'
 import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
 import { MEDIA_ALT_MAX_LENGTH } from '@aglyn/aglyn/app-utils/media-alt'
+import { isSiblingNameTaken, newMediaFolderDoc, normalizeFolderName } from '@aglyn/aglyn/app-utils/media-folders'
 import { mediaNodeSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import {
   checkEntitlement,
@@ -34,6 +35,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { hostScopeToken, ORG_SCOPE_TOKEN } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
+  deleteMediaWithTombstone,
   firebaseAdmin,
   generateMediaVariants,
   getMediaQuarantine,
@@ -45,7 +47,7 @@ import { directUploadMaxBytes, normalizeUploadContentType } from '../media-uploa
 import { mediaStorageGate, scopeBillsStorageOverage } from '../storage-overage'
 import { embeddedMetadataAtIngress } from './media-embedded'
 import { resolveOrgMediaBand } from './media-storage-band'
-import { folderStoragePath, mediaCdnPathUpdate, resolveMediaScope } from './media-scope'
+import { folderStoragePath, mediaCdnPathUpdate, mediaObjectPath, resolveMediaScope } from './media-scope'
 import { resolveUploadSite } from './media-upload-site'
 
 /**
@@ -380,10 +382,68 @@ export async function listOwnerPhotoMedia(input: {
     .map((entry) => entry.asset)
 }
 
+/**
+ * The site library's top-level folder called `name` (AGL-4245), made when
+ * there is none, so a server process files what it stores the way an upload
+ * is filed. The member and the site are checked as for an upload (the
+ * `uploads` gate), and the folder is made the way the library's New folder
+ * makes one (`newMediaFolderDoc`, the same name rule). A site library has no
+ * sharing to set, so none is written. Null when it cannot be made.
+ */
+export async function ensureMediaFolder(input: { hostId: string; uid: string; name: string }): Promise<string | null> {
+  const name = normalizeFolderName(input.name)
+  if (!input.hostId || !input.uid || !name) return null
+  const { scope } = await resolveMediaScope({ hostId: input.hostId }, {}, input.uid, { feature: 'uploads' })
+  if (!scope || scope.collection !== 'hosts') return null
+  const folders = scope.scopeRef.collection('mediaFolders')
+  const snapshot = await folders.limit(500).get()
+  const existing = snapshot.docs.find(
+    (doc) => (doc.get('parentId') ?? null) === null && String(doc.get('name') ?? '').trim().toLowerCase() === name.toLowerCase(),
+  )
+  if (existing) return existing.id
+  const listed = snapshot.docs.map((doc) => ({ $id: doc.id, ...doc.data() })) as Parameters<typeof isSiblingNameTaken>[2]
+  if (isSiblingNameTaken(name, null, listed)) return null
+  const ref = folders.doc(createResourceUid())
+  await ref.set(newMediaFolderDoc({ name, parentId: null, createdAt: Timestamp.now() } as Parameters<typeof newMediaFolderDoc>[0]))
+  return ref.id
+}
+
+/**
+ * Deletes one picture an import stored (AGL-4245), as the library's own
+ * Delete does: `deleteMediaWithTombstone`, so it can be restored for seven
+ * days. Only an asset that still carries `sourceKey` as its `importedFrom`
+ * key is touched, so an undo never removes a file an owner uploaded. The
+ * member is checked as for a delete (`resolveMediaScope`, write).
+ */
+export async function removeImportedPhotoMedia(input: {
+  hostId: string
+  uid: string
+  mediaId: string
+  sourceKey: string
+}): Promise<boolean> {
+  if (!input.hostId || !input.uid || !input.mediaId || !input.sourceKey) return false
+  const { scope } = await resolveMediaScope({ hostId: input.hostId }, {}, input.uid)
+  if (!scope || scope.collection !== 'hosts') return false
+  const snapshot = await scope.scopeRef.collection('media').doc(input.mediaId).get()
+  if (!snapshot.exists) return true
+  if (snapshot.get('importedFrom.key') !== input.sourceKey) return false
+  const bucket = firebaseAdmin.app().storage().bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET)
+  await deleteMediaWithTombstone({
+    scopeRef: scope.scopeRef,
+    bucket,
+    mediaId: input.mediaId,
+    objectPath: mediaObjectPath(snapshot, scope.base),
+    uid: input.uid,
+  })
+  return true
+}
+
 export const consoleMediaIngest: PluginMediaIngest &
-  Required<Pick<PluginMediaIngest, 'listOwnerPhotos' | 'findImportedPhoto'>> = {
+  Required<Pick<PluginMediaIngest, 'listOwnerPhotos' | 'findImportedPhoto' | 'ensureFolder' | 'removeImportedPhoto'>> = {
   ingest: ingestMedia,
   findStockPhoto: findStockPhotoMedia,
   listOwnerPhotos: listOwnerPhotoMedia,
   findImportedPhoto: findImportedPhotoMedia,
+  ensureFolder: ensureMediaFolder,
+  removeImportedPhoto: removeImportedPhotoMedia,
 }

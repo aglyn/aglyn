@@ -138,6 +138,22 @@ export interface PluginMediaIngest {
    * rather than risk a second copy.
    */
   findImportedPhoto?(input: { hostId: string; sourceKey: string }): Promise<PluginMediaAsset | null>
+  /**
+   * The id of the site library's top-level folder called `name`, created
+   * when there is none (AGL-4245): every picture a server process stores is
+   * filed in a folder, as an upload is. Checked as the member, as the
+   * library's own New folder is. `null` when it cannot be made, and the
+   * caller stores nothing rather than leave a file outside a folder.
+   * Optional: an implementation registered before it existed answers nothing.
+   */
+  ensureFolder?(input: { hostId: string; uid: string; name: string }): Promise<string | null>
+  /**
+   * Deletes one picture an import stored in the site's library (AGL-4245),
+   * the way the library's own Delete does (a tombstone it can be restored
+   * from), and only when the asset still carries `sourceKey` as its
+   * `importedFrom` key. `true` when it is gone. Optional, as above.
+   */
+  removeImportedPhoto?(input: { hostId: string; uid: string; mediaId: string; sourceKey: string }): Promise<boolean>
 }
 
 /** One implementation: the app that holds the media ingress. */

@@ -278,6 +278,12 @@ export interface TransferUndoEntry {
   written: Record<string, unknown>
   /** The modes the fields were written under, for the undo screen. */
   modes?: Record<string, TransferFieldMode>
+  /**
+   * What the resource's own `revert` needs beside the record, such as the
+   * media library files an import stored for it (AGL-4245). Never compared
+   * with the record, so it never makes a conflict.
+   */
+  extras?: Record<string, unknown>
 }
 
 /** One chunk's undo entries, as stored. */
