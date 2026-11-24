@@ -204,6 +204,10 @@ the file from its column names and maps each column for you.
   options past the third, and columns Aglyn has no field for, such as a
   ribbon or a cost. A file with missing or extra columns still imports.
 
+Your customers come across separately: import the store's customers file into
+your [contacts](../../content-and-data/crm/import.md#switching-from-an-online-store),
+which keeps their marketing email choices.
+
 ### Add-ons, check-in and quick keys
 
 Four columns carry what a product does at the register and the window. Like

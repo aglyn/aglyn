@@ -782,10 +782,12 @@ site.
 1. **Upload** a CSV, JSON or NDJSON file — or paste the addresses, one per line. The
    separator and whether the first line is a header are detected and can be changed.
 2. **Columns.** Each column is matched to a field: the **Email**, a **Name**, the
-   **Opt-in source** and **Opt-in date** your file declares, and the contact record's
+   **Opt-in source** and **Opt-in date** your file declares, a store file's
+   **Marketing choice**, and the contact record's
    **First name**, **Last name**, **Phone**, **Mobile phone**, **Job title**, **Company**
    and **Department**. Exports from Mailchimp, Klaviyo and Constant Contact are
-   recognized by their own column names. Ignore any column you do not want.
+   recognized by their own column names, and so are Shopify, Wix and
+   Squarespace customer files. Ignore any column you do not want.
 3. **Values** and **Matching** show what was read differently from how it was typed, and
    which rows are new, which are people already on this list, and which repeat an
    address earlier in the file (a repeat is skipped — the same person twice is one
@@ -822,6 +824,25 @@ statement can override that.
 Contact columns go to the contact record through your workspace's CRM, which keeps its
 own rules; an import never touches the contact record when the file has no contact
 column. Undo leaves contact details as they are.
+
+#### Customer files from an online store
+
+A Shopify, Wix or Squarespace customer file is recognized by its columns, and its
+marketing column (*Accepts Email Marketing*, *Email subscriber status* or *Accepts
+Marketing*) maps to **Marketing choice in the file**. It is read for the people who
+said no:
+
+- Anyone the file says said **no**, **false** or **Unsubscribed** is never added to the
+  list, whatever you state on **Permission**. Their address goes on your site's
+  suppression list, the same way a suppression import adds one.
+- Somebody already on the list who said no in the file stays on it, and their address
+  goes on the suppression list, so they get no marketing email.
+- **yes**, **Pending**, **Never subscribed** or a blank adds nobody on its own: your
+  statement on **Permission** decides, as for any address.
+
+**Review** and **Permission** both say how many people the file left out this way.
+Undo never takes those suppressions away. To bring the people who said yes in as
+opted-in contacts too, [import the file into your contacts](../../content-and-data/crm/import.md#switching-from-an-online-store).
 
 Up to 50,000 rows per file. A larger list is split and imported in pieces — nothing
 already on the audience is affected either way.

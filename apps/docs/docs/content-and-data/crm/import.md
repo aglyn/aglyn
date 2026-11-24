@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3
 title: Import contacts and companies
-description: Bring people or companies into the CRM from a file — other CRMs' exports map themselves — see every match and conflict in a dry run, choose how each is handled, and undo for seven days.
+description: Bring people or companies into the CRM from a file — other CRMs' and online stores' exports map themselves — see every match and conflict in a dry run, choose how each is handled, and undo for seven days.
 ---
 
 # Import contacts and companies
@@ -35,8 +35,8 @@ session like every other create.
    per file. The wizard guesses the separator, the encoding and whether the
    first line is a header, and you can change each.
 2. **Columns.** Each column is matched to a field, with how sure the match is
-   and why: the field's own name, a spelling Salesforce, HubSpot, Apollo or
-   Pipedrive writes (the badge says which), a close spelling, or what the
+   and why: the field's own name, a spelling Salesforce, HubSpot, Apollo,
+   Pipedrive, Shopify, Wix or Squarespace writes (the badge says which), a close spelling, or what the
    values look like. Remap any column or leave it out. **Match columns with
    AI** proposes a mapping from the headers and the kind of values in each
    column — never a cell of the file.
@@ -58,12 +58,16 @@ session like every other create.
    whether a blank cell clears the field. Every row where the file and the
    record disagree is listed, with a per-row override. A field the CRM never
    lets a file change is shown locked, with why.
-6. **Review.** The dry run: how many rows will create, update, change
+6. **Permission** (contacts). Whether the marketing opt-ins a store's
+   customer file records come in. The answer starts as no; see
+   [Switching from an online store](#switching-from-an-online-store). A file
+   without a marketing column is not affected.
+7. **Review.** The dry run: how many rows will create, update, change
    nothing, skip or fail, a before → after table, and every kind of warning,
    each with its own **I understand** before **Import** is enabled.
-7. **Import.** Rows are written in chunks with a progress bar. Pause and
+8. **Import.** Rows are written in chunks with a progress bar. Pause and
    resume at any time; close the tab and the import carries on.
-8. **Results.** What happened to every row, a result file (your columns plus
+9. **Results.** What happened to every row, a result file (your columns plus
    the outcome, the reason and the record), and **Undo**.
 
 ## What a file may not do
@@ -74,7 +78,7 @@ Some rules hold whatever a file says. They are shown locked on the
 | Field | The rule |
 | --- | --- |
 | **Email** (contacts) | An existing contact's email is who they are. A matched row never changes it; change it on the contact's page. |
-| **Marketing consent** (contacts) | Never taken from a file. A person gives consent on a form, or a team member records how it was given on the contact's page. The column is exported as it stands. |
+| **Marketing consent** (contacts) | This column is never read as consent. A person gives consent on a form, or a team member records how it was given on the contact's page. The column is exported as it stands. A store's customer file carries its marketing choices through **Email marketing choice** instead, under the rules in [Switching from an online store](#switching-from-an-online-store). |
 | **Lifecycle stage** (contacts) | Moves forward only. A later stage in the file advances the contact and tells automations, as moving it by hand does; an earlier one is held back. |
 | **Do not call** (contacts) | A file can turn it on, never off. |
 | **Full name** (contacts) | Built from the first and last names once either is set. |
@@ -142,6 +146,67 @@ site held is deleted (keeping any refusal they made); one another site holds
 too stays theirs. A record edited since the import is listed with what it
 holds now and what undo would restore, and you choose for each.
 
+Undo takes back a marketing email opt-in a store's file brought in. It never
+takes back an unsubscribe: that is the person's own choice, made at your old
+store. The contact stays unsubscribed, the entry on your site's unsubscribe
+list stays, and a person the undo removes has their refusal kept, as any
+removed contact does. Undo still puts back every other field it changed.
+
+## Switching from an online store {#switching-from-an-online-store}
+
+A store moving from **Shopify**, **Wix** or **Squarespace** brings its
+customers in as contacts. Export the customers file from your old store and
+import it here: the columns map themselves, with nothing to pick.
+
+| Store | The file | What maps itself |
+| --- | --- | --- |
+| **Shopify** | The customers CSV export | *First Name*, *Last Name*, *Email*, *Phone*, *Default Address Company*, the *Default Address* street, city, province, country and zip (the mailing address), *Default Address Phone* (other phone), *Note*, *Tags*. An older file's *Company*, *Address1* … *Zip* map the same way. |
+| **Wix** | The contacts CSV export | *First Name*, *Last Name*, *Email 1*, *Phone 1*, *Phone 2* (other phone), *Address 1* (mailing) and *Address 2* (other), *Company*, *Position*, *Labels* (as tags). |
+| **Squarespace** | The customers CSV export | *Email*, *First Name*, *Last Name*, the *Shipping* address and phone (mailing), the *Billing* address and phone (other), *Tags*. |
+
+A column the import does not know is left unmapped, and a missing column is
+simply not filled. Columns are matched whatever their capital letters. Your
+products come across separately, from the store's product file — see
+[Moving from Shopify, Wix or Squarespace](../../commerce-and-bookings/commerce/store-import-and-export.md#moving-from-shopify-wix-or-squarespace).
+
+### Marketing email choices
+
+Each file says whether a customer agreed to marketing email: Shopify's
+*Accepts Email Marketing* (*Accepts Marketing* in older files), Wix's *Email
+subscriber status*, Squarespace's *Accepts Marketing*. They map to **Email
+marketing choice**, and are carried like this:
+
+| The file says | What the import does |
+| --- | --- |
+| **yes**, **true** or **Subscribed**, and you confirmed on **Permission** | The contact is opted in to marketing email from the site you import under. The record says it came from your store's file, on which date, in which import, and that you confirmed these people agreed to hear from you. |
+| **yes**, **true** or **Subscribed**, and you did not confirm | Nobody is opted in. The dry run counts these people so you can decide. |
+| **yes** for somebody who unsubscribed here | They stay unsubscribed. Nothing in a file opts anyone back in. |
+| **no**, **false** or **Unsubscribed** | Always kept, whatever you chose on **Permission**: the contact is recorded as having said no. A contact who was subscribed here is unsubscribed, and added to the site's unsubscribe list. Undoing the import keeps it. |
+| **Never subscribed**, **Pending**, blank, or a word the import does not know | Nothing changes. |
+
+Opt-ins come in only under a site, since a person agrees to hear from a
+business, not from a workspace. An import that names no site still keeps
+every unsubscribe in the file, for every site.
+
+Before you choose **Permission**, the dry run on **Review** says how many
+people would be opted in, how many unsubscribes would be kept, and how many
+have no choice recorded. Only confirm if these people really agreed to hear
+from your business, for example by ticking a box at your old store's
+checkout, and you can show how if asked.
+
+### What does not move
+
+- **Passwords.** No store's export includes them. A customer who had an
+  account at your old store makes a new one on your site.
+- **Text message marketing choices** (Shopify's *Accepts SMS Marketing*,
+  Wix's *SMS subscriber status*). Marketing texts are not sent from here, so
+  the column is read and not kept, and the dry run says so.
+- **Total spent and order counts.** A contact's spend counts what they buy
+  on your site, so these are read and not kept, and the dry run says so.
+  Past orders stay with your old store: orders are
+  [exported only](../../commerce-and-bookings/commerce/store-import-and-export.md#orders-are-exported-only).
+- **The old store's customer ID.** People are matched by email.
+
 ## Files from other products
 
 | Product | What maps itself |
@@ -150,6 +215,7 @@ holds now and what undo would restore, and you choose for each.
 | **HubSpot** | Contacts and companies exports: *Associated Company*, *Contact owner*, *Lifecycle Stage*, *Street Address*, *State/Region*, *Company Domain Name* … |
 | **Apollo** | People and accounts exports: *Title*, *Company*, *Work Direct Phone*, *# Employees*, *Company City* … |
 | **Pipedrive** | People and organizations exports: *Person - Email - Work*, *Person - Organization*, *Organization - Name* … |
+| **Shopify**, **Wix**, **Squarespace** | Customer and contact exports — see [Switching from an online store](#switching-from-an-online-store). |
 | **Aglyn** | A file the CRM exported, from the [export dialog](./export.md) or before it. |
 
 Columns that mean the opposite of a field — Salesforce's *Email Opt Out*,

@@ -47,6 +47,30 @@ jest.mock('@aglyn/tenant-runtime', () => ({
     void mockEvents.push({ type, payload }),
 }))
 
+/** The site's unsubscribe list, as `site-marketing-sync` files and lifts an outside list's rows. */
+const mockUnsubscribes: Array<{ action: 'record' | 'release'; hostId: string; email: string; via: string }> = []
+jest.mock('@aglyn/tenant-data-admin/server/site-marketing-sync', () => {
+  const { personKey } = jest.requireActual('@aglyn/aglyn/app-utils/person-key')
+  return {
+    __esModule: true,
+    recordSiteUnsubscribe: async (input: { hostId: string; email: string; via: string }) => {
+      mockUnsubscribes.push({ action: 'record', hostId: input.hostId, email: input.email, via: input.via })
+      const ref = mockMemory.firestore.collection('hosts').doc(input.hostId).collection('suppressions').doc(personKey(input.email))
+      if ((await ref.get()).exists) return { created: false }
+      await ref.set({ email: input.email, reason: 'unsubscribe', via: input.via })
+      return { created: true }
+    },
+    releaseSiteUnsubscribe: async (input: { hostId: string; email: string; via: string }) => {
+      mockUnsubscribes.push({ action: 'release', hostId: input.hostId, email: input.email, via: input.via })
+      const ref = mockMemory.firestore.collection('hosts').doc(input.hostId).collection('suppressions').doc(personKey(input.email))
+      const snapshot = await ref.get()
+      if (!snapshot.exists || snapshot.get('via') !== input.via) return false
+      await ref.delete()
+      return true
+    },
+  }
+})
+
 jest.mock('@aglyn/tenant-data-admin', () => {
   const link = jest.requireActual('../../../../../tenant/data/admin/src/lib/server/contact-company-link')
   const contacts = jest.requireActual('@aglyn/aglyn/app-utils/contacts')
@@ -70,6 +94,22 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       const decided = input.decide(snapshot.data())
       if ('refused' in decided) return { outcome: 'refused', error: decided.refused }
       if (decided.action === 'delete') {
+        // The retention as the real door keeps it: every refusal the record
+        // holds, filed under the person, before the document goes.
+        const data = snapshot.data() as Record<string, any>
+        const refusals = Object.fromEntries(
+          Object.entries((data['marketingConsentByHost'] ?? {}) as Record<string, any>).filter(
+            ([, entry]) => entry?.marketingConsent === false,
+          ),
+        )
+        if (Object.keys(refusals).length && data['email']) {
+          await mockMemory.firestore
+            .collection('orgs')
+            .doc('org-1')
+            .collection('retainedRefusals')
+            .doc(String(data['email']))
+            .set({ marketingConsentByHost: refusals })
+        }
         await input.contactRef.delete()
         return { outcome: 'deleted' }
       }
@@ -163,6 +203,7 @@ beforeEach(() => {
   files.clear()
   mockEvents.length = 0
   mockCaptures.length = 0
+  mockUnsubscribes.length = 0
   mockMembers = [{ $id: 'uid-sam', email: 'sam@agency.test', displayName: 'Sam Owner' }]
   mockMemory.seed(`orgs/${ORG}`, { plan: 'starter' })
   mockMemory.seed(`${COMPANIES}/acme`, { name: 'Acme', nameLower: 'acme', domain: 'acme.com', visibleTo: SITE_TOKENS })
@@ -378,6 +419,175 @@ describe('a Salesforce contacts file', () => {
     const { match } = await analyzeTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME })
     const plan = await planTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME, choices: { mapping: match.mapping } })
     expect(plan.rows.rows[0]?.heldBack).toEqual(['marketingConsent'])
+  })
+})
+
+/*
+ * A store's customer file (AGL-4245): its marketing choices are carried under
+ * the import's rules — an opt-in only on the Permission statement, an opt-out
+ * always, never an opt-in over an unsubscribe — and undo puts back what stood.
+ */
+describe('a Shopify customers file', () => {
+  const SHOPIFY_FILE = [
+    'Customer ID,First Name,Last Name,Email,Accepts Email Marketing,Accepts SMS Marketing,Total Spent,Total Orders,Tags',
+    '101,Rae,New,rae@example.com,yes,yes,10.00,1,"vip, local"',
+    '102,Noa,New,noa@example.com,no,no,0.00,0,',
+    '103,Sub,Scriber,sub@example.com,no,no,5.00,1,',
+    '104,Un,Sub,unsub@example.com,yes,no,5.00,1,',
+    '105,Pat,Pending,pat@example.com,Pending,no,0.00,0,',
+  ].join('\n')
+  const SITE_PATH = (email: string) => `hosts/${SITE}/suppressions/${email}`
+  const entryOf = (id: string) =>
+    ((mockMemory.read(`${CONTACTS}/${id}`)?.['marketingConsentByHost'] as Record<string, any> | undefined) ?? {})[SITE]
+  const newId = (email: string) => `c-${email.split('@')[0]}`
+
+  beforeEach(() => {
+    mockMemory.seed(`${CONTACTS}/sub`, {
+      email: 'sub@example.com',
+      visibleTo: SITE_TOKENS,
+      marketingConsentByHost: { [SITE]: { marketingConsent: true, marketingConsentAtMs: 5 } },
+      facets: { [SITE]: { sources: { form: true }, interactions: [], firstName: 'Sub', lastName: 'Scriber' } },
+    })
+    mockMemory.seed(`${CONTACTS}/unsub`, {
+      email: 'unsub@example.com',
+      visibleTo: SITE_TOKENS,
+      marketingConsentByHost: { [SITE]: { marketingConsent: false, marketingConsentAtMs: 6 } },
+      facets: { [SITE]: { sources: { form: true }, interactions: [], firstName: 'Un', lastName: 'Sub' } },
+    })
+  })
+
+  async function planned(attest: boolean | undefined) {
+    const job = await uploaded(SHOPIFY_FILE)
+    const { match } = await analyzeTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME })
+    const plan = await planTransferJob(deps, {
+      orgId: ORG,
+      jobId: job.id,
+      actorUid: ME,
+      choices: { mapping: match.mapping, ...(attest === undefined ? {} : { extras: { 'crm-consent': { attest } } }) },
+    })
+    return { job, match, plan }
+  }
+
+  async function applied(jobId: string, acknowledged: string[]) {
+    return applyTransferJob(deps, {
+      orgId: ORG,
+      jobId,
+      actorUid: ME,
+      acknowledged: acknowledged as TransferWarningClass[],
+      deadlineMs: Date.now() + 120_000,
+      driver: 'spec',
+    })
+  }
+
+  it('maps itself, and says what the file’s choices come to', async () => {
+    const { match, plan } = await planned(undefined)
+    expect(Object.values(match.mapping)).toEqual(
+      expect.arrayContaining(['email', 'firstName', 'lastName', 'emailMarketingChoice', 'smsMarketingChoice', 'tags']),
+    )
+    const screening = plan.warnings.find((warning) => warning.class === 'screening')
+    expect(screening?.samples.map((sample) => sample.detail)).toEqual(
+      expect.arrayContaining([
+        'Nobody will be opted in to marketing email from this file.',
+        '2 unsubscribes from your Shopify file will be kept, and 1 person subscribed here will be unsubscribed. Undoing the import keeps these unsubscribes, because they are each person’s own choice.',
+        '1 person has no marketing choice recorded, and nothing about their marketing email changes.',
+        expect.stringContaining('1 person said yes in your Shopify file but will not be opted in, because you did not confirm'),
+        '1 person said yes in your Shopify file but unsubscribed here, so they stay unsubscribed.',
+        expect.stringContaining('The text message marketing column is not kept'),
+        expect.stringContaining('Total spent and order counts from your old store are not kept'),
+      ]),
+    )
+    expect(plan.acknowledgementsRequired).toContain('screening')
+  })
+
+  it('without the statement opts nobody in, and keeps every unsubscribe with where it came from', async () => {
+    const { job, plan } = await planned(false)
+    await applied(job.id, plan.acknowledgementsRequired)
+    // Rae said yes, and nobody confirmed it: no consent at all.
+    expect(entryOf(newId('rae@example.com'))).toBeUndefined()
+    // Noa said no: her refusal is recorded, with its provenance.
+    expect(entryOf(newId('noa@example.com'))).toMatchObject({
+      marketingConsent: false,
+      marketingConsentSource: { kind: 'contact-import', by: ME, source: 'shopify', jobId: job.id, actor: 'operator' },
+    })
+    expect(entryOf(newId('noa@example.com')).marketingConsentSource.reason).toMatch(/^Unsubscribed as a Shopify customer file recorded/)
+    // Sub was subscribed here: unsubscribed, and on the site's list.
+    expect(entryOf('sub')).toMatchObject({ marketingConsent: false })
+    expect(mockUnsubscribes).toEqual([{ action: 'record', hostId: SITE, email: 'sub@example.com', via: 'crm-import:shopify' }])
+    // Un's own refusal stands, and Pat is left as they are.
+    expect(entryOf('unsub')).toEqual({ marketingConsent: false, marketingConsentAtMs: 6 })
+    expect(entryOf(newId('pat@example.com'))).toBeUndefined()
+  })
+
+  it('on the statement opts the yes people in, never over an unsubscribe; undo takes back the opt-ins and keeps every unsubscribe', async () => {
+    const { job, plan } = await planned(true)
+    expect(plan.warnings.find((warning) => warning.class === 'screening')?.samples[0]?.detail).toBe(
+      '1 person will be opted in to marketing email, as your Shopify file records and as you confirmed they agreed to hear from you.',
+    )
+    await applied(job.id, plan.acknowledgementsRequired)
+    const rae = entryOf(newId('rae@example.com'))
+    expect(rae).toMatchObject({
+      marketingConsent: true,
+      marketingConsentSource: { kind: 'contact-import', by: ME, source: 'shopify', jobId: job.id },
+    })
+    expect(rae.marketingConsentSource.reason).toMatch(/confirmed these people agreed to hear from this business\.$/)
+    expect(entryOf('unsub')).toEqual({ marketingConsent: false, marketingConsentAtMs: 6 })
+    expect(entryOf('sub')).toMatchObject({ marketingConsent: false })
+    const subRow = [...mockMemory.docs.keys()].find((path) => path.startsWith(`hosts/${SITE}/suppressions/`))
+    expect(subRow).toBeDefined()
+
+    const preview = await planTransferJobUndo(deps, { orgId: ORG, jobId: job.id, actorUid: ME })
+    expect(preview.counts).toMatchObject({ conflict: 0 })
+    await applyTransferJobUndo(deps, {
+      orgId: ORG,
+      jobId: job.id,
+      actorUid: ME,
+      otherwise: 'keep',
+      deadlineMs: Date.now() + 120_000,
+      driver: 'spec',
+    })
+    // Rae's opt-in went with her.
+    expect(mockMemory.read(`${CONTACTS}/${newId('rae@example.com')}`)).toBeUndefined()
+    expect(mockMemory.read(`orgs/${ORG}/retainedRefusals/rae@example.com`)).toBeUndefined()
+    // Sub's unsubscribe is their own choice: it stays, and so does the list row.
+    expect(entryOf('sub')).toMatchObject({ marketingConsent: false, marketingConsentSource: { kind: 'contact-import' } })
+    expect(mockMemory.read(subRow as string)).toBeDefined()
+    expect(mockUnsubscribes.map((entry) => entry.action)).toEqual(['record'])
+    // Noa is let go, and her refusal is kept as a deleted contact's is.
+    expect(mockMemory.read(`${CONTACTS}/${newId('noa@example.com')}`)).toBeUndefined()
+    expect(mockMemory.read(`orgs/${ORG}/retainedRefusals/noa@example.com`)).toMatchObject({
+      marketingConsentByHost: { [SITE]: { marketingConsent: false, marketingConsentSource: { kind: 'contact-import' } } },
+    })
+  })
+
+  it('undo restores every other field of an existing contact and leaves the unsubscribe in place', async () => {
+    const job = await uploaded('Email,Job title,Accepts Email Marketing\nsub@example.com,Buyer,no')
+    const { match } = await analyzeTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME })
+    const plan = await planTransferJob(deps, { orgId: ORG, jobId: job.id, actorUid: ME, choices: { mapping: match.mapping } })
+    await applied(job.id, plan.acknowledgementsRequired)
+    expect((mockMemory.read(`${CONTACTS}/sub`)?.['facets'] as Record<string, any>)[SITE].jobTitle).toBe('Buyer')
+    const preview = await planTransferJobUndo(deps, { orgId: ORG, jobId: job.id, actorUid: ME })
+    expect(preview.counts).toMatchObject({ restore: 1, conflict: 0 })
+    await applyTransferJobUndo(deps, {
+      orgId: ORG,
+      jobId: job.id,
+      actorUid: ME,
+      otherwise: 'keep',
+      deadlineMs: Date.now() + 120_000,
+      driver: 'spec',
+    })
+    expect((mockMemory.read(`${CONTACTS}/sub`)?.['facets'] as Record<string, any>)[SITE].jobTitle).toBeUndefined()
+    expect(entryOf('sub')).toMatchObject({ marketingConsent: false })
+    expect(mockUnsubscribes.map((entry) => entry.action)).toEqual(['record'])
+  })
+
+  it('checks again at the write: somebody who unsubscribed after the dry run is not opted in', async () => {
+    const { job, plan } = await planned(true)
+    const { personKey } = jest.requireActual('@aglyn/aglyn/app-utils/person-key')
+    // Rae is created by the import; her address lands on the site's list before it runs.
+    mockMemory.seed(`hosts/${SITE}/suppressions/${personKey('rae@example.com')}`, { email: 'rae@example.com', reason: 'unsubscribe' })
+    const done = await applied(job.id, plan.acknowledgementsRequired)
+    expect(entryOf(newId('rae@example.com'))).toBeUndefined()
+    expect(done.results.find((result) => result.row === 0)?.message).toBe('Not opted in: they unsubscribed here.')
   })
 })
 
