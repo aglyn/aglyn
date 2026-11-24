@@ -103,9 +103,9 @@ describe('why 2% was never the answer', () => {
     const agreeing = pairs.filter(
       ([type, plan]) => resolveTransactionFeePct(org(plan), type) === flat,
     )
-    // Starter physical and Business digital are the only 2% cells among these.
+    // Business digital (a retired plan) is the only 2% cell among these since
+    // the 2026-11-24 ladder (AGL-4245) moved Starter physical to 1%.
     expect(agreeing.map(([type, plan]) => `${plan}:${type}`)).toEqual([
-      'starter:physical',
       'business:digital',
     ])
   })

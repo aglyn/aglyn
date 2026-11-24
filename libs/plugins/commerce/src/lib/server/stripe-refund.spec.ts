@@ -22,6 +22,8 @@
  * sent, and what it reverses.
  */
 
+import { resolveTransactionFeeCents } from '@aglyn/aglyn/server'
+import { directChargeParams } from '@aglyn/tenant-data-admin/server/payment-provider'
 import { createStripeRefund } from './stripe-refund'
 
 type Sent = { headers: Record<string, string>; params: URLSearchParams }
@@ -106,6 +108,38 @@ describe('createStripeRefund', () => {
     expect(sent[1].params.has('reverse_transfer')).toBe(false)
     // A different request, so a different key: never Stripe's replay of the refusal.
     expect(sent[1].headers['Idempotency-Key']).toBe('refund-key:no-fee')
+  })
+
+  it('a Pro physical sale on the store’s own account sends no fee, and its refund still goes through (AGL-4245)', async () => {
+    // Pro takes 0% on physical goods since 2026-11-24, so the direct sale's
+    // fee is 0 and no application fee key is sent to Stripe at all.
+    const pro = { plan: 'pro', subscriptionStatus: 'active' } as any
+    const fee = resolveTransactionFeeCents(pro, 'physical', 1250, 1250, { direct: true })
+    expect(fee).toBe(0)
+    expect(directChargeParams(fee)).toEqual({})
+    // Its refund: Stripe refuses the fee flag on a charge with no fee, and
+    // the refund is sent again without it rather than failed.
+    const { sent, fetch } = stripe([
+      {
+        status: 400,
+        body: {
+          error: {
+            type: 'invalid_request_error',
+            param: 'refund_application_fee',
+            message: 'The record ch_2 has no application fee to refund.',
+          },
+        },
+      },
+      { status: 200, body: { id: 're_pro_physical' } },
+    ])
+    const result = await createStripeRefund({ ...base, fetch, stripeAccount: 'acct_1Seller' })
+    expect(result).toEqual({ ok: true, refundId: 're_pro_physical' })
+    expect(sent).toHaveLength(2)
+    expect(sent[1].params.has('refund_application_fee')).toBe(false)
+    expect(sent[1].params.get('amount')).toBe('1250')
+    // Pro's 1% on services still has a fee to hand back on refund.
+    expect(resolveTransactionFeeCents(pro, 'service', 10_000, 10_000, { direct: true })).toBe(100)
+    expect(directChargeParams(100)).toEqual({ 'payment_intent_data[application_fee_amount]': '100' })
   })
 
   it('any other refusal is not resent', async () => {

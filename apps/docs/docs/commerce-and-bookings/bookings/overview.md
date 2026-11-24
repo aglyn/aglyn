@@ -153,7 +153,7 @@ your own Stripe account, and Aglyn takes its platform fee out of it as a Stripe
 application fee — the same way a storefront sale works.
 
 - A booking is priced as a **service**, which bills at your plan's **digital**
-  transaction rate: 5% on Starter, 3% on Pro, and **0% on Custom**. It is the same
+  transaction rate: 3% on Starter, 1% on Pro, and **0% on Custom**. It is the same
   rate as digital products — bookings are not charged separately or additionally.
 - The fee is taken on the **service price only**. Stripe's own processing fee is
   separate: Stripe bills it to your Stripe account at Stripe's standard pricing

@@ -489,7 +489,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
     //
     // PER LINE BY PRODUCT TYPE, summed — byte-for-byte the arithmetic
     // `cart-checkout.ts` uses, because a basket can mix a physical good
-    // (Starter 2%) with a digital one (Starter 5%) and a single basket-wide
+    // (Starter 1%) with a digital one (Starter 3%) and a single basket-wide
     // rate would price one of them wrong. A missing `type` reads as
     // `physical`, matching `liftLegacyProduct` and the cart.
     //

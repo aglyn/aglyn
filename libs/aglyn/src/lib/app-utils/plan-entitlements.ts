@@ -496,12 +496,13 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     productsPerHost: 100,
     inventoryLocations: 1,
     posRegisters: 0,
-    transactionFeePhysicalPct: 2,
-    // Pricing v3 (2026-07): softened 7→5 — a 7% digital fee stacked on the
-    // ~2.9%+30¢ processor was ~10% all-in, far above the website-builder
-    // norm (Wix/BigCommerce/Squarespace-Core = 0% platform fee). See the
-    // Pricing Decision Log + Competitive Benchmark.
-    transactionFeeDigitalPct: 5,
+    // 2026-11-24: physical 2→1 and services/digital 5→3. Stores take
+    // payments on their own Stripe account and Stripe bills the store for
+    // them, so the platform no longer pays Connect fees on those sales and
+    // the fee is plain platform revenue (see the Pricing Decision Log).
+    // Earlier history: v3 (2026-07) softened digital 7→5.
+    transactionFeePhysicalPct: 1,
+    transactionFeeDigitalPct: 3,
     features: {
       abTesting: false,
       versioning: false,
@@ -627,17 +628,21 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     productsPerHost: UNLIMITED,
     inventoryLocations: 2,
     posRegisters: 1,
-    // 0.5% on physical sales (v4, decision 9): Stripe Connect's account and
-    // payout fees ($2 a month per active account, 0.25% + $0.25 a payout) are
-    // paid by the platform, and at 0% a register doing $10k a month cost
-    // about $32 against Pro's margin. Fractional on purpose: every reader
-    // rounds the fee in cents (`resolveTransactionFeeCents`, the cart, the
-    // register) and prints the rate as it stands, so 0.5 reads "0.5%".
-    transactionFeePhysicalPct: 0.5,
-    // Pricing v3 (2026-07): softened 5→3 to smooth the digital fee ladder.
-    // v4 keeps it: the fee is the usage price of memberships, subscriptions,
-    // gift cards and digital goods, the features that moved into Pro.
-    transactionFeeDigitalPct: 3,
+    // 0% on physical sales (2026-11-24; was 0.5% in v4). The 0.5% existed to
+    // cover Stripe Connect's account and payout fees, which the platform paid
+    // on every sale. Stores now take payments on their own Stripe account
+    // (a direct charge, `SaleProcessingOptions.direct`), Stripe bills the
+    // store, and the platform pays nothing for the sale, so there is no cost
+    // left for the fee to cover. A sale that still goes through the
+    // platform's account (a destination charge) is floored at what Stripe
+    // charges the platform for it (`saleApplicationFeeCents`), so 0% never
+    // runs at a loss. Readers round the fee in cents and print the rate as it
+    // stands, so a fractional rate here would still read correctly.
+    transactionFeePhysicalPct: 0,
+    // 1% on services and digital (2026-11-24; was 3% since v3). The fee is
+    // the usage price of memberships, subscriptions, gift cards, bookings and
+    // digital goods, the features that sit on Pro.
+    transactionFeeDigitalPct: 1,
     // Every Business feature, at no charge (v4): A/B tests, scheduled
     // publishing, webhooks, the API, multilingual sites and members-only
     // content here; recurring billing, paid memberships and gift cards in the
