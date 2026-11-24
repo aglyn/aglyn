@@ -360,6 +360,39 @@ the next wave's **Start** button. Nothing starts the next wave except you, unles
 preview, or as drafts. Under **Every wave**, a wave that was running reads **stopped**, and a
 wave that had not started reads **not started**.
 
+## Redirects from your old addresses {#redirects}
+
+Your old site's page addresses are in search results, bookmarks and links on other sites.
+So when a wave is in, Aglyn adds a permanent redirect from each page's old address to its
+new one: someone who opens `example.com/about-us.html` lands on your new **About us** page,
+and search engines move the page's ranking to the new address. There is nothing to set up.
+
+Each page's row says what happened to its old address:
+
+- **Redirect added**, with the new address visitors go to.
+- **You already had a redirect from the old address, so it was kept.** A redirect you made
+  is never changed or doubled.
+- **No redirect**, with why. For example, the new page is not published yet (your site is
+  not in preview, or another page already had its address), a page on your new site uses
+  the old address, or your plan has no room for more redirects.
+
+A page whose address did not change needs no redirect, so its row says nothing about it.
+A second address of a page already found, such as `/index.html` for your home page, is
+redirected to that page too. No other page that was left out gets a redirect, because
+the import doesn't know where it went.
+
+**Redirects from your old addresses** on the import's page counts them. **Open Redirects**
+shows every rule, where you can change or remove any of them. An address left out is tried
+again when the next wave is in, so a page you publish in the meantime gets its redirect then.
+
+Redirects are included from the Starter plan, up to your plan's number of redirects.
+
+:::info When they work
+The redirects answer on your new site right away, but your old addresses only reach them
+once your own domain points at your new Aglyn site. Until then, visitors who use your domain
+still reach your old site. See [Connect a domain](../building-sites/custom-domains/connect-a-domain.md).
+:::
+
 ## Photos and videos {#photos}
 
 A page's photos are copied into your new site's media library and placed on that page:
