@@ -17,10 +17,13 @@ content on the marketing site and is written separately.
 
 - Billing: staff can add a one-time website build fee to Hand off and propose, Ask to upgrade and the bundle link; the owner pays it once on the subscription's first invoice, with sales tax on top (#2871, AGL-4244).
 - Payments: Stripe setup from Products → Payments prefills the business profile, returns to Payments when done, and warns before Stripe deadlines (#2872, AGL-4245).
+- Payments: the store is told when sales tax setup is blocking checkout (#2874, AGL-4245).
+- Site search finds the store's products (#2877).
 - Legal: pins Legal v27; the terms (4.24) say a hand-off website build is billed with the first plan invoice (#2875).
 
 ### Fixes
 
+- Commerce: product photos show in the Edit product dialog again (#2873, AGL-4246).
 - Page and email screen: a contact email address (Gmail, iCloud, Outlook and the like) no longer counts as naming that provider's brand, and Discord links count as ordinary social links, so a new business's contact, terms, sign-in and account pages are not held as phishing (#2869).
 
 ## v1.29.1 — 2026-11-24
