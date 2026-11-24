@@ -28,6 +28,7 @@ jest.mock('next/navigation', () => ({
 }))
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { registerPluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import axe from 'axe-core'
 import type { AiJobItemLedger, AiJobSummary } from '../model/ai-jobs.types'
 import {
@@ -165,6 +166,73 @@ describe('an import job’s page', () => {
     expect(screen.getByText('This wave used 81 AI credits.')).toBeTruthy()
     expect(screen.getByText('Next: Blog')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Start Blog' })).toBeTruthy()
+  })
+
+  it('says beside each page whether its old address now redirects, and lists the redirects with when they work (AGL-4245)', () => {
+    let state = harbor()
+    state = aiSiteImportWaveClosed(aiSiteImportWaveStarted(state, 0, 'x', new Map()), 0, 'y')
+    state = {
+      ...state,
+      redirects: [
+        { from: '/', to: '/', outcome: 'same', slot: 'p0' },
+        { from: '/about', to: '/about', outcome: 'kept', slot: 'p1' },
+        { from: '/index.html', to: '/', outcome: 'created', slot: null, ruleId: 'job-1-abc' },
+      ],
+    }
+    const items = aiSiteImportLedger(state).map((row): AiJobItemLedger =>
+      row.slot === 'frame' || row.slot === 'p0' || row.slot === 'p1' ? { ...row, status: 'succeeded', creditsSpent: 27, outputs: [`out-${row.slot}`] } : row,
+    )
+    view(summary({ siteImport: state, items, review: { reason: 'wave', message: 'Main pages is in.', findings: [] } }))
+    expect(screen.getByText('You already had a redirect from the old address, so it was kept')).toBeTruthy()
+    expect(screen.getByText('1 redirect added from your old addresses, 1 of yours kept.')).toBeTruthy()
+    expect(screen.getByText(/once your own domain points at your new site/)).toBeTruthy()
+    expect(screen.getByText('/index.html · Redirect added: visitors to the old address go to /')).toBeTruthy()
+    // No link where the redirects plugin publishes no address for its rules.
+    expect(screen.queryByText('Open Redirects')).toBeNull()
+  })
+
+  it('adds the redirects of pages published since, on the person’s say-so, and shows what came of it (AGL-4245)', async () => {
+    let state = harbor()
+    state = aiSiteImportWaveClosed(aiSiteImportWaveStarted(state, 0, 'x', new Map()), 0, 'y')
+    state = { ...state, redirects: [{ from: '/about-us', to: null, outcome: 'left-out', reason: 'unpublished', slot: 'p1' }] }
+    const items = aiSiteImportLedger(state).map((row): AiJobItemLedger => (row.slot === 'p1' ? { ...row, status: 'succeeded', outputs: ['out-p1'] } : row))
+    const job = summary({ siteImport: state, items, review: { reason: 'wave', message: 'Main pages is in.', findings: [] } })
+    const after = { ...state, redirects: [{ from: '/about-us', to: '/about', outcome: 'created' as const, slot: 'p1' }] }
+    mockFetch.mockResolvedValueOnce(json({ job: { ...job, siteImport: after }, changed: true }))
+    const onJob = jest.fn()
+    render(
+      <AiSiteImportJob job={job} orgId="org-1" orgSlug="acme" host="harbor" siteName="Harbor Dental" user={user} busy={false} notice={null} onResume={jest.fn()} onJob={onJob} />,
+    )
+    expect(screen.getByText('No redirect: the new page is not published yet. Add one in Redirects once it is.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Redirects from your old addresses' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add redirects for published pages' }))
+    await waitFor(() => expect(onJob).toHaveBeenCalled())
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('/api/ai/jobs/job-1/redirects')
+    expect(JSON.parse(String(init.body))).toEqual({ orgId: 'org-1', hostId: 'host-1' })
+    expect((onJob.mock.calls[0]?.[0] as AiJobSummary).siteImport?.redirects?.[0]?.outcome).toBe('created')
+  })
+
+  it('offers no such button when nothing left out can clear', () => {
+    let state = harbor()
+    state = aiSiteImportWaveClosed(aiSiteImportWaveStarted(state, 0, 'x', new Map()), 0, 'y')
+    state = { ...state, redirects: [{ from: '/about-us', to: '/about', outcome: 'left-out', reason: 'page-there', slot: 'p1' }] }
+    view(summary({ siteImport: state, items: aiSiteImportLedger(state), review: { reason: 'wave', message: 'Main pages is in.', findings: [] } }))
+    expect(screen.queryByText('Add redirects for published pages')).toBeNull()
+  })
+
+  it('opens Redirects where the redirects plugin says its rules are listed (AGL-4245)', () => {
+    registerPluginRecordRoute(
+      'redirect',
+      { list: (context) => `/${context.orgSlug}/hosts/${context.host}/p/redirects`, record: () => null },
+      { pluginId: 'spec-redirects' },
+    )
+    let state = harbor()
+    state = aiSiteImportWaveClosed(aiSiteImportWaveStarted(state, 0, 'x', new Map()), 0, 'y')
+    state = { ...state, redirects: [{ from: '/index.html', to: '/', outcome: 'created', slot: null }] }
+    view(summary({ siteImport: state, items: aiSiteImportLedger(state), review: { reason: 'wave', message: 'Main pages is in.', findings: [] } }))
+    fireEvent.click(screen.getByRole('button', { name: 'Redirects from your old addresses' }))
+    expect(screen.getByRole('link', { name: 'Open Redirects' }).getAttribute('href')).toBe('/acme/hosts/harbor/p/redirects')
   })
 
   it('says a wave is in the site’s preview, not drafts, where its pages went live there (AGL-4084)', () => {

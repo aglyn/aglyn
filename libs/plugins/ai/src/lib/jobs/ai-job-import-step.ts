@@ -156,6 +156,7 @@ import { aiRebuildImportedForms, type AiSiteImportFormsDeps } from './ai-site-im
 import { aiRunSiteImportLook, type AiSiteImportLookDeps } from './ai-site-import-look'
 import { AI_SITE_IMPORT_PLAN_BUDGET, AI_SITE_IMPORT_PLAN_REFUSED_WHY, aiRunSiteImportPlan, aiSiteImportPlanScopeLines, aiSiteImportPlanWhy } from './ai-site-import-plan'
 import { aiPublishImportedWave } from './ai-site-import-publish'
+import { aiSiteImportWriteRedirects } from './ai-site-import-redirects'
 import { aiUnitErrorRetryable, aiUnitFailure, aiUnitSpend } from './ai-build-unit-outcome'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { AI_JOB_STEP_OVERHEAD_MS } from './ai-job-budget'
@@ -290,6 +291,8 @@ export interface AiSiteImportStepDeps {
   lookDeps?: AiSiteImportLookDeps
   /** A closed wave's pages into the site's preview (AGL-4084). */
   publishWave?: typeof aiPublishImportedWave
+  /** Writes the redirects from a closed wave's old addresses (AGL-4245); specs hand in a fake. */
+  writeRedirects?: typeof aiSiteImportWriteRedirects
   /** The words a page that came in shows, read off its draft (AGL-4084). */
   draftWords?: (firestore: FirebaseFirestore.Firestore, hostId: string, draftId: string) => Promise<number | null>
   /** The site's approved media hosts, with the hosts of the films a page plays from the old site added (AGL-4140). */
@@ -1205,6 +1208,7 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
   const runPlan = deps.plan ?? aiRunSiteImportPlan
   const runLook = deps.look ?? aiRunSiteImportLook
   const publishWave = deps.publishWave ?? aiPublishImportedWave
+  const writeRedirects = deps.writeRedirects ?? aiSiteImportWriteRedirects
   const draftWordsOf = deps.draftWords ?? readDraftWords
   const approveFilms = deps.approveFilmHosts ?? approveFilmHosts
 
@@ -1229,7 +1233,7 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       outcome: AiJobStepOutcome,
     ): Promise<AiJobStepOutcome> => {
       if (!waveSettled(next, wave, ledger)) return { ...outcome, siteImport: next, continue: true }
-      const closed = aiSiteImportWaveClosed(next, wave.index, nowIso)
+      let closed = aiSiteImportWaveClosed(next, wave.index, nowIso)
       // The wave's pages go live in the site's preview, where only its team sees them (AGL-4084).
       let sitePublish = null as Awaited<ReturnType<typeof publishWave>>
       try {
@@ -1244,6 +1248,20 @@ export function createAiJobImportStep(deps: AiSiteImportStepDeps = {}): AiJobSte
       } catch (error) {
         // A publish that failed leaves the pages drafts; the wave is still in.
         console.error('ai site import: a wave could not be published into the preview', { orgId: job.orgId, jobId: job.$id, wave: wave.index, error })
+      }
+      // Each old address of a page now live redirects to it (AGL-4245). A wave
+      // is in whether or not they could be written; the next close tries again.
+      try {
+        const redirects = await writeRedirects(firestore, {
+          job,
+          state: closed,
+          items: ledger,
+          org: (context.org ?? null) as Readonly<Record<string, unknown>> | null,
+          now,
+        })
+        if (redirects) closed = { ...closed, redirects }
+      } catch (error) {
+        console.error('ai site import: the redirects of a wave could not be written', { orgId: job.orgId, jobId: job.$id, wave: wave.index, error })
       }
       const published = sitePublish ? { sitePublish } : {}
       const waiting = closed.waves.find((entry) => entry.index === wave.index)?.status === 'review'

@@ -188,6 +188,8 @@ function harness(patch: Partial<AiSiteImportStepDeps> = {}, theme: 'applied' | '
       h.published.push(input)
       return { liveUrl: 'https://import-check.aglyn.app/', published: [{ id: 'x', label: 'Home', path: '/' }], drafts: [] }
     },
+    // The redirects are the redirects plugin's to write (AGL-4245): none here unless a test says.
+    writeRedirects: async () => null,
     lookDeps: {
       save: async (_firestore, input) => {
         h.saved.push(input.style)
@@ -495,6 +497,48 @@ describe('a wave’s close lands in the site’s preview (AGL-4084, on AGL-4086�
     expect(outcome.review?.reason).toBe('wave')
     expect(outcome.review?.message).toBe('Main pages is in your site’s preview: 1 page is on your site, where only you and your team can see it. Start Legal when you are ready.')
     expect(outcome.siteImport?.pages.find((page) => page.slot === 'p1')?.brought).toEqual({ words: 120 })
+  })
+
+  it('a wave’s close writes the redirects from its old addresses after the publish, onto the import (AGL-4245)', async () => {
+    const order: string[] = []
+    const asked: Array<Parameters<NonNullable<AiSiteImportStepDeps['writeRedirects']>>[1]> = []
+    const h = harness({
+      publishWave: async () => {
+        order.push('publish')
+        return { liveUrl: 'https://import-check.aglyn.app/', published: [{ id: 'd-contact', label: 'Contact', path: '/contact' }], drafts: [] }
+      },
+      writeRedirects: async (_firestore, input) => {
+        order.push('redirects')
+        asked.push(input)
+        return [{ from: '/contact', to: '/contact', outcome: 'same', slot: 'p1' }]
+      },
+    })
+    const before = state()
+    const items = ledger().map((row) => (row.slot === 'p1' ? { ...row, status: 'running' as const, outputs: [] } : row))
+    const pages = before.pages.map((page) => (page.slot === 'p1' ? { ...page, read: { at: '', title: 'Contact', text: '', sections: [], images: [] }, photos: { brought: 0, reused: 0, skipped: 0, assets: [] } } : page))
+    const { outcome } = await pass(createAiJobImportStep(h.deps), importJob({ siteImport: { ...before, pages }, items, outputs }))
+    expect(order).toEqual(['publish', 'redirects'])
+    expect(asked[0]?.state.waves[0]?.status).toBe('review')
+    expect(asked[0]?.org).toEqual({ plan: 'pro' })
+    expect(outcome.siteImport?.redirects).toEqual([{ from: '/contact', to: '/contact', outcome: 'same', slot: 'p1' }])
+    expect(outcome.review?.reason).toBe('wave')
+  })
+
+  it('a wave is in even when its redirects could not be written (AGL-4245)', async () => {
+    const h = harness({
+      writeRedirects: async () => {
+        throw new Error('unavailable')
+      },
+    })
+    const before = state()
+    const items = ledger().map((row) => (row.slot === 'p1' ? { ...row, status: 'running' as const, outputs: [] } : row))
+    const pages = before.pages.map((page) => (page.slot === 'p1' ? { ...page, read: { at: '', title: 'Contact', text: '', sections: [], images: [] }, photos: { brought: 0, reused: 0, skipped: 0, assets: [] } } : page))
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    const { outcome } = await pass(createAiJobImportStep(h.deps), importJob({ siteImport: { ...before, pages }, items, outputs }))
+    error.mockRestore()
+    expect(outcome.review?.reason).toBe('wave')
+    expect(outcome.siteImport?.waves[0]?.status).toBe('review')
+    expect(outcome.siteImport?.redirects).toBeUndefined()
   })
 
   it('Start every remaining wave: no review between waves, and the waves it starts are the one start the day counts', async () => {
