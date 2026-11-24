@@ -44,7 +44,7 @@
 
 import { customImportTarget } from '../app-utils/csv-import'
 import { PLATFORM_BRAND_NAME } from '../app-utils/platform-brand'
-import { TRANSFER_ID_FIELD, isTransferFieldWritable } from './resource'
+import { TRANSFER_ID_FIELD, isTransferFieldExportable, isTransferFieldWritable } from './resource'
 import type { TransferField, TransferFieldType } from './resource'
 
 /** A heading fields are listed under. */
@@ -316,18 +316,23 @@ export function resolveTransferPreset(
     for (const key of keys) rest.delete(key)
     return [...keys, ...catalog.fields.filter((field) => rest.has(field.id)).map((field) => field.id)]
   }
-  if (typeof preset !== 'string') return resolveTransferFieldSelection(catalog, preset.fieldIds)
-  if (preset === 'everything') return { fieldIds: catalog.fields.map((field) => field.id), unknown: [] }
+  // An import-only field is never exported (AGL-4245), whichever preset names it.
+  const exported = catalog.fields.filter(isTransferFieldExportable)
+  if (typeof preset !== 'string') {
+    const selection = resolveTransferFieldSelection(catalog, preset.fieldIds)
+    return { ...selection, fieldIds: selection.fieldIds.filter((id) => isTransferFieldExportable(catalog.byId.get(id) as TransferField)) }
+  }
+  if (preset === 'everything') return { fieldIds: exported.map((field) => field.id), unknown: [] }
   if (preset === 'reimportable') {
     return {
-      fieldIds: lead(catalog.fields.filter(isTransferFieldWritable).map((field) => field.id)),
+      fieldIds: lead(exported.filter(isTransferFieldWritable).map((field) => field.id)),
       unknown: [],
     }
   }
   const minimal = new Set(hints.minimalFieldIds ?? [])
   return {
     fieldIds: lead(
-      catalog.fields.filter((field) => field.required || minimal.has(field.id)).map((field) => field.id),
+      exported.filter((field) => field.required || minimal.has(field.id)).map((field) => field.id),
     ),
     unknown: (hints.minimalFieldIds ?? []).filter((id) => !catalog.byId.has(id)),
   }
