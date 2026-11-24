@@ -357,6 +357,43 @@ export const LIST_MEMBER_ALIASES: readonly TransferAliasDictionary[] = [
       declaredAt: ['Email permission date'],
     },
   },
+  /*
+   * A store's customer file (AGL-4245): its columns only. Its own marketing
+   * column is not read here — a file never says who agreed (see
+   * `CONSENT_FROM_FILE_REASON`) — so the Permission step decides as for any
+   * file. The CRM's contact import is the one that carries a store's
+   * recorded opt-ins and unsubscribes.
+   */
+  {
+    source: 'Shopify customers export',
+    aliases: {
+      email: ['Email'],
+      [contactFieldId('firstName')]: ['First Name'],
+      [contactFieldId('lastName')]: ['Last Name'],
+      [contactFieldId('phone')]: ['Phone'],
+      [contactFieldId('companyName')]: ['Default Address Company', 'Company'],
+    },
+  },
+  {
+    source: 'Wix contacts export',
+    aliases: {
+      email: ['Email 1'],
+      [contactFieldId('firstName')]: ['First Name'],
+      [contactFieldId('lastName')]: ['Last Name'],
+      [contactFieldId('phone')]: ['Phone 1'],
+      [contactFieldId('companyName')]: ['Company'],
+      [contactFieldId('jobTitle')]: ['Position'],
+    },
+  },
+  {
+    source: 'Squarespace customers export',
+    aliases: {
+      email: ['Email'],
+      [contactFieldId('firstName')]: ['First Name'],
+      [contactFieldId('lastName')]: ['Last Name'],
+      [contactFieldId('phone')]: ['Shipping Phone Number'],
+    },
+  },
 ]
 
 /** Why somebody already on the list keeps their membership as it is. */
