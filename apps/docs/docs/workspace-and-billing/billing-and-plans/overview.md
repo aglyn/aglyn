@@ -875,12 +875,13 @@ See [Shipping &amp; taxes](../../commerce-and-bookings/commerce/overview.md#ship
 ### Platform fees
 
 Sales you take through your site carry a **platform fee**, separate from Stripe's
-processing fee. It is lower on Pro than on Starter, and Custom has none:
+processing fee. It is lower on Pro than on Starter: Pro takes nothing on physical
+goods, and Custom takes nothing at all:
 
 | Plan | Physical goods | Digital goods, recurring billing & bookings |
 |---|---|---|
-| Starter | 2% | 5% |
-| Pro | 0.5% | 3% |
+| Starter | 1% | 3% |
+| Pro | 0% | 1% |
 | Custom | 0% | 0% |
 
 **Recurring billing** (subscriptions and paid memberships), paid access to

@@ -1199,7 +1199,27 @@ for (const [label, [why]] of injected('--declare-extra-row', 2)) {
  * matching and is reported as resolved, so it cannot outlive its reason. An
  * exemption that outlives its reason is just an untested cell.
  */
-const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {}
+const FEE_LADDER_2026_11_24_WHY =
+  'the per-sale fee ladder came down on 2026-11-24 (AGL-4245; Starter 1% physical / 3% services and digital, Pro 0% / 1%); a price decrease, so the page and the Figma frames move once billing carries it, and this declaration is deleted when the re-extracted frames catch up'
+
+const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {
+  'Digital transaction fee · Starter': {
+    frame: '5%',
+    why: FEE_LADDER_2026_11_24_WHY,
+  },
+  'Digital transaction fee · Pro': {
+    frame: '3%',
+    why: FEE_LADDER_2026_11_24_WHY,
+  },
+  'Physical transaction fee · Starter': {
+    frame: '2%',
+    why: FEE_LADDER_2026_11_24_WHY,
+  },
+  'Physical transaction fee · Pro': {
+    frame: '0.5%',
+    why: FEE_LADDER_2026_11_24_WHY,
+  },
+}
 
 /*
  * `--declare-stale-cell='<row> · <plan>|<frame value>'`, repeatable.
@@ -1979,6 +1999,22 @@ const FEES_STALE: Record<string, Divergence> = {
   'Physical transaction fee · Free': {
     frame: NO,
     why: 'the same commerce gate as the digital row above',
+  },
+  'Digital transaction fee · Starter': {
+    frame: '5%',
+    why: FEE_LADDER_2026_11_24_WHY,
+  },
+  'Digital transaction fee · Pro': {
+    frame: '3%',
+    why: FEE_LADDER_2026_11_24_WHY,
+  },
+  'Physical transaction fee · Starter': {
+    frame: '2%',
+    why: FEE_LADDER_2026_11_24_WHY,
+  },
+  'Physical transaction fee · Pro': {
+    frame: '0.5%',
+    why: FEE_LADDER_2026_11_24_WHY,
   },
 }
 

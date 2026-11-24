@@ -60,7 +60,8 @@ const FROM_PRO: Readonly<Record<OrgPlan, boolean>> = {
  *
  * Recurring billing, paid memberships and gift cards start at Pro since
  * pricing v4 (2026-11-03, AGL-4126): every Business feature moved into Pro at
- * no charge, and the 3% digital fee is their usage price. `FROM_BUSINESS`
+ * no charge, and the digital fee (1% on Pro since 2026-11-24) is their
+ * usage price. `FROM_BUSINESS`
  * stays the shape a retired plan reads.
  */
 export function commercePlanEntitlements(): PluginPlanEntitlementsDeclaration {

@@ -10,7 +10,16 @@ description: The features Aglyn shipped most recently, grouped by area with link
 The features Aglyn shipped most recently, grouped by area. Each links into its section
 for the how-to.
 
-## November 2026 — accounting sync (newest)
+## November 2026 — lower platform fees (newest)
+
+- **[Platform fees](workspace-and-billing/billing-and-plans/overview.md#platform-fees)
+  are lower on Starter and Pro.** Starter now takes 1% on physical goods (was 2%) and 3%
+  on digital goods, recurring billing and bookings (was 5%). Pro takes nothing on
+  physical goods (was 0.5%) and 1% on digital goods, recurring billing and bookings
+  (was 3%). Custom still takes nothing. Stripe's card processing is billed to your own
+  Stripe account as before.
+
+## November 2026 — accounting sync
 
 - **Accounting** — connect [QuickBooks Online](commerce-and-bookings/commerce/connect-quickbooks-online.md)
   or [Xero](commerce-and-bookings/commerce/connect-xero.md) and every paid order, refund,

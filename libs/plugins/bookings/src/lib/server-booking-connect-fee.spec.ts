@@ -475,18 +475,19 @@ describe('a paid booking pays the MERCHANT (AGL-2315)', () => {
 describe('the take rate is the storefront ladder’s (AGL-2315)', () => {
   /**
    * the decision, 2026-08-19: bookings mirror the storefront ladder — the
-   * same 5%→0%-by-tier rate a storefront sale already takes. The table below
+   * same by-tier rate a storefront sale already takes (3% → 1% → 0% on the
+   * plans sold since 2026-11-24, AGL-4245). The table below
    * is the ladder's `'service'` axis read off `PLAN_ENTITLEMENTS`, written out
    * as MONEY on a $75 massage so the suite fails on a rate change rather than
    * merely re-deriving whatever the code does.
    *
    * Both halves are asserted per tier, and they are different failures:
    * `feeCents` pins the arithmetic, and the second expectation pins it to the
-   * RESOLVER, so neither a drifted table nor a hard-coded 5% can pass.
+   * RESOLVER, so neither a drifted table nor a hard-coded rate can pass.
    */
   const LADDER: Array<[string, number | null]> = [
-    ['starter', 375], // 5% of $75.00
-    ['pro', 225], // 3%
+    ['starter', 225], // 3% of $75.00
+    ['pro', 75], // 1%
     ['business', 150], // 2%
     ['scale', 75], // 1%
     ['advanced', null], // 0% — no fee at all
@@ -610,7 +611,7 @@ describe('the take rate is the storefront ladder’s (AGL-2315)', () => {
     }
     const params = await book()
     expect(params.get('payment_intent_data[application_fee_amount]')).toBe(
-      String(375 + saleProcessingCostCents(7500)),
+      String(225 + saleProcessingCostCents(7500)),
     )
   })
 
@@ -647,7 +648,7 @@ describe('the fee BASIS is items-only (AGL-2317)', () => {
     expect(params.has('subscription_data[application_fee_percent]')).toBe(false)
     expect(params.has('application_fee_percent')).toBe(false)
     expect(params.get('payment_intent_data[application_fee_amount]')).toBe(
-      String(375 + saleProcessingCostCents(7500)),
+      String(225 + saleProcessingCostCents(7500)),
     )
   })
 
@@ -658,12 +659,12 @@ describe('the fee BASIS is items-only (AGL-2317)', () => {
     )
     const fee = Number(params.get('payment_intent_data[application_fee_amount]'))
     expect(unitAmount).toBe(7500)
-    // 5% of the item base and nothing else in the base, plus Stripe's cost on
+    // 3% of the item base and nothing else in the base, plus Stripe's cost on
     // the same charge (AGL-2152). Written as a relationship rather than a
     // literal so that a change to the fixture price cannot make this pass
     // vacuously — and the TAKE half is isolated, which is the basis claim.
     expect(fee - saleProcessingCostCents(unitAmount)).toBe(
-      Math.round(unitAmount * 0.05),
+      Math.round(unitAmount * 0.03),
     )
   })
 
@@ -744,10 +745,10 @@ describe('a DIRECT-charge seller is charged on their own account', () => {
   })
 
   it('takes the plan’s take only, with no card cost passed through', async () => {
-    // Starter: 5% of $75.00.
+    // Starter: 3% of $75.00.
     const params = await book()
-    expect(params.get('payment_intent_data[application_fee_amount]')).toBe('375')
-    expect(params.get('metadata[feeCents]')).toBe('375')
+    expect(params.get('payment_intent_data[application_fee_amount]')).toBe('225')
+    expect(params.get('metadata[feeCents]')).toBe('225')
   })
 
   it('sends no application fee at all on a 0% tier', async () => {

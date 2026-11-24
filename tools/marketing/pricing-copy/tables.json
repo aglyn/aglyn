@@ -434,8 +434,8 @@
             "duplicateOf": null,
             "values": {
               "free": "—",
-              "starter": "5%",
-              "pro": "3%",
+              "starter": "3%",
+              "pro": "1%",
               "enterprise": "0%"
             }
           },
@@ -444,8 +444,8 @@
             "duplicateOf": null,
             "values": {
               "free": "—",
-              "starter": "2%",
-              "pro": "0.5%",
+              "starter": "1%",
+              "pro": "0%",
               "enterprise": "0%"
             }
           },
@@ -828,14 +828,14 @@
       {
         "plan": "starter",
         "label": "Starter",
-        "digital": "5%",
-        "physical": "2%"
+        "digital": "3%",
+        "physical": "1%"
       },
       {
         "plan": "pro",
         "label": "Pro",
-        "digital": "3%",
-        "physical": "0.5%"
+        "digital": "1%",
+        "physical": "0%"
       }
     ],
     "marketplace": {

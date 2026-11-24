@@ -149,9 +149,12 @@ describe('subscription processing pass-through (AGL-2655)', () => {
     // Business digital is 2%: $100 → 2 + 3.2 = 5.2; $90 → 2 + 3.24 = 5.24.
     expect(resolveSubscriptionFeePercent(org('business'), 'digital', 10000)).toBe(5.2)
     expect(resolveSubscriptionFeePercent(org('business'), 'digital', 9000)).toBe(5.24)
-    // Starter digital is 5%: $10 → 5 + 5.9 = 10.9.
-    expect(resolveSubscriptionFeePercent(org('starter'), 'digital', 1000)).toBe(10.9)
-    for (const plan of ['starter', 'business', 'scale'] as OrgPlan[]) {
+    // Starter digital is 3% (AGL-4245): $10 → 3 + 5.9 = 8.9.
+    expect(resolveSubscriptionFeePercent(org('starter'), 'digital', 1000)).toBe(8.9)
+    // Pro digital is 1%: $100 → 1 + 3.2 = 4.2, above the 3.7% the platform
+    // pays for the cycle (2.9% + 30¢ card, 0.25% + 25¢ payout).
+    expect(resolveSubscriptionFeePercent(org('pro'), 'digital', 10000)).toBe(4.2)
+    for (const plan of ['starter', 'pro', 'business', 'scale'] as OrgPlan[]) {
       const take = resolveTransactionFeePct(org(plan), 'digital')
       expect(take).toBeGreaterThan(0)
       // From $1 up: below that the percent hits Stripe's 100% ceiling.
