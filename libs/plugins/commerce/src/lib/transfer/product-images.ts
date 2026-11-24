@@ -118,7 +118,7 @@ export function productImageSkipDetail(skip: ProductImageSkip): string {
     case 'notHttps':
       return 'Not copied: the address starts with http://, not https://. Add this photo on the product.'
     case 'notAddress':
-      return 'Not copied: this is not a web address Aglyn can copy from. Add this photo on the product.'
+      return 'Not copied: this is not a web address a photo can be copied from. Add this photo on the product.'
     case 'mediaName':
       return 'Not copied: the file names the photo but not where it is online. Add this photo on the product.'
     case 'overLimit':

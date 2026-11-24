@@ -201,7 +201,7 @@ export async function fetchProductImage(
 export function productImageRefusalWords(refusal: ProductImageRefusal, status?: number): string {
   switch (refusal) {
     case 'refused-url':
-      return 'its address is not one Aglyn copies from'
+      return 'its address is not one a photo can be copied from'
     case 'private-address':
       return 'its address does not lead to a public website'
     case 'too-many-redirects':
