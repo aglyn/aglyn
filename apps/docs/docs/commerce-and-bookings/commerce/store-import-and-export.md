@@ -184,7 +184,7 @@ the file from its column names and maps each column for you.
   every column maps across.
 - **Wix**: the product rows and their variant rows become one product, with
   each variant's choice, SKU and stock. A variant's extra charge is added to
-  the product's price. A colour choice keeps its name. Stock written as **In
+  the product's price. A color choice keeps its name. Stock written as **In
   stock** isn't counted, and **Out of stock** is zero. A percent or amount
   discount makes the discounted price the price, and the full price the
   compare-at price. Wix doesn't export product addresses, so each product's
