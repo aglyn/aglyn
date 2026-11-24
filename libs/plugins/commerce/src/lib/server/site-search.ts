@@ -57,7 +57,10 @@ const SNIPPET_LENGTH = 160
 const str = (value: unknown): string => (typeof value === 'string' ? value : '')
 
 const isDocumentId = (value: string) =>
-  Boolean(value) && value.length <= 200 && !value.includes('/') && !/^__.*__$/.test(value)
+  Boolean(value) &&
+  value.length <= 200 &&
+  !value.includes('/') &&
+  !/^__.*__$/.test(value)
 
 /** One listed product as the search page matches and shows it, or `null`. */
 export function productSiteSearchItem(
@@ -70,7 +73,9 @@ export function productSiteSearchItem(
   const card = productCard(productId, data)
   // A product with no slug has no page, so there is nothing to link to.
   if (!card.path) return null
-  const product = CommerceModel.liftLegacyProduct(data as CommerceModel.HostProduct)
+  const product = CommerceModel.liftLegacyProduct(
+    data as CommerceModel.HostProduct,
+  )
   const [minPrice, maxPrice] = CommerceModel.productPriceRange(product)
   const description = plainDescription(data['description'])
   const words = (values: unknown) =>
@@ -78,7 +83,9 @@ export function productSiteSearchItem(
   const terms = [
     description,
     str(data['slug']),
-    ...(product.variants ?? []).map((variant) => str(variant.sku)).filter(Boolean),
+    ...(product.variants ?? [])
+      .map((variant) => str(variant.sku))
+      .filter(Boolean),
     ...words(data['tags']),
     ...words(data['categoryIds'])
       .map((id) => categoryNames.get(id) ?? '')
@@ -113,7 +120,10 @@ export const commerceSiteSearch: PluginSiteSearchSource = {
         .limit(SCAN_LIMIT)
         .get(),
       token
-        ? products.where('nameTokens', 'array-contains', token).limit(TOKEN_LIMIT).get()
+        ? products
+            .where('nameTokens', 'array-contains', token)
+            .limit(TOKEN_LIMIT)
+            .get()
         : Promise.resolve(null),
     ])
     const byId = new Map<string, Record<string, any>>()
@@ -121,7 +131,8 @@ export const commerceSiteSearch: PluginSiteSearchSource = {
       if (!byId.has(doc.id)) byId.set(doc.id, doc.data() as Record<string, any>)
     }
     const wantsCategories = [...byId.values()].some(
-      (data) => Array.isArray(data['categoryIds']) && data['categoryIds'].length > 0,
+      (data) =>
+        Array.isArray(data['categoryIds']) && data['categoryIds'].length > 0,
     )
     const categoryNames = new Map<string, string>()
     if (wantsCategories) {

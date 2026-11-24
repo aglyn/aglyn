@@ -227,7 +227,10 @@ async function readPluginResults(
         ...(item.caption ? { caption: item.caption } : {}),
       }
     }
-    const taken = [...titleHits, ...termHits].slice(0, RESULTS_PER_PLUGIN_SOURCE)
+    const taken = [...titleHits, ...termHits].slice(
+      0,
+      RESULTS_PER_PLUGIN_SOURCE,
+    )
     for (const position of taken) {
       ;(titled.has(position) ? byTitle : byTerms).push(toResult(position))
     }

@@ -93,10 +93,10 @@ export interface RegisteredPluginSiteSearchSource {
   source: PluginSiteSearchSource
 }
 
-export const PLUGIN_SITE_SEARCH = definePluginServiceContract<PluginSiteSearchSource>(
-  'core.site-search',
-  { multiple: true },
-)
+export const PLUGIN_SITE_SEARCH =
+  definePluginServiceContract<PluginSiteSearchSource>('core.site-search', {
+    multiple: true,
+  })
 
 /**
  * Registers one group of results. The same plugin registering the same key

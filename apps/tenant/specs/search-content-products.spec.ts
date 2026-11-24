@@ -22,11 +22,14 @@
  */
 
 /**
- * Site search finds a store's products: the commerce plugin's REAL source,
- * registered through core's `core.site-search` contract exactly as its boot
- * does, over a seeded products collection. What is asserted is the whole
- * path a visitor's "hoodie" takes — which products the store offers, how the
- * typed word matches them, where they sit among the pages, and the tabs.
+ * Site search finds a store's products through core's `core.site-search`
+ * contract. The store is a double registered under the commerce plugin's id,
+ * as its boot registers the real one: WHICH products a store offers (live,
+ * active, sold online) is the plugin's decision and is asserted beside it
+ * (`libs/plugins/commerce/src/lib/server/site-search.spec.ts`). What is
+ * asserted here is the rest of the path a visitor's "hoodie" takes — whether
+ * the store is asked at all, how the typed word matches what it offers, where
+ * products sit among the pages, the tabs, and the cache key.
  */
 
 const HOST_ID = 'host_store'
@@ -83,16 +86,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: { app: () => ({ firestore: () => firestore }) },
 }))
-jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
-  __esModule: true,
-  firebaseAdmin: { app: () => ({ firestore: () => firestore }) },
-}))
 jest.mock('@aglyn/tenant-data-admin/render-cache', () => ({
   __esModule: true,
   PUBLISHED_SITE_DATA_TTL_SECONDS: 3600,
   tenantDataTag: (hostId: string) => `tenant-data:${hostId}`,
-  withRenderCache: jest.fn(
-    async (options: { read: () => Promise<unknown> }) => options.read(),
+  withRenderCache: jest.fn(async (options: { read: () => Promise<unknown> }) =>
+    options.read(),
   ),
 }))
 jest.mock('@aglyn/tenant-runtime/template-screens', () => ({
@@ -112,7 +111,6 @@ jest.mock('@aglyn/aglyn/plugin-manager/repeat-rows', () => ({
   __esModule: true,
   readRepeatRows: jest.fn(async () => ({})),
 }))
-jest.mock('@aglyn/aglyn/app-utils/tenant-apex', () => ({ TENANT_APEX: 'aglyn.app' }))
 // The REAL helpers, reached by file path so the stub stays light — the
 // matcher above all: a faked one would assert nothing about typos.
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -139,10 +137,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
 
 import {
   registerPluginSiteSearchSource,
+  type PluginSiteSearchItem,
   type PluginSiteSearchSource,
 } from '@aglyn/aglyn/plugin-manager/plugin-site-search'
 import { unregisterPluginServices } from '@aglyn/aglyn/plugin-manager/plugin-services'
-import { commerceSiteSearch } from '@aglyn/plugins-commerce/server/site-search'
 import { withRenderCache } from '@aglyn/tenant-data-admin/render-cache'
 import searchContent, {
   filterSearchResults,
@@ -152,51 +150,53 @@ import searchContent, {
 const COMMERCE = 'commerce'
 const STORE_ON = ['mui', COMMERCE]
 
-const product = (overrides: Doc = {}): Doc => ({
-  name: 'Team Hoodie',
-  slug: 'team-hoodie',
-  description: 'Heavyweight fleece pullover.',
-  type: 'physical',
-  status: 'active',
-  deletedAt: null,
-  mediaUrls: ['https://cdn.example.com/hoodie.jpg'],
-  variants: [
-    { id: 's', options: {}, priceUsd: 45, sku: 'HD-S' },
-    { id: 'l', options: {}, priceUsd: 50, sku: 'HD-L' },
-  ],
+/** A product as the store offers it to search. */
+const product = (
+  overrides: Partial<PluginSiteSearchItem> = {},
+): PluginSiteSearchItem => ({
+  title: 'Team Hoodie',
+  terms: ['Heavyweight fleece pullover.', 'team-hoodie', 'HD-S', 'HD-L'],
+  url: '/products/team-hoodie',
+  snippet: 'Heavyweight fleece pullover.',
+  imageUrl: 'https://cdn.example.com/hoodie.jpg',
+  caption: 'From $45',
   ...overrides,
 })
 
-/** A site with one page about hoodies and the given products. */
-const seed = (products: Record<string, Doc>) => {
+/** What the store offers on the next search. */
+let offered: PluginSiteSearchItem[] = []
+/** Every request the store was asked. */
+let asked: Array<{ hostId: string; query: string; limit: number }> = []
+
+const storeSource: PluginSiteSearchSource = {
+  key: 'products',
+  label: 'Products',
+  items: async (request) => {
+    asked.push(request)
+    return offered
+  },
+}
+
+/** A site with one page about hoodies, whose store offers `products`. */
+const seed = (products: PluginSiteSearchItem[]) => {
   for (const key of Object.keys(stored)) delete stored[key]
   stored['screens'] = new Map([
     ['s_shop', { displayName: 'Hoodie season', description: 'Our hoodies' }],
   ])
-  stored['products'] = new Map(Object.entries(products))
+  offered = products
   return { $id: HOST_ID, screens: { s_shop: 'shop' } } as any
 }
 
-/** How many times the store was asked, through a counting wrapper. */
-let asked = 0
-const countingSource: PluginSiteSearchSource = {
-  ...commerceSiteSearch,
-  items: async (request) => {
-    asked += 1
-    return commerceSiteSearch.items(request)
-  },
-}
-
 beforeEach(() => {
-  asked = 0
+  asked = []
   jest.clearAllMocks()
   unregisterPluginServices(COMMERCE)
-  registerPluginSiteSearchSource(countingSource, { pluginId: COMMERCE })
+  registerPluginSiteSearchSource(storeSource, { pluginId: COMMERCE })
 })
 
 describe('searchContent: store products', () => {
   it('finds a product by its name, ahead of the page that mentions it', async () => {
-    const host = seed({ p1: product() })
+    const host = seed([product()])
 
     const results = await searchContent({
       host,
@@ -204,6 +204,7 @@ describe('searchContent: store products', () => {
       enabledPlugins: STORE_ON,
     })
 
+    expect(asked).toEqual([{ hostId: HOST_ID, query: 'hoodie', limit: 300 }])
     expect(results).toEqual([
       {
         kind: 'product',
@@ -219,7 +220,7 @@ describe('searchContent: store products', () => {
   })
 
   it('forgives a typo in the name, as a collection entry does', async () => {
-    const host = seed({ p1: product() })
+    const host = seed([product()])
 
     const results = await searchContent({
       host,
@@ -233,7 +234,7 @@ describe('searchContent: store products', () => {
   })
 
   it('finds a product by a SKU, after the pages', async () => {
-    const host = seed({ p1: product({ name: 'Pullover' }) })
+    const host = seed([product({ title: 'Pullover' })])
     stored['screens'].set('s_shop', { displayName: 'HD-L sizing guide' })
 
     const results = await searchContent({
@@ -245,12 +246,8 @@ describe('searchContent: store products', () => {
     expect(results.map((result) => result.kind)).toEqual(['page', 'product'])
   })
 
-  it.each([
-    ['not sold online', { sellOnline: false }],
-    ['a draft', { status: 'draft' }],
-    ['deleted', { deletedAt: 1_700_000_000_000 }],
-  ])('leaves out a product that is %s', async (_label, overrides) => {
-    const host = seed({ p1: product(overrides) })
+  it('leaves out a product the store does not offer, even when the page names it', async () => {
+    const host = seed([])
 
     const results = await searchContent({
       host,
@@ -262,7 +259,7 @@ describe('searchContent: store products', () => {
   })
 
   it('never asks the store on a site without commerce', async () => {
-    const host = seed({ p1: product() })
+    const host = seed([product()])
 
     const withoutStore = await searchContent({
       host,
@@ -273,14 +270,14 @@ describe('searchContent: store products', () => {
 
     expect(withoutStore.map((result) => result.kind)).toEqual(['page'])
     expect(noPlugins.map((result) => result.kind)).toEqual(['page'])
-    expect(asked).toBe(0)
+    expect(asked).toEqual([])
   })
 
   it('counts a Products tab beside Pages, and filters to it', async () => {
-    const host = seed({
-      p1: product(),
-      p2: product({ name: 'Zip Hoodie', slug: 'zip-hoodie' }),
-    })
+    const host = seed([
+      product(),
+      product({ title: 'Zip Hoodie', url: '/products/zip-hoodie' }),
+    ])
 
     const results = await searchContent({
       host,
@@ -302,18 +299,20 @@ describe('searchContent: store products', () => {
   })
 
   it('keeps the pages when the store cannot answer', async () => {
-    const host = seed({ p1: product() })
+    const host = seed([product()])
     unregisterPluginServices(COMMERCE)
     registerPluginSiteSearchSource(
       {
-        ...commerceSiteSearch,
+        ...storeSource,
         items: async () => {
           throw new Error('products unreadable')
         },
       },
       { pluginId: COMMERCE },
     )
-    const quiet = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    const quiet = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined)
 
     const results = await searchContent({
       host,
@@ -326,7 +325,7 @@ describe('searchContent: store products', () => {
   })
 
   it('keys the cache on the sources in force, and leaves a site without them on its old key', async () => {
-    const host = seed({ p1: product() })
+    const host = seed([product()])
 
     await searchContent({ host, query: 'hoodie', enabledPlugins: STORE_ON })
     await searchContent({ host, query: 'hoodie', enabledPlugins: ['mui'] })
@@ -339,7 +338,9 @@ describe('searchContent: store products', () => {
       ['tenant-site-search', HOST_ID, 'hoodie', 'UTC'],
     ])
     expect(
-      (withRenderCache as jest.Mock).mock.calls.map(([options]) => options.tags),
+      (withRenderCache as jest.Mock).mock.calls.map(
+        ([options]) => options.tags,
+      ),
     ).toEqual([[`tenant-data:${HOST_ID}`], [`tenant-data:${HOST_ID}`]])
   })
 })

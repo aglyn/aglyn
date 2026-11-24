@@ -44,13 +44,16 @@ function query(name: string, filters: Array<[string, string, unknown]>): any {
       query(name, [...filters, [field, op, value]]),
     limit: (count: number) => ({
       get: async () => {
-        const where = filters.map(([f, o, v]) => `${f} ${o} ${String(v)}`).join(' & ')
+        const where = filters
+          .map(([f, o, v]) => `${f} ${o} ${String(v)}`)
+          .join(' & ')
         queries.push([name, where, `limit ${count}`].filter(Boolean).join(' '))
         const rows = [...(stored[name] ?? new Map()).entries()]
           .filter(([, data]) =>
             filters.every(([field, op, value]) =>
               op === 'array-contains'
-                ? Array.isArray(data[field]) && (data[field] as unknown[]).includes(value)
+                ? Array.isArray(data[field]) &&
+                  (data[field] as unknown[]).includes(value)
                 : // Firestore's `==` never matches a field the document lacks.
                   Object.prototype.hasOwnProperty.call(data, field) &&
                   data[field] !== undefined &&
@@ -76,9 +79,16 @@ jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
 jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: { app: () => ({ firestore: () => firestore }) },
 }))
-jest.mock('@aglyn/aglyn/app-utils/tenant-apex', () => ({ TENANT_APEX: 'aglyn.app' }))
+jest.mock('@aglyn/aglyn/app-utils/tenant-apex', () => ({
+  TENANT_APEX: 'aglyn.app',
+}))
 
-import { commerceSiteSearch, productSiteSearchItem, SCAN_LIMIT, TOKEN_LIMIT } from './site-search'
+import {
+  commerceSiteSearch,
+  productSiteSearchItem,
+  SCAN_LIMIT,
+  TOKEN_LIMIT,
+} from './site-search'
 
 const product = (overrides: Doc = {}): Doc => ({
   name: 'Team Hoodie',
@@ -94,7 +104,18 @@ const product = (overrides: Doc = {}): Doc => ({
     { id: 's', options: {}, priceUsd: 45, sku: 'HD-S' },
     { id: 'l', options: {}, priceUsd: 50, sku: 'HD-L' },
   ],
-  nameTokens: ['t', 'te', 'tea', 'team', 'h', 'ho', 'hoo', 'hood', 'hoodi', 'hoodie'],
+  nameTokens: [
+    't',
+    'te',
+    'tea',
+    'team',
+    'h',
+    'ho',
+    'hoo',
+    'hood',
+    'hoodi',
+    'hoodie',
+  ],
   ...overrides,
 })
 
@@ -105,14 +126,25 @@ beforeEach(() => {
 
 describe('productSiteSearchItem', () => {
   it('links a listed product to its page, with its photo, its price and its words', () => {
-    const item = productSiteSearchItem('p1', product(), new Map([['c-tops', 'Tops']]))
+    const item = productSiteSearchItem(
+      'p1',
+      product(),
+      new Map([['c-tops', 'Tops']]),
+    )
     expect(item).toEqual({
       title: 'Team Hoodie',
       url: '/products/team-hoodie',
       snippet: 'Heavyweight fleece pullover.',
       imageUrl: 'https://cdn.example.com/hoodie.jpg',
       caption: 'From $45',
-      terms: ['Heavyweight fleece pullover.', 'team-hoodie', 'HD-S', 'HD-L', 'outerwear', 'Tops'],
+      terms: [
+        'Heavyweight fleece pullover.',
+        'team-hoodie',
+        'HD-S',
+        'HD-L',
+        'outerwear',
+        'Tops',
+      ],
     })
   })
 
@@ -128,7 +160,10 @@ describe('productSiteSearchItem', () => {
   })
 
   it('says a product with no price yet is coming soon, never $0', () => {
-    const item = productSiteSearchItem('p1', product({ variants: [{ id: 'a', options: {} }] }))
+    const item = productSiteSearchItem(
+      'p1',
+      product({ variants: [{ id: 'a', options: {} }] }),
+    )
     expect(item?.caption).toBe('Price coming soon')
   })
 })
@@ -137,7 +172,11 @@ describe('commerceSiteSearch.items', () => {
   it('reads the storefront scope and the name-token match, each bounded', async () => {
     stored['products'] = new Map([['p1', product()]])
     stored['productCategories'] = new Map([['c-tops', { name: 'Tops' }]])
-    const items = await commerceSiteSearch.items({ hostId: 'host-1', query: 'hoodie', limit: 300 })
+    const items = await commerceSiteSearch.items({
+      hostId: 'host-1',
+      query: 'hoodie',
+      limit: 300,
+    })
     expect(items.map((item) => item.url)).toEqual(['/products/team-hoodie'])
     expect(queries).toEqual(
       expect.arrayContaining([
@@ -155,7 +194,11 @@ describe('commerceSiteSearch.items', () => {
       ['gone', product({ slug: 'gone-hoodie', deletedAt: 5 })],
       ['till', product({ slug: 'till-hoodie', sellOnline: false })],
     ])
-    const items = await commerceSiteSearch.items({ hostId: 'host-1', query: 'hoodie', limit: 300 })
+    const items = await commerceSiteSearch.items({
+      hostId: 'host-1',
+      query: 'hoodie',
+      limit: 300,
+    })
     expect(items.map((item) => item.url)).toEqual(['/products/team-hoodie'])
   })
 
@@ -163,16 +206,39 @@ describe('commerceSiteSearch.items', () => {
     stored['products'] = new Map([
       ['p1', product({ categoryIds: [] })],
       // Stored before the scope keys were stamped, so only the token read reaches it.
-      ['p2', product({ name: 'Zip Hoodie', slug: 'zip-hoodie', deletedAt: undefined, categoryIds: [] })],
+      [
+        'p2',
+        product({
+          name: 'Zip Hoodie',
+          slug: 'zip-hoodie',
+          deletedAt: undefined,
+          categoryIds: [],
+        }),
+      ],
     ])
-    const items = await commerceSiteSearch.items({ hostId: 'host-1', query: 'hoodie', limit: 300 })
-    expect(items.map((item) => item.url).sort()).toEqual(['/products/team-hoodie', '/products/zip-hoodie'])
+    const items = await commerceSiteSearch.items({
+      hostId: 'host-1',
+      query: 'hoodie',
+      limit: 300,
+    })
+    expect(items.map((item) => item.url).sort()).toEqual([
+      '/products/team-hoodie',
+      '/products/zip-hoodie',
+    ])
     // No candidate names a category, so the categories are never read.
-    expect(queries.some((line) => line.startsWith('productCategories'))).toBe(false)
+    expect(queries.some((line) => line.startsWith('productCategories'))).toBe(
+      false,
+    )
   })
 
   it('answers nothing for a host id that is not a document id', async () => {
-    expect(await commerceSiteSearch.items({ hostId: 'a/b', query: 'hoodie', limit: 300 })).toEqual([])
+    expect(
+      await commerceSiteSearch.items({
+        hostId: 'a/b',
+        query: 'hoodie',
+        limit: 300,
+      }),
+    ).toEqual([])
     expect(queries).toEqual([])
   })
 })
