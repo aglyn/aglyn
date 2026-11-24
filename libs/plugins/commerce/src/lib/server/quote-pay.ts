@@ -53,6 +53,7 @@ import { MEMBER_SESSIONS_VALID_FROM_FIELD, memberCookieName, parseMemberSession 
 import { ensureCheckoutDomain } from './payment-method-domains'
 import { verifyQuoteLinkToken } from './quote-link-token'
 import { SELLER_STRIPE_TAX_NOT_SET_UP_MESSAGE, sellerStripeTaxActive } from './seller-stripe-account'
+import { tellCheckoutTaxRefusal } from './checkout-tax-refusal'
 
 /*==========================================
  * THE CUSTOMER'S QUOTE PAGE AND ITS PAY BUTTON (AGL-4094), AND AN
@@ -125,6 +126,12 @@ export interface QuotePayDeps {
    * asks Stripe Tax. Absent, `sellerStripeTaxActive` answers.
    */
   sellerTaxActive?(accountId: string): Promise<boolean>
+  /**
+   * Tells the store's managers, once, that a customer was refused because the
+   * store's sales tax is not set up (AGL-4245). Absent,
+   * `tellCheckoutTaxRefusal` does.
+   */
+  tellTaxRefusal?(hostId: string, reason: 'tax-undecided' | 'stripe-tax-not-active'): void
   /** Registers the page's domain for Apple Pay; never throws. */
   ensureDomain(input: Parameters<typeof ensureCheckoutDomain>[0]): Promise<unknown>
   /**
@@ -712,6 +719,8 @@ export async function handleQuotePay(deps: QuotePayDeps, req: PluginApiRequest):
   if (blocked === 'payments-unavailable') {
     return refusal(409, blocked, CommerceModel.payLinkPaymentsUnavailableMessage(storeName, kind))
   }
+  const tellTaxRefusal = deps.tellTaxRefusal ?? tellCheckoutTaxRefusal
+  if (blocked === 'tax-undecided') tellTaxRefusal(hostId, 'tax-undecided')
   if (blocked) return refusal(409, blocked, CommerceModel.invoicePayRefusalMessage(blocked, storeName, kind))
   const { owner, accountId, chargeModel } = payments
   const direct = chargeModel === 'direct'
@@ -737,7 +746,10 @@ export async function handleQuotePay(deps: QuotePayDeps, req: PluginApiRequest):
   // claim, so the refusal spends no press.
   if (direct && charge.taxAtPayment) {
     const taxActive = await (deps.sellerTaxActive ?? sellerStripeTaxActive)(String(accountId))
-    if (!taxActive) return refusal(409, 'seller-tax', SELLER_STRIPE_TAX_NOT_SET_UP_MESSAGE)
+    if (!taxActive) {
+      tellTaxRefusal(hostId, 'stripe-tax-not-active')
+      return refusal(409, 'seller-tax', SELLER_STRIPE_TAX_NOT_SET_UP_MESSAGE)
+    }
   }
   const nativeMode = await deps.nativeMode(String(owner?.id ?? ''))
   const site = host as SiteReturnHost

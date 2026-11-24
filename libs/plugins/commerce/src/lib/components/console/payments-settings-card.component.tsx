@@ -34,6 +34,7 @@ import { pluginDocsHelp } from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { PrerequisiteNotice } from '@aglyn/shared-ui-jsx/components/prerequisite-notice.component'
 import { useCommerceEntitlement } from './entitlement-gate.component'
+import CheckoutTaxBlockedNotice from './checkout-tax-blocked-notice.component'
 
 export interface PaymentsSettingsCardProps {
   hostId: string
@@ -219,6 +220,7 @@ export function PaymentsSettingsCard(props: PaymentsSettingsCardProps) {
       contentGutterY
     >
       <Stack spacing={1.5}>
+        <CheckoutTaxBlockedNotice hostId={hostId} />
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Typography variant="body2" sx={{ flex: 1 }}>
             {'Stripe account'}

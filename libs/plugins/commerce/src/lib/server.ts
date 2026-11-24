@@ -698,6 +698,13 @@ export function registerCommerceConsoleApi(): void {
     web: async (request) =>
       (await import('./server/payment-methods')).paymentMethodsHandler(request),
   })
+  // Whether sales tax lets shoppers check out (AGL-4245): the store's own
+  // Stripe Tax and the tax choice, for the Taxes and Payments cards. Loaded
+  // with the first request.
+  registerPluginApiRoute('commerce/tax-readiness', {
+    web: async (request) =>
+      (await import('./server/tax-readiness')).taxReadinessHandler(request),
+  })
   // A smart collection's rules changed or it was deleted: re-stamp which
   // products it holds (AGL-3321), the membership the storefront queries.
   registerPluginApiRoute('commerce/collection-membership', collectionMembershipHandler)

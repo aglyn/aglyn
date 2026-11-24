@@ -97,6 +97,14 @@ export const SELLER_STRIPE_TAX_NOT_SET_UP_MESSAGE =
   'This store is finishing its sales tax setup. Please try again later.'
 
 /**
+ * The same refusal for the store's own manager, who makes a draft order's
+ * payment link in the console and reads the answer there (AGL-4245).
+ */
+export const SELLER_STRIPE_TAX_NOT_SET_UP_MANAGER_MESSAGE =
+  'Stripe Tax isn’t on in your Stripe account yet, so this link can’t collect sales tax. ' +
+  'Finish it in Products → Taxes, or choose another sales tax option there.'
+
+/**
  * Whether the seller's own Stripe Tax is set up (head office, preset tax
  * code, at least one registration): Stripe's `tax/settings` status on their
  * account. A direct-charge session asks for `automatic_tax` only when it is,
@@ -108,18 +116,52 @@ export const SELLER_STRIPE_TAX_NOT_SET_UP_MESSAGE =
 export async function sellerStripeTaxActive(
   sellerAccount: string,
 ): Promise<boolean> {
+  const settings = await fetchSellerStripeTaxSettings(sellerAccount)
+  return (settings as { status?: string } | null)?.status === 'active'
+}
+
+/**
+ * The seller's own `GET /v1/tax/settings` answer, or null when it could not be
+ * read: the one read `sellerStripeTaxActive` makes, shared with the console's
+ * readiness route (AGL-4245) so the two can never disagree.
+ */
+export async function fetchSellerStripeTaxSettings(
+  sellerAccount: string,
+): Promise<Record<string, unknown> | null> {
   const key = String(process.env.STRIPE_SECRET_KEY ?? '').trim()
-  if (!key || !sellerAccount) return false
+  if (!key || !sellerAccount) return null
   try {
     const response = await fetch('https://api.stripe.com/v1/tax/settings', {
       headers: { Authorization: `Bearer ${key}`, 'Stripe-Account': sellerAccount },
     })
-    if (!response.ok) return false
-    const settings = (await response.json().catch(() => null)) as {
-      status?: string
-    } | null
-    return settings?.status === 'active'
+    if (!response.ok) return null
+    const settings = (await response.json().catch(() => null)) as Record<string, unknown> | null
+    return settings && typeof settings === 'object' ? settings : null
   } catch {
-    return false
+    return null
+  }
+}
+
+/**
+ * Whether the seller's account has at least one active tax registration
+ * (`GET /v1/tax/registrations`), for the console's readiness route
+ * (AGL-4245). Stripe Tax turns on without one and then adds no tax anywhere,
+ * so the Taxes card says so. Null when the list could not be read. Checkout
+ * never asks this: it changes nothing about whether a sale may go through.
+ */
+export async function sellerHasActiveTaxRegistration(
+  sellerAccount: string,
+): Promise<boolean | null> {
+  const key = String(process.env.STRIPE_SECRET_KEY ?? '').trim()
+  if (!key || !sellerAccount) return null
+  try {
+    const response = await fetch('https://api.stripe.com/v1/tax/registrations?status=active&limit=1', {
+      headers: { Authorization: `Bearer ${key}`, 'Stripe-Account': sellerAccount },
+    })
+    if (!response.ok) return null
+    const list = (await response.json().catch(() => null)) as { data?: unknown } | null
+    return Array.isArray(list?.data) ? list.data.length > 0 : null
+  } catch {
+    return null
   }
 }
