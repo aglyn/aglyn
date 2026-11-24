@@ -132,6 +132,23 @@ interface Node {
   [key: string]: unknown
 }
 
+/**
+ * The trigger look a new Dropdown Menu takes from the links around it
+ * (AGL-4239): a link drawn as a button (Button, or Link with button styling,
+ * or unset, which is Button) gives the menu the button look with the same
+ * variant, size and color, so it matches them; a text link gives nothing,
+ * which leaves the plain label a menu beside text links should have.
+ */
+export function aiMenuTriggerLookFrom(link: { props?: Record<string, unknown> } | undefined): Record<string, unknown> {
+  const props = link?.props
+  if (!props || props['renderAs'] === 'link') return {}
+  const look: Record<string, unknown> = { renderAs: 'button' }
+  for (const key of ['variant', 'size', 'color']) {
+    if (props[key] !== undefined && props[key] !== null) look[key] = props[key]
+  }
+  return look
+}
+
 const renders = (node: Node, element: string) =>
   node.props?.['element'] === element || node.props?.['component'] === element || node.componentId === element
 
@@ -350,7 +367,11 @@ export function aiLayoutWithMenuChanges(
               componentId: NAV_MENU,
               pluginId: 'mui',
               parentId: list.$id,
-              props: { label: (entry.parent as string).slice(0, AI_MENU_LABEL_MAX) },
+              props: {
+                label: (entry.parent as string).slice(0, AI_MENU_LABEL_MAX),
+                // Drawn like the links beside it (AGL-4239).
+                ...aiMenuTriggerLookFrom(own ? map[own] : template),
+              },
               nodes: own ? [own] : [],
             }
             if (own) {

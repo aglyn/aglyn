@@ -141,6 +141,8 @@ internal fun PhoneShell(
   fun goBack() {
     when {
       route != null -> navigator.back()
+      // The staff list returns to the place it was opened over.
+      leaveStaffConsole(chrome, navigator) -> Unit
       settingsGroups != null && top != ShellNavigator.MENU -> navigator.select(ShellNavigator.MENU)
       else -> { chrome.settingsMode = null; navigator.select(ShellNavigator.HOME) }
     }

@@ -122,7 +122,10 @@ curl "https://app.aglyn.com/api/v1/sites/host_demo/pages/scr_about" \
 Adds a page, blank or from a page [template](templates.md), as the console's
 **Add page** does. **The page is not published**: it has no public address, and no
 visitor can reach it until it is [published](sites.md#publish-pages). It counts
-against your plan's page allowance.
+against your plan's page allowance. A blank page starts inside the site's shared layout
+(its header and footer), chosen as the console chooses it for a new page: the site's
+Built-in page layout, else the layout the home page uses, else the site's only layout.
+A page made from a template starts with no layout.
 
 ```bash
 curl -X POST "https://app.aglyn.com/api/v1/sites/host_demo/pages" \

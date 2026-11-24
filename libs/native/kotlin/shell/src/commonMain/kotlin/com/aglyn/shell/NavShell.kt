@@ -317,6 +317,8 @@ internal fun SignedInShell(
       notificationSettings = { chrome.settingsMode = null; navigator.select(ShellNavigator.SETTINGS); navigator.push(Route.NotificationSettings) },
       staffConsole = staffConsoleAction(screenSession.claims.isStaff) { openStaffConsole(chrome, navigator, wide, staffFirst) },
       privacyChoices = { chrome.closeMenus(); privacyChoices = true },
+      // A phone has no rail: its account sheet carries the rail's All workspaces.
+      allWorkspaces = if (wide) null else ({ openAllWorkspaces(chrome) }),
     )
   }
 
@@ -350,6 +352,8 @@ internal fun SignedInShell(
   BackHandler(enabled = navigator.stack.isNotEmpty() || chrome.settingsMode != null || navigator.top != ShellNavigator.HOME) {
     when {
       navigator.stack.isNotEmpty() -> navigator.back()
+      // A phone's staff list returns to the place it was opened over.
+      !wide && leaveStaffConsole(chrome, navigator) -> Unit
       // A phone's settings screen returns to its settings list first (AGL-4006: the list is pushed on Home).
       !wide && chrome.settingsMode != null && navigator.top != ShellNavigator.MENU -> navigator.select(ShellNavigator.MENU)
       chrome.settingsMode != null -> { chrome.settingsMode = null; navigator.select(ShellNavigator.HOME) }
@@ -774,6 +778,7 @@ internal fun SignedInShell(
     ScopePicker(
       services, workspace, chrome, fullScreen = !wide, twoStep = !wide || chrome.picker == PickerStep.SITE, onPinFull = { chrome.pinFullFor = it },
       onOpenWorkspace = { chrome.settingsMode = null; navigator.select(ShellNavigator.HOME) },
+      onStaffConsole = if (wide) null else actions.staffConsole,
     ) { screen ->
       navigator.select(NavKeys.of(screen))
     }

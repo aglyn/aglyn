@@ -127,3 +127,47 @@ describe('createPageDraft (AGL-4235)', () => {
     expect(await create(double, { pageId: 'p1', versionId: 'v2' })).toEqual({ ok: false, status: 409, error: 'That id already exists' })
   })
 })
+
+describe('a blank page starts inside the site’s layout (AGL-4241)', () => {
+  /** A new site: Home routed at `/`, bound to its header-and-footer layout on the screen. */
+  function newSite(extra: Record<string, Record<string, unknown>> = {}, host: Record<string, unknown> = {}) {
+    return settingsFirestoreDouble({
+      [HOST]: { screens: { home: '/' }, ...host },
+      [`${HOST}/screens/home`]: { kind: 'page', slug: '/', versionId: 'hv', layoutId: 'site-layout' },
+      [`${HOST}/screens/home/versions/hv`]: { screenId: 'home' },
+      [`${HOST}/layouts/site-layout`]: { displayName: 'Site header and footer' },
+      [`${HOST}/layouts/other`]: { displayName: 'Landing' },
+      ...extra,
+    })
+  }
+  const versionOf = (double: ReturnType<typeof site>) =>
+    double.read(`${HOST}/screens/p1/versions/v1`) as Record<string, unknown>
+
+  it('binds the layout the home page uses, on the first version', async () => {
+    const double = newSite()
+    await create(double, { pageId: 'p1', versionId: 'v1' })
+    expect(versionOf(double)['layoutId']).toBe('site-layout')
+    expect(double.read(`${HOST}/screens/p1`)).not.toHaveProperty('layoutId')
+  })
+
+  it('takes the Built-in page layout setting first', async () => {
+    const double = newSite({}, { builtInPageLayoutId: 'other' })
+    await create(double, { pageId: 'p1', versionId: 'v1' })
+    expect(versionOf(double)['layoutId']).toBe('other')
+  })
+
+  it('binds nothing on a site with no layout, or several and none named', async () => {
+    const bare = site({}, { screens: {} })
+    await create(bare, { pageId: 'p1', versionId: 'v1' })
+    expect(versionOf(bare)).not.toHaveProperty('layoutId')
+    const unnamed = newSite({ [`${HOST}/screens/home/versions/hv`]: { screenId: 'home', layoutId: null } })
+    await create(unnamed, { pageId: 'p1', versionId: 'v1' })
+    expect(versionOf(unnamed)).not.toHaveProperty('layoutId')
+  })
+
+  it('leaves a page made from a template’s nodes as it was', async () => {
+    const double = newSite()
+    await create(double, { pageId: 'p1', versionId: 'v1', nodes: blankPageNodes() })
+    expect(versionOf(double)).not.toHaveProperty('layoutId')
+  })
+})

@@ -19,10 +19,18 @@ path yet are prompted to set one in Properties first.
 
 ## 1. Create a page {#1-create-a-screen}
 
-1. Go to **Pages** and choose **New page**.
-2. Set a **title** and a URL **slug** (e.g. `about`). Aglyn normalizes the slug and
-   stores it on the page, ready for when you publish.
-3. Optionally pick a **parent** page — children inherit a nested URL path
+1. Go to **Pages** and choose **Create New Page**. The **Create new page** panel opens.
+2. Fill in the form:
+   - **Display name** (required): a friendly name for the page, up to 25 characters.
+   - **Description**: a short note for your team, up to 80 characters.
+   - **Slug**: the path the page will be served at, such as `about` for `/about`
+     (`/` for the home page). Type it yourself, because it is not filled in from the
+     name. Aglyn normalizes it and stores it on the page, ready for when you publish.
+     Leave it empty to keep the page unpublished until you give it one.
+   - **Start in preview**: once the page is published, only you and your team can see
+     it until you make it public in its **Page Access** card.
+3. To nest the page under another one, pick its **Parent page** in the Besigner's
+   **Page Properties** afterwards. A child page inherits a nested URL path
    (`/services/pricing`).
 
 :::info A new page is a draft
@@ -37,15 +45,19 @@ Design it first, publish when it's ready.
 2. Drag components from the drawer onto the canvas. Rearrange them in the **hierarchy**
    panel or directly on the canvas.
 3. Double-click text to edit it inline. Set component attributes in the inspector.
-4. Bind a shared **[layout](../building-sites/screens-and-layouts/layouts.md)** if you want a
-   common header/footer.
+4. A new page starts inside your site's shared **[layout](../building-sites/screens-and-layouts/layouts.md)**,
+   so it already has the site's header and footer. To use another layout, or none, change
+   **Properties → Shared layout**.
 
 ## 3. Preview and publish
 
 1. Use the artboard **light/dark toggle** to check both color schemes.
 2. **Save** the canvas. Saving writes your working version — it isn't publishing.
-3. **Publish**. The page's slug is registered in the routing map and the page goes live
-   on your site's domain.
+3. **Publish**, or **Save & publish** from the save button's menu. The page's slug is
+   registered in the routing map and the page goes live on your site's domain. The
+   editor confirms *"Published at /…"* with the page's address, and the **Publish**
+   button turns into **Unpublish**. On a page that is already live, **Save & publish**
+   saves your changes and refreshes the live page.
 
 :::info Keeping more than one version is a Pro feature
 Every page is created with one working version, and **Save** updates that version on

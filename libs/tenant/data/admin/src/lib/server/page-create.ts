@@ -19,6 +19,11 @@ import type { HostActivityActor } from '@aglyn/aglyn/app-utils/activity-presente
 import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { draftScreenSlug } from '@aglyn/aglyn/app-utils/draft-screen-slug'
+import {
+  homeScreenIdOf,
+  newPageLayoutId,
+  screenLayoutBinding,
+} from '@aglyn/aglyn/app-utils/new-page-layout'
 import { checkQuota } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   SCREEN_SLUG_PATH_SEPARATOR_MESSAGE,
@@ -29,7 +34,14 @@ import {
 } from '@aglyn/aglyn/app-utils/screen-route'
 import { encodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
-import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore'
+import {
+  FieldValue,
+  Timestamp,
+  type DocumentReference,
+  type DocumentSnapshot,
+  type Firestore,
+  type Transaction,
+} from 'firebase-admin/firestore'
 import { billableScreenIds, readScreenSources } from './billable-screens'
 import { hostActivityEntry } from './host-activity-entry'
 
@@ -49,6 +61,12 @@ import { hostActivityEntry } from './host-activity-entry'
  * It publishes NOTHING (AGL-3021): no routing entry, no `publishedAt`, no
  * `parentId`. The address is stored on the page, so a later publish opens
  * with it, and it is one no live page keeps or the routing map serves.
+ *
+ * A BLANK page starts inside the site's shared layout (AGL-4241), chosen by
+ * `newPageLayoutId` exactly as the console's Create new page drawer chooses
+ * it, and stored on the first version where the editor keeps the binding. A
+ * page made from a template's nodes keeps starting bare, as the console's
+ * Use template does.
  *
  * Who is asking, whether they may edit the site, and the site's lock stay
  * with the caller, as they do for the routes.
@@ -110,6 +128,37 @@ export function blankPageNodes(): Record<string, unknown> {
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+
+/**
+ * The layout a blank page starts inside (AGL-4241): the site's layouts and its
+ * home page's binding, read in the create's transaction, decided by
+ * `newPageLayoutId`. No layout when the site has none.
+ */
+async function defaultLayoutOf(
+  tx: Transaction,
+  hostRef: DocumentReference,
+  host: DocumentSnapshot,
+): Promise<string | undefined> {
+  // 50, the bound every layout picker in the console takes.
+  const layouts = await tx.get(hostRef.collection('layouts').limit(50))
+  if (layouts.empty) return undefined
+  let homeLayoutId: string | null = null
+  const homeId = homeScreenIdOf(host.get('screens'))
+  if (homeId) {
+    const home = await tx.get(hostRef.collection('screens').doc(homeId))
+    const versionId = home.get('versionId')
+    const version =
+      typeof versionId === 'string' && versionId
+        ? await tx.get(hostRef.collection('screens').doc(homeId).collection('versions').doc(versionId))
+        : null
+    homeLayoutId = screenLayoutBinding(home.data(), version?.data())
+  }
+  return newPageLayoutId({
+    designatedLayoutId: host.get('builtInPageLayoutId'),
+    homeLayoutId,
+    layouts: layouts.docs.map((layout) => ({ id: layout.id, deletedAt: layout.get('deletedAt') })),
+  })
+}
 
 /** Creates an unpublished page and its first version in one transaction. */
 export async function createPageDraft(firestore: Firestore, input: CreatePageDraftInput): Promise<CreatePageDraftResult> {
@@ -185,9 +234,11 @@ export async function createPageDraft(firestore: Firestore, input: CreatePageDra
       updatedAt: now,
       createdBy: input.actor.uid,
     }
+    const layoutId = input.nodes === undefined ? await defaultLayoutOf(tx, hostRef, host) : undefined
     tx.create(pageRef, page)
     tx.create(versionRef, {
       screenId: pageId,
+      ...(layoutId ? { layoutId } : {}),
       nodes: packed ? Buffer.from(packed) : nodes,
       ...(input.rootId ? { rootId: input.rootId } : {}),
       createdAt: now,

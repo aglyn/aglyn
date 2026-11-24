@@ -28,7 +28,8 @@ elsewhere and it collapses again.
 ## Dropdown menu
 
 Insert **Dropdown Menu**, set its **Label**, and drop page links (or
-anything else) inside. Its only attribute is **Label** — how the menu
+anything else) inside. Its attributes are **Label** and the
+[look of its nav item](#match-the-nav-item-to-your-links). How the menu
 opens is not an attribute:
 
 - **By default, clicking the nav item toggles the menu.** No
@@ -43,6 +44,26 @@ Menus opened by a hover interaction close themselves once the pointer
 leaves the nav item and its panel, with a short grace period so the
 pointer can travel between the two.
 
+### Match the nav item to your links
+
+The nav item that opens a Dropdown Menu or Mega Menu takes the same look
+settings as a **Page Link**, with the same names, so you can set it the
+same way as the links beside it:
+
+- **Render as** — *Button* draws it as a button; *Text link* draws it
+  as a plain label. Either way it opens the menu.
+- **Theme color**, **Size** and **Variant** (*Text*, *Outlined*,
+  *Contained*) — shown while **Render as** is *Button*, and they mean
+  exactly what they mean on a Page Link.
+
+A Dropdown Menu or Mega Menu you insert now starts as *Button*,
+*Outlined*, *Inherit*, the same as a newly inserted Page Link. If your
+nav uses the **Nav Bar** block's links, set **Variant** to *Text* to
+match them. For a nav of text links, pick *Text link*. Menus added
+before this setting existed keep their plain label until you pick one.
+
+**Styles → Typography** on the menu reaches its label in both looks.
+
 ## Mega menu
 
 Insert **Mega Menu** inside your nav bar. Its panel is a normal canvas
@@ -51,6 +72,9 @@ images, and promo cards all work. Attributes:
 
 - **Panel width** — *Fit content*, *Wide* (720px), or *Full width*
   (edge-to-edge under the nav item).
+- **Render as**, **Theme color**, **Size**, **Variant** — the nav item's
+  look, the same as on the Dropdown Menu
+  ([above](#match-the-nav-item-to-your-links)).
 
 It opens exactly like the dropdown: click-toggle by default, and the
 classic SaaS hover behavior is one interaction — on the mega menu

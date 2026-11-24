@@ -93,7 +93,14 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
-import { forwardRef, useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import {
   DUPLICATE_MENU_LABEL,
   useDuplicateResource,
@@ -145,6 +152,9 @@ import {
 } from '../../../../../../constants/screen-publishing'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
 import createScreenDraft from '../../../../../../utils/create-screen-draft'
+import readNewPageLayout, {
+  type NewPageLayoutReading,
+} from '../../../../../../utils/read-new-page-layout'
 import { updateHostDocument } from '../../../../../../utils/host-document-writes'
 import {
   ceilingedWindow,
@@ -181,17 +191,31 @@ function Screens(props) {
   const orgSlug = useOrgSlug()
   const router = useRouter()
   const host = useHostSubdomain()
-  const hostId = useHostId()
   const { queueLoading, loading } = useLoading()
   const { confirm } = useConfirmationContext()
   const [quickDrawerOpen, setQuickDrawerOpen] = useState<boolean>(false)
+  const firestore = useFirestore()
+  const hostId = useHostId()
+  /*
+   * The layout a new page starts inside (AGL-4241), read once each time the
+   * drawer opens. Until it answers, the drawer shows no Shared layout field
+   * and a submit reads it itself, so a fast submit still gets the default.
+   */
+  const [newPageLayout, setNewPageLayout] =
+    useState<NewPageLayoutReading | null>(null)
+  const newPageLayoutRead = useRef<Promise<NewPageLayoutReading> | null>(null)
   const handleFormOpen = useCallback(() => {
+    setNewPageLayout(null)
+    const read = readNewPageLayout(firestore, hostId)
+    newPageLayoutRead.current = read
+    void read.then((reading) => {
+      if (newPageLayoutRead.current === read) setNewPageLayout(reading)
+    })
     setQuickDrawerOpen(true)
-  }, [])
+  }, [firestore, hostId])
   const handleFormClose = useCallback(() => {
     setQuickDrawerOpen(false)
   }, [])
-  const firestore = useFirestore()
   // The where-used scan is an authenticated POST; the delete confirmation
   // needs the caller's id token to start it (AGL-703).
   const { data: user } = useUser()
@@ -331,8 +355,8 @@ function Screens(props) {
    */
   const { canPublish, loaded: hostRoleLoaded } = useHostRole(hostId)
   const pageFormSchema = useMemo(
-    () => buildPageFormSchema(canPublish),
-    [canPublish],
+    () => buildPageFormSchema(canPublish, newPageLayout),
+    [canPublish, newPageLayout],
   )
   const publishBlock = hostRoleLoaded
     ? 'Your role on this site can edit content but not publish it'
@@ -382,7 +406,25 @@ function Screens(props) {
       // "Start in preview" (AGL-4086) is a fact about who sees the page, kept
       // on the host rather than the screen, so it never reaches the screen's
       // own fields.
-      const { slug: slugInput, startInPreview, ...fields } = values
+      // The Shared layout choice (AGL-4241) belongs to the first version,
+      // where the editor's Properties ▸ Shared layout keeps it, not to the
+      // screen's own fields. Absent when the field had not appeared yet:
+      // then the site's default, read now if the drawer's read is still out.
+      const {
+        slug: slugInput,
+        startInPreview,
+        layoutId: layoutChoice,
+        ...fields
+      } = values
+      const layoutId =
+        layoutChoice === NO_LAYOUT
+          ? undefined
+          : typeof layoutChoice === 'string' && layoutChoice
+            ? layoutChoice
+            : (
+                await (newPageLayoutRead.current ??
+                  readNewPageLayout(firestore, hostId))
+              ).layoutId
 
       // A `/` typed INSIDE the value (AGL-2572). `normalizeScreenSlug`
       // reaches one segment by DELETING the separator, so a screen created
@@ -463,6 +505,7 @@ function Screens(props) {
         versionId: newVersionId,
         fields,
         slug: path ?? undefined,
+        layoutId,
       })
         .then(async () => {
           // A page born in preview (AGL-4086): once published, only the
@@ -1774,10 +1817,37 @@ function Screens(props) {
  * twin of the site's switch, and it is a publishing decision — who sees the
  * page once it is live — so a role that cannot publish sees it off, with why.
  */
-function buildPageFormSchema(canPublish: boolean) {
+function buildPageFormSchema(
+  canPublish: boolean,
+  newPageLayout: NewPageLayoutReading | null,
+) {
   return {
     fields: [
       ...formSchema.fields,
+      // The layout the page starts inside (AGL-4241), shown once the site's
+      // layouts are read and only when it has any. Defaults to the site's
+      // layout; "None" starts the page bare, as every page used to.
+      ...(newPageLayout && newPageLayout.layouts.length > 0
+        ? [
+            {
+              component: 'select',
+              name: 'layoutId',
+              label: 'Shared layout',
+              helperText:
+                'The header and footer the page starts with. You can change ' +
+                'it later in the editor, under Properties ▸ Shared layout.',
+              initialValue: newPageLayout.layoutId ?? NO_LAYOUT,
+              disableDefaultOption: true,
+              options: [
+                ...newPageLayout.layouts.map((layout) => ({
+                  value: layout.id,
+                  label: layout.displayName,
+                })),
+                { value: NO_LAYOUT, label: 'None' },
+              ],
+            },
+          ]
+        : []),
       {
         component: 'switch',
         name: 'startInPreview',
@@ -1792,6 +1862,9 @@ function buildPageFormSchema(canPublish: boolean) {
     ],
   }
 }
+
+/** The Shared layout select's "None": a real sentinel, since `''` cannot survive the form. */
+const NO_LAYOUT = '__none__'
 
 const formSchema = {
   fields: [

@@ -75,6 +75,8 @@ internal fun ScopePicker(
   twoStep: Boolean,
   onPinFull: (String) -> Unit,
   onOpenWorkspace: () -> Unit,
+  /** The staff list, offered on a phone's switcher to staff only (the rail's shield on wide windows); null hides it. */
+  onStaffConsole: (() -> Unit)? = null,
   onOpenScreen: (String) -> Unit,
 ) {
   val step = chrome.picker ?: return
@@ -103,7 +105,7 @@ internal fun ScopePicker(
           TextButton(onClick = close, modifier = Modifier.testTag("picker-done")) { Text("Done") }
         }
         when (step) {
-          PickerStep.WORKSPACE -> WorkspaceStep(services, workspace, onPinFull, { screen -> close(); onOpenScreen(screen) }) { org ->
+          PickerStep.WORKSPACE -> WorkspaceStep(services, workspace, onPinFull, { screen -> close(); onOpenScreen(screen) }, onStaffConsole) { org ->
             services.workspace.selectOrg(org.id)
             if (twoStep) chrome.picker = PickerStep.SITE else { close(); onOpenWorkspace() }
           }
@@ -136,7 +138,14 @@ private fun PickerHeading(text: String) {
 }
 
 @Composable
-private fun WorkspaceStep(services: ShellServices, workspace: WorkspaceState, onPinFull: (String) -> Unit, onOpenScreen: (String) -> Unit, onPick: (WorkspaceOrg) -> Unit) {
+private fun WorkspaceStep(
+  services: ShellServices,
+  workspace: WorkspaceState,
+  onPinFull: (String) -> Unit,
+  onOpenScreen: (String) -> Unit,
+  onStaffConsole: (() -> Unit)?,
+  onPick: (WorkspaceOrg) -> Unit,
+) {
   val prefs by services.accountPrefs.state.collectAsState()
   var query by remember { mutableStateOf("") }
   var shown by remember { mutableIntStateOf(PICKER_PAGE) }
@@ -161,6 +170,16 @@ private fun WorkspaceStep(services: ShellServices, workspace: WorkspaceState, on
   SearchField(query, "Find a workspace", "picker-workspace-search") { query = it }
   WorkspaceFilterRow(filter) { filter = it }
   LazyColumn(Modifier.fillMaxWidth()) {
+    // A phone's switcher is on every tab's top bar: for staff it also leads to the staff list, opened over the screen
+    // you were on.
+    if (onStaffConsole != null && !searching && narrowed == null) {
+      item {
+        PickerRow(STAFF_CONSOLE_TITLE, null, false, "picker-staff-console", leading = { Icon(AglynIcons.named("shield"), null, Modifier.size(24.dp)) }) {
+          onStaffConsole()
+        }
+        HorizontalDivider(Modifier.padding(vertical = 6.dp))
+      }
+    }
     if (narrowed != null && !searching) {
       item { PickerHeading(if (narrowed.isEmpty()) "No workspace matches these filters" else "Workspaces · ${narrowed.size}") }
       items(narrowed, key = { "f-${it.id}" }) { org -> WorkspaceRow(services, workspace, org, prefs.pinned, onPinFull, onPick) }
