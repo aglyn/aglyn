@@ -142,7 +142,7 @@ export const DOCS_HELP_EXCERPTS = {
   googleAnalytics: 'Every event your site sends to your own GA4 property, with the exact parameters each one carries — so you can build a report against it before you have any data.',
   helpDesks: 'Show your support team each buyer\'s recent orders beside their tickets in your own Gorgias, Re:amaze, Kustomer, Gladly or Richpanel account, and send contact form messages there as new tickets.',
   howAglynAiBuilds: 'Every AI build reuses what your site already has, takes its colors and spacing from your theme, and arrives as a draft. Every plan is checked against those rules before you see it, asked again, then stopped.',
-  import: 'Bring people or companies into the CRM from a file — other CRMs\' exports map themselves — see every match and conflict in a dry run, choose how each is handled, and undo for seven days.',
+  import: 'Bring people or companies into the CRM from a file — other CRMs\' and online stores\' exports map themselves — see every match and conflict in a dry run, choose how each is handled, and undo for seven days.',
   importAndExport: 'Render the field-picking export dialog and the eight-step import wizard for your plugin\'s records, with your own steps and locked rules.',
   importExport: 'Export the fields you choose, and import a file with column mapping, record matching, a choice for every conflict, a dry run and undo.',
   injectionZones: 'Every named console zone a plugin widget can render into, and what each receives.',

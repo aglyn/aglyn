@@ -785,7 +785,8 @@ site.
    **Opt-in source** and **Opt-in date** your file declares, and the contact record's
    **First name**, **Last name**, **Phone**, **Mobile phone**, **Job title**, **Company**
    and **Department**. Exports from Mailchimp, Klaviyo and Constant Contact are
-   recognized by their own column names. Ignore any column you do not want.
+   recognized by their own column names, and so are Shopify, Wix and
+   Squarespace customer files. Ignore any column you do not want.
 3. **Values** and **Matching** show what was read differently from how it was typed, and
    which rows are new, which are people already on this list, and which repeat an
    address earlier in the file (a repeat is skipped — the same person twice is one
@@ -822,6 +823,14 @@ statement can override that.
 Contact columns go to the contact record through your workspace's CRM, which keeps its
 own rules; an import never touches the contact record when the file has no contact
 column. Undo leaves contact details as they are.
+
+:::tip Moving from an online store
+A list import does not read a store file's marketing column: your statement on
+**Permission** decides, as for any file. To carry the choices your Shopify, Wix or
+Squarespace customers made, [import the file into your contacts](../../content-and-data/crm/import.md#switching-from-an-online-store)
+first. Their opt-ins come in on your statement there, and everyone who said no is
+recorded as unsubscribed, so a list import never adds them afterwards.
+:::
 
 Up to 50,000 rows per file. A larger list is split and imported in pieces — nothing
 already on the audience is affected either way.
