@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { PodOrderCosts, PodOrderStatus, PodProviderId } from '../model/print-on-demand'
+import type { PodOrderCosts, PodOrderStatus, PodProviderId, PodShippingCost, PodShippingMethod } from '../model/print-on-demand'
 
 /**
  * What an adapter does, in the store's words rather than a service's
@@ -81,6 +81,8 @@ export interface PodSourceProduct {
   imageUrls: string[]
   options: Array<{ name: string; values: string[] }>
   variants: PodSourceVariant[]
+  /** What the service needs to say what shipping it costs, when it can (Printify: blueprint and print provider). */
+  shippingRef?: string | null
 }
 
 export interface PodRecipient {
@@ -119,6 +121,8 @@ export interface PodOrderRequest {
   retailCurrency: string
   /** Confirm for production now, or leave a draft. */
   confirm: boolean
+  /** How the service ships it, where it lets the store choose; Standard when absent. */
+  shippingMethod?: PodShippingMethod
 }
 
 export interface PodSourceShipment {
@@ -161,6 +165,12 @@ export interface PodProvider {
   listStores(token: string): Promise<PodStore[]>
   listProducts(credentials: PodCredentials, cursor: string | null): Promise<PodCatalogPage>
   getProduct(credentials: PodCredentials, productId: string): Promise<PodSourceProduct>
+  /**
+   * What the service charges the merchant to ship the product with its
+   * standard method, per destination, the widest of its variants'. Optional:
+   * a service with no such table answers nothing.
+   */
+  getShippingCosts?(credentials: PodCredentials, product: PodSourceProduct): Promise<PodShippingCost[]>
   /** The order the store sent under `externalId`, or `null`. */
   findOrder(credentials: PodCredentials, externalId: string): Promise<PodSourceOrder | null>
   createOrder(credentials: PodCredentials, request: PodOrderRequest): Promise<PodSourceOrder>

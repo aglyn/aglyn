@@ -33,7 +33,8 @@
     "@aglyn/shared-util-tools": "1.29.2",
     "@aglyn/tenant-data-admin": "1.29.2",
     "@aglyn/tenant-feature-instance": "1.29.2",
-    "@swc/helpers": "0.5.24"
+    "@swc/helpers": "0.5.24",
+    "sharp": "^0.35.5"
   },
   "peerDependencies": {
     "@aglyn/plugins-commerce": "1.29.2",

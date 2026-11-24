@@ -55,6 +55,35 @@ export function isPodProvider(value: unknown): value is PodProviderId {
 /** How a paid order reaches the service. */
 export type PodSubmitMode = 'automatic' | 'review'
 
+/** How the service ships what it makes. Printify offers all four; Printful ships by the method it picks. */
+export type PodShippingMethod = 'standard' | 'priority' | 'express' | 'economy'
+
+export const POD_SHIPPING_METHODS: readonly PodShippingMethod[] = ['standard', 'priority', 'express', 'economy']
+
+export const POD_SHIPPING_METHOD_LABELS: Record<PodShippingMethod, string> = {
+  standard: 'Standard',
+  priority: 'Priority',
+  express: 'Express',
+  economy: 'Economy',
+}
+
+export function isPodShippingMethod(value: unknown): value is PodShippingMethod {
+  return typeof value === 'string' && (POD_SHIPPING_METHODS as readonly string[]).includes(value)
+}
+
+/**
+ * The longest an automatic send may wait before an order goes to
+ * production: a buyer who cancels in that window is cancelled at the
+ * service before anything is made.
+ */
+export const POD_SEND_DELAY_MAX_HOURS = 72
+
+/** The send delay a member asked for, as a whole number of hours within the bounds. */
+export function podSendDelayHours(value: unknown): number {
+  const hours = Math.round(Number(value))
+  return Number.isFinite(hours) ? Math.min(POD_SEND_DELAY_MAX_HOURS, Math.max(0, hours)) : 0
+}
+
 /** What a site's connection says, without its token. */
 export interface PodConnectionView {
   provider: PodProviderId
@@ -67,6 +96,10 @@ export interface PodConnectionView {
   submitMode: PodSubmitMode
   /** Whether a re-sync rewrites the store's prices from the service's. */
   syncPrices: boolean
+  /** With `automatic`: hours a paid order waits as a draft before it is confirmed; 0 confirms at once. */
+  sendDelayHours: number
+  /** How the service ships orders, where it lets the store choose. */
+  shippingMethod: PodShippingMethod
   /** Whether the service tells the store about shipments, or the store asks. */
   webhooks: 'registered' | 'polling'
   webhookDetail: string | null
@@ -83,6 +116,17 @@ export interface PodCatalogEntry {
   variantCount: number
   /** The store's product made from it, when it is already imported. */
   importedProductId: string | null
+}
+
+/** What the service charges the merchant to ship one of its products, by destination. */
+export interface PodShippingCost {
+  /** ISO 3166-1 alpha-2, or `REST_OF_THE_WORLD`. */
+  countries: string[]
+  /** The first unit of the product in a parcel. */
+  firstItemMinor: number
+  /** Each further unit in the same parcel. */
+  additionalItemMinor: number
+  currency: string
 }
 
 /** One imported variant: the store's id, the service's, and what the service charges for it. */
@@ -109,6 +153,10 @@ export interface PodProductLinkView {
   thumbnailUrl: string | null
   costCurrency: string
   variants: PodLinkedVariant[]
+  /** What the service charges to ship it with its standard method, when it says; the widest range per destination. */
+  shippingCosts: PodShippingCost[]
+  /** The service no longer has the product: the store's product was taken off sale. */
+  sourceGone: boolean
   importedAtMs: number
   syncedAtMs: number
   lastError: string | null
@@ -197,8 +245,9 @@ export const POD_ORDER_STATUS_LABELS: Record<PodOrderStatus, string> = {
 
 /**
  * The words of a description a service wrote in HTML, as the store's plain
- * text: paragraphs and line breaks kept, list items as lines, tags and
- * entities gone.
+ * text: paragraphs, headings and line breaks kept, list items as lines, a
+ * table's rows as lines with their cells apart (a size chart stays
+ * readable), tags and entities gone.
  */
 export function htmlToPlainText(html: string): string {
   const named: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' }
@@ -206,7 +255,11 @@ export function htmlToPlainText(html: string): string {
     .replace(/<\s*(script|style)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
     .replace(/<\s*br\s*\/?>/gi, '\n')
     .replace(/<\s*li[^>]*>/gi, '\n• ')
-    .replace(/<\s*\/\s*(p|div|li|ul|ol|h[1-6])\s*>/gi, '\n')
+    // A size table stays a table a shopper can read: one row a line, cells apart.
+    .replace(/<\s*\/\s*t[dh]\s*>\s*(?=<\s*t[dh][\s>])/gi, ' · ')
+    .replace(/<\s*\/\s*tr\s*>/gi, '\n')
+    .replace(/<\s*(h[1-6]|p|div|table|ul|ol)(\s[^>]*)?>/gi, '\n')
+    .replace(/<\s*\/\s*(p|div|li|ul|ol|h[1-6]|table)\s*>/gi, '\n')
     .replace(/<[^>]*>/g, '')
     .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (entity, code: string) => {
       if (code[0] === '#') {
@@ -216,8 +269,35 @@ export function htmlToPlainText(html: string): string {
       return named[code.toLowerCase()] ?? entity
     })
     .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
+}
+
+/** The longest search title and description the product editor allows. */
+export const POD_SEO_TITLE_MAX = 60
+export const POD_SEO_DESCRIPTION_MAX = 155
+
+function clip(text: string, max: number): string {
+  const flat = text.replace(/\s+/g, ' ').trim()
+  if (flat.length <= max) return flat
+  const cut = flat.slice(0, max - 1)
+  const space = cut.lastIndexOf(' ')
+  return `${(space > max * 0.6 ? cut.slice(0, space) : cut).replace(/[\s,.;:–—-]+$/, '')}…`
+}
+
+/**
+ * A search title and description for a product brought from a service,
+ * within the editor's limits: its name, and its description's opening words
+ * without the bullets. Only fills what the merchant left empty.
+ */
+export function podSeoFor(name: string, description: string): { title: string; description: string } {
+  const prose = description
+    .split('\n')
+    .map((line) => line.replace(/^•\s*/, '').trim())
+    .filter((line) => line && !line.includes(' · '))
+    .join(' ')
+  return { title: clip(name, POD_SEO_TITLE_MAX), description: clip(prose, POD_SEO_DESCRIPTION_MAX) }
 }
 
 /** Integer minor units from a decimal the service wrote as a string or number ("29.99"). */

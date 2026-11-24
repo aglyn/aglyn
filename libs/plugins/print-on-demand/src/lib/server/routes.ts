@@ -22,6 +22,8 @@ import { POD_API_ROUTES } from '../constants/api-routes'
 import { POD_COLLECTIONS } from '../constants/bundle-common'
 import {
   isPodProvider,
+  isPodShippingMethod,
+  podSendDelayHours,
   POD_PROVIDER_LABELS,
   POD_PROVIDERS,
   POD_TOKEN_HELP,
@@ -220,6 +222,12 @@ export async function settingsRoute(request: Request): Promise<Response> {
   const patch: Record<string, unknown> = { updatedAtMs: Date.now() }
   if ('submitMode' in gate.body) patch['submitMode'] = gate.body['submitMode'] === 'review' ? 'review' : 'automatic'
   if ('syncPrices' in gate.body) patch['syncPrices'] = gate.body['syncPrices'] === true
+  if ('sendDelayHours' in gate.body) patch['sendDelayHours'] = podSendDelayHours(gate.body['sendDelayHours'])
+  if ('shippingMethod' in gate.body) {
+    if (!isPodShippingMethod(gate.body['shippingMethod'])) return podError(400, 'Choose Standard, Priority, Express or Economy.')
+    if (provider !== 'printify') return podError(400, 'Printful chooses how it ships each order.')
+    patch['shippingMethod'] = gate.body['shippingMethod']
+  }
   await connectionRef(gate.hostId, provider).set(patch, { merge: true })
   const stored = await readConnection(gate.hostId, provider)
   return podJson({ connection: stored ? connectionView(stored) : null })
@@ -307,6 +315,42 @@ export async function importRoute(request: Request): Promise<Response> {
     )
   }
   return podJson({ results })
+}
+
+/**
+ * POST: link a product the store already has to one of the service's
+ * (`{ provider, sourceProductId, productId }`), so its paid orders are sent
+ * there. Nothing is copied: the product keeps its own words, photos, prices
+ * and address; its variants are paired by SKU, then by their choices.
+ */
+export async function linkRoute(request: Request): Promise<Response> {
+  if (request.method !== 'POST') return methodNotAllowed()
+  const gate = await podGate(request, { permission: 'printOnDemand.products' })
+  if (gate instanceof Response) return gate
+  const connection = await connected(gate, gate.body['provider'])
+  if (connection instanceof Response) return connection
+  const sourceProductId = String(gate.body['sourceProductId'] ?? '').trim()
+  const productId = String(gate.body['productId'] ?? '').trim()
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(sourceProductId)) return podError(400, `Choose the ${POD_PROVIDER_LABELS[connection.provider]} product.`)
+  if (!isDocumentId(productId)) return podError(400, 'Missing productId')
+  const store = await pluginProductCatalog()?.store(gate.hostId).catch(() => null)
+  const result = await importSourceProduct({
+    hostId: gate.hostId,
+    orgId: gate.orgId,
+    connection,
+    keyring: gate.keyring,
+    sourceProductId,
+    linkProductId: productId,
+    actorUid: gate.uid,
+    currency: String(store?.currency ?? 'USD').toUpperCase(),
+  }).catch((error): PodImportResult => ({
+    sourceProductId,
+    outcome: 'failed',
+    message: error instanceof Error ? error.message : 'The product could not be linked.',
+  }))
+  if (result.outcome === 'failed') return podError(409, result.message)
+  const found = (await readLinksForProducts(gate.hostId, [productId])).get(productId)
+  return podJson({ result, link: found ? linkView(found.id, found.link) : null })
 }
 
 /** GET: one page of the site's imported products, newest first. */

@@ -38,13 +38,17 @@ import {
   ListItemAvatar,
   ListItemText,
   Stack,
+  MenuItem,
   Switch,
+  TextField,
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import { POD_API_ROUTES } from '../constants/api-routes'
 import {
   POD_ORDER_STATUS_LABELS,
+  POD_SHIPPING_METHOD_LABELS,
+  POD_SHIPPING_METHODS,
   type PodConnectionView,
   type PodOrderView,
   type PodProductLinkView,
@@ -66,6 +70,15 @@ const help = (excerpt: string, anchor: '#connect' | '#import-products' | '#order
   pluginDocsHelp('printOnDemand', { anchor, excerpt })
 
 const PAGE_SIZE = 10
+
+/** The send delays offered, in hours. */
+const SEND_DELAYS = [0, 1, 2, 4, 8, 12, 24, 48, 72] as const
+
+function delayLabel(hours: number): string {
+  if (hours === 0) return 'As soon as it is paid'
+  if (hours % 24 === 0) return `${hours / 24} day${hours === 24 ? '' : 's'} after it is paid`
+  return `${hours} hour${hours === 1 ? '' : 's'} after it is paid`
+}
 
 function itemCount(part: PodOrderView): string {
   const count = part.lines.reduce((sum, line) => sum + line.quantity, 0)
@@ -236,7 +249,7 @@ function ConnectionSection(props: {
       help={help(
         connection.webhooks === 'registered'
           ? `${label} tells the store about every shipment as it happens.`
-          : `${label} is asked about each order every 15 minutes, so a shipment reaches the order within the hour.`,
+          : `${label} is asked about each open order every 15 minutes, so a shipment reaches the order within the half hour.`,
         '#shipments-and-tracking',
       )}
       contentGutterX
@@ -286,9 +299,47 @@ function ConnectionSection(props: {
         />
         <Typography variant="body2" color="text.secondary" sx={{ pl: 6, mt: -1 }}>
           {connection.submitMode === 'automatic'
-            ? `${label} starts making each order as soon as it is paid, and charges your ${label} account.`
+            ? connection.sendDelayHours > 0
+              ? `Each paid order waits at ${label} as a draft for ${delayLabel(connection.sendDelayHours).replace(' after it is paid', '')}, then ${label} starts making it and charges your ${label} account. An order canceled before then is canceled at ${label} and never made.`
+              : `${label} starts making each order as soon as it is paid, and charges your ${label} account.`
             : `Each paid order waits at ${label} as a draft until you confirm it on the order.`}
         </Typography>
+        {connection.submitMode === 'automatic' ? (
+          <TextField
+            select
+            size="small"
+            label="Send for production"
+            value={connection.sendDelayHours}
+            disabled={busy}
+            onChange={(event) => void save({ sendDelayHours: Number(event.target.value) })}
+            helperText="A short wait gives a buyer time to cancel or fix their address before anything is made."
+            sx={{ maxWidth: 360 }}
+          >
+            {SEND_DELAYS.map((hours) => (
+              <MenuItem key={hours} value={hours}>
+                {delayLabel(hours)}
+              </MenuItem>
+            ))}
+          </TextField>
+        ) : null}
+        {connection.provider === 'printify' ? (
+          <TextField
+            select
+            size="small"
+            label={`${label} shipping method`}
+            value={connection.shippingMethod}
+            disabled={busy}
+            onChange={(event) => void save({ shippingMethod: event.target.value })}
+            helperText={`How ${label} ships your orders and what it charges you for it. Not every product offers every method; ${label} refuses an order whose product does not.`}
+            sx={{ maxWidth: 360 }}
+          >
+            {POD_SHIPPING_METHODS.map((method) => (
+              <MenuItem key={method} value={method}>
+                {POD_SHIPPING_METHOD_LABELS[method]}
+              </MenuItem>
+            ))}
+          </TextField>
+        ) : null}
         <FormControlLabel
           control={
             <Switch checked={connection.syncPrices} disabled={busy} onChange={(event) => void save({ syncPrices: event.target.checked })} />

@@ -34,6 +34,8 @@ export const POD_API_ROUTES = {
   catalog: 'print-on-demand/catalog',
   /** POST: import or re-sync products into the store. */
   importProducts: 'print-on-demand/import',
+  /** POST: link a product the store already has to one of the service's, instead of importing a copy. */
+  linkProduct: 'print-on-demand/link',
   /** GET: one page of the site's imported products. */
   imported: 'print-on-demand/imported',
   /** POST: stop filling a product through the service; the product stays. */

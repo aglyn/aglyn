@@ -21,6 +21,8 @@ import type { Firestore } from 'firebase-admin/firestore'
 import { POD_COLLECTIONS } from '../constants/bundle-common'
 import {
   isPodProvider,
+  isPodShippingMethod,
+  podSendDelayHours,
   POD_PROVIDER_LABELS,
   type PodConnectionView,
   type PodLinkedVariant,
@@ -29,6 +31,8 @@ import {
   type PodOrderView,
   type PodProductLinkView,
   type PodProviderId,
+  type PodShippingCost,
+  type PodShippingMethod,
   type PodSubmitMode,
 } from '../model/print-on-demand'
 import type { PodCredentials } from '../providers/types'
@@ -89,6 +93,8 @@ export interface StoredPodConnection {
   sealedWebhookToken: string
   submitMode: PodSubmitMode
   syncPrices: boolean
+  sendDelayHours: number
+  shippingMethod: PodShippingMethod
   webhooks: 'registered' | 'polling'
   webhookDetail: string | null
   lastError: string | null
@@ -144,6 +150,8 @@ export function readStoredConnection(data: unknown): StoredPodConnection | null 
     sealedWebhookToken: String(record.sealedWebhookToken ?? ''),
     submitMode: record.submitMode === 'review' ? 'review' : 'automatic',
     syncPrices: record.syncPrices === true,
+    sendDelayHours: podSendDelayHours(record.sendDelayHours),
+    shippingMethod: isPodShippingMethod(record.shippingMethod) ? record.shippingMethod : 'standard',
     webhooks: record.webhooks === 'registered' ? 'registered' : 'polling',
     webhookDetail: record.webhookDetail ? String(record.webhookDetail) : null,
     lastError: record.lastError ? String(record.lastError) : null,
@@ -173,6 +181,8 @@ export function connectionView(connection: StoredPodConnection): PodConnectionVi
     currency: connection.currency,
     submitMode: connection.submitMode,
     syncPrices: connection.syncPrices,
+    sendDelayHours: connection.sendDelayHours,
+    shippingMethod: connection.shippingMethod,
     webhooks: connection.webhooks,
     webhookDetail: connection.webhookDetail,
     lastError: connection.lastError,
@@ -219,6 +229,9 @@ export interface StoredPodLink {
   thumbnailUrl: string | null
   costCurrency: string
   variants: PodLinkedVariant[]
+  shippingCosts: PodShippingCost[]
+  /** The service answered that it no longer has the product; the store's product was taken off sale. */
+  sourceGone: boolean
   importedByUid: string
   importedAtMs: number
   syncedAtMs: number
@@ -255,6 +268,15 @@ export function readStoredLink(data: unknown): StoredPodLink | null {
       retailMinor: Number(variant?.retailMinor) || 0,
       available: variant?.available !== false,
     })),
+    shippingCosts: (Array.isArray(record.shippingCosts) ? record.shippingCosts : [])
+      .map((cost: any) => ({
+        countries: (Array.isArray(cost?.countries) ? cost.countries : []).map(String),
+        firstItemMinor: Number(cost?.firstItemMinor) || 0,
+        additionalItemMinor: Number(cost?.additionalItemMinor) || 0,
+        currency: String(cost?.currency ?? 'USD'),
+      }))
+      .filter((cost: PodShippingCost) => cost.countries.length > 0),
+    sourceGone: record.sourceGone === true,
     importedByUid: String(record.importedByUid ?? ''),
     importedAtMs: Number(record.importedAtMs) || 0,
     syncedAtMs: Number(record.syncedAtMs) || 0,
@@ -274,6 +296,8 @@ export function linkView(id: string, link: StoredPodLink): PodProductLinkView {
     thumbnailUrl: link.thumbnailUrl,
     costCurrency: link.costCurrency,
     variants: link.variants,
+    shippingCosts: link.shippingCosts,
+    sourceGone: link.sourceGone,
     importedAtMs: link.importedAtMs,
     syncedAtMs: link.syncedAtMs,
     lastError: link.lastError,
@@ -301,7 +325,8 @@ export async function readLinksForProducts(hostId: string, productIds: readonly 
 /* ----------------------------------------------------------------- orders */
 
 /** What the job does next for an order's part at a service. */
-export type PodOrderWork = 'submit' | 'poll' | 'cancel' | null
+/** `confirm`: an automatic send waiting out the connection's delay, confirmed when it is due. */
+export type PodOrderWork = 'submit' | 'poll' | 'cancel' | 'confirm' | null
 
 export interface StoredPodOrderLine {
   lineIndex: number
@@ -391,7 +416,7 @@ export function readStoredPodOrder(data: unknown): StoredPodOrder | null {
     shipments: Array.isArray(record.shipments) ? (record.shipments as StoredPodShipment[]) : [],
     attempts: Number(record.attempts) || 0,
     lastError: record.lastError ? String(record.lastError) : null,
-    work: (['submit', 'poll', 'cancel'] as const).includes(record.work) ? record.work : null,
+    work: (['submit', 'poll', 'cancel', 'confirm'] as const).includes(record.work) ? record.work : null,
     dueAtMs: Number(record.dueAtMs) || 0,
     leaseUntilMs: Number(record.leaseUntilMs) || 0,
     createdAtMs: Number(record.createdAtMs) || 0,
