@@ -35,13 +35,48 @@ internal const val STAFF_CONSOLE_TITLE = "Staff console"
 internal fun staffConsoleAction(isStaff: Boolean, open: () -> Unit): (() -> Unit)? = if (isStaff) open else null
 
 /**
+ * The workspace directory: every workspace you belong to, pinned and recent first (the picker's workspace step), which the
+ * rail's "All workspaces" tile opens on a wide window. A phone has no rail, so its account sheet carries the same place as
+ * a row, one tap from your photo on every screen (AGL-4242).
+ */
+internal const val ALL_WORKSPACES_TITLE = "All workspaces"
+
+/** Opens the workspace directory: the picker, on its workspace step; nothing on screen changes until one is picked. */
+internal fun openAllWorkspaces(chrome: NavChromeState) {
+  chrome.closeMenus()
+  chrome.picker = PickerStep.WORKSPACE
+}
+
+/** Where a phone stood when it opened the staff list: Back from the list returns there. */
+internal data class StaffReturn(val top: String, val stack: List<Route>, val mode: NativeNavListId?)
+
+/**
  * Opens the staff list: on a wide window as the sidebar's mode, on its first row; on a phone as its list, the way a
- * Site settings or Workspace settings tile opens its mode. The list's header leads back to the everyday list.
+ * Site settings or Workspace settings tile opens its mode, remembering where you were so Back returns there. The list's
+ * header leads back to the everyday list.
  */
 internal fun openStaffConsole(chrome: NavChromeState, navigator: ShellNavigator, wide: Boolean, firstKey: String?) {
   chrome.closeMenus()
+  chrome.picker = null
+  if (!wide && !(chrome.settingsMode == STAFF_MODE && navigator.top == ShellNavigator.MENU)) {
+    chrome.staffReturn = StaffReturn(navigator.top, navigator.stack.toList(), chrome.settingsMode.takeIf { it != STAFF_MODE })
+  }
   chrome.settingsMode = STAFF_MODE
   if (wide) firstKey?.let { navigator.select(it) } else navigator.select(ShellNavigator.MENU)
+}
+
+/**
+ * Back on a phone's staff list: the place it was opened over, with its pushed screens and its settings mode. False when
+ * this is not the staff list or nothing was remembered (Back then goes Home, as before).
+ */
+internal fun leaveStaffConsole(chrome: NavChromeState, navigator: ShellNavigator): Boolean {
+  val back = chrome.staffReturn
+  if (chrome.settingsMode != STAFF_MODE || navigator.top != ShellNavigator.MENU || navigator.stack.isNotEmpty() || back == null) return false
+  chrome.staffReturn = null
+  chrome.settingsMode = back.mode
+  navigator.select(back.top)
+  back.stack.forEach(navigator::push)
+  return true
 }
 
 /** The two steps of the scope picker: a workspace, then one of its sites (or the whole workspace). */
@@ -79,6 +114,8 @@ internal class NavChromeState(private val device: KeyValueStore) {
   var areaSwitcher by mutableStateOf(false)
   /** The phone's Tab bar sheet: the pinned areas to remove, reorder and add (AGL-4006). */
   var tabBarSheet by mutableStateOf(false)
+  /** Where a phone opened the staff list from, so Back from the list returns there. */
+  internal var staffReturn: StaffReturn? = null
   /** The workspace waiting on "Pinned is full. Replace one?". */
   var pinFullFor by mutableStateOf<String?>(null)
   /** The workspace whose color picker is open. */

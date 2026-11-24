@@ -170,6 +170,7 @@ private struct WorkspacePickerRow: View {
 struct WorkspacePickerList: View {
   @Environment(AppModel.self) private var model
   @Environment(ShellNavigation.self) private var navigation
+  @Environment(\.dismiss) private var dismiss
   let twoStep: Bool
   let picked: (String) -> Void
   @State private var query = ""
@@ -244,6 +245,22 @@ struct WorkspacePickerList: View {
     let matches = matching(filtered(workspace) ?? workspace.orgs)
     let narrowed = filtered(workspace)
     return List {
+      // A phone's switcher is on every tab's top bar: for staff it also leads to the staff list (the rail's shield on
+      // iPad and the Mac), which opens over the screen you were on.
+      if twoStep && StaffConsole.offered(model.claims) && matches == nil {
+        Section {
+          Button {
+            dismiss()
+            StaffConsole.open(model: model, navigation: navigation)
+          } label: {
+            AglynRow(StaffConsole.title, systemImage: StaffConsole.systemImage) {
+              Image(systemName: "chevron.forward").font(.caption).foregroundStyle(.tertiary)
+            }
+          }
+          .buttonStyle(.aglynRow)
+          .accessibilityIdentifier("picker-staff-console")
+        }
+      }
       if let matches {
         Section(matches.isEmpty ? "No workspace matches" : "Workspaces") {
           ForEach(matches) { row($0) }

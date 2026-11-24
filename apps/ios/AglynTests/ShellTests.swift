@@ -173,7 +173,7 @@ final class ShellTests: XCTestCase {
   }
 
   /// On iPad and the Mac the Staff console row opens the staff list as the sidebar's mode, on its first row; on a phone
-  /// its list is pushed on Home. Its way back is the everyday list, from Home.
+  /// its list is pushed over the screen you are on, so Back returns there. Its header leads back to the everyday list.
   func testTheStaffConsoleOpensTheStaffListAndLeadsBack() {
     let wide = ShellNavigation()
     wide.select(.plugin("commerce.orders"))
@@ -187,14 +187,46 @@ final class ShellTests: XCTestCase {
     let phone = ShellNavigation()
     phone.compact = true
     phone.select(.plugin("commerce.orders"))
+    phone.push(.screen("commerce.order", ["order": "o-1041"]))
     StaffConsole.open(phone, first: .plugin("core.staff.overview"))
     XCTAssertEqual(phone.mode, .admin)
-    XCTAssertEqual(phone.section, .home)
-    XCTAssertEqual(phone.paths[.home], [.modeList])
+    XCTAssertEqual(phone.section, .plugin("commerce.orders"), "the staff list opens where you are")
+    XCTAssertEqual(phone.paths[.plugin("commerce.orders")], [.screen("commerce.order", ["order": "o-1041"]), .modeList])
+    // Back (the stack's pop) returns to the order it was opened over.
+    phone.paths[.plugin("commerce.orders")]?.removeLast()
+    XCTAssertEqual(phone.paths[.plugin("commerce.orders")], [.screen("commerce.order", ["order": "o-1041"])])
+
+    // The header's way back leads to the everyday list, from Home.
+    StaffConsole.open(phone, first: .plugin("core.staff.overview"))
     phone.push(.screen("core.staff.orgs", [:]))
     phone.leaveMode()
     XCTAssertEqual(phone.mode, .main)
-    XCTAssertEqual(phone.paths[.home] ?? [], [])
+    XCTAssertEqual(phone.section, .home)
+  }
+
+  /// Opened from a settings list (Workspace settings pushed on Home), the staff list takes that list's place: one list in
+  /// one mode at a time, so Back never shows the settings rows drawn as the staff list.
+  func testTheStaffConsoleTakesASettingsListsPlaceOnAPhone() {
+    let phone = ShellNavigation()
+    phone.compact = true
+    phone.mode = .workspaceSettings
+    phone.section = .home
+    phone.push(.modeList)
+    phone.push(.screen("core.team", [:]))
+    StaffConsole.open(phone, first: .plugin("core.staff.overview"))
+    XCTAssertEqual(phone.mode, .admin)
+    XCTAssertEqual(phone.paths[.home], [.modeList])
+  }
+
+  /// A phone's account sheet and the rail's tile open the same place: the switcher on its workspace step.
+  func testAllWorkspacesOpensTheSwitcherOnItsWorkspaceStep() {
+    let phone = ShellNavigation()
+    phone.compact = true
+    phone.select(.plugin("commerce.orders"))
+    AllWorkspaces.open(phone)
+    XCTAssertEqual(phone.picker, .workspace)
+    XCTAssertEqual(phone.section, .plugin("commerce.orders"), "nothing on screen changes until a workspace is picked")
+    XCTAssertEqual(AllWorkspaces.title, "All workspaces")
   }
 
   /// Every row the nav manifest lists opens a screen this app has (AGL-3945): a row with none would be a dead end.
