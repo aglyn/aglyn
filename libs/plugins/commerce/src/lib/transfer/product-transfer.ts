@@ -19,6 +19,7 @@ import { validateProductForSave } from '../model/product-card-rules'
 import {
   buildTransferPlan,
   isBlankTransferValue,
+  TRANSFER_FILE_SAMPLE_ROW,
   TRANSFER_SYSTEM_GROUP,
   TRANSFER_WARNING_CLASSES,
   type BuildTransferPlanInput,
@@ -63,6 +64,22 @@ import {
   writeAddOnCell,
   writeCheckInCell,
 } from './product-register-cells'
+import {
+  PRODUCT_IMPORT_FOLDER_NAME,
+  PRODUCT_IMPORT_IMAGES_MAX,
+  productImageCell,
+  productImageList,
+  productImageSkipDetail,
+  type ProductImageSkip,
+} from './product-images'
+import {
+  adaptProductSourceRows,
+  SOURCE_ALIAS_DICTIONARIES,
+  SOURCE_GROUP_KEY,
+  SOURCE_SKIP_KEY,
+  type ProductFileSource,
+  type SourceNote,
+} from './product-sources'
 
 /*
  * PRODUCTS ON THE TRANSFER FRAMEWORK (AGL-3531).
@@ -145,6 +162,15 @@ export const PRODUCT_FIELD = {
   weightGrams: 'weightGrams',
   variantImage: 'variantImage',
   variantCheckIn: 'variantCheckIn',
+  images: 'images',
+  sourceProductId: 'sourceProductId',
+  rowType: 'rowType',
+  priceSurcharge: 'priceSurcharge',
+  discountType: 'discountType',
+  discountAmount: 'discountAmount',
+  salePrice: 'salePrice',
+  onSale: 'onSale',
+  sourceType: 'sourceType',
   priceFrom: 'priceFrom',
   totalInventory: 'totalInventory',
   soldOut: 'soldOut',
@@ -216,6 +242,7 @@ export const PRODUCT_TRANSFER_GROUPS: readonly TransferFieldGroup[] = [
   { id: 'media', label: 'Images' },
   { id: 'selling', label: 'Selling' },
   { id: 'seo', label: 'Search listing' },
+  { id: 'switching', label: 'From another store' },
   { id: 'computed', label: 'Computed' },
 ]
 
@@ -409,7 +436,15 @@ export const PRODUCT_STANDARD_FIELDS: readonly TransferField[] = [
     group: 'media',
     type: 'url',
     aliases: ['image url', 'image src', 'photo', 'picture'],
-    description: 'One image per row; the first row’s is the photo the storefront leads with.',
+    description: 'One image per row; the first row’s is the photo the storefront leads with. Copied into your media library.',
+  },
+  {
+    id: F.images,
+    label: 'Images',
+    group: 'media',
+    type: 'longText',
+    aliases: ['image urls', 'image links', 'photos'],
+    description: 'Several photo addresses in one cell, split by semicolons or spaces. Each is copied into your media library.',
   },
   {
     id: F.seoTitle,
@@ -472,6 +507,45 @@ export const PRODUCT_STANDARD_FIELDS: readonly TransferField[] = [
     aliases: ['add ons', 'addons', 'modifiers', 'modifier groups'],
     description: 'Groups split by semicolons: Milk (at least 1): Whole, Oat +$0.75; Extras (at most 3, register only): Extra shot +$1.00.',
   },
+  // Read from another store's file (AGL-4245, `product-sources.ts`); never stored, so blank on export.
+  {
+    id: F.salePrice,
+    label: 'Sale price',
+    group: 'switching',
+    type: 'currency',
+    description: 'Below the price, it becomes the price and the price becomes the compare-at price. With On sale, only when On sale is yes.',
+  },
+  { id: F.onSale, label: 'On sale', group: 'switching', type: 'boolean', description: 'Whether Sale price is used.' },
+  {
+    id: F.sourceProductId,
+    label: 'Old store product ID',
+    group: 'switching',
+    type: 'text',
+    description: 'Puts the rows of one product together in a Wix or Squarespace file. Not stored.',
+  },
+  {
+    id: F.sourceType,
+    label: 'Old store product type',
+    group: 'switching',
+    type: 'text',
+    description: 'Physical, Digital, Service or Gift card, in a Squarespace file. Gift cards are skipped.',
+  },
+  { id: F.rowType, label: 'Row type', group: 'switching', type: 'text', description: 'Product or Variant, in a Wix file.' },
+  {
+    id: F.priceSurcharge,
+    label: 'Price surcharge',
+    group: 'switching',
+    type: 'currency',
+    description: 'What a Wix variant adds to the product’s price.',
+  },
+  {
+    id: F.discountType,
+    label: 'Discount type',
+    group: 'switching',
+    type: 'text',
+    description: 'Percent or Amount, in a Wix file: the discounted price becomes the price, and the full price the compare-at price.',
+  },
+  { id: F.discountAmount, label: 'Discount', group: 'switching', type: 'number', description: 'The Wix discount, with Discount type.' },
 ]
 
 export const PRODUCT_DERIVED_FIELDS: readonly TransferField[] = [
@@ -545,7 +619,11 @@ export const SHOPIFY_PRODUCT_COLUMNS: Readonly<Record<string, string>> = {
   [F.status]: 'Status',
 }
 
-/** Shopify's export headers, so its file maps column for column. */
+/**
+ * Shopify's export headers, so its file maps column for column, and Wix's
+ * and Squarespace's (AGL-4245), whose files are then read by their header
+ * signature (`product-sources.ts`).
+ */
 export const PRODUCT_ALIAS_DICTIONARIES: readonly TransferAliasDictionary[] = [
   {
     source: 'Shopify',
@@ -553,6 +631,7 @@ export const PRODUCT_ALIAS_DICTIONARIES: readonly TransferAliasDictionary[] = [
       Object.entries(SHOPIFY_PRODUCT_COLUMNS).map(([fieldId, column]) => [fieldId, [column]]),
     ),
   },
+  ...SOURCE_ALIAS_DICTIONARIES,
 ]
 
 /**
@@ -727,6 +806,7 @@ export function productExportRows(
       if (fieldId === 'id') row[fieldId] = id
       else if (fieldId === F.handle) row[fieldId] = record[F.handle]
       else if (fieldId === F.image) row[fieldId] = images[index] ?? null
+      else if (fieldId === F.images) row[fieldId] = index === 0 && images.length ? images.join('; ') : null
       else if (variantFields.has(fieldId)) row[fieldId] = variant ? (variant[fieldId] ?? null) : null
       else row[fieldId] = index === 0 ? (record[fieldId] ?? null) : null
     }
@@ -787,6 +867,8 @@ export interface ProductPlanContext {
   slugTaken?(slug: string): boolean
   /** How many products the site may still create; unbounded when absent. */
   maxCreates?: number
+  /** The other store the file came from, by its headers (`productFileSource`); `null` for Shopify's or any other. */
+  source?: ProductFileSource | null
 }
 
 const text = (value: unknown): string => (value === null || value === undefined ? '' : String(value).trim())
@@ -887,6 +969,8 @@ const hasAny = (values: Readonly<Record<string, unknown>>, fieldIds: readonly st
 
 /** Which product a row belongs to in the file. */
 function groupKey(row: TransferPlanRow, position: number): string {
+  const grouped = text(row.values[SOURCE_GROUP_KEY])
+  if (grouped) return `g:${grouped}`
   const handle = text(row.values[F.handle])
   if (handle) return `h:${handle}`
   const id = text(row.values['id'])
@@ -1038,6 +1122,111 @@ export function variantFromRecord(
   }
 }
 
+/*------------------------------------------
+ * Photos (AGL-4245)
+ *-----------------------------------------*/
+
+/** The photo cells a row carries: its Image, and every address its Images cell lists. */
+function imageCellsOf(values: Readonly<Record<string, unknown>>): string[] {
+  const one = values[F.image]
+  return [
+    ...(Array.isArray(one) ? one.map(text) : [text(one)]),
+    ...productImageList(values[F.images]),
+  ].filter(Boolean)
+}
+
+/**
+ * Which photos a file's rows copy, keep or skip, in file order: the first
+ * {@link PRODUCT_IMPORT_IMAGES_MAX} distinct addresses are copied, and every
+ * cell left out is kept to report.
+ */
+class PhotoPlan {
+  readonly copying = new Set<string>()
+  readonly skipped: Array<{ row: number; fieldId: string; value: string; skip: ProductImageSkip }> = []
+
+  /** The value a cell is written as (its address, or the library file it names); `null` when it is skipped. */
+  keep(raw: unknown, row: number, fieldId: string): string | null {
+    const cell = productImageCell(raw)
+    if (!cell) return null
+    if (cell.kind === 'stored') return cell.value
+    if (cell.kind === 'skip') {
+      this.skipped.push({ row, fieldId, value: cell.value, skip: cell.skip })
+      return null
+    }
+    if (!this.copying.has(cell.url) && this.copying.size >= PRODUCT_IMPORT_IMAGES_MAX) {
+      this.skipped.push({ row, fieldId, value: cell.url, skip: 'overLimit' })
+      return null
+    }
+    this.copying.add(cell.url)
+    return cell.url
+  }
+}
+
+/** The addresses the written rows of a plan copy, once each. */
+export function productPlanPhotoUrls(rows: readonly PlannedTransferRow[]): string[] {
+  const urls = new Set<string>()
+  for (const row of rows) {
+    if (row.verdict !== 'create' && row.verdict !== 'update') continue
+    for (const change of row.diff) {
+      if (change.fieldId !== F.image && change.fieldId !== F.variantImage) continue
+      const values = Array.isArray(change.after) ? change.after : [change.after]
+      for (const value of values) {
+        const cell = productImageCell(value)
+        if (cell?.kind === 'copy') urls.add(cell.url)
+      }
+    }
+  }
+  return [...urls]
+}
+
+/**
+ * The dry run's word on photos and on how another store's file was read: a
+ * `screening` warning saying how many photos are copied and where, each
+ * photo that is not and why, and each note the file's reading left. Only a
+ * photo left out or a note needs "I understand"; a count alone does not.
+ */
+function photoScreening(copies: number, photos: PhotoPlan, notes: readonly SourceNote[]): TransferWarning | null {
+  const samples: TransferWarningSample[] = []
+  if (copies) {
+    samples.push({
+      row: TRANSFER_FILE_SAMPLE_ROW,
+      fieldId: F.image,
+      value: copies.toLocaleString('en-US'),
+      detail: `Copies ${copies.toLocaleString('en-US')} photo${copies === 1 ? '' : 's'} into your media library, in a folder named "${PRODUCT_IMPORT_FOLDER_NAME}", so ${copies === 1 ? 'it keeps' : 'they keep'} showing after your old store closes.`,
+    })
+  }
+  const skips = photos.skipped.length
+  if (skips) {
+    samples.push({
+      row: TRANSFER_FILE_SAMPLE_ROW,
+      fieldId: F.image,
+      value: skips.toLocaleString('en-US'),
+      detail: `${skips.toLocaleString('en-US')} photo${skips === 1 ? ' is' : 's are'} not copied. Add ${skips === 1 ? 'it' : 'them'} on the product after the import.`,
+    })
+  }
+  for (const note of notes) {
+    samples.push({
+      row: note.row,
+      ...(note.fieldId ? { fieldId: note.fieldId } : {}),
+      ...(note.value ? { value: note.value } : {}),
+      detail: note.detail,
+    })
+  }
+  for (const skip of photos.skipped.slice(0, 5)) {
+    samples.push({ row: skip.row, fieldId: skip.fieldId, value: skip.value, detail: productImageSkipDetail(skip.skip) })
+  }
+  if (!samples.length) return null
+  const rows = new Set([...photos.skipped.map((skip) => skip.row), ...notes.map((note) => note.row)].filter((row) => row >= 0))
+  return {
+    class: 'screening',
+    count: copies + skips + notes.length,
+    rows: rows.size,
+    fieldIds: [...new Set(samples.map((sample) => sample.fieldId).filter((id): id is string => Boolean(id)))],
+    samples,
+    requiresAcknowledgement: skips > 0 || notes.length > 0,
+  }
+}
+
 /** The fields a new product is refused without. */
 const PRODUCT_PLAN_FIELDS = (fields: readonly TransferField[]) =>
   fields
@@ -1053,7 +1242,17 @@ const VARIANT_PLAN_FIELDS = (fields: readonly TransferField[]) =>
  * folded back into one verdict per file row (see the block header).
  */
 export function planProductTransfer(input: BuildTransferPlanInput, context: ProductPlanContext): TransferPlan {
-  const rows = input.rows.map(normalizeRow)
+  // Another store's file is read into this layout first (AGL-4245, `product-sources.ts`).
+  const adapted = adaptProductSourceRows(input.rows, context.source ?? null)
+  const photos = new PhotoPlan()
+  const rows = adapted.rows.map(normalizeRow).map((row): TransferPlanRow => {
+    if (isBlankTransferValue(row.values[F.variantImage])) return row
+    const values = { ...row.values }
+    const kept = photos.keep(values[F.variantImage], row.index, F.variantImage)
+    if (kept) values[F.variantImage] = kept
+    else delete values[F.variantImage]
+    return { ...row, values }
+  })
   const tally = new Tally()
 
   // The groups, in the order their first rows appear.
@@ -1064,7 +1263,25 @@ export function planProductTransfer(input: BuildTransferPlanInput, context: Prod
     group.positions.push(position)
     groups.set(key, group)
   })
-  const ordered = [...groups.values()]
+  const out: ProductPlannedRow[] = new Array(rows.length)
+  // A product the file's own store says is not one (a Squarespace gift card) is skipped whole.
+  const ordered = [...groups.values()].filter((group) => {
+    const first = rows[group.positions[0] as number] as TransferPlanRow
+    if (!first.values[SOURCE_SKIP_KEY]) return true
+    for (const position of group.positions) {
+      out[position] = {
+        index: (rows[position] as TransferPlanRow).index,
+        verdict: 'skip',
+        recordId: null,
+        reason: 'resourceRule',
+        diff: [],
+        heldBack: [],
+        warnings: ['screening'],
+        match: input.matches[position] ?? ({ kind: 'new' } as RowMatchOutcome),
+      }
+    }
+    return false
+  })
 
   // The product half: each group's first row, with the group's images and option names.
   const leaders = ordered.map((group): TransferPlanRow => {
@@ -1072,9 +1289,13 @@ export function planProductTransfer(input: BuildTransferPlanInput, context: Prod
     const values = pick(first.values, [...PRODUCT_LEVEL_FIELDS, 'id'])
     const images: string[] = []
     for (const position of group.positions) {
-      const url = text(rows[position]?.values[F.image])
-      if (url && !images.includes(url)) images.push(url)
+      const row = rows[position] as TransferPlanRow
+      for (const raw of imageCellsOf(row.values)) {
+        const kept = photos.keep(raw, row.index, F.image)
+        if (kept && !images.includes(kept)) images.push(kept)
+      }
     }
+    // A product whose every photo is skipped keeps the photos it has.
     if (images.length) values[F.image] = images
     else delete values[F.image]
     OPTION_NAME_FIELDS.forEach((fieldId) => {
@@ -1119,7 +1340,6 @@ export function planProductTransfer(input: BuildTransferPlanInput, context: Prod
   tally.merge(productPlan.warnings)
 
   const variantFields = VARIANT_PLAN_FIELDS(input.fields)
-  const out: ProductPlannedRow[] = new Array(rows.length)
   // Slugs this plan gives new products, so two new ones never share one.
   const handedOut = new Set<string>()
 
@@ -1428,7 +1648,10 @@ export function planProductTransfer(input: BuildTransferPlanInput, context: Prod
 
   const summary = { create: 0, update: 0, unchanged: 0, skip: 0, fail: 0, total: out.length }
   for (const row of out) summary[row.verdict] += 1
-  const warnings = tally.list(WARNING_ORDER)
+  const screening = photoScreening(productPlanPhotoUrls(out).length, photos, adapted.notes)
+  const warnings = [...tally.list(WARNING_ORDER), ...(screening ? [screening] : [])].sort(
+    (a, b) => WARNING_ORDER.indexOf(a.class) - WARNING_ORDER.indexOf(b.class),
+  )
   return {
     rows: out,
     summary,

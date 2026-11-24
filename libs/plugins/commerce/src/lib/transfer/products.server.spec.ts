@@ -46,6 +46,7 @@ import type {
   TransferApplyWriter,
   TransferResourceContext,
 } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
+import type { PluginMediaIngest } from '@aglyn/aglyn/plugin-manager/plugin-media-ingest'
 
 let fake: QueryFakeFirestore
 let mockOrg: Record<string, unknown> = { plan: 'pro' }
@@ -488,5 +489,126 @@ describe('add-ons, check-in and quick keys (AGL-4060)', () => {
     expect(applied.results[0]).toMatchObject({ outcome: 'failed', reason: 'refusedValue' })
     expect(applied.results[0]?.message).toMatch(/121 combinations/)
     expect((fake.read(`${HOST}/products/wide`) as Record<string, unknown>)['modifierGroups']).toBeUndefined()
+  })
+})
+
+describe('photos copied into the media library (AGL-4245)', () => {
+  const copied = new Map<string, string>()
+  const removed: string[] = []
+
+  /** A media library door in memory: what it stores, finds by key, and removes on undo. */
+  function library(failing: readonly string[] = []) {
+    const stored = new Map<string, { key: string; url: string }>()
+    const ingest: PluginMediaIngest = {
+      ingest: async (request) => {
+        const mediaId = `m${stored.size + 1}`
+        stored.set(mediaId, { key: request.importedFrom?.key ?? '', url: request.importedFrom?.url ?? '' })
+        expect(request.folderId).toBe('imported-folder')
+        return { ok: true, mediaId, src: `media:h1/${mediaId}` }
+      },
+      findStockPhoto: async () => null,
+      findImportedPhoto: async ({ sourceKey }) => {
+        const found = [...stored].find(([, entry]) => entry.key === sourceKey)
+        return found ? { mediaId: found[0], src: `media:h1/${found[0]}` } : null
+      },
+      ensureFolder: async () => 'imported-folder',
+      removeImportedPhoto: async ({ mediaId, sourceKey }) => {
+        if (stored.get(mediaId)?.key !== sourceKey) return false
+        stored.delete(mediaId)
+        removed.push(mediaId)
+        return true
+      },
+    }
+    const fetchImage = async (url: string) => {
+      copied.set(url, (copied.get(url) ?? '') + 'x')
+      return failing.includes(url)
+        ? { ok: false, contentType: '', refusal: 'http-status' as const, status: 404 }
+        : { ok: true, data: new Uint8Array([1, 2, 3]), contentType: 'image/jpeg', refusal: null }
+    }
+    return { ingest, stored, deps: { ingest, fetch: fetchImage } }
+  }
+
+  beforeEach(() => {
+    copied.clear()
+    removed.length = 0
+  })
+
+  const file = [
+    'Handle,Title,Option1 Name,Option1 Value,Variant SKU,Variant Price,Image Src,Variant Image',
+    'kettle,Kettle,Color,Red,K-R,30,https://cdn.oldstore.test/kettle.jpg,https://cdn.oldstore.test/kettle-red.jpg',
+    'kettle,,,Blue,K-B,30,https://cdn.oldstore.test/gone.jpg,',
+    'teapot,Teapot,,,T-1,25,https://cdn.oldstore.test/kettle.jpg,',
+  ].join('\n')
+
+  it('stores each photo once and names the stored file on the product and variant; a missing one is noted, never a failure', async () => {
+    const media = library(['https://cdn.oldstore.test/gone.jpg'])
+    const plan = await planFile(file)
+    const rows = plan.rows as ProductPlannedRow[]
+    const writer = memoryWriter()
+    const writes = rows.filter((row) => row.verdict === 'create' || row.verdict === 'update')
+    const applied = await applyProducts(ctx, { jobId: 'job-1', index: 0, start: 0, end: rows.length, rows: writes }, writer, fake as never, media.deps)
+    expect(applied.results.map((result) => result.outcome)).toEqual(['created', 'created', 'created'])
+
+    const kettle = fake.read(`${HOST}/products/${applied.results[0]?.recordId}`) as Record<string, any>
+    expect(kettle['mediaUrls']).toEqual(['media:h1/m1'])
+    expect(kettle['imageUrl']).toBe('media:h1/m1')
+    expect(kettle['variants'].map((variant: any) => variant.imageUrl)).toEqual(['media:h1/m2', undefined])
+    expect(applied.results[0]?.message).toMatch(
+      /^1 photo of "Kettle" could not be copied: https:\/\/cdn\.oldstore\.test\/gone\.jpg \(the old store no longer has it\)\. The product was saved without it/,
+    )
+    // The teapot shares the kettle's photo: one copy, one fetch.
+    const teapot = fake.read(`${HOST}/products/${applied.results[2]?.recordId}`) as Record<string, any>
+    expect(teapot['mediaUrls']).toEqual(['media:h1/m1'])
+    expect(applied.results[2]?.message).toBeUndefined()
+    expect(copied.get('https://cdn.oldstore.test/kettle.jpg')).toBe('x')
+    expect(media.stored.size).toBe(2)
+
+    // Undo removes what the import stored, and nothing else.
+    media.stored.set('owner-upload', { key: 'upload', url: '' })
+    const reverted = await revertProducts(ctx, { jobId: 'job-1', chunk: 0, entries: applied.undo }, undefined, fake as never, media.deps)
+    expect(reverted.conflicts).toEqual([])
+    expect(removed.sort()).toEqual(['m1', 'm2'])
+    expect([...media.stored.keys()]).toEqual(['owner-upload'])
+  })
+
+  it('keeps a stored photo another live product still shows, and one a record kept on undo stored', async () => {
+    const media = library()
+    const plan = await planFile(file)
+    const rows = plan.rows as ProductPlannedRow[]
+    const writes = rows.filter((row) => row.verdict === 'create')
+    const applied = await applyProducts(ctx, { jobId: 'job-1', index: 0, start: 0, end: rows.length, rows: writes }, memoryWriter(), fake as never, media.deps)
+    // The owner used the kettle's photo on the lamp since.
+    const lamp = fake.read(`${HOST}/products/lamp`) as Record<string, unknown>
+    fake.seed(`${HOST}/products/lamp`, { ...lamp, mediaUrls: ['media:h1/m1'] })
+    await revertProducts(ctx, { jobId: 'job-1', chunk: 0, entries: applied.undo }, undefined, fake as never, media.deps)
+    expect(removed.sort()).toEqual(['m2', 'm3'])
+    expect(media.stored.has('m1')).toBe(true)
+  })
+
+  it('reuses what a first import stored when the same file comes in again', async () => {
+    const media = library()
+    const first = await planFile(file)
+    const firstRows = (first.rows as ProductPlannedRow[]).filter((row) => row.verdict === 'create')
+    await applyProducts(ctx, { jobId: 'job-1', index: 0, start: 0, end: 3, rows: firstRows }, memoryWriter(), fake as never, media.deps)
+    const fetchedOnce = new Map(copied)
+    const again = await planFile(file, { fieldDefault: { mode: 'overwrite', blank: 'leave' } })
+    const againRows = (again.rows as ProductPlannedRow[]).filter((row) => row.verdict === 'update')
+    expect(againRows.length).toBeGreaterThan(0)
+    const applied = await applyProducts(ctx, { jobId: 'job-2', index: 0, start: 0, end: 3, rows: againRows }, memoryWriter(), fake as never, media.deps)
+    expect(applied.results.every((result) => result.outcome === 'updated')).toBe(true)
+    expect(copied).toEqual(fetchedOnce)
+    expect(media.stored.size).toBe(3)
+    // Nothing the second import stored, so its undo removes nothing.
+    expect(applied.undo.some((entry) => entry.extras)).toBe(false)
+  })
+
+  it('stops at a row whose photos would not finish in time, and writes it on the next pass', async () => {
+    const media = library()
+    const plan = await planFile(file)
+    const rows = (plan.rows as ProductPlannedRow[]).filter((row) => row.verdict === 'create')
+    const short = { ...memoryWriter(), timeLeftMs: () => 5_000 }
+    const applied = await applyProducts(ctx, { jobId: 'job-1', index: 0, start: 0, end: 3, rows }, short, fake as never, media.deps)
+    expect(applied.results).toEqual([])
+    expect(copied.size).toBe(0)
   })
 })
