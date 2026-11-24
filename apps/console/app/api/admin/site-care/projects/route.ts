@@ -34,6 +34,7 @@ import {
   reverseSiteCareProjectInvoice,
   sendSiteCareProjectInvoice,
 } from '@aglyn/tenant-data-admin/server/site-care-projects'
+import { readWorkspaceBuildFees } from '@aglyn/tenant-data-admin/server/build-fees'
 import { SiteCareError } from '@aglyn/tenant-data-admin/server/site-care-requests'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 
@@ -78,9 +79,19 @@ async function handler(request: Request): Promise<Response> {
     if (!orgId) return Response.json({ error: 'Missing orgId' }, { status: 400 })
 
     if (method === 'GET') {
-      const [projects, billing] = await Promise.all([readSiteCareProjects(firestore, orgId), readOrgBilling(orgId)])
+      const [projects, billing, buildFees] = await Promise.all([
+        readSiteCareProjects(firestore, orgId),
+        readOrgBilling(orgId),
+        // The website build fees the plan already carries (AGL-4244), for the
+        // warning before an invoice for the same build goes out. A warning
+        // only, so a failed read answers none rather than failing the card.
+        readWorkspaceBuildFees(firestore, orgId).catch((error) => {
+          console.error('[site-care/projects] build fees unreadable', error)
+          return []
+        }),
+      ])
       const customerId = String((billing as { stripeCustomerId?: unknown }).stripeCustomerId ?? '')
-      return Response.json({ projects, canInvoice: Boolean(customerId) }, { status: 200 })
+      return Response.json({ projects, canInvoice: Boolean(customerId), buildFees }, { status: 200 })
     }
 
     if (method !== 'POST') return Response.json({ error: 'Method not allowed' }, { status: 405 })

@@ -58,6 +58,8 @@ import {
   StaffBundleFields,
   type BundleDraft,
 } from './staff-bundle-fields.component'
+import { StaffBuildFeeFields } from './staff-build-fee-fields.component'
+import { buildFeeDraftProblem, describeBuildFee } from '@aglyn/aglyn/app-utils/build-fee'
 
 /** A domain chosen with the owner, as staff type it from the registrar's search. */
 export interface BundleDomainDraft {
@@ -332,6 +334,8 @@ interface MintedLink {
   expiresAt: number
   summary: string
   domainLine: string | null
+  /** The build fee the link carries (AGL-4244), as the owner reads it. */
+  buildFeeLine: string | null
 }
 
 export interface StaffBundleLinkActionsProps {
@@ -355,7 +359,7 @@ export function StaffBundleLinkActions(props: StaffBundleLinkActionsProps) {
   const [busy, setBusy] = useState(false)
   const [shown, setShown] = useState<MintedLink | null>(null)
   const domainProblem = bundleDomainProblem(domain)
-  const blocked = disabledReason || domainProblem
+  const blocked = disabledReason || domainProblem || buildFeeDraftProblem(draft.buildFee)
 
   const mint = async (): Promise<MintedLink | null> => {
     setBusy(true)
@@ -393,6 +397,7 @@ export function StaffBundleLinkActions(props: StaffBundleLinkActionsProps) {
           coupon: payload.intent?.coupon ?? null,
         }),
         domainLine: payload.domain ? bundleDomainLine(payload.domain) : null,
+        buildFeeLine: payload.buildFee ? describeBuildFee(payload.buildFee) : null,
       }
     } finally {
       setBusy(false)
@@ -474,6 +479,11 @@ export function StaffBundleLinkActions(props: StaffBundleLinkActionsProps) {
                   {`Domain: ${shown.domainLine}`}
                 </Typography>
               ) : null}
+              {shown.buildFeeLine ? (
+                <Typography variant="body2" color="text.secondary">
+                  {`${shown.buildFeeLine}, charged with the first payment, plus sales tax`}
+                </Typography>
+              ) : null}
               <TextField
                 size="small"
                 label="Link"
@@ -551,6 +561,9 @@ export function StaffBundleLinkCard({ orgId, sites, subscriptionLive, build }: S
           disabled={!!disabledReason}
         />
         {disabledReason ? null : <ClientBuildOwnDomainNote build={build} />}
+        {disabledReason ? null : (
+          <StaffBuildFeeFields orgId={orgId} draft={draft} onChange={setDraft} />
+        )}
       </Stack>
     </CardDisplay>
   )

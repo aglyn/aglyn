@@ -908,6 +908,9 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             // same invoice so the total shown is the total charged. Aglyn AI
             // credits ride as a number of blocks (AGL-4144).
             addons: fitBundleAddonsToPlan(bundleAddons, targetPlan).addons,
+            // The link the owner opened (AGL-4244): the server reads its
+            // build fee from the record, never a figure from here.
+            ...(bundleLinkId ? { bundleLinkId } : {}),
           }),
         })
         const payload = await response.json().catch(() => ({}))
@@ -976,7 +979,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
         return null
       }
     },
-    [user, orgId, interval, bundleAddons, enqueueSnackbar],
+    [user, orgId, interval, bundleAddons, bundleLinkId, enqueueSnackbar],
   )
 
   /**
@@ -1045,6 +1048,9 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
         promotionCode: pricedCode,
         promotionDuration: quote.promotionCodeDuration ?? null,
         promotionDurationInMonths: quote.promotionCodeDurationInMonths ?? null,
+        // A one-time website build fee on this first invoice (AGL-4244).
+        buildFeeCents: Number(quote.buildFee?.amountCents ?? 0),
+        buildFeeLabel: String(quote.buildFee?.label ?? ''),
       })
       const alreadyShown =
         typeof options.shownTotalCents === 'number' &&
@@ -1121,6 +1127,9 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             // The same add-ons the quote above priced (AGL-2897, AGL-3955),
             // Aglyn AI credit blocks among them (AGL-4144).
             addons: purchasedAddons,
+            // The link the quote was priced with (AGL-4244), so the charge
+            // carries the same build fee the confirm named.
+            ...(bundleLinkId ? { bundleLinkId } : {}),
             gaClientId: await readGaClientId(
               process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
             ),
@@ -1306,6 +1315,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
       interval,
       bundleAddons,
       bundleDomain,
+      bundleLinkId,
       router,
       appliedPromotionCode,
       priceSubscribe,
@@ -1750,6 +1760,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                         initialCoupon={planIntent?.coupon ?? null}
                         linkNotice={bundleLinkNotice}
                         onQuoted={onQuoted}
+                        bundleLinkId={bundleLinkId}
                         footer={
                           bundleDomain ? (
                             bundleDomain.available ? (
