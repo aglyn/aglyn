@@ -177,6 +177,10 @@ keeps going if you close the tab, and you can pause it and pick it up later.
 
 ### Moving from Shopify, Wix or Squarespace
 
+Moving your whole store? The
+[Switching to Aglyn](../../guides/switching-to-aglyn/before-you-switch.md) guides take you
+through products, customers, payments, your books and your domain, in order.
+
 Upload the product export from your old store as it is. The wizard recognizes
 the file from its column names and maps each column for you.
 

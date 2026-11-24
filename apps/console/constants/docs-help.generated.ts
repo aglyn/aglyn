@@ -133,6 +133,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/workspace-and-billing/billing-and-plans/bandwidth',
     title: 'Bandwidth',
   },
+  beforeYouSwitch: {
+    path: '/guides/switching-to-aglyn/before-you-switch',
+    title: 'Before you switch: what moves and what doesn\'t',
+  },
   besigner: {
     path: '/building-sites/besigner/overview',
     title: 'The Besigner',
@@ -877,6 +881,18 @@ export const DOCS_HELP_TOPICS = {
     path: '/staff-console/support-triage',
     title: 'Support triage runbook (internal)',
   },
+  switchFromShopify: {
+    path: '/guides/switching-to-aglyn/switch-from-shopify',
+    title: 'Switch from Shopify',
+  },
+  switchFromSquarespace: {
+    path: '/guides/switching-to-aglyn/switch-from-squarespace',
+    title: 'Switch from Squarespace',
+  },
+  switchFromWix: {
+    path: '/guides/switching-to-aglyn/switch-from-wix',
+    title: 'Switch from Wix',
+  },
   tasks: {
     path: '/content-and-data/crm/tasks',
     title: 'Tasks & follow-ups',
@@ -1010,6 +1026,7 @@ export const DOCS_HELP_ANCHORS = {
   automations: ['#the-events', '#the-steps', '#assigning-an-owner-or-rotating-one', '#an-automated-email-on-the-timeline', '#recipes', '#installing-from-the-organization', '#example-tag-every-new-contact-from-a-form', '#example-spread-qualified-leads-across-the-team', '#example-follow-up-on-a-won-deal', '#related'],
   automationsWithAi: ['#draft', '#org-automations', '#change', '#explain', '#why-a-run-failed', '#what-is-sent', '#who-can-use-it', '#related'],
   bandwidth: ['#what-each-plan-includes', '#where-to-see-it', '#paused', '#grace', '#timing', '#reducing-bandwidth', '#reference', '#how-usage-is-counted', '#which-views-are-counted', '#the-two-mechanisms', '#what-a-visitors-browser-gets', '#fail-open-on-purpose', '#self-hosting', '#related'],
+  beforeYouSwitch: ['#what-moves', '#what-cannot-move', '#orders', '#payments', '#saved-cards', '#spending-your-earnings', '#fees', '#accounting', '#domain-and-email', '#go-live-checklist', '#getting-help', '#related'],
   besigner: ['#preview-vs-canvas', '#publish-from-a-preview', '#what-you-can-do', '#the-canvas', '#hierarchy-panel', '#the-inspector', '#inline-and-rich-text', '#reusable-components', '#editing-together', '#ai-in-the-canvas', '#related'],
   billing: ['#billing-page', '#current-plan', '#locked-features', '#billing-link', '#tiers--entitlements', '#made-with-badge', '#leaving-notice', '#plan-without-subscription', '#upgrade-proposal', '#build-fee', '#enterprise', '#single-sign-on-and-enforcement', '#usage-meters', '#usage-card', '#metered-usage-estimate', '#usage-history', '#campaign-sending-pace', '#who-is-generating-what', '#ai-allotments', '#storage-overage', '#if-you-would-rather-uploads-stopped', '#files-on-quotes-and-forms', '#assist-overage', '#stop-ai-assist-at-the-included-band', '#ai-overage-ceiling', '#free-ai-credits', '#ai-credit-alerts', '#usage-budget', '#seats', '#crm-records', '#the-crm-suite', '#one-to-one-email', '#organization-data', '#api-access', '#connected-apps', '#payments', '#outstanding', '#plan-total', '#what-you-will-pay', '#switch-with-a-code', '#billing-history', '#billing-email', '#payment-methods', '#billing-address', '#billing-address-on-profile', '#tax-ids', '#sales-tax', '#platform-fees', '#related'],
   bindings: ['#binding-tokens', '#rename-safe-id-tokens', '#insert-a-variable', '#token-pills', '#in-the-canvas-text-editor', '#site-details', '#typed-variables', '#no-code-functions', '#functions-card', '#parameters-a-visitor-can-answer', '#a-calculator-you-lay-out', '#where-used--safety', '#workflows', '#related'],
@@ -1194,6 +1211,9 @@ export const DOCS_HELP_ANCHORS = {
   supportQueue: ['#support-queue-page', '#triage', '#notifications', '#related'],
   supportTiers: ['#why-custom-is-in-hours-not-business-days', '#what-starts-and-stops-the-clock', '#where-to-see-it'],
   supportTriage: ['#why-this-exists', '#1-order-the-queue', '#not-a-support-ticket', '#3-the-billing-answers', '#4-acting-on-the-customers-account', '#escalation', '#site-care', '#site-care-working', '#site-care-month', '#site-care-reconciliation', '#site-care-projects', '#related'],
+  switchFromShopify: ['#get-your-files', '#site', '#products', '#customers', '#redirects', '#gift-cards', '#payments', '#shopify-balance', '#accounting', '#domain', '#go-live', '#related'],
+  switchFromSquarespace: ['#get-your-files', '#site', '#products', '#customers', '#redirects', '#gift-cards', '#payments', '#accounting', '#domain', '#go-live', '#related'],
+  switchFromWix: ['#get-your-files', '#site', '#products', '#customers', '#redirects', '#gift-cards', '#payments', '#accounting', '#domain', '#go-live', '#related'],
   tasks: ['#task-picklists', '#the-tasks-page', '#the-calendar-view', '#snoozing-a-task', '#selecting-exporting-and-acting-on-many', '#import-from-csv', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#organization-tasks', '#tasks-on-a-contact-company-or-deal', '#reminders', '#turning-reminders-off', '#next-activity', '#the-daily-digest', '#turning-it-off', '#the-dashboard-card', '#who-can-do-what', '#related'],
   taxServices: ['#before-you-start', '#connect', '#when-the-service-is-not-used', '#how-sales-are-taxed', '#product-tax-codes', '#exempt-customers', '#recording-orders-and-refunds', '#disconnect', '#what-is-sent-to-the-vendor'],
   team: ['#team-page', '#team-roles', '#organizations', '#three-kinds-of-user', '#site-roles', '#site-collaborators', '#collaborator-ai-access', '#what-a-site-collaborator-sees', '#site-membership', '#visitor-record-ceiling', '#seats', '#related'],
