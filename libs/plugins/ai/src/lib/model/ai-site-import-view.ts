@@ -64,6 +64,7 @@ import {
   type AiSiteImportState,
   type AiSiteImportWave,
 } from './ai-site-import'
+import { aiSiteImportRedirectOf, aiSiteImportRedirectText } from './ai-site-import-redirects'
 
 /** A domain ownership claim, as the ownership door answers it. */
 export interface AiSiteImportClaim {
@@ -207,6 +208,8 @@ export interface AiSiteImportRowView {
   pictures?: string | null
   /** A page the site's plan proposed (AGL-4152): it has no old page to open. */
   isNew?: boolean
+  /** What became of the old address's redirect (AGL-4245): added, kept, or left out and why. */
+  redirect?: string | null
 }
 
 function rowState(row: AiJobItemLedger | undefined, active: boolean): AiSiteImportRowState {
@@ -338,6 +341,7 @@ export function aiSiteImportWaveRows(
       ...(aiSiteImportAddedText(page) ? { added: aiSiteImportAddedText(page) } : {}),
       ...(aiSiteImportPicturesText(page) ? { pictures: aiSiteImportPicturesText(page) } : {}),
       ...(page.origin === 'proposed' ? { isNew: true } : {}),
+      ...(aiSiteImportRedirectText(aiSiteImportRedirectOf(state, slot)) ? { redirect: aiSiteImportRedirectText(aiSiteImportRedirectOf(state, slot)) } : {}),
       photos: aiSiteImportPhotosText(page.photos),
       outputId: row?.outputs[0] ?? null,
       oldPage: page.url,

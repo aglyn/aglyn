@@ -167,6 +167,29 @@ describe('an import job’s page', () => {
     expect(screen.getByRole('button', { name: 'Start Blog' })).toBeTruthy()
   })
 
+  it('says beside each page whether its old address now redirects, and lists the redirects with when they work (AGL-4245)', () => {
+    let state = harbor()
+    state = aiSiteImportWaveClosed(aiSiteImportWaveStarted(state, 0, 'x', new Map()), 0, 'y')
+    state = {
+      ...state,
+      redirects: [
+        { from: '/', to: '/', outcome: 'same', slot: 'p0' },
+        { from: '/about', to: '/about', outcome: 'kept', slot: 'p1' },
+        { from: '/index.html', to: '/', outcome: 'created', slot: null, ruleId: 'job-1-abc' },
+      ],
+    }
+    const items = aiSiteImportLedger(state).map((row): AiJobItemLedger =>
+      row.slot === 'frame' || row.slot === 'p0' || row.slot === 'p1' ? { ...row, status: 'succeeded', creditsSpent: 27, outputs: [`out-${row.slot}`] } : row,
+    )
+    view(summary({ siteImport: state, items, review: { reason: 'wave', message: 'Main pages is in.', findings: [] } }))
+    expect(screen.getByText('You already had a redirect from the old address, so it was kept')).toBeTruthy()
+    expect(screen.getByText('1 redirect added from your old addresses, 1 of yours kept.')).toBeTruthy()
+    expect(screen.getByText(/once your own domain points at your new site/)).toBeTruthy()
+    expect(screen.getByText('/index.html · Redirect added: visitors to the old address go to /')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Redirects from your old addresses' }))
+    expect(screen.getByRole('link', { name: 'Open Redirects' }).getAttribute('href')).toBe('/acme/hosts/harbor/redirects')
+  })
+
   it('says a wave is in the site’s preview, not drafts, where its pages went live there (AGL-4084)', () => {
     let state = harbor()
     state = aiSiteImportWaveClosed(aiSiteImportWaveStarted(state, 0, 'x', new Map()), 0, 'y')

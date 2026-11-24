@@ -82,6 +82,11 @@ import {
   type AiSiteImportFinishField,
   type AiSiteImportRowState,
 } from '../model/ai-site-import-view'
+import {
+  AI_SITE_IMPORT_REDIRECTS_WHEN,
+  aiSiteImportRedirectText,
+  aiSiteImportRedirectsSummary,
+} from '../model/ai-site-import-redirects'
 import { AiJobCancelButton } from './ai-job-cancel.component'
 import { aiCreditsBillingHref, aiJobOutputHref } from './ai-job-links'
 import { AiSiteImportFinish } from './ai-site-import-finish.component'
@@ -167,6 +172,11 @@ function WaveRows({ job, wave, orgSlug }: { job: AiJobSummary; wave: AiSiteImpor
               {row.pictures ? (
                 <Typography variant="body2" color="text.secondary">
                   {row.pictures}
+                </Typography>
+              ) : null}
+              {row.redirect ? (
+                <Typography variant="body2" color="text.secondary">
+                  {row.redirect}
                 </Typography>
               ) : null}
               {row.note && row.state !== 'done' ? (
@@ -268,6 +278,7 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
   const planFallBack = aiSiteImportPlanFellBackText(state)
   const held = aiSiteImportHeldCopy(job)
   const pagesHref = host && orgSlug ? buildRoute(Route.HOST_SCREENS, { orgSlug, host }) : null
+  const redirectsHref = host && orgSlug ? buildRoute(Route.HOST_REDIRECTS, { orgSlug, host }) : null
   const [claim, setClaim] = useState<AiSiteImportClaim | null>(null)
   const [claimNotice, setClaimNotice] = useState<string | null>(null)
   const verifyAgain = useCallback(async () => {
@@ -383,6 +394,42 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
               ) : null}
             </Box>
           ))}
+        </Stack>
+      </AccordionDetails>
+    </Accordion>
+  ) : null
+
+  // The redirects from the old addresses (AGL-4245): what was added, and the
+  // other addresses of a page, which have no row of their own.
+  const redirectsSummary = aiSiteImportRedirectsSummary(state)
+  const otherAddresses = (state?.redirects ?? []).filter((entry) => !entry.slot && entry.outcome !== 'same')
+  const redirectsCard = redirectsSummary ? (
+    <Accordion variant="outlined" disableGutters slotProps={{ heading: { component: 'h2' } }} sx={{ borderRadius: 2, '&::before': { display: 'none' } }}>
+      <AccordionSummary expandIcon={<MdiIcon path={mdiChevronDown.path} />}>
+        <Typography variant="subtitle1" component="span">{'Redirects from your old addresses'}</Typography>
+      </AccordionSummary>
+      <AccordionDetails>
+        <Stack spacing={1.5}>
+          <Typography variant="body2">{redirectsSummary}</Typography>
+          <Typography variant="body2" color="text.secondary">
+            {AI_SITE_IMPORT_REDIRECTS_WHEN}
+          </Typography>
+          {otherAddresses.length ? (
+            <Stack component="ul" spacing={0.5} aria-label="Other old addresses" sx={{ m: 0, pl: 2.5 }}>
+              {otherAddresses.map((entry, index) => (
+                <Typography component="li" variant="body2" key={`${entry.from}-${index}`} sx={{ overflowWrap: 'anywhere' }}>
+                  {`${entry.from} · ${aiSiteImportRedirectText(entry) ?? ''}`}
+                </Typography>
+              ))}
+            </Stack>
+          ) : null}
+          {redirectsHref ? (
+            <Box>
+              <Button size="small" component={AppLink} href={redirectsHref}>
+                {'Open Redirects'}
+              </Button>
+            </Box>
+          ) : null}
         </Stack>
       </AccordionDetails>
     </Accordion>
@@ -521,6 +568,7 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
         ) : null}
         {startButton}
         {waves}
+        {redirectsCard}
         {leftOutCard}
         {cancel}
       </Frame>
@@ -606,6 +654,7 @@ export function AiSiteImportJob({ job, orgId, orgSlug, host, siteName, user, bus
             <AiSiteImportWhatsNewList state={state} wave={wave} />
           </Stack>
         ))}
+        {redirectsCard}
         {leftOutCard}
       </Frame>
     )
