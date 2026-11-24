@@ -128,6 +128,8 @@ export function ImportResultsStep({
   >({})
   const [undoError, setUndoError] = useState<string | null>(null)
   const [undoing, setUndoing] = useState(false)
+  // What the undo left for the person to know, such as a photo kept because it is still in use (AGL-4245).
+  const [undoNotes, setUndoNotes] = useState<string[]>([])
   const expires = job ? transferUndoExpiresAt(job) : null
   const undone = job?.status === 'undone'
 
@@ -165,6 +167,7 @@ export function ImportResultsStep({
           otherwise: 'keep',
         })
       }
+      setUndoNotes(step.notes ?? [])
       setPreview(null)
       await wizard.refreshResults()
     } catch (reason) {
@@ -174,6 +177,7 @@ export function ImportResultsStep({
     }
   }
   const notes = results ? transferWrittenNotes(results.rows) : []
+
   const unresolved = preview
     ? preview.conflicts.filter((conflict) => !resolutions[conflict.recordId])
         .length
@@ -240,6 +244,22 @@ export function ImportResultsStep({
           {notes.length > NOTES_SHOWN ? (
             <Typography variant="body2">
               {`And ${(notes.length - NOTES_SHOWN).toLocaleString()} more. Download results for the full list.`}
+            </Typography>
+          ) : null}
+        </Alert>
+      ) : null}
+      {undoNotes.length ? (
+        <Alert severity="info" aria-label="What the undo kept">
+          <Stack component="ul" spacing={0.5} sx={{ pl: 2, my: 0 }}>
+            {undoNotes.slice(0, NOTES_SHOWN).map((note) => (
+              <Typography component="li" variant="body2" key={note}>
+                {note}
+              </Typography>
+            ))}
+          </Stack>
+          {undoNotes.length > NOTES_SHOWN ? (
+            <Typography variant="body2">
+              {`And ${(undoNotes.length - NOTES_SHOWN).toLocaleString()} more.`}
             </Typography>
           ) : null}
         </Alert>

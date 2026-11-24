@@ -27,6 +27,9 @@ const mockFolderSets: Array<{ id: string; data: Record<string, unknown> }> = []
 let mockMedia: Record<string, Record<string, unknown>> = {}
 const mockDeleted: Array<{ mediaId: string; objectPath: string; uid: string }> = []
 let mockScope: 'hosts' | 'orgs' | null = 'hosts'
+/** The site's documents the usage scan reads, as text, and what it covered. */
+let mockSiteDocs: Array<{ name: string; text: string }> = []
+let mockCoverage: 'full' | 'published' | 'partial' = 'full'
 const mockScopeCalls: unknown[][] = []
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
@@ -50,6 +53,7 @@ jest.mock('./media-scope', () => ({
     mockScopeCalls.push(args)
     if (!mockScope) return { error: { status: 403, message: 'No access' } }
     const scopeRef = {
+      get: async () => ({ get: () => 'shop', data: () => ({ subdomain: 'shop' }) }),
       collection: (name: string) => ({
         limit: () => ({
           get: async () => ({
@@ -70,6 +74,7 @@ jest.mock('./media-scope', () => ({
             return {
               id,
               exists: Boolean(data),
+              data: () => data,
               get: (path: string) =>
                 path.split('.').reduce<unknown>((value, key) => (value as Record<string, unknown> | undefined)?.[key], data),
             }
@@ -82,6 +87,14 @@ jest.mock('./media-scope', () => ({
   mediaObjectPath: (snapshot: { id: string }, base: string) => `${base}/media/imported-products/${snapshot.id}`,
   mediaCdnPathUpdate: () => null,
   folderStoragePath: async () => '',
+}))
+
+jest.mock('./scan-media-references', () => ({
+  __esModule: true,
+  scanMediaReferences: async (options: { isReferenced: (haystack: string) => boolean }) => {
+    const references = mockSiteDocs.filter((doc) => options.isReferenced(doc.text)).map((doc) => ({ kind: 'plugin', name: doc.name }))
+    return { references, complete: mockCoverage === 'full', coverage: mockCoverage }
+  },
 }))
 
 jest.mock('./media-upload-site', () => ({ __esModule: true, resolveUploadSite: async () => ({ hostId: null }) }))
@@ -102,6 +115,8 @@ beforeEach(() => {
   mockDeleted.length = 0
   mockScope = 'hosts'
   mockScopeCalls.length = 0
+  mockSiteDocs = []
+  mockCoverage = 'full'
 })
 
 describe('the folder imported photos are filed in', () => {
@@ -132,34 +147,49 @@ describe('the folder imported photos are filed in', () => {
   })
 })
 
-describe("an undo's delete of an imported photo", () => {
-  it('goes through the tombstone, only for a file that still carries the import key', async () => {
+describe("an undo's delete of imported photos", () => {
+  const imported = (key: string, jobId = 'job-1') => ({ importedFrom: { key, jobId }, url: `https://storage.test/${key}` })
+  const remove = (photos: Array<{ mediaId: string; sourceKey: string }>, jobId = 'job-1') =>
+    consoleMediaIngest.removeImportedPhotos({ hostId: 'host-1', uid: 'uid-2', jobId, photos })
+
+  it("removes, through the tombstone, only the files this job stored that the library's scan finds unused", async () => {
     mockMedia = {
-      imported: { importedFrom: { key: 'import:abc' } },
+      a: imported('import:a'),
+      b: imported('import:b'),
+      other: imported('import:o', 'job-0'),
       owner: { fileName: 'owner.jpg' },
     }
-    expect(
-      await consoleMediaIngest.removeImportedPhoto({ hostId: 'host-1', uid: 'uid-2', mediaId: 'owner', sourceKey: 'import:abc' }),
-    ).toBe(false)
-    expect(
-      await consoleMediaIngest.removeImportedPhoto({ hostId: 'host-1', uid: 'uid-2', mediaId: 'imported', sourceKey: 'import:other' }),
-    ).toBe(false)
-    expect(mockDeleted).toEqual([])
-    expect(
-      await consoleMediaIngest.removeImportedPhoto({ hostId: 'host-1', uid: 'uid-2', mediaId: 'imported', sourceKey: 'import:abc' }),
-    ).toBe(true)
-    expect(mockDeleted).toEqual([{ mediaId: 'imported', objectPath: 'hosts/host-1/media/imported-products/imported', uid: 'uid-2' }])
+    // A page still shows b, by its media reference; nothing shows a.
+    mockSiteDocs = [{ name: 'Home', text: '{"src":"media:host-1/b"}' }]
+    const answer = await remove([
+      { mediaId: 'a', sourceKey: 'import:a' },
+      { mediaId: 'b', sourceKey: 'import:b' },
+      { mediaId: 'other', sourceKey: 'import:o' },
+      { mediaId: 'owner', sourceKey: 'import:a' },
+      { mediaId: 'gone', sourceKey: 'import:g' },
+    ])
+    expect(answer).toEqual({ removed: ['gone', 'a'], kept: ['b'], usedBy: ['Home'] })
+    expect(mockDeleted).toEqual([{ mediaId: 'a', objectPath: 'hosts/host-1/media/imported-products/a', uid: 'uid-2' }])
   })
 
-  it('is done already for a file that is gone, and refused to a member without the site', async () => {
-    expect(
-      await consoleMediaIngest.removeImportedPhoto({ hostId: 'host-1', uid: 'uid-2', mediaId: 'gone', sourceKey: 'import:abc' }),
-    ).toBe(true)
+  it('keeps a file a product variant still names, and every file when the scan could not read the live site', async () => {
+    mockMedia = { a: imported('import:a') }
+    mockSiteDocs = [{ name: 'Desk lamp', text: '{"variants":[{"imageUrl":"media:host-1/a"}]}' }]
+    expect(await remove([{ mediaId: 'a', sourceKey: 'import:a' }])).toEqual({ removed: [], kept: ['a'], usedBy: ['Desk lamp'] })
+    mockSiteDocs = []
+    mockCoverage = 'partial'
+    expect(await remove([{ mediaId: 'a', sourceKey: 'import:a' }])).toEqual({
+      removed: [],
+      kept: ['a'],
+      usedBy: ['parts of the site that could not be checked'],
+    })
+    expect(mockDeleted).toEqual([])
+  })
+
+  it('touches nothing for a member without the site', async () => {
     mockScope = null
-    mockMedia = { imported: { importedFrom: { key: 'import:abc' } } }
-    expect(
-      await consoleMediaIngest.removeImportedPhoto({ hostId: 'host-1', uid: 'uid-2', mediaId: 'imported', sourceKey: 'import:abc' }),
-    ).toBe(false)
+    mockMedia = { a: imported('import:a') }
+    expect(await remove([{ mediaId: 'a', sourceKey: 'import:a' }])).toEqual({ removed: [], kept: [], usedBy: [] })
     expect(mockDeleted).toEqual([])
   })
 })

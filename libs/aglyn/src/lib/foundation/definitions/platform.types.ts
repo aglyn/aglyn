@@ -1092,6 +1092,11 @@ export interface AglynHostMediaImportSource {
   url: string
   /** The proved domain the import read. */
   domain: string
+  /**
+   * The product import job that stored it (AGL-4245), so that import's undo
+   * removes only the files it stored itself.
+   */
+  jobId?: string
   importedAt?: ITimestamp
 }
 

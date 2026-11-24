@@ -148,12 +148,21 @@ export interface PluginMediaIngest {
    */
   ensureFolder?(input: { hostId: string; uid: string; name: string }): Promise<string | null>
   /**
-   * Deletes one picture an import stored in the site's library (AGL-4245),
-   * the way the library's own Delete does (a tombstone it can be restored
-   * from), and only when the asset still carries `sourceKey` as its
-   * `importedFrom` key. `true` when it is gone. Optional, as above.
+   * Deletes the pictures an import job stored in the site's library
+   * (AGL-4245), the way the library's own Delete does (a tombstone it can be
+   * restored from). Only an asset that still carries its `sourceKey` and the
+   * job's id as `importedFrom` is touched, and only once the library's own
+   * "where is this used" scan finds it used nowhere: on no page, layout,
+   * component, product (its variants included) or other record. `removed`
+   * lists the ids that are gone (or were already), `kept` the ones still in
+   * use, with `usedBy` naming where. Optional, as above.
    */
-  removeImportedPhoto?(input: { hostId: string; uid: string; mediaId: string; sourceKey: string }): Promise<boolean>
+  removeImportedPhotos?(input: {
+    hostId: string
+    uid: string
+    jobId: string
+    photos: ReadonlyArray<{ mediaId: string; sourceKey: string }>
+  }): Promise<{ removed: string[]; kept: string[]; usedBy: string[] }>
 }
 
 /** One implementation: the app that holds the media ingress. */

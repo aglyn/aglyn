@@ -190,9 +190,9 @@ export async function register(): Promise<void> {
         const { consoleMediaIngest } = await import('./utils/server/media-ingest')
         return await consoleMediaIngest.ensureFolder(input)
       },
-      removeImportedPhoto: async (input) => {
+      removeImportedPhotos: async (input) => {
         const { consoleMediaIngest } = await import('./utils/server/media-ingest')
-        return await consoleMediaIngest.removeImportedPhoto(input)
+        return await consoleMediaIngest.removeImportedPhotos(input)
       },
     },
     { pluginId: 'console' },
