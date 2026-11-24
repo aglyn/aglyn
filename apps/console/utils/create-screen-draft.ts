@@ -36,6 +36,14 @@ export interface CreateScreenDraftInput {
    * document and deliberately not registered anywhere: see above.
    */
   slug?: string
+  /**
+   * The shared layout the page starts inside (AGL-4241): the site's default
+   * from `newPageLayoutId`, or whatever the drawer's Shared layout select was
+   * changed to. Absent means no layout. Stored on the FIRST VERSION, exactly
+   * where Properties ▸ Shared layout writes it, so the editor shows it as the
+   * chosen layout and changing or removing it there works as it always has.
+   */
+  layoutId?: string
 }
 
 /**
@@ -91,7 +99,7 @@ export async function createScreenDraft(
   }) => Promise<unknown>,
   input: CreateScreenDraftInput,
 ): Promise<{ screenId: string; versionId: string }> {
-  const { hostId, screenId, versionId, fields, slug } = input
+  const { hostId, screenId, versionId, fields, slug, layoutId } = input
 
   // No createdAt/updatedAt on either write: /api/hosts/resources (AGL-473)
   // and /api/hosts/versions (AGL-1369) stamp both server-side, and a client
@@ -118,6 +126,7 @@ export async function createScreenDraft(
     // that takes, so `Date published` stays empty and the chip reads Draft.
     data: {
       screenId,
+      ...(layoutId ? { layoutId } : {}),
       nodes: {
         [CANVAS_ROOT_ELEMENT_ID]: {
           $id: CANVAS_ROOT_ELEMENT_ID,

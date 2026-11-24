@@ -37,8 +37,9 @@ Design it first, publish when it's ready.
 2. Drag components from the drawer onto the canvas. Rearrange them in the **hierarchy**
    panel or directly on the canvas.
 3. Double-click text to edit it inline. Set component attributes in the inspector.
-4. Bind a shared **[layout](../building-sites/screens-and-layouts/layouts.md)** if you want a
-   common header/footer.
+4. A new page starts inside your site's shared **[layout](../building-sites/screens-and-layouts/layouts.md)**,
+   so it already has the site's header and footer. To use another layout, or none, change
+   **Properties → Shared layout**.
 
 ## 3. Preview and publish
 
