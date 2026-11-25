@@ -30,20 +30,6 @@
             "meteredInfraPassThrough": true,
             "includedEmailSends": null
           },
-          "business": {
-            "extraApiRequestsUsdPer1k": 0.5,
-            "extraContactsUsdPer1k": 0.5,
-            "extraEmailSendsUsdPer1k": 2,
-            "meteredInfraPassThrough": true,
-            "includedEmailSends": null
-          },
-          "advanced": {
-            "extraApiRequestsUsdPer1k": 0.5,
-            "extraContactsUsdPer1k": 0.4,
-            "extraEmailSendsUsdPer1k": 1.85,
-            "meteredInfraPassThrough": true,
-            "includedEmailSends": null
-          },
           "enterprise": {
             "extraApiRequestsUsdPer1k": null,
             "extraContactsUsdPer1k": null,

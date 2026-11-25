@@ -103,7 +103,7 @@ jest.mock('./host-run-history-card.component', () => ({
   default: () => null,
 }))
 
-const ORG = { $id: 'org-1', plan: 'business' } as never
+const ORG = { $id: 'org-1', plan: 'pro' } as never
 
 /** Every zone the card asked the shell to draw, with what it handed. */
 let drawn: Array<{ slot: string; props: Record<string, unknown> }> = []

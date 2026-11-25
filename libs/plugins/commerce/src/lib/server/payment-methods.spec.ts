@@ -62,7 +62,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   isImpersonationSession: () => false,
   emailUnverifiedResponse: () => Response.json({ error: 'Verify your email' }, { status: 403 }),
-  getOrgForHost: async () => ({ orgId: 'org-1', org: { ownerUid: 'owner-1', plan: 'business' } }),
+  getOrgForHost: async () => ({ orgId: 'org-1', org: { ownerUid: 'owner-1', plan: 'pro' } }),
   lockdownRefusal: async () => locked,
 }))
 

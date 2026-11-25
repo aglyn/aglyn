@@ -218,7 +218,7 @@ describe('the enforced band IS the invoiced band (AGL-2075)', () => {
       { plan: 'free' },
       { plan: 'starter' },
       { plan: 'pro' },
-      { plan: 'business' },
+      { plan: 'pro' },
       { plan: 'free', entitlements: { hostLimit: 4, storagePerHostMb: 500 } },
     ]) {
       const pool = await band(org)

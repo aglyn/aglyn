@@ -66,7 +66,7 @@ export async function seedWhiteLabel({ put, uid, now, nameSearchFields, putObjec
     memberRoles: { [uid]: 'owner' },
     hosts: {},
     suspended: false,
-    plan: 'agency',
+    plan: 'enterprise',
     logoUrl: mark,
     brandingProfile: { ...WHITE_LABEL_BRAND, faviconUrl: mark },
     createdAt: created,

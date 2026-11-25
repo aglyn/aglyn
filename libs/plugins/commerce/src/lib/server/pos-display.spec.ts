@@ -43,7 +43,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     consumeRateLimit: async () => ({ allowed: mockRateAllowed }),
     getOrgForHost: async () => ({
       orgId: 'org-1',
-      org: { id: 'org-1', plan: 'business', subscriptionStatus: 'active' },
+      org: { id: 'org-1', plan: 'pro', subscriptionStatus: 'active' },
     }),
     getPluginConfig: async () => ({ posDisplayMessage: 'Hello' }),
   }

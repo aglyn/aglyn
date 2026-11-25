@@ -132,7 +132,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     orgId: 'org-1',
     org: {
       id: 'org-1',
-      plan: 'business',
+      plan: 'pro',
       subscriptionStatus: 'active',
       slug: 'acme',
     },

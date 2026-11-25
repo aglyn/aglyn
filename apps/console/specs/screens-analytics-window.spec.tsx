@@ -143,7 +143,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
-  default: () => ({ org: { $id: 'org-1', plan: 'business' }, ready: true }),
+  default: () => ({ org: { $id: 'org-1', plan: 'pro' }, ready: true }),
 }))
 
 jest.mock('../hooks/use-org-scope', () => ({

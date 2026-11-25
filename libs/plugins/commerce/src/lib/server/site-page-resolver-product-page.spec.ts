@@ -64,6 +64,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 import {
   buildProductPageNodes,
+  commerceEditContextResolver,
   commerceSitePageResolver,
   productPriceText,
   productReturnWindow,
@@ -134,6 +135,36 @@ describe('a store with no product template', () => {
     const detail = Object.values(nodes).find((node) => node.componentId === 'product-detail')
     expect(detail?.props).toMatchObject({ slug: 'signature-soy-candle' })
     expect(Object.values(nodes).some((node) => node.componentId === 'related-products')).toBe(true)
+  })
+})
+
+describe('what the admin edit bar says on a product page', () => {
+  const editContext = (path: string) =>
+    commerceEditContextResolver({ hostId: 'host-1', host: HOST, path })
+
+  it('names the template and the product’s editor, as a blog post names both', async () => {
+    mockStore['pdpScreenId'] = 'pdp-template'
+    expect(await editContext('/products/signature-soy-candle')).toEqual({
+      templateScreenId: 'pdp-template',
+      collectionName: 'Products',
+      entry: true,
+      entryNoun: 'product',
+      recordEditPath: '/products/catalog?product=p1',
+    })
+  })
+
+  it('links the product alone on the built-in page, which has no template', async () => {
+    expect(await editContext('/products/signature-soy-candle')).toMatchObject({
+      templateScreenId: null,
+      recordEditPath: '/products/catalog?product=p1',
+    })
+  })
+
+  it('answers nothing where the page would not render, or is not a product', async () => {
+    mockProducts.splice(0, mockProducts.length, candle({ status: 'draft' }))
+    expect(await editContext('/products/signature-soy-candle')).toBeUndefined()
+    expect(await editContext('/about')).toBeUndefined()
+    expect(await editContext('/products')).toBeUndefined()
   })
 })
 

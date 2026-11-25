@@ -987,7 +987,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   // `enterprise` (Custom) leads the list and is the default (AGL-1118); the
   // paid self-serve plans follow for a custom-priced deal genuinely scoped
   // to that plan's capability. `CUSTOM_BILLING_BASE_PLANS` is built from
-  // `SELF_SERVE_PLANS`, so a retired plan is never offered (AGL-4158).
+  // `SELF_SERVE_PLANS` (AGL-4158).
   const paidPlans = CUSTOM_BILLING_BASE_PLANS
   const [entAmount, setEntAmount] = useState('')
   const [entInterval, setEntInterval] = useState<'month' | 'year'>('month')

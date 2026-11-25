@@ -58,7 +58,7 @@ function setup(options: { locked?: boolean } = {}) {
       if (!decoded) throw Object.assign(new Error('bad token'), { code: 'auth/argument-error' })
       return decoded
     },
-    orgForHost: async () => ({ org: { plan: 'business' } }),
+    orgForHost: async () => ({ org: { plan: 'pro' } }),
     lockdown: async () => (options.locked ? { scope: 'platform' } : null),
     dropCache: jest.fn(),
     now: () => 9_000,

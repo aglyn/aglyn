@@ -285,7 +285,7 @@ describe('start', () => {
     })
     const created = calls.find((entry) => entry.path === 'payment_intents')!
     const fee = resolveTransactionFeeCents(
-      { id: 'org-1', plan: 'business', subscriptionStatus: 'active' } as never,
+      { id: 'org-1', plan: 'pro', subscriptionStatus: 'active' } as never,
       'service',
       5000,
       5400,
@@ -446,7 +446,7 @@ describe('a store on its own Stripe account (direct charge, ToS v24 §10.2(a))',
     expect(created.params.has('transfer_data[destination]')).toBe(false)
     expect(created.params.has('on_behalf_of')).toBe(false)
     expect(created.params.get('metadata[chargeModel]')).toBe('direct')
-    const org = { id: 'org-1', plan: 'business', subscriptionStatus: 'active' } as never
+    const org = { id: 'org-1', plan: 'pro', subscriptionStatus: 'active' } as never
     const take = resolveTransactionFeeCents(org, 'service', 5000, 5000, { inPerson: true, direct: true })
     // Stripe bills the store its card fee, so Aglyn's fee is the take only:
     // below the destination fee, which carries the card cost too.

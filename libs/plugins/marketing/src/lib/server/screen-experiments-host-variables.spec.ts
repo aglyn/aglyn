@@ -127,7 +127,7 @@ describe('an experiment variant names its site (AGL-2883)', () => {
       hostId: 'host-1',
       host: SITE,
       // Business: A/B testing is entitled, so the reader is asked at all.
-      org: { $id: 'org-1', plan: 'business', subscriptionStatus: 'active' },
+      org: { $id: 'org-1', plan: 'pro', subscriptionStatus: 'active' },
       path: '/',
       slugSegments: [],
       screenId: 'home',

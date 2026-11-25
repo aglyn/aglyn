@@ -218,7 +218,7 @@ function WithPageHeader(props: { children?: ReactNode }) {
 }
 
 const ORG_WIDE = { tokens: ['org'], orgWide: true, loaded: true }
-const ORG = { $id: 'org-1', plan: 'scale' } as any
+const ORG = { $id: 'org-1', plan: 'pro' } as any
 
 beforeEach(() => {
   jest.clearAllMocks()

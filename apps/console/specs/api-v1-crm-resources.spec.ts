@@ -209,7 +209,7 @@ beforeEach(() => {
   mockUid = null
   mockScopes = ['crm:read', 'crm:write']
   mockOrg = {
-    plan: 'business',
+    plan: 'pro',
     subscription: { status: 'active' },
     hosts: { 'host-1': true, 'host-2': true },
   }

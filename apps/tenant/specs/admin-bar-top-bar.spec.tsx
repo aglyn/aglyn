@@ -397,6 +397,39 @@ describe('AdminBar top chrome (AGL-1829)', () => {
     expect(screen.queryByText('Edit this page')).toBeNull()
   })
 
+  it('names a product page and links the product beside its template', async () => {
+    await renderReadyBar({
+      screenName: 'Product detail',
+      collectionName: 'Products',
+      collectionEntry: true,
+      entryNoun: 'product',
+      builtInPage: false,
+      entryEditUrl: 'https://app.aglyn.com/acme/hosts/www/products/catalog?product=p1',
+    })
+    expect(screen.getByText('Product · Product detail')).toBeTruthy()
+    expect(screen.queryByText('Unrouted page')).toBeNull()
+    expect(linkByText('Edit this product').href).toBe(
+      'https://app.aglyn.com/acme/hosts/www/products/catalog?product=p1',
+    )
+    expect(linkByText('Edit template').href).toBe(CONTEXT_RESPONSE.editUrl)
+  })
+
+  it('names a built-in product page and offers the product alone', async () => {
+    await renderReadyBar({
+      screenId: null,
+      screenName: null,
+      editUrl: null,
+      collectionName: 'Products',
+      collectionEntry: true,
+      entryNoun: 'product',
+      builtInPage: true,
+      entryEditUrl: 'https://app.aglyn.com/acme/hosts/www/products/catalog?product=p1',
+    })
+    expect(screen.getByText('Product · Built-in page')).toBeTruthy()
+    expect(screen.queryByText('Edit template')).toBeNull()
+    expect(linkByText('Edit this product')).toBeTruthy()
+  })
+
   it('hides the draft flag when the server says false', async () => {
     await renderReadyBar({ draftChanges: false })
     expect(screen.queryByText('Draft changes')).toBeNull()

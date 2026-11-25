@@ -247,7 +247,7 @@ beforeEach(() => {
 
 /** The plan has landed and it is a paying one. */
 function planLands() {
-  orgPlan.org = { plan: 'business', ownerUid: 'uid-owner' }
+  orgPlan.org = { plan: 'pro', ownerUid: 'uid-owner' }
   orgPlan.ready = true
 }
 
@@ -270,7 +270,7 @@ describe('registers card, plan not yet known', () => {
   })
 
   it('enables Add and shows the real cap once the plan lands', () => {
-    orgPlan.org = { plan: 'business' }
+    orgPlan.org = { plan: 'pro' }
     orgPlan.ready = true
     render(<RegistersCard hostId="host-1" />)
     typeName(NEW_REGISTER)
@@ -290,7 +290,7 @@ describe('locations card, plan not yet known', () => {
   })
 
   it('enables Add once the plan lands', () => {
-    orgPlan.org = { plan: 'business' }
+    orgPlan.org = { plan: 'pro' }
     orgPlan.ready = true
     locationDocs.push({ $id: 'l1', name: 'Main warehouse' })
     render(<LocationsCard hostId="host-1" />)

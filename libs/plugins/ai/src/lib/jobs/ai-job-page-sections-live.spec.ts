@@ -37,7 +37,7 @@
  * It calls the provider and costs real money (about $0.40 a run), so it runs
  * only when asked: `AGLYN_LIVE_AI=1` with `ANTHROPIC_API_KEY` set. Run it
  * before promoting a change to the page step, its prompt or the page check.
- * `AGLYN_LIVE_AI_ORG_PLAN=business` builds the same pages on a paid workspace,
+ * `AGLYN_LIVE_AI_ORG_PLAN=pro` builds the same pages on a paid workspace,
  * whose plan places a card component in each section of items, as the plan
  * rules ask of one. `jest.setup.js` scrubs every variable the repo's `.env`
  * holds unless the run carries the live launcher's mark, so a key read from
@@ -56,7 +56,7 @@
  *   2. replay — this spec again: under the launcher every request whose
  *      bytes were answered before is replayed from `.cache/ai-replay` for
  *      nothing, and only a CHANGED prompt goes to the provider;
- *   3. one live run per plan (Free, then `AGLYN_LIVE_AI_ORG_PLAN=business`)
+ *   3. one live run per plan (Free, then `AGLYN_LIVE_AI_ORG_PLAN=pro`)
  *      for the prompts you changed — read `run.live` in the table: 0 means
  *      nothing new was asked and the run proves nothing;
  *   4. the full live sweep, only before landing: `AGLYN_AI_REPLAY=refresh`
@@ -145,7 +145,7 @@ import { aiJobPageSectionMaxElements } from './ai-job-page-step'
 import { aiLiveTimeoutMs } from '../runtime/ai-dev-env'
 
 const LIVE = process.env['AGLYN_LIVE_AI'] === '1' && Boolean(process.env['ANTHROPIC_API_KEY'])
-const ORG_PLAN = process.env['AGLYN_LIVE_AI_ORG_PLAN'] === 'business' ? 'business' : 'free'
+const ORG_PLAN = process.env['AGLYN_LIVE_AI_ORG_PLAN'] === 'pro' ? 'pro' : 'free'
 /**
  * An answer ceiling in place of the served tier's, to measure what a section
  * runs to uncut (`AGLYN_LIVE_AI_MAX_TOKENS=2000`); absent, the step's own.
@@ -225,7 +225,7 @@ function home(seoTitle: string, seoDescription: string, sections: AiBuildPlanScr
     seoTitle,
     seoDescription,
     // A paid workspace's plan places a component in each section of items, as rule 1 asks of its plan.
-    sections: sections.map((section) => (ORG_PLAN === 'business' && section.items ? { ...section, uses: [CARD_ID] } : section)),
+    sections: sections.map((section) => (ORG_PLAN === 'pro' && section.items ? { ...section, uses: [CARD_ID] } : section)),
     record: null,
   } as unknown as AiBuildPlanScreen
 }
@@ -237,7 +237,7 @@ function builtSite(): AiSiteInventory {
     layouts: [{ id: LAYOUT_ID, name: 'Main Layout', parentId: null }],
     forms: [{ id: FORM_ID, name: 'Contact Request Form', fields: ['Name', 'Email', 'Phone', 'Message'] }],
     components:
-      ORG_PLAN === 'business' ? [{ id: CARD_ID, name: 'Card', props: { title: 'text', summary: 'text' } }] : [],
+      ORG_PLAN === 'pro' ? [{ id: CARD_ID, name: 'Card', props: { title: 'text', summary: 'text' } }] : [],
   }
 }
 
@@ -247,7 +247,7 @@ function siteJob(entry: (typeof HOMES)[number], index: number): AiJob {
     reuse: [
       { kind: 'layout', id: LAYOUT_ID, purpose: 'the layout this site’s pages are built on' },
       { kind: 'form', id: FORM_ID, purpose: 'the form this site’s pages are built on' },
-      ...(ORG_PLAN === 'business' ? [{ kind: 'component', id: CARD_ID, purpose: 'the card this site’s pages are built on' }] : []),
+      ...(ORG_PLAN === 'pro' ? [{ kind: 'component', id: CARD_ID, purpose: 'the card this site’s pages are built on' }] : []),
     ],
     create: [],
     screens: [entry.screen],

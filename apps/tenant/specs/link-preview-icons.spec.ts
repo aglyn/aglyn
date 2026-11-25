@@ -308,7 +308,7 @@ describe('the /api/site-icon route', () => {
 
   it('serves a transparent ICO, and a 404 touch icon, for a white-label site with neither', async () => {
     mockGetHost.mockResolvedValue({ host: NEITHER })
-    mockOrg.mockResolvedValue({ org: { $id: 'org-agency', plan: 'agency' } })
+    mockOrg.mockResolvedValue({ org: { $id: 'org-agency', plan: 'enterprise' } })
     const favicon = await call('plain', 'favicon')
     expect(favicon.status).toBe(200)
     expect(favicon.headers.get('Content-Type')).toBe('image/x-icon')

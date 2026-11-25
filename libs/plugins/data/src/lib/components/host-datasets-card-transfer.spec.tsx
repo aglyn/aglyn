@@ -138,7 +138,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   useConfirmationContext: () => ({ confirm: jest.fn() }),
 }))
 
-const ORG = { $id: 'org-1', plan: 'scale' } as any
+const ORG = { $id: 'org-1', plan: 'pro' } as any
 
 const launcher = (allowed: readonly TransferAction[] = ['import', 'export']): jest.Mocked<TransferLauncher> => ({
   openImport: jest.fn(),

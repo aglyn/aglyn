@@ -66,7 +66,7 @@ import { aiJobStepRunnerFor } from './ai-jobs'
 const NOW = new Date('2026-09-20T15:00:00.000Z')
 const MODEL = 'claude-sonnet-5'
 const ORG: Record<string, unknown> = {
-  plan: 'business',
+  plan: 'pro',
   billingStatus: 'active',
   enabledPlugins: ['marketing'],
 }

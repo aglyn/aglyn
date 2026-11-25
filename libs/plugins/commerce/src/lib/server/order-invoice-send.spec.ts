@@ -84,7 +84,7 @@ const firestore: any = {
     }),
 }
 
-const ORG = { id: 'org-1', plan: 'business', billingStatus: 'active', ownerUid: 'owner-1', slug: 'acme' }
+const ORG = { id: 'org-1', plan: 'pro', billingStatus: 'active', ownerUid: 'owner-1', slug: 'acme' }
 
 const sent: Array<Parameters<InvoiceMailerDeps['send']>[0]> = []
 const pdfs: Array<Parameters<InvoiceMailerDeps['invoicePdf']>[0]> = []

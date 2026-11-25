@@ -90,8 +90,8 @@ const SELLS = { managePos: true, posSell: true }
 
 await env.withSecurityRulesDisabled(async (context) => {
   const db = context.firestore()
-  await setDoc(doc(db, 'orgs', ORG), { name: 'Register Test', slug: 'register-test', plan: 'business', ownerUid: ADMIN })
-  await setDoc(doc(db, 'orgs', OTHER_ORG), { name: 'Other', slug: 'other', plan: 'business', ownerUid: OUTSIDER })
+  await setDoc(doc(db, 'orgs', ORG), { name: 'Register Test', slug: 'register-test', plan: 'pro', ownerUid: ADMIN })
+  await setDoc(doc(db, 'orgs', OTHER_ORG), { name: 'Other', slug: 'other', plan: 'pro', ownerUid: OUTSIDER })
   await setDoc(doc(db, 'orgs', ORG, 'members', ADMIN), { role: 'admin', allHosts: true })
   await setDoc(doc(db, 'orgs', ORG, 'members', EDITOR), { role: 'editor', allHosts: true })
   await setDoc(doc(db, 'orgs', ORG, 'members', VIEWER), { role: 'viewer', allHosts: true })

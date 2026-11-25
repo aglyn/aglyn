@@ -121,7 +121,7 @@ const writer = createAutomationDraftWriter({ firestore: () => firestore })
 
 // ── Fixtures ─────────────────────────────────────────────────────────────
 
-const PAID = { plan: 'business' }
+const PAID = { plan: 'pro' }
 const FREE = { plan: 'free' }
 
 /** An automation as a generator hands it over: placeholders, a stray key, and `enabled` asked for. */

@@ -124,7 +124,7 @@ const fakeFirestore = {
     }),
 }
 
-let orgFixture: any = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+let orgFixture: any = { id: 'org-1', plan: 'pro', ownerUid: 'owner-1' }
 
 const mockOperatorAlerts: Array<{ type: string; options: any }> = []
 
@@ -358,7 +358,7 @@ beforeEach(() => {
     // Stripe assertion below is about THIS correction.
     appliedFeePct: 2,
   })
-  orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+  orgFixture = { id: 'org-1', plan: 'pro', ownerUid: 'owner-1' }
   process.env.STRIPE_SECRET_KEY = 'sk_test_fee_basis_spec'
 })
 

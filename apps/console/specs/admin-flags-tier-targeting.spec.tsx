@@ -141,16 +141,15 @@ describe('/admin/flags tier targeting (AGL-2486)', () => {
     // The filter binds the fully-enabled path as well as the rollout, so an
     // "On" chip alone would read as "every customer has this" for a flag only
     // the top of the ladder can see.
-    mockApi({ enabled: true, plans: ['agency', 'enterprise'] })
+    mockApi({ enabled: true, plans: ['pro', 'enterprise'] })
     render(<AdminFlags />)
-    expect(await screen.findByText('Tiers: Agency, Custom')).toBeTruthy()
+    expect(await screen.findByText('Tiers: Pro, Custom')).toBeTruthy()
     expect(screen.getByText('On')).toBeTruthy()
   })
 
   it('offers every tier the plan model declares, in ladder order', async () => {
-    // `PLAN_LADDER` since pricing v4 (AGL-4126): the four retired plans stay
-    // targetable, because a workspace can still be on one, and the custom
-    // plan reads "Custom".
+    // `PLAN_LADDER`: the current plans only, since the plans pricing v4
+    // retired were removed (AGL-4245), and the custom plan reads "Custom".
     render(<AdminFlags />)
     await screen.findByText('Contacts CRM')
     fireEvent.mouseDown(screen.getByLabelText('Contacts CRM tiers'))
@@ -161,10 +160,6 @@ describe('/admin/flags tier targeting (AGL-2486)', () => {
       'Free',
       'Starter',
       'Pro',
-      'Business',
-      'Scale',
-      'Advanced',
-      'Agency',
       'Custom',
     ])
   })
@@ -177,7 +172,7 @@ describe('/admin/flags tier targeting (AGL-2486)', () => {
     await waitFor(() =>
       expect(
         screen.getByText(
-          'Tiers: Pro, Business, Scale, Advanced, Agency, Custom',
+          'Tiers: Pro, Custom',
         ),
       ).toBeTruthy(),
     )

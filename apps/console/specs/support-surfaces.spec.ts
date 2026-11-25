@@ -65,7 +65,7 @@ describe('which Support channel a plan lands on (AGL-1158)', () => {
   })
 
   it('sends every ticket-bearing tier to tickets', () => {
-    for (const plan of ['pro', 'business', 'scale', 'advanced', 'agency', 'enterprise'] as const) {
+    for (const plan of ['pro', 'enterprise'] as const) {
       expect(`${plan}: ${primarySupportSurface(supportForPlan(plan))}`).toBe(
         `${plan}: tickets`,
       )

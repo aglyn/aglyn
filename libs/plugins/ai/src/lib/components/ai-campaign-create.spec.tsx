@@ -37,7 +37,7 @@ if (typeof globalThis.TextEncoder === 'undefined') {
 
 const mockUser = { uid: 'u1', getIdToken: async () => 'tok' }
 const mockFetch = jest.fn()
-let mockOrg: Record<string, unknown> | undefined = { plan: 'business', billingStatus: 'active' }
+let mockOrg: Record<string, unknown> | undefined = { plan: 'pro', billingStatus: 'active' }
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
@@ -111,12 +111,12 @@ async function ask(brief = 'Announce the autumn menu') {
 
 beforeEach(() => {
   jest.clearAllMocks()
-  mockOrg = { plan: 'business', billingStatus: 'active' }
+  mockOrg = { plan: 'pro', billingStatus: 'active' }
 })
 
 describe('which job it starts', () => {
   it('asks the runner’s own check: a campaign where the plan sends campaign email, the design alone where not', () => {
-    expect(aiCampaignJobKind({ plan: 'business', billingStatus: 'active' })).toBe('campaign')
+    expect(aiCampaignJobKind({ plan: 'pro', billingStatus: 'active' })).toBe('campaign')
     expect(aiCampaignJobKind({ plan: 'free' })).toBe('email')
     expect(aiCampaignJobKind(null)).toBe('email')
   })

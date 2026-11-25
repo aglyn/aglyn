@@ -47,7 +47,7 @@ const cachedHit = (path: string) => ({
 const serverHit = (path: string) => ({
   exists: () => true,
   id: path.split('/').pop(),
-  data: () => ({ plan: 'business' }),
+  data: () => ({ plan: 'pro' }),
 })
 
 /**
@@ -100,7 +100,7 @@ describe('useConfirmedDoc server confirms', () => {
     })
     for (const hook of hooks) {
       expect(hook.result.current.fromCache).toBe(false)
-      expect(hook.result.current.data).toMatchObject({ plan: 'business' })
+      expect(hook.result.current.data).toMatchObject({ plan: 'pro' })
     }
   })
 

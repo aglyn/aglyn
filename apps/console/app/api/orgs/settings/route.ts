@@ -588,8 +588,8 @@ async function handler(request: Request): Promise<Response> {
     }
 
     // White-label brand (White-Label Phase 2): the org's `brandingProfile`,
-    // admin-writable but gated on the `whiteLabel` entitlement (Agency tier /
-    // Enterprise override) — the same gate `resolveBrandingProfile` reads, so
+    // admin-writable but gated on the `whiteLabel` entitlement (the Custom
+    // plan, or a per-org override) — the same gate `resolveBrandingProfile` reads, so
     // the server never stores a profile it would ignore anyway, and a
     // non-entitled org can't stage a brand it isn't paying for. Image/support
     // URLs must be https; the color must be a CSS hex. The whole
@@ -607,7 +607,7 @@ async function handler(request: Request): Promise<Response> {
         return Response.json(
           {
             // White label is the Custom plan's since pricing v4 (AGL-4158),
-            // named from the entitlement table, never a retired plan.
+            // named from the entitlement table.
             error: `White-label branding is part of the ${
               planLabelGrantingFeature('whiteLabel') ?? ENTERPRISE_PLAN_LABEL
             } plan`,

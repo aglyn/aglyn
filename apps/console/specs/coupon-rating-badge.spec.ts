@@ -33,7 +33,7 @@ import { checkDiscountMargin } from '@aglyn/aglyn/server'
  * incidental constant.
  */
 const REFERENCE_ORG = {
-  plan: 'business',
+  plan: 'pro',
   subscription: { status: 'active', interval: 'month' },
 } as never
 
@@ -70,8 +70,13 @@ describe('the coupon form badge', () => {
   it('still finds the cost side healthy — the negative control', () => {
     // If cost recovery ever stopped clearing this on its own, the tests above
     // would pass for the wrong reason and the depth arm could be removed
-    // without anything going red.
-    const rating = checkDiscountMargin(REFERENCE_ORG, { percentOff: 93 })
+    // without anything going red. Read at the give-away line (70%): on Pro's
+    // $69 the 93% case is thin on cost too since the reference moved off the
+    // removed Business plan's $139 (AGL-4245), so the control sits where
+    // depth alone blocks.
+    const rating = checkDiscountMargin(REFERENCE_ORG, { percentOff: 70 })
+    expect(rating.rating).toBe('block')
+    expect(rating.reason).toBe('depth')
     expect(rating.marginPct).toBeGreaterThan(rating.floorPct)
   })
 

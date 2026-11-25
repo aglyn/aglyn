@@ -112,8 +112,8 @@ const SALE_DATA = {
 
 await env.withSecurityRulesDisabled(async (context) => {
   const db = context.firestore()
-  await setDoc(doc(db, 'orgs', ORG), { name: 'Hardware Test', slug: 'hardware-test', plan: 'business', ownerUid: OWNER })
-  await setDoc(doc(db, 'orgs', OTHER_ORG), { name: 'Other', slug: 'other', plan: 'business', ownerUid: OUTSIDER })
+  await setDoc(doc(db, 'orgs', ORG), { name: 'Hardware Test', slug: 'hardware-test', plan: 'pro', ownerUid: OWNER })
+  await setDoc(doc(db, 'orgs', OTHER_ORG), { name: 'Other', slug: 'other', plan: 'pro', ownerUid: OUTSIDER })
   await setDoc(doc(db, 'orgs', ORG, 'members', OWNER), { role: 'owner', allHosts: true })
   await setDoc(doc(db, 'orgs', ORG, 'members', ADMIN), { role: 'admin', allHosts: true })
   await setDoc(doc(db, 'orgs', ORG, 'members', EDITOR), { role: 'editor', allHosts: true })

@@ -220,7 +220,7 @@ beforeEach(() => {
     keyId: `key-${keySeq}`,
     scopes: ['read'],
   })
-  mockGetOrgDoc.mockResolvedValue({ plan: 'business', billingStatus: 'active' })
+  mockGetOrgDoc.mockResolvedValue({ plan: 'pro', billingStatus: 'active' })
   mockLockdownRefusal.mockResolvedValue(null)
 })
 

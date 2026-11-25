@@ -293,7 +293,7 @@ function seedPlatform() {
   seed('orgs/org-a', {
     name: 'Acme',
     slug: 'acme',
-    plan: 'business',
+    plan: 'pro',
     entitlements: { features: { crm: true } },
   })
   seed('orgs/org-a/members/ann', { role: 'admin', email: 'Ann@Acme.com', displayName: 'Ann' })
@@ -367,7 +367,7 @@ function seedPlatform() {
   seed('orgs/org-off', {
     name: 'Off',
     slug: 'off',
-    plan: 'business',
+    plan: 'pro',
     entitlements: { features: { crm: true } },
     releaseFlags: { release_crm: false },
   })

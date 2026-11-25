@@ -119,7 +119,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   getRealmPluginInstalls: jest.fn(async () => []),
   getOrgForHost: jest.fn(async () => ({
     orgId: 'org-1',
-    org: { plan: 'business' },
+    org: { plan: 'pro' },
   })),
 }))
 jest.mock('../utils/get-host', () => ({

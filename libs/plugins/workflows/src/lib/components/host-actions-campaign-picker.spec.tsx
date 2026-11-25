@@ -88,7 +88,7 @@ jest.mock('./host-activity-card.component', () => ({
   default: () => null,
 }))
 
-const ORG = { plan: 'business' } as never
+const ORG = { plan: 'pro' } as never
 
 function open(label: string) {
   fireEvent.mouseDown(screen.getByLabelText(label))

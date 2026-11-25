@@ -101,14 +101,14 @@ const CASE_ORGS = [
   { plan: 'free' },
   { plan: 'starter' },
   { plan: 'pro' },
-  { plan: 'business' },
+  { plan: 'pro' },
   { plan: 'enterprise' },
   { plan: 'nonsense' },
-  { plan: 'business', billingStatus: 'canceled' },
-  { plan: 'business', billingStatus: 'past_due' },
+  { plan: 'pro', billingStatus: 'canceled' },
+  { plan: 'pro', billingStatus: 'past_due' },
   { plan: 'pro', subscription: { status: 'unpaid' } },
-  { plan: 'free', entitlements: { planComp: { plan: 'business' } } },
-  { plan: 'starter', billingStatus: 'active', entitlements: { planComp: { plan: 'business' } } },
+  { plan: 'free', entitlements: { planComp: { plan: 'pro' } } },
+  { plan: 'starter', billingStatus: 'active', entitlements: { planComp: { plan: 'pro' } } },
   { plan: 'starter', billingStatus: 'canceled', entitlements: { planComp: { plan: 'pro' } } },
   { plan: 'free', entitlements: { features: { abTesting: true, outreach: true } } },
   { plan: 'enterprise', entitlements: { features: { marketingOverlays: false } } },
@@ -124,9 +124,9 @@ const FEE_CASE_ORGS = [
   { plan: 'pro', entitlements: { marketplaceFeePct: 12 } },
   { plan: 'pro', entitlements: { marketplaceFeePct: 0 } },
   { plan: 'free', entitlements: { marketplaceFeePct: 150 } },
-  { plan: 'business', entitlements: { marketplaceFeePct: -1 } },
-  { plan: 'business', entitlements: { marketplaceFeePct: '15' } },
-  { plan: 'free', entitlements: { planComp: { plan: 'business', uncapped: true } } },
+  { plan: 'pro', entitlements: { marketplaceFeePct: -1 } },
+  { plan: 'pro', entitlements: { marketplaceFeePct: '15' } },
+  { plan: 'free', entitlements: { planComp: { plan: 'pro', uncapped: true } } },
 ]
 
 /** The stored proposals whose summary each platform replays (`upgradeProposal` on the org document). */
@@ -135,9 +135,9 @@ const PROPOSAL_CASE_ORGS = [
   { upgradeProposal: { plan: 'pro' } },
   { upgradeProposal: { plan: 'free' } },
   { upgradeProposal: { plan: 'enterprise' } },
-  { upgradeProposal: { plan: 'business', interval: 'year' } },
-  { upgradeProposal: { plan: 'business', interval: 'month', coupon: 'BOOTH25' } },
-  { upgradeProposal: { plan: 'business', coupon: 'not a code!' } },
+  { upgradeProposal: { plan: 'pro', interval: 'year' } },
+  { upgradeProposal: { plan: 'pro', interval: 'month', coupon: 'BOOTH25' } },
+  { upgradeProposal: { plan: 'pro', coupon: 'not a code!' } },
   { upgradeProposal: { plan: 'starter', addons: { siteCare: 1 } } },
   { upgradeProposal: { plan: 'pro', addons: { managers: 2, hosts: 1, aiAddon: 1 }, aiTier: 'boost', interval: 'year' } },
   { upgradeProposal: { plan: 'pro', addons: { aiAddon: 1 } } },
@@ -147,10 +147,10 @@ const PROPOSAL_CASE_ORGS = [
   // A retired tier name is no number of blocks: left off.
   { upgradeProposal: { plan: 'pro', addons: { aiAddon: 'boost' } } },
   { upgradeProposal: { plan: 'starter', addons: { posRegisters: 3, eventCalendar: 4, datasets: 2000 } } },
-  { upgradeProposal: { plan: 'business', addons: { extraSeat: 2, extraSite: 1, members: 0, datasets: false } } },
-  { upgradeProposal: { plan: 'scale', addons: { managers: 1, members: 1, siteCare: true } } },
-  { billingStatus: 'active', upgradeProposal: { plan: 'business' } },
-  { billingStatus: 'canceled', upgradeProposal: { plan: 'business', interval: 'year' } },
+  { upgradeProposal: { plan: 'pro', addons: { extraSeat: 2, extraSite: 1, members: 0, datasets: false } } },
+  { upgradeProposal: { plan: 'pro', addons: { managers: 1, members: 1, siteCare: true } } },
+  { billingStatus: 'active', upgradeProposal: { plan: 'pro' } },
+  { billingStatus: 'canceled', upgradeProposal: { plan: 'pro', interval: 'year' } },
 ]
 
 /** A number as a Kotlin Double literal (`20.0`, `12.5`). */
@@ -193,12 +193,12 @@ async function build() {
     { enabled: false },
     { enabled: false, rolloutPercent: 50 },
     { enabled: false, rolloutPercent: 100 },
-    { enabled: true, plans: ['business', 'enterprise'] },
+    { enabled: true, plans: ['pro', 'enterprise'] },
   ]
   const flagCases = []
   for (const value of flagValues) {
     for (const orgId of ['org-a', 'org-b', 'org-c', 'mobile-demo-org', null]) {
-      for (const plan of ['free', 'business', null]) {
+      for (const plan of ['free', 'pro', null]) {
         for (const overrides of [null, { release_outreach: true }, { release_outreach: false }]) {
           flagCases.push({
             flag: 'release_outreach', value, orgId, plan, overrides,

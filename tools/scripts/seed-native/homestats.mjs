@@ -20,7 +20,7 @@ export async function seedHomestats({ put, uid, orgId, hostId, now: date }) {
   // What `/api/admin/org-upgrade-proposal` writes: shown on the workspace's Home while no subscription is mirrored live.
   await put(
     `orgs/${orgId}`,
-    { upgradeProposal: { plan: 'business', proposedBy: 'staff-seed', proposedAt: now - 2 * DAY, note: 'Covers the catering site and the second location.' } },
+    { upgradeProposal: { plan: 'pro', proposedBy: 'staff-seed', proposedAt: now - 2 * DAY, note: 'Covers the catering site and the second location.' } },
     { merge: true },
   )
   // The accounts switch is off for a site until it opts in (`defaultOffPerSite`).

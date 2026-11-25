@@ -367,7 +367,7 @@ describe('the per-org table\u2019s search is the scan\u2019s question (AGL-3321)
       jsonResponse({
         rows: [
           rowFor(),
-          rowFor({ orgId: 'org-2', name: 'Globex', plan: 'business' }),
+          rowFor({ orgId: 'org-2', name: 'Globex', plan: 'pro' }),
         ],
         nextCursor: null,
         scanned: 2,
@@ -380,7 +380,7 @@ describe('the per-org table\u2019s search is the scan\u2019s question (AGL-3321)
     // The route answers the search; this fixture is what it answered.
     mockFetch.mockResolvedValueOnce(
       jsonResponse({
-        rows: [rowFor({ orgId: 'org-9', name: 'Globex Two', plan: 'business' })],
+        rows: [rowFor({ orgId: 'org-9', name: 'Globex Two', plan: 'pro' })],
         nextCursor: null,
         scanned: 1,
         reads: 4,

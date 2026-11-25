@@ -127,7 +127,7 @@ describe('a plugin declares what each plan includes of its own keys (AGL-3080)',
 
 describe('an undeclared key reads as nothing included', () => {
   it('is 0 — never unlimited, never free', () => {
-    const resolved = resolveOrgEntitlements({ plan: 'agency' } as never)
+    const resolved = resolveOrgEntitlements({ plan: 'enterprise' } as never)
     expect(planQuotaOf(resolved, 'aKeyNoPluginDeclares')).toBe(0)
     expect(planQuotaOf({ aKey: Number.NaN }, 'aKey')).toBe(0)
     expect(planQuotaOf({ aKey: '12' }, 'aKey')).toBe(0)

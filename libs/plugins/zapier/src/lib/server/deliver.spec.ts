@@ -43,7 +43,7 @@ const hook = (id: string, extra: Partial<ZapierHook> = {}): ZapierHook => ({
   ...extra,
 })
 
-const ORG = { plan: 'business', hosts: { h1: true } }
+const ORG = { plan: 'pro', hosts: { h1: true } }
 
 const input = (extra: Partial<ZapierDeliveryInput> = {}): ZapierDeliveryInput => ({
   eventId: 'evt_1',
@@ -152,7 +152,7 @@ describe('deliverToZapierHooks (AGL-3643)', () => {
     expect((await deliverToZapierHooks(narrowed.deps, input())).removed).toBe(1)
     expect(narrowed.posts).toEqual([])
 
-    const moved = setup([hook('a')], { org: { plan: 'business', hosts: { other: true } } })
+    const moved = setup([hook('a')], { org: { plan: 'pro', hosts: { other: true } } })
     expect((await deliverToZapierHooks(moved.deps, input())).removed).toBe(1)
     expect(moved.posts).toEqual([])
   })
@@ -166,7 +166,7 @@ describe('deliverToZapierHooks (AGL-3643)', () => {
 
   it('pauses, and keeps, the hooks of a plan with the API and without webhooks (AGL-4226)', async () => {
     const noWebhooks = setup([hook('a')], {
-      org: { plan: 'business', hosts: { h1: true }, entitlements: { features: { webhooks: false } } },
+      org: { plan: 'pro', hosts: { h1: true }, entitlements: { features: { webhooks: false } } },
     })
     expect(await deliverToZapierHooks(noWebhooks.deps, input())).toEqual({ delivered: 0, failed: 0, paused: 1, removed: 0 })
     expect(noWebhooks.posts).toEqual([])

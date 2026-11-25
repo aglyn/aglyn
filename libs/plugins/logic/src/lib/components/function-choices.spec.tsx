@@ -89,7 +89,7 @@ jest.mock('@aglyn/aglyn/app-utils/where-used', () => ({
   summarizeDependents: () => '',
 }))
 
-const ORG = { plan: 'business' } as never
+const ORG = { plan: 'pro' } as never
 
 function choose(label: string, option: string, index = 0) {
   fireEvent.mouseDown(screen.getAllByRole('combobox', { name: label })[index])

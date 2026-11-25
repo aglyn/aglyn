@@ -151,7 +151,7 @@ const mockHostRoute = {
   subdomain: 'site',
   base: '/acme/hosts/site',
 }
-const mockPlan = { org: { plan: 'business', features: {} }, ready: true }
+const mockPlan = { org: { plan: 'pro', features: {} }, ready: true }
 const mockResourceApi = { data: undefined, loading: false }
 const mockServices = {
   app: {},
@@ -309,7 +309,7 @@ async function renderConsole(section: string) {
     <InboxConsolePage
       hostId="site1"
       entitled
-      org={{ plan: 'business' } as never}
+      org={{ plan: 'pro' } as never}
       permissions={{} as never}
       basePath={BASE_PATH}
       sections={shellSections()}
@@ -477,7 +477,7 @@ async function renderOrgConsole(section: string, mount = ORG_MOUNT) {
       hostId={null}
       orgMount={mount}
       entitled
-      org={{ plan: 'business' } as never}
+      org={{ plan: 'pro' } as never}
       permissions={{} as never}
       basePath={ORG_BASE_PATH}
       sections={INBOX_ORG_CONSOLE_SECTIONS.map((entry) => ({

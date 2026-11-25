@@ -268,7 +268,7 @@ beforeEach(() => {
   state.memberRoles = { 'user-1': 'admin' }
   // Business: `screensPerHost` is UNLIMITED there, so every refusal below can
   // only be the flat cap — never the plan's allowance wearing its coat.
-  state.org = { plan: 'business' }
+  state.org = { plan: 'pro' }
   state.screens = []
   state.routingMap = {}
   state.selects = []
@@ -277,7 +277,7 @@ beforeEach(() => {
 
 describe('non-page screen documents are capped server-side (AGL-1399)', () => {
   it('is the premise: business screens are unlimited, so only the flat cap can refuse', () => {
-    expect(PLAN_ENTITLEMENTS.business.screensPerHost).toBe(Infinity)
+    expect(PLAN_ENTITLEMENTS.pro.screensPerHost).toBe(Infinity)
     expect(Number.isFinite(NON_PAGE_SCREEN_MAX_PER_HOST)).toBe(true)
   })
 
@@ -415,7 +415,7 @@ describe('non-page screen documents are capped server-side (AGL-1399)', () => {
   })
 
   it('refuses while the owning org is suspended — 423, the distinct lockdown status (AGL-1501)', async () => {
-    state.org = { plan: 'business', suspendedAt: { seconds: 1 } }
+    state.org = { plan: 'pro', suspendedAt: { seconds: 1 } }
     expect((await createEmail()).status).toBe(423)
     expect(mockCreate).not.toHaveBeenCalled()
   })

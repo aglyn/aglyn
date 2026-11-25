@@ -141,7 +141,7 @@ describe('a white-labelled site', () => {
     // The expensive case. An Agency org pays for `whiteLabel` so its
     // customers' sites do not disclose the platform; a generator tag is
     // exactly the disclosure, in the exact place a detector reads.
-    givenOrg({ $id: 'org-1', plan: 'agency' })
+    givenOrg({ $id: 'org-1', plan: 'enterprise' })
 
     expect((await metadata()).generator).toBeUndefined()
   })
@@ -167,7 +167,7 @@ describe('a white-labelled site', () => {
   it('CONTROL — the same fixture still composes the rest of its head', async () => {
     // Proves the two blocks differ by the ENTITLEMENT and not by the
     // white-label fixture happening to break metadata generation outright.
-    givenOrg({ $id: 'org-1', plan: 'agency' })
+    givenOrg({ $id: 'org-1', plan: 'enterprise' })
 
     expect((await metadata()).title).toBeTruthy()
   })

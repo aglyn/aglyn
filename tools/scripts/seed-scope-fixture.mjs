@@ -105,7 +105,7 @@ async function main() {
       ...displayNameSearchFields('Scope Agency'),
       slug: ORG_ID,
       ownerUid: 'scope-owner',
-      plan: 'business',
+      plan: 'pro',
       hosts: Object.fromEntries(ALL_HOSTS.map((id) => [id, true])),
       subscription: { status: 'active' },
       createdAt: FieldValue.serverTimestamp(),

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { SitePageResolver } from '@aglyn/aglyn/server'
+import type { SiteEditContextResolver, SitePageResolver } from '@aglyn/aglyn/server'
 import { hostCollectionKind } from '@aglyn/aglyn/server'
 import composeScreenNodes, {
   composeNodesWithChrome,
@@ -33,6 +33,7 @@ import * as CommerceModel from '../model'
 import { productAsksUseDateAnywhere, toPublicProductDetail } from './product'
 import { readStoreDay } from './store-day'
 import { readProductReviews } from './reviews'
+import { productEditPath } from '../model/commerce-record-routes'
 
 /**
  * Commerce page resolver (AGL-292/298/418), relocated verbatim from the
@@ -113,7 +114,10 @@ export const commerceSitePageResolver: SitePageResolver = async ({
         // The head shares this page as the template's image, then the site
         // default, so their documents are read in the template's own batch
         // (AGL-2850).
+        const shareImage = productShareImage(product)
         const card = collectSocialImageFacts([
+          // Only when there is one: the list is the card's precedence.
+          ...(shareImage ? [shareImage] : []),
           (templateRes.screen as any).seo?.image,
           hostRes.host?.seo?.image,
         ])
@@ -186,6 +190,7 @@ export const commerceSitePageResolver: SitePageResolver = async ({
                       displayName: product.name,
                       seo: {
                         ...((templateRes.screen as any).seo ?? {}),
+                        ...shareCard(shareImage, product.name),
                         // Only when the PRODUCT authored one: inheriting the
                         // template screen's title would give every product
                         // page in the store the same `<title>`.
@@ -252,7 +257,10 @@ export const commerceSitePageResolver: SitePageResolver = async ({
       if (templateRes.screen) {
         // As on the PDP above: the template's image, then the site default
         // (AGL-2850).
+        const shareImage = shopCollection.imageUrl || undefined
         const card = collectSocialImageFacts([
+          // Only when there is one: the list is the card's precedence.
+          ...(shareImage ? [shareImage] : []),
           (templateRes.screen as any).seo?.image,
           hostRes.host?.seo?.image,
         ])
@@ -297,6 +305,7 @@ export const commerceSitePageResolver: SitePageResolver = async ({
                       displayName: shopCollection.name,
                       seo: {
                         ...((templateRes.screen as any).seo ?? {}),
+                        ...shareCard(shareImage, shopCollection.name),
                         title: undefined,
                         description:
                           shopCollection.description ?? undefined,
@@ -315,6 +324,68 @@ export const commerceSitePageResolver: SitePageResolver = async ({
     }
   }
   return undefined
+}
+
+/**
+ * What the admin edit bar says on the pages the resolver above composes. They
+ * are in no routing map, so the bar called a product page "Unrouted page" with
+ * no edit link. It answers from the same reads the page is built from: the
+ * store's designated template (`pdpScreenId`, `collectionScreenId`), and for
+ * a product page the product itself, whose editor the bar links beside the
+ * template's Besigner, as it does for a blog post. A product the page would
+ * not render (not live, or not sold online) gets no answer, as it gets no
+ * page.
+ */
+export const commerceEditContextResolver: SiteEditContextResolver = async ({
+  hostId,
+  path,
+}) => {
+  const segments = path.split('/').filter(Boolean)
+  if (segments.length !== 2) return undefined
+  const [section, slug] = segments
+  if (section !== 'products' && section !== 'collections') return undefined
+  const hostDocRef = firebaseAdmin.app().firestore().collection('hosts').doc(hostId)
+  const storeSettings = await hostDocRef.collection('settings').doc('store').get()
+  const screenField = (name: string) => {
+    const value = storeSettings.get(name)
+    return typeof value === 'string' && value ? value : null
+  }
+  if (section === 'products') {
+    const productSnapshot = await hostDocRef
+      .collection('products')
+      .where('slug', '==', slug)
+      .limit(1)
+      .get()
+    const productDoc = productSnapshot.docs[0]
+    if (!productDoc || !CommerceModel.productListedOnline(productDoc.data() as any)) {
+      return undefined
+    }
+    return {
+      templateScreenId: screenField('pdpScreenId'),
+      collectionName: 'Products',
+      entry: true,
+      entryNoun: 'product',
+      recordEditPath: productEditPath(productDoc.id),
+    }
+  }
+  const collectionSnapshot = await hostDocRef
+    .collection('collections')
+    .where('slug', '==', slug)
+    .limit(5)
+    .get()
+  const shopCollection = collectionSnapshot.docs.find(
+    (docSnapshot) => hostCollectionKind(docSnapshot.data()) === 'catalog',
+  )
+  const templateScreenId = screenField('collectionScreenId')
+  // Without a template the page is not served (no built-in collection page).
+  if (!shopCollection || !templateScreenId) return undefined
+  return {
+    templateScreenId,
+    collectionName: 'Store collections',
+    entry: true,
+    entryNoun: 'collection',
+    recordEditPath: null,
+  }
 }
 
 // What `{{product.price}}` says (AGL-3676) lives with the model now, so the
@@ -431,8 +502,9 @@ async function composeBuiltInProductPage(
       storeTakesReviews(hostId),
     ])
     const returns = productReturnWindow(product, rawReturns)
+    const shareImage = productShareImage(product)
     const card = collectSocialImageFacts([
-      product.mediaUrls?.[0] ?? product.imageUrl,
+      ...(shareImage ? [shareImage] : []),
       (host as { seo?: { image?: string } } | null)?.seo?.image,
     ])
     const nodes = await composeNodesWithChrome({
@@ -465,6 +537,7 @@ async function composeBuiltInProductPage(
               data: {
                 displayName: product.name,
                 seo: {
+                  ...shareCard(shareImage, product.name),
                   title: product.seo?.title ?? undefined,
                   description: product.seo?.description ?? product.description ?? undefined,
                 },
@@ -508,6 +581,39 @@ export function buildOrderStatusNodes(): Record<string, Aglyn.AglynNodeSchema> {
       pluginId: 'commerce',
       props: {},
     } as Aglyn.AglynNodeSchema,
+  }
+}
+
+/**
+ * The image a product page shares: the one picked in the product editor's
+ * "OG image" field (`seo.imageUrl`), else the product's first photo.
+ *
+ * Both product pages used to share the template's image, then the site
+ * default, so every product in a store shared one card and the editor's
+ * OG image was saved and never read. A product's own photo is the most
+ * specific card there is; the template's image stays the fallback for a
+ * product with no photo.
+ */
+function productShareImage(product: CommerceModel.HostProduct): string | undefined {
+  return product.seo?.imageUrl || product.mediaUrls?.[0] || product.imageUrl || undefined
+}
+
+/**
+ * The page's own card fields for a routed product or collection image.
+ *
+ * The template's pixel pair and alt describe the template's image, not this
+ * one, so they are cleared beside it: a stale 1200x630 on a square product
+ * photo is a wrong claim, and no pair is an honest one. The alt names what
+ * the page is about. Nothing when there is no image, so the template's card
+ * stands.
+ */
+function shareCard(image: string | undefined, name: string | undefined) {
+  if (!image) return {}
+  return {
+    image,
+    imageWidth: undefined,
+    imageHeight: undefined,
+    imageAlt: name || undefined,
   }
 }
 

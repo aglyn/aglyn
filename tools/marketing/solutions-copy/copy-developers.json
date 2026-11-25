@@ -5,7 +5,7 @@
   "frameName": "Solutions — Developers",
   "frameSize": {
     "width": 1440,
-    "height": 4423
+    "height": 5398
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
   "sections": [
@@ -14,11 +14,11 @@
       "figmaNodeId": "165:904",
       "order": 0,
       "heightPx": 689.5652465820312,
-      "eyebrow": "SOLUTIONS · DEVELOPERS",
-      "heading": "Open source. Yours to extend.",
+      "eyebrow": "WEBSITE BUILDER FOR DEVELOPERS",
+      "heading": "The website builder for developers who want to own the stack.",
       "subheading": null,
       "body": [
-        "Aglyn is Apache-2.0 — fork it, self-host it with Docker, and extend it with a plugin architecture and a REST API. The whole platform is built the same way you’d build on it."
+        "Aglyn is Apache-2.0 — fork it, self-host it with Docker, and extend it with a plugin architecture and a REST API. The whole platform is built the same way you’d build on it. Aglyn AI drafts pages, forms and emails from a description, and your team edits the result on the canvas or extends it in code."
       ],
       "actions": [],
       "items": [],
@@ -43,7 +43,7 @@
       "kind": null,
       "figmaNodeId": "165:913",
       "order": 2,
-      "heightPx": 737,
+      "heightPx": 716,
       "eyebrow": "WHY AGLYN FOR DEVELOPERS",
       "heading": "Built to be built on.",
       "subheading": null,
@@ -82,7 +82,7 @@
           "figmaNodeId": "165:946",
           "meta": null,
           "title": "REST API & keys",
-          "body": "Automate datasets and read your sites, contacts, and form data with scoped API keys (Business and up).",
+          "body": "Automate datasets and read your sites, contacts, and form data with scoped API keys (Starter and up).",
           "extra": []
         },
         {
@@ -120,14 +120,14 @@
           "figmaNodeId": "168:2112",
           "meta": null,
           "title": "Outbound webhooks",
-          "body": "POST to your own services on any event (Business and up).",
+          "body": "POST to your own services on any event (Pro and up).",
           "extra": []
         },
         {
           "figmaNodeId": "168:2118",
           "meta": null,
           "title": "REST API & keys",
-          "body": "Read and write datasets with scoped API keys (Business and up).",
+          "body": "Read and write datasets with scoped API keys (Starter and up).",
           "extra": []
         }
       ],
@@ -138,7 +138,7 @@
       "kind": null,
       "figmaNodeId": "165:959",
       "order": 4,
-      "heightPx": 410,
+      "heightPx": 473,
       "eyebrow": "HOW DEVELOPERS BUILD ON AGLYN",
       "heading": "Fork it, extend it, ship it.",
       "subheading": null,
@@ -285,8 +285,74 @@
     },
     {
       "kind": null,
-      "figmaNodeId": "165:979",
+      "figmaNodeId": "2298:56376",
       "order": 7,
+      "heightPx": 723,
+      "eyebrow": "BEFORE YOU START",
+      "heading": "Questions about a website builder for developers.",
+      "subheading": null,
+      "body": [
+        "The license, self-hosting, the API and plugins, in plain terms."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "2298:56379",
+          "meta": null,
+          "title": "Is Aglyn really open source?",
+          "body": "Yes. Apache-2.0 and public on GitHub; the hosted platform runs the same code.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:56382",
+          "meta": null,
+          "title": "How do I self-host?",
+          "body": "Run it with Docker on your own infrastructure with your own Firebase project; the docs walk through it.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:56385",
+          "meta": null,
+          "title": "Is there an API?",
+          "body": "Yes. On the hosted platform the REST API starts on Starter and webhooks on Pro; self-hosted, you get both in full.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:56388",
+          "meta": null,
+          "title": "Can I write plugins?",
+          "body": "Yes. Aglyn is built from plugins, and you can package templates, layouts, schemas and private plugins of your own.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:56391",
+          "meta": null,
+          "title": "Can I build client sites and hand them off?",
+          "body": "Yes. Give a client a collaborator seat on their site, or white-label the whole console on a Custom plan.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:56394",
+          "meta": null,
+          "title": "What does the hosted platform add?",
+          "body": "Hosting, CDN delivery, SSL, billing and Aglyn AI credits, with the same open codebase underneath.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2328:66169",
+          "meta": null,
+          "title": "What is Aglyn?",
+          "body": "Aglyn is a website builder with the store, forms, CRM, email, analytics and Aglyn AI built in. It is open source and free to start.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "165:979",
+      "order": 8,
       "heightPx": 289,
       "eyebrow": null,
       "heading": "Build on an open platform.",

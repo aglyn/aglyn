@@ -222,7 +222,7 @@ const DEAL_IN_A_STAGE = {
 
 await env.withSecurityRulesDisabled(async (context) => {
   const db = context.firestore()
-  await setDoc(seed(db, 'orgs', ORG), { name: 'CRM audience keys', slug: 'crm-audience-keys', plan: 'agency' })
+  await setDoc(seed(db, 'orgs', ORG), { name: 'CRM audience keys', slug: 'crm-audience-keys', plan: 'enterprise' })
   await setDoc(seed(db, 'orgs', NO_SUITE_ORG), { name: 'Free', slug: 'crm-audience-free', plan: 'free' })
   await setDoc(seed(db, 'orgs', NO_SUITE_ORG, 'members', uidOf('admin')), { role: 'admin', allHosts: true })
   for (const [name, member] of Object.entries(MEMBERS)) {
@@ -606,7 +606,7 @@ await allow('an admin holding the key can', () =>
   })
   await controlEnv.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore()
-    await setDoc(doc(db, 'orgs', ORG), { name: 'CRM audience keys', slug: 'crm-audience-keys', plan: 'agency' })
+    await setDoc(doc(db, 'orgs', ORG), { name: 'CRM audience keys', slug: 'crm-audience-keys', plan: 'enterprise' })
     await setDoc(doc(db, 'orgs', ORG, 'members', uidOf('adminRefusedTemplates')), MEMBERS.adminRefusedTemplates)
     await setDoc(doc(db, 'orgs', ORG, 'crmEmailTemplates', 'personal'), PERSONAL_TEMPLATE)
   })

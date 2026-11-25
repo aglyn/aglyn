@@ -58,7 +58,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     fromCache: false,
   }),
   useFirestoreDoc: () => ({ data: mockStore, status: 'success', fromCache: mockStoreFromCache }),
-  useOrgPlan: () => ({ org: { $id: 'org-1', plan: 'business' }, ready: true }),
+  useOrgPlan: () => ({ org: { $id: 'org-1', plan: 'pro' }, ready: true }),
   useHostResourceApi: () => jest.fn(),
   useUser: () => ({ data: { uid: 'uid-owner', getIdToken: jest.fn(async () => 'tok') } }),
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance').writeGuardedBySeed,

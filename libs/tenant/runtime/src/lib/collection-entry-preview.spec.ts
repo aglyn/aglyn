@@ -147,7 +147,7 @@ beforeEach(() => {
   for (const key of Object.keys(flips)) delete flips[key]
   storeVerdicts.length = 0
   entryDocs = []
-  orgForHost = { orgId: 'org-1', org: { plan: 'business' } }
+  orgForHost = { orgId: 'org-1', org: { plan: 'pro' } }
   collectionDoc.fields = {
     displayName: 'Blog',
     slug: 'blog',

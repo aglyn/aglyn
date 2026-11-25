@@ -100,7 +100,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 }))
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
-  default: () => ({ org: { plan: 'business' } }),
+  default: () => ({ org: { plan: 'pro' } }),
 }))
 
 /**

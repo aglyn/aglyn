@@ -348,7 +348,7 @@ jest.mock('../components/host-id-provider', () => ({
 jest.mock('../hooks/use-org-scope', () => ({ useOrgSlug: () => 'acme' }))
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
-  default: () => ({ org: { plan: 'business' }, orgId: 'org-1', ready: true }),
+  default: () => ({ org: { plan: 'pro' }, orgId: 'org-1', ready: true }),
 }))
 jest.mock('../hooks/use-branding', () => ({
   __esModule: true,

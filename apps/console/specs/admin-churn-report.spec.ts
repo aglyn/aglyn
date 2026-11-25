@@ -403,7 +403,7 @@ describe('the free-text answers (AGL-2294)', () => {
   }
 
   it('returns what the customer actually typed, joined to their reason', async () => {
-    mockGroupDocs = [survey(CHURN_SURVEY_REASONS[1], RETENTION_SURFACES[0], 'business')]
+    mockGroupDocs = [survey(CHURN_SURVEY_REASONS[1], RETENTION_SURFACES[0], 'pro')]
     // `doc-0` is the id the double mints for the first retention row, so this
     // detail belongs to that survey — the join the route performs.
     mockDetailDocs = [detail('doc-0', 'Your form builder lost my fields twice.')]
@@ -417,7 +417,7 @@ describe('the free-text answers (AGL-2294)', () => {
       detail: 'Your form builder lost my fields twice.',
       reason: CHURN_SURVEY_REASONS[1],
       surface: RETENTION_SURFACES[0],
-      plan: 'business',
+      plan: 'pro',
       atMs: 1_760_000_000_000,
     })
   })

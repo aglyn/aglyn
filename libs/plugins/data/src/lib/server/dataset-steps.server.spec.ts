@@ -260,7 +260,7 @@ describe('the row and byte bands', () => {
     // Agency's `recordsPerDataset` is UNLIMITED: the read is only worth paying
     // where it can change the answer.
     recordCount = 9_000_000
-    await run('datasetAppend', { email: 'a@b.co' }, { plan: 'agency' })
+    await run('datasetAppend', { email: 'a@b.co' }, { plan: 'enterprise' })
     expect(countReads).toBe(0)
     expect(addedRecords).toHaveLength(1)
   })

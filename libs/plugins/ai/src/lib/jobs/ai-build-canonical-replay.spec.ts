@@ -265,7 +265,7 @@ async function plan(answers: unknown[]) {
     readOps: async () => OPS,
     admissionRefusal: async () => null,
     readSiteContext: null,
-  })({ job: buildJob(), stepIndex: 0, now: NOW, firestore, org: { plan: 'business', billingStatus: 'active' } } as never)
+  })({ job: buildJob(), stepIndex: 0, now: NOW, firestore, org: { plan: 'pro', billingStatus: 'active' } } as never)
   return outcome
 }
 

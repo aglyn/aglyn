@@ -57,7 +57,7 @@ describe('AGL-2226 · gift cards are reachable from the console', () => {
     // If `giftCards` were ever retired from every plan this guard should stop
     // demanding a UI for it, rather than pinning a surface to a dead flag.
     expect(Object.keys(PLAN_ENTITLEMENTS.free.features)).toContain('giftCards')
-    expect(PLAN_ENTITLEMENTS.business.features.giftCards).toBe(true)
+    expect(PLAN_ENTITLEMENTS.pro.features.giftCards).toBe(true)
     expect(PLAN_ENTITLEMENTS.free.features.giftCards).toBe(false)
     expect(planGrantingFeature('giftCards')).toBeDefined()
   })

@@ -623,7 +623,7 @@ describe('the notification email is a system email (AGL-3367)', () => {
     userDocs.set('uid-a', ON)
     directory.set('uid-a', 'a@example.com')
     hostDocs.set('orgs/org-1', {
-      plan: 'agency',
+      plan: 'enterprise',
       name: 'Client Co',
       brandingProfile: { productName: 'Acme Sites', fromName: 'Acme Sites' },
     })
@@ -680,7 +680,7 @@ describe('the notification email is a system email (AGL-3367)', () => {
     userDocs.set('uid-s', ON)
     directory.set('uid-s', 's@example.com')
     hostDocs.set('orgs/org-1', {
-      plan: 'agency',
+      plan: 'enterprise',
       brandingProfile: { productName: 'Acme Sites', fromName: 'Acme Sites' },
     })
     await notifyUsers(

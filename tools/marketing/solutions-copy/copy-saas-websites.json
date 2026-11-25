@@ -5,7 +5,7 @@
   "frameName": "Use case — SaaS websites",
   "frameSize": {
     "width": 1440,
-    "height": 4709
+    "height": 5681
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
   "sections": [
@@ -14,11 +14,11 @@
       "figmaNodeId": "190:2855",
       "order": 0,
       "heightPx": 639.1304321289062,
-      "eyebrow": "USE CASE · SAAS WEBSITES",
-      "heading": "The website around your app.",
+      "eyebrow": "SAAS WEBSITE BUILDER",
+      "heading": "The SaaS website builder for the site around your app.",
       "subheading": null,
       "body": [
-        "Build the marketing site, docs, pricing, blog, and even a store for your SaaS — all on one platform, so your whole web presence lives in one console."
+        "Marketing site, pricing, docs, blog and lead capture on one platform, so your whole web presence lives in one console. Describe the site and Aglyn AI drafts it; your team edits on the canvas or extends it in code."
       ],
       "actions": [],
       "items": [],
@@ -43,7 +43,7 @@
       "kind": null,
       "figmaNodeId": "190:2866",
       "order": 2,
-      "heightPx": 707,
+      "heightPx": 685,
       "eyebrow": "WHAT YOU CAN BUILD",
       "heading": "Your whole web presence.",
       "subheading": null,
@@ -195,7 +195,7 @@
       "kind": null,
       "figmaNodeId": "190:2940",
       "order": 5,
-      "heightPx": 392,
+      "heightPx": 474,
       "eyebrow": "HOW IT WORKS",
       "heading": "Ship your whole site.",
       "subheading": null,
@@ -248,15 +248,15 @@
         {
           "figmaNodeId": "419:6294",
           "meta": null,
-          "title": "Test on Business",
-          "body": "A/B experiments on pages and sections from Business up.",
+          "title": "Test on Pro",
+          "body": "A/B experiments on pages and sections from Pro up.",
           "extra": []
         },
         {
           "figmaNodeId": "419:6301",
           "meta": null,
           "title": "API when you need it",
-          "body": "REST API with scoped keys — 100k requests/mo on Business, 1M on Advanced.",
+          "body": "REST API with scoped keys, from Starter.",
           "extra": []
         }
       ],
@@ -307,8 +307,74 @@
     },
     {
       "kind": null,
-      "figmaNodeId": "190:2960",
+      "figmaNodeId": "2298:57723",
       "order": 8,
+      "heightPx": 702,
+      "eyebrow": "BEFORE YOU START",
+      "heading": "Questions about SaaS websites.",
+      "subheading": null,
+      "body": [
+        "Docs, leads, testing and self-hosting, in plain terms."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "2298:57726",
+          "meta": null,
+          "title": "Can I host docs and the marketing site together?",
+          "body": "Yes. Documentation, pricing, blog and the marketing pages share one platform, theme and console.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57729",
+          "meta": null,
+          "title": "Can leads go into a CRM?",
+          "body": "Yes. A demo or sign-up form files a lead in the built-in CRM from Starter, and a workflow can start the follow-up.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57732",
+          "meta": null,
+          "title": "Can engineers extend it?",
+          "body": "Yes. Aglyn is open source with a REST API, webhooks and plugins, and you can self-host it.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57735",
+          "meta": null,
+          "title": "Can I A/B test the pricing page?",
+          "body": "Yes. Test two versions of a real page and read the result in Analytics.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57738",
+          "meta": null,
+          "title": "Can we self-host?",
+          "body": "Yes. Aglyn is Apache-2.0 and runs with Docker on your own infrastructure.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57741",
+          "meta": null,
+          "title": "Is there a free plan?",
+          "body": "Yes. One site with up to five pages, forms, media and AI credits, with no credit card.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2328:66199",
+          "meta": null,
+          "title": "What is Aglyn?",
+          "body": "Aglyn is a website builder with the store, forms, CRM, email, analytics and Aglyn AI built in. It is open source and free to start.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:2960",
+      "order": 9,
       "heightPx": 290,
       "eyebrow": null,
       "heading": "Build your SaaS site on Aglyn.",

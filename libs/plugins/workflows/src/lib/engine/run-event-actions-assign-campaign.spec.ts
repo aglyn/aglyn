@@ -153,7 +153,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     hostIds: [HOST_ID],
     declared: false,
   }),
-  getOrgForHost: async () => ({ org: { plan: 'business' } }),
+  getOrgForHost: async () => ({ org: { plan: 'pro' } }),
   meterHostEmail: async () => ({ allowed: true }),
   notifyHostManagers: async () => undefined,
   orgDataCollectionForHost: async () => collectionHandle('orgs/o1/datasets'),

@@ -96,7 +96,7 @@ jest.mock('./host-activity-card.component', () => ({
 }))
 
 /** A plan that entitles the builder, so nothing is refused for that reason. */
-const ORG = { plan: 'business' } as never
+const ORG = { plan: 'pro' } as never
 
 /** A stored action, as the list reads one: an id, a name, a trigger, steps. */
 const stored = (extra: Record<string, unknown>) => ({

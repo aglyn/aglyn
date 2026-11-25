@@ -160,7 +160,7 @@ describe('the name hostSendingIdentity stamps', () => {
   it('falls back to a white-label org’s own brand', async () => {
     orgs.set(HOST, {
       name: 'Northwind',
-      plan: 'agency',
+      plan: 'enterprise',
       brandingProfile: { fromName: 'Northwind Agency' },
     })
     const verdict = await hostSendingIdentity(HOST)

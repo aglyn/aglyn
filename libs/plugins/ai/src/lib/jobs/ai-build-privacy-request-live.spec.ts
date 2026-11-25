@@ -64,7 +64,7 @@ const INVENTORY: AiSiteInventory = {
 
 const OPS: AiBuildOps = new Map<string, PluginAiCapability>(AI_OWNED_CAPABILITIES.map((one) => [one.op, one] as const))
 
-const ORG = { plan: 'business' as const, billingStatus: 'active', ownerUid: 'owner-1' }
+const ORG = { plan: 'pro' as const, billingStatus: 'active', ownerUid: 'owner-1' }
 
 /** Each request, and the privacy arguments its plan must carry. */
 const REQUESTS: readonly { brief: string; expect: Record<string, unknown> }[] = [

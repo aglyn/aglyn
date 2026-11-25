@@ -60,12 +60,12 @@ afterEach(() => {
 describe('the workspace’s brand color', () => {
   it('is a white-label workspace’s own color, and nobody else’s', () => {
     const branding = { brandingProfile: { primaryColor: '#0F766E' } }
-    expect(organizationBrandColors({ plan: 'agency', ...branding } as never)).toEqual([
+    expect(organizationBrandColors({ plan: 'enterprise', ...branding } as never)).toEqual([
       { hex: '#0f766e', source: 'organization' },
     ])
     expect(organizationBrandColors({ plan: 'pro', ...branding } as never)).toEqual([])
     expect(
-      organizationBrandColors({ plan: 'agency', brandingProfile: { primaryColor: 'teal' } } as never),
+      organizationBrandColors({ plan: 'enterprise', brandingProfile: { primaryColor: 'teal' } } as never),
     ).toEqual([])
     expect(organizationBrandColors(null)).toEqual([])
   })
@@ -204,7 +204,7 @@ describe('gatherAiThemeBrandInputs', () => {
     const inputs = await gatherAiThemeBrandInputs(
       {
         firestore,
-        org: { plan: 'agency', brandingProfile: { primaryColor: '#0f766e' } } as never,
+        org: { plan: 'enterprise', brandingProfile: { primaryColor: '#0f766e' } } as never,
         hostId: 'host-1',
         host,
         brief: 'Match https://brand.example/ and make it warmer.',

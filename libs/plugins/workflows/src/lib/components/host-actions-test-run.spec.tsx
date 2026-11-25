@@ -99,7 +99,7 @@ jest.mock('./host-activity-card.component', () => ({
   default: () => null,
 }))
 
-const ORG = { plan: 'business' } as never
+const ORG = { plan: 'pro' } as never
 
 /** The route's answer, as the card reads it. */
 function answer(status: number, body: Record<string, unknown>) {

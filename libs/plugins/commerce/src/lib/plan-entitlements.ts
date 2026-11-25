@@ -37,22 +37,12 @@ declare module '@aglyn/aglyn/plugin-manager/plugin-entitlement-keys' {
   }
 }
 
-/** Business and up. */
-const FROM_BUSINESS: Readonly<Record<OrgPlan, boolean>> = {
-  free: false,
-  starter: false,
-  pro: false,
-  business: true,
-  scale: true,
-  advanced: true,
-  agency: true,
-  enterprise: true,
-}
-
 /** Pro and up. */
 const FROM_PRO: Readonly<Record<OrgPlan, boolean>> = {
-  ...FROM_BUSINESS,
+  free: false,
+  starter: false,
   pro: true,
+  enterprise: true,
 }
 
 /**
@@ -61,8 +51,7 @@ const FROM_PRO: Readonly<Record<OrgPlan, boolean>> = {
  * Recurring billing, paid memberships and gift cards start at Pro since
  * pricing v4 (2026-11-03, AGL-4126): every Business feature moved into Pro at
  * no charge, and the digital fee (1% on Pro since 2026-11-24) is their
- * usage price. `FROM_BUSINESS`
- * stays the shape a retired plan reads.
+ * usage price.
  */
 export function commercePlanEntitlements(): PluginPlanEntitlementsDeclaration {
   return {

@@ -250,7 +250,7 @@ beforeEach(() => {
   mockSlotZones.length = 0
   mockStartersVisible = false
   mockSearchParams = new URLSearchParams()
-  mockOrg = { plan: 'business', slug: 'acme' }
+  mockOrg = { plan: 'pro', slug: 'acme' }
   mockCan = true
   mockLanding = (url) => url
   mockCreateGate = null

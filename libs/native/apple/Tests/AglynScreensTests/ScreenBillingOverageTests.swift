@@ -141,7 +141,7 @@ final class ScreenBillingOverageTests: XCTestCase {
 
   func testAStaffCompBillsNothingAndSoQuotesNothing() throws {
     let base: JSONValue = [
-      "ent": ["plan": "business", "quotas": ["contactsPerHost": 10, "apiRequestsPerMonth": 10, "emailSendsPerMonth": 10, "hostLimit": 1]],
+      "ent": ["plan": "pro", "quotas": ["contactsPerHost": 10, "apiRequestsPerMonth": 10, "emailSendsPerMonth": 10, "hostLimit": 1]],
       "contacts": ["count": 100], "companies": ["count": 0], "deals": ["count": 0], "api": ["count": 100], "emails": ["2026-10": 100],
       "collab": ["sites": []], "siteTraffic": [],
     ]
@@ -153,12 +153,12 @@ final class ScreenBillingOverageTests: XCTestCase {
     }
     XCTAssertEqual(try warnings(org: ["subscription": ["status": "active"]]), 3)
     // A comp grants the plan with nothing for sale; a live subscription wins over it.
-    XCTAssertEqual(try warnings(org: ["entitlements": ["planComp": ["plan": "business"]]]), 0)
-    XCTAssertEqual(try warnings(org: ["entitlements": ["planComp": ["plan": "business"]], "subscription": ["status": "canceled"]]), 0)
-    XCTAssertEqual(try warnings(org: ["entitlements": ["planComp": ["plan": "business"]], "subscription": ["status": "active"]]), 3)
+    XCTAssertEqual(try warnings(org: ["entitlements": ["planComp": ["plan": "pro"]]]), 0)
+    XCTAssertEqual(try warnings(org: ["entitlements": ["planComp": ["plan": "pro"]], "subscription": ["status": "canceled"]]), 0)
+    XCTAssertEqual(try warnings(org: ["entitlements": ["planComp": ["plan": "pro"]], "subscription": ["status": "active"]]), 3)
     // The metered estimate follows the same rule.
     var comped = base
-    comped = ScreenContext.with(comped, "org", ["entitlements": ["planComp": ["plan": "business"]]])
+    comped = ScreenContext.with(comped, "org", ["entitlements": ["planComp": ["plan": "pro"]]])
     comped = ScreenContext.with(comped, "collab", ["sites": [["hostId": "h0"]]])
     let model = try seeded(comped, month: "2026-10")
     XCTAssertEqual(ScreenValues.lookup("is.comp", in: model.context), true)

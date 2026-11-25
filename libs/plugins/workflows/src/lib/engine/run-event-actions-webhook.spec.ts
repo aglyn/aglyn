@@ -48,7 +48,7 @@ let mockActions: { id: string; data: Record<string, any> }[] = []
 /** `hosts/site-1/webhooks`, by document id. */
 let mockWebhooks: Record<string, Record<string, any>> = {}
 /** The org's billing doc, as the run's gate reads it. */
-let mockOrg: Record<string, any> = { plan: 'business' }
+let mockOrg: Record<string, any> = { plan: 'pro' }
 
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
@@ -227,7 +227,7 @@ const fetchMock = jest.fn(async () => ({ ok: true, status: 200 }))
 beforeEach(() => {
   mockActions = []
   mockWebhooks = { 'hook-1': HOOK }
-  mockOrg = { plan: 'business' }
+  mockOrg = { plan: 'pro' }
   fetchMock.mockClear()
   ;(globalThis as any).fetch = fetchMock
 })

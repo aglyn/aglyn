@@ -52,10 +52,6 @@ export const MARKETPLACE_FEE_PCT_BY_PLAN: Readonly<Record<OrgPlan, number>> = {
   free: 30,
   starter: 20,
   pro: 20,
-  business: 20,
-  scale: 20,
-  advanced: 20,
-  agency: 20,
   enterprise: 20,
 }
 
@@ -64,10 +60,6 @@ export const MARKETPLACE_SELLING_BY_PLAN: Readonly<Record<OrgPlan, boolean>> = {
   free: false,
   starter: false,
   pro: true,
-  business: true,
-  scale: true,
-  advanced: true,
-  agency: true,
   enterprise: true,
 }
 

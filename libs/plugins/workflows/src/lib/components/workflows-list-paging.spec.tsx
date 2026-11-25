@@ -167,7 +167,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 
 import { HostWorkflowsCard } from './host-workflows-card.component'
 
-const ORG = { $id: 'org-1', plan: 'scale' } as any
+const ORG = { $id: 'org-1', plan: 'pro' } as any
 
 beforeEach(() => {
   mockCapsAsked = []

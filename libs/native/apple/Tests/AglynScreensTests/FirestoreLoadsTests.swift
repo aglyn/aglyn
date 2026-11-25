@@ -132,11 +132,11 @@ final class FirestoreLoadsTests: XCTestCase {
       reader.docs = ["orgs/o1": org]
       return try await FirestoreLoads.entitlement(reader, feature: feature, orgID: "o1")
     }
-    let business = try await gate(["plan": "business"])
-    XCTAssertEqual(business["carried"], .bool(true))
+    let pro = try await gate(["plan": "pro"])
+    XCTAssertEqual(pro["carried"], .bool(true))
     let free = try await gate(["plan": "free"])
     XCTAssertEqual(free["carried"], .bool(false))
-    // The cheapest plan that carries gift cards: Pro since pricing v4 (Business is retired).
+    // The cheapest plan that carries gift cards: Pro since pricing v4.
     XCTAssertEqual(free["label"], .string("Pro"))
     let override = try await gate(["plan": "free", "entitlements": ["features": ["giftCards": true]]])
     XCTAssertEqual(override["carried"], .bool(true), "a per-workspace override wins over the plan")

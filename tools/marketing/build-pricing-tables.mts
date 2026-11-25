@@ -826,30 +826,37 @@ const metered = {
 }
 
 const fees = {
+  /*
+   * The same commerce gate as the compare grid's fee rows: a plan that
+   * cannot sell has no fee to state, so it publishes "—" rather than the 0%
+   * its entitlement carries (Free: `commerce: false`). The page's
+   * TRANSACTION FEES table prints the dash for Hobby since 2026-11-25. The
+   * entitlement itself is untouched.
+   */
   rows: PLANS.filter((p) => p !== 'enterprise').map((p) => ({
     plan: p,
     label: PLAN_LABELS[p],
-    digital: pct(PLAN_ENTITLEMENTS[p].transactionFeeDigitalPct),
-    physical: pct(PLAN_ENTITLEMENTS[p].transactionFeePhysicalPct),
+    digital: F(p).commerce ? pct(PLAN_ENTITLEMENTS[p].transactionFeeDigitalPct) : NO,
+    physical: F(p).commerce ? pct(PLAN_ENTITLEMENTS[p].transactionFeePhysicalPct) : NO,
   })),
 
   /*==========================================
    * THE MARKETPLACE TAKE RATE (AGL-2194 P8).
    *
    * `/pricing` carries a section headed "TRANSACTION FEES — What Aglyn takes
-   * on a sale" and answers it with the digital/physical ladder above, which
-   * reaches 0% from Advanced up. The same page ticks "Sell on the
-   * marketplace" from Pro up. It states the take rate on a marketplace sale
-   * NOWHERE: grepping the live page (2026-08-20) for "20%", "take rate" and
-   * "revenue share" returns zero hits, and `/product/plugins` is silent too.
+   * on a sale" and answers it with the digital/physical ladder above. Until
+   * 2026-08-24 it stated the take rate on a marketplace sale nowhere: a
+   * grep of the live page (2026-08-20) for "20%", "take rate" and "revenue
+   * share" returned zero hits. Since then the section's paragraph states it:
+   * "Aglyn keeps 20% of a marketplace listing sale on every paid plan, and
+   * 30% on Free." (pinned by `published-pricing-table-parity.spec.ts`).
    *
    * `marketplaceFeePct` is 20 on every paid plan and 30 on free, charged at
    * `libs/plugins/marketplace/src/lib/server/checkout.ts` through
-   * `resolveMarketplaceFeePct`. So a publisher on Advanced reads "0%
-   * transaction fees" and "Sell on the marketplace ✓" on one screen and keeps
-   * 80% of their sale. That is the one number on this page where the product
-   * charges MORE than the page discloses, and it is money a seller has not
-   * been told about.
+   * `resolveMarketplaceFeePct`. Before the disclosure, a publisher on a 0%
+   * plan read "0% transaction fees" and "Sell on the marketplace ✓" on one
+   * screen and kept 80% of their sale: the one number where the product
+   * charged MORE than the page disclosed.
    *
    * The rate is LOCKED and is not changed here. What is fixed here is that
    * the figure now exists in the generated source of truth, so the besigner
@@ -1199,27 +1206,7 @@ for (const [label, [why]] of injected('--declare-extra-row', 2)) {
  * matching and is reported as resolved, so it cannot outlive its reason. An
  * exemption that outlives its reason is just an untested cell.
  */
-const FEE_LADDER_2026_11_24_WHY =
-  'the per-sale fee ladder came down on 2026-11-24 (AGL-4245; Starter 1% physical / 3% services and digital, Pro 0% / 1%); a price decrease, so the page and the Figma frames move once billing carries it, and this declaration is deleted when the re-extracted frames catch up'
-
-const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {
-  'Digital transaction fee · Starter': {
-    frame: '5%',
-    why: FEE_LADDER_2026_11_24_WHY,
-  },
-  'Digital transaction fee · Pro': {
-    frame: '3%',
-    why: FEE_LADDER_2026_11_24_WHY,
-  },
-  'Physical transaction fee · Starter': {
-    frame: '2%',
-    why: FEE_LADDER_2026_11_24_WHY,
-  },
-  'Physical transaction fee · Pro': {
-    frame: '0.5%',
-    why: FEE_LADDER_2026_11_24_WHY,
-  },
-}
+const FRAME_STALE_CELLS: Record<string, { frame: string; why: string }> = {}
 
 /*
  * `--declare-stale-cell='<row> · <plan>|<frame value>'`, repeatable.
@@ -1977,46 +1964,17 @@ fail('the published origin-media weight disagrees with the code', mediaWeightDif
 /*==========================================
  * THE TRANSACTION-FEE LADDER.
  *
- * `fees` has no surface of its own on the page: the ladder it publishes IS
- * the compare grid's two fee rows, which is where it is reconciled. Thin, but
- * not vacuous — the compare rows apply the `commerce` gate and `fees` does
- * not, so this is the only thing checking that the two agree on the plans
- * where both state a number, and the only thing that would notice `fees`
- * being wired to the wrong entitlement.
+ * `fees` is reconciled against the compare grid's two fee rows, which carry
+ * the same ladder. Both apply the `commerce` gate, so a plan that cannot sell
+ * reads "—" in each; this is the only thing that would notice `fees` being
+ * wired to the wrong entitlement.
  *
- * NOT reconciled, and deliberately: `fees.marketplace`. The take rate is 20%
- * on every paid plan and 30% on Free, charged in `resolveMarketplaceFeePct`,
- * and the page states it NOWHERE — grepping the frame for "20%", "take rate"
- * and "revenue share" returns nothing. A comparison against a surface that
- * does not exist is the one thing this file must not pretend to make, so it
- * is named here as a gap instead. It closes the day the disclosure ships.
+ * NOT reconciled here: `fees.marketplace`. The take rate (20% on every paid
+ * plan, 30% on Free, charged in `resolveMarketplaceFeePct`) is stated in the
+ * TRANSACTION FEES paragraph, as prose rather than a table cell, and the
+ * parity spec pins that sentence against the entitlement.
  *=========================================*/
-const FEES_STALE: Record<string, Divergence> = {
-  'Digital transaction fee · Free': {
-    frame: NO,
-    why: 'the compare row gates the fee behind `features.commerce`, and Free cannot sell, so the frame publishes a dash where `fees` publishes the 0% the entitlement carries — a fee ladder with a hole in it reads as unknown rather than unavailable',
-  },
-  'Physical transaction fee · Free': {
-    frame: NO,
-    why: 'the same commerce gate as the digital row above',
-  },
-  'Digital transaction fee · Starter': {
-    frame: '5%',
-    why: FEE_LADDER_2026_11_24_WHY,
-  },
-  'Digital transaction fee · Pro': {
-    frame: '3%',
-    why: FEE_LADDER_2026_11_24_WHY,
-  },
-  'Physical transaction fee · Starter': {
-    frame: '2%',
-    why: FEE_LADDER_2026_11_24_WHY,
-  },
-  'Physical transaction fee · Pro': {
-    frame: '0.5%',
-    why: FEE_LADDER_2026_11_24_WHY,
-  },
-}
+const FEES_STALE: Record<string, Divergence> = {}
 
 const feeLadder = reconciler('transaction fees', FEES_STALE)
 const FEE_ROWS = [
@@ -2138,18 +2096,14 @@ addonCards.finish()
  * nobody noticed. Each of these is uncheckable for a reason that would stop
  * being true if the page changed, and the entry comes out when it does.
  *
- *   `fees.marketplace` — the take rate is stated NOWHERE on the page.
- *     Grepping the extractions for "20%", "take rate" and "revenue share"
- *     returns nothing, and `/product/plugins` is silent too. Comparing
- *     against a surface that does not exist is the one thing this file must
- *     not pretend to do; it is reconciled the day the disclosure ships.
+ *   `fees.marketplace` — the page states the take rate in a sentence of
+ *     the TRANSACTION FEES paragraph, not in a cell this file reads; the
+ *     parity spec pins that sentence (`marketplace take rate`) instead.
  *
  *   The EMAIL-SEND overage rate, declared in `USAGE_EXPECTED_ABSENT`. It is
  *     emitted into the add-on capacity table and billed today, and no
- *     breakpoint states it, so there is no cell to compare against — the
- *     same "no surface exists" shape as the marketplace take rate above,
- *     differing only in that it HAS a generated figure for the besigner edit
- *     to transcribe. `--check` guards it against code drift meanwhile; it
+ *     breakpoint states it, so there is no cell to compare against; it HAS
+ *     a generated figure for the besigner edit to transcribe. `--check` guards it against code drift meanwhile; it
  *     does not compare it against the page, and will not until the row
  *     ships. The AI credits rate left this list with AGL-2900.
  *

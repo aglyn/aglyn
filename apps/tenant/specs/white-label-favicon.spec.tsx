@@ -63,7 +63,7 @@ const faviconFor = (
   })
 
 /** An Agency org: carries `whiteLabel`. */
-const AGENCY = { $id: 'org-1', plan: 'agency' }
+const AGENCY = { $id: 'org-1', plan: 'enterprise' }
 /** A Free org: platform attribution is expected and correct. */
 const FREE = { $id: 'org-2', plan: 'free' }
 

@@ -63,7 +63,7 @@ let store: Record<string, Record<string, any>> = {}
 /** Every `update()`, in order, by the path it wrote. */
 let updates: { path: string; data: Record<string, any> }[] = []
 /** The owning org's billing doc — the plan both halves read. */
-let mockOrg: Record<string, any> = { plan: 'business' }
+let mockOrg: Record<string, any> = { plan: 'pro' }
 /** Activities the record already carries, as the ceiling's aggregate answers. */
 let mockActivityCount = 0
 /** Every owner assignment handed to the assignment helper (AGL-2618), in order. */
@@ -363,7 +363,7 @@ beforeEach(() => {
   store = {}
   updates = []
   minted = 0
-  mockOrg = { plan: 'business' }
+  mockOrg = { plan: 'pro' }
   mockActivityCount = 0
   mockAssignments = []
   mockAssignment = {
@@ -630,7 +630,7 @@ describe('records beside the contact (claim 3)', () => {
   })
 
   it('stamps the org-wide scope when the org chose it', async () => {
-    mockOrg = { plan: 'business', defaultResourceScope: 'org' }
+    mockOrg = { plan: 'pro', defaultResourceScope: 'org' }
     seedActions({ type: 'logCrmActivity', kind: 'note', body: 'Signed up' })
     await run({ email: 'ada@example.com' })
     expect(orgRows('crmActivities')[0].visibleTo).toEqual(['org'])
@@ -716,7 +716,7 @@ describe('the CRM’s plan gate (claim 5, AGL-2611)', () => {
    * reaches it, and the step must say so rather than read as if it ran.
    */
   it('refuses every CRM step on an org whose suite was withdrawn, into the run history', async () => {
-    mockOrg = { plan: 'business', entitlements: { features: { crm: false } } }
+    mockOrg = { plan: 'pro', entitlements: { features: { crm: false } } }
     seedActions({ type: 'setContactStage', lifecycleStage: 'customer' })
     await run({ email: 'ada@example.com' })
     expect(contactUpdates()).toHaveLength(0)
@@ -818,7 +818,7 @@ describe('an email to the contact, on the contact’s timeline (claim 6, AGL-261
   })
 
   it('still sends, untagged, and files nothing on an org whose suite was withdrawn', async () => {
-    mockOrg = { plan: 'business', entitlements: { features: { crm: false } } }
+    mockOrg = { plan: 'pro', entitlements: { features: { crm: false } } }
     welcome()
     await run({ contactId: 'contact-1', email: 'ada@example.com' })
     expect(mockSentMessages).toHaveLength(1)

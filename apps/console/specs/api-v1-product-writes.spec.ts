@@ -79,7 +79,7 @@ function context(overrides: Partial<ApiV1Context> = {}): ApiV1Context {
     keyName: 'Catalog sync',
     credential: 'api_key',
     scopes: WRITE_SCOPES as ApiV1Context['scopes'],
-    org: { plan: 'business', hosts: { [SITE]: true } } as ApiV1Context['org'],
+    org: { plan: 'pro', hosts: { [SITE]: true } } as ApiV1Context['org'],
     firestore: memory.firestore,
     headers: { 'X-RateLimit-Limit': '120' },
     ...overrides,
@@ -279,7 +279,7 @@ describe('createProduct', () => {
   })
 
   it('refuses a create past the plan’s product allowance', async () => {
-    const ctx = context({ org: { plan: 'business', entitlements: { productsPerHost: 1 }, hosts: { [SITE]: true } } as ApiV1Context['org'] })
+    const ctx = context({ org: { plan: 'pro', entitlements: { productsPerHost: 1 }, hosts: { [SITE]: true } } as ApiV1Context['org'] })
     const { status, body } = await call('POST', `sites/${SITE}/products`, { name: 'Rye' }, ctx)
     expect(status).toBe(403)
     expect(body.error).toMatchObject({ type: 'plan_required', code: 'product_quota' })

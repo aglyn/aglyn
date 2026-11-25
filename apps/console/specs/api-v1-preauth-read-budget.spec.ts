@@ -180,7 +180,7 @@ beforeEach(() => {
     degraded: false,
     contended: false,
   })
-  mockGetOrgDoc.mockResolvedValue({ plan: 'business', billingStatus: 'active' })
+  mockGetOrgDoc.mockResolvedValue({ plan: 'pro', billingStatus: 'active' })
   mockLockdownRefusal.mockResolvedValue(null)
 })
 

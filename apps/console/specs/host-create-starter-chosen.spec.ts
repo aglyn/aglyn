@@ -62,7 +62,7 @@ const mockDescribe = jest.fn(async (..._args: unknown[]): Promise<Record<string,
 const mockAnnounceNewSite = jest.fn(async (_site: Record<string, unknown>) => undefined)
 let mockSourceRegistered = true
 let mockStaff = false
-let mockOrg: Record<string, unknown> = { plan: 'business', slug: 'acme' }
+let mockOrg: Record<string, unknown> = { plan: 'pro', slug: 'acme' }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
@@ -157,7 +157,7 @@ beforeEach(() => {
   mockLooksRegistered = true
   mockLook.mockResolvedValue(null)
   mockStaff = false
-  mockOrg = { plan: 'business', slug: 'acme' }
+  mockOrg = { plan: 'pro', slug: 'acme' }
 })
 
 /** A base starter of `pages` pages, the first its Home. */

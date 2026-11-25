@@ -121,7 +121,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 }))
 
 /** A plan that clears the cap, so nothing is refused for another reason. */
-const ORG = { plan: 'business' } as never
+const ORG = { plan: 'pro' } as never
 
 beforeEach(() => {
   jest.clearAllMocks()

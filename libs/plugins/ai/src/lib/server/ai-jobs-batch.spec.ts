@@ -121,7 +121,7 @@ const noRunner = (async () => {
 
 /** An Agency workspace: its plan holds the sites a batch is for. */
 const AGENCY_ORG = {
-  plan: 'agency',
+  plan: 'enterprise',
   billingStatus: 'active',
   seatAddons: { aiAddon: true },
 }

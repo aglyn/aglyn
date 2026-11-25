@@ -162,8 +162,8 @@ jest.mock('@aglyn/aglyn/app-utils/where-used', () => ({
 
 import HostWorkflowsCard from './host-workflows-card.component'
 
-/** Stock `scale`: entitles workflows, `workflowsPerHost: 250`. */
-const ORG = { $id: 'org-1', plan: 'scale' } as never
+/** `pro`, which entitles workflows, with `workflowsPerHost: 250` by override. */
+const ORG = { $id: 'org-1', plan: 'pro', entitlements: { workflowsPerHost: 250 } } as never
 
 beforeEach(() => {
   jest.clearAllMocks()

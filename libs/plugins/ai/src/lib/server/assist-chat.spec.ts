@@ -323,7 +323,7 @@ function seedOrgs(): void {
   })
   mockDocs.set(`orgs/${AGENCY_ORG}`, {
     name: 'Northwind Studio',
-    plan: 'agency',
+    plan: 'enterprise',
     billingStatus: 'active',
     brandingProfile: { productName: 'Northwind' },
   })
@@ -2374,13 +2374,13 @@ describe('honest answers: the plan, the open jobs, the language, the limits', ()
     seedOrgs()
     armUpstream()
     await (await POST(post(QUESTION_BODY(PRO_ORG)))).text()
-    mockDocs.set(`orgs/${PRO_ORG}`, { name: 'Pros', plan: 'business', billingStatus: 'active' })
+    mockDocs.set(`orgs/${PRO_ORG}`, { name: 'Pros', plan: 'enterprise', billingStatus: 'active' })
     armUpstream()
     const after = await POST(post(QUESTION_BODY(PRO_ORG)))
     await after.text()
     expect(after.headers.get('X-Assist-Served-By')).toBeNull()
     expect(mockFetch).toHaveBeenCalledTimes(2)
-    expect(systemOf(1)).toContain('This workspace is on the Business plan.')
+    expect(systemOf(1)).toContain('This workspace is on the Custom plan.')
   })
 
   it('states the standing limits in the cached prefix: text only, no RTL, no invented features, the asker’s language', async () => {

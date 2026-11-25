@@ -47,7 +47,7 @@
 const mockDocs = new Map<string, Record<string, unknown>>()
 
 /** The org document `getOrgDoc` hands the pipeline. Drives plan + quota. */
-let mockOrg: Record<string, unknown> = { plan: 'business' }
+let mockOrg: Record<string, unknown> = { plan: 'pro' }
 /** Scopes on the authenticated key. */
 let mockScopes: string[] = ['datasets:read', 'datasets:write']
 /** Deterministic dataset ids, so assertions can name them. */
@@ -263,7 +263,7 @@ const VALID = { name: 'Customers', fields: ['name', 'email'] }
 
 beforeEach(() => {
   mockDocs.clear()
-  mockOrg = { plan: 'business' }
+  mockOrg = { plan: 'pro' }
   mockScopes = ['datasets:read', 'datasets:write']
   mockUidSeq = 0
 })
@@ -293,7 +293,7 @@ describe('POST /v1/datasets (AGL-2126)', () => {
   it('follows the org default when it scopes new resources to a host', async () => {
     // No site is in context on an org-scoped API key, so a `host` default has
     // no host to name and must still land somewhere readable.
-    mockOrg = { plan: 'business', defaultResourceScope: 'host' }
+    mockOrg = { plan: 'pro', defaultResourceScope: 'host' }
     await createDataset(VALID)
     expect(mockDocs.get(`${DATASETS}/ds_1`)?.visibleTo).toEqual(['org'])
   })
@@ -325,7 +325,7 @@ describe('POST /v1/datasets (AGL-2126)', () => {
     // so every plan without `dataStore` is also a plan whose key never gets
     // past the authenticator. The only reachable shape is an org that may
     // call the API and may not have datasets.
-    mockOrg = { plan: 'business', entitlements: { features: { dataStore: false } } }
+    mockOrg = { plan: 'pro', entitlements: { features: { dataStore: false } } }
     const response = await createDataset(VALID)
     expect(response.status).toBe(403)
     expect((await response.json()).error).toMatchObject({
@@ -342,7 +342,7 @@ describe('POST /v1/datasets (AGL-2126)', () => {
     // own $1 add-on price comes from the plan table, so this fails if the
     // table moves.
     mockOrg = {
-      plan: 'business',
+      plan: 'pro',
       entitlements: { datasetsPerOrg: 2, maxDatasetsPerOrg: 10 },
     }
     for (let i = 0; i < 2; i++) await createDataset(VALID)
@@ -356,7 +356,7 @@ describe('POST /v1/datasets (AGL-2126)', () => {
       code: 'dataset_quota',
     })
     expect(body.error.message).toContain('(2)')
-    expect(body.error.message).toContain('$1/mo')
+    expect(body.error.message).toContain('$2/mo')
     expect(storedDatasets()).toHaveLength(2)
   })
 
@@ -364,14 +364,14 @@ describe('POST /v1/datasets (AGL-2126)', () => {
     // The refusal clears when somebody buys an add-on. A burned key would mean
     // the retry that should finally succeed replays the refusal forever.
     mockOrg = {
-      plan: 'business',
+      plan: 'pro',
       entitlements: { datasetsPerOrg: 2, maxDatasetsPerOrg: 10 },
     }
     for (let i = 0; i < 2; i++) await createDataset(VALID)
     expect((await createDataset(VALID, 'key-a')).status).toBe(403)
 
     // The add-on lands: the same key must now create, not replay the refusal.
-    mockOrg = { plan: 'business' }
+    mockOrg = { plan: 'pro' }
     const retried = await createDataset(VALID, 'key-a')
     expect(retried.status).toBe(201)
     expect(storedDatasets()).toHaveLength(3)
@@ -389,7 +389,7 @@ describe('POST /v1/datasets (AGL-2126)', () => {
     // the same band. Either ordering passes one of them; only claiming above
     // the quota passes both.
     mockOrg = {
-      plan: 'business',
+      plan: 'pro',
       entitlements: { datasetsPerOrg: 2, maxDatasetsPerOrg: 10 },
     }
     await createDataset(VALID)

@@ -111,7 +111,7 @@ describe('subscription processing pass-through (AGL-2655)', () => {
     expect(saleProcessingPassThroughPercent(0)).toBe(0)
     expect(saleProcessingPassThroughPercent(-500)).toBe(0)
     expect(saleProcessingPassThroughPercent(Number.NaN)).toBe(0)
-    expect(resolveSubscriptionFeePercent(org('business'), 'digital', 0)).toBe(0)
+    expect(resolveSubscriptionFeePercent(org('pro'), 'digital', 0)).toBe(0)
   })
 
   it('caps at 100, the ceiling Stripe puts on the parameter', () => {
@@ -128,7 +128,7 @@ describe('subscription processing pass-through (AGL-2655)', () => {
    * really collected on top of the cost.
    */
   it('a 0% tier carries what Stripe charges the platform for the cycle (AGL-4198)', () => {
-    for (const plan of ['advanced', 'agency', 'enterprise'] as OrgPlan[]) {
+    for (const plan of ['enterprise'] as OrgPlan[]) {
       expect(resolveTransactionFeePct(org(plan), 'digital')).toBe(0)
       for (const amount of [1000, 2500, 10000]) {
         expect(resolveSubscriptionFeePercent(org(plan), 'digital', amount)).toBe(
@@ -146,9 +146,9 @@ describe('subscription processing pass-through (AGL-2655)', () => {
   })
 
   it('a fee tier carries its take plus the pass-through, to two decimals', () => {
-    // Business digital is 2%: $100 → 2 + 3.2 = 5.2; $90 → 2 + 3.24 = 5.24.
-    expect(resolveSubscriptionFeePercent(org('business'), 'digital', 10000)).toBe(5.2)
-    expect(resolveSubscriptionFeePercent(org('business'), 'digital', 9000)).toBe(5.24)
+    // Pro digital is 1% (AGL-4245): $100 → 1 + 3.2 = 4.2; $90 → 1 + 3.24 = 4.24.
+    expect(resolveSubscriptionFeePercent(org('pro'), 'digital', 10000)).toBe(4.2)
+    expect(resolveSubscriptionFeePercent(org('pro'), 'digital', 9000)).toBe(4.24)
     // Starter digital is 3% (AGL-4245): $10 → 3 + 5.9 = 8.9.
     expect(resolveSubscriptionFeePercent(org('starter'), 'digital', 1000)).toBe(8.9)
     // Pro digital is 1%: $100 → 1 + 3.2 = 4.2, above the 3.7% the platform
@@ -175,7 +175,7 @@ describe('subscription processing pass-through (AGL-2655)', () => {
    */
   it('the bare take would have been a loss on a 0% tier at every size', () => {
     for (const amount of RECURRING_CENTS) {
-      const takeOnly = recoveredCents(amount, resolveTransactionFeePct(org('advanced'), 'digital'))
+      const takeOnly = recoveredCents(amount, resolveTransactionFeePct(org('enterprise'), 'digital'))
       expect(takeOnly - saleProcessingCostCents(amount)).toBeLessThan(0)
     }
   })

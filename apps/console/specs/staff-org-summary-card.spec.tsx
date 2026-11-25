@@ -40,7 +40,7 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 const org = {
   name: 'Northwind',
   slug: 'northwind',
-  plan: 'agency',
+  plan: 'enterprise',
   ownerUid: 'QQ7fixtureUid0000000000000002',
   stripeCustomerId: 'cus_123',
   subscription: { status: 'active' },
@@ -141,12 +141,12 @@ describe('StaffOrgSummaryCard (AGL-938)', () => {
     render(
       <StaffOrgSummaryCard
         orgId="hz_KgetqSq"
-        org={{ ...org, entitlements: { planComp: { ...uncapped, plan: 'agency' } } }}
+        org={{ ...org, entitlements: { planComp: { ...uncapped, plan: 'enterprise' } } }}
         owner={null}
         onImpersonateOwner={jest.fn()}
       />,
     )
-    expect(screen.getByText('comp: agency (uncapped, dormant)')).toBeTruthy()
+    expect(screen.getByText('comp: enterprise (uncapped, dormant)')).toBeTruthy()
   })
 
   it('renders a resolved owner as a person, uid demoted off the surface', () => {

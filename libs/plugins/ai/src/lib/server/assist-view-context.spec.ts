@@ -137,10 +137,10 @@ describe('GUARD: page context never carries another org’s data or a secret', (
     const comped = {
       ...canceled,
       entitlements: {
-        planComp: { plan: 'business', note: 'STAFF-NOTE-SECRET', grantedBy: 'staff-uid-SECRET' },
+        planComp: { plan: 'enterprise', note: 'STAFF-NOTE-SECRET', grantedBy: 'staff-uid-SECRET' },
       },
     }
-    expect(safeOrgFacts(comped)).toEqual({ name: 'Acme', plan: 'Business' })
+    expect(safeOrgFacts(comped)).toEqual({ name: 'Acme', plan: 'Custom' })
     expect(Object.values(safeOrgFacts(comped)).join(' ')).not.toContain('SECRET')
 
     // A live subscription decides the plan, whatever comp waits behind it.

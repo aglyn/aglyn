@@ -352,7 +352,7 @@ describe('the transfer launcher', () => {
   })
 
   it('offers gift cards’ Import only to a holder of "Import gift cards" (AGL-4047)', () => {
-    mockBilling = { org: { plan: 'business' }, ready: true }
+    mockBilling = { org: { plan: 'pro' }, ready: true }
     accessTarget = { resource: 'commerce.gift-cards', scope: 'host', hostId: 'host-a' }
     mockOrg = { $id: 'org-1', role: 'admin', orgWide: true }
     const view = render(

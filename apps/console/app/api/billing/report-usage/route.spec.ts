@@ -1163,10 +1163,10 @@ describe('assist credits past the band bill the month at the plan rate (AGL-2653
    * The measured spend `report-usage` reads is `estCostUsd` on the month's
    * `assistUsage` document — 1,000 credits to the dollar, so the fixtures are
    * written in dollars at the credit count they mean. Pro includes 2,750
-   * credits at $3.00 per 1,000 over; Agency 58,000 at $2.00.
+   * credits at $3.00 per 1,000 over; Starter 750 at $3.00.
    */
   function seedAssist(
-    plan: 'pro' | 'agency',
+    plan: 'pro' | 'starter',
     estCostUsd: number,
     assistOverage?: { hardCap: boolean },
   ) {
@@ -1219,16 +1219,18 @@ describe('assist credits past the band bill the month at the plan rate (AGL-2653
     expect(Number(over['billedCents'])).toBe(cents)
   })
 
-  it('on Agency the same 2,500 credits bill $5.00, at ITS rate', async () => {
-    seedAssist('agency', 58)
+  it('on Starter the same 2,500 credits bill past ITS band', async () => {
+    // (Agency's 58,000 at $2.00 until the retired plans were removed,
+    // AGL-4245.)
+    seedAssist('starter', 0.75)
     const cents = Number((await sweepClosed())['billedCents'])
-    seedAssist('agency', 60.5)
+    seedAssist('starter', 3.25)
     const over = await sweepClosed()
-    expect(over['assistCreditsBand']).toBe(58_000)
+    expect(over['assistCreditsBand']).toBe(750)
     expect(over['assistCreditsOverage']).toBe(2_500)
-    expect(over['assistOverageUsd']).toBe(5)
-    expect(over['assistOverageRateUsd']).toBe(2)
-    expect(Number(over['billedCents'])).toBe(cents + 500)
+    expect(over['assistOverageUsd']).toBe(7.5)
+    expect(over['assistOverageRateUsd']).toBe(3)
+    expect(Number(over['billedCents'])).toBe(cents + 750)
   })
 
   it('the hard-cap switch does NOT change what a closed month bills', async () => {

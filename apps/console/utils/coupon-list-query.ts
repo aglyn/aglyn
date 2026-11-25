@@ -120,7 +120,7 @@ export interface CouponAppliesTo {
 /**
  * The plans a coupon can be limited to: the self-serve plans that are sold
  * at a price, in ladder order (Starter, Pro). Read off `SELF_SERVE_PLANS`, so
- * a retired plan is never offered and a new one is offered without an edit.
+ * a new plan is offered without an edit.
  */
 export const COUPON_PLAN_CHOICES: readonly OrgPlan[] = SELF_SERVE_PLANS.filter(
   (plan) => PLAN_PRICING[plan]?.basePriceMonthlyUsd > 0,

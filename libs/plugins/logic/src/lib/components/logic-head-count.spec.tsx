@@ -226,8 +226,8 @@ const countAnswered = async (name: Counted) => {
 }
 
 describe('the variables cap is a server aggregate (AGL-1716)', () => {
-  /** Stock `business`: `variablesPerHost: 1000`. */
-  const ORG = { $id: 'org-1', plan: 'business' } as any
+  /** `pro` with `variablesPerHost: 1000` by override (Pro's own is unlimited). */
+  const ORG = { $id: 'org-1', plan: 'pro', entitlements: { variablesPerHost: 1000 } } as any
 
   it('refuses Add over the band the loaded window hid', async () => {
     render(<HostVariablesCard hostId="host-1" org={ORG} />)
@@ -317,8 +317,8 @@ describe('the variables cap is a server aggregate (AGL-1716)', () => {
 })
 
 describe('the functions cap is a server aggregate (AGL-1716)', () => {
-  /** Stock `business`: `functionsPerHost: 250`. */
-  const ORG = { $id: 'org-1', plan: 'business' } as any
+  /** `pro` with `functionsPerHost: 250` by override (Pro's own is unlimited). */
+  const ORG = { $id: 'org-1', plan: 'pro', entitlements: { functionsPerHost: 250 } } as any
 
   it('refuses Add over the band the loaded window hid', async () => {
     render(<HostFunctionsCard hostId="host-1" org={ORG} />)

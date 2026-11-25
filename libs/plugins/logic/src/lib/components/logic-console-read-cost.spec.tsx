@@ -100,7 +100,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useHostResourceApi: () => jest.fn().mockResolvedValue({ id: 'new' }),
   useHostActivityLogger: () => jest.fn(),
   useUser: () => ({ data: { uid: 'uid-test', getIdToken: jest.fn() } }),
-  useOrgPlan: () => ({ org: { $id: 'org-1', plan: 'scale' }, ready: true }),
+  useOrgPlan: () => ({ org: { $id: 'org-1', plan: 'pro' }, ready: true }),
   useConsoleHostRoute: () => ({ base: null, orgSlug: null, subdomain: null }),
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'] }),
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
@@ -150,7 +150,7 @@ import { standInWorkflowList } from '../testing/stand-in-workflow-list'
 standInDatasetList()
 standInWorkflowList()
 
-const ORG = { $id: 'org-1', plan: 'scale' } as any
+const ORG = { $id: 'org-1', plan: 'pro' } as any
 
 beforeEach(() => {
   mockListens.length = 0

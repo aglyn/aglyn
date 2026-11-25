@@ -28,7 +28,7 @@
  *
  * It calls the provider and costs real money, so it runs only when asked:
  * `AGLYN_LIVE_AI=1` with `ANTHROPIC_API_KEY` set, under the eval launcher for
- * replay, once on Free and once with `AGLYN_LIVE_AI_ORG_PLAN=business`. The
+ * replay, once on Free and once with `AGLYN_LIVE_AI_ORG_PLAN=pro`. The
  * ids are built from the briefs, so an unchanged prompt replays for nothing.
  */
 
@@ -56,8 +56,8 @@ const LIVE = process.env['AGLYN_LIVE_AI'] === '1' && Boolean(process.env['ANTHRO
 // date, and a date that moved every run gave each run new request bytes, so
 // the replay cache answered none of them.
 const NOW = new Date('2026-10-14T12:00:00Z')
-const ORG_PLAN = process.env['AGLYN_LIVE_AI_ORG_PLAN'] === 'business' ? 'business' : 'free'
-const PAGES = ORG_PLAN === 'business' ? 5 : 2
+const ORG_PLAN = process.env['AGLYN_LIVE_AI_ORG_PLAN'] === 'pro' ? 'pro' : 'free'
+const PAGES = ORG_PLAN === 'pro' ? 5 : 2
 const ORG: Partial<AglynOrgBilling> & { ownerUid: string } = { plan: ORG_PLAN, ownerUid: 'owner-1' }
 
 interface Brief {

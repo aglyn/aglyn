@@ -5,7 +5,7 @@
   "frameName": "Solutions — Creators",
   "frameSize": {
     "width": 1440,
-    "height": 4363
+    "height": 5359
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
   "sections": [
@@ -14,11 +14,11 @@
       "figmaNodeId": "165:632",
       "order": 0,
       "heightPx": 689.5652465820312,
-      "eyebrow": "SOLUTIONS · CREATORS",
-      "heading": "Sell your work, your way.",
+      "eyebrow": "WEBSITE BUILDER FOR CREATORS",
+      "heading": "The website builder for creators whose work sells itself.",
       "subheading": null,
       "body": [
-        "Publish your content, open a store for digital downloads and memberships, and grow an audience — all on one platform you fully control."
+        "Portfolio, blog, members-only content and digital downloads on one site you own, with Stripe payments, email campaigns and a real media library behind it. Describe it and Aglyn AI drafts it. Free to start."
       ],
       "actions": [],
       "items": [],
@@ -61,7 +61,7 @@
           "figmaNodeId": "165:652",
           "meta": null,
           "title": "Members & sign-ups",
-          "body": "Let fans create accounts, then gate content or perks behind a membership (Business and up).",
+          "body": "Let fans create accounts, then gate content or perks behind a membership (Pro and up).",
           "extra": []
         },
         {
@@ -138,7 +138,7 @@
       "kind": null,
       "figmaNodeId": "165:687",
       "order": 4,
-      "heightPx": 410,
+      "heightPx": 473,
       "eyebrow": "HOW CREATORS BUILD ON AGLYN",
       "heading": "From first post to first sale.",
       "subheading": null,
@@ -285,8 +285,74 @@
     },
     {
       "kind": null,
-      "figmaNodeId": "165:707",
+      "figmaNodeId": "2298:9350",
       "order": 7,
+      "heightPx": 723,
+      "eyebrow": "BEFORE YOU START",
+      "heading": "Questions about a website builder for creators.",
+      "subheading": null,
+      "body": [
+        "Selling digital goods, memberships, fees and ownership, answered plainly."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "2298:9353",
+          "meta": null,
+          "title": "Can I sell digital downloads?",
+          "body": "Yes. Digital goods sell through Stripe checkout from the Starter plan, delivered from your own site.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:9356",
+          "meta": null,
+          "title": "Can I run a membership?",
+          "body": "Yes. Member accounts, gated pages and recurring subscriptions are included from the Pro plan.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:9359",
+          "meta": null,
+          "title": "What are the fees on digital goods?",
+          "body": "Stripe's processing fee on every plan, plus a small Aglyn platform fee on digital goods that falls as you move up the plans and reaches zero on the higher tiers. The pricing page lists every rate.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:9362",
+          "meta": null,
+          "title": "Can I email my audience?",
+          "body": "Yes. Campaigns go to the contacts your forms and store collect, with consent recorded, from the Pro plan.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:9365",
+          "meta": null,
+          "title": "Do I own my content and audience?",
+          "body": "Yes. Your pages, media, members and lists live in your organization on an open-source platform you could self-host.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:9368",
+          "meta": null,
+          "title": "Is there a free plan?",
+          "body": "Yes. One site with up to five pages, forms, media and AI credits, with no credit card. Selling starts at Starter.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2328:66166",
+          "meta": null,
+          "title": "What is Aglyn?",
+          "body": "Aglyn is a website builder with the store, forms, CRM, email, analytics and Aglyn AI built in. It is open source and free to start.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "165:707",
+      "order": 8,
       "heightPx": 289,
       "eyebrow": null,
       "heading": "Start creating on Aglyn.",

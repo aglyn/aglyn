@@ -85,7 +85,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
           doc: () => ({
             get: async () => ({
               exists: true,
-              data: () => ({ plan: 'agency' }),
+              data: () => ({ plan: 'enterprise' }),
               get: (field: string) => (field === 'role' ? 'owner' : undefined),
             }),
             collection: () => ({

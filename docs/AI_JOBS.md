@@ -476,7 +476,7 @@ the cheapest rung that can see its mistake, from a checkout cut from
    bytes were answered before from `.cache/ai-replay/` (gitignored), and
    sends only the requests whose prompt changed.
 3. **One live run per plan, for the prompts you changed**: the spec once on
-   Free and once with `AGLYN_LIVE_AI_ORG_PLAN=business`. Every live table
+   Free and once with `AGLYN_LIVE_AI_ORG_PLAN=pro`. Every live table
    carries `run`: `live` and `replayed` counts and what the live calls cost
    at list. `live: 0` means nothing new was asked; it is not a live pass.
 4. **The full live sweep, only before landing**: `AGLYN_AI_REPLAY=refresh`

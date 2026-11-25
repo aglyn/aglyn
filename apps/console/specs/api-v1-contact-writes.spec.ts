@@ -48,7 +48,7 @@
  */
 
 const mockDocs = new Map<string, Record<string, unknown>>()
-let mockOrg: Record<string, unknown> = { plan: 'business' }
+let mockOrg: Record<string, unknown> = { plan: 'pro' }
 let mockScopes: string[] = ['contacts:read', 'contacts:write']
 let mockUidSeq = 0
 /** The person a connected app acts for (AGL-4235); null models an API key. */
@@ -529,7 +529,7 @@ beforeEach(() => {
   // `hosts` is what `orgOwnsHost` checks: an opt-in over the API names the
   // site it was given to, and a site the org does not own is refused.
   mockOrg = {
-    plan: 'business',
+    plan: 'pro',
     subscription: { status: 'active' },
     hosts: { 'host-1': true },
   }
@@ -537,10 +537,10 @@ beforeEach(() => {
 
 describe('the premise', () => {
   it('business meters the audience band, so it may never be refused', () => {
-    expect(PLAN_ENTITLEMENTS.business.features.apiAccess).toBe(true)
+    expect(PLAN_ENTITLEMENTS.pro.features.apiAccess).toBe(true)
     // Metered: `allowed` is true at any usage, so no refusal in this suite can
     // be business's own band wearing a different coat.
-    expect(checkContactQuota({ plan: 'business' } as never, 10_000_000).allowed).toBe(
+    expect(checkContactQuota({ plan: 'pro' } as never, 10_000_000).allowed).toBe(
       true,
     )
     expect(checkContactQuota({ plan: 'free' } as never, 10_000_000).allowed).toBe(
@@ -1166,7 +1166,7 @@ describe('custom fields on /v1/contacts', () => {
 describe('the sites an API opt-in covers', () => {
   beforeEach(() => {
     mockOrg = {
-      plan: 'business',
+      plan: 'pro',
       subscription: { status: 'active' },
       hosts: { 'host-1': true, 'host-2': true },
       consentGroups: { nw: { name: 'Northwind', hostIds: ['host-1', 'host-2'] } },
@@ -1236,7 +1236,7 @@ describe('the sites an API opt-in covers', () => {
 
   it('THE CONTROL: an org that declared no group records the named site either way', async () => {
     mockOrg = {
-      plan: 'business',
+      plan: 'pro',
       subscription: { status: 'active' },
       hosts: { 'host-1': true, 'host-2': true },
     }

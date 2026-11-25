@@ -97,7 +97,7 @@ jest.mock('./host-activity-card.component', () => ({
   default: () => null,
 }))
 
-const PRO = { plan: 'business' } as never
+const PRO = { plan: 'pro' } as never
 const FREE = { plan: 'free' } as never
 
 // The recipes are the CRM's, and the forms the Forms plugin's, both reached

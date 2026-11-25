@@ -63,7 +63,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     hostId === HOST
       ? { orgId: ORG, org: { $id: ORG, plan: mockPlan } }
       : hostId === OTHER_HOST
-        ? { orgId: 'org-2', org: { $id: 'org-2', plan: 'agency' } }
+        ? { orgId: 'org-2', org: { $id: 'org-2', plan: 'enterprise' } }
         : null,
   getOrgDoc: async (orgId: string) => (orgId === ORG ? { $id: ORG, plan: mockPlan } : null),
   resolveOrgMembership: async () => ({ member: mockMember }),

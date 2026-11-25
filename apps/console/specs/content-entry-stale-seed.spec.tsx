@@ -290,7 +290,7 @@ jest.mock('../components/host-id-provider', () => ({
 jest.mock('../hooks/use-org-scope', () => ({ useOrgSlug: () => 'acme' }))
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
-  default: () => ({ org: { plan: 'business' }, ready: true }),
+  default: () => ({ org: { plan: 'pro' }, ready: true }),
 }))
 /**
  * The page names the product in its Template-screens help copy and reads that

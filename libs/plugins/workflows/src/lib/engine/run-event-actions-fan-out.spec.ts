@@ -125,7 +125,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     }),
   },
   // A plan whose allowance cannot be what stops a run here.
-  getOrgForHost: async () => ({ org: { plan: 'business' } }),
+  getOrgForHost: async () => ({ org: { plan: 'pro' } }),
   notifyHostManagers: async () => undefined,
   resolveOrgIdForHost: async () => null,
 }))

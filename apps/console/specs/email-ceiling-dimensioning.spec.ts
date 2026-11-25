@@ -185,13 +185,13 @@ describe('the guard can tell the two answers apart', () => {
     // `resolveOrgEntitlements(undefined)` resolves the FREE tier, and free is
     // 0 — so a wiring bug that lost the plan would read every ceiling as
     // zero and this whole file would agree that nothing oversells.
-    expect(PLAN_KEYS.length).toBeGreaterThan(5)
+    expect(PLAN_KEYS.length).toBe(4)
     expect(PLAN_ENTITLEMENTS.free.emailSendsPerMonth).toBe(0)
-    expect(PLAN_ENTITLEMENTS.agency.emailSendsPerMonth).toBeGreaterThan(0)
+    expect(PLAN_ENTITLEMENTS.pro.emailSendsPerMonth).toBeGreaterThan(0)
     // …and the values are genuinely different between tiers, so a table that
     // collapsed to one number cannot pass.
     expect(new Set(PLAN_KEYS.map((plan) => PLAN_ENTITLEMENTS[plan].emailSendsPerMonth)).size)
-      .toBeGreaterThan(5)
+      .toBe(3)
   })
 })
 
@@ -245,25 +245,21 @@ describe('R3 — which plans the platform can actually deliver', () => {
 
   it('pins the deliverable set exactly', () => {
     expect(PLAN_KEYS.filter((plan) => !oversells(plan)).sort()).toEqual([
-      'advanced',
-      'agency',
-      'business',
       'enterprise',
       'free',
       'pro',
-      'scale',
       'starter',
     ])
   })
 
-  it('states the size of the agency headroom in numbers, not a boolean', () => {
-    const model = modelFor('agency')
-    expect(model.planMonthly).toBe(130_000)
+  it('states the size of the Pro headroom in numbers, not a boolean', () => {
+    const model = modelFor('pro')
+    expect(model.planMonthly).toBe(2_500)
     expect(model.deliverableMonthly).toBe(360_000)
-    // 130,000 at 500/hour needs 260 hours of a 720-hour month. The number is
+    // 2,500 at 500/hour needs 5 hours of a 720-hour month. The number is
     // asserted rather than a boolean because "fits" and "fits by 30 minutes"
     // are different products, and only one of them survives a bad week.
-    expect(model.hoursToSpendPlan).toBe(260)
+    expect(model.hoursToSpendPlan).toBe(5)
     expect(
       model.violations.some(
         (candidate) => candidate.relation === 'plan-exceeds-deliverable-month',
@@ -279,7 +275,7 @@ describe('R3 — which plans the platform can actually deliver', () => {
     const model = modelFor('enterprise')
     expect(model.planMonthly).toBe(260_000)
     expect(model.hoursToSpendPlan).toBe(520)
-    expect(model.planMonthly).toBeGreaterThan(modelFor('agency').planMonthly)
+    expect(model.planMonthly).toBeGreaterThan(modelFor('pro').planMonthly)
     expect(model.planMonthly).toBeLessThanOrEqual(DELIVERABLE)
   })
 

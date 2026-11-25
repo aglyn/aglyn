@@ -62,7 +62,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     data: { uid: 'uid-test', getIdToken: async () => 'token' },
   }),
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1' }),
-  useOrgPlan: () => ({ org: { $id: 'org-1', plan: 'scale' }, ready: true }),
+  useOrgPlan: () => ({ org: { $id: 'org-1', plan: 'pro' }, ready: true }),
   useHostOrgId: () => 'org-1',
   useConsoleHostRoute: () => ({ base: null, orgSlug: null, subdomain: null }),
   useFirestoreDoc: () => ({ data: undefined, status: 'success' }),

@@ -273,7 +273,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         selection: null,
         platformFrom: process.env['USAGE_EMAIL_FROM'] || 'noreply@aglyn.com',
       }),
-  getOrgForHost: async () => ({ orgId: ORG_ID, org: { plan: 'business' } }),
+  getOrgForHost: async () => ({ orgId: ORG_ID, org: { plan: 'pro' } }),
   resolveOrgMembership: async () => ({
     orgId: ORG_ID,
     member: { role: 'admin', allHosts: true },

@@ -151,7 +151,7 @@ const fakeFirestore = {
 const mockOrg: any = {
   org: {
     id: 'org-1',
-    plan: 'advanced',
+    plan: 'enterprise',
     subscriptionStatus: 'active',
     ownerUid: 'owner-1',
     slug: 'acme',
@@ -284,7 +284,7 @@ describe('a storefront subscription carries the card cost as a percent (AGL-2655
   afterAll(() => {
     global.fetch = realFetch
     process.env.STRIPE_SECRET_KEY = realKey as string
-    mockOrg.org.plan = 'advanced'
+    mockOrg.org.plan = 'enterprise'
   })
 
   beforeEach(() => {
@@ -303,7 +303,7 @@ describe('a storefront subscription carries the card cost as a percent (AGL-2655
     [25, '5.4'],
     [100, '3.7'],
   ])('a 0% tier at $%i carries exactly the pass-through, %s%%', async (priceUsd, percent) => {
-    const { result, body } = await runCheckout({ plan: 'advanced', priceUsd })
+    const { result, body } = await runCheckout({ plan: 'enterprise', priceUsd })
     expect(result.status).toBe(200)
     expect(body?.get('mode')).toBe('subscription')
     expect(body?.get('line_items[0][price_data][unit_amount]')).toBe(
@@ -320,14 +320,15 @@ describe('a storefront subscription carries the card cost as a percent (AGL-2655
    * recorded `feeCents` is what that percent takes of the opening goods.
    */
   it('a fee tier carries its take plus the pass-through', async () => {
-    const { result, body } = await runCheckout({ plan: 'business', priceUsd: 100 })
+    // Pro's 1% digital take plus the 3.2% pass-through at $100.
+    const { result, body } = await runCheckout({ plan: 'pro', priceUsd: 100 })
     expect(result.status).toBe(200)
-    expect(body?.get('subscription_data[application_fee_percent]')).toBe('5.2')
-    expect(body?.get('metadata[feeCents]')).toBe('520')
+    expect(body?.get('subscription_data[application_fee_percent]')).toBe('4.2')
+    expect(body?.get('metadata[feeCents]')).toBe('420')
   })
 
   it('the 0% tier records what the pass-through takes of the opening cycle', async () => {
-    const { body } = await runCheckout({ plan: 'advanced', priceUsd: 25 })
+    const { body } = await runCheckout({ plan: 'enterprise', priceUsd: 25 })
     // 5.4% of $25 is $1.35 — the figure `metadata[feeCents]` records.
     expect(body?.get('metadata[feeCents]')).toBe('135')
   })

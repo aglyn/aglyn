@@ -40,7 +40,7 @@ const ORG_ID = 'o1'
 /** Actions returned by the trigger query, filtered by `trigger.event`. */
 let mockActions: { id: string; data: Record<string, any> }[] = []
 /** The org's billing doc, as the run's gate read it. */
-let mockOrg: Record<string, any> = { plan: 'business' }
+let mockOrg: Record<string, any> = { plan: 'pro' }
 /** Everything added to `hosts/{id}/activity`. */
 let mockActivity: Record<string, any>[] = []
 /** Every message handed to `sendEmail`, and what it answers. */
@@ -208,7 +208,7 @@ beforeEach(() => {
   mockActivity = []
   sentMessages = []
   sendResult = { sent: true }
-  mockOrg = { plan: 'business' }
+  mockOrg = { plan: 'pro' }
   mockOwned = true
   offered = []
   filed = []

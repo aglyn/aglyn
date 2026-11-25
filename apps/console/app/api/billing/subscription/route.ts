@@ -27,7 +27,6 @@ import {
 // By path: the route's specs stub the `/server` barrel with a partial object.
 import {
   PLAN_LABELS,
-  RETIRED_PLANS,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   emailUnverifiedResponse,
@@ -77,9 +76,8 @@ import {
 
 /**
  * The plans a switch can move TO, by price (pricing v4, AGL-4126): Starter
- * and Pro. Business, Scale, Advanced and Agency are retired and never sold
- * again, so their `STRIPE_PRICE_*` env is no longer read; no subscription was
- * on one of them when v4 shipped.
+ * and Pro. The plans v4 retired were removed outright (AGL-4245), so their
+ * `STRIPE_PRICE_*` env is not read.
  */
 const PRICE_ENV: Record<string, string | undefined> = {
   starter: process.env.STRIPE_PRICE_STARTER,
@@ -143,9 +141,7 @@ function planFromConfiguredPriceId(priceId?: string): OrgPlan | null {
  */
 function isLadderDowngrade(from: OrgPlan | null, to: string): boolean {
   if (!from) return false
-  // The whole ladder, retired plans in their old place (pricing v4): a
-  // workspace left on Business moving to Pro is still walking DOWN.
-  const ladder = [...SELF_SERVE_PLANS, ...RETIRED_PLANS]
+  const ladder = SELF_SERVE_PLANS
   const fromIndex = ladder.indexOf(from)
   const toIndex = ladder.indexOf(to as OrgPlan)
   return fromIndex >= 0 && toIndex >= 0 && toIndex < fromIndex

@@ -103,7 +103,7 @@ const VIEWER = 'uid-viewer'
 const AUTHOR = 'uid-author'
 const ADMIN = 'uid-admin'
 const SETTINGS = `hosts/${HOST}/settings/store`
-const BUSINESS = { plan: 'business' }
+const BUSINESS = { plan: 'pro' }
 const FREE = { plan: 'free' }
 
 let locked = false

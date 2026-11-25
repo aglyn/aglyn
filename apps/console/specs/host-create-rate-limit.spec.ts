@@ -82,7 +82,7 @@ const CREATE_WRITES = [
  */
 let mockRivalHosts: Array<{ id: string }> = []
 
-const ORG = { $id: 'org-1', slug: 'acme', plan: 'business' }
+const ORG = { $id: 'org-1', slug: 'acme', plan: 'pro' }
 
 /**
  * Stands in for `FreeWorkspaceCapError` — the class the route's catch arm

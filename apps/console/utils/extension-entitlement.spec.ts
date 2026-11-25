@@ -184,7 +184,7 @@ describe('lockedPreviewPlanLabel (AGL-3977)', () => {
 
   it('answers nothing when nothing is missing', () => {
     expect(
-      lockedPreviewPlanLabel(['crm', undefined], { plan: 'business', billingStatus: 'active' }),
+      lockedPreviewPlanLabel(['crm', undefined], { plan: 'pro', billingStatus: 'active' }),
     ).toBeUndefined()
   })
 

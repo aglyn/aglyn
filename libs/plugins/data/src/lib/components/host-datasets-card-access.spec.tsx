@@ -152,7 +152,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   useConfirmationContext: () => ({ confirm: jest.fn() }),
 }))
 
-const ORG = { $id: 'org-1', plan: 'scale' } as any
+const ORG = { $id: 'org-1', plan: 'pro' } as any
 const HERE = 'host-h'
 const THIS_SITE = [`host:${HERE}`]
 

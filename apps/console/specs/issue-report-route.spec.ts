@@ -194,7 +194,7 @@ beforeEach(() => {
   })
   mockGetOrgForUser.mockResolvedValue({
     orgId: 'org-abc',
-    org: { name: 'Acme Co', plan: 'business' },
+    org: { name: 'Acme Co', plan: 'pro' },
     member: { role: 'admin' },
   })
 
@@ -392,7 +392,7 @@ describe('AGL-2185 · what actually reaches Linear', () => {
       'uid-123',
       'Acme Co',
       'org-abc',
-      'business',
+      'pro',
       '/acme/hosts/site-1/media',
       'console.aglyn.com',
       '1.0.0-beta.1',

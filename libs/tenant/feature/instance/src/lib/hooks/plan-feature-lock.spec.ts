@@ -44,7 +44,7 @@ describe('resolvePlanFeatureLock', () => {
 
   it('opens it on a plan that includes it', () => {
     const lock = resolvePlanFeatureLock({
-      org: { plan: 'business', billingStatus: 'active' },
+      org: { plan: 'pro', billingStatus: 'active' },
       ready: true,
       feature: 'scheduledPublishing',
       orgSlug: 'acme',

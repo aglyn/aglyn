@@ -74,7 +74,7 @@ import {
 } from './fixtures/ai-site-foreign-datasets-recording'
 
 const NOW = new Date('2026-10-17T05:30:00.000Z')
-const PAID_ORG: Partial<AglynOrgBilling> = { plan: 'business' }
+const PAID_ORG: Partial<AglynOrgBilling> = { plan: 'pro' }
 
 /** A new site's inventory as a site start's plan reads it: the workspace's datasets, counted, nothing of its own. */
 const siteInventory = (hostId: string): AiSiteInventory => ({

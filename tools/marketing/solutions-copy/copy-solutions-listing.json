@@ -5,7 +5,7 @@
   "frameName": "Solutions — Listing",
   "frameSize": {
     "width": 1440,
-    "height": 2585
+    "height": 2866
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
   "sections": [
@@ -13,12 +13,12 @@
       "kind": null,
       "figmaNodeId": "163:116",
       "order": 0,
-      "heightPx": 412,
-      "eyebrow": "SOLUTIONS",
-      "heading": "Built for how you build.",
+      "heightPx": 504,
+      "eyebrow": "WHO BUILDS ON AGLYN",
+      "heading": "A website builder for however you build.",
       "subheading": null,
       "body": [
-        "Whatever you’re putting on the web — client sites, a storefront, a startup, a docs site — Aglyn is one platform that adapts to the way you work."
+        "Whether you are putting up your first website or running a hundred for clients and brands, the same builder, store, CRM and Aglyn AI apply. Pick the page that sounds like you."
       ],
       "actions": [],
       "items": [],
@@ -98,7 +98,7 @@
       "kind": null,
       "figmaNodeId": "163:192",
       "order": 2,
-      "heightPx": 601,
+      "heightPx": 580,
       "eyebrow": "BY USE CASE",
       "heading": "Whatever you need to ship.",
       "subheading": null,

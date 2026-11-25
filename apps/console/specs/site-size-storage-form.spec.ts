@@ -134,7 +134,7 @@ function fakeHostRef(host: SeededHost) {
 function fakeOrgRef(orgId: string) {
   return {
     id: orgId,
-    get: async () => snapshotOf(orgId, { plan: 'business' }),
+    get: async () => snapshotOf(orgId, { plan: 'pro' }),
     collection: (name: string) =>
       name === 'usage'
         ? {

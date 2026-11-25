@@ -265,7 +265,7 @@ beforeEach(() => {
   mockShipments.length = 0
   mockScopes = ['orders:read', 'orders:write']
   mockEntitlements = { apiAccess: true, commerce: true }
-  mockOrg = { plan: 'business', hosts: { host_1: true } }
+  mockOrg = { plan: 'pro', hosts: { host_1: true } }
   mockDocs.set('hosts/host_1', { displayName: 'Bakery' })
   mockDocs.set('hosts/host_1/orders/ord_1', {
     number: 12,

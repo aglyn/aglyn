@@ -74,9 +74,8 @@
  * publishes none. A price RISE publishes on the page before billing moves
  * (`docs/PRICING_SURFACES.md`), so the Pro column is pinned to the figures
  * those frames carry — $69 / $49, every Business feature, unlimited counts
- * and add-on ceilings, 1,500 API requests at $0.50, 0.5% on physical sales
- * (the fee ladder has since come down, code ahead of the page: AGL-4245).
- * Each moved cell says so. Business, Scale, Advanced and Agency are retired:
+ * and add-on ceilings, 1,500 API requests at $0.50. Each moved cell says so.
+ * Business, Scale, Advanced and Agency are retired:
  * never sold again, their rows kept in `PLAN_ENTITLEMENTS` for the
  * workspaces still on them, and no column on the page, so no figure of
  * theirs is pinned here any more.
@@ -106,7 +105,6 @@ import {
   PLAN_PRICING,
   planSellsAiCredits,
   RELEASE_FLAGS,
-  RETIRED_PLANS,
   SELF_SERVE_PLANS,
   SITE_CARE_ADDON_MONTHLY_USD,
   UNLIMITED,
@@ -167,11 +165,12 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
   // would pass by comparing nothing to nothing. Assert the shape first.
   // ---------------------------------------------------------------------
   describe('premise — the sources exist and have the published shape', () => {
-    it('publishes a column for every plan sold, and none for a retired one', () => {
+    it('publishes a column for every plan, and the plans are exactly those', () => {
       // Since pricing v4 (AGL-4126) the columns are the plans SOLD, then
-      // Custom; the four retired plans keep their rows and no column.
+      // Custom; the four plans it retired were removed outright (AGL-4245),
+      // so there is no plan row without a column.
       expect(Object.keys(PLAN_ENTITLEMENTS).sort()).toEqual(
-        [...PUBLISHED_COLUMNS, ...RETIRED_PLANS, 'enterprise'].sort(),
+        [...PUBLISHED_COLUMNS, 'enterprise'].sort(),
       )
       expect(SELF_SERVE_PLANS).toEqual(PUBLISHED_COLUMNS)
       expect(SELF_SERVE_PLANS).toEqual(['free', 'starter', 'pro'])
@@ -652,28 +651,17 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
     })
 
     /**
-     * CODE AHEAD OF THE PAGE (AGL-4245): the per-sale fee ladder came down on
-     * 2026-11-24 — Starter 5% → 3% and 2% → 1%, Pro 3% → 1% and 0.5% → 0%.
-     * A price DECREASE publishes on the page once billing carries it
-     * (`docs/PRICING_SURFACES.md`), so until then the page still prints the
-     * v4 figures below (`PUBLISHED`). When the page is republished, its
-     * transcription replaces `PUBLISHED` and the two collapse into one row.
-     * Custom's "0%" is a fixed fee rather than a band, and the page prints it.
+     * The per-sale fee ladder came down on 2026-11-24 (AGL-4245) and the page
+     * printed it on 2026-11-25: Starter 3% / 1%, Pro 1% / 0%. Custom's "0%" is
+     * a fixed fee rather than a band, and the page prints it.
      */
-    it('Digital transaction fee — — · 3% · 1% · Custom 0% (code ahead of the page: 5% · 3%)', () => {
-      const PUBLISHED: Row = [0, 5, 3]
-      const CODE_AHEAD: Row = [0, 3, 1]
-      expect(quotaColumn('transactionFeeDigitalPct')).toEqual(CODE_AHEAD)
-      // Only ever lower than the page, never higher.
-      CODE_AHEAD.forEach((rate, index) => expect(rate).toBeLessThanOrEqual(PUBLISHED[index]))
+    it('Digital transaction fee — — · 3% · 1% · Custom 0%', () => {
+      expect(quotaColumn('transactionFeeDigitalPct')).toEqual([0, 3, 1] satisfies Row)
       expect(PLAN_ENTITLEMENTS.enterprise.transactionFeeDigitalPct).toBe(0)
     })
 
-    it('Physical transaction fee — — · 1% · 0% · Custom 0% (code ahead of the page: 2% · 0.5%)', () => {
-      const PUBLISHED: Row = [0, 2, 0.5]
-      const CODE_AHEAD: Row = [0, 1, 0]
-      expect(quotaColumn('transactionFeePhysicalPct')).toEqual(CODE_AHEAD)
-      CODE_AHEAD.forEach((rate, index) => expect(rate).toBeLessThanOrEqual(PUBLISHED[index]))
+    it('Physical transaction fee — — · 1% · 0% · Custom 0%', () => {
+      expect(quotaColumn('transactionFeePhysicalPct')).toEqual([0, 1, 0] satisfies Row)
       expect(PLAN_ENTITLEMENTS.enterprise.transactionFeePhysicalPct).toBe(0)
     })
 
@@ -1027,13 +1015,15 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
        * mirror image: usage past a bound that is silently free, so the bound
        * achieves nothing. The pair is only ever correct together.
        */
-      // Agency is retired (pricing v4) and publishes no column, but its row
-      // still bills the workspaces on it, so the pair is still held.
-      expect(Number.isFinite(PLAN_ENTITLEMENTS.agency.contactsPerHost)).toBe(true)
-      expect(PLAN_PRICING.agency.extraContactsUsdPer1k).toBe(0.4)
+      // Agency was removed with the other retired plans (AGL-4245); the pair
+      // is held on every plan that publishes a rate.
+      for (const plan of PUBLISHED_COLUMNS.filter((p) => p !== 'free')) {
+        expect(Number.isFinite(PLAN_ENTITLEMENTS[plan].contactsPerHost)).toBe(true)
+        expect(PLAN_PRICING[plan].extraContactsUsdPer1k).not.toBeNull()
+      }
       // Custom publishes no rate and, since 2026-09-07, no unbounded band
-      // either: its row is a finite fallback of twice Agency's that a
-      // contract raises, and the page still reads "Talk to us" for it.
+      // either: its row is a finite fallback that a contract raises, and the
+      // page still reads "Talk to us" for it.
       expect(PLAN_ENTITLEMENTS.enterprise.contactsPerHost).toBe(1_000_000)
       expect(PLAN_PRICING.enterprise.extraContactsUsdPer1k).toBeNull()
     })
@@ -1075,11 +1065,11 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
         expect(AI_CREDITS_PER_BLOCK).toBe(5000)
         expect(PAID.every((p) => planSellsAiCredits(p))).toBe(true)
         // On any paid plan that is SOLD; Free and Enterprise sell none, and
-        // nor do the plans pricing v4 retired (AGL-4126).
+        // nor does a removed plan id (AGL-4245).
         expect(
           SELF_SERVE_PLANS.filter((p) => p !== 'free').every((p) => planSellsAiCredits(p)),
         ).toBe(true)
-        expect(RETIRED_PLANS.some((p) => planSellsAiCredits(p))).toBe(false)
+        expect(['business', 'scale', 'advanced', 'agency'].some((p) => planSellsAiCredits(p))).toBe(false)
         expect(planSellsAiCredits('free')).toBe(false)
         expect(planSellsAiCredits('enterprise')).toBe(false)
       })

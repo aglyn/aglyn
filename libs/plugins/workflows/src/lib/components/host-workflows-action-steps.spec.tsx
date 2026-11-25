@@ -112,7 +112,7 @@ standInDatasetList()
 standInOverlayList()
 
 /** Stock `business`: entitles workflows, actions and webhooks. */
-const ORG = { $id: 'org-1', plan: 'business' } as never
+const ORG = { $id: 'org-1', plan: 'pro' } as never
 
 /** The card with its editor open on a new workflow. */
 const openEditor = async () => {

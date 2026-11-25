@@ -85,7 +85,7 @@ function mockFirestoreQuery(field?: string): any {
     (field && mockOrgsByField?.[field]) ??
     ['org-a', 'org-b', 'org-c'].map((id) => ({
       id,
-      data: { plan: 'business', billingStatus: 'active' },
+      data: { plan: 'pro', billingStatus: 'active' },
     }))
   return {
     limit: () => mockFirestoreQuery(field),
@@ -195,11 +195,11 @@ describe('a broadcast records why, and what was actually sent (AGL-2162)', () =>
             entitlements: { planComp: { plan: 'pro' } },
           },
         },
-        // A comp a live subscription outranks: that org is on Business.
+        // A comp a live subscription outranks: that org is on Starter.
         {
           id: 'dormant',
           data: {
-            plan: 'business',
+            plan: 'starter',
             billingStatus: 'active',
             entitlements: { planComp: { plan: 'pro' } },
           },
@@ -235,7 +235,7 @@ describe('a broadcast records why, and what was actually sent (AGL-2162)', () =>
       title: 'Maintenance Saturday',
       body: 'The console will be read-only 02:00–04:00 UTC.',
       link: '/manage/notifications',
-      plan: 'business',
+      plan: 'pro',
       reason: 'Scheduled Firestore index rebuild, business tier only',
     })
     expect(response.status).toBe(200)
@@ -246,7 +246,7 @@ describe('a broadcast records why, and what was actually sent (AGL-2162)', () =>
     expect(rows[0]).toMatchObject({
       actorUid: 'uid-staff',
       action: 'broadcast.send',
-      target: 'orgs?plan=business',
+      target: 'orgs?plan=pro',
       reason: 'Scheduled Firestore index rebuild, business tier only',
     })
     // The gap that mattered most: what every customer was TOLD was recorded
@@ -254,7 +254,7 @@ describe('a broadcast records why, and what was actually sent (AGL-2162)', () =>
     expect(rows[0].after).toMatchObject({
       body: 'The console will be read-only 02:00–04:00 UTC.',
       link: '/manage/notifications',
-      plan: 'business',
+      plan: 'pro',
       orgs: 3,
       // 3 is far under MAX_ORGS_PER_BROADCAST, so this send was complete.
       truncated: false,

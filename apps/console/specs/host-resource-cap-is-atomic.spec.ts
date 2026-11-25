@@ -366,8 +366,8 @@ describe('CONCURRENTLY: twenty requests at once still land exactly five', () => 
     // Without this, "exactly five" is also what a route capped at a hard-coded
     // five would produce, and a route that refused the 6th of ANY plan would
     // pass the case above. Business screens are UNLIMITED.
-    expect(PLAN_ENTITLEMENTS.business.screensPerHost).toBe(Infinity)
-    mockState.org = { plan: 'business', subscription: { status: 'active' } }
+    expect(PLAN_ENTITLEMENTS.pro.screensPerHost).toBe(Infinity)
+    mockState.org = { plan: 'pro', subscription: { status: 'active' } }
     const attempts = 20
     const responses = await Promise.all(
       Array.from({ length: attempts }, () => createScreen()),

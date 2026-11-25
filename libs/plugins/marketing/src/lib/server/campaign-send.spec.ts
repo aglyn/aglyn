@@ -1553,11 +1553,11 @@ describe('campaign email begins at Pro', () => {
     expect(mockState.metered).toEqual([['host-1', 1, 'campaign']])
   })
 
-  it('CONTROL: every tier above Pro sends too', async () => {
+  it('CONTROL: the tier above Pro sends too', async () => {
     // The control widened. One passing tier could still be a gate admitting
     // exactly one plan; the claim is that the refusal is confined to the two
     // tiers banded at zero.
-    for (const plan of ['business', 'scale', 'advanced', 'agency'] as const) {
+    for (const plan of ['enterprise'] as const) {
       await expect(attempt(plan)).resolves.toMatchObject({ sent: 1 })
     }
   })
@@ -1572,13 +1572,7 @@ describe('campaign email begins at Pro', () => {
         `${plan}: 0`,
       )
     }
-    for (const plan of [
-      'pro',
-      'business',
-      'scale',
-      'advanced',
-      'agency',
-    ] as const) {
+    for (const plan of ['pro', 'enterprise'] as const) {
       expect(`${plan}: ${PLAN_ENTITLEMENTS[plan].emailSendsPerMonth > 0}`).toBe(
         `${plan}: true`,
       )

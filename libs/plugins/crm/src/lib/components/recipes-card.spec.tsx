@@ -165,7 +165,7 @@ function Mount(props: { children: ReactNode; hosts?: typeof HOSTS; hostsReady?: 
 }
 
 /** A plan that carries the actions builder, so nothing is refused for that reason. */
-const ORG = { plan: 'business' } as never
+const ORG = { plan: 'pro' } as never
 
 const renderCard = (org: unknown = ORG) =>
   render(

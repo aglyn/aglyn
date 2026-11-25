@@ -54,7 +54,7 @@ import { aiActiveProvider, aiProviderReady } from './ai-runtime'
  *   2. replay — this run again: under the launcher every request whose
  *      bytes were answered before is replayed from `.cache/ai-replay` for
  *      nothing, and only a CHANGED prompt goes to the provider;
- *   3. one live run per plan (Free, then `AGLYN_LIVE_AI_ORG_PLAN=business`)
+ *   3. one live run per plan (Free, then `AGLYN_LIVE_AI_ORG_PLAN=pro`)
  *      for the prompts you changed — read `run.live` in the table: 0 means
  *      nothing new was asked and the run proves nothing;
  *   4. the full live sweep, only before landing: `AGLYN_AI_REPLAY=refresh`

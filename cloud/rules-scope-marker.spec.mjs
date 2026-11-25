@@ -150,7 +150,7 @@ const WRITERS = {
 }
 
 const seedWorkspace = async (seed, org = ORG) => {
-  await seed(['orgs', org], { name: 'Marker', slug: org, plan: 'agency', hosts: { [HERE]: true, [OTHER]: true } })
+  await seed(['orgs', org], { name: 'Marker', slug: org, plan: 'enterprise', hosts: { [HERE]: true, [OTHER]: true } })
   for (const hostId of [HERE, OTHER]) {
     await seed(['hosts', hostId], { orgId: org, memberRoles: { siteOnly: 'admin', owner: 'admin', editor: 'editor' } })
   }
@@ -473,7 +473,7 @@ const slug = (text) => text.replace(/[^a-z]+/gi, '-')
     // 250 tokens of their own, none of them the document's.
     wideElsewhere: collaborator(Array.from({ length: 250 }, (_, n) => hostId(n + 1000))),
   }
-  await seed(['orgs', ORG], { name: 'Wide', slug: 'wide', plan: 'agency' })
+  await seed(['orgs', ORG], { name: 'Wide', slug: 'wide', plan: 'enterprise' })
   for (const [uid, member] of Object.entries(MEMBERS)) {
     await seed(['orgs', ORG, 'members', uid], { ...member, scopeTokens: projectMemberScopeTokens(member) })
   }

@@ -163,7 +163,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
     useFirestore: () => FIRESTORE,
     useUser: () => ({ data: { uid: 'uid-test', getIdToken: jest.fn() } }),
     useHostResourceApi: () => jest.fn().mockResolvedValue({ id: 'new' }),
-    useOrgPlan: () => ({ org: { plan: 'business' }, ready: true }),
+    useOrgPlan: () => ({ org: { plan: 'pro' }, ready: true }),
     useConsoleHostRoute: () => ({ base: null, orgSlug: null, subdomain: null }),
     useFirestoreDoc: () => ({ data: undefined, status: 'success' }),
     writeGuardedBySeed: actual.writeGuardedBySeed,

@@ -36,11 +36,16 @@ import {
   createWebhookEffectLedger,
   NOTIFICATION_TYPE_LABELS,
   observeWrites,
-  PLAN_LABELS,
   formatOperatorAlertAmount,
   Route,
   runBillingWebhookHandlers,
 } from '@aglyn/aglyn/server'
+// By its own module, not the server barrel the route specs stub with a
+// partial object (AGL-4245).
+import {
+  normalizeStoredPlan,
+  storedPlanLabel,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 import {
   findOrgIdByStripeCustomer,
   firebaseAdmin,
@@ -810,12 +815,14 @@ async function handler(request: Request): Promise<Response> {
         // plan price id first and only then falls back (AGL-1340), so a
         // metered or add-on item can never supply the `priceId` and
         // `interval` mirrored below. metadata.plan (set at checkout/switch)
-        // still wins for the plan itself.
+        // still wins for the plan itself, read through `normalizeStoredPlan`
+        // so an id from before the retired plans were removed (AGL-4245)
+        // mirrors as Pro and an unknown one falls to the price.
         const planItem = findPlanItem<any>(items)
         const priceId = planItem?.price?.id
         const plan = canceled
           ? 'free'
-          : (object?.metadata?.plan ?? planFromPriceId(priceId) ?? 'free')
+          : (normalizeStoredPlan(object?.metadata?.plan) ?? planFromPriceId(priceId) ?? 'free')
         // Discount mirror (AGL-1105): reflect the coupon on the subscription
         // onto org.discount so the net-of-discount billing figure is right
         // whether the discount was staff-applied or self-serve-redeemed at
@@ -1207,8 +1214,7 @@ async function handler(request: Request): Promise<Response> {
               const workspace = (orgSnapshot.get('name') as string) ?? String(orgId)
               // Plans by the name the pricing page prints, never the id: this
               // sentence is emailed as well as listed (AGL-3367).
-              const plan = (id: unknown): string =>
-                PLAN_LABELS[id as keyof typeof PLAN_LABELS] ?? String(id)
+              const plan = (id: unknown): string => storedPlanLabel(String(id))
               const body =
                 entry.kind === 'started'
                   ? `${workspace} subscribed to the ${plan(entry.plan)} plan.`

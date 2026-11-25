@@ -83,7 +83,7 @@ describe('the premise: reading as Enterprise is not holding Enterprise', () => {
   it('a custom-priced org is the same shape', () => {
     const custom = {
       $id: 'org-custom',
-      plan: 'business',
+      plan: 'pro',
       subscription: { status: 'active', customMonthlyUsd: 4000 },
     } as unknown as Partial<AglynOrgBilling>
     expect(isEnterpriseOrg(custom)).toBe(true)

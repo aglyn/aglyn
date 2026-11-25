@@ -41,7 +41,7 @@
 const ruleDocs: Array<{ id: string; data: Record<string, unknown> }> = []
 const reads: string[] = []
 const writes: string[] = []
-let orgPlan: Record<string, unknown> = { plan: 'business' }
+let orgPlan: Record<string, unknown> = { plan: 'pro' }
 let orgReads = 0
 
 const docStub = (id: string, data: Record<string, unknown>) => ({
@@ -151,7 +151,7 @@ beforeEach(() => {
   writes.length = 0
   ruleDocs.length = 0
   orgReads = 0
-  orgPlan = { plan: 'business' }
+  orgPlan = { plan: 'pro' }
   ruleDocs.push({
     id: 'r1',
     data: {

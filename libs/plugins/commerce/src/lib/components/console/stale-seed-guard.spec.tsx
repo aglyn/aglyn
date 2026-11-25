@@ -159,7 +159,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   }),
   // Products hub only: a paying, settled plan, so nothing below is refused
   // for the AGL-1064 reason instead of the one under test.
-  useOrgPlan: () => ({ org: { plan: 'business' }, ready: true }),
+  useOrgPlan: () => ({ org: { plan: 'pro' }, ready: true }),
   useHostResourceApi: () => mockCreateResource,
   useUser: () => ({ data: { uid: 'uid-owner', getIdToken: jest.fn() } }),
   useFirestoreDoc: () => ({ data: undefined }),

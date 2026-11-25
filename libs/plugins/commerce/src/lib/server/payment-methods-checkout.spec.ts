@@ -92,7 +92,7 @@ async function runTransaction(body: (transaction: any) => Promise<any>): Promise
 const fakeFirestore = { collection: (name: string) => makeCollectionRef(name), runTransaction }
 
 const mockOrg: any = {
-  org: { id: 'org-1', plan: 'business', subscriptionStatus: 'active', ownerUid: 'owner-1', slug: 'acme' },
+  org: { id: 'org-1', plan: 'pro', subscriptionStatus: 'active', ownerUid: 'owner-1', slug: 'acme' },
 }
 let flagOn = false
 

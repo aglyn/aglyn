@@ -74,8 +74,8 @@ const MONTH = '2026-08'
 const ORG = 'org-acme'
 const HOST = 'host-a'
 
-/** Business, whose band is the smallest of the four that were lowered. */
-const BAND = PLAN_ENTITLEMENTS.business.emailSendsPerMonth
+/** Pro, the first plan that sends campaigns. */
+const BAND = PLAN_ENTITLEMENTS.pro.emailSendsPerMonth
 
 // ---------------------------------------------------------------------------
 // A path-keyed store. `{ increment: n }` is applied as a real addition, and a
@@ -176,14 +176,14 @@ const costCounter = (store: Store, scope: string) =>
   Number(store.docs.get(`${scope}/counters/${EMAIL_SENDS_COUNTER}`)?.[MONTH] ?? 0)
 
 describe('the premise: the band is a real, finite number', () => {
-  it('Business includes 15,000 campaign emails a month', () => {
+  it('Pro includes 2,500 campaign emails a month', () => {
     // Every assertion below compares against this. A stubbed entitlements
     // module would resolve it to 0, and a cap of 0 refuses everything — so
     // "the campaign was refused" would pass while proving nothing at all.
-    expect(BAND).toBe(15_000)
+    expect(BAND).toBe(2_500)
     expect(Number.isFinite(BAND)).toBe(true)
     expect(
-      resolveOrgEntitlements({ plan: 'business' } as never).emailSendsPerMonth,
+      resolveOrgEntitlements({ plan: 'pro' } as never).emailSendsPerMonth,
     ).toBe(BAND)
   })
 })
@@ -240,7 +240,7 @@ describe('at the cap, a campaign is refused', () => {
       orgId: ORG,
       month: MONTH,
       count: 500,
-      limit: PLAN_ENTITLEMENTS.agency.emailSendsPerMonth,
+      limit: PLAN_ENTITLEMENTS.enterprise.emailSendsPerMonth,
       firestore: fakeFirestore(store),
     })
     expect(result.ok).toBe(true)
@@ -294,21 +294,21 @@ describe('…while transactional mail keeps going out', () => {
 
 describe('the excess that produces is what the invoice prices', () => {
   it('prices the transactional overflow, not the campaigns', () => {
-    // The month above: 15,000 campaign emails inside the band, then 4,000
-    // transactional past it. The cost meter reads 19,000 and the band is
-    // 15,000, so 4,000 is billable at Business's $2.00/1,000.
+    // The month above: 2,500 campaign emails inside the band, then 4,000
+    // transactional past it. The cost meter reads 6,500 and the band is
+    // 2,500, so 4,000 is billable at Pro's $2.25/1,000.
     const overage = emailSendsOverage(BAND + 4_000, BAND)
     expect(overage).toBe(4_000)
-    const priced = priceEmailSendOverage({ plan: 'business' } as never, overage)
-    expect(priced.overageRateUsd).toBe(2)
-    expect(priced.overageMonthlyUsd).toBe(8)
+    const priced = priceEmailSendOverage({ plan: 'pro' } as never, overage)
+    expect(priced.overageRateUsd).toBe(2.25)
+    expect(priced.overageMonthlyUsd).toBe(9)
   })
 
   it('a month inside the band bills nothing', () => {
     // The other direction, and the one a customer meets far more often.
     expect(emailSendsOverage(BAND - 1, BAND)).toBe(0)
     expect(
-      priceEmailSendOverage({ plan: 'business' } as never, 0).overageMonthlyUsd,
+      priceEmailSendOverage({ plan: 'pro' } as never, 0).overageMonthlyUsd,
     ).toBe(0)
     // The boundary belongs to the customer: exactly at the band is free.
     expect(emailSendsOverage(BAND, BAND)).toBe(0)

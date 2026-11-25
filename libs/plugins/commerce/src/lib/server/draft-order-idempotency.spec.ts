@@ -121,7 +121,10 @@ const mockVerifyIdToken = jest.fn(async () => ({
 const mockOrg: any = {
   org: {
     id: 'org-1',
-    plan: 'business',
+    plan: 'pro',
+    // Business's 2% digital rate, which every fee below is cut against, as
+    // an override: the plan itself was removed (AGL-4245).
+    entitlements: { transactionFeeDigitalPct: 2 },
     // The org doc's real status field is `billingStatus` — the bare mirror
     // `writeOrgBilling` writes back for the dunning banner, and the one
     // `subscriptionStatusOf` reads on an org doc (the live `subscription`
@@ -438,7 +441,7 @@ describe('draft-order idempotency (AGL-1697)', () => {
  */
 describe('the commerce entitlement gates the draft door (AGL-1873)', () => {
   afterEach(() => {
-    mockOrg.org.plan = 'business'
+    mockOrg.org.plan = 'pro'
     mockOrg.org.billingStatus = 'active'
   })
 
@@ -461,7 +464,7 @@ describe('the commerce entitlement gates the draft door (AGL-1873)', () => {
     mockOrg.org.plan = 'free'
     const refused = await post({}, { 'idempotency-key': 'attempt-back' })
     expect(refused.status).toBe(403)
-    mockOrg.org.plan = 'business'
+    mockOrg.org.plan = 'pro'
     const retry = await post({}, { 'idempotency-key': 'attempt-back' })
     expect(retry.status).toBe(200)
     expect(orderDocs()).toHaveLength(1)

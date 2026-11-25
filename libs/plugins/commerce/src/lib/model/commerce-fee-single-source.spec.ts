@@ -95,19 +95,15 @@ describe('why 2% was never the answer', () => {
       ['digital', 'starter'],
       ['physical', 'pro'],
       ['digital', 'pro'],
-      ['physical', 'business'],
-      ['digital', 'business'],
-      ['digital', 'scale'],
-      ['digital', 'advanced'],
+      ['physical', 'enterprise'],
+      ['digital', 'enterprise'],
     ]
     const agreeing = pairs.filter(
       ([type, plan]) => resolveTransactionFeePct(org(plan), type) === flat,
     )
-    // Business digital (a retired plan) is the only 2% cell among these since
-    // the 2026-11-24 ladder (AGL-4245) moved Starter physical to 1%.
-    expect(agreeing.map(([type, plan]) => `${plan}:${type}`)).toEqual([
-      'business:digital',
-    ])
+    // No cell is 2% since the 2026-11-24 ladder (AGL-4245) moved Starter
+    // physical to 1% and removed Business, whose digital rate was the last.
+    expect(agreeing.map(([type, plan]) => `${plan}:${type}`)).toEqual([])
   })
 
   it('is resolved from the ORG, which no constant can be', () => {

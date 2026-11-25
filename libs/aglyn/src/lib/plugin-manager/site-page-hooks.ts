@@ -147,6 +147,73 @@ export async function resolveSitePage(
   return undefined
 }
 
+/**
+ * What the admin edit bar says about a page a plugin composes (AGL-1845's
+ * collection context, for plugin routes).
+ *
+ * The bar's `/api/edit-context` resolves routed screens and content
+ * collection routes itself, but a page a {@link SitePageResolver} composes
+ * (commerce's `/products/{slug}`) is in no routing map, so the bar called it
+ * "Unrouted page" and offered no edit link. The plugin that composes the page
+ * answers for it here instead, without the tenant app naming the plugin.
+ */
+export interface SiteEditContextAnswer {
+  /**
+   * The template screen that renders this path, which "Edit template" opens
+   * in the Besigner; null when the plugin renders a built-in page.
+   */
+  templateScreenId: string | null
+  /** The kind of record the page shows, as the bar names it: `Products`. */
+  collectionName: string
+  /** True on one record's page, false on a list of them. */
+  entry: boolean
+  /**
+   * What one record is called, lower case (`product`): the bar says
+   * "Product · {template}" and "Edit this product" rather than the generic
+   * "entry". Omitted, it says "entry".
+   */
+  entryNoun?: string
+  /**
+   * Where the record is edited, as a path under the site's console dashboard
+   * (`/products/catalog?product=abc`), the form a plugin's `editBarLink`
+   * takes. The route prefixes it, so a plugin never spells the console's
+   * origin or org path. Null when the page has no single record.
+   */
+  recordEditPath: string | null
+}
+
+export type SiteEditContextResolver = (
+  context: Pick<SitePageContext, 'hostId' | 'host' | 'path'>,
+) => Promise<SiteEditContextAnswer | undefined>
+
+const editContextResolvers: SiteEditContextResolver[] = []
+
+/** Registers a plugin's answer to "what is this page" for the edit bar. */
+export function registerSiteEditContextResolver(
+  fn: SiteEditContextResolver,
+): void {
+  editContextResolvers.push(fn)
+}
+
+/**
+ * The first plugin answer for a path no screen is routed at. A resolver that
+ * throws is skipped: the bar's context is best-effort, and one plugin's
+ * failed read must not cost the bar the rest of it.
+ */
+export async function resolveSiteEditContext(
+  context: Pick<SitePageContext, 'hostId' | 'host' | 'path'>,
+): Promise<SiteEditContextAnswer | undefined> {
+  for (const resolver of editContextResolvers) {
+    try {
+      const answer = await resolver(context)
+      if (answer) return answer
+    } catch (error) {
+      console.error('[edit-context] plugin resolver failed', error)
+    }
+  }
+  return undefined
+}
+
 /** Null/undefined, an empty array or an empty object — nothing to render. */
 function isEmptyContribution(value: unknown): boolean {
   if (value == null) return true
