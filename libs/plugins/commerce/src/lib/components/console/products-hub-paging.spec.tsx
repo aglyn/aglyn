@@ -179,8 +179,16 @@ jest.mock('firebase/firestore', () => ({
   addDoc: jest.fn().mockResolvedValue(undefined),
   deleteDoc: jest.fn().mockResolvedValue(undefined),
   getDoc: jest.fn().mockResolvedValue({ get: () => undefined }),
+  getDocFromServer: jest.fn(),
   setDoc: jest.fn().mockResolvedValue(undefined),
   updateDoc: jest.fn().mockResolvedValue(undefined),
+}))
+
+/** The console URL's query, which `?product={id}` opens an editor from. */
+let mockSearch = ''
+jest.mock('next/navigation', () => ({
+  ...jest.requireActual('next/navigation'),
+  useSearchParams: () => new URLSearchParams(mockSearch),
 }))
 
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
@@ -208,6 +216,7 @@ import ProductsHubCard from './products-hub-card.component'
 
 beforeEach(() => {
   mockQueries = []
+  mockSearch = ''
 })
 
 const mount = async () => {
@@ -359,5 +368,42 @@ describe('the license-key pool is a per-product read (AGL-2501)', () => {
     // removed — which is why the double evaluates the equality rather than
     // merely recording it.
     expect(screen.getByText(/^3 available · 0 assigned/)).toBeTruthy()
+  })
+})
+
+describe('a product named in the URL opens in its editor (admin edit bar)', () => {
+  const firestore = jest.requireMock('firebase/firestore') as {
+    getDocFromServer: jest.Mock
+  }
+
+  it('THE CONTROL: no `?product=` opens nothing', async () => {
+    await mount()
+    expect(screen.queryByText('Edit product')).toBeNull()
+  })
+
+  it('opens a product on the page without reading it again', async () => {
+    mockSearch = 'product=prod-3'
+    await mount()
+    await waitFor(() => expect(screen.getByText('Edit product')).toBeTruthy())
+    expect(screen.getByDisplayValue('Product 0003')).toBeTruthy()
+    expect(firestore.getDocFromServer).not.toHaveBeenCalled()
+  })
+
+  it('reads a product off the page from the server, once', async () => {
+    firestore.getDocFromServer.mockResolvedValue({
+      id: 'prod-far',
+      exists: () => true,
+      get: () => undefined,
+      data: () => ({
+        name: 'Far Away Hoodie',
+        slug: 'far-away-hoodie',
+        status: 'active',
+        variants: [{ id: 'v1', priceUsd: 45, inventory: 3 }],
+      }),
+    })
+    mockSearch = 'product=prod-far'
+    await mount()
+    await waitFor(() => expect(screen.getByDisplayValue('Far Away Hoodie')).toBeTruthy())
+    expect(firestore.getDocFromServer).toHaveBeenCalledTimes(1)
   })
 })

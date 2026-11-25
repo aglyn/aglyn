@@ -73,13 +73,18 @@ From left to right:
 - the site's **name**, beside the Aglyn mark and the site's favicon, if it has one. It
   opens the site's dashboard in the console.
 - the **page** you're on. A blog post or another collection page shows the collection
-  and the template page that renders it, such as *Blog entry · Post*. An address no page
+  and the template page that renders it, such as *Blog entry · Post*. A product's page
+  shows *Product* and the product template, such as *Product · Product detail*, or
+  *Product · Built-in page* when the store has no product template. An address no page
   serves shows *Unrouted page*.
 - **Draft changes**, when the page has a version newer than the one that's live.
 - **Edit this page**, which opens the Besigner on that page, at the version the site is
   serving. On a blog post or another collection entry it reads **Edit template**, because
   that template is the design every entry shares, and **Edit this entry** beside it opens
-  the entry itself — its text, cover and author — in the console's content editor.
+  the entry itself — its text, cover and author — in the console's content editor. On a
+  product's page the same pair reads **Edit template** and **Edit this product**, which
+  opens the product in the Catalog; with no product template there is only **Edit this
+  product**.
 - today's page views across the site, and on **Pro+** how many of them were of this page,
   as in *120 views today · 18 on this page*. Days are counted in UTC. It opens the site's
   analytics.

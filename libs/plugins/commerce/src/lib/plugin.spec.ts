@@ -145,9 +145,9 @@ describe('where a product is read (AGL-3080)', () => {
     const route = pluginRecordRoute('product')?.route
     expect(route?.list({ orgSlug: 'acme', host: 'shop' })).toBe('/acme/hosts/shop/products')
     // The catalog has no page per product, so a product's address is the
-    // catalog it is edited in.
+    // Catalog, opening that product's editor.
     expect(route?.record({ orgSlug: 'acme', host: 'shop' }, 'prod-1')).toBe(
-      '/acme/hosts/shop/products',
+      '/acme/hosts/shop/products/catalog?product=prod-1',
     )
     expect(route?.list({ orgSlug: 'acme', host: null })).toBeNull()
     expect(route?.record({ orgSlug: 'acme', host: null }, 'prod-1')).toBeNull()

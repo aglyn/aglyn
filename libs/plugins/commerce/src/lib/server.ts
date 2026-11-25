@@ -30,6 +30,7 @@ import {
   registerPluginApiRoute,
   registerPluginJob,
   registerSitePageEnricher,
+  registerSiteEditContextResolver,
   registerSitePageResolver,
   registerPluginPermissions,
   registerPluginConfigSchema,
@@ -56,7 +57,10 @@ import { registerOrderFigureReaders } from './server/order-figures'
 import { COMMERCE_PERMISSIONS } from './model/plugin-permissions'
 import { COMMERCE_CONFIG_SCHEMA } from './plugin-config'
 import { commerceSitePageEnricher } from './server/site-page-enricher'
-import { commerceSitePageResolver } from './server/site-page-resolver'
+import {
+  commerceEditContextResolver,
+  commerceSitePageResolver,
+} from './server/site-page-resolver'
 import { cartCheckoutHandler } from './server/cart-checkout'
 import { cartHandler } from './server/cart'
 import { cartExtrasHandler } from './server/checkout-extras'
@@ -417,6 +421,8 @@ export function registerCommerceApi(): void {
   registerPluginConfigSchema(COMMERCE_CONFIG_SCHEMA)
   // PDP/PLP template pages (AGL-418): /products/* + /collections/*.
   registerSitePageResolver(commerceSitePageResolver)
+  // What the admin edit bar names those pages, and where it edits them.
+  registerSiteEditContextResolver(commerceEditContextResolver)
   // Seeds product grids on ordinary screens (AGL-659) — the resolver above
   // only covers /products/* and /collections/*, so /products itself, and any
   // designed page with a grid on it, needed this to render server-side.

@@ -104,6 +104,10 @@ interface EditContext {
    * TEMPLATE screen serving the route. */
   collectionName?: string | null
   collectionEntry?: boolean
+  /** What one record is called on a plugin's page (`product`). */
+  entryNoun?: string | null
+  /** A plugin page with no template of its own: nothing for the Besigner. */
+  builtInPage?: boolean
   versionId: string | null
   /** True when a version newer than the live pointer exists; null unknown. */
   draftChanges?: boolean | null
@@ -917,20 +921,29 @@ export default function AdminBar({
         }}
         title={
           context?.collectionName
-            ? `A ${context.collectionName} ${
+            ? `A ${context.entryNoun ?? `${context.collectionName} ${
                 context.collectionEntry ? 'entry' : 'list page'
-              } rendered by ${
-                context.screenName ? `the "${context.screenName}" template` : 'its template'
+              }`} rendered by ${
+                context.builtInPage
+                  ? 'the built-in page'
+                  : context.screenName
+                    ? `the "${context.screenName}" template`
+                    : 'its template'
               }`
             : undefined
         }
       >
         {context?.collectionName
-          ? // A composed collection route (AGL-1845): name the collection
-            // context, then the template screen serving it.
-            `${context.collectionName}${
-              context.collectionEntry ? ' entry' : ''
-            } · ${context.screenName ?? 'Template'}`
+          ? // A composed collection route (AGL-1845), or a page a plugin
+            // composes (a product's): name the collection context, then the
+            // template screen serving it.
+            `${
+              context.entryNoun
+                ? context.entryNoun.charAt(0).toUpperCase() + context.entryNoun.slice(1)
+                : `${context.collectionName}${context.collectionEntry ? ' entry' : ''}`
+            } · ${
+              context.builtInPage ? 'Built-in page' : (context.screenName ?? 'Template')
+            }`
           : (context?.screenName ?? 'Unrouted page')}
       </span>
       {context?.draftChanges === true ? (
@@ -969,7 +982,7 @@ export default function AdminBar({
           target="_blank"
           rel="noreferrer"
         >
-          Edit this entry
+          {`Edit this ${context.entryNoun ?? 'entry'}`}
         </a>
       ) : null}
       <span style={{ flex: 1, minWidth: 12 }} />

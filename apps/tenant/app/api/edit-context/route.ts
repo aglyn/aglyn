@@ -31,6 +31,7 @@ import {
   pluginEditBarLinks,
   resolveHostEnabledPlugins,
   resolveMediaSrc,
+  resolveSiteEditContext,
   Route,
   SCREEN_ROOT_PATH,
   TENANT_APEX,
@@ -50,6 +51,7 @@ import {
   verifyEditAccessToken,
 } from '@aglyn/tenant-data-admin'
 import { clearEditHintCookies } from '../../../utils/edit-hint-cookies'
+import { serverPluginLoader } from '../../../utils/server-plugin-loader'
 
 export const dynamic = 'force-dynamic'
 
@@ -250,6 +252,37 @@ export async function POST(request: Request): Promise<Response> {
       }
     }
 
+    // Pages a PLUGIN composes (commerce's /products/{slug}) are in no routing
+    // map either, and the bar called them "Unrouted page" with no edit link.
+    // The plugin that composes the page says which template renders it and
+    // where its record is edited; this route never names the plugin. Same
+    // loader the page itself ran its resolvers through.
+    let recordEditPath: string | null = null
+    let entryNoun: string | null = null
+    // A plugin page with no template of its own (commerce's built-in product
+    // page): there is no screen to open, but the bar still names the page.
+    let builtInPage = false
+    if (!screenId && !collectionName && normalized !== SCREEN_ROOT_PATH) {
+      try {
+        await serverPluginLoader.ensureAll(['tenantApi'])
+        const answer = await resolveSiteEditContext({
+          hostId: claims.hostId,
+          host: hostDoc,
+          path: `/${normalized}`,
+        })
+        if (answer) {
+          screenId = answer.templateScreenId ?? undefined
+          collectionName = answer.collectionName
+          collectionEntry = answer.entry
+          recordEditPath = answer.recordEditPath
+          entryNoun = answer.entryNoun ?? null
+          builtInPage = !answer.templateScreenId
+        }
+      } catch {
+        // No verdict beats a wrong one — the bar keeps the plain miss.
+      }
+    }
+
     let screenName: string | undefined
     let versionId: string | undefined
     let draftChanges: boolean | null = null
@@ -355,6 +388,16 @@ export async function POST(request: Request): Promise<Response> {
             collectionSlug: entryRef.collectionKey,
             entryId: entryRef.entryId,
           })}`
+        : null
+
+    // A plugin record's editor (a product's), under the dashboard the same
+    // way a plugin's quick link is.
+    const recordEditUrl =
+      canLink && recordEditPath
+        ? `${CONSOLE_ORIGIN}${buildRoute(Route.HOST_DASHBOARD, {
+            orgSlug: orgSlug as string,
+            host: hostDoc.subdomain as string,
+          })}${recordEditPath}`
         : null
 
     // Quick links (AGL-1829), server-built via buildRoute like everything
@@ -467,12 +510,18 @@ export async function POST(request: Request): Promise<Response> {
         // route served by a template screen, not a routed screen of its own.
         collectionName: collectionName ?? null,
         collectionEntry,
+        // What one record is called on a plugin's page (`product`); null on
+        // content collections, which say "entry".
+        entryNoun,
+        builtInPage,
         versionId: versionId ?? null,
         // True when a version newer than the live pointer exists; null when
         // the answer isn't known (no screen, or the read failed).
         draftChanges,
         editUrl,
-        entryEditUrl,
+        // The entry's editor: a content entry's, or a plugin record's (a
+        // product's) — the bar draws both as "Edit this entry".
+        entryEditUrl: entryEditUrl ?? recordEditUrl,
         consoleUrl,
         screensUrl,
         // One entry per plugin the site runs, in the order the bar draws
