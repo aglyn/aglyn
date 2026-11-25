@@ -35,7 +35,7 @@ import { datasetIntegrityFields } from '../model/dataset-models'
 
 jest.setTimeout(30_000)
 
-const ORG = { $id: 'org-1', plan: 'scale' } as any
+const ORG = { $id: 'org-1', plan: 'pro' } as any
 
 const MODEL = {
   order: ['name', 'status', 'price', 'active', 'tags', 'due'],

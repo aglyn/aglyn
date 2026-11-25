@@ -83,27 +83,24 @@ const AI_CREDIT_BLOCKS_TS = 'libs/aglyn/src/lib/app-utils/ai-credit-blocks.ts'
  * request is a function". Pro moved with pricing v4 — 56 → 69 monthly, 39 →
  * 49 annual, and its physical fee 0 → 0.5% — recorded in "2026-11-03 —
  * Pricing v4: four plans (Free, Starter, Pro, Custom) …" (AGL-4126), which
- * also retired Business, Scale, Advanced and Agency: their rows stay pinned
- * at the figures they were last sold at, because the code keeps them for
- * reading and a retired row that moved would be a change nobody decided.
+ * also retired Business, Scale, Advanced and Agency.
  * The fee ladder came down on 2026-11-24 — Starter 5/2 → 3/1 and Pro 3/0.5 →
  * 1/0 (digital/physical) — recorded in "2026-11-24 — Per-sale platform fees
- * come down …" (AGL-4245); the retired rows did not move.
+ * come down …" (AGL-4245). The retired plans were removed from the product
+ * the same day, recorded in "2026-11-24 — The retired plans (Business,
+ * Scale, Advanced, Agency) are removed from the product" (AGL-4245), and
+ * their pins went with their rows.
  * Each is pinned here because the decision is written down, not because the
  * check was red: a pin moved to silence a failure records nothing and can
  * catch nothing afterwards. Every other column is where Sept 1 put it.
  */
 const LOCKED = {
-  monthly: { free: 0, starter: 25, pro: 69, business: 139, scale: 249, advanced: 399, agency: 1299 },
-  annualPerMonth: { free: 0, starter: 16, pro: 49, business: 99, scale: 179, advanced: 299, agency: 1049 },
+  monthly: { free: 0, starter: 25, pro: 69 },
+  annualPerMonth: { free: 0, starter: 16, pro: 49 },
   ladder: {
     free: { digital: 0, physical: 0 },
     starter: { digital: 3, physical: 1 },
     pro: { digital: 1, physical: 0 },
-    business: { digital: 2, physical: 0 },
-    scale: { digital: 1, physical: 0 },
-    advanced: { digital: 0, physical: 0 },
-    agency: { digital: 0, physical: 0 },
   },
   // What `/pricing` publishes: unit cost + 30% kept after Stripe's fee, rounded
   // up, in the units the page quotes (AGL-3476).

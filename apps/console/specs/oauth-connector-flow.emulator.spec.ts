@@ -102,7 +102,7 @@ describeEmulated('connecting an app, end to end (emulators)', () => {
     const db = getFirestore()
     await getAuth().createUser({ uid: UID, email: `${UID}@example.com`, emailVerified: true })
     idToken = await idTokenFor(UID)
-    await db.collection('orgs').doc(ORG).set({ name: 'Flow Co', slug: `flow-${RUN}`, plan: 'business' })
+    await db.collection('orgs').doc(ORG).set({ name: 'Flow Co', slug: `flow-${RUN}`, plan: 'pro' })
     await db.collection('orgs').doc(ORG).collection('members').doc(UID).set({ role: 'owner', email: `${UID}@example.com` })
     await db.collection('users').doc(UID).collection('orgs').doc(ORG).set({ role: 'owner' })
   }, 120_000)

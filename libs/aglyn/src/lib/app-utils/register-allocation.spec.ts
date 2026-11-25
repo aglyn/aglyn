@@ -261,12 +261,12 @@ describe('POS register allocation (AGL-1775)', () => {
       // maximum and puts it all on one site gets all of it there. The pool
       // changed WHERE the purchase applies, not how much is honoured.
       const maxed = {
-        plan: 'agency',
+        plan: 'enterprise',
         seatAddons: { posRegisters: POS_REGISTERS_ADDON_MAX },
         registerAllocations: { 'host-1': POS_REGISTERS_ADDON_MAX },
       } as any
       expect(resolveHostRegisterCap(maxed, 'host-1')).toBe(
-        PLAN_ENTITLEMENTS.agency.posRegisters + POS_REGISTERS_ADDON_MAX,
+        PLAN_ENTITLEMENTS.enterprise.posRegisters + POS_REGISTERS_ADDON_MAX,
       )
     })
   })

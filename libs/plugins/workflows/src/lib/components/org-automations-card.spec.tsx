@@ -94,7 +94,7 @@ const MOUNT: WorkflowsOrgMount = {
 }
 
 /** A plan that carries the actions builder, so nothing is refused for that. */
-const ORG = { plan: 'business' } as never
+const ORG = { plan: 'pro' } as never
 
 function seeded(overrides: Record<string, unknown> = {}) {
   return {

@@ -221,9 +221,9 @@ const peopleRecord = (values: Record<string, unknown>) => {
 }
 
 /** A plan whose dataset holds five records, so the cap is reachable. */
-const CAPPED = { plan: 'scale', entitlements: { recordsPerDataset: 5 } }
+const CAPPED = { plan: 'pro', entitlements: { recordsPerDataset: 5 } }
 
-const seed = (org: Record<string, unknown> = { plan: 'scale' }) => {
+const seed = (org: Record<string, unknown> = { plan: 'pro' }) => {
   store.clear()
   store.set(ORG, org)
   store.set(DS, { displayName: 'Services', model: SERVICES, visibleTo: ['org'] })

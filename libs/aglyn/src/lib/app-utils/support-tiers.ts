@@ -33,12 +33,7 @@
 import type { OrgPlan } from '../foundation'
 
 /** Ordered weakest → strongest; the queue sorts on this. */
-export type SupportTier =
-  | 'community'
-  | 'standard'
-  | 'business'
-  | 'priority'
-  | 'dedicated'
+export type SupportTier = 'community' | 'standard' | 'dedicated'
 
 /**
  * A first-response window.
@@ -105,41 +100,13 @@ export const SUPPORT_BY_PLAN: Record<OrgPlan, SupportCommitment> = {
     namedManager: false,
     forum: true,
   },
-  business: {
-    tier: 'business',
-    label: 'Business',
-    firstResponse: { min: 4, max: 6, unit: 'business-days' },
-    namedManager: false,
-    forum: true,
-  },
-  scale: {
-    tier: 'business',
-    label: 'Business',
-    firstResponse: { min: 4, max: 6, unit: 'business-days' },
-    namedManager: false,
-    forum: true,
-  },
-  advanced: {
-    tier: 'business',
-    label: 'Business',
-    firstResponse: { min: 4, max: 6, unit: 'business-days' },
-    namedManager: false,
-    forum: true,
-  },
-  agency: {
-    tier: 'priority',
-    label: 'Priority',
-    firstResponse: { min: 1, max: 3, unit: 'business-days' },
-    namedManager: false,
-    forum: true,
-  },
   enterprise: {
     tier: 'dedicated',
     label: 'Dedicated',
     // Quoted in CLOCK hours, and that is the point of the tier: 24–48 hours
     // runs through a weekend, where "1–3 business days" does not. Read as
-    // business hours it would be 3–6 business days — SLOWER than Agency
-    // above, inverting the ladder. `ladderIsMonotonic` below asserts it is
+    // business hours it would be 3–6 business days — SLOWER than the
+    // weekday tiers it sits above, inverting the ladder. `ladderIsMonotonic` below asserts it is
     // not, so this cannot silently regress.
     firstResponse: { min: 24, max: 48, unit: 'hours' },
     namedManager: true,
@@ -147,18 +114,24 @@ export const SUPPORT_BY_PLAN: Record<OrgPlan, SupportCommitment> = {
   },
 }
 
-/** Strength order, weakest first — the index IS the rank. */
-export const SUPPORT_TIER_ORDER: SupportTier[] = [
-  'community',
-  'standard',
-  'business',
-  'priority',
-  'dedicated',
-]
+/** Strength order, weakest first. */
+export const SUPPORT_TIER_ORDER: SupportTier[] = ['community', 'standard', 'dedicated']
+
+/**
+ * Each tier's rank, higher is stronger. Written out rather than read from an
+ * index: a ticket stores its `supportTierRank`, and the two tiers that only
+ * the removed plans carried (`business` 2, `priority` 3; AGL-4245) left a gap
+ * that must not renumber `dedicated` under tickets already filed at 4.
+ */
+const SUPPORT_TIER_RANK: Readonly<Record<SupportTier, number>> = {
+  community: 0,
+  standard: 1,
+  dedicated: 4,
+}
 
 /** Higher is stronger. Used to order the staff queue. */
 export function supportTierRank(tier: SupportTier): number {
-  return SUPPORT_TIER_ORDER.indexOf(tier)
+  return SUPPORT_TIER_RANK[tier]
 }
 
 export function supportForPlan(plan: OrgPlan | undefined | null): SupportCommitment {
@@ -225,9 +198,9 @@ export function responseDueAt(
  * Is the ladder still strictly better as plans get stronger?
  *
  * Exported so a test can assert it, because the failure is silent and the
- * units differ across tiers: quoting Enterprise in business hours rather than
- * clock hours makes it slower than Agency while every individual number still
- * looks reasonable on its own. Compares worst cases as elapsed wall-clock from
+ * units differ across tiers: a tier quoted in business days can come out
+ * slower than the one below it while every individual number still looks
+ * reasonable on its own. Compares worst cases as elapsed wall-clock from
  * a Monday, which is the only basis on which the two units are comparable.
  */
 export function ladderIsMonotonic(mondayMs: number): boolean {

@@ -113,7 +113,7 @@ jest.mock('@aglyn/tenant-feature-instance/hooks/use-paged-collection', () => ({
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
   default: () => ({
-    org: { $id: 'org-1', plan: 'business', ownerUid: 'owner-1' },
+    org: { $id: 'org-1', plan: 'pro', ownerUid: 'owner-1' },
     orgId: 'org-1',
     ready: true,
   }),

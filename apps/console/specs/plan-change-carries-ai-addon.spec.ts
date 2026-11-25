@@ -77,9 +77,9 @@ describe('carriedAiAddonSentence (AGL-2899, AGL-4144)', () => {
     // The credits go with them — the sentence says so, because the meter
     // will.
     expect(many).toContain('the credits go with them')
-    // …and a plan pricing v4 retired, which sells nothing (AGL-4126).
-    expect(carriedAiAddonSentence(proWithBlocks(2), 'business', [])).toContain(
-      'not sold on Business, so they are removed',
+    // …and Custom, which sells no blocks self-serve.
+    expect(carriedAiAddonSentence(proWithBlocks(2), 'enterprise', [])).toContain(
+      'not sold on Custom, so they are removed',
     )
   })
 

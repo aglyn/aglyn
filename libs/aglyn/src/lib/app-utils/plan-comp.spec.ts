@@ -133,7 +133,7 @@ describe('a canceled customer with a stored paid plan stays Free (AGL-3034)', ()
     for (const status of DEAD) {
       expect(resolveEffectivePlan({ plan: 'pro', billingStatus: status } as any)).toBe('free')
       expect(
-        resolveEffectivePlan({ plan: 'business', subscription: { status } } as any),
+        resolveEffectivePlan({ plan: 'pro', subscription: { status } } as any),
       ).toBe('free')
     }
   })
@@ -160,9 +160,9 @@ describe('a canceled customer with a stored paid plan stays Free (AGL-3034)', ()
 describe('a comp applies on a dead subscription (AGL-3034)', () => {
   it('resolves the comp plan for every dead status', () => {
     for (const status of DEAD) {
-      const org = withComp({ plan: 'pro', billingStatus: status }, comp('business'))
-      expect(resolveEffectivePlan(org)).toBe('business')
-      expect(resolvePlanComp(org)?.plan).toBe('business')
+      const org = withComp({ plan: 'pro', billingStatus: status }, comp('enterprise'))
+      expect(resolveEffectivePlan(org)).toBe('enterprise')
+      expect(resolvePlanComp(org)?.plan).toBe('enterprise')
     }
   })
 
@@ -182,9 +182,9 @@ describe('a comp applies on a dead subscription (AGL-3034)', () => {
   })
 
   it('also applies where no subscription exists at all, over a plan stored directly', () => {
-    const org = withComp({ plan: 'starter' }, comp('scale'))
+    const org = withComp({ plan: 'starter' }, comp('enterprise'))
     expect(orgSubscriptionState(org)).toBe('none')
-    expect(resolveEffectivePlan(org)).toBe('scale')
+    expect(resolveEffectivePlan(org)).toBe('enterprise')
     expect(describeOrgPlan(org).decidedBy).toBe('comp')
   })
 
@@ -236,24 +236,24 @@ describe('a live subscription beats a comp (AGL-3034)', () => {
   it.each(['active', 'trialing', 'past_due', 'paused'])(
     'the subscription decides on %s — a status the resolver does not read as dead',
     (status) => {
-      const org = withComp({ plan: 'starter', billingStatus: status }, comp('agency'))
+      const org = withComp({ plan: 'starter', billingStatus: status }, comp('enterprise'))
       expect(resolveEffectivePlan(org)).toBe('starter')
       expect(resolvePlanComp(org)).toBeNull()
       // Stored, and dormant — not gone.
-      expect(readOrgPlanComp(org)?.plan).toBe('agency')
+      expect(readOrgPlanComp(org)?.plan).toBe('enterprise')
       expect(describeOrgPlan(org)).toMatchObject({
         decidedBy: 'subscription',
         compInForce: false,
-        comp: { plan: 'agency' },
+        comp: { plan: 'enterprise' },
       })
       expect(orgPlanDescriptionSentence(describeOrgPlan(org))).toMatch(/dormant/)
     },
   )
 
   it('takes over again when that subscription ends', () => {
-    const live = withComp({ plan: 'business', billingStatus: 'active' }, comp('pro'))
+    const live = withComp({ plan: 'enterprise', billingStatus: 'active' }, comp('pro'))
     const ended = { ...live, plan: 'free', billingStatus: 'canceled' }
-    expect(resolveEffectivePlan(live)).toBe('business')
+    expect(resolveEffectivePlan(live)).toBe('enterprise')
     expect(resolveEffectivePlan(ended)).toBe('pro')
   })
 })
@@ -269,8 +269,8 @@ describe('clearing a comp returns Free (AGL-3034)', () => {
   })
 
   it('on a workspace that never subscribed and stores no paid plan', () => {
-    const comped = withComp({ plan: 'free' }, comp('business'))
-    expect(resolveEffectivePlan(comped)).toBe('business')
+    const comped = withComp({ plan: 'free' }, comp('enterprise'))
+    expect(resolveEffectivePlan(comped)).toBe('enterprise')
     expect(resolveEffectivePlan({ plan: 'free', entitlements: {} } as any)).toBe('free')
   })
 
@@ -305,7 +305,7 @@ describe('a malformed comp grants nothing (AGL-3034)', () => {
 })
 
 describe('a comp sells nothing past its bands (AGL-3034)', () => {
-  const PAID: OrgPlan[] = ['starter', 'pro', 'business', 'scale', 'advanced', 'agency']
+  const PAID: OrgPlan[] = ['starter', 'pro']
 
   it('withholds every rate on every plan row, keeping only the list prices', () => {
     for (const plan of PAID) {
@@ -323,7 +323,7 @@ describe('a comp sells nothing past its bands (AGL-3034)', () => {
   })
 
   it('makes each metered band a wall rather than a line usage is sold past', () => {
-    const org = withComp({ billingStatus: 'canceled' }, comp('business'))
+    const org = withComp({ billingStatus: 'canceled' }, comp('enterprise'))
     const band = resolveOrgEntitlements(org)
     expect(checkCrmRecordsQuota(org, band.contactsPerHost).allowed).toBe(false)
     expect(checkCrmRecordsQuota(org, band.contactsPerHost + 5000).overageMonthlyUsd).toBe(0)
@@ -337,7 +337,7 @@ describe('a comp sells nothing past its bands (AGL-3034)', () => {
 
     // The same plan on a live subscription sells past the band — the control
     // that proves the wall is the comp's, not the plan's.
-    const paying = { plan: 'business', billingStatus: 'active' } as any
+    const paying = { plan: 'pro', billingStatus: 'active' } as any
     expect(checkCrmRecordsQuota(paying, band.contactsPerHost).allowed).toBe(true)
     expect(planMetersInfraOverage(paying)).toBe(true)
   })
@@ -349,8 +349,8 @@ describe('a comp is never a paying subscription (AGL-3034)', () => {
     ['absent', { plan: 'pro' }],
     ['absent, no stored plan', {}],
   ])('books no revenue on a %s subscription', (_label, base) => {
-    const org = withComp(base, comp('agency'))
-    expect(resolveEffectivePlan(org)).toBe('agency')
+    const org = withComp(base, comp('enterprise'))
+    expect(resolveEffectivePlan(org)).toBe('enterprise')
     expect(isBillingSubscription(org)).toBe(false)
     expect(orgListPriceMonthlyUsd(org)).toBe(0)
     expect(orgMonthlyRevenueUsd(org)).toBe(0)
@@ -360,7 +360,7 @@ describe('a comp is never a paying subscription (AGL-3034)', () => {
 describe('a comp names the plan everywhere the plan is named (AGL-3034)', () => {
   it('reads as Enterprise when comped to it, and not off a plan stored before the comp', () => {
     expect(isEnterpriseOrg(withComp({ billingStatus: 'canceled' }, comp('enterprise')))).toBe(true)
-    expect(isEnterpriseOrg(withComp({ plan: 'enterprise' }, comp('scale')))).toBe(false)
+    expect(isEnterpriseOrg(withComp({ plan: 'enterprise' }, comp('pro')))).toBe(false)
     // The explicit marker still counts, and a live subscription ignores the comp.
     expect(isEnterpriseOrg(withComp({ enterprise: true }, comp('pro')))).toBe(true)
     expect(
@@ -499,9 +499,9 @@ describe('an uncapped comp lifts every cap (AGL-3049)', () => {
   })
 
   it('is never billable: every rate withheld, no overage priced, no revenue booked', () => {
-    const org = withComp(INTERNAL, uncappedComp('agency'))
+    const org = withComp(INTERNAL, uncappedComp('enterprise'))
     const pricing = resolvePlanPricing(org)
-    expect(pricing).toEqual(resolvePlanPricing(withComp(INTERNAL, comp('agency'))))
+    expect(pricing).toEqual(resolvePlanPricing(withComp(INTERNAL, comp('enterprise'))))
     for (const [key, value] of Object.entries(pricing)) {
       if (key.startsWith('basePrice')) continue
       expect(`${key}: ${value}`).toBe(`${key}: ${typeof value === 'boolean' ? false : null}`)
@@ -522,7 +522,7 @@ describe('an uncapped comp lifts every cap (AGL-3049)', () => {
   it('is ignored while a live subscription is in force, and lifts again when it ends', () => {
     const live = withComp(
       { plan: 'starter', billingStatus: 'active', entitlements: { contactsPerHost: 2000 } },
-      uncappedComp('agency'),
+      uncappedComp('enterprise'),
     )
     expect(isUncappedPlanComp(live)).toBe(false)
     expect(resolveEffectivePlan(live)).toBe('starter')
@@ -548,10 +548,10 @@ describe('an uncapped comp lifts every cap (AGL-3049)', () => {
       decidedBy: 'subscription',
       compInForce: false,
       uncapped: false,
-      comp: { plan: 'agency', uncapped: true },
+      comp: { plan: 'enterprise', uncapped: true },
     })
     expect(orgPlanDescriptionSentence(description)).toMatch(
-      /An uncapped Agency comp is stored and dormant/,
+      /An uncapped Custom comp is stored and dormant/,
     )
 
     const ended = { ...live, billingStatus: 'canceled' }
@@ -622,12 +622,12 @@ describe('naming an uncapped comp to staff (AGL-3049)', () => {
     )
     expect(planCompLabel({ plan: 'pro', uncapped: false }, true)).toBe('Pro')
     expect(planCompLabel({ plan: 'pro', uncapped: false }, false)).toBe('Pro (dormant)')
-    expect(planCompLabel({ plan: 'agency', uncapped: true }, false)).toBe(
-      'Agency (uncapped, dormant)',
+    expect(planCompLabel({ plan: 'enterprise', uncapped: true }, false)).toBe(
+      'Custom (uncapped, dormant)',
     )
     // The surfaces that show plan keys name the comp by its key.
-    expect(planCompLabel({ plan: 'agency', uncapped: true }, true, 'agency')).toBe(
-      'agency (uncapped)',
+    expect(planCompLabel({ plan: 'enterprise', uncapped: true }, true, 'enterprise')).toBe(
+      'enterprise (uncapped)',
     )
     expect(planCompPhrase({ plan: 'enterprise', uncapped: true })).toBe(
       'uncapped Custom comp',

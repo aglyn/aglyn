@@ -713,7 +713,7 @@ describe('the plugin runs here (AGL-3548)', () => {
 describe('every plugin’s plan (AGL-3548)', () => {
   const FREE = { $id: 'org-1', plan: 'free' }
   const STARTER = { $id: 'org-1', plan: 'starter' }
-  const BUSINESS = { $id: 'org-1', plan: 'business' }
+  const BUSINESS = { $id: 'org-1', plan: 'pro' }
   const ADDONS = { $id: 'org-1', plan: 'free', entitlements: { features: { eventCalendar: true, outreach: true } } }
   const cases: Array<{ resource: string; hostId?: string; feature: string; off: Record<string, unknown>; on: Record<string, unknown>; imports: boolean; exportOpen?: boolean }> = [
     { resource: 'bookings', hostId: 'host-a', feature: 'bookings', off: FREE, on: STARTER, imports: false },
@@ -843,7 +843,7 @@ describe('the import permission (AGL-4047)', () => {
   const upload_ = (hostId = 'host-a') => upload(request('upload', { orgId: 'org-1', resource: 'commerce.gift-cards', hostId, fileName: 'x.csv', content: 'a\n1' }))
 
   beforeEach(() => {
-    mockOrg = { $id: 'org-1', plan: 'business' }
+    mockOrg = { $id: 'org-1', plan: 'pro' }
     mockEngine.uploadTransferSource.mockResolvedValue({ job: JOB, preview: {} })
     mockJobs['job-gifts'] = { resource: 'commerce.gift-cards', hostId: 'host-a' }
   })

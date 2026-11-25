@@ -423,9 +423,9 @@ describe('report-usage: a free org blowing every band posts NO meter event (AGL-
       {
         plan: 'starter',
         billingStatus: 'canceled',
-        entitlements: { planComp: { plan: 'business', reason: 'beta', grantedBy: 'staff-1' } },
+        entitlements: { planComp: { plan: 'pro', reason: 'beta', grantedBy: 'staff-1' } },
       },
-      { entitlements: { planComp: { plan: 'agency', reason: 'trial', grantedBy: 'staff-1' } } },
+      { entitlements: { planComp: { plan: 'enterprise', reason: 'trial', grantedBy: 'staff-1' } } },
       {
         plan: 'enterprise',
         enterprise: true,

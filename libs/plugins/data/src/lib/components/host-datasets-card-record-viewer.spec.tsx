@@ -61,7 +61,7 @@ import { type ReactNode, useMemo, useState } from 'react'
 import { PageHeaderActionsContext } from '@aglyn/aglyn/app-utils/page-header-actions-context'
 import { HostDatasetsCard } from './host-datasets-card.component'
 
-const ORG = { $id: 'org-1', plan: 'scale' } as any
+const ORG = { $id: 'org-1', plan: 'pro' } as any
 
 /**
  * `auditedBy` is declared in `fields` and left out of `order`, which is a real

@@ -128,12 +128,11 @@ test('comparePlansToStripe', async (t) => {
     assert.equal(v.filter((x) => x.status === 'differs').length, 0)
   })
 
-  await t.test('does not hold a retired plan’s prices to the code (pricing v4)', () => {
-    // Business has a code row and no live price at all — archived is the end
-    // state, so it is stated as retired rather than reported unreadable.
+  await t.test('compares only current plans: a row for a removed id is ignored (AGL-4245)', () => {
+    // The fixture still carries a Business row. The plans pricing v4 retired
+    // were removed outright, so nothing about it is compared or reported.
     const v = comparePlansToStripe(code, indexStripePrices(stripePayload()))
-    assert.ok(v.some((x) => x.key === 'retired:business' && x.status === 'in-sync'))
-    assert.equal(v.some((x) => /^aglyn_business_/.test(x.key)), false)
+    assert.equal(v.some((x) => /business/.test(x.key)), false)
   })
 
   await t.test('CATCHES a deactivated price whose amount still agrees', () => {

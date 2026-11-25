@@ -277,7 +277,7 @@ beforeEach(() => {
   // Business plan: hostLimit is high enough that the QUOTA is never what
   // refuses a second site here. If the quota were the thing saying no, these
   // tests would pass without any uniqueness guard at all.
-  mockDocs.set(`orgs/${ORG}`, { plan: 'business', hosts: {} })
+  mockDocs.set(`orgs/${ORG}`, { plan: 'pro', hosts: {} })
 })
 
 /** Host documents carrying a given subdomain — the verdict, in stored state. */

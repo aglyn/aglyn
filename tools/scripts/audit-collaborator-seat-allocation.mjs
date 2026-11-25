@@ -87,12 +87,8 @@ export const AUDIT_PLAN_COLLABORATOR_CAPS = {
   starter: { membersPerHost: 2, maxMembersPerHost: 10 },
   // The ceiling is lifted on Pro since pricing v4 (AGL-4126).
   pro: { membersPerHost: 3, maxMembersPerHost: Number.POSITIVE_INFINITY },
-  business: { membersPerHost: 5, maxMembersPerHost: 100 },
-  scale: { membersPerHost: 5, maxMembersPerHost: 150 },
-  advanced: { membersPerHost: 5, maxMembersPerHost: 250 },
-  agency: { membersPerHost: 5, maxMembersPerHost: 1000 },
-  // Twice Agency's bands — the finite Enterprise fallback since 2026-09-07; a
-  // contracted per-org override on the org document still wins.
+  // The finite Enterprise fallback since 2026-09-07; a contracted per-org
+  // override on the org document still wins.
   enterprise: { membersPerHost: 10, maxMembersPerHost: 2000 },
 }
 

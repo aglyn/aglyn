@@ -28,12 +28,12 @@ import type { ReactNode } from 'react'
 
 let readersAnswer: any
 let registerRows: Array<Record<string, unknown>> | undefined
-const orgPlan = { org: { plan: 'business' } as unknown, ready: true }
+const orgPlan = { org: { plan: 'pro' } as unknown, ready: true }
 const calls: Array<{ url: string; body: any }> = []
 
 jest.mock('@aglyn/aglyn', () => ({
   pluginDocsHelp: () => undefined,
-  checkEntitlement: (org: any, key: string) => key === 'pos' && org?.plan === 'business',
+  checkEntitlement: (org: any, key: string) => key === 'pos' && org?.plan === 'pro',
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: ({ children, HeaderProps }: { children: ReactNode; HeaderProps?: { action?: ReactNode } }) => (
@@ -82,7 +82,7 @@ import PosDevicesCard from './pos-devices-card.component'
 beforeEach(() => {
   calls.length = 0
   registerRows = [{ $id: 'reg-1', name: 'Front counter' }]
-  orgPlan.org = { plan: 'business' }
+  orgPlan.org = { plan: 'pro' }
   orgPlan.ready = true
   readersAnswer = {
     available: true,

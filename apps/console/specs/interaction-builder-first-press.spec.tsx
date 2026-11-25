@@ -36,7 +36,7 @@ const mockEnqueueSnackbar = jest.fn()
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useHostResourceApi: () => jest.fn(),
-  useOrgPlan: () => ({ org: { plan: 'business' }, ready: true }),
+  useOrgPlan: () => ({ org: { plan: 'pro' }, ready: true }),
   // The REAL guard: a stub would let the write through whatever was passed.
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,

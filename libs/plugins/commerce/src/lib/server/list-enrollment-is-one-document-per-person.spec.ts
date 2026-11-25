@@ -170,7 +170,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     '@aglyn/tenant-data-admin/server/list-members',
   ).enrollListMember,
   firebaseAdmin: { app: () => ({ firestore: () => firestoreHandle }) },
-  getOrgForHost: async () => ({ org: { plan: 'business' }, orgId: ORG_ID }),
+  getOrgForHost: async () => ({ org: { plan: 'pro' }, orgId: ORG_ID }),
   resolveOrgIdForHost: async () => ORG_ID,
   orgDataCollectionForHost: async () =>
     collectionHandle(`orgs/${ORG_ID}/contacts`),

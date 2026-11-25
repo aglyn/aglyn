@@ -84,7 +84,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   useConfirmationContext: () => ({ confirm: jest.fn().mockResolvedValue(undefined) }),
 }))
 
-const ORG = { plan: 'business' } as never
+const ORG = { plan: 'pro' } as never
 
 function launcher(allowed: { import?: boolean; export?: boolean } = {}): TransferLauncher {
   return {

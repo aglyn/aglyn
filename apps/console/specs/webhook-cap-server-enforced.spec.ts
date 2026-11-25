@@ -238,7 +238,7 @@ describe('webhook cap is enforced server-side (AGL-1360)', () => {
     state.memberRoles = { 'user-1': 'admin' }
     // Business plan: `webhooks` is a paid entitlement, so every cap
     // assertion below needs an org that actually has the feature.
-    state.org = { plan: 'business' }
+    state.org = { plan: 'pro' }
     state.webhooks = []
     state.selects = []
     mockVerifyIdToken.mockResolvedValue({ uid: 'user-1', email_verified: true })
@@ -342,7 +342,7 @@ describe('webhook cap is enforced server-side (AGL-1360)', () => {
   })
 
   it('refuses while the owning org is suspended — 423, the distinct lockdown status (AGL-1501)', async () => {
-    state.org = { plan: 'business', suspendedAt: { seconds: 1 } }
+    state.org = { plan: 'pro', suspendedAt: { seconds: 1 } }
     expect((await createWebhook()).status).toBe(423)
     expect(mockCreate).not.toHaveBeenCalled()
   })

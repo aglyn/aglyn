@@ -59,7 +59,9 @@ describe('the AI credits each plan includes are the AI plugin’s to declare (AG
     expect(PLAN_ENTITLEMENTS.enterprise.assistCreditsPerMonth).toBe(
       ENTERPRISE_ASSIST_CREDITS_PER_MONTH,
     )
-    expect(ENTERPRISE_ASSIST_CREDITS_PER_MONTH).toBe(AI_CREDITS_BY_PLAN.agency * 2)
+    // Twice the old top self-serve tier's 58,000, fixed when that tier was
+    // removed (AGL-4245).
+    expect(ENTERPRISE_ASSIST_CREDITS_PER_MONTH).toBe(116_000)
     expect(Number.isFinite(ENTERPRISE_ASSIST_CREDITS_PER_MONTH)).toBe(true)
   })
 })

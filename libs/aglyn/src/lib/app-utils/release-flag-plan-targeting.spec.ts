@@ -18,7 +18,6 @@
 import {
   PLAN_LABELS,
   PLAN_LADDER,
-  RETIRED_PLANS,
   SELF_SERVE_PLANS,
 } from './plan-entitlements'
 import {
@@ -69,9 +68,9 @@ describe('release flag plan targeting (AGL-2486)', () => {
     })
 
     it('keeps known tiers, in ladder order, regardless of stored order', () => {
-      expect(parseReleaseFlagPlans(['enterprise', 'pro', 'agency'])).toEqual([
+      expect(parseReleaseFlagPlans(['enterprise', 'pro', 'starter'])).toEqual([
+        'starter',
         'pro',
-        'agency',
         'enterprise',
       ])
     })
@@ -86,6 +85,8 @@ describe('release flag plan targeting (AGL-2486)', () => {
       expect(parseReleaseFlagPlans(['pro', 'platinum', 42, null])).toEqual([
         'pro',
       ])
+      // …and a plan id removed from the product (AGL-4245) is one of them.
+      expect(parseReleaseFlagPlans(['business', 'pro', 'agency'])).toEqual(['pro'])
     })
 
     it('collapses an all-unknown list to undefined, not to an empty list', () => {
@@ -99,14 +100,7 @@ describe('release flag plan targeting (AGL-2486)', () => {
 
   describe('releaseFlagPlansAtOrAbove', () => {
     it('expands to the tier and everything above it on the ladder', () => {
-      expect(releaseFlagPlansAtOrAbove('pro')).toEqual([
-        'pro',
-        'business',
-        'scale',
-        'advanced',
-        'agency',
-        'enterprise',
-      ])
+      expect(releaseFlagPlansAtOrAbove('pro')).toEqual(['pro', 'enterprise'])
     })
 
     it('tops out at enterprise and bottoms out at the whole ladder', () => {
@@ -128,15 +122,10 @@ describe('release flag plan targeting (AGL-2486)', () => {
       )
     })
 
-    it('runs cheapest-first: self-serve tiers, the retired ones, then enterprise', () => {
-      // Pricing v4 (AGL-4126) retired Business, Scale, Advanced and Agency
-      // from sale, but a workspace can still be ON one, so the ladder a flag
-      // targets keeps them in their old place (`PLAN_LADDER`).
-      expect(RELEASE_FLAG_PLAN_LADDER).toEqual([
-        ...SELF_SERVE_PLANS,
-        ...RETIRED_PLANS,
-        'enterprise',
-      ])
+    it('runs cheapest-first: self-serve tiers, then enterprise', () => {
+      // The plans pricing v4 retired were removed outright (AGL-4245), so the
+      // ladder a flag targets is the current plans (`PLAN_LADDER`).
+      expect(RELEASE_FLAG_PLAN_LADDER).toEqual([...SELF_SERVE_PLANS, 'enterprise'])
       expect(RELEASE_FLAG_PLAN_LADDER).toEqual(PLAN_LADDER)
     })
   })
@@ -163,9 +152,9 @@ describe('release flag plan targeting (AGL-2486)', () => {
     it('admits only the named tiers', () => {
       const value: ReleaseFlagValue = {
         enabled: true,
-        plans: ['agency', 'enterprise'],
+        plans: ['starter', 'enterprise'],
       }
-      expect(releaseFlagTargetsPlan(value, 'agency')).toBe(true)
+      expect(releaseFlagTargetsPlan(value, 'starter')).toBe(true)
       expect(releaseFlagTargetsPlan(value, 'enterprise')).toBe(true)
       expect(releaseFlagTargetsPlan(value, 'pro')).toBe(false)
       expect(releaseFlagTargetsPlan(value, 'free')).toBe(false)
@@ -186,7 +175,7 @@ describe('release flag plan targeting (AGL-2486)', () => {
     it('keeps an ON flag away from tiers it does not target', () => {
       const value: ReleaseFlagValue = {
         enabled: true,
-        plans: ['agency', 'enterprise'],
+        plans: ['enterprise'],
       }
       expect(isReleaseFlagOn(KEY, value, 'org_a', 'enterprise')).toBe(true)
       expect(isReleaseFlagOn(KEY, value, 'org_a', 'pro')).toBe(false)
@@ -203,7 +192,7 @@ describe('release flag plan targeting (AGL-2486)', () => {
     const value: ReleaseFlagValue = {
       enabled: false,
       rolloutPercent: 50,
-      plans: ['pro', 'business', 'scale', 'advanced', 'agency', 'enterprise'],
+      plans: ['pro', 'enterprise'],
     }
 
     it('is the intersection: the global cohort, restricted to the tiers', () => {
@@ -224,7 +213,7 @@ describe('release flag plan targeting (AGL-2486)', () => {
 
     it('lands roughly half of the targeted tier, not half of everyone', () => {
       const targeted = subjects.filter((subject) =>
-        isReleaseFlagOn(KEY, value, subject, 'business'),
+        isReleaseFlagOn(KEY, value, subject, 'pro'),
       )
       // Not an assertion about the hash quality — `releaseFlagBucket` owns
       // that — only that the percentage is applied WITHIN the tier rather
@@ -244,16 +233,16 @@ describe('release flag plan targeting (AGL-2486)', () => {
       const before: ReleaseFlagValue = {
         enabled: false,
         rolloutPercent: 40,
-        plans: ['business'],
+        plans: ['pro'],
       }
       const after: ReleaseFlagValue = {
         enabled: false,
         rolloutPercent: 40,
-        plans: ['business', 'enterprise'],
+        plans: ['pro', 'enterprise'],
       }
       for (const subject of subjects) {
-        expect(isReleaseFlagOn(KEY, after, subject, 'business')).toBe(
-          isReleaseFlagOn(KEY, before, subject, 'business'),
+        expect(isReleaseFlagOn(KEY, after, subject, 'pro')).toBe(
+          isReleaseFlagOn(KEY, before, subject, 'pro'),
         )
       }
     })

@@ -67,7 +67,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     },
     getOrgForHost: async (hostId: string) => ({
       orgId: owners[hostId],
-      org: { id: owners[hostId], plan: 'business', subscriptionStatus: 'active', ownerUid: 'owner-seller' },
+      org: { id: owners[hostId], plan: 'pro', subscriptionStatus: 'active', ownerUid: 'owner-seller' },
     }),
     consumeRateLimit: async () => ({ allowed: mockRateAllowed }),
     hostDisplayName: (host: Record<string, unknown>, id: string) => String(host['name'] ?? id),
@@ -165,7 +165,7 @@ function seed() {
   })
   // A buyer with a workspace and two stores, one ready for readers.
   mockUsers['uid-pat'] = { uid: 'uid-pat', email: 'pat@example.com', displayName: 'Pat Lee' }
-  fakeDocs.set('orgs/org-pat', { name: 'Acme Builders', ownerUid: 'uid-pat', plan: 'business', subscriptionStatus: 'active', nameTokens: ['a', 'ac', 'acm', 'acme', 'b', 'bu', 'bui', 'buil', 'build', 'builde', 'builder', 'builders'] })
+  fakeDocs.set('orgs/org-pat', { name: 'Acme Builders', ownerUid: 'uid-pat', plan: 'pro', subscriptionStatus: 'active', nameTokens: ['a', 'ac', 'acm', 'acme', 'b', 'bu', 'bui', 'buil', 'build', 'builde', 'builder', 'builders'] })
   fakeDocs.set('orgs/org-pat/members/uid-pat', {
     uid: 'uid-pat',
     displayName: 'Pat Lee',

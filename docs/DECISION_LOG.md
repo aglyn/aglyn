@@ -92,6 +92,16 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-11-24 — The retired plans (Business, Scale, Advanced, Agency) are removed from the product (AGL-4245)
+
+Pricing v4 (2026-11-03, AGL-4126) stopped selling Business, Scale, Advanced and Agency but kept their entitlement and price rows so a workspace still stored on one resolved as before. None is: a read-only production check on 2026-11-24 found no workspace on a retired plan by stored plan, staff comp, pending upgrade or pending downgrade, no release flag targeting one, no active Stripe price for one, and the only two subscriptions ever on one already canceled. The 24 retired Stripe products were archived the same day. So the four plan ids are removed from the product outright: `OrgPlan` is `free`, `starter`, `pro` and `enterprise` (Custom), and every entitlement row, price row, label, support tier, plugin band, guard pin and Firestore rules list that existed only for them is deleted. There is no data migration. One read-time safety net remains, `normalizeStoredPlan`: a stored plan, a comp or a Stripe `metadata.plan` that still names a removed id reads as Pro, the plan every one of their features moved into, and anything else unknown keeps reading as Free; staff can no longer store or comp one. Nothing a current customer pays or receives changes.
+
+- **Decided by:** the account owner, 2026-11-24, in the session chat: the retired plans are removed from the product outright, leaving Free, Starter, Pro and Custom.
+- **Scope:** pricing, packaging
+- **Evidence:** `OrgPlan` in `libs/aglyn/src/lib/foundation/definitions/org-billing.types.ts`; `PLAN_ENTITLEMENTS`, `PLAN_PRICING`, `PLAN_LABELS`, `PLAN_LADDER` and `normalizeStoredPlan` in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`; the plugin plan tables; the `LOCKED` pins in `tools/scripts/check-pricing-drift.mjs`; the CRM suite lists in `cloud/firebase-firestore.rules`; AGL-4245.
+
+---
+
 ## 2026-11-24 — Per-sale platform fees come down: Starter 1% physical / 3% services and digital, Pro 0% / 1%, Custom unchanged at 0% (AGL-4245)
 
 | Plan | Physical goods | Services and digital |

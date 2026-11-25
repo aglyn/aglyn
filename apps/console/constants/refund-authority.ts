@@ -45,14 +45,15 @@
  *
  * ## Why these numbers
  *
- * `PLAN_PRICING` bases are $0 / $25 / $56 / $139 / $249 / $399 / $799 a
- * month. A $150 per-refund cap covers a full month on every self-serve tier a
- * customer can sign up to today — including $139 with headroom for tax and
- * proration — and stops at the two things worth a second pair of eyes: an
- * ANNUAL term (billed ×12, so $300 at the cheapest paid tier) and the large
- * accounts. That seam is the point. "One month of a mainstream plan" is the
- * refund support should just issue; "a year up front" and "a $799 account"
- * are decisions, not transactions.
+ * `PLAN_PRICING` bases are $0 / $25 / $69 a month (Free, Starter, Pro; Custom
+ * is priced per deal). The cap was set when the ladder ran to $139 and $799
+ * plans, since removed (AGL-4245). A $150 per-refund cap covers a full month
+ * on every self-serve tier a customer can sign up to — with headroom for tax
+ * and proration — and stops at the two things worth a second pair of eyes:
+ * an ANNUAL term (billed ×12, so $192 at the cheapest paid tier) and the
+ * large accounts. That seam is the point. "One month of a mainstream plan"
+ * is the refund support should just issue; "a year up front" and "a custom
+ * account" are decisions, not transactions.
  *
  * $500 a day is roughly three of those and change. It is far above any
  * plausible day of support volume for a platform nine days old, and it bounds

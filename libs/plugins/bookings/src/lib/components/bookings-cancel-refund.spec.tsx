@@ -96,7 +96,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   }),
 }))
 
-const ORG = { plan: 'business' } as never
+const ORG = { plan: 'pro' } as never
 
 const FUTURE = Date.now() + 7 * 24 * 60 * 60_000
 

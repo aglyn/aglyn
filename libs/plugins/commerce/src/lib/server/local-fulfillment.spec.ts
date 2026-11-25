@@ -74,7 +74,7 @@ const mockRateLimit = jest.fn(async () => ({ allowed: true }))
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: { app: () => ({ firestore: () => fakeFirestore }) },
-  getOrgForHost: async () => ({ org: { id: 'org-1', plan: 'business', subscriptionStatus: 'active', timeZone: 'America/Chicago' } }),
+  getOrgForHost: async () => ({ org: { id: 'org-1', plan: 'pro', subscriptionStatus: 'active', timeZone: 'America/Chicago' } }),
   consumeRateLimit: (...args: unknown[]) => mockRateLimit(...(args as [])),
 }))
 jest.mock('@aglyn/aglyn/plugin-manager/plugin-shipping-rates', () => ({

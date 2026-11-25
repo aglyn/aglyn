@@ -48,7 +48,7 @@ const profile: { data: unknown; status: string } = {
 let subscribeCount = 0
 
 const orgPlan = {
-  org: { plan: 'business', ownerUid: 'uid-owner' } as unknown,
+  org: { plan: 'pro', ownerUid: 'uid-owner' } as unknown,
   ready: true,
 }
 
@@ -93,7 +93,7 @@ const statusClaims = () => [
 beforeEach(() => {
   profile.data = undefined
   profile.status = 'loading'
-  orgPlan.org = { plan: 'business', ownerUid: 'uid-owner' }
+  orgPlan.org = { plan: 'pro', ownerUid: 'uid-owner' }
   orgPlan.ready = true
   subscribeCount = 0
 })

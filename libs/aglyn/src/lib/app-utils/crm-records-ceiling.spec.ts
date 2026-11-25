@@ -37,7 +37,7 @@ describe('Starter CRM records stop at Pro\'s included amount (AGL-4227)', () => 
   it('reads the ceiling off Pro\'s band, and Pro and up have none', () => {
     expect(PLAN_ENTITLEMENTS.starter.maxCrmRecords).toBe(PRO_BAND)
     expect(PRO_BAND).toBe(10_000)
-    for (const plan of ['pro', 'business', 'scale', 'advanced', 'agency', 'enterprise'] as OrgPlan[]) {
+    for (const plan of ['pro', 'enterprise'] as OrgPlan[]) {
       expect(`${plan}: ${PLAN_ENTITLEMENTS[plan].maxCrmRecords}`).toBe(`${plan}: ${UNLIMITED}`)
     }
   })

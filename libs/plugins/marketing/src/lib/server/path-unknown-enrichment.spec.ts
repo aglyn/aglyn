@@ -80,7 +80,7 @@ const EXCEPT_BLOG_BAR = {
 /** An org with every marketing entitlement, so nothing is gated off here. */
 const ORG = {
   $id: 'org-1',
-  plan: 'business',
+  plan: 'pro',
   subscriptionStatus: 'active',
 }
 

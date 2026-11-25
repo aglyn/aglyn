@@ -51,7 +51,7 @@ import { uploadFixtureBase64 } from './upload-fixture-bytes'
  */
 
 const mockDocs = new Map<string, Record<string, unknown>>()
-let mockOrg: Record<string, unknown> = { plan: 'business', hosts: { 'host-1': true } }
+let mockOrg: Record<string, unknown> = { plan: 'pro', hosts: { 'host-1': true } }
 let mockScopes: string[] = ['media:read', 'media:write']
 let mockUidSeq = 0
 /** Objects written to the storage bucket, by path. */
@@ -387,7 +387,7 @@ beforeEach(() => {
   // The site the requests name, which the site router reads first (AGL-4235).
   mockDocs.set('hosts/host-1', { displayName: 'Demo', subdomain: 'demo' })
   mockObjects = new Map()
-  mockOrg = { plan: 'business', hosts: { 'host-1': true } }
+  mockOrg = { plan: 'pro', hosts: { 'host-1': true } }
   mockScopes = ['media:read', 'media:write']
   mockUidSeq = 0
   mockQuarantined = false

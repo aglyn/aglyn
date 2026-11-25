@@ -206,7 +206,7 @@ const TOKENS: Record<string, Record<string, unknown> & { uid: string }> = {
   staff: { uid: 'u-staff', staff: true },
 }
 
-let org: Record<string, unknown> = { plan: 'business' }
+let org: Record<string, unknown> = { plan: 'pro' }
 let locked = false
 
 const handler = createReservationWalkInHandler({
@@ -266,7 +266,7 @@ beforeEach(() => {
   autoIdCounter = 0
   afterRead = null
   abortedRetries = 0
-  org = { plan: 'business' }
+  org = { plan: 'pro' }
   locked = false
   writeDoc(
     'hosts/h1',
@@ -347,7 +347,7 @@ describe('who may book a walk-in', () => {
   })
 
   it('refuses a lapsed paid plan too (the sticky downgrade)', async () => {
-    org = { plan: 'business', billingStatus: 'canceled' }
+    org = { plan: 'pro', billingStatus: 'canceled' }
     const res = await call('admin', walkIn())
     expect(res.statusCode).toBe(403)
     expect(stays()).toEqual([])

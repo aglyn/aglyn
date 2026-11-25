@@ -64,7 +64,7 @@ function setup(options: { org?: Record<string, unknown>; locked?: boolean } = {}
       if (!decoded) throw Object.assign(new Error('bad token'), { code: 'auth/argument-error' })
       return decoded
     },
-    orgForHost: async () => ({ org: options.org ?? { plan: 'business' } }),
+    orgForHost: async () => ({ org: options.org ?? { plan: 'pro' } }),
     lockdown: async () => (options.locked ? { scope: 'platform' } : null),
     dropCache,
     now: () => 9_000,
@@ -132,7 +132,7 @@ describe('commerce/products/save', () => {
   it('refuses a create the plan does not include, or past its product limit', async () => {
     const free = setup({ org: { plan: 'free' } })
     expect((await call(free.save, 'editor', { hostId: 'h1', productId: 'p2', create: true, product: edited })).statusCode).toBe(403)
-    const full = setup({ org: { plan: 'business', entitlements: { productsPerHost: 1 } } })
+    const full = setup({ org: { plan: 'pro', entitlements: { productsPerHost: 1 } } })
     expect((await call(full.save, 'editor', { hostId: 'h1', productId: 'p2', create: true, product: edited })).statusCode).toBe(403)
     expect(full.memory.read('hosts/h1/products/p2')).toBeUndefined()
   })

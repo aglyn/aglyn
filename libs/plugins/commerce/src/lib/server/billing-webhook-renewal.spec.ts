@@ -134,7 +134,7 @@ let contactUpserts: PluginContactCaptureRequest[] = []
  * Shaped like the real doc `getOrgDoc` returns: the WHOLE org, no projection,
  * so `resolveEffectivePlan` has `plan` and `subscription.status` to work with.
  */
-let orgFixture: any = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+let orgFixture: any = { id: 'org-1', plan: 'pro', ownerUid: 'owner-1' }
 /** Set to make the org read REJECT, as a Firestore outage does. */
 let orgReadError: Error | null = null
 
@@ -437,7 +437,7 @@ beforeEach(() => {
     ],
   })
   docs.set('hosts/host-1/subscriptions/sub_1', { ...SOLD_SUBSCRIPTION })
-  orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+  orgFixture = { id: 'org-1', plan: 'pro', ownerUid: 'owner-1' }
   orgReadError = null
   process.env.STRIPE_SECRET_KEY = 'sk_test_renewal_spec'
 })
@@ -995,7 +995,7 @@ describe('storefront subscription renewals (AGL-1743)', () => {
       subscription: 'sub_org',
       billing_reason: 'subscription_cycle',
       amount_paid: 4900,
-      subscription_details: { metadata: { orgId: 'org-1', plan: 'business' } },
+      subscription_details: { metadata: { orgId: 'org-1', plan: 'pro' } },
     })
 
     expect(invoiceDocs()).toHaveLength(0)
@@ -1398,7 +1398,7 @@ describe('a lapsed storefront stops renewing (AGL-2071)', () => {
   /** The org's own subscription died: `resolveEffectivePlan` reads `free`. */
   const LAPSED = {
     id: 'org-1',
-    plan: 'business',
+    plan: 'pro',
     ownerUid: 'owner-1',
     subscription: { status: 'canceled' },
   }
@@ -1511,7 +1511,7 @@ describe('a lapsed storefront stops renewing (AGL-2071)', () => {
    */
   it('does NOT stop when the org could not be READ', async () => {
     // The org itself is perfectly healthy — the read is what failed.
-    orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+    orgFixture = { id: 'org-1', plan: 'pro', ownerUid: 'owner-1' }
     orgReadError = new Error('DEADLINE_EXCEEDED')
     acceptStop()
 
@@ -1681,8 +1681,8 @@ describe('a lapsed storefront stops renewing (AGL-2071)', () => {
  * processing cost folded into the rate, sized on the cycle's recurring goods.
  * `RENEWAL_INVOICE` bills $90.00 of goods (`total` 9000, no tax, no shipping),
  * so at the card rate, 2.9% + 30¢ (AGL-4198; 6% before), the pass-through is
- * `2.9 + 0.30 ÷ 90` = 3.23…%, rounded UP to 3.24%. Business digital (2%) re-prices
- * to 5.24%. Advanced (0%) re-prices to what Stripe charges the platform for the
+ * `2.9 + 0.30 ÷ 90` = 3.23…%, rounded UP to 3.24%. Pro digital (1%) re-prices
+ * to 4.24%. Custom (0%) re-prices to what Stripe charges the platform for the
  * cycle, the card and the payout, 3.77%, since a 0% take cannot pay the payout.
  * Neither re-prices to "unset", because the pass-through is owed on every tier.
  */
@@ -1712,10 +1712,10 @@ describe('the platform fee follows the plan (AGL-2289, AGL-2655)', () => {
   }
 
   it('lowers a stale 5% take to the merchant’s current 0% plus the pass-through', async () => {
-    // Sold on Starter, merchant is now on Advanced. The take goes to zero;
+    // Sold on Starter, merchant is now on a 0% plan. The take goes to zero;
     // the card cost does not, because Aglyn still pays Stripe for the charge.
     sellDigital(5)
-    orgFixture = { id: 'org-1', plan: 'advanced', ownerUid: 'owner-1' }
+    orgFixture = { id: 'org-1', plan: 'enterprise', ownerUid: 'owner-1' }
 
     await deliver(RENEWAL_INVOICE)
 
@@ -1726,15 +1726,15 @@ describe('the platform fee follows the plan (AGL-2289, AGL-2655)', () => {
 
   it('raises a stale 0% to the merchant’s current rate plus the pass-through', async () => {
     // Sold on Advanced before the pass-through existed (nothing was ever
-    // sent), merchant is now on Business.
+    // sent), merchant is now on Pro's 1%.
     sellDigital(0)
-    orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+    orgFixture = { id: 'org-1', plan: 'pro', ownerUid: 'owner-1' }
 
     await deliver(RENEWAL_INVOICE)
 
     expect(feeRepriceCalls()).toHaveLength(1)
-    expect(repriceBody()).toBe('application_fee_percent=5.24')
-    expect(storedSubscription().appliedFeePct).toBe(5.24)
+    expect(repriceBody()).toBe('application_fee_percent=4.24')
+    expect(storedSubscription().appliedFeePct).toBe(4.24)
   })
 
   it('carries a subscription sold at the bare take onto the pass-through', async () => {
@@ -1742,22 +1742,22 @@ describe('the platform fee follows the plan (AGL-2289, AGL-2655)', () => {
     // and the plan has not changed. The stored rate still disagrees with the
     // figure now owed, so the one pass re-prices it — no backfill.
     sellDigital(2)
-    orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+    orgFixture = { id: 'org-1', plan: 'pro', ownerUid: 'owner-1' }
 
     await deliver(RENEWAL_INVOICE)
 
     expect(feeRepriceCalls()).toHaveLength(1)
-    expect(repriceBody()).toBe('application_fee_percent=5.24')
-    expect(storedSubscription().appliedFeePct).toBe(5.24)
+    expect(repriceBody()).toBe('application_fee_percent=4.24')
+    expect(storedSubscription().appliedFeePct).toBe(4.24)
   })
 
   it('sizes the pass-through on the sale’s recurring goods when the invoice bills a fraction', async () => {
     // A proration invoice bills a slice of the cycle. A percent sized on the
     // slice would be applied to the NEXT full cycle and over-recover on it,
-    // so the sale's own lines ($50 × 2 = $100) size it instead: 5.20% (2% + 3.20%), not
+    // so the sale's own lines ($50 × 2 = $100) size it instead: 4.20% (1% + 3.20%), not
     // the 32.9% a $1 slice would give.
     sellDigital(undefined)
-    orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+    orgFixture = { id: 'org-1', plan: 'pro', ownerUid: 'owner-1' }
 
     await deliver({
       ...RENEWAL_INVOICE,
@@ -1781,7 +1781,7 @@ describe('the platform fee follows the plan (AGL-2289, AGL-2655)', () => {
       },
     })
 
-    expect(repriceBody()).toBe('application_fee_percent=5.2')
+    expect(repriceBody()).toBe('application_fee_percent=4.2')
   })
 
   it('leaves the rate alone when neither the invoice nor the sale can size the pass-through', async () => {
@@ -1800,7 +1800,7 @@ describe('the platform fee follows the plan (AGL-2289, AGL-2655)', () => {
       lineItems: [],
       appliedFeePct: 2,
     })
-    orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+    orgFixture = { id: 'org-1', plan: 'pro', ownerUid: 'owner-1' }
 
     await deliver({
       ...RENEWAL_INVOICE,
@@ -1832,11 +1832,11 @@ describe('the platform fee follows the plan (AGL-2289, AGL-2655)', () => {
     // No `appliedFeePct` at all reads as UNKNOWN, never as agreement — which
     // is what makes this self-healing rather than needing a backfill.
     sellDigital(undefined)
-    orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+    orgFixture = { id: 'org-1', plan: 'pro', ownerUid: 'owner-1' }
 
     await deliver(RENEWAL_INVOICE)
 
-    expect(repriceBody()).toBe('application_fee_percent=5.24')
+    expect(repriceBody()).toBe('application_fee_percent=4.24')
   })
 
   it('treats a malformed stored rate as unknown', async () => {
@@ -1850,11 +1850,11 @@ describe('the platform fee follows the plan (AGL-2289, AGL-2655)', () => {
       ...DIGITAL_SOLD,
       appliedFeePct: 'two',
     })
-    orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+    orgFixture = { id: 'org-1', plan: 'pro', ownerUid: 'owner-1' }
 
     await deliver(RENEWAL_INVOICE)
 
-    expect(repriceBody()).toBe('application_fee_percent=5.24')
+    expect(repriceBody()).toBe('application_fee_percent=4.24')
   })
 
   /**
@@ -1863,8 +1863,8 @@ describe('the platform fee follows the plan (AGL-2289, AGL-2655)', () => {
    * feature would be satisfied by a handler that POSTs on every single cycle.
    */
   it('POSITIVE CONTROL: an agreeing rate makes no Stripe call at all', async () => {
-    sellDigital(5.24)
-    orgFixture = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+    sellDigital(4.24)
+    orgFixture = { id: 'org-1', plan: 'pro', ownerUid: 'owner-1' }
 
     await deliver(RENEWAL_INVOICE)
 
@@ -1876,7 +1876,7 @@ describe('the platform fee follows the plan (AGL-2289, AGL-2655)', () => {
     sellDigital(5)
     orgFixture = {
       id: 'org-1',
-      plan: 'business',
+      plan: 'pro',
       ownerUid: 'owner-1',
       subscription: { status: 'canceled' },
     }

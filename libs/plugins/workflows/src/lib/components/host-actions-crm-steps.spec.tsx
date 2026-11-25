@@ -90,7 +90,7 @@ jest.mock('./host-activity-card.component', () => ({
 }))
 
 /** A plan that entitles the builder, so nothing is refused for that reason. */
-const ORG = { plan: 'business' } as never
+const ORG = { plan: 'pro' } as never
 
 beforeEach(() => {
   jest.clearAllMocks()

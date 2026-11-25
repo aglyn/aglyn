@@ -227,7 +227,7 @@ standInOverlayList()
 // The forms the trigger's "Form is" condition lists (AGL-3458).
 standInFormList()
 
-const ORG = { $id: 'org-1', plan: 'scale' } as any
+const ORG = { $id: 'org-1', plan: 'pro' } as any
 
 beforeEach(() => {
   mockCapsAsked = {}

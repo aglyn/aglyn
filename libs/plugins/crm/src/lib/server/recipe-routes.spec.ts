@@ -217,8 +217,8 @@ beforeEach(() => {
   mockDecoded = { uid: 'u-1', email: 'ada@acme.test' }
   mockPermissions = orgWideManager()
   orgs = {
-    [ORG]: { $id: ORG, plan: 'business' },
-    [OTHER_ORG]: { $id: OTHER_ORG, plan: 'business' },
+    [ORG]: { $id: ORG, plan: 'pro' },
+    [OTHER_ORG]: { $id: OTHER_ORG, plan: 'pro' },
   }
   docs.set('hosts/host-a', {
     orgId: ORG,

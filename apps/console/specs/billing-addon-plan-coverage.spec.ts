@@ -45,7 +45,13 @@
  * dashboard) could be re-priced as if it were the plan.
  */
 
-import { RETIRED_PLANS, SELF_SERVE_PLANS, type OrgPlan } from '@aglyn/aglyn/server'
+import { SELF_SERVE_PLANS, type OrgPlan } from '@aglyn/aglyn/server'
+
+/**
+ * The plan ids removed on 2026-11-24 (AGL-4245). Not plans any more, so typed
+ * through `unknown`: what is held is that nothing reads or sells one.
+ */
+const RETIRED_PLANS = ['business', 'scale', 'advanced', 'agency'] as unknown as OrgPlan[]
 import {
   ADDON_KINDS,
   addonKindFromPriceId,
@@ -125,7 +131,7 @@ describe('PAID_PLANS covers every plan that is actually sold (AGL-1340)', () => 
     // ladder, nor a plan v4 retired.
     expect(PAID_PLANS).not.toContain('free')
     expect(PAID_PLANS).not.toContain('enterprise')
-    for (const retired of ['business', 'scale', 'advanced', 'agency'] as OrgPlan[]) {
+    for (const retired of RETIRED_PLANS) {
       expect(PAID_PLANS).not.toContain(retired)
     }
   })
@@ -175,8 +181,8 @@ describe('PAID_PLANS covers every plan that is actually sold (AGL-1340)', () => 
     },
   )
 
-  it.each(['business', 'scale', 'advanced', 'agency'] as OrgPlan[])(
-    'reads no %s add-on price, and sells none: the plan is retired (pricing v4)',
+  it.each(RETIRED_PLANS)(
+    'reads no %s add-on price, and sells none: the plan was removed (AGL-4245)',
     (plan) => {
       // Even with the env still set, a retired plan's per-plan prices are
       // neither sold nor read back as an add-on.
@@ -360,7 +366,7 @@ describe('Aglyn AI credits are a quantity kind, one flat block price on any paid
     )
     // A target that sells no blocks drops them: Free, and a retired plan.
     expect(addonTargetPriceId('aiAddon', 'free', 'month', 'price_ai_credits')).toBeNull()
-    expect(addonTargetPriceId('aiAddon', 'agency', 'year', 'price_ai_credits')).toBeNull()
+    expect(addonTargetPriceId('aiAddon', 'agency' as string as OrgPlan, 'year', 'price_ai_credits')).toBeNull()
   })
 
   it('caps at 30 on every paid plan and at zero on Free and Enterprise', () => {

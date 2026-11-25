@@ -101,7 +101,7 @@ function recordingFirestore(writes: Write[]) {
       fn({
         get: async (target: { path?: string }) =>
           target?.path
-            ? { get: () => undefined, data: () => ({ plan: 'business' }) }
+            ? { get: () => undefined, data: () => ({ plan: 'pro' }) }
             : { docs: [] },
         set: (target: { path: string }, data: unknown, options?: unknown) => {
           writes.push(options === undefined ? [target.path, data] : [target.path, data, options])

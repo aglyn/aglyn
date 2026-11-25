@@ -163,7 +163,7 @@ jest.mock('@aglyn/aglyn/app-utils/where-used', () => ({
 
 /** A plan that clears the per-host caps, so nothing is refused for a quota
  * reason instead of the one under test. */
-const ORG = { plan: 'business' } as never
+const ORG = { plan: 'pro' } as never
 
 beforeEach(() => {
   jest.clearAllMocks()

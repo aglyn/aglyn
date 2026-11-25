@@ -203,7 +203,14 @@ const FEATURE_KEYS = Object.keys(PLAN_ENTITLEMENTS.free.features)
 /** Every registered release flag, by name. */
 const RELEASE_FLAG_KEYS = RELEASE_FLAGS.map((definition) => definition.key)
 
-const PLAN_KEYS = new Set(Object.keys(PLAN_ENTITLEMENTS))
+/**
+ * The plans staff may store or comp: the current plans and nothing else. The
+ * plans removed on 2026-11-24 (AGL-4245) have no entitlement row, so a
+ * request naming one is refused here with the list of what is a plan, rather
+ * than written and left for the read-time safety net to reinterpret.
+ */
+const PLAN_KEYS = new Set<string>(Object.keys(PLAN_ENTITLEMENTS))
+const PLAN_KEYS_SENTENCE = [...PLAN_KEYS].join(', ')
 
 /**
  * A refusal, with the one fact the console cannot work out for itself.
@@ -289,7 +296,9 @@ function readCompRequest(raw: unknown): CompRequest | { error: string } {
   }
   const plan = (raw as Record<string, unknown>)['plan']
   if (typeof plan !== 'string' || !PLAN_KEYS.has(plan)) {
-    return { error: `Unknown comp plan: ${String(plan)}` }
+    return {
+      error: `Unknown comp plan: ${String(plan)}. The plans are ${PLAN_KEYS_SENTENCE}.`,
+    }
   }
   if (plan === 'free') {
     return {
@@ -387,7 +396,7 @@ async function handler(request: Request): Promise<Response> {
     }
     const plan = String(rawPlan ?? '').trim() as OrgPlan | ''
     if (plan && !PLAN_KEYS.has(plan)) {
-      return refuse(`Unknown plan: ${plan}`, 400)
+      return refuse(`Unknown plan: ${plan}. The plans are ${PLAN_KEYS_SENTENCE}.`, 400)
     }
 
     // Numeric entitlements — the caller's EXPLICIT set, and absence is the

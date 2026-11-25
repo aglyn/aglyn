@@ -84,8 +84,8 @@ const MEMBERS = {
 
 await env.withSecurityRulesDisabled(async (context) => {
   const db = context.firestore()
-  await setDoc(doc(db, 'orgs', ORG), { name: 'Workspace Keys', slug: 'workspace-keys', plan: 'business', ownerUid: UIDS.owner })
-  await setDoc(doc(db, 'orgs', OTHER_ORG), { name: 'Other', slug: 'other-wk', plan: 'business', ownerUid: UIDS.outsider })
+  await setDoc(doc(db, 'orgs', ORG), { name: 'Workspace Keys', slug: 'workspace-keys', plan: 'pro', ownerUid: UIDS.owner })
+  await setDoc(doc(db, 'orgs', OTHER_ORG), { name: 'Other', slug: 'other-wk', plan: 'pro', ownerUid: UIDS.outsider })
   await setDoc(doc(db, 'orgs', OTHER_ORG, 'members', UIDS.outsider), { role: 'owner', allHosts: true })
   for (const [uid, member] of Object.entries(MEMBERS)) await setDoc(doc(db, 'orgs', ORG, 'members', uid), member)
 })

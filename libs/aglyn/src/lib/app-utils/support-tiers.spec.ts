@@ -65,7 +65,7 @@ describe('supportForPlan', () => {
       .map(([plan]) => plan)
       .sort()
     expect(ticketed).toEqual(
-      ['advanced', 'agency', 'business', 'enterprise', 'pro', 'scale'].sort(),
+      ['enterprise', 'pro'].sort(),
     )
     expect(supportForPlan('free').firstResponse).toBeNull()
     expect(supportForPlan('starter').firstResponse).toBeNull()
@@ -137,9 +137,6 @@ describe('responseDueAt', () => {
     expect(responseDueAt(supportForPlan('pro'), MONDAY)).toBe(
       addBusinessDays(MONDAY, 14),
     )
-    expect(responseDueAt(supportForPlan('agency'), MONDAY)).toBe(
-      addBusinessDays(MONDAY, 3),
-    )
   })
 
   it('measures enterprise in CLOCK hours, so a weekend does not pause it', () => {
@@ -156,32 +153,36 @@ describe('the ladder gets better as plans get stronger (AGL-1103)', () => {
     expect(ladderIsMonotonic(MONDAY)).toBe(true)
   })
 
-  it('would INVERT if enterprise were quoted in business hours', () => {
-    // The trap this guards. "24–48 business hours" reads as a stronger promise
-    // than "1–3 business days" and is a weaker one: at 8h per business day it
-    // is 3–6 business days, so Enterprise would wait longer than Agency while
-    // every number still looked reasonable on its own. Kept as an executable
-    // note so nobody re-reads the unit and "fixes" it.
+  it('would WEAKEN if enterprise were quoted in business hours', () => {
+    // The trap this guards. "24–48 business hours" reads like the same
+    // promise and is a weaker one: at 8h per business day it is 3–6 business
+    // days. Until the retired plans were removed (AGL-4245) that put
+    // Enterprise behind the 1–3 business days the tier below it quoted; it
+    // still beats Pro either way, but the clock-hour reading is the promise.
+    // Kept as an executable note so nobody re-reads the unit and "fixes" it.
     const enterpriseAsClockHours = responseDueAt(
       supportForPlan('enterprise'),
       MONDAY,
     ) as number
     const enterpriseAsBusinessHours = addBusinessDays(MONDAY, 48 / 8)
-    const agency = responseDueAt(supportForPlan('agency'), MONDAY) as number
+    const pro = responseDueAt(supportForPlan('pro'), MONDAY) as number
 
-    expect(enterpriseAsClockHours).toBeLessThan(agency)
-    expect(enterpriseAsBusinessHours).toBeGreaterThan(agency)
+    expect(enterpriseAsClockHours).toBeLessThan(pro)
+    expect(enterpriseAsBusinessHours).toBeGreaterThan(enterpriseAsClockHours)
   })
 
   it('ranks tiers weakest to strongest', () => {
     expect(supportTierRank('community')).toBeLessThan(supportTierRank('standard'))
-    expect(supportTierRank('standard')).toBeLessThan(supportTierRank('business'))
-    expect(supportTierRank('business')).toBeLessThan(supportTierRank('priority'))
-    expect(supportTierRank('priority')).toBeLessThan(supportTierRank('dedicated'))
+    expect(supportTierRank('standard')).toBeLessThan(supportTierRank('dedicated'))
+    // Tickets store the rank, so removing the two tiers only the removed
+    // plans carried (AGL-4245) must not renumber the ones that remain.
+    expect([0, 1, 4]).toEqual(
+      (['community', 'standard', 'dedicated'] as const).map(supportTierRank),
+    )
   })
 
   it('quotes the same window for every plan sharing a tier', () => {
-    // free/starter, and business/scale/advanced, are each one tier. A drift
+    // free/starter are one tier. A drift
     // between them is a promise that depends on which plan page you read.
     const byTier = new Map<string, string>()
     for (const commitment of Object.values(SUPPORT_BY_PLAN)) {

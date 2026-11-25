@@ -82,7 +82,7 @@ const MOUNT: WorkflowsOrgMount = {
   basePath: '/acme/automation',
 }
 
-const BUSINESS = { plan: 'business' } as never
+const BUSINESS = { plan: 'pro' } as never
 const FREE = { plan: 'free' } as never
 
 const PROPOSAL: OrgAutomationProposal = {

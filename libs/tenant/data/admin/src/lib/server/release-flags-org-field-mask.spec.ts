@@ -100,7 +100,7 @@ const bulk = {
 
 const ORGS: Record<string, Record<string, unknown>> = {
   'no plan': { ...bulk },
-  'stored paid plan': { ...bulk, plan: 'business' },
+  'stored paid plan': { ...bulk, plan: 'pro' },
   'live subscription': { ...bulk, plan: 'pro', subscription: { status: 'active', id: 'sub_1' } },
   'dead subscription': { ...bulk, plan: 'pro', subscription: { status: 'canceled' } },
   'mirrored status wins': {
@@ -113,7 +113,7 @@ const ORGS: Record<string, Record<string, unknown>> = {
     ...bulk,
     plan: 'pro',
     subscription: { status: 'canceled' },
-    entitlements: { planComp: { plan: 'business', uncapped: true }, other: 1 },
+    entitlements: { planComp: { plan: 'pro', uncapped: true }, other: 1 },
   },
   'comp with no subscription': {
     ...bulk,
@@ -166,7 +166,7 @@ describe('the org read is masked to the fields the answer uses (AGL-4121)', () =
       getOrgReleaseFlagTargeting('org-1'),
     ])
     expect(mockReads).toBe(1)
-    expect(answers.every((answer) => answer.plan === 'business')).toBe(true)
+    expect(answers.every((answer) => answer.plan === 'pro')).toBe(true)
   })
 
   it('the loaded-org verdict reads nothing at all', async () => {

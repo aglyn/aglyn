@@ -207,7 +207,7 @@ interface Case {
   key: string
   /** The case's number in PR #1810's list. */
   n: number
-  orgPlan: 'business' | 'free'
+  orgPlan: 'pro' | 'free'
   businessName: string
   siteType: string
   audience: string
@@ -227,18 +227,18 @@ const CASES: readonly Case[] = [
   {
     key: 'c1-photography',
     n: 1,
-    orgPlan: 'business',
+    orgPlan: 'pro',
     businessName: 'Fern & Field Photography',
     siteType: 'a wedding and family photographer in Asheville who shoots outdoors in natural light',
     audience: 'engaged couples and young families comparing photographers',
     kind: 'photography',
     sites: [AI_INSPIRATION_PORTFOLIO],
   },
-  { key: 'c2-restaurant', n: 2, orgPlan: 'business', ...RESTAURANT_BRIEF, sites: [AI_INSPIRATION_RESTAURANT] },
+  { key: 'c2-restaurant', n: 2, orgPlan: 'pro', ...RESTAURANT_BRIEF, sites: [AI_INSPIRATION_RESTAURANT] },
   {
     key: 'c3-business',
     n: 3,
-    orgPlan: 'business',
+    orgPlan: 'pro',
     businessName: 'Tallyworks',
     siteType: 'a software company whose app tracks inventory and reorders for independent craft breweries',
     audience: 'brewery owners and taproom managers who count kegs on clipboards',
@@ -248,7 +248,7 @@ const CASES: readonly Case[] = [
   {
     key: 'c4-all-three',
     n: 4,
-    orgPlan: 'business',
+    orgPlan: 'pro',
     businessName: 'Rise & Ritual Bakehouse',
     siteType: 'a neighborhood bakery and coffee bar in Minneapolis with sourdough, pastries and custom cakes',
     audience: 'neighbors on their morning commute and people ordering a cake for a celebration',
@@ -256,11 +256,11 @@ const CASES: readonly Case[] = [
     sites: [AI_INSPIRATION_PORTFOLIO, AI_INSPIRATION_RESTAURANT, AI_INSPIRATION_SAAS],
   },
   { key: 'c5-free-restaurant', n: 5, orgPlan: 'free', ...RESTAURANT_BRIEF, sites: [AI_INSPIRATION_RESTAURANT] },
-  { key: 'c6-control', n: 6, orgPlan: 'business', ...RESTAURANT_BRIEF, sites: [] },
+  { key: 'c6-control', n: 6, orgPlan: 'pro', ...RESTAURANT_BRIEF, sites: [] },
 ]
 
 const orgOf = (entry: Case): Partial<AglynOrgBilling> & { ownerUid: string } => ({ plan: entry.orgPlan, ownerUid: 'owner-1' })
-const pagesOf = (entry: Case) => (entry.orgPlan === 'business' ? 5 : 2)
+const pagesOf = (entry: Case) => (entry.orgPlan === 'pro' ? 5 : 2)
 
 /** Every distinct value a recording would leak: its sentences, names, picture files and alt texts, its address. */
 function leaksOf(recording: AiSiteInspirationRecording): string[] {

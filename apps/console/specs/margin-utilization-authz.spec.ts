@@ -419,7 +419,7 @@ describe('which organizations: every clause and the search on the query (AGL-332
   beforeEach(() => {
     mockOrgDocs = [
       { id: 'org-a', data: { ...payingOrg('org-a').data, name: 'Acme', nameTokens: ['a', 'ac', 'acm', 'acme'] } },
-      { id: 'org-b', data: { ...payingOrg('org-b', 'business').data, name: 'Globex', nameTokens: ['g', 'gl'] } },
+      { id: 'org-b', data: { ...payingOrg('org-b', 'pro').data, name: 'Globex', nameTokens: ['g', 'gl'] } },
       { id: 'org-c', data: { ...payingOrg('org-c').data, name: 'Acme Two', nameTokens: ['a', 'ac', 'acm', 'acme', 't', 'tw', 'two'] } },
     ]
     mockVerifyIdToken.mockResolvedValue(STAFF)
@@ -490,18 +490,18 @@ describe('what it serves', () => {
      * a model does not error, it just answers smaller.
      */
     mockVerifyIdToken.mockResolvedValue(STAFF)
-    mockOrgDocs = [payingOrg('org-1', 'business')]
+    mockOrgDocs = [payingOrg('org-1', 'pro')]
     mockUsageByOrg['org-1'] = {
       month: '2026-07',
-      workflowRuns: 25_000,
-      actionRuns: 5_000,
+      workflowRuns: 2_500,
+      actionRuns: 500,
     }
     const payload = await (await call({ token: 'tok' })).json()
     const bands = payload.rows[0].bands
-    // Business sells 50,000 of each.
-    expect(bands.workflowRuns.used).toBe(25_000)
+    // Pro sells 5,000 of each.
+    expect(bands.workflowRuns.used).toBe(2_500)
     expect(bands.workflowRuns.fraction).toBeCloseTo(0.5, 9)
-    expect(bands.actionRuns.used).toBe(5_000)
+    expect(bands.actionRuns.used).toBe(500)
     expect(bands.actionRuns.fraction).toBeCloseTo(0.1, 9)
   })
 
@@ -510,7 +510,7 @@ describe('what it serves', () => {
     // about the fixture. A rollup written before these meters existed has no
     // such field, and the band still has to render.
     mockVerifyIdToken.mockResolvedValue(STAFF)
-    mockOrgDocs = [payingOrg('org-1', 'business')]
+    mockOrgDocs = [payingOrg('org-1', 'pro')]
     mockUsageByOrg['org-1'] = { month: '2026-07' }
     const payload = await (await call({ token: 'tok' })).json()
     expect(payload.rows[0].bands.workflowRuns.state).toBe('measured')

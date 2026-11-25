@@ -38,7 +38,7 @@ const ENTITLEMENTS_PATH = WATCHED[0].path
 const METERING_PATH = WATCHED[1].path
 
 /** A minimal but shape-faithful `plan-entitlements.ts`. */
-const entitlements = ({ proMonthly = 56, businessScheduled = true, cogsStorage = 0.026 } = {}) => `
+const entitlements = ({ proMonthly = 56, starterScheduled = true, cogsStorage = 0.026 } = {}) => `
 export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
   free: {
     scheduledPublishing: false,
@@ -48,8 +48,8 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     scheduledPublishing: false,
     marketplaceFeePct: 20,
   },
-  business: {
-    scheduledPublishing: ${businessScheduled},
+  starter: {
+    scheduledPublishing: ${starterScheduled},
     marketplaceFeePct: 20,
   },
 }
@@ -61,7 +61,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
   pro: {
     basePriceMonthlyUsd: ${proMonthly},
   },
-  business: {
+  starter: {
     basePriceMonthlyUsd: 139,
   },
 }
@@ -107,7 +107,7 @@ test('the price surface parses every watched constant', () => {
   const { values, unreadable } = priceSurface(sources())
   assert.deepEqual(unreadable, [])
   assert.equal(values['PLAN_PRICING.pro.basePriceMonthlyUsd'], 56)
-  assert.equal(values['PLAN_ENTITLEMENTS.business.scheduledPublishing'], true)
+  assert.equal(values['PLAN_ENTITLEMENTS.starter.scheduledPublishing'], true)
   assert.equal(values['PLAN_ENTITLEMENTS.free.marketplaceFeePct'], 30)
   assert.equal(values['METERED_MARKUP'], 1.3)
   assert.equal(values['POS_REGISTER_ADDON_MONTHLY_USD'], 89)
@@ -221,13 +221,13 @@ test('RED: a moved ENTITLEMENT with an unchanged Decision Log — the entry-sche
   const verdicts = changeControlVerdicts({
     baseRef: 'origin/production',
     baseSources: sources(),
-    headSources: sources({ businessScheduled: false }),
+    headSources: sources({ starterScheduled: false }),
     baseLog: GOOD_LOG,
     headLog: GOOD_LOG,
   })
   const v = verdictFor(verdicts, 'change-control')
   assert.equal(v.status, 'differs')
-  assert.match(v.detail, /PLAN_ENTITLEMENTS\.business\.scheduledPublishing true → false/)
+  assert.match(v.detail, /PLAN_ENTITLEMENTS\.starter\.scheduledPublishing true → false/)
 })
 
 test('RED: a moved COGS rate — it changes the published rate through the markup', () => {

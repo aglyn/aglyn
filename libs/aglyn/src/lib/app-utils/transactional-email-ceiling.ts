@@ -73,19 +73,12 @@ export const TRANSACTIONAL_EMAILS_PER_DAY_KEY = 'transactionalEmailsPerDay'
  * every site together, before the next is refused.
  *
  * Free, Starter and Pro are the figures the 2026-11-03 margin check set.
- * The tiers between Pro and Enterprise sit at or above Pro's figure and rise
- * with the sites each sells (Business 10, Scale 15, Advanced 25, Agency 100),
- * so none of them is tighter per site than Pro. Enterprise is unlimited, and
- * an agreement that wants a number writes it as the override.
+ * Enterprise is unlimited, and an agreement that wants a number writes it as the override.
  */
 export const TRANSACTIONAL_EMAILS_PER_DAY_BY_PLAN: Readonly<Record<OrgPlan, number>> = {
   free: 200,
   starter: 1_000,
   pro: 5_000,
-  business: 10_000,
-  scale: 15_000,
-  advanced: 25_000,
-  agency: 50_000,
   enterprise: UNLIMITED,
 }
 

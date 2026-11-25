@@ -168,7 +168,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     // block re-checks as defence in depth (AGL-470).
     getOrgForHost: async () => ({
       orgId: 'org-1',
-      org: { id: 'org-1', plan: 'business', ownerUid: 'owner-1' },
+      org: { id: 'org-1', plan: 'pro', ownerUid: 'owner-1' },
     }),
     meterHostEmail: async (hostId: string) => {
       meteredEmails.push(hostId)

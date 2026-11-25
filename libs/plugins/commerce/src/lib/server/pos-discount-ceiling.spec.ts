@@ -221,7 +221,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   getOrgForHost: async () => ({
     orgId: 'org-1',
-    org: { id: 'org-1', plan: 'business', ownerUid: 'owner-1' },
+    org: { id: 'org-1', plan: 'pro', ownerUid: 'owner-1' },
   }),
   // Through the REAL merge and the REAL schema — see the file docblock.
   getPluginConfig: async (_orgId: unknown, pluginId: string) => {

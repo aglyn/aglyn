@@ -91,7 +91,7 @@ await env.withSecurityRulesDisabled(async (context) => {
   await setDoc(doc(db, 'orgs', ORG), {
     name: 'Accounting Test',
     slug: 'accounting-test',
-    plan: 'business',
+    plan: 'pro',
     ownerUid: OWNER,
   })
   await setDoc(doc(db, 'orgs', ORG, 'members', OWNER), { role: 'owner', allHosts: true })

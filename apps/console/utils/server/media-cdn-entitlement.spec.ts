@@ -91,7 +91,7 @@ describe('mediaCdnPathUpdate — the mediaCdn entitlement gate', () => {
       // does not include; it simply no longer gates this.
       for (const status of ['canceled', 'unpaid', 'incomplete']) {
         expect(
-          isDeleteSentinel(update({ plan: 'business', billingStatus: status })),
+          isDeleteSentinel(update({ plan: 'pro', billingStatus: status })),
         ).toBe(false)
       }
     })
@@ -99,7 +99,7 @@ describe('mediaCdnPathUpdate — the mediaCdn entitlement gate', () => {
     it('mints no path when a staff override turns the feature off', () => {
       expect(
         isDeleteSentinel(
-          update({ plan: 'business', entitlements: { features: { mediaCdn: false } } }),
+          update({ plan: 'pro', entitlements: { features: { mediaCdn: false } } }),
         ),
       ).toBe(true)
     })

@@ -342,7 +342,7 @@ beforeEach(() => {
   mockKeyName = null
   mockUid = null
   mockOrg = {
-    plan: 'business',
+    plan: 'pro',
     subscription: { status: 'active' },
     hosts: { 'host-1': true, 'host-2': true },
   }
@@ -398,7 +398,7 @@ describe('the premise', () => {
     expect(gated.status).toBe(403)
     expect((await json(gated)).error).toMatchObject({ type: 'plan_required', code: 'crm' })
 
-    mockOrg = { plan: 'business', subscription: { status: 'active' }, hosts: { [HOST]: true } }
+    mockOrg = { plan: 'pro', subscription: { status: 'active' }, hosts: { [HOST]: true } }
     mockScopes = ['crm:read']
     const denied = await call('PATCH', `leads/lead-a?siteId=${HOST}`, { status: 'working' })
     expect(denied.status).toBe(403)

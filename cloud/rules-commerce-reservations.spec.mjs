@@ -85,7 +85,7 @@ const MEMBER_ROLES = {
 
 await env.withSecurityRulesDisabled(async (context) => {
   const db = context.firestore()
-  await setDoc(doc(db, 'orgs', ORG), { name: 'Stays Test', slug: 'stays-test', plan: 'business', ownerUid: ADMIN })
+  await setDoc(doc(db, 'orgs', ORG), { name: 'Stays Test', slug: 'stays-test', plan: 'pro', ownerUid: ADMIN })
   for (const [uid, role] of Object.entries(MEMBER_ROLES)) {
     await setDoc(doc(db, 'orgs', ORG, 'members', uid), {
       role: role === 'author' ? 'viewer' : role,

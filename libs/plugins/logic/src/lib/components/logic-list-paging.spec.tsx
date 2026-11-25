@@ -122,7 +122,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useHostResourceApi: () => jest.fn().mockResolvedValue({ id: 'new' }),
   useHostActivityLogger: () => jest.fn(),
   useUser: () => ({ data: { uid: 'uid-test', getIdToken: jest.fn() } }),
-  useOrgPlan: () => ({ org: { $id: 'org-1', plan: 'scale' }, ready: true }),
+  useOrgPlan: () => ({ org: { $id: 'org-1', plan: 'pro' }, ready: true }),
   useConsoleHostRoute: () => ({ base: null, orgSlug: null, subdomain: null }),
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,
@@ -191,7 +191,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 import { HostVariablesCard } from './host-variables-card.component'
 import { HostFunctionsCard } from './host-functions-card.component'
 
-const ORG = { $id: 'org-1', plan: 'scale' } as any
+const ORG = { $id: 'org-1', plan: 'pro' } as any
 
 beforeEach(() => {
   mockCapsAsked = []

@@ -381,7 +381,7 @@ describe('countFreeWorkspacesForOwner', () => {
 
   it('does NOT count paid workspaces — an agency pays and is unaffected', async () => {
     writeDoc('orgs/a', { ownerUid: OWNER, createdByUid: OWNER, plan: 'pro' }, false)
-    writeDoc('orgs/b', { ownerUid: OWNER, createdByUid: OWNER, plan: 'business' }, false)
+    writeDoc('orgs/b', { ownerUid: OWNER, createdByUid: OWNER, plan: 'pro' }, false)
     writeDoc('orgs/c', { ownerUid: OWNER, createdByUid: OWNER }, false)
     expect((await countFreeWorkspacesForOwner({ uid: OWNER, firestore })).held).toBe(1)
   })

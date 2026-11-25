@@ -47,10 +47,8 @@ import {
   isEnterpriseOrg,
   applyDiscountUsd,
   ENTERPRISE_PLAN_LABEL,
-  isRetiredPlan,
   PLAN_LABELS,
   PLAN_LADDER,
-  RETIRED_PLANS,
   SELF_SERVE_PLANS,
   orgListPriceMonthlyUsd,
   orgMonthlyRevenueUsd,
@@ -204,11 +202,7 @@ describe('plan entitlements', () => {
       starter: [1, 25, 3],
       // Pages per site are unlimited on Pro since pricing v4 (AGL-4126).
       pro: [3, UNLIMITED, UNLIMITED],
-      business: [10, UNLIMITED, UNLIMITED],
-      scale: [15, UNLIMITED, UNLIMITED],
-      advanced: [25, UNLIMITED, UNLIMITED],
-      agency: [100, UNLIMITED, UNLIMITED],
-      // Enterprise: twice Agency's hosts, and UNLIMITED where Agency has it.
+      // Enterprise: 200 sites, and UNLIMITED where Pro is.
       enterprise: [200, UNLIMITED, UNLIMITED],
     })
     // Media storage was pinned against the published-site cap (AGL-67) until
@@ -221,17 +215,16 @@ describe('plan entitlements', () => {
       expect(plan).not.toHaveProperty('totalSiteSizeMb')
     }
     expect(PLAN_ENTITLEMENTS.starter.features.removeBranding).toBe(true)
-    // White-label (White-Label Phase 1): Agency and Enterprise only; every
-    // other tier — including Advanced — is off by default. Distinct from
-    // removeBranding, which paid tiers all carry.
-    expect(PLAN_ENTITLEMENTS.agency.features.whiteLabel).toBe(true)
+    // White-label (White-Label Phase 1): Enterprise only; every other tier
+    // is off by default. Distinct from removeBranding, which paid tiers all
+    // carry.
     expect(PLAN_ENTITLEMENTS.enterprise.features.whiteLabel).toBe(true)
     for (const plan of Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]) {
-      if (plan === 'agency' || plan === 'enterprise') continue
+      if (plan === 'enterprise') continue
       expect(PLAN_ENTITLEMENTS[plan].features.whiteLabel).toBe(false)
     }
     // SSO (AGL-1101/1118): the Enterprise differentiator — on for the
-    // `enterprise` plan, off on EVERY other base plan including Agency
+    // `enterprise` plan, off on EVERY other base plan
     // (distinct from white-label by design).
     expect(PLAN_ENTITLEMENTS.enterprise.features.ssoEnabled).toBe(true)
     for (const plan of Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]) {
@@ -243,7 +236,7 @@ describe('plan entitlements', () => {
     expect(
       checkEntitlement(
         {
-          plan: 'agency',
+          plan: 'enterprise',
           entitlements: { features: { ssoEnabled: true } },
         } as any,
         'ssoEnabled',
@@ -253,7 +246,6 @@ describe('plan entitlements', () => {
     // Scheduled publishing moved from Business into Pro (pricing v4, AGL-4126).
     expect(PLAN_ENTITLEMENTS.starter.features.scheduledPublishing).toBe(false)
     expect(PLAN_ENTITLEMENTS.pro.features.scheduledPublishing).toBe(true)
-    expect(PLAN_ENTITLEMENTS.business.features.scheduledPublishing).toBe(true)
     // Builder gating (AGL-99): paid tiers unlock workflows/datasets, free
     // keeps a taste of variables/functions only.
     expect(PLAN_ENTITLEMENTS.free.workflowsPerHost).toBe(0)
@@ -264,7 +256,6 @@ describe('plan entitlements', () => {
     // Unlimited on Pro since pricing v4 (AGL-4126): a count with no cost term.
     expect(PLAN_ENTITLEMENTS.pro.functionsPerHost).toBe(UNLIMITED)
     expect(PLAN_ENTITLEMENTS.pro.recordsPerDataset).toBe(UNLIMITED)
-    expect(PLAN_ENTITLEMENTS.business.recordsPerDataset).toBe(100000)
     // CDN media delivery: EVERY plan, free included (AGL-1152).
     //
     // This asserted "paid tiers only" from AGL-175 until the economics were
@@ -274,7 +265,6 @@ describe('plan entitlements', () => {
     // expensive path, not the cheaper one.
     expect(PLAN_ENTITLEMENTS.free.features.mediaCdn).toBe(true)
     expect(PLAN_ENTITLEMENTS.starter.features.mediaCdn).toBe(true)
-    expect(PLAN_ENTITLEMENTS.business.features.mediaCdn).toBe(true)
   })
 
   it('includes basic interactions on every plan while gating actions (AGL-577)', () => {
@@ -286,11 +276,10 @@ describe('plan entitlements', () => {
     expect(PLAN_ENTITLEMENTS.free.features.actions).toBe(false)
     expect(PLAN_ENTITLEMENTS.starter.features.actions).toBe(false)
     expect(PLAN_ENTITLEMENTS.pro.features.actions).toBe(true)
-    expect(PLAN_ENTITLEMENTS.business.features.actions).toBe(true)
   })
 
   it('treats UNLIMITED quotas as always allowed', () => {
-    const org = { plan: 'business' } as any
+    const org = { plan: 'pro' } as any
     const result = checkQuota(org, 'screensPerHost', 100000)
     expect(result.allowed).toBe(true)
     expect(result.remaining).toBe(UNLIMITED)
@@ -346,66 +335,6 @@ describe('plan entitlements', () => {
         extraRunsUsdPer1k: 0.02,
         meteredInfraPassThrough: true,
       },
-      business: {
-        basePriceMonthlyUsd: 139,
-        basePriceAnnualMonthlyUsd: 99,
-        extraHostMonthlyUsd: 20,
-        extraSeatMonthlyUsd: 3,
-        extraCollaboratorMonthlyUsd: 1,
-        extraDatasetMonthlyUsd: 1,
-        extraDataGbMonthlyUsd: 0.36,
-        extraApiRequestsUsdPer1k: 0.5,
-        extraAssistCreditsUsdPer1k: 2.75,
-        extraContactsUsdPer1k: 0.5,
-        extraEmailSendsUsdPer1k: 2,
-        extraRunsUsdPer1k: 0.02,
-        meteredInfraPassThrough: true,
-      },
-      scale: {
-        basePriceMonthlyUsd: 249,
-        basePriceAnnualMonthlyUsd: 179,
-        extraHostMonthlyUsd: 20,
-        extraSeatMonthlyUsd: 2,
-        extraCollaboratorMonthlyUsd: 1,
-        extraDatasetMonthlyUsd: 1,
-        extraDataGbMonthlyUsd: 0.36,
-        extraApiRequestsUsdPer1k: 0.5,
-        extraAssistCreditsUsdPer1k: 2.5,
-        extraContactsUsdPer1k: 0.4,
-        extraEmailSendsUsdPer1k: 1.9,
-        extraRunsUsdPer1k: 0.02,
-        meteredInfraPassThrough: true,
-      },
-      advanced: {
-        basePriceMonthlyUsd: 399,
-        basePriceAnnualMonthlyUsd: 299,
-        extraHostMonthlyUsd: 20,
-        extraSeatMonthlyUsd: 2,
-        extraCollaboratorMonthlyUsd: 1,
-        extraDatasetMonthlyUsd: 1,
-        extraDataGbMonthlyUsd: 0.36,
-        extraApiRequestsUsdPer1k: 0.5,
-        extraAssistCreditsUsdPer1k: 2.25,
-        extraContactsUsdPer1k: 0.4,
-        extraEmailSendsUsdPer1k: 1.85,
-        extraRunsUsdPer1k: 0.02,
-        meteredInfraPassThrough: true,
-      },
-      agency: {
-        basePriceMonthlyUsd: 1299,
-        basePriceAnnualMonthlyUsd: 1049,
-        extraHostMonthlyUsd: 20,
-        extraSeatMonthlyUsd: 2,
-        extraCollaboratorMonthlyUsd: 1,
-        extraDatasetMonthlyUsd: 1,
-        extraDataGbMonthlyUsd: 0.36,
-        extraApiRequestsUsdPer1k: 0.5,
-        extraAssistCreditsUsdPer1k: 2,
-        extraContactsUsdPer1k: 0.4,
-        extraEmailSendsUsdPer1k: 1.8,
-        extraRunsUsdPer1k: 0.02,
-        meteredInfraPassThrough: true,
-      },
       // Enterprise (AGL-1118) is quoted per deal — these zeros/nulls are the
       // "no list price" sentinel, NOT a $0 offer. `isCustomPricedPlan` is how
       // a surface tells the two apart; a free plan is priced 0 and sold.
@@ -437,24 +366,26 @@ describe('plan entitlements', () => {
     // either be sellable (listed here) or custom-priced — never silently
     // absent from both, which is how a tier goes missing from pricing.
     //
-    // Pricing v4 (AGL-4126) sells three, and RETIRED is the third answer: a
-    // plan no longer sold, whose row stays so a workspace on it still resolves.
+    // Pricing v4 (AGL-4126) sells three; the plans it retired were removed
+    // outright on 2026-11-24 (AGL-4245), so every plan is one or the other.
     expect(SELF_SERVE_PLANS).toEqual(['free', 'starter', 'pro'])
-    expect(RETIRED_PLANS).toEqual(['business', 'scale', 'advanced', 'agency'])
     const all = Object.keys(PLAN_ENTITLEMENTS) as OrgPlan[]
+    expect(all.sort()).toEqual(['enterprise', 'free', 'pro', 'starter'])
     expect(SELF_SERVE_PLANS).not.toContain('enterprise')
     for (const plan of all) {
       expect(
-        [
-          SELF_SERVE_PLANS.includes(plan),
-          isRetiredPlan(plan),
-          isCustomPricedPlan(plan),
-        ].filter(Boolean),
+        [SELF_SERVE_PLANS.includes(plan), isCustomPricedPlan(plan)].filter(Boolean),
       ).toEqual([true])
     }
     // Every plan a workspace can be on is on the ladder, in price order.
     expect([...PLAN_LADDER].sort()).toEqual([...all].sort())
-    expect(PLAN_LADDER).toEqual([...SELF_SERVE_PLANS, ...RETIRED_PLANS, 'enterprise'])
+    expect(PLAN_LADDER).toEqual([...SELF_SERVE_PLANS, 'enterprise'])
+    // And only those: the removed ids have no row in any table.
+    for (const removed of ['business', 'scale', 'advanced', 'agency']) {
+      expect(PLAN_ENTITLEMENTS).not.toHaveProperty(removed)
+      expect(PLAN_PRICING).not.toHaveProperty(removed)
+      expect(PLAN_LABELS).not.toHaveProperty(removed)
+    }
     // Every plan has a label — the one source plan badges read.
     for (const plan of all) {
       expect(PLAN_LABELS[plan]).toBeTruthy()
@@ -464,18 +395,21 @@ describe('plan entitlements', () => {
     expect(ENTERPRISE_PLAN_LABEL).toBe(PLAN_LABELS.enterprise)
   })
 
-  it('gives the enterprise plan finite fallbacks at twice Agency\'s bands, and SSO (AGL-1118)', () => {
+  it('gives the enterprise plan finite fallbacks, never below Pro, and SSO (AGL-1118)', () => {
     const org = { plan: 'enterprise' } as any
     const resolved = resolveOrgEntitlements(org)
-    const agency = PLAN_ENTITLEMENTS.agency as unknown as Record<string, number>
-    // The 2026-09-07 rule, key by key: every numeric quota is Agency's × 2,
-    // and UNLIMITED only where Agency is already UNLIMITED. A row that read
-    // UNLIMITED on every axis was the one org on the platform whose cost had
-    // no bound — `meteredInfraPassThrough` is false here and every rate is
-    // the "not for sale" sentinel, so nothing priced the usage a contract had
-    // not named. A contracted per-org override still wins on every axis; the
-    // case below proves it.
+    const pro = resolveOrgEntitlements({ plan: 'pro', billingStatus: 'active' } as any) as unknown as Record<string, number>
+    // The 2026-09-07 rule set every numeric quota at twice the old top
+    // self-serve tier's band, UNLIMITED only where that tier was. That tier
+    // was removed (AGL-4245), so what is held now is what the rule was FOR:
+    // the bands are finite — a row that read UNLIMITED on every axis was the
+    // one org on the platform whose cost had no bound, since
+    // `meteredInfraPassThrough` is false here and every rate is the "not for
+    // sale" sentinel — and Custom is never below Pro on any axis (AGL-4158).
+    // A contracted per-org override still wins on every axis; the case below
+    // proves it.
     const doubled: string[] = []
+    const belowPro: string[] = []
     for (const [key, value] of Object.entries(resolved)) {
       if (key === 'features') continue
       // A fee RATE is not a capacity — doubled would mean twice the cut.
@@ -483,7 +417,7 @@ describe('plan entitlements', () => {
       if (key === 'transactionFeeDigitalPct') continue
       if (key === 'marketplaceFeePct') continue
       // Nor is the top of the saved-form ladder. `formsPerHost` is
-      // `FORMS_PER_HOST_CEILING` from Scale up, this plan included (AGL-3597).
+      // UNLIMITED on Pro and Custom (AGL-4158).
       // A deal that needs a larger catalog takes a per-org override.
       if (key === 'formsPerHost') continue
       // Nor is the workspace's API rate limit (AGL-4226): Custom is unlimited
@@ -493,14 +427,16 @@ describe('plan entitlements', () => {
         expect(value).toBe(UNLIMITED)
         continue
       }
-      if (agency[key] === UNLIMITED) {
-        expect([key, value]).toEqual([key, UNLIMITED])
-        continue
-      }
-      expect([key, value]).toEqual([key, agency[key] * 2])
+      if ((value as number) < pro[key]) belowPro.push(key)
+      if (value === UNLIMITED) continue
       expect(Number.isFinite(value as number)).toBe(true)
       doubled.push(key)
     }
+    // Never below Pro, with one known exception: the purchase CEILINGS on
+    // seats, collaborators and datasets, which Pro lifted to unlimited with
+    // pricing v4 (AGL-4126) while this row kept its finite fallback. An
+    // agreement raises them by override.
+    expect(belowPro.sort()).toEqual(['maxDatasetsPerOrg', 'maxManagersPerOrg', 'maxMembersPerHost'])
     // …over a real set of axes, so the loop cannot pass by skipping.
     expect(doubled.length).toBeGreaterThanOrEqual(18)
     expect(doubled).toEqual(
@@ -528,7 +464,7 @@ describe('plan entitlements', () => {
     // suite holds its own named band, `ENTERPRISE_ASSIST_CREDITS_PER_MONTH`,
     // the same way.
     expect(resolved.emailSendsPerMonth).toBe(ENTERPRISE_EMAIL_SENDS_PER_MONTH)
-    expect(ENTERPRISE_EMAIL_SENDS_PER_MONTH).toBe(agency.emailSendsPerMonth * 2)
+    expect(ENTERPRISE_EMAIL_SENDS_PER_MONTH).toBe(260_000)
     // Custom is never below Pro on the saved-form catalog (AGL-4158).
     expect(resolved.formsPerHost).toBe(UNLIMITED)
     expect(resolved.transactionFeePhysicalPct).toBe(0)
@@ -601,7 +537,7 @@ describe('plan entitlements', () => {
 
   it('reports no list-price revenue for an enterprise org without a deal price', () => {
     // The negotiated price is the truth (AGL-1110). A plan-only enterprise org
-    // must NOT inherit Agency's $799 — reporting a price nobody agreed to is
+    // must NOT inherit a list price — reporting a price nobody agreed to is
     // worse than reporting none, and the enterprise-billing flow always writes
     // `customMonthlyUsd` for a paying deal.
     const noPrice = {
@@ -645,10 +581,6 @@ describe('plan entitlements', () => {
       // The ceilings are lifted on Pro since pricing v4 (AGL-4126): it buys
       // as many seats and collaborators as it needs, each at its add-on price.
       pro: [3, UNLIMITED, 3, UNLIMITED],
-      advanced: [10, 250, 5, 250],
-      business: [5, 100, 5, 100],
-      scale: [5, 150, 5, 150],
-      agency: [10, 500, 5, 1000],
       enterprise: [20, 1000, 10, 2000],
     })
   })
@@ -768,36 +700,36 @@ describe('plan entitlements', () => {
     // is invoiced $89/mo each for, so this pins the resolver to the ceiling
     // the purchase route will actually sell.
     //
-    // Agency is the largest STOCK band (20 registers, 25 sites), so every
-    // number below is above every band a clamp could reasonably use.
+    // Enterprise is the largest STOCK band (40 registers, 200 sites), so
+    // every number below is above every band a clamp could reasonably use.
     //
     // AGL-1775 moved WHERE the purchase applies (an org pool allocated to one
     // site) without changing HOW MUCH is honoured, so the ceiling is asserted
     // through `resolveHostRegisterCap` with the whole pool assigned to one
     // site — the shape a single-site merchant who bought 50 registers has.
     const maxedRegisters = {
-      plan: 'agency',
+      plan: 'enterprise',
       seatAddons: { posRegisters: POS_REGISTERS_ADDON_MAX },
       registerAllocations: { 'host-1': POS_REGISTERS_ADDON_MAX },
     } as any
     expect(resolveHostRegisterCap(maxedRegisters, 'host-1')).toBe(
-      PLAN_ENTITLEMENTS.agency.posRegisters + POS_REGISTERS_ADDON_MAX,
+      PLAN_ENTITLEMENTS.enterprise.posRegisters + POS_REGISTERS_ADDON_MAX,
     )
     // The consequence a clamp would break, stated as the merchant sees it:
-    // the 70th register is still creatable, and the 71st is not.
+    // the 90th register is still creatable, and the 91st is not.
     expect(
-      checkHostRegisterQuota(maxedRegisters, 'host-1', 69).allowed,
+      checkHostRegisterQuota(maxedRegisters, 'host-1', 89).allowed,
     ).toBe(true)
     expect(
-      checkHostRegisterQuota(maxedRegisters, 'host-1', 70).allowed,
+      checkHostRegisterQuota(maxedRegisters, 'host-1', 90).allowed,
     ).toBe(false)
     // Same shape for extra sites, the other flat-ceiling kind.
     const maxedHosts = {
-      plan: 'agency',
+      plan: 'enterprise',
       seatAddons: { hosts: EXTRA_HOSTS_ADDON_MAX },
     } as any
     expect(resolveOrgEntitlements(maxedHosts).hostLimit).toBe(
-      PLAN_ENTITLEMENTS.agency.hostLimit + EXTRA_HOSTS_ADDON_MAX,
+      PLAN_ENTITLEMENTS.enterprise.hostLimit + EXTRA_HOSTS_ADDON_MAX,
     )
     // And no plan carries a register hard max to clamp against — the key a
     // future "fix" would reach for does not exist on ANY band, which is the
@@ -881,12 +813,12 @@ describe('plan entitlements', () => {
     // Dead subscriptions downgrade paid plans to free.
     for (const status of ['canceled', 'unpaid', 'incomplete']) {
       expect(
-        resolveEffectivePlan({ plan: 'business', subscription: { status } } as any),
+        resolveEffectivePlan({ plan: 'pro', subscription: { status } } as any),
       ).toBe('free')
     }
     // Entitlements follow: a canceled business org loses paid features.
     const canceled = {
-      plan: 'business',
+      plan: 'pro',
       subscription: { status: 'canceled' },
     } as any
     expect(checkEntitlement(canceled, 'workflows')).toBe(false)
@@ -917,8 +849,6 @@ describe('plan entitlements', () => {
       ['starter', 'multilingual', false],
       ['pro', 'webhooks', true],
       ['pro', 'multilingual', true],
-      ['business', 'webhooks', true],
-      ['business', 'multilingual', true],
     ]
     for (const [plan, feature, expected] of table) {
       expect(checkEntitlement({ plan } as any, feature)).toBe(expected)
@@ -992,22 +922,11 @@ describe('plan entitlements', () => {
     expect(free.overageRateUsd).toBeNull()
   })
 
-  it('checkApiRequestQuota meters overage on Pro/Business/Advanced, blocks below (AGL-634)', () => {
+  it('checkApiRequestQuota meters overage on Starter and Pro, blocks below (AGL-634)', () => {
     // Paying workspaces (a live subscription — since AGL-4227 a plan with
-    // none sells nothing past its band). Business includes 1,500 requests; 51,500 used → 50k over at $0.50/1k = $25.
-    const business = checkApiRequestQuota({ plan: 'business', billingStatus: 'active' } as any, 51_500)
-    expect(business.allowed).toBe(true)
-    expect(business.included).toBe(1_500)
-    expect(business.overageRequests).toBe(50_000)
-    expect(business.overageMonthlyUsd).toBeCloseTo(25)
-    expect(business.overageRateUsd).toBe(0.5)
-    // Advanced: 17,000 included at Pro's $0.50/1k since AGL-4227 (was $0.25,
-    // which lost money on a page of 100). 117,000 → 100k over = $50.
-    const advanced = checkApiRequestQuota({ plan: 'advanced', billingStatus: 'active' } as any, 117_000)
-    expect(advanced.included).toBe(17_000)
-    expect(advanced.overageMonthlyUsd).toBeCloseTo(50)
+    // none sells nothing past its band).
     // Within the included quota there is no overage; remaining is tracked.
-    const within = checkApiRequestQuota({ plan: 'business', billingStatus: 'active' } as any, 400)
+    const within = checkApiRequestQuota({ plan: 'pro', billingStatus: 'active' } as any, 400)
     expect(within.overageRequests).toBe(0)
     expect(within.remaining).toBe(1_100)
     // Pro carries Business's band and rate since pricing v4 (AGL-4126):
@@ -1048,20 +967,17 @@ describe('plan entitlements', () => {
     expect(pro.allowed).toBe(true)
     expect(pro.overageMonthlyUsd).toBeCloseTo(1.5)
     // Within the band there is no overage; remaining is tracked.
-    const within = checkCrmRecordsQuota({ plan: 'business' } as any, 20_000)
+    const within = checkCrmRecordsQuota({ plan: 'pro' } as any, 6_000)
     expect(within.overageRecords).toBe(0)
-    expect(within.remaining).toBe(10_000)
+    expect(within.remaining).toBe(4_000)
     expect(within.allowed).toBe(true)
-    // Agency METERS now that its band is finite — a rate is what makes the
-    // bound bill rather than drop the CRM record, and the two only ever
-    // moved together.
-    const agency = checkCrmRecordsQuota(
-      { plan: 'agency' } as any,
-      PLAN_ENTITLEMENTS.agency.contactsPerHost + 2_000,
+    // Enterprise has no rate, so past its finite fallback it is a wall.
+    const enterprise = checkCrmRecordsQuota(
+      { plan: 'enterprise' } as any,
+      PLAN_ENTITLEMENTS.enterprise.contactsPerHost + 2_000,
     )
-    expect(agency.allowed).toBe(true)
-    expect(agency.overageRecords).toBe(2_000)
-    expect(agency.overageMonthlyUsd).toBeCloseTo(0.8)
+    expect(enterprise.allowed).toBe(false)
+    expect(enterprise.overageMonthlyUsd).toBe(0)
     // Free hard-bands at 100 — no rate, blocked at the band.
     const freeOver = checkCrmRecordsQuota({ plan: 'free' } as any, 100)
     expect(freeOver.allowed).toBe(false)
@@ -1122,10 +1038,6 @@ describe('plan entitlements', () => {
       free: 0,
       starter: 35,
       pro: 150,
-      business: 200,
-      scale: 300,
-      advanced: 500,
-      agency: 1_000,
       enterprise: 2_000,
     }
     for (const [plan, cap] of Object.entries(table)) {
@@ -1148,8 +1060,8 @@ describe('plan entitlements', () => {
     expect(full.remaining).toBe(0)
     // No overage rate exists for this band, so past it stays refused rather
     // than metered — unlike the records band beside it.
-    expect(checkCrmEmailQuota({ plan: 'agency' } as any, 1_000, noon).allowed).toBe(false)
-    expect(checkCrmEmailQuota({ plan: 'agency' } as any, 999, noon).allowed).toBe(true)
+    expect(checkCrmEmailQuota({ plan: 'pro' } as any, 150, noon).allowed).toBe(false)
+    expect(checkCrmEmailQuota({ plan: 'pro' } as any, 149, noon).allowed).toBe(true)
     // Free has no CRM and no cap to spend: refused at zero.
     const free = checkCrmEmailQuota({ plan: 'free' } as any, 0, noon)
     expect(free.allowed).toBe(false)
@@ -1235,7 +1147,7 @@ describe('plan entitlements', () => {
     expect(checkFormSubmissionQuota({ plan: 'starter' } as any, 5_000).allowed).toBe(
       true,
     )
-    expect(checkFormSubmissionQuota({ plan: 'agency' } as any, 1e9).allowed).toBe(
+    expect(checkFormSubmissionQuota({ plan: 'pro', billingStatus: 'active' } as any, 1e9).allowed).toBe(
       true,
     )
 
@@ -1288,10 +1200,6 @@ describe('plan entitlements', () => {
       'free',
       'starter',
       'pro',
-      'business',
-      'scale',
-      'advanced',
-      'agency',
       'enterprise',
     ]
     for (const plan of ladder) {
@@ -1359,9 +1267,6 @@ describe('plan entitlements', () => {
       ['pro', 'giftCards', true],
       ['pro', 'storefrontSubscriptions', true],
       ['pro', 'contentGating', true],
-      ['business', 'storefrontSubscriptions', true],
-      ['business', 'contentGating', true],
-      ['business', 'giftCards', true],
     ]
     for (const [plan, feature, expected] of table) {
       expect(checkEntitlement({ plan } as any, feature)).toBe(expected)
@@ -1402,21 +1307,13 @@ describe('plan entitlements', () => {
       .toBe(0)
     expect(resolveTransactionFeePct({ plan: 'enterprise' } as any, 'service'))
       .toBe(0)
-    // The retired plans did not move.
-    expect(resolveTransactionFeePct({ plan: 'business' } as any, 'digital'))
-      .toBe(2)
-    // Retired plans keep the v3 (2026-07) digital ladder: 2 → 1 → 0 → 0.
-    expect(resolveTransactionFeePct({ plan: 'scale' } as any, 'digital'))
-      .toBe(1)
-    expect(resolveTransactionFeePct({ plan: 'advanced' } as any, 'digital'))
-      .toBe(0)
-    expect(resolveTransactionFeePct({ plan: 'agency' } as any, 'digital'))
+    expect(resolveTransactionFeePct({ plan: 'enterprise' } as any, 'digital'))
       .toBe(0)
     // Canceled subscriptions resolve to free — which cannot sell at all.
     expect(
       resolveTransactionFeePct(
         {
-          plan: 'business',
+          plan: 'pro',
           subscription: { status: 'canceled' },
         } as any,
         'digital',
@@ -1492,7 +1389,7 @@ describe('plan entitlements', () => {
     expect(
       resolveTransactionFeePct(
         {
-          plan: 'business',
+          plan: 'pro',
           subscription: { status: 'canceled' },
           entitlements: { features: { commerce: true } },
         } as any,
@@ -1535,8 +1432,8 @@ describe('plan entitlements', () => {
     // org, which cannot sell at all.
     expect(resolveTransactionFeePct({ plan: 'pro' } as any, 'physical')).toBe(0)
     expect(resolveTransactionFeePct({ plan: 'pro' } as any, 'digital')).toBe(1)
-    expect(resolveTransactionFeePct({ plan: 'business' } as any, 'physical')).toBe(0)
-    expect(resolveTransactionFeePct({ plan: 'agency' } as any, 'digital'))
+    expect(resolveTransactionFeePct({ plan: 'pro' } as any, 'physical')).toBe(0)
+    expect(resolveTransactionFeePct({ plan: 'enterprise' } as any, 'digital'))
       .toBe(0)
     expect(resolveTransactionFeePct({ plan: 'free' } as any, 'physical'))
       .toBe(0)
@@ -1548,7 +1445,7 @@ describe('plan entitlements', () => {
     expect(resolveMarketplaceFeePct({ plan: 'free' } as any)).toBe(30)
     expect(resolveMarketplaceFeePct({ plan: 'starter' } as any)).toBe(20)
     expect(resolveMarketplaceFeePct({ plan: 'pro' } as any)).toBe(20)
-    expect(resolveMarketplaceFeePct({ plan: 'agency' } as any)).toBe(20)
+    expect(resolveMarketplaceFeePct({ plan: 'enterprise' } as any)).toBe(20)
     // Missing/unknown plans are free-plan sellers.
     expect(resolveMarketplaceFeePct(null)).toBe(30)
     expect(resolveMarketplaceFeePct({ plan: 'bogus' } as any)).toBe(30)
@@ -1585,9 +1482,9 @@ describe('plan entitlements', () => {
 
   describe('MRR (AGL-925)', () => {
     it('excludes a staff plan override, which writes no subscription', () => {
-      const comped = { plan: 'business' } as any
-      // The org still GETS business — only the revenue is zero.
-      expect(resolveEffectivePlan(comped)).toBe('business')
+      const comped = { plan: 'pro' } as any
+      // The org still GETS Pro — only the revenue is zero.
+      expect(resolveEffectivePlan(comped)).toBe('pro')
       expect(isBillingSubscription(comped)).toBe(false)
       expect(orgMonthlyRevenueUsd(comped)).toBe(0)
     })
@@ -1613,16 +1510,16 @@ describe('plan entitlements', () => {
     it('counts an annual plan at its per-month equivalent', () => {
       expect(
         orgMonthlyRevenueUsd({
-          plan: 'business',
+          plan: 'pro',
           subscription: { status: 'active', interval: 'year' },
         } as any),
-      ).toBe(99)
+      ).toBe(49)
       expect(
         orgMonthlyRevenueUsd({
-          plan: 'business',
+          plan: 'pro',
           subscription: { status: 'active', interval: 'month' },
         } as any),
-      ).toBe(139)
+      ).toBe(69)
     })
 
     it('adds purchased seat and dataset add-ons to the base price', () => {
@@ -1639,11 +1536,11 @@ describe('plan entitlements', () => {
       // Previously omitted — understated MRR for every org carrying them.
       expect(
         orgMonthlyRevenueUsd({
-          plan: 'business',
+          plan: 'pro',
           subscription: { status: 'active' },
           seatAddons: { hosts: 2, posRegisters: 1, eventCalendar: 1 },
         } as any),
-      ).toBe(139 + 2 * 20 + 89 + 9)
+      ).toBe(69 + 2 * 20 + 89 + 9)
     })
   })
 
@@ -1660,10 +1557,10 @@ describe('plan entitlements', () => {
     it('amortizes the fixed 30¢ over 12 months for annual billing', () => {
       expect(
         orgNetMonthlyRevenueUsd({
-          plan: 'business',
+          plan: 'pro',
           subscription: { status: 'active', interval: 'year' },
         } as any),
-      ).toBeCloseTo(99 * (1 - 0.029) - 0.3 / 12, 2)
+      ).toBeCloseTo(49 * (1 - 0.029) - 0.3 / 12, 2)
     })
 
     it('is 0 for a non-billing org', () => {
@@ -1718,11 +1615,11 @@ describe('plan entitlements', () => {
     it('orgMonthlyRevenueUsd subtracts an applied fixed discount', () => {
       expect(
         orgMonthlyRevenueUsd({
-          plan: 'business',
+          plan: 'pro',
           subscription: { status: 'active', interval: 'month' },
           discount: { couponId: 'co_2', amountOffUsd: 10, appliedBy: 'u' },
         } as any),
-      ).toBe(129)
+      ).toBe(59)
     })
 
     it('an undiscounted org still reads its full list price', () => {
@@ -1759,7 +1656,7 @@ describe('plan entitlements', () => {
       // The bug: an agency-capability org on a negotiated $2,730/mo used to
       // report the $799 agency default. It must now report the real figure.
       const enterprise = {
-        plan: 'agency',
+        plan: 'enterprise',
         subscription: {
           status: 'active',
           interval: 'month',
@@ -1772,7 +1669,7 @@ describe('plan entitlements', () => {
 
     it('the custom price overrides seat/host add-ons too (folded into the quote)', () => {
       const org = {
-        plan: 'agency',
+        plan: 'enterprise',
         subscription: {
           status: 'active',
           interval: 'month',
@@ -1786,7 +1683,7 @@ describe('plan entitlements', () => {
 
     it('a per-org discount still applies on top of the custom price', () => {
       const org = {
-        plan: 'agency',
+        plan: 'enterprise',
         subscription: {
           status: 'active',
           interval: 'month',
@@ -1801,7 +1698,7 @@ describe('plan entitlements', () => {
     it('an annual custom deal is stored monthly-normalized and read as-is', () => {
       // A $32,760/yr deal is persisted as 2730/mo; readers never re-divide.
       const org = {
-        plan: 'agency',
+        plan: 'enterprise',
         subscription: {
           status: 'active',
           interval: 'year',
@@ -1820,7 +1717,7 @@ describe('plan entitlements', () => {
       // The real plan (AGL-1118) qualifies on its own — no price, no marker.
       expect(isEnterpriseOrg({ plan: 'enterprise' } as any)).toBe(true)
       const custom = {
-        plan: 'agency',
+        plan: 'pro',
         subscription: {
           status: 'active',
           interval: 'month',
@@ -1830,20 +1727,20 @@ describe('plan entitlements', () => {
       expect(isEnterpriseOrg(custom)).toBe(true)
       // The explicit comped-enterprise marker qualifies without a price or sub
       // (Aglyn's own dogfood org: Enterprise + SSO, 100%-discounted).
-      expect(isEnterpriseOrg({ plan: 'agency', enterprise: true } as any)).toBe(
+      expect(isEnterpriseOrg({ plan: 'pro', enterprise: true } as any)).toBe(
         true,
       )
-      // A list-priced agency org is NOT enterprise.
+      // A list-priced org is NOT enterprise.
       expect(
         isEnterpriseOrg({
-          plan: 'agency',
+          plan: 'pro',
           subscription: { status: 'active', interval: 'month' },
         } as any),
       ).toBe(false)
       // A canceled sub with a stale custom amount is not enterprise.
       expect(
         isEnterpriseOrg({
-          plan: 'agency',
+          plan: 'pro',
           subscription: { status: 'canceled', customMonthlyUsd: 2730 },
         } as any),
       ).toBe(false)
@@ -1852,7 +1749,7 @@ describe('plan entitlements', () => {
     it('a custom amount on a non-billing org is ignored (0)', () => {
       expect(
         orgMonthlyRevenueUsd({
-          plan: 'agency',
+          plan: 'enterprise',
           subscription: { status: 'canceled', customMonthlyUsd: 2730 },
         } as any),
       ).toBe(0)
@@ -1860,7 +1757,7 @@ describe('plan entitlements', () => {
 
     it('zero/negative custom amounts fall back to the plan price', () => {
       const base = {
-        plan: 'agency',
+        plan: 'pro',
         subscription: { status: 'active', interval: 'month' },
       } as any
       expect(
@@ -1868,18 +1765,21 @@ describe('plan entitlements', () => {
           ...base,
           subscription: { ...base.subscription, customMonthlyUsd: 0 },
         }),
-      ).toBe(PLAN_PRICING.agency.basePriceMonthlyUsd)
+      ).toBe(PLAN_PRICING.pro.basePriceMonthlyUsd)
     })
   })
 
   describe('discount margin guardrail (AGL-1105)', () => {
-    const businessMonthly = {
-      plan: 'business',
-      subscription: { status: 'active', interval: 'month' },
+    // A $139 monthly list price: every figure below was cut against the
+    // retired Business plan's price, and the plan was removed (AGL-4245), so
+    // the same price is written as a negotiated amount on a current plan.
+    const listed139Monthly = {
+      plan: 'pro',
+      subscription: { status: 'active', interval: 'month', customMonthlyUsd: 139 },
     } as any
 
     it('rates a modest discount ok and reports the list price as gross', () => {
-      const result = checkDiscountMargin(businessMonthly, { percentOff: 10 })
+      const result = checkDiscountMargin(listed139Monthly, { percentOff: 10 })
       expect(result.grossUsd).toBe(139)
       expect(result.discountedUsd).toBe(applyDiscountUsd(139, { percentOff: 10 }))
       expect(result.netUsd).toBe(netOfProcessorFee(125.1, false))
@@ -1893,7 +1793,7 @@ describe('plan entitlements', () => {
       // blocks this one now, so the cost-recovery arm is asserted directly:
       // it is the arm that still has to work for a SHALLOW discount on an org
       // running many sites.
-      const result = checkDiscountMargin(businessMonthly, { percentOff: 94 })
+      const result = checkDiscountMargin(listed139Monthly, { percentOff: 94 })
       expect(result.marginPct).toBeLessThan(NET_MARGIN_FLOOR_PCT)
       expect(result.marginPct).toBeGreaterThanOrEqual(
         NET_MARGIN_FLOOR_PCT - 0.1,
@@ -1901,7 +1801,7 @@ describe('plan entitlements', () => {
     })
 
     it('blocks a discount that pushes the margin well below the floor', () => {
-      const result = checkDiscountMargin(businessMonthly, { percentOff: 97 })
+      const result = checkDiscountMargin(listed139Monthly, { percentOff: 97 })
       expect(result.rating).toBe('block')
       expect(result.marginPct).toBeLessThan(NET_MARGIN_FLOOR_PCT - 0.1)
     })
@@ -1916,7 +1816,7 @@ describe('plan entitlements', () => {
      */
     describe('discount depth is first-class (AGL-1120)', () => {
       it('never rates a 93% coupon ok, and says depth is why', () => {
-        const result = checkDiscountMargin(businessMonthly, { percentOff: 93 })
+        const result = checkDiscountMargin(listed139Monthly, { percentOff: 93 })
         expect(result.rating).toBe('block')
         expect(result.reason).toBe('depth')
         expect(result.depthPct).toBeCloseTo(0.93, 4)
@@ -1929,12 +1829,12 @@ describe('plan entitlements', () => {
       it('warns from the depth that already needs sign-off', () => {
         // The badge and the approval checkbox used to disagree: 40% off
         // demanded explicit sign-off while the rating still read "OK".
-        const at = checkDiscountMargin(businessMonthly, {
+        const at = checkDiscountMargin(listed139Monthly, {
           percentOff: DISCOUNT_DEPTH_WARN_PCT,
         })
         expect(at.rating).toBe('warn')
         expect(at.reason).toBe('depth')
-        const below = checkDiscountMargin(businessMonthly, {
+        const below = checkDiscountMargin(listed139Monthly, {
           percentOff: DISCOUNT_DEPTH_WARN_PCT - 1,
         })
         expect(below.rating).toBe('ok')
@@ -1943,12 +1843,12 @@ describe('plan entitlements', () => {
 
       it('blocks at the give-away threshold', () => {
         expect(
-          checkDiscountMargin(businessMonthly, {
+          checkDiscountMargin(listed139Monthly, {
             percentOff: DISCOUNT_DEPTH_BLOCK_PCT,
           }).rating,
         ).toBe('block')
         expect(
-          checkDiscountMargin(businessMonthly, {
+          checkDiscountMargin(listed139Monthly, {
             percentOff: DISCOUNT_DEPTH_BLOCK_PCT - 1,
           }).rating,
         ).toBe('warn')
@@ -1958,7 +1858,7 @@ describe('plan entitlements', () => {
         // Depth is a fraction of list, so it has to be derived from the
         // resulting price rather than read off `percentOff` — an amount-off
         // coupon has no percentage to read.
-        const result = checkDiscountMargin(businessMonthly, {
+        const result = checkDiscountMargin(listed139Monthly, {
           amountOffUsd: 130,
         })
         expect(result.depthPct).toBeCloseTo(130 / 139, 3)
@@ -1974,7 +1874,7 @@ describe('plan entitlements', () => {
           Array.from({ length: 60 }, (_, index) => [`h${index}`, true]),
         )
         const result = checkDiscountMargin(
-          { ...businessMonthly, hosts },
+          { ...listed139Monthly, hosts },
           { percentOff: 10 },
         )
         expect(result.depthPct).toBeCloseTo(0.1, 4)
@@ -1986,7 +1886,7 @@ describe('plan entitlements', () => {
     describe('measured COGS (AGL-1120)', () => {
       it('uses the org’s measured cost when it exceeds the flat estimate', () => {
         const result = checkDiscountMargin(
-          businessMonthly,
+          listed139Monthly,
           { percentOff: 10 },
           { measuredCogsUsd: 48 },
         )
@@ -2000,7 +1900,7 @@ describe('plan entitlements', () => {
         // relax the guardrail would fail in the one direction that costs
         // money, so the placeholder stays the floor.
         const result = checkDiscountMargin(
-          businessMonthly,
+          listed139Monthly,
           { percentOff: 10 },
           { measuredCogsUsd: 0.05 },
         )
@@ -2011,7 +1911,7 @@ describe('plan entitlements', () => {
       it('ignores a missing or nonsense measurement', () => {
         for (const value of [null, undefined, Number.NaN]) {
           const result = checkDiscountMargin(
-            businessMonthly,
+            listed139Monthly,
             { percentOff: 10 },
             { measuredCogsUsd: value as never },
           )
@@ -2022,7 +1922,7 @@ describe('plan entitlements', () => {
     })
 
     it('blocks a 100%-off discount (net ≤ 0) with a clamped margin', () => {
-      const result = checkDiscountMargin(businessMonthly, { percentOff: 100 })
+      const result = checkDiscountMargin(listed139Monthly, { percentOff: 100 })
       expect(result.discountedUsd).toBe(0)
       expect(result.netUsd).toBe(0)
       expect(result.marginPct).toBe(-1)
@@ -2030,10 +1930,10 @@ describe('plan entitlements', () => {
     })
 
     it('scales infra COGS by the number of sites the org runs', () => {
-      const oneSite = checkDiscountMargin(businessMonthly, { percentOff: 10 })
+      const oneSite = checkDiscountMargin(listed139Monthly, { percentOff: 10 })
       expect(oneSite.infraCogsUsd).toBe(INFRA_COGS_PER_SITE_USD)
       const manySites = checkDiscountMargin(
-        { ...businessMonthly, hosts: { a: true, b: true, c: true } },
+        { ...listed139Monthly, hosts: { a: true, b: true, c: true } },
         { percentOff: 10 },
       )
       expect(manySites.infraCogsUsd).toBe(INFRA_COGS_PER_SITE_USD * 3)
@@ -2052,7 +1952,7 @@ describe('plan entitlements', () => {
     it('does not double-count a discount already on the org', () => {
       // grossUsd is always the list price, regardless of org.discount.
       const withExisting = checkDiscountMargin(
-        { ...businessMonthly, discount: { couponId: 'co', percentOff: 50 } },
+        { ...listed139Monthly, discount: { couponId: 'co', percentOff: 50 } },
         { percentOff: 10 },
       )
       expect(withExisting.grossUsd).toBe(139)
@@ -2113,7 +2013,7 @@ describe('plan entitlements', () => {
         // If these two ever disagree, one screen is underwriting deals against
         // a floor the guardrail has already moved off.
         for (const percentOff of [0, 10, 40, 60, 80, 94, 97]) {
-          const result = checkDiscountMargin(businessMonthly, { percentOff })
+          const result = checkDiscountMargin(listed139Monthly, { percentOff })
           if (result.reason === 'cogs' || result.rating === 'ok') {
             expect(netMarginRating(result.marginPct)).toBe(
               result.reason === 'cogs' ? result.rating : 'ok',
@@ -2133,11 +2033,11 @@ describe('plan entitlements', () => {
        */
       it('rates the largest REAL measured cost identically to no usage at all', () => {
         const withRealUsage = checkDiscountMargin(
-          businessMonthly,
+          listed139Monthly,
           { percentOff: 60 },
           { measuredCogsUsd: 0.22 },
         )
-        const withNothing = checkDiscountMargin(businessMonthly, {
+        const withNothing = checkDiscountMargin(listed139Monthly, {
           percentOff: 60,
         })
         expect(withRealUsage.infraCogsUsd).toBe(withNothing.infraCogsUsd)
@@ -2147,7 +2047,7 @@ describe('plan entitlements', () => {
         // the verdict, so the equality above is a fact about the size of real
         // usage, not about the measured arm being disconnected.
         const busy = checkDiscountMargin(
-          businessMonthly,
+          listed139Monthly,
           { percentOff: 60 },
           { measuredCogsUsd: 30 },
         )
@@ -2158,21 +2058,21 @@ describe('plan entitlements', () => {
   })
 
   describe('white-label (White-Label Phase 1)', () => {
-    it('gates the whiteLabel entitlement to Agency (and per-org overrides)', () => {
-      expect(checkEntitlement({ plan: 'agency' } as any, 'whiteLabel')).toBe(true)
-      // Every non-agency tier — including Advanced — is off by default.
-      for (const plan of ['free', 'starter', 'pro', 'business', 'scale', 'advanced'] as OrgPlan[]) {
+    it('gates the whiteLabel entitlement to Enterprise (and per-org overrides)', () => {
+      expect(checkEntitlement({ plan: 'enterprise' } as any, 'whiteLabel')).toBe(true)
+      // Every other tier is off by default.
+      for (const plan of ['free', 'starter', 'pro'] as OrgPlan[]) {
         expect(checkEntitlement({ plan } as any, 'whiteLabel')).toBe(false)
       }
       // Enterprise inherits via the per-org entitlements override mechanism.
       const enterprise = {
-        plan: 'business',
+        plan: 'pro',
         entitlements: { features: { whiteLabel: true } },
       } as any
       expect(checkEntitlement(enterprise, 'whiteLabel')).toBe(true)
-      // A canceled agency subscription downgrades to free — and loses it.
+      // A canceled enterprise subscription downgrades to free — and loses it.
       const canceled = {
-        plan: 'agency',
+        plan: 'enterprise',
         subscription: { status: 'canceled' },
       } as any
       expect(checkEntitlement(canceled, 'whiteLabel')).toBe(false)
@@ -2180,7 +2080,7 @@ describe('plan entitlements', () => {
 
     it('returns the Aglyn defaults when white-label is off, ignoring any stored profile', () => {
       expect(resolveBrandingProfile(undefined)).toEqual(PLATFORM_BRANDING_PROFILE)
-      expect(resolveBrandingProfile({ plan: 'business' } as any).productName).toBe(
+      expect(resolveBrandingProfile({ plan: 'pro' } as any).productName).toBe(
         'Aglyn',
       )
       // A profile stored without the entitlement is ignored entirely.
@@ -2193,7 +2093,7 @@ describe('plan entitlements', () => {
 
     it('applies the org profile when white-label is on, filling gaps with Aglyn defaults', () => {
       const org = {
-        plan: 'agency',
+        plan: 'enterprise',
         brandingProfile: {
           productName: 'Acme Sites',
           fromName: 'Acme Team',
@@ -2216,7 +2116,7 @@ describe('plan entitlements', () => {
 
     it('carries the dark-mode logo and favicon, and falls back to neither', () => {
       const set = resolveBrandingProfile({
-        plan: 'agency',
+        plan: 'enterprise',
         brandingProfile: {
           logoUrl: 'https://cdn.acme.com/logo.png',
           logoDarkUrl: 'https://cdn.acme.com/logo-white.png',
@@ -2229,7 +2129,7 @@ describe('plan entitlements', () => {
       // Unset means null, not the light value: a reader asks for
       // `logoDarkUrl ?? logoUrl` itself, so "did they set one" stays answerable.
       const unset = resolveBrandingProfile({
-        plan: 'agency',
+        plan: 'enterprise',
         brandingProfile: { logoUrl: 'https://cdn.acme.com/logo.png' },
       } as any)
       expect(unset.logoDarkUrl).toBeNull()
@@ -2237,7 +2137,7 @@ describe('plan entitlements', () => {
       // And without the entitlement a stored dark logo is ignored like the rest.
       expect(
         resolveBrandingProfile({
-          plan: 'business',
+          plan: 'pro',
           brandingProfile: { logoDarkUrl: 'https://cdn.acme.com/logo-white.png' },
         } as any).logoDarkUrl,
       ).toBeNull()
@@ -2293,7 +2193,7 @@ describe('plan entitlements', () => {
        */
       it('never lends that mark to a white-label org with no logo', () => {
         const brand = resolveBrandingProfile({
-          plan: 'agency',
+          plan: 'enterprise',
           brandingProfile: { productName: 'Acme Sites' },
         } as any)
         expect(brand.logoUrl).toBeNull()
@@ -2302,7 +2202,7 @@ describe('plan entitlements', () => {
 
       it('never lends that HOME to a white-label org either', () => {
         const brand = resolveBrandingProfile({
-          plan: 'agency',
+          plan: 'enterprise',
           brandingProfile: { productName: 'Acme Sites' },
         } as any)
         expect(brand.homeUrl).toBeNull()
@@ -2312,7 +2212,7 @@ describe('plan entitlements', () => {
         // Unchanged behaviour for white-label: the badge went to the org's
         // support URL before the split and still does.
         const brand = resolveBrandingProfile({
-          plan: 'agency',
+          plan: 'enterprise',
           brandingProfile: {
             productName: 'Acme Sites',
             supportUrl: 'https://acme.test/help',
@@ -2324,7 +2224,7 @@ describe('plan entitlements', () => {
 
     describe('the support URL falls back to nothing, never to Aglyn', () => {
       const whiteLabelWithout = (profile: Record<string, unknown>) =>
-        resolveBrandingProfile({ plan: 'agency', brandingProfile: profile } as any)
+        resolveBrandingProfile({ plan: 'enterprise', brandingProfile: profile } as any)
 
       it('is null when the field is absent, blank or whitespace', () => {
         for (const profile of [
@@ -2371,9 +2271,9 @@ describe('plan entitlements', () => {
       })
     })
 
-    it('is on by default for the Agency tier with no explicit override', () => {
+    it('is on by default for the Enterprise tier with no explicit override', () => {
       const brand = resolveBrandingProfile({
-        plan: 'agency',
+        plan: 'enterprise',
         brandingProfile: { productName: 'Studio One' },
       } as any)
       expect(brand.productName).toBe('Studio One')
@@ -2392,9 +2292,9 @@ describe('plan entitlements', () => {
       it('resolves to the platform profile whole', () => {
         for (const org of [
           { plan: 'enterprise' },
-          { plan: 'agency' },
-          { plan: 'agency', brandingProfile: {} },
-          { plan: 'agency', brandingProfile: { productName: ' ', supportUrl: '' } },
+          { plan: 'enterprise' },
+          { plan: 'enterprise', brandingProfile: {} },
+          { plan: 'enterprise', brandingProfile: { productName: ' ', supportUrl: '' } },
         ]) {
           expect(resolveBrandingProfile(org as any)).toBe(PLATFORM_BRANDING_PROFILE)
         }
@@ -2404,7 +2304,7 @@ describe('plan entitlements', () => {
         // Without this the case above is satisfied by a build that never
         // white-labels anybody.
         const brand = resolveBrandingProfile({
-          plan: 'agency',
+          plan: 'enterprise',
           brandingProfile: { primaryColor: '#ff5a00' },
         } as any)
         expect(brand).not.toBe(PLATFORM_BRANDING_PROFILE)
@@ -2416,7 +2316,7 @@ describe('plan entitlements', () => {
 
     it('treats blank/whitespace profile fields as unset (Aglyn default wins)', () => {
       const org = {
-        plan: 'agency',
+        plan: 'enterprise',
         brandingProfile: { productName: '   ', fromName: '' },
       } as any
       const brand = resolveBrandingProfile(org)
@@ -2431,8 +2331,6 @@ describe('plan entitlements', () => {
     // Pricing v4 (AGL-4126): $49 billed yearly, $69 month to month.
     expect(PLAN_PRICING.pro.basePriceAnnualMonthlyUsd).toBe(49)
     expect(PLAN_PRICING.pro.basePriceMonthlyUsd).toBe(69)
-    expect(PLAN_PRICING.business.basePriceAnnualMonthlyUsd).toBe(99)
-    expect(PLAN_PRICING.business.basePriceMonthlyUsd).toBe(139)
   })
 })
 
@@ -2762,23 +2660,23 @@ describe('a first payment that never completed is not a paid workspace', () => {
     ({ plan, subscription: { status: 'past_due' } }) as any
 
   it('resolves to free rather than granting the plan forever', () => {
-    expect(resolveEffectivePlan(expired('business'))).toBe('free')
-    expect(checkEntitlement(expired('business'), 'workflows')).toBe(false)
+    expect(resolveEffectivePlan(expired('pro'))).toBe('free')
+    expect(checkEntitlement(expired('pro'), 'workflows')).toBe(false)
     expect(resolveOrgEntitlements(expired('pro')).hostLimit).toBe(
       PLAN_ENTITLEMENTS.free.hostLimit,
     )
   })
 
   it('is not counted as revenue', () => {
-    expect(isBillingSubscription(expired('business'))).toBe(false)
-    expect(orgListPriceMonthlyUsd(expired('business'))).toBe(0)
+    expect(isBillingSubscription(expired('pro'))).toBe(false)
+    expect(orgListPriceMonthlyUsd(expired('pro'))).toBe(0)
   })
 
   it('reaches both readers through the billingStatus mirror too', () => {
     // The org doc's mirror is what `subscriptionStatusOf` reads FIRST, so a set
     // that only matched the inline subscription would answer correctly in a
     // test and wrongly in the console.
-    const mirrored = { plan: 'business', billingStatus: 'incomplete_expired' } as any
+    const mirrored = { plan: 'pro', billingStatus: 'incomplete_expired' } as any
     expect(resolveEffectivePlan(mirrored)).toBe('free')
     expect(isBillingSubscription(mirrored)).toBe(false)
   })
@@ -2787,10 +2685,10 @@ describe('a first payment that never completed is not a paid workspace', () => {
     // Without this the fix could be satisfied by treating every non-active
     // status as dead, which would cut off a workspace Stripe is still
     // successfully retrying.
-    expect(resolveEffectivePlan(pastDue('business'))).toBe('business')
-    expect(checkEntitlement(pastDue('business'), 'workflows')).toBe(true)
-    expect(isBillingSubscription(pastDue('business'))).toBe(true)
-    expect(orgListPriceMonthlyUsd(pastDue('business'))).toBeGreaterThan(0)
+    expect(resolveEffectivePlan(pastDue('pro'))).toBe('pro')
+    expect(checkEntitlement(pastDue('pro'), 'workflows')).toBe(true)
+    expect(isBillingSubscription(pastDue('pro'))).toBe(true)
+    expect(orgListPriceMonthlyUsd(pastDue('pro'))).toBeGreaterThan(0)
     // And a healthy one, so the control cannot pass on a stub that answers the
     // paid plan for everything.
     expect(resolveEffectivePlan({ plan: 'pro', subscription: { status: 'active' } } as any)).toBe('pro')
@@ -2817,16 +2715,12 @@ describe('the saved-form ladder (AGL-3597)', () => {
   /**
    * The published ladder: what one site may save on each plan. Pro's is
    * UNLIMITED since pricing v4 (AGL-4126) — a saved form is a count with no
-   * cost term — and the retired plans keep the rungs they were sold with.
+   * cost term.
    */
   const LADDER: Record<OrgPlan, number> = {
     free: 1,
     starter: 5,
     pro: UNLIMITED,
-    business: 100,
-    scale: FORMS_PER_HOST_CEILING,
-    advanced: FORMS_PER_HOST_CEILING,
-    agency: FORMS_PER_HOST_CEILING,
     // Custom is never below Pro (AGL-4158).
     enterprise: UNLIMITED,
   }
@@ -2851,13 +2745,8 @@ describe('the saved-form ladder (AGL-3597)', () => {
   })
 
   it('climbs with the plan, and never steps down', () => {
-    // Over the plans SOLD (pricing v4, AGL-4126), and over the retired rows
-    // on their own: Pro's unlimited catalog sits above Business's 100, which
-    // no workspace can step to any more, so the two chains are read apart.
-    for (const order of [
-      [...SELF_SERVE_PLANS, 'enterprise'],
-      ['business', 'scale', 'advanced', 'agency', 'enterprise'],
-    ] as OrgPlan[][]) {
+    // Over every plan, cheapest first (pricing v4, AGL-4126).
+    for (const order of [[...SELF_SERVE_PLANS, 'enterprise']] as OrgPlan[][]) {
       const values = order.map((plan) => PLAN_ENTITLEMENTS[plan].formsPerHost)
       for (let index = 1; index < values.length; index++) {
         expect([order[index], values[index] >= values[index - 1]]).toEqual([order[index], true])
@@ -3061,8 +2950,6 @@ describe('Aglyn AI credits by the block (AGL-2896, AGL-4144)', () => {
   // than restated, so a plan row that comes or goes moves this with it.
   // Since pricing v4 (AGL-4126) that is Starter and Pro.
   const SOLD = SELF_SERVE_PLANS.filter((plan) => plan !== 'free')
-  /** Retired by v4: readable rows, never sold, so they sell no blocks either. */
-  const RETIRED = RETIRED_PLANS
   const band = (plan: OrgPlan) => PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth
 
   it('opens generation on EVERY plan: one pool, paid for by the plan’s included credits', () => {
@@ -3072,7 +2959,7 @@ describe('Aglyn AI credits by the block (AGL-2896, AGL-4144)', () => {
     for (const plan of PLANS) {
       expect(`${plan}: ${PLAN_ENTITLEMENTS[plan].features.aiGenerative}`).toBe(`${plan}: true`)
     }
-    for (const plan of [...SOLD, ...RETIRED]) {
+    for (const plan of SOLD) {
       expect(checkEntitlement({ plan } as any, 'aiGenerative')).toBe(true)
       expect(PLAN_ENTITLEMENTS[plan].features.aiAssist).toBe(true)
     }
@@ -3109,16 +2996,8 @@ describe('Aglyn AI credits by the block (AGL-2896, AGL-4144)', () => {
         )
       }
     }
-    // A retired plan (pricing v4, AGL-4126) sells no blocks, so a quantity
-    // written on one adds nothing and bills nothing: its own band is the pool.
-    for (const plan of RETIRED) {
-      const org = { plan, subscription: { status: 'active' }, seatAddons: { aiAddon: 3 } } as any
-      expect(planSellsAiCredits(plan)).toBe(false)
-      expect(resolveAiCreditBlocks(org)).toBe(0)
-      expect(aiCreditBlocksCreditsPerMonth(org)).toBe(0)
-      expect(resolveOrgEntitlements(org).assistCreditsPerMonth).toBe(band(plan))
-      expect(orgListPriceMonthlyUsd(org)).toBe(PLAN_PRICING[plan].basePriceMonthlyUsd)
-    }
+    // Custom sells no blocks self-serve: its agreement names the credits.
+    expect(planSellsAiCredits('enterprise')).toBe(false)
   })
 
   it('reads a stored retired tier as nothing: only the block count decides', () => {
@@ -3237,10 +3116,9 @@ describe('Aglyn AI credits by the block (AGL-2896, AGL-4144)', () => {
       expect(aiCreditsQuotaPerUnit({}, plan)).toBe(AI_CREDITS_PER_BLOCK)
     }
     expect([...SOLD]).toEqual(['starter', 'pro'])
-    // …and no retired plan sells one (pricing v4, AGL-4126).
-    for (const plan of RETIRED) {
+    // …and a removed plan id (AGL-4245) is not a plan that sells one.
+    for (const plan of ['business', 'scale', 'advanced', 'agency']) {
       expect(planSellsAiCredits(plan)).toBe(false)
-      expect(aiCreditsQuotaPerUnit({}, plan)).toBe(0)
     }
     expect(planSellsAiCredits('nonsense')).toBe(false)
     expect(planSellsAiCredits(undefined)).toBe(false)

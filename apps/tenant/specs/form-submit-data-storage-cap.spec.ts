@@ -63,7 +63,7 @@ let mockDataset: any = null
 /** Existing records in the dataset, for the quota check. */
 let mockRecordCount = 0
 /** The owning org's billing doc, swapped per case. */
-let mockOrg: Record<string, any> = { plan: 'business' }
+let mockOrg: Record<string, any> = { plan: 'pro' }
 /** Reads of `orgs/org-1/usage/{month}` — the storage gate's only read. */
 let mockUsageReads = 0
 
@@ -333,7 +333,7 @@ beforeEach(() => {
   mockRecordCount = 0
   mockUsageReads = 0
   mockDataset = datasetDoc()
-  mockOrg = { plan: 'business', subscription: { status: 'active' } }
+  mockOrg = { plan: 'pro', subscription: { status: 'active' } }
 })
 
 /**

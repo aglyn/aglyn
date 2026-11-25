@@ -189,8 +189,17 @@ const lastMonthKey = () => {
  * hand-written. A hand-written literal would let the loader keep passing
  * after the evaluator started producing a different shape.
  */
+/**
+ * A paying plan with a 45 GB band: Pro with the retired Business plan's band
+ * as an override (the plan was removed, AGL-4245), so the figures below keep
+ * the 139,769-view ceiling they were cut against.
+ */
+const PAID_45GB = 'pro+45gb'
+
 const tripFor = (plan: string, pageViews: number, month = MONTH) => {
-  const org = { plan } as never
+  const org = (
+    plan === PAID_45GB ? { plan: 'pro', entitlements: { bandwidthGb: 45 } } : { plan }
+  ) as never
   const ceiling = Aglyn.checkBandwidthAbuseCeiling(org, pageViews)
   return {
     month,
@@ -205,7 +214,7 @@ const tripFor = (plan: string, pageViews: number, month = MONTH) => {
 describe('the ceiling arithmetic the loader is driven by', () => {
   it('separates the two plans at the same count — 105,000 views', () => {
     const free = tripFor('free', 105_000)
-    const business = tripFor('business', 105_000)
+    const business = tripFor(PAID_45GB, 105_000)
     expect(free.ceiling).toBe(100_000)
     expect(free.exceeded).toBe(true)
     expect(free.degraded).toBe(true)
@@ -215,24 +224,21 @@ describe('the ceiling arithmetic the loader is driven by', () => {
     expect(tripFor('starter', 105_000).ceiling).toBe(100_000)
     expect(tripFor('starter', 105_000).degraded).toBe(false)
     // The metered plan never degrades even past its OWN ceiling.
-    expect(tripFor('business', 1_000_000).exceeded).toBe(true)
-    expect(tripFor('business', 1_000_000).degraded).toBe(false)
+    expect(tripFor(PAID_45GB, 1_000_000).exceeded).toBe(true)
+    expect(tripFor(PAID_45GB, 1_000_000).degraded).toBe(false)
   })
 
   it('the ladder never inverts — a bigger plan never gets a smaller ceiling', () => {
     // The failure `FORM_ABUSE_CEILING_UNLIMITED` exists to prevent, restated:
     // a floor plus a multiple plus an infinite band is three rules that can
     // disagree. Since 2026-09-07 no plan row is infinite — enterprise's band
-    // is a finite fallback of twice Agency's — so the top of the ladder is a
+    // is a finite fallback — so the top of the ladder is a
     // multiple like every rung below it, and the sentinel's ceiling is what a
     // contracted UNLIMITED override resolves to.
     const ladder = [
       'free',
       'starter',
       'pro',
-      'business',
-      'advanced',
-      'agency',
       'enterprise',
     ].map((plan) => tripFor(plan, 0).ceiling)
     for (let i = 1; i < ladder.length; i++) {
@@ -287,7 +293,7 @@ describe('the tenant loader refuses a contained FREE site (AGL-2155)', () => {
   })
 
   it('THE NEGATIVE CONTROL: a PAYING host at the same 105,000 serves normally', async () => {
-    const trip = tripFor('business', 105_000)
+    const trip = tripFor(PAID_45GB, 105_000)
     expect(trip.exceeded).toBe(false)
     // Nothing would have been written at all; planting it anyway is the
     // stronger test — even a flag that somehow existed must not degrade a

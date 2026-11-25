@@ -106,7 +106,7 @@ const MEMBER_PERMISSIONS = {
 
 await env.withSecurityRulesDisabled(async (context) => {
   const db = context.firestore()
-  await setDoc(doc(db, 'orgs', ORG), { name: 'Site Keys', slug: 'site-keys', plan: 'business', ownerUid: UIDS.admin })
+  await setDoc(doc(db, 'orgs', ORG), { name: 'Site Keys', slug: 'site-keys', plan: 'pro', ownerUid: UIDS.admin })
   await setDoc(doc(db, 'hosts', HOST), { orgId: ORG, memberRoles: MEMBER_ROLES, memberPermissions: MEMBER_PERMISSIONS })
   await setDoc(doc(db, 'hosts', HOST, 'redirects', 'r1'), { from: '/old', destination: '/new', kind: 'exact' })
   await setDoc(doc(db, 'hosts', HOST, 'webhooks', 'w1'), { url: 'https://example.com/hook' })

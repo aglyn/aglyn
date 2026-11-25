@@ -28,7 +28,7 @@ const mockProfiles: Record<string, unknown> = {}
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useConsoleHostRoute: () => ({ base: '/acme/hosts/shop', orgSlug: 'acme', subdomain: 'shop' }),
   useFirestore: () => ({}),
-  useOrgPlan: () => ({ org: { plan: 'business', ownerUid: 'uid-owner' }, ready: true }),
+  useOrgPlan: () => ({ org: { plan: 'pro', ownerUid: 'uid-owner' }, ready: true }),
   useUser: () => ({ data: { uid: 'uid-admin', getIdToken: jest.fn() } }),
   useFirestoreDoc: (build: () => { path?: string } | null) => {
     const ref = build()

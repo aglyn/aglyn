@@ -203,7 +203,7 @@ describe('the package route', () => {
   })
 
   it('leaves sequences out of a workspace without the Sequences add-on, both ways (AGL-3548)', async () => {
-    mockOrg = { $id: 'org-1', plan: 'scale', enabledPlugins: ['outreach', 'crm'] }
+    mockOrg = { $id: 'org-1', plan: 'pro', enabledPlugins: ['outreach', 'crm'] }
     mockPackages.listTransferPackageItems.mockResolvedValue([])
     mockPackages.planTransferPackageImport.mockResolvedValue({ job: JOB, plan: PLAN, resources: {}, created: true })
     await packageRoute(request('package', { orgId: 'org-1', action: 'list' }))

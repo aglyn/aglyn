@@ -354,7 +354,7 @@ beforeEach(() => {
   mockBlocked = null
   mockPublicIp = '93.184.216.34'
   mockAudit.mockClear()
-  mockOrg = { plan: 'business', subscriptionStatus: 'active', ownerUid: 'owner-1', slug: 'acme' }
+  mockOrg = { plan: 'pro', subscriptionStatus: 'active', ownerUid: 'owner-1', slug: 'acme' }
   process.env.STRIPE_SECRET_KEY = 'sk_test_fake'
   delete process.env.STRIPE_TERMINAL_LIVE_ENABLED
   fakeDocs.set('hosts/host-1', { name: 'Corner Cafe', memberRoles: { 'manager-1': 'admin', 'viewer-1': 'viewer' } })
@@ -519,7 +519,7 @@ describe('applying a store’s screen', () => {
     expect(fakeDocs.get(configPath)?.['splashAppliedKey']).toMatch(/^platform:/)
 
     stripeCalls.length = 0
-    mockOrg = { ...mockOrg, plan: 'agency', brandingProfile: { productName: 'Harbor Suite' } }
+    mockOrg = { ...mockOrg, plan: 'enterprise', brandingProfile: { productName: 'Harbor Suite' } }
     fakeDocs.set(configPath, { ...fakeDocs.get(configPath), splash: { choice: 'platform', updatedAtMs: 1 } })
     const result = await applyPosReaderSplash('host-1')
     expect(result.outcome).toBe('cleared')
@@ -535,7 +535,7 @@ describe('applying a store’s screen', () => {
   it('gives a white-label workspace its brand logo by default', async () => {
     await seedOrgLogo()
     await seedPlatformDefault()
-    mockOrg = { ...mockOrg, plan: 'agency', brandingProfile: { productName: 'Harbor Suite', logoUrl: 'media:org:org-1/logo1' } }
+    mockOrg = { ...mockOrg, plan: 'enterprise', brandingProfile: { productName: 'Harbor Suite', logoUrl: 'media:org:org-1/logo1' } }
     const result = await applyPosReaderSplash('host-1')
     expect(result.plan).toMatchObject({ effectiveChoice: 'logo', whiteLabel: true, productName: 'Harbor Suite' })
     expect(result.outcome).toBe('applied')
@@ -857,7 +857,7 @@ describe('the POS devices card’s setting', () => {
   })
 
   it('refuses the platform screen to a white-label workspace', async () => {
-    mockOrg = { ...mockOrg, plan: 'agency', brandingProfile: { productName: 'Harbor Suite' } }
+    mockOrg = { ...mockOrg, plan: 'enterprise', brandingProfile: { productName: 'Harbor Suite' } }
     const result = await store({ action: 'save', choice: 'platform' })
     expect(result.status).toBe(400)
     expect(fakeDocs.get(configPath)?.['splash']).toBeUndefined()

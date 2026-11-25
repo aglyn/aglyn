@@ -153,17 +153,17 @@ describe('the detectors answer differently for different inputs', () => {
     // `resolveOrgEntitlements(undefined)` resolves FREE, whose band is 0 — so
     // a wiring failure that lost the plan would read every band as zero and
     // every assertion in this file would agree that nothing is too expensive.
-    expect(PLAN_KEYS.length).toBe(8)
+    expect(PLAN_KEYS.length).toBe(4)
     expect(PLAN_ENTITLEMENTS.free.emailSendsPerMonth).toBe(0)
-    expect(PLAN_ENTITLEMENTS.agency.emailSendsPerMonth).toBeGreaterThan(0)
+    expect(PLAN_ENTITLEMENTS.pro.emailSendsPerMonth).toBeGreaterThan(0)
     // …and the bands are genuinely different between tiers, so a table that
-    // collapsed to one number cannot pass either. SEVEN distinct values
-    // across eight plans: Free and Starter share the zero, and every tier
+    // collapsed to one number cannot pass either. THREE distinct values
+    // across four plans: Free and Starter share the zero, and every tier
     // that sells email has a band of its own.
     expect(
       new Set(PLAN_KEYS.map((plan) => PLAN_ENTITLEMENTS[plan].emailSendsPerMonth))
         .size,
-    ).toBe(7)
+    ).toBe(3)
     expect(
       new Set(SELLS_EMAIL.map((plan) => PLAN_ENTITLEMENTS[plan].emailSendsPerMonth))
         .size,
@@ -200,10 +200,6 @@ describe('the included campaign-email bands', () => {
       free: 0,
       starter: 0,
       pro: 2_500,
-      business: 15_000,
-      scale: 25_000,
-      advanced: 65_000,
-      agency: 130_000,
       enterprise: 260_000,
     })
   })
@@ -217,10 +213,10 @@ describe('the included campaign-email bands', () => {
     // tell that from one — or from eight. Where it starts rising is the
     // product decision, so it is asserted as one.
     // Pricing v4 (AGL-4126): the plans sold are Free, Starter and Pro, so Pro
-    // is the one paid rung that sells email; the retired rows still rise.
+    // is the one paid rung that sells email.
     expect(SELLS_EMAIL).toEqual(['pro'])
     expect(PLAN_ENTITLEMENTS.enterprise.emailSendsPerMonth).toBeGreaterThan(
-      PLAN_ENTITLEMENTS.agency.emailSendsPerMonth,
+      PLAN_ENTITLEMENTS.pro.emailSendsPerMonth,
     )
   })
 
@@ -322,10 +318,6 @@ describe('the billed rate and the cost rate are different numbers', () => {
       // AGL-4227: billed past 1,000 emails a month of everything it sends.
       starter: 2.5,
       pro: 2.25,
-      business: 2,
-      scale: 1.9,
-      advanced: 1.85,
-      agency: 1.8,
       enterprise: null,
     })
     // Not one of them equals the cost, and not one equals cost + 30% either
@@ -503,20 +495,22 @@ describe('the billed rate and the cost rate are different numbers', () => {
 // ---------------------------------------------------------------------------
 describe('priceEmailSendOverage', () => {
   it('prices the excess at the plan rate, to the cent', () => {
-    // Business: $2.00/1,000. 4,321 over = $8.642 → $8.64.
-    const priced = priceEmailSendOverage({ plan: 'business' } as never, 4_321)
-    expect(priced.overageRateUsd).toBe(2)
+    // Pro: $2.25/1,000. 4,321 over = $9.72225 → $9.72.
+    const priced = priceEmailSendOverage({ plan: 'pro' } as never, 4_321)
+    expect(priced.overageRateUsd).toBe(2.25)
     expect(priced.overageSends).toBe(4_321)
-    expect(priced.overageMonthlyUsd).toBe(8.64)
+    expect(priced.overageMonthlyUsd).toBe(9.72)
   })
 
-  it('charges a cheaper tier less for the same excess', () => {
+  it('charges each tier its own rate for the same excess', () => {
     // Non-vacuous: a stubbed plan resolution would return one rate for every
     // org, and every assertion about "the plan's rate" would still pass.
-    const business = priceEmailSendOverage({ plan: 'business' } as never, 10_000)
-    const agency = priceEmailSendOverage({ plan: 'agency' } as never, 10_000)
-    expect(business.overageMonthlyUsd).toBe(20)
-    expect(agency.overageMonthlyUsd).toBe(18)
+    // (Pro against a cheaper tier until the retired plans were removed,
+    // AGL-4245; Starter's dearer rate makes the same point.)
+    const pro = priceEmailSendOverage({ plan: 'pro' } as never, 10_000)
+    const starter = priceEmailSendOverage({ plan: 'starter' } as never, 10_000)
+    expect(pro.overageMonthlyUsd).toBe(22.5)
+    expect(starter.overageMonthlyUsd).toBe(25)
   })
 
   it('is structurally zero where the plan carries no rate', () => {
@@ -532,7 +526,7 @@ describe('priceEmailSendOverage', () => {
 
   it('never turns a nonsense reading into a charge', () => {
     for (const bad of [-5, Number.NaN, Number.POSITIVE_INFINITY]) {
-      const priced = priceEmailSendOverage({ plan: 'agency' } as never, bad)
+      const priced = priceEmailSendOverage({ plan: 'enterprise' } as never, bad)
       expect(`${bad}: ${priced.overageMonthlyUsd}`).toBe(`${bad}: 0`)
       expect(`${bad}: ${priced.overageSends}`).toBe(`${bad}: 0`)
     }
@@ -717,38 +711,19 @@ describe('band and rate agree about whether an "over" exists', () => {
 // ---------------------------------------------------------------------------
 // No charged price moved.
 // ---------------------------------------------------------------------------
-describe('exactly one list price moved with the email change', () => {
+describe('the list prices the email change left alone', () => {
   it('the unchanged ones are still what they were', () => {
     // The email work moved no price at all; the band resize that followed it
     // moved exactly one. Both halves are asserted, because "we changed a
-    // price" and "we changed the price list" are different events. Read over
-    // the old ladder by name: pricing v4 (AGL-4126) shrank SELF_SERVE_PLANS,
-    // and the retired rows still carry the prices they were sold at.
-    const UNMOVED = ['free', 'starter', 'business', 'scale', 'advanced'] as OrgPlan[]
-    expect(UNMOVED.map((plan) => PLAN_PRICING[plan].basePriceMonthlyUsd)).toEqual([
-      0, 25, 139, 249, 399,
-    ])
-    expect(UNMOVED.map((plan) => PLAN_PRICING[plan].basePriceAnnualMonthlyUsd)).toEqual([
-      0, 16, 99, 179, 299,
-    ])
+    // price" and "we changed the price list" are different events. The
+    // plans pricing v4 (AGL-4126) retired were removed (AGL-4245), so what is
+    // left to read is Free and Starter.
+    const UNMOVED = ['free', 'starter'] as OrgPlan[]
+    expect(UNMOVED.map((plan) => PLAN_PRICING[plan].basePriceMonthlyUsd)).toEqual([0, 25])
+    expect(UNMOVED.map((plan) => PLAN_PRICING[plan].basePriceAnnualMonthlyUsd)).toEqual([0, 16])
     // Pro moved later, with pricing v4 — $56/$39 to $69/$49 — not with email.
     expect(PLAN_PRICING.pro.basePriceMonthlyUsd).toBe(69)
     expect(PLAN_PRICING.pro.basePriceAnnualMonthlyUsd).toBe(49)
-  })
-
-  it('Agency is the one that did, on both intervals together', () => {
-    // Moving the monthly alone would have widened the annual discount to 50%
-    // on the single tier being repriced for margin.
-    expect(PLAN_PRICING.agency.basePriceMonthlyUsd).toBe(1299)
-    expect(PLAN_PRICING.agency.basePriceAnnualMonthlyUsd).toBe(1049)
-    // $12,588 a year, which is what the live Stripe yearly price charges —
-    // the constant every surface quotes has to be the one Stripe bills.
-    expect(PLAN_PRICING.agency.basePriceAnnualMonthlyUsd * 12).toBe(12_588)
-    const discount =
-      1 -
-      PLAN_PRICING.agency.basePriceAnnualMonthlyUsd /
-        PLAN_PRICING.agency.basePriceMonthlyUsd
-    expect(discount).toBeCloseTo(1 - 649 / 799, 2)
   })
 
   it('the dataset add-on rate is NOT the metered storage pass-through', () => {

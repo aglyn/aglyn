@@ -79,7 +79,7 @@ describe('the catalog door and the plan (AGL-3982)', () => {
   })
 
   it('offers the catalog, and no notice, on a plan with the store', () => {
-    openAddLine({ plan: 'business', slug: 'acme' })
+    openAddLine({ plan: 'pro', slug: 'acme' })
     expect(screen.getByRole('button', { name: 'From the catalog' })).toBeTruthy()
     expect(screen.queryByText(/needs a plan with the store/)).toBeNull()
   })

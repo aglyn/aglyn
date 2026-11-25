@@ -289,7 +289,7 @@ describe('a held upgrade projects no plan (AGL-3358)', () => {
           items: { data: [item('price_pro_monthly')] },
           pending_update: {
             expires_at: 1_790_685_512,
-            metadata: { plan: 'advanced' },
+            metadata: { plan: 'enterprise' },
             subscription_items: [
               { id: 'si_price_pro_monthly', price: { id: 'price_advanced_monthly' } },
             ],
@@ -314,13 +314,13 @@ describe('a held upgrade projects no plan (AGL-3358)', () => {
           customer: 'cus_held',
           status: 'active',
           current_period_end: 1_793_194_709,
-          metadata: { orgId: 'org-real', plan: 'advanced' },
+          metadata: { orgId: 'org-real', plan: 'enterprise' },
           items: { data: [item('price_advanced_monthly')] },
           pending_update: null,
         }),
       ),
     )
-    expect(mockOrgPatches.map((patch) => patch.plan)).toEqual(['advanced'])
+    expect(mockOrgPatches.map((patch) => patch.plan)).toEqual(['enterprise'])
   })
 })
 

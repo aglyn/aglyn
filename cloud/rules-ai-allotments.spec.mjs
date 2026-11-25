@@ -167,7 +167,7 @@ const seeded = (subject) => ({
 
 await env.withSecurityRulesDisabled(async (context) => {
   const db = context.firestore()
-  await setDoc(doc(db, 'orgs', ORG), { name: 'AI Allotments Test', slug: 'ai-allotments-test', plan: 'agency' })
+  await setDoc(doc(db, 'orgs', ORG), { name: 'AI Allotments Test', slug: 'ai-allotments-test', plan: 'enterprise' })
   await setDoc(doc(db, 'orgs', ORG, 'members', OWNER), { role: 'owner', allHosts: true })
   await setDoc(doc(db, 'orgs', ORG, 'members', ADMIN), { role: 'admin', allHosts: true })
   await setDoc(doc(db, 'orgs', ORG, 'members', REVOKED_ADMIN), {

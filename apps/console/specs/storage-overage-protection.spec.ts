@@ -382,10 +382,6 @@ describe('INGRESS AND report-usage TELL THE SAME STORY', () => {
     'free',
     'starter',
     'pro',
-    'business',
-    'scale',
-    'advanced',
-    'agency',
     'enterprise',
   ] as const
 
@@ -426,14 +422,7 @@ describe('INGRESS AND report-usage TELL THE SAME STORY', () => {
     const billing = ALL_PLANS.filter((plan) =>
       planMetersInfraOverage({ plan } as any),
     )
-    expect(billing).toEqual([
-      'starter',
-      'pro',
-      'business',
-      'scale',
-      'advanced',
-      'agency',
-    ])
+    expect(billing).toEqual(['starter', 'pro'])
     expect(planMetersInfraOverage({ plan: 'free' } as any)).toBe(false)
     expect(planMetersInfraOverage({ plan: 'enterprise' } as any)).toBe(false)
   })

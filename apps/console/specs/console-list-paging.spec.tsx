@@ -261,7 +261,7 @@ jest.mock('next/navigation', () => ({
 }))
 
 /** The workspace the card reads its allowance from; Business unless a test says otherwise. */
-let mockOrg: Record<string, unknown> = { $id: 'org-1', plan: 'business' }
+let mockOrg: Record<string, unknown> = { $id: 'org-1', plan: 'pro' }
 let mockLiveCount = 0
 
 jest.mock('../hooks/use-current-org', () => ({
@@ -321,7 +321,7 @@ import {
 import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
 
 beforeEach(() => {
-  mockOrg = { $id: 'org-1', plan: 'business' }
+  mockOrg = { $id: 'org-1', plan: 'pro' }
   mockLiveCount = 0
   mockDocs = seedComponents()
   mockLimitsAsked = []

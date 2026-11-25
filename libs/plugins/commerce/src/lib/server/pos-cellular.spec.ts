@@ -56,7 +56,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     },
     getOrgForHost: async () => ({
       orgId: 'org-1',
-      org: { id: 'org-1', plan: 'business', subscriptionStatus: 'active', ownerUid: 'owner-1' },
+      org: { id: 'org-1', plan: 'pro', subscriptionStatus: 'active', ownerUid: 'owner-1' },
     }),
     readOrgBilling: async () => mockBilling,
     raiseOperatorAlert: async (definition: { type: string }, options: Record<string, any>) => {

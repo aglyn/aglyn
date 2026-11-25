@@ -29,7 +29,7 @@ const config = {
 
 /** A site that switched the plugin on, which it is not by default. */
 const switchedOn = { orgId: 'org-1', enabledPlugins: ['weglot'] }
-const business = { plan: 'business' }
+const business = { plan: 'pro' }
 
 const context = (overrides: Record<string, unknown> = {}) =>
   ({

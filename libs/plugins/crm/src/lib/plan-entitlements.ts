@@ -92,10 +92,6 @@ export const CRM_EMAILS_PER_DAY_BY_PLAN: Readonly<Record<OrgPlan, number>> = {
   // sends.
   starter: 35,
   pro: 150,
-  business: 200,
-  scale: 300,
-  advanced: 500,
-  agency: 1000,
   // Finite like the campaign allowance beside it, and for the same reason
   // one-to-one mail is capped on every other tier: a rep with a template and
   // a list can put thousands of messages onto the platform's sending

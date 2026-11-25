@@ -147,7 +147,7 @@ const OPS: AiBuildOps = new Map<string, PluginAiCapability>(
   [...AI_OWNED_CAPABILITIES, ...OWNER_CAPABILITIES].map((one) => [one.op, one] as const),
 )
 
-const ORG = { plan: 'business' as const, billingStatus: 'active', ownerUid: 'owner-1' }
+const ORG = { plan: 'pro' as const, billingStatus: 'active', ownerUid: 'owner-1' }
 
 function buildJob(): AiJob {
   return {

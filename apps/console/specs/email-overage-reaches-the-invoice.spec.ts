@@ -331,7 +331,7 @@ afterEach(() => {
 
 
 /**
- * Business's band and rate, READ rather than transcribed.
+ * Pro's band and rate, READ rather than transcribed.
  *
  * This is also what makes the file a MODULE rather than a script: without a
  * top-level import TypeScript places every `const` here in the global scope,
@@ -339,13 +339,12 @@ afterEach(() => {
  * `report-usage-free-tier-cap.spec.ts`. Jest does not care; `tsc` does, and
  * the error names a redeclaration rather than the missing import.
  */
-const BAND = PLAN_ENTITLEMENTS.business.emailSendsPerMonth
-const RATE_PER_1K = PLAN_PRICING.business.extraEmailSendsUsdPer1k as number
-const AGENCY_BAND = PLAN_ENTITLEMENTS.agency.emailSendsPerMonth
+const BAND = PLAN_ENTITLEMENTS.pro.emailSendsPerMonth
+const RATE_PER_1K = PLAN_PRICING.pro.extraEmailSendsUsdPer1k as number
 
 describe('the premise: the fixture meters email and nothing else', () => {
   it('a month inside the band bills exactly nothing', async () => {
-    seedOrg('business')
+    seedOrg('pro')
     mockEmailSends = BAND
     await runRollup(loadRoute(MONTH))
     const rollup = mockDocs.get(`orgs/org-1/usage/${MONTH}`)!
@@ -361,50 +360,52 @@ describe('the premise: the fixture meters email and nothing else', () => {
   it('the band it is measured against is the plan\'s, not a default', async () => {
     // Free resolves for an unknown org and its band is 0, which would make
     // every send an overage — the shape that would let this file pass with
-    // the plan lookup broken. Business is asserted by its effect: 30,000
-    // sends leave 15,000 over, not 30,000.
-    seedOrg('business')
+    // the plan lookup broken. Pro is asserted by its effect: 30,000
+    // sends leave 27,500 over, not 30,000.
+    seedOrg('pro')
     mockEmailSends = 30_000
     await runRollup(loadRoute(MONTH))
     expect(mockDocs.get(`orgs/org-1/usage/${MONTH}`)!['emailSendsOverage']).toBe(
-      15_000,
+      27_500,
     )
   })
 })
 
 describe('with the switch set to this month, the overage bills', () => {
   it('adds exactly the priced excess to billedCents', async () => {
-    seedOrg('business')
+    seedOrg('pro')
     mockEmailSends = BAND + 4_000
     await runRollup(loadRoute(MONTH))
     const rollup = mockDocs.get(`orgs/org-1/usage/${MONTH}`)!
     expect(rollup['emailSendsOverage']).toBe(4_000)
-    // 4,000 at $2.00/1,000 = $8.00.
-    expect(rollup['emailSendsOverageUsd']).toBe(8)
-    expect(rollup['billedCents']).toBe(800)
+    // 4,000 at $2.25/1,000 = $9.00.
+    expect(rollup['emailSendsOverageUsd']).toBe(9)
+    expect(rollup['billedCents']).toBe(900)
     expect(rollup['emailSendsOverageBilled']).toBe(true)
     expect(rollup['emailSendsOverageWithheldUsd']).toBe(0)
   })
 
   it('reaches Stripe as a real meter event', async () => {
-    seedOrg('business')
+    seedOrg('pro')
     mockEmailSends = BAND + 4_000
     await runRollup(loadRoute(MONTH))
     expect(meterEvents).toHaveLength(1)
-    expect(Number(meterEvents[0].get('payload[value]'))).toBe(800)
+    expect(Number(meterEvents[0].get('payload[value]'))).toBe(900)
   })
 
-  it('charges a cheaper tier less for the same excess', async () => {
+  it('charges another tier its own rate for the same excess', async () => {
     // The rate is the PLAN'S. A single hardcoded rate would satisfy every
-    // assertion above.
-    seedOrg('agency')
-    // Agency's band, plus the same 4,000.
-    mockEmailSends = AGENCY_BAND + 4_000
-    await runRollup(loadRoute(MONTH))
+    // assertion above. (This read a cheaper tier until the retired plans were
+    // removed, AGL-4245; Starter's dearer rate makes the same point.)
+    seedOrg('starter')
+    // Starter's 1,000, plus the same 4,000.
+    mockEmailSends = 1_000 + 4_000
+    await runRollup(loadRoute(MONTH, MONTH))
     const rollup = mockDocs.get(`orgs/org-1/usage/${MONTH}`)!
     expect(rollup['emailSendsOverage']).toBe(4_000)
-    // 4,000 at $1.80/1,000 = $7.20.
-    expect(rollup['billedCents']).toBe(720)
+    // 4,000 at $2.50/1,000 = $10.00, not Pro's $9.00.
+    expect(rollup['billedCents']).toBe(1_000)
+    expect(rollup['billedCents']).not.toBe(Math.round(4 * RATE_PER_1K * 100))
   })
 
   it('never bills a FREE org, whatever it sent', async () => {
@@ -431,14 +432,14 @@ describe('with the switch set to this month, the overage bills', () => {
 
 describe('with the switch unset or in the future, it does not', () => {
   it('measures and records the overage, and charges nothing', async () => {
-    seedOrg('business')
+    seedOrg('pro')
     mockEmailSends = BAND + 4_000
     await runRollup(loadRoute(undefined))
     const rollup = mockDocs.get(`orgs/org-1/usage/${MONTH}`)!
     // MEASURED — the count and the price are both on the document, so the
     // first billed month is a comparison rather than a surprise.
     expect(rollup['emailSendsOverage']).toBe(4_000)
-    expect(rollup['emailSendsOverageWithheldUsd']).toBe(8)
+    expect(rollup['emailSendsOverageWithheldUsd']).toBe(9)
     expect(rollup['emailSendsOverageBilled']).toBe(false)
     // …and NOT CHARGED.
     expect(rollup['emailSendsOverageUsd']).toBe(0)
@@ -449,7 +450,7 @@ describe('with the switch unset or in the future, it does not', () => {
   it('does not reach backwards into an earlier month', async () => {
     // The property a boolean cannot have. The sweep is running MONTH; the
     // switch names the month after it.
-    seedOrg('business')
+    seedOrg('pro')
     mockEmailSends = BAND + 4_000
     await runRollup(loadRoute('2026-08'))
     const rollup = mockDocs.get(`orgs/org-1/usage/${MONTH}`)!
@@ -464,7 +465,7 @@ describe('with the switch unset or in the future, it does not', () => {
     return ['true', '1', 'yes', '2026', '2026-7', 'now'].reduce(
       (chain, bad) =>
         chain.then(async () => {
-          seedOrg('business')
+          seedOrg('pro')
           mockEmailSends = BAND + 4_000
           await runRollup(loadRoute(bad))
           const rollup = mockDocs.get(`orgs/org-1/usage/${MONTH}`)!
@@ -480,7 +481,7 @@ describe('with the switch unset or in the future, it does not', () => {
   it('BOTH WAYS: the same month with the switch ON does bill', async () => {
     // The control for every case above. Without it a route that had stopped
     // billing email altogether would satisfy all of them.
-    seedOrg('business')
+    seedOrg('pro')
     mockEmailSends = BAND + 4_000
     await runRollup(loadRoute(MONTH))
     expect(mockDocs.get(`orgs/org-1/usage/${MONTH}`)!['billedCents']).toBe(

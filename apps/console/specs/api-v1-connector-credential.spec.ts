@@ -164,7 +164,7 @@ beforeEach(() => {
     degraded: false,
     contended: false,
   })
-  mockGetOrgDoc.mockResolvedValue({ plan: 'business', billingStatus: 'active' })
+  mockGetOrgDoc.mockResolvedValue({ plan: 'pro', billingStatus: 'active' })
   mockLockdownRefusal.mockResolvedValue(null)
   mockResolveOrgMembership.mockResolvedValue({ orgId: 'org-1', member: { role: 'admin' } })
   mockMemberHasOrgPermission.mockResolvedValue(true)
@@ -191,7 +191,7 @@ describe('a connector token through the /api/v1 door (AGL-4225)', () => {
     expect(mockConsumeRateLimit).toHaveBeenCalledWith(`apiv1:${GRANT}`)
     // The person's own lock applies to their app.
     expect(mockLockdownRefusal).toHaveBeenCalledWith(
-      expect.objectContaining({ uid: 'user-1', org: { plan: 'business', billingStatus: 'active' } }),
+      expect.objectContaining({ uid: 'user-1', org: { plan: 'pro', billingStatus: 'active' } }),
     )
     expect(mockUsageWrites).toEqual([expect.stringMatching(/^orgs\/org-1\/apiUsage\//)])
   })
@@ -300,7 +300,7 @@ describe('a connector token through the /api/v1 door (AGL-4225)', () => {
   })
 
   it('charges an extra call in a batch as its own request, and refuses it when the budget is spent', async () => {
-    const context = { orgId: 'org-1', keyId: GRANT, keyName: 'Claude', scopes: [], org: { plan: 'business', billingStatus: 'active' }, firestore: { collection: () => ({ doc: () => ({ collection: () => ({ doc: () => ({ set: async () => void mockUsageWrites.push('extra') }) }) }) }) }, headers: {} }
+    const context = { orgId: 'org-1', keyId: GRANT, keyName: 'Claude', scopes: [], org: { plan: 'pro', billingStatus: 'active' }, firestore: { collection: () => ({ doc: () => ({ collection: () => ({ doc: () => ({ set: async () => void mockUsageWrites.push('extra') }) }) }) }) }, headers: {} }
     expect((await chargeApiV1Call(context as never)).refusal).toBeNull()
     expect(mockConsumeRateLimit).toHaveBeenCalledWith(`apiv1:${GRANT}`)
     expect(mockUsageWrites).toEqual(['extra'])

@@ -233,7 +233,7 @@ jest.mock('../utils/server/media-scope', () => {
         scopeRef: mockOrgScopeRef,
         base: `orgs/${ORG}`,
         cdnScope: `org:${ORG}`,
-        billing: { plan: 'business' },
+        billing: { plan: 'pro' },
         viewerOrgWide: mockOrgWide,
         viewerTokens: ['org'],
       },

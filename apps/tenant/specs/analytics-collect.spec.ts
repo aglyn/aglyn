@@ -795,9 +795,10 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
 
   it('THE NEGATIVE CONTROL: a PAID host at the SAME count is not flagged at all', async () => {
     // Same traffic, same route, same month — only the plan differs.
-    // Business's ceiling is 139,769 — 45 GB of views times three — so 105,000
+    // A 45 GB band (Business's, as an override since that plan was removed,
+    // AGL-4245) makes the ceiling 139,769 — 45 GB of views times three — so 105,000
     // is still ordinary growth and nothing happens.
-    mockOrgForHost = { $id: 'org-1', plan: 'business' }
+    mockOrgForHost = { $id: 'org-1', plan: 'pro', entitlements: { bandwidthGb: 45 } }
     plantMonthViews(105_000)
     await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
     expect(flag()).toBeUndefined()
@@ -809,7 +810,7 @@ describe('bandwidth abuse ceiling (AGL-2155)', () => {
     // plan, but only an UNCOMPENSATED overage changes what a visitor sees.
     // A metered plan's traffic bills, so taking the site down would trade a
     // bill the customer agreed to for an outage they did not.
-    mockOrgForHost = { $id: 'org-1', plan: 'business' }
+    mockOrgForHost = { $id: 'org-1', plan: 'pro', entitlements: { bandwidthGb: 45 } }
     plantMonthViews(1_000_000)
     await loadRoute().POST(beacon({ hostId: HOST_ID, path: '/' }))
     expect(flag()).toMatchObject({ ceiling: 139_769, degraded: false })

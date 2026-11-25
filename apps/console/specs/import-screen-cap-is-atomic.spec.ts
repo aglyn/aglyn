@@ -615,7 +615,7 @@ describe('the screens leg is atomic (AGL-2370)', () => {
   /** An UNLIMITED plan lands all of them — the cap fix did not become a wall. */
   it('lets an unlimited plan land both concurrent imports', async () => {
     RACE_ARRIVALS = 2
-    mockOrg = { plan: 'business' }
+    mockOrg = { plan: 'pro' }
     seedHost({ screens: ids(10, 'held') })
     const [a, b] = await Promise.all([
       runImport(

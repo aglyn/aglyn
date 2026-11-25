@@ -141,7 +141,7 @@ beforeEach(() => {
   cacheStore.clear()
   documents = {}
   readFails = false
-  orgForHost = { orgId: 'org-1', org: { plan: 'business' } }
+  orgForHost = { orgId: 'org-1', org: { plan: 'pro' } }
   orgReads = 0
 })
 
@@ -350,7 +350,7 @@ describe('the cache (AGL-3118)', () => {
     })
 
     expect(await resolve(['entry:blog/due'])).toEqual({})
-    orgForHost = { orgId: 'org-1', org: { plan: 'business' } }
+    orgForHost = { orgId: 'org-1', org: { plan: 'pro' } }
     expect(await resolve(['entry:blog/due'])).toEqual({
       'entry:blog/due': 'blog/due',
     })

@@ -86,11 +86,11 @@ describe('useOrgPlan.ready under a refused read (AGL-1066)', () => {
    */
   it('IS ready once a snapshot has answered, cached or not', () => {
     docState.status = 'success'
-    docState.data = { plan: 'business' }
+    docState.data = { plan: 'pro' }
     const { result } = renderHook(() => useOrgPlan('host-1'))
 
     expect(result.current.ready).toBe(true)
-    expect(result.current.org).toEqual({ plan: 'business' })
+    expect(result.current.org).toEqual({ plan: 'pro' })
   })
 })
 

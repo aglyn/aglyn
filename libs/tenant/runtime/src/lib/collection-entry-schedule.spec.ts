@@ -169,7 +169,7 @@ const AN_HOUR_AGO = () => ({ seconds: nowSeconds() - 3600 })
 beforeEach(() => {
   for (const key of Object.keys(flips)) delete flips[key]
   entryDocs = []
-  orgForHost = { orgId: 'org-1', org: { plan: 'business' } }
+  orgForHost = { orgId: 'org-1', org: { plan: 'pro' } }
   orgReads = 0
   orgReadThrows = false
   collectionDoc.fields = {

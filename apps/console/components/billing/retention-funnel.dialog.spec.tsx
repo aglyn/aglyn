@@ -467,7 +467,7 @@ describe('the funnel reports every step to GA4 (AGL-1865)', () => {
   it('the account-delete path reports the SAME events under its own surface', async () => {
     renderFunnel({
       surface: 'account_delete',
-      currentPlan: 'business',
+      currentPlan: 'pro',
       subscriptionActive: false,
     })
     await answerSurvey('Something else')
@@ -478,7 +478,7 @@ describe('the funnel reports every step to GA4 (AGL-1865)', () => {
     await waitFor(() =>
       expect(eventParams('cancellation_completed')).toMatchObject({
         surface: 'account_delete',
-        plan: 'business',
+        plan: 'pro',
       }),
     )
     expect(eventParams('churn_survey_submitted')).toMatchObject({

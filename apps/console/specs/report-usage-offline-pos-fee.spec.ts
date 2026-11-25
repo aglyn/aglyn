@@ -233,7 +233,7 @@ function seedOrg(offline?: { feeCents?: unknown; orders?: number; month?: string
   mockDocs.clear()
   mockDocs.set('hosts/host-1', { orgId: 'org-1', screens: {} })
   mockDocs.set('orgs/org-1', {
-    plan: 'business',
+    plan: 'pro',
     subscription: { status: 'active' },
   })
   mockDocs.set('hosts/host-1/counters/media', { bytes: 12 * 1024 * 1024 })

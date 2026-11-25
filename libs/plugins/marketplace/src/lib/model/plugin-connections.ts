@@ -196,10 +196,6 @@ export const PLUGIN_CONNECTIONS_BY_PLAN: Readonly<Record<OrgPlan, boolean>> = {
   free: false,
   starter: true,
   pro: true,
-  business: true,
-  scale: true,
-  advanced: true,
-  agency: true,
   enterprise: true,
 }
 

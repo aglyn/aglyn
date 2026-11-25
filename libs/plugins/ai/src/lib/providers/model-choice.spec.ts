@@ -111,7 +111,7 @@ describe('a pick is bounded', () => {
   it('by the ALLOTMENT allowlist, which bounds Auto as well as a pick', () => {
     const fast = ofTier('fast')
     const balanced = ofTier('balanced')
-    const bounds = { plan: 'agency' as OrgPlan, allotmentModels: [fast.id] }
+    const bounds = { plan: 'enterprise' as OrgPlan, allotmentModels: [fast.id] }
     expect(aiModelsSelectable(providerId(), bounds).map((entry) => entry.id)).toEqual([fast.id])
     expect(resolveAiModelChoice('copy.section', balanced.id, bounds)).toEqual({
       model: fast.id,
@@ -154,7 +154,7 @@ describe('a pick is bounded', () => {
 
 describe('the price beside each option', () => {
   it('Auto is 1×; each option is its cost over Auto’s for the same request, in credits, cheapest first', () => {
-    const listed = aiModelOptions('copy.section', { plan: 'agency' }, null)
+    const listed = aiModelOptions('copy.section', { plan: 'enterprise' }, null)
     if (!listed) throw new Error('no provider')
     expect(listed.auto).toMatchObject({
       id: AI_MODEL_AUTO,

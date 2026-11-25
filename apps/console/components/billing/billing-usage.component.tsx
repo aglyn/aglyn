@@ -1190,10 +1190,9 @@ export function BillingUsageComponent(props: BillingUsageProps) {
           color="text.secondary"
           sx={{ display: 'block', mt: -1.5, mb: 2 }}
         >
-          {/* `toFixed(2)` on the rate as well as the total: Business bills
-              $0.5/1,000 and Advanced $0.2/1,000, and a bare interpolation
-              prints those as "$0.5" and "$0.2" — a price missing its cents
-              column reads as a typo on the one line that is about money. */}
+          {/* `toFixed(2)` on the rate as well as the total: Pro bills
+              $0.5/1,000, and a bare interpolation prints that as
+              "$0.5" — a price missing its cents column reads as a typo on the one line that is about money. */}
           {`API overage: ${apiQuota.overageRequests.toLocaleString()} requests ` +
             `over the included band at $${apiQuota.overageRateUsd.toFixed(2)}` +
             `/1,000 — ≈$${apiQuota.overageMonthlyUsd.toFixed(2)} on this ` +

@@ -582,25 +582,27 @@ describe('StaffOrgActions (AGL-939)', () => {
     it('keeps a standing comp on a save that does not touch it', async () => {
       const dialog = await openOverride({
         ...CANCELED,
-        entitlements: { planComp: { plan: 'business', reason: 'trial', note: null, grantedBy: 'staff-0', grantedAt: null } },
+        entitlements: { planComp: { plan: 'pro', reason: 'trial', note: null, grantedBy: 'staff-0', grantedAt: null } },
       })
       const body = await save(dialog)
       expect(body).not.toHaveProperty('comp')
     })
 
     it('a live subscription: the stored plan select, saying the subscription governs, and no comp', async () => {
-      const dialog = await openOverride({ plan: 'business', billingStatus: 'active' })
-      expect(within(dialog).getByText('Effective: Business')).toBeTruthy()
+      const dialog = await openOverride({ plan: 'pro', billingStatus: 'active' })
+      expect(within(dialog).getByText('Effective: Pro')).toBeTruthy()
       expect(within(dialog).getByText('Subscription: active')).toBeTruthy()
       expect(within(dialog).getByRole('alert').textContent).toMatch(
-        /The live subscription \(active\) decides the plan: Business/,
+        /The live subscription \(active\) decides the plan: Pro/,
       )
       expect(within(dialog).queryByRole('combobox', { name: 'Comp plan' })).toBeNull()
       fireEvent.mouseDown(within(dialog).getByRole('combobox', { name: 'Stored plan' }))
-      // A retired plan is shown only as the value the org is stored on, and
-      // the other retired plans are never offered (AGL-4158).
-      expect(screen.getByRole('option', { name: 'Business (retired, current)' })).toBeTruthy()
-      for (const retired of ['Scale', 'Advanced', 'Agency']) {
+      // The current plans only: the plans removed on 2026-11-24 (AGL-4245)
+      // are never offered.
+      for (const plan of ['Free', 'Starter', 'Pro', 'Custom']) {
+        expect(screen.getByRole('option', { name: plan })).toBeTruthy()
+      }
+      for (const retired of ['Business', 'Scale', 'Advanced', 'Agency']) {
         expect(screen.queryByRole('option', { name: new RegExp(`^${retired}`) })).toBeNull()
       }
       fireEvent.click(await screen.findByRole('option', { name: 'Custom' }))
@@ -756,12 +758,12 @@ describe('StaffOrgActions (AGL-939)', () => {
       const dialog = await openOverride({
         plan: 'pro',
         billingStatus: 'active',
-        entitlements: { planComp: { ...UNCAPPED, plan: 'agency' } },
+        entitlements: { planComp: { ...UNCAPPED, plan: 'enterprise' } },
       })
-      expect(within(dialog).getByText('Comp: Agency (uncapped, dormant)')).toBeTruthy()
+      expect(within(dialog).getByText('Comp: Custom (uncapped, dormant)')).toBeTruthy()
       expect(within(dialog).queryByRole('radiogroup', { name: 'Comp caps' })).toBeNull()
       expect(within(dialog).getByRole('alert').textContent).toMatch(
-        /An uncapped Agency comp is stored and dormant/,
+        /An uncapped Custom comp is stored and dormant/,
       )
     })
 

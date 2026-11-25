@@ -147,7 +147,7 @@ const writer = createProductDraftWriter({ firestore: () => firestore })
 /** Free: no commerce. */
 const FREE = { plan: 'free' }
 /** Business: commerce on, products well past what these cases make. */
-const BUSINESS = { plan: 'business' }
+const BUSINESS = { plan: 'pro' }
 
 const CONTENT = {
   name: 'Sourdough loaf',

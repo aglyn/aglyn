@@ -193,7 +193,7 @@ describe('no plan carries Outreach, so the override is the whole answer (AGL-297
     // Strictly `false`: the day this fails, `orgCarriesOutreach` needs
     // `crmSuiteCarried`'s plan half, and the plans it must name are the ones
     // this assertion prints.
-    expect(PLANS.length).toBeGreaterThanOrEqual(8)
+    expect(PLANS.length).toBeGreaterThanOrEqual(4)
     for (const plan of PLANS) {
       expect([plan, PLAN_ENTITLEMENTS[plan].features.outreach]).toEqual([
         plan,

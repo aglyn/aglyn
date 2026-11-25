@@ -215,10 +215,6 @@ describe('each plan is refused at its own rung', () => {
       starter: 5,
       // Unlimited since pricing v4 (AGL-4126): saved forms carry no cost term.
       pro: UNLIMITED,
-      business: 100,
-      scale: FORMS_PER_HOST_CEILING,
-      advanced: FORMS_PER_HOST_CEILING,
-      agency: FORMS_PER_HOST_CEILING,
       // Custom is never below Pro (AGL-4158).
       enterprise: UNLIMITED,
     })

@@ -222,7 +222,7 @@ const create = (resource: string, data: Row) =>
 
 /** An org on a paid plan with every feature these kinds need, and an allowance of 2 for `quotaKey`. */
 const allowing = (quotaKey: string) => ({
-  plan: 'business',
+  plan: 'pro',
   subscription: { status: 'active' },
   entitlements: {
     [quotaKey]: 2,

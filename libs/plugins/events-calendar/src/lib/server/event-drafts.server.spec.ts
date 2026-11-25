@@ -96,7 +96,7 @@ const writer = createEventDraftWriter({ firestore: () => firestore })
 /** A workspace that bought the add-on. */
 const WITH_ADDON = { plan: 'pro', entitlements: { features: { eventCalendar: true } } }
 /** A paid plan without it: no plan includes the calendar. */
-const WITHOUT_ADDON = { plan: 'business' }
+const WITHOUT_ADDON = { plan: 'pro' }
 
 const CONTENT = {
   title: 'Autumn sourdough workshop',

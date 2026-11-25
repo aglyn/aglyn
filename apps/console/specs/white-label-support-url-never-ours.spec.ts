@@ -45,7 +45,7 @@ const REPO_ROOT = resolve(__dirname, '../../..')
 describe('a white-label org with no Support URL links nowhere', () => {
   const whiteLabel = (profile: Record<string, unknown>) =>
     resolveBrandingProfile({
-      plan: 'agency',
+      plan: 'enterprise',
       brandingProfile: profile,
     } as never)
 

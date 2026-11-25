@@ -823,7 +823,7 @@ describe('a build whose plan leaves out what only the person can give asks for i
       orgId: 'org-1',
       hostId: 'host-1',
       inputs: {},
-      org: { plan: 'business', billingStatus: 'active' },
+      org: { plan: 'pro', billingStatus: 'active' },
       plan,
     })
 

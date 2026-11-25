@@ -135,8 +135,8 @@ jest.mock('next/navigation', () => ({
 // per-row plan reads this is measuring.
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
-  default: () => ({ org: { plan: 'agency' }, ready: true }),
-  useCurrentOrg: () => ({ org: { plan: 'agency' }, ready: true }),
+  default: () => ({ org: { plan: 'enterprise' }, ready: true }),
+  useCurrentOrg: () => ({ org: { plan: 'enterprise' }, ready: true }),
 }))
 
 // Leaves, not the subject: the create dialog and the search input pull in
@@ -215,7 +215,7 @@ beforeEach(() => {
   mockParams = { orgSlug: 'client-1' }
   // Every org doc resolves, so nothing is left "unknown" and retried.
   for (let index = 1; index <= 400; index += 1) {
-    mockDocs.set(`orgs/org-${index}`, { plan: 'agency' })
+    mockDocs.set(`orgs/org-${index}`, { plan: 'enterprise' })
   }
 })
 

@@ -175,7 +175,7 @@ const mockRateLimit = jest.fn(async (_key: string, _options: unknown) => ({
   resetMs: Date.now() + 60_000,
 }))
 const mockOrg: { org: Record<string, unknown> } = {
-  org: { id: 'org-1', plan: 'business', ownerUid: 'owner-1' },
+  org: { id: 'org-1', plan: 'pro', ownerUid: 'owner-1' },
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
@@ -696,7 +696,7 @@ describe('the hourly review-request sweep', () => {
       expect(result.skipped).toBe(1)
       expect(mockSend).not.toHaveBeenCalled()
     } finally {
-      mockOrg.org = { id: 'org-1', plan: 'business', ownerUid: 'owner-1' }
+      mockOrg.org = { id: 'org-1', plan: 'pro', ownerUid: 'owner-1' }
     }
   })
 })

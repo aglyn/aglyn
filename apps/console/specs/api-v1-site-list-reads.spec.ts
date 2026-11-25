@@ -147,7 +147,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       keyId: 'key-1',
       scopes: mockScopes,
     }),
-    getOrgDoc: async () => ({ plan: 'business', billingStatus: 'active', hosts: mockOrgHosts }),
+    getOrgDoc: async () => ({ plan: 'pro', billingStatus: 'active', hosts: mockOrgHosts }),
     lockdownRefusal: async () => null,
     consumeRateLimit: async () => ({
       allowed: true,

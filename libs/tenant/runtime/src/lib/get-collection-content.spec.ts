@@ -315,7 +315,7 @@ beforeEach(() => {
   entryDocs = []
   entryUpdates = []
   orderedReadFails = false
-  orgForHost = { orgId: 'org-1', org: { plan: 'business' } }
+  orgForHost = { orgId: 'org-1', org: { plan: 'pro' } }
   collectionDoc.fields = {
     displayName: 'Videos',
     slug: 'videos',

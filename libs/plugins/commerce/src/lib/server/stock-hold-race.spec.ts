@@ -277,7 +277,7 @@ const fakeFirestore: any = {
 const mockOrg: any = {
   org: {
     id: 'org-1',
-    plan: 'business',
+    plan: 'pro',
     subscriptionStatus: 'active',
     ownerUid: 'owner-1',
     slug: 'acme',

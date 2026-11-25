@@ -90,10 +90,9 @@ const ReportIssueDialog = lazy(() => import('./report-issue-dialog.component'))
 /**
  * Plans with a self-serve step above them to sell: every self-serve plan but
  * the top one. Since pricing v4 (AGL-4126) that is Free and Starter — Pro tops
- * the ladder, the custom plan sits off it (AGL-1118), and a workspace left on
- * a retired plan has no sold plan above it. Named as the plans that CAN
- * upgrade rather than the ones that cannot, so a retired plan (or any plan
- * nobody listed) never sees the CTA; the native apps offer it on the same two.
+ * the ladder and the custom plan sits off it (AGL-1118). Named as the plans
+ * that CAN upgrade rather than the ones that cannot, so any plan nobody
+ * listed never sees the CTA; the native apps offer it on the same two.
  */
 const UPGRADEABLE_PLANS: ReadonlySet<string> = new Set(SELF_SERVE_PLANS.slice(0, -1))
 

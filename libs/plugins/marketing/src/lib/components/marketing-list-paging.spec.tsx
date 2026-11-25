@@ -232,7 +232,7 @@ import { HostOverlaysCard } from './host-overlays-card.component'
 /** Entitled, so neither card renders its upgrade panel instead of the list. */
 const ORG = {
   $id: 'org-1',
-  plan: 'scale',
+  plan: 'pro',
   entitlements: { abTesting: true, marketingOverlays: true },
 } as any
 

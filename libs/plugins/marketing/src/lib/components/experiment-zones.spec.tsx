@@ -100,7 +100,7 @@ import {
 } from './experiment-zones'
 import HostExperimentsCard from './host-experiments-card.component'
 
-const ORG = { plan: 'business' } as never
+const ORG = { plan: 'pro' } as never
 
 /** A shell whose renderer draws nothing, which is a workspace with no widget for the zone. */
 const Silent = () => null

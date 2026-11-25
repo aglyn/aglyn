@@ -96,7 +96,7 @@ const ctx = (overrides: Partial<ApiV1Context> = {}): ApiV1Context =>
     keyId: 'key_1',
     keyName: 'Zapier',
     scopes: ['bookings:read'],
-    org: { plan: 'business', features: { bookings: true } },
+    org: { plan: 'pro', features: { bookings: true } },
     firestore: firestoreDouble(STORED),
     headers: { 'X-RateLimit-Limit': '120' },
     ...overrides,

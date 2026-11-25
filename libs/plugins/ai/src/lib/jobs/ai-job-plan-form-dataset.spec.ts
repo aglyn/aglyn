@@ -76,7 +76,7 @@ import {
 import { AI_FOOD_BANK_SITE_PLAN_FIRST_ANSWER as FOOD_BANK } from './fixtures/ai-dataset-site-plan-recordings'
 
 const NOW = new Date('2026-10-10T06:32:00.000Z')
-const PAID_ORG: Partial<AglynOrgBilling> = { plan: 'business' }
+const PAID_ORG: Partial<AglynOrgBilling> = { plan: 'pro' }
 
 const NEW_SITE: AiSiteInventory = {
   ...emptyAiSiteInventory('host-1'),

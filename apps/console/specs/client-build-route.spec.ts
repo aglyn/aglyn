@@ -126,7 +126,7 @@ describe('the client build route (AGL-3958)', () => {
   })
 
   it('saves only the parts the body carries, and never an intent', async () => {
-    const response = await post({ action: 'save', domain: { choice: 'free' }, intent: { plan: 'agency' } })
+    const response = await post({ action: 'save', domain: { choice: 'free' }, intent: { plan: 'enterprise' } })
     expect(response.status).toBe(200)
     expect(mockSave).toHaveBeenCalledWith({
       orgId: 'org-1',

@@ -187,7 +187,7 @@ jest.mock('./overlay-stats-row.component', () => ({
 
 /** A plan that entitles overlays and A/B tests, so nothing is refused for
  * that reason instead of the one under test. */
-const ORG = { plan: 'business' } as never
+const ORG = { plan: 'pro' } as never
 
 beforeEach(() => {
   jest.clearAllMocks()

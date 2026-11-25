@@ -1329,21 +1329,23 @@ describe("the PLAN's band binds, and the operator default may not undercut it", 
    * $40 default is the ceiling; with it off, to show the same spend reserves.
    */
   const STOPPED = { assistOverage: { hardCap: true } }
+  /** A Pro org whose assist band is 58,000 credits ($58) by override. */
+  const BANDED_58 = { plan: 'pro' as const, entitlements: { assistCreditsPerMonth: 58_000 } }
 
-  it('REFUSES a Business org at its band, well under the $40 default', async () => {
-    // $8 of spend against a $7.50 band. The repo default is $40, so a build
+  it('REFUSES a Pro org at its band, well under the $40 default', async () => {
+    // $3 of spend against a $2.75 band. The repo default is $40, so a build
     // that ignored the plan band would let this through — which is precisely
     // the fail-open under test.
-    mockDocs.set(monthPath, { messages: 12, estCostUsd: 8 })
+    mockDocs.set(monthPath, { messages: 12, estCostUsd: 3 })
     const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
-      plan: 'business',
+      plan: 'pro',
       ...STOPPED,
     })
     expect(reservation).toMatchObject({
       allowed: false,
       refusedBy: 'band',
-      costLimitUsd: 7.5,
-      budgetUsd: 7.5,
+      costLimitUsd: 2.75,
+      budgetUsd: 2.75,
     })
     // Refused, and nothing moved.
     expect(mockDocs.get(monthPath)).toMatchObject({ messages: 12 })
@@ -1351,25 +1353,27 @@ describe("the PLAN's band binds, and the operator default may not undercut it", 
 
   it('THE NEGATIVE CONTROL: the same spend under the band reserves', async () => {
     // Without this the test above passes for a build that refuses every
-    // Business org, or every org carrying any cost at all.
-    mockDocs.set(monthPath, { messages: 12, estCostUsd: 7 })
+    // Pro org, or every org carrying any cost at all.
+    mockDocs.set(monthPath, { messages: 12, estCostUsd: 2 })
     const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
-      plan: 'business',
+      plan: 'pro',
       ...STOPPED,
     })
     expect(reservation).toMatchObject({ allowed: true, refusedBy: null })
     expect(mockDocs.get(monthPath)).toMatchObject({ messages: 13 })
   })
 
-  it('ADMITS an Agency org above $40, which the default alone would refuse', async () => {
+  it('ADMITS an org banded above $40, which the default alone would refuse', async () => {
     // The other direction, and the one that costs a customer rather than us.
-    // $50 of spend is over the $40 repo default and under Agency's $58 band.
-    // A build that took the lower of the two would cut a paying workspace off
-    // well before the capacity it bought.
+    // $50 of spend is over the $40 repo default and under a $58 band — a Pro
+    // org's band raised by override, since no self-serve plan bands that high
+    // now that the old top tier is removed (AGL-4245). A build that took the
+    // lower of the two would cut a paying workspace off well before the
+    // capacity it bought.
     expect(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD).toBeUndefined()
     mockDocs.set(monthPath, { messages: 12, estCostUsd: 50 })
     const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
-      plan: 'agency',
+      ...BANDED_58,
       ...STOPPED,
     })
     expect(reservation).toMatchObject({
@@ -1383,7 +1387,7 @@ describe("the PLAN's band binds, and the operator default may not undercut it", 
     // default stays out of it exactly as above, and the standing still names
     // the band the org bought.
     const selling = await reserveAssistMessage(firestore(), ORG, true, NOW, {
-      plan: 'agency',
+      ...BANDED_58,
     })
     expect(selling).toMatchObject({
       allowed: true,
@@ -1393,10 +1397,10 @@ describe("the PLAN's band binds, and the operator default may not undercut it", 
     })
   })
 
-  it('and still refuses that Agency org at ITS band', async () => {
+  it('and still refuses that org at ITS band', async () => {
     mockDocs.set(monthPath, { messages: 12, estCostUsd: 59 })
     const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
-      plan: 'agency',
+      ...BANDED_58,
       ...STOPPED,
     })
     expect(reservation).toMatchObject({ allowed: false, refusedBy: 'band' })
@@ -1404,8 +1408,8 @@ describe("the PLAN's band binds, and the operator default may not undercut it", 
 
   it('takes a CONTRACTED Enterprise band over the plan fallback', async () => {
     mockDocs.set(monthPath, { messages: 12, estCostUsd: 120 })
-    // The fallback is 116,000 credits — $116, twice Agency's band since
-    // 2026-09-07 — so this org is over it. No switch here: Enterprise sells
+    // The fallback is 116,000 credits — $116, fixed on 2026-09-07 — so this
+    // org is over it. No switch here: Enterprise sells
     // no overage rate, so its band is a wall whatever the org's map says, and
     // the refusal is still the band's.
     const onFallback = await reserveAssistMessage(firestore(), ORG, true, NOW, {
@@ -1475,7 +1479,7 @@ describe('the operator ceiling composes with a band without erasing it', () => {
     // The org asked to be stopped (AGL-2653); `off` turns off a backstop and
     // does not un-ask that.
     const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
-      plan: 'agency',
+      plan: 'enterprise',
       assistOverage: { hardCap: true },
     })
     expect(reservation).toMatchObject({ allowed: false, refusedBy: 'band' })
@@ -1503,7 +1507,7 @@ describe('ANTI-VACUITY: a stubbed entitlements module must not refuse everyone',
     // backstop and its assistant still runs.
     mockDocs.set(monthPath, { messages: 12, estCostUsd: 1 })
     const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
-      plan: 'business',
+      plan: 'pro',
       entitlements: { assistCreditsPerMonth: 0 },
     })
     expect(reservation).toMatchObject({
@@ -1521,7 +1525,7 @@ describe('ANTI-VACUITY: a stubbed entitlements module must not refuse everyone',
     // that a band of 500 is a band, not that Business refuses by default.
     mockDocs.set(monthPath, { messages: 12, estCostUsd: 1 })
     const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
-      plan: 'business',
+      plan: 'pro',
       entitlements: { assistCreditsPerMonth: 500 },
       assistOverage: { hardCap: true },
     })
@@ -1683,18 +1687,18 @@ describe('what leaves the server is credits, never our provider bill', () => {
   const monthPath = `orgs/${ORG}/assistUsage/2026-08`
 
   it('strips every dollar figure and reports the credit standing', async () => {
-    mockDocs.set(monthPath, { messages: 12, estCostUsd: 4.5 })
+    mockDocs.set(monthPath, { messages: 12, estCostUsd: 1.5 })
     const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
-      plan: 'business',
+      plan: 'pro',
     })
     const view = publicAssistQuota(reservation)
     expect(view.credits).toEqual({
-      used: 4_500,
-      limit: 7_500,
-      remaining: 3_000,
+      used: 1_500,
+      limit: 2_750,
+      remaining: 1_250,
     })
     const wire = JSON.stringify(view)
-    for (const leak of ['costUsd', 'costLimitUsd', 'budgetUsd', '4.5']) {
+    for (const leak of ['costUsd', 'costLimitUsd', 'budgetUsd', '1.5']) {
       expect(wire).not.toContain(leak)
     }
     // The message standing survives: the free tier's daily cap is a real,
@@ -2251,7 +2255,7 @@ describe('the Free taste readout and knobs (AGL-2925)', () => {
     expect(freeAssistAccount({ plan: 'free' })).toEqual({ accountUid: null })
     expect(freeAssistAccount(null)).toEqual({ accountUid: null })
     expect(
-      freeAssistAccount({ plan: 'agency', ownerUid: 'o', subscription: { status: 'canceled' } } as never),
+      freeAssistAccount({ plan: 'enterprise', ownerUid: 'o', subscription: { status: 'canceled' } } as never),
     ).toEqual({ accountUid: 'o' })
   })
 

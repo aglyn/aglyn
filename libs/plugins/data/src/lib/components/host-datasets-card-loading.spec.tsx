@@ -152,7 +152,7 @@ function WithPageHeader(props: { children?: ReactNode }) {
   return <PageHeaderActionsContext.Provider value={value}>{props.children}</PageHeaderActionsContext.Provider>
 }
 
-const ORG = { $id: 'org-1', plan: 'scale' } as any
+const ORG = { $id: 'org-1', plan: 'pro' } as any
 
 beforeEach(() => {
   jest.clearAllMocks()

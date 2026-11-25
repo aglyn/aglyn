@@ -131,7 +131,7 @@ const firestore = {
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: { app: () => ({ firestore: () => firestore }) },
-  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'business' } }),
+  getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'pro' } }),
 }))
 
 /**

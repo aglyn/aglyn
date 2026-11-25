@@ -167,7 +167,7 @@ jest.mock('../hooks/use-host-role', () => ({
 }))
 jest.mock('../hooks/use-current-org', () => ({
   __esModule: true,
-  default: () => ({ org: { plan: 'business' } }),
+  default: () => ({ org: { plan: 'pro' } }),
 }))
 jest.mock('../hooks/use-collection-templates', () => ({
   __esModule: true,
