@@ -69,6 +69,7 @@ import {
   collection,
   doc,
   documentId,
+  getDocFromServer,
   limit,
   orderBy,
   query,
@@ -77,7 +78,8 @@ import {
 } from 'firebase/firestore'
 import { getLiveCountFromServer } from '@aglyn/aglyn/app-utils/live-document-count.client'
 import type { GridColDef } from '@mui/x-data-grid'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { writeSiteWideChange } from '@aglyn/tenant-feature-instance/hooks/helpers/site-wide-change'
 import {
@@ -92,6 +94,7 @@ import ProductEditorDialog from './product-editor-dialog.component'
 import { productSlugLedger } from './product-slugs'
 import { productCollectionFields } from './smart-collections'
 import ProductsHubZone from './products-hub-zone.component'
+import { PRODUCTS_PRODUCT_PARAM } from '../../model/commerce-record-routes'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import {
   heldSaveLabel,
@@ -301,6 +304,39 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
       })),
     [productDocs],
   )
+  /*
+   * A product named in the URL opens in its editor on arrival, as an order
+   * does over the Orders list (AGL-2622). The admin edit bar on a product's
+   * page links here with `?product={id}`, and so does every other surface that
+   * asks the record routes for a product. The list shows one page and the
+   * product may not be on it, so it is read once by id from the SERVER — the
+   * editor replaces the whole document, so a cached seed would revert what
+   * the server holds (AGL-1358). Once per id, so closing the editor does not
+   * reopen it on the next render.
+   */
+  const searchParams = useSearchParams()
+  const linkedProductId = searchParams?.get(PRODUCTS_PRODUCT_PARAM) ?? null
+  const linkedOpened = useRef<string | null>(null)
+  useEffect(() => {
+    if (!linkedProductId || linkedOpened.current === linkedProductId) return
+    if (productsStatus === 'loading') return
+    linkedOpened.current = linkedProductId
+    const loaded = products.find((row) => row.$id === linkedProductId)
+    if (loaded) {
+      setEditing(loaded)
+      return
+    }
+    void getDocFromServer(doc(firestore, 'hosts', hostId, 'products', linkedProductId))
+      .then((snapshot) => {
+        if (linkedOpened.current !== snapshot.id || !snapshot.exists()) return
+        if (snapshot.get('deletedAt')) return
+        setEditing({
+          ...CommerceModel.liftLegacyProduct(snapshot.data() as any),
+          $id: snapshot.id,
+        })
+      })
+      .catch(() => undefined)
+  }, [linkedProductId, products, productsStatus, firestore, hostId])
   /*
    * The stock dialog, kept as EDITS over the product as the list has it now
    * (AGL-4047). An adjustment recomputes the whole `variants` array from the

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { SitePageResolver } from '@aglyn/aglyn/server'
+import type { SiteEditContextResolver, SitePageResolver } from '@aglyn/aglyn/server'
 import { hostCollectionKind } from '@aglyn/aglyn/server'
 import composeScreenNodes, {
   composeNodesWithChrome,
@@ -33,6 +33,7 @@ import * as CommerceModel from '../model'
 import { productAsksUseDateAnywhere, toPublicProductDetail } from './product'
 import { readStoreDay } from './store-day'
 import { readProductReviews } from './reviews'
+import { productEditPath } from '../model/commerce-record-routes'
 
 /**
  * Commerce page resolver (AGL-292/298/418), relocated verbatim from the
@@ -315,6 +316,68 @@ export const commerceSitePageResolver: SitePageResolver = async ({
     }
   }
   return undefined
+}
+
+/**
+ * What the admin edit bar says on the pages the resolver above composes. They
+ * are in no routing map, so the bar called a product page "Unrouted page" with
+ * no edit link. It answers from the same reads the page is built from: the
+ * store's designated template (`pdpScreenId`, `collectionScreenId`), and for
+ * a product page the product itself, whose editor the bar links beside the
+ * template's Besigner, as it does for a blog post. A product the page would
+ * not render (not live, or not sold online) gets no answer, as it gets no
+ * page.
+ */
+export const commerceEditContextResolver: SiteEditContextResolver = async ({
+  hostId,
+  path,
+}) => {
+  const segments = path.split('/').filter(Boolean)
+  if (segments.length !== 2) return undefined
+  const [section, slug] = segments
+  if (section !== 'products' && section !== 'collections') return undefined
+  const hostDocRef = firebaseAdmin.app().firestore().collection('hosts').doc(hostId)
+  const storeSettings = await hostDocRef.collection('settings').doc('store').get()
+  const screenField = (name: string) => {
+    const value = storeSettings.get(name)
+    return typeof value === 'string' && value ? value : null
+  }
+  if (section === 'products') {
+    const productSnapshot = await hostDocRef
+      .collection('products')
+      .where('slug', '==', slug)
+      .limit(1)
+      .get()
+    const productDoc = productSnapshot.docs[0]
+    if (!productDoc || !CommerceModel.productListedOnline(productDoc.data() as any)) {
+      return undefined
+    }
+    return {
+      templateScreenId: screenField('pdpScreenId'),
+      collectionName: 'Products',
+      entry: true,
+      entryNoun: 'product',
+      recordEditPath: productEditPath(productDoc.id),
+    }
+  }
+  const collectionSnapshot = await hostDocRef
+    .collection('collections')
+    .where('slug', '==', slug)
+    .limit(5)
+    .get()
+  const shopCollection = collectionSnapshot.docs.find(
+    (docSnapshot) => hostCollectionKind(docSnapshot.data()) === 'catalog',
+  )
+  const templateScreenId = screenField('collectionScreenId')
+  // Without a template the page is not served (no built-in collection page).
+  if (!shopCollection || !templateScreenId) return undefined
+  return {
+    templateScreenId,
+    collectionName: 'Store collections',
+    entry: true,
+    entryNoun: 'collection',
+    recordEditPath: null,
+  }
 }
 
 // What `{{product.price}}` says (AGL-3676) lives with the model now, so the

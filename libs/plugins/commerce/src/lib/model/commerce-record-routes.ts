@@ -33,13 +33,32 @@ import { COMMERCE_SETTINGS_PAGE_ZONES } from '../components/commerce-console-sec
  *
  * Both are a site's, so only a site has an address. The catalog has no page
  * per product — a product opens in the hub's editor — so the record answers
- * the catalog a caller would find it in. An order opens as a dialog over the
+ * the Catalog with {@link PRODUCTS_PRODUCT_PARAM}, which opens that product's
+ * editor on arrival. An order opens as a dialog over the
  * Orders list, which reads {@link ORDERS_ORDER_PARAM} on arrival; the list
  * narrowed to one buyer reads {@link ORDERS_CUSTOMER_PARAM}.
  */
 
 /** The nav slug the shell resolves the catalog by. */
 export const PRODUCTS_SLUG = 'products'
+
+/** The Catalog section of the products hub, where the product editor opens. */
+export const PRODUCTS_CATALOG_SECTION = 'catalog'
+
+/** The query key the Catalog opens one product's editor by. */
+export const PRODUCTS_PRODUCT_PARAM = 'product'
+
+/**
+ * One product's editor, as a path under the site's console dashboard: the
+ * form the admin edit bar takes a record's address in (it prefixes the
+ * console origin and org path itself), so the tenant server can link a
+ * product page to its product without building console routes.
+ */
+export function productEditPath(productId: string): string {
+  return `/${PRODUCTS_SLUG}/${PRODUCTS_CATALOG_SECTION}?${new URLSearchParams({
+    [PRODUCTS_PRODUCT_PARAM]: productId,
+  }).toString()}`
+}
 
 /** The query key the Orders list opens one order's dialog by. */
 export const ORDERS_ORDER_PARAM = 'order'
@@ -67,6 +86,15 @@ function orders(context: PluginRecordRouteContext, key?: string, value?: string)
   return key && value
     ? `${list}/orders?${new URLSearchParams({ [key]: value }).toString()}`
     : `${list}/orders`
+}
+
+/** One product's address: the Catalog, opening that product's editor. */
+function product(context: PluginRecordRouteContext, id: string): string | null {
+  const list = catalog(context)
+  if (!list || !id) return list
+  return `${list}/${PRODUCTS_CATALOG_SECTION}?${new URLSearchParams({
+    [PRODUCTS_PRODUCT_PARAM]: id,
+  }).toString()}`
 }
 
 /**
@@ -102,7 +130,7 @@ function settings(context: PluginRecordRouteContext, page?: string): string | nu
 export function registerCommerceRecordRoutes(): void {
   registerPluginRecordRoute(
     'product',
-    { list: catalog, record: catalog },
+    { list: catalog, record: product },
     { pluginId: BUNDLE_ID },
   )
   registerPluginRecordRoute(

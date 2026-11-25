@@ -231,7 +231,31 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ),
 }))
 
+// The plugins' server declarations stay unloaded here: the spec registers
+// the one edit-context answer it means to test, below.
+const mockEnsureAll = jest.fn(async () => undefined)
+jest.mock('../utils/server-plugin-loader', () => ({
+  __esModule: true,
+  serverPluginLoader: { ensureAll: () => mockEnsureAll() },
+}))
+
+import { registerSiteEditContextResolver } from '@aglyn/aglyn/server'
 import { POST } from '../app/api/edit-context/route'
+
+// A plugin page (commerce's /products/{slug}), answered the way a plugin
+// answers it: the template, the record's noun and its editor path.
+let mockPluginPdpScreenId: string | null = null
+registerSiteEditContextResolver(async ({ path }) =>
+  path === '/products/black-hoodie'
+    ? {
+        templateScreenId: mockPluginPdpScreenId,
+        collectionName: 'Products',
+        entry: true,
+        entryNoun: 'product',
+        recordEditPath: '/products/catalog?product=prod-9',
+      }
+    : undefined,
+)
 
 function contextRequest(token = 'good-token', path = '/about'): Request {
   return new Request('https://www.aglyn.com/api/edit-context', {
@@ -424,6 +448,49 @@ describe('/api/edit-context extended payload (AGL-1829)', () => {
     expect(payload.editUrl).toBe(
       'https://app.aglyn.com/acme/hosts/www/screens/screen-1/versions/v-live/besigner',
     )
+  })
+
+  it('asks the plugins about a page no screen or collection routes (a product)', async () => {
+    // `/products/{slug}` is composed by a plugin — before this it was
+    // "Unrouted page" with no edit link at all.
+    mockPluginPdpScreenId = 'screen-1'
+    const payload = await (
+      await POST(contextRequest('good-token', '/products/black-hoodie'))
+    ).json()
+    expect(payload.screenId).toBe('screen-1')
+    expect(payload.collectionName).toBe('Products')
+    expect(payload.collectionEntry).toBe(true)
+    expect(payload.entryNoun).toBe('product')
+    expect(payload.builtInPage).toBe(false)
+    // The template's besigner AND the product's editor, as on a blog post.
+    expect(payload.editUrl).toBe(
+      'https://app.aglyn.com/acme/hosts/www/screens/screen-1/versions/v-live/besigner',
+    )
+    expect(payload.entryEditUrl).toBe(
+      'https://app.aglyn.com/acme/hosts/www/products/catalog?product=prod-9',
+    )
+  })
+
+  it('links the product alone on a built-in product page (no template)', async () => {
+    mockPluginPdpScreenId = null
+    const payload = await (
+      await POST(contextRequest('good-token', '/products/black-hoodie'))
+    ).json()
+    expect(payload.screenId).toBeNull()
+    expect(payload.editUrl).toBeNull()
+    expect(payload.builtInPage).toBe(true)
+    expect(payload.entryEditUrl).toBe(
+      'https://app.aglyn.com/acme/hosts/www/products/catalog?product=prod-9',
+    )
+  })
+
+  it('keeps the plain miss where no plugin answers', async () => {
+    const payload = await (
+      await POST(contextRequest('good-token', '/nowhere/at-all'))
+    ).json()
+    expect(payload.screenId).toBeNull()
+    expect(payload.collectionName).toBeNull()
+    expect(payload.entryEditUrl).toBeNull()
   })
 
   it('links the ENTRY editor beside the template on an entry route', async () => {
