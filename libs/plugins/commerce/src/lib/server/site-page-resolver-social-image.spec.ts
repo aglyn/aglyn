@@ -203,3 +203,44 @@ describe('a catalog collection page (AGL-2850)', () => {
     })
   })
 })
+
+describe("a product or collection page shares its own image", () => {
+  const PHOTO = 'media:org:org-1/blue-widget-front'
+  const PICKED = 'media:org:org-1/blue-widget-og'
+
+  const withProduct = (extra: Record<string, unknown>) =>
+    mockProducts.splice(0, mockProducts.length, {
+      id: 'p1',
+      data: () => ({ name: 'Blue Widget', slug: 'blue-widget', status: 'active', priceUsd: 20, ...extra }),
+    })
+
+  it("shares the product's first photo ahead of the template's card", async () => {
+    withProduct({ mediaUrls: [PHOTO, 'media:org:org-1/blue-widget-back'] })
+    const answer = await resolve('/products/blue-widget')
+    expect(imagesHanded()).toEqual([PHOTO, TEMPLATE_CARD, HOST_CARD])
+    const seo = answer.props.data.screen.data.seo
+    expect(seo.image).toBe(PHOTO)
+    // The template's 1200x630 described the template's image, not this one.
+    expect(seo).not.toHaveProperty('imageWidth')
+    expect(seo).not.toHaveProperty('imageHeight')
+    expect(seo.imageAlt).toBe('Blue Widget')
+  })
+
+  it("shares the image picked in the product editor's OG image field first", async () => {
+    withProduct({ mediaUrls: [PHOTO], seo: { imageUrl: PICKED } })
+    const answer = await resolve('/products/blue-widget')
+    expect(imagesHanded()).toEqual([PICKED, TEMPLATE_CARD, HOST_CARD])
+    expect(answer.props.data.screen.data.seo.image).toBe(PICKED)
+  })
+
+  it("shares a store collection's image ahead of the template's card", async () => {
+    mockCollections.splice(0, mockCollections.length, {
+      id: 'c1',
+      data: () => ({ name: 'Summer', slug: 'summer', kind: 'catalog', imageUrl: PHOTO }),
+    })
+    const answer = await resolve('/collections/summer')
+    expect(imagesHanded()).toEqual([PHOTO, TEMPLATE_CARD, HOST_CARD])
+    expect(answer.props.data.screen.data.seo.image).toBe(PHOTO)
+    expect(answer.props.data.screen.data.seo.imageAlt).toBe('Summer')
+  })
+})
