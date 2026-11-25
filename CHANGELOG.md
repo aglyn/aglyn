@@ -9,6 +9,32 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.29.3 — 2026-11-25
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.29.2...v1.29.3)
+
+### Fixed
+
+- **commerce:** product and collection pages share their own image
+- **mui:** grid keeps a per-breakpoint spacing instead of dropping it
+- **pricing-tables:** the free plan publishes a dash in the fee ladder, like the page ([AGL-4245](https://linear.app/aglyn/issue/AGL-4245))
+- **tenant:** admin bar names a product page and links its template and product
+
+### Changed
+
+- **pricing:** remove the retired plans Business, Scale, Advanced and Agency ([AGL-4245](https://linear.app/aglyn/issue/AGL-4245))
+
+<details>
+<summary>Also in this release: 3 test, 2 chore</summary>
+
+- product admin link and product share card specs match main
+- **marketing:** re-extract solutions copy from the current Figma frames ([AGL-4245](https://linear.app/aglyn/issue/AGL-4245))
+- **pricing:** fee parity rows equal the published page; record the 11-25 publish ([AGL-4245](https://linear.app/aglyn/issue/AGL-4245))
+- **marketing:** re-extract pricing copy from Figma, drop fee stale declarations ([AGL-4245](https://linear.app/aglyn/issue/AGL-4245))
+- **pricing:** rules and decision-log fixtures no longer lean on a removed plan id ([AGL-4245](https://linear.app/aglyn/issue/AGL-4245))
+
+</details>
+
 ## v1.29.2 — 2026-11-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.29.1...v1.29.2)
