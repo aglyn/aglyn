@@ -187,7 +187,8 @@ export function CatalogImportDialog(props: CatalogImportDialogProps) {
         <Stack spacing={2}>
           <Typography variant="body2" color="text.secondary">
             {`Choose the products to sell. Each comes in with its variants, the retail prices you set at ${connection.providerLabel} and its photos. ` +
-              `Choosing one you already imported updates it from ${connection.providerLabel}.`}
+              `Choosing one you already imported updates it from ${connection.providerLabel}. ` +
+              `If your store already has the product (copied from another store), link it from the product instead, so you don’t get a second copy.`}
           </Typography>
           {error ? <Alert severity="error">{error}</Alert> : null}
           {rows === null ? (

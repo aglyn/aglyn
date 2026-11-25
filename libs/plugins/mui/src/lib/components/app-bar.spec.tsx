@@ -161,10 +161,9 @@ describe('MUI AppBar color premise (AGL-1191)', () => {
 describe('App Bar scroll reactions: shrink and hide', () => {
   function scrollTo(y: number) {
     act(() => {
-      Object.defineProperty(window, 'pageYOffset', {
-        configurable: true,
-        value: y,
-      })
+      // MUI's scroll trigger reads pageYOffset; the shrink reads scrollY.
+      for (const key of ['pageYOffset', 'scrollY'])
+        Object.defineProperty(window, key, { configurable: true, value: y })
       fireEvent.scroll(window)
     })
   }
@@ -187,6 +186,26 @@ describe('App Bar scroll reactions: shrink and hide', () => {
     expect(bar.hasAttribute('data-scrolled')).toBe(true)
 
     scrollTo(0)
+    expect(bar.hasAttribute('data-scrolled')).toBe(false)
+  })
+
+  it('does not pulse when compacting pulls the page back under the threshold', () => {
+    const { container } = render(<AglynAppBar position="sticky" shrinkOnScroll />)
+    const bar = container.querySelector('header') as HTMLElement
+
+    // Just past the shrink point: compacts.
+    scrollTo(70)
+    expect(bar.hasAttribute('data-scrolled')).toBe(true)
+    // The bar lost 16px and scroll anchoring took them off scrollY: it must
+    // stay compact, or it restores, grows back over the line, and pulses.
+    scrollTo(54)
+    expect(bar.hasAttribute('data-scrolled')).toBe(true)
+    scrollTo(10)
+    expect(bar.hasAttribute('data-scrolled')).toBe(true)
+    // Back at the top: restores, and growing back 16px does not re-compact.
+    scrollTo(4)
+    expect(bar.hasAttribute('data-scrolled')).toBe(false)
+    scrollTo(20)
     expect(bar.hasAttribute('data-scrolled')).toBe(false)
   })
 

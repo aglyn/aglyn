@@ -41,7 +41,11 @@ import {
  *
  * Only the rule's own fields (`HostRedirect`) are read, plus
  * `replacesLivePage`: a from-path the site publishes a page at is refused
- * unless the person asked for that page to be redirected. The provenance
+ * unless the person asked for that page to be redirected; and, on a create,
+ * `followChain` (AGL-4245): a destination the site's rules already redirect
+ * is replaced by where they lead, so the new rule never starts a chain. A
+ * build's arguments never carry it (its schema does not name it); a site
+ * import's redirects do. The provenance
  * stamp on an off-site destination is never content: the writer stamps the
  * member the change is made for.
  */
@@ -68,6 +72,8 @@ export interface RedirectDraftContent {
   priority?: number
   enabled?: boolean
   replacesLivePage?: boolean
+  /** Create only: send visitors straight to where an already-redirected destination leads (AGL-4245). */
+  followChain?: boolean
 }
 
 export type RedirectDraftContentRead =
@@ -84,6 +90,7 @@ const KEYS = new Set([
   'priority',
   'enabled',
   'replacesLivePage',
+  'followChain',
 ])
 
 /** The fields an update may change, and a remove may not carry. */
@@ -135,7 +142,7 @@ export function readRedirectDraftContent(
     if (typeof priority === 'number' && Number.isInteger(priority)) value.priority = priority
     else problems.push('The priority is a whole number')
   }
-  for (const key of ['enabled', 'replacesLivePage'] as const) {
+  for (const key of ['enabled', 'replacesLivePage', 'followChain'] as const) {
     if (content[key] === undefined || content[key] === null) continue
     if (typeof content[key] === 'boolean') value[key] = content[key] as boolean
     else problems.push(`"${key}" is true or false`)
@@ -152,6 +159,9 @@ export function readRedirectDraftContent(
     if (CHANGES.some((key) => value[key] !== undefined)) {
       problems.push('Removing a redirect names only its from-path and, where needed, its match mode')
     }
+  }
+  if (value.action !== 'create' && value.followChain !== undefined) {
+    problems.push('Only a new redirect follows a chain')
   }
 
   // The page's own rules on what the content gives: a path or pattern the
@@ -179,6 +189,11 @@ export function readRedirectDraftContent(
 /**
  * The seam's `check`: whether the content is a change the writer would try,
  * with what it says about it. Pure. A change is live once written.
+ *
+ * `storedSource` is the from-path as the rule would store it, normalized
+ * the redirects page's way (lowercase, no trailing slash, no query; a
+ * pattern trimmed), so a caller compares addresses as the plugin does
+ * without restating its rules (AGL-4245).
  */
 export function checkRedirectDraftContent(
   content: Readonly<Record<string, unknown>>,
@@ -188,6 +203,13 @@ export function checkRedirectDraftContent(
   const { action, source, destination, kind } = read.value
   return {
     ok: true,
-    facts: { action, source, ...(destination ? { destination } : {}), kind: kind ?? 'exact', live: true },
+    facts: {
+      action,
+      source,
+      storedSource: (kind ?? 'exact') === 'regex' ? source : normalizeRedirectSource(source),
+      ...(destination ? { destination } : {}),
+      kind: kind ?? 'exact',
+      live: true,
+    },
   }
 }

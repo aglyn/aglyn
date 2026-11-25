@@ -27,8 +27,8 @@ sequenceDiagram
 ```
 
 :::info Plan availability
-**Paid**. Starter sells up to 100 products (2% physical / 5% digital fee).
-Pro has no product limit and a lower fee: 0.5% on physical goods and 3% on digital
+**Paid**. Starter sells up to 100 products (1% physical / 3% digital and service fee).
+Pro has no product limit and a lower fee: no fee on physical goods and 1% on digital
 and service products. Custom carries no platform fee.
 :::
 
@@ -66,6 +66,9 @@ passed through at cost inside the platform fee (see
 and **View payouts in Stripe** opens the Express dashboard. The kind of account
 can't be changed once it is created.
 :::
+
+Moving a store from Shopify, Wix or Squarespace? See
+[Switching to Aglyn](../../guides/switching-to-aglyn/before-you-switch.md).
 
 ![The products hub](/img/commerce/products-page.png)
 

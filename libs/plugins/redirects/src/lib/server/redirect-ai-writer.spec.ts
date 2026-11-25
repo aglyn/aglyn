@@ -21,6 +21,7 @@ import { matchRedirect } from '../model/redirects'
 import {
   REDIRECT_AI_LOCKED_REFUSAL,
   REDIRECT_AI_PLAN_REFUSAL,
+  REDIRECT_AI_REFUSAL_CODES,
   REDIRECT_AI_ROLE_REFUSAL,
   createRedirectAiWriter,
   redirectAiLimitRefusal,
@@ -278,6 +279,55 @@ describe('creating a redirect', () => {
     // 25 live now: the next is refused.
     expect(refused(await writer.write(request({ action: 'create', source: '/past-cap', destination: '/menu' }, { id: 'build-1-i1' })))).toBe(
       redirectAiLimitRefusal(25),
+    )
+  })
+})
+
+describe('a site import’s redirects (AGL-4245)', () => {
+  function code(write: PluginDraftWrite): string | null {
+    return write.ok === false ? (write.code ?? null) : null
+  }
+
+  it('names each refusal a caller treats differently', async () => {
+    expect(code(await writer.write(request({ action: 'create', source: '/shop', destination: '/about' })))).toBe(
+      REDIRECT_AI_REFUSAL_CODES.duplicate,
+    )
+    expect(code(await writer.write(request({ action: 'create', source: '/about', destination: '/menu' }, { id: 'x1' })))).toBe(
+      REDIRECT_AI_REFUSAL_CODES.livePage,
+    )
+    docs.set(`${RULES}/r3`, { source: '/a', destination: '/b', statusCode: 302, kind: 'exact', enabled: true })
+    expect(code(await writer.write(request({ action: 'create', source: '/b', destination: '/a' }, { id: 'x2' })))).toBe(
+      REDIRECT_AI_REFUSAL_CODES.loop,
+    )
+    for (let index = 0; index < 24; index += 1) docs.set(`${RULES}/f${index}`, { source: `/f${index}`, destination: '/', statusCode: 302 })
+    expect(await writer.write(request({ action: 'create', source: '/past-cap', destination: '/menu' }, { id: 'x3' }))).toMatchObject({
+      ok: false,
+      status: 403,
+      error: redirectAiLimitRefusal(25),
+      code: REDIRECT_AI_REFUSAL_CODES.planLimit,
+    })
+  })
+
+  it('with followChain, points at where an already-redirected destination leads', async () => {
+    // `/shop` already goes to `/menu`, and `/menu` on to `/menu-2`.
+    docs.set(`${RULES}/r5`, { source: '/menu', destination: '/menu-2', statusCode: 301, kind: 'exact', enabled: true })
+    const write = await writer.write(request({ action: 'create', source: '/old-shop', destination: '/shop', statusCode: 301, followChain: true }))
+    expect(write).toMatchObject({ ok: true, facts: { source: '/old-shop', destination: '/menu-2', statusCode: 301 } })
+    expect(rule('build-1-i0')).toMatchObject({ source: '/old-shop', destination: '/menu-2' })
+    // Without it, a chain is the person's to make.
+    const plain = await writer.write(request({ action: 'create', source: '/older-shop', destination: '/shop' }, { id: 'x1' }))
+    expect(plain).toMatchObject({ ok: true, facts: { destination: '/shop' } })
+  })
+
+  it('with followChain, stops at the last on-site address and still refuses a loop', async () => {
+    docs.set(`${RULES}/r5`, { source: '/menu', destination: 'https://order.example.com/acme', statusCode: 301, kind: 'exact', enabled: true, externalDestinationApprovedBy: EDITOR })
+    const write = await writer.write(request({ action: 'create', source: '/old-shop', destination: '/shop', followChain: true }))
+    expect(write).toMatchObject({ ok: true, facts: { destination: '/menu' } })
+    expect(rule('build-1-i0')?.['externalDestinationApprovedBy']).toBeUndefined()
+    docs.set(`${RULES}/r6`, { source: '/a', destination: '/b', statusCode: 302, kind: 'exact', enabled: true })
+    docs.set(`${RULES}/r7`, { source: '/b', destination: '/a', statusCode: 302, kind: 'exact', enabled: true })
+    expect(code(await writer.write(request({ action: 'create', source: '/c', destination: '/a', followChain: true }, { id: 'x2' })))).toBe(
+      REDIRECT_AI_REFUSAL_CODES.loop,
     )
   })
 })

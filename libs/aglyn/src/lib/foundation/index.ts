@@ -78,6 +78,7 @@ export type {
   OrgCrmAssignmentRule,
   OrgCrmHostSettings,
   OrgCrmRoundRobin,
+  OrgBuildFee,
   OrgCrmSettings,
   OrgDiscount,
   OrgEntitlements,

@@ -140,7 +140,11 @@ describe('staff only', () => {
 describe('GET', () => {
   it('reads the workspace’s projects and whether it can be invoiced', async () => {
     mocks.readSiteCareProjects.mockResolvedValue([{ projectId: 'p1' }])
-    expect(await (await get('?orgId=org-1')).json()).toEqual({ projects: [{ projectId: 'p1' }], canInvoice: true })
+    expect(await (await get('?orgId=org-1')).json()).toEqual({
+      projects: [{ projectId: 'p1' }],
+      canInvoice: true,
+      buildFees: [],
+    })
     expect(mocks.readSiteCareProjects).toHaveBeenCalledWith(FIRESTORE, 'org-1')
     mockReadOrgBilling.mockResolvedValue({})
     expect((await (await get('?orgId=org-1')).json()).canInvoice).toBe(false)

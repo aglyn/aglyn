@@ -144,6 +144,8 @@ const SITE_DOORS: Record<string, 'GET' | 'POST' | 'PATCH'> = {
   'ai/assist': 'POST',
   'ai/jobs': 'POST',
   'ai/jobs/:jobId/resume': 'POST',
+  // Bring my site's missing redirects (AGL-4245): it names the import's site.
+  'ai/jobs/:jobId/redirects': 'POST',
   'ai/seo/apply': 'POST',
   'ai/experiments/versions': 'POST',
   'ai/generate/component': 'POST',

@@ -301,7 +301,8 @@ export function createHttpTransferClient(options: HttpTransferClientOptions): Tr
           decisions: request.decisions,
           otherwise: request.otherwise ?? 'keep',
         })
-        return { job: answer.job, counts: answer.undo.counts, conflicts: [], done: answer.done }
+        const notes = Object.values(answer.undo.notes ?? {})
+        return { job: answer.job, counts: answer.undo.counts, conflicts: [], done: answer.done, ...(notes.length ? { notes } : {}) }
       }
       const conflicts: TransferUndoConflict[] = []
       let offset: number | null = 0

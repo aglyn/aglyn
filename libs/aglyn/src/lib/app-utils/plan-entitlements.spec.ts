@@ -1384,19 +1384,28 @@ describe('plan entitlements', () => {
   })
 
   it('resolves transaction fees by plan and product type (AGL-278)', () => {
+    // The ladder of 2026-11-24 (AGL-4245): Starter 1% physical / 3% services
+    // and digital, Pro 0% / 1%, Custom 0% / 0%.
     expect(resolveTransactionFeePct({ plan: 'starter' } as any, 'physical'))
-      .toBe(2)
+      .toBe(1)
     expect(resolveTransactionFeePct({ plan: 'starter' } as any, 'digital'))
-      .toBe(5)
-    // 0.5% on physical sales since pricing v4 (AGL-4126, decision 9), for the
-    // Stripe Connect account and payout fees the platform pays.
-    expect(resolveTransactionFeePct({ plan: 'pro' } as any, 'physical'))
-      .toBe(0.5)
-    expect(resolveTransactionFeePct({ plan: 'pro' } as any, 'service'))
       .toBe(3)
+    expect(resolveTransactionFeePct({ plan: 'starter' } as any, 'service'))
+      .toBe(3)
+    expect(resolveTransactionFeePct({ plan: 'pro' } as any, 'physical'))
+      .toBe(0)
+    expect(resolveTransactionFeePct({ plan: 'pro' } as any, 'digital'))
+      .toBe(1)
+    expect(resolveTransactionFeePct({ plan: 'pro' } as any, 'service'))
+      .toBe(1)
+    expect(resolveTransactionFeePct({ plan: 'enterprise' } as any, 'physical'))
+      .toBe(0)
+    expect(resolveTransactionFeePct({ plan: 'enterprise' } as any, 'service'))
+      .toBe(0)
+    // The retired plans did not move.
     expect(resolveTransactionFeePct({ plan: 'business' } as any, 'digital'))
       .toBe(2)
-    // Pricing v3 (2026-07) digital fee ladder: 5 → 3 → 2 → 1 → 0 → 0.
+    // Retired plans keep the v3 (2026-07) digital ladder: 2 → 1 → 0 → 0.
     expect(resolveTransactionFeePct({ plan: 'scale' } as any, 'digital'))
       .toBe(1)
     expect(resolveTransactionFeePct({ plan: 'advanced' } as any, 'digital'))
@@ -1428,7 +1437,7 @@ describe('plan entitlements', () => {
    * `resolveMarketplaceFeePct` has forbidden exactly this since AGL-1543 and
    * says so in its own docblock; this is the storefront half of that rule.
    *
-   * Driven on STARTER, whose physical rate is a non-zero 2%: on any plan whose
+   * Driven on STARTER, whose physical rate is a non-zero 1%: on any plan whose
    * table rate is a deliberate 0 the assertion could not fail, which is how a
    * guard for this ends up vacuous. Forced red by restoring
    * `if (Number.isFinite(pct) && pct > 0) return pct` over the raw value —
@@ -1449,10 +1458,10 @@ describe('plan entitlements', () => {
       Number.POSITIVE_INFINITY,
       Number.NEGATIVE_INFINITY,
       -5,
-      '2' as unknown,
+      '4' as unknown,
       null,
     ]) {
-      expect(withOverride(bad)).toBe(2)
+      expect(withOverride(bad)).toBe(1)
     }
     // POSITIVE CONTROL, both directions: a WELL-FORMED override still wins,
     // including a deliberate comp at 0 with a reason attached. Without these
@@ -1471,9 +1480,10 @@ describe('plan entitlements', () => {
       plan: 'free',
       entitlements: { features: { commerce: true } },
     } as any
-    expect(resolveTransactionFeePct(overridden, 'physical')).toBe(2)
-    expect(resolveTransactionFeePct(overridden, 'digital')).toBe(5)
-    expect(resolveTransactionFeePct(overridden, 'service')).toBe(5)
+    // Floored to Starter's rates, 1% / 3% since 2026-11-24 (AGL-4245).
+    expect(resolveTransactionFeePct(overridden, 'physical')).toBe(1)
+    expect(resolveTransactionFeePct(overridden, 'digital')).toBe(3)
+    expect(resolveTransactionFeePct(overridden, 'service')).toBe(3)
 
     // A LAPSED paid org resolves to free the same way, and the same floor
     // applies when commerce was overridden on. Without the override every
@@ -1488,7 +1498,7 @@ describe('plan entitlements', () => {
         } as any,
         'digital',
       ),
-    ).toBe(5)
+    ).toBe(3)
 
     // A staff fee override WINS, at 0 too: that is a negotiated comp with a
     // reason attached, and the floor must not silently overrule it.
@@ -1510,18 +1520,21 @@ describe('plan entitlements', () => {
           plan: 'free',
           entitlements: {
             features: { commerce: true },
-            transactionFeePhysicalPct: 1,
+            // Not Starter's own 1%, or this could not tell the override
+            // from the floor.
+            transactionFeePhysicalPct: 4,
           },
         } as any,
         'physical',
       ),
-    ).toBe(1)
+    ).toBe(4)
 
     // The floor is scoped to FREE. A paid plan's own rate is untouched — Pro's
-    // fractional 0.5% physical (pricing v4, AGL-4126) is not lifted to
-    // Starter's 2%, and a deliberate 0% on a plan above it stays 0 — and so is
-    // an ordinary free org, which cannot sell at all.
-    expect(resolveTransactionFeePct({ plan: 'pro' } as any, 'physical')).toBe(0.5)
+    // 0% physical (2026-11-24, AGL-4245) is not lifted to Starter's 1%, and a
+    // deliberate 0% on a plan above it stays 0 — and so is an ordinary free
+    // org, which cannot sell at all.
+    expect(resolveTransactionFeePct({ plan: 'pro' } as any, 'physical')).toBe(0)
+    expect(resolveTransactionFeePct({ plan: 'pro' } as any, 'digital')).toBe(1)
     expect(resolveTransactionFeePct({ plan: 'business' } as any, 'physical')).toBe(0)
     expect(resolveTransactionFeePct({ plan: 'agency' } as any, 'digital'))
       .toBe(0)

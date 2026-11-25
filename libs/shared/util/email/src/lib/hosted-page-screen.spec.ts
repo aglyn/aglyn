@@ -674,3 +674,104 @@ describe('media embeds and a workspace’s own brand (2026-09-28 aglyn.com outag
     ])
   })
 })
+
+describe('a shop’s own Gmail address and Discord server', () => {
+  /** A young racewear shop: its contact address is on Gmail, its group chat on Discord. */
+  const SHOP = {
+    ownNames: ['Northline Racewear', 'northline-racewear'],
+    ownDomains: ['northline-racewear.aglyn.app'],
+  }
+  const footer = [
+    text('Questions? Email us at northlineracewear@gmail.com.'),
+    button('Instagram', 'https://www.instagram.com/northlineracewear'),
+    button('Discord', 'https://discord.gg/northlineracewear'),
+  ]
+
+  it('a contact page with the shop’s Gmail address, its Discord and "sign in to your account" holds nothing', () => {
+    const verdict = screenHostedPage({
+      nodes: page(
+        text('Checking on an order? Use your order status link, or sign in to your account.'),
+        ...footer,
+      ),
+      ...SHOP,
+    })
+    expect(verdict.signals).toEqual([])
+    expect(signalsThatHold(verdict.signals, { ageDays: 0 })).toEqual([])
+  })
+
+  it('a Gmail address is not "Gmail", even beside a link that is foreign', () => {
+    const verdict = screenHostedPage({
+      nodes: page(
+        text('You can also sign in to your account to see your orders.'),
+        text('Write to northlineracewear@gmail.com.'),
+        button('Size chart', 'https://sizes.example.top/chart'),
+      ),
+      ...SHOP,
+    })
+    expect(verdict.signals.map((signal) => signal.code)).not.toContain('brand-lure-page')
+    expect(verdict.signals.map((signal) => signal.code)).not.toContain('brand-action-page')
+  })
+
+  it('a page that names Gmail itself, beside the lure and a foreign link, still holds', () => {
+    const verdict = screenHostedPage({
+      nodes: page(
+        text('Sign in to your Gmail account to view the shared invoice.'),
+        button('Continue', 'https://mail-verify.example.top/login'),
+      ),
+      ...SHOP,
+    })
+    expect(signalsThatHold(verdict.signals, { ageDays: 0 }).map((signal) => signal.code)).toContain(
+      'brand-action-page',
+    )
+  })
+})
+
+describe('a realtor’s own free-mail address (a self-serve business, any provider)', () => {
+  const REALTOR = {
+    ownNames: ['Jordan Reyes, REALTOR', 'jordan-reyes'],
+    ownDomains: ['jordanreyes.aglyn.app'],
+  }
+  /** The site's own header links, on every page the layout renders. */
+  const nav = [button('Home', '/'), button('Listings', '/listings'), button('Contact', '/contact')]
+
+  it('terms that list homes "I have sold" beside a Gmail address hold nothing', () => {
+    const verdict = screenHostedPage({
+      nodes: page(
+        ...nav,
+        text('Listings and homes I have sold are shown for information only.'),
+        text('Questions about these terms: jordanreyessold@gmail.com.'),
+        button('Brokerage disclosures', 'https://brokerage-docs.example.top/disclosures'),
+      ),
+      ...REALTOR,
+    })
+    expect(signalsThatHold(verdict.signals, { ageDays: 0 })).toEqual([])
+  })
+
+  it('a site sign-in page with a Gmail address and the brokerage’s document host holds nothing', () => {
+    const verdict = screenHostedPage({
+      nodes: page(
+        ...nav,
+        { componentId: 'muiTypography', props: { variant: 'h1', children: 'Sign in to your saved homes' } },
+        text('Trouble signing in? Email jordanreyessold@gmail.com.'),
+        button('Buyer guide (PDF)', 'https://brokerage.widen.example/buyer-guide.pdf'),
+      ),
+      ...REALTOR,
+    })
+    expect(signalsThatHold(verdict.signals, { ageDays: 0 })).toEqual([])
+  })
+
+  it.each(['jordan@icloud.com', 'jordan@outlook.com', 'jordan@hotmail.com', 'jordan@yahoo.com'])(
+    'a contact address at %s is not that provider’s brand',
+    (address) => {
+      const verdict = screenHostedPage({
+        nodes: page(
+        ...nav,
+          text(`Sign in to your account to see saved homes, or write to ${address}.`),
+          button('Disclosures', 'https://brokerage-docs.example.top/disclosures'),
+        ),
+        ...REALTOR,
+      })
+      expect(signalsThatHold(verdict.signals, { ageDays: 0 })).toEqual([])
+    },
+  )
+})

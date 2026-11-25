@@ -479,6 +479,10 @@ const COMMON_LINK_DOMAINS: ReadonlySet<string> = new Set([
   'tripadvisor.com',
   'wa.me',
   'whatsapp.com',
+  // A shop's or a team's Discord server, linked from its footer the way
+  // its Instagram is.
+  'discord.gg',
+  'discord.com',
 ])
 
 /**
@@ -1027,6 +1031,19 @@ export const squashScreenText = squash
 export const isWorkspaceOwnBrand = isOwnBrand
 /** Is this registrable domain one of any listed brand's own? */
 export const isAnyOfficialBrandDomain = isAnyOfficialDomain
+/**
+ * An email address, which names its mailbox's provider and never the brand
+ * as a lure: a shop whose contact address is `shop@gmail.com` has not said
+ * "your Gmail". Taken out before a brand's mention is read, so the screen
+ * matches the brand's NAME in the copy, as every other mention does.
+ */
+const EMAIL_ADDRESS_PATTERN = /[\w.+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+/gi
+
+/** Does this text name the brand, outside any email address it contains? */
+export function mentionsBrand(brand: PhishingScreenBrand, text: string): boolean {
+  return brand.mention.test(text.replace(EMAIL_ADDRESS_PATTERN, ' '))
+}
+
 /** Is this registrable domain a social, maps or review link merchants ordinarily carry? */
 export function isCommonLinkDomain(registrable: string): boolean {
   return COMMON_LINK_DOMAINS.has(registrable)
@@ -1093,7 +1110,7 @@ export function screenOutboundEmail(input: PhishingScreenInput): PhishingScreenV
     if (foreign) {
       const namedInCopy = `${visibleCopy}\n${fromName}`
       for (const brand of PHISHING_SCREEN_BRANDS) {
-        if (brand.mention.test(namedInCopy) && !isOwnBrand(brand, ownNames, ownRegistrables)) {
+        if (mentionsBrand(brand, namedInCopy) && !isOwnBrand(brand, ownNames, ownRegistrables)) {
           signals.push({
             code: 'brand-lure-link',
             brand: brand.id,

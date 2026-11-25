@@ -35,6 +35,7 @@ import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import {
   TRANSFER_PRESET_IDS,
   buildTransferFieldCatalog,
+  isTransferFieldExportable,
   resolveTransferFieldSelection,
   resolveTransferPreset,
 } from '@aglyn/aglyn/data-transfer'
@@ -168,7 +169,8 @@ export function TransferExportDialog(props: TransferExportDialogProps) {
     () =>
       info
         ? buildTransferFieldCatalog({
-            standard: info.fields,
+            // An import-only field is never offered here (AGL-4245).
+            standard: info.fields.filter(isTransferFieldExportable),
             groups: info.groups,
           })
         : null,
@@ -197,7 +199,7 @@ export function TransferExportDialog(props: TransferExportDialogProps) {
         if (!live) return
         setError(null)
         const built = buildTransferFieldCatalog({
-          standard: loaded.fields,
+          standard: loaded.fields.filter(isTransferFieldExportable),
           groups: loaded.groups,
         })
         const loadedHints = presetHintsOf(loaded)

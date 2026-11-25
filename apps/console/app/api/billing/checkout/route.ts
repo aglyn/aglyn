@@ -61,6 +61,17 @@ import {
 } from '@aglyn/aglyn/app-utils/bundle-intent'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import {
+  attachBuildFeeInvoice,
+  buildFeeLineParams,
+  buildFeeProduct,
+  resolveDueBuildFee,
+  type DueBuildFee,
+} from '@aglyn/tenant-data-admin/server/build-fees'
+import {
+  BUILD_FEE_METADATA,
+  buildFeeSourceKey,
+} from '@aglyn/aglyn/app-utils/build-fee'
+import {
   describeDiscountFullUse,
   orgDiscountFullUse,
 } from '@aglyn/aglyn/app-utils/full-use-cost'
@@ -553,6 +564,49 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
+    // ── The website build fee (AGL-4244) ──
+    //
+    // A one-time fee staff set on the upgrade proposal or on the bundle link
+    // the owner opened, read from Firestore and never from this request: the
+    // body names at most WHICH link, and a link for another workspace or one
+    // already paid names no fee. Charged once, on the first invoice of the
+    // subscription this route makes, priced against a product whose tax code
+    // is checked, so Stripe Tax adds sales tax on top exactly as it does for
+    // the plan. Resolved here, above the preview, so the quote, the confirm
+    // and the charge all carry the same fee.
+    const firestore = firebaseAdmin.app().firestore()
+    const dueBuildFee: DueBuildFee | null = await resolveDueBuildFee(
+      firestore,
+      {
+        orgId,
+        bundleLinkId: typeof body?.bundleLinkId === 'string' ? body.bundleLinkId : null,
+      },
+      { secretKey },
+    )
+    const buildFeeLine = dueBuildFee
+      ? { amountCents: dueBuildFee.fee.amountCents, label: dueBuildFee.fee.label }
+      : null
+    // On every answer only when there is a fee, so a quote without one reads
+    // exactly as it did before.
+    const buildFeeAnswer = buildFeeLine ? { buildFee: buildFeeLine } : {}
+    let buildFeeProductId: string | null = null
+    if (dueBuildFee) {
+      const product = await buildFeeProduct({ secretKey })
+      if ('error' in product) {
+        console.error('[billing/checkout] build fee product unavailable', product.error)
+        return Response.json(
+          {
+            error:
+              'The website build fee cannot be priced just now, so nothing has been ' +
+              'charged. Try again in a moment.',
+            code: 'build_fee_unpriced',
+          },
+          { status: 502 },
+        )
+      }
+      buildFeeProductId = product.ok ? product.productId : null
+    }
+
     // ── The purchase, built out of the pieces the customer already has ──
     //
     // There is no checkout step here and no checkout surface. A workspace
@@ -625,7 +679,7 @@ async function handler(request: Request): Promise<Response> {
         : {}
       if (!existingCustomerId) {
         return Response.json(
-          { needsBillingDetails: true, ...promotionTerms },
+          { needsBillingDetails: true, ...promotionTerms, ...buildFeeAnswer },
           { status: 200 },
         )
       }
@@ -648,7 +702,7 @@ async function handler(request: Request): Promise<Response> {
       const quoteCustomerRecord = await quoteCustomer.json()
       if (!quoteCustomerRecord?.address?.country) {
         return Response.json(
-          { needsBillingAddress: true, ...promotionTerms },
+          { needsBillingAddress: true, ...promotionTerms, ...buildFeeAnswer },
           { status: 200 },
         )
       }
@@ -675,6 +729,15 @@ async function handler(request: Request): Promise<Response> {
         preview.set(`subscription_details[items][${at}][quantity]`, String(line.quantity))
       }
       if (promo.id) preview.set('discounts[0][promotion_code]', promo.id)
+      // The build fee on the same quote (AGL-4244), as the one-time line the
+      // first invoice will carry, so the total shown is the total charged.
+      if (dueBuildFee && buildFeeProductId) {
+        for (const [key, value] of Object.entries(
+          buildFeeLineParams('invoice_items[0]', dueBuildFee.fee, buildFeeProductId),
+        )) {
+          preview.set(key, value)
+        }
+      }
       const upcoming = await fetch(
         `https://api.stripe.com/v1/invoices/upcoming?${preview.toString()}`,
         {
@@ -720,6 +783,9 @@ async function handler(request: Request): Promise<Response> {
           // Whether the code reaches the plan's base price alone (AGL-4159),
           // so the card can say add-ons and usage still bill.
           promotionCodeBasePriceOnly: promo.id ? Boolean(promo.limitedToProducts) : null,
+          // The build fee inside the figures above (AGL-4244), so the card
+          // can show it as its own line, "one time".
+          ...buildFeeAnswer,
         },
         { status: 200 },
       )
@@ -918,6 +984,19 @@ async function handler(request: Request): Promise<Response> {
       subParams.set(`metadata[${INTERNAL_TRAFFIC_PARAM}]`, INTERNAL_TRAFFIC_VALUE)
     }
     if (promo.id) subParams.set('discounts[0][promotion_code]', promo.id)
+    // The build fee on the FIRST invoice only (AGL-4244): `add_invoice_items`
+    // is a one-time line Stripe adds to the invoice this call creates and to
+    // no renewal. Its source rides the subscription's metadata, which the
+    // webhook's `invoice.paid` reads to record it paid.
+    if (dueBuildFee && buildFeeProductId) {
+      for (const [key, value] of Object.entries(
+        buildFeeLineParams('add_invoice_items[0]', dueBuildFee.fee, buildFeeProductId),
+      )) {
+        subParams.set(key, value)
+      }
+      subParams.set(`metadata[${BUILD_FEE_METADATA.cents}]`, String(dueBuildFee.fee.amountCents))
+      subParams.set(`metadata[${BUILD_FEE_METADATA.source}]`, buildFeeSourceKey(dueBuildFee.source))
+    }
     for (const [key, value] of Object.entries(
       promotionCodeFullUseMetadata(
         plan as OrgPlan,
@@ -968,6 +1047,16 @@ async function handler(request: Request): Promise<Response> {
     }
     const invoice = subscription?.latest_invoice ?? null
     let intent = invoice?.payment_intent ?? null
+    // The first invoice, stamped on the fee's source (AGL-4244), so a later
+    // checkout asks Stripe whether it was paid before it would charge again.
+    if (dueBuildFee && invoice?.id) {
+      await attachBuildFeeInvoice(firestore, {
+        orgId,
+        source: dueBuildFee.source,
+        invoiceId: String(invoice.id),
+        subscriptionId: String(subscription?.id ?? ''),
+      })
+    }
 
     // ── The confirm, SERVER-SIDE, and nothing works without it ──
     //
@@ -1055,6 +1144,7 @@ async function handler(request: Request): Promise<Response> {
       // reason for some future caller to trust the wrong source.
       subscriptionStatus: String(subscription?.status ?? ''),
       invoice: describeInvoiceAmounts(invoice),
+      ...buildFeeAnswer,
       ...(requiresAction && intent?.client_secret
         ? { requiresAction: true, paymentClientSecret: intent.client_secret }
         : {}),

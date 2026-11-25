@@ -23,7 +23,10 @@
  * exact aliases and shows where a match came from ("Salesforce"), so a
  * Salesforce report, a HubSpot export, an Apollo list or a Pipedrive file
  * maps itself. They live here, beside the fields they name: the platform's
- * core knows no product's vocabulary.
+ * core knows no product's vocabulary. A store's customer file — Shopify,
+ * Wix, Squarespace — is recognized the same way, by the dictionaries of
+ * `customer-sources.ts` (AGL-4245), which also reads what its marketing
+ * column means.
  *
  * A column whose meaning is the OPPOSITE of a field is left out on purpose:
  * Salesforce's "Email Opt Out" and HubSpot's "Unsubscribed" are refusals,
@@ -36,6 +39,7 @@
 
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import type { TransferAliasDictionary } from '@aglyn/aglyn/data-transfer'
+import { CUSTOMER_ALIAS_DICTIONARIES } from './customer-sources'
 
 const SALESFORCE = 'Salesforce'
 const HUBSPOT = 'HubSpot'
@@ -212,6 +216,8 @@ export const CONTACT_ALIASES: readonly TransferAliasDictionary[] = [
       }),
     },
   },
+  // A store's customer file (AGL-4245).
+  ...CUSTOMER_ALIAS_DICTIONARIES,
 ]
 
 /*==========================================

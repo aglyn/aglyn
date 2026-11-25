@@ -140,6 +140,8 @@ export function readListConsentAnswer(
 
 /** What the screening found, as the list's import ledger keeps it and the permission step shows it. */
 export interface ListImportScreeningReport {
+  /** New people the file says said no to marketing email, left off the list (AGL-4245). */
+  saidNo?: number
   roleAccounts: number
   roleAccountSamples: string[]
   purchaseTellColumns: string[]
@@ -174,6 +176,22 @@ export const LIST_MEMBER_CONTACT_FIELDS: ReadonlyArray<{
   { key: 'companyName', label: 'Company', type: 'text', aliases: ['company', 'company name', 'organization', 'employer'] },
   { key: 'department', label: 'Department', type: 'text', aliases: ['department', 'team'] },
 ]
+
+/**
+ * A store customer file's marketing column (AGL-4245): Shopify's `Accepts
+ * Email Marketing`, Wix's `Email subscriber status`, Squarespace's `Accepts
+ * Marketing`. Read for one thing only — a row that says no (`no`, `false`,
+ * `Unsubscribed`) is never added to the list, whatever the operator states,
+ * and goes on the site's suppression list as a suppression import adds one.
+ * A yes adds nobody on its own: the Permission step decides, as for any row.
+ */
+export const LIST_MARKETING_CHOICE_FIELD = 'marketingChoice'
+
+/** The value a planned row carries when the file says the person said no. */
+export const LIST_FILE_SAID_NO = 'Said no'
+
+/** The note a suppression the file's no adds is filed with. */
+export const LIST_FILE_SAID_NO_NOTE = 'Said no to marketing email in an imported customer file.'
 
 /** The field id of a contact-record column. */
 export function contactFieldId(key: string): string {
@@ -243,6 +261,17 @@ export function listMemberCatalog(): TransferCatalogInput {
         maxLength: 60,
         aliases: LIST_IMPORT_OPT_IN_DATE_COLUMNS,
         description: 'When your file says the person signed up, kept as written.',
+      },
+      {
+        id: LIST_MARKETING_CHOICE_FIELD,
+        label: 'Marketing choice in the file',
+        group: 'evidence',
+        type: 'text',
+        importOnly: true,
+        maxLength: 60,
+        aliases: ['accepts email marketing', 'accepts marketing', 'email subscriber status'],
+        description:
+          'From a store’s customer file. Somebody who said no or Unsubscribed is never added, and goes on your site’s suppression list. A yes adds nobody on its own: the Permission step decides.',
       },
       {
         id: 'addedAt',
@@ -357,6 +386,45 @@ export const LIST_MEMBER_ALIASES: readonly TransferAliasDictionary[] = [
       declaredAt: ['Email permission date'],
     },
   },
+  /*
+   * A store's customer file (AGL-4245). Its marketing column is read for its
+   * refusals only (`LIST_MARKETING_CHOICE_FIELD`): a file never says who
+   * agreed (see `CONSENT_FROM_FILE_REASON`), so a yes is the Permission
+   * step's to decide, and a no is always kept.
+   */
+  {
+    source: 'Shopify customers export',
+    aliases: {
+      email: ['Email'],
+      [contactFieldId('firstName')]: ['First Name'],
+      [contactFieldId('lastName')]: ['Last Name'],
+      [contactFieldId('phone')]: ['Phone'],
+      [contactFieldId('companyName')]: ['Default Address Company', 'Company'],
+      [LIST_MARKETING_CHOICE_FIELD]: ['Accepts Email Marketing', 'Accepts Marketing'],
+    },
+  },
+  {
+    source: 'Wix contacts export',
+    aliases: {
+      email: ['Email 1'],
+      [contactFieldId('firstName')]: ['First Name'],
+      [contactFieldId('lastName')]: ['Last Name'],
+      [contactFieldId('phone')]: ['Phone 1'],
+      [contactFieldId('companyName')]: ['Company'],
+      [contactFieldId('jobTitle')]: ['Position'],
+      [LIST_MARKETING_CHOICE_FIELD]: ['Email subscriber status'],
+    },
+  },
+  {
+    source: 'Squarespace customers export',
+    aliases: {
+      email: ['Email'],
+      [contactFieldId('firstName')]: ['First Name'],
+      [contactFieldId('lastName')]: ['Last Name'],
+      [contactFieldId('phone')]: ['Shipping Phone Number'],
+      [LIST_MARKETING_CHOICE_FIELD]: ['Accepts Marketing'],
+    },
+  },
 ]
 
 /** Why somebody already on the list keeps their membership as it is. */
@@ -386,6 +454,11 @@ export const LIST_MEMBER_LOCKED_RULES: readonly TransferLockedRule[] = [
     }),
   ),
   { fieldId: 'consent', refuseValues: true, reason: CONSENT_FROM_FILE_REASON },
+  {
+    fieldId: LIST_MARKETING_CHOICE_FIELD,
+    reason:
+      'Read for its refusals only: somebody the file says said no is never added, whatever you state on Permission, and goes on your site’s suppression list.',
+  },
   ...LIST_MEMBER_CONTACT_FIELD_IDS.map(
     (fieldId): TransferLockedRule => ({
       fieldId,

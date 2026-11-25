@@ -22,6 +22,8 @@
  *=========================================*/
 
 import { registerPluginTransferResourceUi } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
+import { lazy } from 'react'
+import { CONTACT_CONSENT_STEP_ID } from './customer-sources'
 import {
   CRM_ACTIVITIES_RESOURCE,
   CRM_COMPANIES_RESOURCE,
@@ -45,9 +47,29 @@ export const CRM_TRANSFER_LABELS: Readonly<Record<string, string>> = {
   [CRM_FIELDS_RESOURCE]: 'Custom fields',
 }
 
-/** Registers the client half of every CRM transfer resource. */
+/* The contact import's Permission step (AGL-4245), loaded when the wizard reaches it. */
+const ContactConsentStep = lazy(() =>
+  import('./contact-import-steps').then((steps) => ({ default: steps.ContactConsentStep })),
+)
+
+/**
+ * Registers the client half of every CRM transfer resource. The contact
+ * import carries one step of its own: the statement of permission for the
+ * marketing opt-ins a store's customer file records.
+ */
 export function registerCrmTransferResourceUis(pluginId: string): void {
   for (const [key, label] of Object.entries(CRM_TRANSFER_LABELS)) {
-    registerPluginTransferResourceUi(key, { label }, { pluginId })
+    registerPluginTransferResourceUi(
+      key,
+      key === CRM_CONTACTS_RESOURCE
+        ? {
+            label,
+            extraSteps: [
+              { id: CONTACT_CONSENT_STEP_ID, label: 'Permission', after: 'conflicts', component: ContactConsentStep },
+            ],
+          }
+        : { label },
+      { pluginId },
+    )
   }
 }

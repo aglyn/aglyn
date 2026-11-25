@@ -30,19 +30,31 @@ import { podFetch } from './config'
  * AS THE MEMBER who imported it, so the library applies every check, quota
  * and counter an Upload button would, and the photo is theirs to edit.
  *
- * A photo that cannot be fetched, is too large for one upload, or is not an
- * image is left out; the product is imported without it and the result says
- * how many were. Only the first few photos are copied; the rest stay at the
- * service.
+ * A photo too large for one upload is made smaller first (the longest side
+ * at most {@link POD_IMAGE_MAX_EDGE} pixels, re-encoded), so a service's
+ * full-size mockups arrive rather than being skipped. A photo that cannot be
+ * fetched, or is not an image, is left out; the product is imported without
+ * it and the result says how many were. The product's own gallery is copied
+ * up to {@link POD_IMAGES_PER_PRODUCT}, and every color's own photo beside
+ * it, so each choice on the product page still shows its picture.
  */
 
 const IMAGE_HOSTS = new Set<string>(POD_IMAGE_ORIGINS.map((origin) => new URL(origin).hostname))
 
-/** Photos copied per product. */
-export const POD_IMAGES_PER_PRODUCT = 8
+/** Gallery photos copied per product; each variant's own photo is copied beside them. */
+export const POD_IMAGES_PER_PRODUCT = 12
 
-/** The largest photo copied: one upload request's body must stay under the platform's limit. */
+/** Every photo copied for one product, gallery and variants together. */
+export const POD_IMAGES_MAX_TOTAL = 60
+
+/** The largest photo uploaded as it is: one upload request's body must stay under the platform's limit. */
 export const POD_IMAGE_MAX_BYTES = 3 * 1024 * 1024
+
+/** The largest photo fetched at all; a larger one is made smaller before upload. */
+export const POD_IMAGE_FETCH_MAX_BYTES = 30 * 1024 * 1024
+
+/** The longest side of a photo that had to be made smaller. */
+export const POD_IMAGE_MAX_EDGE = 2400
 
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 
@@ -72,15 +84,63 @@ async function fetchImage(url: string): Promise<{ base64: string; contentType: s
     const contentType = String(response.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase()
     if (!IMAGE_TYPES.has(contentType)) return null
     const declared = Number(response.headers.get('content-length'))
-    if (Number.isFinite(declared) && declared > POD_IMAGE_MAX_BYTES) return null
+    if (Number.isFinite(declared) && declared > POD_IMAGE_FETCH_MAX_BYTES) return null
     const bytes = Buffer.from(await response.arrayBuffer())
-    if (bytes.length === 0 || bytes.length > POD_IMAGE_MAX_BYTES) return null
-    return { base64: bytes.toString('base64'), contentType }
+    if (bytes.length === 0 || bytes.length > POD_IMAGE_FETCH_MAX_BYTES) return null
+    if (bytes.length <= POD_IMAGE_MAX_BYTES) return { base64: bytes.toString('base64'), contentType }
+    const smaller = await shrinkImage(bytes, contentType)
+    return smaller ? { base64: smaller.bytes.toString('base64'), contentType: smaller.contentType } : null
   } catch {
     return null
   } finally {
     clearTimeout(timer)
   }
+}
+
+/**
+ * A photo over the upload limit, made smaller: the longest side at most
+ * {@link POD_IMAGE_MAX_EDGE}, re-encoded in its own format (a PNG mockup
+ * keeps its transparency) and, if still too large, as a JPEG at a lower
+ * quality. `null` when it cannot be made small enough.
+ */
+export async function shrinkImage(bytes: Buffer, contentType: string): Promise<{ bytes: Buffer; contentType: string } | null> {
+  if (contentType === 'image/gif') return null
+  try {
+    const { default: sharp } = await import('sharp')
+    const resized = () =>
+      sharp(bytes, { failOn: 'none' }).rotate().resize({ width: POD_IMAGE_MAX_EDGE, height: POD_IMAGE_MAX_EDGE, fit: 'inside', withoutEnlargement: true })
+    const attempts: Array<() => Promise<{ bytes: Buffer; contentType: string }>> = [
+      async () =>
+        contentType === 'image/png'
+          ? { bytes: await resized().png({ compressionLevel: 9, palette: true }).toBuffer(), contentType: 'image/png' }
+          : contentType === 'image/webp'
+            ? { bytes: await resized().webp({ quality: 85 }).toBuffer(), contentType: 'image/webp' }
+            : { bytes: await resized().jpeg({ quality: 85, mozjpeg: true }).toBuffer(), contentType: 'image/jpeg' },
+      async () => ({ bytes: await resized().webp({ quality: 80 }).toBuffer(), contentType: 'image/webp' }),
+      async () => ({ bytes: await resized().jpeg({ quality: 72, mozjpeg: true }).toBuffer(), contentType: 'image/jpeg' }),
+    ]
+    for (const attempt of attempts) {
+      const out = await attempt()
+      if (out.bytes.length > 0 && out.bytes.length <= POD_IMAGE_MAX_BYTES) return out
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The photos to copy, in order: the product's gallery up to
+ * {@link POD_IMAGES_PER_PRODUCT}, then each variant's own photo not already
+ * among them, at most {@link POD_IMAGES_MAX_TOTAL} in all.
+ */
+export function photosToCopy(gallery: readonly string[], variantPhotos: readonly string[]): string[] {
+  const out = [...new Set(gallery)].slice(0, POD_IMAGES_PER_PRODUCT)
+  for (const url of variantPhotos) {
+    if (out.length >= POD_IMAGES_MAX_TOTAL) break
+    if (url && !out.includes(url)) out.push(url)
+  }
+  return out
 }
 
 function fileNameFor(name: string, index: number, contentType: string): string {
@@ -101,7 +161,7 @@ export async function copyImagesToLibrary(
 ): Promise<{ urls: Map<string, string>; skipped: number }> {
   const urls = new Map<string, string>()
   let skipped = 0
-  const wanted = [...new Set(sourceUrls)].slice(0, POD_IMAGES_PER_PRODUCT)
+  const wanted = [...new Set(sourceUrls)].slice(0, POD_IMAGES_MAX_TOTAL)
   for (const [index, sourceUrl] of wanted.entries()) {
     if (!isPodImageUrl(sourceUrl)) {
       skipped += 1

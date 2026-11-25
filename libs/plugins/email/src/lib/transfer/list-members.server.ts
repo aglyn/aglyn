@@ -50,6 +50,15 @@
  *   contact-capture door (`capturePluginContact`), the record system's own
  *   write path — never written here. Each is planned against what the record
  *   holds, under the person's field choices; a blank cell never empties one.
+ * - A STORE FILE'S "NO" IS ALWAYS KEPT (AGL-4245). When a Shopify, Wix or
+ *   Squarespace customer file's marketing column says a person said no
+ *   (`no`, `false`, `Unsubscribed`), they are never added to the list,
+ *   whatever the operator states, and their address goes on the site's
+ *   suppression list the way a suppression import adds one — somebody
+ *   already on the list too, so they get no marketing email. Undo leaves
+ *   those entries, as it leaves every suppression. A yes, `Pending`,
+ *   `Never subscribed` or a blank adds nobody on its own: the rule above
+ *   decides, as for any row.
  * - 50,000 rows a file (`limits.maxRows`), refused at the upload before
  *   anything is staged; repeats of an address are skipped as repeats; a line
  *   that is not an address fails its row, by name, rather than vanishing.
@@ -131,6 +140,9 @@ import {
   resolveAddresses,
 } from '../server-list-gate'
 import {
+  LIST_FILE_SAID_NO,
+  LIST_FILE_SAID_NO_NOTE,
+  LIST_MARKETING_CHOICE_FIELD,
   LIST_MEMBER_ALIASES,
   LIST_MEMBER_CONTACT_FIELD_IDS,
   LIST_MEMBER_LOCKED_RULES,
@@ -143,6 +155,8 @@ import {
   readListExistingAnswer,
 } from './email-transfer-catalog'
 import { countExisting, slices } from './transfer-reads.server'
+import { addImportedSuppression } from './suppressions.server'
+import { readMarketingChoice } from '@aglyn/aglyn/app-utils/marketing-choice'
 
 /** `source` stamped on every membership an import writes. */
 export const CONSOLE_IMPORT_SOURCE = 'console:list-import'
@@ -434,12 +448,16 @@ export async function planListMembers(
     },
   }
 
-  // 1. The membership, against the members the lookup found.
+  // 1. The membership, against the members the lookup found. A store
+  // file's marketing column is read below, never as a membership field.
   const membership = buildTransferPlan({
     ...input,
     policy,
     fields: input.fields.filter((field) => !isContact(field.id)),
-    rows: input.rows.map((row) => ({ ...row, values: pick(row.values, (fieldId) => !isContact(fieldId)) })),
+    rows: input.rows.map((row) => ({
+      ...row,
+      values: pick(row.values, (fieldId) => !isContact(fieldId) && fieldId !== LIST_MARKETING_CHOICE_FIELD),
+    })),
   })
 
   const emailOf = new Map<number, string>()
@@ -522,9 +540,38 @@ export async function planListMembers(
     return diff.length ? { ...joined, verdict: 'update', diff } : joined
   })
 
+  // 3b. A store file's "no" (AGL-4245): never added, always suppressed.
+  const saidNo = new Set(
+    input.rows
+      .filter((row) => emailOf.has(row.index) && readMarketingChoice(row.values[LIST_MARKETING_CHOICE_FIELD]).choice === 'optOut')
+      .map((row) => row.index),
+  )
+  const refusals = { leftOut: 0, onList: 0 }
+  const refusal: PlannedTransferRow['diff'][number] = {
+    fieldId: LIST_MARKETING_CHOICE_FIELD,
+    before: null,
+    after: LIST_FILE_SAID_NO,
+    mode: 'overwrite',
+    source: 'locked',
+    rule: 'written',
+  }
+  const planned = rows.map((row): PlannedTransferRow => {
+    if (!saidNo.has(row.index)) return row
+    if (row.verdict === 'create') {
+      refusals.leftOut += 1
+      // The suppression is what this row writes: no membership, no contact.
+      return { ...row, diff: [...row.diff.filter((change) => !isContact(change.fieldId)), refusal] }
+    }
+    if ((row.verdict === 'unchanged' || row.verdict === 'update') && row.recordId) {
+      refusals.onList += 1
+      return { ...row, verdict: 'update', diff: [...row.diff, refusal] }
+    }
+    return row
+  })
+
   // 4. The screening, over the people the import would add.
-  const adding = rows
-    .filter((row) => row.verdict === 'create' && emailOf.has(row.index))
+  const adding = planned
+    .filter((row) => row.verdict === 'create' && emailOf.has(row.index) && !saidNo.has(row.index))
     .map((row) => ({ index: row.index, email: emailOf.get(row.index) as string }))
   const roles = adding.filter((entry) => isRoleAccount(entry.email))
   const tells = purchaseTellColumns(ctx.headers ?? [])
@@ -537,6 +584,7 @@ export async function planListMembers(
     (row) => !!String(row.values['declaredSource'] ?? '').trim() || !!String(row.values['declaredAt'] ?? '').trim(),
   )
   const report: ListImportScreeningReport = {
+    ...(saidNo.size ? { saidNo: refusals.leftOut } : {}),
     roleAccounts: roles.length,
     roleAccountSamples: roles.slice(0, ROLE_ACCOUNT_SAMPLE_MAX).map((entry) => entry.email),
     purchaseTellColumns: tells,
@@ -549,7 +597,7 @@ export async function planListMembers(
       refused: resolution.refused,
     },
   }
-  const screening = screeningWarning(report, roles, attested)
+  const screening = screeningWarning(report, roles, attested, refusals)
   const warnings = mergeTransferWarnings([membership.warnings, contactWarnings, screening ? [screening] : []])
 
   await list.listRef
@@ -580,10 +628,10 @@ export async function planListMembers(
       { merge: true },
     )
 
-  const summary = { create: 0, update: 0, unchanged: 0, skip: 0, fail: 0, total: rows.length }
-  for (const row of rows) summary[row.verdict] += 1
+  const summary = { create: 0, update: 0, unchanged: 0, skip: 0, fail: 0, total: planned.length }
+  for (const row of planned) summary[row.verdict] += 1
   return {
-    rows,
+    rows: planned,
     summary,
     warnings,
     acknowledgementsRequired: warnings.filter((entry) => entry.requiresAcknowledgement).map((entry) => entry.class),
@@ -599,7 +647,35 @@ export function screeningWarning(
   report: ListImportScreeningReport,
   roles: ReadonlyArray<{ index: number; email: string }>,
   attested: boolean,
+  refusals: { leftOut: number; onList: number } = { leftOut: 0, onList: 0 },
 ): TransferWarning | null {
+  const people = (count: number) => `${count.toLocaleString('en-US')} ${count === 1 ? 'person' : 'people'}`
+  const refusalSamples: TransferWarningSample[] = [
+    ...(refusals.leftOut
+      ? [
+          {
+            row: TRANSFER_FILE_SAMPLE_ROW,
+            fieldId: LIST_MARKETING_CHOICE_FIELD,
+            value: refusals.leftOut.toLocaleString('en-US'),
+            detail:
+              `${people(refusals.leftOut)} said no to marketing email in the file, so ${refusals.leftOut === 1 ? 'is' : 'are'} not added to this list, ` +
+              'whatever you state on Permission. Their addresses go on your site’s suppression list, and undo leaves them there.',
+          },
+        ]
+      : []),
+    ...(refusals.onList
+      ? [
+          {
+            row: TRANSFER_FILE_SAMPLE_ROW,
+            fieldId: LIST_MARKETING_CHOICE_FIELD,
+            value: refusals.onList.toLocaleString('en-US'),
+            detail:
+              `${people(refusals.onList)} already on this list said no in the file. Their addresses go on your site’s suppression list, ` +
+              'so they get no marketing email, and undo leaves them there.',
+          },
+        ]
+      : []),
+  ]
   const samples: TransferWarningSample[] = report.purchaseTellColumns.map((column) => ({
     row: TRANSFER_FILE_SAMPLE_ROW,
     value: column,
@@ -629,13 +705,15 @@ export function screeningWarning(
       detail: 'A shared mailbox — common in lists collected rather than signed up to. It is added if you go ahead.',
     })
   }
-  const count = report.purchaseTellColumns.length + roles.length + (sample.refused > 0 || unlisted ? 1 : 0)
+  samples.push(...refusalSamples)
+  const count =
+    report.purchaseTellColumns.length + roles.length + (sample.refused > 0 || unlisted ? 1 : 0) + refusalSamples.length
   if (!count) return null
   return {
     class: 'screening',
     count,
     rows: roles.length,
-    fieldIds: roles.length ? ['email'] : [],
+    fieldIds: [...(roles.length ? ['email'] : []), ...(refusalSamples.length ? [LIST_MARKETING_CHOICE_FIELD] : [])],
     samples,
     requiresAcknowledgement: true,
   }
@@ -721,7 +799,9 @@ export async function applyListMembers(
     for (const row of batch) {
       if (writer.timeLeftMs() < APPLY_RESERVE_MS) break
       const result: { result: TransferRowResult; undo?: TransferUndoEntry } =
-        row.verdict === 'create'
+        after(row, LIST_MARKETING_CHOICE_FIELD) === LIST_FILE_SAID_NO
+          ? await suppressFileRefusal(ctx, list, row)
+          : row.verdict === 'create'
           ? await addMember(ctx, list, row, { resolution, verdicts, attested, attestingUid, nowMs })
           : await updateMemberContact(ctx, list, row)
       await writer.markApplied(result.result, result.undo)
@@ -822,6 +902,37 @@ async function addMember(
           },
         }
       : {}),
+  }
+}
+
+/**
+ * A row whose store file says the person said no (AGL-4245): never added,
+ * their address put on the site's suppression list as a suppression import
+ * puts one, and somebody already on the list left on it, suppressed. No undo
+ * entry: undo never takes a suppression away.
+ */
+async function suppressFileRefusal(
+  ctx: TransferResourceContext,
+  list: ListTarget,
+  row: PlannedTransferRow,
+): Promise<{ result: TransferRowResult }> {
+  const member = row.verdict === 'update' && row.recordId ? await list.listRef.collection('members').doc(row.recordId).get() : null
+  const email = normalizeContactEmail(member ? member.get('email') : after(row, 'email'))
+  if (!email) return { result: refused(row, 'unroutable-address') }
+  const suppressions = firebaseAdmin.app().firestore().collection('hosts').doc(list.hostId).collection('suppressions')
+  const added = await addImportedSuppression(ctx, suppressions, email, LIST_FILE_SAID_NO_NOTE)
+  const listed = added === 'created' ? 'added to your site’s suppression list' : 'already on your site’s suppression list'
+  // Somebody already on the list keeps the contact update the operator chose.
+  const contactError = member ? await captureContact(ctx, list, email, undefined, contactProfile(row)) : null
+  return {
+    result: member
+      ? {
+          row: row.index,
+          outcome: 'updated',
+          recordId: member.id,
+          message: `Said no in the file: still on this list, ${listed}, so they get no marketing email.${contactError ? ` ${contactError}` : ''}`,
+        }
+      : { row: row.index, outcome: 'skipped', message: `Not added: they said no in the file, and are ${listed}.` },
   }
 }
 

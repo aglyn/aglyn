@@ -26,7 +26,7 @@ import {
   searchTransferFields,
   transferExportHeaders,
 } from './field-catalog'
-import type { TransferField } from './resource'
+import { isTransferFieldExportable, isTransferFieldImportable, type TransferField } from './resource'
 
 const standard: TransferField[] = [
   { id: 'email', label: 'Email', type: 'email', group: 'identity', aliases: ['e-mail address'] },
@@ -184,5 +184,23 @@ describe('transferExportHeaders', () => {
     ).toEqual({ a: 'Handle', e: 'x'.repeat(120) })
     expect(transferExportHeaders(['a'], null)).toEqual({})
     expect(transferExportHeaders(['a'], ['Handle'])).toEqual({})
+  })
+})
+
+describe('import-only fields (AGL-4245)', () => {
+  const fields: TransferField[] = [
+    { id: 'title', label: 'Title', type: 'text', required: true },
+    { id: 'price', label: 'Price', type: 'currency' },
+    { id: 'salePrice', label: 'Sale price', type: 'currency', importOnly: true },
+  ]
+  const onlyImport = buildTransferFieldCatalog({ standard: fields })
+
+  it('are mapped on import and never exported, whatever the preset', () => {
+    expect(isTransferFieldImportable(fields[2] as TransferField)).toBe(true)
+    expect(isTransferFieldExportable(fields[2] as TransferField)).toBe(false)
+    expect(isTransferFieldExportable(fields[1] as TransferField)).toBe(true)
+    expect(resolveTransferPreset(onlyImport, 'everything').fieldIds).not.toContain('salePrice')
+    expect(resolveTransferPreset(onlyImport, 'reimportable').fieldIds).not.toContain('salePrice')
+    expect(resolveTransferPreset(onlyImport, { id: 'mine', label: 'Mine', fieldIds: ['salePrice', 'title'] }).fieldIds).toEqual(['title'])
   })
 })

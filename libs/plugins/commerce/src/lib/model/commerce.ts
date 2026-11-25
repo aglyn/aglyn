@@ -36,10 +36,11 @@ import type { PickupLocationSettings } from './order-local-fulfillment'
  * (AGL-2295).
  *
  * `COMMERCE_PLATFORM_FEE_PERCENT = 2` lived here with ZERO call sites. It
- * asserted a flat 2% that agrees with the plan table for exactly one cell
- * (Starter, physical) and disagrees with the other fifteen — Starter digital
- * is 5%, Pro digital 3%, Business 2%, Scale 1%, and every physical rate above
- * Starter is 0%. Nothing was wrong while nothing read it; the cost was that
+ * asserted a flat 2% that agreed with the plan table of the time for exactly
+ * one cell (Starter, physical) and disagreed with the other fifteen — Starter
+ * digital was 5%, Pro digital 3%, Business 2%, Scale 1%, and every physical
+ * rate above Starter 0%. (The ladder has moved since; the table is the
+ * answer, which is the point.) Nothing was wrong while nothing read it; the cost was that
  * the next reader wiring it up would silently re-price every plan, and a
  * constant sitting in the model beside the types reads like the answer.
  *
@@ -959,6 +960,23 @@ export function productPriceRange(
     .filter((price) => Number.isFinite(price) && price >= 0)
   if (prices.length === 0) return [0, 0]
   return [Math.min(...prices), Math.max(...prices)]
+}
+
+/**
+ * What a product's price says to a shopper: the price, "From" the lowest
+ * where variants differ, or "Price coming soon" for a product listed before
+ * any variant has one (AGL-3676) — never "$0". `{{product.price}}` on the
+ * product page, and the caption on a site search result.
+ */
+export function productPriceText(
+  product: Pick<HostProduct, 'variants'>,
+  minPrice: number,
+  maxPrice: number,
+): string {
+  if (!(product.variants ?? []).some((variant) => variantHasPrice(variant))) {
+    return 'Price coming soon'
+  }
+  return minPrice === maxPrice ? `$${minPrice}` : `From $${minPrice}`
 }
 
 /** Sum of tracked inventory; null when every variant is untracked. */

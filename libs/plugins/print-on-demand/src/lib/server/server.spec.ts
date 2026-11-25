@@ -65,6 +65,7 @@ import {
   orderActionRoute,
   orderRoute,
   ordersRoute,
+  linkRoute,
   productLinkRoute,
   settingsRoute,
   storesRoute,
@@ -323,6 +324,7 @@ const serviceCalls = (host = 'api.printful.com') => calls.filter((call) => call.
 /* ------------------------------------------------------------- the seams */
 
 let written: SourcedProductWrite[] = []
+let unlisted: string[] = []
 let storeProducts: Map<string, { variants: string[] }>
 let shipments: PluginShipmentWrite[] = []
 let tracking: PluginTrackingUpdate[] = []
@@ -343,7 +345,11 @@ function registerSeams() {
         const productId = existing ? (write.productId as string) : `prod-${storeProducts.size + 1}`
         const variants = write.product.variants.map((variant, index) => ({ key: variant.key, variantId: variant.variantId ?? `${productId}-v${index}` }))
         storeProducts.set(productId, { variants: variants.map((entry) => entry.variantId) })
-        return { outcome: existing ? 'updated' : 'created', productId, variants }
+        return { outcome: existing ? 'updated' : 'created', productId, variants, ...(existing ? { matched: variants.length } : {}) }
+      },
+      unlistSourced: async ({ productId }) => {
+        unlisted.push(productId)
+        return 'unlisted'
       },
     },
     { pluginId: 'commerce' },
@@ -471,6 +477,7 @@ beforeEach(() => {
   printifyOrder = null
   printifyHooks = []
   written = []
+  unlisted = []
   storeProducts = new Map()
   shipments = []
   tracking = []
@@ -725,6 +732,41 @@ describe('importing', () => {
     expect(await runPodLinkTick({ nowMs: Date.now(), deadlineMs: Date.now() + 60_000 })).toEqual({ synced: 0, linkFailed: 1 })
     expect(db.docs.has(id)).toBe(false)
   })
+
+  it('links a product the store already has, copying nothing, and refuses a second link either way', async () => {
+    storeProducts.set('handmade-hoodie', { variants: ['vh1', 'vh2'] })
+    const linked = await json(
+      await linkRoute(request(POD_API_ROUTES.linkProduct, 'tok-editor', { body: { provider: 'printful', sourceProductId: '501', productId: 'handmade-hoodie' } })),
+    )
+    expect(linked.status).toBe(200)
+    expect(linked.body.result).toMatchObject({ outcome: 'updated', productId: 'handmade-hoodie', matched: 2, offered: 2 })
+    expect(written[0]).toMatchObject({ productId: 'handmade-hoodie', prices: false, content: false, recreate: false, product: { mediaUrls: [] } })
+    expect(written[0].product.variants.every((variant) => variant.variantId === undefined)).toBe(true)
+    expect(calls.some((call) => call.path === '/api/media/upload')).toBe(false)
+    expect(linked.body.link).toMatchObject({ productId: 'handmade-hoodie', sourceProductId: '501', sourceGone: false })
+
+    storeProducts.set('another', { variants: [] })
+    const twice = await json(
+      await linkRoute(request(POD_API_ROUTES.linkProduct, 'tok-editor', { body: { provider: 'printful', sourceProductId: '501', productId: 'another' } })),
+    )
+    expect(twice.status).toBe(409)
+    expect(twice.body.error).toContain('already fills')
+    const viewer = await linkRoute(request(POD_API_ROUTES.linkProduct, 'tok-viewer', { body: { provider: 'printful', sourceProductId: '501', productId: 'another' } }))
+    expect(viewer.status).toBe(403)
+  })
+
+  it('takes a product off sale once, and tells the managers, when the service deleted it', async () => {
+    await importTee()
+    const id = `podProductLinks/${linkId(HOST, 'printful', '501')}`
+    override = (call) => (call.path === '/store/products/501' ? { status: 404, body: { result: 'Not found' } } : null)
+    for (let round = 0; round < 2; round += 1) {
+      db.docs.set(id, { ...(db.docs.get(id) as object), syncDueAtMs: 0 })
+      expect(await runPodLinkTick({ nowMs: Date.now(), deadlineMs: Date.now() + 60_000 })).toEqual({ synced: 0, linkFailed: 1 })
+    }
+    expect(unlisted).toEqual(['prod-1', 'prod-1'])
+    expect(notices.map((notice) => notice.title)).toEqual(['“Ocean Tee” is no longer at Printful'])
+    expect(readStoredLink(db.docs.get(id))).toMatchObject({ productId: 'prod-1', sourceGone: true })
+  })
 })
 
 /* ---------------------------------------------------------------- orders */
@@ -820,6 +862,27 @@ describe('orders', () => {
     const confirmed = await json(await orderActionRoute(request(POD_API_ROUTES.orderAction, 'tok-editor', { body: { orderId: ORDER_ID, provider: 'printful', action: 'confirm' } })))
     expect(confirmed.body.part.status).toBe('submitted')
     expect(printfulOrders.get('701')?.status).toBe('pending')
+  })
+
+  it('waits out the send delay as a draft, then the job confirms it', async () => {
+    await settingsRoute(request(POD_API_ROUTES.settings, 'tok-admin', { body: { provider: 'printful', sendDelayHours: 2 } }))
+    await onOrderPaid(paidEnvelope())
+    expect(part()).toMatchObject({ status: 'draft', work: 'confirm' })
+    expect(serviceCalls().find((call) => call.path === '/orders')?.search).toBe('?confirm=false')
+    // Not yet due.
+    await runPodOrderTick({ nowMs: Date.now() + 3_600_000, deadlineMs: Date.now() + 60_000 })
+    expect(part()?.status).toBe('draft')
+    const counts = await runPodOrderTick({ nowMs: Date.now() + 3 * 3_600_000, deadlineMs: Date.now() + 60_000 })
+    expect(counts['confirmed']).toBe(1)
+    expect(part()).toMatchObject({ status: 'submitted', work: 'poll' })
+    expect(printfulOrders.get('701')?.status).toBe('pending')
+  })
+
+  it('keeps the shipping method a Printify choice', async () => {
+    const refused = await json(await settingsRoute(request(POD_API_ROUTES.settings, 'tok-admin', { body: { provider: 'printful', shippingMethod: 'express' } })))
+    expect(refused.status).toBe(400)
+    const odd = await json(await settingsRoute(request(POD_API_ROUTES.settings, 'tok-admin', { body: { provider: 'printful', shippingMethod: 'teleport' } })))
+    expect(odd.status).toBe(400)
   })
 
   it('routes nothing for an order with no imported products, and nothing without a connection', async () => {

@@ -25,6 +25,7 @@ import {
   resolveSubscriptionFeePercent,
   resolveTransactionFeeCents,
   saleApplicationFeeCents,
+  salePlatformCostCents,
 } from './plan-entitlements'
 
 describe('direct-charge sale fees', () => {
@@ -58,5 +59,40 @@ describe('direct-charge sale fees', () => {
     const direct = resolveSubscriptionFeePercent(org, 'service', 1_000, { direct: true })
     expect(direct).toBeLessThan(destination)
     expect(Number.isInteger(direct * 100)).toBe(true)
+  })
+
+  /**
+   * The ladder of 2026-11-24 (AGL-4245) on the store's own account: Starter
+   * 1% physical / 3% services and digital, Pro 0% / 1%, Custom 0%. A 0% take
+   * sends no fee at all (`directChargeParams` omits the key, and a renewal
+   * unsets `application_fee_percent`), so the answer here must be exactly 0.
+   */
+  it('charges the new ladder on a direct sale, and nothing at 0%', () => {
+    const on = (plan: string) => ({ plan, subscriptionStatus: 'active' }) as any
+    const direct = { direct: true }
+    expect(resolveTransactionFeeCents(on('starter'), 'physical', 10_000, 10_000, direct)).toBe(100)
+    expect(resolveTransactionFeeCents(on('starter'), 'digital', 10_000, 10_000, direct)).toBe(300)
+    expect(resolveTransactionFeeCents(on('starter'), 'service', 10_000, 10_000, direct)).toBe(300)
+    expect(resolveTransactionFeeCents(on('pro'), 'physical', 10_000, 10_000, direct)).toBe(0)
+    expect(resolveTransactionFeeCents(on('pro'), 'digital', 10_000, 10_000, direct)).toBe(100)
+    expect(resolveTransactionFeeCents(on('pro'), 'service', 10_000, 10_000, direct)).toBe(100)
+    expect(resolveTransactionFeeCents(on('enterprise'), 'physical', 10_000, 10_000, direct)).toBe(0)
+    expect(resolveTransactionFeeCents(on('enterprise'), 'service', 10_000, 10_000, direct)).toBe(0)
+    // Subscriptions on the store's own account carry the take percent alone.
+    expect(resolveSubscriptionFeePercent(on('starter'), 'digital', 1_000, direct)).toBe(3)
+    expect(resolveSubscriptionFeePercent(on('starter'), 'physical', 1_000, direct)).toBe(1)
+    expect(resolveSubscriptionFeePercent(on('pro'), 'digital', 1_000, direct)).toBe(1)
+    expect(resolveSubscriptionFeePercent(on('pro'), 'physical', 1_000, direct)).toBe(0)
+  })
+
+  it('still recovers the platform cost at 0% on a destination sale (AGL-4245)', () => {
+    const pro = { plan: 'pro', subscriptionStatus: 'active' } as any
+    // $100 of physical goods on Pro: no take, so the fee is the platform's
+    // cost, card 320 + payout 50.
+    expect(resolveTransactionFeeCents(pro, 'physical', 10_000)).toBe(370)
+    expect(resolveTransactionFeeCents(pro, 'physical', 10_000)).toBe(salePlatformCostCents(10_000))
+    // A physical subscription on Pro: the percent is the platform's cost for
+    // the cycle, 3.7% of $100, never 0.
+    expect(resolveSubscriptionFeePercent(pro, 'physical', 10_000)).toBe(3.7)
   })
 })

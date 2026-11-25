@@ -51,8 +51,18 @@ Two settings sit under each connection:
 - **Send paid orders for production automatically** — on by default. Turn it
   off to have each paid order wait at the service as a **draft** until you
   confirm it from the order.
+- **Send for production** — with automatic sending on, how long a paid order
+  waits at the service as a draft before it is confirmed: as soon as it is
+  paid (the default), or from 1 hour up to 3 days later. An order canceled or
+  fully refunded in that time is canceled at the service and never made, so a
+  short wait gives a buyer time to cancel or fix their address.
 - **Use the service's retail prices when products update** — off by default,
   so your store keeps the prices you set in Aglyn.
+- **Printify shipping method** (Printify only) — **Standard** by default, or
+  **Priority**, **Express** or **Economy**. It decides how Printify ships your
+  orders and what it charges you for it. Not every product offers every
+  method; Printify refuses an order whose product does not. Printful chooses
+  how it ships each order itself.
 
 ## Import products
 
@@ -62,8 +72,13 @@ Printful store or Printify shop. Choose the ones to sell and select
 
 - its variants, as options such as **Color** and **Size**;
 - the retail price you set at the service, for each variant;
-- its photos, copied into your site's media library;
-- its description and, from Printify, its tags.
+- its photos, copied into your site's media library: up to 12 from the
+  product's gallery, plus each color's own photo so every choice shows its
+  picture. A photo too large to upload is made smaller first, never skipped;
+- its description as text, with lists and size charts kept readable, and,
+  from Printify, its tags;
+- a search title and description made from its name and description, which
+  you can change in **Search listing**.
 
 New products arrive as **drafts** unless you turn on **List new products in the
 store now**. Edit them like any other product: change the name, description,
@@ -78,21 +93,58 @@ turned on, or use **Update** from the product's menu under **Imported
 products**.
 
 Each imported product counts toward your plan's product allowance like any
-other. **Stop filling through the service** in the product's menu keeps the
+other.
+
+If the service deletes a product you imported, the daily update takes it off
+sale in your store (back to a draft) and your site's admins and editors are
+told, so nobody buys something that can no longer be made. Link it to another
+product at the service, or stop filling it through the service to sell it
+yourself.
+
+## Link a product you already have
+
+Moving from another store, your products may already be in Aglyn with their
+own photos, descriptions, addresses and search listings. Importing them from
+the service would make a second copy of each. Link them instead:
+
+1. Open the product in **Products** and scroll to **Made by Printful** or
+   **Made by Printify**.
+2. Select **Link to Printify product** (or Printful), choose the product at
+   the service, and select **Link**.
+
+Nothing is copied. The product keeps its name, description, photos, prices,
+address and search listing. Its sizes and colors are matched to the
+service's by **SKU** first, then by their names — so a color you call "Grey"
+still matches the service's "Sport Grey" once one of its sizes matched by
+SKU. A variant the service offers that your product did not have is added at
+the service's retail price; a variant your product had that the service
+cannot make is removed. You're told how many matched. Close the product
+without saving and open it again to see its variants.
+
+From then on paid orders for it go to the service, and the daily update
+keeps its availability and costs current while keeping your own option names
+and values.
+
+A linked product doesn't count against your product allowance again, because
+it is the same product. **Stop filling through the service** in the product's menu keeps the
 product in your store but stops sending its orders to the service.
 
 ## Costs and margins
 
-The product editor shows, for an imported product, what the service charges you
-for each variant next to its retail price there. Each order's **Print on
+The product editor shows, for an imported or linked product, what the service
+charges you for each variant next to its retail price there, and, from
+Printify, what it charges you to ship it with Standard shipping to each
+destination: the first item and each additional one, the highest of its
+variants. Your buyers pay your store's own shipping rates, not the service's,
+so set your rates (**Products → Settings → Shipping & delivery**) to cover it. Each order's **Print on
 demand** section shows what the service charged for that order — items,
 shipping and tax — next to what your buyer paid for those items, and the
 difference, before your own shipping charge and payment fees.
 
 ## Orders
 
-When an order is paid, its lines for imported products are sent to the service
-right away. An order with products from both services is sent to each, and
+When an order is paid, its lines for imported and linked products are sent to
+the service right away (as a draft first, when **Send for production** waits). An order with products from both services is sent to each, and
 lines for your own products stay with you to ship as usual: a shipping label
 you buy for the order leaves off the items a service is making.
 
@@ -144,8 +196,9 @@ shipping email follow the same rules.
 Aglyn asks the service to notify it of each shipment as it happens. If the
 service already sends its notifications somewhere else (Printful keeps one
 address per store), the connection shows **Checked every 15 min** and Aglyn
-asks the service about open orders instead, so a parcel still reaches the
-order.
+asks the service about each open order every 15 minutes instead, so a parcel
+reaches the order, and your buyer's shipping email goes, within about half an
+hour.
 
 ## Disconnect
 

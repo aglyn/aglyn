@@ -121,6 +121,11 @@ import {
 } from '../../../../utils/server/stripe-livemode'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 import { recordSiteCareProjectPayment } from '@aglyn/tenant-data-admin/server/site-care-projects'
+import { recordBuildFeePayment } from '@aglyn/tenant-data-admin/server/build-fees'
+import {
+  BUILD_FEE_METADATA,
+  parseBuildFeeSourceKey,
+} from '@aglyn/aglyn/app-utils/build-fee'
 // The leaf, not the barrel: the webhook's specs substitute the barrel, and
 // the row a fraud signal files must be the real one under them (AGL-3356).
 import {
@@ -1793,6 +1798,35 @@ async function handler(request: Request): Promise<Response> {
               if (outcome === 'recorded') ledger.effect('site-care-project-paid')
             } catch (projectError) {
               console.error('site care project payment not recorded', projectError)
+            }
+          }
+          // A WEBSITE BUILD FEE, PAID (AGL-4244). The checkout put it on the
+          // subscription's FIRST invoice and named its source on the
+          // subscription's metadata; that invoice being paid is the fee
+          // being paid. Renewals carry the same metadata and are skipped by
+          // their `billing_reason`. Idempotent on a redelivery; never this
+          // route's failure, and the checkout re-checks a fee's invoice in
+          // Stripe before it would ever charge it again.
+          const subscriptionMetadata = (object?.subscription_details?.metadata ?? {}) as Record<
+            string,
+            unknown
+          >
+          const buildFeeSource =
+            type === 'invoice.paid' && object?.billing_reason === 'subscription_create'
+              ? parseBuildFeeSourceKey(subscriptionMetadata[BUILD_FEE_METADATA.source])
+              : null
+          if (buildFeeSource && Number(subscriptionMetadata[BUILD_FEE_METADATA.cents] ?? 0) > 0) {
+            try {
+              const outcome = await recordBuildFeePayment(firebaseAdmin.app().firestore(), {
+                orgId,
+                source: buildFeeSource,
+                invoiceId: String(object?.id ?? ''),
+                subscriptionId:
+                  typeof object?.subscription === 'string' ? object.subscription : null,
+              })
+              if (outcome === 'recorded') ledger.effect('build-fee-paid')
+            } catch (buildFeeError) {
+              console.error('website build fee payment not recorded', buildFeeError)
             }
           }
           if (type === 'invoice.paid') {

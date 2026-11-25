@@ -92,6 +92,22 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-11-24 — Per-sale platform fees come down: Starter 1% physical / 3% services and digital, Pro 0% / 1%, Custom unchanged at 0% (AGL-4245)
+
+| Plan | Physical goods | Services and digital |
+| -- | -- | -- |
+| Starter | 2% → **1%** | 5% → **3%** |
+| Pro | 0.5% → **0%** | 3% → **1%** |
+| Custom | 0% (unchanged) | 0% (unchanged) |
+
+Stores now take payments on their own Stripe account, and Stripe bills the store for them, so the platform pays no Connect account or payout fees on those sales and Pro's 0.5% physical fee no longer covers any cost. Lowering every rung makes selling on Aglyn cheaper next to other site builders while the fee stays the usage price of the selling features. Free stays 0% / 0%, and a Free workspace given commerce by a per-org override is still charged Starter's rates, now 1% / 3%. A sale that still runs through the platform's account (a destination charge) keeps its floor: its application fee is never below what Stripe charges the platform for it (`saleApplicationFeeCents`), so a 0% rate never runs at a loss. The retired plans (Business 0% / 2%, Scale 0% / 1%, Advanced and Agency 0% / 0%) are not changed. These are price decreases, so `/pricing`, the calculator and the comparison pages are republished once billing carries them, after the owner approves the before → after rows.
+
+- **Decided by:** the account owner, 2026-11-24, in the session chat: Pro's physical fee 0.5% → 0% for stores on their own Stripe account, Pro services and digital 3% → 1%, and Starter lowered as well, to 1% physical and 3% services and digital.
+- **Scope:** pricing
+- **Evidence:** `PLAN_ENTITLEMENTS.starter` and `PLAN_ENTITLEMENTS.pro` (`transactionFeePhysicalPct`, `transactionFeeDigitalPct`) in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`; the `LOCKED.ladder` pin in `tools/scripts/check-pricing-drift.mjs`; `tools/marketing/pricing-copy/tables.json`; the docs and console copy that quote the rates; AGL-4245.
+
+---
+
 ## 2026-11-16 — Overage audit corrections: Starter email billed past 1,000 from November 2026, Free email capped at 300 a month, Free keeps 100 people for the CRM, API billed by size, Starter's extra site $25, Starter CRM records stop at Pro's band, retired API overage $0.50 (AGL-4227)
 
 After an audit of every overage line against cost and the upgrade path (the rule: overage above cost, and upgrading cheaper at heavy use):

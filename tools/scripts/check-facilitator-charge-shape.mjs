@@ -252,8 +252,10 @@ const DIRECT_CHARGE_SITES = new Map([
   [
     'libs/plugins/commerce/src/lib/server/seller-stripe-account.ts',
     'Reads a site sale back (status, expiry, portal) on the seller\'s account ' +
-      'first, then the platform; and asks whether the seller\'s own Stripe Tax ' +
-      'is set up before a direct sale turns `automatic_tax` on.',
+      'first, then the platform; asks whether the seller\'s own Stripe Tax ' +
+      'is set up before a direct sale turns `automatic_tax` on; and reads ' +
+      'its tax registrations for the console\'s Taxes card (AGL-4245, GET ' +
+      'only).',
   ],
   [
     'libs/plugins/commerce/src/lib/server/manual-tax-rate.ts',

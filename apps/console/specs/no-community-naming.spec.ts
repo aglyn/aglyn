@@ -235,6 +235,13 @@ const ALLOWED = new Map<string, string>([
       'filename.',
   ],
   [
+    'apps/docs/docs/guides/switching-to-aglyn/before-you-switch.md',
+    'One occurrence, and it is the LINK target support-and-community.md — ' +
+      'where a business switching from another platform asks for help ' +
+      '(AGL-4245). Same shape as report-an-issue.md above and unfixable in ' +
+      'place: the string is that page’s own exempted filename.',
+  ],
+  [
     'apps/docs/docs/workspace-and-billing/teams-and-roles/invite-teammates.md',
     'Points at the forum for help.',
   ],

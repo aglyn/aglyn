@@ -555,6 +555,34 @@ builder declares the extra-site cell ahead of the frame
 (`USAGE_STALE['Extra site, per month · Starter']`), and the email row is
 already declared absent from the page.
 
+### 2026-11-24 — the per-sale fee ladder comes down: the page after billing (AGL-4245)
+
+Starter 2% → 1% physical and 5% → 3% services and digital; Pro 0.5% → 0% and
+3% → 1%; Custom 0%; the retired plans unchanged. A price DECREASE, so the
+order is the reverse of a rise: the page may not quote less than billing
+charges, so `/pricing` and every other live surface move once the promotion
+carrying the code is in production. The code lane moved:
+
+- **#1 `plan-entitlements.ts`:** the Starter and Pro rows.
+- **#4 `LOCKED.ladder`** and **#5 `DECISION_LOG.md`**, together.
+- **#6 `tables.json`:** regenerated. The Figma frames still draw the v4
+  rates, so the four fee cells are declared in `FRAME_STALE_CELLS` and
+  `FEES_STALE` with the frames' values; each reports itself for deletion when
+  the re-extracted frames catch up.
+- `published-pricing-table-parity.spec.ts`: both fee rows are "code ahead of
+  the page", with the page's v4 figures kept beside the code's; the page's
+  transcription replaces them when it is republished.
+- The docs that print the rates, and their generated index.
+
+Owed once billing is live, each with the owner's yes on the before → after
+rows: `/pricing` (compare rows, the transaction-fee section and the mobile
+panels), its SEO description if it quotes a rate, the calculator's
+`plan_rates` / `plan_<id>` variables and `estimate_plan`, the comparison
+pages, the multi-site cost sheet PDF, page and blog post, and the Figma
+Pricing frames. No rate lives in Stripe: the fee is computed per sale from
+`PLAN_ENTITLEMENTS` and sent as `application_fee_amount` /
+`application_fee_percent`, so Stripe needs nothing.
+
 ## Enterprise has no price here, but it has bands
 
 `PLAN_ENTITLEMENTS.enterprise` is a row of **finite fallbacks** — twice

@@ -222,6 +222,11 @@ interface DeclaredSinkFile {
  * set — JSON-LD, the merchant feed, the page tokens — not the storefront.
  */
 const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
+  'apps/tenant/app/[host]/[scheme]/search/search-results.component.tsx': {
+    markers: 1,
+    guard: 'projection',
+    why: 'A product result\'s photo on the site search page. The URL is resolved by resolveMediaSrc in apps/tenant/utils/search-content.ts (with the host id) from the product card\'s imageUrl or first mediaUrls entry, which the merchant set in the product editor.',
+  },
   'apps/tenant/app/[host]/[scheme]/[[...slug]]/catch-all-client.tsx': {
     markers: 2,
     guard: 'media-ref',

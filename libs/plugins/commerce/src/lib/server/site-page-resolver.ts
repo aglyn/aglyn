@@ -128,7 +128,7 @@ export const commerceSitePageResolver: SitePageResolver = async ({
           tokens: {
             'product.name': product.name,
             'product.description': product.description ?? '',
-            'product.price': productPriceText(product, minPrice, maxPrice),
+            'product.price': CommerceModel.productPriceText(product, minPrice, maxPrice),
             'product.image':
               product.mediaUrls?.[0] ?? product.imageUrl ?? '',
             'product.slug': product.slug,
@@ -317,21 +317,9 @@ export const commerceSitePageResolver: SitePageResolver = async ({
   return undefined
 }
 
-/**
- * What `{{product.price}}` says: the price, "From" the lowest where variants
- * differ, or "Price coming soon" for a product listed before any variant has
- * one (AGL-3676) — never "$0".
- */
-export function productPriceText(
-  product: Pick<CommerceModel.HostProduct, 'variants'>,
-  minPrice: number,
-  maxPrice: number,
-): string {
-  if (!(product.variants ?? []).some((variant) => CommerceModel.variantHasPrice(variant))) {
-    return 'Price coming soon'
-  }
-  return minPrice === maxPrice ? `$${minPrice}` : `From $${minPrice}`
-}
+// What `{{product.price}}` says (AGL-3676) lives with the model now, so the
+// site's search can caption a product the same way without loading this page.
+export { productPriceText } from '../model'
 
 const PRODUCT_PAGE_NODE = 'pdp__detail'
 const PRODUCT_PAGE_REVIEWS_NODE = 'pdp__reviews'

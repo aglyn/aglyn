@@ -43,6 +43,7 @@ import {
   onboardingDestination,
   type OnboardingPlanIntent,
 } from './onboarding-deep-link'
+import { readBuildFee } from './build-fee'
 import { isLiveSubscriptionStatus } from './org-billing-doc'
 import { PLAN_LABELS, SELF_SERVE_PLANS } from './plan-entitlements'
 
@@ -87,6 +88,9 @@ export function readUpgradeProposal(
   }
   const note = normalizeUpgradeProposalNote(raw.note)
   const bundle = normalizeUpgradeProposalBundle(raw.plan, raw)
+  // A build fee rides only a proposal that starts a subscription (AGL-4244):
+  // a subscriber's first invoice is behind it.
+  const buildFee = raw.forSubscriber === true ? null : readBuildFee(raw.buildFee)
   return {
     plan: raw.plan,
     proposedBy: typeof raw.proposedBy === 'string' ? raw.proposedBy : '',
@@ -94,6 +98,7 @@ export function readUpgradeProposal(
     ...(note ? { note } : {}),
     ...bundle,
     ...(raw.forSubscriber === true ? { forSubscriber: true } : {}),
+    ...(buildFee ? { buildFee } : {}),
   }
 }
 

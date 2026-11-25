@@ -33,7 +33,7 @@ import {
 } from './carrier-shipping'
 import { resolveManualTaxRateId } from './manual-tax-rate'
 import {
-  SELLER_STRIPE_TAX_NOT_SET_UP_MESSAGE,
+  SELLER_STRIPE_TAX_NOT_SET_UP_MANAGER_MESSAGE,
   sellerStripeTaxActive,
 } from './seller-stripe-account'
 import { orderStatusUrl } from './order-status-token'
@@ -405,7 +405,9 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
       useStripeTax &&
       !(await sellerStripeTaxActive(String(accountId)))
     ) {
-      return res.status(409).json({ error: SELLER_STRIPE_TAX_NOT_SET_UP_MESSAGE })
+      // The manager making the link reads this, not a shopper (AGL-4245), so
+      // it says what to do rather than "try again later".
+      return res.status(409).json({ error: SELLER_STRIPE_TAX_NOT_SET_UP_MANAGER_MESSAGE })
     }
     const manualRate =
       taxDecision.kind === 'manual' &&

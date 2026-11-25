@@ -9397,6 +9397,11 @@
               "sample": "Great meeting you at the booth."
             },
             {
+              "name": "proposal.buildFee",
+              "description": "The one-time website build fee charged with the first payment, with how it is taxed, or nothing when no fee was set",
+              "sample": "Website build, $350 one time, charged with your first payment. Sales tax is added from your billing address, and Billing shows the total due today before you pay."
+            },
+            {
               "name": "billingUrl",
               "description": "Billing page with the bundle preselected; signing in with this address joins the workspace first",
               "sample": "https://app.aglyn.com/test-org/billing?plan=starter&interval=year&addons=siteCare"
@@ -9531,6 +9536,11 @@
               "name": "proposal.summary",
               "description": "The plan with the add-ons, cadence and coupon proposed with it, or nothing when only a plan was proposed",
               "sample": "Starter with Site Care, billed yearly, code BOOTH25"
+            },
+            {
+              "name": "proposal.buildFee",
+              "description": "The one-time website build fee charged with the first payment, with how it is taxed, or nothing when no fee was set",
+              "sample": "Website build, $350 one time, charged with your first payment. Sales tax is added from your billing address, and Billing shows the total due today before you pay."
             },
             {
               "name": "billingUrl",

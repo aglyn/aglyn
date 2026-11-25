@@ -19,16 +19,18 @@ import { pluginProductCatalog } from '@aglyn/aglyn/plugin-manager/plugin-product
 import { pluginProductWriter, type SourcedProductWriteOutcome } from '@aglyn/aglyn/plugin-manager/plugin-product-writer'
 import type { SecretBoxKeyring } from '@aglyn/shared-util-tools/secret-box'
 import { POD_COLLECTIONS } from '../constants/bundle-common'
-import { POD_PROVIDER_LABELS, type PodLinkedVariant } from '../model/print-on-demand'
+import { POD_PROVIDER_LABELS, podSeoFor, type PodLinkedVariant } from '../model/print-on-demand'
 import { PodProviderError } from '../providers/http'
 import type { PodSourceProduct } from '../providers/types'
+import { notifyHostManagers } from '@aglyn/tenant-data-admin'
 import { podProviderFor, readPodKeyring } from './config'
-import { copyImagesToLibrary, type MediaCopyContext } from './media'
+import { copyImagesToLibrary, photosToCopy, type MediaCopyContext } from './media'
 import { resolvePodSite } from './site-context'
 import {
   linkId,
   linkRef,
   openCredentials,
+  readLinksForProducts,
   podDb,
   readConnection,
   readStoredLink,
@@ -55,6 +57,23 @@ import {
  *
  * Prices are never converted: a service that prices in another currency
  * than the store's is refused with a sentence that says so.
+ *
+ * ## Linking a product the store already has
+ *
+ * A merchant moving from another store often has the products already —
+ * copied over with their own photos, words, addresses and search listing.
+ * Importing would make a second of each. Linking instead names the store's
+ * product: its variants are paired with the service's by SKU, then by the
+ * same choices (the writer's rule), and the product keeps everything the
+ * merchant wrote, its prices included. A variant the service has and the
+ * product did not is added; one the product had and the service does not
+ * offer is removed, because nothing could fill it.
+ *
+ * ## A product the service no longer has
+ *
+ * When a re-sync is told the product is gone (a 404), the store's product
+ * is taken off sale — back to a draft — and the site's managers are told
+ * once, so no shopper pays for something nothing will make.
  */
 
 /** How often the job re-syncs an imported product. */
@@ -67,6 +86,9 @@ export type PodImportResult =
       productId: string
       name: string
       imagesSkipped: number
+      /** On a link: variants paired with ones the product had, and how many the service offers. */
+      matched?: number
+      offered?: number
     }
   | { sourceProductId: string; outcome: 'failed'; message: string }
 
@@ -107,6 +129,12 @@ export async function importSourceProduct(input: {
   currency?: string
   /** A background re-sync: a product the merchant deleted is not made again. */
   background?: boolean
+  /**
+   * Link the service's product to this store product instead of making a
+   * new one: its variants are paired by SKU, then by choices, and the
+   * product keeps its own name, words, photos and prices.
+   */
+  linkProductId?: string
   now?: number
 }): Promise<PodImportResult> {
   const { hostId, connection, sourceProductId } = input
@@ -116,11 +144,32 @@ export async function importSourceProduct(input: {
   const existing = readStoredLink((await linkRef(id).get()).data())
   const writer = pluginProductWriter()
   if (!writer) return { sourceProductId, outcome: 'failed', message: 'This deployment has no store to import products into.' }
+  const linking = input.linkProductId ?? null
+  if (linking) {
+    if (existing && existing.productId !== linking) {
+      return {
+        sourceProductId,
+        outcome: 'failed',
+        message: `This ${label} product already fills “${existing.name}” in your store. Unlink it there first.`,
+      }
+    }
+    const other = (await readLinksForProducts(hostId, [linking])).get(linking)
+    if (other && other.id !== id) {
+      return {
+        sourceProductId,
+        outcome: 'failed',
+        message: `This product is already filled by another ${POD_PROVIDER_LABELS[other.link.provider]} product. Unlink it first.`,
+      }
+    }
+  }
 
   let product: PodSourceProduct
   try {
     product = await podProviderFor(connection.provider).getProduct(openCredentials(connection, input.keyring), sourceProductId)
   } catch (error) {
+    if (existing && error instanceof PodProviderError && error.status === 404) {
+      return sourceGone(input, existing, id, label, now)
+    }
     const message = error instanceof PodProviderError ? error.message : `${label} could not be read.`
     if (existing) await linkRef(id).set({ lastError: message, syncDueAtMs: now + POD_LINK_SYNC_MS }, { merge: true })
     return { sourceProductId, outcome: 'failed', message }
@@ -139,19 +188,25 @@ export async function importSourceProduct(input: {
     )
   }
 
-  const copyMedia = Boolean(input.media) && (!existing || input.content === true)
+  // A link keeps the merchant's own photos; an import copies the service's.
+  const copyMedia = Boolean(input.media) && !linking && (!existing || input.content === true)
   let mediaUrls: string[] = []
   let variantImages = new Map<string, string>()
   let imagesSkipped = 0
   if (copyMedia && input.media) {
     const variantSources = product.variants.map((variant) => variant.imageUrl).filter((url): url is string => Boolean(url))
-    const copied = await copyImagesToLibrary(input.media, product.name, [...product.imageUrls, ...variantSources])
+    const copied = await copyImagesToLibrary(input.media, product.name, photosToCopy(product.imageUrls, variantSources))
     mediaUrls = product.imageUrls.map((url) => copied.urls.get(url)).filter((url): url is string => Boolean(url))
     variantImages = copied.urls
     imagesSkipped = copied.skipped
   }
 
-  const previous = new Map((existing?.variants ?? []).map((variant) => [variant.sourceVariantId, variant.variantId]))
+  const previous = new Map(
+    (existing && existing.productId === (linking ?? existing.productId) ? existing.variants : []).map((variant) => [
+      variant.sourceVariantId,
+      variant.variantId,
+    ]),
+  )
   const written = await writer.upsertSourced({
     hostId,
     product: {
@@ -160,6 +215,7 @@ export async function importSourceProduct(input: {
       description: product.description,
       mediaUrls,
       tags: product.tags,
+      seo: podSeoFor(product.name, product.description),
       options: product.options,
       variants: product.variants.map((variant) => ({
         key: variant.id,
@@ -172,14 +228,16 @@ export async function importSourceProduct(input: {
         available: variant.available,
       })),
     },
-    ...(existing ? { productId: existing.productId } : {}),
+    ...(linking ? { productId: linking } : existing ? { productId: existing.productId } : {}),
     status: input.status ?? 'draft',
-    prices: connection.syncPrices,
-    content: input.content === true,
-    ...(input.background ? { recreate: false } : {}),
+    // A link keeps the store's prices; later re-syncs follow the connection's setting.
+    prices: linking ? false : connection.syncPrices,
+    content: linking ? false : input.content === true,
+    ...(input.background || linking ? { recreate: false } : {}),
     ...(input.actorUid ? { actorUid: input.actorUid } : {}),
   })
   if (written.outcome === 'missing') {
+    if (linking && !existing) return { sourceProductId, outcome: 'failed', message: 'That product is no longer in your store.' }
     // The merchant deleted the product: its link goes, so nothing routes to it.
     await linkRef(id).delete()
     return { sourceProductId, outcome: 'failed', message: writerRefusal(written) }
@@ -197,6 +255,13 @@ export async function importSourceProduct(input: {
     available: variant.available,
   }))
   const thumbnail = mediaUrls[0] ?? existing?.thumbnailUrl ?? null
+  // What shipping costs the merchant at the service; a failure keeps what was known.
+  const provider = podProviderFor(connection.provider)
+  const shippingCosts = provider.getShippingCosts
+    ? await provider
+        .getShippingCosts(openCredentials(connection, input.keyring), product)
+        .catch(() => existing?.shippingCosts ?? [])
+    : []
   const link: StoredPodLink = {
     orgId: input.orgId,
     hostId,
@@ -207,6 +272,8 @@ export async function importSourceProduct(input: {
     thumbnailUrl: thumbnail,
     costCurrency: product.currency,
     variants,
+    shippingCosts,
+    sourceGone: false,
     importedByUid: existing?.importedByUid ?? input.actorUid ?? '',
     // A product re-made because the merchant deleted the old one is a new import.
     importedAtMs: existing && existing.productId === written.productId ? existing.importedAtMs : now,
@@ -215,7 +282,43 @@ export async function importSourceProduct(input: {
     lastError: null,
   }
   await linkRef(id).set(link)
-  return { sourceProductId, outcome: written.outcome, productId: written.productId, name: product.name, imagesSkipped }
+  return {
+    sourceProductId,
+    outcome: written.outcome,
+    productId: written.productId,
+    name: product.name,
+    imagesSkipped,
+    ...(linking ? { matched: written.matched ?? 0, offered: product.variants.length } : {}),
+  }
+}
+
+/**
+ * The service says it no longer has the product: the store's product goes
+ * off sale, and the managers are told the first time.
+ */
+async function sourceGone(
+  input: { hostId: string; actorUid?: string },
+  existing: StoredPodLink,
+  id: string,
+  label: string,
+  now: number,
+): Promise<PodImportResult> {
+  const message = `${label} no longer has this product, so it was taken off sale. Link it to another ${label} product, or unlink it to sell it yourself.`
+  const unlisted = await pluginProductWriter()
+    ?.unlistSourced?.({ hostId: input.hostId, productId: existing.productId, ...(input.actorUid ? { actorUid: input.actorUid } : {}) })
+    .catch(() => null)
+  await linkRef(id).set({ lastError: message, sourceGone: true, syncDueAtMs: now + POD_LINK_SYNC_MS }, { merge: true })
+  if (!existing.sourceGone) {
+    await notifyHostManagers(input.hostId, {
+      type: 'content.lowStock',
+      title: `“${existing.name}” is no longer at ${label}`,
+      body:
+        unlisted === 'unlisted'
+          ? `${label} deleted it, so it was taken off sale in your store. Link it to another ${label} product, or unlink it to sell it yourself.`
+          : `${label} deleted it. Paid orders for it can no longer be sent; link it to another ${label} product, or unlink it.`,
+    }).catch(() => undefined)
+  }
+  return { sourceProductId: existing.sourceProductId, outcome: 'failed', message }
 }
 
 /**

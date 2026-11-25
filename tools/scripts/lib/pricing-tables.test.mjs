@@ -564,8 +564,13 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
     const run = check()
     assert.equal(run.status, 1)
     assert.match(run.stderr, /transaction fees: CODE-vs-FRAME disagreements/)
-    // Pro's v4 physical fee (AGL-4126).
-    assert.match(run.stderr, /Physical transaction fee · Pro \[mobile\]: code=0\.5% {2}frame=7%/)
+    // Pro's physical fee, 0% since 2026-11-24 (AGL-4245). The frame's v4
+    // 0.5% is declared stale, so a THIRD value is still a failure, and the
+    // message names the declared value it did not match.
+    assert.match(
+      run.stderr,
+      /Physical transaction fee · Pro \[mobile\]: code=0% {2}frame=7% {2}\(declared stale value was 0\.5%\)/,
+    )
   })
 
   it('reads the MOBILE add-on shape, which is not a plan row at all', () => {
