@@ -45,9 +45,9 @@ describe('the commerce record routes', () => {
     expect(pluginRecordRoute('order')?.pluginId).toBe('commerce')
   })
 
-  it('answers the catalog for a product, which opens in its editor', () => {
+  it('answers the catalog for a product, and opens the product itself in its editor', () => {
     expect(pluginRecordListHref('product', SITE)).toBe('/acme/hosts/shop/products')
-    expect(pluginRecordHref('product', SITE, 'p-1')).toBe('/acme/hosts/shop/products')
+    expect(pluginRecordHref('product', SITE, 'p-1')).toBe('/acme/hosts/shop/products/catalog?product=p-1')
   })
 
   it('opens an order in its dialog over the Orders list, and narrows the list to one buyer', () => {

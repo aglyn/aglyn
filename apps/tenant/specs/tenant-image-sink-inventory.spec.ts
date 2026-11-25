@@ -663,9 +663,9 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     why: 'Wishlist tile through siteRelativeMediaSrc (9a517e5ec). Resolution only; no scheme refusal.',
   },
   'libs/plugins/commerce/src/lib/server/site-page-resolver.ts': {
-    markers: 2,
+    markers: 3,
     guard: 'raw',
-    why: 'The product.image and collection.image page tokens substitute the stored string straight into a merchant\'s own page copy, with no resolver between the store and the render.',
+    why: 'The product.image and collection.image page tokens substitute the stored string straight into a merchant\'s own page copy, with no resolver between the store and the render. The third, `shareCard`, is a projection: it puts the product or collection image into the composed screen SEO, which page.tsx hands to resolveSocialImage like any screen image.',
   },
   'libs/plugins/crm/src/lib/components/record-files-card.tsx': {
     markers: 1,
