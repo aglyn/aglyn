@@ -663,9 +663,9 @@ const DECLARED: Readonly<Record<string, DeclaredSinkFile>> = {
     why: 'Wishlist tile through siteRelativeMediaSrc (9a517e5ec). Resolution only; no scheme refusal.',
   },
   'libs/plugins/commerce/src/lib/server/site-page-resolver.ts': {
-    markers: 2,
+    markers: 3,
     guard: 'raw',
-    why: 'The product.image and collection.image page tokens substitute the stored string straight into a merchant\'s own page copy, with no resolver between the store and the render.',
+    why: "The product.image and collection.image page tokens substitute the stored string straight into a merchant's own page copy, with no resolver between the store and the render — those two are why the file is raw. The third marker is the `image: string` parameter of `shareCard` (the product and collection pages' own share image): the product editor's OG image (`seo.imageUrl`), else the product's first photo (`mediaUrls[0]`, then `imageUrl`), or the collection's `imageUrl`, all merchant-set. It is merged as stored into the routed page's `screen.seo`, and the tenant head reads that through resolveSocialImage, which calls absoluteMediaSrc before og:image/twitter:image are emitted — a projection onto the media-ref resolver: any host and any scheme still pass, as for every other screen's seo.image.",
   },
   'libs/plugins/crm/src/lib/components/record-files-card.tsx': {
     markers: 1,
