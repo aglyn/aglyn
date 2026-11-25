@@ -74,9 +74,8 @@
  * publishes none. A price RISE publishes on the page before billing moves
  * (`docs/PRICING_SURFACES.md`), so the Pro column is pinned to the figures
  * those frames carry — $69 / $49, every Business feature, unlimited counts
- * and add-on ceilings, 1,500 API requests at $0.50, 0.5% on physical sales
- * (the fee ladder has since come down, code ahead of the page: AGL-4245).
- * Each moved cell says so. Business, Scale, Advanced and Agency are retired:
+ * and add-on ceilings, 1,500 API requests at $0.50. Each moved cell says so.
+ * Business, Scale, Advanced and Agency are retired:
  * never sold again, their rows kept in `PLAN_ENTITLEMENTS` for the
  * workspaces still on them, and no column on the page, so no figure of
  * theirs is pinned here any more.
@@ -652,28 +651,17 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
     })
 
     /**
-     * CODE AHEAD OF THE PAGE (AGL-4245): the per-sale fee ladder came down on
-     * 2026-11-24 — Starter 5% → 3% and 2% → 1%, Pro 3% → 1% and 0.5% → 0%.
-     * A price DECREASE publishes on the page once billing carries it
-     * (`docs/PRICING_SURFACES.md`), so until then the page still prints the
-     * v4 figures below (`PUBLISHED`). When the page is republished, its
-     * transcription replaces `PUBLISHED` and the two collapse into one row.
-     * Custom's "0%" is a fixed fee rather than a band, and the page prints it.
+     * The per-sale fee ladder came down on 2026-11-24 (AGL-4245) and the page
+     * printed it on 2026-11-25: Starter 3% / 1%, Pro 1% / 0%. Custom's "0%" is
+     * a fixed fee rather than a band, and the page prints it.
      */
-    it('Digital transaction fee — — · 3% · 1% · Custom 0% (code ahead of the page: 5% · 3%)', () => {
-      const PUBLISHED: Row = [0, 5, 3]
-      const CODE_AHEAD: Row = [0, 3, 1]
-      expect(quotaColumn('transactionFeeDigitalPct')).toEqual(CODE_AHEAD)
-      // Only ever lower than the page, never higher.
-      CODE_AHEAD.forEach((rate, index) => expect(rate).toBeLessThanOrEqual(PUBLISHED[index]))
+    it('Digital transaction fee — — · 3% · 1% · Custom 0%', () => {
+      expect(quotaColumn('transactionFeeDigitalPct')).toEqual([0, 3, 1] satisfies Row)
       expect(PLAN_ENTITLEMENTS.enterprise.transactionFeeDigitalPct).toBe(0)
     })
 
-    it('Physical transaction fee — — · 1% · 0% · Custom 0% (code ahead of the page: 2% · 0.5%)', () => {
-      const PUBLISHED: Row = [0, 2, 0.5]
-      const CODE_AHEAD: Row = [0, 1, 0]
-      expect(quotaColumn('transactionFeePhysicalPct')).toEqual(CODE_AHEAD)
-      CODE_AHEAD.forEach((rate, index) => expect(rate).toBeLessThanOrEqual(PUBLISHED[index]))
+    it('Physical transaction fee — — · 1% · 0% · Custom 0%', () => {
+      expect(quotaColumn('transactionFeePhysicalPct')).toEqual([0, 1, 0] satisfies Row)
       expect(PLAN_ENTITLEMENTS.enterprise.transactionFeePhysicalPct).toBe(0)
     })
 

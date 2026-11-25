@@ -565,23 +565,53 @@ carrying the code is in production. The code lane moved:
 
 - **#1 `plan-entitlements.ts`:** the Starter and Pro rows.
 - **#4 `LOCKED.ladder`** and **#5 `DECISION_LOG.md`**, together.
-- **#6 `tables.json`:** regenerated. The Figma frames still draw the v4
-  rates, so the four fee cells are declared in `FRAME_STALE_CELLS` and
-  `FEES_STALE` with the frames' values; each reports itself for deletion when
-  the re-extracted frames catch up.
-- `published-pricing-table-parity.spec.ts`: both fee rows are "code ahead of
-  the page", with the page's v4 figures kept beside the code's; the page's
-  transcription replaces them when it is republished.
+- **#6 `tables.json`:** regenerated. Until the Figma frames caught up, the
+  four fee cells were declared in `FRAME_STALE_CELLS` and `FEES_STALE` with
+  the frames' v4 values; those declarations are deleted now that the
+  re-extracted frames carry the new rates, and the reconciliation is clean
+  without them.
+- `published-pricing-table-parity.spec.ts`: both fee rows were "code ahead of
+  the page" until the page was republished; they are now one row each, the
+  published figures equal to the code's.
 - The docs that print the rates, and their generated index.
 
-Owed once billing is live, each with the owner's yes on the before → after
-rows: `/pricing` (compare rows, the transaction-fee section and the mobile
-panels), its SEO description if it quotes a rate, the calculator's
-`plan_rates` / `plan_<id>` variables and `estimate_plan`, the comparison
-pages, the multi-site cost sheet PDF, page and blog post, and the Figma
-Pricing frames. No rate lives in Stripe: the fee is computed per sale from
+No rate lives in Stripe: the fee is computed per sale from
 `PLAN_ENTITLEMENTS` and sent as `application_fee_amount` /
 `application_fee_percent`, so Stripe needs nothing.
+
+**Published 2026-11-25**, after Release v1.29.2 (which carries the code)
+reached production at 00:11Z, each surface by a guarded version cut from
+live, its old text asserted, then revalidated:
+
+- `/pricing` (screen `v0clP6xQl-`): `E-p7MXQY00` → `Vf-eag8pzc` at 00:17Z
+  (fees table, compare rows, mobile panels; the FAQ answer now "0–3%" and
+  "1% digital and nothing on physical goods on Pro, 0% on Custom"; the
+  break-even "about $3,300 a month"; and the Stripe clause "which Stripe
+  bills to your own Stripe account at its standard rates"), then
+  `Vf-eag8pzc` → `QciLvdt07B` at 00:26Z (the Hobby fees row reads "—" in
+  both columns). Live: `QciLvdt07B`. The SEO description quotes no rate.
+- The calculator variables `plan_starter` (3 / 1) and `plan_pro` (1 / 0), at
+  00:25Z; `plan_rates` and `estimate_plan` carry no rate.
+- The multi-site cost sheet page (`0uCIsr72VL`): `Z9gNuCRp9W` → `UP9-NIbBBM`;
+  its PDF replaced in place (same media id, same URL) and its blog post's
+  Aglyn rows and verdicts updated.
+- `/alternatives/shopify` `Kxy4ZKodwW` → `dw5kVwMhim`,
+  `/alternatives/squarespace` `VpoIAfwmlW` → `6Q1WIKjl76`,
+  `/alternatives/wix` `M77YzW3k-l` → `EqKI8kY04_`,
+  `/alternatives/duda` `B_6En3Oh9-` → `ANxOv_7lnp`,
+  `/shop-on-your-domain` `mAV3zPLg_T` → `BA3deKu0Ih`,
+  `/product/commerce` `__uaLQbhfo` → `EtIaun8bMM`,
+  `/use-cases/online-stores` `XZ3Xx6oN7s` → `f43Gp_8wyu`.
+- The Figma frames (marketing file): the four current Pricing frames (fee
+  cells, the Hobby dash, the fees paragraph and the FAQ answer), the current
+  Pricing template, the Alternatives frames (Shopify, Squarespace, Wix, Duda),
+  the Online stores use-case frames at every breakpoint and the
+  shop-on-your-domain campaign frame, each edited in place to the live text.
+  `tools/marketing/pricing-copy/copy-*.json` were re-extracted from the four
+  Pricing frames.
+
+Revert (page only, if ever needed): point `v0clP6xQl-`'s `versionId` back at
+`E-p7MXQY00` and revalidate; the code would then be below the page again.
 
 ### 2026-11-24, later — the retired plans are removed from the product (AGL-4245)
 
