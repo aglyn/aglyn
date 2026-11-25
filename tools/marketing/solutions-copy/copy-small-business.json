@@ -5,7 +5,7 @@
   "frameName": "Solutions — Small business",
   "frameSize": {
     "width": 1440,
-    "height": 4402
+    "height": 6366
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
   "sections": [
@@ -14,11 +14,11 @@
       "figmaNodeId": "165:1448",
       "order": 0,
       "heightPx": 689.5652465820312,
-      "eyebrow": "SOLUTIONS · SMALL BUSINESS",
-      "heading": "Everything to get online, one price.",
+      "eyebrow": "SMALL BUSINESS WEBSITE BUILDER",
+      "heading": "A website for your small business, with the store and bookings built in.",
       "subheading": null,
       "body": [
-        "A professional site, a store, bookings, and a contact form — without hiring a developer or paying for five different subscriptions."
+        "Get your business online this week: pages, a contact form, appointment booking and a store on your own domain, with no developer. Describe your business and Aglyn AI drafts the site; edit it on the canvas; publish. Free to start, one price when you grow."
       ],
       "actions": [],
       "items": [],
@@ -27,8 +27,22 @@
     },
     {
       "kind": null,
-      "figmaNodeId": "168:2498",
+      "figmaNodeId": "2358:69144",
       "order": 1,
+      "heightPx": 944,
+      "eyebrow": null,
+      "heading": null,
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:2498",
+      "order": 2,
       "heightPx": 253,
       "eyebrow": null,
       "heading": "You shouldn’t need a developer, an agency, and three subscriptions just to get online. Aglyn gives you a professional site, a store, and bookings for one simple price.",
@@ -42,7 +56,7 @@
     {
       "kind": null,
       "figmaNodeId": "165:1457",
-      "order": 2,
+      "order": 3,
       "heightPx": 716,
       "eyebrow": "WHY AGLYN FOR SMALL BUSINESS",
       "heading": "Your whole online presence, handled.",
@@ -99,7 +113,7 @@
     {
       "kind": null,
       "figmaNodeId": "168:2500",
-      "order": 3,
+      "order": 4,
       "heightPx": 554.2608642578125,
       "eyebrow": "SELL, BOOK, AND GET PAID",
       "heading": "Turn your site into a business.",
@@ -137,8 +151,8 @@
     {
       "kind": null,
       "figmaNodeId": "165:1503",
-      "order": 4,
-      "heightPx": 410,
+      "order": 5,
+      "heightPx": 473,
       "eyebrow": "HOW SMALL BUSINESSES GET ONLINE",
       "heading": "Online in an afternoon.",
       "subheading": null,
@@ -173,7 +187,7 @@
     {
       "kind": null,
       "figmaNodeId": "168:2616",
-      "order": 5,
+      "order": 6,
       "heightPx": 473,
       "eyebrow": "WHAT'S INCLUDED",
       "heading": "Everything to run your business.",
@@ -244,7 +258,7 @@
     {
       "kind": null,
       "figmaNodeId": "168:2653",
-      "order": 6,
+      "order": 7,
       "heightPx": 485,
       "eyebrow": "EXPLORE THE PLATFORM",
       "heading": "Built on the whole platform.",
@@ -285,8 +299,81 @@
     },
     {
       "kind": null,
+      "figmaNodeId": "2298:56468",
+      "order": 8,
+      "heightPx": 747,
+      "eyebrow": "BEFORE YOU START",
+      "heading": "Questions about a small business website builder.",
+      "subheading": null,
+      "body": [
+        "Cost, bookings, selling, SEO and what Aglyn AI does for you, in plain terms."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "2298:56471",
+          "meta": null,
+          "title": "How much does a small business website cost on Aglyn?",
+          "body": "Nothing to build and publish on the free plan. Your own domain, bookings and the store come with the Starter plan; the pricing page has every figure.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:56474",
+          "meta": null,
+          "title": "Can customers book appointments?",
+          "body": "Yes. Appointment booking with availability windows and reminder emails is built in from Starter.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:56477",
+          "meta": null,
+          "title": "Can I sell online and in person?",
+          "body": "Yes. Online checkout and digital goods from Starter; in-person POS with inventory kept in sync from Pro.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:56480",
+          "meta": null,
+          "title": "Do I need a developer?",
+          "body": "No. You edit on a visual canvas, and Aglyn AI drafts the first version from a description of your business.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:56483",
+          "meta": null,
+          "title": "Will my website show up on Google?",
+          "body": "It gives you the parts that rank: titles and descriptions for every page, sitemaps, Search Console and Bing verification and an SEO check that scores each page.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:56486",
+          "meta": null,
+          "title": "Do I own my website, and can I move it later?",
+          "body": "Yes. Your pages, media and customers live in your account, and Aglyn is open source and self-hostable, so nothing locks you in.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2328:66175",
+          "meta": null,
+          "title": "Can Aglyn AI build it for me?",
+          "body": "Yes. Describe the business and who it is for, confirm the plan, and the pages arrive as drafts for you to edit and publish.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2328:66178",
+          "meta": null,
+          "title": "What is Aglyn?",
+          "body": "Aglyn is a website builder with the store, forms, CRM, email, analytics and Aglyn AI built in. It is open source and free to start.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
       "figmaNodeId": "165:1523",
-      "order": 7,
+      "order": 9,
       "heightPx": 289,
       "eyebrow": null,
       "heading": "Get your business online.",

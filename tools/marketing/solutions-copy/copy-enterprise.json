@@ -5,7 +5,7 @@
   "frameName": "Solutions — Enterprise",
   "frameSize": {
     "width": 1440,
-    "height": 4572
+    "height": 6511
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
   "sections": [
@@ -14,11 +14,11 @@
       "figmaNodeId": "165:1176",
       "order": 0,
       "heightPx": 689.5652465820312,
-      "eyebrow": "SOLUTIONS · ENTERPRISE",
-      "heading": "Roles, security, and scale.",
+      "eyebrow": "MULTI-BRAND WEBSITE PLATFORM",
+      "heading": "Every brand’s website, one platform, one team.",
       "subheading": null,
       "body": [
-        "Run many sites and a big team on one console — with granular roles, audit trails, custom domains, and room to grow, backed by an open, self-hostable platform."
+        "Run many sites and a big team on one console — with granular roles, audit trails, custom domains, and room to grow, backed by an open, self-hostable platform. Describe a page or campaign and Aglyn AI drafts it in that brand’s theme for your team to review."
       ],
       "actions": [],
       "items": [],
@@ -27,8 +27,22 @@
     },
     {
       "kind": null,
-      "figmaNodeId": "168:2290",
+      "figmaNodeId": "2358:69183",
       "order": 1,
+      "heightPx": 944,
+      "eyebrow": null,
+      "heading": null,
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:2290",
+      "order": 2,
       "heightPx": 253,
       "eyebrow": null,
       "heading": "Running dozens of sites usually means dozens of logins, vendors, and gaps. Aglyn brings every site into one console — with the roles, audit, and governance a large team needs.",
@@ -42,7 +56,7 @@
     {
       "kind": null,
       "figmaNodeId": "165:1185",
-      "order": 2,
+      "order": 3,
       "heightPx": 737,
       "eyebrow": "WHY AGLYN FOR ENTERPRISE",
       "heading": "Built for teams that need control.",
@@ -54,7 +68,7 @@
           "figmaNodeId": "165:1190",
           "meta": null,
           "title": "Every site, one console",
-          "body": "Manage up to 25 hosts on Advanced from a single organization, with room to add more.",
+          "body": "Manage every host from a single organization, adding sites as your portfolio grows.",
           "extra": []
         },
         {
@@ -99,8 +113,8 @@
     {
       "kind": null,
       "figmaNodeId": "168:2292",
-      "order": 3,
-      "heightPx": 565,
+      "order": 4,
+      "heightPx": 554.2608642578125,
       "eyebrow": "SCALE WITHOUT CHAOS",
       "heading": "Many sites, one source of truth.",
       "subheading": null,
@@ -112,8 +126,8 @@
         {
           "figmaNodeId": "168:2298",
           "meta": null,
-          "title": "Scale without ceilings",
-          "body": "Advanced runs 25 sites, Agency runs 100 — and Enterprise contracts are sized to your portfolio, with volume pricing.",
+          "title": "Scale as your portfolio grows",
+          "body": "Pro includes 3 sites and adds more at $20 a month each, and Custom contracts are sized to your portfolio, with volume pricing.",
           "extra": []
         },
         {
@@ -137,12 +151,14 @@
     {
       "kind": null,
       "figmaNodeId": "589:1218",
-      "order": 4,
-      "heightPx": 138,
-      "eyebrow": "ON THE ENTERPRISE ROADMAP",
-      "heading": "Single sign-on (SAML / OIDC), an uptime SLA with a public status page, priority support with a named success manager, and a security & compliance kit are in active planning for Enterprise contracts.",
+      "order": 5,
+      "heightPx": 148,
+      "eyebrow": "ON ENTERPRISE",
+      "heading": "Single sign-on and dedicated support.",
       "subheading": null,
-      "body": [],
+      "body": [
+        "SAML/OIDC single sign-on and dedicated support with a named manager."
+      ],
       "actions": [],
       "items": [],
       "image": null,
@@ -151,8 +167,8 @@
     {
       "kind": null,
       "figmaNodeId": "165:1231",
-      "order": 5,
-      "heightPx": 410,
+      "order": 6,
+      "heightPx": 473,
       "eyebrow": "HOW ENTERPRISES RUN ON AGLYN",
       "heading": "Control, without the overhead.",
       "subheading": null,
@@ -187,7 +203,7 @@
     {
       "kind": null,
       "figmaNodeId": "168:2426",
-      "order": 6,
+      "order": 7,
       "heightPx": 473,
       "eyebrow": "WHAT'S INCLUDED",
       "heading": "Built for scale and control.",
@@ -198,7 +214,7 @@
         {
           "figmaNodeId": "168:2431",
           "meta": null,
-          "title": "Up to 100 sites on Agency",
+          "title": "Sites sized to your contract",
           "body": null,
           "extra": []
         },
@@ -258,7 +274,7 @@
     {
       "kind": null,
       "figmaNodeId": "168:2463",
-      "order": 7,
+      "order": 8,
       "heightPx": 485,
       "eyebrow": "EXPLORE THE PLATFORM",
       "heading": "Built on the whole platform.",
@@ -299,8 +315,74 @@
     },
     {
       "kind": null,
+      "figmaNodeId": "2298:56422",
+      "order": 9,
+      "heightPx": 723,
+      "eyebrow": "BEFORE YOU START",
+      "heading": "Questions about a multi-brand website platform.",
+      "subheading": null,
+      "body": [
+        "Roles, audit, shared components, SSO and pricing, answered before the first call."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "2298:56425",
+          "meta": null,
+          "title": "Can marketing run the sites without an engineering queue?",
+          "body": "Yes. Pages, forms, campaigns and content are edited visually with roles, versioning and scheduled publishing, so marketing ships without a ticket.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:56428",
+          "meta": null,
+          "title": "How do roles and audit work?",
+          "body": "Organization roles and per-site access control who can edit what, and an activity feed records every publish, order and change with who did it.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:56431",
+          "meta": null,
+          "title": "Can we share components across brands?",
+          "body": "Yes. Author a component or layout once and instance it across brand sites, with brand tokens set per site.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:56434",
+          "meta": null,
+          "title": "Is there single sign-on?",
+          "body": "SSO is available on Custom plans.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:56437",
+          "meta": null,
+          "title": "Can we self-host?",
+          "body": "Yes. Aglyn is Apache-2.0 and runs on your own infrastructure with Docker.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:56440",
+          "meta": null,
+          "title": "How is enterprise priced?",
+          "body": "Enterprise is custom. Talk to sales about sites, seats and support.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2328:66172",
+          "meta": null,
+          "title": "What is Aglyn?",
+          "body": "Aglyn is a website builder with the store, forms, CRM, email, analytics and Aglyn AI built in. It is open source and free to start.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
       "figmaNodeId": "165:1251",
-      "order": 8,
+      "order": 10,
       "heightPx": 289,
       "eyebrow": null,
       "heading": "Bring your team to Aglyn.",

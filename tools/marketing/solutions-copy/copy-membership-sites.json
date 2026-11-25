@@ -5,7 +5,7 @@
   "frameName": "Use case — Membership sites",
   "frameSize": {
     "width": 1440,
-    "height": 4906
+    "height": 5751
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
   "sections": [
@@ -14,11 +14,11 @@
       "figmaNodeId": "190:3423",
       "order": 0,
       "heightPx": 639.1304321289062,
-      "eyebrow": "USE CASE · MEMBERSHIP SITES",
-      "heading": "Members-only, made simple.",
+      "eyebrow": "MEMBERSHIP SITE BUILDER",
+      "heading": "Create a membership site with members-only pages and billing.",
       "subheading": null,
       "body": [
-        "Let people sign up, gate your content and perks behind a membership, and bill them on a recurring plan — all on your own site."
+        "Member accounts, gated pages and recurring Stripe subscriptions on your own site, with welcome emails and a CRM record for every member. Describe it and Aglyn AI drafts the pages. Included from the Pro plan."
       ],
       "actions": [],
       "items": [],
@@ -61,14 +61,14 @@
           "figmaNodeId": "190:3446",
           "meta": null,
           "title": "Gated content",
-          "body": "Lock pages, posts, or downloads behind a membership (Business and up).",
+          "body": "Lock pages, posts, or downloads behind a membership (Pro and up).",
           "extra": []
         },
         {
           "figmaNodeId": "190:3453",
           "meta": null,
           "title": "Subscriptions",
-          "body": "Bill members on recurring plans through Stripe (Business and up).",
+          "body": "Bill members on recurring plans through Stripe (Pro and up).",
           "extra": []
         },
         {
@@ -120,7 +120,7 @@
           "figmaNodeId": "420:6285",
           "meta": null,
           "title": "Gate what matters",
-          "body": "Lock pages, posts, and downloads behind membership (Business and up).",
+          "body": "Lock pages, posts, and downloads behind membership (Pro and up).",
           "extra": []
         },
         {
@@ -138,17 +138,11 @@
       "kind": null,
       "figmaNodeId": "190:3479",
       "order": 4,
-      "heightPx": 586,
+      "heightPx": 411,
       "eyebrow": "WHAT’S INCLUDED",
       "heading": "Everything to run a membership.",
       "subheading": null,
-      "body": [
-        "—",
-        "—",
-        "—",
-        "—",
-        "—"
-      ],
+      "body": [],
       "actions": [],
       "items": [
         {
@@ -161,14 +155,14 @@
         {
           "figmaNodeId": "190:3488",
           "meta": null,
-          "title": "Gated content (Business+)",
+          "title": "Gated content (Pro+)",
           "body": null,
           "extra": []
         },
         {
           "figmaNodeId": "190:3492",
           "meta": null,
-          "title": "Subscriptions (Business+)",
+          "title": "Subscriptions (Pro+)",
           "body": null,
           "extra": []
         },
@@ -201,7 +195,7 @@
       "kind": null,
       "figmaNodeId": "190:3508",
       "order": 5,
-      "heightPx": 414,
+      "heightPx": 474,
       "eyebrow": "HOW IT WORKS",
       "heading": "From sign-up to subscription.",
       "subheading": null,
@@ -254,15 +248,15 @@
         {
           "figmaNodeId": "420:6437",
           "meta": null,
-          "title": "Business unlocks gating",
-          "body": "Content gating, subscriptions, and gift cards from Business up.",
+          "title": "Pro unlocks gating",
+          "body": "Content gating, subscriptions, and gift cards from Pro up.",
           "extra": []
         },
         {
           "figmaNodeId": "420:6444",
           "meta": null,
           "title": "Email included",
-          "body": "Campaigns and lists built in — no separate email tool to pay for.",
+          "body": "Campaigns and lists built in from Pro — no separate email tool to pay for.",
           "extra": []
         }
       ],
@@ -313,8 +307,74 @@
     },
     {
       "kind": null,
-      "figmaNodeId": "190:3528",
+      "figmaNodeId": "2298:57815",
       "order": 8,
+      "heightPx": 750,
+      "eyebrow": "BEFORE YOU START",
+      "heading": "Questions about membership sites.",
+      "subheading": null,
+      "body": [
+        "Members, billing, gating and email, in plain terms."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "2298:57818",
+          "meta": null,
+          "title": "How do I create a membership site?",
+          "body": "Build the site, turn on member accounts, mark the pages that are members-only and connect Stripe for recurring billing.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57821",
+          "meta": null,
+          "title": "How do members pay?",
+          "body": "Through Stripe subscriptions on your own site, with no separate paywall or billing tool.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57824",
+          "meta": null,
+          "title": "What are the fees?",
+          "body": "Stripe's processing fee on every plan, plus a small Aglyn platform fee on digital goods and memberships that falls as you move up and reaches zero on the higher tiers. See pricing.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57827",
+          "meta": null,
+          "title": "Can I gate specific pages?",
+          "body": "Yes. Any page can be members-only, and member accounts are built in.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57830",
+          "meta": null,
+          "title": "Can I email members?",
+          "body": "Yes. Welcome emails run on workflows, and campaigns to consented members go out from Marketing on Pro and up.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57833",
+          "meta": null,
+          "title": "Which plan do I need?",
+          "body": "Subscriptions and memberships are included from the Pro plan; the pricing page lists every plan.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2328:66205",
+          "meta": null,
+          "title": "What is Aglyn?",
+          "body": "Aglyn is a website builder with the store, forms, CRM, email, analytics and Aglyn AI built in. It is open source and free to start.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:3528",
+      "order": 9,
       "heightPx": 290,
       "eyebrow": null,
       "heading": "Launch your membership on Aglyn.",

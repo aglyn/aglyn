@@ -5,7 +5,7 @@
   "frameName": "Use case — Portfolios",
   "frameSize": {
     "width": 1440,
-    "height": 4709
+    "height": 5727
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
   "sections": [
@@ -14,11 +14,11 @@
       "figmaNodeId": "190:2287",
       "order": 0,
       "heightPx": 639.1304321289062,
-      "eyebrow": "USE CASE · PORTFOLIOS",
-      "heading": "Show your work, beautifully.",
+      "eyebrow": "PORTFOLIO WEBSITE BUILDER",
+      "heading": "Create a portfolio website that shows your work beautifully.",
       "subheading": null,
       "body": [
-        "Design a portfolio that looks like you — on a live canvas, with a real media library behind it and your own domain out front."
+        "Build a portfolio website on a visual canvas with a real media library behind it: galleries, case studies, an about page and an inquiry form. Describe it and Aglyn AI drafts the pages. Free to start, your own domain from Starter."
       ],
       "actions": [],
       "items": [],
@@ -126,7 +126,7 @@
         {
           "figmaNodeId": "418:5959",
           "meta": null,
-          "title": "Fast on every screen",
+          "title": "Fast on every device",
           "body": "Responsive WebP variants served from the global CDN.",
           "extra": []
         }
@@ -195,7 +195,7 @@
       "kind": null,
       "figmaNodeId": "190:2372",
       "order": 5,
-      "heightPx": 392,
+      "heightPx": 474,
       "eyebrow": "HOW IT WORKS",
       "heading": "From blank canvas to portfolio.",
       "subheading": null,
@@ -307,8 +307,81 @@
     },
     {
       "kind": null,
-      "figmaNodeId": "190:2392",
+      "figmaNodeId": "2298:57631",
       "order": 8,
+      "heightPx": 726,
+      "eyebrow": "BEFORE YOU START",
+      "heading": "Questions about portfolio websites.",
+      "subheading": null,
+      "body": [
+        "Storage, images, forms and your own domain, in plain terms."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "2298:57634",
+          "meta": null,
+          "title": "How do I create a portfolio website for free?",
+          "body": "Sign up, describe your work to Aglyn AI or start from the ready-made site, add your images to the media library and publish on an aglyn.app address.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57637",
+          "meta": null,
+          "title": "How many images can I upload?",
+          "body": "The free plan includes 250 MB of storage; paid plans include more, with extra storage metered rather than blocked.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57640",
+          "meta": null,
+          "title": "Will it look good on phones?",
+          "body": "Yes. Galleries and pages are responsive, and images are delivered in the right size for each device.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57643",
+          "meta": null,
+          "title": "Can I add a contact or inquiry form?",
+          "body": "Yes. Forms and the Inbox are included on the free plan.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57646",
+          "meta": null,
+          "title": "Can I start from a portfolio template?",
+          "body": "Yes. Install a template or layout from the marketplace, or describe your work and Aglyn AI drafts the pages in your theme.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57649",
+          "meta": null,
+          "title": "Can I sell prints or downloads later?",
+          "body": "Yes. Switch on commerce from Starter to sell physical products and digital downloads from the same site.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2328:66193",
+          "meta": null,
+          "title": "Can I use my own domain?",
+          "body": "Yes, from the Starter plan, with SSL handled for you.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2344:9249",
+          "meta": null,
+          "title": "What is Aglyn?",
+          "body": "Aglyn is a website builder with the store, forms, CRM, email, analytics and Aglyn AI built in. It is open source and free to start.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:2392",
+      "order": 9,
       "heightPx": 290,
       "eyebrow": null,
       "heading": "Build your portfolio on Aglyn.",

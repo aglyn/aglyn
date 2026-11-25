@@ -5,7 +5,7 @@
   "frameName": "Use case — Online stores",
   "frameSize": {
     "width": 1440,
-    "height": 4709
+    "height": 6719
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
   "sections": [
@@ -14,11 +14,11 @@
       "figmaNodeId": "189:2139",
       "order": 0,
       "heightPx": 639.1304321289062,
-      "eyebrow": "USE CASE · ONLINE STORES",
-      "heading": "Open a store on your own site.",
+      "eyebrow": "ONLINE STORE BUILDER",
+      "heading": "Create an online store on your own website.",
       "subheading": null,
       "body": [
-        "Sell physical products, digital downloads, and subscriptions from a storefront that’s part of your site — with checkout, POS, and inventory built in."
+        "Build an online store with products, Stripe checkout and digital downloads on the same site as your pages and blog, with in-person POS and subscriptions from Pro. Describe your products and Aglyn AI drafts the listings. The store switches on from Starter."
       ],
       "actions": [],
       "items": [],
@@ -27,8 +27,22 @@
     },
     {
       "kind": null,
-      "figmaNodeId": "189:2241",
+      "figmaNodeId": "2358:69157",
       "order": 1,
+      "heightPx": 944,
+      "eyebrow": null,
+      "heading": null,
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "189:2241",
+      "order": 2,
       "heightPx": 214,
       "eyebrow": null,
       "heading": "You don’t need a separate storefront platform bolted onto your site. With Aglyn, your store and your site are the same thing — one design, one login, one checkout.",
@@ -42,7 +56,7 @@
     {
       "kind": null,
       "figmaNodeId": "189:2243",
-      "order": 2,
+      "order": 3,
       "heightPx": 707,
       "eyebrow": "WHAT YOUR STORE INCLUDES",
       "heading": "Everything you need to sell.",
@@ -61,7 +75,7 @@
           "figmaNodeId": "189:2255",
           "meta": null,
           "title": "Checkout & payments",
-          "body": "Stripe-powered checkout with taxes, discounts, coupons, and gift cards.",
+          "body": "Stripe-powered checkout with taxes, discounts and coupons, plus gift cards (Pro & up).",
           "extra": []
         },
         {
@@ -75,7 +89,7 @@
           "figmaNodeId": "189:2269",
           "meta": null,
           "title": "Subscriptions",
-          "body": "Offer recurring plans and memberships, billed through Stripe (Business and up).",
+          "body": "Offer recurring plans and memberships, billed through Stripe (Pro and up).",
           "extra": []
         },
         {
@@ -99,7 +113,7 @@
     {
       "kind": null,
       "figmaNodeId": "418:5709",
-      "order": 3,
+      "order": 4,
       "heightPx": 554.2608642578125,
       "eyebrow": "ORDERS & IN-PERSON",
       "heading": "Every order, one stream.",
@@ -137,7 +151,7 @@
     {
       "kind": null,
       "figmaNodeId": "189:2288",
-      "order": 4,
+      "order": 5,
       "heightPx": 411,
       "eyebrow": "WHAT’S INCLUDED",
       "heading": "Everything to sell.",
@@ -169,7 +183,7 @@
         {
           "figmaNodeId": "189:2305",
           "meta": null,
-          "title": "Subscriptions & gift cards (Business+)",
+          "title": "Subscriptions & gift cards (Pro+)",
           "body": null,
           "extra": []
         },
@@ -194,8 +208,8 @@
     {
       "kind": null,
       "figmaNodeId": "189:2317",
-      "order": 5,
-      "heightPx": 392,
+      "order": 6,
+      "heightPx": 474,
       "eyebrow": "HOW IT WORKS",
       "heading": "Selling in three steps.",
       "subheading": null,
@@ -230,7 +244,7 @@
     {
       "kind": null,
       "figmaNodeId": "418:5861",
-      "order": 6,
+      "order": 7,
       "heightPx": 485,
       "eyebrow": "GOOD TO KNOW",
       "heading": "Plans, in plain terms.",
@@ -242,21 +256,21 @@
           "figmaNodeId": "418:5866",
           "meta": null,
           "title": "Selling starts on Starter",
-          "body": "Open your store on any paid plan — digital fee 5% on Starter, down to 0% on Advanced.",
+          "body": "Open your store on any paid plan — digital fee 3% on Starter and 1% on Pro.",
           "extra": []
         },
         {
           "figmaNodeId": "418:5873",
           "meta": null,
           "title": "POS from Pro",
-          "body": "Ring up in-person sales with 1 register on Pro, 2 on Business, 5 on Advanced.",
+          "body": "Ring up in-person sales with 1 register per site on Pro, and add more as you need them.",
           "extra": []
         },
         {
           "figmaNodeId": "418:5880",
           "meta": null,
           "title": "Physical fees drop fast",
-          "body": "2% on Starter, then 0% from Pro up — payments through your own Stripe account.",
+          "body": "1% on Starter, 0% on Pro and Custom — payments through your own Stripe account.",
           "extra": []
         }
       ],
@@ -266,7 +280,7 @@
     {
       "kind": null,
       "figmaNodeId": "418:5906",
-      "order": 7,
+      "order": 8,
       "heightPx": 485,
       "eyebrow": "EXPLORE THE PLATFORM",
       "heading": "Built on the whole platform.",
@@ -307,8 +321,74 @@
     },
     {
       "kind": null,
+      "figmaNodeId": "2298:18751",
+      "order": 9,
+      "heightPx": 774,
+      "eyebrow": "BEFORE YOU START",
+      "heading": "Questions about building an online store.",
+      "subheading": null,
+      "body": [
+        "What you can sell, what it costs and when the store switches on."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "2298:18754",
+          "meta": null,
+          "title": "How do I create an online store on Aglyn?",
+          "body": "Build your site free, then switch on commerce from Starter: add products, connect Stripe and your checkout is live on your own domain.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:18757",
+          "meta": null,
+          "title": "What can I sell?",
+          "body": "Physical products, digital downloads and appointment bookings from Starter, and subscriptions from the Pro plan.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:18760",
+          "meta": null,
+          "title": "What are the fees?",
+          "body": "Stripe's processing fee on every plan, plus a small Aglyn platform fee on digital goods that falls as you move up and reaches zero on the higher tiers; physical goods carry a small fee only on Starter. See pricing.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:18763",
+          "meta": null,
+          "title": "Can I sell in person?",
+          "body": "Yes. In-person POS with inventory kept in sync is included from the Pro plan.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:18766",
+          "meta": null,
+          "title": "Can I start free and add the store later?",
+          "body": "Yes. Build the pages on the free plan and switch on commerce when you are ready to sell.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:18769",
+          "meta": null,
+          "title": "Do I need Shopify?",
+          "body": "Not when the store is part of a website that also markets and follows up. If selling is the whole business, Shopify is a strong pure-commerce choice; see our Shopify comparison.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2328:66181",
+          "meta": null,
+          "title": "What is Aglyn?",
+          "body": "Aglyn is a website builder with the store, forms, CRM, email, analytics and Aglyn AI built in. It is open source and free to start.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
       "figmaNodeId": "189:2337",
-      "order": 8,
+      "order": 10,
       "heightPx": 290,
       "eyebrow": null,
       "heading": "Open your store on Aglyn.",

@@ -5,7 +5,7 @@
   "frameName": "Solutions — Startups",
   "frameSize": {
     "width": 1440,
-    "height": 4363
+    "height": 5383
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
   "sections": [
@@ -14,11 +14,11 @@
       "figmaNodeId": "165:360",
       "order": 0,
       "heightPx": 689.5652465820312,
-      "eyebrow": "SOLUTIONS · STARTUPS",
-      "heading": "Launch fast. Iterate without a stack.",
+      "eyebrow": "WEBSITE BUILDER FOR STARTUPS",
+      "heading": "Build your startup’s website in a day, not a sprint.",
       "subheading": null,
       "body": [
-        "Get your marketing site, waitlist, blog — even a store — live in days, on one platform you won’t outgrow. Spend your time on the product, not the plumbing."
+        "A launch page, pricing, a waitlist form and a blog, with the CRM and email behind them, on one platform. Describe the site and Aglyn AI drafts it; edit it on the canvas; ship on your domain. Start free and grow into a team."
       ],
       "actions": [],
       "items": [],
@@ -138,7 +138,7 @@
       "kind": null,
       "figmaNodeId": "165:415",
       "order": 4,
-      "heightPx": 410,
+      "heightPx": 473,
       "eyebrow": "HOW STARTUPS SHIP ON AGLYN",
       "heading": "From zero to launched, fast.",
       "subheading": null,
@@ -212,7 +212,7 @@
         {
           "figmaNodeId": "168:1830",
           "meta": null,
-          "title": "Email — transactional & campaigns",
+          "title": "Email — transactional, campaigns from Pro",
           "body": null,
           "extra": []
         },
@@ -285,8 +285,74 @@
     },
     {
       "kind": null,
-      "figmaNodeId": "165:435",
+      "figmaNodeId": "2298:9304",
       "order": 7,
+      "heightPx": 747,
+      "eyebrow": "BEFORE YOU START",
+      "heading": "Questions about a website builder for startups.",
+      "subheading": null,
+      "body": [
+        "What the free plan covers, how far the platform scales and what engineers can extend."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "2298:9307",
+          "meta": null,
+          "title": "Can I launch a landing page and waitlist for free?",
+          "body": "Yes. The free plan covers a site with up to five pages and forms; the waitlist lands in your Inbox, and from Starter in the CRM.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:9310",
+          "meta": null,
+          "title": "Will we outgrow it?",
+          "body": "The same platform runs a hundred sites with roles, versioning and an API, so the marketing site, docs, pricing and blog can stay in one place as you grow.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:9313",
+          "meta": null,
+          "title": "Can engineers extend it?",
+          "body": "Yes — and most startups never need to. Aglyn is open source with a REST API and plugins, so engineers can extend it when the product demands it.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:9316",
+          "meta": null,
+          "title": "Does it handle pricing pages and docs?",
+          "body": "Yes. Pricing, documentation, blog and the marketing site all run on the same platform and theme.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:9319",
+          "meta": null,
+          "title": "Can I email the waitlist?",
+          "body": "Yes. Campaigns to consented contacts are part of Marketing on Pro and up, and a workflow can send the confirmation the moment someone signs up.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:9322",
+          "meta": null,
+          "title": "Can Aglyn AI write the first version?",
+          "body": "Yes. Describe what you are launching and who it is for, and Aglyn AI drafts the pages, navigation, form and palette for you to edit.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2328:66163",
+          "meta": null,
+          "title": "What is Aglyn?",
+          "body": "Aglyn is a website builder with the store, forms, CRM, email, analytics and Aglyn AI built in. It is open source and free to start.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "165:435",
+      "order": 8,
       "heightPx": 289,
       "eyebrow": null,
       "heading": "Build your startup on Aglyn.",
