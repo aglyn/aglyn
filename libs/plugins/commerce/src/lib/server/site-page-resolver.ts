@@ -114,7 +114,10 @@ export const commerceSitePageResolver: SitePageResolver = async ({
         // The head shares this page as the template's image, then the site
         // default, so their documents are read in the template's own batch
         // (AGL-2850).
+        const shareImage = productShareImage(product)
         const card = collectSocialImageFacts([
+          // Only when there is one: the list is the card's precedence.
+          ...(shareImage ? [shareImage] : []),
           (templateRes.screen as any).seo?.image,
           hostRes.host?.seo?.image,
         ])
@@ -187,6 +190,7 @@ export const commerceSitePageResolver: SitePageResolver = async ({
                       displayName: product.name,
                       seo: {
                         ...((templateRes.screen as any).seo ?? {}),
+                        ...shareCard(shareImage, product.name),
                         // Only when the PRODUCT authored one: inheriting the
                         // template screen's title would give every product
                         // page in the store the same `<title>`.
@@ -253,7 +257,10 @@ export const commerceSitePageResolver: SitePageResolver = async ({
       if (templateRes.screen) {
         // As on the PDP above: the template's image, then the site default
         // (AGL-2850).
+        const shareImage = shopCollection.imageUrl || undefined
         const card = collectSocialImageFacts([
+          // Only when there is one: the list is the card's precedence.
+          ...(shareImage ? [shareImage] : []),
           (templateRes.screen as any).seo?.image,
           hostRes.host?.seo?.image,
         ])
@@ -298,6 +305,7 @@ export const commerceSitePageResolver: SitePageResolver = async ({
                       displayName: shopCollection.name,
                       seo: {
                         ...((templateRes.screen as any).seo ?? {}),
+                        ...shareCard(shareImage, shopCollection.name),
                         title: undefined,
                         description:
                           shopCollection.description ?? undefined,
@@ -494,8 +502,9 @@ async function composeBuiltInProductPage(
       storeTakesReviews(hostId),
     ])
     const returns = productReturnWindow(product, rawReturns)
+    const shareImage = productShareImage(product)
     const card = collectSocialImageFacts([
-      product.mediaUrls?.[0] ?? product.imageUrl,
+      ...(shareImage ? [shareImage] : []),
       (host as { seo?: { image?: string } } | null)?.seo?.image,
     ])
     const nodes = await composeNodesWithChrome({
@@ -528,6 +537,7 @@ async function composeBuiltInProductPage(
               data: {
                 displayName: product.name,
                 seo: {
+                  ...shareCard(shareImage, product.name),
                   title: product.seo?.title ?? undefined,
                   description: product.seo?.description ?? product.description ?? undefined,
                 },
@@ -571,6 +581,39 @@ export function buildOrderStatusNodes(): Record<string, Aglyn.AglynNodeSchema> {
       pluginId: 'commerce',
       props: {},
     } as Aglyn.AglynNodeSchema,
+  }
+}
+
+/**
+ * The image a product page shares: the one picked in the product editor's
+ * "OG image" field (`seo.imageUrl`), else the product's first photo.
+ *
+ * Both product pages used to share the template's image, then the site
+ * default, so every product in a store shared one card and the editor's
+ * OG image was saved and never read. A product's own photo is the most
+ * specific card there is; the template's image stays the fallback for a
+ * product with no photo.
+ */
+function productShareImage(product: CommerceModel.HostProduct): string | undefined {
+  return product.seo?.imageUrl || product.mediaUrls?.[0] || product.imageUrl || undefined
+}
+
+/**
+ * The page's own card fields for a routed product or collection image.
+ *
+ * The template's pixel pair and alt describe the template's image, not this
+ * one, so they are cleared beside it: a stale 1200x630 on a square product
+ * photo is a wrong claim, and no pair is an honest one. The alt names what
+ * the page is about. Nothing when there is no image, so the template's card
+ * stands.
+ */
+function shareCard(image: string | undefined, name: string | undefined) {
+  if (!image) return {}
+  return {
+    image,
+    imageWidth: undefined,
+    imageHeight: undefined,
+    imageAlt: name || undefined,
   }
 }
 

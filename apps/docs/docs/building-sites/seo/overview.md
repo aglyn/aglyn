@@ -494,8 +494,12 @@ than a missing one — it is a claim that the answer is "nothing".
 
 Which image a page uses is decided in this order:
 
-1. the **entry's cover image**, for a blog or collection entry;
-2. the **page's own social image**, from its SEO panel;
+1. the **entry's cover image**, for a blog or collection entry. On a **store
+   product page**, the product's **OG image** from the product editor, then its
+   first photo; on a **store collection page**, the collection's image. So each
+   product and collection shares its own picture rather than one card for all;
+2. the **page's own social image**, from its SEO panel (on a product or
+   collection page, the template's, for one with no picture of its own);
 3. the **site default**, from Setup → SEO;
 4. nothing.
 
