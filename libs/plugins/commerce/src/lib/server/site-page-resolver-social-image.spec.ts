@@ -80,6 +80,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 
 import type { ComposeSocialImages } from '@aglyn/tenant-runtime/social-image-facts'
+import * as Aglyn from '@aglyn/aglyn/server'
 import { commerceSitePageResolver } from './site-page-resolver'
 
 const TEMPLATE_CARD = 'media:host-1/template-card'
@@ -242,5 +243,96 @@ describe("a product or collection page shares its own image", () => {
     expect(imagesHanded()).toEqual([PHOTO, TEMPLATE_CARD, HOST_CARD])
     expect(answer.props.data.screen.data.seo.image).toBe(PHOTO)
     expect(answer.props.data.screen.data.seo.imageAlt).toBe('Summer')
+  })
+})
+
+/**
+ * The head's answer, end to end: what `og:image` says for a store page.
+ *
+ * The cases above stop at the composed SEO and the facts batch. This one
+ * runs both through `resolveSocialImage` exactly as the tenant page head
+ * does (`sources: [screen.seo, host.seo]`, with
+ * `assetFacts: props.socialImageFacts`), so the card a crawler reads is the product's own
+ * photo, as an absolute URL, with the pixel pair its asset records rather
+ * than the template's 1200x630 or the site default.
+ */
+describe("a store page's og:image is its own picture with its own size", () => {
+  const PHOTO = 'media:host-1/blue-widget-front'
+  const PICKED = 'media:host-1/blue-widget-og'
+  const COVER = 'media:host-1/summer-cover'
+
+  const headCard = (answer: any) =>
+    Aglyn.resolveSocialImage({
+      sources: [answer.props.data.screen.data.seo, HOST.seo],
+      host: HOST,
+      assetFacts: answer.props.socialImageFacts,
+    })
+
+  beforeEach(() => {
+    DAM[PHOTO] = { width: 1000, height: 1000 }
+    DAM[PICKED] = { width: 1200, height: 630 }
+    DAM[COVER] = { width: 1600, height: 1200 }
+  })
+  afterEach(() => {
+    delete DAM[PHOTO]
+    delete DAM[PICKED]
+    delete DAM[COVER]
+  })
+
+  const withProduct = (extra: Record<string, unknown>) =>
+    mockProducts.splice(0, mockProducts.length, {
+      id: 'p1',
+      data: () => ({ name: 'Blue Widget', slug: 'blue-widget', status: 'active', priceUsd: 20, ...extra }),
+    })
+
+  it("is the product's first photo, absolute, with that photo's dimensions", async () => {
+    withProduct({ mediaUrls: [PHOTO, 'media:host-1/blue-widget-back'] })
+    const card = headCard(await resolve('/products/blue-widget'))
+    expect(card).toEqual({
+      url: 'https://acme.aglyn.app/api/media/cdn/host-1/blue-widget-front',
+      width: 1000,
+      height: 1000,
+      alt: 'Blue Widget',
+    })
+  })
+
+  it("is the product editor's OG image ahead of the photo, with its dimensions", async () => {
+    withProduct({ mediaUrls: [PHOTO], seo: { imageUrl: PICKED } })
+    const card = headCard(await resolve('/products/blue-widget'))
+    expect(card).toMatchObject({
+      url: expect.stringMatching(/^https:\/\/.+\/blue-widget-og$/),
+      width: 1200,
+      height: 630,
+    })
+  })
+
+  it("claims no size for a product photo whose asset records none, never the template's", async () => {
+    withProduct({ mediaUrls: ['media:host-1/unmeasured'] })
+    const card = headCard(await resolve('/products/blue-widget'))
+    expect(card?.url).toMatch(/\/unmeasured$/)
+    expect(card).not.toHaveProperty('width')
+    expect(card).not.toHaveProperty('height')
+  })
+
+  it("is the template's card for a product with no picture of its own", async () => {
+    const card = headCard(await resolve('/products/blue-widget'))
+    expect(card).toMatchObject({
+      url: expect.stringMatching(/\/template-card$/),
+      ...DAM[TEMPLATE_CARD],
+    })
+  })
+
+  it("is a store collection's own image, with its dimensions", async () => {
+    mockCollections.splice(0, mockCollections.length, {
+      id: 'c1',
+      data: () => ({ name: 'Summer', slug: 'summer', kind: 'catalog', imageUrl: COVER }),
+    })
+    const card = headCard(await resolve('/collections/summer'))
+    expect(card).toMatchObject({
+      url: expect.stringMatching(/\/summer-cover$/),
+      width: 1600,
+      height: 1200,
+      alt: 'Summer',
+    })
   })
 })
