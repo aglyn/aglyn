@@ -5,7 +5,7 @@
   "frameName": "Use case — Blogs",
   "frameSize": {
     "width": 1440,
-    "height": 4709
+    "height": 5676
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
   "sections": [
@@ -14,11 +14,11 @@
       "figmaNodeId": "190:2571",
       "order": 0,
       "heightPx": 639.1304321289062,
-      "eyebrow": "USE CASE · BLOGS",
-      "heading": "A blog that’s truly yours.",
+      "eyebrow": "BLOG WEBSITE BUILDER",
+      "heading": "Start a blog you own, with the audience to match.",
       "subheading": null,
       "body": [
-        "Write, schedule, and publish posts on a fast, global CDN — with categories, tags, and SEO built in, on a site you fully own. Write in markdown — fenced code blocks and tables render everywhere, and a pasted README keeps its structure."
+        "Start a blog with posts, categories, SEO fields, sitemaps and structured data, served fast on your own domain, with email campaigns to the readers you collect. Describe it and Aglyn AI drafts the layout. Free to start."
       ],
       "actions": [],
       "items": [],
@@ -43,7 +43,7 @@
       "kind": null,
       "figmaNodeId": "190:2582",
       "order": 2,
-      "heightPx": 707,
+      "heightPx": 685,
       "eyebrow": "WHAT YOUR BLOG INCLUDES",
       "heading": "Everything to publish.",
       "subheading": null,
@@ -68,7 +68,7 @@
           "figmaNodeId": "190:2601",
           "meta": null,
           "title": "Scheduled publishing",
-          "body": "Write now and publish later on a schedule (Business and up).",
+          "body": "Write now and publish later on a schedule (Pro and up).",
           "extra": []
         },
         {
@@ -162,7 +162,7 @@
         {
           "figmaNodeId": "190:2640",
           "meta": null,
-          "title": "Scheduled publishing (Business+)",
+          "title": "Scheduled publishing (Pro+)",
           "body": null,
           "extra": []
         },
@@ -195,7 +195,7 @@
       "kind": null,
       "figmaNodeId": "190:2656",
       "order": 5,
-      "heightPx": 392,
+      "heightPx": 445,
       "eyebrow": "HOW IT WORKS",
       "heading": "From draft to published.",
       "subheading": null,
@@ -248,15 +248,15 @@
         {
           "figmaNodeId": "419:6058",
           "meta": null,
-          "title": "Schedule on Business",
-          "body": "Write ahead and publish on a schedule from the Business plan up.",
+          "title": "Schedule on Pro",
+          "body": "Write ahead and publish on a schedule from the Pro plan up.",
           "extra": []
         },
         {
           "figmaNodeId": "419:6065",
           "meta": null,
           "title": "Email your readers",
-          "body": "500 sends a month on Starter, up to 250,000 on Advanced.",
+          "body": "Send each new post to your list with campaign email, from the Pro plan up.",
           "extra": []
         }
       ],
@@ -307,8 +307,81 @@
     },
     {
       "kind": null,
-      "figmaNodeId": "190:2676",
+      "figmaNodeId": "2298:57677",
       "order": 8,
+      "heightPx": 726,
+      "eyebrow": "BEFORE YOU START",
+      "heading": "Questions about starting a blog.",
+      "subheading": null,
+      "body": [
+        "Publishing, ranking, subscribers and ownership, in plain terms."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "2298:57680",
+          "meta": null,
+          "title": "How do I start a blog for free?",
+          "body": "Sign up, add the blog to your site, write your first post and publish on an aglyn.app address. Your own domain starts at Starter.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57683",
+          "meta": null,
+          "title": "Can I schedule posts?",
+          "body": "Yes. Write now and set a publish time.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57686",
+          "meta": null,
+          "title": "Will my blog rank on Google?",
+          "body": "It has the parts that rank: SEO fields on every post, sitemaps, structured data and fast CDN delivery. Ranking still depends on what you write.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57689",
+          "meta": null,
+          "title": "Can readers subscribe by email?",
+          "body": "Yes. A sign-up form collects subscribers with consent, and campaigns go out from Marketing on Pro and up.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57692",
+          "meta": null,
+          "title": "Does my blog have an RSS feed?",
+          "body": "Yes. Every blog publishes an RSS feed, and readers can also subscribe by email.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57695",
+          "meta": null,
+          "title": "Can I add a store or memberships later?",
+          "body": "Yes. Commerce and memberships run on the same site when you are ready.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2328:66196",
+          "meta": null,
+          "title": "Do I own my content?",
+          "body": "Yes. Your posts, media and subscriber list live in your organization on an open-source platform you could self-host.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2344:9252",
+          "meta": null,
+          "title": "What is Aglyn?",
+          "body": "Aglyn is a website builder with the store, forms, CRM, email, analytics and Aglyn AI built in. It is open source and free to start.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:2676",
+      "order": 9,
       "heightPx": 290,
       "eyebrow": null,
       "heading": "Start your blog on Aglyn.",

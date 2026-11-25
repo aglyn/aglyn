@@ -5,7 +5,7 @@
   "frameName": "Use case — Documentation",
   "frameSize": {
     "width": 1440,
-    "height": 4709
+    "height": 5681
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
   "sections": [
@@ -14,11 +14,11 @@
       "figmaNodeId": "190:3139",
       "order": 0,
       "heightPx": 639.1304321289062,
-      "eyebrow": "USE CASE · DOCUMENTATION",
-      "heading": "Docs that are easy to publish.",
+      "eyebrow": "DOCUMENTATION SITE BUILDER",
+      "heading": "Documentation that’s easy to publish and easy to find.",
       "subheading": null,
       "body": [
-        "Publish product docs, guides, and help articles as clean, fast pages — organized, searchable, and on your own domain. Write in markdown — fenced code blocks and tables render everywhere, and a pasted README keeps its structure."
+        "Publish product docs, guides, and help articles as clean, fast pages — organized, searchable, and on your own domain. Write in markdown — fenced code blocks and tables render everywhere, and a pasted README keeps its structure. Describe a docs page and Aglyn AI drafts it in your theme for you to edit and publish."
       ],
       "actions": [],
       "items": [],
@@ -68,7 +68,7 @@
           "figmaNodeId": "190:3169",
           "meta": null,
           "title": "Multilingual",
-          "body": "Publish docs in multiple languages with a language switcher (Business and up).",
+          "body": "Publish docs in multiple languages with a language switcher (Pro and up).",
           "extra": []
         },
         {
@@ -162,7 +162,7 @@
         {
           "figmaNodeId": "190:3208",
           "meta": null,
-          "title": "Multilingual (Business+)",
+          "title": "Multilingual (Pro+)",
           "body": null,
           "extra": []
         },
@@ -195,7 +195,7 @@
       "kind": null,
       "figmaNodeId": "190:3224",
       "order": 5,
-      "heightPx": 392,
+      "heightPx": 474,
       "eyebrow": "HOW IT WORKS",
       "heading": "From draft to docs.",
       "subheading": null,
@@ -231,7 +231,7 @@
       "kind": null,
       "figmaNodeId": "420:6193",
       "order": 6,
-      "heightPx": 485,
+      "heightPx": 463,
       "eyebrow": "GOOD TO KNOW",
       "heading": "Plans, in plain terms.",
       "subheading": null,
@@ -248,8 +248,8 @@
         {
           "figmaNodeId": "420:6205",
           "meta": null,
-          "title": "Translate on Business",
-          "body": "Multilingual pages with a language switcher from Business up.",
+          "title": "Translate on Pro",
+          "body": "Multilingual pages with a language switcher from Pro up.",
           "extra": []
         },
         {
@@ -307,8 +307,74 @@
     },
     {
       "kind": null,
-      "figmaNodeId": "190:3244",
+      "figmaNodeId": "2298:57769",
       "order": 8,
+      "heightPx": 702,
+      "eyebrow": "BEFORE YOU START",
+      "heading": "Questions about documentation sites.",
+      "subheading": null,
+      "body": [
+        "Domains, search, versions and languages, in plain terms."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "2298:57772",
+          "meta": null,
+          "title": "Can I build docs on my own domain?",
+          "body": "Yes. Documentation publishes to your own domain from Starter, or to an aglyn.app address on the free plan.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57775",
+          "meta": null,
+          "title": "Does it have search?",
+          "body": "Yes. Site-wide search is built in.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57778",
+          "meta": null,
+          "title": "Can I keep versions of the docs?",
+          "body": "Yes. Versioning and rollback are included from the Pro plan.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57781",
+          "meta": null,
+          "title": "Can docs be in more than one language?",
+          "body": "Yes. Multilingual support is available on the plans that include additional languages.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57784",
+          "meta": null,
+          "title": "Can docs and the marketing site share a theme?",
+          "body": "Yes. They run on the same platform and theme, in the same console.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:57787",
+          "meta": null,
+          "title": "Is it free?",
+          "body": "Yes to start: one site with up to five pages and forms, with no credit card.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2328:66202",
+          "meta": null,
+          "title": "What is Aglyn?",
+          "body": "Aglyn is a website builder with the store, forms, CRM, email, analytics and Aglyn AI built in. It is open source and free to start.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "190:3244",
+      "order": 9,
       "heightPx": 290,
       "eyebrow": null,
       "heading": "Publish your docs on Aglyn.",

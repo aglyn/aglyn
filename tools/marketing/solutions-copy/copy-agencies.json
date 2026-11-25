@@ -5,7 +5,7 @@
   "frameName": "Solutions — Agencies",
   "frameSize": {
     "width": 1440,
-    "height": 4444
+    "height": 6387
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-solutions-copy.mjs (AGL-1277). `kind` and `notes` are left null for a human pass — the frame does not name its own section types.",
   "sections": [
@@ -14,11 +14,11 @@
       "figmaNodeId": "164:195",
       "order": 0,
       "heightPx": 689.5652465820312,
-      "eyebrow": "SOLUTIONS · AGENCIES",
-      "heading": "Run every client site from one console.",
+      "eyebrow": "WEBSITE BUILDER FOR AGENCIES",
+      "heading": "Build every client website from one console.",
       "subheading": null,
       "body": [
-        "Spin up a host for each client, brand it as your own, control who can touch what, and bill it all from one place — without stitching a stack of tools together."
+        "Spin up a host for each client, brand it as your own, control who can touch what, and bill it all from one place — without stitching a stack of tools together. Describe a client’s site from the brief and Aglyn AI drafts it for your team to finish on the canvas."
       ],
       "actions": [],
       "items": [],
@@ -27,8 +27,22 @@
     },
     {
       "kind": null,
-      "figmaNodeId": "168:1404",
+      "figmaNodeId": "2358:69170",
       "order": 1,
+      "heightPx": 944,
+      "eyebrow": null,
+      "heading": null,
+      "subheading": null,
+      "body": [],
+      "actions": [],
+      "items": [],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
+      "figmaNodeId": "168:1404",
+      "order": 2,
       "heightPx": 253,
       "eyebrow": null,
       "heading": "Most agencies run a different stack for every client — a builder here, a store there, analytics somewhere else. Aglyn puts every client site on one platform, so your team learns it once and reuses everything.",
@@ -42,8 +56,8 @@
     {
       "kind": null,
       "figmaNodeId": "164:315",
-      "order": 2,
-      "heightPx": 758,
+      "order": 3,
+      "heightPx": 737,
       "eyebrow": "WHY AGLYN FOR AGENCIES",
       "heading": "One platform for every client.",
       "subheading": null,
@@ -68,7 +82,7 @@
           "figmaNodeId": "164:333",
           "meta": null,
           "title": "White-label sites, console & email",
-          "body": "On the Agency plan, published sites, the console your clients sign into, and every transactional email carry your brand — right down to running the console on your own domain.",
+          "body": "On a Custom plan, published sites, the console your clients sign into, and every transactional email carry your brand.",
           "extra": []
         },
         {
@@ -99,7 +113,7 @@
     {
       "kind": null,
       "figmaNodeId": "168:1406",
-      "order": 3,
+      "order": 4,
       "heightPx": 554.2608642578125,
       "eyebrow": "BUILD ONCE, REUSE EVERYWHERE",
       "heading": "Design a system, not one-off sites.",
@@ -137,8 +151,8 @@
     {
       "kind": null,
       "figmaNodeId": "164:361",
-      "order": 4,
-      "heightPx": 410,
+      "order": 5,
+      "heightPx": 473,
       "eyebrow": "HOW AGENCIES RUN ON AGLYN",
       "heading": "From pitch to handoff, in one place.",
       "subheading": null,
@@ -173,7 +187,7 @@
     {
       "kind": null,
       "figmaNodeId": "168:1558",
-      "order": 5,
+      "order": 6,
       "heightPx": 473,
       "eyebrow": "WHAT'S INCLUDED",
       "heading": "Everything agencies get.",
@@ -184,7 +198,7 @@
         {
           "figmaNodeId": "168:1563",
           "meta": null,
-          "title": "Multiple sites (up to 100 on Agency)",
+          "title": "Multiple sites (3 on Pro, then $20/mo each)",
           "body": null,
           "extra": []
         },
@@ -244,7 +258,7 @@
     {
       "kind": null,
       "figmaNodeId": "168:1595",
-      "order": 6,
+      "order": 7,
       "heightPx": 485,
       "eyebrow": "EXPLORE THE PLATFORM",
       "heading": "Built on the whole platform.",
@@ -285,8 +299,81 @@
     },
     {
       "kind": null,
+      "figmaNodeId": "2298:9258",
+      "order": 8,
+      "heightPx": 747,
+      "eyebrow": "BEFORE YOU START",
+      "heading": "Questions about a website builder for agencies.",
+      "subheading": null,
+      "body": [
+        "Plain answers on client sites, access, white-label and billing before you move a portfolio."
+      ],
+      "actions": [],
+      "items": [
+        {
+          "figmaNodeId": "2298:9261",
+          "meta": null,
+          "title": "How many client websites can I run?",
+          "body": "As many as you need: Starter includes one and Pro three, and each extra host is $20 a month rather than blocked.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:9264",
+          "meta": null,
+          "title": "Can clients log in to only their own site?",
+          "body": "Yes. A collaborator seat shows a client only the site they were invited to.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:9267",
+          "meta": null,
+          "title": "Can I white-label the sites and the console?",
+          "body": "Yes, on a Custom plan: published sites, the console your clients sign into and every transactional email carry your brand, down to running the console on your own domain.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:9270",
+          "meta": null,
+          "title": "What do 10, 25 or 100 client sites cost?",
+          "body": "Less than one subscription per site. The multi-site cost sheet puts Aglyn beside Webflow, Duda, Wix Studio and Framer at each size.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:9273",
+          "meta": null,
+          "title": "How is billing handled across clients?",
+          "body": "One billing view covers plans, seats and hosts for the whole portfolio, so you get one invoice and bill your clients however you like.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2298:9276",
+          "meta": null,
+          "title": "Can Aglyn AI draft a client site from a brief?",
+          "body": "Yes. Describe the business and who it is for, confirm the plan it proposes, and every page arrives as a draft under that client's host.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2328:66151",
+          "meta": null,
+          "title": "Can I reuse components across client sites?",
+          "body": "Yes. Author a component, layout or template once and instance it on every client site, with brand tokens set per client.",
+          "extra": []
+        },
+        {
+          "figmaNodeId": "2344:9237",
+          "meta": null,
+          "title": "What is Aglyn?",
+          "body": "Aglyn is a website builder with the store, forms, CRM, email, analytics and Aglyn AI built in. It is open source and free to start.",
+          "extra": []
+        }
+      ],
+      "image": null,
+      "notes": null
+    },
+    {
+      "kind": null,
       "figmaNodeId": "164:381",
-      "order": 7,
+      "order": 9,
       "heightPx": 289,
       "eyebrow": null,
       "heading": "Run your agency on Aglyn.",
