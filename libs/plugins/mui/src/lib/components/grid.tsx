@@ -55,6 +55,10 @@ export const ID: Aglyn.ComponentId = 'muiGrid'
 export const BREAKPOINTS = SPAN_BREAKPOINTS
 export type Breakpoint = SpanBreakpoint
 
+/** A stored spacing value: one size for every screen, or one per breakpoint. */
+export type GridSpacingValue =
+  number | string | Partial<Record<string, number | string | null>>
+
 export interface GridElementProps {
   /** Flex container behavior; items are its direct Grid children. */
   container?: boolean
@@ -67,9 +71,14 @@ export interface GridElementProps {
   size?: string | number
   /** Empty columns before the item; same syntax as `size`, minus `grow`. */
   offset?: string | number
-  spacing?: number | string
-  rowSpacing?: number | string
-  columnSpacing?: number | string
+  /**
+   * Gap between cells, in theme spacing units. A number, a numeric string
+   * (what a number field persists), or a per-breakpoint object such as
+   * `{ xs: 2, md: 4 }` (what the AI builder, the API and imports can write).
+   */
+  spacing?: GridSpacingValue
+  rowSpacing?: GridSpacingValue
+  columnSpacing?: GridSpacingValue
   /** Total columns in the container; MUI's default is 12. */
   columns?: number | string
   /**
@@ -103,7 +112,10 @@ const DEFAULT_COLUMNS = 12
  */
 const GridColumnsContext = createContext<number>(DEFAULT_COLUMNS)
 
-type SpanBreakpointStyles = Record<string, Record<string, Record<string, string>>>
+type SpanBreakpointStyles = Record<
+  string,
+  Record<string, Record<string, string>>
+>
 
 /**
  * The styles that widen a lone last cell to the full row (`fillLastRow`).
@@ -176,7 +188,12 @@ export function loneLastCellStyles(
  */
 export function parseSpan(
   value: unknown,
-): number | 'auto' | 'grow' | Record<string, number | 'auto' | 'grow'> | undefined {
+):
+  | number
+  | 'auto'
+  | 'grow'
+  | Record<string, number | 'auto' | 'grow'>
+  | undefined {
   // The reading itself is `parseBreakpointSpan` in `@aglyn/shared-data-enums`
   // (AGL-2486), shared with the attributes panel's breakpoint row so the
   // editor and the renderer cannot disagree about a stored string. This
@@ -220,6 +237,32 @@ function toNumber(value: unknown): number | undefined {
 }
 
 /**
+ * Reads a stored spacing value into what MUI's Grid accepts.
+ *
+ * A plain number or numeric string becomes a number. A per-breakpoint
+ * object (`{ xs: 5, md: 7 }`) is passed through with each value coerced
+ * the same way: running the whole object through `toNumber` turned it
+ * into `undefined`, and the row rendered with its columns flush against
+ * each other. Entries that are cleared (`null`, `''`) or not numbers are
+ * dropped rather than handed to MUI, and an object with nothing left is
+ * `undefined`, so MUI's own default applies.
+ */
+export function toSpacing(
+  value: unknown,
+): number | Record<string, number> | undefined {
+  if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+    const kept = Object.entries(value as Record<string, unknown>).flatMap(
+      ([key, entry]) => {
+        const parsed = toNumber(entry)
+        return parsed === undefined ? [] : [[key, parsed] as const]
+      },
+    )
+    return kept.length ? Object.fromEntries(kept) : undefined
+  }
+  return toNumber(value)
+}
+
+/**
  * Responsive 12-column grid (https://mui.com/material-ui/react-grid/).
  * One element covers both roles, matching MUI v6+: switch **Container**
  * on for the row, leave it off and set a **Span** for each cell.
@@ -253,16 +296,18 @@ const GridElement = forwardRef<HTMLDivElement, GridElementProps>(
         offset={parseOffset(offset)}
         // Spacing props only apply to containers; MUI ignores them on
         // items, so no need to strip them here.
-        spacing={toNumber(spacing)}
-        rowSpacing={toNumber(rowSpacing)}
-        columnSpacing={toNumber(columnSpacing)}
+        spacing={toSpacing(spacing)}
+        rowSpacing={toSpacing(rowSpacing)}
+        columnSpacing={toSpacing(columnSpacing)}
         columns={ownColumns}
         // A CLEARED select persists as `null`, and MUI resolves both of these
         // as responsive values — `null.xs` throws during SSR and 500s the
         // published page (the AGL-1226 shape). `undefined` is what "cleared"
         // has to mean by the time it reaches MUI.
         {...dropClearedProps({ direction, wrap })}
-        {...applySemanticElement(dropClearedProps(rest) as Record<string, unknown>)}
+        {...applySemanticElement(
+          dropClearedProps(rest) as Record<string, unknown>,
+        )}
         sx={[
           fillLastRow && !container
             ? (theme: Theme) =>

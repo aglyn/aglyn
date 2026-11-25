@@ -25,6 +25,7 @@ import Grid, {
   parseSpan,
   presets,
   schema,
+  toSpacing,
 } from './grid'
 
 describe('parseSpan (AGL-1201)', () => {
@@ -105,6 +106,92 @@ describe('Grid element', () => {
     const root = container.querySelector('.MuiGrid-container') as HTMLElement
     expect(root).toBeTruthy()
     expect(root.className).not.toMatch(/NaN/)
+  })
+})
+
+describe('responsive spacing', () => {
+  it('reads a number, a numeric string, and a breakpoint object', () => {
+    expect(toSpacing(3)).toBe(3)
+    expect(toSpacing('3')).toBe(3)
+    expect(toSpacing(0)).toBe(0)
+    expect(toSpacing({ xs: 5, md: 7 })).toEqual({ xs: 5, md: 7 })
+    expect(toSpacing({ xs: '2', md: '4' })).toEqual({ xs: 2, md: 4 })
+  })
+
+  it('drops cleared and non-numeric entries from a breakpoint object', () => {
+    // A cleared value persists as `null`; MUI must never receive it.
+    expect(toSpacing({ xs: 5, md: null })).toEqual({ xs: 5 })
+    expect(toSpacing({ xs: 'wide', md: 7 })).toEqual({ md: 7 })
+    expect(toSpacing({ xs: null, md: '' })).toBeUndefined()
+    expect(toSpacing({})).toBeUndefined()
+  })
+
+  it('treats a cleared or unreadable value as unset', () => {
+    expect(toSpacing(null)).toBeUndefined()
+    expect(toSpacing(undefined)).toBeUndefined()
+    expect(toSpacing('')).toBeUndefined()
+    expect(toSpacing('wide')).toBeUndefined()
+  })
+
+  /** Every rule emotion inserted, as one string, for reading the gap. */
+  const insertedCss = () =>
+    Array.from(document.querySelectorAll('style'))
+      .map((tag) =>
+        tag.sheet
+          ? Array.from(tag.sheet.cssRules)
+              .map((rule) => rule.cssText)
+              .join('\n')
+          : '',
+      )
+      .join('\n') +
+    Array.from(document.querySelectorAll('style'))
+      .map((tag) => tag.textContent ?? '')
+      .join('\n')
+
+  /** Every column gap the rendered grids declare, across media queries. */
+  const columnGaps = () =>
+    Array.from(
+      insertedCss().matchAll(/--Grid-columnSpacing:\s*([^;}]+)/g),
+      (match) => match[1].trim(),
+    )
+
+  it('renders an {xs, md} spacing as a non-zero column gap', () => {
+    // The live failure: `{ xs: 5, md: 7 }` went through `toNumber`, came
+    // out undefined, and the two columns sat flush with no gap at all.
+    const { container } = render(
+      <Grid container spacing={{ xs: 5, md: 7 }}>
+        <Grid size="xs:12 md:6">{'Left'}</Grid>
+        <Grid size="xs:12 md:6">{'Right'}</Grid>
+      </Grid>,
+    )
+    const root = container.querySelector('.MuiGrid-container') as HTMLElement
+    const gaps = columnGaps()
+    // One declaration per breakpoint, each a real gap: 5 and 7 units.
+    expect(gaps.some((gap) => /\b40px\b|calc\(5 \*/.test(gap))).toBe(true)
+    expect(gaps.some((gap) => /\b56px\b|calc\(7 \*/.test(gap))).toBe(true)
+    expect(gaps.every((gap) => !/^0(px)?$/.test(gap))).toBe(true)
+    expect(root.className).not.toMatch(/NaN|undefined|null/)
+  })
+
+  it('renders an object with a cleared breakpoint without throwing', () => {
+    const { container } = render(
+      <Grid container spacing={{ xs: 3, md: null }}>
+        <Grid size="6">{'Cell'}</Grid>
+      </Grid>,
+    )
+    expect(container.querySelector('.MuiGrid-container')).toBeTruthy()
+    expect(columnGaps().some((gap) => /\b24px\b|calc\(3 \*/.test(gap))).toBe(
+      true,
+    )
+  })
+
+  it("renders a null spacing as MUI's default", () => {
+    const { container } = render(
+      <Grid container spacing={null as any}>
+        <Grid size="6">{'Cell'}</Grid>
+      </Grid>,
+    )
+    expect(container.querySelector('.MuiGrid-container')).toBeTruthy()
   })
 })
 
@@ -198,7 +285,7 @@ describe('the container props MUI has, and only those (AGL-2486)', () => {
     expect(values('direction')).not.toContain('column-reverse')
   })
 
-  it('offers exactly MUI\'s three wrap values', () => {
+  it("offers exactly MUI's three wrap values", () => {
     expect(values('wrap').sort()).toEqual(
       ['nowrap', 'wrap', 'wrap-reverse'].sort(),
     )
@@ -234,9 +321,7 @@ describe('Span and Offset are authored per breakpoint (AGL-2486)', () => {
     schema.attributes.find((a: any) => a.name === name) as any
 
   it('uses the breakpoint row, not a free-text box', () => {
-    expect(by('size').component).toBe(
-      Aglyn.FieldComponentType.BREAKPOINT_SPAN,
-    )
+    expect(by('size').component).toBe(Aglyn.FieldComponentType.BREAKPOINT_SPAN)
     expect(by('offset').component).toBe(
       Aglyn.FieldComponentType.BREAKPOINT_SPAN,
     )
@@ -346,7 +431,9 @@ describe('a cell alone on the last row fills it (AGL-3715)', () => {
   /** Every rule emotion has inserted so far, in order. */
   const emittedCss = () =>
     Array.from(document.styleSheets)
-      .flatMap((sheet) => Array.from(sheet.cssRules).map((rule) => rule.cssText))
+      .flatMap((sheet) =>
+        Array.from(sheet.cssRules).map((rule) => rule.cssText),
+      )
       .concat(
         Array.from(document.querySelectorAll('style')).map(
           (style) => style.textContent ?? '',
@@ -359,7 +446,9 @@ describe('a cell alone on the last row fills it (AGL-3715)', () => {
   it('spans the row at each breakpoint range where it is alone, bounded', () => {
     // One a row on a phone, two from sm, three from md: an odd last cell
     // fills its row from sm until md, and a 3n+1 last cell from md up.
-    expect(loneLastCellStyles({ xs: 12, sm: 6, md: 4 }, 12, breakpoints)).toEqual({
+    expect(
+      loneLastCellStyles({ xs: 12, sm: 6, md: 4 }, 12, breakpoints),
+    ).toEqual({
       [between('sm', 'md')]: {
         '&:last-child:nth-child(2n + 1)': { width: '100%' },
       },
@@ -369,7 +458,7 @@ describe('a cell alone on the last row fills it (AGL-3715)', () => {
     })
   })
 
-  it('counts against the row\'s own Columns', () => {
+  it("counts against the row's own Columns", () => {
     expect(loneLastCellStyles(2, 6, breakpoints)).toEqual({
       [breakpoints.up('xs')]: {
         '&:last-child:nth-child(3n + 1)': { width: '100%' },
@@ -380,21 +469,21 @@ describe('a cell alone on the last row fills it (AGL-3715)', () => {
   it('adds nothing where a cell is already a whole row, auto, or grow', () => {
     expect(loneLastCellStyles(12, 12, breakpoints)).toEqual({})
     expect(loneLastCellStyles('auto', 12, breakpoints)).toEqual({})
-    expect(loneLastCellStyles({ xs: 12, md: 'grow' }, 12, breakpoints)).toEqual({})
+    expect(loneLastCellStyles({ xs: 12, md: 'grow' }, 12, breakpoints)).toEqual(
+      {},
+    )
     expect(loneLastCellStyles(undefined, 12, breakpoints)).toEqual({})
   })
 
   it('ends a range where an auto span takes over', () => {
-    expect(
-      loneLastCellStyles({ xs: 6, lg: 'auto' }, 12, breakpoints),
-    ).toEqual({
+    expect(loneLastCellStyles({ xs: 6, lg: 'auto' }, 12, breakpoints)).toEqual({
       [between('xs', 'lg')]: {
         '&:last-child:nth-child(2n + 1)': { width: '100%' },
       },
     })
   })
 
-  it('emits the rule for the row\'s columns in the rendered page', () => {
+  it("emits the rule for the row's columns in the rendered page", () => {
     render(
       <Grid container columns={6}>
         <Grid size="2" fillLastRow>
@@ -405,7 +494,9 @@ describe('a cell alone on the last row fills it (AGL-3715)', () => {
         </Grid>
       </Grid>,
     )
-    expect(emittedCss()).toMatch(/:last-child:nth-child\(3n \+ 1\)\s*\{\s*width:\s*100%;?\s*\}/)
+    expect(emittedCss()).toMatch(
+      /:last-child:nth-child\(3n \+ 1\)\s*\{\s*width:\s*100%;?\s*\}/,
+    )
   })
 
   it('leaves a cell without the setting alone', () => {
