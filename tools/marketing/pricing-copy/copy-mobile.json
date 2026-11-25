@@ -5,7 +5,7 @@
   "frameName": "✅ CURRENT · Pricing — Mobile",
   "frameSize": {
     "width": 375,
-    "height": 15024
+    "height": 15008
   },
   "notes": "Extracted verbatim from the Figma frame by tools/marketing/extract-pricing-copy.mjs (AGL-1278). `kind` and `notes` are left null for a human pass — the frame does not name its own section types. THE CODE WINS OVER THE FRAME: this file is a record of the design, not of the truth. Prices here have been caught drifting from libs/aglyn/src/lib/app-utils/plan-entitlements.ts twice; that file is the source of truth for every number.",
   "sections": [
@@ -673,7 +673,7 @@
               "name": "row",
               "cells": [
                 "Digital transaction fee",
-                "3%"
+                "1%"
               ]
             },
             {
@@ -681,7 +681,7 @@
               "name": "row",
               "cells": [
                 "Physical transaction fee",
-                "0.5%"
+                "0%"
               ]
             },
             {
@@ -973,7 +973,7 @@
       "name": "Usage pricing",
       "order": 3,
       "widthPx": 375,
-      "heightPx": 4065,
+      "heightPx": 4049,
       "groups": [
         {
           "figmaNodeId": "268:2170",
@@ -1529,7 +1529,7 @@
               "figmaNodeId": "2610:678",
               "name": null,
               "cells": [
-                "This is on top of Stripe's processing fee (2.9% + 30¢ on most online card sales), which we pass through to you at cost — it shows up in your Aglyn fee rather than as a separate Stripe charge. Services, including appointment bookings and reservations, are charged at the digital rate. The Aglyn percentage steps down as you move up the plans. If you sell physical goods, moving from Starter to Pro pays for itself on the fee alone once sales pass about $2,200 a month, on yearly billing. Selling through the Aglyn marketplace is separate from the rates above and does not step down with your plan: Aglyn keeps 20% of a marketplace listing sale on every paid plan, and 30% on Free."
+                "This is on top of Stripe's processing fee (2.9% + 30¢ on most online card sales), which Stripe bills to your own Stripe account at its standard rates. Services, including appointment bookings and reservations, are charged at the digital rate. The Aglyn percentage steps down as you move up the plans. If you sell physical goods, moving from Starter to Pro pays for itself on the fee alone once sales pass about $3,300 a month, on yearly billing. Selling through the Aglyn marketplace is separate from the rates above and does not step down with your plan: Aglyn keeps 20% of a marketplace listing sale on every paid plan, and 30% on Free."
               ]
             },
             {
@@ -1546,8 +1546,8 @@
               "name": "mc",
               "cells": [
                 "Hobby",
-                "0%",
-                "0%"
+                "—",
+                "—"
               ]
             },
             {
@@ -1555,8 +1555,8 @@
               "name": "mc",
               "cells": [
                 "Starter",
-                "5%",
-                "2%"
+                "3%",
+                "1%"
               ]
             },
             {
@@ -1564,8 +1564,8 @@
               "name": "mc",
               "cells": [
                 "Pro",
-                "3%",
-                "0.5%"
+                "1%",
+                "0%"
               ]
             },
             {
@@ -1691,7 +1691,7 @@
               "name": "qa",
               "cells": [
                 "How do transaction fees work?",
-                "Payments run on Stripe. Aglyn adds a transaction fee on top of Stripe’s processing — 0–5% depending on plan and what you sell: physical goods on the lower rate, digital products and services (bookings included) on the higher one. It steps down as you move up — 3% digital and 0.5% physical on Pro, 0% on Custom."
+                "Payments run on Stripe. Aglyn adds a transaction fee on top of Stripe’s processing — 0–3% depending on plan and what you sell: physical goods on the lower rate, digital products and services (bookings included) on the higher one. It steps down as you move up — 1% digital and nothing on physical goods on Pro, 0% on Custom."
               ]
             },
             {
