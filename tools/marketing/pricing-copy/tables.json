@@ -822,8 +822,8 @@
       {
         "plan": "free",
         "label": "Free",
-        "digital": "0%",
-        "physical": "0%"
+        "digital": "—",
+        "physical": "—"
       },
       {
         "plan": "starter",
