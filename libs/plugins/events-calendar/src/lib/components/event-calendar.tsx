@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { EVENT_ELEMENT_ICON_COLOR } from './element-icon'
 import { mdiCalendarMonth } from '@aglyn/shared-data-mdi'
 import Box from '@mui/material/Box'
 import { forwardRef, lazy, Suspense } from 'react'
@@ -50,7 +51,7 @@ export const schema: Aglyn.ComponentSchema<EventCalendarProps> = {
   description:
     'Your published events by month, week or list, with category filters, search, tickets and add to calendar.',
   category: Aglyn.ComponentCategory.DATA_DISPLAY,
-  icon: { path: mdiCalendarMonth.path, sx: { color: '#7b1fa2' } },
+  icon: { path: mdiCalendarMonth.path, sx: { color: EVENT_ELEMENT_ICON_COLOR } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
   attributes: [
     {
@@ -108,7 +109,7 @@ export const presets: Aglyn.PresetSchema[] = [
     pluginId: BUNDLE_ID,
     description: 'Month, week and list views of your events (add-on)',
     category: Aglyn.ComponentCategory.DATA_DISPLAY,
-    icon: { path: mdiCalendarMonth.path, sx: { color: '#7b1fa2' } },
+    icon: { path: mdiCalendarMonth.path, sx: { color: EVENT_ELEMENT_ICON_COLOR } },
     data: { $id: null, componentId: ID, pluginId: BUNDLE_ID, props: {} },
   },
 ]

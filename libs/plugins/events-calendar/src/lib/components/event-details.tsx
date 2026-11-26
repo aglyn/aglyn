@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { EVENT_ELEMENT_ICON_COLOR } from './element-icon'
 import { mdiCalendarText } from '@aglyn/shared-data-mdi'
 import Box from '@mui/material/Box'
 import { forwardRef, lazy, Suspense } from 'react'
@@ -50,7 +51,7 @@ export const schema: Aglyn.ComponentSchema<EventDetailsProps> = {
   description:
     'The event a calendar link opens: its date, place, tickets, add to calendar and next dates. Place it on your event page.',
   category: Aglyn.ComponentCategory.DATA_DISPLAY,
-  icon: { path: mdiCalendarText.path, sx: { color: '#7b1fa2' } },
+  icon: { path: mdiCalendarText.path, sx: { color: EVENT_ELEMENT_ICON_COLOR } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
   attributes: [
     {
@@ -71,7 +72,7 @@ export const presets: Aglyn.PresetSchema[] = [
     pluginId: BUNDLE_ID,
     description: 'One event, opened from the calendar (add-on)',
     category: Aglyn.ComponentCategory.DATA_DISPLAY,
-    icon: { path: mdiCalendarText.path, sx: { color: '#7b1fa2' } },
+    icon: { path: mdiCalendarText.path, sx: { color: EVENT_ELEMENT_ICON_COLOR } },
     data: { $id: null, componentId: ID, pluginId: BUNDLE_ID, props: {} },
   },
 ]

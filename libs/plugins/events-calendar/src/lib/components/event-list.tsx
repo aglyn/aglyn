@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { EVENT_ELEMENT_ICON_COLOR } from './element-icon'
 import { mdiCalendarStar } from '@aglyn/shared-data-mdi'
 import Box from '@mui/material/Box'
 import CircularProgress from '@mui/material/CircularProgress'
@@ -258,7 +259,7 @@ export const schema: Aglyn.ComponentSchema<EventListProps> = {
   category: Aglyn.ComponentCategory.DATA_DISPLAY,
   icon: {
     path: mdiCalendarStar.path,
-    sx: { color: '#7b1fa2' },
+    sx: { color: EVENT_ELEMENT_ICON_COLOR },
   },
   flags: {
     selfClosing: Aglyn.FEATURE_FLAG.ENABLED,
@@ -300,7 +301,7 @@ export const presets: Aglyn.PresetSchema[] = [
     category: Aglyn.ComponentCategory.DATA_DISPLAY,
     icon: {
       path: mdiCalendarStar.path,
-      sx: { color: '#7b1fa2' },
+      sx: { color: EVENT_ELEMENT_ICON_COLOR },
     },
     data: {
       $id: null,
