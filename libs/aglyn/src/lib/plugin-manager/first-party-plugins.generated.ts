@@ -73,7 +73,7 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     "alwaysOnForWorkspace": true,
     "description": "The assistant, generative building and automation, and the AI add-on.",
     "siteOff": {
-      "stops": "Switching AI off for this site hides the assistant, Create with AI, the AI cards and the editor’s AI controls on this site, refuses every AI request made for it, and stops its queued AI jobs without spending credits.",
+      "stops": "Switching AI off for this site hides the assistant, Create with AI, the AI cards and the editor’s AI controls on this site, removes the AI chat from its published pages, refuses every AI request made for it, and stops its queued AI jobs without spending credits.",
       "keeps": "It does not stop the workspace’s AI add-on, credits, allotments or overage billing, and AI keeps working on the workspace’s other sites."
     }
   },
@@ -857,7 +857,12 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
         "description",
         "coverImage",
         "coverImageAlt",
-        "status"
+        "status",
+        "categoryIds",
+        "timeZone",
+        "recurrence",
+        "ticket",
+        "seriesEndsAtMs"
       ],
       "package": {
         "kind": "event",
@@ -866,6 +871,27 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
       },
       "count": {
         "uncapped": "The events page creates an event with a client write and no count, so a restore mints nothing an editor could not already."
+      }
+    }
+  },
+  {
+    "pluginId": "events-calendar",
+    "name": "eventCategories",
+    "routeSlug": "events",
+    "siteExport": {
+      "limit": 50,
+      "fields": [
+        "name",
+        "color",
+        "order"
+      ],
+      "package": {
+        "kind": "eventCategory",
+        "label": "Event categories",
+        "nameField": "name"
+      },
+      "count": {
+        "uncapped": "The Events page creates a category with a client write and no count, and a site holds at most 30, so a restore mints nothing an editor could not already."
       }
     }
   },
@@ -1833,6 +1859,38 @@ export const PLUGIN_TRANSFER_RESOURCES_DECLARED: readonly ResolvedTransferResour
  */
 export const PLUGIN_ORG_COLLECTIONS_DECLARED: readonly ResolvedPluginOrgCollection[] = [
   {
+    "pluginId": "crm",
+    "name": "contacts",
+    "label": "CRM contact",
+    "mediaScan": "none",
+    "mediaScanReason": "A CRM record: names, contact details, notes and the ids of files attached to it (mediaIds). Attachments are held by bare media id, which the address match cannot see, so the library move reads them through mediaIdsField instead; scanning the records would read every contact in the workspace on each check for a field this declaration already names.",
+    "mediaIdsField": "mediaIds"
+  },
+  {
+    "pluginId": "crm",
+    "name": "companies",
+    "label": "CRM company",
+    "mediaScan": "none",
+    "mediaScanReason": "A CRM record: names, contact details, notes and the ids of files attached to it (mediaIds). Attachments are held by bare media id, which the address match cannot see, so the library move reads them through mediaIdsField instead; scanning the records would read every contact in the workspace on each check for a field this declaration already names.",
+    "mediaIdsField": "mediaIds"
+  },
+  {
+    "pluginId": "crm",
+    "name": "deals",
+    "label": "CRM deal",
+    "mediaScan": "none",
+    "mediaScanReason": "A CRM record: names, contact details, notes and the ids of files attached to it (mediaIds). Attachments are held by bare media id, which the address match cannot see, so the library move reads them through mediaIdsField instead; scanning the records would read every contact in the workspace on each check for a field this declaration already names.",
+    "mediaIdsField": "mediaIds"
+  },
+  {
+    "pluginId": "crm",
+    "name": "crmActivities",
+    "label": "CRM activity",
+    "mediaScan": "none",
+    "mediaScanReason": "A CRM record: names, contact details, notes and the ids of files attached to it (mediaIds). Attachments are held by bare media id, which the address match cannot see, so the library move reads them through mediaIdsField instead; scanning the records would read every contact in the workspace on each check for a field this declaration already names.",
+    "mediaIdsField": "mediaIds"
+  },
+  {
     "pluginId": "marketing",
     "name": "campaigns",
     "routeSlug": "marketing",
@@ -1927,6 +1985,17 @@ export const PLUGIN_ENTITY_PICKERS_DECLARED: readonly ResolvedPluginEntityPicker
     "singular": "form",
     "plural": "forms",
     "page": "the Forms page"
+  },
+  {
+    "pluginId": "bookings",
+    "kind": "services",
+    "attribute": "service-select",
+    "scope": "host",
+    "collection": "services",
+    "nameField": "name",
+    "singular": "service",
+    "plural": "services",
+    "page": "the Bookings page"
   },
   {
     "pluginId": "commerce",

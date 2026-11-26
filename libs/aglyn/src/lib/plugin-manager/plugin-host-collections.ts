@@ -343,6 +343,14 @@ export interface PluginOrgCollectionDeclaration {
    * for an organization the site no longer belongs to. Needs `siteField`.
    */
   holdsTransferWhile?: { field: string; values: string[] }
+  /**
+   * The array field on each document holding workspace-library files by bare
+   * media id (`mediaIds`), when the plugin attaches files that way (AGL-4254).
+   * An id has no library in it, so the address match cannot see the use;
+   * moving a file out of the workspace library reads this field and keeps a
+   * file a document holds where the plugin reads it from.
+   */
+  mediaIdsField?: string
 }
 
 /** An org declaration with the plugin that made it. */

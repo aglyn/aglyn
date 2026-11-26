@@ -167,6 +167,11 @@ export const PLUGIN_DOCS = {
     title: 'Generate a website from a prompt',
     excerpt: 'Generate a website from a prompt: describe a business and an Aglyn AI build job plans a small site — pages, navigation, layout, contact form and palette — then builds it. A guided start publishes it.',
   },
+  aiSiteChat: {
+    path: '/ai/site-chat',
+    title: 'AI chat on your site',
+    excerpt: 'An Aglyn AI chat on your published site that answers visitors from your own pages and products, shows product cards, and adds to the cart or books only when the visitor confirms. Rolling out.',
+  },
   aiSiteLooks: {
     path: '/ai/site-looks',
     title: 'Looks and themes for AI sites',
@@ -321,6 +326,11 @@ export const PLUGIN_DOCS = {
     path: '/content-and-data/crm/views',
     title: 'Saved views',
     excerpt: 'Keep a CRM list\'s filters, columns and sort under a name, open it from the views menu or a link, share it with the team, and use a contacts view as an email audience.',
+  },
+  currencies: {
+    path: '/commerce-and-bookings/commerce/currencies',
+    title: 'Sell in other currencies',
+    excerpt: 'Show and charge prices in your shoppers\' own currencies, with daily rates, rounding, a buffer, and fixed prices where you want them.',
   },
   datasets: {
     path: '/content-and-data/datasets/overview',
@@ -624,6 +634,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   aiProducts: ['#write-a-products-copy', '#write-copy-for-many-products', '#when-you-import-products', '#propose-a-first-catalog', '#propose-categories-and-discounts', '#what-the-copy-never-says', '#what-is-sent-to-the-ai-provider', '#who-can-use-it', '#related'],
   aiSeo: ['#write-a-pages-listing', '#write-a-products-listing', '#fix-what-the-seo-check-finds', '#apply-all-as-drafts', '#structured-data-and-llmstxt', '#related'],
   aiSite: ['#starting-a-new-site-from-a-few-questions', '#on-the-free-plan', '#if-the-plan-does-not-work-out', '#what-a-scaffold-builds', '#what-is-published', '#what-it-costs-before-it-starts', '#watching-it-build', '#generate-for-several-sites-at-once'],
+  aiSiteChat: ['#set-up-the-chat', '#what-the-chat-may-do', '#pages', '#conversations', '#credits-and-limits', '#how-the-chat-loads', '#privacy', '#related'],
   aiSiteLooks: ['#choose-a-style', '#each-styles-layout', '#an-ai-starters-look', '#how-the-look-is-made', '#your-theme-afterwards', '#change-the-look-later', '#related'],
   aiStart: ['#how-do-you-want-to-start', '#start-from-an-ai-starter', '#the-questions', '#your-business', '#audience', '#style', '#sites-you-like', '#details', '#review', '#what-it-will-cost', '#what-gets-built', '#building-your-site', '#paused-or-out-of-credits', '#try-again', '#published-and-indexable', '#the-sites-search-listing', '#business-details', '#a-store-from-the-start', '#a-blog-from-the-start', '#events-from-the-start', '#on-the-free-plan', '#who-can-use-it', '#related'],
   aiTemplate: ['#the-three-kinds', '#templates-list', '#installing-from-the-marketplace', '#saving-something-as-a-template', '#using-a-template', '#generate-a-page-template-with-aglyn-ai', '#where-a-template-came-from', '#first-party-starters', '#templates-are-per-site', '#duplicating', '#deleting', '#related'],
@@ -655,6 +666,7 @@ export const PLUGIN_DOCS_ANCHORS = {
   crmSharing: ['#default-sharing-for-new-records', '#apply-to-existing-records', '#share-a-record-with-more-sites', '#all-sites-except-some', '#what-a-shared-record-looks-like', '#sharing-card', '#share-a-record-by-hand', '#several-records-at-once', '#sharing-rules', '#access-read-only-or-read-and-edit', '#sharing-is-not-consent', '#who-can-do-this', '#related'],
   crmTasks: ['#task-picklists', '#the-tasks-page', '#the-calendar-view', '#snoozing-a-task', '#selecting-exporting-and-acting-on-many', '#import-from-csv', '#creating-a-task', '#assigning-a-task-to-someone-else', '#completing-and-reopening', '#organization-tasks', '#tasks-on-a-contact-company-or-deal', '#reminders', '#turning-reminders-off', '#next-activity', '#the-daily-digest', '#turning-it-off', '#the-dashboard-card', '#who-can-do-what', '#related'],
   crmViews: ['#the-views-control', '#a-view-is-a-link', '#filters', '#filters-on-the-contacts-list', '#filters-on-the-other-lists', '#columns-and-sort', '#segments-and-views', '#who-sees-what', '#related'],
+  currencies: ['#turn-on-other-currencies', '#how-shoppers-get-their-currency', '#exchange-rates', '#rounding', '#price-adjustment', '#fixed-prices', '#prices-that-include-tax', '#charging-and-payouts', '#what-stays-in-your-store-currency', '#ship-to-other-countries', '#related'],
   datasets: ['#organization-data-page', '#model-builder', '#typed-documents', '#sample-rows', '#filter-records', '#relations', '#query-layer', '#repeatable-components', '#record-pages', '#who-a-dataset-is-shared-with', '#default-dataset-sharing', '#import--export', '#related'],
   deals: ['#pipelines', '#stages', '#the-board-and-the-table', '#import-from-csv', '#creating-a-deal', '#type-and-lead-source', '#contact-roles', '#line-items', '#moving-winning-and-losing', '#a-won-deal-makes-its-contact-a-customer', '#a-deals-page', '#deal-properties', '#deals-on-a-record', '#files', '#related'],
   deliveryApps: ['#connect-a-store', '#the-menu', '#match-items', '#taking-orders'],
@@ -836,6 +848,9 @@ export const PLUGIN_DOCS_SECTION_TITLES: {
   },
   aiSite: {
     '#generate-for-several-sites-at-once': 'Generate for several sites at once',
+  },
+  aiSiteChat: {
+    '#set-up-the-chat': 'Set up the chat',
   },
   aiSiteLooks: {
     '#choose-a-style': 'Choose a style',

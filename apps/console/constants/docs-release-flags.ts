@@ -422,6 +422,17 @@ export const FLAG_DOC_PAGES: Partial<
   // AGL-4140. The flag shows YouTube's own thumbnail as the poster of a
   // YouTube film with none. The Video page covers every way the element
   // plays a film, so it discloses beside the one section about it.
+  // The AI chat on a published site (AGL-4250): its own page, which opens
+  // with the rolling-out admonition before the plan admonition.
+  release_ai_site_chat: [
+    {
+      path: 'docs/ai/site-chat.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: false,
+      priceClaimNote:
+        'The page names the plans the chat is included on and the site-chat credit allotments, which hold whether or not the flag is on; it states no price.',
+    },
+  ],
   release_video_embed_posters: [
     {
       path: 'docs/building-sites/besigner/video.md',
@@ -429,6 +440,24 @@ export const FLAG_DOC_PAGES: Partial<
         /### A YouTube video without a poster[\s\S]{0,80}\*\*YouTube thumbnails as posters are rolling out\*\*,[\s\S]{0,40}may not have them\s+yet\./,
       ],
       checkNoPriceClaim: true,
+    },
+  ],
+  // AGL-4252. The Calendar and Event details elements, categories, repeats,
+  // tickets, the feed and the new search sources. The calendar page is ABOUT
+  // them, so it opens with the admonition; the add-on's own page mentions them
+  // beside the qualification. Neither prices them: the add-on page does.
+  release_events_calendar_v2: [
+    {
+      path: 'docs/content-and-data/events/calendar.md',
+      disclosure: 'admonition',
+      checkNoPriceClaim: true,
+    },
+    {
+      path: 'docs/content-and-data/events/overview.md',
+      disclosure: [/\*\*The new events calendar is rolling out\*\*,[\s\S]{0,40}may\s+not have it yet/],
+      checkNoPriceClaim: false,
+      priceClaimNote:
+        'The add-on page prices the Event Calendar add-on itself, which is released; the new calendar adds no price of its own.',
     },
   ],
   release_site_starters: [

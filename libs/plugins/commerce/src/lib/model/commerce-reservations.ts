@@ -77,6 +77,12 @@ export interface HostResource {
   checkInPerGuest?: boolean
   photoUrls?: string[]
   amenities?: string[]
+  /**
+   * The page on the site that holds this resource's booking widget
+   * (AGL-4252), site-relative (`/cabins/lakeside`): where a site search
+   * result for the stay opens. Absent, the stay is not a search result.
+   */
+  pagePath?: string
   nightlyRateUsd: number
   /** Friday/Saturday nights multiply by this (default 1). */
   weekendMultiplier?: number

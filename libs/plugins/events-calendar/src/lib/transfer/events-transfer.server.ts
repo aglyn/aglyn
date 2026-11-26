@@ -18,7 +18,9 @@
 import { checkEntitlement } from '@aglyn/aglyn/server'
 import { transferPlanRequired } from '@aglyn/aglyn/plugin-manager/plugin-transfer-resources'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
+import { isServerReleaseFlagOnForOrg } from '@aglyn/tenant-data-admin/server/release-flags'
 import { TransferPlanRefusedError } from '@aglyn/tenant-data-admin/server/transfer-jobs'
+import { EVENT_CATEGORIES_COLLECTION } from '../model/event-categories'
 import {
   createEventsTransferResource,
   type EventsTransferResource,
@@ -45,6 +47,19 @@ export function adminEventsTransferResource(): EventsTransferResource {
       const org = await firestore.collection('orgs').doc(orgId).get()
       if (checkEntitlement(org.exists ? (org.data() as never) : null, 'eventCalendar')) return
       throw new TransferPlanRefusedError(transferPlanRequired('eventCalendar', 'Events', 'import'))
+    },
+    // Calendar v2's columns (AGL-4252), where the workspace has it.
+    calendarV2: (orgId) => isServerReleaseFlagOnForOrg('release_events_calendar_v2', orgId),
+    readCategories: async (hostId) => {
+      const snapshot = await firestore
+        .collection('hosts')
+        .doc(hostId)
+        .collection(EVENT_CATEGORIES_COLLECTION)
+        .limit(100)
+        .get()
+      return snapshot.docs
+        .map((doc) => [doc.id, String(doc.get('name') ?? '').trim()] as [string, string])
+        .filter(([, name]) => Boolean(name))
     },
   })
 }

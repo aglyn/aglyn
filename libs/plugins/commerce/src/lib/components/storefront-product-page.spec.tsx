@@ -225,8 +225,12 @@ describe('related products', () => {
     const placeholder = screen.getByTestId('product-image-placeholder')
     expect(placeholder.getAttribute('aria-label')).toBe('Travel Tin Soy Candle — no photo yet')
     expect(placeholder.textContent).toBe('T')
-    // The seeded page's product is the anchor: no product lookup first.
-    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/commerce/related?hostId=host-1&productId=p1')
+    // The seeded page's product is the anchor: no product lookup first. (The
+    // store's currencies are asked alongside, AGL-4248, and are not a lookup.)
+    const reads = fetchMock.mock.calls
+      .map(([url]) => String(url))
+      .filter((url) => !url.startsWith('/api/commerce/currency'))
+    expect(reads[0]).toContain('/api/commerce/related?hostId=host-1&productId=p1')
   })
 })
 

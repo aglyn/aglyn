@@ -842,6 +842,14 @@
       "why": "This plugin's rows in the native apps' navigation, assembled into the nav manifest by generate:native-contracts (AGL-3943); imports only the core's plain nav module."
     },
     {
+      "path": "libs/plugins/events-calendar/src/lib/model/event-categories.ts",
+      "why": "An event's categories and ticket link as stored (AGL-4252), read by event-write; no imports."
+    },
+    {
+      "path": "libs/plugins/events-calendar/src/lib/model/event-recurrence.ts",
+      "why": "How an event repeats and the dates it falls on (AGL-4252), read by event-write; imports only the shared zoned-time calendar math."
+    },
+    {
       "path": "libs/plugins/events-calendar/src/lib/model/event-write.ts",
       "why": "The one rule for what an event stores, shared by the Events page, the events import and the native editors (AGL-3670)."
     },

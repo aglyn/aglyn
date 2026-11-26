@@ -277,6 +277,7 @@ jest.mock('../utils/server/media-scope', () => ({
   folderStoragePath: async () => '',
   mediaObjectPath: () => mockOriginalPath,
   mediaCdnPathUpdate: () => '/api/media/cdn/org:org-1/media-1',
+  mediaCdnPathCreateField: () => ({ cdnPath: '/api/media/cdn/org:org-1/media-1' }),
 }))
 
 import { MEDIA_VARIANT_SOURCE_MAX_BYTES } from '@aglyn/tenant-data-admin'

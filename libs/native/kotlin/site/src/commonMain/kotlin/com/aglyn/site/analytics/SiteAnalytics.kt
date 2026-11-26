@@ -2,6 +2,7 @@ package com.aglyn.site.analytics
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -25,10 +26,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.aglyn.contracts.ActivityEntryFields
 import com.aglyn.contracts.DeviceSplitEntry
 import com.aglyn.contracts.ScreenTrafficDay
-import com.aglyn.contracts.ScreenTrafficRow
 import com.aglyn.contracts.activityActorLabel
 import com.aglyn.contracts.activityRowText
 import com.aglyn.contracts.aggregateScreenDays
@@ -54,8 +55,11 @@ import com.aglyn.core.FirestoreTimestamp
 import com.aglyn.core.Live
 import com.aglyn.core.nowMillis
 import com.aglyn.core.relativeTime
+import com.aglyn.core.siteListAddress
 import com.aglyn.ui.AglynIcons
 import com.aglyn.ui.AglynListItem
+import com.aglyn.ui.ChipOption
+import com.aglyn.ui.ChoiceChipRow
 import com.aglyn.ui.DeltaTone
 import com.aglyn.ui.NoticeBanner
 import com.aglyn.ui.RangePicker
@@ -76,7 +80,8 @@ import kotlinx.serialization.json.booleanOrNull
 
 /*
  * A SITE'S NUMBERS, as the console's cards read them (AGL-4011): the Traffic card over `hosts/{id}/analytics` (a
- * document per UTC day), the Pages table (a Pro feature) over `hosts/{id}/screenAnalytics`, a page's own traffic over its
+ * document per UTC day), the Pages table (a Pro feature) over the same days' per-path counts (AGL-4253), each path named by
+ * `SitePageTraffic.kt`, with a page's device and referrer from `hosts/{id}/screenAnalytics`, a page's own traffic over its
  * `screenAnalytics/{screenId}:{day}` documents, and the activity log `hosts/{id}/activity`. The figures are the
  * console's own functions, ported once in the contracts. Home, Analytics and a page's detail draw these parts, and a
  * phone's Home can host them too. The Apple twin is AglynSite/SiteAnalytics.swift.
@@ -174,6 +179,88 @@ fun screenAnalyticsQuery(hostId: String, nowMs: Long, range: Int) = FirestoreQue
   orderBy = listOf(FirestoreOrder("day", descending = true)),
   limit = 1000,
 )
+
+/** The Pages table's day read: the window's documents of `hosts/{id}/analytics`, by id from its oldest day on. */
+fun pagesDaysQuery(hostId: String, range: Int, nowMs: Long) = FirestoreQuery(
+  "hosts/$hostId/analytics",
+  filters = listOf(FirestoreFilter("__name__", FilterOp.GTE, "hosts/$hostId/analytics/${recentDayIds(nowMs, range).last()}")),
+  orderBy = listOf(FirestoreOrder("__name__")),
+  limit = range,
+)
+
+/** How many values one Firestore `in` filter takes. */
+const val IN_QUERY_MAX = 30
+
+/**
+ * The Pages table's rows (AGL-4253). [failed]: the days could not be read, so nothing is shown as zero. [labelsFailed]:
+ * the names could not be read, so rows show their addresses. [screensFailed]: the per-page device and referrer could not.
+ */
+data class SitePagesLoad(
+  val rows: List<SitePageRow>,
+  val failed: Boolean = false,
+  val labelsFailed: Boolean = false,
+  val screensFailed: Boolean = false,
+)
+
+/**
+ * Every visited path over [range] days by its day documents' `paths` counts, each named for what it is, with device and
+ * referrer only where counted per page (`screenAnalytics`, a routed page that is not a template). Read once per open,
+ * range or refresh, as the console's table does.
+ */
+suspend fun loadSitePages(firestore: FirestoreReader, hostId: String, range: Int, nowMs: Long): SitePagesLoad {
+  val days = runCatching { firestore.page(pagesDaysQuery(hostId, range, nowMs)).docs }.getOrElse { return SitePagesLoad(emptyList(), failed = true) }
+  val views = rollUpPathViews(days.map { trafficDayOf(it.id, it.data).paths })
+  val screens = runCatching { aggregateScreenDays(firestore.page(screenAnalyticsQuery(hostId, nowMs, range)).docs.map { it.data }) }.getOrNull()
+  val screenById = screens.orEmpty().associateBy { it.screenId }
+  val labels = runCatching { labelSitePaths(firestore, hostId, views.map { it.first }) }.getOrNull()
+  val rows = views.map { (path, count) ->
+    val label = labels?.get(path) ?: SitePageLabel.unlabeled(path)
+    SitePageRow(path, count, label, label.screenId?.let { screenById[it] })
+  }
+  return SitePagesLoad(rows, labelsFailed = labels == null && views.isNotEmpty(), screensFailed = screens == null)
+}
+
+/**
+ * Names every path (`labelSitePaths`): the host doc and its collections once, each visited page's screen, then one `in`
+ * query per thirty records or entries. A read that fails throws: the rows then show their addresses and the card says
+ * so, rather than filing a product under Other addresses because its lookup was refused.
+ */
+suspend fun labelSitePaths(firestore: FirestoreReader, hostId: String, paths: List<String>): Map<String, SitePageLabel> {
+  if (paths.isEmpty()) return emptyMap()
+  val host = firestore.get("hosts/$hostId")?.data.orEmpty()
+  val collections = firestore.page(FirestoreQuery("hosts/$hostId/collections", limit = 500)).docs
+  val facts = SitePageFacts(
+    routes = (host["screens"] as? Map<*, *>).orEmpty().entries.mapNotNull { (k, v) -> (v as? String)?.let { k.toString() to it } }.toMap(),
+    origin = sitePublicOrigin(host),
+    collections = collections.map { it.id to it.data },
+  )
+  val context = facts.context
+  val classes = paths.map { classifyPagePath(it, context) }
+  val wanted = SitePageReads.of(classes)
+  val screens = wanted.screenIds.mapNotNull { id -> firestore.get("hosts/$hostId/screens/$id")?.let { id to it.data } }.toMap()
+  suspend fun bySlug(collection: String, slugs: List<String>, accepts: (Map<String, Any?>) -> Boolean = { true }): Map<String, Pair<String, Map<String, Any?>>> {
+    val found = linkedMapOf<String, Pair<String, Map<String, Any?>>>()
+    slugs.chunked(IN_QUERY_MAX).forEach { chunk ->
+      firestore.page(FirestoreQuery(collection, filters = listOf(FirestoreFilter("slug", FilterOp.IN, chunk)), limit = chunk.size * 2)).docs.forEach { doc ->
+        val slug = doc.data["slug"] as? String
+        if (slug != null && accepts(doc.data) && slug !in found) found[slug] = doc.id to doc.data
+      }
+    }
+    return found
+  }
+  val records = wanted.recordSlugs.mapNotNull { (segment, slugs) ->
+    SitePathKind.ALL.firstOrNull { it.segment == segment }?.let { kind -> segment to bySlug("hosts/$hostId/${kind.collection}", slugs, kind::accepts) }
+  }.toMap()
+  val entries = wanted.entrySlugs.mapNotNull { (slug, entrySlugs) ->
+    facts.contentBySlug[slug]?.first?.let { owner -> slug to bySlug("hosts/$hostId/collections/$owner/entries", entrySlugs) }
+  }.toMap()
+  val read = SitePageFound(screens, records, entries)
+  return paths.zip(classes).associate { (path, found) -> path to sitePageLabel(path, found, facts, read) }
+}
+
+/** The site's public origin (`hostPublicOrigin`): its custom domain, else its address on the platform domain. */
+fun sitePublicOrigin(host: Map<String, Any?>): String? =
+  siteListAddress(host["cname"] as? String, host["subdomain"] as? String)?.let { "https://$it" }
 
 /** One page's last [PAGE_TRAFFIC_DAYS] days by document id (`{screenId}:{day}`), so no index is owed. */
 fun pageTrafficQuery(hostId: String, screenId: String, nowMs: Long): FirestoreQuery {
@@ -346,17 +433,22 @@ private fun TrafficLists(summary: TrafficSummary) {
   )
 }
 
-/** The console's Pages table (`ScreensAnalyticsTable`): every page's views over a range, a Pro feature; a row opens that page's traffic. */
+/**
+ * The console's Pages table (`PagesTrafficTable`, AGL-4253): every visited product, store collection, post and page of
+ * the site by its own name, the address beneath, filtered by kind, a Pro feature. A row opens what it names ([open]): a
+ * page's traffic, a product's editor, or the live page.
+ */
 @Composable
 fun SitePagesTrafficCard(
   firestore: FirestoreReader,
   api: ConsoleApiClient,
   hostId: String,
   upgrade: () -> Unit,
-  open: (screenId: String, path: String) -> Unit,
+  open: (SitePageLabel) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   var range by remember { mutableStateOf(14) }
+  var kind by remember(hostId, range) { mutableStateOf(ALL_KINDS) }
   var attempt by remember(hostId) { mutableStateOf(0) }
   val (entitled, failed) = rememberScreenAnalyticsEntitlement(api, hostId, attempt)
   StatsSection(
@@ -373,35 +465,67 @@ fun SitePagesTrafficCard(
         Text("Checking your plan…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
       false -> UpgradeNotice(
-        "Comparing traffic across pages is a Pro feature. Data is already being collected, so history is waiting the moment you upgrade.",
+        "Seeing which pages, products and posts get visited is a Pro feature. Data is already being collected, so history is waiting the moment you upgrade.",
         modifier = Modifier.testTag("analytics-pages-upgrade"),
         action = upgrade,
       )
       true -> {
-        val now = remember(range) { nowMillis() }
-        val docs by remember(hostId, range) { firestore.observe(screenAnalyticsQuery(hostId, now, range)) }.collectAsState(Live.Loading)
-        val host by remember(hostId) { firestore.observeDoc("hosts/$hostId") }.collectAsState(Live.Loading)
-        val screens = ((host as? Live.Ready)?.value?.data?.get("screens") as? Map<*, *>).orEmpty()
-        when (val live = docs) {
-          Live.Loading -> SkeletonList(rows = 3)
-          is Live.Failed -> NoticeBanner("Pages could not be loaded.", StatusTone.ERROR)
-          is Live.Ready -> {
-            val rows = aggregateScreenDays(live.value.map { it.data })
-            val sum = rows.sumOf { it.total }
-            if (rows.isEmpty()) {
-              Text("No per-page pageviews recorded in this range yet.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
-              Column {
-                PagesHeader()
-                rows.forEach { row ->
-                  HorizontalDivider()
-                  val path = screens[row.screenId] as? String ?: row.screenId
-                  PageRow(row, path, sum) { open(row.screenId, path) }
-                }
-              }
+        var load by remember(hostId, range) { mutableStateOf<SitePagesLoad?>(null) }
+        LaunchedEffect(hostId, range, attempt) { load = loadSitePages(firestore, hostId, range, nowMillis()) }
+        when (val loaded = load) {
+          null -> SkeletonList(rows = 3)
+          else -> if (loaded.failed) {
+            NoticeBanner("Pages could not be loaded. Check the connection and try again.", StatusTone.ERROR, Modifier.testTag("analytics-pages-load-failed")) {
+              TextButton(onClick = { attempt += 1 }) { Text("Try again") }
             }
+          } else if (loaded.rows.isEmpty()) {
+            Text("No pageviews recorded in this range yet.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          } else {
+            if (loaded.labelsFailed) NoticeBanner("The names of these pages could not be read, so they show by address.", StatusTone.WARNING)
+            PagesTable(loaded, kind, { kind = it }, open)
           }
         }
+      }
+    }
+  }
+}
+
+private const val ALL_KINDS = "all"
+
+/** Under the table: why template-drawn rows say Site-wide. */
+const val PAGES_SHARED_TEMPLATE_NOTE =
+  "Views are counted per address, so each product, post and collection is its own row. Device and referrer are counted per page design: rows drawn from a shared template show “Site-wide”, and the site’s split is in Traffic."
+
+@Composable
+private fun PagesTable(loaded: SitePagesLoad, kind: String, onKind: (String) -> Unit, open: (SitePageLabel) -> Unit) {
+  val groups = sitePageGroups(loaded.rows)
+  val shown = if (kind == ALL_KINDS) loaded.rows else loaded.rows.filter { it.label.group.id == kind }
+  val sum = loaded.rows.sumOf { it.views }
+  // A phone's width holds the name, views and share; device and referrer need a tablet's or a desktop's.
+  BoxWithConstraints {
+    val compact = maxWidth < 600.dp
+    Column {
+      ChoiceChipRow(
+        listOf(ChipOption(ALL_KINDS, "All · ${loaded.rows.size}")) +
+          groups.map { ChipOption(it.group.id, "${it.group.label} · ${it.count} · ${analyticsCount(it.views)} views") },
+        kind,
+        onKind,
+        Modifier.fillMaxWidth().padding(bottom = space(1f)).testTag("analytics-pages-kinds"),
+        // Every kind in view, as the console's chips wrap: a scrolled-off kind is a filter nobody finds.
+        wrap = true,
+      )
+      PagesHeader(compact)
+      shown.forEach { row ->
+        HorizontalDivider()
+        PageRow(row, sum, showKind = kind == ALL_KINDS, screensFailed = loaded.screensFailed, compact = compact) { open(row.label) }
+      }
+      if (!compact) {
+        Text(
+          PAGES_SHARED_TEMPLATE_NOTE,
+          Modifier.padding(top = space(2f)),
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
       }
     }
   }
@@ -410,11 +534,11 @@ fun SitePagesTrafficCard(
 private val PAGE_COLUMNS = listOf("Page" to 3f, "Views" to 1f, "Share" to 1f, "Top device" to 1.4f, "Top referrer" to 2f)
 
 @Composable
-private fun PagesHeader() {
+private fun PagesHeader(compact: Boolean) {
   Row(Modifier.fillMaxWidth().padding(bottom = space(1f))) {
-    PAGE_COLUMNS.forEachIndexed { index, (label, weight) ->
+    PAGE_COLUMNS.take(if (compact) 3 else PAGE_COLUMNS.size).forEachIndexed { index, (label, weight) ->
       Text(
-        label, Modifier.weight(weight),
+        label, Modifier.weight(weight).then(if (index == 3) Modifier.padding(start = space(2f)) else Modifier),
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = if (index == 1 || index == 2) TextAlign.End else TextAlign.Start,
@@ -423,16 +547,39 @@ private fun PagesHeader() {
   }
 }
 
+/** A row's own device or referrer; "Site-wide" where it is drawn from a shared template and not counted per page. */
+private fun perPage(label: SitePageLabel, screensFailed: Boolean, value: String?): String = when {
+  label.screenId == null -> "Site-wide"
+  screensFailed -> "Could not read"
+  else -> value?.ifEmpty { null } ?: "--"
+}
+
 @Composable
-private fun PageRow(row: ScreenTrafficRow, path: String, sum: Long, onClick: () -> Unit) {
-  Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = space(1.5f)).testTag("analytics-page-${row.screenId}")) {
+private fun PageRow(row: SitePageRow, sum: Double, showKind: Boolean, screensFailed: Boolean, compact: Boolean, onClick: () -> Unit) {
+  val label = row.label
+  val opens = label.screenId != null || label.productId != null || label.liveUrl != null
+  Row(
+    Modifier.fillMaxWidth().clickable(enabled = opens, onClick = onClick).padding(vertical = space(1.5f)).testTag("analytics-page-${row.path}"),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
     val style = MaterialTheme.typography.bodyMedium
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    Text(path, Modifier.weight(3f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = style)
-    Text(analyticsCount(row.total.toDouble()), Modifier.weight(1f), style = style, textAlign = TextAlign.End)
-    Text(if (sum > 0) "${kotlin.math.floor(row.total * 100.0 / sum + 0.5).toLong()}%" else "--", Modifier.weight(1f), style = style, color = muted, textAlign = TextAlign.End)
-    Text(topDevice(row).replaceFirstChar { it.uppercaseChar() }.ifEmpty { "--" }, Modifier.weight(1.4f).padding(start = space(2f)), style = style, color = muted)
-    Text(referrerLabel(topReferrer(row)).ifEmpty { "--" }, Modifier.weight(2f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = style, color = muted)
+    Column(Modifier.weight(3f)) {
+      Text(label.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = style)
+      Text(
+        listOfNotNull(if (showKind) label.group.label else null, label.path, label.note).joinToString(" · "),
+        maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = muted,
+      )
+    }
+    Text(analyticsCount(row.views), Modifier.weight(1f), style = style, textAlign = TextAlign.End)
+    Text(if (sum > 0) "${kotlin.math.floor(row.views * 100.0 / sum + 0.5).toLong()}%" else "--", Modifier.weight(1f), style = style, color = muted, textAlign = TextAlign.End)
+    if (!compact) {
+      Text(
+        perPage(label, screensFailed, row.screen?.let { topDevice(it).replaceFirstChar { c -> c.uppercaseChar() } }),
+        Modifier.weight(1.4f).padding(start = space(2f)), maxLines = 1, overflow = TextOverflow.Ellipsis, style = style, color = muted,
+      )
+      Text(perPage(label, screensFailed, row.screen?.let { referrerLabel(topReferrer(it)) }), Modifier.weight(2f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = style, color = muted)
+    }
   }
 }
 

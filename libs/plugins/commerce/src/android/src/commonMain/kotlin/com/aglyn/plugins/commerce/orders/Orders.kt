@@ -19,6 +19,7 @@ import com.aglyn.contracts.OrderRestockCheck
 import com.aglyn.contracts.OrderStatus
 import com.aglyn.contracts.OrderTimelineEvent
 import com.aglyn.contracts.canTransitionOrder
+import com.aglyn.contracts.formatOrderMoney
 import com.aglyn.contracts.formatOrderNumber
 import com.aglyn.contracts.deviceTimeZone
 import com.aglyn.contracts.formatReceiptTime
@@ -126,7 +127,35 @@ data class OrderRow(
   val createdAtMs: Long,
   val testMode: Boolean,
   val disputeOpen: Boolean,
+  /** The currency the shopper paid in (AGL-4248); null on an order from before multi-currency, which is in the store's. */
+  val currency: String? = null,
 )
+
+/**
+ * The currency every amount on an order is in (AGL-4248), upper case: the one the shopper paid in, else the store's
+ * own (orders from before multi-currency carry none).
+ */
+fun orderCurrency(paid: String?, storeCurrency: String): String {
+  val code = paid?.trim().orEmpty().ifEmpty { storeCurrency.trim() }.ifEmpty { "USD" }
+  return code.uppercase()
+}
+
+fun orderCurrency(order: HostOrder, storeCurrency: String): String = orderCurrency(order.currency, storeCurrency)
+
+/**
+ * An order's total, and beside it the store-currency total when the shopper paid in another currency (AGL-4248):
+ * `NZ$141.00 (US$82.94)`. A US dollar beside another currency says which dollar it is, as the shopper's money does.
+ */
+fun orderTotalText(order: HostOrder, storeCurrency: String): String {
+  val currency = orderCurrency(order, storeCurrency)
+  val total = formatOrderMoney(order.totals?.totalCents ?: order.amountCents ?: 0.0, currency)
+  val base = order.baseCurrency?.trim().orEmpty().uppercase()
+  val baseCents = order.baseTotals?.totalCents
+  if (base.isEmpty() || base == currency || baseCents == null) return total
+  var baseText = formatOrderMoney(baseCents, base)
+  if (base == "USD") baseText = baseText.replaceFirst(Regex("^(-?)\\$"), "$1US\\$")
+  return "$total ($baseText)"
+}
 
 /**
  * An unpaid quote is not an order (`isUnpaidQuote`): it carries no `createdAtMs`, so the default list and every filter leave it
@@ -152,6 +181,7 @@ fun orderRow(doc: FirestoreDoc): OrderRow {
     createdAtMs = order.createdAtMs?.toLong() ?: 0L,
     testMode = docIsTestMode(doc, order),
     disputeOpen = doc.data["disputeKey"] == "open",
+    currency = order.currency?.ifBlank { null },
   )
 }
 

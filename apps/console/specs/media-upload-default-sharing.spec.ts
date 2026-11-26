@@ -224,6 +224,7 @@ jest.mock('../utils/server/media-scope', () => ({
   folderStoragePath: async () => '',
   mediaObjectPath: () => 'orgs/org-1/media/media-1',
   mediaCdnPathUpdate: () => '/api/media/cdn/org:org-1/media-1',
+  mediaCdnPathCreateField: () => ({ cdnPath: '/api/media/cdn/org:org-1/media-1' }),
   // The real predicate, so a collaborator's reach is decided as it is live.
   scopeAllows: jest.requireActual('../utils/server/media-scope').scopeAllows,
 }))

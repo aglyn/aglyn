@@ -1540,6 +1540,50 @@
               "totalCents": 5000
             }
           }
+        ],
+        [
+          {
+            "currency": "nzd",
+            "baseCurrency": "usd",
+            "fxRate": 1.7,
+            "totals": {
+              "totalCents": 14100
+            },
+            "baseTotals": {
+              "totalCents": 8294
+            },
+            "refundedCents": 3400,
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Kit",
+                "quantity": 1,
+                "unitAmountCents": 14100
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "currency": "nzd",
+            "baseCurrency": "usd",
+            "fxRate": 1.7,
+            "totals": {
+              "totalCents": 14100
+            },
+            "baseTotals": {
+              "totalCents": 8294
+            },
+            "refundedCents": 14100,
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Kit",
+                "quantity": 1,
+                "unitAmountCents": 14100
+              }
+            ]
+          }
         ]
       ]
     },
@@ -1685,6 +1729,18 @@
         [
           1250,
           "zzz"
+        ],
+        [
+          14100,
+          "nzd"
+        ],
+        [
+          14100,
+          "aud"
+        ],
+        [
+          8294,
+          "gbp"
         ]
       ]
     },
@@ -1703,6 +1759,28 @@
           {
             "productId": "p1",
             "amountCents": 900
+          }
+        ],
+        [
+          {
+            "currency": "nzd",
+            "baseCurrency": "usd",
+            "fxRate": 1.7,
+            "totals": {
+              "totalCents": 14100
+            },
+            "baseTotals": {
+              "totalCents": 8294
+            },
+            "refundedCents": 3400,
+            "lineItems": [
+              {
+                "productId": "p1",
+                "name": "Kit",
+                "quantity": 1,
+                "unitAmountCents": 14100
+              }
+            ]
           }
         ]
       ]

@@ -19,7 +19,12 @@ import {
   type PluginRecordRouteContext,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { hostCollectionKind } from '@aglyn/aglyn/app-utils/collection-kind'
-import { registerSitePathKind } from '@aglyn/aglyn/plugin-manager/site-path-kinds'
+import {
+  registerSiteBuiltInPage,
+  registerSitePathKind,
+} from '@aglyn/aglyn/plugin-manager/site-path-kinds'
+import { QUOTE_PAGE_PATH } from '../constants/quote-page'
+import { RETURN_REQUEST_PATH } from '../constants/return-request'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { COMMERCE_SETTINGS_PAGE_ZONES } from '../components/commerce-console-sections'
 
@@ -181,4 +186,13 @@ export function registerCommerceRecordRoutes(): void {
     },
     { pluginId: BUNDLE_ID },
   )
+  /*
+   * The fixed pages the storefront resolver serves (AGL-4253), so Analytics
+   * names a visit there instead of filing it under "Other addresses". The
+   * order status address is `ORDER_STATUS_PATH`, which lives with its server
+   * token code; spelled here so the console bundle does not pull that in.
+   */
+  registerSiteBuiltInPage({ path: 'order-status', title: 'Order status' }, { pluginId: BUNDLE_ID })
+  registerSiteBuiltInPage({ path: RETURN_REQUEST_PATH, title: 'Start a return' }, { pluginId: BUNDLE_ID })
+  registerSiteBuiltInPage({ path: QUOTE_PAGE_PATH, title: 'Pay a quote' }, { pluginId: BUNDLE_ID })
 }

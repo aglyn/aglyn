@@ -88,7 +88,9 @@ export const AI_PLUGIN_ENTITLEMENTS: PluginEntitlementRegistration = {
       },
       // Gated even while the route 501s without a provider key — the switch
       // predates the key on purpose.
-      apiPaths: { exact: ['ai/assist', 'assist/chat'] },
+      // The AI chat on a published site (AGL-4250) is the same assistant,
+      // answering visitors: the switch stops it with the console's.
+      apiPaths: { exact: ['ai/assist', 'assist/chat'], prefixes: ['ai/site-chat'] },
     },
     {
       key: 'ai-generate',

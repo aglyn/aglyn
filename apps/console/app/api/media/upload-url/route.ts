@@ -57,7 +57,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import {
   folderStoragePath,
-  mediaCdnPathUpdate,
+  mediaCdnPathCreateField,
   resolveMediaScope,
 } from '../../../../utils/server/media-scope'
 import { createHash, randomUUID } from 'crypto'
@@ -823,7 +823,7 @@ async function handler(request: Request): Promise<Response> {
         : {}),
       // Stable mediaId-keyed CDN URL (AGL-829), same rule as the direct
       // route — parity matters now that PDFs/zips can land here (AGL-1317).
-      cdnPath: mediaCdnPathUpdate({
+      ...mediaCdnPathCreateField({
         billing: org,
         cdnScope: scope.cdnScope,
         mediaId,

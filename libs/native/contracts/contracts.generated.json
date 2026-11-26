@@ -2698,7 +2698,7 @@
       "label": "AI",
       "siteOff": {
         "keeps": "It does not stop the workspace’s AI add-on, credits, allotments or overage billing, and AI keeps working on the workspace’s other sites.",
-        "stops": "Switching AI off for this site hides the assistant, Create with AI, the AI cards and the editor’s AI controls on this site, refuses every AI request made for it, and stops its queued AI jobs without spending credits."
+        "stops": "Switching AI off for this site hides the assistant, Create with AI, the AI cards and the editor’s AI controls on this site, removes the AI chat from its published pages, refuses every AI request made for it, and stops its queued AI jobs without spending credits."
       }
     },
     {
@@ -10601,7 +10601,7 @@
     "accounting": "console-only",
     "accounts": "routes",
     "ad-conversions": "console-only",
-    "ai": "console-only",
+    "ai": "elements",
     "bookings": "elements",
     "business-phone": "console-only",
     "commerce": "elements",

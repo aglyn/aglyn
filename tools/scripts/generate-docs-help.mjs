@@ -185,6 +185,8 @@ const PLUGIN_TOPICS = {
   buildAWorkflow: '/marketing-and-automation/workflows-and-actions/build-a-workflow',
   catalog: '/commerce-and-bookings/commerce/catalog',
   commerce: '/commerce-and-bookings/commerce/overview',
+  // The Currencies card beside Store settings (AGL-4248).
+  currencies: '/commerce-and-bookings/commerce/currencies',
   commerceEndToEnd: '/guides/commerce-end-to-end',
   // The Quotes cards on the Orders tab and the Checkout settings (AGL-4094).
   quotes: '/commerce-and-bookings/commerce/quotes-and-proofs',
@@ -327,6 +329,8 @@ const PLUGIN_TOPICS = {
   webhooks: '/marketing-and-automation/workflows-and-actions/webhooks',
   // The Live chat card on a site's setup page (AGL-3698).
   liveChat: '/building-sites/live-chat',
+  // The AI chat card on a site's setup page (AGL-4250).
+  aiSiteChat: '/ai/site-chat',
   // The domains plugin's Get a domain card on the Custom Domain page
   // (AGL-3962).
   // The Verify with ChatGPT card on a site's Setup → SEO page, which the

@@ -17,6 +17,7 @@ export function registerPluginServerDeclarations(): Promise<void> {
   done ??= (async () => {
     ;(await import('@aglyn/plugins-forms/declarations.server')).registerFormsServerDeclarations()
     ;(await import('@aglyn/plugins-bookings/declarations')).registerBookingsDeclarations()
+    ;(await import('@aglyn/plugins-bookings/declarations.server')).registerBookingsServerDeclarations()
     ;(await import('@aglyn/plugins-commerce/declarations')).registerCommerceDeclarations()
     ;(await import('@aglyn/plugins-commerce/declarations.server')).registerCommerceServerDeclarations()
     ;(await import('@aglyn/plugins-marketplace/declarations')).registerMarketplaceDeclarations()
@@ -27,6 +28,7 @@ export function registerPluginServerDeclarations(): Promise<void> {
     ;(await import('@aglyn/plugins-data/declarations')).registerDataDeclarations()
     ;(await import('@aglyn/plugins-data/declarations.server')).registerDataServerDeclarations()
     ;(await import('@aglyn/plugins-email/declarations')).registerEmailDeclarations()
+    ;(await import('@aglyn/plugins-events-calendar/declarations.server')).registerEventsCalendarServerDeclarations()
     ;(await import('@aglyn/plugins-inbox/declarations')).registerInboxDeclarations()
     ;(await import('@aglyn/plugins-logic/declarations.server')).registerLogicServerDeclarations()
     ;(await import('@aglyn/plugins-marketing/declarations')).registerMarketingDeclarations()

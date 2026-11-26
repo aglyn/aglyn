@@ -918,7 +918,7 @@ private fun ShellBody(
     is Route.Web -> com.aglyn.webview.WebPageScreen(route.url, onClose = { navigator.back() }, openInBrowser = openInBrowser, header = banner)
     is Route.Screen -> PluginScreenHost(services, context, route.screenId, route.params, workspace.site != null, onPickSite) { navigator.back() }
     is Route.Besigner -> services.besigner(route.path, { navigator.back() }) { link -> navigator.back(); context.openLink(link) }
-    Route.Analytics -> AnalyticsScreen(services, context)
+    Route.Analytics -> AnalyticsScreen(services, context, navigator::openWeb)
     Route.Switcher -> SwitcherScreen(services.workspace, workspace, services.api.origin) { navigator.back() }
     Route.NotificationSettings -> NotificationSettingsScreen(services, uid)
     Route.ThemeSettings -> ThemeSettingsScreen(services, workspace, onWorkspaceColor)
@@ -930,7 +930,7 @@ private fun ShellBody(
       else -> {
         val (screen, params) = NavKeys.parse(top) ?: ("" to emptyMap())
         when (screen) {
-          NavKeys.ANALYTICS_SCREEN -> AnalyticsScreen(services, context)
+          NavKeys.ANALYTICS_SCREEN -> AnalyticsScreen(services, context, navigator::openWeb)
           "" -> HomeScreen(services, context, workspace, widthClass, navigator)
           else -> PluginScreenHost(services, context, screen, params, workspace.site != null, onPickSite) { navigator.select(ShellNavigator.HOME) }
         }

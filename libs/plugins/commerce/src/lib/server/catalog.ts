@@ -38,6 +38,7 @@ import {
   storefrontCatalogSort,
 } from '../constants/storefront-catalog-query'
 import * as CommerceModel from '../model'
+import { publicFixedPrices } from './product'
 
 export interface PublicCatalogItem {
   id: string
@@ -47,6 +48,11 @@ export interface PublicCatalogItem {
   priceUsd: number
   maxPriceUsd: number
   compareAtPriceUsd?: number
+  /**
+   * The cheapest priced variant's own prices per currency (AGL-4248), major
+   * units, so a card's "from" price matches its product page.
+   */
+  fixedPrices?: Record<string, number>
   imageUrl?: string
   soldOut: boolean
   tags?: string[]
@@ -388,6 +394,17 @@ async function readProductsById(
   return rows
 }
 
+/** The fixed prices of the variant a card's price is, when it has any. */
+function cheapestFixedPrices(
+  variants: readonly CommerceModel.ProductVariant[],
+  minPrice: number,
+): Record<string, number> | undefined {
+  const cheapest = variants.find(
+    (variant) => CommerceModel.variantHasPrice(variant) && Number(variant.priceUsd) === minPrice,
+  )
+  return publicFixedPrices(cheapest?.fixedPrices)
+}
+
 /** The card a grid renders for one product. */
 function toItem(row: CatalogRow): PublicCatalogItem {
   const { product } = row
@@ -402,6 +419,9 @@ function toItem(row: CatalogRow): PublicCatalogItem {
     maxPriceUsd: maxPrice,
     ...(primary?.compareAtPriceUsd
       ? { compareAtPriceUsd: primary.compareAtPriceUsd }
+      : {}),
+    ...(cheapestFixedPrices(product.variants, minPrice)
+      ? { fixedPrices: cheapestFixedPrices(product.variants, minPrice) }
       : {}),
     ...(productCardImage(product) ? { imageUrl: productCardImage(product) } : {}),
     // The same verdict the In stock chip queries (`soldOut`), from the one
