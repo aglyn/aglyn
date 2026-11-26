@@ -81,6 +81,7 @@ import { BUNDLE_ID } from '../constants/bundle-common'
 import { CART_UPDATED_EVENT } from '../constants/cart-events'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { useStorefrontPurchaseEvent } from '../utils/use-storefront-purchase-event'
+import { useShopperCurrency, type ShopperCurrency } from './shopper-currency'
 
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'cart'
@@ -126,6 +127,11 @@ interface CartView {
    */
   needsShippingCountry?: boolean
   shippingCountries?: string[]
+  /**
+   * The currency every amount is in (AGL-4248), when the cart was read in
+   * the shopper's: what checkout will charge. Absent: the store currency.
+   */
+  currency?: string
 }
 
 /**
@@ -136,14 +142,21 @@ interface CartView {
  */
 type CartLoad = 'loading' | 'loaded' | 'failed'
 
-const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
-
 /**
  * The stored cart's read: one URL for the preload hint and the fetch, so the
- * browser hands the fetch the response it already has.
+ * browser hands the fetch the response it already has. A shopper seeing
+ * another currency than the store's (AGL-4248) reads it priced in theirs.
  */
-function cartReadUrl(hostId: string): string {
-  return `/api/commerce/cart?hostId=${encodeURIComponent(hostId)}`
+function cartReadUrl(hostId: string, currency?: string): string {
+  return (
+    `/api/commerce/cart?hostId=${encodeURIComponent(hostId)}` +
+    (currency ? `&currency=${encodeURIComponent(currency)}` : '')
+  )
+}
+
+/** The currency a cart read or write asks for: only one other than the store's. */
+function cartCurrencyParam(shopper: ShopperCurrency): string | undefined {
+  return shopper.foreign ? shopper.code : undefined
 }
 
 /**
@@ -199,6 +212,14 @@ function CartLines(props: {
   const { hostId, cart, load, showCoupon, checkoutLabel, emptyText, onMutate } =
     props
   const siteFetch = Aglyn.useSiteFetch()
+  const shopper = useShopperCurrency()
+  // The lines and subtotal print in the currency the server priced them in;
+  // the extras and delivery fees are store amounts, shown converted.
+  const money = (cents: number) => shopper.formatIn(cents, cart?.currency)
+  const feeMoney =
+    cart?.currency && cart.currency !== shopper.code
+      ? (cents: number) => shopper.formatIn(cents, cart.currency)
+      : shopper.formatBaseCents
   const [coupon, setCoupon] = useState('')
   const [email, setEmail] = useState('')
   const [optIn, setOptIn] = useState(false)
@@ -352,7 +373,7 @@ function CartLines(props: {
   const fulfillment = useCartFulfillment(hostId, cartSignature)
   useEffect(() => {
     attemptKey.current = ''
-  }, [cartSignature, email, coupon, giftCard, creditCode, shipTo, shipPostal, extrasSignature, fulfillment.signature])
+  }, [cartSignature, email, coupon, giftCard, creditCode, shipTo, shipPostal, extrasSignature, fulfillment.signature, shopper.code])
 
   const handleCheckout = useCallback(async () => {
     if (status === 'sending') return
@@ -396,6 +417,9 @@ function CartLines(props: {
           // The visitor's advertising consent and the vendors' browser ids, only
           // where that consent grants advertising (AGL-3694); absent otherwise.
           ...advertisingConsentField(hostId),
+          // The currency the shopper sees (AGL-4248), a request like the
+          // rest: the server charges in it only where the store sells in it.
+          ...(shopper.ready ? { currency: shopper.code } : {}),
         }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -532,7 +556,7 @@ function CartLines(props: {
     // subtotal and the OLD lines. The pre-AGL-1591 raw call had the same bug
     // in the `value` alone, where a wrong number is indistinguishable from a
     // right one.
-  }, [hostId, cart, coupon, email, optIn, giftCard, creditCode, shipTo, shipPostal, status, siteFetch, extras.chosenIds, extras.reload, extras.credits.length, fulfillment.request, fulfillment.reload, hardwareTerms, hardwareTermsAsked])
+  }, [hostId, cart, coupon, email, optIn, giftCard, creditCode, shipTo, shipPostal, status, siteFetch, extras.chosenIds, extras.reload, extras.credits.length, fulfillment.request, fulfillment.reload, hardwareTerms, hardwareTermsAsked, shopper.ready, shopper.code])
 
   if (!cart && load === 'loading') {
     return (
@@ -625,7 +649,7 @@ function CartLines(props: {
             <Typography variant="caption" color="text.secondary">
               {line.unavailable
                 ? (line.problem ?? 'No longer available')
-                : usd(line.unitAmountCents)}
+                : money(line.unitAmountCents)}
             </Typography>
           </Box>
           <TextField
@@ -665,15 +689,15 @@ function CartLines(props: {
       })}
       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
         <Typography variant="subtitle2">{'Subtotal'}</Typography>
-        <Typography variant="subtitle2">{usd(cart.subtotalCents)}</Typography>
+        <Typography variant="subtitle2">{money(cart.subtotalCents)}</Typography>
       </Box>
       <CartExtras
         offers={extras.offers}
         chosen={extras.chosen}
         onToggle={extras.toggle}
-        formatCents={usd}
+        formatCents={feeMoney}
       />
-      <CartFulfillmentChoice state={fulfillment} formatCents={usd} />
+      <CartFulfillmentChoice state={fulfillment} formatCents={feeMoney} />
       <Typography variant="caption" color="text.secondary">
         {fulfillment.method === 'shipping'
           ? 'Shipping and taxes are calculated at checkout.'
@@ -841,6 +865,8 @@ const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
   const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
   const { hostId } = Aglyn.useSite()
   const siteFetch = Aglyn.useSiteFetch()
+  const shopper = useShopperCurrency()
+  const currencyParam = cartCurrencyParam(shopper)
   const [cart, setCart] = useState<CartView | null>(null)
   const [load, setLoad] = useState<CartLoad>('loading')
   const [open, setOpen] = useState(false)
@@ -855,7 +881,7 @@ const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
   const refresh = useCallback(async () => {
     if (!hostId) return
     try {
-      const response = await fetch(cartReadUrl(hostId))
+      const response = await fetch(cartReadUrl(hostId, currencyParam))
       if (response.ok) {
         setCart(await response.json())
         setLoad('loaded')
@@ -866,7 +892,7 @@ const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
       // Badge silently stays stale offline; a cart never read says so.
       setLoad((current) => (current === 'loaded' ? current : 'failed'))
     }
-  }, [hostId])
+  }, [hostId, currencyParam])
 
   useEffect(() => {
     void refresh()
@@ -922,14 +948,14 @@ const Cart = forwardRef<HTMLDivElement, CartProps>((props, ref) => {
       const response = await siteFetch('/api/commerce/cart', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hostId, ...body }),
+        body: JSON.stringify({ hostId, ...body, ...(currencyParam ? { currency: currencyParam } : {}) }),
       })
       if (response.ok) {
         setCart(await response.json())
         window.dispatchEvent(new Event(CART_UPDATED_EVENT))
       }
     },
-    [hostId, siteFetch],
+    [hostId, siteFetch, currencyParam],
   )
 
   if (!hostId) {

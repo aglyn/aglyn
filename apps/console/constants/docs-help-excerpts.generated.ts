@@ -101,6 +101,7 @@ export const DOCS_HELP_EXCERPTS = {
   createWithAi: 'The Create with AI button sits beside the create button on every list Aglyn AI can fill: pages, templates, layouts, forms, components, emails, campaigns, automations, products, overlays and media.',
   crm: 'One place for the people who interact with your sites — contacts captured from forms, members, orders and bookings, with leads, companies, a deals pipeline, tasks, a timeline, reports and custom fields.',
   crmByAi: 'An AI CRM for small business: a short summary and a suggested next step on a contact, company, deal or lead, a one-to-one email drafted into the composer, and an import\'s columns matched to fields.',
+  currencies: 'Show and charge prices in your shoppers\' own currencies, with daily rates, rounding, a buffer, and fixed prices where you want them.',
   customDomains: 'Connect your own domain — subdomain or bare apex — with one-click DNS verification.',
   customFields: 'Define your own properties on contacts, companies, deals and leads — text, number, date, choice, checkbox, link or currency — show them on every record and its list, and save form answers straight into a contact\'s.',
   customRoles: 'Define roles with unique permission sets and fine-tune access per member.',

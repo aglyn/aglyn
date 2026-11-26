@@ -80,6 +80,8 @@ fun GlanceWidget(context: NativePluginContext) {
       null
     }
   }
+  // An order from before multi-currency is in the store's own currency (AGL-4248).
+  val storeCurrency = com.aglyn.plugins.commerce.orders.rememberOrderStoreCurrency(context)
   val read = glance ?: return
   if (!read.access.carried) {
     SectionCard("At a glance", Modifier.fillMaxWidth().testTag("glance")) {
@@ -95,7 +97,7 @@ fun GlanceWidget(context: NativePluginContext) {
     read.latest.forEach { order ->
       Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(space(1f)), verticalAlignment = Alignment.CenterVertically) {
         Text("${order.label} · ${order.customer}", Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
-        Text(formatOrderMoney(order.netCents), style = MaterialTheme.typography.bodySmall)
+        Text(formatOrderMoney(order.netCents, com.aglyn.plugins.commerce.orders.orderCurrency(order.currency, storeCurrency)), style = MaterialTheme.typography.bodySmall)
         StatusChip(order.statusLabel, statusTone(order.status))
       }
     }

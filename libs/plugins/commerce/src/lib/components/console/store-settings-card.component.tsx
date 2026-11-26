@@ -249,7 +249,10 @@ export function StoreSettingsCard(props: StoreSettingsCardProps) {
           size="small"
           select
           sx={{ maxWidth: 200 }}
-          helperText="Charges settle in USD; more currencies are coming"
+          helperText={
+            'Charges settle in USD. To show and charge prices in other ' +
+            'currencies too, turn them on in the Currencies card.'
+          }
         >
           <MenuItem value="USD">{'USD ($)'}</MenuItem>
         </TextField>

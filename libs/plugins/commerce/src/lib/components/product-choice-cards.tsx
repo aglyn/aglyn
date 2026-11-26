@@ -40,7 +40,7 @@ import {
   type ProductModifierGroup,
   type ProductModifierOption,
 } from '../model/product-modifiers'
-import { addOnGroupHint, ProductWriteInField, withGroupAnswer } from './product-add-ons'
+import { addOnGroupHint, addOnMoney, ProductWriteInField, withGroupAnswer } from './product-add-ons'
 
 /*
  * THE PRODUCT BUILDER'S PICTURE CARDS (AGL-4205).
@@ -59,6 +59,8 @@ export interface CardVariant {
   id: string
   options?: Record<string, string>
   priceUsd: number | null
+  /** The merchant's own price per currency (AGL-4248). */
+  fixedPrices?: Record<string, number>
   soldOut?: boolean
   imageUrl?: string
   note?: string
@@ -251,6 +253,13 @@ export interface ProductChoiceCardsProps {
   onChange: (next: ModifierSelection[]) => void
   /** The store's money, e.g. `$1,250.00`. */
   formatCents: (cents: number) => string
+  /**
+   * What a choice adds, in the shopper's currency (AGL-4248): its fixed
+   * amount there when it has one. Absent: `formatCents` of its store price.
+   */
+  formatAddOn?: (option: ProductModifierOption, variantId?: string | null) => string
+  /** A variant's price in the shopper's currency (AGL-4248); absent: `formatCents`. */
+  formatVariant?: (variant: { priceUsd?: number | null; fixedPrices?: Record<string, number> }) => string
   /** What a card says where a variant has no price yet. */
   unpricedLabel: string
   disabled?: boolean
@@ -268,6 +277,8 @@ export function ProductChoiceCards(props: ProductChoiceCardsProps) {
     value,
     onChange,
     formatCents,
+    formatAddOn,
+    formatVariant,
     unpricedLabel,
     disabled,
   } = props
@@ -278,7 +289,9 @@ export function ProductChoiceCards(props: ProductChoiceCardsProps) {
       <ChoiceCard
         key={option.id}
         name={option.name}
-        price={addOnPriceLabel(modifierOptionPriceCents(option, variantId), formatCents)}
+        price={addOnPriceLabel(modifierOptionPriceCents(option, variantId), () =>
+          addOnMoney(option, variantId, formatCents, formatAddOn),
+        )}
         note={option.note}
         imageUrl={option.imageUrl}
         selected={selected}
@@ -302,7 +315,9 @@ export function ProductChoiceCards(props: ProductChoiceCardsProps) {
                 name={choice}
                 price={
                   typeof variant?.priceUsd === 'number'
-                    ? formatCents(Math.round(variant.priceUsd * 100))
+                    ? formatVariant
+                      ? formatVariant(variant)
+                      : formatCents(Math.round(variant.priceUsd * 100))
                     : unpricedLabel
                 }
                 note={variant?.note}
@@ -328,6 +343,7 @@ export function ProductChoiceCards(props: ProductChoiceCardsProps) {
               value={value}
               onChange={onChange}
               formatCents={formatCents}
+              formatAddOn={formatAddOn}
               disabled={disabled}
             />
           )

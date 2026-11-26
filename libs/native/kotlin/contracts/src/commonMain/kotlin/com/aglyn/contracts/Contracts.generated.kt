@@ -311,6 +311,17 @@ data class BookingWindow(
     val start: Long,
 )
 
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = BuyerNotificationChannelSerializer::class)
+enum class BuyerNotificationChannel(val raw: String) {
+    EMAIL("email"),
+    SMS("sms"),
+    UNKNOWN(""),
+}
+
+internal object BuyerNotificationChannelSerializer :
+    RawEnumSerializer<BuyerNotificationChannel>("com.aglyn.contracts.BuyerNotificationChannel", BuyerNotificationChannel.entries, BuyerNotificationChannel.UNKNOWN, { it.raw })
+
 @Serializable
 data class CheckInCustomer(
     val contactId: String? = null,
@@ -905,6 +916,8 @@ data class HostFunctionVariable(
 @Serializable
 data class HostOrder(
     val amountCents: Double? = null,
+    val baseCurrency: String? = null,
+    val baseTotals: OrderTotals? = null,
     val billingAddress: OrderAddress? = null,
     val buyerNotifications: Map<String, HostOrderBuyerNotificationsValue>? = null,
     val cashierId: String? = null,
@@ -914,6 +927,7 @@ data class HostOrder(
     val couponCode: String? = null,
     val createdAtMs: Double? = null,
     val credits: List<OrderCredit>? = null,
+    val currency: String? = null,
     val customerEmail: String? = null,
     val customerId: String? = null,
     val customerName: String? = null,
@@ -929,6 +943,7 @@ data class HostOrder(
     val feeCents: Double? = null,
     val fulfillmentMethod: OrderFulfillmentMethod? = null,
     val fulfillments: List<OrderFulfillment>? = null,
+    val fxRate: Double? = null,
     val giftCardRedeemedCents: Double? = null,
     val hardwareBuyer: OrderHardwareBuyer? = null,
     val hardwareOrderId: String? = null,
@@ -975,20 +990,9 @@ data class HostOrder(
 @Serializable
 data class HostOrderBuyerNotificationsValue(
     val atMs: Double,
-    val channel: HostOrderBuyerNotificationsValueChannel,
+    val channel: BuyerNotificationChannel,
     val state: HostOrderBuyerNotificationsValueState,
 )
-
-/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
-@Serializable(with = HostOrderBuyerNotificationsValueChannelSerializer::class)
-enum class HostOrderBuyerNotificationsValueChannel(val raw: String) {
-    EMAIL("email"),
-    SMS("sms"),
-    UNKNOWN(""),
-}
-
-internal object HostOrderBuyerNotificationsValueChannelSerializer :
-    RawEnumSerializer<HostOrderBuyerNotificationsValueChannel>("com.aglyn.contracts.HostOrderBuyerNotificationsValueChannel", HostOrderBuyerNotificationsValueChannel.entries, HostOrderBuyerNotificationsValueChannel.UNKNOWN, { it.raw })
 
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = HostOrderBuyerNotificationsValueStateSerializer::class)
@@ -3285,6 +3289,7 @@ data class ProductModifierGroup(
 
 @Serializable
 data class ProductModifierOption(
+    val fixedPriceCents: Map<String, Double>? = null,
     val id: String,
     val imageUrl: String? = null,
     val includes: List<String>? = null,
@@ -3338,6 +3343,7 @@ data class ProductVariant(
     val barcode: String? = null,
     val checkIn: ProductCheckIn? = null,
     val compareAtPriceUsd: Double? = null,
+    val fixedPrices: Map<String, Double>? = null,
     val id: String? = null,
     val imageUrl: String? = null,
     val inventory: Double? = null,

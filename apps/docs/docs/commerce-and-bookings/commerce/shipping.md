@@ -45,6 +45,10 @@ To let buyers choose which location to collect from, with pickup hours and a
 ready-for-pickup email, turn on pickup for the location instead: see
 [Pickup & local delivery](./pickup-and-local-delivery.md).
 
+If you [sell in other currencies](./currencies.md), a **Flat** or **Free over
+subtotal** rate can also carry its own price, and free-over subtotal, in each
+of them. Leave those blank to convert from your store currency.
+
 Checkout charges only the rates of the zone the destination falls in, and
 narrows the address it collects to that destination, so a shopper cannot pick
 another zone's cheaper rate. The [destination coverage](./overview.md#destination-coverage)
