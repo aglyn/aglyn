@@ -445,6 +445,18 @@ public struct BookingWindow: Codable, Hashable, Sendable {
   }
 }
 
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum BuyerNotificationChannel: String, Codable, CaseIterable, Hashable, Sendable {
+  case email = "email"
+  case sms = "sms"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
 public struct CheckInCustomer: Codable, Hashable, Sendable {
   public var contactId: String?
   public var customerKey: String
@@ -815,13 +827,48 @@ public struct EntryStatusOptionsItem: Codable, Hashable, Sendable {
   }
 }
 
+public struct EventRecurrence: Codable, Hashable, Sendable {
+  public var count: Double?
+  public var exceptDayKeys: [String]?
+  public var freq: EventRepeatFrequency
+  public var interval: Double?
+  public var untilDayKey: String?
+  public var weekdays: [Double]?
+
+  public init(count: Double? = nil, exceptDayKeys: [String]? = nil, freq: EventRepeatFrequency, interval: Double? = nil, untilDayKey: String? = nil, weekdays: [Double]? = nil) {
+    self.count = count
+    self.exceptDayKeys = exceptDayKeys
+    self.freq = freq
+    self.interval = interval
+    self.untilDayKey = untilDayKey
+    self.weekdays = weekdays
+  }
+}
+
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum EventRemovableField: String, Codable, CaseIterable, Hashable, Sendable {
+  case categoryIds = "categoryIds"
   case coverImage = "coverImage"
   case coverImageAlt = "coverImageAlt"
   case description = "description"
   case location = "location"
   case organizer = "organizer"
+  case recurrence = "recurrence"
+  case ticket = "ticket"
+  case timeZone = "timeZone"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum EventRepeatFrequency: String, Codable, CaseIterable, Hashable, Sendable {
+  case daily = "daily"
+  case monthly = "monthly"
+  case weekly = "weekly"
   case unknown = ""
 
   public init(from decoder: Decoder) throws {
@@ -843,26 +890,60 @@ public enum EventStatus: String, Codable, CaseIterable, Hashable, Sendable {
 }
 
 public struct EventStoredFields: Codable, Hashable, Sendable {
+  public var categoryIds: [String]?
   public var coverImage: String?
   public var coverImageAlt: String?
   public var description: String?
   public var endsAtMs: Int
   public var location: String?
   public var organizer: String?
+  public var recurrence: EventRecurrence?
+  public var seriesEndsAtMs: Double?
   public var startsAtMs: Int
   public var status: EventStatus
+  public var ticket: EventTicket?
+  public var timeZone: String?
   public var title: String
 
-  public init(coverImage: String? = nil, coverImageAlt: String? = nil, description: String? = nil, endsAtMs: Int, location: String? = nil, organizer: String? = nil, startsAtMs: Int, status: EventStatus, title: String) {
+  public init(categoryIds: [String]? = nil, coverImage: String? = nil, coverImageAlt: String? = nil, description: String? = nil, endsAtMs: Int, location: String? = nil, organizer: String? = nil, recurrence: EventRecurrence? = nil, seriesEndsAtMs: Double? = nil, startsAtMs: Int, status: EventStatus, ticket: EventTicket? = nil, timeZone: String? = nil, title: String) {
+    self.categoryIds = categoryIds
     self.coverImage = coverImage
     self.coverImageAlt = coverImageAlt
     self.description = description
     self.endsAtMs = endsAtMs
     self.location = location
     self.organizer = organizer
+    self.recurrence = recurrence
+    self.seriesEndsAtMs = seriesEndsAtMs
     self.startsAtMs = startsAtMs
     self.status = status
+    self.ticket = ticket
+    self.timeZone = timeZone
     self.title = title
+  }
+}
+
+public struct EventTicket: Codable, Hashable, Sendable {
+  public var id: String
+  public var kind: EventTicketKind
+  public var label: String?
+
+  public init(id: String, kind: EventTicketKind, label: String? = nil) {
+    self.id = id
+    self.kind = kind
+    self.label = label
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum EventTicketKind: String, Codable, CaseIterable, Hashable, Sendable {
+  case product = "product"
+  case service = "service"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
   }
 }
 
@@ -877,25 +958,33 @@ public struct EventWrite: Codable, Hashable, Sendable {
 }
 
 public struct EventWriteInput: Codable, Hashable, Sendable {
+  public var categoryIds: [String]?
   public var coverImage: String?
   public var coverImageAlt: String?
   public var description: String?
   public var endsAtMs: Int?
   public var location: String?
   public var organizer: String?
+  public var recurrence: ContractJSON?
   public var startsAtMs: Int
   public var status: EventStatus
+  public var ticket: ContractJSON?
+  public var timeZone: String?
   public var title: String
 
-  public init(coverImage: String? = nil, coverImageAlt: String? = nil, description: String? = nil, endsAtMs: Int? = nil, location: String? = nil, organizer: String? = nil, startsAtMs: Int, status: EventStatus, title: String) {
+  public init(categoryIds: [String]? = nil, coverImage: String? = nil, coverImageAlt: String? = nil, description: String? = nil, endsAtMs: Int? = nil, location: String? = nil, organizer: String? = nil, recurrence: ContractJSON? = nil, startsAtMs: Int, status: EventStatus, ticket: ContractJSON? = nil, timeZone: String? = nil, title: String) {
+    self.categoryIds = categoryIds
     self.coverImage = coverImage
     self.coverImageAlt = coverImageAlt
     self.description = description
     self.endsAtMs = endsAtMs
     self.location = location
     self.organizer = organizer
+    self.recurrence = recurrence
     self.startsAtMs = startsAtMs
     self.status = status
+    self.ticket = ticket
+    self.timeZone = timeZone
     self.title = title
   }
 }
@@ -1334,6 +1423,8 @@ public struct HostFunctionVariable: Codable, Hashable, Sendable {
 
 public struct HostOrder: Codable, Hashable, Sendable {
   public var amountCents: Double?
+  public var baseCurrency: String?
+  public var baseTotals: OrderTotals?
   public var billingAddress: OrderAddress?
   public var buyerNotifications: [String: HostOrderBuyerNotificationsValue]?
   public var cashierId: String?
@@ -1343,6 +1434,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
   public var couponCode: String?
   public var createdAtMs: Double?
   public var credits: [OrderCredit]?
+  public var currency: String?
   public var customerEmail: String?
   public var customerId: String?
   public var customerName: String?
@@ -1358,6 +1450,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
   public var feeCents: Double?
   public var fulfillmentMethod: OrderFulfillmentMethod?
   public var fulfillments: [OrderFulfillment]?
+  public var fxRate: Double?
   public var giftCardRedeemedCents: Double?
   public var hardwareBuyer: OrderHardwareBuyer?
   public var hardwareOrderId: String?
@@ -1400,8 +1493,10 @@ public struct HostOrder: Codable, Hashable, Sendable {
   public var unresolvedLines: [OrderUnresolvedLine]?
   public var useDayKeys: [String]?
 
-  public init(amountCents: Double? = nil, billingAddress: OrderAddress? = nil, buyerNotifications: [String: HostOrderBuyerNotificationsValue]? = nil, cashierId: String? = nil, channel: OrderChannel? = nil, channelSource: OrderChannelSource? = nil, checkoutSessionId: String? = nil, couponCode: String? = nil, createdAtMs: Double? = nil, credits: [OrderCredit]? = nil, customerEmail: String? = nil, customerId: String? = nil, customerName: String? = nil, customerPhone: String? = nil, customerRecord: HostOrderCustomerRecord? = nil, discountBy: String? = nil, discountId: String? = nil, discountPct: Double? = nil, dispute: OrderDispute? = nil, draftShipping: OrderDraftShipping? = nil, emailThread: QuoteEmailThread? = nil, extras: [OrderExtra]? = nil, feeCents: Double? = nil, fulfillmentMethod: OrderFulfillmentMethod? = nil, fulfillments: [OrderFulfillment]? = nil, giftCardRedeemedCents: Double? = nil, hardwareBuyer: OrderHardwareBuyer? = nil, hardwareOrderId: String? = nil, hardwareSalePending: Bool? = nil, hardwareSerials: [String]? = nil, hardwareTermsAcceptance: HostOrderHardwareTermsAcceptance? = nil, hardwareTermsRequest: HostOrderHardwareTermsRequest? = nil, invoiceId: String? = nil, invoiceSends: [OrderInvoiceSendRecord]? = nil, kioskDeviceId: String? = nil, kioskQueuedAtMs: Double? = nil, kioskQueueRegisterId: String? = nil, lineItems: [OrderLineItem]? = nil, localDelivery: OrderLocalDelivery? = nil, locationId: String? = nil, note: String? = nil, number: Double? = nil, offline: PosOfflineOrderStamp? = nil, payLink: OrderPayLink? = nil, paymentIntentId: String? = nil, paymentLinkUrl: String? = nil, paymentRisk: PaymentRisk? = nil, payments: [OrderPayment]? = nil, pickup: OrderPickup? = nil, posSource: String? = nil, productId: String? = nil, quote: OrderQuote? = nil, receiptRequest: HostOrderReceiptRequest? = nil, refundedCents: Double? = nil, refundedLineItemIds: [Double]? = nil, registerId: String? = nil, restockCheck: OrderRestockCheck? = nil, shiftId: String? = nil, shippingAddress: OrderAddress? = nil, status: OrderStatus? = nil, subscriptionId: String? = nil, taxMode: StorefrontTaxMode? = nil, timeline: [OrderTimelineEvent]? = nil, totals: OrderTotals? = nil, unresolvedLines: [OrderUnresolvedLine]? = nil, useDayKeys: [String]? = nil) {
+  public init(amountCents: Double? = nil, baseCurrency: String? = nil, baseTotals: OrderTotals? = nil, billingAddress: OrderAddress? = nil, buyerNotifications: [String: HostOrderBuyerNotificationsValue]? = nil, cashierId: String? = nil, channel: OrderChannel? = nil, channelSource: OrderChannelSource? = nil, checkoutSessionId: String? = nil, couponCode: String? = nil, createdAtMs: Double? = nil, credits: [OrderCredit]? = nil, currency: String? = nil, customerEmail: String? = nil, customerId: String? = nil, customerName: String? = nil, customerPhone: String? = nil, customerRecord: HostOrderCustomerRecord? = nil, discountBy: String? = nil, discountId: String? = nil, discountPct: Double? = nil, dispute: OrderDispute? = nil, draftShipping: OrderDraftShipping? = nil, emailThread: QuoteEmailThread? = nil, extras: [OrderExtra]? = nil, feeCents: Double? = nil, fulfillmentMethod: OrderFulfillmentMethod? = nil, fulfillments: [OrderFulfillment]? = nil, fxRate: Double? = nil, giftCardRedeemedCents: Double? = nil, hardwareBuyer: OrderHardwareBuyer? = nil, hardwareOrderId: String? = nil, hardwareSalePending: Bool? = nil, hardwareSerials: [String]? = nil, hardwareTermsAcceptance: HostOrderHardwareTermsAcceptance? = nil, hardwareTermsRequest: HostOrderHardwareTermsRequest? = nil, invoiceId: String? = nil, invoiceSends: [OrderInvoiceSendRecord]? = nil, kioskDeviceId: String? = nil, kioskQueuedAtMs: Double? = nil, kioskQueueRegisterId: String? = nil, lineItems: [OrderLineItem]? = nil, localDelivery: OrderLocalDelivery? = nil, locationId: String? = nil, note: String? = nil, number: Double? = nil, offline: PosOfflineOrderStamp? = nil, payLink: OrderPayLink? = nil, paymentIntentId: String? = nil, paymentLinkUrl: String? = nil, paymentRisk: PaymentRisk? = nil, payments: [OrderPayment]? = nil, pickup: OrderPickup? = nil, posSource: String? = nil, productId: String? = nil, quote: OrderQuote? = nil, receiptRequest: HostOrderReceiptRequest? = nil, refundedCents: Double? = nil, refundedLineItemIds: [Double]? = nil, registerId: String? = nil, restockCheck: OrderRestockCheck? = nil, shiftId: String? = nil, shippingAddress: OrderAddress? = nil, status: OrderStatus? = nil, subscriptionId: String? = nil, taxMode: StorefrontTaxMode? = nil, timeline: [OrderTimelineEvent]? = nil, totals: OrderTotals? = nil, unresolvedLines: [OrderUnresolvedLine]? = nil, useDayKeys: [String]? = nil) {
     self.amountCents = amountCents
+    self.baseCurrency = baseCurrency
+    self.baseTotals = baseTotals
     self.billingAddress = billingAddress
     self.buyerNotifications = buyerNotifications
     self.cashierId = cashierId
@@ -1411,6 +1506,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
     self.couponCode = couponCode
     self.createdAtMs = createdAtMs
     self.credits = credits
+    self.currency = currency
     self.customerEmail = customerEmail
     self.customerId = customerId
     self.customerName = customerName
@@ -1426,6 +1522,7 @@ public struct HostOrder: Codable, Hashable, Sendable {
     self.feeCents = feeCents
     self.fulfillmentMethod = fulfillmentMethod
     self.fulfillments = fulfillments
+    self.fxRate = fxRate
     self.giftCardRedeemedCents = giftCardRedeemedCents
     self.hardwareBuyer = hardwareBuyer
     self.hardwareOrderId = hardwareOrderId
@@ -1472,25 +1569,13 @@ public struct HostOrder: Codable, Hashable, Sendable {
 
 public struct HostOrderBuyerNotificationsValue: Codable, Hashable, Sendable {
   public var atMs: Double
-  public var channel: HostOrderBuyerNotificationsValueChannel
+  public var channel: BuyerNotificationChannel
   public var state: HostOrderBuyerNotificationsValueState
 
-  public init(atMs: Double, channel: HostOrderBuyerNotificationsValueChannel, state: HostOrderBuyerNotificationsValueState) {
+  public init(atMs: Double, channel: BuyerNotificationChannel, state: HostOrderBuyerNotificationsValueState) {
     self.atMs = atMs
     self.channel = channel
     self.state = state
-  }
-}
-
-/// A newer server value decodes as `.unknown`, so an older app never fails on it.
-public enum HostOrderBuyerNotificationsValueChannel: String, Codable, CaseIterable, Hashable, Sendable {
-  case email = "email"
-  case sms = "sms"
-  case unknown = ""
-
-  public init(from decoder: Decoder) throws {
-    let raw = try decoder.singleValueContainer().decode(String.self)
-    self = Self(rawValue: raw) ?? .unknown
   }
 }
 
@@ -5075,6 +5160,7 @@ public struct ProductModifierGroup: Codable, Hashable, Sendable {
 }
 
 public struct ProductModifierOption: Codable, Hashable, Sendable {
+  public var fixedPriceCents: [String: Double]?
   public var id: String
   public var imageUrl: String?
   public var includes: [String]?
@@ -5083,7 +5169,8 @@ public struct ProductModifierOption: Codable, Hashable, Sendable {
   public var priceCents: Double
   public var priceCentsByVariant: [String: Double]?
 
-  public init(id: String, imageUrl: String? = nil, includes: [String]? = nil, name: String, note: String? = nil, priceCents: Double, priceCentsByVariant: [String: Double]? = nil) {
+  public init(fixedPriceCents: [String: Double]? = nil, id: String, imageUrl: String? = nil, includes: [String]? = nil, name: String, note: String? = nil, priceCents: Double, priceCentsByVariant: [String: Double]? = nil) {
+    self.fixedPriceCents = fixedPriceCents
     self.id = id
     self.imageUrl = imageUrl
     self.includes = includes
@@ -5150,6 +5237,7 @@ public struct ProductVariant: Codable, Hashable, Sendable {
   public var barcode: String?
   public var checkIn: ProductCheckIn?
   public var compareAtPriceUsd: Double?
+  public var fixedPrices: [String: Double]?
   public var id: String?
   public var imageUrl: String?
   public var inventory: Double?
@@ -5161,10 +5249,11 @@ public struct ProductVariant: Codable, Hashable, Sendable {
   public var sku: String?
   public var weightGrams: Double?
 
-  public init(barcode: String? = nil, checkIn: ProductCheckIn? = nil, compareAtPriceUsd: Double? = nil, id: String? = nil, imageUrl: String? = nil, inventory: Double? = nil, inventoryByLocation: [String: Double]? = nil, note: String? = nil, offerOnKiosk: Bool? = nil, options: [String: String]? = nil, priceUsd: Double? = nil, sku: String? = nil, weightGrams: Double? = nil) {
+  public init(barcode: String? = nil, checkIn: ProductCheckIn? = nil, compareAtPriceUsd: Double? = nil, fixedPrices: [String: Double]? = nil, id: String? = nil, imageUrl: String? = nil, inventory: Double? = nil, inventoryByLocation: [String: Double]? = nil, note: String? = nil, offerOnKiosk: Bool? = nil, options: [String: String]? = nil, priceUsd: Double? = nil, sku: String? = nil, weightGrams: Double? = nil) {
     self.barcode = barcode
     self.checkIn = checkIn
     self.compareAtPriceUsd = compareAtPriceUsd
+    self.fixedPrices = fixedPrices
     self.id = id
     self.imageUrl = imageUrl
     self.inventory = inventory

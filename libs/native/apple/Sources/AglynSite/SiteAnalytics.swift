@@ -8,7 +8,8 @@ import Observation
 import SwiftUI
 
 // A SITE'S NUMBERS, as the console's cards read them (AGL-4011): the Traffic card over `hosts/{id}/analytics` (a
-// document per UTC day), the Pages table (a Pro feature) over `hosts/{id}/screenAnalytics`, a page's own traffic over
+// document per UTC day), the Pages table (a Pro feature) over the same days' per-path counts (AGL-4253), each path named by
+// `SitePageTraffic.swift`, with a page's device and referrer from `hosts/{id}/screenAnalytics`, a page's own traffic over
 // its `screenAnalytics/{screenId}:{day}` documents, and the activity log `hosts/{id}/activity`. The figures are the
 // console's own functions, ported once in the contracts. Home, Analytics and a page's detail draw these parts, and a
 // phone's Home can host them too. The Kotlin twin is `site/SiteAnalytics.kt`.
@@ -79,6 +80,8 @@ enum SiteAnalyticsMetrics {
   static let shareColumn = AglynSpace.of(7)
   static let deviceColumn = AglynSpace.of(12)
   static let referrerColumn = AglynSpace.of(17.5)
+  /// The narrowest Pages table that holds every column: the four fixed ones, the gaps and a readable name.
+  static let pagesFullRow = AglynSpace.of(77.5)
   static let summaryChart = AglynSpace.of(15)
   static let detailChart = AglynSpace.of(20)
   static let pageChart = AglynSpace.of(12)
@@ -97,12 +100,10 @@ public func analyticsCount(_ value: Double) -> String { Int(value).formatted() }
 public final class SiteAnalyticsModel {
   public private(set) var traffic: [FirestoreDocument]?
   public private(set) var trafficFailed = false
-  public private(set) var screenDocs: [FirestoreDocument]?
   public private(set) var screens: [String: String] = [:]
   public private(set) var entitled: Bool?
   public private(set) var entitlementFailed = false
   @ObservationIgnored private var listeners: [FirestoreListening] = []
-  @ObservationIgnored private var pagesListener: FirestoreListening?
 
   public init() {}
 
@@ -152,19 +153,6 @@ public final class SiteAnalyticsModel {
     }
   }
 
-  /// Every page's day documents in the window, newest first, at most a thousand (the console table's ceiling).
-  public func startPages(reader: FirestoreReader, hostID: String, range: Int) {
-    pagesListener?.remove()
-    let first = recentDayIDs(now: .now, days: range).last ?? ""
-    pagesListener = reader.listen(
-      FirestoreQuery(
-        ["hosts", hostID, "screenAnalytics"], filters: [ListQueryConstraint(path: "day", op: .greaterThanOrEqual, value: first)],
-        order: [.init("day", descending: true)], limit: 1000)
-    ) { [weak self] result in
-      if case .success(let docs) = result { self?.screenDocs = docs } else { self?.screenDocs = [] }
-    }
-  }
-
   private func stopTraffic() {
     listeners.forEach { $0.remove() }
     listeners = []
@@ -172,8 +160,113 @@ public final class SiteAnalyticsModel {
 
   public func stop() {
     stopTraffic()
-    pagesListener?.remove()
-    pagesListener = nil
+  }
+}
+
+/// The Pages table's rows (AGL-4253): every visited path over the window by its day documents' `paths` counts, each
+/// named for what it is (a page, a product, a store collection, a post, a collection's list, an address nothing
+/// answers), with device and referrer only where they are counted per page (`screenAnalytics`, a routed page that is
+/// not a template). Read once per open, range or refresh, as the console's table does.
+@MainActor
+@Observable
+public final class SitePagesTrafficModel {
+  /// The most documents the per-page device and referrer read takes (the console table's ceiling).
+  public static let screenQueryLimit = 1000
+  public private(set) var rows: [SitePageRow]?
+  /// The days could not be read: nothing is shown as zero.
+  public private(set) var failed = false
+  /// The names could not be read: rows show their addresses, and the card says so.
+  public private(set) var labelsFailed = false
+  /// The per-page device and referrer counts could not be read.
+  public private(set) var screensFailed = false
+  @ObservationIgnored private var task: Task<Void, Never>?
+
+  public init() {}
+
+  public func start(reader: FirestoreReader, hostID: String, range: Int) {
+    task?.cancel()
+    task = Task { [weak self] in await self?.load(reader: reader, hostID: hostID, range: range) }
+  }
+
+  public func stop() {
+    task?.cancel()
+    task = nil
+  }
+
+  private func load(reader: FirestoreReader, hostID: String, range: Int) async {
+    let first = recentDayIDs(now: .now, days: range).last ?? ""
+    let days: [FirestoreDocument]
+    do {
+      days = try await reader.readOnce(
+        FirestoreQuery(
+          ["hosts", hostID, "analytics"], filters: [ListQueryConstraint(path: "__name__", op: .greaterThanOrEqual, value: first)],
+          order: [.init("__name__")], limit: range))
+    } catch {
+      Telemetry.record(error, "site_analytics.pages_days")
+      guard !Task.isCancelled else { return }
+      failed = true
+      if rows == nil { rows = [] }
+      return
+    }
+    let views = rollUpPathViews(days.map { TrafficDay(day: $0.id, data: $0.data).paths })
+    let screenDocs = try? await reader.readOnce(
+      FirestoreQuery(
+        ["hosts", hostID, "screenAnalytics"], filters: [ListQueryConstraint(path: "day", op: .greaterThanOrEqual, value: first)],
+        order: [.init("day", descending: true)], limit: Self.screenQueryLimit))
+    let screenByID = Dictionary((screenDocs.map { aggregateScreenDays($0.map(\.data)) } ?? []).map { ($0.screenId, $0) }, uniquingKeysWith: { a, _ in a })
+    let labels = try? await Self.labels(reader: reader, hostID: hostID, paths: views.map(\.path))
+    guard !Task.isCancelled else { return }
+    rows = views.map { one in
+      let label = labels?[one.path] ?? .unlabeled(one.path)
+      return SitePageRow(path: one.path, views: one.views, label: label, screen: label.screenID.flatMap { screenByID[$0] })
+    }
+    failed = false
+    labelsFailed = labels == nil && !views.isEmpty
+    screensFailed = screenDocs == nil
+  }
+
+  /// Names every path (`labelSitePaths`): the host doc and its collections once, each visited page's screen, then one
+  /// `in` query per thirty records or entries. A read that fails throws: the rows then show their addresses and the card
+  /// says so, rather than filing a product under Other addresses because its lookup was refused.
+  static func labels(reader: FirestoreReader, hostID: String, paths: [String]) async throws -> [String: SitePageLabel] {
+    guard !paths.isEmpty else { return [:] }
+    let host = try await reader.readOnce(["hosts", hostID])
+    let collections = try await reader.readOnce(FirestoreQuery(["hosts", hostID, "collections"]))
+    let facts = SitePageFacts(
+      routes: (host?.data["screens"] as? [String: Any] ?? [:]).compactMapValues { $0 as? String },
+      origin: HostStatus.publicOrigin(host?.data),
+      collections: collections.map { (id: $0.id, data: $0.data) })
+    let context = facts.context
+    let classes = paths.map { classifyPagePath($0, context) }
+    let wanted = SitePageReads(classes)
+    var found = SitePageFound()
+    for id in wanted.screenIDs {
+      if let doc = try await reader.readOnce(["hosts", hostID, "screens", id]) { found.screens[id] = doc.data }
+    }
+    func bySlug(_ collection: [String], _ slugs: [String], accepts: ([String: Any]) -> Bool = { _ in true }) async throws
+      -> [String: (id: String, data: [String: Any])]
+    {
+      var result: [String: (id: String, data: [String: Any])] = [:]
+      for start in stride(from: 0, to: slugs.count, by: 30) {
+        let chunk = Array(slugs[start..<min(slugs.count, start + 30)])
+        let docs = try await reader.readOnce(FirestoreQuery(collection, filters: [ListQueryConstraint(path: "slug", op: .in, value: chunk)]))
+        for doc in docs where accepts(doc.data) {
+          if let slug = doc.data["slug"] as? String, result[slug] == nil { result[slug] = (id: doc.id, data: doc.data) }
+        }
+      }
+      return result
+    }
+    for (segment, slugs) in wanted.recordSlugs {
+      guard let kind = SitePathKind.all.first(where: { $0.segment == segment }) else { continue }
+      found.records[segment] = try await bySlug(["hosts", hostID, kind.collection], slugs, accepts: kind.accepts)
+    }
+    let content = facts.contentBySlug
+    for (collectionSlug, slugs) in wanted.entrySlugs {
+      guard let owner = content[collectionSlug]?["$id"] as? String else { continue }
+      found.entries[collectionSlug] = try await bySlug(["hosts", hostID, "collections", owner, "entries"], slugs)
+    }
+    return Dictionary(
+      zip(paths, classes).map { ($0.0, sitePageLabel($0.0, $0.1, facts: facts, read: found)) }, uniquingKeysWith: { a, _ in a })
   }
 }
 
@@ -429,21 +522,32 @@ public struct SiteTrafficCard: View {
   }
 }
 
-/// The console's Pages table (`ScreensAnalyticsTable`): every page's views over a range, side by side, a Pro feature.
-/// A row opens that page's traffic.
+/// The console's Pages table (`PagesTrafficTable`, AGL-4253): every visited product, store collection, post and page of
+/// the site by its own name, the address beneath, filtered by kind, a Pro feature. A row opens what it names: a page's
+/// traffic, a product's editor, or the live page.
 public struct SitePagesTrafficCard: View {
   let reader: FirestoreReader
   let api: ConsoleAPIClient?
   let hostID: String
   let refresh: Int
   let upgrade: () -> Void
-  let open: (_ screenID: String, _ path: String) -> Void
-  @State private var model = SiteAnalyticsModel()
+  let open: (SitePageLabel) -> Void
+  @State private var plan = SiteAnalyticsModel()
+  @State private var model = SitePagesTrafficModel()
   @State private var range = 14
+  @State private var kind = "all"
+  /// The table's own width: a phone, or an iPad's detail column beside the sidebar and list, holds the name, views and
+  /// share; device and referrer come in where the full row fits.
+  @State private var width: CGFloat = .infinity
+  private var compact: Bool { width < SiteAnalyticsMetrics.pagesFullRow }
+
+  /// Device and referrer of a row drawn from a template it shares, said once under the table.
+  static let sharedTemplateNote =
+    "Views are counted per address, so each product, post and collection is its own row. Device and referrer are counted per page design: rows drawn from a shared template show “Site-wide”, and the site’s split is in Traffic."
 
   public init(
     reader: FirestoreReader, api: ConsoleAPIClient?, hostID: String, refresh: Int = 0, upgrade: @escaping () -> Void,
-    open: @escaping (_ screenID: String, _ path: String) -> Void
+    open: @escaping (SitePageLabel) -> Void
   ) {
     self.reader = reader
     self.api = api
@@ -455,25 +559,24 @@ public struct SitePagesTrafficCard: View {
 
   public var body: some View {
     AglynStatsSection("Pages") {
-      if model.entitled == true { AglynRangePicker(days: $range, choices: [7, 14, 30]) }
+      if plan.entitled == true { AglynRangePicker(days: $range, choices: [7, 14, 30]) }
     } content: {
       content
     }
-    .task(id: "\(hostID):\(refresh)") {
-      model.start(reader: reader, api: api, hostID: hostID, range: 1)
+    .task(id: "\(hostID):\(refresh)") { plan.checkEntitlement(api: api, hostID: hostID) }
+    .task(id: "\(hostID):\(range):\(plan.entitled == true):\(refresh)") {
+      if plan.entitled == true { model.start(reader: reader, hostID: hostID, range: range) }
     }
-    .task(id: "\(hostID):\(range):\(model.entitled == true):\(refresh)") {
-      if model.entitled == true { model.startPages(reader: reader, hostID: hostID, range: range) }
-    }
+    .onChange(of: range) { kind = "all" }
     .onDisappear { model.stop() }
     .accessibilityIdentifier("analytics-pages")
   }
 
   @ViewBuilder
   private var content: some View {
-    switch model.entitled {
+    switch plan.entitled {
     case nil:
-      if model.entitlementFailed {
+      if plan.entitlementFailed {
         AglynNotice("Your plan could not be checked. Check the connection and pull to refresh.", tone: .error)
           .accessibilityIdentifier("analytics-pages-failed")
       } else {
@@ -481,18 +584,22 @@ public struct SitePagesTrafficCard: View {
       }
     case false?:
       AglynUpgradeNotice(
-        "Comparing traffic across pages is a Pro feature. Data is already being collected, so history is waiting the moment you upgrade.",
+        "Seeing which pages, products and posts get visited is a Pro feature. Data is already being collected, so history is waiting the moment you upgrade.",
         action: upgrade
       )
       .accessibilityIdentifier("analytics-pages-upgrade")
     case true?:
-      if let docs = model.screenDocs {
-        let rows = aggregateScreenDays(docs.map(\.data))
-        let sum = rows.reduce(0) { $0 + $1.total }
-        if rows.isEmpty {
-          Text("No per-page pageviews recorded in this range yet.").font(AglynFont.subheadline).foregroundStyle(.secondary)
+      if let rows = model.rows {
+        if model.failed && rows.isEmpty {
+          AglynNotice("Pages could not be loaded. Check the connection and pull to refresh.", tone: .error)
+            .accessibilityIdentifier("analytics-pages-load-failed")
+        } else if rows.isEmpty {
+          Text("No pageviews recorded in this range yet.").font(AglynFont.subheadline).foregroundStyle(.secondary)
         } else {
-          table(rows, sum: sum)
+          if model.labelsFailed {
+            AglynNotice("The names of these pages could not be read, so they show by address.", tone: .warning)
+          }
+          table(rows)
         }
       } else {
         SkeletonRows(count: 3)
@@ -500,34 +607,69 @@ public struct SitePagesTrafficCard: View {
     }
   }
 
-  private func table(_ rows: [ScreenTrafficRow], sum: Int) -> some View {
-    VStack(spacing: 0) {
+  private func table(_ rows: [SitePageRow]) -> some View {
+    let groups = sitePageGroups(rows)
+    let shown = kind == "all" ? rows : rows.filter { $0.label.group.id == kind }
+    let sum = rows.reduce(0) { $0 + $1.views }
+    return VStack(alignment: .leading, spacing: 0) {
+      AglynChipRow(
+        [AglynChipOption("all", "All · \(rows.count)")]
+          + groups.map { AglynChipOption($0.group.id, "\($0.group.label) · \($0.count) · \(analyticsCount($0.views)) views") },
+        selected: kind
+      ) { kind = $0 }
+      .accessibilityIdentifier("analytics-pages-kinds")
       header
-      ForEach(rows, id: \.screenId) { row in
+      ForEach(shown) { row in
         Divider()
-        let path = model.screens[row.screenId] ?? row.screenId
-        Button {
-          open(row.screenId, path)
-        } label: {
-          HStack(spacing: AglynSpace.two) {
-            Text(path).lineLimit(1).truncationMode(.middle).frame(maxWidth: .infinity, alignment: .leading)
-            Text(analyticsCount(Double(row.total))).monospacedDigit().frame(width: SiteAnalyticsMetrics.viewsColumn, alignment: .trailing)
-            Text(sum > 0 ? "\(Int((Double(row.total) * 100 / Double(sum) + 0.5).rounded(.down)))%" : "--").monospacedDigit()
-              .foregroundStyle(.secondary).frame(width: SiteAnalyticsMetrics.shareColumn, alignment: .trailing)
-            Text(topDevice(row).isEmpty ? "--" : topDevice(row).capitalized).foregroundStyle(.secondary)
-              .frame(width: SiteAnalyticsMetrics.deviceColumn, alignment: .leading)
-            Text(topReferrer(row).isEmpty ? "--" : referrerLabel(topReferrer(row))).lineLimit(1).foregroundStyle(.secondary)
-              .frame(width: SiteAnalyticsMetrics.referrerColumn, alignment: .leading)
-            Image(systemName: "chevron.right").font(AglynFont.caption).foregroundStyle(.tertiary).accessibilityHidden(true)
-          }
-          .font(AglynFont.subheadline)
-          .padding(.vertical, AglynSpace.oneAndHalf)
-          .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("analytics-page-\(row.screenId)")
+        pageRow(row, sum: sum)
+      }
+      if !compact {
+        Text(Self.sharedTemplateNote).font(AglynFont.caption).foregroundStyle(.secondary).padding(.top, AglynSpace.two)
       }
     }
+    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+  }
+
+  private func pageRow(_ row: SitePageRow, sum: Double) -> some View {
+    let label = row.label
+    let opens = label.screenID != nil || label.productID != nil || label.liveURL != nil
+    let measured = label.screenID != nil
+    let subtitle = [kind == "all" ? label.group.label : nil, label.path, label.note].compactMap { $0 }.joined(separator: " · ")
+    return Button {
+      open(label)
+    } label: {
+      HStack(spacing: AglynSpace.two) {
+        VStack(alignment: .leading, spacing: 2) {
+          Text(label.title).lineLimit(1).truncationMode(.tail)
+          Text(subtitle).font(AglynFont.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        Text(analyticsCount(row.views)).monospacedDigit().frame(width: SiteAnalyticsMetrics.viewsColumn, alignment: .trailing)
+        Text(sum > 0 ? "\(Int((row.views * 100 / sum + 0.5).rounded(.down)))%" : "--").monospacedDigit()
+          .foregroundStyle(.secondary).frame(width: SiteAnalyticsMetrics.shareColumn, alignment: .trailing)
+        if !compact {
+          Text(perPage(measured, row.screen.map { topDevice($0).capitalized }))
+            .foregroundStyle(.secondary).lineLimit(1).frame(width: SiteAnalyticsMetrics.deviceColumn, alignment: .leading)
+          Text(perPage(measured, row.screen.map { referrerLabel(topReferrer($0)) })).lineLimit(1).foregroundStyle(.secondary)
+            .frame(width: SiteAnalyticsMetrics.referrerColumn, alignment: .leading)
+        }
+        Image(systemName: label.screenID != nil || label.productID != nil ? "chevron.right" : "arrow.up.right")
+          .font(AglynFont.caption).foregroundStyle(.tertiary).opacity(opens ? 1 : 0).accessibilityHidden(true)
+      }
+      .font(AglynFont.subheadline)
+      .padding(.vertical, AglynSpace.oneAndHalf)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .disabled(!opens)
+    .accessibilityIdentifier("analytics-page-\(row.path)")
+  }
+
+  /// A row's own device or referrer; "Site-wide" where it is drawn from a shared template and not counted per page.
+  private func perPage(_ measured: Bool, _ value: String?) -> String {
+    guard measured else { return "Site-wide" }
+    if model.screensFailed { return "Could not read" }
+    return value.flatMap { $0.isEmpty ? nil : $0 } ?? "--"
   }
 
   private var header: some View {
@@ -535,12 +677,15 @@ public struct SitePagesTrafficCard: View {
       Text("Page").frame(maxWidth: .infinity, alignment: .leading)
       Text("Views").frame(width: SiteAnalyticsMetrics.viewsColumn, alignment: .trailing)
       Text("Share").frame(width: SiteAnalyticsMetrics.shareColumn, alignment: .trailing)
-      Text("Top device").frame(width: SiteAnalyticsMetrics.deviceColumn, alignment: .leading)
-      Text("Top referrer").frame(width: SiteAnalyticsMetrics.referrerColumn, alignment: .leading)
+      if !compact {
+        Text("Top device").frame(width: SiteAnalyticsMetrics.deviceColumn, alignment: .leading)
+        Text("Top referrer").frame(width: SiteAnalyticsMetrics.referrerColumn, alignment: .leading)
+      }
       Image(systemName: "chevron.right").font(AglynFont.caption).hidden()
     }
     .font(AglynFont.caption.weight(.semibold))
     .foregroundStyle(.secondary)
+    .padding(.top, AglynSpace.one)
     .padding(.bottom, AglynSpace.one)
   }
 }

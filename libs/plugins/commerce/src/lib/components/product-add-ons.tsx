@@ -45,6 +45,11 @@ export interface ProductAddOnsProps {
   onChange: (next: ModifierSelection[]) => void
   /** The store's money, e.g. `$1,250.00`. */
   formatCents: (cents: number) => string
+  /**
+   * What a choice adds, in the shopper's currency (AGL-4248): its fixed
+   * amount there when it has one. Absent: `formatCents` of its store price.
+   */
+  formatAddOn?: (option: ProductModifierOption, variantId?: string | null) => string
   disabled?: boolean
 }
 
@@ -88,7 +93,18 @@ export interface ProductWriteInFieldProps {
   value: readonly ModifierSelection[]
   onChange: (next: ModifierSelection[]) => void
   formatCents: (cents: number) => string
+  formatAddOn?: (option: ProductModifierOption, variantId?: string | null) => string
   disabled?: boolean
+}
+
+/** What a choice adds, as money: the shopper's formatter when given, else the store's. */
+export function addOnMoney(
+  option: ProductModifierOption,
+  variantId: string | null | undefined,
+  formatCents: (cents: number) => string,
+  formatAddOn?: (option: ProductModifierOption, variantId?: string | null) => string,
+): string {
+  return formatAddOn ? formatAddOn(option, variantId) : formatCents(modifierOptionPriceCents(option, variantId))
 }
 
 /**
@@ -97,13 +113,13 @@ export interface ProductWriteInFieldProps {
  * under it, or what is wrong with what was typed.
  */
 export function ProductWriteInField(props: ProductWriteInFieldProps) {
-  const { group, groups, variantId, value, onChange, formatCents, disabled } = props
+  const { group, groups, variantId, value, onChange, formatCents, formatAddOn, disabled } = props
   const option = group.options[0]
   const text = value.find((pick) => pick.groupId === group.id)?.text ?? ''
   const limit = writeInMaxLength(group)
   const problem = writeInProblem(group, text)
   const cents = option ? modifierOptionPriceCents(option, variantId) : 0
-  const hint = [option?.note, cents > 0 ? `Adds ${formatCents(cents)}` : null, `${Array.from(text).length}/${limit}`]
+  const hint = [option?.note, cents > 0 && option ? `Adds ${addOnMoney(option, variantId, formatCents, formatAddOn)}` : null, `${Array.from(text).length}/${limit}`]
     .filter(Boolean)
     .join(' · ')
   return (
@@ -143,10 +159,12 @@ export function addOnGroupHint(group: Pick<ProductModifierGroup, 'min' | 'max'>)
  * product that has add-ons on the website.
  */
 export function ProductAddOns(props: ProductAddOnsProps) {
-  const { groups, variantId, value, onChange, formatCents, disabled } = props
+  const { groups, variantId, value, onChange, formatCents, formatAddOn, disabled } = props
   const priceLabel = (option: ProductModifierOption) => {
     const cents = modifierOptionPriceCents(option, variantId)
-    return cents > 0 ? `${option.name} (+${formatCents(cents)})` : option.name
+    return cents > 0
+      ? `${option.name} (+${addOnMoney(option, variantId, formatCents, formatAddOn)})`
+      : option.name
   }
   return (
     <Stack spacing={1.5} sx={{ mb: 1.5 }}>
@@ -161,6 +179,7 @@ export function ProductAddOns(props: ProductAddOnsProps) {
               value={value}
               onChange={onChange}
               formatCents={formatCents}
+              formatAddOn={formatAddOn}
               disabled={disabled}
             />
           )

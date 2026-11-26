@@ -10,6 +10,37 @@ import XCTest
 @testable import AglynCommercePlugin
 
 final class StoreOrdersTests: XCTestCase {
+  /// An order paid in New Zealand dollars shows NZ$, with the store's US-dollar total beside it on the detail (AGL-4248).
+  func testAnOrderPaidInNzdFormatsInNzdWithTheStoreTotalBeside() {
+    let doc = FirestoreDocument(
+      id: "o9",
+      data: [
+        "number": 1050, "status": "paid", "currency": "nzd", "baseCurrency": "usd", "fxRate": 1.7,
+        "totals": ["totalCents": 14100, "itemsCents": 14100],
+        "baseTotals": ["totalCents": 8294, "itemsCents": 8294],
+      ])
+    let row = OrderRow(id: doc.id, order: decodeOrder(doc), storeCurrency: "USD")
+    XCTAssertEqual(row.currency, "NZD")
+    XCTAssertEqual(row.total, "NZ$141.00")
+    XCTAssertEqual(row.money(500), "NZ$5.00")
+    XCTAssertEqual(row.totalWithBase, "NZ$141.00 (US$82.94)")
+  }
+
+  /// An order from before multi-currency carries none and is in the store's currency, with nothing beside its total.
+  func testAnOrderWithoutACurrencyIsInTheStoreCurrency() {
+    let order = HostOrder(totals: OrderTotals(totalCents: 4500))
+    XCTAssertEqual(OrderRow(id: "o1", order: order).total, "$45.00")
+    let row = OrderRow(id: "o1", order: order, storeCurrency: "AUD")
+    XCTAssertEqual(row.total, "A$45.00")
+    XCTAssertEqual(row.totalWithBase, "A$45.00")
+    // Paid in the store's own currency: no second figure.
+    let same = HostOrder(baseCurrency: "usd", baseTotals: OrderTotals(totalCents: 4500), currency: "usd", totals: OrderTotals(totalCents: 4500))
+    XCTAssertEqual(orderTotalText(same, storeCurrency: "USD"), "$45.00")
+    // A euro store's order paid in pounds: the euro total beside, no US prefix.
+    let gbp = HostOrder(baseCurrency: "eur", baseTotals: OrderTotals(totalCents: 1170), currency: "gbp", totals: OrderTotals(totalCents: 1000))
+    XCTAssertEqual(orderTotalText(gbp, storeCurrency: "EUR"), "£10.00 (€11.70)")
+  }
+
   /// The status chips take the console's colors (ORDER_STATUS_COLOR), as the Kotlin app does: refunded is the alarm.
   func testStatusTonesAreTheConsoles() {
     XCTAssertEqual(orderStatusTone(.paid), .success)

@@ -534,7 +534,12 @@ export function inspect(path, code) {
   // 5. A Stripe Tax path stays in USD, because the platform account infers
   // tax behaviour FROM the currency and the transfer arithmetic assumes the
   // tax sits on top. See the module note.
-  if (enablesStripeTax) {
+  // A path that pins `price_data][tax_behavior]` itself (AGL-4248: a sale
+  // charged in the shopper's currency pins `exclusive`, or `inclusive` where
+  // the merchant set that currency tax-inclusive) no longer leans on the
+  // account's inferred default, which is the defect this invariant guards.
+  const pinsTaxBehavior = code.includes('price_data][tax_behavior]')
+  if (enablesStripeTax && !pinsTaxBehavior) {
     for (const hit of hits(code, 'price_data][currency]')) {
       // `hits` returns the whole source line, and every emission of this key
       // in the repo states its value on that same line — both the object-

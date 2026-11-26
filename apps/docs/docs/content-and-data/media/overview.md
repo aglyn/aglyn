@@ -49,6 +49,50 @@ uploads, editing and a storage meter — for assets more than one site uses, suc
 logo or brand photography. A site sees it on its **Organization (shared)** tab, limited
 to the assets [shared with that site](#who-an-asset-is-shared-with).
 
+### Which library a file belongs in {#which-library}
+
+- **This site's library:** anything only that website uses: product and collection
+  photos, page and section photos, team and review photos, downloads, each page's share
+  card and the site's default social card.
+- **The organization library:** what the whole workspace uses: the workspace logo, logo
+  files and icon, brand marks used in emails and at the register, CRM files such as call
+  recordings, and anything two or more sites use.
+
+When you are unsure, ask whether a second site or the CRM would ever use the file.
+
+### Move a file to the other library {#move-to-the-other-library}
+
+A file in the wrong library can move without breaking anything that uses it. On a
+site's **Media** page:
+
+1. Open the file's details, or select several files.
+2. Choose **Move to this site's library** (on the **Organization (shared)** tab) or
+   **Move to organization library** (on the **This site** tab).
+3. Aglyn checks every page, product and setting that uses the files and says what will
+   move. Choose **Move**.
+
+The file keeps its name, folder, alt text, tags and details; a folder with the same name
+is made in the other library if there is none. Every place that uses it is updated to its
+new address: pages, layouts, reusable components and email templates (every version,
+drafts included), content entries, products and their variants, collections and
+categories, SEO and share images, the site's settings and forms. The published site is
+refreshed, and the old address keeps working, so a page someone has open, an email that
+was already sent or a link someone copied still shows the file.
+
+When it is done, Aglyn says how many files moved and how many uses it updated. Files
+that could not move stay selected and are named, with the reason.
+
+**Moving to a site's library is refused** for a file that anything outside that site
+uses, because a site's library is that site's alone. Aglyn names what uses it: another
+site, the workspace's logo or settings, or the CRM. Change those first, or leave the
+file in the organization library. **Moving to the organization library is always
+allowed**; the file is shared with every site, and you can narrow that with
+[Shared with](#who-an-asset-is-shared-with) afterwards.
+
+You need permission to edit both the site and the workspace media library. Files are
+moved from a site's **Media** page, which names the site; the workspace **Media** page
+has no site to move a file to.
+
 ## Organize
 
 - Arrange media in a **folder hierarchy**. Folders appear as **cards in the grid

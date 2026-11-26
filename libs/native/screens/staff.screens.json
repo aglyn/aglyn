@@ -24424,6 +24424,50 @@
                 }
               ],
               "help": "Super staff only. Off by default for everyone: yes."
+            },
+            {
+              "key": "release.release_events_calendar_v2",
+              "label": "Early access: Events calendar v2",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_events_calendar_v2}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: yes."
+            },
+            {
+              "key": "release.release_ai_site_chat",
+              "label": "Early access: Aglyn AI chat on published sites",
+              "kind": "select",
+              "initial": "{item.releaseFlags.release_ai_site_chat}",
+              "when": "staff.super",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Inherit the plan"
+                },
+                {
+                  "value": "true",
+                  "label": "On"
+                },
+                {
+                  "value": "false",
+                  "label": "Off"
+                }
+              ],
+              "help": "Super staff only. Off by default for everyone: yes."
             }
           ],
           "submit": {

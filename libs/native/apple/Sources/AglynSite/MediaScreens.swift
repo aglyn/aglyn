@@ -156,12 +156,22 @@ struct MediaLibrary: View {
   @AppStorage("aglyn.media.view") private var viewRaw = MediaViewMode.grid.rawValue
   /// Files staff have disabled among those on screen (AGL-1612), asked of the console after each change of the page.
   @State private var disabled: [String: MediaQuarantineNotice] = [:]
+  /// A move to the other library (site ↔ organization), from its confirmation to its report.
+  @State private var mover = MediaLibraryMover()
+  @State private var moveReport: MediaLibraryMoveReport?
 
   private var api: MediaAPI { MediaAPI(api: context.api, scope: scope) }
   private var origin: String { context.api.origin }
 
   private var canEdit: Bool {
     scope.isOrg ? context.can("org.media") : context.can("site.edit")
+  }
+
+  /// Where a file here can move to the other library: a site's media screen only (both libraries), and only for
+  /// someone who may edit both, as the route requires.
+  private var libraryMove: MediaLibraryMoveTarget? {
+    guard canEdit, context.can("org.media"), context.can("site.edit") else { return nil }
+    return scope.libraryMove(orgID: context.orgID)
   }
 
   private var folderList: [MediaFolder] { sortedFolders((folders.state.value ?? []).map(MediaFolder.init)) }
@@ -309,6 +319,12 @@ struct MediaLibrary: View {
       Button("Delete", role: .destructive) { deleteSelection() }
     } message: {
       Text("The files are removed from storage, and pages that show them stop showing them. You can undo this right after.")
+    }
+    .sheet(
+      isPresented: Binding(
+        get: { mover.request.map { !$0.fromDetail } ?? false }, set: { if !$0 { mover.cancel() } })
+    ) {
+      MediaLibraryMoveSheet(mover: mover, api: api, finished: libraryMoved)
     }
     .quickLookPreview($quickLook)
     .safeAreaInset(edge: .bottom) { banners }
@@ -694,6 +710,12 @@ struct MediaLibrary: View {
           Button(folderPath(folder, byID: foldersByID)) { move(dragIDs(item), to: folder.id) }
         }
       }
+      if let libraryMove {
+        Button(mediaLibraryMoveLabel(libraryMove.direction), systemImage: "arrow.left.arrow.right") {
+          startLibraryMove(dragIDs(item))
+        }
+        .disabled(runner.busy)
+      }
       Divider()
       Button("Delete…", systemImage: "trash", role: .destructive) {
         if !selection.contains(item.id) { selection = [item.id] }
@@ -806,6 +828,9 @@ struct MediaLibrary: View {
       MediaBulkPanel(
         items: selectedItems, origin: origin, folders: folderList, canEdit: canEdit, busy: runner.busy,
         move: { move(items.map(\.id).filter(selection.contains), to: $0) },
+        libraryMove: libraryMove.map { target in
+          (label: mediaLibraryMoveLabel(target.direction), run: { startLibraryMove(items.map(\.id).filter(selection.contains)) })
+        },
         tag: { add in
           runner.error = nil
           bulkTag = add
@@ -817,7 +842,10 @@ struct MediaLibrary: View {
   private func detail(_ id: String, inspector: Bool) -> some View {
     MediaDetail(
       context: context, scope: scope, mediaID: id, api: api, runner: runner, folders: folderList, canEdit: canEdit,
-      onDeleted: deleted, onClose: inspector ? { selection = [] } : nil)
+      onDeleted: deleted, onClose: inspector ? { selection = [] } : nil,
+      libraryMove: libraryMove.map { _ in
+        MediaDetailLibraryMove(mover: mover, start: { item in startLibraryMove([item.id], fromDetail: !inspector) }, finished: libraryMoved)
+      })
   }
 
   // MARK: Actions
@@ -853,6 +881,16 @@ struct MediaLibrary: View {
         )
         .accessibilityIdentifier("media-undo")
       }
+      if let moveReport {
+        // A full move reads like any success and goes; a partial one stays until it is read.
+        AglynNotice(moveReport.message, tone: moveReport.tone) { self.moveReport = nil }
+          .accessibilityIdentifier("media-library-moved")
+          .task(id: moveReport) {
+            guard case .success = moveReport else { return }
+            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            if self.moveReport == moveReport { self.moveReport = nil }
+          }
+      }
       if folderSheet == nil, bulkTag == nil, let error = runner.error {
         AglynNotice(error, tone: .error) { runner.clear() }
       } else if let notice = runner.notice {
@@ -880,6 +918,9 @@ struct MediaLibrary: View {
             folder in
             Button(folderPath(folder, byID: foldersByID)) { move(items.map(\.id).filter(selection.contains), to: folder.id) }
           }
+        }
+        if let libraryMove {
+          Button(mediaLibraryMoveLabel(libraryMove.direction)) { startLibraryMove(items.map(\.id).filter(selection.contains)) }
         }
         Button("Add tag…") { bulkTag = true }
         Button("Remove tag…") { bulkTag = false }
@@ -953,6 +994,27 @@ struct MediaLibrary: View {
       selection.subtract(ids)
       countsVersion += 1
     }
+  }
+
+  /// Opens the move-to-the-other-library confirmation for `ids` (it runs the preview first).
+  private func startLibraryMove(_ ids: [String], fromDetail: Bool = false) {
+    guard let libraryMove, !ids.isEmpty, !runner.busy else { return }
+    runner.clear()
+    moveReport = nil
+    let names = Dictionary(items.filter { ids.contains($0.id) }.map { ($0.id, $0.fileName) }) { first, _ in first }
+    mover.start(ids, names: names, target: libraryMove, api: api, fromDetail: fromDetail)
+  }
+
+  /// A move to the other library has run: what moved leaves the selection and this library, the rest stays selected.
+  private func libraryMoved(_ movedIDs: [String], _ report: MediaLibraryMoveReport) {
+    let moved = Set(movedIDs)
+    selection.subtract(moved)
+    if !moved.isEmpty {
+      model.drop(moved)
+      model.refresh()
+      countsVersion += 1
+    }
+    moveReport = report
   }
 
   private func upload(_ files: [PickedFile], rightsConfirmed: Bool) {
@@ -1190,6 +1252,8 @@ struct MediaDetail: View {
   let onDeleted: (String, String, Bool) -> Void
   /// Closes the details beside the grid; nil where they are pushed.
   var onClose: (() -> Void)? = nil
+  /// The move to the other library, on a site's media screen only.
+  var libraryMove: MediaDetailLibraryMove? = nil
   @State private var doc = LiveDocument()
 
   var body: some View {
@@ -1204,7 +1268,7 @@ struct MediaDetail: View {
         if let item = value.flatMap(MediaItem.init) {
           MediaDetailBody(
             context: context, scope: scope, item: item, api: api, runner: runner, folders: folders, canEdit: canEdit,
-            onDeleted: onDeleted, onClose: onClose)
+            onDeleted: onDeleted, onClose: onClose, libraryMove: libraryMove)
         } else {
           AglynEmptyState("This file is gone", systemImage: SiteSymbols.media, message: "It may have been deleted.")
         }
@@ -1286,8 +1350,10 @@ struct MediaDetailBody: View {
   let canEdit: Bool
   let onDeleted: (String, String, Bool) -> Void
   var onClose: (() -> Void)? = nil
+  var libraryMove: MediaDetailLibraryMove? = nil
   @Environment(\.openURL) private var openURL
   @Environment(\.aglynWideChrome) private var wide
+  @Environment(\.dismiss) private var dismiss
   @State private var fileName = ""
   @State private var alt = ""
   @State private var details = ""
@@ -1372,6 +1438,14 @@ struct MediaDetailBody: View {
         Label("Move to folder", systemImage: "folder")
       }
       .disabled(!canEdit)
+      if let libraryMove, let target = scope.libraryMove(orgID: context.orgID) {
+        Button {
+          libraryMove.start(item)
+        } label: {
+          Label(mediaLibraryMoveLabel(target.direction), systemImage: "arrow.left.arrow.right")
+        }
+        .disabled(!canEdit || runner.busy)
+      }
       Button(role: .destructive) {
         deleting = true
       } label: {
@@ -1501,6 +1575,13 @@ struct MediaDetailBody: View {
         .buttonStyle(.plain)
         .disabled(!canEdit)
         .accessibilityIdentifier("media-folder")
+        if let libraryMove, let target = scope.libraryMove(orgID: context.orgID) {
+          Button(mediaLibraryMoveLabel(target.direction), systemImage: "arrow.left.arrow.right") { libraryMove.start(item) }
+            .buttonStyle(.borderless)
+            .font(.system(size: wide ? AglynMediaMetrics.detailText : AglynMediaMetrics.phoneDetailText, weight: .medium))
+            .disabled(!canEdit || runner.busy)
+            .accessibilityIdentifier("media-library-move-button")
+        }
         HStack(spacing: AglynSpace.one) {
           Button("Save") {
             let (name, alt, details, tags) = (fileName.trimmed, alt.trimmed, details.trimmed, parsedTags)
@@ -1577,6 +1658,18 @@ struct MediaDetailBody: View {
       }
     }
     .sheet(isPresented: $moving) { moveSheet }
+    .sheet(
+      isPresented: Binding(
+        get: { libraryMove?.mover.request?.fromDetail ?? false }, set: { if !$0 { libraryMove?.mover.cancel() } })
+    ) {
+      if let libraryMove {
+        // Pushed on a phone, the details present the confirmation themselves and leave once their file has moved.
+        MediaLibraryMoveSheet(mover: libraryMove.mover, api: api) { movedIDs, report in
+          libraryMove.finished(movedIDs, report)
+          if movedIDs.contains(item.id) { dismiss() }
+        }
+      }
+    }
     .sheet(isPresented: $editingImage) { imageEditor }
     .confirmationDialog("Delete \(item.fileName)?", isPresented: $deleting, titleVisibility: .visible) {
       Button("Delete", role: .destructive) {

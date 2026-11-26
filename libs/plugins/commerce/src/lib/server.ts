@@ -116,6 +116,7 @@ import {
 import { processRestockHandler, scanRestockAlerts } from './server/process-restock'
 import { scanStockDecrements } from './server/reconcile-stock'
 import { refundHandler } from './server/refund'
+import { currencyHandler, refreshFxRates } from './server/currency'
 import { orderWebhooksHandler } from './server/order-webhooks'
 import { returnRequestHandler, returnsHandler } from './server/returns'
 import { scanSupplierDeliveries } from './server/supplier-outbox'
@@ -395,6 +396,23 @@ registerPluginJob({
 })
 
 /**
+ * The daily currency rates (AGL-4248). The ECB publishes once a working day
+ * around 16:00 CET; a six-hourly beat catches it the same evening and costs
+ * one small fetch plus, at most, one platform write. No host is touched.
+ */
+registerPluginJob({
+  pluginId: BUNDLE_ID,
+  name: 'fx-rates-refresh',
+  intervalMinutes: 360,
+  description: 'Fetch the daily currency reference rates every store prices other currencies from.',
+  lockdown: { scope: 'platform', reason: 'writes one platform rates document; reads and writes no host' },
+  handler: async () => {
+    const rates = await refreshFxRates()
+    if (rates) console.info(`commerce: fx rates as of ${new Date(rates.asOfMs).toISOString().slice(0, 10)}`)
+  },
+})
+
+/**
  * A visitor's payment door: it opens a Stripe Checkout Session for whoever
  * calls it, so the dispatcher holds it to the card-testing counters
  * (AGL-3363). Declared here, beside the registration, so the door cannot
@@ -437,6 +455,7 @@ export function registerCommerceApi(): void {
   // Optional lines another plugin offers at the cart (AGL-3635).
   registerPluginApiRoute('commerce/cart-extras', cartExtrasHandler)
   registerPluginApiRoute('commerce/catalog', catalogHandler)
+  registerPluginApiRoute('commerce/currency', currencyHandler)
   registerPluginApiRoute('commerce/checkout', checkoutHandler, CARD_PAYMENT_DOOR)
   registerPluginApiRoute('commerce/download', downloadHandler)
   // The pre-channels Google feed address (AGL-299), now written by the

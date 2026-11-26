@@ -143,8 +143,14 @@ final class SalesModel {
   private(set) var report: SalesReport?
   private(set) var access: SalesAccess?
   private(set) var failed = false
+  /// The store's own currency, which the report's figures are shown in.
+  private(set) var storeCurrency = "USD"
   @ObservationIgnored private var orders: FirestoreListening?
   @ObservationIgnored private var plan: FirestoreListening?
+  @ObservationIgnored private var currency: FirestoreListening?
+
+  /// A report figure, in the store's currency.
+  func money(_ cents: Int) -> String { formatOrderMoney(cents, currency: storeCurrency) }
 
   /// Reads the plan first, and the orders only while it carries analytics.
   func start(_ reader: FirestoreReader, hostID: String?, orgID: String?, range: Int) {
@@ -153,6 +159,7 @@ final class SalesModel {
     access = nil
     failed = false
     guard let hostID, let orgID else { return }
+    currency = listenStoreCurrency(reader, hostID: hostID) { [weak self] in self?.storeCurrency = $0 }
     plan = reader.listenDocument(["orgs", orgID]) { [weak self] result in
       guard let self else { return }
       switch result {
@@ -192,6 +199,8 @@ final class SalesModel {
     orders = nil
     plan?.remove()
     plan = nil
+    currency?.remove()
+    currency = nil
   }
 }
 
@@ -250,14 +259,14 @@ struct SalesScreen: View {
           Section {
             AglynCardGrid(minimum: 150, maxColumns: 3) {
               MetricCard(
-                "Revenue", systemImage: "dollarsign.circle", value: formatOrderMoney(report.current.revenueCents),
+                "Revenue", systemImage: "dollarsign.circle", value: model.money(report.current.revenueCents),
                 caption: salesChange(report.revenueDeltaPct) ?? ordersCaption(report.current.orders))
               MetricCard(
                 "Orders", systemImage: "bag", value: "\(report.current.orders)",
                 caption: salesChange(report.ordersDeltaPct) ?? "")
               MetricCard(
                 "Average order", systemImage: "chart.line.uptrend.xyaxis",
-                value: formatOrderMoney(report.current.averageCents), caption: "")
+                value: model.money(report.current.averageCents), caption: "")
             }
             .listRowInsets(EdgeInsets())
             .listRowBackground(Color.clear)
@@ -266,14 +275,14 @@ struct SalesScreen: View {
             SalesChart(days: report.days).frame(height: 180)
             ForEach(report.days.reversed()) { day in
               AglynAmountRow(
-                day.start.formatted(.dateTime.weekday(.wide).month().day()), amount: formatOrderMoney(day.cents))
+                day.start.formatted(.dateTime.weekday(.wide).month().day()), amount: model.money(day.cents))
             }
           }
           Section("By channel") {
             if report.channels.isEmpty {
               Text("No sales in this period.").foregroundStyle(.secondary)
             }
-            ForEach(report.channels) { AglynAmountRow($0.label, amount: formatOrderMoney($0.cents)) }
+            ForEach(report.channels) { AglynAmountRow($0.label, amount: model.money($0.cents)) }
           }
           Section("Best sellers") {
             if report.topProducts.isEmpty {
@@ -281,7 +290,7 @@ struct SalesScreen: View {
             }
             ForEach(report.topProducts, id: \.productID) { product in
               AglynAmountRow(
-                "\(product.name) \u{00B7} \(salesUnitsText(product.units)) sold", amount: formatOrderMoney(Int(product.cents)))
+                "\(product.name) \u{00B7} \(salesUnitsText(product.units)) sold", amount: model.money(Int(product.cents)))
             }
           }
           Section {
@@ -313,7 +322,7 @@ struct SalesTodayWidget: View {
     let locked = model.access.map { !$0.carried } ?? false
     MetricCard(
       "Sales today", systemImage: "dollarsign.circle",
-      value: locked ? "\u{2014}" : model.report.map { formatOrderMoney($0.today?.cents ?? 0) },
+      value: locked ? "\u{2014}" : model.report.map { model.money($0.today?.cents ?? 0) },
       caption: locked
         ? "Included from \(model.access?.plan ?? "a higher plan")"
         : model.report.map { ordersCaption($0.today?.orders ?? 0) } ?? "Loading",
@@ -337,7 +346,7 @@ struct SalesTrendWidget: View {
         Text("Included from \(access.plan ?? "a higher plan").").foregroundStyle(.secondary)
       } else if let report = model.report {
         VStack(alignment: .leading, spacing: AglynSpace.one) {
-          Text(formatOrderMoney(report.current.revenueCents)).font(AglynFont.figure).monospacedDigit()
+          Text(model.money(report.current.revenueCents)).font(AglynFont.figure).monospacedDigit()
           SalesChart(days: report.days).frame(height: 120)
         }
       } else if model.failed {

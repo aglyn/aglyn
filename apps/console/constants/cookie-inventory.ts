@@ -380,6 +380,20 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
       },
     ],
   },
+  'libs/plugins/ai/src/lib/server/site-chat.ts': {
+    note:
+      'The AI chat visitor session on a site that turned the chat on (AGL-4250); the name is built in model/site-chat.ts and the value signed in site-chat-session.ts.',
+    cookies: [
+      {
+        name: 'aglyn_chat_{siteId}',
+        token: 'siteChatCookieName',
+        surface: 'customer sites that use the AI chat, on the chat\u2019s own paths only',
+        purpose: 'Keeps your conversation with the site\u2019s AI chat, so you can pick it up where you left off',
+        duration: '30 days',
+        httpOnly: true,
+      },
+    ],
+  },
   'libs/plugins/commerce/src/lib/server/membership.ts': {
     note:
       'Signed member session for a site that sells memberships; the name is built in sign-in-hint-cookie.ts.',

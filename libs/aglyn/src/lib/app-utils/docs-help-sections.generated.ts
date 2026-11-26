@@ -149,6 +149,9 @@ export const PLUGIN_DOCS_SECTION_EXCERPTS: {
   aiSite: {
     '#generate-for-several-sites-at-once': 'On the Sites page of your organization, Generate for several sites runs one brief across many of your sites, changing the business name, the city and the brand for each.',
   },
+  aiSiteChat: {
+    '#set-up-the-chat': 'Open your site\'s Setup page. Changing these settings takes the Manage site settings permission, which site admins hold by default.',
+  },
   aiSiteLooks: {
     '#choose-a-style': 'The Style step of Start your site offers these styles, each as a card with a picture of an example home page of that kind, drawn in its style.',
   },

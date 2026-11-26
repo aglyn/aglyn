@@ -48,7 +48,7 @@ import kotlinx.coroutines.CancellationException
 
 const val COMMERCE_SALES_SCREEN = "commerce.sales"
 
-private fun money(cents: Double) = formatOrderMoney(cents)
+private fun money(cents: Double, currency: String) = formatOrderMoney(cents, currency)
 
 private fun change(pct: Double?): String? = pct?.let { (if (it > 0) "+" else "") + it.toString().removeSuffix(".0") + "% vs the period before" }
 
@@ -72,6 +72,8 @@ private fun <T> loaded(vararg key: Any?, refresh: Int, read: suspend () -> T): L
 @Composable
 fun SalesScreen(context: NativePluginContext) {
   val hostId = context.hostId ?: return
+  // The figures are in the store's own currency.
+  val currency = com.aglyn.plugins.commerce.orders.rememberOrderStoreCurrency(context)
   var range by rememberSaveable { mutableIntStateOf(7) }
   var refresh by remember { mutableIntStateOf(0) }
   val report = loaded(hostId, range, refresh = refresh) {
@@ -101,7 +103,7 @@ fun SalesScreen(context: NativePluginContext) {
           icon = AglynIcons.named("error"), tone = EmptyTone.ERROR,
           action = { OutlinedButton(onClick = { refresh++ }) { Text("Try again") } },
         )
-        is Load.Ready -> report.value.report?.let { SalesReportView(it) }
+        is Load.Ready -> report.value.report?.let { SalesReportView(it, currency) }
           ?: NoticeBanner(salesLockedText(report.value.access.plan), StatusTone.INFO, Modifier.testTag("sales-locked"))
       }
     }
@@ -112,13 +114,13 @@ fun SalesScreen(context: NativePluginContext) {
 private class SalesRead(val access: SalesAccess, val report: SalesReport?)
 
 @Composable
-private fun SalesReportView(report: SalesReport) {
+private fun SalesReportView(report: SalesReport, currency: String) {
   if (report.capped) {
     NoticeBanner("This store had more than $SALES_ORDER_CEILING orders in the period; the oldest are left out, so there is no comparison.", StatusTone.WARNING)
   }
   Row(horizontalArrangement = Arrangement.spacedBy(space(2f))) {
     SectionCard("Revenue", Modifier.weight(1f).testTag("sales-revenue")) {
-      Text(money(report.current.revenueCents), style = MaterialTheme.typography.headlineMedium)
+      Text(money(report.current.revenueCents, currency), style = MaterialTheme.typography.headlineMedium)
       change(report.revenueDeltaPct)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
     SectionCard("Orders", Modifier.weight(1f).testTag("sales-orders")) {
@@ -133,23 +135,23 @@ private fun SalesReportView(report: SalesReport) {
         TrendBar(
           value = day.revenueCents,
           label = if ((report.days.lastIndex - index) % labelEvery == 0) formatLocalDay(day.startMs, if (report.range > 7) "MMM d" else "EEE") else "",
-          spoken = "${formatLocalDay(day.startMs, "EEEE, MMMM d")}: ${money(day.revenueCents)} from ${day.orders} ${if (day.orders == 1) "order" else "orders"}",
+          spoken = "${formatLocalDay(day.startMs, "EEEE, MMMM d")}: ${money(day.revenueCents, currency)} from ${day.orders} ${if (day.orders == 1) "order" else "orders"}",
         )
       },
       modifier = Modifier.fillMaxWidth().testTag("sales-days"),
       height = 140.dp,
     )
-    AmountRow("Average order", money(report.current.averageCents), muted = true)
+    AmountRow("Average order", money(report.current.averageCents, currency), muted = true)
   }
   SectionCard("By channel") {
     if (report.channels.isEmpty()) Text("No sales in this period.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-    report.channels.forEach { AmountRow(it.label, money(it.revenueCents)) }
+    report.channels.forEach { AmountRow(it.label, money(it.revenueCents, currency)) }
   }
   SectionCard("Best sellers") {
     if (report.topProducts.isEmpty()) Text("No sales in this period.", color = MaterialTheme.colorScheme.onSurfaceVariant)
     report.topProducts.forEach { product ->
       val units = product.units.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() }
-      AmountRow("${product.name} · $units sold", money(product.cents))
+      AmountRow("${product.name} · $units sold", money(product.cents, currency))
     }
   }
 }
@@ -158,6 +160,7 @@ private fun SalesReportView(report: SalesReport) {
 @Composable
 fun TodaySalesWidget(context: NativePluginContext) {
   val hostId = context.hostId ?: return
+  val currency = com.aglyn.plugins.commerce.orders.rememberOrderStoreCurrency(context)
   val today = loaded(hostId, refresh = 0) {
     val access = salesAccess(context.firestore, context.orgId.orEmpty())
     val now = nowMillis()
@@ -167,7 +170,7 @@ fun TodaySalesWidget(context: NativePluginContext) {
   val ready = (today as? Load.Ready)?.value
   MetricCard(
     title = "Today",
-    value = ready?.let { (access, sales) -> if (access.carried) money(sales.figures.revenueCents) else "\u2014" },
+    value = ready?.let { (access, sales) -> if (access.carried) money(sales.figures.revenueCents, currency) else "\u2014" },
     caption = ready?.let { (access, sales) ->
       val toShip = if (sales.toFulfill > 0) "${sales.toFulfill} to ship" else null
       val orders = "${sales.figures.orders} ${if (sales.figures.orders == 1L) "order" else "orders"}".takeIf { access.carried }
@@ -186,6 +189,7 @@ fun TodaySalesWidget(context: NativePluginContext) {
 @Composable
 fun SalesTrendWidget(context: NativePluginContext) {
   val hostId = context.hostId ?: return
+  val currency = com.aglyn.plugins.commerce.orders.rememberOrderStoreCurrency(context)
   val report = loaded(hostId, refresh = 0) {
     val access = salesAccess(context.firestore, context.orgId.orEmpty())
     if (!access.carried) return@loaded SalesRead(access, null)
@@ -198,11 +202,11 @@ fun SalesTrendWidget(context: NativePluginContext) {
       Load.Loading -> SkeletonList(rows = 2)
       is Load.Failed -> Text(report.message, color = MaterialTheme.colorScheme.error)
       is Load.Ready -> report.value.report?.let { week ->
-        Text(money(week.current.revenueCents), style = MaterialTheme.typography.headlineSmall)
+        Text(money(week.current.revenueCents, currency), style = MaterialTheme.typography.headlineSmall)
         change(week.revenueDeltaPct)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         TrendBars(
           week.days.map { day ->
-            TrendBar(day.revenueCents, formatLocalDay(day.startMs, "EEE"), "${formatLocalDay(day.startMs, "EEEE")}: ${money(day.revenueCents)}")
+            TrendBar(day.revenueCents, formatLocalDay(day.startMs, "EEE"), "${formatLocalDay(day.startMs, "EEEE")}: ${money(day.revenueCents, currency)}")
           },
           modifier = Modifier.fillMaxWidth(),
           height = 80.dp,

@@ -185,6 +185,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/building-sites/custom-domains/buy-a-domain',
     title: 'Buy a domain',
   },
+  calendar: {
+    path: '/content-and-data/events/calendar',
+    title: 'Calendar, categories and repeating events',
+  },
   catalog: {
     path: '/commerce-and-bookings/commerce/catalog',
     title: 'Product catalog',
@@ -296,6 +300,10 @@ export const DOCS_HELP_TOPICS = {
   crmByAi: {
     path: '/ai/crm-by-ai',
     title: 'The AI CRM built into Aglyn',
+  },
+  currencies: {
+    path: '/commerce-and-bookings/commerce/currencies',
+    title: 'Sell in other currencies',
   },
   customDomains: {
     path: '/building-sites/custom-domains/overview',
@@ -829,6 +837,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/building-sites/site-backup-and-packages',
     title: 'Site backup and packages',
   },
+  siteChat: {
+    path: '/ai/site-chat',
+    title: 'AI chat on your site',
+  },
   siteLooks: {
     path: '/ai/site-looks',
     title: 'Looks and themes for AI sites',
@@ -1039,6 +1051,7 @@ export const DOCS_HELP_ANCHORS = {
   bulkActions: ['#exports', '#contacts', '#the-contacts-file', '#companies', '#deals', '#tasks', '#leads', '#at-the-organization-level', '#when-a-row-cannot-be-changed', '#adding-people-to-an-audience', '#related'],
   businessProfile: ['#where-to-edit-it', '#the-business-profile-card', '#where-the-values-come-from', '#workspace-defaults', '#contact-details-are-never-invented', '#what-aglyn-ai-learned', '#which-jobs-read-it', '#related'],
   buyADomain: ['#steps', '#site-has-a-domain', '#confirm-email', '#renewals', '#problems', '#transfer', '#after'],
+  calendar: ['#categories', '#repeating-events', '#calendar-element', '#event-details-page', '#tickets', '#add-to-calendar', '#site-search', '#import-and-export', '#aglyn-ai'],
   catalog: ['#products-options-and-variants', '#product-list', '#more-than-100-combinations', '#add-ons', '#price-by-size', '#add-ons-on-the-product-page', '#picture-cards', '#free-mockup', '#write-ins', '#name-the-group-on-the-order', '#a-product-built-from-choices', '#sell-in-person-only', '#offer-on-the-kiosk', '#billing-modes-and-subscriptions', '#subscriptions-list', '#ai', '#categories-and-tags', '#collections', '#product-reviews', '#show-reviews', '#review-settings', '#review-moderation', '#slugs', '#merchant-center-feed', '#related'],
   claude: ['#connect-claude', '#other-assistants', '#what-claude-can-do', '#changes-show-on-your-live-site', '#what-it-cannot-do', '#good-habits', '#disconnect-claude', '#claude-code', '#for-developers'],
   comingSoonLaunch: ['#1-build-the-coming-soon-page', '#the-notify-me-form', '#2-make-it-the-home-page', '#3-keep-everything-else-out-of-search', '#while-nothing-is-ready-the-site-wide-switch', '#once-youre-launching-page-by-page-per-screen-visibility', '#4-collect-the-signups', '#5-launch-day-reverse-every-step', '#6-verify-it-actually-worked', '#related'],
@@ -1067,6 +1080,7 @@ export const DOCS_HELP_ANCHORS = {
   createWithAi: ['#the-button', '#where-it-appears', '#what-you-get', '#without-the-add-on', '#when-it-is-not-there', '#related'],
   crm: ['#whats-in-the-crm-area', '#unified-ingestion', '#what-each-plan-includes', '#the-contacts-page', '#import-and-export', '#segments', '#everywhere-the-crm-shows-up', '#capture-replies', '#at-the-organization-level', '#known-by', '#who-can-open-the-crm', '#one-sender-one-crm', '#related'],
   crmByAi: ['#summarize-a-record', '#summaries-are-reused-until-the-record-changes', '#draft-an-email', '#match-columns', '#what-is-sent', '#set-up-the-crm', '#who-can-use-it', '#related'],
+  currencies: ['#turn-on-other-currencies', '#how-shoppers-get-their-currency', '#exchange-rates', '#rounding', '#price-adjustment', '#fixed-prices', '#prices-that-include-tax', '#charging-and-payouts', '#what-stays-in-your-store-currency', '#ship-to-other-countries', '#related'],
   customDomains: ['#connect-a-domain', '#related'],
   customFields: ['#define-a-field', '#fields-per-record', '#where-values-show', '#currency-fields', '#save-a-form-field', '#picklist-values', '#task-picklists', '#over-the-api', '#retire-restore-delete', '#export-fields', '#recompute-next-activity', '#related'],
   customRoles: ['#create-a-custom-role', '#point-of-sale-permissions', '#site-access-narrows', '#workspace-permissions', '#dataset-permissions', '#site-permissions', '#order-permissions', '#reservation-permissions', '#booking-permissions', '#funnel-and-campaign-permissions', '#marketplace-site-permissions', '#marketplace-publisher-permissions', '#crm-settings-permission', '#crm-colleague-templates-permission', '#crm-move-stages-permission', '#automation-and-domain-permissions', '#integration-permissions', '#email-and-inbox-permissions', '#api-keys-privacy-and-holds', '#ai-permissions', '#effective-permissions', '#per-member-overrides', '#tips', '#related'],
@@ -1133,7 +1147,7 @@ export const DOCS_HELP_ANCHORS = {
   manifestAndEnvs: ['#plugin-manifest-published-with-every-version', '#contributes--where-the-plugin-loads', '#config--settings-without-writing-a-settings-screen', '#connections', '#connection-sync', '#connection-record', '#connection-repeat', '#connection-variables', '#image-hosts', '#listing--version-documents', '#review--trust-lifecycle', '#review-queue', '#verification-requests', '#listed-plugins', '#submission-status', '#review-overview', '#review-checklist', '#review-verdict', '#review-versions', '#take-down', '#environment-variables', '#pluginsconfigjson-first-party-contributors'],
   marketingOverlays: ['#announcement-bar', '#promotional-popups', '#frequency', '#popup-v2', '#multiple-overlays-scheduling--page-targeting', '#with-ai', '#variables-in-copy', '#engagement-stats', '#across-your-sites', '#org-marketing-overview', '#org-overlays', '#related'],
   marketingWithAi: ['#write-overlay-copy', '#create-an-overlay', '#create-a-campaign', '#ask-about-these-numbers', '#what-is-sent', '#who-can-use-it', '#related'],
-  media: ['#two-libraries', '#site-library', '#organization-library', '#organize', '#ask-aglyn-ai', '#filter-and-search', '#views', '#tags', '#custom-metadata', '#file-info', '#upload', '#photo-link', '#stock-photos', '#size-and-plan-limits', '#storage', '#edit-images', '#download-file', '#deliver-over-cdn', '#urls-are-stable', '#page-elements-point-at-the-asset-not-at-a-link', '#hotlinking-and-your-visitors', '#delivery-line', '#who-an-asset-is-shared-with', '#default-media-sharing', '#private-files', '#members-videos-are-private', '#approved-image-hosts', '#adding-an-approved-image-host', '#approved-image-host-troubleshooting', '#other-approved-hosts', '#approved-media-hosts', '#approved-font-hosts', '#approved-form-destinations', '#approved-embeds', '#approved-connections', '#reference', '#variant-widths', '#media-cache', '#tag-limits', '#over-the-api', '#components', '#related'],
+  media: ['#two-libraries', '#site-library', '#organization-library', '#which-library', '#move-to-the-other-library', '#organize', '#ask-aglyn-ai', '#filter-and-search', '#views', '#tags', '#custom-metadata', '#file-info', '#upload', '#photo-link', '#stock-photos', '#size-and-plan-limits', '#storage', '#edit-images', '#download-file', '#deliver-over-cdn', '#urls-are-stable', '#page-elements-point-at-the-asset-not-at-a-link', '#hotlinking-and-your-visitors', '#delivery-line', '#who-an-asset-is-shared-with', '#default-media-sharing', '#private-files', '#members-videos-are-private', '#approved-image-hosts', '#adding-an-approved-image-host', '#approved-image-host-troubleshooting', '#other-approved-hosts', '#approved-media-hosts', '#approved-font-hosts', '#approved-form-destinations', '#approved-embeds', '#approved-connections', '#reference', '#variant-widths', '#media-cache', '#tag-limits', '#over-the-api', '#components', '#related'],
   megaMenuWithInteractions: ['#what-youll-build', '#1-insert-the-mega-menu', '#2-build-the-columns', '#3-make-it-open-on-hover', '#prefer-primitives-insert-the-dropdown-panel-preset', '#4-add-a-mobile-drawer-optional', '#5-test-and-publish', '#how-it-works-under-the-hood', '#troubleshooting', '#related'],
   members: ['#1-turn-user-accounts-on-for-the-site', '#2-the-built-in-sign-in-and-sign-up-pages', '#3-design-an-account-page', '#4-gate-screens-to-members', '#gate-part-of-a-page-not-all-of-it', '#5-manage-members-from-the-console', '#the-users-page', '#suspend--reactivate', '#password-help', '#related'],
   membersOnly: ['#let-visitors-sign-up', '#sign-in-sign-up-and-recovery-pages', '#forgotten-passwords', '#gate-a-screen', '#manage-your-members', '#suspend-or-reactivate-a-member', '#tips', '#related'],
@@ -1198,6 +1212,7 @@ export const DOCS_HELP_ANCHORS = {
   shipWithYourOwnEasyshipSendcloudOrShipperhq: ['#before-you-start', '#connect-an-account', '#easyship', '#sendcloud', '#shipperhq', '#tracking-webhooks', '#what-changes', '#disconnect', '#troubleshooting', '#related'],
   showToSignedInVisitors: ['#choose-who-sees-an-element', '#what-visitors-see'],
   siteBackupAndPackages: ['#backup-and-restore-card', '#what-a-package-carries', '#download-a-backup', '#export-items', '#import-a-package', '#1-upload', '#2-items', '#3-missing-items', '#4-changes', '#5-review', '#6-import', '#undo-an-import', '#moving-a-site-to-another-of-your-sites'],
+  siteChat: ['#set-up-the-chat', '#what-the-chat-may-do', '#pages', '#conversations', '#credits-and-limits', '#how-the-chat-loads', '#privacy', '#related'],
   siteLooks: ['#choose-a-style', '#each-styles-layout', '#an-ai-starters-look', '#how-the-look-is-made', '#your-theme-afterwards', '#change-the-look-later', '#related'],
   siteProtection: ['#where-these-controls-live', '#per-screen-passwords', '#custom-error-screens', '#maintenance-mode', '#related'],
   siteSearch: ['#how-it-works', '#what-it-searches', '#the-layout-built-in-pages-use', '#configure-it', '#related'],

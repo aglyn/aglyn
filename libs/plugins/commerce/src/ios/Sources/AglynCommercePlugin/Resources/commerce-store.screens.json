@@ -68,7 +68,7 @@
                   "label": "USD ($)"
                 }
               ],
-              "help": "Charges settle in USD; more currencies are coming"
+              "help": "Charges settle in USD. To show and charge prices in other currencies too, turn them on in the Currencies card in the web console."
             },
             {
               "key": "guestCheckout",

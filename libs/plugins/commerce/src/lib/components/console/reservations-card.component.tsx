@@ -335,6 +335,17 @@ export function ReservationsCard(props: ReservationsCardProps) {
       ...('fewLeftAt' in seeded
         ? { fewLeftAt: CommerceModel.resourceFewLeftAt({ fewLeftAt }) }
         : {}),
+      // A path as typed (`cabins/lakeside `), stored as the site path it
+      // names; cleared, an empty string, which search reads as no page.
+      ...('pagePath' in seeded
+        ? {
+            pagePath: (() => {
+              const text = String(fields.pagePath ?? '').trim().split(/[?#]/)[0]
+              if (!text || text.startsWith('//')) return ''
+              return text.startsWith('/') ? text : `/${text}`
+            })(),
+          }
+        : {}),
     }
     /**
      * Refuse an EDIT whose seed the server never confirmed (AGL-1358).
@@ -831,6 +842,19 @@ export function ReservationsCard(props: ReservationsCardProps) {
             autoFocus
             sx={{ mt: 1 }}
             placeholder="Lakeside cabin"
+          />
+          {/* Where a site search result for the stay opens (AGL-4252). */}
+          <TextField
+            label="Page on your site"
+            value={resourceDraft?.pagePath ?? ''}
+            onChange={(event) =>
+              setResourceDraft((prev) =>
+                prev ? { ...prev, pagePath: event.target.value.slice(0, 300) } : prev,
+              )
+            }
+            size="small"
+            placeholder="/cabins/lakeside"
+            helperText="The page that holds this stay's booking widget. Site search links there."
           />
           <Stack direction="row" spacing={1}>
             <TextField

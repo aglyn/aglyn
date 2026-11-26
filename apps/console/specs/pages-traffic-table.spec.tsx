@@ -184,6 +184,7 @@ function seed() {
         '/collections/helmets': 7,
         '/blog/race-recap': 6,
         '/wp-login_php': 1,
+        '/signin': 3,
       },
     },
     [`${H}/analytics/${days[1]}`]: {
@@ -277,8 +278,16 @@ describe('the Pages table names each visited record (AGL-4253)', () => {
   it('says a removed record is gone, and files a dead address under Other', async () => {
     await mount()
     expect(screen.getByText(/gone-hoodie · Not a product on this site now/)).toBeTruthy()
+    expect(screen.getByText(/wp-login_php · Not a page, product or post of this site now/)).toBeTruthy()
     const dead = screen.getByText('/wp-login_php', { selector: 'p' }).closest('tr') as HTMLElement
     expect(within(dead).getByText('Other addresses')).toBeTruthy()
+  })
+
+  it('names a built-in page rather than calling it an address nothing answers', async () => {
+    await mount()
+    const signIn = screen.getByText('Sign in').closest('tr') as HTMLElement
+    expect(within(signIn).getByText('Built-in pages')).toBeTruthy()
+    expect(within(signIn).queryByText(/Not a page/)).toBeNull()
   })
 
   it('filters to one kind: Products answers "which products are looked at"', async () => {

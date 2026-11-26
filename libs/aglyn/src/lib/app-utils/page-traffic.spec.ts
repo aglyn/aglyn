@@ -66,6 +66,19 @@ describe('classifyPagePath answers in the site loader’s order (AGL-4253)', () 
     })
   })
 
+  it('a built-in page is named, the core’s ahead of the routing map', () => {
+    const withBuiltIns = { ...context, builtInPages: new Map([['order-status', 'Order status']]) }
+    expect(classifyPagePath('/signin', withBuiltIns)).toEqual({ kind: 'builtIn', title: 'Sign in' })
+    expect(classifyPagePath('/recover/', withBuiltIns)).toEqual({
+      kind: 'builtIn',
+      title: 'Reset password',
+    })
+    expect(classifyPagePath('/order-status', withBuiltIns)).toEqual({
+      kind: 'builtIn',
+      title: 'Order status',
+    })
+  })
+
   it('anything else is not a page of the site now', () => {
     expect(classifyPagePath('/wp-admin', context)).toEqual({ kind: 'other' })
     expect(classifyPagePath('/products/a/b', context)).toEqual({ kind: 'other' })

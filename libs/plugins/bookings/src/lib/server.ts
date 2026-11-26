@@ -49,6 +49,7 @@ import {
   type PluginResolvedFlatTax,
 } from '@aglyn/aglyn/plugin-manager/plugin-tax-profile'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerBookingsSiteChatTools } from './server/site-chat-tools'
 import { BOOKINGS_CONFIG_SCHEMA } from './plugin-config'
 import { bookingsBillingWebhookHandler } from './server/billing-webhook'
 import { bookingAnalyticsHandler } from './server/booking-analytics'
@@ -1223,6 +1224,9 @@ const remindersHandler: PluginApiHandler = async (req, res) => {
 
 /** Registers the bookings plugin's public (site-facing) API routes (AGL-396). */
 export function registerBookingsApi(): void {
+  // The AI chat on the site (AGL-4250) offers this site's open times and a
+  // card to book one, from the same slot door the widget asks.
+  registerBookingsSiteChatTools(slotsHandler)
   registerPluginApiRoute('bookings/slots', slotsHandler)
   // A deposit opens a Stripe Checkout Session for whoever books, so the
   // dispatcher holds this door to the card-testing counters (AGL-3363).

@@ -206,6 +206,14 @@ export function registerAiConsoleApi(): void {
   // generation doors' own rules, metered as a text job is.
   registerAiTextGenerator()
   registerPluginApiRoute('assist/chat', { web: assistChat })
+  // The AI chat on a published site (AGL-4250): the owner's settings and the
+  // visitors' conversations. The visitor's door is the tenant's (`site-server`).
+  registerPluginApiRoute('ai/site-chat/settings', async (req, res) =>
+    (await import('./server/site-chat-platform')).siteChatSettingsDoor()(req, res),
+  )
+  registerPluginApiRoute('ai/site-chat/conversations', async (req, res) =>
+    (await import('./server/site-chat-platform')).siteChatConversationsDoor()(req, res),
+  )
   registerPluginApiRoute('assist/feedback', { web: assistFeedback })
   // The applied-edit record (AGL-2906): counts of a proposal the author
   // applied in their editor, written to the site's activity log.

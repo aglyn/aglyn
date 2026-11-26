@@ -364,9 +364,8 @@ describe('the AI plugin, loaded through a bundler that honors sideEffects', () =
   })
 
   it('serves the jobs beat from the console surface, and puts nothing on the tenant’s job runner', () => {
-    // AGL-3026: every step calls the provider, whose key only the console
-    // holds, so the beat is a console route and the tenant loads no server
-    // surface of this plugin at all.
+    // AGL-3026: every step calls the provider, so the beat is a console route
+    // and the tenant loads none of the jobs' server surface.
     const bundled = isolated(() => registered(load(serverBundle)))
     const { AI_JOBS_BEAT_PATH } = require('./jobs/ai-jobs-beat')
     expect(bundled.routes).toContain(AI_JOBS_BEAT_PATH)
@@ -377,9 +376,15 @@ describe('the AI plugin, loaded through a bundler that honors sideEffects', () =
     expect(bundled.jobs).toEqual([])
     expect(isolated(() => require('./server').registerAiApi)).toBeUndefined()
     const config = JSON.parse(readFileSync(resolve(PLUGIN_ROOT, '..', '..', '..', 'plugins.config.json'), 'utf8')) as {
-      plugins: Array<{ id: string; register: Record<string, string> }>
+      plugins: Array<{ id: string; register: Record<string, string>; modules?: Record<string, string> }>
     }
-    expect(Object.keys(config.plugins.find((plugin) => plugin.id === 'ai')?.register ?? {})).not.toContain('tenantApi')
+    // The tenant loads ONE server surface since AGL-4250, the site chat's, and
+    // from its own module: never the console's `/server` entry, so no job
+    // kind, step or beat reaches the tenant.
+    const ai = config.plugins.find((plugin) => plugin.id === 'ai')
+    expect(ai?.register['tenantApi']).toBe('registerAiSiteApi')
+    expect(ai?.modules?.['tenantApi']).toBe('site-server')
+    expect(Object.keys(isolated(() => require('./site-server')))).toEqual(['registerAiSiteApi'])
   })
 
   it('declares the activity catalog from the declarations entry alone', () => {

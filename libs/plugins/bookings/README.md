@@ -84,3 +84,8 @@ A plugin may import the tenant runtime, the renderer, the Besigner logic, the co
 ## License
 
 Apache-2.0. Source: https://github.com/aglyn/aglyn/tree/main/libs/plugins/bookings
+
+## Server declarations (AGL-4252)
+
+`registerBookingsServerDeclarations()` (the `serverDeclarations` surface) registers the site's offered services as a `services` source of the site's search (`core.site-search`, behind `release_events_calendar_v2`), and the `service` kind for `core.site-offers`, so another plugin's "Book" button (an events calendar's) opens the booking page on a service. The plugin also declares a `services` entity picker.
+

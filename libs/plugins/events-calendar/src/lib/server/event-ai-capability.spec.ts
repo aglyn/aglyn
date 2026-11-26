@@ -105,10 +105,24 @@ describe('the event capability', () => {
     })
   })
 
-  it('offers only what an event stores: no recurrence, tickets, RSVP, link or status', () => {
-    expect(Object.keys(eventAiCapability.argsSchema.properties).sort()).toEqual(
-      ['description', 'endsAt', 'location', 'organizer', 'startsAt', 'timezone', 'title'],
-    )
+  it('offers only what an event stores: its repeat and category (AGL-4252), no tickets, RSVP, link or status', () => {
+    expect(Object.keys(eventAiCapability.argsSchema.properties).sort()).toEqual([
+      'category',
+      'description',
+      'endsAt',
+      'location',
+      'organizer',
+      'repeat',
+      'repeatDays',
+      'repeatTimes',
+      'repeatUntil',
+      'startsAt',
+      'timezone',
+      'title',
+    ])
+    expect(pluginAiCapabilityArgsProblems(eventAiCapability.argsSchema, { ...ARGS, repeat: 'yearly' })).toEqual([
+      '"repeat" must be one of daily, weekly, monthly',
+    ])
     for (const extra of ['recurrence', 'ticketUrl', 'rsvp', 'status']) {
       expect(pluginAiCapabilityArgsProblems(eventAiCapability.argsSchema, { ...ARGS, [extra]: 'x' })).toEqual([
         `"${extra}" is not an argument`,

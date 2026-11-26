@@ -118,7 +118,7 @@ import {
 import { resolveOrgMediaBand } from './server/media-storage-band'
 import { videoUploadsOpenForOrg } from './server/video-uploads'
 import { scheduleMediaDeliveryCopies } from './server/media-delivery-copies'
-import { folderStoragePath, mediaCdnPathUpdate } from './server/media-scope'
+import { folderStoragePath, mediaCdnPathCreateField } from './server/media-scope'
 import { embeddedMetadataAtIngress } from './server/media-embedded'
 import { mediaEmbeddedPublicView } from '@aglyn/aglyn/app-utils/media-embedded-fields'
 import {
@@ -1145,7 +1145,7 @@ async function createMedia(
       // Stable, mediaId-keyed CDN URL (AGL-829). The helper applies the
       // plan-and-private rule itself, so this is the same expression the
       // console's three ingress routes write and cannot disagree with them.
-      cdnPath: mediaCdnPathUpdate({
+      ...mediaCdnPathCreateField({
         billing: ctx.org as never,
         cdnScope: scope.cdnScope,
         mediaId,

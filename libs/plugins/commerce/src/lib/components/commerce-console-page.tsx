@@ -28,6 +28,7 @@ import {
 } from './commerce-console-sections'
 import CatalogOrganizationCard from './console/catalog-organization-card.component'
 import CommerceAnalyticsCard from './console/commerce-analytics-card.component'
+import CurrenciesCard from './console/currencies-card.component'
 import CustomerNotificationsCard from './console/customer-notifications-card.component'
 import DiscountsCard from './console/discounts-card.component'
 import GiftCardsCard from './console/gift-cards-card.component'
@@ -275,6 +276,9 @@ function sectionBody(
     case 'checkout':
       return settingsPage(section, hostId, [
         <StoreSettingsCard key="store" hostId={hostId} />,
+        // Which other currencies shoppers see and pay in (AGL-4248), beside
+        // the store currency above.
+        <CurrenciesCard key="currencies" hostId={hostId} />,
         // Whether buyers may ask for a return online (AGL-3611): the store's
         // policy, beside the terms and guest-checkout rules above it.
         <ReturnSettingsCard key="returns" hostId={hostId} />,

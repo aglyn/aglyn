@@ -123,7 +123,7 @@ struct OrderDetailView: View {
                 )
                 .font(.system(size: 14)).foregroundStyle(AglynColor.textPrimary)
                 Spacer(minLength: 12)
-                Text(formatOrderMoney(Int(line.unitAmountCents) * quantity)).font(.system(size: 14)).monospacedDigit()
+                Text(row.money(Int(line.unitAmountCents) * quantity)).font(.system(size: 14)).monospacedDigit()
                   .strikethrough(withdrawn)
                   .foregroundStyle(withdrawn ? AglynColor.secondaryText : AglynColor.textPrimary)
               }
@@ -145,11 +145,11 @@ struct OrderDetailView: View {
           } else {
             VStack(alignment: .leading, spacing: AglynSpace.one) {
               AglynRow(
-                line.name, subtitle: [line.variantLabel, quantity == 1 ? nil : "\(quantity) × \(formatOrderMoney(Int(line.unitAmountCents)))"]
+                line.name, subtitle: [line.variantLabel, quantity == 1 ? nil : "\(quantity) × \(row.money(Int(line.unitAmountCents)))"]
                   .compactMap { $0 }.joined(separator: " · "),
                 systemImage: "shippingbox"
               ) {
-                Text(formatOrderMoney(Int(line.unitAmountCents) * quantity)).monospacedDigit()
+                Text(row.money(Int(line.unitAmountCents) * quantity)).monospacedDigit()
                   .strikethrough(withdrawn)
                   .foregroundStyle(withdrawn ? .secondary : .primary)
               }
@@ -178,29 +178,29 @@ struct OrderDetailView: View {
 
       Section {
         let totals = order.totals
-        if let items = totals?.itemsCents { AglynAmountRow("Items", amount: formatOrderMoney(Int(items))) }
+        if let items = totals?.itemsCents { AglynAmountRow("Items", amount: row.money(Int(items))) }
         if let discount = totals?.discountCents, discount != 0 {
-          AglynAmountRow("Discount", amount: "−" + formatOrderMoney(abs(Int(discount))))
+          AglynAmountRow("Discount", amount: "−" + row.money(abs(Int(discount))))
         }
         if let shipping = totals?.shippingCents, shipping != 0 {
-          AglynAmountRow("Shipping", amount: formatOrderMoney(Int(shipping)))
+          AglynAmountRow("Shipping", amount: row.money(Int(shipping)))
         }
-        if let tax = totals?.taxCents, tax != 0 { AglynAmountRow("Tax", amount: formatOrderMoney(Int(tax))) }
+        if let tax = totals?.taxCents, tax != 0 { AglynAmountRow("Tax", amount: row.money(Int(tax))) }
         // Optional lines the buyer took at checkout (AGL-3635), by name.
         ForEach(order.extras ?? [], id: \.id) { extra in
-          AglynAmountRow(extra.label, amount: formatOrderMoney(Int(extra.amountCents)))
+          AglynAmountRow(extra.label, amount: row.money(Int(extra.amountCents)))
         }
-        if let tip = totals?.tipCents, tip != 0 { AglynAmountRow("Tip", amount: formatOrderMoney(Int(tip))) }
-        AglynAmountRow("Total", amount: row.total, emphasized: true)
+        if let tip = totals?.tipCents, tip != 0 { AglynAmountRow("Tip", amount: row.money(Int(tip))) }
+        AglynAmountRow("Total", amount: row.totalWithBase, emphasized: true)
           // Figma 13:483: the total sits under a hairline in the plain column.
           .overlay(alignment: .top) { if wide { AglynHairline() } }
         // In the plain column the notes are a row, so they line up with the totals (a footer ignores the row insets).
-        if wide { totalsNotes(order).font(.system(size: 12)).foregroundStyle(AglynColor.secondaryText) }
+        if wide { totalsNotes(row).font(.system(size: 12)).foregroundStyle(AglynColor.secondaryText) }
       } header: {
         // In the plain column the totals follow the items directly, under the total's hairline (Figma 13:483).
         if !wide { Text("Totals") }
       } footer: {
-        if !wide { totalsNotes(order) }
+        if !wide { totalsNotes(row) }
       }
 
       let shipments = order.fulfillments ?? []
@@ -263,7 +263,7 @@ struct OrderDetailView: View {
       Text("The buyer is not refunded automatically. Refund first if they paid.")
     }
     .sheet(isPresented: $refundingSheet) {
-      RefundSheet(order: order, number: row.number) { amount in
+      RefundSheet(order: order, number: row.number, currency: row.currency) { amount in
         try await refund(amountCents: amount)
       }
     }
@@ -534,15 +534,16 @@ struct OrderDetailView: View {
   /// Under the totals, as the console's order says it: how the tax was computed (AGL-2451; absent means not recorded,
   /// never "no tax"), then what was refunded and what a lost chargeback took, two doors said apart (AGL-1787), in the
   /// error color.
-  private func totalsNotes(_ order: HostOrder) -> some View {
+  private func totalsNotes(_ row: OrderRow) -> some View {
+    let order = row.order
     let reversal = splitOrderReversal(order)
     return VStack(alignment: .leading, spacing: 2) {
       Text(describeOrderTaxMode(order.taxMode?.rawValue))
       if reversal.refundedCents > 0 {
-        Text("Refunded \(formatOrderMoney(reversal.refundedCents))").foregroundStyle(AglynColor.error)
+        Text("Refunded \(row.money(reversal.refundedCents))").foregroundStyle(AglynColor.error)
       }
       if reversal.chargedBackCents > 0 {
-        Text("Charged back \(formatOrderMoney(reversal.chargedBackCents))").foregroundStyle(AglynColor.error)
+        Text("Charged back \(row.money(reversal.chargedBackCents))").foregroundStyle(AglynColor.error)
       }
     }
   }
@@ -567,6 +568,8 @@ struct SheetFailure: LocalizedError {
 struct RefundSheet: View {
   let order: HostOrder
   let number: String
+  /// The order's currency, which the refund is in.
+  var currency = "USD"
   let refund: (Int?) async throws -> Void
   @State private var full = true
   @State private var amount = ""
@@ -577,7 +580,7 @@ struct RefundSheet: View {
 
   var body: some View {
     AglynFormSheet(
-      "Refund \(number)", confirm: cents.flatMap { problem == nil ? "Refund \(formatOrderMoney($0))" : nil } ?? "Refund",
+      "Refund \(number)", confirm: cents.flatMap { problem == nil ? "Refund \(formatOrderMoney($0, currency: currency))" : nil } ?? "Refund",
       destructive: true, canConfirm: problem == nil,
       save: { try await refund(full ? nil : cents) }
     ) {
@@ -600,7 +603,7 @@ struct RefundSheet: View {
           if let problem, !amount.isEmpty { Text(problem).font(AglynFont.caption).foregroundStyle(.red) }
         }
       } footer: {
-        Text("\(formatOrderMoney(refundable)) is left to refund on this order, through Stripe.")
+        Text("\(formatOrderMoney(refundable, currency: currency)) is left to refund on this order, through Stripe.")
       }
     }
   }

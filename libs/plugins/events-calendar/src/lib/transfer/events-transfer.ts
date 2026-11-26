@@ -54,6 +54,12 @@ import {
   EVENTS_CATALOG,
   EVENTS_MATCH_KEYS,
 } from './events-transfer-catalog'
+import {
+  EVENT_V2_FIELD_IDS,
+  EVENTS_V2_FIELDS,
+  eventV2FieldValues,
+  eventV2WriteFields,
+} from './events-transfer-v2'
 
 /**
  * THE `events` TRANSFER RESOURCE: a site's calendar events, exported and
@@ -91,6 +97,14 @@ export interface EventsTransferDeps {
    * sweep that resumes an import without the gate.
    */
   requireEntitled(orgId: string): Promise<void>
+  /**
+   * Whether the workspace has calendar v2 (AGL-4252), which adds the
+   * Categories, Repeats, Skip dates, Time zone and Tickets columns. Absent:
+   * it has not.
+   */
+  calendarV2?(orgId: string): Promise<boolean>
+  /** The site's event categories as `[id, name]`, for the Categories column. */
+  readCategories?(hostId: string): Promise<Array<[string, string]>>
   now?(): number
   /** A new event id; `createResourceUid`, like the editor. */
   createId?(): string
@@ -146,8 +160,15 @@ function textOf(value: unknown): string | null {
  * A stored event as field values: what an export writes, what a match
  * compares and what undo checks. The title leads, so a row label reads it.
  */
-export function eventFieldValues(id: string, data: Data): Values {
+export function eventFieldValues(
+  id: string,
+  data: Data,
+  categoryNames: ReadonlyMap<string, string> = new Map(),
+): Values {
   return {
+    // Calendar v2 (AGL-4252): read from every event, so an update writes a
+    // stored series back as it was whether or not the file carries it.
+    ...eventV2FieldValues(data, categoryNames),
     title: textOf(data['title']),
     startsAt: isoOfMs(data['startsAtMs']),
     endsAt: isoOfMs(data['endsAtMs']),
@@ -172,7 +193,12 @@ function msOf(value: unknown): number | null {
 }
 
 /** Field values as the shared write rule's input, or why they cannot be written. */
-function writeInputOf(values: Values): EventWriteInput | { problem: string } {
+function writeInputOf(
+  values: Values,
+  categoryIds: ReadonlyMap<string, string> = new Map(),
+): EventWriteInput | { problem: string } {
+  const v2 = eventV2WriteFields(values, categoryIds)
+  if ('problem' in v2) return { problem: v2.problem }
   const status: EventStatus | null = isBlankTransferValue(values['status'])
     ? 'draft'
     : eventStatusOf(values['status'])
@@ -187,6 +213,10 @@ function writeInputOf(values: Values): EventWriteInput | { problem: string } {
     coverImage: textOf(values['coverImage']),
     coverImageAlt: textOf(values['coverImageAlt']),
     status,
+    ...(v2.categoryIds !== undefined ? { categoryIds: v2.categoryIds } : {}),
+    ...(v2.recurrence !== undefined ? { recurrence: v2.recurrence } : {}),
+    ...(v2.timeZone !== undefined ? { timeZone: v2.timeZone } : {}),
+    ...(v2.ticket !== undefined ? { ticket: v2.ticket } : {}),
   }
   const problem = eventWriteProblem(input)
   return problem ? { problem } : input
@@ -274,6 +304,21 @@ export function createEventsTransferResource(
   const eventsOf = (hostId: string) =>
     deps.firestore.collection('hosts').doc(hostId).collection('events')
 
+  /*
+   * The site's category names (AGL-4252), read once per hook that reads or
+   * writes events, so the Categories column names them and a file's names
+   * find them. Every value and write below goes through the two wrappers.
+   */
+  let categoryNames: ReadonlyMap<string, string> = new Map()
+  let categoryIds: ReadonlyMap<string, string> = new Map()
+  async function loadCategories(hostId: string): Promise<void> {
+    const rows = deps.readCategories ? await deps.readCategories(hostId) : []
+    categoryNames = new Map(rows)
+    categoryIds = new Map(rows.map(([id, name]) => [name.toLowerCase(), id]))
+  }
+  const fieldValues = (id: string, data: Data) => eventFieldValues(id, data, categoryNames)
+  const inputOf = (values: Values) => writeInputOf(values, categoryIds)
+
   /** Stored events by id; a missing id is absent. */
   async function readByIds(
     hostId: string,
@@ -338,6 +383,7 @@ export function createEventsTransferResource(
       (row) => row.verdict === 'create' || row.verdict === 'update',
     )
     if (!writes.length) return []
+    await loadCategories(requireHost(ctx))
     const found: TransferResourceFinding[] = []
     for (const row of writes) {
       const before = (row.recordId ? existing.get(row.recordId) : null) ?? {}
@@ -357,10 +403,20 @@ export function createEventsTransferResource(
         })
         continue
       }
-      const input = writeInputOf(after)
+      const input = inputOf(after)
       if ('problem' in input) {
         found.push({ row: row.index, detail: input.problem, refuse: true })
         continue
+      }
+      // A category the site does not have is left off, and said so (AGL-4252).
+      const v2 = eventV2WriteFields(changes, categoryIds)
+      if (!('problem' in v2) && v2.unknownCategories.length) {
+        found.push({
+          row: row.index,
+          fieldId: 'categories',
+          value: v2.unknownCategories.join(', '),
+          detail: `This site has no category named ${v2.unknownCategories.map((name) => `"${name}"`).join(', ')}, so the event is left out of it. Add categories on the Events page.`,
+        })
       }
       if (
         !isBlankTransferValue(after['endsAt']) &&
@@ -379,7 +435,16 @@ export function createEventsTransferResource(
   }
 
   return {
-    fields: () => EVENTS_CATALOG,
+    // The v2 columns only where the workspace has calendar v2 (AGL-4252).
+    fields: (ctx) => {
+      const calendarV2 = deps.calendarV2
+      if (!calendarV2 || !ctx?.orgId) return EVENTS_CATALOG
+      return calendarV2(ctx.orgId).then((on) =>
+        on
+          ? { ...EVENTS_CATALOG, standard: [...EVENTS_CATALOG.standard, ...EVENTS_V2_FIELDS] }
+          : EVENTS_CATALOG,
+      )
+    },
     matchKeys: EVENTS_MATCH_KEYS,
     aliases: EVENTS_ALIASES,
 
@@ -411,6 +476,7 @@ export function createEventsTransferResource(
 
     async readPage(ctx, cursor, fieldIds, options = {}) {
       const hostId = requireHost(ctx)
+      await loadCategories(hostId)
       const size = Math.max(
         1,
         Math.min(options.pageSize ?? READ_PAGE_ROWS, READ_PAGE_ROWS),
@@ -423,7 +489,7 @@ export function createEventsTransferResource(
         const rows = ids
           .filter((id) => found.has(id) && !isDeletedEvent(found.get(id)))
           .map((id) =>
-            pick(eventFieldValues(id, found.get(id) as Data), fieldIds),
+            pick(fieldValues(id, found.get(id) as Data), fieldIds),
           )
         return {
           rows,
@@ -437,7 +503,7 @@ export function createEventsTransferResource(
       const rows = snapshot.docs
         .filter((doc) => !isDeletedEvent(doc.data() as Data))
         .map((doc) =>
-          pick(eventFieldValues(doc.id, doc.data() as Data), fieldIds),
+          pick(fieldValues(doc.id, doc.data() as Data), fieldIds),
         )
       const last = snapshot.docs[snapshot.docs.length - 1]
       return {
@@ -451,6 +517,7 @@ export function createEventsTransferResource(
 
     async lookup(ctx, requests) {
       const hostId = requireHost(ctx)
+      await loadCategories(hostId)
       const isId = (request: MatchLookupRequest) =>
         request.fieldId === TRANSFER_ID_FIELD &&
         request.normalizer === 'aglynId'
@@ -473,7 +540,7 @@ export function createEventsTransferResource(
 
       const records = [...candidates].map(([id, data]) => ({
         id,
-        values: eventFieldValues(id, data),
+        values: fieldValues(id, data),
       }))
       const built = buildMatchLookup(records, requests)
       const lookup = new Map<string, string[]>()
@@ -518,6 +585,7 @@ export function createEventsTransferResource(
     async apply(ctx, chunk, writer) {
       const hostId = requireHost(ctx)
       await deps.requireEntitled(ctx.orgId)
+      await loadCategories(hostId)
       const events = eventsOf(hostId)
       const results: TransferRowResult[] = []
       const undo: TransferUndoEntry[] = []
@@ -553,7 +621,7 @@ export function createEventsTransferResource(
         if (writer.timeLeftMs() < APPLY_ROW_RESERVE_MS) break
         const changes = changesOf(row)
         if (row.verdict === 'create') {
-          const input = writeInputOf(changes)
+          const input = inputOf(changes)
           if ('problem' in input) {
             await fail(row, 'resourceRule', input.problem)
             continue
@@ -565,9 +633,9 @@ export function createEventsTransferResource(
           await events
             .doc(id)
             .create({ ...write.fields, createdAt: at, updatedAt: at })
-          const stored = eventFieldValues(id, afterWrite({}, write))
+          const stored = fieldValues(id, afterWrite({}, write))
           const written = Object.fromEntries(
-            EVENT_CONTENT_FIELD_IDS.filter(
+            [...EVENT_CONTENT_FIELD_IDS, ...EVENT_V2_FIELD_IDS].filter(
               (fieldId) => !isBlankTransferValue(stored[fieldId]),
             ).map((fieldId) => [fieldId, stored[fieldId]]),
           )
@@ -598,16 +666,16 @@ export function createEventsTransferResource(
           )
           continue
         }
-        const before = eventFieldValues(id, data)
-        const input = writeInputOf({ ...before, ...changes })
+        const before = fieldValues(id, data)
+        const input = inputOf({ ...before, ...changes })
         if ('problem' in input) {
           await fail(row, 'resourceRule', input.problem)
           continue
         }
         // The record as it will be, so a blank the policy chose clears.
         const write = eventWrite(input, { clearBlank: true })
-        const after = eventFieldValues(id, afterWrite(data, write))
-        const touched = EVENT_CONTENT_FIELD_IDS.filter(
+        const after = fieldValues(id, afterWrite(data, write))
+        const touched = [...EVENT_CONTENT_FIELD_IDS, ...EVENT_V2_FIELD_IDS].filter(
           (fieldId) => !transferValuesEqual(before[fieldId], after[fieldId]),
         )
         if (!touched.length) {
@@ -652,6 +720,7 @@ export function createEventsTransferResource(
 
     async revert(ctx, snapshot, decisions) {
       const hostId = requireHost(ctx)
+      await loadCategories(hostId)
       const events = eventsOf(hostId)
       const current = await readByIds(
         hostId,
@@ -663,7 +732,7 @@ export function createEventsTransferResource(
         const data = current.get(entry.recordId)
         const values =
           data && !isDeletedEvent(data)
-            ? eventFieldValues(entry.recordId, data)
+            ? fieldValues(entry.recordId, data)
             : null
         const step = planTransferUndo(entry, values)
         if (
@@ -695,7 +764,7 @@ export function createEventsTransferResource(
           values &&
           data
         ) {
-          const input = writeInputOf({ ...values, ...step.values })
+          const input = inputOf({ ...values, ...step.values })
           if ('problem' in input) {
             throw new Error(
               `Event ${entry.recordId} cannot be restored: ${input.problem}`,

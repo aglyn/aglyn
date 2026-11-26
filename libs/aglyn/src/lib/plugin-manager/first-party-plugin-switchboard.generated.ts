@@ -236,7 +236,7 @@ export const FIRST_PARTY_PLUGIN_SWITCHES: readonly FirstPartyPluginSwitch[] = [
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
   "mui": "elements",
   "forms": "elements",
-  "ai": "console-only",
+  "ai": "elements",
   "theme-presets": "console-only",
   "funnels": "console-only",
   "accounts": "routes",

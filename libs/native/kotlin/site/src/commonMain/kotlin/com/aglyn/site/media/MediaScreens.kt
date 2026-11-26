@@ -240,7 +240,14 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
   }.collectAsState(Live.Loading)
   val folderList = sortedFolders((folders as? Live.Ready)?.value?.map(::mediaFolderOf).orEmpty())
   val foldersById = folderList.associateBy { it.id }
-  val canEdit = if (scope is MediaScope.Org) com.aglyn.pluginhost.rememberMemberPermissions(context).can("org.media") else com.aglyn.pluginhost.rememberMemberPermissions(context).can("site.edit")
+  val permissions = com.aglyn.pluginhost.rememberMemberPermissions(context)
+  val canEdit = if (scope is MediaScope.Org) permissions.can("org.media") else permissions.can("site.edit")
+  // Moving to the other library (AGL-4254) needs a site and its workspace, so a site's Media page only, and both keys:
+  // editing the workspace library and editing the site.
+  val moveOrgId = context.orgId
+  val moveHostId = context.hostId
+  val libraryDirection = if (library != null && moveOrgId != null && moveHostId != null) mediaLibraryDirection(scope) else null
+  val canMoveLibrary = libraryDirection != null && permissions.can("org.media") && permissions.can("site.edit")
   val origin = context.api.origin
   val phone = currentWidthClass() == WidthClass.COMPACT && !LocalShellMetrics.current.compact
   val compact = LocalShellMetrics.current.compact
@@ -269,6 +276,9 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
   var countsVersion by remember { mutableStateOf(0) }
   var bulkTag by remember { mutableStateOf<Boolean?>(null) }
   var bulkDeleting by remember { mutableStateOf(false) }
+  /** The files the move-to-the-other-library dialog is open for, and what the last move said. */
+  var libraryMoving by remember { mutableStateOf<List<String>?>(null) }
+  var libraryReport by remember(scope) { mutableStateOf<MediaLibraryMoveReport?>(null) }
   var columns by remember { mutableStateOf(4) }
   val focus = remember { FocusRequester() }
 
@@ -410,6 +420,11 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
     if (selecting) { selecting = false; selection = emptySet() } else open(crumbs.dropLast(1).lastOrNull()?.id)
   }
 
+  // Only when the action is allowed here: the label says which way it goes.
+  val moveLibraryLabel = libraryDirection?.takeIf { canMoveLibrary }?.let(::moveToOtherLibraryLabel)
+  val moveSelectionToLibrary: (() -> Unit)? = if (moveLibraryLabel != null) ({ runner.clear(); libraryMoving = items.map { it.id }.filter { it in selection } }) else null
+  val moveOneToLibrary: ((String) -> Unit)? = if (moveLibraryLabel != null) ({ id -> runner.clear(); libraryMoving = listOf(id) }) else null
+
   val onDeleted: (String, String, Boolean) -> Unit = { id, name, restorable ->
     model.drop(id)
     selection = selection - id
@@ -421,8 +436,14 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
   val phoneDetail = phoneFile
   if (phone && phoneDetail != null) {
     Column(Modifier.fillMaxSize()) {
-      Column(Modifier.padding(horizontal = edge), verticalArrangement = Arrangement.spacedBy(space(1f))) { RunnerBanners(runner) }
-      MediaDetail(context, scope, phoneDetail, api, runner, folderList, foldersById, canEdit, onDeleted = onDeleted, onChanged = { model.refresh() })
+      Column(Modifier.padding(horizontal = edge), verticalArrangement = Arrangement.spacedBy(space(1f))) {
+        RunnerBanners(runner)
+        libraryReport?.let { LibraryMoveReportBanner(it) { libraryReport = null } }
+      }
+      MediaDetail(
+        context, scope, phoneDetail, api, runner, folderList, foldersById, canEdit, onDeleted = onDeleted, onChanged = { model.refresh() },
+        moveLibraryLabel = moveLibraryLabel, onMoveLibrary = moveOneToLibrary?.let { move -> { move(phoneDetail) } },
+      )
     }
   } else {
     Column(Modifier.fillMaxSize().testTag("media-screen")) {
@@ -500,13 +521,14 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
               }
             }
           }
-          MediaBanners(runner, uploading, undo, dialogOpen = dialog != null || bulkTag != null, edge, onUndo = { ids, names ->
+          MediaBanners(runner, uploading, undo, dialogOpen = dialog != null || bulkTag != null || libraryMoving != null, edge, libraryReport, onDismissReport = { libraryReport = null }, onUndo = { ids, names ->
             undo = null
             runner.run(mediaRestoredMessage(names), onDone = { model.refresh() }) { ids.forEach { api.restore(it) } }
           }, onDismissUndo = { undo = null })
           if (phone && selecting && selection.isNotEmpty()) {
             PhoneBulkBar(selection.size, folderList, foldersById, enabled = canEdit && !runner.busy, edge,
-              onMove = { move(items.map { it.id }.filter { id -> id in selection }, it) }, onTag = { bulkTag = it }, onDelete = { bulkDeleting = true })
+              onMove = { move(items.map { it.id }.filter { id -> id in selection }, it) }, onTag = { bulkTag = it }, onDelete = { bulkDeleting = true },
+              moveLibraryLabel = moveLibraryLabel, onMoveLibrary = moveSelectionToLibrary)
           }
         }
         if (!phone && selection.isNotEmpty()) {
@@ -517,6 +539,7 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
                 MediaDetail(
                   context, scope, selection.first(), api, runner, folderList, foldersById, canEdit, onDeleted = onDeleted,
                   onChanged = { model.refresh() }, onClose = { selection = emptySet() },
+                  moveLibraryLabel = moveLibraryLabel, onMoveLibrary = moveOneToLibrary?.let { move -> { move(selection.first()) } },
                 )
               }
             } else {
@@ -524,6 +547,7 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
                 selectedItems, origin, folderList, foldersById, enabled = canEdit && !runner.busy,
                 onMove = { move(items.map { it.id }.filter { id -> id in selection }, it) },
                 onTag = { runner.clear(); bulkTag = it }, onDelete = { bulkDeleting = true }, onClear = { selection = emptySet() },
+                moveLibraryLabel = moveLibraryLabel, onMoveLibrary = moveSelectionToLibrary,
               )
             }
           }
@@ -573,6 +597,25 @@ private fun MediaLibrary(context: NativePluginContext, scope: MediaScope, scopeT
       audioBatch = null
       if (confirmed) sendFiles(files, true)
     }
+  }
+  val movingIds = libraryMoving
+  if (movingIds != null && libraryDirection != null && moveOrgId != null && moveHostId != null) {
+    val names = remember(movingIds) { items.filter { it.id in movingIds }.associate { it.id to it.fileName } }
+    MediaLibraryMoveDialog(
+      api, runner, moveOrgId, moveHostId, libraryDirection, movingIds, nameOf = { names[it] ?: it },
+      onDismiss = { libraryMoving = null },
+      onFinished = { movedIds, report ->
+        libraryMoving = null
+        // Moved files leave this library and the selection; the rest stay selected. A detail whose file moved closes.
+        val moved = movedIds.toSet()
+        model.drop(moved)
+        selection = selection - moved
+        if (phoneFile in moved) phoneFile = null
+        libraryReport = report
+        model.refresh()
+        countsVersion++
+      },
+    )
   }
 }
 
@@ -1063,6 +1106,9 @@ private fun MediaBulkPanel(
   onTag: (Boolean) -> Unit,
   onDelete: () -> Unit,
   onClear: () -> Unit,
+  /** Move to the other library (AGL-4254), named by where the files go; null where it is not offered. */
+  moveLibraryLabel: String? = null,
+  onMoveLibrary: (() -> Unit)? = null,
 ) {
   var moving by remember { mutableStateOf(false) }
   val metrics = mediaMetrics(phone = false)
@@ -1089,6 +1135,11 @@ private fun MediaBulkPanel(
         }
       }
     }
+    if (moveLibraryLabel != null && onMoveLibrary != null) {
+      OutlinedButton(onClick = onMoveLibrary, enabled = enabled, shape = controlShape(), modifier = Modifier.fillMaxWidth().testTag("media-bulk-move-library")) {
+        Icon(AglynIcons.named("swap_horiz"), null, Modifier.size(metrics.icon)); Text("$moveLibraryLabel…", Modifier.padding(start = space(0.75f)))
+      }
+    }
     OutlinedButton(onClick = { onTag(true) }, enabled = enabled, shape = controlShape(), modifier = Modifier.fillMaxWidth().testTag("media-bulk-add-tag")) {
       Icon(AglynIcons.named("label"), null, Modifier.size(metrics.icon)); Text("Add tag…", Modifier.padding(start = space(0.75f)))
     }
@@ -1107,7 +1158,10 @@ private fun MediaBulkPanel(
 
 /** A phone's bulk actions while picking several: how many, and the console's actions in one menu. */
 @Composable
-private fun PhoneBulkBar(count: Int, folders: List<MediaFolder>, byId: Map<String, MediaFolder>, enabled: Boolean, edge: Dp, onMove: (String?) -> Unit, onTag: (Boolean) -> Unit, onDelete: () -> Unit) {
+private fun PhoneBulkBar(
+  count: Int, folders: List<MediaFolder>, byId: Map<String, MediaFolder>, enabled: Boolean, edge: Dp, onMove: (String?) -> Unit, onTag: (Boolean) -> Unit, onDelete: () -> Unit,
+  moveLibraryLabel: String? = null, onMoveLibrary: (() -> Unit)? = null,
+) {
   var open by remember { mutableStateOf(false) }
   var moving by remember { mutableStateOf(false) }
   val metrics = mediaMetrics(phone = true)
@@ -1121,6 +1175,9 @@ private fun PhoneBulkBar(count: Int, folders: List<MediaFolder>, byId: Map<Strin
         TextButton(onClick = { open = true }, enabled = enabled, modifier = Modifier.testTag("media-bulk-menu")) { Text("Actions") }
         DropdownMenu(open, onDismissRequest = { open = false }) {
           DropdownMenuItem(text = { Text("Move to folder…") }, onClick = { open = false; moving = true })
+          if (moveLibraryLabel != null && onMoveLibrary != null) {
+            DropdownMenuItem(text = { Text("$moveLibraryLabel…") }, onClick = { open = false; onMoveLibrary() }, modifier = Modifier.testTag("media-bulk-move-library"))
+          }
           DropdownMenuItem(text = { Text("Add tag…") }, onClick = { open = false; onTag(true) })
           DropdownMenuItem(text = { Text("Remove tag…") }, onClick = { open = false; onTag(false) })
           HorizontalDivider()
@@ -1145,6 +1202,8 @@ private fun MediaBanners(
   undo: Pair<List<String>, List<String>>?,
   dialogOpen: Boolean,
   edge: Dp,
+  libraryReport: MediaLibraryMoveReport?,
+  onDismissReport: () -> Unit,
   onUndo: (List<String>, List<String>) -> Unit,
   onDismissUndo: () -> Unit,
 ) {
@@ -1171,6 +1230,7 @@ private fun MediaBanners(
       })
     }
     if (!dialogOpen) {
+      libraryReport?.let { LibraryMoveReportBanner(it, onDismissReport) }
       runner.error?.let { NoticeBanner(it, StatusTone.ERROR) }
       runner.notice?.let { NoticeBanner(it, StatusTone.SUCCESS, action = { TextButton(onClick = runner::clear) { Text("Dismiss") } }) }
     }
@@ -1357,6 +1417,9 @@ private fun MediaDetail(
   onChanged: () -> Unit,
   /** Closes the details beside the grid; null where they fill the screen. */
   onClose: (() -> Unit)? = null,
+  /** Move to the other library (AGL-4254), named by where the file goes; null where it is not offered. */
+  moveLibraryLabel: String? = null,
+  onMoveLibrary: (() -> Unit)? = null,
 ) {
   val live by remember(scope, mediaId, context.firestore) { context.firestore.observeDoc("${scope.path}/media/$mediaId") }.collectAsState(Live.Loading)
   // A deleted file closes its detail; the library already dropped it and offers the undo.
@@ -1369,7 +1432,7 @@ private fun MediaDetail(
       if (item == null) {
         EmptyState("This file is gone", body = "It may have been deleted.", icon = AglynIcons.named("photo_library"))
       } else {
-        MediaDetailBody(context, scope, item, api, runner, folders, foldersById, canEdit, onDeleted, onChanged, onClose)
+        MediaDetailBody(context, scope, item, api, runner, folders, foldersById, canEdit, onDeleted, onChanged, onClose, moveLibraryLabel, onMoveLibrary)
       }
     }
   }
@@ -1388,6 +1451,8 @@ private fun MediaDetailBody(
   onDeleted: (id: String, name: String, restorable: Boolean) -> Unit,
   onChanged: () -> Unit,
   onClose: (() -> Unit)? = null,
+  moveLibraryLabel: String? = null,
+  onMoveLibrary: (() -> Unit)? = null,
 ) {
   val origin = context.api.origin
   val clipboard = LocalClipboardManager.current
@@ -1416,8 +1481,9 @@ private fun MediaDetailBody(
   val orgWideEditor = scope !is MediaScope.Org || context.orgRole in setOf("owner", "admin")
   val disabled by produceState<MediaQuarantineNotice?>(null, api, item.id) { value = api.quarantine(listOf(item.id))[item.id] }
 
-  val actions = listOf(
+  val actions = listOfNotNull(
     MenuAction("move", "Move to folder", "drive_file_move", enabled = canEdit) { moving = true },
+    if (moveLibraryLabel != null && onMoveLibrary != null) MenuAction("move-library", moveLibraryLabel, "swap_horiz", enabled = !runner.busy) { onMoveLibrary() } else null,
     MenuAction("delete", "Delete file", "delete", destructive = true, enabled = canEdit) { deleting = true },
   )
   // Beside the grid the details pad to the panel's 24; filling the screen, to the column's content edge.
@@ -1676,3 +1742,91 @@ private fun MediaDetailBody(
   }
 }
 
+
+/** What the last move to the other library said, in its tone, until it is dismissed. */
+@Composable
+private fun LibraryMoveReportBanner(report: MediaLibraryMoveReport, onDismiss: () -> Unit) {
+  NoticeBanner(report.message, report.tone, Modifier.testTag("media-library-move-report"), action = { TextButton(onClick = onDismiss) { Text("Dismiss") } })
+}
+
+/**
+ * Move to this site's library / Move to organization library (AGL-4254), as the console's dialog asks it: the preview
+ * runs first and says how many files will move, who will be able to use them and how many pages, products or settings
+ * are updated (the old address keeps working); the files that must stay are named with why; then Move N files runs the
+ * move, round after round, with its progress. [onFinished] gets the ids that moved and what to say.
+ */
+@Composable
+private fun MediaLibraryMoveDialog(
+  api: MediaApi,
+  runner: ActionRunner,
+  orgId: String,
+  hostId: String,
+  direction: MediaLibraryDirection,
+  ids: List<String>,
+  nameOf: (String) -> String,
+  onDismiss: () -> Unit,
+  onFinished: (movedIds: List<String>, report: MediaLibraryMoveReport) -> Unit,
+) {
+  val coroutines = rememberCoroutineScope()
+  var preview by remember(ids) { mutableStateOf<MediaLibraryPreview?>(null) }
+  var problem by remember(ids) { mutableStateOf<String?>(null) }
+  var progress by remember(ids) { mutableStateOf<Pair<Int, Int>?>(null) }
+  LaunchedEffect(ids, direction) {
+    try {
+      preview = api.previewLibraryMove(orgId, hostId, direction, ids)
+    } catch (error: Throwable) {
+      if (error is kotlinx.coroutines.CancellationException) throw error
+      problem = (error as? com.aglyn.core.ConsoleApiError)?.takeIf { it.status != 0 }?.message ?: "Could not check where these files are used"
+    }
+  }
+  val ready = preview
+  val busy = progress != null
+  ActionDialog(
+    title = moveToOtherLibraryLabel(direction),
+    icon = "swap_horiz",
+    confirmLabel = moveToOtherLibraryConfirm(ready?.movable?.size ?: 0),
+    confirmEnabled = !ready?.movable.isNullOrEmpty(),
+    busy = busy,
+    onDismiss = onDismiss,
+    onConfirm = confirm@{
+      val picked = ready ?: return@confirm
+      if (picked.movable.isEmpty() || busy) return@confirm
+      coroutines.launch {
+        progress = 0 to picked.movable.size
+        val outcome = try {
+          api.moveLibrary(orgId, hostId, direction, picked, nameOf) { done, total -> progress = done to total }
+        } finally {
+          progress = null
+        }
+        onFinished(outcome.movedIds, mediaLibraryMoveReport(direction, outcome, ids.size, runner::describe))
+      }
+    },
+    modifier = Modifier.testTag("media-library-move"),
+  ) {
+    Column(verticalArrangement = Arrangement.spacedBy(space(1.5f))) {
+      problem?.let { NoticeBanner(it, StatusTone.ERROR, Modifier.testTag("media-library-move-problem")) }
+      if (problem == null && ready == null) {
+        Text("Checking every page, product and setting that uses these files…", style = MaterialTheme.typography.bodyMedium)
+        LinearProgressIndicator(Modifier.fillMaxWidth())
+      }
+      if (ready != null) {
+        Text(
+          if (ready.movable.isNotEmpty()) moveToOtherLibraryIntro(direction, ready.movable.size, ready.documents) else noneCanMoveToLibrary(direction),
+          style = MaterialTheme.typography.bodyMedium,
+          modifier = Modifier.testTag("media-library-move-intro"),
+        )
+        if (ready.refused.isNotEmpty()) {
+          Column(Modifier.testTag("media-library-move-refused"), verticalArrangement = Arrangement.spacedBy(space(0.5f))) {
+            Text(mediaLibraryRefusedHeading(ready.refused.size), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            ready.refused.take(8).forEach { Text(mediaLibraryRefusedLine(it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (ready.refused.size > 8) Text("and ${ready.refused.size - 8} more", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+          }
+        }
+      }
+      progress?.let { (done, total) ->
+        Text("Moving $done of $total file${if (total == 1) "" else "s"}…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        LinearProgressIndicator(progress = { done.toFloat() / total.coerceAtLeast(1) }, Modifier.fillMaxWidth())
+      }
+    }
+  }
+}

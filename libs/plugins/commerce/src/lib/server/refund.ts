@@ -519,10 +519,11 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
       await claim?.release()
       return res.status(409).json({
         error:
-          `Only $${(refundCents / 100).toFixed(2)} is left to refund on this ` +
-          `order, and the lines you selected are worth $${(
-            namedLinesCents / 100
-          ).toFixed(2)}. Refund an amount without selecting lines instead.`,
+          `Only ${CommerceModel.saleMoneyText(refundCents, order.currency)} is left to refund on this ` +
+          `order, and the lines you selected are worth ${CommerceModel.saleMoneyText(
+            namedLinesCents,
+            order.currency,
+          )}. Refund an amount without selecting lines instead.`,
       })
     }
 
@@ -554,8 +555,8 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
         return res.status(409).json({
           error:
             'This sale was paid with several cards, and no one card has ' +
-            `$${(refundCents / 100).toFixed(2)} left to refund. Refund at most ` +
-            `$${(largest / 100).toFixed(2)} at a time; hand back any part paid ` +
+            `${CommerceModel.saleMoneyText(refundCents, order.currency)} left to refund. Refund at most ` +
+            `${CommerceModel.saleMoneyText(largest, order.currency)} at a time; hand back any part paid ` +
             'in cash or by gift card at the register.',
         })
       }
@@ -680,7 +681,7 @@ export const refundHandler: PluginApiHandler = async (req, res) => {
           timeline: CommerceModel.appendOrderEvent(
             fresh,
             'refund',
-            `$${(refundCents / 100).toFixed(2)} refunded` +
+            `${CommerceModel.saleMoneyText(refundCents, fresh.currency)} refunded` +
               (fullyRefunded
                 ? ' (full)'
                 : requestedLineIds.length > 0

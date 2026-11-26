@@ -67,6 +67,15 @@ import {
   readCheckoutSessionPayload,
   resolveNativeCheckoutMode,
 } from './native-checkout'
+import {
+  type CheckoutCurrency,
+  checkoutAmountMinor,
+  checkoutLineMinor,
+  loadFxRates,
+  resolveCheckoutCurrency,
+  storeCurrencyContextFrom,
+  stripeCurrency,
+} from './currency'
 import { ensureCheckoutDomain } from './payment-method-domains'
 import {
   SELLER_STRIPE_TAX_NOT_SET_UP_MESSAGE,
@@ -447,6 +456,30 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     // metadata so the webhook never has to re-price from the product doc.
     // The add-ons are part of it (AGL-4100): what one configured unit costs.
     const listUnitAmountCents = Math.round(priceUsd * 100) + chosenModifiers.extraCents
+    /**
+     * The currency the shopper is charged in (AGL-4248). Buy-now prices and
+     * checks everything below in the store currency as before; the amounts
+     * handed to Stripe are scaled by the one ratio between the line's price
+     * there and here, so a fixed price, a discount and the tax line all keep
+     * their proportions. A direct one-time sale only; a gift card's balance
+     * and a subscription's renewals stay in the store currency.
+     */
+    let checkoutCurrency: CheckoutCurrency | undefined
+    if (body.currency && direct && !isSubscription && !product.giftCard) {
+      const currencyStore = await hostRef.collection('settings').doc('store').get()
+      const resolved = resolveCheckoutCurrency(
+        storeCurrencyContextFrom(currencyStore.data(), await loadFxRates()),
+        body.currency,
+      )
+      if (resolved.foreign) checkoutCurrency = resolved
+    }
+    const chargeCurrency = checkoutCurrency ? stripeCurrency(checkoutCurrency) : 'usd'
+    const chargeListUnit = checkoutCurrency
+      ? checkoutLineMinor(checkoutCurrency, lifted, variant, chosenModifiers.modifiers)
+      : listUnitAmountCents
+    /** A store-currency amount of this sale in the charge currency. */
+    const inCharge = (cents: number): number =>
+      checkoutCurrency ? Math.round((cents * chargeListUnit) / Math.max(1, listUnitAmountCents)) : cents
     let amountCents = listUnitAmountCents * quantity
     // THE DISCOUNTS HUB, ON THIS PATH TOO.
     //
@@ -1106,8 +1139,16 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         isSubscription ? 'subscription' : 'payment',
       ),
       'line_items[0][quantity]': String(chargedQuantity),
-      'line_items[0][price_data][currency]': 'usd',
-      'line_items[0][price_data][unit_amount]': String(chargedUnitAmountCents),
+      'line_items[0][price_data][currency]': chargeCurrency,
+      'line_items[0][price_data][unit_amount]': String(inCharge(chargedUnitAmountCents)),
+      // Pinned whenever the charge is not in USD (AGL-1956 invariant 5).
+      ...(checkoutCurrency
+        ? {
+            'line_items[0][price_data][tax_behavior]': checkoutCurrency.entry.pricesIncludeTax
+              ? 'inclusive'
+              : 'exclusive',
+          }
+        : {}),
       'line_items[0][price_data][product_data][name]': chargedLineName,
       // A long set of choices is cut from the name at 120; the description carries all of them.
       ...(lineLabel && chargedLineName.length >= 120
@@ -1193,8 +1234,9 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       ...(taxCents > 0 && !isSubscription
         ? {
             'line_items[1][quantity]': '1',
-            'line_items[1][price_data][currency]': 'usd',
-            'line_items[1][price_data][unit_amount]': String(taxCents),
+            'line_items[1][price_data][currency]': chargeCurrency,
+            'line_items[1][price_data][unit_amount]': String(inCharge(taxCents)),
+            ...(checkoutCurrency ? { 'line_items[1][price_data][tax_behavior]': 'exclusive' } : {}),
             'line_items[1][price_data][product_data][name]': taxLabel.slice(
               0,
               120,
@@ -1223,7 +1265,9 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       // the Stripe Tax on it (their registrations, their liability), so the
       // split is the take alone and none of the AGL-1956 transfer arithmetic
       // applies.
-      ...(direct && !isSubscription ? directChargeParams(feeCents) : {}),
+      ...(direct && !isSubscription
+        ? directChargeParams(checkoutCurrency ? checkoutAmountMinor(checkoutCurrency, feeCents) : feeCents)
+        : {}),
       ...(direct ? { 'metadata[chargeModel]': 'direct' } : {}),
       ...(!isSubscription && !direct
         ? CommerceModel.destinationChargeParams({
@@ -1308,10 +1352,20 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       // `computeBuyNowOrder` SUMS the metadata figure with Stripe's, on the
       // documented ground that the two are mutually exclusive, so carrying
       // both would double-count the tax on the recorded sale.
-      'metadata[unitAmountCents]': String(listUnitAmountCents),
-      'metadata[taxCents]': String(isSubscription ? 0 : taxCents),
+      // In the charge currency, like every figure Stripe reports back
+      // (AGL-4248); the order's store-currency figures come from `fxRate`.
+      'metadata[unitAmountCents]': String(inCharge(listUnitAmountCents)),
+      'metadata[taxCents]': String(isSubscription ? 0 : inCharge(taxCents)),
+      ...(checkoutCurrency
+        ? {
+            'metadata[currency]': chargeCurrency,
+            'metadata[baseCurrency]': checkoutCurrency.base.toLowerCase(),
+            'metadata[fxRate]': String(checkoutCurrency.rate),
+            'metadata[chargeFeeCents]': String(checkoutAmountMinor(checkoutCurrency, feeCents)),
+          }
+        : {}),
       ...taxEngineSessionMetadata(engineTax.stamp),
-      'metadata[discountCents]': String(discountCents),
+      'metadata[discountCents]': String(inCharge(discountCents)),
       ...(appliedCoupon ? { 'metadata[couponCode]': appliedCoupon } : {}),
       ...(appliedDiscountId
         ? { 'metadata[discountId]': appliedDiscountId }
@@ -1366,7 +1420,16 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
               ...option,
               amountCents: 0,
             }))
-          : shippingPlan.options,
+          : checkoutCurrency
+            ? CommerceModel.shippingOptionsInCurrency(shippingPlan.options, shippingSettings, {
+                code: checkoutCurrency.code,
+                subtotalMinor: chargeListUnit * quantity,
+                convert: (cents, fixed) =>
+                  checkoutAmountMinor(checkoutCurrency as CheckoutCurrency, cents, fixed),
+              })
+            : shippingPlan.options,
+        chargeCurrency,
+        checkoutCurrency?.entry.pricesIncludeTax ? { taxBehavior: 'inclusive' } : {},
       )
     }
     // The payment methods the merchant switched off (AGL-3629). Exclusions

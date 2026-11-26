@@ -21,7 +21,7 @@ import {
   type PluginRecordRouteContext,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { BUNDLE_ID } from '../constants/bundle-common'
-import { EVENT_DRAFT_RESOURCE } from './event-draft-content'
+import { EVENT_DRAFT_RESOURCE } from './event-draft-resource'
 
 /**
  * Where an event is read, published for every other surface (AGL-3743).
