@@ -36,6 +36,7 @@ import {
 } from '@aglyn/tenant-data-admin/render-cache'
 import { boundedAwait } from '@aglyn/shared-util-http/bounded-await'
 import { FieldValue } from 'firebase-admin/firestore'
+import { readAllRedirectRules } from './read-redirect-rules'
 
 /**
  * How long a render waits on the phishing review of an off-site rule before
@@ -62,17 +63,21 @@ const REDIRECT_RULES_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 /** One enabled rule, flattened to the plain data the matcher reads. */
 type StoredRedirect = HostRedirect & { $id: string }
 
+/**
+ * Every enabled rule, never a window of them (AGL-4247): a `limit(100)` here
+ * left a site's 101st rule and on silently unenforced.
+ */
 async function readEnabledRules(hostId: string): Promise<StoredRedirect[]> {
-  const rules = await firebaseAdmin
-    .app()
-    .firestore()
-    .collection('hosts')
-    .doc(hostId)
-    .collection('redirects')
-    .where('enabled', '==', true)
-    .limit(100)
-    .get()
-  return rules.docs.map((doc) => ({
+  const docs = await readAllRedirectRules(
+    firebaseAdmin
+      .app()
+      .firestore()
+      .collection('hosts')
+      .doc(hostId)
+      .collection('redirects'),
+    { enabledOnly: true },
+  )
+  return docs.map((doc) => ({
     ...(doc.data() as HostRedirect),
     $id: doc.id,
   }))
