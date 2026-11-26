@@ -60,8 +60,8 @@ beforeEach(() => {
 
 describe('the currency selector', () => {
   it('names each currency by code, sign and name', () => {
-    expect(currencyOptionLabel('NZD')).toBe('NZD $ · New Zealand dollar')
-    expect(currencyOptionLabel('EUR', false)).toBe('EUR €')
+    expect(currencyOptionLabel('NZD', 'New Zealand dollar')).toBe('NZD $ · New Zealand dollar')
+    expect(currencyOptionLabel('EUR')).toBe('EUR €')
   })
 
   it('renders nothing on a store that sells in one currency', async () => {

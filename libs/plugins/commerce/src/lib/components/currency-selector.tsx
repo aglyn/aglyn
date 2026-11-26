@@ -22,7 +22,6 @@ import MenuItem from '@mui/material/MenuItem'
 import TextField from '@mui/material/TextField'
 import { forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
-import { CURRENCY_NAMES } from '../model/commerce-currency'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { useShopperCurrency } from './shopper-currency'
 
@@ -50,11 +49,10 @@ function currencySign(code: string): string {
 }
 
 /** One currency as the selector lists it: `NZD $ · New Zealand dollar`. */
-export function currencyOptionLabel(code: string, showName = true): string {
+export function currencyOptionLabel(code: string, name?: string): string {
   const sign = currencySign(code)
   const head = sign && sign !== code ? `${code} ${sign}` : code
-  const name = CURRENCY_NAMES[code]
-  return showName && name ? `${head} · ${name}` : head
+  return name ? `${head} · ${name}` : head
 }
 
 /**
@@ -87,7 +85,7 @@ const CurrencySelector = forwardRef<HTMLDivElement, CurrencySelectorProps>((prop
       >
         {codes.map((code) => (
           <MenuItem key={code} value={code}>
-            {currencyOptionLabel(code, showName)}
+            {currencyOptionLabel(code, showName ? shopper.currencyName(code) : undefined)}
           </MenuItem>
         ))}
       </TextField>

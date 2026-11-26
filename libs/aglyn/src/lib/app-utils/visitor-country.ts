@@ -51,7 +51,7 @@ async function fetchVisitorCountry(): Promise<string | null> {
   try {
     const response = await fetch(VISITOR_REGION_ENDPOINT)
     if (!response.ok) return null
-    const payload = await response.json().catch(() => null)
+    const payload = await response.json().catch((): null => null)
     const country = typeof payload?.country === 'string' ? payload.country : null
     try {
       // A successful `null` is cached too: "the edge sends no geo here" is

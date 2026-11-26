@@ -19,17 +19,14 @@ import * as Aglyn from '@aglyn/aglyn'
 import { resolveVisitorCountry } from '@aglyn/aglyn/app-utils/visitor-country'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { formatOrderMoney } from '../model/buyer-notifications'
-import {
-  amountMinorIn,
-  convertMinor,
-  currenciesShareSign,
-  formatShopperMoney,
-  resolveShopperCurrency,
-  variantPriceMinor,
-  type FixedPrices,
-  type PublicCurrencyAnswer,
-  type StoreCurrency,
-} from '../model/commerce-currency'
+import type { FixedPrices, PublicCurrencyAnswer, StoreCurrency } from '../model/commerce-currency'
+
+/**
+ * The conversion model (country map, names, rounding), a chunk of its own:
+ * loaded only for a store that sells in more than one currency, so a
+ * one-currency store's pages carry none of it (check:plugin-budgets).
+ */
+type CurrencyModel = typeof import('../model/commerce-currency')
 
 /**
  * The shopper's currency on a storefront (AGL-4248), the way Shopify Markets
@@ -73,6 +70,8 @@ function writeChosenCurrency(hostId: string, code: string): void {
 interface CurrencyLookup {
   answer: PublicCurrencyAnswer | null
   country: string | null
+  /** Loaded with a store that sells in several currencies; absent otherwise. */
+  model?: CurrencyModel
 }
 
 const lookups = new Map<string, Promise<CurrencyLookup>>()
@@ -90,13 +89,15 @@ async function lookUpCurrency(hostId: string): Promise<CurrencyLookup> {
   } catch {
     // The store currency, as before multi-currency.
   }
+  if (!answer || answer.currencies.length < 2) return { answer, country: null }
   // The country is asked only where it can change anything: a store selling
   // in one currency, or one with auto-detect off, never sends the request.
-  const country =
-    answer && answer.currencies.length > 1 && answer.autoDetect
-      ? await resolveVisitorCountry().catch(() => null)
-      : null
-  return { answer, country }
+  const [country, model] = await Promise.all([
+    answer.autoDetect ? resolveVisitorCountry().catch((): null => null) : null,
+    import('../model/commerce-currency').catch((): undefined => undefined),
+  ])
+  // Without the model nothing can be converted: the store currency it is.
+  return model ? { answer, country, model } : { answer: { ...answer, currencies: answer.currencies.slice(0, 1) }, country: null }
 }
 
 /** One lookup per store per page, however many blocks ask. */
@@ -149,6 +150,8 @@ export interface ShopperCurrency {
   amountMinor: (baseCents: number, fixedMinor?: Record<string, number>) => number
   /** An add-on's price on a variant in the shopper currency, minor units. */
   addOnMinor: (option: PricedAddOn, variantId?: string | null) => number
+  /** A currency's name ("New Zealand dollar"), once the store's currencies are in. */
+  currencyName: (code: string) => string | undefined
   /** Minor units already in the shopper currency, as money. */
   format: (minor: number) => string
   /** Minor units in a named currency (a server answer), as money. */
@@ -163,8 +166,9 @@ export function shopperCurrencyFrom(input: {
   answer: PublicCurrencyAnswer | null
   country: string | null
   chosen: string | null
+  model?: CurrencyModel
 }): { code: string; base: string; currencies: StoreCurrency[]; entry: StoreCurrency } {
-  const { answer } = input
+  const { answer, model } = input
   if (!answer) {
     return { code: 'USD', base: 'USD', currencies: [], entry: { code: 'USD', rounding: 'none' } }
   }
@@ -172,7 +176,10 @@ export function shopperCurrencyFrom(input: {
   const currencies = answer.currencies.length
     ? answer.currencies
     : [{ code: base, rounding: 'none' as const }]
-  const code = resolveShopperCurrency({
+  if (!model || currencies.length < 2) {
+    return { code: base, base, currencies: currencies.slice(0, 1), entry: { code: base, rounding: 'none' } }
+  }
+  const code = model.resolveShopperCurrency({
     settings: { enabled: true, autoDetect: answer.autoDetect, currencies },
     base,
     country: input.country,
@@ -182,7 +189,7 @@ export function shopperCurrencyFrom(input: {
   // A currency the store cannot price (no daily rate and no rate of the
   // merchant's own) prints in the store currency, as checkout would charge
   // it. Asked through the converter, so it follows however the model rates it.
-  if (!entry || (code !== base && convertMinor(100, base, entry, answer.rates ?? undefined) == null)) {
+  if (!entry || (code !== base && model.convertMinor(100, base, entry, answer.rates ?? undefined) == null)) {
     return { code: base, base, currencies, entry: { code: base, rounding: 'none' } }
   }
   return { code, base, currencies, entry }
@@ -225,22 +232,25 @@ export function useShopperCurrency(): ShopperCurrency {
   return useMemo(() => {
     const answer = lookup?.answer ?? null
     const ready = Boolean(answer)
-    const resolved = shopperCurrencyFrom({ answer, country: lookup?.country ?? null, chosen })
+    const model = lookup?.model
+    const resolved = shopperCurrencyFrom({ answer, country: lookup?.country ?? null, chosen, model })
     const { code, base, entry } = resolved
     const rates = answer?.rates ?? undefined
-    const foreign = ready && code !== base
-    const disambiguate = currenciesShareSign(resolved.currencies.map((item) => item.code))
+    const foreign = Boolean(model) && ready && code !== base
+    const disambiguate = model
+      ? model.currenciesShareSign(resolved.currencies.map((item) => item.code))
+      : false
     const formatIn = (minor: number, currency: string | undefined) =>
-      // Before the store answers, exactly what the page printed before
-      // multi-currency: no layout shift for a one-currency store.
-      ready || currency
-        ? formatShopperMoney(minor, currency || base, { disambiguate })
-        : formatOrderMoney(minor)
+      // A one-currency store, and any store before it answers, prints
+      // exactly what the page printed before multi-currency.
+      model
+        ? model.formatShopperMoney(minor, currency || base, { disambiguate })
+        : formatOrderMoney(minor, currency || (ready ? base : 'USD'))
     const variantMinor = (variant: PricedVariant) => {
       const baseMinor = Math.round(Number(variant.priceUsd ?? 0) * 100)
       if (!foreign) return baseMinor
       return (
-        variantPriceMinor(
+        model?.variantPriceMinor(
           { priceUsd: Number(variant.priceUsd ?? 0), fixedPrices: variant.fixedPrices },
           base,
           entry,
@@ -249,7 +259,7 @@ export function useShopperCurrency(): ShopperCurrency {
       )
     }
     const amountMinor = (baseCents: number, fixedMinor?: Record<string, number>) =>
-      foreign ? (amountMinorIn(baseCents, base, entry, rates, fixedMinor) ?? baseCents) : baseCents
+      foreign ? (model?.amountMinorIn(baseCents, base, entry, rates, fixedMinor) ?? baseCents) : baseCents
     const addOnMinor = (option: PricedAddOn, variantId?: string | null) => {
       const byVariant = variantId ? option.priceCentsByVariant?.[variantId] : undefined
       const cents = typeof byVariant === 'number' && Number.isFinite(byVariant) ? byVariant : option.priceCents
@@ -264,6 +274,7 @@ export function useShopperCurrency(): ShopperCurrency {
       ready,
       foreign,
       setCurrency,
+      currencyName: (currency: string) => model?.CURRENCY_NAMES[currency],
       variantMinor,
       amountMinor,
       addOnMinor,
