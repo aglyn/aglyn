@@ -64,6 +64,10 @@ export const MOVE_CORPUS_READ_LIMIT = 40_000
 /** Page size for the walk. */
 const PAGE = 300
 
+/** Sites read at once, and queries at once within a site. */
+const HOST_CONCURRENCY = 6
+const VERSION_CONCURRENCY = 12
+
 /** One stored document that uses at least one of the files being moved. */
 export interface MediaUseHit {
   ref: FirebaseFirestore.DocumentReference
@@ -147,58 +151,69 @@ export async function walkMoveCorpus(options: {
     ...pluginHostCollectionsScannedGenerically(),
   ]
 
-  for (const hostId of hostIds) {
+  /** Runs `work` over `items`, `limit` at a time, until the budget is spent. */
+  const pool = async <T>(items: readonly T[], limit: number, work: (item: T) => Promise<void>) => {
+    let next = 0
+    await Promise.all(
+      Array.from({ length: Math.min(limit, items.length) }, async () => {
+        while (complete && next < items.length) await work(items[next++])
+      }),
+    )
+  }
+  /** Every document of a query, page by page. */
+  const readAll = async (
+    query: FirebaseFirestore.Query,
+    each: (document: FirebaseFirestore.QueryDocumentSnapshot) => void | Promise<void>,
+  ) => {
+    for await (const docs of pages(query)) {
+      if (!spend(docs.length)) return
+      for (const document of docs) await each(document)
+    }
+  }
+
+  // Sites side by side, and within a site the version reads side by side:
+  // the walk is hundreds of small queries, and one at a time it outlived the
+  // request on a workspace of fifty sites.
+  await pool(hostIds, HOST_CONCURRENCY, async (hostId) => {
     const hostRef = firestore.collection('hosts').doc(hostId)
     const host = await hostRef.get()
-    if (!spend(1)) break
+    if (!spend(1)) return
     if (host.exists) consider(host, hostId, 'site', 'Site settings')
 
+    const parents: Array<{ parent: FirebaseFirestore.QueryDocumentSnapshot; area: string }> = []
     for (const collectionName of versioned) {
-      for await (const docs of pages(hostRef.collection(collectionName))) {
-        if (!spend(docs.length)) break
-        for (const parent of docs) {
-          if (parent.get('deletedAt')) continue
-          const parentName = nameOf(parent)
-          consider(parent, hostId, collectionName, parentName)
-          // Every version: the published one, older ones and drafts. A
-          // rollback or the next publish would bring any of them back.
-          for await (const versions of pages(parent.ref.collection('versions'))) {
-            if (!spend(versions.length)) break
-            for (const version of versions) {
-              consider(version, hostId, collectionName, parentName)
-            }
-          }
-          if (!complete) break
-        }
-        if (!complete) break
-      }
-      if (!complete) break
+      await readAll(hostRef.collection(collectionName), (parent) => {
+        if (parent.get('deletedAt')) return
+        consider(parent, hostId, collectionName)
+        parents.push({ parent, area: collectionName })
+      })
     }
-    if (!complete) break
+    // Every version: the published one, older ones and drafts. A rollback or
+    // the next publish would bring any of them back.
+    await pool(parents, VERSION_CONCURRENCY, async ({ parent, area }) => {
+      const parentName = nameOf(parent)
+      await readAll(parent.ref.collection('versions'), (version) =>
+        consider(version, hostId, area, parentName),
+      )
+    })
 
-    for await (const collections of pages(hostRef.collection('collections'))) {
-      if (!spend(collections.length)) break
-      for (const collection of collections) {
-        consider(collection, hostId, 'collections')
-        for await (const entries of pages(collection.ref.collection('entries'))) {
-          if (!spend(entries.length)) break
-          for (const entry of entries) consider(entry, hostId, 'entries')
-        }
-        if (!complete) break
-      }
-      if (!complete) break
-    }
-    if (!complete) break
+    const collections: FirebaseFirestore.QueryDocumentSnapshot[] = []
+    await readAll(hostRef.collection('collections'), (collection) => {
+      consider(collection, hostId, 'collections')
+      collections.push(collection)
+    })
+    await pool(collections, VERSION_CONCURRENCY, async (collection) => {
+      await readAll(collection.ref.collection('entries'), (entry) =>
+        consider(entry, hostId, 'entries'),
+      )
+    })
 
-    for (const collectionName of generic) {
-      for await (const docs of pages(hostRef.collection(collectionName))) {
-        if (!spend(docs.length)) break
-        for (const document of docs) consider(document, hostId, collectionName)
-      }
-      if (!complete) break
-    }
-    if (!complete) break
-  }
+    await pool(generic, VERSION_CONCURRENCY, async (collectionName) => {
+      await readAll(hostRef.collection(collectionName), (document) =>
+        consider(document, hostId, collectionName),
+      )
+    })
+  })
 
   if (complete && orgId) {
     const orgRef = firestore.collection('orgs').doc(orgId)
