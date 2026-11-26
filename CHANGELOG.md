@@ -9,6 +9,48 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.32.0 — 2026-11-26
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/ad8a5f8a9...v1.32.0)
+
+### Added
+
+- **ai:** an AI chat on published sites, behind release_ai_site_chat ([AGL-4250](https://linear.app/aglyn/issue/AGL-4250))
+- **events:** calendar v2 with categories, repeats, tickets, feed and search sources ([AGL-4252](https://linear.app/aglyn/issue/AGL-4252))
+- **core:** site offers seam, events calendar v2 flag, any-flag verdict for plugin pages ([AGL-4252](https://linear.app/aglyn/issue/AGL-4252))
+- **commerce:** reports count orders in store currency; refunds name the currency ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
+- **native:** orders show the currency they were paid in ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
+- **commerce:** currencies card gets manual rates, price adjustment and opt-in rounding ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
+- **commerce:** currency model follows Shopify Markets ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
+- **commerce:** per-currency shipping prices and free-over thresholds ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
+- **commerce:** fixed prices in other currencies on products and add-ons ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
+- **commerce:** a currency selector element for storefronts ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
+- **commerce:** currency rates follow Shopify Markets ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248), [AGL-4253](https://linear.app/aglyn/issue/AGL-4253))
+- **commerce:** storefront blocks print prices in the shopper currency ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
+- **commerce:** cart read prices in the shopper currency ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
+- **commerce:** a currencies card beside store settings, and its guide ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
+- **commerce:** shopper currency hook for storefront blocks ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
+- **aglyn:** visitor country lookup moves to the lib for every site block ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
+- **commerce:** currency setup helpers and the console's setup answer ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
+- **native:** order currency fields reach the native contracts ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
+- **commerce:** checkout charges in the shopper's currency ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
+- **commerce:** multi-currency core: rates, conversion, rounding, fixed prices ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
+
+### Fixed
+
+- **events:** theme the category chip text, record the element icon tints ([AGL-4252](https://linear.app/aglyn/issue/AGL-4252))
+- **commerce:** currency selector icon uses a theme colour; docs spell gray ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
+- **commerce:** shopper currency asks the converter whether a currency can be priced ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
+
+### Performance
+
+- **commerce:** the currency model loads only for a store selling in several currencies ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
+
+### Documentation
+
+- **events:** calendar v2 page, release-flag disclosure, native parity rows ([AGL-4252](https://linear.app/aglyn/issue/AGL-4252))
+- **commerce:** say what stays in the store currency ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
+
 ## v1.31.0 — 2026-11-26
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/eea45c8c8...v1.31.0)
