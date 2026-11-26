@@ -61,6 +61,12 @@ item on your shelf with its own stock and price. The frame, the walls and the
 printing are then add-ons: 5 sizes are 5 variants, and the rest are choices the
 shopper adds on the product's page, each with its price.
 
+For a set made to order, such as a jersey, pants and gloves sold together, no
+size needs its own stock. Give the product no options at all, and add one
+required add-on group for each piece's size. Add
+[write-ins](#write-ins) for the name and number. There's then no limit on how
+the sizes combine: see [A gear set](#a-gear-set) for the whole set-up.
+
 ## Add-ons {#add-ons}
 
 **Add-ons** are choices added to an item that aren't stocked variants: the
@@ -168,6 +174,64 @@ opens the quote editor with a line for the product, its size, its add-ons and
 the quantity, priced from your catalog. A product that has no price yet can
 still take mockup requests: its page offers the form instead of **Buy now**.
 Products with **Offer a free mockup** off don't show the button or the form.
+
+### Write-ins: a name, a number {#write-ins}
+
+A **write-in** is an add-on the customer types instead of picks: the name and
+number printed on a jersey, or a line of engraving. The answer goes on the cart
+line, the order, the receipt and your order emails, like
+“Name on jersey: SMITH”.
+
+1. Under **Add-ons** in the product editor, click **New write-in**.
+2. Type the **Field name**, such as "Name on jersey". The product's page and
+   the order use this name.
+3. Set **Longest answer**, the most characters it takes (up to 40).
+4. Turn on **Numbers only** for a race number, so only digits are taken. On a
+   phone, the number keypad opens.
+5. **Adds ($)** is what a filled-in answer adds to the price. Leave it blank
+   for no charge.
+6. **Note** is a line under the field, such as "As it should print on the back".
+7. **Required** is on for a new write-in, so the item can't be added to a cart
+   until the field is filled in. Turn it off to make the field optional.
+   **Show on the website** works as it does for any group.
+
+On the product's page, a write-in is a text field among the other choices,
+with drop-downs or with picture cards. It shows how many characters are left
+and what's wrong with an answer, such as a letter in a numbers-only field. Two
+riders' sets with different names are two lines in the cart.
+
+At the register, the item's choices ask the same field, so you can type the
+name the customer gives you. A quote's line asks it too.
+
+### Name the group on the order {#name-the-group-on-the-order}
+
+A choice like "M" or "32" doesn't say what it is on its own. Turn on **Name the
+group on the order** on its group, and the order, the receipt and your emails
+say “Jersey size: M, Pant size: 32” instead of “M, 32”.
+
+### A gear set {#a-gear-set}
+
+A set of pieces sold only together, each in its own size and made to order,
+such as a motocross jersey, pants and gloves, is one product with add-ons:
+
+1. Make the product with its price and no options, so it is one variant. If
+   each set is made to order, leave its **Inventory** blank so it never sells
+   out.
+2. Add a group for each piece's size: **Jersey size** (S, M, L, XL, 2XL),
+   **Pant size** (28, 30, 32 and up) and **Glove size**. Set **At least** to 1
+   on each one so it is required, and turn on **Name the group on the order**.
+3. Add a write-in **Name on jersey** (longest answer 14) and a write-in
+   **Number** (longest answer 3, **Numbers only**).
+4. To charge more for some sizes, type what each adds, such as +$20.00 on 3XL.
+   To make gloves optional, set the glove group's **At least** to 0.
+5. In the Besigner, set the **Product detail** block's **Show choices as** to
+   **Picture cards** if you want each size as a card.
+
+The order then reads like “Jersey size: L, Pant size: 32, Glove size: M, Name
+on jersey: SMITH, Number: 27”. The sizes combine any way the rider needs, with
+no limit on combinations. To make many sets the same way, set up one, then
+copy its add-ons to the others through
+[import and export](store-import-and-export.md#add-ons-check-in-and-quick-keys).
 
 ## Sell in person only {#sell-in-person-only}
 
