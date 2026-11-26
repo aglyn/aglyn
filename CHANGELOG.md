@@ -43,6 +43,8 @@ content on the marketing site and is written separately.
 ### Fixed
 
 - **events:** theme the category chip text, record the element icon tints ([AGL-4252](https://linear.app/aglyn/issue/AGL-4252))
+- **events:** one recorded icon tint for every events element ([AGL-4252](https://linear.app/aglyn/issue/AGL-4252))
+- **media:** a private upload is stored, not answered with a 500 ([AGL-4249](https://linear.app/aglyn/issue/AGL-4249))
 - **commerce:** currency selector icon uses a theme colour; docs spell gray ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
 - **commerce:** shopper currency asks the converter whether a currency can be priced ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
 
