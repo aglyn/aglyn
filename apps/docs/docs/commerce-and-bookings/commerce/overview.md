@@ -786,7 +786,9 @@ link and the receipt footer.
    [The product page template](../../guides/commerce-end-to-end.md#the-product-page-template).
 2. Choose the **Collection page template**, a page with a **Product grid**,
    rendered at `/collections/{slug}`.
-3. Leave **Currency** at USD; charges settle in USD.
+3. Leave **Currency** at USD; charges settle in USD. To show and charge
+   prices in other currencies too, use the **Currencies** card beside it: see
+   [Sell in other currencies](./currencies.md).
 4. Turn on **Allow guest checkout** to let buyers pay without an account.
 5. Optionally enter a **Terms URL**, linked from checkout, and a **Receipt
    footer**.
@@ -839,6 +841,7 @@ The [Storefront sales tax](#storefront-sales-tax) card sits beside it.
 ## Related
 
 - [Product catalog](catalog.md)
+- [Sell in other currencies](currencies.md)
 - [Use ShipStation with Aglyn](use-shipstation.md)
 - [Use ShippingEasy with Aglyn](use-shippingeasy.md)
 - [Use Pirate Ship with Aglyn](use-pirate-ship.md)
