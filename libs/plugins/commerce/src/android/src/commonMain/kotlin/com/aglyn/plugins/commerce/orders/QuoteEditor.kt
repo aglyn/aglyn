@@ -172,7 +172,7 @@ data class QuoteLineDraft(
         fields["modifiers"] = JsonArray(
           modifiers.map { pick ->
             val entry = mutableMapOf<String, JsonElement>("groupId" to JsonPrimitive(pick.groupId), "optionId" to JsonPrimitive(pick.optionId))
-            // A write-in's answer (the gear set builder); the server cleans and checks it.
+            // A write-in's answer (write-ins); the server cleans and checks it.
             pick.text?.takeIf { it.isNotBlank() }?.let { entry["text"] = JsonPrimitive(it) }
             JsonObject(entry)
           },
@@ -748,7 +748,7 @@ private fun ModifierField(group: ProductModifierGroup, line: QuoteLineDraft, ena
   val variantId = line.variantId.ifEmpty { null }
   val chosen = line.modifiers.filter { it.groupId == group.id }.map { it.optionId }
   if (group.isWriteIn()) {
-    // A write-in (the gear set builder): the answer the customer gave, typed into the quote.
+    // A write-in (write-ins): the answer the customer gave, typed into the quote.
     val option = group.options.firstOrNull()
     val typed = writeInAnswer(line.modifiers, group)
     val problem = writeInProblem(group, typed)

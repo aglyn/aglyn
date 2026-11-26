@@ -91,8 +91,13 @@ beforeEach(() => {
 
 describe('ShippingSettingsCard coverage (AGL-1791)', () => {
   it('names the destinations checkout turns away, and offers the fix', () => {
+    // Checkout collects the countries the zones name, so the gap is a zone
+    // nothing is priced on.
     listener.shipping = {
-      zones: [{ id: 'us', name: 'Domestic', countries: ['US'] }],
+      zones: [
+        { id: 'us', name: 'Domestic', countries: ['US'] },
+        { id: 'nz', name: 'New Zealand', countries: ['NZ'] },
+      ],
       rates: [
         {
           id: 'std',
@@ -106,12 +111,10 @@ describe('ShippingSettingsCard coverage (AGL-1791)', () => {
     render(<ShippingSettingsCard hostId="host-1" />)
 
     const warning = screen.getByRole('alert')
-    expect(warning.textContent).toContain('turns away 5 of the 6 destinations')
+    expect(warning.textContent).toContain('turns away 1 of the 2 destinations')
     // The countries by name, not by code: a merchant reading this page is
     // being told which orders they are losing.
-    expect(warning.textContent).toContain(
-      'Canada, United Kingdom, Australia, Germany, France',
-    )
+    expect(warning.textContent).toContain('No rate reaches New Zealand')
     // A warning with no action is noise, so the one-click fix rides on it.
     expect(
       screen.getByRole('button', { name: 'Add rest-of-world zone' }),
@@ -144,7 +147,7 @@ describe('ShippingSettingsCard coverage (AGL-1791)', () => {
     render(<ShippingSettingsCard hostId="host-1" />)
     expect(screen.queryByRole('alert')).toBeNull()
     expect(cardText()).toContain(
-      'Checkout can price shipping to every destination',
+      'Checkout can price shipping to every country it can collect an address for',
     )
     // One '*' zone asks the shopper nothing, so the extra-step note is wrong
     // here — and it is the note most likely to be shown unconditionally.
@@ -214,7 +217,10 @@ describe('ShippingSettingsCard coverage (AGL-1791)', () => {
     // The whole point of computing off `current`: a merchant widening a zone
     // sees the answer move under their hands, not after a round trip.
     listener.shipping = {
-      zones: [{ id: 'us', name: 'Domestic', countries: ['US'] }],
+      zones: [
+        { id: 'us', name: 'Domestic', countries: ['US'] },
+        { id: 'nz', name: 'New Zealand', countries: ['NZ'] },
+      ],
       rates: [
         {
           id: 'std',
@@ -226,11 +232,12 @@ describe('ShippingSettingsCard coverage (AGL-1791)', () => {
       ],
     }
     render(<ShippingSettingsCard hostId="host-1" />)
-    expect(screen.getByRole('alert').textContent).toContain('Canada')
+    expect(screen.getByRole('alert').textContent).toContain('New Zealand')
 
-    fireEvent.change(screen.getByLabelText('Countries'), {
-      target: { value: 'US, CA, GB, AU, DE, FR' },
-    })
+    // Add New Zealand to the priced zone through the country picker.
+    const picker = screen.getAllByLabelText('Countries')[0] as HTMLInputElement
+    fireEvent.change(picker, { target: { value: 'New Zea' } })
+    fireEvent.click(screen.getByRole('option', { name: 'New Zealand' }))
     expect(screen.queryByRole('alert')).toBeNull()
     expect(cardText()).toContain(
       'Checkout can price shipping to every destination',
@@ -239,7 +246,10 @@ describe('ShippingSettingsCard coverage (AGL-1791)', () => {
 
   it('adds a rest-of-world ZONE only, leaving the price to the merchant', () => {
     listener.shipping = {
-      zones: [{ id: 'us', name: 'Domestic', countries: ['US'] }],
+      zones: [
+        { id: 'us', name: 'Domestic', countries: ['US'] },
+        { id: 'nz', name: 'New Zealand', countries: ['NZ'] },
+      ],
       rates: [
         {
           id: 'std',
@@ -255,8 +265,9 @@ describe('ShippingSettingsCard coverage (AGL-1791)', () => {
       screen.getByRole('button', { name: 'Add rest-of-world zone' }),
     )
 
-    const zones = screen.getAllByLabelText('Countries') as HTMLInputElement[]
-    expect(zones.map((input) => input.value)).toEqual(['US', '*'])
+    // The new zone's picker holds the one Rest of world chip.
+    expect(screen.getAllByLabelText('Countries')).toHaveLength(3)
+    expect(screen.getAllByText('Rest of world')).toHaveLength(1)
     // A rate defaulted here would post at a price nobody chose, and a blank
     // flat rate resolves to FREE — so the warning correctly persists until
     // the merchant prices the new zone, and the button is gone.

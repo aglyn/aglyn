@@ -183,7 +183,7 @@ describe('shipping', () => {
     })
   })
 
-  it('warns when a zone layout turns buyers away', () => {
+  it('does not warn when every zone it names is priced', () => {
     const result = apply(EMPTY, freeOverFifty)
     const withCanada = written(result)
     const second = apply({ settings: { shipping: withCanada }, locations: [] }, {
@@ -194,7 +194,8 @@ describe('shipping', () => {
       freeOverUsd: undefined,
       amountUsd: 12,
     })
-    expect(second.ok && second.warnings.join(' ')).toMatch(/turns away buyers in/)
+    // Checkout collects only the countries the zones name, and both are priced.
+    expect(second.ok && second.warnings.join(' ')).not.toMatch(/turns away buyers in/)
   })
 })
 

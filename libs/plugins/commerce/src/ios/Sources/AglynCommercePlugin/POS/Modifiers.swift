@@ -29,17 +29,17 @@ struct LineModifier: Equatable {
   let group: String
   let name: String
   let priceCents: Int
-  /// A write-in's answer as sold, such as the name for the jersey.
+  /// A write-in's answer as sold, such as the text to engrave.
   var text: String? = nil
-  /// The group's name prints before the choice on the line ("Jersey size: M").
+  /// The group's name prints before the choice on the line ("Size: M").
   var nameOnOrder = false
 }
 
 /*
- * WRITE-INS (the gear set builder). A group of `kind: "text"` asks for a typed
- * answer instead of a pick: the name and number printed on a jersey. It holds
+ * WRITE-INS (write-ins). A group of `kind: "text"` asks for a typed
+ * answer instead of a pick: a name to print, an engraving, a cake message. It holds
  * exactly one option, which prices it and carries its helper note; the pick
- * adds the `text`, which prints on the line as "Name on jersey: SMITH".
+ * adds the `text`, which prints on the line as "Engraving: For Sam".
  */
 
 /// A write-in's longest answer (`writeInMaxLength`).
@@ -231,7 +231,7 @@ func soldLineModifiers(_ groups: [ProductModifierGroup], _ raw: [ModifierSelecti
 }
 
 /// How one modifier prints on a line (`modifierLineText`): its name (`Oat milk`), its group and name when the group
-/// asks for it (`Jersey size: M`), or a write-in's name and answer (`Name on jersey: SMITH`).
+/// asks for it (`Size: M`), or a write-in's name and answer (`Engraving: For Sam`).
 func modifierLineText(name: String, group: String?, text: String?, nameOnOrder: Bool?) -> String {
   if let text, !text.isEmpty { return "\(group?.isEmpty == false ? group! : name): \(text)" }
   if nameOnOrder == true, let group, !group.isEmpty { return "\(group): \(name)" }
@@ -256,7 +256,7 @@ func lineLabelWithModifiers(_ variantLabel: String?, _ modifierNames: [String]) 
     .compactMap { $0 }.joined(separator: " / ")
 }
 
-/// Two lines merge only when they are the same item with the same choices: two riders are two lines.
+/// Two lines merge only when they are the same item with the same choices: two answers are two lines.
 func modifierSelectionKey(_ selection: [ModifierSelection]) -> String {
   selection.map { pick in
     if let text = pick.text, !text.isEmpty { return "\(pick.groupId):\(pick.optionId)=\(text)" }

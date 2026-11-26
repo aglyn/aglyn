@@ -209,7 +209,7 @@ export function sanitizePosKioskLines(
       if (!ID_PATTERN.test(groupId) || !ID_PATTERN.test(optionId)) {
         return { ok: false, error: 'A choice on an item is no longer offered.' }
       }
-      // A write-in's answer (the gear set builder), checked against its group when the order is priced.
+      // A write-in's answer (write-ins), checked against its group when the order is priced.
       const text = cleanWriteIn(pick?.['text'])
       modifiers.push(text ? { groupId, optionId, text } : { groupId, optionId })
     }

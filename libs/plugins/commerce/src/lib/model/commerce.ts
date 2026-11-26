@@ -615,8 +615,9 @@ export function variantMatrixProblem(options: ProductOption[] | undefined): stri
   if (count <= COMMERCE_MAX_VARIANTS) return null
   return (
     `These options make ${count.toLocaleString('en-US')} combinations, and a product holds at most ` +
-    `${COMMERCE_MAX_VARIANTS}. Remove some values, or move choices that don’t need their own stock ` +
-    '(walls, printing, extras) to Add-ons, priced by option where they cost more on a larger size.'
+    `${COMMERCE_MAX_VARIANTS}. Keep as options only what you stock separately, and move the rest to ` +
+    'Add-ons: they combine without a limit, can be required, and can cost more on some options. A ' +
+    'choice the customer types, such as a name to print, is a write-in.'
   )
 }
 

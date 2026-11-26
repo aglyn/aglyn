@@ -90,7 +90,7 @@ private fun clampQuantity(quantity: Int) = quantity.coerceIn(0, POS_LINE_MAX_QUA
 
 /** Adds [quantity] of a pick: the same item with the same choices grows its line. */
 fun Cart.add(pick: CartPick, quantity: Int = 1): Cart {
-  // A write-in's answer stays on its pick (the gear set builder): two riders are two lines.
+  // A write-in's answer stays on its pick (write-ins): two answers are two lines.
   val modifiers = pick.modifiers.map { ModifierSelection(it.groupId, it.optionId, cleanWriteIn(it.text).ifEmpty { null }) }
   val key = cartLineKey(pick.productId, pick.variantId, modifiers)
   lines.firstOrNull { it.key == key }?.let { return setQuantity(key, it.quantity + quantity) }

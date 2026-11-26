@@ -27,7 +27,7 @@ func writeInTyped(_ group: ProductModifierGroup, _ typed: String) -> String {
   return String(cut)
 }
 
-/// One write-in at the register or the kiosk (the gear set builder): a text field named after the group, the number
+/// One write-in at the register or the kiosk (write-ins): a text field named after the group, the number
 /// pad for numbers only, with its note, what a filled answer adds and a count of characters under it.
 struct WriteInFieldSection: View {
   let group: ProductModifierGroup

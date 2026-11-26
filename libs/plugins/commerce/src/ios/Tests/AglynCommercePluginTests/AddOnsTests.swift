@@ -157,12 +157,12 @@ final class AddOnsTests: XCTestCase {
     XCTAssertEqual(group.maxLength, 20)
     XCTAssertEqual(group.online, true)
     XCTAssertEqual(group.choices.map(\.id), ["o2"])
-    let named = group.withWriteInName("Name on jersey")
-    XCTAssertEqual(named.choices[0].name, "Name on jersey", "its one choice carries the field's name")
+    let named = group.withWriteInName("Engraving")
+    XCTAssertEqual(named.choices[0].name, "Engraving", "its one choice carries the field's name")
     XCTAssertEqual(named.withWriteInLength("99").maxLength, 40)
     XCTAssertEqual(named.withWriteInLength("").maxLength, 1)
     XCTAssertEqual(named.withWriteInLength("14").maxLength, 14)
-    XCTAssertEqual(writeInExample(named), "Name on jersey: SMITH")
+    XCTAssertEqual(writeInExample(named), "Engraving: For Sam")
   }
 
   func testAWriteInReadsAndSavesItsKindLengthNumbersOnlyAndNote() throws {

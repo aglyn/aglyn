@@ -1,19 +1,42 @@
+import AglynContracts
 import AglynCore
 import Foundation
 
 /// What a store's saved shipping zones and rates cover, as the console's Shipping card says it (`summarizeShippingCoverage`
-/// in `commerce-shipping.ts`): which of the six destinations checkout collects an address for are reached by at least one
+/// in `commerce-shipping.ts`): which of the destinations checkout collects an address for are reached by at least one
 /// rate, which it turns away, and whether the shopper is asked where the parcel is going. A port of the console's resolver
 /// (zones, the four priced rate kinds, local pickup, the five-option cap) replayed from `function-cases.generated.json`, so a
 /// change to the TypeScript fails there until this follows.
 enum ShippingCoverage {
-  /// The destinations a storefront session collects an address for, in the order the console lists them.
-  static let countries = ["US", "CA", "GB", "AU", "DE", "FR"]
+  /// The destinations a session collects an address for when the store prices no shipping (`CHECKOUT_SHIPPING_COUNTRIES`).
+  static let fallbackCountries = ["US", "CA", "GB", "AU", "DE", "FR"]
 
-  /// Shopper-facing names for those destinations.
-  static let names = [
-    "US": "United States", "CA": "Canada", "GB": "United Kingdom", "AU": "Australia", "DE": "Germany", "FR": "France",
-  ]
+  /// Shopper-facing names for every country checkout can collect an address for.
+  static var names: [String: String] { ContractValues.shared.checkoutShippingCountryNames }
+
+  /// Whether the store prices shipping at all: local pickup, or a rate bound to a zone that exists (`merchantPricesShipping`).
+  private static func pricesShipping(_ settings: JSONValue?) -> Bool {
+    guard let settings, settings != .null else { return false }
+    if ScreenValues.truthy(settings["localPickup"]) { return true }
+    let zoneIDs = Set((settings["zones"]?.arrayValue ?? []).map { $0["id"]?.stringValue ?? "" })
+    return (settings["rates"]?.arrayValue ?? []).contains { zoneIDs.contains($0["zoneId"]?.stringValue ?? "") }
+  }
+
+  /// The countries THIS store's checkout collects an address for (`checkoutShippingCountries`): the ones its zones name, every
+  /// country for a rest-of-world zone, and the six above for a store that prices no shipping.
+  static func countries(_ settings: JSONValue?) -> [String] {
+    let zones = settings?["zones"]?.arrayValue ?? []
+    guard pricesShipping(settings), !zones.isEmpty else { return fallbackCountries }
+    var named: [String] = []
+    for zone in zones {
+      for value in codes(zone) {
+        let code = zoneCode(value)
+        if code == "*" { return ContractValues.shared.stripeShippingCountryCodes }
+        if names[code] != nil, !named.contains(code) { named.append(code) }
+      }
+    }
+    return named.isEmpty ? fallbackCountries : named
+  }
 
   /// Stripe shows a session at most this many shipping options.
   static let maxOptions = 5
@@ -127,6 +150,7 @@ enum ShippingCoverage {
 
   /// What a store's settings reach (`summarizeShippingCoverage`).
   struct Coverage: Equatable {
+    var collectable: Int
     var served: [String]
     var unserved: [String]
     var shipsNowhere: Bool
@@ -139,7 +163,8 @@ enum ShippingCoverage {
     var served: [String] = []
     var unserved: [String] = []
     var offers = Set<String>()
-    for country in countries {
+    let collectable = countries(settings)
+    for country in collectable {
       let options = checkoutOptions(settings, [country])
       offers.insert(key(options))
       // Asked of the shippable list: local pickup is a collection choice, not a rate, so it never counts as coverage.
@@ -147,12 +172,16 @@ enum ShippingCoverage {
     }
     let zones = settings?["zones"]?.arrayValue ?? []
     return Coverage(
-      served: served, unserved: served.isEmpty ? [] : unserved, shipsNowhere: served.isEmpty, asksDestination: offers.count > 1,
+      collectable: collectable.count, served: served, unserved: served.isEmpty ? [] : unserved, shipsNowhere: served.isEmpty, asksDestination: offers.count > 1,
       offersLocalPickup: ScreenValues.truthy(settings?["localPickup"]),
       hasRestOfWorldZone: zones.contains { codes($0).contains { $0.stringValue == "*" } })
   }
 
-  private static func named(_ codes: [String]) -> String { codes.map { names[$0] ?? $0 }.joined(separator: ", ") }
+  /// Names, the first eight in full: a rest-of-world gap can be 200 countries.
+  private static func named(_ codes: [String]) -> String {
+    let all = codes.map { names[$0] ?? $0 }
+    return all.count > 8 ? all.prefix(8).joined(separator: ", ") + " and \(all.count - 8) more" : all.joined(separator: ", ")
+  }
 
   /// The console's own sentences (`describeShippingCoverage`), so a store reads the same on every surface.
   static func words(_ coverage: Coverage) -> (headline: String, detail: String, note: String, asks: String) {
@@ -161,7 +190,7 @@ enum ShippingCoverage {
       ? "Rates differ by destination, so checkout asks the shopper where the parcel is going before it can price one." : ""
     if !coverage.unserved.isEmpty {
       return (
-        "Checkout turns away \(coverage.unserved.count) of the \(countries.count) destinations it collects addresses for",
+        "Checkout turns away \(coverage.unserved.count) of the \(coverage.collectable) destinations it collects addresses for",
         "No rate reaches \(named(coverage.unserved)), so an order shipping there is refused rather than posted for free. "
           + (coverage.offersLocalPickup
             ? "Local pickup does not cover them: it is a collection choice, not a rate, so it is offered where checkout completes and closes no gap here. "
@@ -178,6 +207,8 @@ enum ShippingCoverage {
         coverage.offersLocalPickup
         ? "No rate reaches any destination, so local pickup is the only delivery choice checkout offers. Nobody is turned away and no shipping is charged."
         : "No rate reaches any destination, so checkout charges no shipping and turns nobody away."
+    } else if coverage.hasRestOfWorldZone && coverage.served.count == ContractValues.shared.stripeShippingCountryCodes.count {
+      note = "Checkout can price shipping to every country it can collect an address for."
     } else {
       note = "Checkout can price shipping to every destination it collects an address for: \(named(coverage.served))."
     }
@@ -198,7 +229,7 @@ enum ShippingCoverage {
       "servedNames": .string(named(coverage.served)),
       "unservedNames": .string(named(coverage.unserved)),
       "unservedCount": .number(Double(coverage.unserved.count)),
-      "countryCount": .number(Double(countries.count)),
+      "countryCount": .number(Double(coverage.collectable)),
       "shipsNowhere": .bool(coverage.shipsNowhere),
       "asksDestination": .bool(coverage.asksDestination),
       "offersLocalPickup": .bool(coverage.offersLocalPickup),

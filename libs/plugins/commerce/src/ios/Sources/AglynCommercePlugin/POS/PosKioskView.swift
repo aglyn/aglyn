@@ -337,7 +337,7 @@ private struct KioskItemSheet: View {
         }
         ForEach(item.modifierGroups, id: \.id) { group in
           if group.isWriteIn {
-            // A write-in (the gear set builder): the customer types the answer, such as the name for the jersey.
+            // A write-in (write-ins): the customer types the answer, such as the text to engrave.
             WriteInFieldSection(
               group: group, variantID: variantID, text: picks.first { $0.groupId == group.id }?.text ?? "", money: model.money
             ) { typed in

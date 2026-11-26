@@ -336,7 +336,7 @@ struct ProductDetailView: View {
       if !row.item.modifierGroups.isEmpty {
         Section("Options") {
           ForEach(row.item.modifierGroups, id: \.id) { group in
-            // A write-in (the gear set builder) is a field, not a list of choices.
+            // A write-in (write-ins) is a field, not a list of choices.
             LabeledContent(
               group.name,
               value: group.isWriteIn

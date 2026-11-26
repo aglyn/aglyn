@@ -567,7 +567,13 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         error: CARRIER_POSTAL_CODE_MESSAGE,
         needsShippingCountry: true,
         needsShippingPostalCode: true,
-        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+        shippingCountries: [
+          ...CommerceModel.checkoutShippingCountries(
+            storeSettings.get('shipping') as
+              | CommerceModel.ShippingSettings
+              | undefined,
+          ),
+        ],
       })
     }
     // The shopper is asked, then the answer is ENFORCED (AGL-1721): a declared
@@ -579,7 +585,13 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       return res.status(400).json({
         error: 'Choose where you’re shipping to.',
         needsShippingCountry: true,
-        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+        shippingCountries: [
+          ...CommerceModel.checkoutShippingCountries(
+            storeSettings.get('shipping') as
+              | CommerceModel.ShippingSettings
+              | undefined,
+          ),
+        ],
       })
     }
     if (shippingPlan.refusal === 'destination-unserved') {
@@ -592,7 +604,13 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
           'that country'
         }.`,
         needsShippingCountry: true,
-        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+        shippingCountries: [
+          ...CommerceModel.checkoutShippingCountries(
+            storeSettings.get('shipping') as
+              | CommerceModel.ShippingSettings
+              | undefined,
+          ),
+        ],
       })
     }
     // The merchant priced shipping and their table cannot reach this cart

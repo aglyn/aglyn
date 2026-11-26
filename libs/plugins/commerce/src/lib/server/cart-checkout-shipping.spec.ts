@@ -446,14 +446,10 @@ describe('cart checkout shipping options (AGL-1707)', () => {
     const { result, body } = await runCheckout({ shipping })
     expect(result.status).toBe(400)
     expect(result.body).toMatchObject({ needsShippingCountry: true })
-    expect(result.body.shippingCountries).toEqual([
-      'US',
-      'CA',
-      'GB',
-      'AU',
-      'DE',
-      'FR',
-    ])
+    // The countries the zones name: US, and every country for rest of world.
+    expect(result.body.shippingCountries).toEqual(
+      expect.arrayContaining(['US', 'NZ', 'IE']),
+    )
     // No session at all — not a session with the union on it.
     expect(body).toBeNull()
     expect(stripeCalls('/v1/checkout/sessions')).toBe(0)
@@ -463,7 +459,7 @@ describe('cart checkout shipping options (AGL-1707)', () => {
     // The forgery shape. A crafted body naming something outside the
     // collectable list must not fall through to the old union — which is what
     // a handler that only narrowed WHEN IT RECOGNISED the country would do.
-    for (const shippingCountry of ['JP', '', 'us; DROP', null, 42, ['US']]) {
+    for (const shippingCountry of ['ZZ', '', 'us; DROP', null, 42, ['US']]) {
       const { result, body } = await runCheckout(
         { shipping },
         { shippingCountry },
@@ -540,7 +536,7 @@ describe('cart checkout shipping options (AGL-1707)', () => {
     }
   })
 
-  it('keeps all six collectable countries when one rate serves them all', async () => {
+  it('collects an address in every country when one rest-of-world rate serves them all', async () => {
     // The configuration AGL-1721 calls invisible, and the one that must not
     // regress: a single '*' zone resolves the same everywhere, so the union
     // IS exact, no destination is needed, and the session is the one AGL-1707
@@ -561,7 +557,10 @@ describe('cart checkout shipping options (AGL-1707)', () => {
       tax: { mode: 'stripe' },
     })
     expect(result.status).toBe(200)
-    expect(allowedCountries(body)).toEqual(['US', 'CA', 'GB', 'AU', 'DE', 'FR'])
+    expect(allowedCountries(body)).toEqual(
+      expect.arrayContaining(['US', 'NZ', 'IE', 'AU', 'GB', 'NL']),
+    )
+    expect(allowedCountries(body).length).toBeGreaterThan(200)
     expect(shippingOptions(body).map((option) => option.amount)).toEqual([
       '500',
     ])

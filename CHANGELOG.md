@@ -23,6 +23,7 @@ content on the marketing site and is written separately.
 ### Fixed
 
 - **redirects:** a site enforces every redirect rule, not the first 100
+- **commerce:** write-ins and the 100-variant message speak for any product, not one kind
 
 ### Documentation
 

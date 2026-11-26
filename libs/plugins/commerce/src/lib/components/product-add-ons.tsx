@@ -64,7 +64,7 @@ export function withGroupAnswer(
 }
 
 /**
- * The picks with a write-in's answer replaced (the gear set builder): the
+ * The picks with a write-in's answer replaced (write-ins): the
  * text as typed so far, kept while it is being typed; an empty answer leaves
  * the group unanswered. The server cleans and checks it.
  */

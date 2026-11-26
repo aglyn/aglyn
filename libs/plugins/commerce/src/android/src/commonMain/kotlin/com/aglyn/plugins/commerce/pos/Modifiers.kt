@@ -11,10 +11,10 @@ import com.aglyn.contracts.ProductModifierOption
  * The register sends only the chosen option ids; the SERVER prices them from
  * the product, so the figures here are a preview checked by the same rules.
  *
- * WRITE-INS (the gear set builder). A group of `kind: "text"` asks for a typed
- * answer instead of a pick: the name and number printed on a jersey. It holds
+ * WRITE-INS (write-ins). A group of `kind: "text"` asks for a typed
+ * answer instead of a pick: a name to print, an engraving, a cake message. It holds
  * exactly one option, which prices it and carries its helper note; the pick
- * adds the `text`, which prints on the line as "Name on jersey: SMITH".
+ * adds the `text`, which prints on the line as "Engraving: For Sam".
  */
 
 const val POS_MAX_MODIFIER_GROUPS = 10
@@ -40,9 +40,9 @@ data class LineModifier(
   val group: String,
   val name: String,
   val priceCents: Long,
-  /** A write-in's answer as sold, such as the name for the jersey. */
+  /** A write-in's answer as sold, such as the text to engrave. */
   val text: String? = null,
-  /** The group's name prints before the choice on the line ("Jersey size: M"). */
+  /** The group's name prints before the choice on the line ("Size: M"). */
   val nameOnOrder: Boolean = false,
 )
 
@@ -210,7 +210,7 @@ fun resolveLineModifiers(productName: String, groups: List<ProductModifierGroup>
   val modifiers = mutableListOf<LineModifier>()
   for (group in usable) {
     if (group.isWriteIn()) {
-      // A write-in (the gear set builder): its answer is checked, cleaned and kept.
+      // A write-in (write-ins): its answer is checked, cleaned and kept.
       val option = group.options.first()
       val pick = picks.firstOrNull { it.groupId == group.id && it.optionId == option.id }
       writeInProblem(group, pick?.text)?.let { return ResolvedModifiers.Refused("$it ($productName)") }
@@ -236,7 +236,7 @@ fun resolveLineModifiers(productName: String, groups: List<ProductModifierGroup>
 
 /**
  * How one modifier prints on a line (`modifierLineText`): its name (`Oat milk`), its group and name when the group asks
- * for it (`Jersey size: M`), or a write-in's name and answer (`Name on jersey: SMITH`).
+ * for it (`Size: M`), or a write-in's name and answer (`Engraving: For Sam`).
  */
 fun modifierLineText(name: String, group: String?, text: String?, nameOnOrder: Boolean?): String = when {
   !text.isNullOrEmpty() -> "${group?.ifEmpty { null } ?: name}: $text"
@@ -256,6 +256,6 @@ fun lineLabelWithModifiers(variantLabel: String?, modifiers: List<LineModifier>)
 fun modifierSelectionOf(modifiers: List<LineModifier>): List<ModifierSelection> =
   modifiers.map { ModifierSelection(it.groupId, it.optionId, it.text?.ifEmpty { null }) }
 
-/** Two lines merge only when they are the same item with the same choices, and the same answers: two riders are two lines. */
+/** Two lines merge only when they are the same item with the same choices, and the same answers: two answers are two lines. */
 fun modifierSelectionKey(selection: List<ModifierSelection>): String =
   selection.map { if (!it.text.isNullOrEmpty()) "${it.groupId}:${it.optionId}=${it.text}" else "${it.groupId}:${it.optionId}" }.sorted().joinToString("|")

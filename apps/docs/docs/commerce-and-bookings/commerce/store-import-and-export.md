@@ -244,14 +244,14 @@ of them:
 - `register only` turns off **Show on the website**. Left out, the group is
   shown on the website.
 - `name on order` turns on **Name the group on the order**, so the order says
-  “Jersey size: M” instead of “M”.
+  “Size: M” instead of “M”.
 - `write-in` makes the group a [write-in](catalog.md#write-ins), a field the
   customer types into. After the colon, write the field's name and what a
   filled-in answer adds, if anything. `up to 14` is the longest answer, and
   `numbers only` takes digits only:
 
 ```text
-Jersey size (at least 1, name on order): S, M, L, XL; Name on jersey (write-in, at least 1, up to 14): Name on jersey; Number (write-in, at least 1, up to 3, numbers only): Number +$5.00
+Size (at least 1, name on order): S, M, L, XL; Engraving (write-in, up to 30): Engraving +$10.00; House number (write-in, at least 1, up to 5, numbers only): House number
 ```
 
 Parentheses after a choice hold what it adds on a particular variant, by the
