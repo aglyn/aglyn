@@ -59,7 +59,7 @@ that apply to that product:
   photos, SEO, categories, tags and collections. It counts toward your plan's
   product allowance.
 - **View on site** opens the product's page on your site in a new tab. It's
-  greyed out for draft and archived products, and for products you
+  grayed out for draft and archived products, and for products you
   [sell in person only](#sell-in-person-only), because those have no page.
 - **Adjust stock** appears when the product tracks inventory.
 - **Print labels** appears on physical products, and **License keys** on
