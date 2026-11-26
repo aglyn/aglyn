@@ -102,7 +102,7 @@ export const schema: Aglyn.ComponentSchema<CurrencySelectorProps> = {
     'Lets shoppers pick the currency prices show in, from the currencies the store sells in. ' +
     'Hidden when the store sells in one currency.',
   category: Aglyn.ComponentCategory.COMMERCE,
-  icon: { path: mdiCurrencyUsd.path, sx: { color: '#2e7d32' } },
+  icon: { path: mdiCurrencyUsd.path, sx: { color: 'success.main' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
   attributes: [
     {
@@ -128,7 +128,7 @@ export const presets: Aglyn.PresetSchema[] = [
     pluginId: BUNDLE_ID,
     description: 'Shoppers pick the currency prices show in',
     category: Aglyn.ComponentCategory.COMMERCE,
-    icon: { path: mdiCurrencyUsd.path, sx: { color: '#2e7d32' } },
+    icon: { path: mdiCurrencyUsd.path, sx: { color: 'success.main' } },
     data: {
       $id: null,
       componentId: ID,

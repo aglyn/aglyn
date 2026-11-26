@@ -91,7 +91,7 @@ shoppers in that currency cover it. Leave it at 0 to charge the rate exactly.
 Where a converted price is not the one you want, set the price yourself. A
 fixed price is charged exactly as you enter it, with no conversion,
 adjustment or rounding. Leave a field blank to keep converting it; the blank field shows the
-converted price in grey.
+converted price in gray.
 
 - **Products**: in the product editor, under **Prices in other currencies**,
   enter a price for any variant in any of your currencies.
