@@ -15,6 +15,8 @@ content on the marketing site and is written separately.
 
 ### Added
 
+- **media:** move a file between a site's library and the organization library; every use is rewritten and the old address forwards ([AGL-4254](https://linear.app/aglyn/issue/AGL-4254))
+- **native:** move a file to the other library on iOS, macOS and Android ([AGL-4254](https://linear.app/aglyn/issue/AGL-4254))
 - **ai:** an AI chat on published sites, behind release_ai_site_chat ([AGL-4250](https://linear.app/aglyn/issue/AGL-4250))
 - **events:** calendar v2 with categories, repeats, tickets, feed and search sources ([AGL-4252](https://linear.app/aglyn/issue/AGL-4252))
 - **core:** site offers seam, events calendar v2 flag, any-flag verdict for plugin pages ([AGL-4252](https://linear.app/aglyn/issue/AGL-4252))
@@ -44,6 +46,7 @@ content on the marketing site and is written separately.
 
 ### Performance
 
+- **media:** the library move walk reads sites and versions concurrently ([AGL-4254](https://linear.app/aglyn/issue/AGL-4254))
 - **commerce:** the currency model loads only for a store selling in several currencies ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248))
 
 ### Documentation
