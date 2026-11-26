@@ -893,7 +893,8 @@
     "libs/plugins/commerce/src/lib/model/commerce-shipping.ts": {
       "values": [
         "CHECKOUT_SHIPPING_COUNTRY_NAMES",
-        "CHECKOUT_SHIPPING_COUNTRY_CODES"
+        "CHECKOUT_SHIPPING_COUNTRY_CODES",
+        "STRIPE_SHIPPING_COUNTRY_CODES"
       ]
     },
     "libs/plugins/commerce/src/lib/model/order-dialog.ts": {
@@ -24667,6 +24668,7 @@
       "args": [
         [
           {
+            "collectable": 6,
             "served": [
               "US"
             ],
@@ -24685,6 +24687,7 @@
         ],
         [
           {
+            "collectable": 6,
             "served": [
               "US"
             ],
@@ -24703,6 +24706,7 @@
         ],
         [
           {
+            "collectable": 6,
             "served": [
               "US",
               "CA"
@@ -24721,6 +24725,7 @@
         ],
         [
           {
+            "collectable": 2,
             "served": [
               "US"
             ],
@@ -24735,6 +24740,7 @@
         ],
         [
           {
+            "collectable": 6,
             "served": [
               "US",
               "CA",
@@ -24752,6 +24758,7 @@
         ],
         [
           {
+            "collectable": 6,
             "served": [
               "US",
               "CA",
@@ -24769,6 +24776,7 @@
         ],
         [
           {
+            "collectable": 6,
             "served": [],
             "unserved": [],
             "shipsNowhere": true,
@@ -24779,6 +24787,7 @@
         ],
         [
           {
+            "collectable": 6,
             "served": [],
             "unserved": [],
             "shipsNowhere": true,

@@ -6697,6 +6697,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
   public let starredField: String
   public let starredMax: Int
   public let stayCheckInModes: [StayCheckInMode]
+  public let stripeShippingCountryCodes: [String]
   public let submissionFilterHeaders: [String: String]
   public let submissionListQuery: ListQueryDeclaration
   public let submissionReadOptions: [ListFilterOption]
@@ -7097,6 +7098,7 @@ public struct ContractValues: Codable, Hashable, Sendable {
     case starredField = "STARRED_FIELD"
     case starredMax = "STARRED_MAX"
     case stayCheckInModes = "STAY_CHECK_IN_MODES"
+    case stripeShippingCountryCodes = "STRIPE_SHIPPING_COUNTRY_CODES"
     case submissionFilterHeaders = "SUBMISSION_FILTER_HEADERS"
     case submissionListQuery = "SUBMISSION_LIST_QUERY"
     case submissionReadOptions = "SUBMISSION_READ_OPTIONS"

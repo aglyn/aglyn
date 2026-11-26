@@ -726,10 +726,13 @@ Two things the figures do not yet include, both stated on the card itself:
 
 ### Destination coverage
 
-Checkout collects a shipping address for six countries — **United States,
-Canada, United Kingdom, Australia, Germany and France** — and charges the
-rate that destination resolves to. It will not charge a rate belonging to
-another zone, so the zones you save decide what checkout can do:
+Checkout collects a shipping address in **the countries your zones name**.
+A rest-of-world zone opens it to every country Stripe can ship to, New
+Zealand and Ireland included. A store that has set up no shipping collects an
+address for the United States, Canada, United Kingdom, Australia, Germany and
+France, as before. Checkout charges the rate that destination resolves to and
+never a rate belonging to another zone, so the zones you save decide what
+checkout can do:
 
 - **A destination no rate reaches is refused.** The shopper is told the store
   does not ship there, rather than being posted a parcel you priced nothing
