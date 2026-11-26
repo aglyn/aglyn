@@ -230,7 +230,8 @@ beforeEach(() => {
  */
 async function adjustStockBy(change: string): Promise<Record<string, unknown>> {
   const view = render(<ProductsHubCard hostId="host-1" />)
-  fireEvent.click(screen.getAllByRole('button', { name: 'Stock' })[0])
+  fireEvent.click(screen.getAllByRole('button', { name: /^More actions for / })[0])
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Adjust stock' }))
   fireEvent.change(screen.getByLabelText('Change'), {
     target: { value: change },
   })
