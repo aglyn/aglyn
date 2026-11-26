@@ -919,6 +919,7 @@ async function createMedia(
     contentType,
     confirmed: body[AUDIO_RIGHTS_FIELD],
     purpose: body[MEDIA_UPLOAD_PURPOSE_FIELD],
+    isPrivate: body['private'],
     uid: `api:${ctx.keyId}`,
   })
   if (rights.refusal) {

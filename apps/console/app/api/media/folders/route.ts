@@ -598,6 +598,15 @@ async function handler(request: Request): Promise<Response> {
       if (!snapshot.exists || snapshot.get('deletedAt')) {
         return Response.json({ error: 'Unknown media' }, { status: 404 })
       }
+      // A call recording is a person's voice and is never published: it was
+      // let in without the music rights question on the condition that it
+      // stay private.
+      if (!makePrivate && snapshot.get('mediaPurpose') === 'callRecording') {
+        return Response.json(
+          { error: 'A call recording stays private, so it cannot be published.' },
+          { status: 409 },
+        )
+      }
       /**
        * A file something still sells stays private (AGL-2814, AGL-2847;
        * asked rather than known since AGL-3080).

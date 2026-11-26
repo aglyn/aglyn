@@ -220,8 +220,8 @@ file (about 1.3 MB of base64) is 6 units.
 | `folderId` | string | no | Put the file in a folder, by its id. |
 | `alt` | string | no | Alt text. Worth setting — it's the field an accessibility audit reads. |
 | `private` | boolean | no | `true` stores it restricted: no `cdnUrl`, no public link. Left out or `false`, the file gets a public link that anyone can open. |
-| `rightsConfirmed` | boolean | for audio | Must be `true` for an audio file, or the upload is a `400`. For music it says you own the audio or hold a license to use it on your site; with `purpose: "callRecording"` it says everyone on the call knew it was being recorded. Stored on the file with who confirmed it and when. |
-| `purpose` | string | no | `callRecording` for a recording of a call or a meeting that you will attach to a CRM activity ([Attach a recording](activities.md#attach-a-recording)). Send it with `private: true`. |
+| `rightsConfirmed` | boolean | for audio | Must be `true` for an audio file other than a call recording, or the upload is a `400`. It says you own the audio or hold a license to use it on your site, and is stored on the file with who confirmed it and when. |
+| `purpose` | string | no | `callRecording` for a recording of a call or a meeting that you will attach to a CRM activity ([Attach a recording](activities.md#attach-a-recording)). It needs `private: true` (otherwise a `400`, `code: "call_recording_must_be_private"`) and no `rightsConfirmed`. |
 
 ```bash
 curl -X POST "https://app.aglyn.com/api/v1/media" \

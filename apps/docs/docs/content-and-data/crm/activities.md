@@ -164,11 +164,6 @@ iPhone's Voice Memos saves), WAV, AAC or OGG file up to 50 MB: choose **Upload
 recording**, or drop the file on the box. **Choose from library** attaches an audio
 file already in your media library instead. An entry holds up to 5 recordings.
 
-Before a recording uploads, tick **Everyone on this call knew it was being
-recorded**. The answer is saved on the file, with who gave it and when. Whether
-you need everyone's agreement to record a call depends on where you and they are,
-so check the rules that apply to you.
-
 The file goes to your workspace's media library, into **CRM › Calls** (made for you
 the first time), and is **private**: it has no public link, and it plays only for
 teammates who can see your media library, through a link that expires. Uploading

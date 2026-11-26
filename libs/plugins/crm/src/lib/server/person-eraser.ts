@@ -77,9 +77,11 @@ export interface CrmPersonEraserDeps {
 /**
  * Whether a media document is a CALL RECORDING: uploaded from a CRM activity
  * with the call-recording confirmation, as against a brochure or a logo that
- * happens to be attached to a record too and belongs to the business.
+ * happens to be attached to a record too and belongs to the business. The
+ * upload routes mark it `mediaPurpose: 'callRecording'`.
  */
 export function isCallRecordingMedia(data: Record<string, unknown> | undefined): boolean {
+  if (data?.['mediaPurpose'] === 'callRecording') return true
   const confirmation = data?.['rightsConfirmation'] as Record<string, unknown> | undefined
   return confirmation?.['purpose'] === 'callRecording'
 }

@@ -17,6 +17,7 @@
 'use client'
 
 import {
+  CALL_RECORDING_CONSENT_REQUIRED,
   CALL_RECORDING_CONSENT_STATEMENT,
   CRM_ACTIVITY_MEDIA_IDS_MAX,
   CRM_ACTIVITY_TRANSCRIPT_MAX,
@@ -53,7 +54,14 @@ import {
   Typography,
 } from '@mui/material'
 import { doc, type Firestore, getDoc } from 'firebase/firestore'
-import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  type DragEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 
 /*
  * CALL RECORDINGS ON AN ACTIVITY.
@@ -132,9 +140,17 @@ export function useActivityRecordings(
     void Promise.all(
       wanted.map(async (mediaId): Promise<ActivityRecording> => {
         try {
-          const snapshot = await getDoc(doc(firestore, 'orgs', orgId, 'media', mediaId))
+          const snapshot = await getDoc(
+            doc(firestore, 'orgs', orgId, 'media', mediaId),
+          )
           if (!snapshot.exists()) {
-            return { mediaId, fileName: '', contentType: '', isPrivate: false, missing: true }
+            return {
+              mediaId,
+              fileName: '',
+              contentType: '',
+              isPrivate: false,
+              missing: true,
+            }
           }
           const data = (snapshot.data() ?? {}) as Record<string, unknown>
           const isPrivate = data['private'] === true
@@ -143,7 +159,9 @@ export function useActivityRecordings(
             ? signer
               ? await signPrivateMedia(signer, orgId, mediaId)
               : undefined
-            : resolveMediaSrc(formatMediaRef(`org:${orgId}`, mediaId) ?? undefined)
+            : resolveMediaSrc(
+                formatMediaRef(`org:${orgId}`, mediaId) ?? undefined,
+              )
           return {
             mediaId,
             fileName: String(data['fileName'] ?? ''),
@@ -153,7 +171,13 @@ export function useActivityRecordings(
             missing: !src,
           }
         } catch {
-          return { mediaId, fileName: '', contentType: '', isPrivate: false, missing: true }
+          return {
+            mediaId,
+            fileName: '',
+            contentType: '',
+            isPrivate: false,
+            missing: true,
+          }
         }
       }),
     ).then((resolved) => {
@@ -171,7 +195,9 @@ export function useActivityRecordings(
  * One recording: the browser's own audio controls (play, pause, scrub,
  * volume), a speed menu, and a download.
  */
-export function ActivityRecordingPlayer(props: { recording: ActivityRecording }) {
+export function ActivityRecordingPlayer(props: {
+  recording: ActivityRecording
+}) {
   const { recording } = props
   const audio = useRef<HTMLAudioElement | null>(null)
   const [speed, setSpeed] = useState<number>(1)
@@ -181,7 +207,11 @@ export function ActivityRecordingPlayer(props: { recording: ActivityRecording })
   const name = recording.fileName || recording.mediaId
   if (recording.missing || !recording.src) {
     return (
-      <Typography variant="caption" color="text.secondary" data-testid="activity-recording-missing">
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        data-testid="activity-recording-missing"
+      >
         {`${name}: this recording is no longer in the library, or you cannot play it.`}
       </Typography>
     )
@@ -189,7 +219,11 @@ export function ActivityRecordingPlayer(props: { recording: ActivityRecording })
   return (
     <Stack spacing={0.5} data-testid="activity-recording">
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-        <MdiIcon path={mdiFileMusicOutline.path} size={0.8} sx={{ color: 'text.secondary' }} />
+        <MdiIcon
+          path={mdiFileMusicOutline.path}
+          size={0.8}
+          sx={{ color: 'text.secondary' }}
+        />
         <Typography variant="body2" noWrap sx={{ flex: 1, minWidth: 0 }}>
           {name}
         </Typography>
@@ -200,7 +234,9 @@ export function ActivityRecordingPlayer(props: { recording: ActivityRecording })
           value={speed}
           onChange={(event) => setSpeed(Number(event.target.value) || 1)}
           sx={{ width: 96 }}
-          slotProps={{ htmlInput: { 'aria-label': `Playback speed for ${name}` } }}
+          slotProps={{
+            htmlInput: { 'aria-label': `Playback speed for ${name}` },
+          }}
         >
           {SPEEDS.map((value) => (
             <MenuItem key={value} value={value}>
@@ -279,8 +315,13 @@ export function ActivityRecordingsBlock(props: {
   mediaIds: unknown
   transcript?: unknown
 }) {
-  const recordings = useActivityRecordings(props.firestore, props.orgId, props.mediaIds)
-  const transcript = typeof props.transcript === 'string' ? props.transcript.trim() : ''
+  const recordings = useActivityRecordings(
+    props.firestore,
+    props.orgId,
+    props.mediaIds,
+  )
+  const transcript =
+    typeof props.transcript === 'string' ? props.transcript.trim() : ''
   const hasIds = normalizeCrmActivityMediaIds(props.mediaIds).length > 0
   if (!hasIds && !transcript) return null
   return (
@@ -291,7 +332,10 @@ export function ActivityRecordingsBlock(props: {
         </Typography>
       ) : null}
       {(recordings ?? []).map((recording) => (
-        <ActivityRecordingPlayer key={recording.mediaId} recording={recording} />
+        <ActivityRecordingPlayer
+          key={recording.mediaId}
+          recording={recording}
+        />
       ))}
       {transcript ? <ActivityTranscript transcript={transcript} /> : null}
     </Stack>
@@ -325,10 +369,10 @@ export interface ActivityRecordingFieldsProps {
  * (pick or drop), or choose one already in the library; and a transcript,
  * typed, pasted, or loaded from a `.txt`.
  *
- * An upload asks its uploader to confirm {@link CALL_RECORDING_CONSENT_STATEMENT}
- * first, and the server refuses audio without the answer; the answer is
- * stored on the file with who gave it and when. The file goes to the
- * organization's library, private, in CRM / Calls.
+ * The file goes to the organization's library, private, in CRM / Calls.
+ * While {@link CALL_RECORDING_CONSENT_REQUIRED} is on, an upload first asks
+ * its uploader to confirm {@link CALL_RECORDING_CONSENT_STATEMENT}; it is off
+ * (the owner's decision), so nothing is asked.
  */
 export function ActivityRecordingFields(props: ActivityRecordingFieldsProps) {
   const {
@@ -368,11 +412,15 @@ export function ActivityRecordingFields(props: ActivityRecordingFieldsProps) {
       if (!file || !uploadMedia || disabled || uploading) return
       setError(null)
       if (full) {
-        setError(`An activity holds at most ${CRM_ACTIVITY_MEDIA_IDS_MAX} recordings.`)
+        setError(
+          `An activity holds at most ${CRM_ACTIVITY_MEDIA_IDS_MAX} recordings.`,
+        )
         return
       }
-      if (!consent) {
-        setError('Confirm that everyone on the call knew it was being recorded first.')
+      if (CALL_RECORDING_CONSENT_REQUIRED && !consent) {
+        setError(
+          'Confirm that everyone on the call knew it was being recorded first.',
+        )
         return
       }
       setUploading(file.name)
@@ -381,7 +429,7 @@ export function ActivityRecordingFields(props: ActivityRecordingFieldsProps) {
           folderPath: CRM_CALL_RECORDINGS_FOLDER_PATH,
           private: true,
           purpose: 'callRecording',
-          confirmed: true,
+          ...(CALL_RECORDING_CONSENT_REQUIRED ? { confirmed: true } : {}),
           kind: 'audio',
         })
         if (picked.mediaId) add(picked.mediaId)
@@ -404,7 +452,9 @@ export function ActivityRecordingFields(props: ActivityRecordingFieldsProps) {
     const picked = await pickMedia({ kind: 'audio', allowPrivate: true })
     if (!picked?.mediaId) return
     if (full) {
-      setError(`An activity holds at most ${CRM_ACTIVITY_MEDIA_IDS_MAX} recordings.`)
+      setError(
+        `An activity holds at most ${CRM_ACTIVITY_MEDIA_IDS_MAX} recordings.`,
+      )
       return
     }
     add(picked.mediaId)
@@ -426,20 +476,35 @@ export function ActivityRecordingFields(props: ActivityRecordingFieldsProps) {
       try {
         onTranscriptChange(await readTranscriptFile(file))
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : 'The transcript could not be read.')
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : 'The transcript could not be read.',
+        )
       }
     },
     [onTranscriptChange],
   )
 
-  const names = new Map((recordings ?? []).map((row) => [row.mediaId, row.fileName]))
+  const names = new Map(
+    (recordings ?? []).map((row) => [row.mediaId, row.fileName]),
+  )
 
   return (
     <Stack spacing={1} data-testid="activity-recording-fields">
       <Typography variant="subtitle2">{'Recording'}</Typography>
       {mediaIds.map((mediaId) => (
-        <Stack key={mediaId} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-          <MdiIcon path={mdiFileMusicOutline.path} size={0.8} sx={{ color: 'text.secondary' }} />
+        <Stack
+          key={mediaId}
+          direction="row"
+          spacing={1}
+          sx={{ alignItems: 'center' }}
+        >
+          <MdiIcon
+            path={mdiFileMusicOutline.path}
+            size={0.8}
+            sx={{ color: 'text.secondary' }}
+          />
           <Typography variant="body2" noWrap sx={{ flex: 1, minWidth: 0 }}>
             {names.get(mediaId) || mediaId}
           </Typography>
@@ -447,7 +512,9 @@ export function ActivityRecordingFields(props: ActivityRecordingFieldsProps) {
             size="small"
             aria-label={`Remove ${names.get(mediaId) || 'recording'}`}
             disabled={disabled || uploading !== null}
-            onClick={() => onMediaIdsChange(mediaIds.filter((id) => id !== mediaId))}
+            onClick={() =>
+              onMediaIdsChange(mediaIds.filter((id) => id !== mediaId))
+            }
           >
             <MdiIcon path={mdiClose.path} size={0.8} />
           </IconButton>
@@ -471,18 +538,28 @@ export function ActivityRecordingFields(props: ActivityRecordingFieldsProps) {
           }}
         >
           <Stack spacing={1}>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  size="small"
-                  checked={consent}
-                  onChange={(event) => setConsent(event.target.checked)}
-                  disabled={disabled}
-                />
-              }
-              label={<Typography variant="body2">{CALL_RECORDING_CONSENT_STATEMENT}</Typography>}
-            />
-            <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+            {CALL_RECORDING_CONSENT_REQUIRED ? (
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    size="small"
+                    checked={consent}
+                    onChange={(event) => setConsent(event.target.checked)}
+                    disabled={disabled}
+                  />
+                }
+                label={
+                  <Typography variant="body2">
+                    {CALL_RECORDING_CONSENT_STATEMENT}
+                  </Typography>
+                }
+              />
+            ) : null}
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{ flexWrap: 'wrap', rowGap: 1 }}
+            >
               <Button
                 size="small"
                 variant="outlined"
@@ -494,7 +571,9 @@ export function ActivityRecordingFields(props: ActivityRecordingFieldsProps) {
               </Button>
               <Button
                 size="small"
-                startIcon={<MdiIcon path={mdiFolderMusicOutline.path} size={0.8} />}
+                startIcon={
+                  <MdiIcon path={mdiFolderMusicOutline.path} size={0.8} />
+                }
                 disabled={!pickMedia || disabled || uploading !== null}
                 onClick={() => void choose()}
               >
@@ -502,7 +581,9 @@ export function ActivityRecordingFields(props: ActivityRecordingFieldsProps) {
               </Button>
             </Stack>
             <Typography variant="caption" color="text.secondary">
-              {'Drop an MP3, M4A, WAV, AAC or OGG file here, up to 50 MB. It is kept private in your media library, under CRM / Calls.'}
+              {
+                'Drop an MP3, M4A, WAV, AAC or OGG file here, up to 50 MB. It is kept private in your media library, under CRM / Calls.'
+              }
             </Typography>
             <input
               ref={fileInput}
@@ -526,7 +607,9 @@ export function ActivityRecordingFields(props: ActivityRecordingFieldsProps) {
         </Stack>
       ) : null}
       {!uploadMedia ? (
-        <Alert severity="info">{'Uploading is not available on this surface.'}</Alert>
+        <Alert severity="info">
+          {'Uploading is not available on this surface.'}
+        </Alert>
       ) : null}
       {error ? <Alert severity="warning">{error}</Alert> : null}
       <TextField

@@ -261,7 +261,7 @@ describe('erase', () => {
       fileName: 'call.m4a',
       sizeBytes: 1200,
       storagePath: `orgs/${ORG}/media/crm/calls/rec1`,
-      rightsConfirmation: { uid: 'u1', atMs: 1, statement: 'x', purpose: 'callRecording' },
+      mediaPurpose: 'callRecording',
     })
     docs.set(`orgs/${ORG}/media/brochure`, { fileName: 'brochure.pdf', sizeBytes: 900 })
     docs.set(`orgs/${ORG}/counters/media`, { bytes: 5000, count: 4 })

@@ -124,10 +124,9 @@ meeting's recording and transcript after it was logged. It takes `mediaIds` and
 logged. `null` or `[]` removes a field. Accepts an
 [`Idempotency-Key`](../conventions.md#idempotency).
 
-Upload the audio first with [`POST /v1/media`](media.md), with `private: true`,
-`purpose: "callRecording"` and `rightsConfirmed: true`, which records that everyone on
-the call knew it was being recorded. A request body carries at most about 3 MB of
-file, so a longer recording is uploaded in the console, from the activity itself.
+Upload the audio first with [`POST /v1/media`](media.md), with `private: true` and
+`purpose: "callRecording"`. A request body carries at most about 3 MB of file,
+so a longer recording is uploaded in the console, from the activity itself.
 
 ```bash
 curl -X PATCH "https://app.aglyn.com/api/v1/activities/a_8f21" \

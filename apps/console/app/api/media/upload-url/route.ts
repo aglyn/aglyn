@@ -180,6 +180,7 @@ async function handler(request: Request): Promise<Response> {
           contentType,
           confirmed: body?.[AUDIO_RIGHTS_FIELD],
           purpose: body?.[MEDIA_UPLOAD_PURPOSE_FIELD],
+          isPrivate: body?.['private'],
           uid: decoded.uid,
         })
         if (rights.refusal) return audioRightsRefusal(rights.refusal)
@@ -316,6 +317,7 @@ async function handler(request: Request): Promise<Response> {
       contentType,
       confirmed: body?.[AUDIO_RIGHTS_FIELD],
       purpose: body?.[MEDIA_UPLOAD_PURPOSE_FIELD],
+      isPrivate: body?.['private'],
       uid: decoded.uid,
     })
     if (rights.refusal) {

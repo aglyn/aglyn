@@ -741,15 +741,15 @@ export function buildCustomerApiOpenApi(
         rightsConfirmed: {
           type: 'boolean',
           description:
-            'Required `true` for audio. For music: you own it or hold a license to use it on your site. ' +
-            'With `purpose: "callRecording"`: everyone on the call knew it was being recorded. Stored on the file.',
+            'Required `true` for an audio file other than a call recording: you own the audio or hold a license ' +
+            'to use it on your site. Stored on the file.',
         },
         purpose: {
           type: 'string',
           enum: ['callRecording'],
           description:
             'What an audio file is for when it is not music. `callRecording` is a recording of a call or a meeting, ' +
-            'attached to a CRM activity; send it with `private: true`.',
+            'attached to a CRM activity. It needs `private: true` and no `rightsConfirmed`.',
         },
       },
       additionalProperties: true,

@@ -31,10 +31,10 @@ import { join } from 'node:path'
 import { inspectUploadBytes } from '@aglyn/aglyn/app-utils/upload-inspection'
 import { mediaKindOf } from '@aglyn/aglyn/app-utils/media-metadata'
 import { MEDIA_TYPE_OPTIONS } from '@aglyn/aglyn/app-utils/media-filter'
-import { CALL_RECORDING_CONSENT_STATEMENT } from '@aglyn/aglyn'
+import { CALL_RECORDING_CONSENT_REQUIRED } from '@aglyn/aglyn/app-utils/call-recordings'
 import {
   AUDIO_RIGHTS_REQUIRED_CODE,
-  CALL_RECORDING_CONSENT_REQUIRED_MESSAGE,
+  CALL_RECORDING_PRIVATE_CODE,
   AUDIO_RIGHTS_STATEMENT,
   audioRightsRefusal,
   audioRightsVerdict,
@@ -115,38 +115,34 @@ describe('the rights gate', () => {
     })
   })
 
-  it('confirms a call recording against its own sentence, and stores which', async () => {
+  it('asks a call recording nothing but that it be private, and marks it as one', () => {
     expect(
       audioRightsVerdict({
         contentType: 'audio/mp4',
+        confirmed: undefined,
+        uid: 'u1',
+        purpose: 'callRecording',
+        isPrivate: true,
+      }),
+    ).toEqual({ refusal: null, fields: { mediaPurpose: 'callRecording' } })
+    // A named purpose is not a way around the music question onto a page.
+    for (const isPrivate of [undefined, false, 'true']) {
+      const refused = audioRightsVerdict({
+        contentType: 'audio/mp4',
         confirmed: true,
         uid: 'u1',
-        nowMs: 7,
         purpose: 'callRecording',
-      }),
-    ).toEqual({
-      refusal: null,
-      fields: {
-        rightsConfirmation: {
-          uid: 'u1',
-          atMs: 7,
-          statement: CALL_RECORDING_CONSENT_STATEMENT,
-          purpose: 'callRecording',
-        },
-      },
-    })
-    const refused = audioRightsVerdict({
-      contentType: 'audio/mp4',
-      confirmed: false,
-      uid: 'u1',
-      purpose: 'callRecording',
-    })
-    expect(refused.refusal?.message).toBe(CALL_RECORDING_CONSENT_REQUIRED_MESSAGE)
-    // A purpose this platform does not know is music, not a way around the question.
+        isPrivate,
+      })
+      expect(refused.refusal).toMatchObject({ status: 400, code: CALL_RECORDING_PRIVATE_CODE })
+    }
+    // A purpose this platform does not know is music.
     expect(
-      audioRightsVerdict({ contentType: 'audio/mp4', confirmed: true, uid: 'u1', nowMs: 1, purpose: 'other' })
-        .fields.rightsConfirmation?.statement,
-    ).toBe(AUDIO_RIGHTS_STATEMENT)
+      audioRightsVerdict({ contentType: 'audio/mp4', confirmed: undefined, uid: 'u1', purpose: 'other', isPrivate: true })
+        .refusal?.code,
+    ).toBe(AUDIO_RIGHTS_REQUIRED_CODE)
+    // The consent question is switched off, and kept to switch on.
+    expect(CALL_RECORDING_CONSENT_REQUIRED).toBe(false)
   })
 
   it('every route that asks the question passes the request’s purpose', () => {
@@ -155,9 +151,9 @@ describe('the rights gate', () => {
       'apps/console/app/api/media/upload-url/route.ts',
     ]) {
       const source = read(path)
-      expect(source.split('purpose: body?.[MEDIA_UPLOAD_PURPOSE_FIELD]').length - 1).toBe(
-        source.split('audioRightsVerdict(').length - 1,
-      )
+      const asks = source.split('audioRightsVerdict(').length - 1
+      expect(source.split('purpose: body?.[MEDIA_UPLOAD_PURPOSE_FIELD]').length - 1).toBe(asks)
+      expect(source.split("isPrivate: body?.['private']").length - 1).toBe(asks)
     }
   })
 

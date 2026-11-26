@@ -26,6 +26,7 @@
  * activity already logged is the activity's own.
  */
 
+import { MediaPickerContext } from '@aglyn/aglyn'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { LogActivityDialog } from './log-activity-dialog'
 
@@ -433,13 +434,12 @@ describe('Name, Related To and the company it rolls up to (AGL-4123)', () => {
 
 /*
  * A CALL'S RECORDING. Uploaded from the dialog into the organization's
- * library — private, in CRM / Calls, with the consent answer — and filed on
- * the activity by id, with the transcript beside it.
+ * library — private, in CRM / Calls — and filed on the activity by id, with
+ * the transcript beside it. No consent answer is asked while
+ * `CALL_RECORDING_CONSENT_REQUIRED` is off.
  */
 describe('a call’s recording and transcript', () => {
   const { addDoc } = jest.requireMock('firebase/firestore') as { addDoc: jest.Mock }
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { MediaPickerContext } = require('@aglyn/aglyn') as typeof import('@aglyn/aglyn')
   const uploadMedia = jest.fn(async () => ({ url: 'ref', mediaId: 'rec-9', private: true }))
   beforeEach(() => {
     addDoc.mockClear()
@@ -454,21 +454,16 @@ describe('a call’s recording and transcript', () => {
     )
   const file = new File(['abc'], 'call.m4a', { type: 'audio/mp4' })
 
-  it('asks for the consent answer before a byte leaves, then files the recording', async () => {
+  it('uploads the recording private into CRM / Calls and files it with the transcript', async () => {
     open('call')
+    expect(screen.queryByRole('checkbox')).toBeNull()
     const input = screen.getByTestId('activity-recording-input')
-    fireEvent.change(input, { target: { files: [file] } })
-    await waitFor(() => expect(screen.getByText(/knew it was being recorded first/)).toBeTruthy())
-    expect(uploadMedia).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Everyone on this call knew it was being recorded' }))
     fireEvent.change(input, { target: { files: [file] } })
     await waitFor(() => expect(uploadMedia).toHaveBeenCalledTimes(1))
     expect(uploadMedia).toHaveBeenCalledWith(file, {
       folderPath: ['CRM', 'Calls'],
       private: true,
       purpose: 'callRecording',
-      confirmed: true,
       kind: 'audio',
     })
     await waitFor(() => expect(screen.getByText('call.m4a')).toBeTruthy())
