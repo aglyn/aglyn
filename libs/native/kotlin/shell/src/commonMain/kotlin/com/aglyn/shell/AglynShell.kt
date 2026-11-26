@@ -113,9 +113,24 @@ fun AglynShell(
         is AuthState.SignedIn if !state.user.emailVerified && impersonation == null -> VerifyEmailScreen(services, state.user.email)
         // Keyed by the account: switching accounts starts the shell over, so nothing of one account's shows in the other's.
         is AuthState.SignedIn -> androidx.compose.runtime.key(state.user.uid) {
+          // The platform lockdown (the console's `PlatformLockdownGate`): asked once per account in use, held only for
+          // someone who is not staff, and open when the read fails.
+          var lockdown by remember { mutableStateOf<com.aglyn.core.PlatformLockdownNotice?>(null) }
+          LaunchedEffect(state.user.uid) {
+            val notice = com.aglyn.core.PlatformLockdownNotice.read(services.api, services.config.brandName)
+            val staff = notice != null &&
+              com.aglyn.core.TokenClaims.fromIdToken(runCatching { services.auth.idToken(false) }.getOrNull()).isStaff
+            lockdown = if (staff) null else notice
+          }
+          val gateScope = rememberCoroutineScope()
           Box(Modifier.graphicsLayer { alpha = reveal.alpha; translationY = reveal.rise.dp.toPx() }) {
             AccountSwitchReset(navigator, state.user.uid)
-            SignedInShell(services, navigator, state.user.uid, pendingLink, onLinkOpened, linksInNewTab)
+            val held = lockdown
+            if (held != null) {
+              LockdownGate(held) { gateScope.launch { services.signOut() } }
+            } else {
+              SignedInShell(services, navigator, state.user.uid, pendingLink, onLinkOpened, linksInNewTab)
+            }
           }
         }
       }
