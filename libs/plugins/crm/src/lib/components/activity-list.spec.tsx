@@ -23,7 +23,7 @@
  * delivery chip; and neither offers an edit, since neither is a note.
  */
 
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { ActivityRow } from './activity-list'
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -40,9 +40,16 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 jest.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...segments: string[]) => segments.join('/'),
   deleteDoc: jest.fn().mockResolvedValue(undefined),
+  getDoc: jest.fn(async (path: string) => ({
+    exists: () => true,
+    data: () =>
+      path.endsWith('/rec-1')
+        ? { fileName: 'call.m4a', contentType: 'audio/mp4' }
+        : undefined,
+  })),
 }))
 
-const scope = { firestore: {}, dataScope: ['orgs', 'org-1'] as [string, string] }
+const scope = { firestore: {}, dataScope: ['orgs', 'org-1'] as [string, string], orgId: 'org-1' }
 
 const base = {
   kind: 'email',
@@ -108,5 +115,37 @@ describe('ActivityRow with a captured email (AGL-2657)', () => {
     expect(screen.getByText('Logged')).toBeTruthy()
     expect(screen.getByText(/Ada Admin/)).toBeTruthy()
     expect(screen.getByLabelText('Edit activity')).toBeTruthy()
+  })
+})
+
+describe('ActivityRow with a call recording', () => {
+  const call = {
+    ...base,
+    $id: 'act-call',
+    kind: 'call',
+    subject: undefined,
+    body: 'Walked through the store build.',
+    mediaIds: ['rec-1'],
+    transcript: 'Hello, can you hear me?',
+  }
+
+  it('says so on the closed row, and reads nothing until it opens', () => {
+    renderRow(call)
+    expect(screen.getByTestId('activity-recording-chip').textContent).toBe('Recording')
+    expect(screen.queryByTestId('activity-recording')).toBeNull()
+  })
+
+  it('opens to a player with a download and the transcript behind a button', async () => {
+    render(
+      <ActivityRow activity={call as never} scope={scope as never} expanded onToggle={jest.fn()} nowMs={2_000} />,
+    )
+    await waitFor(() => expect(screen.getByTestId('activity-recording')).toBeTruthy())
+    const audio = document.querySelector('audio')
+    expect(audio?.getAttribute('src')).toBe('/api/media/cdn/org:org-1/rec-1')
+    expect(screen.getByLabelText('Download call.m4a').getAttribute('href')).toBe(
+      '/api/media/cdn/org:org-1/rec-1',
+    )
+    expect(screen.getByText('Show transcript')).toBeTruthy()
+    expect(screen.queryByTestId('activity-transcript')).toBeNull()
   })
 })

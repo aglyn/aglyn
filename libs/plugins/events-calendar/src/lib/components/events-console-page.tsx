@@ -67,6 +67,25 @@ import { useCallback, useMemo, useState } from 'react'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { eventWrite } from '../model/event-write'
+import {
+  EMPTY_REPEAT,
+  EMPTY_TICKET,
+  recurrenceOfDraft,
+  repeatDraftOf,
+  repeatDraftProblem,
+  ticketDraftOf,
+  ticketOfDraft,
+  type RepeatDraft,
+  type TicketDraft,
+} from '../model/event-editor-draft'
+import { eventRecurrenceText } from '../model/event-recurrence'
+import {
+  EventCategoriesCard,
+  EventCategoryPicker,
+  EventRepeatFields,
+  EventTicketFields,
+  useEventCategories,
+} from './event-v2-fields'
 import { EVENTS_TRANSFER_RESOURCE } from '../transfer/events-transfer-key'
 
 /**
@@ -90,6 +109,22 @@ interface EventDraft {
   coverImage: string
   coverImageAlt: string
   status: 'draft' | 'published'
+  /** Calendar v2 (AGL-4252); written only where v2 is on. */
+  categoryIds: string[]
+  repeat: RepeatDraft
+  ticket: TicketDraft
+}
+
+/** The flag the editor's v2 boxes and the categories card follow. */
+const EVENTS_CALENDAR_V2_FLAG = 'release_events_calendar_v2'
+
+/** The zone the editor's date and time boxes are typed in: this browser's. */
+function editorTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  } catch {
+    return 'UTC'
+  }
 }
 
 interface EventRecord {
@@ -102,6 +137,9 @@ interface EventRecord {
   description?: string
   coverImage?: string
   coverImageAlt?: string
+  categoryIds?: string[]
+  recurrence?: unknown
+  ticket?: unknown
   /** `deleted` is written by the delete, beside `deletedAt`. */
   status?: 'draft' | 'published' | 'deleted'
   deletedAt?: unknown
@@ -212,11 +250,18 @@ function eventDraftOf(event: EventRecord): EventDraft {
     coverImage: event.coverImage ?? '',
     coverImageAlt: event.coverImageAlt ?? '',
     status: event.status === 'published' ? 'published' : 'draft',
+    categoryIds: Array.isArray(event.categoryIds) ? event.categoryIds : [],
+    repeat: repeatDraftOf(event.recurrence),
+    ticket: ticketDraftOf(event.ticket),
   }
 }
 
 export function EventsConsolePage(props: ConsolePluginPageProps) {
   const { hostId } = props
+  // Calendar v2 (AGL-4252): categories, repeats and tickets, where the
+  // workspace has it (staff see it to support one that does).
+  const v2 = Boolean(props.releaseVerdict?.(EVENTS_CALENDAR_V2_FLAG).visible)
+  const categories = useEventCategories(v2 ? hostId : '')
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -311,6 +356,10 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
         persist: false,
       })
     }
+    const repeatProblem = v2 ? repeatDraftProblem(draft.repeat, draft.startsAt.slice(0, 10) || null) : null
+    if (repeatProblem) {
+      return void enqueueSnackbar(repeatProblem, { variant: 'warning', persist: false })
+    }
     try {
       const id = draft.id ?? createResourceUid()
       /**
@@ -350,6 +399,16 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
             coverImage: draft.coverImage,
             coverImageAlt: draft.coverImageAlt,
             status: draft.status,
+            // The v2 fields only where v2 is on: left undefined, a stored
+            // series, its categories and its ticket stay as they are.
+            ...(v2
+              ? {
+                  categoryIds: draft.categoryIds,
+                  timeZone: editorTimeZone(),
+                  recurrence: recurrenceOfDraft(draft.repeat),
+                  ticket: ticketOfDraft(draft.ticket),
+                }
+              : {}),
           })
           await setDoc(
             doc(firestore, 'hosts', hostId, 'events', id),
@@ -392,6 +451,7 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
     eventsFromCache,
     eventsListen,
     eventsUnreadable,
+    v2,
   ])
 
   const handleDelete = useCallback(
@@ -423,260 +483,286 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
   })
 
   return (
-    <CardDisplay
-      header={'Events'}
-      help={pluginDocsHelp('events', { anchor: '#manage-events' })}
-      HeaderProps={transferActions ? { action: transferActions } : undefined}
-      contentGutterX
-      contentGutterY
-    >
-      <Stack spacing={1}>
-        {events.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            {'Create events here, then drop an Event List element on any ' +
-              'page — published events render with SEO Event markup.'}
-          </Typography>
-        ) : (
-          visibleEvents.map((event) => (
-            <Stack
-              key={event.$id}
-              direction="row"
-              spacing={1}
-              sx={{ alignItems: 'center' }}
-            >
-              <Chip
-                size="small"
-                label={event.status ?? 'draft'}
-                color={event.status === 'published' ? 'success' : 'default'}
-              />
-              <Stack sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="body2" noWrap>
-                  {event.title}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" noWrap>
-                  {new Date(event.startsAtMs ?? 0).toLocaleString()}
-                  {event.location ? ` · ${event.location}` : ''}
-                </Typography>
-              </Stack>
-              <Button
-                size="small"
-                onClick={() => setDraft(eventDraftOf(event))}
-              >
-                {'Edit'}
-              </Button>
-              <Button size="small" color="error" onClick={handleDelete(event)}>
-                {'Delete'}
-              </Button>
-            </Stack>
-          ))
-        )}
-        {events.length === 0 ? null : (
-          <ListPagination
-            page={page}
-            pageSize={pageSize}
-            rowCount={visibleEvents.length}
-            // The events this page HOLDS, after the soft-deleted ones are
-            // dropped — a slice of rows already read, so the total is exact
-            // for the window. The alert below says when the window is short
-            // of the site.
-            count={events.length}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-          />
-        )}
-        {eventsTruncated ? (
-          <Alert severity="info">
-            {`Showing the newest ${EVENT_CEILING} events. This site has ` +
-              'more, and the older ones are not reachable from here.'}
-          </Alert>
-        ) : null}
-        <Button
-          size="small"
-          color="primary"
-          sx={{ alignSelf: 'flex-start' }}
-          onClick={() =>
-            setDraft({
-              id: null,
-              title: '',
-              startsAt: '',
-              endsAt: '',
-              location: '',
-              organizer: '',
-              description: '',
-              coverImage: '',
-              coverImageAlt: '',
-              status: 'draft',
-            })
-          }
-        >
-          {'Add event'}
-        </Button>
-      </Stack>
-
-      <Dialog
-        open={Boolean(draft)}
-        onClose={() => setDraft(null)}
-        maxWidth="sm"
-        fullWidth
+    <Stack spacing={2}>
+      <CardDisplay
+        header={'Events'}
+        help={pluginDocsHelp('events', { anchor: '#manage-events' })}
+        HeaderProps={transferActions ? { action: transferActions } : undefined}
+        contentGutterX
+        contentGutterY
       >
-        <DialogTitle>{draft?.id ? 'Edit event' : 'Add event'}</DialogTitle>
-        <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}
+        <Stack spacing={1}>
+          {events.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              {'Create events here, then drop an Event List element on any ' +
+                'page — published events render with SEO Event markup.'}
+            </Typography>
+          ) : (
+            visibleEvents.map((event) => (
+              <Stack
+                key={event.$id}
+                direction="row"
+                spacing={1}
+                sx={{ alignItems: 'center' }}
+              >
+                <Chip
+                  size="small"
+                  label={event.status ?? 'draft'}
+                  color={event.status === 'published' ? 'success' : 'default'}
+                />
+                <Stack sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="body2" noWrap>
+                    {event.title}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" noWrap>
+                    {new Date(event.startsAtMs ?? 0).toLocaleString()}
+                    {event.location ? ` · ${event.location}` : ''}
+                    {v2 && event.recurrence ? ` · ${eventRecurrenceText(event.recurrence)}` : ''}
+                  </Typography>
+                </Stack>
+                <Button
+                  size="small"
+                  onClick={() => setDraft(eventDraftOf(event))}
+                >
+                  {'Edit'}
+                </Button>
+                <Button size="small" color="error" onClick={handleDelete(event)}>
+                  {'Delete'}
+                </Button>
+              </Stack>
+            ))
+          )}
+          {events.length === 0 ? null : (
+            <ListPagination
+              page={page}
+              pageSize={pageSize}
+              rowCount={visibleEvents.length}
+              // The events this page HOLDS, after the soft-deleted ones are
+              // dropped — a slice of rows already read, so the total is exact
+              // for the window. The alert below says when the window is short
+              // of the site.
+              count={events.length}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
+          )}
+          {eventsTruncated ? (
+            <Alert severity="info">
+              {`Showing the newest ${EVENT_CEILING} events. This site has ` +
+                'more, and the older ones are not reachable from here.'}
+            </Alert>
+          ) : null}
+          <Button
+            size="small"
+            color="primary"
+            sx={{ alignSelf: 'flex-start' }}
+            onClick={() =>
+              setDraft({
+                id: null,
+                title: '',
+                startsAt: '',
+                endsAt: '',
+                location: '',
+                organizer: '',
+                description: '',
+                coverImage: '',
+                coverImageAlt: '',
+                status: 'draft',
+                categoryIds: [],
+                repeat: { ...EMPTY_REPEAT },
+                ticket: { ...EMPTY_TICKET },
+              })
+            }
+          >
+            {'Add event'}
+          </Button>
+        </Stack>
+
+        <Dialog
+          open={Boolean(draft)}
+          onClose={() => setDraft(null)}
+          maxWidth="sm"
+          fullWidth
         >
-          <TextField
-            label="Title"
-            value={draft?.title ?? ''}
-            onChange={(event) =>
-              setDraft((prev) =>
-                prev ? { ...prev, title: event.target.value } : prev,
-              )
-            }
-            size="small"
-            autoFocus
-            sx={{ mt: 1 }}
-          />
-          <Stack direction="row" spacing={1}>
+          <DialogTitle>{draft?.id ? 'Edit event' : 'Add event'}</DialogTitle>
+          <DialogContent
+            sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}
+          >
             <TextField
-              label="Starts"
-              type="datetime-local"
-              value={draft?.startsAt ?? ''}
+              label="Title"
+              value={draft?.title ?? ''}
               onChange={(event) =>
                 setDraft((prev) =>
-                  prev ? { ...prev, startsAt: event.target.value } : prev,
+                  prev ? { ...prev, title: event.target.value } : prev,
                 )
               }
               size="small"
-              slotProps={{ inputLabel: { shrink: true } }}
-              sx={{ flex: 1 }}
+              autoFocus
+              sx={{ mt: 1 }}
             />
+            <Stack direction="row" spacing={1}>
+              <TextField
+                label="Starts"
+                type="datetime-local"
+                value={draft?.startsAt ?? ''}
+                onChange={(event) =>
+                  setDraft((prev) =>
+                    prev ? { ...prev, startsAt: event.target.value } : prev,
+                  )
+                }
+                size="small"
+                slotProps={{ inputLabel: { shrink: true } }}
+                sx={{ flex: 1 }}
+              />
+              <TextField
+                label="Ends"
+                type="datetime-local"
+                value={draft?.endsAt ?? ''}
+                onChange={(event) =>
+                  setDraft((prev) =>
+                    prev ? { ...prev, endsAt: event.target.value } : prev,
+                  )
+                }
+                size="small"
+                slotProps={{ inputLabel: { shrink: true } }}
+                sx={{ flex: 1 }}
+              />
+            </Stack>
+            <Stack direction="row" spacing={1}>
+              <TextField
+                label="Location"
+                value={draft?.location ?? ''}
+                onChange={(event) =>
+                  setDraft((prev) =>
+                    prev ? { ...prev, location: event.target.value } : prev,
+                  )
+                }
+                size="small"
+                sx={{ flex: 1 }}
+              />
+              <TextField
+                label="Organizer"
+                value={draft?.organizer ?? ''}
+                onChange={(event) =>
+                  setDraft((prev) =>
+                    prev ? { ...prev, organizer: event.target.value } : prev,
+                  )
+                }
+                size="small"
+                sx={{ flex: 1 }}
+              />
+            </Stack>
             <TextField
-              label="Ends"
-              type="datetime-local"
-              value={draft?.endsAt ?? ''}
+              label="Cover image URL"
+              value={draft?.coverImage ?? ''}
               onChange={(event) =>
                 setDraft((prev) =>
-                  prev ? { ...prev, endsAt: event.target.value } : prev,
+                  prev ? { ...prev, coverImage: event.target.value } : prev,
                 )
               }
               size="small"
-              slotProps={{ inputLabel: { shrink: true } }}
-              sx={{ flex: 1 }}
             />
-          </Stack>
-          <Stack direction="row" spacing={1}>
+            {/*
+              AGL-2418, matching the collection entry editor's wording. Shown
+              only beside a cover, because a description with nothing to
+              describe is a field nobody can answer. Left empty the thumbnail
+              renders `alt=""`, which is right here — the title sits next to
+              it — so this is for the cover that carries something the title
+              does not: a face, a venue, a poster with the lineup on it.
+            */}
+            {draft?.coverImage?.trim() ? (
+              <TextField
+                label="Cover image description"
+                placeholder="What the picture shows"
+                value={draft?.coverImageAlt ?? ''}
+                onChange={(event) =>
+                  setDraft((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          coverImageAlt: event.target.value.slice(
+                            0,
+                            MEDIA_ALT_MAX_LENGTH,
+                          ),
+                        }
+                      : prev,
+                  )
+                }
+                size="small"
+                helperText={
+                  'Read aloud by screen readers. Leave empty if the picture is decorative.'
+                }
+              />
+            ) : null}
             <TextField
-              label="Location"
-              value={draft?.location ?? ''}
+              label="Description"
+              value={draft?.description ?? ''}
               onChange={(event) =>
                 setDraft((prev) =>
-                  prev ? { ...prev, location: event.target.value } : prev,
+                  prev ? { ...prev, description: event.target.value } : prev,
                 )
               }
               size="small"
-              sx={{ flex: 1 }}
+              multiline
+              minRows={3}
             />
-            <TextField
-              label="Organizer"
-              value={draft?.organizer ?? ''}
-              onChange={(event) =>
-                setDraft((prev) =>
-                  prev ? { ...prev, organizer: event.target.value } : prev,
-                )
-              }
-              size="small"
-              sx={{ flex: 1 }}
-            />
-          </Stack>
-          <TextField
-            label="Cover image URL"
-            value={draft?.coverImage ?? ''}
-            onChange={(event) =>
-              setDraft((prev) =>
-                prev ? { ...prev, coverImage: event.target.value } : prev,
-              )
-            }
-            size="small"
-          />
-          {/*
-            AGL-2418, matching the collection entry editor's wording. Shown
-            only beside a cover, because a description with nothing to
-            describe is a field nobody can answer. Left empty the thumbnail
-            renders `alt=""`, which is right here — the title sits next to
-            it — so this is for the cover that carries something the title
-            does not: a face, a venue, a poster with the lineup on it.
-          */}
-          {draft?.coverImage?.trim() ? (
-            <TextField
-              label="Cover image description"
-              placeholder="What the picture shows"
-              value={draft?.coverImageAlt ?? ''}
-              onChange={(event) =>
+            {v2 && draft ? (
+              <>
+                <EventCategoryPicker
+                  categories={categories}
+                  value={draft.categoryIds}
+                  onChange={(categoryIds) => setDraft((prev) => (prev ? { ...prev, categoryIds } : prev))}
+                />
+                <EventRepeatFields
+                  value={draft.repeat}
+                  onChange={(repeat) => setDraft((prev) => (prev ? { ...prev, repeat } : prev))}
+                  problem={repeatDraftProblem(draft.repeat, draft.startsAt.slice(0, 10) || null)}
+                />
+                <EventTicketFields
+                  hostId={hostId}
+                  value={draft.ticket}
+                  onChange={(ticket) => setDraft((prev) => (prev ? { ...prev, ticket } : prev))}
+                />
+              </>
+            ) : null}
+          </DialogContent>
+          <DialogActions sx={{ justifyContent: 'space-between' }}>
+            <Button
+              onClick={() =>
                 setDraft((prev) =>
                   prev
                     ? {
                         ...prev,
-                        coverImageAlt: event.target.value.slice(
-                          0,
-                          MEDIA_ALT_MAX_LENGTH,
-                        ),
+                        status:
+                          prev.status === 'published' ? 'draft' : 'published',
                       }
                     : prev,
                 )
               }
-              size="small"
-              helperText={
-                'Read aloud by screen readers. Leave empty if the picture is decorative.'
-              }
-            />
-          ) : null}
-          <TextField
-            label="Description"
-            value={draft?.description ?? ''}
-            onChange={(event) =>
-              setDraft((prev) =>
-                prev ? { ...prev, description: event.target.value } : prev,
-              )
-            }
-            size="small"
-            multiline
-            minRows={3}
-          />
-        </DialogContent>
-        <DialogActions sx={{ justifyContent: 'space-between' }}>
-          <Button
-            onClick={() =>
-              setDraft((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      status:
-                        prev.status === 'published' ? 'draft' : 'published',
-                    }
-                  : prev,
-              )
-            }
-          >
-            {draft?.status === 'published' ? 'Set to draft' : 'Set published'}
-          </Button>
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            {draftChecking ? (
-              <Typography variant="body2" color="text.secondary" role="status">
-                {seedCheckingText('event')}
-              </Typography>
-            ) : null}
-            <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
-            <Button
-              variant="contained"
-              color="primary"
-              disabled={!draft?.title.trim() || held.saving}
-              onClick={held.press}
             >
-              {heldSaveLabel(held, 'Save event')}
+              {draft?.status === 'published' ? 'Set to draft' : 'Set published'}
             </Button>
-          </Stack>
-        </DialogActions>
-      </Dialog>
-    </CardDisplay>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              {draftChecking ? (
+                <Typography variant="body2" color="text.secondary" role="status">
+                  {seedCheckingText('event')}
+                </Typography>
+              ) : null}
+              <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>
+              <Button
+                variant="contained"
+                color="primary"
+                disabled={!draft?.title.trim() || held.saving}
+                onClick={held.press}
+              >
+                {heldSaveLabel(held, 'Save event')}
+              </Button>
+            </Stack>
+          </DialogActions>
+        </Dialog>
+      </CardDisplay>
+      {v2 ? <EventCategoriesCard hostId={hostId} categories={categories} /> : null}
+    </Stack>
   )
 }
 EventsConsolePage.displayName = 'EventsConsolePage'

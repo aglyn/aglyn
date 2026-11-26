@@ -24,6 +24,14 @@ import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { cartCookieName, mintCartId, readCartId } from './cart-cookie'
 import { readStoreDay } from './store-day'
 import { planCheckoutShippingWithCarriers } from './carrier-shipping'
+import {
+  checkoutAmountMinor,
+  checkoutVariantMinor,
+  loadFxRates,
+  resolveCheckoutCurrency,
+  storeCurrencyContextFrom,
+  type CheckoutCurrency,
+} from './currency'
 
 export interface ResolvedCartLine extends CommerceModel.CartLine {
   name: string
@@ -83,6 +91,10 @@ export const cartHandler: PluginApiHandler = async (req, res) => {
   let cartId = readCartId(req.cookies, hostId)
   const firestore = firebaseAdmin.app().firestore()
   const hostRef = firestore.collection('hosts').doc(hostId)
+
+  // The shopper's currency (AGL-4248), asked by a storefront showing another
+  // than the store's: the cart prices in it exactly as checkout will charge.
+  const requestedCurrency = String((isPost ? body.currency : req.query.currency) ?? '').trim()
 
   try {
     if (!cartId) {
@@ -214,6 +226,10 @@ export const cartHandler: PluginApiHandler = async (req, res) => {
         snapshot.exists ? CommerceModel.liftLegacyProduct(snapshot.data() as any) : null,
       ]),
     )
+    const currency = requestedCurrency ? await cartCurrency(hostRef, requestedCurrency) : undefined
+    // Each line in the store currency as well, for what the store's own
+    // rules (free shipping over, zones) are written in.
+    const baseUnitCents = new Map<CommerceModel.CartLine, number>()
     const lines: ResolvedCartLine[] = cart.lines.map((line) => {
       const product = productsById.get(line.productId)
       if (!product || !CommerceModel.productListedOnline(product)) {
@@ -255,11 +271,15 @@ export const cartHandler: PluginApiHandler = async (req, res) => {
         }
       }
       const label = CommerceModel.lineLabelWithModifiers(variantLabel, chosen.modifiers)
+      const baseCents = Math.round(Number(variant.priceUsd) * 100) + chosen.extraCents
+      baseUnitCents.set(line, baseCents)
       return {
         ...line,
         name: product.name,
         ...(label ? { variantLabel: label } : {}),
-        unitAmountCents: Math.round(Number(variant.priceUsd) * 100) + chosen.extraCents,
+        unitAmountCents: currency?.foreign
+          ? cartUnitMinor(currency, product, variant, chosen.modifiers)
+          : baseCents,
         ...(variant.imageUrl || product.mediaUrls?.[0] || product.imageUrl
           ? {
               imageUrl:
@@ -276,6 +296,13 @@ export const cartHandler: PluginApiHandler = async (req, res) => {
     const subtotalCents = lines
       .filter((line) => !line.unavailable)
       .reduce((sum, line) => sum + line.unitAmountCents * line.quantity, 0)
+    const baseSubtotalCents = currency?.foreign
+      ? cart.lines.reduce(
+          (sum, line, index) =>
+            lines[index]?.unavailable ? sum : sum + (baseUnitCents.get(line) ?? 0) * line.quantity,
+          0,
+        )
+      : subtotalCents
     // Card reader hardware the platform's own store sells (AGL-4038): the
     // cart asks for the terms of sale before checkout. Read from the
     // environment first, so no other store reads anything more.
@@ -289,12 +316,14 @@ export const cartHandler: PluginApiHandler = async (req, res) => {
       hostRef,
       lines,
       productsById,
-      subtotalCents,
+      subtotalCents: baseSubtotalCents,
     })
     return res.status(200).json({
       lines,
       count: CommerceModel.cartCount(cart),
       subtotalCents,
+      // The currency every amount above is in, when the storefront asked.
+      ...(currency ? { currency: currency.code } : {}),
       ...(hardwareTerms ? { hardwareTerms: true } : {}),
       ...(askShippingCountry
         ? {
@@ -307,6 +336,51 @@ export const cartHandler: PluginApiHandler = async (req, res) => {
     console.error(error)
     return res.status(500).json({ error: 'Cart unavailable' })
   }
+}
+
+/**
+ * The currency a cart prices in (AGL-4248): the one the storefront asked for
+ * when the store sells in it and fresh rates cover it, else the store's,
+ * resolved exactly as checkout resolves it.
+ */
+async function cartCurrency(
+  hostRef: FirebaseFirestore.DocumentReference,
+  requested: string,
+): Promise<CheckoutCurrency | undefined> {
+  try {
+    const [storeSnap, rates] = await Promise.all([
+      hostRef.collection('settings').doc('store').get(),
+      loadFxRates(),
+    ])
+    return resolveCheckoutCurrency(
+      storeCurrencyContextFrom(storeSnap.data() as Record<string, unknown> | undefined, rates),
+      requested,
+    )
+  } catch (error) {
+    // The cart still shows, in the store currency, and says so by omission.
+    console.error('commerce: cart currency unavailable', error)
+    return undefined
+  }
+}
+
+/**
+ * One unit of a line in the checkout currency, as checkout charges it: the
+ * variant's price there (its fixed price wins), plus each add-on converted
+ * on its own (an add-on's fixed amount wins).
+ */
+export function cartUnitMinor(
+  currency: CheckoutCurrency,
+  product: { modifierGroups?: unknown },
+  variant: { priceUsd?: number; fixedPrices?: Record<string, number> },
+  modifiers: readonly CommerceModel.OrderLineModifier[],
+): number {
+  const groups = CommerceModel.productModifierGroups(product)
+  return modifiers.reduce((sum, modifier) => {
+    const option = groups
+      .find((group) => group.id === modifier.groupId)
+      ?.options.find((entry) => entry.id === modifier.optionId)
+    return sum + checkoutAmountMinor(currency, modifier.priceCents, option?.fixedPriceCents)
+  }, checkoutVariantMinor(currency, variant))
 }
 
 /**

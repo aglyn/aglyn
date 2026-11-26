@@ -22,9 +22,9 @@ import {
   DataTableComponent,
   type DataTableProps,
 } from './data-table.component'
-import { IconButton, Stack, Tooltip } from '@mui/material'
+import { Box, IconButton, Stack, Tooltip } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
-import type { ReactNode } from 'react'
+import type { MouseEvent, ReactNode } from 'react'
 import { LIST_PAGE_SORT_DESCRIPTION } from '@aglyn/shared-util-tools/list-query/list-column-sort'
 import type { ListColumnSort } from '../hooks/use-list-column-sort'
 import RowActionsMenu, {
@@ -299,6 +299,14 @@ export interface ListTableProps extends DataTableProps {
   /** Row click → the artifact's detail view. */
   onOpen?: (id: string, row: any) => void
   /**
+   * The address a row opens at, for the gestures that mean "in a new tab":
+   * a cmd-, ctrl- or shift-click, and a middle-click. A row opened by
+   * `onOpen` in a dialog has no anchor of its own, so without this those
+   * gestures did what a plain click does, or nothing. Absent → they open
+   * the row the ordinary way.
+   */
+  openHref?: (id: string, row: any) => string | undefined
+  /**
    * The toolbar's free-text search box.
    *
    * Defaults to shown where the GRID answers it, which is client filtering.
@@ -444,6 +452,7 @@ const PINNED_ACTIONS_SX = {
 export function ListTable(props: ListTableProps) {
   const {
     onOpen,
+    openHref,
     sx,
     initialState,
     hideFooter,
@@ -539,7 +548,26 @@ export function ListTable(props: ListTableProps) {
         pageSizeOptions: [Math.max(rowCount, 1)],
       }
     : {}
-  return (
+  /*
+   * A MIDDLE-CLICK on a row opens its address in a new tab, as it would on a
+   * link. The grid reports primary clicks only, so this listens on a wrapper
+   * that draws nothing (`display: contents`) and finds the row it landed on.
+   */
+  const onAuxClick = openHref
+    ? (event: MouseEvent<HTMLDivElement>) => {
+        if (event.button !== 1) return
+        const target = event.target as Element | null
+        if (target?.closest?.(`[data-field="${LIST_ACTIONS_FIELD}"]`)) return
+        const id = target?.closest?.('.MuiDataGrid-row')?.getAttribute('data-id')
+        if (!id) return
+        const row = (rows ?? []).find((candidate: any) => String(candidate.$id) === id)
+        const href = row ? openHref(id, row) : undefined
+        if (!href) return
+        event.preventDefault()
+        window.open(href, '_blank', 'noopener')
+      }
+    : undefined
+  const grid = (
     <DataTableComponent
       getRowId={(row: any) => row.$id}
       {...selection}
@@ -556,6 +584,12 @@ export function ListTable(props: ListTableProps) {
                */
               const target = event.target as Element | null
               if (target?.closest?.(`[data-field="${LIST_ACTIONS_FIELD}"]`)) return
+              const newTab = event.metaKey || event.ctrlKey || event.shiftKey
+              const href = newTab ? openHref?.(String(id), row) : undefined
+              if (href) {
+                window.open(href, '_blank', 'noopener')
+                return
+              }
               onOpen(String(id), row)
             }
           : undefined
@@ -695,6 +729,13 @@ export function ListTable(props: ListTableProps) {
        */
       {...unpaged}
     />
+  )
+  return onAuxClick ? (
+    <Box sx={{ display: 'contents' }} onAuxClick={onAuxClick}>
+      {grid}
+    </Box>
+  ) : (
+    grid
   )
 }
 ListTable.displayName = 'ListTable'

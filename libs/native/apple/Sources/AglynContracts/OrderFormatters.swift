@@ -89,14 +89,17 @@ public func orderRefundSummary(_ order: HostOrder) -> String {
   let state = orderRefundState(order)
   if state == .none { return "" }
   let refunded = max(0, wholeCents(order.refundedCents ?? 0))
-  if state == .full { return "Refunded in full ($\(usd(refunded)))" }
+  // In the currency it was paid in (AGL-4248); a USD order reads as before.
+  let currency = (order.currency ?? "usd").uppercased()
+  func money(_ cents: Int) -> String { currency == "USD" ? "$\(usd(cents))" : formatOrderMoney(cents, currency: currency) }
+  if state == .full { return "Refunded in full (\(money(refunded)))" }
   let revoked = order.refundedLineItemIds?.count ?? 0
   let lines = order.lineItems?.count ?? 0
   let scope =
     revoked > 0
     ? "\(revoked) of \(lines) line\(lines == 1 ? "" : "s") withdrawn"
     : "no lines withdrawn — refunded by amount"
-  return "Partially refunded ($\(usd(refunded)) of $\(usd(grossCents(order)))) — \(scope)"
+  return "Partially refunded (\(money(refunded)) of \(money(grossCents(order)))) — \(scope)"
 }
 
 /// The sale's revenue after refunds; a refunded register tip comes off at most once.
@@ -109,7 +112,11 @@ public func orderNetCents(_ order: HostOrder) -> Int {
 
 /// What the order took, less refunds.
 public func orderPaidCents(_ order: HostOrder) -> Int {
-  grossCents(order) - wholeCents(order.refundedCents ?? 0)
+  // An order paid in another currency counts in the store's (AGL-4248).
+  if let base = order.baseTotals?.totalCents, let rate = order.fxRate, rate > 0 {
+    return wholeCents(base) - Int(((order.refundedCents ?? 0) / rate + 0.5).rounded(.down))
+  }
+  return grossCents(order) - wholeCents(order.refundedCents ?? 0)
 }
 
 /// Splits `totalCents` across `weights` in whole cents by largest remainder,

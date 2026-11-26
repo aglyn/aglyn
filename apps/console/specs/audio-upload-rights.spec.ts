@@ -31,8 +31,10 @@ import { join } from 'node:path'
 import { inspectUploadBytes } from '@aglyn/aglyn/app-utils/upload-inspection'
 import { mediaKindOf } from '@aglyn/aglyn/app-utils/media-metadata'
 import { MEDIA_TYPE_OPTIONS } from '@aglyn/aglyn/app-utils/media-filter'
+import { CALL_RECORDING_CONSENT_REQUIRED } from '@aglyn/aglyn/app-utils/call-recordings'
 import {
   AUDIO_RIGHTS_REQUIRED_CODE,
+  CALL_RECORDING_PRIVATE_CODE,
   AUDIO_RIGHTS_STATEMENT,
   audioRightsRefusal,
   audioRightsVerdict,
@@ -111,6 +113,48 @@ describe('the rights gate', () => {
       refusal: null,
       fields: { rightsConfirmation: { uid: 'u1', atMs: 42, statement: AUDIO_RIGHTS_STATEMENT } },
     })
+  })
+
+  it('asks a call recording nothing but that it be private, and marks it as one', () => {
+    expect(
+      audioRightsVerdict({
+        contentType: 'audio/mp4',
+        confirmed: undefined,
+        uid: 'u1',
+        purpose: 'callRecording',
+        isPrivate: true,
+      }),
+    ).toEqual({ refusal: null, fields: { mediaPurpose: 'callRecording' } })
+    // A named purpose is not a way around the music question onto a page.
+    for (const isPrivate of [undefined, false, 'true']) {
+      const refused = audioRightsVerdict({
+        contentType: 'audio/mp4',
+        confirmed: true,
+        uid: 'u1',
+        purpose: 'callRecording',
+        isPrivate,
+      })
+      expect(refused.refusal).toMatchObject({ status: 400, code: CALL_RECORDING_PRIVATE_CODE })
+    }
+    // A purpose this platform does not know is music.
+    expect(
+      audioRightsVerdict({ contentType: 'audio/mp4', confirmed: undefined, uid: 'u1', purpose: 'other', isPrivate: true })
+        .refusal?.code,
+    ).toBe(AUDIO_RIGHTS_REQUIRED_CODE)
+    // The consent question is switched off, and kept to switch on.
+    expect(CALL_RECORDING_CONSENT_REQUIRED).toBe(false)
+  })
+
+  it('every route that asks the question passes the request’s purpose', () => {
+    for (const path of [
+      'apps/console/app/api/media/upload/route.ts',
+      'apps/console/app/api/media/upload-url/route.ts',
+    ]) {
+      const source = read(path)
+      const asks = source.split('audioRightsVerdict(').length - 1
+      expect(source.split('purpose: body?.[MEDIA_UPLOAD_PURPOSE_FIELD]').length - 1).toBe(asks)
+      expect(source.split("isPrivate: body?.['private']").length - 1).toBe(asks)
+    }
   })
 
   it('asks nothing of a file that is not audio', () => {

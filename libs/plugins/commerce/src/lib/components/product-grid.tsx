@@ -45,7 +45,7 @@ import {
 } from '../constants/storefront-catalog-query'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { addToCart } from '../utils/add-to-cart'
-import { formatOrderMoney } from '../model/buyer-notifications'
+import { useShopperCurrency, type ShopperCurrency } from './shopper-currency'
 import { ProductImagePlaceholder } from './product-image-placeholder'
 import {
   PRODUCT_PHOTO_FIT_ATTRIBUTE,
@@ -132,6 +132,8 @@ interface CatalogItem {
   priceUsd: number
   maxPriceUsd: number
   compareAtPriceUsd?: number
+  /** The cheapest variant's own prices per currency (AGL-4248). */
+  fixedPrices?: Record<string, number>
   imageUrl?: string
   soldOut: boolean
   tags?: string[]
@@ -252,14 +254,15 @@ function collectionSlugFromLocation(): string {
   return match ? decodeURIComponent(match[1]) : ''
 }
 
-/** A catalog price as the product page prints it: `$3.50`, never `$3.5`. */
-const usdLabel = (priceUsd: number) => formatOrderMoney(Math.round(priceUsd * 100))
-
-function priceLabel(item: CatalogItem): string {
+/**
+ * A catalog price as the product page prints it (`$3.50`, never `$3.5`), in
+ * the shopper's currency (AGL-4248): the card's fixed price there when the
+ * merchant set one.
+ */
+function priceLabel(item: CatalogItem, shopper: ShopperCurrency): string {
   if (item.priceComingSoon) return PRICE_COMING_SOON_LABEL
-  return item.priceUsd === item.maxPriceUsd
-    ? usdLabel(item.priceUsd)
-    : `From ${usdLabel(item.priceUsd)}`
+  const price = shopper.formatVariant({ priceUsd: item.priceUsd, fixedPrices: item.fixedPrices })
+  return item.priceUsd === item.maxPriceUsd ? price : `From ${price}`
 }
 
 /**
@@ -312,6 +315,11 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
     const site = Aglyn.useSite()
     const siteFetch = Aglyn.useSiteFetch()
     const { hostId } = site
+    const shopper = useShopperCurrency()
+    // The price filter stays in the store currency (the catalog filters on
+    // stored prices), and says so where the store sells in more than one.
+    const sliderMoney = (value: number) =>
+      shopper.currencies.length > 1 ? `${shopper.base} ${value}` : `$${value}`
     // Quick add (AGL-3676 follow-up): which card is adding, which just did.
     const [quickAdding, setQuickAdding] = useState('')
     const [quickAdded, setQuickAdded] = useState('')
@@ -713,7 +721,7 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
               color="text.secondary"
               sx={{ whiteSpace: 'nowrap' }}
             >
-              {`$${sliderMin}`}
+              {sliderMoney(sliderMin)}
             </Typography>
             <Slider
               size="small"
@@ -727,7 +735,7 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
                 setPriceInput(Array.isArray(value) ? value : [value, value])
               }
               valueLabelDisplay="auto"
-              valueLabelFormat={(value) => `$${value}`}
+              valueLabelFormat={(value) => sliderMoney(value)}
               getAriaLabel={(index) =>
                 index === 0 ? 'Minimum price' : 'Maximum price'
               }
@@ -737,7 +745,7 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
               color="text.secondary"
               sx={{ whiteSpace: 'nowrap' }}
             >
-              {`$${sliderMax}`}
+              {sliderMoney(sliderMax)}
             </Typography>
           </Box>
         ) : null}
@@ -885,7 +893,7 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                   <Typography variant="body2" color="text.secondary">
-                    {priceLabel(item)}
+                    {priceLabel(item, shopper)}
                   </Typography>
                   {item.compareAtPriceUsd ? (
                     <Typography
@@ -893,7 +901,7 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
                       color="text.secondary"
                       sx={{ textDecoration: 'line-through' }}
                     >
-                      {usdLabel(item.compareAtPriceUsd)}
+                      {shopper.formatVariant({ priceUsd: item.compareAtPriceUsd })}
                     </Typography>
                   ) : null}
                   {item.soldOut ? (

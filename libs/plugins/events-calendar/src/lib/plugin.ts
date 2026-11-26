@@ -22,6 +22,7 @@ import { lazy } from 'react'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerEventsRecordRoutes } from './model/events-record-routes'
 import { eventCalendarUpgradeMessage } from './model/upgrade-notice'
+import { EVENTS_CONFIG_SCHEMA } from './plugin-config'
 import {
   EVENTS_TRANSFER_LABEL,
   EVENTS_TRANSFER_RESOURCE,
@@ -43,6 +44,9 @@ const EventsConsolePage = lazy(() => import('./components/events-console-page'))
  * surface exists without any edit to the console's own nav or page files.
  */
 export function registerEventsCalendarConsole(): void {
+  // Where an event's link opens (AGL-4252): the Calendar and Event details
+  // pages, in the plugin settings the console lists.
+  Aglyn.registerPluginConfigSchema(EVENTS_CONFIG_SCHEMA)
   Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Events Calendar',

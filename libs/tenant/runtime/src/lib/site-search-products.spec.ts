@@ -82,6 +82,9 @@ const firestore = { collection: () => ({ doc: () => hostRef }) }
 // Factories, not bare `jest.mock`: the module graph under
 // `@aglyn/tenant-data-admin` reaches `undici`, and an auto-mock still
 // evaluates the real graph to derive its shape.
+// The section index is its own reader with its own spec (site-section-index.spec.ts);
+// here it answers nothing, so these cases count only what they set up.
+jest.mock('./site-section-index', () => ({ retrieveSiteSections: jest.fn(async () => []) }))
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: { app: () => ({ firestore: () => firestore }) },
@@ -94,7 +97,7 @@ jest.mock('@aglyn/tenant-data-admin/render-cache', () => ({
     options.read(),
   ),
 }))
-jest.mock('@aglyn/tenant-runtime/template-screens', () => ({
+jest.mock('./template-screens', () => ({
   __esModule: true,
   default: jest.fn(async () => new Set<string>()),
   getTemplateScreenIds: jest.fn(async () => new Set<string>()),
@@ -103,7 +106,7 @@ jest.mock('@aglyn/tenant-runtime/template-screens', () => ({
     listRoutes: {} as Record<string, string>,
   })),
 }))
-jest.mock('@aglyn/tenant-runtime/get-screen-version', () => ({
+jest.mock('./get-screen-version', () => ({
   __esModule: true,
   default: jest.fn(async () => ({ version: undefined, error: null })),
 }))
@@ -116,22 +119,22 @@ jest.mock('@aglyn/aglyn/plugin-manager/repeat-rows', () => ({
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
   screenRoutePathToUrl: jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/screen-route',
+    '@aglyn/aglyn/app-utils/screen-route',
   ).screenRoutePathToUrl,
   hostCollectionKind: jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/collection-kind',
+    '@aglyn/aglyn/app-utils/collection-kind',
   ).hostCollectionKind,
   decodeStoredNodes: jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/stored-nodes',
+    '@aglyn/aglyn/app-utils/stored-nodes',
   ).decodeStoredNodes,
   repeatKeys: jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/expand-repeatables',
+    '@aglyn/aglyn/app-utils/expand-repeatables',
   ).repeatKeys,
   COLLECTION_SEARCH_FUSE_OPTIONS: jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/collection-entries',
+    '@aglyn/aglyn/app-utils/collection-entries',
   ).COLLECTION_SEARCH_FUSE_OPTIONS,
   formatCollectionEntryDate: jest.requireActual(
-    '../../../libs/aglyn/src/lib/app-utils/collection-entries',
+    '@aglyn/aglyn/app-utils/collection-entries',
   ).formatCollectionEntryDate,
 }))
 
@@ -145,7 +148,7 @@ import { withRenderCache } from '@aglyn/tenant-data-admin/render-cache'
 import searchContent, {
   filterSearchResults,
   searchResultFacets,
-} from '../utils/search-content'
+} from './site-search'
 
 const COMMERCE = 'commerce'
 const STORE_ON = ['mui', COMMERCE]

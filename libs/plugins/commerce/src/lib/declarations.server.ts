@@ -40,6 +40,10 @@ import {
   type PluginSiteSearchSource,
 } from '@aglyn/aglyn/plugin-manager/plugin-site-search'
 import {
+  registerPluginSiteOffer,
+  type PluginSiteOfferSource,
+} from '@aglyn/aglyn/plugin-manager/plugin-site-offers'
+import {
   registerPluginStockLevels,
   type PluginStockLevels,
 } from '@aglyn/aglyn/plugin-manager/plugin-stock-levels'
@@ -113,6 +117,13 @@ export function registerCommerceServerDeclarations(): void {
   // The store's products in the site's own search page: what the storefront
   // lists, linked to each product's page. The reads load with the first search.
   registerPluginSiteSearchSource(lazySiteSearch, { pluginId: BUNDLE_ID })
+  // Its stays (cabins, hookups, tent sites) beside them (AGL-4252), each
+  // linked to the page its owner named for it.
+  registerPluginSiteSearchSource(lazyStaysSearch, { pluginId: BUNDLE_ID })
+  // A product as another plugin's button sells it (AGL-4252): an events
+  // calendar's "Get tickets" puts it in the cart, with the event's day as its
+  // use day when the product asks for one.
+  registerPluginSiteOffer('product', lazyProductOffer, { pluginId: BUNDLE_ID })
   // Counts another warehouse keeps, applied as a stock-take (AGL-3634): a
   // fulfillment network says how many it can ship and the products say so.
   registerPluginStockLevels(lazyStockLevels, { pluginId: BUNDLE_ID })
@@ -182,4 +193,18 @@ function lazyIndex(name: IndexName): PluginRecordIndex {
     list: async (request) => (await load()).list(request),
     get: async (request) => (await load()).get(request),
   }
+}
+
+/** Stays in site search, with the reads arriving on the first search. */
+const lazyStaysSearch: PluginSiteSearchSource = {
+  key: 'stays',
+  label: 'Stays',
+  items: async (request) =>
+    (await import('./server/stays-site-search')).commerceStaysSiteSearch.items(request),
+}
+
+/** A product's offer, with the read arriving on the first ask. */
+const lazyProductOffer: PluginSiteOfferSource = {
+  resolve: async (request) =>
+    (await import('./server/site-offers')).commerceProductSiteOffer.resolve(request),
 }

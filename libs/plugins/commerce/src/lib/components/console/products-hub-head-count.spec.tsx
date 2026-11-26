@@ -334,7 +334,9 @@ describe('the products hub head-count is a server aggregate (AGL-1716)', () => {
 
     // Duplicate is a create and consumes the same slot, so it reads the
     // same number — before the fix, the same saturated one.
-    fireEvent.click(screen.getAllByText('Duplicate')[0])
+    // From the row's ⋮ menu, the same on every row.
+    fireEvent.click(screen.getAllByRole('button', { name: /^More actions for / })[0])
+    fireEvent.click(screen.getByRole('menuitem', { name: /Duplicate/ }))
 
     expect(
       enqueueSnackbar.mock.calls.some((call) =>

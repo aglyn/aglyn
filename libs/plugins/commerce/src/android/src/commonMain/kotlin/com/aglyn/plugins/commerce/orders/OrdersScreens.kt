@@ -122,7 +122,7 @@ fun statusTone(status: OrderStatus): StatusTone = when (Contracts.orderStatusCol
   else -> StatusTone.NEUTRAL
 }
 
-private fun money(cents: Double) = formatOrderMoney(cents)
+private fun money(cents: Double, currency: String = "USD") = formatOrderMoney(cents, currency)
 
 private fun addressLines(address: OrderAddress?): List<String> = address?.let {
   listOfNotNull(
@@ -198,6 +198,8 @@ private fun OrdersList(
   val disputeFlow = remember(hostId, context.firestore) { hostId?.let { context.firestore.observe(openDisputesQuery(it)) } }
   val disputeDocs = disputeFlow?.collectAsState(Live.Loading)?.value
   val disputeRows = (disputeDocs as? Live.Ready)?.value.orEmpty()
+  // An order from before multi-currency is in the store's own currency (AGL-4248).
+  val storeCurrency = rememberOrderStoreCurrency(context)
   val disputes = com.aglyn.contracts.summariseOpenDisputes(disputeRows.take(OPEN_DISPUTE_CEILING).map(::hostOrderFrom), nowMillis().toDouble())
   val loaded = (model.rows as? Load.Ready)?.value.orEmpty()
   val nearEnd by remember {
@@ -346,9 +348,9 @@ private fun OrdersList(
           }
           items(rows.value, key = { it.id }) { row ->
             if (selecting) {
-              OrderListRow(row, row.id in picked, ticked = row.id in picked) { picked = if (row.id in picked) picked - row.id else picked + row.id }
+              OrderListRow(row, storeCurrency, row.id in picked, ticked = row.id in picked) { picked = if (row.id in picked) picked - row.id else picked + row.id }
             } else {
-              OrderListRow(row, row.id == selected) { onSelect(row.id) }
+              OrderListRow(row, storeCurrency, row.id == selected) { onSelect(row.id) }
             }
           }
           if (model.hasMore || model.loadingMore) item { SkeletonList(rows = 2) }
@@ -399,7 +401,7 @@ private fun OrdersList(
 }
 
 @Composable
-private fun OrderListRow(row: OrderRow, selected: Boolean, ticked: Boolean? = null, onClick: () -> Unit) {
+private fun OrderListRow(row: OrderRow, storeCurrency: String, selected: Boolean, ticked: Boolean? = null, onClick: () -> Unit) {
   val now = nowMillis()
   val items = if (row.itemCount == 1L) "1 item" else "${row.itemCount} items"
   // Figma List/Order row (11:329): the number and customer over items, channel and time; the total over the status.
@@ -411,7 +413,7 @@ private fun OrderListRow(row: OrderRow, selected: Boolean, ticked: Boolean? = nu
     // The order's glyph is Orders' own (the manifest's bag), the register's for a sale rung up there.
     // Every order wears the bag (Figma List/Order row, as on Apple); the channel is in its detail line.
     leading = { com.aglyn.ui.ScaffoldRowTile(if (ticked == true) "check_circle" else "shopping_bag") },
-    figure = money(row.netCents),
+    figure = money(row.netCents, orderCurrency(row.currency, storeCurrency)),
     status = {
       Row(horizontalArrangement = Arrangement.spacedBy(space(0.5f))) {
         if (row.disputeOpen) StatusChip("Dispute", StatusTone.ERROR)
@@ -432,6 +434,8 @@ fun OrderDetailPane(context: NativePluginContext, orderId: String, onChanged: ()
   val live by flow.collectAsState(Live.Loading)
   val scope = rememberCoroutineScope()
   val actions = remember(hostId, orderId) { OrderActionsModel(ConsoleOrderActionsApi(context.api, hostId, context.firestore), scope) }
+  // An order from before multi-currency is in the store's own currency (AGL-4248).
+  val storeCurrency = rememberOrderStoreCurrency(context)
   LaunchedEffect(actions.done) { if (actions.done != null) onChanged() }
   when (val value = live) {
     Live.Loading -> SkeletonList(rows = 8, modifier = Modifier.padding(space(2f)))
@@ -509,10 +513,11 @@ fun OrderDetailPane(context: NativePluginContext, orderId: String, onChanged: ()
           onDownloadInvoice = onDownloadInvoice,
           onSendInvoice = onSendInvoice,
           openCustomer = customerLink?.let { link -> { context.openLink(link) } },
+          storeCurrency = storeCurrency,
         ) {
           context.navigate(COMMERCE_ORDER_SERVICES_SCREEN, mapOf("orderId" to orderId))
         }
-        OrderDialogs(detail, actions)
+        OrderDialogs(detail, actions, orderCurrency(detail.order, storeCurrency))
       }
     }
   }
@@ -535,9 +540,12 @@ private fun OrderDetailContent(
   onDownloadInvoice: () -> Unit,
   onSendInvoice: () -> Unit,
   openCustomer: (() -> Unit)? = null,
+  storeCurrency: String = "USD",
   openServices: () -> Unit,
 ) {
   val order = detail.order
+  // Every amount on the order is in the currency it was paid in (AGL-4248).
+  val currency = orderCurrency(order, storeCurrency)
   val totals = order.totals
   val uriHandler = LocalUriHandler.current
   val offer = detail.actions
@@ -634,7 +642,7 @@ private fun OrderDetailContent(
               .padding(vertical = if (beside) 8.dp else space(0.5f)).testTag("order-line-$index"),
           ) {
             val quantity = line.quantity.toLong()
-            val amount = money(line.unitAmountCents * line.quantity)
+            val amount = money(line.unitAmountCents * line.quantity, currency)
             if (beside) {
               // Figma 13:483 / 13:2167's plain line: what was bought, its options, and how many, then its amount.
               AmountRow(listOfNotNull(line.name, line.variantLabel).joinToString(", ") + if (quantity == 1L) "" else " × $quantity", amount, muted = withdrawn, size = 14.sp)
@@ -675,20 +683,20 @@ private fun OrderDetailContent(
       // Beside a list each row is Figma's 40 (14/20 text, 10 above and below); a phone keeps its own rhythm.
       val size = if (beside) 14.sp else null
       val row = if (beside) Modifier.padding(vertical = 10.dp) else Modifier
-      totals?.itemsCents?.let { AmountRow("Items", money(it), row, size = size) }
-      totals?.discountCents?.takeIf { it > 0 }?.let { AmountRow("Discount", "−" + money(it), row, size = size) }
-      totals?.shippingCents?.takeIf { it > 0 }?.let { AmountRow("Shipping", money(it), row, size = size) }
-      totals?.taxCents?.takeIf { it > 0 }?.let { AmountRow("Tax", money(it), row, size = size) }
-      order.extras.orEmpty().forEach { extra -> AmountRow(extra.label, money(extra.amountCents), row, size = size) }
-      totals?.tipCents?.takeIf { it > 0 }?.let { AmountRow("Tip", money(it), row, size = size) }
+      totals?.itemsCents?.let { AmountRow("Items", money(it, currency), row, size = size) }
+      totals?.discountCents?.takeIf { it > 0 }?.let { AmountRow("Discount", "−" + money(it, currency), row, size = size) }
+      totals?.shippingCents?.takeIf { it > 0 }?.let { AmountRow("Shipping", money(it, currency), row, size = size) }
+      totals?.taxCents?.takeIf { it > 0 }?.let { AmountRow("Tax", money(it, currency), row, size = size) }
+      order.extras.orEmpty().forEach { extra -> AmountRow(extra.label, money(extra.amountCents, currency), row, size = size) }
+      totals?.tipCents?.takeIf { it > 0 }?.let { AmountRow("Tip", money(it, currency), row, size = size) }
       HorizontalDivider(color = com.aglyn.ui.shellColors.divider)
-      AmountRow("Total", money(totals?.totalCents ?: order.amountCents ?: 0.0), row, emphasized = true, size = size)
+      AmountRow("Total", orderTotalText(order, storeCurrency), row, emphasized = true, size = size)
       Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         val reversal = splitOrderReversal(order)
         val note = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 16.sp)
         Text(describeOrderTaxMode(order.taxMode?.raw), style = note, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        reversal.refundedCents.takeIf { it > 0 }?.let { Text("Refunded ${money(it.toDouble())}", style = note, color = MaterialTheme.colorScheme.error) }
-        reversal.chargedBackCents.takeIf { it > 0 }?.let { Text("Charged back ${money(it.toDouble())}", style = note, color = MaterialTheme.colorScheme.error) }
+        reversal.refundedCents.takeIf { it > 0 }?.let { Text("Refunded ${money(it.toDouble(), currency)}", style = note, color = MaterialTheme.colorScheme.error) }
+        reversal.chargedBackCents.takeIf { it > 0 }?.let { Text("Charged back ${money(it.toDouble(), currency)}", style = note, color = MaterialTheme.colorScheme.error) }
       }
     }
     }
@@ -803,7 +811,7 @@ private fun RestockCard(detail: OrderDetail, check: OrderRestockCheck, actions: 
 }
 
 @Composable
-private fun OrderDialogs(detail: OrderDetail, actions: OrderActionsModel) {
+private fun OrderDialogs(detail: OrderDetail, actions: OrderActionsModel, currency: String = "USD") {
   val orderId = detail.id
   when (actions.dialog) {
     null -> Unit
@@ -884,9 +892,9 @@ private fun OrderDialogs(detail: OrderDetail, actions: OrderActionsModel) {
       val problem = if (full) null else checkRefundAmount(cents, detail.refundableCents)
       ActionDialog(
         title = "Refund ${detail.label}",
-        body = "${money(detail.refundableCents)} is left to refund on this order.",
+        body = "${money(detail.refundableCents, currency)} is left to refund on this order.",
         icon = "undo",
-        confirmLabel = if (cents != null && problem == null) "Refund ${money(cents.toDouble())}" else "Refund",
+        confirmLabel = if (cents != null && problem == null) "Refund ${money(cents.toDouble(), currency)}" else "Refund",
         confirmEnabled = problem == null,
         destructive = true,
         busy = actions.busy,

@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1
 title: Site Search
-description: Let visitors search your site's pages, blog entries, and dataset records with a built-in search page.
+description: Let visitors search your site's pages, blog entries, products and dataset records with a built-in search page.
 ---
 
 # Site Search
@@ -24,23 +24,27 @@ published content directly when the visitor searches.
 
 ## What it searches
 
-A search matches the query as a case-insensitive substring across three kinds of
-content:
+A search looks across:
 
-- **Pages** — the page's name, description, and [SEO](../seo/overview.md)
-  title and description.
-- **Blog & collection entries** — published entries' title, excerpt, and body
+- **Pages**: the page's name, description and [SEO](../seo/overview.md)
+  title and description, matched as a case-insensitive substring, and then
+  **what the page says**. Every published page is read section by section
+  (each heading starts a section), so a visitor who searches "dogs" finds the
+  page whose rules mention dogs, even when its name does not.
+- **Blog & collection entries**: published entries' title, excerpt, and body
   (see [collections](../site-templates/build-a-blog.md)).
-- **Dataset records** — a record's [dataset](../../content-and-data/datasets/overview.md)
+- **Dataset records**: a record's [dataset](../../content-and-data/datasets/overview.md)
   values. A record only appears in results when a published page
   [repeats over that dataset](../../content-and-data/datasets/overview.md#repeatable-components),
   so the result can link to a real page.
+- **Products**, on a site whose store is on: a product's name, and the other
+  words it carries (its description, SKUs, tags).
 
-Results are listed in that order (pages, then entries, then records), up to
-50 matches. There's no relevance ranking — matching is a straight substring
-test — so clear titles and descriptions make results more useful. The `/search`
-results page is excluded from search engines, and `search` is a reserved page
-slug.
+Products found by name come first, then pages, entries and dataset records found
+by name or value, then pages found by what they say (the page that answers best
+first), then products found by their other words, up to 50 matches. Pages found
+by what they say are refreshed each time you publish. The `/search` results page
+is excluded from search engines, and `search` is a reserved page slug.
 
 ## The layout built-in pages use
 

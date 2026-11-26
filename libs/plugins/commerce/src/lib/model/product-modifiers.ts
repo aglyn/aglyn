@@ -65,6 +65,11 @@ export interface ProductModifierOption {
    * `priceCents`. Read through {@link modifierOptionPriceCents}.
    */
   priceCentsByVariant?: Record<string, number>
+  /**
+   * What the choice adds in another currency the store sells in (AGL-4248),
+   * minor units keyed by ISO code. A currency not listed converts.
+   */
+  fixedPriceCents?: Record<string, number>
   /** A picture of the choice, from the media library, for its card (AGL-4205). */
   imageUrl?: string
   /** A short line under the choice on its card (AGL-4205): "Blocks wind on one side". */

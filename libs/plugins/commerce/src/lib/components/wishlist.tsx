@@ -27,6 +27,7 @@ import Typography from '@mui/material/Typography'
 import { forwardRef, useCallback, useEffect, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
+import { useShopperCurrency } from './shopper-currency'
 
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'wishlist'
@@ -104,6 +105,8 @@ interface CatalogItem {
   name: string
   slug: string
   priceUsd: number
+  /** The cheapest variant's own prices per currency (AGL-4248). */
+  fixedPrices?: Record<string, number>
   imageUrl?: string
   soldOut: boolean
   /** Listed before it has a price (AGL-3676). */
@@ -121,6 +124,8 @@ const Wishlist = forwardRef<HTMLDivElement, WishlistProps>((props, ref) => {
   const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
   const { hostId } = Aglyn.useSite()
   const siteFetch = Aglyn.useSiteFetch()
+  // In the shopper's currency (AGL-4248), like every other price on the store.
+  const shopper = useShopperCurrency()
   const [items, setItems] = useState<CatalogItem[] | null>(null)
 
   const refresh = useCallback(async () => {
@@ -237,7 +242,7 @@ const Wishlist = forwardRef<HTMLDivElement, WishlistProps>((props, ref) => {
                       ? 'Sold out'
                       : item.priceComingSoon
                         ? 'Price coming soon'
-                        : `$${item.priceUsd}`}
+                        : shopper.formatVariant({ priceUsd: item.priceUsd, fixedPrices: item.fixedPrices })}
                   </Typography>
                 </CardContent>
               </CardActionArea>

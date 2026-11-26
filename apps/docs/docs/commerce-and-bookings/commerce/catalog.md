@@ -43,6 +43,32 @@ Products created with the earlier single-price product block are lifted
 into this model automatically as a single default variant — nothing breaks
 and no migration step is needed.
 
+## The product list {#product-list}
+
+**Products → Catalog** lists your products, one row each. Click a row to open
+the product in the editor. To open it in a new tab instead, Cmd-click it
+(Ctrl-click on Windows), Shift-click it or middle-click it. Every column
+header sorts the list.
+
+Each row has one **⋮** menu. Every row has the same menu, with the actions
+that apply to that product:
+
+- **Edit** opens the product in the editor, as clicking the row does.
+- **Duplicate** copies the product as a **draft** named "(copy)". The copy
+  keeps the original's options, all its variants, add-ons and write-ins,
+  photos, SEO, categories, tags and collections. It counts toward your plan's
+  product allowance.
+- **View on site** opens the product's page on your site in a new tab. It's
+  grayed out for draft and archived products, and for products you
+  [sell in person only](#sell-in-person-only), because those have no page.
+- **Adjust stock** appears when the product tracks inventory.
+- **Print labels** appears on physical products, and **License keys** on
+  digital ones.
+- **Set active**, **Set to draft**, and **Archive** or **Unarchive as draft**
+  change the product's status.
+- **Delete** asks you to confirm, then removes the product. Past orders keep
+  showing it.
+
 ### More than 100 combinations {#more-than-100-combinations}
 
 Every value of every option makes more variants: 5 sizes, 5 colors and 6

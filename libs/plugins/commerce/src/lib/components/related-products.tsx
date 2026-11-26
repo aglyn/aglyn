@@ -26,7 +26,7 @@ import Typography from '@mui/material/Typography'
 import { forwardRef, useEffect, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
-import { formatOrderMoney } from '../model/buyer-notifications'
+import { useShopperCurrency } from './shopper-currency'
 import { ProductImagePlaceholder } from './product-image-placeholder'
 import {
   PRODUCT_PHOTO_FIT_ATTRIBUTE,
@@ -63,6 +63,8 @@ interface CatalogItem {
   name: string
   slug: string
   priceUsd: number
+  /** The cheapest variant's own prices per currency (AGL-4248). */
+  fixedPrices?: Record<string, number>
   imageUrl?: string
   /** Listed before it has a price (AGL-3676). */
   priceComingSoon?: boolean
@@ -79,6 +81,7 @@ const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
     // Node styles ride the renderer-merged sx; recompose (stack.ts pattern).
     const nodeSx = Array.isArray(props['sx']) ? props['sx'] : [props['sx']]
     const site = Aglyn.useSite()
+    const shopper = useShopperCurrency()
     const { hostId } = site
     // The page's product, when the server seeded it (AGL-659): its id is the
     // anchor, so the rail skips a product lookup the page already made.
@@ -212,7 +215,7 @@ const RelatedProducts = forwardRef<HTMLDivElement, RelatedProductsProps>(
                     <Typography variant={grid ? 'body2' : 'caption'} color="text.secondary">
                       {item.priceComingSoon
                         ? 'Price coming soon'
-                        : formatOrderMoney(Math.round(item.priceUsd * 100))}
+                        : shopper.formatVariant({ priceUsd: item.priceUsd, fixedPrices: item.fixedPrices })}
                     </Typography>
                   </CardContent>
                 </CardActionArea>

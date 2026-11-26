@@ -31,6 +31,7 @@ import { memo, useCallback, useId, useState } from 'react'
 import * as CommerceModel from '../../model'
 import { PRODUCT_CHOICE_NOTE_MAX, PRODUCT_COMBO_ITEM_MAX, PRODUCT_COMBO_MAX_ITEMS } from '../../model/product-card-rules'
 import { CardPictureField, type ProductMediaPick } from './product-builder-fields.component'
+import type { ConsoleCurrencySetup } from './use-currency-setup'
 
 type Patch = Partial<CommerceModel.HostProduct>
 
@@ -43,6 +44,11 @@ export interface ProductAddOnsFieldsProps {
   update: (patch: Patch) => void
   /** Opens the media browser for a choice's picture (AGL-4205); without it, no picture is chosen. */
   pick?: ProductMediaPick
+  /**
+   * The store's other currencies (AGL-4248): with any, each choice may carry
+   * a fixed amount in them. Without, nothing currency-related is drawn.
+   */
+  currencies?: ConsoleCurrencySetup
 }
 
 function newId(prefix: string): string {
@@ -126,6 +132,28 @@ export function withVariantPrice(
   if (raw.trim() === '') delete next[variantId]
   else next[variantId] = centsFromDollars(raw)
   return Object.keys(next).length ? { ...rest, priceCentsByVariant: next } : rest
+}
+
+/**
+ * A choice's fixed amount in another currency (AGL-4248), set or cleared, in
+ * minor units of that currency. A cleared amount converts again; with none
+ * left the field is dropped, never stored as `undefined`. Something that is
+ * not a price changes nothing.
+ */
+export function withCurrencyPrice(
+  option: CommerceModel.ProductModifierOption,
+  code: string,
+  raw: string,
+): CommerceModel.ProductModifierOption {
+  const major = CommerceModel.parseMajorInput(raw)
+  if (major === null) return option
+  const { fixedPriceCents, ...rest } = option
+  const next = CommerceModel.withCurrencyAmount(
+    fixedPriceCents,
+    code,
+    major === undefined ? undefined : CommerceModel.majorToMinor(major, code),
+  )
+  return next ? { ...rest, fixedPriceCents: next } : rest
 }
 
 /**
@@ -270,9 +298,11 @@ function WriteInFields(props: WriteInFieldsProps) {
 export const ProductAddOnsFields = memo(function ProductAddOnsFields(
   props: ProductAddOnsFieldsProps,
 ) {
-  const { modifierGroups, options, variants, update, pick } = props
+  const { modifierGroups, options, variants, update, pick, currencies } = props
   const helpId = useId()
   const [pricedByVariant, setPricedByVariant] = useState<Record<string, boolean>>({})
+  const [inCurrenciesOpen, setInCurrenciesOpen] = useState<Record<string, boolean>>({})
+  const others = currencies?.others ?? []
   const [cardOpen, setCardOpen] = useState<Record<string, boolean>>({})
   const setGroups = useCallback(
     (groups: CommerceModel.ProductModifierGroup[]) => update({ modifierGroups: groups }),
@@ -394,6 +424,8 @@ export const ProductAddOnsFields = memo(function ProductAddOnsFields(
                 pricedByVariant[optionKey] ?? Object.keys(option.priceCentsByVariant ?? {}).length > 0
               const hasCard = Boolean(option.imageUrl || option.note || option.includes?.length)
               const cardShown = cardOpen[optionKey] ?? hasCard
+              const currenciesShown =
+                inCurrenciesOpen[optionKey] ?? Object.keys(option.fixedPriceCents ?? {}).length > 0
               const choiceLabel = option.name || 'this choice'
               return (
                 <Box key={option.id}>
@@ -425,6 +457,17 @@ export const ProductAddOnsFields = memo(function ProductAddOnsFields(
                         }
                       >
                         {byLabel}
+                      </Button>
+                    ) : null}
+                    {others.length ? (
+                      <Button
+                        size="small"
+                        aria-expanded={currenciesShown}
+                        onClick={() =>
+                          setInCurrenciesOpen((open) => ({ ...open, [optionKey]: !currenciesShown }))
+                        }
+                      >
+                        {'Other currencies'}
                       </Button>
                     ) : null}
                     <Button
@@ -474,6 +517,56 @@ export const ProductAddOnsFields = memo(function ProductAddOnsFields(
                                   withVariantPrice(
                                     modifierGroups[groupIndex].options[optionIndex],
                                     variant.id,
+                                    event.target.value,
+                                  ),
+                                )
+                              }
+                              slotProps={{ htmlInput: { inputMode: 'decimal' } }}
+                            />
+                          ))}
+                        </Box>
+                      </Stack>
+                    </Collapse>
+                  ) : null}
+                  {others.length && currencies ? (
+                    <Collapse in={currenciesShown} unmountOnExit>
+                      <Stack spacing={1} sx={{ pl: 2, pt: 1.5 }}>
+                        <Typography variant="caption" color="text.secondary">
+                          {`What “${choiceLabel}” adds in each currency. Leave one blank to convert ` +
+                            'the price above at the day’s rate.'}
+                        </Typography>
+                        <Box
+                          sx={{
+                            display: 'grid',
+                            gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, minmax(0, 1fr))' },
+                            gap: 1,
+                          }}
+                        >
+                          {others.map((entry) => (
+                            <TextField
+                              key={entry.code}
+                              label={`Adds (${entry.code})`}
+                              size="small"
+                              defaultValue={CommerceModel.minorToInput(
+                                option.fixedPriceCents?.[entry.code],
+                                entry.code,
+                              )}
+                              placeholder={CommerceModel.minorToInput(
+                                CommerceModel.amountMinorIn(
+                                  option.priceCents ?? 0,
+                                  currencies.base,
+                                  entry,
+                                  currencies.rates,
+                                ),
+                                entry.code,
+                              )}
+                              onBlur={(event) =>
+                                replaceOption(
+                                  groupIndex,
+                                  optionIndex,
+                                  withCurrencyPrice(
+                                    modifierGroups[groupIndex].options[optionIndex],
+                                    entry.code,
                                     event.target.value,
                                   ),
                                 )

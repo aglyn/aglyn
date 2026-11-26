@@ -205,13 +205,37 @@ export function productDuplicateSlugBase(slug: string | undefined, name: string)
  * source's would sort and find it by the source's name) and stock fields, and
  * not the source's SKU and barcode keys, which are derived again from its
  * variants. The caller adds the claimed `slug`'s smart-collection membership.
+ *
+ * Everything the merchant made is copied: options, every variant, add-ons and
+ * write-ins (`modifierGroups`), photos, SEO, categories, tags. The source's
+ * OWN bookkeeping is not: the checkout holds on its stock (`stockHolds`, which
+ * no checkout of the copy would ever release), its soft delete, and who made
+ * it and when, which the create stamps afresh.
  */
 export function productDuplicateFields(
-  product: HostProduct & { $id?: string; skus?: string[]; barcodes?: string[] },
+  product: HostProduct & {
+    $id?: string
+    skus?: string[]
+    barcodes?: string[]
+    stockHolds?: unknown
+    createdAt?: unknown
+    updatedAt?: unknown
+    createdBy?: unknown
+  },
   slug: string,
   nowMs: number,
 ) {
-  const { $id: _sourceId, skus: _skus, barcodes: _barcodes, ...copy } = product
+  const {
+    $id: _sourceId,
+    skus: _skus,
+    barcodes: _barcodes,
+    stockHolds: _stockHolds,
+    createdAt: _createdAt,
+    updatedAt: _updatedAt,
+    createdBy: _createdBy,
+    deletedAt: _deletedAt,
+    ...copy
+  } = product
   return {
     ...copy,
     ...productSearchFields({ name: productDuplicateName(product.name), variants: product.variants }),

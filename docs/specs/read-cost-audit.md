@@ -474,7 +474,7 @@ names one; **none** is the arbitrary-sample defect described in §2.
 | `libs/plugins/commerce/src/lib/server/related.ts`:69 | 300 | **none** | unordered |
 | `apps/console/app/(app)/manage/notifications/page.tsx`:260 | 200 | ordered |  |
 | `apps/console/components/document-preview.component.tsx`:320 | 200 | **none** | unordered |
-| `apps/tenant/utils/search-content.ts`:268 | 200 | **none** | unordered |
+| `libs/tenant/runtime/src/lib/site-search.ts`:268 | 200 | **none** | unordered |
 | `libs/plugins/commerce/src/lib/server/catalog.ts`:200 | 200 | **none** | unordered |
 | `libs/plugins/commerce/src/lib/server/catalog.ts`:201 | 200 | **none** | unordered |
 | `libs/plugins/commerce/src/lib/server/process-abandoned.ts`:80 | 200 | **none** | unordered |
@@ -482,7 +482,7 @@ names one; **none** is the arbitrary-sample defect described in §2.
 | `libs/plugins/marketing/src/lib/server/campaign-send.ts`:2527 | 200 | ordered |  |
 | `libs/tenant/runtime/src/lib/get-components.ts`:51 | 200 | **none** | unordered |
 | `libs/tenant/runtime/src/lib/template-screens.ts`:295 | 200 | **none** | unordered |
-| `apps/tenant/utils/search-content.ts`:177 | 100 | **none** | unordered |
+| `libs/tenant/runtime/src/lib/site-search.ts`:177 | 100 | **none** | unordered |
 | `libs/plugins/bookings/src/lib/server.ts`:66 | 100 | **none** | unordered |
 | `libs/plugins/commerce/src/lib/server/cart-checkout.ts`:356 | 100 | **none** | unordered |
 | `libs/plugins/commerce/src/lib/server/checkout.ts`:315 | 100 | **none** | unordered |

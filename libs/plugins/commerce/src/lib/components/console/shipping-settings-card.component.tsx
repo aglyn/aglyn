@@ -49,6 +49,7 @@ import {
   useHeldSave,
   useSeedEdits,
 } from '@aglyn/tenant-feature-instance/hooks/use-seed-edits'
+import { useCurrencySetup } from './use-currency-setup'
 
 export interface ShippingSettingsCardProps {
   hostId: string
@@ -150,6 +151,13 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
   }, [hostId, user])
   const update = (patch: Partial<CommerceModel.ShippingSettings>) =>
     form.edit(patch)
+  /*
+   * The store's other currencies (AGL-4248), from the same settings doc, and
+   * the day's rates for the converted figure each blank field stands for.
+   */
+  const { rates: fxRates } = useCurrencySetup(hostId)
+  const storeBase = CommerceModel.storeBaseCurrency(store)
+  const otherCurrencies = CommerceModel.otherStoreCurrencies(store?.currencies, storeBase)
 
   const updateZone = (
     index: number,
@@ -191,6 +199,34 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
         ...rates[index],
         ...patch,
       }
+    update({ rates })
+  }
+
+  /**
+   * One rate's price, or free-over threshold, in another currency
+   * (AGL-4248). Blank is converted from the store-currency figure, and drops
+   * the key: an emptied map is removed rather than stored as `undefined`.
+   */
+  const updateRateCurrency = (
+    index: number,
+    field: 'amountsByCurrency' | 'freeOverByCurrency',
+    code: string,
+    raw: string,
+  ) => {
+    const rate = current.rates?.[index]
+    if (!rate) return
+    const major = CommerceModel.parseMajorInput(raw)
+    if (major === null) return
+    const map = CommerceModel.withCurrencyAmount(
+      rate[field],
+      code,
+      major === undefined ? undefined : CommerceModel.majorToMinor(major, code),
+    )
+    const next: CommerceModel.ShippingRate = { ...rate }
+    if (map) next[field] = map
+    else delete next[field]
+    const rates = [...(current.rates ?? [])]
+    rates[index] = next
     update({ rates })
   }
 
@@ -446,7 +482,17 @@ export function ShippingSettingsCard(props: ShippingSettingsCardProps) {
                   />
                 ) : null}
               </Stack>
-            ) : (
+            ) : null}
+            {(rate.kind === 'flat' || rate.kind === 'free_over') && otherCurrencies.length ? (
+              <RateCurrencyFields
+                rate={rate}
+                base={storeBase}
+                currencies={otherCurrencies}
+                rates={fxRates}
+                onChange={(field, code, raw) => updateRateCurrency(index, field, code, raw)}
+              />
+            ) : null}
+            {rate.kind === 'carrier' || rate.kind === 'flat' || rate.kind === 'free_over' ? null : (
               <Stack spacing={1} sx={{ pl: 2 }}>
                 {(rate.tiers ?? []).map((tier, tierIndex) => (
                   <Stack key={tierIndex} direction="row" spacing={1}>
@@ -715,6 +761,67 @@ function CarrierRateFields(props: CarrierRateFieldsProps) {
           ))}
         </TextField>
       </Stack>
+    </Stack>
+  )
+}
+
+interface RateCurrencyFieldsProps {
+  rate: CommerceModel.ShippingRate
+  base: string
+  currencies: CommerceModel.StoreCurrency[]
+  rates: CommerceModel.FxRates | undefined
+  onChange: (
+    field: 'amountsByCurrency' | 'freeOverByCurrency',
+    code: string,
+    raw: string,
+  ) => void
+}
+
+/**
+ * A flat or free-over rate in each other currency the store sells in
+ * (AGL-4248). A blank field is converted at the day's rate, and shows the
+ * converted figure as its placeholder; a typed one is charged as typed.
+ */
+function RateCurrencyFields(props: RateCurrencyFieldsProps) {
+  const { rate, base, currencies, rates, onChange } = props
+  const converted = (minor: number | undefined, entry: CommerceModel.StoreCurrency) =>
+    minor == null
+      ? ''
+      : CommerceModel.minorToInput(
+          CommerceModel.amountMinorIn(minor, base, entry, rates),
+          entry.code,
+        )
+  return (
+    <Stack spacing={1} sx={{ pl: 2 }}>
+      <Typography variant="caption" color="text.secondary">
+        {'In other currencies. Leave one blank to convert it from the price above.'}
+      </Typography>
+      {currencies.map((entry) => (
+        <Stack key={entry.code} direction="row" spacing={1}>
+          <TextField
+            key={`${rate.id}-amount-${entry.code}`}
+            label={`Price (${entry.code})`}
+            defaultValue={CommerceModel.minorToInput(rate.amountsByCurrency?.[entry.code], entry.code)}
+            placeholder={converted(rate.amountCents ?? 0, entry)}
+            onBlur={(event) => onChange('amountsByCurrency', entry.code, event.target.value)}
+            size="small"
+            sx={{ width: 140 }}
+            slotProps={{ htmlInput: { inputMode: 'decimal' } }}
+          />
+          {rate.kind === 'free_over' ? (
+            <TextField
+              key={`${rate.id}-free-${entry.code}`}
+              label={`Free at subtotal (${entry.code})`}
+              defaultValue={CommerceModel.minorToInput(rate.freeOverByCurrency?.[entry.code], entry.code)}
+              placeholder={converted(rate.freeOverCents, entry)}
+              onBlur={(event) => onChange('freeOverByCurrency', entry.code, event.target.value)}
+              size="small"
+              sx={{ width: 190 }}
+              slotProps={{ htmlInput: { inputMode: 'decimal' } }}
+            />
+          ) : null}
+        </Stack>
+      ))}
     </Stack>
   )
 }

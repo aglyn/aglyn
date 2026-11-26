@@ -9,6 +9,23 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.31.0 — 2026-11-26
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/eea45c8c8...v1.31.0)
+
+### Added
+
+- **crm:** a call recording asks no consent answer and stays private ([AGL-4249](https://linear.app/aglyn/issue/AGL-4249))
+- **crm:** call recordings and transcripts on activities ([AGL-4249](https://linear.app/aglyn/issue/AGL-4249))
+- **commerce:** checkout ships to the countries a store's zones name ([AGL-4248](https://linear.app/aglyn/issue/AGL-4248), [AGL-1721](https://linear.app/aglyn/issue/AGL-1721))
+- **analytics:** the Pages table names each visited product, post and collection ([AGL-4253](https://linear.app/aglyn/issue/AGL-4253))
+- **search:** site search into tenant-runtime, per-site section index ([AGL-4250](https://linear.app/aglyn/issue/AGL-4250))
+
+### Fixed
+
+- **commerce:** cart line choices wrap in full; long choices reach the payment page
+- **commerce:** product rows open the editor, one ⋮ menu, Duplicate copies all
+
 ## v1.30.0 — 2026-11-26
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.29.3...v1.30.0)

@@ -16,6 +16,7 @@
  */
 
 import { CRM_COLLECTIONS } from '@aglyn/aglyn/app-utils/crm'
+import { FieldValue } from 'firebase-admin/firestore'
 import { runPluginEventHandlers } from '@aglyn/aglyn/plugin-manager/plugin-events'
 import type {
   PluginPersonErasureReport,
@@ -26,6 +27,8 @@ import type {
 import { companyContactsCountFields } from '@aglyn/tenant-data-admin/server/contact-company-link'
 import { deleteWhereEquals } from '@aglyn/tenant-data-admin/server/paged-sweeps'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
+import { mediaStoragePathInScope } from '@aglyn/tenant-data-admin/server/media-storage-path'
+import { mediaDerivedObjectPaths } from '@aglyn/tenant-data-admin/server/media-variants'
 import { contactFacetHolders, repointContactReportsTo } from './contact-reports-to'
 import { sweepDealContactRoles } from './deal-contact-roles'
 
@@ -60,8 +63,90 @@ import { sweepDealContactRoles } from './deal-contact-roles'
 
 type Firestore = FirebaseFirestore.Firestore
 
+/** The part of a Storage bucket the eraser uses: deleting an object by path. */
+export interface CrmEraserBucket {
+  file(path: string): { delete(): Promise<unknown> }
+}
+
 export interface CrmPersonEraserDeps {
   firestore(): Firestore
+  /** The media bucket, where a call recording's bytes are. */
+  bucket?(): CrmEraserBucket
+}
+
+/**
+ * Whether a media document is a CALL RECORDING: uploaded from a CRM activity
+ * with the call-recording confirmation, as against a brochure or a logo that
+ * happens to be attached to a record too and belongs to the business. The
+ * upload routes mark it `mediaPurpose: 'callRecording'`.
+ */
+export function isCallRecordingMedia(data: Record<string, unknown> | undefined): boolean {
+  if (data?.['mediaPurpose'] === 'callRecording') return true
+  const confirmation = data?.['rightsConfirmation'] as Record<string, unknown> | undefined
+  return confirmation?.['purpose'] === 'callRecording'
+}
+
+/**
+ * The call recordings filed on a person's activities, destroyed with them:
+ * the bytes (and anything derived from them), the media document, and the
+ * library's counter. A recording is the person's voice, so it is personal
+ * data in a way the sentence about the call is — and unlike a media delete in
+ * the library, nothing is kept for a restore. Only files uploaded as call
+ * recordings are touched; any other file a record names is the business's
+ * and stays. Returns how many were destroyed.
+ */
+export async function eraseCallRecordings(input: {
+  db: Firestore
+  orgRef: FirebaseFirestore.DocumentReference
+  activities: readonly FirebaseFirestore.QueryDocumentSnapshot[]
+  bucket: CrmEraserBucket | null
+}): Promise<number> {
+  const { orgRef, activities, bucket } = input
+  const ids = new Set<string>()
+  for (const activity of activities) {
+    const named: unknown = activity.get('mediaIds')
+    if (!Array.isArray(named)) continue
+    for (const id of named) if (typeof id === 'string' && id) ids.add(id)
+  }
+  let erased = 0
+  const base = `orgs/${orgRef.id}`
+  for (const mediaId of ids) {
+    try {
+      const mediaRef = orgRef.collection('media').doc(mediaId)
+      const snapshot = await mediaRef.get()
+      if (!snapshot.exists) continue
+      const data = (snapshot.data() ?? {}) as Record<string, unknown>
+      if (!isCallRecordingMedia(data)) continue
+      const objectPath = mediaStoragePathInScope({
+        storagePath: data['storagePath'],
+        base,
+        mediaId,
+      })
+      if (bucket) {
+        for (const path of [objectPath, ...mediaDerivedObjectPaths(objectPath, data)]) {
+          await bucket.file(path).delete().catch(() => undefined)
+        }
+      }
+      const sizeBytes = Number(data['sizeBytes'] ?? 0) || 0
+      // The document and the counter in one commit, so the library's total
+      // never counts a file that is gone.
+      const batch = input.db.batch()
+      batch.delete(mediaRef)
+      batch.set(
+        orgRef.collection('counters').doc('media'),
+        {
+          bytes: FieldValue.increment(-sizeBytes),
+          count: FieldValue.increment(-1),
+        },
+        { merge: true },
+      )
+      await batch.commit()
+      erased += 1
+    } catch (error) {
+      console.error(`${LABEL}: call recording could not be erased`, error)
+    }
+  }
+  return erased
 }
 
 /** The label every log line of this eraser carries — never the address. */
@@ -89,6 +174,7 @@ export function createCrmPersonEraser(deps: CrmPersonEraserDeps): PluginPersonRe
       deals: 0,
       tasks: 0,
       activities: 0,
+      recordings: 0,
       leads: 0,
     }
     const wanted = new Set(request.contactIds)
@@ -134,6 +220,22 @@ export function createCrmPersonEraser(deps: CrmPersonEraserDeps): PluginPersonRe
         LABEL,
       )
       report.tasks += await deleteWhereEquals(db, orgRef.collection(CRM_COLLECTIONS.tasks), 'contactId', contactId, LABEL)
+      // The recordings BEFORE the activities that name them: once the
+      // activities are gone, nothing says which files were this person's.
+      try {
+        const filed = await orgRef
+          .collection(CRM_COLLECTIONS.activities)
+          .where('contactId', '==', contactId)
+          .get()
+        report.recordings += await eraseCallRecordings({
+          db,
+          orgRef,
+          activities: filed.docs,
+          bucket: deps.bucket?.() ?? null,
+        })
+      } catch (error) {
+        console.error(`${LABEL}: call recordings could not be read`, error)
+      }
       report.activities += await deleteWhereEquals(
         db,
         orgRef.collection(CRM_COLLECTIONS.activities),
@@ -209,5 +311,9 @@ export function createCrmPersonEraser(deps: CrmPersonEraserDeps): PluginPersonRe
 
 /** The records eraser over the platform's own Firestore, as the declarations register it. */
 export function crmPersonEraser(): PluginPersonRecordsEraser {
-  return createCrmPersonEraser({ firestore: () => firebaseAdmin.app().firestore() })
+  return createCrmPersonEraser({
+    firestore: () => firebaseAdmin.app().firestore(),
+    bucket: () =>
+      firebaseAdmin.app().storage().bucket(process.env['NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET']),
+  })
 }

@@ -22,7 +22,11 @@ This package is a first-party Aglyn plugin. It is loaded through Aglyn's plugin 
 
 ### On a published site
 
-- One canvas component, `eventList`: a list of the site's published events, each rendered with `schema.org/Event` JSON-LD. Registered by `registerEventsCalendarPlugin()`.
+- `eventList`: a list of the site's published events, each rendered with `schema.org/Event` JSON-LD.
+- `eventCalendar` (calendar v2): month, week and list views (a phone gets the list), category chips, search, a details window with the ticket button, Add to calendar (Google link, `.ics` file) and the next dates, a subscribe link, and `schema.org/Event` per date.
+- `eventDetails` (calendar v2): the one event a page's `?event=…&on=…` names, for an event page the owner designs once.
+
+All three are registered by `registerEventsCalendarPlugin()`. The two v2 elements draw nothing until the workspace's `release_events_calendar_v2` is on (their doors answer `enabled: false`); in Preview they say so.
 
 ### In the console
 
@@ -34,6 +38,13 @@ This package is a first-party Aglyn plugin. It is loaded through Aglyn's plugin 
 
 - `events/list`: published events for the Event List component, sorted by start, with a `mode=past` option. Drafts never leave the server.
 - `events/dispatch`: receives a site event whose client-side trigger fired on the page, so that the action's server steps run.
+- `events/occurrences` (v2): published events in a date range, a repeating event expanded to its dates on the site's clock, with the site's categories and each date's ticket offer; `category` and `q` filter it.
+- `events/event` (v2): one published event at a date, and its next dates.
+- `events/ics` (v2): the site's calendar as iCalendar (series kept as rules) to subscribe to, or one date to download.
+
+`registerEventsCalendarServerDeclarations()` (the `serverDeclarations` surface) registers the `events` source of the site's search (`core.site-search`) and the plugin's settings (`calendarPath`, `eventPagePath`).
+
+A ticket names a record another plugin owns (`product`, `service`), and the plugin that owns the kind answers how a visitor buys or books it through core's `core.site-offers` seam (`@aglyn/aglyn/plugin-manager/plugin-site-offers`): commerce posts a product to its cart with the event's day as the use day, bookings links to its booking page. This plugin imports neither.
 
 `registerEventsCalendarConsoleServerDeclarations()` (the `consoleServerDeclarations` surface) registers the server half of the events import and export, and the `event` draft writer with the `event` build operation an Aglyn AI build or guided site start uses to make dated events and place the Event List on a page. An event is published for a member with the publishing role (admin or editor) and kept as a draft, with a notice, for an author; a new event with no cover gets one from the stock photo picker (`core.stock-photo-picker`) when a plugin registers one.
 

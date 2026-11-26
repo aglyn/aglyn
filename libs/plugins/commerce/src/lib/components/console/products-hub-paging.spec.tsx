@@ -325,7 +325,9 @@ describe('the products table pages, and its header counts the catalog', () => {
 describe('the license-key pool is a per-product read (AGL-2501)', () => {
   const openKeys = async () => {
     await mount()
-    fireEvent.click(screen.getAllByRole('button', { name: 'Keys' })[0])
+    // From the first digital product's ⋮ menu.
+    fireEvent.click(screen.getAllByRole('button', { name: /^More actions for / })[0])
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'License keys' }))
     await waitFor(() =>
       expect(screen.getByText(/available ·/)).toBeTruthy(),
     )
