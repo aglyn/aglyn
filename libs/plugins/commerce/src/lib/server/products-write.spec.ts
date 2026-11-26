@@ -204,6 +204,49 @@ describe('commerce/products/duplicate', () => {
     expect(second.body.slug).toBe('latte-copy-2')
   })
 
+  it('copies a many-variant product whole, joins the source’s manual collections, and leaves its stock holds behind', async () => {
+    const { memory, duplicate } = setup()
+    const variants = ['S', 'M', 'L'].flatMap((size) =>
+      ['Black', 'Camo'].map((color) => ({ id: `${size}-${color}`, options: { Size: size, Color: color }, priceUsd: 30 })),
+    )
+    memory.seed('hosts/h1/products/shirt', {
+      name: 'Racing shirt',
+      slug: 'racing-shirt',
+      type: 'physical',
+      status: 'active',
+      deletedAt: null,
+      options: [{ name: 'Size', values: ['S', 'M', 'L'] }, { name: 'Color', values: ['Black', 'Camo'] }],
+      variants,
+      modifierGroups: [{ id: 'name', label: 'Name on back', type: 'text' }],
+      mediaUrls: ['https://cdn.example/shirt.jpg'],
+      seo: { title: 'Racing shirt' },
+      categoryIds: ['cat-tops'],
+      tags: ['moto'],
+      stockHolds: { 'cs_1': { units: { 'S-Black': 1 }, expiresAtMs: 99_999 } },
+      createdBy: 'u-someone-else',
+    })
+    memory.seed('hosts/h1/collections/c-gear', { kind: 'catalog', mode: 'manual', productIds: ['shirt'] })
+    memory.seed('hosts/h1/collections/c-other', { kind: 'catalog', mode: 'manual', productIds: ['p1'] })
+    const res = await call(duplicate, 'editor', { hostId: 'h1', productId: 'shirt', newProductId: 'shirt-2' })
+    expect(res.statusCode).toBe(200)
+    const copy = memory.read('hosts/h1/products/shirt-2')!
+    expect(copy).toMatchObject({
+      name: 'Racing shirt (copy)',
+      status: 'draft',
+      variants,
+      options: [{ name: 'Size', values: ['S', 'M', 'L'] }, { name: 'Color', values: ['Black', 'Camo'] }],
+      modifierGroups: [{ id: 'name', label: 'Name on back', type: 'text' }],
+      mediaUrls: ['https://cdn.example/shirt.jpg'],
+      seo: { title: 'Racing shirt' },
+      categoryIds: ['cat-tops'],
+      tags: ['moto'],
+      createdBy: 'u-editor',
+    })
+    expect(copy['stockHolds']).toBeUndefined()
+    expect(memory.read('hosts/h1/collections/c-gear')!['productIds']).toEqual(['shirt', 'shirt-2'])
+    expect(memory.read('hosts/h1/collections/c-other')!['productIds']).toEqual(['p1'])
+  })
+
   it('refuses a deleted source, a role that cannot write and a plan with no room', async () => {
     const { memory, duplicate } = setup()
     memory.seed('hosts/h1/products/gone', { name: 'Gone', deletedAt: { seconds: 1 }, variants: [] })

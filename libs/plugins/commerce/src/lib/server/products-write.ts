@@ -501,9 +501,11 @@ export function createProductDuplicateHandler(options: ProductsWriteDeps = {}): 
       const nowMs = deps.now()
       const fields = productDuplicateFields(product, slug, nowMs)
       const smartQuery = hostRef.collection('collections').where('kind', '==', 'catalog').where('mode', '==', 'smart')
+      // The MANUAL collections holding the source by id, which the copy joins.
+      const manualQuery = hostRef.collection('collections').where('productIds', 'array-contains', productId)
       const outbox = outboxEntry(db, hostId)
       const answer = await db.runTransaction(async (tx) => {
-        const [existing, smart] = await Promise.all([tx.get(copyRef), tx.get(smartQuery)])
+        const [existing, smart, manual] = await Promise.all([tx.get(copyRef), tx.get(smartQuery), tx.get(manualQuery)])
         if (existing.exists) return { status: 200, body: { ok: true, id: newProductId, replayed: true } }
         const early = planRefusal(door.org as never)
         if (early) return { status: early.status, body: { error: early.error } }
@@ -523,6 +525,9 @@ export function createProductDuplicateHandler(options: ProductsWriteDeps = {}): 
           updatedAt: FieldValue.serverTimestamp(),
           createdBy: door.uid,
         })
+        for (const held of manual.docs) {
+          tx.update(held.ref, { productIds: FieldValue.arrayUnion(newProductId) })
+        }
         tx.set(outbox.ref, outbox.data)
         return { status: 200, body: { ok: true, id: newProductId, replayed: false, slug } }
       })

@@ -223,6 +223,7 @@ function AfterImport() {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  jest.mocked(getDoc).mockResolvedValue({ get: () => undefined } as never)
   opened.length = 0
   delete zones.productsHub
   delete zones.productImport
@@ -243,7 +244,11 @@ describe('a product nobody has priced yet, in the products hub (AGL-2916)', () =
 
   it('activates it all the same, and says what visitors will see (AGL-3676)', async () => {
     mount()
-    fireEvent.click(await screen.findByText('Activate'))
+    // An archived product's ⋮ menu sets it active.
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'More actions for Wild mint soy candle' }),
+    )
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Set active' }))
     await waitFor(() =>
       expect(enqueueSnackbar).toHaveBeenCalledWith(
         'Wild mint soy candle has no price yet: visitors will see “Price coming soon” and can’t buy it.',
@@ -259,7 +264,9 @@ describe('a product nobody has priced yet, in the products hub (AGL-2916)', () =
 
 describe('what an import does next (AGL-2916, AGL-3531)', () => {
   it('hands the import zone the new products the dry run counts, and the options it set to the hub zone with what the import created', async () => {
-    jest.mocked(getDoc).mockResolvedValueOnce({
+    // Every read answers the job's summary: the hub also reads its site's
+    // address on mount, which must not take the one answer meant for the job.
+    jest.mocked(getDoc).mockResolvedValue({
       get: (path: string) => (path === 'summary.create' ? 2 : undefined),
     } as never)
     jest.mocked(authorizedFetch).mockResolvedValueOnce({
