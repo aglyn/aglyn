@@ -20,6 +20,10 @@ content on the marketing site and is written separately.
 - **commerce:** write-ins on the product page, web register, kiosk, quotes and add-ons editor
 - **commerce:** write-in add-ons carry a typed answer on the order line
 
+### Fixed
+
+- **redirects:** a site enforces every redirect rule, not the first 100
+
 ### Documentation
 
 - **commerce:** write-ins, naming a group on the order, and setting up a gear set
