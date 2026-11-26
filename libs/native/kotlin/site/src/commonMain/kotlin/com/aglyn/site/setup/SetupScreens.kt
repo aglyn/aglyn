@@ -660,6 +660,9 @@ private fun ThemeLibraryCard(context: NativePluginContext, hostId: String, host:
   val runner = rememberRunner()
   var naming by remember { mutableStateOf<Pair<String?, String>?>(null) }
   var deleting by remember { mutableStateOf<SavedTheme?>(null) }
+  // The theme being previewed before it is used (the console picker's first step).
+  var previewing by remember { mutableStateOf<ThemePreviewTarget?>(null) }
+  val currentName = selection.name ?: if (selection.kind == "default") "Default theme" else "Custom theme"
   SectionCard("Your theme") {
     Row(verticalAlignment = Alignment.CenterVertically) {
       Column(Modifier.weight(1f)) {
@@ -680,7 +683,7 @@ private fun ThemeLibraryCard(context: NativePluginContext, hostId: String, host:
           MenuAction("save-as", "Save as a custom theme", "content_copy", enabled = canManage) { naming = null to "" },
           MenuAction("update", "Update the saved theme", "check", enabled = canManage && edited && selection.kind == "custom") { runner.run("The saved theme now has your edits.") { api.updateSavedTheme() } },
           MenuAction("restore", "Undo all edits", "undo", enabled = canManage && edited) { runner.run("Edits undone.") { api.restoreTheme() } },
-          MenuAction("default", "Use the default theme", "refresh", enabled = canManage && selection.kind != "default") { runner.run("Switched to the default theme.") { api.selectTheme("default") } },
+          MenuAction("default", "Use the default theme", "refresh", enabled = canManage && selection.kind != "default") { previewing = ThemePreviewTarget("default", null, "Default theme") },
         ),
       )
     }
@@ -698,7 +701,7 @@ private fun ThemeLibraryCard(context: NativePluginContext, hostId: String, host:
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(space(1f))) {
               ThemeSwatches(preset.swatches)
               if (current) StatusChip("In use", StatusTone.SUCCESS)
-              else TextButton(onClick = { runner.run("Switched to ${preset.name}.") { api.selectTheme("preset", preset.id) } }, enabled = canManage && !runner.busy) { Text("Use") }
+              else TextButton(onClick = { previewing = ThemePreviewTarget("preset", preset.id, preset.name) }, enabled = !runner.busy, modifier = Modifier.testTag("preset-preview-${preset.id}")) { Text("Preview") }
             }
           },
           modifier = Modifier.testTag("preset-${preset.id}"),
@@ -722,13 +725,13 @@ private fun ThemeLibraryCard(context: NativePluginContext, hostId: String, host:
         if (own.isEmpty()) Text("None yet. Save your theme to switch back to it later.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         own.forEachIndexed { index, theme ->
           if (index > 0) HorizontalDivider()
-          LibraryThemeRow(theme, selection, canManage, runner, api, onRename = { naming = theme.id to theme.name }, onDelete = { deleting = theme })
+          LibraryThemeRow(theme, selection, canManage, runner, onPreview = { previewing = ThemePreviewTarget(theme.kind, theme.id, theme.name) }, onRename = { naming = theme.id to theme.name }, onDelete = { deleting = theme })
         }
         if (installed.isNotEmpty()) {
           Text("From the marketplace", style = MaterialTheme.typography.labelLarge)
           installed.forEachIndexed { index, theme ->
             if (index > 0) HorizontalDivider()
-            LibraryThemeRow(theme, selection, canManage, runner, api, onRename = null, onDelete = { deleting = theme })
+            LibraryThemeRow(theme, selection, canManage, runner, onPreview = { previewing = ThemePreviewTarget(theme.kind, theme.id, theme.name) }, onRename = null, onDelete = { deleting = theme })
           }
         }
       }
@@ -749,6 +752,9 @@ private fun ThemeLibraryCard(context: NativePluginContext, hostId: String, host:
       OutlinedTextField(name, { name = it.take(THEME_NAME_MAX) }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     }
   }
+  previewing?.let { target ->
+    ThemePreviewDialog(target, api, currentName, edited, canManage, runner) { previewing = null }
+  }
   deleting?.let { theme ->
     ActionDialog(
       title = "Delete ${theme.name}?",
@@ -765,8 +771,9 @@ private fun ThemeLibraryCard(context: NativePluginContext, hostId: String, host:
 }
 
 /**
- * One theme of the library: Use switches to it by its own kind (a marketplace theme is `installed`, never `custom`), and only
- * the site's own themes can be renamed ([onRename] is null for the rest), as the theme route allows.
+ * One theme of the library: Preview shows it before it is used (the switch is by its own kind: a marketplace theme is
+ * `installed`, never `custom`), and only the site's own themes can be renamed ([onRename] is null for the rest), as the
+ * theme route allows.
  */
 @Composable
 private fun LibraryThemeRow(
@@ -774,7 +781,7 @@ private fun LibraryThemeRow(
   selection: ThemeSelection,
   canManage: Boolean,
   runner: ActionRunner,
-  api: HostSettingsApi,
+  onPreview: () -> Unit,
   onRename: (() -> Unit)?,
   onDelete: () -> Unit,
 ) {
@@ -785,7 +792,7 @@ private fun LibraryThemeRow(
     trailing = {
       Row(verticalAlignment = Alignment.CenterVertically) {
         if (current) StatusChip("In use", StatusTone.SUCCESS)
-        else TextButton(onClick = { runner.run("Switched to ${theme.name}.") { api.selectTheme(theme.kind, theme.id) } }, enabled = canManage && !runner.busy) { Text("Use") }
+        else TextButton(onClick = onPreview, enabled = !runner.busy, modifier = Modifier.testTag("saved-theme-preview-${theme.id}")) { Text("Preview") }
         OverflowMenu(
           listOfNotNull(
             onRename?.let { MenuAction("rename", "Rename", "edit", enabled = canManage) { it() } },

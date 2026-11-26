@@ -123,6 +123,20 @@ fun parseHexColor(hex: String): Color? {
   return Color(r.toInt(), g.toInt(), b.toInt(), a.toInt())
 }
 
+/**
+ * A CSS color as a theme writes it: `#rgb`, `#rrggbb[aa]`, `rgb()` or `rgba()` (MUI derives some palette values, such as
+ * text and the selected row's wash, as `rgba`). The Swift kit's `AglynCSSColor.parse`.
+ */
+fun parseCssColor(css: String): Color? {
+  val value = css.trim().lowercase()
+  if (value.startsWith("#")) return parseHexColor(value)
+  if (!value.startsWith("rgb") || !value.endsWith(")")) return null
+  val parts = value.substringAfter('(').removeSuffix(")").split(',').map { it.trim().toDoubleOrNull() ?: return null }
+  if (parts.size < 3) return null
+  val alpha = parts.getOrNull(3) ?: 1.0
+  return Color(parts[0].toInt(), parts[1].toInt(), parts[2].toInt(), (alpha * 255).toInt().coerceIn(0, 255))
+}
+
 /** A color typed as hex, with its swatch beside it. The field says when the words are not a color. */
 @Composable
 fun ColorField(label: String, value: String, onValue: (String) -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, supporting: String? = null) {
