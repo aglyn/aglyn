@@ -87,6 +87,7 @@ import {
   type ConsoleProductCopyValues,
   type ConsoleProductEditorZoneProps,
 } from './product-zones'
+import ProductTrafficCard from './product-traffic-card.component'
 import {
   type MembersVideo,
   MembersVideosField,
@@ -2060,6 +2061,12 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             proposeValues={proposeSeoValues}
           />
         ) : null}
+
+        {/*
+          This product's own page views (AGL-4253), from its stored address:
+          the Pages table's row for it, where it is edited.
+        */}
+        {product?.$id ? <ProductTrafficCard hostId={hostId} slug={product.slug} /> : null}
 
         {/* The ceiling's own warning sits beside the options (AGL-4100). */}
         {error && error !== matrixProblem ? <Alert severity="warning">{error}</Alert> : null}

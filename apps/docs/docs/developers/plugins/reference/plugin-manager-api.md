@@ -1104,6 +1104,35 @@ name; a plugin whose members it cannot name registers a detacher
 clears its leads and each site's contact facet that way, and Outreach its
 sequences and enrollments.
 
+## Site addresses — `site-path-kinds`
+
+The records a plugin serves at `/{segment}/{slug}` on a published site, declared so
+the site's **Analytics** page can name each visited record. Pageviews are counted per
+address; a page the plugin composes from one template (commerce's `/products/{slug}`)
+would otherwise show only as that template.
+
+```ts
+registerSitePathKind({
+  segment: 'products',          // serves /products/{slug}
+  groupLabel: 'Products',       // the Pages table's grouping
+  noun: 'product',              // "Not a product on this site now"
+  collection: 'products',       // hosts/{hostId}/products
+  slugField: 'slug',            // default
+  titleField: 'name',           // default
+  accepts: (data) => true,      // filter a shared collection by kind
+  editHref: (context, id) => pluginRecordHref('product', context, id),
+})
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerSitePathKind(kind, { pluginId? })` | One segment has one owner: another plugin claiming it throws naming both, and the incumbent keeps serving. A segment is one path segment. |
+| `listSitePathKinds()` | Every declared kind, with its owner. |
+
+Declarative, so the console reads the records itself: one `where(slugField, 'in', …)`
+per thirty VISITED slugs, never the whole collection. Register it from your console
+declarations, where the shell loads it before any page renders.
+
 ## Record addresses — `plugin-record-routes`
 
 Where a plugin's records are read, published by the plugin that owns them, so

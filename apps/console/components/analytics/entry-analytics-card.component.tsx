@@ -26,7 +26,6 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { doc, getDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../../constants/docs-links'
@@ -34,7 +33,8 @@ import { hasEntitlement } from '../../constants/entitlements'
 import { buildRoute, Route } from '../../constants/route-links'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import useCurrentOrg from '../../hooks/use-current-org'
-import { readAnalyticsDays, recentDayIds } from '../../utils/analytics-day-cache'
+import { recentDayIds } from '../../utils/analytics-day-cache'
+import { readHostPathDays } from '../../utils/host-path-days'
 
 /**
  * One help for the card in every state it draws (AGL-3707) — the loading and
@@ -121,28 +121,13 @@ export function EntryAnalyticsCard(props: {
     // across a DST boundary.
     const newestFirst = recentDayIds(Date.now(), DAYS)
     const ids = [...newestFirst].reverse()
-    void readAnalyticsDays<DayStat>({
-      scopeKey: `hosts/${hostId}`,
-      field: 'traffic-paths',
+    void readHostPathDays({
+      firestore,
+      hostId,
       dayIds: ids,
       liveDay: newestFirst[0],
-      now: Date.now(),
-      fallback: { day: '', paths: {} },
-      read: async (id) => {
-        const snapshot = await getDoc(
-          doc(firestore, 'hosts', hostId, 'analytics', id),
-        )
-        return {
-          day: id,
-          paths: (snapshot.get('paths') ?? {}) as Record<string, number>,
-        }
-      },
     }).then((stats) => {
-      // A failed day carries no id, so restore the one it stands for rather
-      // than letting an empty label reach the chart.
-      if (active) {
-        setDays(stats.map((stat, index) => ({ ...stat, day: ids[index] })))
-      }
+      if (active) setDays(stats)
     })
     return () => {
       active = false

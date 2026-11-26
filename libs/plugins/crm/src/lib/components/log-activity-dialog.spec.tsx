@@ -26,6 +26,7 @@
  * activity already logged is the activity's own.
  */
 
+import { MediaPickerContext } from '@aglyn/aglyn'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { LogActivityDialog } from './log-activity-dialog'
 
@@ -428,5 +429,62 @@ describe('Name, Related To and the company it rolls up to (AGL-4123)', () => {
         companyId: 'co-contact',
       })
     })
+  })
+})
+
+/*
+ * A CALL'S RECORDING. Uploaded from the dialog into the organization's
+ * library — private, in CRM / Calls — and filed on the activity by id, with
+ * the transcript beside it. No consent answer is asked while
+ * `CALL_RECORDING_CONSENT_REQUIRED` is off.
+ */
+describe('a call’s recording and transcript', () => {
+  const { addDoc } = jest.requireMock('firebase/firestore') as { addDoc: jest.Mock }
+  const uploadMedia = jest.fn(async () => ({ url: 'ref', mediaId: 'rec-9', private: true }))
+  beforeEach(() => {
+    addDoc.mockClear()
+    uploadMedia.mockClear()
+    mockRecords.set('orgs/org-1/media/rec-9', { fileName: 'call.m4a', contentType: 'audio/mp4', private: true })
+  })
+  const open = (kind?: 'call' | 'note') =>
+    render(
+      <MediaPickerContext.Provider value={{ uploadMedia }}>
+        <LogActivityDialog open onClose={() => undefined} scope={scope} link={{ contactId: 'c-1' }} kind={kind} />
+      </MediaPickerContext.Provider>,
+    )
+  const file = new File(['abc'], 'call.m4a', { type: 'audio/mp4' })
+
+  it('uploads the recording private into CRM / Calls and files it with the transcript', async () => {
+    open('call')
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    const input = screen.getByTestId('activity-recording-input')
+    fireEvent.change(input, { target: { files: [file] } })
+    await waitFor(() => expect(uploadMedia).toHaveBeenCalledTimes(1))
+    expect(uploadMedia).toHaveBeenCalledWith(file, {
+      folderPath: ['CRM', 'Calls'],
+      private: true,
+      purpose: 'callRecording',
+      kind: 'audio',
+    })
+    await waitFor(() => expect(screen.getByText('call.m4a')).toBeTruthy())
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Transcript' }), {
+      target: { value: '  Hello there.\r\nHi.  ' },
+    })
+    fireEvent.change(screen.getByRole('textbox', { name: 'What happened' }), {
+      target: { value: 'Store build call' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Log' }))
+    await waitFor(() => expect(addDoc).toHaveBeenCalledTimes(1))
+    expect(addDoc.mock.calls[0][1]).toMatchObject({
+      kind: 'call',
+      mediaIds: ['rec-9'],
+      transcript: 'Hello there.\nHi.',
+    })
+  })
+
+  it('offers no recording on a note', () => {
+    open('note')
+    expect(screen.queryByTestId('activity-recording-fields')).toBeNull()
   })
 })

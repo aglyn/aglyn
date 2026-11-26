@@ -22,7 +22,7 @@ import { Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Stack } from '@mui/material'
 import HostAnalyticsCard from '../../../../../../components/analytics/host-analytics-card.component'
-import ScreensAnalyticsTable from '../../../../../../components/analytics/screens-analytics-table.component'
+import PagesTrafficTable from '../../../../../../components/analytics/pages-traffic-table.component'
 import PluginWidgetSlot from '../../../../../../components/plugin-widget-slot.component'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
@@ -66,8 +66,11 @@ const HostAnalytics: NextPageWithLayout<Record<string, never>> = () => {
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <Stack spacing={3}>
           <HostAnalyticsCard hostId={hostId} />
-          {/* Per-screen comparison (AGL-1844), Pro-gated inside. */}
-          <ScreensAnalyticsTable hostId={hostId} />
+          {/*
+            Every visited page by name (AGL-1844, per page AGL-4253): each
+            product, post and collection its own row. Pro-gated inside.
+           */}
+          <PagesTrafficTable hostId={hostId} />
           {/*
             Analytics sections a plugin computes from what the site records
             (AGL-3605) — funnels — registered rather than imported.

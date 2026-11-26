@@ -24,8 +24,8 @@ import AppLink from '@aglyn/shared-ui-jsx/components/app-link'
 import { Container } from '@aglyn/shared-ui-jsx/components/container'
 import { useSoftGetSubmit } from '@aglyn/shared-ui-jsx/hooks/use-soft-get-submit'
 import { Box, Chip, Stack, Typography } from '@mui/material'
-import type { SearchFacet, SearchResult } from '../../../../utils/search-facets'
-import { SEARCH_FACET_ALL } from '../../../../utils/search-facets'
+import type { SearchFacet, SearchResult } from '@aglyn/tenant-runtime/site-search-facets'
+import { SEARCH_FACET_ALL } from '@aglyn/tenant-runtime/site-search-facets'
 
 export interface SearchResultsProps {
   query: string
