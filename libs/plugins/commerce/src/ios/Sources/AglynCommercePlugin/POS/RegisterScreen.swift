@@ -529,6 +529,18 @@ struct ItemSheetView: View {
             }
           }
           ForEach(sheet.item.modifierGroups, id: \.id) { group in
+            if group.isWriteIn {
+              // A write-in (the gear set builder): the cashier types the answer the customer gives.
+              WriteInFieldSection(
+                group: group, variantID: sheet.variant.id,
+                text: sheet.picks.first { $0.groupId == group.id }?.text ?? "", money: model.money
+              ) { typed in
+                guard var current = model.sheet else { return }
+                current.picks = withWriteInAnswer(current.item.modifierGroups, current.picks, group: group, text: typed)
+                current.problem = nil
+                model.sheet = current
+              }
+            } else {
             Section {
               ForEach(group.options, id: \.id) { option in
                 let chosen = sheet.picks.contains { $0.groupId == group.id && $0.optionId == option.id }
@@ -553,14 +565,29 @@ struct ItemSheetView: View {
             } footer: {
               Text(group.isRequired ? "Required" : group.isSingle ? "Optional" : "Choose up to \(Int(group.max))")
             }
+            }
           }
+          let check = pick(sheet.item, sheet.variant, modifiers: sheet.picks)
           Section {
             HStack {
               Text("Quantity")
               Spacer()
               AglynQuantityStepper(value: sheet.quantity, range: 1...posLineMaxQuantity) { model.sheet?.quantity = $0 }
             }
+            // The line as it goes in the basket: its label, write-ins included, and its price.
+            if case .ok(let line) = check {
+              LabeledContent {
+                Text(model.money(line.unitCents * sheet.quantity)).monospacedDigit()
+              } label: {
+                Text("Total")
+                if let label = line.variantLabel { Text(label) }
+              }
+              .accessibilityIdentifier("item-sheet-total")
+            }
             if let problem = sheet.problem { AglynNotice(problem, tone: .error) }
+          } footer: {
+            // Add stays off until every required choice and write-in is answered, as the console's dialog keeps it.
+            if sheet.problem == nil, case .problem(let why) = check { Text(why) }
           }
         }
         .formStyle(.grouped)
@@ -568,12 +595,20 @@ struct ItemSheetView: View {
         .toolbar {
           ToolbarItem(placement: .cancellationAction) { Button("Cancel") { model.sheet = nil } }
           ToolbarItem(placement: .confirmationAction) {
-            Button("Add") { model.addFromSheet() }.accessibilityIdentifier("item-sheet-add")
+            Button("Add") { model.addFromSheet() }
+              .disabled(sheetBlocked(sheet))
+              .accessibilityIdentifier("item-sheet-add")
           }
         }
       }
       .presentationDetents([.medium, .large])
     }
+  }
+
+  /// Whether the sheet's picks cannot be sold yet: a required choice or write-in unanswered, or an answer that does not fit.
+  private func sheetBlocked(_ sheet: ItemSheet) -> Bool {
+    if case .problem = pick(sheet.item, sheet.variant, modifiers: sheet.picks) { return true }
+    return false
   }
 
   private func toggle(_ group: ProductModifierGroup, _ optionID: String) {

@@ -93,12 +93,8 @@ export function kioskCartLine(
   choice: PosItemChoice,
 ): KioskCartLine {
   const variant = product.variants.find((candidate) => candidate.id === choice.variant.id) ?? product.variants[0]!
-  const picked = choice.modifiers
-    .map((pick) => {
-      const group = product.modifierGroups.find((candidate) => candidate.id === pick.groupId)
-      return group?.options.find((option) => option.id === pick.optionId)
-    })
-    .filter((option): option is CommerceModel.ProductModifierOption => Boolean(option))
+  // Priced and named as the order will name them: a write-in with its answer (the gear set builder).
+  const picked = CommerceModel.soldLineModifiers(product, choice.modifiers, variant.id)
   const label = CommerceModel.lineLabelWithModifiers(
     Object.keys(variant.options).length ? Object.values(variant.options).join(' / ') : undefined,
     picked,
@@ -112,9 +108,7 @@ export function kioskCartLine(
     name: product.name,
     ...(label ? { label } : {}),
     // A choice priced by variant adds its price on this one (AGL-4100).
-    unitCents:
-      variant.priceCents +
-      picked.reduce((sum, option) => sum + CommerceModel.modifierOptionPriceCents(option, variant.id), 0),
+    unitCents: variant.priceCents + picked.reduce((sum, modifier) => sum + modifier.priceCents, 0),
   }
 }
 

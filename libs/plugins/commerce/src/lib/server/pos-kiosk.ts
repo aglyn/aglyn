@@ -945,7 +945,7 @@ async function staffAction(req: PluginApiRequest, body: Record<string, any>, act
         unitAmountCents: line.unitAmountCents,
         quantity: line.quantity,
         ...(line.modifiers?.length
-          ? { modifiers: line.modifiers.map((modifier) => ({ groupId: modifier.groupId, optionId: modifier.optionId })) }
+          ? { modifiers: CommerceModel.modifierSelectionOf(line.modifiers) }
           : {}),
       })),
     },

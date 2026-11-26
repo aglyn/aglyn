@@ -1,5 +1,6 @@
 package com.aglyn.plugins.commerce.orders
 
+import com.aglyn.plugins.commerce.pos.lineText
 import com.aglyn.ui.FoldedSection
 import com.aglyn.ui.OutlinedButton
 import com.aglyn.ui.PlainSection
@@ -643,7 +644,7 @@ private fun OrderDetailContent(
             val notes = listOfNotNull(
               line.variantLabel.takeIf { !beside },
               line.sku?.takeIf { !beside }?.let { "SKU $it" },
-              line.modifiers?.takeIf { it.isNotEmpty() }?.joinToString(", ") { it.name },
+              line.modifiers?.takeIf { it.isNotEmpty() }?.joinToString(", ") { it.lineText() },
               state?.takeIf { it.fulfilledQuantity > 0 }?.let { "${it.fulfilledQuantity} of ${it.quantity} fulfilled" },
               if (withdrawn) "Refunded" else null,
             )

@@ -197,6 +197,10 @@ export interface AddOnCellGroup {
   min: number
   max: number
   online: boolean
+  /** A write-in (the gear set builder): `write-in`, `up to 14`, `numbers only`. */
+  writeIn?: { maxLength: number | null; digitsOnly: boolean }
+  /** `name on order`: the group's name prints before the choice. */
+  nameOnOrder?: boolean
   choices: AddOnCellChoice[]
 }
 
@@ -205,23 +209,46 @@ const defaultMax = (min: number): number => Math.max(1, min)
 
 function readSettings(
   inner: string | null,
-): Read<Pick<AddOnCellGroup, 'min' | 'max' | 'online'>> {
+): Read<Pick<AddOnCellGroup, 'min' | 'max' | 'online' | 'writeIn' | 'nameOnOrder'>> {
   let min = 0
   let max: number | null = null
   let online = true
+  let writeIn = false
+  let maxLength: number | null = null
+  let digitsOnly = false
+  let nameOnOrder = false
   for (const raw of (inner ?? '').split(',')) {
     const setting = raw.trim()
     if (!setting) continue
     const least = /^at least (\d+)$/i.exec(setting)
     const most = /^at most (\d+)$/i.exec(setting)
+    const upTo = /^up to (\d+)$/i.exec(setting)
     if (least) min = Number(least[1])
     else if (most) max = Number(most[1])
     else if (/^register only$/i.test(setting)) online = false
+    else if (/^write-?in$/i.test(setting)) writeIn = true
+    else if (upTo) maxLength = Number(upTo[1])
+    else if (/^numbers only$/i.test(setting)) digitsOnly = true
+    else if (/^name on order$/i.test(setting)) nameOnOrder = true
     else {
-      return fail(`"${setting}" is not a group setting. Use at least 1, at most 2 or register only. ${QUOTE_THE_NAME}`)
+      return fail(
+        `"${setting}" is not a group setting. Use at least 1, at most 2, register only, name on order, ` +
+          `or for a write-in: write-in, up to 14, numbers only. ${QUOTE_THE_NAME}`,
+      )
     }
   }
-  return { value: { min, max: max ?? defaultMax(min), online } }
+  if (!writeIn && (maxLength !== null || digitsOnly)) {
+    return fail('"up to" and "numbers only" are for a write-in. Add write-in to the group\'s settings.')
+  }
+  return {
+    value: {
+      min,
+      max: writeIn ? 1 : (max ?? defaultMax(min)),
+      online,
+      ...(writeIn ? { writeIn: { maxLength, digitsOnly } } : {}),
+      ...(nameOnOrder ? { nameOnOrder: true } : {}),
+    },
+  }
 }
 
 function readByVariant(inner: string | null, choice: string): Read<AddOnCellChoice['byVariant']> {
@@ -270,6 +297,15 @@ function readChoices(source: string, group: string): Read<AddOnCellChoice[]> {
   return { value: choices }
 }
 
+/** A write-in's side of the colon: blank or `+$5.00`, priced by variant like any choice. */
+function readWriteInChoice(source: string, group: string): Read<AddOnCellChoice[]> {
+  const trimmed = source.trim()
+  const read = readChoices(trimmed && !/^[+$]/.test(trimmed) ? trimmed : `${writeName(group)} ${trimmed}`, group)
+  if ('message' in read) return read
+  if (read.value.length !== 1) return fail(`"${group}" is a write-in: after the colon, write only what it adds.`)
+  return { value: [{ ...read.value[0], name: group }] }
+}
+
 /** An add-ons cell as its groups, or what is wrong with it for the person to fix. */
 export function readAddOnCell(cell: unknown): Read<AddOnCellGroup[]> {
   const groups: AddOnCellGroup[] = []
@@ -295,7 +331,10 @@ export function readAddOnCell(cell: unknown): Read<AddOnCellGroup[]> {
     if (!name) return fail('Name every add-on group.')
     const settings = readSettings(head.value.inner)
     if ('message' in settings) return settings
-    const choices = readChoices(sides[1] as string, name)
+    // A write-in's one field is named after the group; after the colon is only what it adds, if anything.
+    const choices = settings.value.writeIn
+      ? readWriteInChoice(sides[1] as string, name)
+      : readChoices(sides[1] as string, name)
     if ('message' in choices) return choices
     groups.push({ name, ...settings.value, choices: choices.value })
   }
@@ -326,12 +365,22 @@ function writeChoice(choice: AddOnCellChoice): string {
 export function writeAddOnCell(groups: readonly AddOnCellGroup[]): string {
   return groups
     .map((group) => {
+      const writeIn = group.writeIn
       const settings = [
+        ...(writeIn ? ['write-in'] : []),
         ...(group.min > 0 ? [`at least ${group.min}`] : []),
-        ...(group.max !== defaultMax(group.min) ? [`at most ${group.max}`] : []),
+        ...(!writeIn && group.max !== defaultMax(group.min) ? [`at most ${group.max}`] : []),
+        ...(writeIn?.maxLength ? [`up to ${writeIn.maxLength}`] : []),
+        ...(writeIn?.digitsOnly ? ['numbers only'] : []),
+        ...(group.nameOnOrder ? ['name on order'] : []),
         ...(group.online ? [] : ['register only']),
       ]
       const head = settings.length ? `${writeName(group.name)} (${settings.join(', ')})` : writeName(group.name)
+      if (writeIn) {
+        // The one field is named after the group, with what a filled answer adds.
+        const choice = group.choices[0] ?? { name: group.name, priceCents: 0, byVariant: [] }
+        return `${head}: ${writeChoice({ ...choice, name: group.name })}`
+      }
       return `${head}: ${group.choices.map(writeChoice).join(', ')}`
     })
     .join('; ')
@@ -347,6 +396,10 @@ export function addOnCellOf(stored: unknown, variants: readonly LabelledVariant[
     min: Number(group?.min) || 0,
     max: Number(group?.max) || 0,
     online: group?.online === true,
+    ...(group?.kind === 'text'
+      ? { writeIn: { maxLength: Number(group.maxLength) || null, digitsOnly: group.digitsOnly === true } }
+      : {}),
+    ...(group?.nameOnOrder === true ? { nameOnOrder: true } : {}),
     choices: (Array.isArray(group?.options) ? group.options : []).map((option): AddOnCellChoice => {
       const byVariant: AddOnCellChoice['byVariant'] = []
       for (const variant of variants) {
@@ -440,7 +493,7 @@ export function modifierGroupsFromAddOnCell(
       else delete option.priceCentsByVariant
       return option
     })
-    return {
+    const next: ProductModifierGroup = {
       ...(held ?? {}),
       id: held?.id ?? freeId('g', group.name, groupIds),
       name: group.name,
@@ -449,6 +502,18 @@ export function modifierGroupsFromAddOnCell(
       online: group.online,
       options,
     }
+    // The cell says what the group is: a write-in and its settings, the name on the order.
+    delete next.kind
+    delete next.maxLength
+    delete next.digitsOnly
+    delete next.nameOnOrder
+    if (group.writeIn) {
+      next.kind = 'text'
+      if (group.writeIn.maxLength) next.maxLength = group.writeIn.maxLength
+      if (group.writeIn.digitsOnly) next.digitsOnly = true
+    }
+    if (group.nameOnOrder) next.nameOnOrder = true
+    return next
   })
   return { groups, problem }
 }

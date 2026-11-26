@@ -245,3 +245,96 @@ describe('the cart', () => {
     expect(shown.body.subtotalCents).toBe(0)
   })
 })
+
+describe('a gear set with write-ins', () => {
+  const SET = {
+    name: 'Summit Race Set',
+    slug: 'summit-race-set',
+    type: 'physical',
+    status: 'active',
+    deletedAt: null,
+    variants: [{ id: 'default', priceUsd: 250, inventory: null }],
+    modifierGroups: [
+      {
+        id: 'jersey',
+        name: 'Jersey size',
+        min: 1,
+        max: 1,
+        online: true,
+        nameOnOrder: true,
+        options: [
+          { id: 'm', name: 'M', priceCents: 0 },
+          { id: 'xxxl', name: '3XL', priceCents: 2000 },
+        ],
+      },
+      {
+        id: 'name',
+        name: 'Name on jersey',
+        kind: 'text',
+        min: 1,
+        max: 1,
+        maxLength: 14,
+        online: true,
+        options: [{ id: 'name-o', name: 'Name on jersey', priceCents: 0, note: 'As it should print' }],
+      },
+      {
+        id: 'number',
+        name: 'Number',
+        kind: 'text',
+        min: 1,
+        max: 1,
+        maxLength: 3,
+        digitsOnly: true,
+        online: true,
+        options: [{ id: 'number-o', name: 'Number', priceCents: 500 }],
+      },
+    ],
+  }
+  const picks = (name: string, number: string, size = 'm') => [
+    { groupId: 'jersey', optionId: size },
+    { groupId: 'name', optionId: 'name-o', text: name },
+    { groupId: 'number', optionId: 'number-o', text: number },
+  ]
+  beforeEach(() => fake.seed(`hosts/${HOST_ID}/products/set`, SET))
+
+  it('sends the page each write-in with its length and numbers only', async () => {
+    const result = await call(productHandler, { query: { hostId: HOST_ID, slug: 'summit-race-set' } })
+    const groups = result.body.product.modifierGroups
+    expect(groups[0]).toMatchObject({ id: 'jersey', nameOnOrder: true })
+    expect(groups[1]).toMatchObject({ id: 'name', kind: 'text', maxLength: 14 })
+    expect(groups[1]).not.toHaveProperty('digitsOnly')
+    expect(groups[2]).toMatchObject({ id: 'number', kind: 'text', maxLength: 3, digitsOnly: true })
+  })
+
+  it('keeps the name and number on the cart line, and two riders as two lines', async () => {
+    expect((await post({ productId: 'set', modifiers: picks('  smith ', '27') })).status).toBe(200)
+    expect((await post({ productId: 'set', modifiers: picks('JONES', '4', 'xxxl') })).status).toBe(200)
+    expect(lines()).toEqual([
+      { productId: 'set', modifiers: picks('smith', '27'), quantity: 1 },
+      { productId: 'set', modifiers: picks('JONES', '4', 'xxxl'), quantity: 1 },
+    ])
+    const shown = await call(cartHandler, { query: { hostId: HOST_ID } })
+    expect(shown.body.lines[0]).toMatchObject({
+      variantLabel: 'Jersey size: M, Name on jersey: smith, Number: 27',
+      unitAmountCents: 25500,
+    })
+    expect(shown.body.lines[1]).toMatchObject({ unitAmountCents: 27500 })
+    // The line is found again by its answers.
+    await call(cartHandler, {
+      method: 'POST',
+      body: { hostId: HOST_ID, action: 'remove', productId: 'set', modifiers: picks('smith', '27') },
+    })
+    expect(lines()).toHaveLength(1)
+  })
+
+  it('refuses a missing name, letters in the number and a name too long, and stores nothing', async () => {
+    expect((await post({ productId: 'set', modifiers: picks('', '27') })).body.error).toBe(
+      'Fill in name on jersey for Summit Race Set.',
+    )
+    expect((await post({ productId: 'set', modifiers: picks('SMITH', '2a') })).body.error).toMatch(/numbers only/)
+    expect((await post({ productId: 'set', modifiers: picks('A NAME FAR TOO LONG', '27') })).body.error).toMatch(
+      /up to 14 characters/,
+    )
+    expect(lines()).toEqual([])
+  })
+})

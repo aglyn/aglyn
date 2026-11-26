@@ -42,6 +42,16 @@
  * one price for a bundle ("Weekend kit: 4 walls, 4 weights, a bag"), and the
  * card folds its contents out. Display only: a combo is priced and sold as
  * the one choice it is.
+ *
+ * WRITE-INS (the gear set builder). A group of `kind: 'text'` asks the
+ * shopper to type an answer instead of picking one: the name and number
+ * printed on a jersey. It holds exactly one option, which carries what a
+ * filled answer adds to the price (by variant too) and its helper note, so
+ * pricing, ids and every path that carries picks stay the same; the pick
+ * adds the `text`. The answer is checked and cleaned on the server like any
+ * pick ({@link cleanWriteIn}) and prints on the line as "Name on jersey:
+ * SMITH". With write-ins and required size groups, one variant sells a set
+ * of pieces in any combination of sizes, with no cap on combinations.
  *=========================================*/
 
 /** One choice in a modifier group. `priceCents` is added to the item, 0 for free. */
@@ -77,6 +87,22 @@ export interface ProductModifierGroup {
   max: number
   options: ProductModifierOption[]
   /**
+   * `'text'` makes the group a write-in: the shopper types the answer (a
+   * name, a number) into one field. Absent is a group of choices. A write-in
+   * holds exactly one option, which names it and prices it.
+   */
+  kind?: ProductModifierGroupKind
+  /** A write-in's longest answer, 1 to {@link MAX_WRITE_IN_LENGTH}; {@link DEFAULT_WRITE_IN_LENGTH} when absent. */
+  maxLength?: number
+  /** A write-in that takes digits only, such as a race number. */
+  digitsOnly?: boolean
+  /**
+   * Print the group's name before the choice on the order, receipt and
+   * emails ("Jersey size: M"), for choices that do not say what they are on
+   * their own. A write-in always prints its name.
+   */
+  nameOnOrder?: boolean
+  /**
    * Offered on the product's page on the website as well as at the register
    * (AGL-4100), "Show on the website". Absent reads as register only, so a
    * group made before the switch changes nothing on a live store; the
@@ -85,6 +111,9 @@ export interface ProductModifierGroup {
   online?: boolean
 }
 
+/** What a group is: choices to pick from, or a write-in the shopper types. */
+export type ProductModifierGroupKind = 'text'
+
 /** A modifier as the order line keeps it: names and price as sold. */
 export interface OrderLineModifier {
   groupId: string
@@ -92,18 +121,73 @@ export interface OrderLineModifier {
   group: string
   name: string
   priceCents: number
+  /** A write-in's answer as sold, such as the name for the jersey. */
+  text?: string
+  /** The group's name prints before the choice on the line ("Jersey size: M"). */
+  nameOnOrder?: boolean
 }
 
 /** What the register sends for a line: the option ids it picked, nothing priced. */
 export interface ModifierSelection {
   groupId: string
   optionId: string
+  /** A write-in's answer, as typed; the server cleans and checks it. */
+  text?: string
 }
 
 export const POS_MAX_MODIFIER_GROUPS = 10
 export const POS_MAX_MODIFIER_OPTIONS = 20
 /** $1,000 on one modifier: anything larger is a product, not an add-on. */
 export const POS_MAX_MODIFIER_PRICE_CENTS = 100_000
+/** The longest answer a write-in can take: a name and a nickname for a jersey fit well inside. */
+export const MAX_WRITE_IN_LENGTH = 40
+/** A write-in's length when the merchant sets none. */
+export const DEFAULT_WRITE_IN_LENGTH = 20
+/** How much of a typed answer is carried before its group checks it. */
+const WRITE_IN_INPUT_BOUND = 200
+
+/** Whether a group is a write-in the shopper types. */
+export function modifierGroupIsWriteIn(group: Pick<ProductModifierGroup, 'kind'> | null | undefined): boolean {
+  return group?.kind === 'text'
+}
+
+/** A write-in's longest answer. */
+export function writeInMaxLength(group: Pick<ProductModifierGroup, 'maxLength'>): number {
+  const length = group.maxLength
+  return typeof length === 'number' && Number.isInteger(length) && length >= 1 && length <= MAX_WRITE_IN_LENGTH
+    ? length
+    : DEFAULT_WRITE_IN_LENGTH
+}
+
+/**
+ * A write-in's answer cleaned for the order: control characters and runs of
+ * spaces gone, trimmed, cut at the group's length. Empty when nothing is left.
+ * Without a group the answer is only bounded, so a too-long one still reaches
+ * the check that names it.
+ */
+export function cleanWriteIn(raw: unknown, group?: Pick<ProductModifierGroup, 'maxLength'> | null): string {
+  if (typeof raw !== 'string') return ''
+  const limit = group ? writeInMaxLength(group) : WRITE_IN_INPUT_BOUND
+  const flat = raw
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return Array.from(flat).slice(0, limit).join('').trim()
+}
+
+/** Why a write-in's answer cannot be sold, or null when it can. An empty answer is the minimum's business. */
+export function writeInProblem(
+  group: Pick<ProductModifierGroup, 'name' | 'maxLength' | 'digitsOnly'>,
+  raw: unknown,
+): string | null {
+  const typed = cleanWriteIn(raw)
+  if (!typed) return null
+  const limit = writeInMaxLength(group)
+  if (Array.from(typed).length > limit) return `${group.name} takes up to ${limit} characters.`
+  if (group.digitsOnly && !/^[0-9]+$/.test(typed)) return `${group.name} takes numbers only.`
+  return null
+}
 /** Whether a choice is a combo: it lists what it includes (AGL-4205). */
 export function modifierOptionIsCombo(option: Pick<ProductModifierOption, 'includes'>): boolean {
   return (
@@ -135,6 +219,25 @@ export function modifierGroupsProblem(groups: unknown): string | null {
     groupIds.add(group.id)
     if (!String(group.name ?? '').trim()) return 'Name every modifier group'
     const options = Array.isArray(group.options) ? group.options : []
+    if (group.kind != null && group.kind !== 'text') return `“${group.name}” is a list of choices or a write-in`
+    if (group.kind === 'text') {
+      if (options.length !== 1) return `“${group.name}” is a write-in and holds one field`
+      if (group.max !== 1 || (group.min !== 0 && group.min !== 1)) {
+        return `“${group.name}” is a write-in: required or not, one answer`
+      }
+      if (
+        group.maxLength != null &&
+        (!Number.isInteger(group.maxLength) || group.maxLength < 1 || group.maxLength > MAX_WRITE_IN_LENGTH)
+      ) {
+        return `“${group.name}” takes 1 to ${MAX_WRITE_IN_LENGTH} characters`
+      }
+      if (group.digitsOnly != null && typeof group.digitsOnly !== 'boolean') {
+        return `“${group.name}” takes numbers only or any text`
+      }
+    }
+    if (group.nameOnOrder != null && typeof group.nameOnOrder !== 'boolean') {
+      return `“${group.name}” prints its name on the order or not`
+    }
     if (options.length === 0) return `Add a choice to “${group.name}”`
     if (options.length > POS_MAX_MODIFIER_OPTIONS) {
       return `“${group.name}” has more than ${POS_MAX_MODIFIER_OPTIONS} choices`
@@ -232,10 +335,34 @@ export interface ResolvedLineModifiers {
 export function modifierSelectionFrom(raw: unknown): ModifierSelection[] {
   return (Array.isArray(raw) ? raw : [])
     .slice(0, POS_MAX_MODIFIER_GROUPS * POS_MAX_MODIFIER_OPTIONS)
-    .map((entry: any) => ({
-      groupId: String(entry?.groupId ?? ''),
-      optionId: String(entry?.optionId ?? ''),
-    }))
+    .map((entry: any): ModifierSelection => {
+      const pick: ModifierSelection = {
+        groupId: String(entry?.groupId ?? ''),
+        optionId: String(entry?.optionId ?? ''),
+      }
+      // A write-in's answer, bounded here and checked against its group when priced.
+      const text = cleanWriteIn(entry?.text)
+      if (text) pick.text = text
+      return pick
+    })
+}
+
+/** A pick as the order keeps it: a choice, or a write-in with its answer. */
+function soldModifier(
+  group: ProductModifierGroup,
+  option: ProductModifierOption,
+  variantId: string | null | undefined,
+  text: string | undefined,
+): OrderLineModifier {
+  return {
+    groupId: group.id,
+    optionId: option.id,
+    group: group.name,
+    name: option.name,
+    priceCents: modifierOptionPriceCents(option, variantId),
+    ...(text ? { text } : {}),
+    ...(group.nameOnOrder === true ? { nameOnOrder: true } : {}),
+  }
 }
 
 /**
@@ -272,6 +399,20 @@ export function resolveLineModifiers(
   }
   const modifiers: OrderLineModifier[] = []
   for (const group of groups) {
+    if (modifierGroupIsWriteIn(group)) {
+      // A write-in (the gear set builder): its answer is checked, cleaned and kept.
+      const option = group.options[0]
+      const pick = picks.find((entry) => entry.groupId === group.id && entry.optionId === option.id)
+      const problem = writeInProblem(group, pick?.text)
+      if (problem) return refuse(`${problem} (${product.name})`)
+      const text = cleanWriteIn(pick?.text, group)
+      if (!text) {
+        if (group.min > 0) return refuse(`Fill in ${group.name.toLowerCase()} for ${product.name}.`)
+        continue
+      }
+      modifiers.push(soldModifier(group, option, variantId, text))
+      continue
+    }
     const chosen = group.options.filter((option) =>
       picks.some((pick) => pick.groupId === group.id && pick.optionId === option.id),
     )
@@ -281,15 +422,7 @@ export function resolveLineModifiers(
     if (chosen.length > group.max) {
       return refuse(`Choose at most ${group.max} for ${group.name.toLowerCase()} on ${product.name}.`)
     }
-    for (const option of chosen) {
-      modifiers.push({
-        groupId: group.id,
-        optionId: option.id,
-        group: group.name,
-        name: option.name,
-        priceCents: modifierOptionPriceCents(option, variantId),
-      })
-    }
+    for (const option of chosen) modifiers.push(soldModifier(group, option, variantId, undefined))
   }
   return {
     ok: true,
@@ -330,16 +463,13 @@ export function soldLineModifiers(
   const picks = modifierSelectionFrom(raw)
   const modifiers: OrderLineModifier[] = []
   for (const group of productModifierGroups(product)) {
+    const writeIn = modifierGroupIsWriteIn(group)
     for (const option of group.options) {
-      if (picks.some((pick) => pick.groupId === group.id && pick.optionId === option.id)) {
-        modifiers.push({
-          groupId: group.id,
-          optionId: option.id,
-          group: group.name,
-          name: option.name,
-          priceCents: modifierOptionPriceCents(option, variantId),
-        })
-      }
+      const pick = picks.find((entry) => entry.groupId === group.id && entry.optionId === option.id)
+      if (!pick) continue
+      const text = writeIn ? cleanWriteIn(pick.text, group) : undefined
+      if (writeIn && !text) continue
+      modifiers.push(soldModifier(group, option, variantId, text))
     }
   }
   return modifiers
@@ -358,9 +488,13 @@ export function cartLineModifierProblem(error: string | undefined): string {
 
 /** The picks a priced line keeps: ids only, in the product's group order. */
 export function modifierSelectionOf(
-  modifiers: readonly Pick<OrderLineModifier, 'groupId' | 'optionId'>[],
+  modifiers: readonly (Pick<OrderLineModifier, 'groupId' | 'optionId'> & { text?: string })[],
 ): ModifierSelection[] {
-  return modifiers.map((modifier) => ({ groupId: modifier.groupId, optionId: modifier.optionId }))
+  return modifiers.map((modifier) => ({
+    groupId: modifier.groupId,
+    optionId: modifier.optionId,
+    ...(modifier.text ? { text: modifier.text } : {}),
+  }))
 }
 
 /**
@@ -369,7 +503,10 @@ export function modifierSelectionOf(
  */
 export function encodeModifierSelection(selection: readonly ModifierSelection[] | undefined): string {
   if (!selection?.length) return ''
-  return JSON.stringify(selection.map((pick) => [pick.groupId, pick.optionId]))
+  // A write-in's answer rides as a third entry: `[["group","option","SMITH"],…]`.
+  return JSON.stringify(
+    selection.map((pick) => (pick.text ? [pick.groupId, pick.optionId, pick.text] : [pick.groupId, pick.optionId])),
+  )
 }
 
 /** {@link encodeModifierSelection} read back; nothing for a value it did not write. */
@@ -380,29 +517,44 @@ export function decodeModifierSelection(value: unknown): ModifierSelection[] {
     if (!Array.isArray(parsed)) return []
     return parsed
       .filter(
-        (pair): pair is [string, string] =>
+        (pair): pair is [string, string, unknown?] =>
           Array.isArray(pair) && typeof pair[0] === 'string' && typeof pair[1] === 'string',
       )
       .slice(0, POS_MAX_MODIFIER_GROUPS * POS_MAX_MODIFIER_OPTIONS)
-      .map(([groupId, optionId]) => ({ groupId, optionId }))
+      .map(([groupId, optionId, typed]) => {
+        const text = cleanWriteIn(typed)
+        return text ? { groupId, optionId, text } : { groupId, optionId }
+      })
   } catch {
     return []
   }
 }
 
+/** A modifier as {@link modifierLineText} reads it. */
+export type PrintedModifier = Pick<OrderLineModifier, 'name'> &
+  Partial<Pick<OrderLineModifier, 'group' | 'text' | 'nameOnOrder'>>
+
+/**
+ * How one modifier prints on a line: its name (`Oat milk`), its group and
+ * name when the group asks for it (`Jersey size: M`), or a write-in's name
+ * and answer (`Name on jersey: SMITH`).
+ */
+export function modifierLineText(modifier: PrintedModifier): string {
+  if (modifier.text) return `${modifier.group || modifier.name}: ${modifier.text}`
+  if (modifier.nameOnOrder && modifier.group) return `${modifier.group}: ${modifier.name}`
+  return modifier.name
+}
+
 /** The label a line prints: the variant, then each modifier (`Large / Oat milk, Extra shot`). */
-export function lineLabelWithModifiers(
-  variantLabel: string | undefined,
-  modifiers: readonly Pick<OrderLineModifier, 'name'>[],
-): string {
-  const added = modifiers.map((modifier) => modifier.name).join(', ')
+export function lineLabelWithModifiers(variantLabel: string | undefined, modifiers: readonly PrintedModifier[]): string {
+  const added = modifiers.map(modifierLineText).join(', ')
   return [variantLabel, added].filter(Boolean).join(' / ')
 }
 
 /** Two lines merge only when they are the same item with the same choices. */
 export function modifierSelectionKey(selection: readonly ModifierSelection[] | undefined): string {
   return [...(selection ?? [])]
-    .map((pick) => `${pick.groupId}:${pick.optionId}`)
+    .map((pick) => (pick.text ? `${pick.groupId}:${pick.optionId}=${pick.text}` : `${pick.groupId}:${pick.optionId}`))
     .sort()
     .join('|')
 }

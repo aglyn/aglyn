@@ -93,7 +93,8 @@ struct ProductEditorSheet: View {
       Text(
         "Add-ons are choices added to the item that don’t need their own stock, such as walls or printing on a canopy, "
           + "or a milk in a latte. Each can be free or add to the price, and can cost more on a larger size. Show a group "
-          + "on the website to offer it on the product’s page; the register offers every group."
+          + "on the website to offer it on the product’s page; the register offers every group. A write-in asks the "
+          + "customer to type an answer, such as the name and number for a jersey, and puts it on the order."
       )
       .font(.footnote)
       .foregroundStyle(.secondary)
@@ -104,41 +105,10 @@ struct ProductEditorSheet: View {
     // projections into the draft (`$model.draft.addOns` → `$group.choices`) crashed with an access conflict when a
     // choice's prices by size opened.
     ForEach(model.draft.addOns) { group in
-      let binding = addOnGroupBinding(group.id)
-      Section {
-        TextField("Group name (Walls)", text: binding.name).accessibilityIdentifier("addon-group-name-\(group.id)")
-        Stepper(value: binding.min, in: 0...Swift.max(0, group.choices.count)) {
-          LabeledContent("At least", value: "\(group.min) · \(group.required ? "Required" : "Optional")")
-        }
-        Stepper(value: binding.max, in: 1...Swift.max(1, group.choices.count)) {
-          LabeledContent("At most", value: "\(group.max)")
-        }
-        Toggle(isOn: Binding(get: { group.online == true }, set: { binding.wrappedValue.online = $0 })) {
-          VStack(alignment: .leading, spacing: 2) {
-            Text("Show on the website")
-            Text(group.online == true ? "Offered on the product’s page and at the register." : "Offered at the register only.")
-              .font(.caption)
-              .foregroundStyle(.secondary)
-          }
-        }
-        .accessibilityIdentifier("addon-group-online-\(group.id)")
-        ForEach(group.choices) { choice in
-          addOnChoiceRow(groupID: group.id, choice: choice)
-        }
-        Button {
-          binding.wrappedValue = group.withChoiceAdded()
-        } label: {
-          Label("Add choice", systemImage: "plus")
-        }
-        .disabled(group.choices.count >= posMaxModifierOptions)
-        .accessibilityIdentifier("addon-choice-add-\(group.id)")
-        Button(role: .destructive) {
-          model.draft.addOns.removeAll { $0.id == group.id }
-        } label: {
-          Label("Remove group", systemImage: "trash")
-        }
-      } header: {
-        Text(group.name.trimmingCharacters(in: .whitespaces).isEmpty ? "Add-on group" : group.name)
+      if group.isWriteIn {
+        writeInSection(group)
+      } else {
+        choiceGroupSection(group)
       }
     }
     Section {
@@ -149,10 +119,136 @@ struct ProductEditorSheet: View {
       }
       .disabled(model.draft.addOns.count >= posMaxModifierGroups)
       .accessibilityIdentifier("addon-group-add")
+      Button {
+        model.draft.addOns.append(newWriteInGroup())
+      } label: {
+        Label("New write-in", systemImage: "character.cursor.ibeam")
+      }
+      .disabled(model.draft.addOns.count >= posMaxModifierGroups)
+      .accessibilityIdentifier("addon-write-in-add")
     } footer: {
       if !model.draft.addOns.isEmpty, let problem = checkAddOns(model.draft.addOns) {
         Text(problem).foregroundStyle(.orange)
       }
+    }
+  }
+
+  /// One write-in (the gear set builder), as the console's `WriteInFields` has it: what the field is called, how long an
+  /// answer can be, what a filled one adds, the note under it, and whether it is required, numbers only and asked on
+  /// the website.
+  @ViewBuilder private func writeInSection(_ group: AddOnGroupDraft) -> some View {
+    let binding = addOnGroupBinding(group.id)
+    let choiceID = group.choices.first?.id ?? ""
+    let choice = addOnChoiceBinding(groupID: group.id, choiceID: choiceID)
+    Section {
+      TextField(
+        "Field name", text: Binding(get: { group.name }, set: { binding.wrappedValue = binding.wrappedValue.withWriteInName($0) }),
+        prompt: Text("Name on jersey")
+      )
+      .accessibilityIdentifier("addon-write-in-name-\(group.id)")
+      LabeledContent("Longest answer") {
+        HStack(spacing: AglynSpace.one) {
+          TextField(
+            "\(defaultWriteInLength)",
+            text: Binding(
+              get: { String(group.maxLength ?? defaultWriteInLength) },
+              set: { binding.wrappedValue = binding.wrappedValue.withWriteInLength($0) })
+          )
+          .multilineTextAlignment(.trailing)
+          .monospacedDigit()
+          .frame(maxWidth: 60)
+          #if os(iOS)
+            .keyboardType(.numberPad)
+          #endif
+          .accessibilityIdentifier("addon-write-in-length-\(group.id)")
+          Text("characters").foregroundStyle(.secondary)
+        }
+      }
+      LabeledContent("Adds ($)") {
+        TextField("0.00", text: choice.price)
+          .multilineTextAlignment(.trailing)
+          .monospacedDigit()
+          .frame(maxWidth: 110)
+          #if os(iOS)
+            .keyboardType(.decimalPad)
+          #endif
+          .accessibilityIdentifier("addon-write-in-price-\(group.id)")
+      }
+      VStack(alignment: .leading, spacing: 2) {
+        TextField(
+          "Note",
+          text: Binding(get: { choice.wrappedValue.note }, set: { choice.wrappedValue.note = String($0.prefix(productChoiceNoteMax)) }),
+          prompt: Text("As it should print on the back")
+        )
+        .accessibilityIdentifier("addon-write-in-note-\(group.id)")
+        Text("Shown under the field on the product’s page.").font(.caption).foregroundStyle(.secondary)
+      }
+      Toggle("Required", isOn: Binding(get: { group.min > 0 }, set: { binding.wrappedValue.min = $0 ? 1 : 0 }))
+        .accessibilityIdentifier("addon-write-in-required-\(group.id)")
+      Toggle("Numbers only", isOn: Binding(get: { group.digitsOnly }, set: { binding.wrappedValue.digitsOnly = $0 }))
+        .accessibilityIdentifier("addon-write-in-digits-\(group.id)")
+      Toggle("Show on the website", isOn: Binding(get: { group.online == true }, set: { binding.wrappedValue.online = $0 }))
+        .accessibilityIdentifier("addon-group-online-\(group.id)")
+      Text(
+        "The answer goes on the order, the receipt and your order emails, like “\(writeInExample(group))”."
+          + (group.online == true ? "" : " Asked at the register only.")
+      )
+      .font(.caption)
+      .foregroundStyle(.secondary)
+      Button(role: .destructive) {
+        model.draft.addOns.removeAll { $0.id == group.id }
+      } label: {
+        Label("Remove write-in", systemImage: "trash")
+      }
+    } header: {
+      Text(group.name.trimmingCharacters(in: .whitespaces).isEmpty ? "Write-in" : "Write-in · \(group.name)")
+    }
+  }
+
+  /// One group of choices: its name, how many to pick, the website switch, the name on the order, and its choices.
+  @ViewBuilder private func choiceGroupSection(_ group: AddOnGroupDraft) -> some View {
+    let binding = addOnGroupBinding(group.id)
+    Section {
+      TextField("Group name (Walls)", text: binding.name).accessibilityIdentifier("addon-group-name-\(group.id)")
+      Stepper(value: binding.min, in: 0...Swift.max(0, group.choices.count)) {
+        LabeledContent("At least", value: "\(group.min) · \(group.required ? "Required" : "Optional")")
+      }
+      Stepper(value: binding.max, in: 1...Swift.max(1, group.choices.count)) {
+        LabeledContent("At most", value: "\(group.max)")
+      }
+      Toggle(isOn: Binding(get: { group.online == true }, set: { binding.wrappedValue.online = $0 })) {
+        VStack(alignment: .leading, spacing: 2) {
+          Text("Show on the website")
+          Text(group.online == true ? "Offered on the product’s page and at the register." : "Offered at the register only.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+      }
+      .accessibilityIdentifier("addon-group-online-\(group.id)")
+      Toggle(isOn: Binding(get: { group.nameOnOrder }, set: { binding.wrappedValue.nameOnOrder = $0 })) {
+        VStack(alignment: .leading, spacing: 2) {
+          Text("Name the group on the order")
+          Text(nameOnOrderHelp(group)).font(.caption).foregroundStyle(.secondary)
+        }
+      }
+      .accessibilityIdentifier("addon-group-name-on-order-\(group.id)")
+      ForEach(group.choices) { choice in
+        addOnChoiceRow(groupID: group.id, choice: choice)
+      }
+      Button {
+        binding.wrappedValue = group.withChoiceAdded()
+      } label: {
+        Label("Add choice", systemImage: "plus")
+      }
+      .disabled(group.choices.count >= posMaxModifierOptions)
+      .accessibilityIdentifier("addon-choice-add-\(group.id)")
+      Button(role: .destructive) {
+        model.draft.addOns.removeAll { $0.id == group.id }
+      } label: {
+        Label("Remove group", systemImage: "trash")
+      }
+    } header: {
+      Text(group.name.trimmingCharacters(in: .whitespaces).isEmpty ? "Add-on group" : group.name)
     }
   }
 

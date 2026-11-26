@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { ProductModifierGroup } from '../model/product-modifiers'
+import { modifierGroupsProblem, type ProductModifierGroup } from '../model/product-modifiers'
 import {
   addOnCellOf,
   addOnVariantIds,
@@ -234,5 +234,39 @@ describe('a check-in cell', () => {
   it('is blank for a product with no setting', () => {
     expect(checkInCellOf(undefined)).toBeNull()
     expect(checkInCellOf({ headcount: 2 })).toBeNull()
+  })
+})
+
+describe('write-ins in an add-ons cell (the gear set builder)', () => {
+  const cell =
+    'Jersey size (at least 1, name on order): S, M, L; ' +
+    'Name on jersey (write-in, at least 1, up to 14): Name on jersey; ' +
+    'Number (write-in, at least 1, up to 3, numbers only): +$5.00'
+
+  it('reads a write-in, its length, numbers only and a group named on the order', () => {
+    const { groups, problem } = modifierGroupsFromAddOnCell(cell, [], {})
+    expect(problem).toBeNull()
+    expect(groups?.map((group) => [group.name, group.kind, group.maxLength, group.digitsOnly, group.nameOnOrder])).toEqual([
+      ['Jersey size', undefined, undefined, undefined, true],
+      ['Name on jersey', 'text', 14, undefined, undefined],
+      ['Number', 'text', 3, true, undefined],
+    ])
+    expect(groups?.[2].options).toEqual([expect.objectContaining({ name: 'Number', priceCents: 500 })])
+    expect(modifierGroupsProblem(groups)).toBeNull()
+  })
+
+  it('writes them back the same way', () => {
+    const { groups } = modifierGroupsFromAddOnCell(cell, [], {})
+    const written = addOnCellOf(groups, [])
+    expect(written).toBe(
+      'Jersey size (at least 1, name on order): S, M, L; ' +
+        'Name on jersey (write-in, at least 1, up to 14): Name on jersey; ' +
+        'Number (write-in, at least 1, up to 3, numbers only): Number +$5.00',
+    )
+    expect(modifierGroupsFromAddOnCell(written, groups ?? [], {}).groups).toEqual(groups)
+  })
+
+  it('says a length belongs to a write-in', () => {
+    expect(modifierGroupsFromAddOnCell('Size (up to 3): S', [], {}).problem).toMatch(/for a write-in/)
   })
 })
