@@ -267,6 +267,19 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   // entirely until the verdict settles rather than assert the default-off
   // answer for one paint.
   const { flags, ready: releaseFlagsReady, isStaff } = useReleaseFlags()
+
+  // The verdict for ANY flag the page names (AGL-4252), staff bypass applied
+  // as the console dock applies it: a plugin with a second flag of its own
+  // asks for it here, so the shell names no plugin's flag.
+  const releaseVerdict = useCallback(
+    (key: string) => {
+      const released = Boolean(
+        (flags as Record<string, { released?: boolean } | undefined>)[key]?.released,
+      )
+      return { visible: released || isStaff, staffPreview: isStaff && !released }
+    },
+    [flags, isStaff],
+  )
   const releaseFlagVerdict = useMemo(
     () =>
       releaseFlag
@@ -658,6 +671,7 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
           org={org}
           permissions={permissions}
           releaseFlag={releaseFlagVerdict}
+          releaseVerdict={releaseVerdict}
           hostRole={hostRole}
           basePath={basePath}
           sections={resolvedSections}
