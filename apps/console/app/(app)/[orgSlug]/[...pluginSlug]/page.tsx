@@ -34,7 +34,7 @@ import {
   useRouter,
   useSearchParams,
 } from 'next/navigation'
-import { Suspense, useEffect, useMemo } from 'react'
+import { Suspense, useCallback, useEffect, useMemo } from 'react'
 import ConsoleMediaPickerProvider from '../../../../components/console-media-picker-provider.component'
 import { useEnabledPluginIds } from '../../../../components/console-plugins-gate.component'
 import FeatureGate from '../../../../components/feature-gate.component'
@@ -179,6 +179,19 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   const releaseFlag = releaseFlagForNavTab(resolved?.navItem.navTabId)
   const sectionReleaseFlag = releaseFlagForNavTab(resolved?.section?.navTabId)
   const { flags, ready: releaseFlagsReady, isStaff } = useReleaseFlags()
+
+  // The verdict for ANY flag the page names (AGL-4252), staff bypass applied
+  // as the console dock applies it: a plugin with a second flag of its own
+  // asks for it here, so the shell names no plugin's flag.
+  const releaseVerdict = useCallback(
+    (key: string) => {
+      const released = Boolean(
+        (flags as Record<string, { released?: boolean } | undefined>)[key]?.released,
+      )
+      return { visible: released || isStaff, staffPreview: isStaff && !released }
+    },
+    [flags, isStaff],
+  )
   // `released`, deliberately not `visible` (AGL-1662): the staff bypass must
   // not move a billing claim.
   const releaseFlagVerdict = useMemo(
@@ -475,6 +488,7 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
           permissions={permissions}
           viewerOrgs={viewerOrgs}
           releaseFlag={releaseFlagVerdict}
+          releaseVerdict={releaseVerdict}
           basePath={basePath}
           sections={resolvedSections}
           section={resolved?.section?.id}

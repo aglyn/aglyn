@@ -312,6 +312,7 @@
         "tenantApi": "registerBookingsApi",
         "consoleApi": "registerBookingsConsoleApi",
         "declarations": "registerBookingsDeclarations",
+        "serverDeclarations": "registerBookingsServerDeclarations",
         "consoleServerDeclarations": "registerBookingsConsoleServerDeclarations",
         "tenantEmails": "bookingsTenantEmails"
       },
@@ -321,6 +322,18 @@
       },
       "apiPrefixes": [
         "bookings"
+      ],
+      "entityPickers": [
+        {
+          "kind": "services",
+          "attribute": "service-select",
+          "scope": "host",
+          "collection": "services",
+          "nameField": "name",
+          "singular": "service",
+          "plural": "services",
+          "page": "the Bookings page"
+        }
       ],
       "mobile": {
         "$comment": "AGL-3670: the site's bookings on a calendar (day, week, month, upcoming) with each booking's check-in, reschedule, cancel and refund, the services and their hours, Home's card for today and the Bookings page opening natively; in Aglyn POS, today's bookings paid at the counter on the device's own reader (AGL-3652).",
@@ -2111,6 +2124,7 @@
         "site": "registerEventsCalendarPlugin",
         "console": "registerEventsCalendarConsole",
         "tenantApi": "registerEventsCalendarApi",
+        "serverDeclarations": "registerEventsCalendarServerDeclarations",
         "consoleServerDeclarations": "registerEventsCalendarConsoleServerDeclarations"
       },
       "modules": {
@@ -2164,11 +2178,29 @@
               "description",
               "coverImage",
               "coverImageAlt",
-              "status"
+              "status",
+              "categoryIds",
+              "timeZone",
+              "recurrence",
+              "ticket",
+              "seriesEndsAtMs"
             ],
             "package": { "kind": "event", "label": "Events", "nameField": "title" },
             "count": {
               "uncapped": "The events page creates an event with a client write and no count, so a restore mints nothing an editor could not already."
+            }
+          }
+        },
+        {
+          "name": "eventCategories",
+          "routeSlug": "events",
+          "siteExport": {
+            "$comment": "The site's event categories (AGL-4252): a name, a color and an order each, which events name by id in `categoryIds`.",
+            "limit": 50,
+            "fields": ["name", "color", "order"],
+            "package": { "kind": "eventCategory", "label": "Event categories", "nameField": "name" },
+            "count": {
+              "uncapped": "The Events page creates a category with a client write and no count, and a site holds at most 30, so a restore mints nothing an editor could not already."
             }
           }
         }
@@ -2198,7 +2230,9 @@
       "contributes": {
         "site": {
           "components": [
-            "eventList"
+            "eventList",
+            "eventCalendar",
+            "eventDetails"
           ]
         },
         "console": {

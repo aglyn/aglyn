@@ -54,6 +54,7 @@ export type ReleaseFlagKey =
   | 'release_ad_audience_sync'
   | 'release_site_starters'
   | 'release_video_embed_posters'
+  | 'release_events_calendar_v2'
 
 export interface ReleaseFlagDefinition {
   key: ReleaseFlagKey
@@ -370,6 +371,21 @@ const PLATFORM_RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
       'own thumbnail (AGL-4140), which each visitor\u2019s browser loads from ' +
       'i.ytimg.com with the page. OFF by default: nothing is requested from ' +
       'Google until the Subprocessors page that discloses it is published.',
+    defaultEnabled: false,
+  },
+  // Per org (AGL-4252): the events plugin's second flag, beside its plugin
+  // flag `release_events`. The site's event doors read it for the site's
+  // workspace (calendar range, feed, search) and the Events page reads it
+  // through the shell's verdict. Off, a site has the Event List and the
+  // Events page as before.
+  {
+    key: 'release_events_calendar_v2',
+    label: 'Events calendar v2',
+    description:
+      'The Calendar and Event details elements (month, week and list views, ' +
+      'category chips, search, add to calendar, tickets), repeating events, ' +
+      'event categories, the calendar feed and events in site search ' +
+      '(AGL-4252). OFF by default: the Event List and Events page as before.',
     defaultEnabled: false,
   },
 ]

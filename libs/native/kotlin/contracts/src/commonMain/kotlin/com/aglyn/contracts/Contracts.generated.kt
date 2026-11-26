@@ -589,19 +589,45 @@ data class EntryStatusOptionsItem(
     val value: String,
 )
 
+@Serializable
+data class EventRecurrence(
+    val count: Double? = null,
+    val exceptDayKeys: List<String>? = null,
+    val freq: EventRepeatFrequency,
+    val interval: Double? = null,
+    val untilDayKey: String? = null,
+    val weekdays: List<Double>? = null,
+)
+
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = EventRemovableFieldSerializer::class)
 enum class EventRemovableField(val raw: String) {
+    CATEGORY_IDS("categoryIds"),
     COVER_IMAGE("coverImage"),
     COVER_IMAGE_ALT("coverImageAlt"),
     DESCRIPTION("description"),
     LOCATION("location"),
     ORGANIZER("organizer"),
+    RECURRENCE("recurrence"),
+    TICKET("ticket"),
+    TIME_ZONE("timeZone"),
     UNKNOWN(""),
 }
 
 internal object EventRemovableFieldSerializer :
     RawEnumSerializer<EventRemovableField>("com.aglyn.contracts.EventRemovableField", EventRemovableField.entries, EventRemovableField.UNKNOWN, { it.raw })
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = EventRepeatFrequencySerializer::class)
+enum class EventRepeatFrequency(val raw: String) {
+    DAILY("daily"),
+    MONTHLY("monthly"),
+    WEEKLY("weekly"),
+    UNKNOWN(""),
+}
+
+internal object EventRepeatFrequencySerializer :
+    RawEnumSerializer<EventRepeatFrequency>("com.aglyn.contracts.EventRepeatFrequency", EventRepeatFrequency.entries, EventRepeatFrequency.UNKNOWN, { it.raw })
 
 /** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
 @Serializable(with = EventStatusSerializer::class)
@@ -616,16 +642,39 @@ internal object EventStatusSerializer :
 
 @Serializable
 data class EventStoredFields(
+    val categoryIds: List<String>? = null,
     val coverImage: String? = null,
     val coverImageAlt: String? = null,
     val description: String? = null,
     val endsAtMs: Long,
     val location: String? = null,
     val organizer: String? = null,
+    val recurrence: EventRecurrence? = null,
+    val seriesEndsAtMs: Double? = null,
     val startsAtMs: Long,
     val status: EventStatus,
+    val ticket: EventTicket? = null,
+    val timeZone: String? = null,
     val title: String,
 )
+
+@Serializable
+data class EventTicket(
+    val id: String,
+    val kind: EventTicketKind,
+    val label: String? = null,
+)
+
+/** A newer server value decodes as [UNKNOWN], so an older app never fails on it. */
+@Serializable(with = EventTicketKindSerializer::class)
+enum class EventTicketKind(val raw: String) {
+    PRODUCT("product"),
+    SERVICE("service"),
+    UNKNOWN(""),
+}
+
+internal object EventTicketKindSerializer :
+    RawEnumSerializer<EventTicketKind>("com.aglyn.contracts.EventTicketKind", EventTicketKind.entries, EventTicketKind.UNKNOWN, { it.raw })
 
 @Serializable
 data class EventWrite(
@@ -635,14 +684,18 @@ data class EventWrite(
 
 @Serializable
 data class EventWriteInput(
+    val categoryIds: List<String>? = null,
     val coverImage: String? = null,
     val coverImageAlt: String? = null,
     val description: String? = null,
     val endsAtMs: Long? = null,
     val location: String? = null,
     val organizer: String? = null,
+    val recurrence: JsonElement? = null,
     val startsAtMs: Long,
     val status: EventStatus,
+    val ticket: JsonElement? = null,
+    val timeZone: String? = null,
     val title: String,
 )
 

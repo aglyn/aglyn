@@ -2795,6 +2795,11 @@
       "enabled": false,
       "rolloutPercent": 0,
       "plans": []
+    },
+    "release_events_calendar_v2": {
+      "enabled": false,
+      "rolloutPercent": 0,
+      "plans": []
     }
   },
   "flagCases": [

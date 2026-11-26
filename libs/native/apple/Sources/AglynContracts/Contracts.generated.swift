@@ -827,13 +827,48 @@ public struct EntryStatusOptionsItem: Codable, Hashable, Sendable {
   }
 }
 
+public struct EventRecurrence: Codable, Hashable, Sendable {
+  public var count: Double?
+  public var exceptDayKeys: [String]?
+  public var freq: EventRepeatFrequency
+  public var interval: Double?
+  public var untilDayKey: String?
+  public var weekdays: [Double]?
+
+  public init(count: Double? = nil, exceptDayKeys: [String]? = nil, freq: EventRepeatFrequency, interval: Double? = nil, untilDayKey: String? = nil, weekdays: [Double]? = nil) {
+    self.count = count
+    self.exceptDayKeys = exceptDayKeys
+    self.freq = freq
+    self.interval = interval
+    self.untilDayKey = untilDayKey
+    self.weekdays = weekdays
+  }
+}
+
 /// A newer server value decodes as `.unknown`, so an older app never fails on it.
 public enum EventRemovableField: String, Codable, CaseIterable, Hashable, Sendable {
+  case categoryIds = "categoryIds"
   case coverImage = "coverImage"
   case coverImageAlt = "coverImageAlt"
   case description = "description"
   case location = "location"
   case organizer = "organizer"
+  case recurrence = "recurrence"
+  case ticket = "ticket"
+  case timeZone = "timeZone"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum EventRepeatFrequency: String, Codable, CaseIterable, Hashable, Sendable {
+  case daily = "daily"
+  case monthly = "monthly"
+  case weekly = "weekly"
   case unknown = ""
 
   public init(from decoder: Decoder) throws {
@@ -855,26 +890,60 @@ public enum EventStatus: String, Codable, CaseIterable, Hashable, Sendable {
 }
 
 public struct EventStoredFields: Codable, Hashable, Sendable {
+  public var categoryIds: [String]?
   public var coverImage: String?
   public var coverImageAlt: String?
   public var description: String?
   public var endsAtMs: Int
   public var location: String?
   public var organizer: String?
+  public var recurrence: EventRecurrence?
+  public var seriesEndsAtMs: Double?
   public var startsAtMs: Int
   public var status: EventStatus
+  public var ticket: EventTicket?
+  public var timeZone: String?
   public var title: String
 
-  public init(coverImage: String? = nil, coverImageAlt: String? = nil, description: String? = nil, endsAtMs: Int, location: String? = nil, organizer: String? = nil, startsAtMs: Int, status: EventStatus, title: String) {
+  public init(categoryIds: [String]? = nil, coverImage: String? = nil, coverImageAlt: String? = nil, description: String? = nil, endsAtMs: Int, location: String? = nil, organizer: String? = nil, recurrence: EventRecurrence? = nil, seriesEndsAtMs: Double? = nil, startsAtMs: Int, status: EventStatus, ticket: EventTicket? = nil, timeZone: String? = nil, title: String) {
+    self.categoryIds = categoryIds
     self.coverImage = coverImage
     self.coverImageAlt = coverImageAlt
     self.description = description
     self.endsAtMs = endsAtMs
     self.location = location
     self.organizer = organizer
+    self.recurrence = recurrence
+    self.seriesEndsAtMs = seriesEndsAtMs
     self.startsAtMs = startsAtMs
     self.status = status
+    self.ticket = ticket
+    self.timeZone = timeZone
     self.title = title
+  }
+}
+
+public struct EventTicket: Codable, Hashable, Sendable {
+  public var id: String
+  public var kind: EventTicketKind
+  public var label: String?
+
+  public init(id: String, kind: EventTicketKind, label: String? = nil) {
+    self.id = id
+    self.kind = kind
+    self.label = label
+  }
+}
+
+/// A newer server value decodes as `.unknown`, so an older app never fails on it.
+public enum EventTicketKind: String, Codable, CaseIterable, Hashable, Sendable {
+  case product = "product"
+  case service = "service"
+  case unknown = ""
+
+  public init(from decoder: Decoder) throws {
+    let raw = try decoder.singleValueContainer().decode(String.self)
+    self = Self(rawValue: raw) ?? .unknown
   }
 }
 
@@ -889,25 +958,33 @@ public struct EventWrite: Codable, Hashable, Sendable {
 }
 
 public struct EventWriteInput: Codable, Hashable, Sendable {
+  public var categoryIds: [String]?
   public var coverImage: String?
   public var coverImageAlt: String?
   public var description: String?
   public var endsAtMs: Int?
   public var location: String?
   public var organizer: String?
+  public var recurrence: ContractJSON?
   public var startsAtMs: Int
   public var status: EventStatus
+  public var ticket: ContractJSON?
+  public var timeZone: String?
   public var title: String
 
-  public init(coverImage: String? = nil, coverImageAlt: String? = nil, description: String? = nil, endsAtMs: Int? = nil, location: String? = nil, organizer: String? = nil, startsAtMs: Int, status: EventStatus, title: String) {
+  public init(categoryIds: [String]? = nil, coverImage: String? = nil, coverImageAlt: String? = nil, description: String? = nil, endsAtMs: Int? = nil, location: String? = nil, organizer: String? = nil, recurrence: ContractJSON? = nil, startsAtMs: Int, status: EventStatus, ticket: ContractJSON? = nil, timeZone: String? = nil, title: String) {
+    self.categoryIds = categoryIds
     self.coverImage = coverImage
     self.coverImageAlt = coverImageAlt
     self.description = description
     self.endsAtMs = endsAtMs
     self.location = location
     self.organizer = organizer
+    self.recurrence = recurrence
     self.startsAtMs = startsAtMs
     self.status = status
+    self.ticket = ticket
+    self.timeZone = timeZone
     self.title = title
   }
 }
