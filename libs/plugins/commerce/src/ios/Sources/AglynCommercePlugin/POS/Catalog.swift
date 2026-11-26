@@ -108,11 +108,23 @@ func modifierGroups(_ raw: Any?) -> [ProductModifierGroup] {
         byVariant = read
       }
       options.append(
-        ProductModifierOption(id: option["id"] as? String ?? "", name: option["name"] as? String ?? "", priceCents: price, priceCentsByVariant: byVariant))
+        ProductModifierOption(
+          id: option["id"] as? String ?? "", name: option["name"] as? String ?? "", note: text(option["note"]), priceCents: price,
+          priceCentsByVariant: byVariant))
+    }
+    // A write-in (the gear set builder): what it is, how long an answer can be, and numbers only.
+    let maxLength: Double?
+    if let stored = group["maxLength"] {
+      guard let length = number(stored) else { return [] }
+      maxLength = length
+    } else {
+      maxLength = nil
     }
     groups.append(
       ProductModifierGroup(
-        id: group["id"] as? String ?? "", max: max, min: min, name: group["name"] as? String ?? "", online: group["online"] as? Bool, options: options))
+        digitsOnly: group["digitsOnly"] as? Bool, id: group["id"] as? String ?? "", kind: group["kind"] as? String, max: max,
+        maxLength: maxLength, min: min, name: group["name"] as? String ?? "", nameOnOrder: group["nameOnOrder"] as? Bool,
+        online: group["online"] as? Bool, options: options))
   }
   return usableModifierGroups(groups)
 }
@@ -153,7 +165,7 @@ func pick(_ item: PosItem, _ variant: PosVariant, modifiers: [ModifierSelection]
   switch resolveLineModifiers(item.name, item.modifierGroups, modifiers, variantID: variant.id) {
   case .refused(let error): return .problem(error)
   case .ok(let resolved, let extra):
-    let label = lineLabelWithModifiers(variant.label, resolved.map(\.name))
+    let label = lineLabelWithModifiers(variant.label, resolved.map(\.lineText))
     return .ok(
       CartPick(
         productID: item.id,
@@ -162,7 +174,8 @@ func pick(_ item: PosItem, _ variant: PosVariant, modifiers: [ModifierSelection]
         variantID: variant.id == "default" ? nil : variant.id,
         name: item.name,
         variantLabel: label.isEmpty ? nil : label,
-        modifiers: resolved.map { ModifierSelection(groupId: $0.groupID, optionId: $0.optionID) },
+        // A write-in's answer rides with its pick, cleaned as the order will keep it.
+        modifiers: resolved.map(\.selection),
         unitCents: unit + extra))
   }
 }

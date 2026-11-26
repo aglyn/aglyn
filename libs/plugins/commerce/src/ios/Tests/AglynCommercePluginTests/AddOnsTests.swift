@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AglynCore
+import Foundation
 import XCTest
 
 @testable import AglynCommercePlugin
@@ -140,5 +141,79 @@ final class AddOnsTests: XCTestCase {
     let after = try XCTUnwrap(productSaveJSON(draft, stored: stored)["modifierGroups"]?.arrayValue?.first?["options"]?.arrayValue?[1])
     XCTAssertNil(after["includes"])
     XCTAssertNil(after["note"])
+  }
+
+  // MARK: Write-ins (the gear set builder)
+
+  func testANewWriteInIsRequiredOneAnswerOfTwentyAndShownOnTheWebsite() {
+    var n = 0
+    let group = newWriteInGroup { prefix in
+      n += 1
+      return "\(prefix)\(n)"
+    }
+    XCTAssertTrue(group.isWriteIn)
+    XCTAssertEqual(group.min, 1)
+    XCTAssertEqual(group.max, 1)
+    XCTAssertEqual(group.maxLength, 20)
+    XCTAssertEqual(group.online, true)
+    XCTAssertEqual(group.choices.map(\.id), ["o2"])
+    let named = group.withWriteInName("Name on jersey")
+    XCTAssertEqual(named.choices[0].name, "Name on jersey", "its one choice carries the field's name")
+    XCTAssertEqual(named.withWriteInLength("99").maxLength, 40)
+    XCTAssertEqual(named.withWriteInLength("").maxLength, 1)
+    XCTAssertEqual(named.withWriteInLength("14").maxLength, 14)
+    XCTAssertEqual(writeInExample(named), "Name on jersey: SMITH")
+  }
+
+  func testAWriteInReadsAndSavesItsKindLengthNumbersOnlyAndNote() throws {
+    var draft = productDraft(FirestoreDocument(id: "p1", data: stored))
+    var number = newWriteInGroup().withWriteInName("Number").withWriteInLength("3")
+    number.digitsOnly = true
+    number.choices[0].price = "5"
+    number.choices[0].note = "On the back"
+    draft.addOns.append(number)
+    XCTAssertNil(checkAddOns(draft.addOns))
+    let saved = productSaveJSON(draft, stored: stored)
+    let group = try XCTUnwrap(saved["modifierGroups"]?.arrayValue?.last)
+    XCTAssertEqual(group["kind"], .string("text"))
+    XCTAssertEqual(group["maxLength"], .number(3))
+    XCTAssertEqual(group["digitsOnly"], .bool(true))
+    XCTAssertEqual(group["min"], .number(1))
+    XCTAssertNil(group["nameOnOrder"])
+    let option = try XCTUnwrap(group["options"]?.arrayValue?.first)
+    XCTAssertEqual(option["name"], .string("Number"))
+    XCTAssertEqual(option["priceCents"], .number(500))
+    XCTAssertEqual(option["note"], .string("On the back"))
+    XCTAssertNil(saved["modifierGroups"]?.arrayValue?.first?["kind"], "a group of choices has no kind")
+
+    let read = try XCTUnwrap(JSONSerialization.jsonObject(with: saved.encoded()) as? [String: Any])
+    let back = productDraft(FirestoreDocument(id: "p1", data: read)).addOns.last
+    XCTAssertEqual(back?.kind, "text")
+    XCTAssertEqual(back?.maxLength, 3)
+    XCTAssertEqual(back?.digitsOnly, true)
+    XCTAssertEqual(back?.choices.first?.note, "On the back")
+  }
+
+  func testAChoiceGroupCanNameItselfOnTheOrder() throws {
+    var draft = productDraft(FirestoreDocument(id: "p1", data: stored))
+    XCTAssertFalse(draft.addOns[0].nameOnOrder)
+    XCTAssertEqual(
+      nameOnOrderHelp(draft.addOns[0]),
+      "The order says “Full wall”. Turn this on when a choice doesn’t say what it is on its own, like a size.")
+    draft.addOns[0].nameOnOrder = true
+    XCTAssertEqual(nameOnOrderHelp(draft.addOns[0]), "The order says “Walls: Full wall”.")
+    let on = try XCTUnwrap(productSaveJSON(draft, stored: stored)["modifierGroups"]?.arrayValue?.first)
+    XCTAssertEqual(on["nameOnOrder"], .bool(true))
+    draft.addOns[0].nameOnOrder = false
+    XCTAssertNil(productSaveJSON(draft, stored: stored)["modifierGroups"]?.arrayValue?.first?["nameOnOrder"])
+  }
+
+  func testAWriteInsChecksSpeakTheConsolesWords() {
+    var field = newWriteInGroup().withWriteInName("Name on jersey")
+    field.maxLength = 41
+    XCTAssertEqual(checkAddOns([field]), "“Name on jersey” takes 1 to 40 characters")
+    field.maxLength = 14
+    field.choices[0].price = "1500"
+    XCTAssertEqual(checkAddOns([field]), "“Name on jersey” needs a price of $0 to $1,000")
   }
 }
