@@ -112,7 +112,7 @@ func modifierGroups(_ raw: Any?) -> [ProductModifierGroup] {
           id: option["id"] as? String ?? "", name: option["name"] as? String ?? "", note: text(option["note"]), priceCents: price,
           priceCentsByVariant: byVariant))
     }
-    // A write-in (the gear set builder): what it is, how long an answer can be, and numbers only.
+    // A write-in (write-ins): what it is, how long an answer can be, and numbers only.
     let maxLength: Double?
     if let stored = group["maxLength"] {
       guard let length = number(stored) else { return [] }

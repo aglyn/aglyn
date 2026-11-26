@@ -378,7 +378,7 @@ private fun KioskItemSheet(model: PosKioskModel, product: PosKioskProduct, close
         }
         for (group in item.modifierGroups) {
           if (group.isWriteIn()) {
-            // A write-in (the gear set builder): the customer types the answer.
+            // A write-in (write-ins): the customer types the answer.
             WriteInField(group, item.modifierGroups, variantId, picks, { model.money(it) }, "kiosk-writein-${group.id}") {
               picks = it
               problem = null

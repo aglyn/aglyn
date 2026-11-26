@@ -317,7 +317,7 @@ export function ProductChoiceCards(props: ProductChoiceCardsProps) {
         </CardGroup>
       ))}
       {groups.map((group) => {
-        // A write-in (the gear set builder) is a text field among the cards: there is nothing to picture.
+        // A write-in (write-ins) is a text field among the cards: there is nothing to picture.
         if (modifierGroupIsWriteIn(group)) {
           return (
             <ProductWriteInField

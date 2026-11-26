@@ -217,7 +217,7 @@ export function PosItemDialog(props: PosItemDialogProps) {
             </Typography>
           ) : null}
           {groups.map((group) => {
-            // A write-in (the gear set builder): the cashier types the answer the customer gives.
+            // A write-in (write-ins): the cashier types the answer the customer gives.
             if (CommerceModel.modifierGroupIsWriteIn(group)) {
               return (
                 <ProductWriteInField

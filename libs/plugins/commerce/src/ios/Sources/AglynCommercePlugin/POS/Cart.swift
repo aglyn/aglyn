@@ -162,7 +162,7 @@ struct Cart: Codable, Hashable {
             if case .object(let modifier) = item, case .string(let group)? = modifier["groupId"],
               case .string(let option)? = modifier["optionId"]
             {
-              // A write-in's answer (the gear set builder) is kept with its pick, cleaned.
+              // A write-in's answer (write-ins) is kept with its pick, cleaned.
               var text: String?
               if case .string(let typed)? = modifier["text"] { text = cleanWriteIn(typed).nilIfEmpty }
               modifiers.append(ModifierSelection(groupId: group, optionId: option, text: text))

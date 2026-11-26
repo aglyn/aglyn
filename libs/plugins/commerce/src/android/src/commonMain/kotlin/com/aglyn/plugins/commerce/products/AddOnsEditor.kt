@@ -57,7 +57,7 @@ internal fun AddOnsFields(context: NativePluginContext, draft: ProductDraft, cha
   Text(
     "Add-ons are choices added to the item that don’t need their own stock, such as walls or printing on a canopy, or a milk in a latte. " +
       "Each can be free or add to the price, and can cost more on a larger size. Show a group on the website to offer it on the product’s page; " +
-      "the register offers every group. A write-in asks the customer to type an answer, such as the name and number for a jersey, " +
+      "the register offers every group. A write-in asks the customer to type an answer, such as a name to print, an engraving or a cake message, " +
       "and puts it on the order.",
     style = MaterialTheme.typography.bodySmall,
     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -93,7 +93,7 @@ internal fun AddOnsFields(context: NativePluginContext, draft: ProductDraft, cha
             Text("Name the group on the order")
             val first = group.choices.firstOrNull()?.name?.ifBlank { null } ?: "M"
             Text(
-              if (group.nameOnOrder == true) "The order says “${group.name.ifBlank { "Jersey size" }}: $first”."
+              if (group.nameOnOrder == true) "The order says “${group.name.ifBlank { "Size" }}: $first”."
               else "The order says “$first”. Turn this on when a choice doesn’t say what it is on its own, like a size.",
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -143,7 +143,7 @@ internal fun AddOnsFields(context: NativePluginContext, draft: ProductDraft, cha
 }
 
 /**
- * One write-in in the editor (the gear set builder), as the console's `WriteInFields`: what the field is called, how
+ * One write-in in the editor (write-ins), as the console's `WriteInFields`: what the field is called, how
  * long an answer can be, what a filled one adds, the note under it, and whether it is required, numbers only and asked
  * on the website.
  */
@@ -152,11 +152,11 @@ private fun WriteInFields(group: AddOnGroupDraft, tag: String, update: (AddOnGro
   val option = group.choices.firstOrNull()
   fun updateOption(next: AddOnChoiceDraft) = update(group.copy(choices = group.choices.mapIndexed { at, choice -> if (at == 0) next else choice }))
   var length by remember(group.id) { mutableStateOf((group.maxLength ?: DEFAULT_WRITE_IN_LENGTH).toString()) }
-  val example = "${group.name.ifBlank { "Name on jersey" }}: ${if (group.digitsOnly == true) "27" else "SMITH"}"
+  val example = "${group.name.ifBlank { "Engraving" }}: ${if (group.digitsOnly == true) "27" else "For Sam"}"
   Column(Modifier.padding(space(1.5f)), verticalArrangement = Arrangement.spacedBy(space(1f))) {
     Text("WRITE-IN", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     OutlinedTextField(
-      group.name, { update(group.withWriteInName(it)) }, label = { Text("Field name") }, placeholder = { Text("Name on jersey") },
+      group.name, { update(group.withWriteInName(it)) }, label = { Text("Field name") }, placeholder = { Text("Engraving") },
       singleLine = true, modifier = Modifier.fillMaxWidth().testTag("addon-writein-name-$tag"),
     )
     Row(horizontalArrangement = Arrangement.spacedBy(space(1f))) {
@@ -177,7 +177,7 @@ private fun WriteInFields(group: AddOnGroupDraft, tag: String, update: (AddOnGro
     }
     OutlinedTextField(
       option?.note.orEmpty(), { typed -> option?.let { updateOption(it.copy(note = typed.take(PRODUCT_CHOICE_NOTE_MAX))) } }, label = { Text("Note") },
-      placeholder = { Text("As it should print on the back") }, supportingText = { Text("Shown under the field on the product’s page.") },
+      placeholder = { Text("Exactly as it should read") }, supportingText = { Text("Shown under the field on the product’s page.") },
       singleLine = true, enabled = option != null, modifier = Modifier.fillMaxWidth().testTag("addon-writein-note-$tag"),
     )
     SwitchLine("Required", group.min > 0, "addon-writein-required-$tag") { update(group.copy(min = if (it) 1 else 0)) }
