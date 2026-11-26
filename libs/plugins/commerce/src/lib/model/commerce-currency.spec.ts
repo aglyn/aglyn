@@ -64,8 +64,8 @@ describe('storeCurrencies', () => {
       'AUD',
       'NZD',
     ])
-    // A currency added with no rounding rounds to a whole number, Shopify's default.
-    expect(storeCurrencies(settings, 'USD')[3].rounding).toBe('whole')
+    // Rounding is off until the merchant turns it on, as on Shopify.
+    expect(storeCurrencies(settings, 'USD')[3].rounding).toBe('none')
   })
 
   it('is the store currency alone while switched off', () => {
@@ -126,8 +126,8 @@ describe('conversion', () => {
     expect(convertMinor(10_000, 'USD', nzd, rates)).toBe(17_400)
     // $100 → £80 exactly → .99 = £80.99.
     expect(convertMinor(10_000, 'USD', gbp, rates)).toBe(8_099)
-    // $250 → A$385.71… → whole = A$386.
-    expect(convertMinor(25_000, 'USD', aud, rates)).toBe(38_600)
+    // $250 → A$385.714… → no rounding = A$385.72 (up to the cent).
+    expect(convertMinor(25_000, 'USD', aud, rates)).toBe(38_572)
     expect(convertMinor(0, 'USD', nzd, rates)).toBe(0)
   })
 
@@ -238,5 +238,29 @@ describe('orders in another currency', () => {
     expect(saleMoneyText(123_450, 'usd')).toBe('$1234.50')
     expect(saleMoneyText(44_900, 'nzd')).toBe('NZ$449.00')
     expect(saleMoneyText(2499, 'GBP')).toBe('£24.99')
+  })
+})
+
+describe('Shopify-style rate controls', () => {
+  it('uses a manual rate where the merchant set one, whatever the daily rate', () => {
+    const [, nzd] = storeCurrencies({ enabled: true, currencies: [{ code: 'NZD', manualRate: 1.8, rounding: 'whole' }] }, 'USD')
+    expect(convertMinor(10_000, 'USD', nzd, rates)).toBe(18_000)
+    // A manual rate does not need the daily file at all.
+    expect(convertMinor(10_000, 'USD', nzd, undefined)).toBe(18_000)
+    expect(
+      publicCurrencyAnswer({ base: 'USD', settings: { enabled: true, currencies: [{ code: 'CHF', manualRate: 0.9 }] }, rates: undefined }, Date.now())
+        .currencies.map((c) => c.code),
+    ).toEqual(['USD', 'CHF'])
+  })
+
+  it('takes a negative price adjustment, and clamps it to -90…+100', () => {
+    const [, nzd, gbp] = storeCurrencies(
+      { enabled: true, currencies: [{ code: 'NZD', bufferPct: -10 }, { code: 'GBP', bufferPct: 500 }] },
+      'USD',
+    )
+    expect(nzd.bufferPct).toBe(-10)
+    expect(gbp.bufferPct).toBe(100)
+    // $100 → NZ$170 − 10% = NZ$153.
+    expect(convertMinor(10_000, 'USD', nzd, rates)).toBe(15_300)
   })
 })

@@ -45,9 +45,22 @@ export const CURRENCY_ROUNDING_LABELS: Readonly<Record<CurrencyRounding, string>
 export interface StoreCurrency {
   /** ISO 4217, upper case: 'NZD'. */
   code: string
+  /**
+   * Rounding of converted prices, OFF unless the merchant turns it on
+   * (Shopify's rule): converted prices round UP to the ending chosen.
+   */
   rounding?: CurrencyRounding
-  /** Added to the rate, in percent (0–10): covers conversion fees. */
+  /**
+   * Price adjustment, in percent (-90 to +100), on every converted price in
+   * this currency: Shopify's per-market adjustment. Positive covers Stripe's
+   * conversion fee, which the merchant pays otherwise.
+   */
   bufferPct?: number
+  /**
+   * A manual exchange rate: units of this currency per one unit of the store
+   * currency. Set, it replaces the daily rate and never goes stale.
+   */
+  manualRate?: number
   /**
    * Prices shown and charged in this currency INCLUDE tax (VAT/GST), the way
    * shoppers in the UK, EU, Australia and New Zealand expect. Only meaningful
@@ -219,8 +232,9 @@ export function storeCurrencies(
         entry.rounding as CurrencyRounding,
       )
         ? entry.rounding
-        : 'whole',
+        : 'none',
       bufferPct: clampBuffer(entry.bufferPct),
+      ...(Number(entry.manualRate) > 0 ? { manualRate: Number(entry.manualRate) } : {}),
       ...(entry.pricesIncludeTax ? { pricesIncludeTax: true } : {}),
     })
   }
@@ -229,8 +243,22 @@ export function storeCurrencies(
 
 function clampBuffer(value: unknown): number {
   const n = Number(value)
-  if (!Number.isFinite(n) || n <= 0) return 0
-  return Math.min(10, Math.round(n * 100) / 100)
+  if (!Number.isFinite(n) || n === 0) return 0
+  return Math.max(-90, Math.min(100, Math.round(n * 100) / 100))
+}
+
+/**
+ * The rate a store converts into `target` at: its manual rate when set,
+ * else the daily cross rate. `undefined` when neither covers it.
+ */
+export function currencyRate(
+  rates: FxRates | undefined,
+  base: string,
+  target: StoreCurrency,
+): number | undefined {
+  if (upper(base) === target.code) return 1
+  if (target.manualRate && target.manualRate > 0) return target.manualRate
+  return crossRate(rates, base, target.code)
 }
 
 /** Whether `code` is a currency this store sells in. */
@@ -312,7 +340,7 @@ export function convertMinor(
   rates: FxRates | undefined,
   options: { round?: boolean } = {},
 ): number | undefined {
-  const rate = crossRate(rates, from, target.code)
+  const rate = currencyRate(rates, from, target)
   if (rate == null) return undefined
   if (upper(from) === target.code) return Math.round(amountMinor)
   if (!amountMinor) return 0
@@ -321,7 +349,7 @@ export function convertMinor(
   const rounded =
     options.round === false
       ? roundMajor(major, 'none', target.code)
-      : roundMajor(major, target.rounding ?? 'whole', target.code)
+      : roundMajor(major, target.rounding ?? 'none', target.code)
   return Math.round(rounded * currencyMinorFactor(target.code))
 }
 
@@ -515,6 +543,7 @@ export function publicCurrencyAnswer(
   const currencies = storeCurrencies(context.settings, context.base).filter(
     (entry) =>
       entry.code === context.base ||
+      Boolean(entry.manualRate) ||
       (fresh && crossRate(context.rates, context.base, entry.code) != null),
   )
   const rates =

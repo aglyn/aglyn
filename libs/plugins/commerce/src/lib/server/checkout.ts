@@ -1141,8 +1141,13 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       'line_items[0][quantity]': String(chargedQuantity),
       'line_items[0][price_data][currency]': chargeCurrency,
       'line_items[0][price_data][unit_amount]': String(inCharge(chargedUnitAmountCents)),
-      ...(checkoutCurrency?.entry.pricesIncludeTax
-        ? { 'line_items[0][price_data][tax_behavior]': 'inclusive' }
+      // Pinned whenever the charge is not in USD (AGL-1956 invariant 5).
+      ...(checkoutCurrency
+        ? {
+            'line_items[0][price_data][tax_behavior]': checkoutCurrency.entry.pricesIncludeTax
+              ? 'inclusive'
+              : 'exclusive',
+          }
         : {}),
       'line_items[0][price_data][product_data][name]': chargedLineName,
       ...(isSubscription
@@ -1227,6 +1232,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
             'line_items[1][quantity]': '1',
             'line_items[1][price_data][currency]': chargeCurrency,
             'line_items[1][price_data][unit_amount]': String(inCharge(taxCents)),
+            ...(checkoutCurrency ? { 'line_items[1][price_data][tax_behavior]': 'exclusive' } : {}),
             'line_items[1][price_data][product_data][name]': taxLabel.slice(
               0,
               120,

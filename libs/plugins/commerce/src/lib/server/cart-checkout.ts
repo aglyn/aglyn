@@ -460,8 +460,13 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         `line_items[${index}][price_data][unit_amount]`,
         String(chargeUnit),
       )
-      if (checkoutCurrency?.entry.pricesIncludeTax) {
-        params.set(`line_items[${index}][price_data][tax_behavior]`, 'inclusive')
+      // Pinned whenever the charge is not in USD (AGL-1956 invariant 5):
+      // Stripe infers tax-inclusive pricing from some currencies otherwise.
+      if (checkoutCurrency) {
+        params.set(
+          `line_items[${index}][price_data][tax_behavior]`,
+          checkoutCurrency.entry.pricesIncludeTax ? 'inclusive' : 'exclusive',
+        )
       }
       // The variant, then the add-ons, as the order line will print them.
       const lineLabel = CommerceModel.lineLabelWithModifiers(
