@@ -43,7 +43,7 @@ It shows six figures for the window you picked:
 | **Visitors** | The approximate count described above |
 | **Avg / day** | Page views divided by the days in the window |
 | **Mobile / Desktop** | The share of views from each, largest first |
-| **Top page** | The most-viewed path, with its view count |
+| **Top page** | The most-viewed page by name (a product's name, a post's title), with its view count |
 | **Top referrer** | Where most visits came from, with its count |
 
 ### What the growth figure compares against {#traffic-delta}
@@ -77,14 +77,49 @@ from the URL — nothing about the visitor.
 
 ## Per-page traffic {#per-screen-traffic}
 
-**Pro+** sites get a **per-page traffic panel** in each page's detail view, with
-pageviews attributed to the page and broken down by **referrer** and **device** — and a
-**Pages table** on the site's analytics page comparing pageview share across all your
-pages over a selectable window. Plan cards surface analytics as an upsell for lower
-tiers.
+**Pro+** sites get the **Pages table** on the site's **Analytics** page, and a
+**per-page traffic panel** in each page's detail view. Plan cards surface analytics as
+an upsell for lower tiers; views are collected on every plan, so history is there the
+moment you upgrade.
+
+### The Pages table {#pages-table}
+
+The Pages table lists every address on your site that was visited in the window you
+pick (**7**, **14** or **30 days**), each under its own name:
+
+- **Products**: each product by its name, one row per product. A product page is drawn
+  from your store's product template, but the table never shows the template; it
+  shows which products people looked at.
+- **Collections**: each store collection by its name.
+- **Your content collections** (a blog, news, recipes…): each post by its title, and the
+  collection's list page.
+- **Pages**: your own pages, by page title.
+- **Other addresses**: addresses nothing on your site answers now, such as a link to a
+  page you removed or a bot probing for `/wp-login.php`.
+
+Click a kind above the table to see only that kind. **Products** answers "which products
+are getting looked at" in one click. Each row links to where you edit it, and the
+arrow beside it opens the live page. A product or post you have since deleted keeps its
+row, marked **Not a product on this site now**, because those views happened.
+
+| Column | What it means |
+|---|---|
+| **Views** | Views of that address in the window |
+| **Share** | Its share of all the site's views in the window |
+| **Top device** / **Top referrer** | Counted per page design. For one of your own pages, it is that page's own split. A product, collection or post shares its design with others like it, so those rows say **Site-wide**; the site's split is in the Traffic card above. |
+
+Only visited addresses are listed, never a page with no views. If a day in the window
+could not be read, the table says how many days are missing rather than counting them
+as zero.
+
+A product's own views are also on the product: open it in **Products** and look for
+**Page views (14 days)**. A blog post's are on the post, in **Entry traffic**.
+
+### A page's own panel {#page-traffic-panel}
 
 To find it: open a site, go to **Pages**, open a page, open the version you want, and
-look for the **Page traffic (14 days)** card.
+look for the **Page traffic (14 days)** card. It breaks a page's views down by
+**referrer** and **device**.
 
 ### Average time on a page {#dwell-time}
 

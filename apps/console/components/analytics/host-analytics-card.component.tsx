@@ -43,7 +43,11 @@ import {
   trafficDeltaPct,
 } from '@aglyn/aglyn/app-utils/analytics-summary'
 import { referrerLabel } from '@aglyn/aglyn/app-utils/screen-analytics-aggregate'
+import { normalizeCountedPath } from '@aglyn/aglyn/app-utils/page-traffic'
 import { docsHelp } from '../../constants/docs-links'
+import { useHostSubdomain } from '../host-id-provider'
+import { useOrgSlug } from '../../hooks/use-org-scope'
+import { labelSitePaths, type SitePageLabel } from '../../utils/site-page-labels'
 
 interface DayStat {
   day: string
@@ -98,8 +102,17 @@ function StatTile(props: {
  * heading reads as a campaign list that failed to load rather than as a site
  * nobody has run a campaign for.
  */
-function TopList(props: { title: string; rows: Array<[string, number]> }) {
-  const { title, rows } = props
+function TopList(props: {
+  title: string
+  rows: Array<[string, number]>
+  /**
+   * Names for the rows, keyed by the row's key (AGL-4253): Top pages says
+   * which product or post a path is, the way the Pages table does. A row
+   * with no name shows its key.
+   */
+  names?: ReadonlyMap<string, SitePageLabel> | null
+}) {
+  const { title, rows, names } = props
   if (!rows.length) return null
   return (
     <Stack spacing={0.5} sx={{ minWidth: 0 }}>
@@ -111,15 +124,40 @@ function TopList(props: { title: string; rows: Array<[string, number]> }) {
           spacing={1}
           sx={{ justifyContent: 'space-between' }}
         >
-          <Typography variant="body2" noWrap sx={{ minWidth: 0 }}>
-            {label}
-          </Typography>
+          <TopListName label={label} name={names?.get(normalizeCountedPath(label))} />
           <Typography variant="body2" color="text.secondary">
             {count.toLocaleString()}
           </Typography>
         </Stack>
       ))}
     </Stack>
+  )
+}
+
+function TopListName(props: { label: string; name?: SitePageLabel }) {
+  const { label, name } = props
+  if (!name || name.title === name.path) {
+    return (
+      <Typography variant="body2" noWrap sx={{ minWidth: 0 }}>
+        {label}
+      </Typography>
+    )
+  }
+  return (
+    <Tooltip title={name.path}>
+      <Typography variant="body2" noWrap sx={{ minWidth: 0 }}>
+        {name.editHref ? (
+          <AppLink href={name.editHref} color="inherit">
+            {name.title}
+          </AppLink>
+        ) : (
+          name.title
+        )}
+        <Typography component="span" variant="caption" color="text.secondary">
+          {` · ${name.group.label}`}
+        </Typography>
+      </Typography>
+    </Tooltip>
   )
 }
 
@@ -138,6 +176,9 @@ export function HostAnalyticsCard(props: {
   const firestore = useFirestore()
   const [days, setDays] = useState<DayStat[] | null>(null)
   const [range, setRange] = useState(14)
+  const orgSlug = useOrgSlug()
+  const host = useHostSubdomain()
+  const [pageNames, setPageNames] = useState<Map<string, SitePageLabel> | null>(null)
 
   useEffect(() => {
     let active = true
@@ -216,6 +257,32 @@ export function HostAnalyticsCard(props: {
     ([key, count]): [string, number] => [referrerLabel(key), count],
   )
   const topPaths = allPaths.slice(0, 5)
+  /*
+   * The same names the Pages table shows (AGL-4253), for the five paths this
+   * card lists: a product's name rather than `/products/nova`. Reads only
+   * those five, through the shared label cache. A failed read leaves the
+   * paths, which are still true.
+   */
+  const topPathsKey = topPaths.map(([path]) => path).join('|')
+  useEffect(() => {
+    if (!topPathsKey || !orgSlug || !host) return
+    let active = true
+    labelSitePaths({
+      firestore,
+      hostId,
+      paths: topPathsKey.split('|'),
+      context: { orgSlug, host },
+    })
+      .then((names) => {
+        if (active) setPageNames(names)
+      })
+      .catch(() => {
+        if (active) setPageNames(null)
+      })
+    return () => {
+      active = false
+    }
+  }, [firestore, hostId, topPathsKey, orgSlug, host])
   const topReferrers = allReferrers.slice(0, 5)
   const deviceTotals = windowDays.reduce<Record<string, number>>(
     (acc, day) => {
@@ -230,6 +297,7 @@ export function HostAnalyticsCard(props: {
   // The single top row of each list, promoted to its own tile — the two
   // the mockup shows beside Page views (AGL-2160).
   const topPage = allPaths[0]
+  const topPageName = topPage ? pageNames?.get(normalizeCountedPath(topPage[0])) : undefined
   const topReferrer = allReferrers[0]
   // Campaign attribution (AGL-1844): the two UTM dimensions worth a list —
   // source says who sent the traffic, campaign says which push; medium is
@@ -380,7 +448,7 @@ export function HostAnalyticsCard(props: {
             ) : null}
             {topPage ? (
               <StatTile
-                value={topPage[0]}
+                value={topPageName && topPageName.title !== topPageName.path ? topPageName.title : topPage[0]}
                 label={`Top page · ${topPage[1].toLocaleString()} views`}
                 tooltip={topPage[0]}
               />
@@ -436,7 +504,7 @@ export function HostAnalyticsCard(props: {
               },
             }}
           >
-            <TopList title={'Top pages'} rows={topPaths} />
+            <TopList title={'Top pages'} rows={topPaths} names={pageNames} />
             <TopList title={'Top referrers'} rows={topReferrers} />
             <TopList
               title={'Top campaign sources (UTM)'}
@@ -446,8 +514,8 @@ export function HostAnalyticsCard(props: {
           </Box>
           {/* Per-screen teaser (AGL-153, table AGL-1844). */}
           <Typography variant="caption" color="text.secondary">
-            {'Per-page breakdowns live in the Pages table in Analytics ' +
-              'and in each page\u2019s detail view (Pro plans).'}
+            {'Every visited page, product and post by name is in the ' +
+              'Pages table in Analytics (Pro plans).'}
           </Typography>
         </Stack>
       )}

@@ -349,7 +349,7 @@ export const DOCS_HELP_SECTION_EXCERPTS: {
     '#linkedin-insight-tag': 'Paste the numeric partner ID from LinkedIn Campaign Manager to run the LinkedIn Insight Tag for ads and remarketing, under the same consent as the other advertising tags.',
     '#meta-pixel': 'Paste the numeric pixel ID from Meta Events Manager to run a Meta pixel for ads and remarketing; it waits for advertising consent, a separate choice from analytics.',
     '#pageview-tracking': 'A lightweight pageview beacon records visits into daily counters.',
-    '#per-screen-traffic': 'Pro+ sites get a per-page traffic panel in each page\'s detail view, with pageviews attributed to the page and broken down by referrer and device — and a Pages table on the site\'s analytics page comparing pageview…',
+    '#per-screen-traffic': 'Pro+ sites get the Pages table on the site\'s Analytics page, and a per-page traffic panel in each page\'s detail view.',
     '#tracking-card': 'The Tracking card in a site\'s Setup connects your own analytics and advertising tags — Google Analytics, Tag Manager, a Meta pixel, Google Ads and LinkedIn — each loading only where the visitor\'s consent allows it.',
     '#traffic-card': 'The Traffic card on a site\'s dashboard is the one most people read.',
   },
