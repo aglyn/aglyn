@@ -237,6 +237,19 @@ describe('voice service (AGL-4251)', () => {
     expect(env.repo.usage[`${SITE}/phoneMinutes/2026-11`]).toBe(1)
   })
 
+  it('files a voicemail on the CRM timeline once, with its transcript, after the transcription arrives', async () => {
+    const env = setup()
+    const number = await withNumber(env)
+    await env.voice.inbound({ To: number.e164, From: '+18305550142', CallSid: 'CA9' })
+    await env.voice.voicemailLeft({ org: ORG, call: 'CA9' }, { RecordingSid: 'RE9', RecordingDuration: '8' })
+    await env.voice.statusChanged({}, { CallSid: 'CA9', To: number.e164, From: '+18305550142', CallStatus: 'completed', CallDuration: '30' })
+    expect(env.activity).toHaveLength(0)
+    await env.voice.transcription({ org: ORG, call: 'CA9' }, { TranscriptionStatus: 'completed', TranscriptionText: 'Open Sunday?' })
+    expect(env.activity).toEqual([
+      expect.objectContaining({ kind: 'call', dedupeKey: 'phone-call:CA9', transcript: 'Open Sunday?', body: 'Voicemail: Open Sunday?' }),
+    ])
+  })
+
   it('sends every call to voicemail outside hours', async () => {
     const env = setup()
     const number = await withNumber(env)

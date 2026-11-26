@@ -78,6 +78,29 @@ export function createVoiceService(deps: PhoneServiceDeps, phone: PhoneService) 
     }
   }
 
+  /** Files a finished call on the person's CRM timeline, once (its id is the key). */
+  async function fileOnTimeline(orgId: string, call: PhoneCall): Promise<void> {
+    if (!call.contact || !deps.logActivity) return
+    const number = await repo.getNumber(orgId, call.numberId)
+    if (!number) return
+    try {
+      await deps.logActivity({
+        orgId,
+        hostId: number.hostId,
+        person: call.contact,
+        kind: 'call',
+        direction: call.direction,
+        body: describeCallForTimeline(call),
+        atMs: call.startedAtMs,
+        byUid: call.byUid ?? null,
+        dedupeKey: `phone-call:${call.id}`,
+        ...(call.voicemail?.transcript ? { transcript: call.voicemail.transcript } : {}),
+      })
+    } catch {
+      // The timeline is a convenience.
+    }
+  }
+
   return {
     /** The number rang. Answers the TwiML that rings the team, or takes a message. */
     async inbound(params: Record<string, string>): Promise<string> {
@@ -161,14 +184,19 @@ export function createVoiceService(deps: PhoneServiceDeps, phone: PhoneService) 
       const call = await repo.getCall(query.org, query.call)
       if (!call?.voicemail) return
       const done = String(params['TranscriptionStatus'] ?? '') === 'completed'
-      await repo.putCall(query.org, {
+      const next: PhoneCall = {
         ...call,
         voicemail: {
           ...call.voicemail,
           transcript: done ? String(params['TranscriptionText'] ?? '').slice(0, 4000) : null,
           transcriptStatus: done ? 'completed' : 'failed',
         },
-      })
+      }
+      await repo.putCall(query.org, next)
+      // A voicemail waiting on its transcript was held off the timeline when
+      // the call ended; it is filed now, with the transcript in the CRM's own
+      // field (AGL-4249) — or without one, when the transcription failed.
+      if (next.endedAtMs) await fileOnTimeline(query.org, next)
     },
 
     /**
@@ -201,23 +229,8 @@ export function createVoiceService(deps: PhoneServiceDeps, phone: PhoneService) 
       const next: PhoneCall = { ...call, status, endedAtMs, durationSec: seconds }
       await repo.putCall(orgId, next)
       await phone.countMinutes(number.hostId, endedAtMs, seconds)
-      if (next.contact && deps.logActivity) {
-        try {
-          await deps.logActivity({
-            orgId,
-            hostId: number.hostId,
-            person: next.contact,
-            kind: 'call',
-            direction: next.direction,
-            body: describeCallForTimeline(next),
-            atMs: next.startedAtMs,
-            byUid: next.byUid ?? null,
-            dedupeKey: `phone-call:${next.id}`,
-          })
-        } catch {
-          // The timeline is a convenience.
-        }
-      }
+      // A voicemail still being transcribed is filed when its transcript arrives.
+      if (next.voicemail?.transcriptStatus !== 'pending') await fileOnTimeline(orgId, next)
       if (next.direction === 'inbound' && (status === 'missed' || status === 'voicemail')) {
         const settings = await phone.settings(orgId)
         if (settings.missedCallText.trim() && next.theirs.startsWith('+')) {

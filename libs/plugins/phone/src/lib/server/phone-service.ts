@@ -70,6 +70,8 @@ export interface PhoneServiceDeps {
     atMs: number
     byUid: string | null
     dedupeKey: string
+    /** A voicemail's transcript, filed on the call as the CRM's own field (AGL-4249). */
+    transcript?: string | null
   }): Promise<void>
   /** One send against the workspace's hourly ceiling: false when it is spent. */
   consumeSendRate(orgId: string): Promise<boolean>

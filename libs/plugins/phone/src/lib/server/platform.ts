@@ -89,6 +89,7 @@ function serviceDeps(): PhoneServiceDeps {
         body: input.body,
         byUid: input.byUid ?? PHONE_PLUGIN_ID,
         dedupeKey: input.dedupeKey,
+        ...(input.transcript ? { transcript: input.transcript } : {}),
       } as Parameters<typeof writer.logActivity>[0])
     },
     async consumeSendRate(orgId) {
