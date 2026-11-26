@@ -462,7 +462,7 @@ describe('buy-now checkout shipping options (AGL-1720)', () => {
     expect(body).toBeNull()
   })
 
-  it('keeps all six countries when one rate serves them all', async () => {
+  it('collects an address in every country when one rest-of-world rate serves them all', async () => {
     // The single-'*'-zone merchant, whose union was exact all along. Asking
     // this shopper anything would be a regression, and the buy-now path must
     // agree with the cart's answer for the same settings document.
@@ -470,7 +470,10 @@ describe('buy-now checkout shipping options (AGL-1720)', () => {
       settings: { shipping: byWeight },
     })
     expect(result.status).toBe(200)
-    expect(allowedCountries(body)).toEqual(['US', 'CA', 'GB', 'AU', 'DE', 'FR'])
+    expect(allowedCountries(body)).toEqual(
+      expect.arrayContaining(['US', 'NZ', 'IE', 'AU', 'GB', 'NL']),
+    )
+    expect(allowedCountries(body).length).toBeGreaterThan(200)
     expect(shippingOptions(body)).toHaveLength(1)
   })
 

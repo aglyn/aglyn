@@ -944,7 +944,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
         error: CARRIER_POSTAL_CODE_MESSAGE,
         needsShippingCountry: true,
         needsShippingPostalCode: true,
-        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+        shippingCountries: [...CommerceModel.checkoutShippingCountries(shippingSettings)],
       })
     }
     if (shippingPlan.refusal === 'destination-required') {
@@ -957,7 +957,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       return res.status(400).json({
         error: 'Choose where you’re shipping to.',
         needsShippingCountry: true,
-        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+        shippingCountries: [...CommerceModel.checkoutShippingCountries(shippingSettings)],
       })
     }
     if (shippingPlan.refusal === 'destination-unserved') {
@@ -973,7 +973,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
           'that country'
         }.`,
         needsShippingCountry: true,
-        shippingCountries: [...CommerceModel.CHECKOUT_SHIPPING_COUNTRIES],
+        shippingCountries: [...CommerceModel.checkoutShippingCountries(shippingSettings)],
       })
     }
     // The merchant priced shipping and no rate of theirs reaches this cart

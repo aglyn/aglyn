@@ -16,9 +16,9 @@ link.
 The **Shipping** card, on **Products → Shipping & delivery**, prices every parcel: group the
 countries you ship to into zones, then give each zone one or more rates.
 
-1. Under **Zones**, select **Add zone**, enter a **Zone name** and its
-   **Countries** as two-letter codes, such as `US, CA`, or `*` for everywhere
-   else.
+1. Under **Zones**, select **Add zone**, enter a **Zone name**, and pick its
+   **Countries** by name (start typing "New Zealand"), or pick **Rest of
+   world** for everywhere else.
 2. Under **Rates**, select **Add rate**, choose its **Zone**, give it a
    **Name** buyers see (a rate without one is dropped at checkout), and choose
    its **Type** and price.
@@ -26,7 +26,10 @@ countries you ship to into zones, then give each zone one or more rates.
 4. Check the **Coverage** line, which names any destination no rate reaches,
    then select **Save shipping settings**.
 
-A **zone** owns countries; `*` is the rest of the world. A **rate** belongs to
+A **zone** owns countries; **Rest of world** covers every country no other
+zone names. Checkout collects an address only in the countries your zones
+name, so to sell to New Zealand, the UK or the EU, add a zone for them (or a
+rest-of-world zone) with a rate. A **rate** belongs to
 one zone and prices a parcel in one of four ways:
 
 | Rate type | What the shopper pays |

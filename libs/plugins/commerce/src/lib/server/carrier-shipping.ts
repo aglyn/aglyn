@@ -111,11 +111,12 @@ export async function planCheckoutShippingWithCarriers(input: {
   const available = await quoter.available(input.hostId).catch(() => false)
   if (!available) return tablePlan()
 
-  const country = CommerceModel.normalizeCheckoutShippingCountry(input.destination.country)
+  const countries = CommerceModel.checkoutShippingCountries(settings)
+  const country = CommerceModel.normalizeCheckoutShippingCountry(input.destination.country, countries)
   if (!country) {
     // Carrier prices differ by address by construction, so a session that
     // does not know the destination cannot be honest about any of them.
-    return { countries: CommerceModel.CHECKOUT_SHIPPING_COUNTRIES, options: [], refusal: 'destination-required' }
+    return { countries, options: [], refusal: 'destination-required' }
   }
   const carrierRates = CommerceModel.carrierRatesFor(settings, country)
   if (!carrierRates.length) return tablePlan()

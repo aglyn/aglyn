@@ -28,7 +28,7 @@ final class ShippingCoverageTests: XCTestCase {
   private func coverage(_ json: JSONValue?) -> ShippingCoverage.Coverage {
     func list(_ key: String) -> [String] { (json?[key]?.arrayValue ?? []).compactMap(\.stringValue) }
     return ShippingCoverage.Coverage(
-      served: list("served"), unserved: list("unserved"), shipsNowhere: json?["shipsNowhere"] == .bool(true),
+      collectable: Int(json?["collectable"]?.numberValue ?? 0), served: list("served"), unserved: list("unserved"), shipsNowhere: json?["shipsNowhere"] == .bool(true),
       asksDestination: json?["asksDestination"] == .bool(true), offersLocalPickup: json?["offersLocalPickup"] == .bool(true),
       hasRestOfWorldZone: json?["hasRestOfWorldZone"] == .bool(true))
   }
@@ -72,11 +72,14 @@ final class ShippingCoverageTests: XCTestCase {
   func testADerivedLoadReadsTheSettingsItNamesFromTheOtherLoads() {
     let load = LoadSpec(key: "coverage", .object(["derive": "shippingCoverage", "from": "store.shipping"]))
     let data: JSONValue = [
-      "store": ["shipping": ["zones": [["id": "z1", "name": "US", "countries": ["US"]]], "rates": [["id": "r1", "zoneId": "z1", "name": "Standard", "kind": "flat", "amountCents": 500]]]]
+      "store": ["shipping": ["zones": [["id": "z1", "name": "US", "countries": ["US"]], ["id": "z2", "name": "NZ", "countries": ["NZ"]]], "rates": [["id": "r1", "zoneId": "z1", "name": "Standard", "kind": "flat", "amountCents": 500]]]]
     ]
     let answer = ScreenModel.derived(load, from: data)
     XCTAssertEqual(answer["servedNames"]?.stringValue, "United States")
-    XCTAssertEqual(answer["unservedCount"], .number(5))
+    // Checkout collects the countries the zones name; New Zealand has no rate.
+    XCTAssertEqual(answer["unservedNames"]?.stringValue, "New Zealand")
+    XCTAssertEqual(answer["unservedCount"], .number(1))
+    XCTAssertEqual(answer["countryCount"], .number(2))
     XCTAssertEqual(ScreenModel.derived(load, from: ["store": [:]])["shipsNowhere"], .bool(true))
   }
 

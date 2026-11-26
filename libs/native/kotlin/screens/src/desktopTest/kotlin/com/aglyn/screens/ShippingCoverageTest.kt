@@ -31,6 +31,7 @@ class ShippingCoverageTest {
   private fun flag(json: JsonObject, key: String) = (json[key] as? JsonPrimitive)?.content == "true"
 
   private fun coverage(json: JsonObject) = ShippingCoverage.Coverage(
+    collectable = (json["collectable"] as? JsonPrimitive)?.content?.toDouble()?.toInt() ?: 0,
     served = json["served"]!!.jsonArray.map { (it as JsonPrimitive).content },
     unserved = json["unserved"]!!.jsonArray.map { (it as JsonPrimitive).content },
     shipsNowhere = flag(json, "shipsNowhere"),
