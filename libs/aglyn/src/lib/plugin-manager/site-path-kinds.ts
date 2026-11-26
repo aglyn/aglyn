@@ -111,3 +111,51 @@ export function listSitePathKinds(): ResolvedSitePathKind[] {
     pluginId: entry.pluginId,
   }))
 }
+
+/**
+ * A page a plugin serves at one fixed address with no page of the site's own
+ * behind it — commerce's `/order-status` — so the Analytics page names it
+ * rather than filing it under addresses nothing answers (AGL-4253).
+ */
+export interface SiteBuiltInPage {
+  /** The address, one segment: `order-status`. */
+  path: string
+  /** What the page is called: `Order status`. */
+  title: string
+}
+
+export const PLUGIN_SITE_BUILT_IN_PAGES = definePluginServiceContract<SiteBuiltInPage>(
+  'core.site-built-in-pages',
+  { multiple: true },
+)
+
+/** Declares a page a plugin serves at a fixed address. One owner per address. */
+export function registerSiteBuiltInPage(
+  page: SiteBuiltInPage,
+  options?: { pluginId?: string },
+): void {
+  const key = page.path.trim().replace(/^\/+|\/+$/g, '')
+  if (!key || key.includes('/')) {
+    throw new Error('a built-in site page needs one path segment')
+  }
+  const pluginId = (getRegisteringPluginId() ?? options?.pluginId ?? '').trim()
+  const incumbent = resolvePluginServices(PLUGIN_SITE_BUILT_IN_PAGES).find(
+    (entry) => entry.key === key,
+  )
+  if (incumbent && pluginId && incumbent.pluginId !== pluginId) {
+    throw new Error(
+      `built-in site page "${key}" is already declared by ` +
+        `"${incumbent.pluginId}"; refused "${pluginId}"`,
+    )
+  }
+  registerPluginService(
+    PLUGIN_SITE_BUILT_IN_PAGES,
+    { ...page, path: key },
+    { ...(options?.pluginId ? { pluginId: options.pluginId } : {}), key },
+  )
+}
+
+/** Every declared built-in page, by address. */
+export function listSiteBuiltInPages(): SiteBuiltInPage[] {
+  return resolvePluginServices(PLUGIN_SITE_BUILT_IN_PAGES).map((entry) => entry.impl)
+}

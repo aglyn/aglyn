@@ -25,6 +25,7 @@ import {
 import { hostCollectionKind } from '@aglyn/aglyn/app-utils/collection-kind'
 import { hostPublicOrigin } from '@aglyn/aglyn/app-utils/host-naming'
 import {
+  listSiteBuiltInPages,
   listSitePathKinds,
   type ResolvedSitePathKind,
 } from '@aglyn/aglyn/plugin-manager/site-path-kinds'
@@ -71,6 +72,7 @@ export interface SitePageLabel {
 }
 
 export const PAGES_GROUP: SitePageGroup = { id: 'pages', label: 'Pages' }
+export const BUILT_IN_GROUP: SitePageGroup = { id: 'builtIn', label: 'Built-in pages' }
 export const OTHER_GROUP: SitePageGroup = { id: 'other', label: 'Other addresses' }
 
 interface HostFacts {
@@ -209,6 +211,7 @@ export async function labelSitePaths(options: {
   const contentBySlug = new Map(
     contentCollections.map((one) => [text(one['slug']), one]),
   )
+  const builtInPages = new Map(listSiteBuiltInPages().map((page) => [page.path, page.title]))
   const classes = new Map<string, PagePathClass>()
   for (const path of wanted) {
     classes.set(
@@ -218,6 +221,7 @@ export async function labelSitePaths(options: {
         templateScreenIds: collectionTemplateScreenIds(facts.collections as never),
         recordSegments: new Set(kinds.keys()),
         contentCollectionSlugs: new Set(contentBySlug.keys()),
+        builtInPages,
       }),
     )
   }
@@ -351,12 +355,24 @@ export async function labelSitePaths(options: {
           screenId: null,
         }
       }
+    } else if (found.kind === 'builtIn') {
+      label = {
+        path: shown,
+        group: BUILT_IN_GROUP,
+        title: found.title,
+        note: null,
+        editHref: null,
+        liveHref: live(path),
+        screenId: null,
+      }
     } else {
       label = {
         path: shown,
         group: OTHER_GROUP,
         title: shown,
-        note: 'No page answers this address now',
+        // Not "nothing answers": a page a plugin serves without declaring it
+        // here would land in this group too, and this is all that is known.
+        note: 'Not a page, product or post of this site now',
         editHref: null,
         liveHref: null,
         screenId: null,

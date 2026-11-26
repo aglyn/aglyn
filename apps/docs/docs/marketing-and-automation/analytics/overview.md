@@ -94,8 +94,11 @@ pick (**7**, **14** or **30 days**), each under its own name:
 - **Your content collections** (a blog, news, recipes…): each post by its title, and the
   collection's list page.
 - **Pages**: your own pages, by page title.
-- **Other addresses**: addresses nothing on your site answers now, such as a link to a
-  page you removed or a bot probing for `/wp-login.php`.
+- **Built-in pages**: pages every site has without you building them, such as **Sign
+  in**, **Sign up**, **Reset password**, and a store's **Order status**, **Start a
+  return** and **Pay a quote**.
+- **Other addresses**: addresses that are not a page, product or post of your site now,
+  such as a link to a page you removed or a bot probing for `/wp-login.php`.
 
 Click a kind above the table to see only that kind. **Products** answers "which products
 are getting looked at" in one click. Each row links to where you edit it, and the
