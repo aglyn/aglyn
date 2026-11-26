@@ -127,6 +127,15 @@ Stripe Tax registration in each country that pays in that currency. See
 - A refund goes back in the currency the shopper paid, for the amount they
   paid in it.
 
+## What stays in your store currency {#what-stays-in-your-store-currency}
+
+These are always priced and charged in your store currency:
+
+- Gift cards, because a card's balance is kept in your store currency.
+- Subscriptions, so each renewal charges the same amount.
+- Quotes, invoices and payment links you send, and sales at the register.
+- Your reports: sales figures add up every order in your store currency.
+
 ## Ship to other countries {#ship-to-other-countries}
 
 Selling in a currency does not by itself let you ship there. Checkout collects
