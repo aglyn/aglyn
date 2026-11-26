@@ -53,6 +53,8 @@ const ORG_ID = 'org-1'
 
 /** Whether `isServerReleaseFlagOnForOrg` should answer true. */
 let mockFlagOn: boolean
+/** Whether `release_phone` is on for the org (AGL-4251). */
+let mockPhoneFlagOn: boolean
 /** Whether the caller's token carries the staff claim. */
 let mockIsStaff: boolean
 /** Every `(flagKey, orgId)` the route asked the release gate about. */
@@ -96,7 +98,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     orgId: string | null | undefined,
   ) => {
     mockGateCalls.push([flagKey, orgId])
-    return mockFlagOn
+    return flagKey === 'release_phone' ? mockPhoneFlagOn : mockFlagOn
   },
 }))
 
@@ -140,6 +142,7 @@ beforeEach(() => {
   // be the thing under test — but no request leaves the process.
   process.env.STRIPE_SECRET_KEY = 'sk_test_fake'
   mockFlagOn = true
+  mockPhoneFlagOn = false
   mockIsStaff = false
   mockGateCalls = []
   mockStripeCalls = []
@@ -210,5 +213,20 @@ describe('the gate is conditional, not a removal', () => {
     expect(mockStripeCalls.length).toBeGreaterThan(0)
     // Staff skip the gate entirely rather than being force-passed by it.
     expect(mockGateCalls).toEqual([])
+  })
+})
+
+describe('Phone is offered only where it is released (AGL-4251)', () => {
+  it('leaves Phone out of the catalog while release_phone is off for the org', async () => {
+    const body = await (await callAddons('get')).json()
+    expect(body.catalog.phone).toBeUndefined()
+    expect(body.catalog.siteCare).toBeDefined()
+    expect(mockGateCalls).toContainEqual(['release_phone', ORG_ID])
+  })
+
+  it('offers Phone once release_phone is on for the org', async () => {
+    mockPhoneFlagOn = true
+    const body = await (await callAddons('get')).json()
+    expect(body.catalog.phone).toMatchObject({ unitUsd: 15, max: 1 })
   })
 })

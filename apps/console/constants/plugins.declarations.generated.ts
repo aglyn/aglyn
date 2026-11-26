@@ -27,6 +27,7 @@ export function registerPluginDeclarations(): Promise<void> {
     ;(await import('@aglyn/plugins-marketing/declarations')).registerMarketingDeclarations()
     ;(await import('@aglyn/plugins-workflows/declarations')).registerWorkflowsDeclarations()
     ;(await import('@aglyn/plugins-ai/declarations')).registerAiDeclarations()
+    ;(await import('@aglyn/plugins-phone/declarations')).registerPhoneDeclarations()
     ;(await import('@aglyn/plugins-shipping/declarations.console')).registerShippingConsoleDeclarations()
     ;(await import('@aglyn/plugins-post-purchase/declarations.console')).registerPostPurchaseConsoleDeclarations()
     ;(await import('@aglyn/plugins-review-platforms/declarations.console')).registerReviewPlatformsConsoleDeclarations()

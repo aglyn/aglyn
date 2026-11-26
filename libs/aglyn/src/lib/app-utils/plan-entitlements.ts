@@ -48,6 +48,7 @@ import {
   listPluginFeatures,
   listPluginSeatAddons,
   pluginSeatAddon,
+  pluginSeatAddonQuotas,
 } from '../plugin-manager/plugin-entitlements'
 import { pluginOrgCapacity } from '../plugin-manager/plugin-org-capacity'
 import {
@@ -1015,6 +1016,21 @@ export const EVENT_CALENDAR_ADDON_MONTHLY_USD = 9
  * the org-wide `features.siteCare` from any purchased quantity >= 1.
  */
 export const SITE_CARE_ADDON_MONTHLY_USD = 49
+
+/**
+ * Aglyn Phone, the business-number add-on (AGL-4251): $15 a month, flat, on
+ * Starter and Pro. It includes one number, unlimited calls within the US and
+ * Canada, unlimited voicemail with transcripts, and a pool of 300 texts (the
+ * phone plugin's declaration); texts past the pool are metered at cost + 30%
+ * like the other infrastructure meters. Not on Free (no subscription to
+ * carry it) or Enterprise (quoted per deal) — {@link planSellsPhone}.
+ */
+export const PHONE_ADDON_MONTHLY_USD = 15
+
+/** Whether a plan sells the Phone add-on: Starter and Pro. */
+export function planSellsPhone(plan: OrgPlan | null | undefined): boolean {
+  return plan === 'starter' || plan === 'pro'
+}
 
 /**
  * Site Care's included time (AGL-3959): about an hour of staff work a month,
@@ -1999,6 +2015,7 @@ export function orgListPriceMonthlyUsd(
     seats(addons.posRegisters, POS_REGISTER_ADDON_MONTHLY_USD) +
     seats(addons.eventCalendar, EVENT_CALENDAR_ADDON_MONTHLY_USD) +
     seats(siteCareUnits(addons), SITE_CARE_ADDON_MONTHLY_USD) +
+    seats(Math.min(1, Number(addons.phone ?? 0) || 0), PHONE_ADDON_MONTHLY_USD) +
     // Aglyn AI credit blocks (AGL-4144), $10 each on a plan that sells them.
     seats(
       planSellsAiCredits(org?.plan) ? aiAddonUnits(addons) : 0,
@@ -2514,6 +2531,17 @@ export const ORG_COGS_UNIT_RATES_USD = {
    */
   perPageView: 0.00039902751,
   perFormSubmission: 0.000061538462,
+  /**
+   * Aglyn Phone (AGL-4251): one call minute and one text segment, at Twilio's
+   * published US list prices read 2026-11-26. The minute is a cost-model rate
+   * only: calls within the US and Canada are unlimited and never billed. A minute is priced at the
+   * dearest leg it can take — an inbound minute forwarded to a cell is $0.0085
+   * in plus $0.014 out, and a voicemail minute adds $0.0025 of recording —
+   * rounded up to $0.025. A segment is $0.0083 plus the typical US carrier
+   * fee on a registered number (~$0.003), as the sms plugin meters it.
+   */
+  perPhoneMinute: 0.025,
+  perPhoneText: 0.0113,
   /**
    * Firestore-backed dataset bytes — nam5's $0.18 per GiB-month, an order
    * pricier than object storage.
@@ -3510,13 +3538,13 @@ function foldPluginSeatAddons(
     const units = pluginSeatAddonUnits(purchased, addon.key)
     if (!units) continue
     const next: ResolvedOrgEntitlements = { ...out, features: { ...out.features } }
-    if (addon.quota) {
-      const perUnit = addon.quota.perUnit
-        ? addon.quota.perUnit(org, plan)
-        : (addon.quota.perUnitByPlan?.[plan] ?? 0)
+    for (const quota of pluginSeatAddonQuotas(addon)) {
+      const perUnit = quota.perUnit
+        ? quota.perUnit(org, plan)
+        : (quota.perUnitByPlan?.[plan] ?? 0)
       const bag = next as unknown as Record<string, unknown>
-      const current = Number(bag[addon.quota.key] ?? 0)
-      bag[addon.quota.key] = (Number.isFinite(current) ? current : 0) + perUnit * units
+      const current = Number(bag[quota.key] ?? 0)
+      bag[quota.key] = (Number.isFinite(current) ? current : 0) + perUnit * units
     }
     const features = next.features as unknown as Record<string, boolean>
     for (const feature of addon.features ?? []) features[feature] = true

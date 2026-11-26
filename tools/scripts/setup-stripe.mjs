@@ -467,6 +467,18 @@ const siteCareAddon = await ensureAddonPair({
 env['STRIPE_PRICE_SITE_CARE'] = siteCareAddon.monthly.id
 env['STRIPE_PRICE_SITE_CARE_YEARLY'] = siteCareAddon.yearly.id
 
+// Aglyn Phone (AGL-4251): the business-number add-on, $15 a month flat on
+// Starter and Pro, capped at quantity 1 by the console. Minutes and texts past
+// its pool bill on the metered usage line, not on this price.
+const phoneAddon = await ensureAddonPair({
+  lookupBase: 'aglyn_phone_addon',
+  productName: 'Aglyn Phone',
+  usd: 15,
+  planMetadata: 'addon',
+})
+env['STRIPE_PRICE_PHONE'] = phoneAddon.monthly.id
+env['STRIPE_PRICE_PHONE_YEARLY'] = phoneAddon.yearly.id
+
 // Aglyn AI credits by the block (AGL-4144), mirroring `ai-credit-blocks.ts`
 // in libs/aglyn/src/lib/app-utils: 5,000 credits for $10 a month, bought in
 // any quantity from 1 to 30 on any paid plan, so the price is ONE block and

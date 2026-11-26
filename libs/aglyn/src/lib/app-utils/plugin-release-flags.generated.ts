@@ -27,6 +27,7 @@ export type PluginReleaseFlagKey =
   | 'release_workflows'
   | 'release_accounting'
   | 'release_weglot'
+  | 'release_phone'
 
 export const PLUGIN_RELEASE_FLAGS: readonly PluginReleaseFlagDefinition[] = [
   {
@@ -136,5 +137,12 @@ export const PLUGIN_RELEASE_FLAGS: readonly PluginReleaseFlagDefinition[] = [
     "label": "Weglot translation",
     "description": "Weglot's JavaScript translation on published sites, with the merchant's own Weglot key (AGL-3700). Platform-wide kill switch; each site still switches it on itself.",
     "defaultEnabled": true
+  },
+  {
+    "key": "release_phone",
+    "label": "Phone",
+    "description": "Phone (AGL-4251): a business number per workspace with two-way texts, calls forwarded to cell phones, voicemail and transcripts, billed as the $15/mo Phone add-on with minutes and texts past its pool at cost + 30%. OFF by default; staff turn it on per workspace through its release flag override.",
+    "defaultEnabled": false,
+    "navTabId": "nav-tab-org-phone"
   }
 ]

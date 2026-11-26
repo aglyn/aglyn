@@ -649,6 +649,10 @@ export const DOCS_HELP_TOPICS = {
     path: '/building-sites/site-protection/password-a-screen',
     title: 'Password-protect a page',
   },
+  phone: {
+    path: '/content-and-data/crm/phone',
+    title: 'Phone',
+  },
   pickupAndLocalDelivery: {
     path: '/commerce-and-bookings/commerce/pickup-and-local-delivery',
     title: 'Pickup & local delivery',
@@ -1165,6 +1169,7 @@ export const DOCS_HELP_ANCHORS = {
   orderWebhooks: ['#what-your-endpoint-receives', '#check-the-signature', '#answer-quickly-and-retries', '#related'],
   orgAutomations: ['#what-an-org-automation-is', '#create-one', '#triggers', '#steps', '#pause-it-on-one-site', '#waiting-switching-off-and-deleting', '#every-sites-own-automations', '#related'],
   passwordAScreen: ['#steps', '#password-vs-members-only', '#related'],
+  phone: ['#what-it-costs', '#choose-your-number', '#keep-a-number-you-already-have', '#register-your-number-for-texting', '#texts', '#calls', '#call-a-customer-from-your-business-number', '#settings', '#recording'],
   pickupAndLocalDelivery: ['#set-up-pickup', '#set-up-local-delivery', '#queue', '#ask-aglyn-ai', '#related'],
   platformHealth: ['#health-board', '#three-states-never-two', '#the-probes', '#serving', '#backups--exports', '#rate-limiters', '#signup-volume', '#email-delivery', '#mail-gateway-ledger', '#csp-violations', '#sharing-scope-drift', '#pending-erasures', '#people-waiting-beside-the-workspaces', '#idempotency-claims', '#resolved-server-config', '#when-the-configured-text-does-not-mean-what-it-says', '#values-are-never-shown', '#re-checking', '#related'],
   pluginConfig: ['#layers', '#declare', '#field-types', '#read', '#no-schema', '#resolution', '#console-ui', '#api', '#related'],

@@ -3221,6 +3221,54 @@
       }
     },
     {
+      "id": "business-phone",
+      "$comment": "AGL-4251: Aglyn Phone, a business number per workspace (its own Twilio subaccount) with two-way texts, calls forwarded to cell phones, voicemail with transcripts and calls placed from the business number. Its own plugin rather than the sms plugin grown: sms is platform infrastructure (one shared Messaging Service, no switch), while Phone is a merchant product with a release flag, an add-on and an org page, and a subaccount's webhooks are signed by that subaccount's own token. Org-level console surface only, no site or tenant half. OFF behind release_phone; the phone entitlement comes only from the $15/mo phone add-on or a staff override.",
+      "package": "@aglyn/plugins-phone",
+      "register": {
+        "console": "registerPhoneConsole",
+        "consoleApi": "registerPhoneConsoleApi",
+        "declarations": "registerPhoneDeclarations",
+        "consoleServerDeclarations": "registerPhoneConsoleServerDeclarations",
+        "subprocessors": "phoneSubprocessors",
+        "planEntitlements": "phonePlanEntitlements",
+        "usageAxes": "phoneUsageAxes"
+      },
+      "apiPrefixes": [
+        "phone"
+      ],
+      "orgKeyedCollections": [
+        {
+          "name": "phoneNumberIndex",
+          "orgField": "orgId"
+        },
+        {
+          "name": "phoneSubaccountIndex",
+          "orgField": "orgId"
+        }
+      ],
+      "catalog": {
+        "order": 42,
+        "label": "Phone",
+        "description": "A business number your team texts and takes calls on.",
+        "releaseFlag": "release_phone",
+        "releaseFlagDefinition": {
+          "label": "Phone",
+          "description": "Phone (AGL-4251): a business number per workspace with two-way texts, calls forwarded to cell phones, voicemail and transcripts, billed as the $15/mo Phone add-on with minutes and texts past its pool at cost + 30%. OFF by default; staff turn it on per workspace through its release flag override.",
+          "defaultEnabled": false,
+          "navTabId": "nav-tab-org-phone"
+        },
+        "publishedSiteImpact": "console-only"
+      },
+      "contributes": {
+        "console": {
+          "shell": true,
+          "orgRoutes": [
+            "/business-phone"
+          ]
+        }
+      }
+    },
+    {
       "id": "sms",
       "$comment": "AGL-3610: text messages behind core's core.messaging.sms contract (Twilio adapter). Infrastructure, like video-delivery: no catalog entry and no switch. Inert until TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_MESSAGING_SERVICE_SID are set. consoleApi serves Twilio's signed inbound STOP webhook at /api/sms/inbound.",
       "package": "@aglyn/plugins-sms",

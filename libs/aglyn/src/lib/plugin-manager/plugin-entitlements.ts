@@ -56,6 +56,25 @@ import {
   type PluginPermission,
 } from './plugin-permissions'
 
+/** One quota a seat add-on widens per unit. */
+export interface PluginSeatAddonQuota {
+  key: string
+  perUnitByPlan?: Readonly<Record<OrgPlan, number>>
+  /**
+   * The per-unit figure read off the org itself. `org` is the billing
+   * document as `resolveOrgEntitlements` received it and `plan` its
+   * effective plan.
+   */
+  perUnit?: (org: Readonly<Partial<AglynOrgBilling>>, plan: OrgPlan) => number
+}
+
+/** Every quota an add-on widens: `quota`, then `quotas`. */
+export function pluginSeatAddonQuotas(
+  addon: PluginSeatAddonDeclaration,
+): readonly PluginSeatAddonQuota[] {
+  return [...(addon.quota ? [addon.quota] : []), ...(addon.quotas ?? [])]
+}
+
 export interface PluginSeatAddonDeclaration {
   /** The `org.seatAddons` key the purchase is stored under (`aiAddon`). */
   key: string
@@ -72,16 +91,13 @@ export interface PluginSeatAddonDeclaration {
    * bought (the Aglyn AI tier, AGL-3965), else `perUnitByPlan[plan] × units`.
    * A plan the add-on is not sold on answers 0.
    */
-  quota?: {
-    key: string
-    perUnitByPlan?: Readonly<Record<OrgPlan, number>>
-    /**
-     * The per-unit figure read off the org itself. `org` is the billing
-     * document as `resolveOrgEntitlements` received it and `plan` its
-     * effective plan.
-     */
-    perUnit?: (org: Readonly<Partial<AglynOrgBilling>>, plan: OrgPlan) => number
-  }
+  quota?: PluginSeatAddonQuota
+  /**
+   * Further quotas each unit widens, for an add-on that includes more than
+   * one pool — Phone's minutes AND texts (AGL-4251). Folded exactly like
+   * `quota`, after it.
+   */
+  quotas?: readonly PluginSeatAddonQuota[]
   /** Feature flags a purchased unit switches on. */
   features?: readonly string[]
   /**
@@ -101,8 +117,9 @@ export function pluginSeatAddonSoldOn(
   plan: OrgPlan,
 ): boolean {
   if (addon.soldOn) return addon.soldOn(plan)
-  if (!addon.quota) return true
-  return (addon.quota.perUnitByPlan?.[plan] ?? 0) > 0
+  const quotas = pluginSeatAddonQuotas(addon)
+  if (!quotas.length) return true
+  return quotas.some((quota) => (quota.perUnitByPlan?.[plan] ?? 0) > 0)
 }
 
 export interface PluginFeatureDeclaration {

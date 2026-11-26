@@ -152,6 +152,14 @@ export const METERED_UNIT_RATES_USD = {
   storagePerGbMonth: 0.026,
   perPageView: 0.00039902751,
   perFormSubmission: 0.000061538462,
+  /**
+   * Aglyn Phone (AGL-4251): one text segment, sent or received, at Twilio's
+   * published US price read 2026-11-26 ($0.0083) plus the typical US carrier
+   * fee on a registered number (~$0.003), as the sms plugin meters it. A call
+   * minute is a cost-model rate only (`ORG_COGS_UNIT_RATES_USD.perPhoneMinute`):
+   * calls within the US and Canada are unlimited, never billed.
+   */
+  perPhoneText: 0.0113,
 }
 
 /**
@@ -172,6 +180,7 @@ export const METERED_OVERAGE_COST_USD = {
   perPageView:
     METERED_UNIT_RATES_USD.perPageView + PAGE_VIEW_CDN_REQUEST_COST_USD,
   perFormSubmission: METERED_UNIT_RATES_USD.perFormSubmission,
+  perPhoneText: METERED_UNIT_RATES_USD.perPhoneText,
 }
 
 /**
@@ -205,6 +214,9 @@ export const METERED_BILLED_RATES_USD = {
   perPageView: publishedMeteredPrice(METERED_OVERAGE_COST_USD.perPageView * 1000, 2) / 1000,
   perFormSubmission:
     publishedMeteredPrice(METERED_OVERAGE_COST_USD.perFormSubmission * 1000, 3) / 1000,
+  // Phone (AGL-4251): quoted per text, to the tenth of a cent. Calls are
+  // unlimited within the US and Canada, so no minute is ever billed.
+  perPhoneText: publishedMeteredPrice(METERED_OVERAGE_COST_USD.perPhoneText, 3),
 }
 
 /**

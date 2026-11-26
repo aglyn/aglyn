@@ -229,6 +229,47 @@ export const PLUGIN_SUBPROCESSORS: readonly PluginSubprocessorManifestEntry[] = 
     ],
   },
   {
+    pluginId: 'business-phone',
+    subprocessors: [
+      {
+        host: "api.twilio.com",
+        entity: "Twilio Inc.",
+        region: "United States",
+        purpose: "A workspace’s business phone number: two-way texts with its customers, calls to and from the number, call forwarding and voicemail",
+        publishedOn: "2026-10-07",
+        reason: "Phone’s Twilio client (`libs/plugins/phone/src/lib/twilio/twilio-client.ts`) buys and releases a workspace’s number in its own Twilio subaccount, sends the texts a member writes, places the calls a member starts, and answers Twilio’s signed webhooks for texts and calls to the number.",
+        dataReceived: "The customer’s and the business’s phone numbers, the text of every message sent or received, call audio as it is carried, voicemail recordings and their transcripts, and the member cell numbers calls are forwarded to. No email address, payment detail or account credential is sent.",
+      },
+      {
+        host: "messaging.twilio.com",
+        entity: "Twilio Inc.",
+        region: "United States",
+        purpose: "Registering a workspace’s number for texting with US carriers (A2P 10DLC or toll-free verification)",
+        publishedOn: "2026-10-07",
+        reason: "Phone’s texting registration form, submitted by a workspace owner or admin.",
+        dataReceived: "The business’s legal name, EIN, address, website, a contact person’s name, email and phone, what its texts are for, and two example texts.",
+      },
+      {
+        host: "trusthub.twilio.com",
+        entity: "Twilio Inc.",
+        region: "United States",
+        purpose: "The business profile carriers require before a local number may text",
+        publishedOn: "2026-10-07",
+        reason: "Phone’s texting registration for a local number (A2P 10DLC brand).",
+        dataReceived: "The same business details as the texting registration.",
+      },
+      {
+        host: "numbers.twilio.com",
+        entity: "Twilio Inc.",
+        region: "United States",
+        purpose: "Moving a workspace’s existing number in from its current carrier (number porting)",
+        publishedOn: "2026-10-07",
+        reason: "Phone’s Move my number form, submitted by a workspace owner or admin.",
+        dataReceived: "The number, the account holder’s name, the account number and transfer PIN at the current carrier, and the service address.",
+      },
+    ],
+  },
+  {
     pluginId: 'sms',
     subprocessors: [
       {

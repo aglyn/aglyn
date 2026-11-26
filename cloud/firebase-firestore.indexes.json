@@ -6283,6 +6283,34 @@
       ]
     },
     {
+      "collectionGroup": "phoneThreads",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "archived",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "lastMessageAtMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "phoneCalls",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "theirs",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "startedAtMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "experiments",
       "queryScope": "COLLECTION",
       "fields": [

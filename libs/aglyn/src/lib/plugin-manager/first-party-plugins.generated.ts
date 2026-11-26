@@ -386,6 +386,12 @@ export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
     }
   },
   {
+    "id": "business-phone",
+    "label": "Phone",
+    "description": "A business number your team texts and takes calls on.",
+    "releaseFlag": "release_phone"
+  },
+  {
     "id": "ad-conversions",
     "label": "Ad conversions",
     "alwaysOnForWorkspace": true,
@@ -2185,6 +2191,28 @@ export const PLUGIN_PLAN_QUOTAS_DECLARED: readonly ResolvedPluginPlanQuota[] = [
       "enterprise": 116000
     }
   },
+  {
+    "pluginId": "business-phone",
+    "key": "phoneMinutesPerMonth",
+    "label": "Phone min / mo (with Phone)",
+    "byPlan": {
+      "free": Infinity,
+      "starter": Infinity,
+      "pro": Infinity,
+      "enterprise": Infinity
+    }
+  },
+  {
+    "pluginId": "business-phone",
+    "key": "phoneTextsPerMonth",
+    "label": "Phone texts / mo",
+    "byPlan": {
+      "free": 0,
+      "starter": 0,
+      "pro": 0,
+      "enterprise": 0
+    }
+  },
 ]
 
 /**
@@ -2236,6 +2264,17 @@ export const PLUGIN_PLAN_FEATURES_DECLARED: readonly ResolvedPluginPlanFeature[]
       "enterprise": true
     }
   },
+  {
+    "pluginId": "business-phone",
+    "key": "phone",
+    "label": "Phone",
+    "byPlan": {
+      "free": false,
+      "starter": false,
+      "pro": false,
+      "enterprise": false
+    }
+  },
 ]
 
 /**
@@ -2267,6 +2306,24 @@ export const PLUGIN_COST_AXES_DECLARED: readonly ResolvedPluginCostAxis[] = [
       "dealsCount"
     ],
     "rate": "perContactMonth"
+  },
+  {
+    "pluginId": "business-phone",
+    "id": "phoneMinutes",
+    "order": 74,
+    "fields": [
+      "phoneMinutes"
+    ],
+    "rate": "perPhoneMinute"
+  },
+  {
+    "pluginId": "business-phone",
+    "id": "phoneTexts",
+    "order": 75,
+    "fields": [
+      "phoneTexts"
+    ],
+    "rate": "perPhoneText"
   },
   {
     "pluginId": "ai",
@@ -2334,6 +2391,34 @@ export const PLUGIN_USAGE_BANDS_DECLARED: readonly ResolvedPluginUsageBand[] = [
       "contactsCount"
     ],
     "entitlement": "contactsPerHost"
+  },
+  {
+    "pluginId": "business-phone",
+    "id": "phoneMinutes",
+    "label": "Phone minutes",
+    "order": 74,
+    "fields": [
+      "phoneMinutes"
+    ],
+    "entitlement": "phoneMinutesPerMonth",
+    "hostCounter": "phoneMinutes"
+  },
+  {
+    "pluginId": "business-phone",
+    "id": "phoneTexts",
+    "label": "Phone texts",
+    "order": 75,
+    "fields": [
+      "phoneTexts"
+    ],
+    "entitlement": "phoneTextsPerMonth",
+    "hostCounter": "phoneTexts",
+    "metered": {
+      "rate": "perPhoneText",
+      "quotedPer": 1,
+      "noun": "phone texts",
+      "withheldUntil": "release_phone"
+    }
   },
   {
     "pluginId": "ai",
@@ -2455,6 +2540,16 @@ export const PLUGIN_ORG_KEYED_COLLECTIONS: readonly PluginOrgKeyedCollection[] =
   {
     "pluginId": "outreach",
     "name": "outreachLinks",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "business-phone",
+    "name": "phoneNumberIndex",
+    "orgField": "orgId"
+  },
+  {
+    "pluginId": "business-phone",
+    "name": "phoneSubaccountIndex",
     "orgField": "orgId"
   },
   {

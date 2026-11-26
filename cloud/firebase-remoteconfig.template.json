@@ -7,6 +7,13 @@
       "description": "The CRM: contacts, leads, companies, deals, tasks, reports and fields.",
       "valueType": "JSON"
     },
+    "release_phone": {
+      "defaultValue": {
+        "value": "{\"enabled\": false, \"rolloutPercent\": 0}"
+      },
+      "description": "Aglyn Phone (AGL-4251): business number, two-way texts, calls and voicemail. OFF by default; turned on per workspace by a staff release flag override.",
+      "valueType": "JSON"
+    },
     "release_outreach": {
       "defaultValue": {
         "value": "{\"enabled\": false, \"rolloutPercent\": 0}"

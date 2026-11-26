@@ -784,6 +784,13 @@ export interface OrgSeatAddons {
    */
   siteCare?: number
   /**
+   * Aglyn Phone org-wide toggle, 0/1 (AGL-4251): a business number with texts
+   * and calls, flat at `PHONE_ADDON_MONTHLY_USD` on Starter and Pro. The
+   * phone plugin declares what a unit switches on (`features.phone`) and
+   * the minutes and texts it includes.
+   */
+  phone?: number
+  /**
    * Aglyn AI credit blocks, 0 to 30 (AGL-2896, AGL-4144). Org-wide: one
    * pool covers every host. `resolveOrgEntitlements` adds 5,000 credits a
    * block (`ai-credit-blocks.ts`) to `assistCreditsPerMonth`, on any paid

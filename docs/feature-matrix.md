@@ -48,6 +48,7 @@ this file is the last step, not the decision.
 | `mediaCdn` | ✓ | ✓ | ✓ | ✓ |
 | `multilingual` | — | — | ✓ | ✓ |
 | `outreach` | — | — | — | — |
+| `phone` | — | — | — | — |
 | `pos` | — | — | ✓ | ✓ |
 | `productReviews` | — | — | ✓ | ✓ |
 | `redirects` | — | ✓ | ✓ | ✓ |
@@ -65,4 +66,4 @@ this file is the last step, not the decision.
 | `whiteLabel` | — | — | — | ✓ |
 | `workflows` | — | ✓ | ✓ | ✓ |
 
-_40 features across 4 plans._
+_41 features across 4 plans._

@@ -189,6 +189,7 @@ export const DOCS_HELP_EXCERPTS = {
   orderWebhooks: 'What an order webhook posts to your endpoint, the headers that come with it, how to check its signature, and how retries work.',
   orgAutomations: 'Write an automation once for the whole organization and run it on the sites you choose, with a pause on each site.',
   passwordAScreen: 'Require a password to view a specific page.',
+  phone: 'A business number for your workspace. Text customers, take calls on your team\'s cell phones, and read voicemail as text. Rolling out.',
   pickupAndLocalDelivery: 'Let buyers pick up orders at your locations or have your own driver deliver them, with pickup hours, delivery zones, fees, minimums and delivery times.',
   platformHealth: 'The staff health board — serving, backups, rate limiters, signup volume, email delivery and CSP violations, with what each red light means and what to do.',
   pluginConfig: 'Declare a settings schema and get a console form for free — plus the three layers a setting is answered at, workspace defaults with per-site overrides, and the one write that clears one.',

@@ -455,8 +455,15 @@ async function handler(request: Request): Promise<Response> {
 
     if (action === 'get') {
       const quantities = addonQuantitiesFromItems(items)
+      // Phone (AGL-4251) is offered only where it is released, so the web card
+      // and the native add-ons screen both leave it out elsewhere — unless
+      // the workspace already holds it, so it can still be removed.
+      const phoneOffered =
+        isStaff ||
+        (quantities.phone ?? 0) > 0 ||
+        (await isServerReleaseFlagOnForOrg('release_phone', orgId))
       const catalog = Object.fromEntries(
-        ADDON_KINDS.map((kind) => {
+        ADDON_KINDS.filter((kind) => kind !== 'phone' || phoneOffered).map((kind) => {
           // What the add-on is CHARGED at now (AGL-4227), which can trail a
           // catalog price whose new Stripe price is not configured yet.
           const unitUsd = addonChargedUnitUsd(kind, plan, interval)
@@ -491,6 +498,17 @@ async function handler(request: Request): Promise<Response> {
     const kind = String(body?.kind ?? '') as AddonKind
     if (!ADDON_KINDS.includes(kind)) {
       return Response.json({ error: 'Unknown add-on' }, { status: 400 })
+    }
+    // Aglyn Phone (AGL-4251) is sold only where it is released: nobody buys
+    // an add-on whose page their workspace cannot open. Removing it stays
+    // open, so a workspace the flag was turned off for can stop paying.
+    if (
+      kind === 'phone' &&
+      Math.floor(Number(body?.quantity)) > 0 &&
+      !isStaff &&
+      !(await isServerReleaseFlagOnForOrg('release_phone', orgId))
+    ) {
+      return Response.json({ error: 'Phone is not available to this workspace yet' }, { status: 409 })
     }
     const quantity = Math.floor(Number(body?.quantity))
     const max = addonMax(kind, baseline, plan)
