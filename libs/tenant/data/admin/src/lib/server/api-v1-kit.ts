@@ -218,6 +218,8 @@ export type ClaimKind =
   | 'task-deletes'
   | 'activities'
   | 'activity-deletes'
+  // A call's recording and transcript attached after it was logged.
+  | 'activity-patches'
   | 'lead-conversions'
   // A lead created over the API (AGL-3231) — the door updates an existing
   // address, so the receipt is the lead's view either way.

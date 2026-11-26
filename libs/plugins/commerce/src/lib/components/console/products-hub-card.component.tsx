@@ -38,9 +38,26 @@ import {
   listQueryRefusals,
 } from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import {
+  ListRowActions,
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { MdiIcon } from '@aglyn/shared-ui-jsx/components/mdi-icon/mdi-icon'
+import {
+  mdiArchiveArrowUpOutline,
+  mdiArchiveOutline,
+  mdiBarcode,
+  mdiCheckCircleOutline,
+  mdiContentCopy,
+  mdiDeleteOutline,
+  mdiEyeOutline,
+  mdiFileDocumentEditOutline,
+  mdiKeyOutline,
+  mdiPackageVariant,
+  mdiPencilOutline,
+} from '@aglyn/shared-data-mdi'
+import { siteLiveUrlForSlug } from '@aglyn/aglyn/app-utils/site-live-url'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
@@ -66,10 +83,13 @@ import {
 } from '@mui/material'
 import {
   addDoc,
+  arrayUnion,
   collection,
   doc,
   documentId,
+  getDoc,
   getDocFromServer,
+  getDocs,
   limit,
   orderBy,
   query,
@@ -131,6 +151,22 @@ const PRODUCT_PAGE_SORTS = {
   variants: (row: ProductRow) => row.variants.length,
 }
 const PRODUCT_PAGE_SORT_HEADERS = { stock: 'Stock', variants: 'Variants' }
+
+/** What a status change from a row's menu says when it has been written. */
+const PRODUCT_STATUS_DONE: Record<CommerceModel.ProductStatus, string> = {
+  active: 'Product is active',
+  draft: 'Product set to draft',
+  archived: 'Product archived',
+}
+
+/**
+ * The address one product's editor opens at, on the Catalog this list is
+ * on: what a cmd-click or middle-click on a row opens in a new tab.
+ */
+function productEditorHref(productId: string): string {
+  const path = typeof window === 'undefined' ? '' : window.location.pathname
+  return `${path}?${new URLSearchParams({ [PRODUCTS_PRODUCT_PARAM]: productId }).toString()}`
+}
 
 const STATUS_COLOR: Record<string, 'default' | 'success' | 'warning'> = {
   active: 'success',
@@ -290,6 +326,30 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     [firestore, hostId],
     { idField: '$id' },
   )
+  /*
+   * The site's address, for a row's "View on site" (its subdomain and custom
+   * domain). Read once: a site's address does not move under an open list.
+   */
+  const [siteAddress, setSiteAddress] = useState<{
+    subdomain?: string | null
+    cname?: string | null
+  } | null>(null)
+  useEffect(() => {
+    let active = true
+    void Promise.resolve()
+      .then(() => getDoc(doc(firestore, 'hosts', hostId)))
+      .then((snapshot) => {
+        if (!active || !snapshot?.exists?.()) return
+        setSiteAddress({
+          subdomain: snapshot.get('subdomain') ?? null,
+          cname: snapshot.get('cname') ?? null,
+        })
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [firestore, hostId])
   /*
    * The PAGE on screen, lifted from legacy shapes. It is what the table
    * draws, the reserved-stock clock watches and the zone hands its widgets,
@@ -503,7 +563,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         // The source's SKU and barcode keys are not copied: the copy's own
         // are derived (`productDuplicateFields`), and a copy of a product
         // with none must have none.
-        await createHostResource({
+        const { id: copyId } = await createHostResource({
           hostId,
           resource: 'product',
           data: {
@@ -515,6 +575,30 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
             })),
           },
         })
+        /*
+         * The MANUAL collections the source is in hold it by id in their own
+         * `productIds`, which nothing on the product carries, so the copy
+         * joins each of them here. A draft is on no storefront until it is
+         * made active, so this changes nothing a visitor sees.
+         */
+        try {
+          const manual = await getDocs(
+            query(
+              collection(firestore, 'hosts', hostId, 'collections'),
+              where('productIds', 'array-contains', product.$id),
+            ),
+          )
+          await Promise.all(
+            manual.docs.map((collectionDoc) =>
+              updateDoc(collectionDoc.ref, { productIds: arrayUnion(copyId) }),
+            ),
+          )
+        } catch {
+          enqueueSnackbar(
+            'Product duplicated, but it could not be added to the source’s collections: add it in Collections.',
+            { variant: 'warning', persist: false },
+          )
+        }
         // A create moves the count and the aggregate is a one-shot — the
         // listener refreshes the ROWS for free, the count has to be asked
         // again or the cap drifts stale for the rest of the session.
@@ -555,6 +639,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
             updatedAt: Timestamp.now(),
           }),
       })
+      enqueueSnackbar(PRODUCT_STATUS_DONE[status], { variant: 'success', persist: false })
     },
     [firestore, hostId, user, enqueueSnackbar],
   )
@@ -752,6 +837,130 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     return held > 0 ? ` (${held} reserved)` : ''
   }
 
+  const icon = (path: string) => <MdiIcon path={path} size={0.8} />
+  /**
+   * Every action a product row offers, in its ⋮ menu. An action that does
+   * not apply to this product is left out (labels are for physical goods,
+   * keys for digital ones, stock for tracked inventory); one that applies
+   * but cannot run now is shown disabled with the reason.
+   */
+  const productRowActions = (product: ProductRow): RowActionsMenuItem[] => {
+    const items: RowActionsMenuItem[] = [
+      {
+        key: 'edit',
+        label: 'Edit',
+        icon: icon(mdiPencilOutline.path),
+        onClick: () => setEditing(product),
+      },
+      {
+        key: 'duplicate',
+        label: 'Duplicate',
+        icon: icon(mdiContentCopy.path),
+        description: 'Copies it as a draft',
+        disabled: !productQuota,
+        disabledReason: productQuota ? undefined : 'Checking your plan…',
+        onClick: () => void handleDuplicate(product)(),
+      },
+    ]
+    const liveUrl =
+      product.slug && siteAddress
+        ? siteLiveUrlForSlug(siteAddress, `/products/${product.slug}`)
+        : undefined
+    const offline =
+      product.status !== 'active'
+        ? 'Only active products are on the site'
+        : !CommerceModel.productSellsOnline(product)
+          ? 'Sold in person only, so it has no page on the site'
+          : !liveUrl
+            ? 'This site has no address yet'
+            : undefined
+    items.push({
+      key: 'view',
+      label: 'View on site',
+      icon: icon(mdiEyeOutline.path),
+      href: offline ? undefined : liveUrl,
+      external: true,
+      disabled: Boolean(offline),
+      disabledReason: offline,
+    })
+    if (CommerceModel.productInventory(product) != null) {
+      items.push({
+        key: 'stock',
+        label: 'Adjust stock',
+        icon: icon(mdiPackageVariant.path),
+        onClick: () =>
+          setAdjusting({
+            product,
+            variantId:
+              product.variants.find((variant) => variant.inventory != null)?.id ??
+              product.variants[0].id,
+            delta: '',
+            reason: 'restock',
+            locationId:
+              (locationDocs ?? []).find((location: any) => location.isDefault)?.$id ??
+              (locationDocs ?? [])[0]?.$id ??
+              '',
+          }),
+      })
+    }
+    if (product.type === 'physical') {
+      items.push({
+        key: 'labels',
+        label: 'Print labels',
+        icon: icon(mdiBarcode.path),
+        onClick: () => setLabelsFor(product),
+      })
+    }
+    if (product.type === 'digital') {
+      items.push({
+        key: 'keys',
+        label: 'License keys',
+        icon: icon(mdiKeyOutline.path),
+        onClick: () => setKeysFor(product),
+      })
+    }
+    if (product.status !== 'active') {
+      items.push({
+        key: 'activate',
+        label: 'Set active',
+        icon: icon(mdiCheckCircleOutline.path),
+        onClick: () => void handleStatus(product, 'active')(),
+      })
+    }
+    if (product.status === 'active') {
+      items.push({
+        key: 'draft',
+        label: 'Set to draft',
+        icon: icon(mdiFileDocumentEditOutline.path),
+        description: 'Takes it off the site',
+        onClick: () => void handleStatus(product, 'draft')(),
+      })
+    }
+    items.push(
+      product.status === 'archived'
+        ? {
+            key: 'unarchive',
+            label: 'Unarchive as draft',
+            icon: icon(mdiArchiveArrowUpOutline.path),
+            onClick: () => void handleStatus(product, 'draft')(),
+          }
+        : {
+            key: 'archive',
+            label: 'Archive',
+            icon: icon(mdiArchiveOutline.path),
+            onClick: () => void handleStatus(product, 'archived')(),
+          },
+      {
+        key: 'delete',
+        label: 'Delete',
+        icon: icon(mdiDeleteOutline.path),
+        destructive: true,
+        onClick: () => void handleDelete(product)(),
+      },
+    )
+    return items
+  }
+
   const productColumns = listFilterGridColumns(
     [
       {
@@ -828,68 +1037,14 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         width: 100,
         valueGetter: (_value: unknown, row: ProductRow) => row.variants.length,
       },
+      // ONE menu per row, the same on every row (Zach, 2026-11-25): the
+      // inline buttons were wider than the column, so the table clipped
+      // them and a row showed whichever ones happened to fit.
       listActionsColumn(
         (product: ProductRow) => (
-          <Stack
-            direction="row"
-            spacing={0.5}
-            sx={{ justifyContent: 'flex-end', whiteSpace: 'nowrap' }}
-          >
-            <Button size="small" onClick={() => setEditing(product)}>
-              {'Edit'}
-            </Button>
-            <Button size="small" onClick={handleDuplicate(product)}>
-              {'Duplicate'}
-            </Button>
-            {product.type === 'physical' ? (
-              <Button size="small" onClick={() => setLabelsFor(product)}>
-                {'Labels'}
-              </Button>
-            ) : null}
-            {product.type === 'digital' ? (
-              <Button size="small" onClick={() => setKeysFor(product)}>
-                {'Keys'}
-              </Button>
-            ) : null}
-            {CommerceModel.productInventory(product) != null ? (
-              <Button
-                size="small"
-                onClick={() =>
-                  setAdjusting({
-                    product,
-                    variantId:
-                      product.variants.find(
-                        (variant) => variant.inventory != null,
-                      )?.id ?? product.variants[0].id,
-                    delta: '',
-                    reason: 'restock',
-                    locationId:
-                      (locationDocs ?? []).find(
-                        (location: any) => location.isDefault,
-                      )?.$id ??
-                      (locationDocs ?? [])[0]?.$id ??
-                      '',
-                  })
-                }
-              >
-                {'Stock'}
-              </Button>
-            ) : null}
-            <Button
-              size="small"
-              onClick={handleStatus(
-                product,
-                product.status === 'archived' ? 'active' : 'archived',
-              )}
-            >
-              {product.status === 'archived' ? 'Activate' : 'Archive'}
-            </Button>
-            <Button size="small" color="error" onClick={handleDelete(product)}>
-              {'Delete'}
-            </Button>
-          </Stack>
+          <ListRowActions label={product.name} items={productRowActions(product)} />
         ),
-        { width: 470 },
+        { width: 64 },
       ),
     ] as GridColDef[],
     PRODUCT_LIST_FIELDS,
@@ -1028,6 +1183,10 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         />
         <ListTable
           aria-label="Products"
+          // A row opens its product in the editor; cmd-, ctrl-, shift- or
+          // middle-click opens the editor in a new tab.
+          onOpen={(_id, row: ProductRow) => setEditing(row)}
+          openHref={(id) => productEditorHref(id)}
           rows={columnSort.rows}
           columns={productColumns}
           loading={productsStatus === 'loading'}

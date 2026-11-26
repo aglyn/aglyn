@@ -121,9 +121,9 @@ describe('the tool list as a public listing (AGL-4225)', () => {
     }
   })
 
-  it('counts 42 tools that only read and 45 that write', () => {
+  it('counts 42 tools that only read and 46 that write', () => {
     const reads = tools.filter((tool) => tool.annotations.readOnlyHint).length
-    expect({ reads, writes: tools.length - reads }).toEqual({ reads: 42, writes: 45 })
+    expect({ reads, writes: tools.length - reads }).toEqual({ reads: 42, writes: 46 })
   })
 
   it('describes every tool in at least a full sentence of its own', () => {
