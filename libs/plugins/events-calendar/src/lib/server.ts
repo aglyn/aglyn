@@ -33,6 +33,17 @@ import {
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { dispatchHostAutomation } from '@aglyn/tenant-runtime'
+import { registerPluginConfigSchema } from '@aglyn/aglyn/plugin-manager/plugin-config'
+import { EVENTS_CONFIG_SCHEMA } from './plugin-config'
+import {
+  eventsEventHandler,
+  eventsIcsHandler,
+  eventsOccurrencesHandler,
+} from './server/event-calendar.server'
+
+// The settings the calendar doors read (AGL-4252), defaults-merged for the
+// server's `getPluginConfig`, as the bookings server registers its own.
+registerPluginConfigSchema(EVENTS_CONFIG_SCHEMA)
 
 /** How many events one listing returns. */
 const EVENTS_LIST_LIMIT = 50
@@ -180,4 +191,10 @@ const eventsDispatchHandler: PluginApiHandler = async (req, res) => {
 export function registerEventsCalendarApi(): void {
   registerPluginApiRoute('events/list', eventsListHandler)
   registerPluginApiRoute('events/dispatch', eventsDispatchHandler)
+  // Calendar v2 (AGL-4252), each answering only where its flag is on: the
+  // Calendar element's date range, the Event details element's one event,
+  // and the site's calendar as a subscribable or downloadable `.ics`.
+  registerPluginApiRoute('events/occurrences', eventsOccurrencesHandler)
+  registerPluginApiRoute('events/event', eventsEventHandler)
+  registerPluginApiRoute('events/ics', eventsIcsHandler)
 }

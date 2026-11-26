@@ -30,6 +30,8 @@ import {
   EVENT_TITLE_MAX_LENGTH,
   type EventWriteInput,
 } from './event-write'
+import { EVENT_CATEGORY_NAME_MAX_LENGTH } from './event-categories'
+import { eventRecurrenceOf, isEventDayKey, type EventRecurrence } from './event-recurrence'
 
 /**
  * AN EVENT ANOTHER PLUGIN ASKS FOR, AS CONTENT (AGL-3743).
@@ -45,12 +47,14 @@ import {
  * stores only that instant (`startsAtMs`), exactly as an event the editor
  * saved; the zone is how the caller's words are read, not a stored field.
  *
- * An event has no recurrence, tickets, RSVP or online-meeting field, so a
- * caller cannot ask for one: the content's keys are the event's own.
+ * Calendar v2 (AGL-4252) adds how it repeats (`repeat`, `repeatDays`,
+ * `repeatUntil`, `repeatTimes`) and the name of one of the site's categories
+ * (`category`); the writer keeps them only where the workspace has v2. An
+ * event has no RSVP or online-meeting field, so a caller cannot ask for one.
  */
 
 /** The resource name the writer is registered under. */
-export const EVENT_DRAFT_RESOURCE = 'event'
+export { EVENT_DRAFT_RESOURCE } from './event-draft-resource'
 
 /** A wall time as the content states it: `YYYY-MM-DDTHH:MM`. */
 export const EVENT_DRAFT_WALL_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/
@@ -76,11 +80,54 @@ export interface EventDraftContent {
   /** An image address, as the editor's "Cover image URL" takes one. */
   coverImage?: string
   coverImageAlt?: string
+  /** `daily`, `weekly` or `monthly`; absent, a one-off. */
+  repeat?: string
+  /** For a weekly repeat: day names, comma separated ("Tuesday, Thursday"). */
+  repeatDays?: string
+  /** The last day it may happen, `YYYY-MM-DD`. */
+  repeatUntil?: string
+  /** How many times it happens in all. */
+  repeatTimes?: string
+  /** One of the site's category names. */
+  category?: string
 }
 
 export type EventDraftContentRead =
-  | { ok: true; value: EventWriteInput & { endsAtMs: number | null }; timezone: string }
+  | {
+      ok: true
+      value: EventWriteInput & { endsAtMs: number | null }
+      timezone: string
+      /** The category the content names, for the writer to find. */
+      categoryName?: string
+    }
   | { ok: false; problems: string[] }
+
+const WEEKDAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+
+/** The repeat keys as a rule, `null` when the content names none, or a problem. */
+export function eventDraftRecurrence(
+  content: Readonly<Record<string, unknown>>,
+): EventRecurrence | null | { problem: string } {
+  const freq = line(content['repeat']).toLowerCase()
+  if (!freq || freq === 'none') return null
+  if (!['daily', 'weekly', 'monthly'].includes(freq)) {
+    return { problem: 'The repeat is daily, weekly or monthly' }
+  }
+  const weekdays: number[] = []
+  for (const name of line(content['repeatDays']).toLowerCase().split(/[,\s]+/).filter(Boolean)) {
+    const day = WEEKDAY_NAMES.findIndex((one) => one === name || one.slice(0, 3) === name.slice(0, 3))
+    if (day < 0) return { problem: `"${name}" is not a day of the week` }
+    weekdays.push(day)
+  }
+  const until = line(content['repeatUntil'])
+  if (until && !isEventDayKey(until)) return { problem: 'The repeat ends on a date written YYYY-MM-DD' }
+  const times = line(content['repeatTimes'])
+  return eventRecurrenceOf({
+    freq,
+    ...(freq === 'weekly' ? { weekdays } : {}),
+    ...(until ? { untilDayKey: until } : times ? { count: times } : {}),
+  })
+}
 
 /** Text on one line: controls and runs of space folded to one space. */
 function line(value: unknown): string {
@@ -150,6 +197,9 @@ export function readEventDraftContent(content: Readonly<Record<string, unknown>>
     problems.push('The cover image is an https address or a path on the site')
   }
   const coverImageAlt = optional(content, 'coverImageAlt', 'cover description', EVENT_COVER_ALT_MAX_LENGTH, problems)
+  const recurrence = eventDraftRecurrence(content)
+  if (recurrence && 'problem' in recurrence) problems.push(recurrence.problem)
+  const categoryName = line(content['category']).slice(0, EVENT_CATEGORY_NAME_MAX_LENGTH)
   if (problems.length) return { ok: false, problems: [...new Set(problems)] }
   return {
     ok: true,
@@ -164,7 +214,11 @@ export function readEventDraftContent(content: Readonly<Record<string, unknown>>
       coverImage: coverImage || null,
       coverImageAlt: coverImageAlt || null,
       status: 'draft',
+      // Kept in the zone the times were given in, so a weekly class stays at
+      // its hour across a clock change.
+      ...(recurrence ? { recurrence, timeZone: timezone } : {}),
     },
+    ...(categoryName ? { categoryName } : {}),
   }
 }
 

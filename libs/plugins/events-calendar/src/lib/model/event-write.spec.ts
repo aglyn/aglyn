@@ -109,3 +109,42 @@ describe('eventWrite, the one rule both writers store through', () => {
     expect(eventStatusOf(null)).toBeNull()
   })
 })
+
+describe('eventWrite, the calendar v2 fields (AGL-4252)', () => {
+  it('leaves every v2 field alone for a writer that does not know them', () => {
+    const write = eventWrite(input())
+    expect(write.fields).not.toHaveProperty('recurrence')
+    expect(write.fields).not.toHaveProperty('seriesEndsAtMs')
+    expect(write.remove).not.toContain('recurrence')
+    expect(write.remove).not.toContain('categoryIds')
+  })
+
+  it('stores categories, zone, rule, ticket and the series end', () => {
+    const write = eventWrite(
+      input({
+        categoryIds: ['mx', 'mx', 'kids'],
+        timeZone: 'America/Chicago',
+        recurrence: { freq: 'weekly', count: 2 },
+        ticket: { kind: 'product', id: 'pass-1' },
+      }),
+    )
+    expect(write.fields).toMatchObject({
+      categoryIds: ['mx', 'kids'],
+      timeZone: 'America/Chicago',
+      recurrence: { freq: 'weekly', count: 2 },
+      ticket: { kind: 'product', id: 'pass-1' },
+      seriesEndsAtMs: START + 7 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000,
+    })
+  })
+
+  it('clears what a v2 writer emptied, and ends a one-off series at the event', () => {
+    const write = eventWrite(
+      input({ categoryIds: [], timeZone: 'Not/AZone', recurrence: null, ticket: { kind: 'x', id: 'y' } }),
+    )
+    expect(write.remove).toEqual(
+      expect.arrayContaining(['categoryIds', 'timeZone', 'recurrence', 'ticket']),
+    )
+    expect(write.fields.seriesEndsAtMs).toBe(write.fields.endsAtMs)
+  })
+})
+

@@ -45,8 +45,10 @@ import {
  * `live: false`).
  *
  * The arguments are flat, as the contract requires, and are the event's own
- * fields: an event has no recurrence, tickets, RSVP or meeting link, so none
- * is offered. The planner fills them in, so no model runs
+ * fields; calendar v2 (AGL-4252) adds how it repeats and one of the site's
+ * category names, which the writer keeps only where the workspace has v2.
+ * An event has no RSVP or meeting link, and a build sets no ticket, so
+ * neither is offered. The planner fills them in, so no model runs
  * (`estimateCredits` 0).
  */
 
@@ -67,7 +69,20 @@ const WALL_TIME = 'local date and time "YYYY-MM-DDTHH:MM", in timezone'
 
 /** The writer's content for an item: the arguments, which are the content's own keys. Pure. */
 export function eventDraftContentFromArgs(args: PluginAiCapabilityArgs): Readonly<Record<string, unknown>> {
-  const keys = ['title', 'startsAt', 'endsAt', 'timezone', 'location', 'organizer', 'description']
+  const keys = [
+    'title',
+    'startsAt',
+    'endsAt',
+    'timezone',
+    'location',
+    'organizer',
+    'description',
+    'repeat',
+    'repeatDays',
+    'repeatUntil',
+    'repeatTimes',
+    'category',
+  ]
   return Object.fromEntries(
     keys
       .filter((key) => typeof args[key] === 'string' && (args[key] as string).trim())
@@ -124,6 +139,32 @@ export const eventAiCapability: PluginAiCapability = {
         description:
           'Two to four sentences a visitor reads: what happens, who it is for and what to bring or expect, in the business’s voice. No price, ticket, sign-up or link the request does not state, and no lorem ipsum.',
         maxLength: EVENT_DESCRIPTION_MAX_LENGTH,
+      },
+      repeat: {
+        type: 'string',
+        enum: ['daily', 'weekly', 'monthly'],
+        description:
+          'Only for something held again and again (a weekly practice, a Saturday market): how often. Leave it out for a one-off. One event that repeats, never one item per date.',
+      },
+      repeatDays: {
+        type: 'string',
+        description: 'For a weekly repeat held on more than its first day: the day names, comma separated, e.g. "Tuesday, Thursday".',
+        maxLength: 80,
+      },
+      repeatUntil: {
+        type: 'string',
+        description: 'The last day it happens, YYYY-MM-DD, when the request gives one; leave it out for no end.',
+        maxLength: 10,
+      },
+      repeatTimes: {
+        type: 'string',
+        description: 'How many times it happens in all, when the request gives a number instead of an end date.',
+        maxLength: 3,
+      },
+      category: {
+        type: 'string',
+        description: 'One of the site’s event category names, exactly as the site has it, when one fits; leave it out otherwise.',
+        maxLength: 40,
       },
     },
     required: ['title', 'startsAt', 'timezone', 'description'],

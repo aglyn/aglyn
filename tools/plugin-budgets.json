@@ -35,8 +35,8 @@
     "budget": 40960
   },
   "events-calendar": {
-    "baseline": 6350,
-    "budget": 8192
+    "baseline": 10805,
+    "budget": 14336
   },
   "inbox": {
     "baseline": 4811,

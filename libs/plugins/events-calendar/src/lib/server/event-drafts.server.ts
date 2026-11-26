@@ -31,12 +31,14 @@ import {
   type StockPhotoPicker,
 } from '@aglyn/aglyn/plugin-manager/stock-photo-provider'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
+import { isServerReleaseFlagOnForLoadedOrg } from '@aglyn/tenant-data-admin/server/release-flags'
 import {
   checkEventDraftContent,
   EVENT_DRAFT_COVER_ADDRESS,
   eventDraftWallText,
   readEventDraftContent,
 } from '../model/event-draft-content'
+import { EVENT_CATEGORIES_COLLECTION } from '../model/event-categories'
 import { EVENT_COVER_ALT_MAX_LENGTH, eventWrite } from '../model/event-write'
 
 /**
@@ -134,6 +136,11 @@ export interface EventDraftWriterDeps {
   firestore?: () => Firestore
   /** The stock photo picker a cover comes from; specs hand in a double. */
   stockPhotos?: () => StockPhotoPicker | null
+  /**
+   * Whether the workspace has calendar v2 (AGL-4252): a repeat and a
+   * category are kept only where it does. Asked only of content naming one.
+   */
+  calendarV2?: (context: { orgId: string; org: Readonly<Record<string, unknown>> | null }) => Promise<boolean>
 }
 
 /**
@@ -171,6 +178,14 @@ async function coverFor(
 export function createEventDraftWriter(deps: EventDraftWriterDeps = {}): PluginResourceDraftWriter {
   const firestore = deps.firestore ?? (() => firebaseAdmin.app().firestore() as unknown as Firestore)
   const stockPhotos = deps.stockPhotos ?? stockPhotoPicker
+  const calendarV2 =
+    deps.calendarV2 ??
+    (({ orgId, org }) =>
+      isServerReleaseFlagOnForLoadedOrg(
+        'release_events_calendar_v2',
+        orgId,
+        (org ?? null) as Record<string, unknown> | null,
+      ))
   return {
     refusal: async (context) => {
       const host = await firestore().collection('hosts').doc(context.hostId).get()
@@ -200,6 +215,21 @@ export function createEventDraftWriter(deps: EventDraftWriterDeps = {}): PluginR
       const db = firestore()
       const hostRef = db.collection('hosts').doc(request.hostId)
       const eventRef = hostRef.collection('events').doc(request.id)
+      // Calendar v2's repeat and category (AGL-4252): kept where the workspace
+      // has it, and the category only when the site has one by that name.
+      const v2Asked = Boolean(read.value.recurrence || read.categoryName)
+      const v2On = v2Asked && (await calendarV2({ orgId: request.orgId, org: request.org }))
+      if (!v2On) {
+        delete read.value.recurrence
+        delete read.value.timeZone
+      } else if (read.categoryName) {
+        const categories = await hostRef.collection(EVENT_CATEGORIES_COLLECTION).limit(100).get()
+        const wanted = read.categoryName.toLowerCase()
+        const match = categories.docs.find(
+          (doc) => String(doc.get('name') ?? '').trim().toLowerCase() === wanted,
+        )
+        if (match) read.value.categoryIds = [match.id]
+      }
       // A cover is fetched only for a new event a member may write, before
       // the transaction: a photo's copy is too slow to hold one open.
       if (!read.value.coverImage) {
