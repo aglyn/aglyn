@@ -41,6 +41,8 @@ import { SCREEN_ROOT_PATH } from './screen-slug'
  * page as something the visitor was never shown.
  */
 export type PagePathClass =
+  /** A page the platform or a plugin serves at a fixed address: sign-in. */
+  | { kind: 'builtIn'; title: string }
   /** One of the site's own pages, routed at this path. */
   | { kind: 'page'; screenId: string }
   /** A plugin's record page: `/{segment}/{slug}`. */
@@ -61,7 +63,23 @@ export interface PagePathContext {
   recordSegments: ReadonlySet<string>
   /** Slugs of the site's content collections. */
   contentCollectionSlugs: ReadonlySet<string>
+  /**
+   * Pages a plugin serves at a fixed address (`order-status` → `Order
+   * status`). The core's own sign-in pages are always included.
+   */
+  builtInPages?: ReadonlyMap<string, string>
 }
+
+/**
+ * The pages every site serves at a fixed address, ahead of its own routing
+ * map (`load-page-data.ts` answers these first): a visit there is a real page,
+ * never an address "nothing answers".
+ */
+export const CORE_BUILT_IN_PAGES: ReadonlyMap<string, string> = new Map([
+  ['signin', 'Sign in'],
+  ['signup', 'Sign up'],
+  ['recover', 'Reset password'],
+])
 
 /**
  * A counted path in the form the routing map stores: no leading or trailing
@@ -86,11 +104,15 @@ export function classifyPagePath(
   context: PagePathContext,
 ): PagePathClass {
   const normalized = normalizeCountedPath(path)
+  const core = CORE_BUILT_IN_PAGES.get(normalized)
+  if (core) return { kind: 'builtIn', title: core }
   const screenId = findScreenIdByRoutePath(context.routes as never, normalized)
   if (screenId && !context.templateScreenIds.has(screenId)) {
     return { kind: 'page', screenId }
   }
   if (normalized === SCREEN_ROOT_PATH) return { kind: 'other' }
+  const declared = context.builtInPages?.get(normalized)
+  if (declared) return { kind: 'builtIn', title: declared }
   const segments = normalized.split('/')
   if (segments.length === 2 && context.recordSegments.has(segments[0])) {
     return { kind: 'record', segment: segments[0], slug: segments[1] }
